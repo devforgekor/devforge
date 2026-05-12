@@ -1,0 +1,34 @@
+# /etc/systemd/system/caddy.service
+# DevForge Caddy — Reverse Proxy + Auto-HTTPS (rootful podman container)
+[Unit]
+Description=DevForge Caddy — Reverse Proxy (80/443)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+TimeoutStopSec=10
+ExecStart=/usr/bin/podman run \
+	--cidfile=%t/%n.ctr-id \
+	--cgroups=no-conmon \
+	--rm \
+	--sdnotify=conmon \
+	--replace \
+	-d \
+	--health-cmd "wget -q -O- http://127.0.0.1:2019/config/" \
+	--health-interval 30s \
+	--health-timeout 10s \
+	--health-retries 3 \
+	--name caddy \
+	--network host \
+	-v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:Z,ro \
+	-v /var/lib/caddy:/data:Z \
+	docker.io/library/caddy:latest
+ExecStop=/usr/bin/podman stop --ignore -t 10 --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm -f --ignore -t 10 --cidfile=%t/%n.ctr-id
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
