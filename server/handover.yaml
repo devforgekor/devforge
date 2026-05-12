@@ -288,8 +288,11 @@ decisions:
 - 'MOTD 포맷 정리 2026-05-13: (1) STORAGE — LVM에서 VG/LV 중복 테이블 제거, df -h 기반 Device 테이블만 유지. (2) SYSTEM 2줄 컬럼 정렬 (Spec/OS/Arch,
   CPU Load/Mem/Zram). (3) NETWORK, SERVICES 헤더-내용 분리로 전 섹션 [HEADER] + 들여쓰기 형식 통일. (4) 헤더 배너(DevForge Server Env) 제거,
   ==== 구분선만 유지. gen_server_state.py 및 backup_project 동기화 완료.'
+- 'GitHub repo 설정 2026-05-13: git@github.com:devforgekor/devforge.git — /opt/projects 초기화, server/ common-lib/ litellm/ scripts/
+  systemd/ 등 102개 파일 커밋 + 푸시 (main). M4 Air SSH 키(~/.ssh/id_ed25519)로 인증. systemd 유닛 파일 9개 추가 커밋으로 컨테이너 오케스트레이션
+  정의(Docker Compose 역할) 포함.'
 pending:
-- '[POST-SWITCH CLEANUP] rm -rf /tmp.old re-scheduled via atd (job 3, Tue May 12 10:35 KST) — original job 2 lost on reboot'
 - 'tmux: session devforge running (auto-started on boot)'
 known_issues: []
-completed_log: []
+completed_log:
+- '/tmp.old cleanup — completed, directory no longer exists'
