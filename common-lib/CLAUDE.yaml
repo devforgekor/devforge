@@ -1,0 +1,43 @@
+# common-lib — machine-discoverable modular shared library
+# Single source of truth. Read this first, then AGENTS.yaml for workflows.
+
+overview:
+  what: "LEGO-block library. Modules <=400 SLOC, type-hinted, English-only."
+  flow: "index.yaml -> read .py -> recipes/ -> compose"
+  compose: "python scripts/run.py <recipe> [--config <project>.json]"
+  harvest: "completed project -> extract reusable -> register in common-lib"
+  debug: "traceback path decides: common-lib path -> fix here, project path -> fix there"
+
+structure:
+  now:
+    dirs: "src/common_lib/(azure/ core/ domain/ oci/ scripts/) harvest/ config/ builds/ deploy/ recipes/"
+    modules: 32
+    deps: "oci, pytz"
+  planned:
+    _active: "/opt/projects/seedling"
+    _dormant: "harvest/agora harvest/axis harvest/extentions harvest/infra harvest/isuflow harvest/make-vm harvest/neisync harvest/papertrail harvest/schooldocs harvest/schools"
+    rule: "do not move files yet. migrate through harvest one-by-one."
+  location:
+    _all: "/opt/projects/common-lib/"
+    harvest: "/opt/projects/common-lib/harvest/"
+    seedling: "/opt/projects/seedling/"
+
+tools:
+  gen_index: "python scripts/gen_index.py — docstring validate + index.yaml"
+  run: "python scripts/run.py <recipe> [--config <cfg>.json] — execute recipe"
+  stats: "python scripts/stats.py — module reference hot/warm/cold"
+  stats_archive: "python scripts/stats.py archive — archive cold"
+
+must:
+  sloc: 400
+  language: "English: code, docstrings, comments. Korean: answers to user."
+  docstring: "<path> | <desc> | needs:<pkg> | uses:<mod> | config:<path> | api()"
+  index_sync: "python scripts/gen_index.py; must exit 0"
+  auto_gen: "never edit index.yaml or builds/ manually"
+  configs: "config/*.example.yaml committed, *.yaml gitignored"
+  type_hints: "public API signatures"
+  no_emoji: true
+
+should:
+  edit_prefer: "Edit > Write, Grep > Read"
+  stdlib_prefer: true

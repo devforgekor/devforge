@@ -1,0 +1,1 @@
+"""oci/__init__ | OCI SDK wrappers: compute ops, auth config loader | needs:oci | launch_instance(),terminate_instance(),resize_instance(),wait_for_state(),get_public_ip(),list_instances(),load_oci_config()"""

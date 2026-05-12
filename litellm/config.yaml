@@ -1,0 +1,21 @@
+# LiteLLM Proxy config — DevForge
+# Backend: llama-server (127.0.0.1:8080, OpenAI-compatible)
+
+general_settings:
+  master_key: devforge-litellm-key
+  database_url: "postgresql://postgres:devforge_secret_2026@data-pod:5432/litellm"
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  request_timeout: 120
+
+model_list:
+  - model_name: qwen2.5-coder-7b
+    litellm_params:
+      model: openai/qwen2.5-coder-7b
+      api_base: http://127.0.0.1:8080/v1
+      api_key: unused
+      max_retries: 3
+      tpm: 100000
+      rpm: 1000

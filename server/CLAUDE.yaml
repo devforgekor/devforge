@@ -1,0 +1,148 @@
+overview:
+  hostname: devforge
+  purpose: OCI ARM development server — LLM inference + FastAPI application hosting
+  os: Oracle Linux Server 9.7 (aarch64)
+  cpu: ARM Neoverse-N1, 4-core
+  memory: 22Gi + 4G zram (59B) + 8G swap (swappiness=10)
+storage:
+  boot_disk:
+    device: /dev/sda (50GB)
+    vg: ocivolume
+    lvs:
+    - lv: lv_logs
+      size: 10G
+      mount: /var/log
+    - lv: lv_meta
+      size: 4.5G
+      mount: /mnt/secure_meta
+    - lv: lv_tmp
+      size: 10G
+      mount: /var/tmp
+    - lv: root
+      size: 20G
+      mount: /
+    free: 0G
+  data_disk:
+    device: /dev/sdb (150GB)
+    vg: datavg
+    lvs:
+    - lv: lv_ai_data
+      size: 100G
+      mount: /opt/ai_data
+    - lv: lv_db
+      size: 30G
+      mount: /mnt/lv_db
+    - lv: lv_projects
+      size: 10G
+      mount: /opt/projects
+    - lv: lv_swap
+      size: 4G
+      mount: SWAP
+    free: 6G
+containers:
+  runtime: Podman (rootless, user opc)
+  image: docker.io/amperecomputingai/llama.cpp:latest (OpenBLAS + KleidiAI)
+  model: qwen2.5-coder-7b-instruct-q8_0.gguf (8.1GB)
+  flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --port 8080 --host 127.0.0.1 --threads 4 --ctx-size 8192 --mlock --cache-reuse
+    256 --api-key unused
+  target_flags: --threads 4 --ctx-size 16384 --mlock --cache-reuse 256 --host 127.0.0.1
+services:
+- name: devforge-llm
+  status: active
+  type: systemd user
+- name: litellm
+  status: active
+  type: systemd user
+- name: postgres
+  status: active
+  type: systemd user
+- name: caddy
+  status: active
+  type: systemd system (rootful podman)
+- name: netdata
+  status: active
+  type: systemd system (native)
+network:
+  interface: enp0s6
+  ip: 10.0.0.75/24
+  firewall: firewalld — SSH + dhcpv6-client
+  exposed_ports:
+  - 22/tcp (SSH, key-only)
+  - 111/tcp (rpcbind)
+  llm_api: 127.0.0.1:8080 (host networking)
+  litellm_api: 127.0.0.1:4000 (host networking)
+  netdata: 127.0.0.1:19999
+projects:
+  root: /opt/projects
+  active: []
+  shared:
+  - name: common-lib
+    path: /opt/projects/common-lib/
+    what: LEGO-block modular Python library, 32 modules
+  dormant:
+  - path: /opt/projects/common-lib/harvest/
+    what: 9 harvested projects awaiting module extraction
+  venv:
+  - name: aider-env
+    path: /opt/projects/aider-env/
+    what: Python 3.11 venv for AI coding assistants
+entry_points:
+  overview: CLAUDE.yaml (this file)
+  blueprint: blueprint.yaml (target architecture, phases, backlog — read on any planning/architectural work)
+  structural_status: state.yaml#structural
+  metrics_snapshot: state.yaml#metrics
+  change_log: changelog.yaml (< 3 months, always read)
+  change_archive: changelog_archive.yaml (> 3 months, read on demand)
+  session_handover: handover.yaml (last checkpoint + AI decisions/tasks, always read on session start)
+  retention: indefinite — no deletion, archive-only after 3 months
+refresh:
+  trigger: motd-gen.timer (systemd user, 15min interval)
+  script: /opt/projects/server/scripts/gen_server_state.py
+  flow: collect -> state.yaml -> hash detect -> changelog (if changed) -> archive -> CLAUDE.yaml -> MOTD
+  auto: true
+handover:
+  trigger: handover-gen.timer (systemd user, 10min interval) + SessionEnd hook
+  script: /opt/projects/server/scripts/update_handover.py
+  flow: scan recent files -> git status -> preserve AI sections -> write handover.yaml
+  auto: true
+  ai_writes:
+  - current_task
+  - decisions
+  - pending
+  - known_issues
+tracked:
+  structural:
+  - 'storage: LVM layout, mount status — change triggers changelog'
+  - 'containers: name, status, ports, model — change triggers changelog'
+  - 'services: systemd user unit active/inactive/not-installed — change triggers changelog'
+  - 'network: IP address, TCP listen ports — change triggers changelog'
+  metrics:
+  - 'system: CPU load, memory %, zram — snapshot only'
+  - 'storage_use: disk usage % per mount — snapshot only'
+  - 'containers_uptime: uptime strings — snapshot only'
+  - 'alerts: threshold-based warnings/criticals — derived, snapshot only'
+not_tracked:
+- installed packages (rpm, pip) — use 'dnf list installed' or 'pip list'
+- firewall rules — use 'sudo firewall-cmd --list-all'
+- user config files (.bashrc, .tmux.conf, etc.) — read directly
+- kernel parameters, sysctl, SELinux — use appropriate system tools
+- OCI cloud configuration (VNIC, security lists) — use OCI CLI/console
+- Claude Code API keys — stored in ~/.bashrc.d/claude-env (ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_MODEL)
+rules:
+  must:
+  - CLAUDE.yaml is the single entry point — read this first.
+  - Read handover.yaml on session start. Write current_task, decisions, pending, known_issues before session ends.
+  - Update blueprint.yaml when phases progress or architecture decisions change.
+  - All machine-readable content MUST be English.
+  - state.yaml is auto-generated. NEVER edit manually.
+  - changelog.yaml is append-only. NEVER modify existing entries.
+  - Use gen_server_state.py for all state/changelog/MOTD updates.
+  - Structural changes trigger changelog entry. Metrics changes do NOT.
+  - 'Timezone: system internals (logs, timestamps, cron) MUST use UTC. User-facing output (MOTD, CLI, reports) MUST convert
+    to KST (UTC+9).'
+  - 'tmux: source-file only adds hooks, never removes them. After deleting a hook from .tmux.conf, MUST run tmux set-hook
+    -gu <hook-name> to purge from running server.'
+  should:
+  - 'Prefer Python stdlib. Only dependency: pyyaml.'
+  - 'changelog.archive policy: entries > 3 months move to changelog_archive.yaml.'
+  - MOTD reflects real-time state; state.yaml reflects last collected snapshot.

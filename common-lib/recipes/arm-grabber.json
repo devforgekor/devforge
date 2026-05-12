@@ -1,0 +1,34 @@
+{
+  "name": "arm-grabber",
+  "summary": "Dual-strategy OCI ARM instance grabber: direct 4/24 and small 1/6→resize in parallel, winner-takes-all",
+  "config": "config/arm-grabber.example.yaml",
+  "steps": [
+    {
+      "module": "oci.config",
+      "call": "load_oci_config",
+      "save": "oci_cfg"
+    },
+    {
+      "module": "domain.arm_grabber.engine",
+      "call": "run_engine",
+      "with": {
+        "oci_cfg": "$oci_cfg",
+        "instance_cfg": {
+          "compartment_id": "$OCI_COMPARTMENT_ID",
+          "subnet_id": "$OCI_SUBNET_ID",
+          "availability_domain": "$OCI_AVAILABILITY_DOMAIN",
+          "image_id": "$OCI_IMAGE_ID",
+          "ssh_authorized_key": "$OCI_SSH_PUBLIC_KEY",
+          "display_name": "devforge",
+          "direct_ocpus": 4,
+          "direct_memory_gb": 24,
+          "small_ocpus": 1,
+          "small_memory_gb": 6,
+          "target_ocpus": 4,
+          "target_memory_gb": 24
+        }
+      },
+      "save": "result"
+    }
+  ]
+}

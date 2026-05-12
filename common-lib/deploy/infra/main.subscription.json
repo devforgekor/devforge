@@ -1,0 +1,938 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "10333064022776419680"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "koreacentral",
+      "metadata": {
+        "description": "Deployment location for both resource group and resources."
+      }
+    },
+    "schoolNameToken": {
+      "type": "string",
+      "defaultValue": "kuhwa",
+      "metadata": {
+        "description": "Normalized school token. Keep this within the naming budget for KV and Storage."
+      }
+    },
+    "schoolLevel": {
+      "type": "string",
+      "defaultValue": "sc",
+      "allowedValues": [
+        "es",
+        "ms",
+        "hs",
+        "sc",
+        "kg"
+      ],
+      "metadata": {
+        "description": "School level token"
+      }
+    },
+    "envSuffix": {
+      "type": "string",
+      "defaultValue": "test",
+      "allowedValues": [
+        "test",
+        "prod"
+      ],
+      "metadata": {
+        "description": "Deployment environment suffix"
+      }
+    },
+    "deployNum": {
+      "type": "string",
+      "defaultValue": "01",
+      "maxLength": 2,
+      "metadata": {
+        "description": "Two-digit deployment sequence"
+      }
+    },
+    "regionCode": {
+      "type": "string",
+      "defaultValue": "krc",
+      "allowedValues": [
+        "krc",
+        "cin",
+        "eas",
+        "jpe"
+      ],
+      "metadata": {
+        "description": "Region short code used in resource names. Example: krc, cin, eas, jpe"
+      }
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional override for resource group name. Leave empty to auto-generate."
+      }
+    },
+    "enableCosmosFreeTier": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable Cosmos DB free tier. Only one free-tier account is allowed per subscription."
+      }
+    },
+    "configureRuntimeSecrets": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "If true, wire Key Vault secret references into Container App runtime settings. Run this only after required secrets exist in Key Vault."
+      }
+    },
+    "containerPort": {
+      "type": "int",
+      "defaultValue": 80,
+      "metadata": {
+        "description": "Container listening port"
+      }
+    },
+    "probePath": {
+      "type": "string",
+      "defaultValue": "/",
+      "metadata": {
+        "description": "Liveness and readiness probe path"
+      }
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 0,
+      "metadata": {
+        "description": "Minimum replicas for the Container App"
+      }
+    },
+    "maxReplicas": {
+      "type": "int",
+      "defaultValue": 2,
+      "metadata": {
+        "description": "Maximum replicas for the Container App"
+      }
+    },
+    "enableIpRestriction": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable inbound IP restrictions for Container App ingress. Keep false in development."
+      }
+    },
+    "allowedCidrs": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Allowed inbound CIDR ranges when IP restriction is enabled, for example ['203.0.113.0/24']."
+      }
+    },
+    "corsAllowedOrigins": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Allowed browser origins for CORS, for example ['https://school.example.kr']. Keep empty to disable CORS policy."
+      }
+    },
+    "existingContainerAppEnvName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of an existing Container App Environment to reuse. Leave empty to create a new one. Only one Managed Environment is allowed per region per subscription."
+      }
+    },
+    "existingContainerAppEnvResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource group of the existing Container App Environment. Required when existingContainerAppEnvName is set and the environment is in a different resource group."
+      }
+    },
+    "existingCosmosDbName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of an existing shared Cosmos DB account to reuse. Leave empty to create a new one. Only one free-tier Cosmos DB is allowed per subscription."
+      }
+    },
+    "existingCosmosDbResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource group of the existing shared Cosmos DB account. Required when existingCosmosDbName is set and the account is in a different resource group."
+      }
+    }
+  },
+  "variables": {
+    "rgName": "[if(not(empty(parameters('resourceGroupName'))), parameters('resourceGroupName'), format('rg-{0}-{1}-{2}-{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum')))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('rgName')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "workload": "schooldocs",
+        "schoolNameToken": "[parameters('schoolNameToken')]",
+        "schoolLevel": "[parameters('schoolLevel')]",
+        "envSuffix": "[parameters('envSuffix')]",
+        "regionCode": "[parameters('regionCode')]"
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))]",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "schoolNameToken": {
+            "value": "[parameters('schoolNameToken')]"
+          },
+          "schoolLevel": {
+            "value": "[parameters('schoolLevel')]"
+          },
+          "envSuffix": {
+            "value": "[parameters('envSuffix')]"
+          },
+          "deployNum": {
+            "value": "[parameters('deployNum')]"
+          },
+          "regionCode": {
+            "value": "[parameters('regionCode')]"
+          },
+          "enableCosmosFreeTier": {
+            "value": "[parameters('enableCosmosFreeTier')]"
+          },
+          "configureRuntimeSecrets": {
+            "value": "[parameters('configureRuntimeSecrets')]"
+          },
+          "containerPort": {
+            "value": "[parameters('containerPort')]"
+          },
+          "probePath": {
+            "value": "[parameters('probePath')]"
+          },
+          "minReplicas": {
+            "value": "[parameters('minReplicas')]"
+          },
+          "maxReplicas": {
+            "value": "[parameters('maxReplicas')]"
+          },
+          "enableIpRestriction": {
+            "value": "[parameters('enableIpRestriction')]"
+          },
+          "allowedCidrs": {
+            "value": "[parameters('allowedCidrs')]"
+          },
+          "corsAllowedOrigins": {
+            "value": "[parameters('corsAllowedOrigins')]"
+          },
+          "existingContainerAppEnvName": {
+            "value": "[parameters('existingContainerAppEnvName')]"
+          },
+          "existingContainerAppEnvResourceGroup": {
+            "value": "[parameters('existingContainerAppEnvResourceGroup')]"
+          },
+          "existingCosmosDbName": {
+            "value": "[parameters('existingCosmosDbName')]"
+          },
+          "existingCosmosDbResourceGroup": {
+            "value": "[parameters('existingCosmosDbResourceGroup')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "5375689047236420689"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Deployment location"
+              }
+            },
+            "schoolNameToken": {
+              "type": "string",
+              "defaultValue": "school",
+              "minLength": 2,
+              "maxLength": 7,
+              "metadata": {
+                "description": "Normalized school token. Keep this within the naming budget for KV and Storage."
+              }
+            },
+            "schoolLevel": {
+              "type": "string",
+              "defaultValue": "es",
+              "allowedValues": [
+                "es",
+                "ms",
+                "hs",
+                "sc",
+                "kg"
+              ],
+              "metadata": {
+                "description": "School level token"
+              }
+            },
+            "envSuffix": {
+              "type": "string",
+              "defaultValue": "prod",
+              "allowedValues": [
+                "test",
+                "prod"
+              ],
+              "metadata": {
+                "description": "Deployment environment suffix"
+              }
+            },
+            "deployNum": {
+              "type": "string",
+              "defaultValue": "01",
+              "maxLength": 2,
+              "metadata": {
+                "description": "Two-digit deployment sequence"
+              }
+            },
+            "regionCode": {
+              "type": "string",
+              "defaultValue": "krc",
+              "allowedValues": [
+                "krc",
+                "cin",
+                "eas",
+                "jpe"
+              ],
+              "metadata": {
+                "description": "Region short code used in resource names. Example: krc, cin, eas, jpe"
+              }
+            },
+            "enableCosmosFreeTier": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Enable Cosmos DB free tier. Only one free-tier account is allowed per subscription."
+              }
+            },
+            "configureRuntimeSecrets": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "If true, wire Key Vault secret references into Container App runtime settings. Run this only after required secrets exist in Key Vault."
+              }
+            },
+            "containerPort": {
+              "type": "int",
+              "defaultValue": 80,
+              "metadata": {
+                "description": "Container listening port"
+              }
+            },
+            "probePath": {
+              "type": "string",
+              "defaultValue": "/",
+              "metadata": {
+                "description": "Liveness and readiness probe path"
+              }
+            },
+            "minReplicas": {
+              "type": "int",
+              "defaultValue": 0,
+              "metadata": {
+                "description": "Minimum replicas for the Container App"
+              }
+            },
+            "maxReplicas": {
+              "type": "int",
+              "defaultValue": 2,
+              "metadata": {
+                "description": "Maximum replicas for the Container App"
+              }
+            },
+            "enableIpRestriction": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Enable inbound IP restrictions for Container App ingress. Keep false in development."
+              }
+            },
+            "allowedCidrs": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "Allowed inbound CIDR ranges when IP restriction is enabled, for example ['203.0.113.0/24']."
+              }
+            },
+            "corsAllowedOrigins": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "Allowed browser origins for CORS, for example ['https://school.example.kr']. Keep empty to disable CORS policy."
+              }
+            },
+            "existingContainerAppEnvName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of an existing Container App Environment to reuse. Leave empty to create a new one. Only one Managed Environment is allowed per region per subscription."
+              }
+            },
+            "existingContainerAppEnvResourceGroup": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Resource group of the existing Container App Environment. Required when existingContainerAppEnvName is set and the environment is in a different resource group."
+              }
+            },
+            "existingCosmosDbName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of an existing shared Cosmos DB account to reuse. Leave empty to create a new one. Only one free-tier Cosmos DB is allowed per subscription."
+              }
+            },
+            "existingCosmosDbResourceGroup": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Resource group of the existing shared Cosmos DB account. Required when existingCosmosDbName is set and the account is in a different resource group."
+              }
+            }
+          },
+          "variables": {
+            "copy": [
+              {
+                "name": "generatedIpSecurityRestrictions",
+                "count": "[length(parameters('allowedCidrs'))]",
+                "input": {
+                  "name": "[format('AllowCIDR{0}', copyIndex('generatedIpSecurityRestrictions'))]",
+                  "ipAddressRange": "[parameters('allowedCidrs')[copyIndex('generatedIpSecurityRestrictions')]]",
+                  "action": "Allow"
+                }
+              }
+            ],
+            "kvName": "[format('kv-{0}-{1}-{2}-{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum'))]",
+            "storageName": "[format('st{0}{1}{2}{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum'))]",
+            "cosmosName": "[if(not(empty(parameters('existingCosmosDbName'))), parameters('existingCosmosDbName'), format('cosmos-{0}-{1}-{2}-{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum')))]",
+            "acrName": "[format('acr{0}{1}{2}{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum'))]",
+            "logWorkspaceName": "[format('law-{0}-{1}-{2}-{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum'))]",
+            "envName": "[format('env-{0}-{1}-{2}-{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum'))]",
+            "appName": "[format('app-{0}-{1}-{2}-{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum'))]",
+            "identityName": "[format('id-{0}-{1}-{2}-{3}{4}', parameters('schoolNameToken'), parameters('schoolLevel'), parameters('envSuffix'), parameters('regionCode'), parameters('deployNum'))]",
+            "acrPullRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
+            "storageBlobRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+            "keyVaultSecretsUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+            "manualSecretNames": [
+              "api-key-ai",
+              "azure-openai-endpoint",
+              "api-key-sms",
+              "api-secret-sms",
+              "sms-sender-phone",
+              "encryption-key-aes",
+              "encryption-key-hmac"
+            ],
+            "autoSecretNames": [
+              "connection-string-storage",
+              "connection-string-database"
+            ],
+            "ipSecurityRestrictions": "[if(parameters('enableIpRestriction'), variables('generatedIpSecurityRestrictions'), createArray())]",
+            "ingressConfig": "[if(empty(parameters('corsAllowedOrigins')), createObject('external', true(), 'targetPort', parameters('containerPort'), 'ipSecurityRestrictions', variables('ipSecurityRestrictions')), createObject('external', true(), 'targetPort', parameters('containerPort'), 'ipSecurityRestrictions', variables('ipSecurityRestrictions'), 'corsPolicy', createObject('allowedOrigins', parameters('corsAllowedOrigins'), 'allowedMethods', createArray('GET', 'POST', 'OPTIONS'), 'allowedHeaders', createArray('*'))))]",
+            "containerEnv": "[if(parameters('configureRuntimeSecrets'), createArray(createObject('name', 'ENCRYPTION_KEY_AES', 'secretRef', 'encryption-key-aes'), createObject('name', 'ENCRYPTION_KEY_HMAC', 'secretRef', 'encryption-key-hmac'), createObject('name', 'DATABASE_CONNECTION_STRING', 'secretRef', 'connection-string-database'), createObject('name', 'STORAGE_CONNECTION_STRING', 'secretRef', 'connection-string-storage'), createObject('name', 'AI_SERVICE_KEY', 'secretRef', 'api-key-ai'), createObject('name', 'AZURE_OPENAI_ENDPOINT', 'secretRef', 'azure-openai-endpoint'), createObject('name', 'SMS_API_KEY', 'secretRef', 'api-key-sms'), createObject('name', 'SMS_API_SECRET', 'secretRef', 'api-secret-sms'), createObject('name', 'SMS_SENDER_PHONE', 'secretRef', 'sms-sender-phone'), createObject('name', 'COSMOS_DATABASE', 'value', 'CertificateSystem'), createObject('name', 'COSMOS_CONTAINER', 'value', 'records'), createObject('name', 'COSMOS_ADMINS_CONTAINER', 'value', 'admins'), createObject('name', 'COSMOS_REGISTRY_CONTAINER', 'value', 'registry'), createObject('name', 'STORAGE_CONTAINER', 'value', 'record-files'), createObject('name', 'WEBSITES_INCLUDE_CLOUD_CERTS', 'value', 'true')), createArray())]",
+            "cosmosDbName": "[if(not(empty(parameters('existingCosmosDbName'))), parameters('existingCosmosDbName'), variables('cosmosName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[variables('identityName')]",
+              "location": "[parameters('location')]"
+            },
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2022-10-01",
+              "name": "[variables('logWorkspaceName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "retentionInDays": 30
+              }
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2023-02-01",
+              "name": "[variables('kvName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "tenantId": "[subscription().tenantId]",
+                "enableRbacAuthorization": true,
+                "softDeleteRetentionInDays": 7,
+                "enablePurgeProtection": true
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-01-01",
+              "name": "[variables('storageName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "supportsHttpsTrafficOnly": true,
+                "allowBlobPublicAccess": false,
+                "minimumTlsVersion": "TLS1_2"
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', variables('storageName'), 'default')]",
+              "properties": {
+                "deleteRetentionPolicy": {
+                  "enabled": true,
+                  "days": 30
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', variables('storageName'), 'default', 'webps')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageName'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', variables('storageName'), 'default', 'record-files')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageName'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/managementPolicies",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', variables('storageName'), 'default')]",
+              "properties": {
+                "policy": {
+                  "rules": [
+                    {
+                      "enabled": true,
+                      "name": "archive-policy",
+                      "type": "Lifecycle",
+                      "definition": {
+                        "actions": {
+                          "baseBlob": {
+                            "tierToCool": {
+                              "daysAfterModificationGreaterThan": 1095
+                            },
+                            "delete": {
+                              "daysAfterModificationGreaterThan": 3285
+                            }
+                          }
+                        },
+                        "filters": {
+                          "blobTypes": [
+                            "blockBlob"
+                          ],
+                          "prefixMatch": [
+                            "webps/"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+              ]
+            },
+            {
+              "condition": "[empty(parameters('existingCosmosDbName'))]",
+              "type": "Microsoft.DocumentDB/databaseAccounts",
+              "apiVersion": "2023-04-15",
+              "name": "[variables('cosmosName')]",
+              "location": "[parameters('location')]",
+              "kind": "GlobalDocumentDB",
+              "properties": {
+                "databaseAccountOfferType": "Standard",
+                "enableFreeTier": "[parameters('enableCosmosFreeTier')]",
+                "consistencyPolicy": {
+                  "defaultConsistencyLevel": "Session"
+                },
+                "locations": [
+                  {
+                    "locationName": "[parameters('location')]",
+                    "failoverPriority": 0
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+              "apiVersion": "2023-04-15",
+              "name": "[format('{0}/CertificateSystem', variables('cosmosDbName'))]",
+              "properties": {
+                "resource": {
+                  "id": "CertificateSystem"
+                },
+                "options": {
+                  "throughput": 400
+                }
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2023-04-15",
+              "name": "[format('{0}/CertificateSystem/registry', variables('cosmosDbName'))]",
+              "properties": {
+                "resource": {
+                  "id": "registry",
+                  "partitionKey": {
+                    "paths": [
+                      "/cohortId"
+                    ],
+                    "kind": "Hash"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2023-04-15",
+              "name": "[format('{0}/CertificateSystem/records', variables('cosmosDbName'))]",
+              "properties": {
+                "resource": {
+                  "id": "records",
+                  "partitionKey": {
+                    "paths": [
+                      "/studentId"
+                    ],
+                    "kind": "Hash"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2023-04-15",
+              "name": "[format('{0}/CertificateSystem/admins', variables('cosmosDbName'))]",
+              "properties": {
+                "resource": {
+                  "id": "admins",
+                  "partitionKey": {
+                    "paths": [
+                      "/email"
+                    ],
+                    "kind": "Hash"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2023-04-15",
+              "name": "[format('{0}/CertificateSystem/ai_limits', variables('cosmosDbName'))]",
+              "properties": {
+                "resource": {
+                  "id": "ai_limits",
+                  "partitionKey": {
+                    "paths": [
+                      "/id"
+                    ],
+                    "kind": "Hash"
+                  },
+                  "defaultTtl": -1
+                }
+              }
+            },
+            {
+              "type": "Microsoft.ContainerRegistry/registries",
+              "apiVersion": "2023-01-01-preview",
+              "name": "[variables('acrName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Basic"
+              },
+              "properties": {
+                "adminUserEnabled": false
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
+              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('acrPullRoleId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), '2023-01-31').principalId]",
+                "roleDefinitionId": "[variables('acrPullRoleId')]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('storageBlobRoleId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), '2023-01-31').principalId]",
+                "roleDefinitionId": "[variables('storageBlobRoleId')]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('keyVaultSecretsUserRoleId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), '2023-01-31').principalId]",
+                "roleDefinitionId": "[variables('keyVaultSecretsUserRoleId')]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-02-01",
+              "name": "[format('{0}/{1}', variables('kvName'), 'connection-string-storage')]",
+              "properties": {
+                "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', variables('storageName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2023-01-01').keys[0].value, environment().suffixes.storage)]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+              ]
+            },
+            {
+              "condition": "[empty(parameters('existingCosmosDbName'))]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-02-01",
+              "name": "[format('{0}/{1}', variables('kvName'), 'connection-string-database')]",
+              "properties": {
+                "value": "[listConnectionStrings(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosName')), '2023-04-15').connectionStrings[0].connectionString]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosName'))]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]"
+              ]
+            },
+            {
+              "condition": "[empty(parameters('existingContainerAppEnvName'))]",
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2023-05-01",
+              "name": "[variables('envName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('logWorkspaceName')), '2022-10-01').customerId]",
+                    "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('logWorkspaceName')), '2022-10-01').primarySharedKey]"
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logWorkspaceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2023-05-01",
+              "name": "[variables('appName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')))]": {}
+                }
+              },
+              "properties": {
+                "managedEnvironmentId": "[if(not(empty(parameters('existingContainerAppEnvName'))), resourceId(if(not(empty(parameters('existingContainerAppEnvResourceGroup'))), parameters('existingContainerAppEnvResourceGroup'), resourceGroup().name), 'Microsoft.App/managedEnvironments', parameters('existingContainerAppEnvName')), resourceId('Microsoft.App/managedEnvironments', variables('envName')))]",
+                "configuration": {
+                  "ingress": "[variables('ingressConfig')]",
+                  "registries": [
+                    {
+                      "server": "[format('{0}.azurecr.io', variables('acrName'))]",
+                      "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
+                    }
+                  ],
+                  "secrets": "[if(parameters('configureRuntimeSecrets'), createArray(createObject('name', 'api-key-ai', 'keyVaultUrl', format('{0}secrets/api-key-ai', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))), createObject('name', 'azure-openai-endpoint', 'keyVaultUrl', format('{0}secrets/azure-openai-endpoint', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))), createObject('name', 'api-key-sms', 'keyVaultUrl', format('{0}secrets/api-key-sms', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))), createObject('name', 'api-secret-sms', 'keyVaultUrl', format('{0}secrets/api-secret-sms', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))), createObject('name', 'sms-sender-phone', 'keyVaultUrl', format('{0}secrets/sms-sender-phone', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))), createObject('name', 'encryption-key-aes', 'keyVaultUrl', format('{0}secrets/encryption-key-aes', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))), createObject('name', 'encryption-key-hmac', 'keyVaultUrl', format('{0}secrets/encryption-key-hmac', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))), createObject('name', 'connection-string-storage', 'keyVaultUrl', format('{0}secrets/connection-string-storage', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))), createObject('name', 'connection-string-database', 'keyVaultUrl', format('{0}secrets/connection-string-database', reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')))), createArray())]"
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "[variables('appName')]",
+                      "image": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+                      "env": "[variables('containerEnv')]",
+                      "probes": [
+                        {
+                          "type": "Liveness",
+                          "httpGet": {
+                            "path": "[parameters('probePath')]",
+                            "port": "[parameters('containerPort')]"
+                          },
+                          "initialDelaySeconds": 30,
+                          "periodSeconds": 10
+                        },
+                        {
+                          "type": "Readiness",
+                          "httpGet": {
+                            "path": "[parameters('probePath')]",
+                            "port": "[parameters('containerPort')]"
+                          },
+                          "initialDelaySeconds": 5,
+                          "periodSeconds": 5
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": "[parameters('minReplicas')]",
+                    "maxReplicas": "[parameters('maxReplicas')]",
+                    "rules": [
+                      {
+                        "name": "http-rule",
+                        "http": {
+                          "metadata": {
+                            "concurrentRequests": "50"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
+                "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('acrPullRoleId')))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+                "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
+                "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), 'connection-string-database')]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+                "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('keyVaultSecretsUserRoleId')))]",
+                "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), variables('storageBlobRoleId')))]",
+                "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('kvName'), 'connection-string-storage')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "keyVaultName": {
+              "type": "string",
+              "value": "[variables('kvName')]"
+            },
+            "keyVaultUri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), '2023-02-01').vaultUri]"
+            },
+            "containerAppName": {
+              "type": "string",
+              "value": "[variables('appName')]"
+            },
+            "containerEnvironmentName": {
+              "type": "string",
+              "value": "[if(not(empty(parameters('existingContainerAppEnvName'))), parameters('existingContainerAppEnvName'), variables('envName'))]"
+            },
+            "containerRegistryName": {
+              "type": "string",
+              "value": "[variables('acrName')]"
+            },
+            "userAssignedIdentityResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
+            },
+            "requiredManualSecretNames": {
+              "type": "array",
+              "value": "[variables('manualSecretNames')]"
+            },
+            "autoManagedSecretNames": {
+              "type": "array",
+              "value": "[variables('autoSecretNames')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[variables('rgName')]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))), '2025-04-01').outputs.keyVaultName.value]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))), '2025-04-01').outputs.keyVaultUri.value]"
+    },
+    "containerAppName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))), '2025-04-01').outputs.containerAppName.value]"
+    },
+    "containerEnvironmentName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))), '2025-04-01').outputs.containerEnvironmentName.value]"
+    },
+    "containerRegistryName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))), '2025-04-01').outputs.containerRegistryName.value]"
+    },
+    "userAssignedIdentityResourceId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))), '2025-04-01').outputs.userAssignedIdentityResourceId.value]"
+    },
+    "requiredManualSecretNames": {
+      "type": "array",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))), '2025-04-01').outputs.requiredManualSecretNames.value]"
+    },
+    "autoManagedSecretNames": {
+      "type": "array",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('schooldocs-main-{0}', uniqueString(subscription().id, variables('rgName')))), '2025-04-01').outputs.autoManagedSecretNames.value]"
+    }
+  }
+}

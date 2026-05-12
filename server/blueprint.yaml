@@ -1,0 +1,90 @@
+# DevForge Blueprint — Target Architecture & Roadmap v1.0
+# AI-maintained: updated as phases progress, items complete, or architecture decisions change.
+# Human reads for context; AI writes to keep current.
+# Phase status: planned → active → complete
+# Last updated: 2026-05-10 (AI session)
+
+phases:
+  - phase: 1
+    name: "Foundation"
+    status: "complete"
+    completed: "2026-05-09"
+    items:
+      - "Server knowledge system: CLAUDE.yaml → state.yaml → changelog.yaml"
+      - "MOTD dashboard via motd-gen.timer (15min)"
+      - "Tmux session manager (~/.bashrc.d/tmux-session)"
+      - "Mosh connectivity (mconnect wrapper + OCI security list UDP 60000-61000)"
+      - "Session handover: update_handover.py + handover-gen.timer (10min) + SessionEnd hook"
+
+  - phase: 2
+    name: "LLM Infrastructure v2"
+    status: "complete"
+    completed: "2026-05-10"
+    items:
+      - "devforge-llm systemd user service"
+      - "Migrate llm-coder from podman run to systemd unit"
+      - "llama-server flags: --threads 4 --ctx-size 8192 --mlock --cache-reuse 256 --host 127.0.0.1 --port 8080"
+      - "Host networking (no pasta port-forward)"
+      - "LiteLLM container: API gateway for model routing"
+      - "PostgreSQL on lv_db: mount /dev/datavg/lv_db to target path"
+    completed:
+      - "devforge-llm systemd user service"
+      - "Migrate llm-coder from podman run to systemd unit"
+      - "Host networking (no pasta port-forward)"
+      - "Full flags applied: --threads 4 --ctx-size 8192 --mlock --cache-reuse 256 --host 127.0.0.1 --api-key unused"
+      - "lv_db mounted at /mnt/lv_db, fstab registered"
+      - "LiteLLM container: systemd user unit, 127.0.0.1:4000 -> llama-server:8080"
+      - "PostgreSQL 16 on lv_db: systemd system service, SELinux configured, seedling DB created"
+
+  - phase: 3
+    name: "Application Hosting"
+    status: "cancelled"
+    reason: "Wrong direction — discarded 2026-05-10"
+    items: []
+
+target:
+  services:
+    - name: "llama-server"
+      type: "systemd user"
+      image: "docker.io/amperecomputingai/llama.cpp:latest"
+      model: "qwen2.5-coder-7b-instruct-q8_0.gguf"
+      flags:
+        threads: 4
+        ctx_size: 16384
+        mlock: true
+        memory: "16g"
+        cache_reuse: 256
+        host: "127.0.0.1"
+        port: 8080
+      networking: "host"
+
+    - name: "litellm"
+      type: "systemd user / podman"
+      purpose: "API gateway — unified OpenAI-compatible endpoint with model routing"
+      endpoint: "127.0.0.1:4000"
+
+    - name: "postgresql"
+      type: "systemd system"
+      data_dir: "/dev/datavg/lv_db"
+      mount: "/mnt/lv_db"
+      purpose: "Application databases for seedling, litellm metadata"
+
+    - name: "netdata"
+      type: "systemd system"
+      endpoint: "127.0.0.1:19999"
+      purpose: "Real-time system monitoring dashboard with auto-discovery"
+
+  network:
+    internal_api: "127.0.0.1:8080 (llama-server)"
+    gateway_api: "127.0.0.1:4000 (LiteLLM)"
+    monitoring: "127.0.0.1:19999 (Netdata)"
+    application: "TBD (FastAPI on UNIX socket or localhost port)"
+
+  storage:
+    lv_db:
+      device: "/dev/datavg/lv_db"
+      size: "30G"
+      status: "mounted"
+      target: "/mnt/lv_db (PostgreSQL 16 data directory)"
+
+backlog:

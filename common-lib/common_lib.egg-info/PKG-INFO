@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: common-lib
+Version: 1.0.0
+Summary: Shared Python utilities for seedling & related projects
+Requires-Python: >=3.11
+Requires-Dist: oci>=2.100
+Requires-Dist: pytz
