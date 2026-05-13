@@ -1,9 +1,5 @@
 """
-Blob offload helper — store large context chunks to Azure Blob Storage.
-
-Integrated into generate_response() in llm_client.py. When context_str exceeds
-2000 chars, store_context_blob() is called and the blob path is stored in
-InteractionLogs.reference_blob_path via llm_result["blob_path"].
+azure/blob_offload | Blob offload helper: store large context chunks to Azure Blob Storage | needs:azure-storage-blob | store_context_blob()
 """
 import os
 import time

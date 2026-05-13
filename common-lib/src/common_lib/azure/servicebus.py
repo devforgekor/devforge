@@ -1,11 +1,5 @@
 """
-Service Bus ingestion for external conversation data (v1.0)
-
-Receives AI conversation history from browser plugins via Azure Service Bus,
-writes to per-user InteractionLogs DB, and archives raw JSON to Blob Storage.
-
-Called from batch/light.py (10-min cron). Non-real-time: DB contention causes
-message abandon, retried next cycle.
+azure/servicebus | Service Bus ingestion for conversation data: receive messages and archive to Blob | needs:azure-servicebus,azure-storage-blob | receive_and_ingest()
 """
 import json
 import logging

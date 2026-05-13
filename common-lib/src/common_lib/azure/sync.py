@@ -1,8 +1,5 @@
 """
-Azure Table Storage integration — PartitionKey, Blob replication, Service Bus trigger
-- Table Storage: InteractionLogs, ConversationSegments 원시 로그 이관
-- Service Bus 큐: 세그먼트 종료 Job 트리거
-- Blob Storage 계층 정책: 6년 이상 데이터 Cold 이동
+azure/sync | Azure Table Storage sync: log replication, Service Bus segment triggers, Blob tier policy | needs:azure-data-tables,azure-servicebus,azure-storage-blob | query_logs_from_azure_by_user(),sync_logs_to_table_storage(),sync_segments_to_table_storage(),send_segment_finalize_message(),receive_segment_finalize_messages(),apply_blob_tier_policy(),download_keys_db(),upload_keys_db()
 """
 
 import json

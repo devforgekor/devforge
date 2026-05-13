@@ -1,4 +1,6 @@
-"""Cosmos DB 무료 티어 싱크 — SQLite → Cosmos DB 메타데이터 이관 (P3-2)"""
+"""
+azure/seedling_cosmos | Cosmos DB free-tier sync: SQLite metadata migration to Cosmos DB | needs:azure-cosmos | sync_daily_metrics_to_cosmos(),sync_strategic_decisions_to_cosmos(),sync_user_profile_to_cosmos(),read_daily_metrics_from_cosmos()
+"""
 import os
 from datetime import datetime, timezone
 
