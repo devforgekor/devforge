@@ -14,8 +14,8 @@ metadata:
     - role: "system owner"
       contact: "local"
   base_dir: "~/.config/devforge"
-  refresh_cycle: "4 months"
-  next_refresh_date: "2026-09-01"
+  refresh_cycle: "4 months (April 15, August 15, December 15 UTC at 00:00)"
+  next_refresh_date: "2026-08-15"
   emergency_response_enabled: true
   policy_evolution_log: "historical/policy-log.md"
 
@@ -310,7 +310,7 @@ collection:
 
 # ---------- 4-Month Refresh Day Procedure (revised with roles & timing) ----------
 refresh_procedure:
-  frequency: "every 4 months (e.g., Jan 1, May 1, Sep 1)"
+  frequency: "every 4 months on 15th UTC at 00:00 (April 15, August 15, December 15)"
   total_duration_estimate: "1–2 hours (plus extra if HIGH migration selected)"
   steps:
     - step: 1
