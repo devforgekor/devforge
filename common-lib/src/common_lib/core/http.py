@@ -2,6 +2,7 @@
 core/http | Async HTTP client with retry and circuit breaker | needs:httpx | http_request(),CircuitBreaker()
 """
 import asyncio
+import time
 from typing import Any
 
 import httpx
@@ -19,7 +20,7 @@ class CircuitBreaker:
     def allow(self) -> bool:
         if self.open_until is None:
             return True
-        if asyncio.get_event_loop().time() > self.open_until:
+        if time.monotonic() > self.open_until:
             self.open_until = None
             self.fail_count = 0
             return True
@@ -28,7 +29,7 @@ class CircuitBreaker:
     def record_failure(self) -> None:
         self.fail_count += 1
         if self.fail_count >= self.fail_max:
-            self.open_until = asyncio.get_event_loop().time() + self.reset_timeout
+            self.open_until = time.monotonic() + self.reset_timeout
 
     def record_success(self) -> None:
         self.fail_count = 0
@@ -66,10 +67,13 @@ async def http_request(
         if cb and not cb.allow():
             raise RuntimeError("circuit breaker is open")
         try:
-            _client = client or httpx.AsyncClient()
-            async with _client as ac:
-                resp = await ac.request(method, url, timeout=timeout, **kwargs)
+            if client is not None:
+                resp = await client.request(method, url, timeout=timeout, **kwargs)
                 resp.raise_for_status()
+            else:
+                async with httpx.AsyncClient() as ac:
+                    resp = await ac.request(method, url, timeout=timeout, **kwargs)
+                    resp.raise_for_status()
             if cb:
                 cb.record_success()
             return resp
