@@ -4,6 +4,7 @@ version = "1.0.0"
 description = "Shared Python utilities for seedling & related projects"
 requires-python = ">=3.11"
 dependencies = [
+    "httpx>=0.27",
     "oci>=2.100",
     "pytz",
 ]
