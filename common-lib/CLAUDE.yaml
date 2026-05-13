@@ -15,7 +15,8 @@ structure:
     deps: "oci, pytz"
   planned:
     _active: "/opt/projects/seedling"
-    _dormant: "harvest/agora harvest/axis harvest/extentions harvest/infra harvest/isuflow harvest/make-vm harvest/neisync harvest/papertrail harvest/schooldocs harvest/schools"
+    _dormant: "harvest/agora harvest/isuflow harvest/make-vm harvest/neisync harvest/papertrail harvest/schooldocs"
+    _archive: "/opt/projects/archive/ (axis extentions schools)"
     rule: "do not move files yet. migrate through harvest one-by-one."
   location:
     _all: "/opt/projects/common-lib/"
