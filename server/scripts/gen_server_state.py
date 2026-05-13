@@ -26,7 +26,7 @@ CLAUDE_FILE = SERVER_DIR / "CLAUDE.yaml"
 LAST_STRUCTURAL_HASH = SERVER_DIR / ".last-structural-hash"
 MOTD_FILE = Path("/etc/motd")
 
-TZ = timezone(timedelta(hours=9))
+TZ = timezone.utc
 CHANGELOG_ARCHIVE_DAYS = 90
 
 # ── ANSI ───────────────────────────────────────────────────────────────
@@ -61,10 +61,16 @@ def discover_services():
     Returns list of (unit_name, display_name, scope) tuples. Scope: 'user' or 'system'."""
     services = []
 
+    def _is_transient_noise(name):
+        # Podman healthcheck/transient helpers create unstable unit names that should not be tracked.
+        return bool(re.search(r"healthcheck|conmon|run-[0-9a-f]{8,}", name))
+
     # User services: container-*.service + known names
-    known_user = {"devforge-llm", "litellm", "postgres"}
+    known_user = {"devforge-llm", "litellm", "postgres", "devforge-backup", "devforge-restore-test"}
     for line in _run_lines(["systemctl", "--user", "list-unit-files", "--no-legend", "--type=service"]):
         name = line.strip().split()[0].replace(".service", "")
+        if _is_transient_noise(name):
+            continue
         if name.startswith("container-") or name in known_user:
             display = name.removeprefix("container-")
             services.append((name, display, "user"))
@@ -82,8 +88,13 @@ def discover_services():
 def collect_container_flags(name):
     """Parse llama-server flags from a podman systemd user unit file.
     Only captures flags AFTER the image name (podman operational flags are excluded)."""
-    unit_path = os.path.expanduser(f"~/.config/systemd/user/{name}.service")
-    if not os.path.exists(unit_path):
+    user_dir = Path(os.path.expanduser("~/.config/systemd/user"))
+    candidates = [
+        user_dir / f"{name}.service",
+        user_dir / f"container-{name}.service",
+    ]
+    unit_path = next((str(p) for p in candidates if p.exists()), "")
+    if not unit_path:
         return ""
     content = Path(unit_path).read_text()
     # Match ExecStart= line that spans multiple lines with backslash continuation

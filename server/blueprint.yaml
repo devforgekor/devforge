@@ -2,7 +2,7 @@
 # AI-maintained: updated as phases progress, items complete, or architecture decisions change.
 # Human reads for context; AI writes to keep current.
 # Phase status: planned → active → complete
-# Last updated: 2026-05-10 (AI session)
+# Last updated: 2026-05-13 (AI session)
 
 phases:
   - phase: 1
@@ -23,18 +23,18 @@ phases:
     items:
       - "devforge-llm systemd user service"
       - "Migrate llm-coder from podman run to systemd unit"
-      - "llama-server flags: --threads 4 --ctx-size 8192 --mlock --cache-reuse 256 --host 127.0.0.1 --port 8080"
-      - "Host networking (no pasta port-forward)"
+      - "llama-server flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0 --port 8080"
+      - "Quadlet-managed pod networking (devforge-net)"
       - "LiteLLM container: API gateway for model routing"
       - "PostgreSQL on lv_db: mount /dev/datavg/lv_db to target path"
     completed:
       - "devforge-llm systemd user service"
       - "Migrate llm-coder from podman run to systemd unit"
-      - "Host networking (no pasta port-forward)"
-      - "Full flags applied: --threads 4 --ctx-size 8192 --mlock --cache-reuse 256 --host 127.0.0.1 --api-key unused"
+      - "Quadlet-managed pod networking (devforge-net)"
+      - "Full flags applied: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0"
       - "lv_db mounted at /mnt/lv_db, fstab registered"
       - "LiteLLM container: systemd user unit, 127.0.0.1:4000 -> llama-server:8080"
-      - "PostgreSQL 16 on lv_db: systemd system service, SELinux configured, seedling DB created"
+      - "PostgreSQL 16 on lv_db: Quadlet user unit, SELinux configured, seedling DB removed"
 
   - phase: 3
     name: "Application Hosting"
@@ -46,25 +46,25 @@ target:
   services:
     - name: "llama-server"
       type: "systemd user"
-      image: "docker.io/amperecomputingai/llama.cpp:latest"
+      image: "localhost/devforge-llama:2026.05.13"
       model: "qwen2.5-coder-7b-instruct-q8_0.gguf"
       flags:
         threads: 4
         ctx_size: 16384
-        mlock: true
+        mlock: false
         memory: "16g"
         cache_reuse: 256
-        host: "127.0.0.1"
+        host: "0.0.0.0"
         port: 8080
-      networking: "host"
+      networking: "Quadlet pod network (devforge-net)"
 
     - name: "litellm"
-      type: "systemd user / podman"
+      type: "systemd user / Quadlet container"
       purpose: "API gateway — unified OpenAI-compatible endpoint with model routing"
       endpoint: "127.0.0.1:4000"
 
     - name: "postgresql"
-      type: "systemd system"
+      type: "systemd user / Quadlet container"
       data_dir: "/dev/datavg/lv_db"
       mount: "/mnt/lv_db"
       purpose: "Application databases for seedling, litellm metadata"
@@ -75,8 +75,8 @@ target:
       purpose: "Real-time system monitoring dashboard with auto-discovery"
 
   network:
-    internal_api: "127.0.0.1:8080 (llama-server)"
-    gateway_api: "127.0.0.1:4000 (LiteLLM)"
+    internal_api: "ai-pod:8080 via devforge-net (published on host 8080)"
+    gateway_api: "ai-pod:4000 via devforge-net (published on host 4000)"
     monitoring: "127.0.0.1:19999 (Netdata)"
     application: "TBD (FastAPI on UNIX socket or localhost port)"
 

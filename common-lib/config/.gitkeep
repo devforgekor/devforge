@@ -1,3 +1,0 @@
-# Config templates live here as *.example.yaml (committed).
-# Actual configs: *.yaml (gitignored).
-# Module docstrings reference templates via config:<path>.

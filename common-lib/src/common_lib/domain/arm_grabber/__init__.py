@@ -1,1 +1,0 @@
-"""domain/arm_grabber/__init__ | ARM instance grabber: dual-strategy (direct+small->resize), winner-takes-all, status reporting | needs:oci,pytz | uses:domain/arm_grabber/strategy,domain/arm_grabber/notify,oci/compute,oci/config | config:arm-grabber.example.yaml | DirectStrategy(),SmallResizeStrategy()"""

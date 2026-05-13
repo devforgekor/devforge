@@ -38,14 +38,18 @@ storage:
     - lv: lv_swap
       size: 4G
       mount: SWAP
-    free: 6G
+    - lv: lv_workspace
+      size: 6G
+      mount: /opt/workspace
+    free: 0G
 containers:
   runtime: Podman (rootless, user opc)
-  image: docker.io/amperecomputingai/llama.cpp:latest (OpenBLAS + KleidiAI)
+  image: localhost/devforge-llama:2026.05.13 (fixed local tag)
   model: qwen2.5-coder-7b-instruct-q8_0.gguf (8.1GB)
-  flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --port 8080 --host 127.0.0.1 --threads 4 --ctx-size 8192 --mlock --cache-reuse
-    256 --api-key unused
-  target_flags: --threads 4 --ctx-size 16384 --mlock --cache-reuse 256 --host 127.0.0.1
+  flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --host 0.0.0.0 --port 8080 --threads 4 --threads-batch 4 --ctx-size
+    16384 --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 --cache-reuse 256 --slot-save-path /cache/ --cache-ram 16384
+    --batch-size 4096 --ubatch-size 1024
+  target_flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0
 services:
 - name: devforge-llm
   status: active
@@ -56,6 +60,10 @@ services:
 - name: postgres
   status: active
   type: systemd user
+- name: devforge-backup
+  status: inactive
+- name: devforge-restore-test
+  status: inactive
 - name: caddy
   status: active
   type: systemd system (rootful podman)
@@ -138,11 +146,17 @@ rules:
   - changelog.yaml is append-only. NEVER modify existing entries.
   - Use gen_server_state.py for all state/changelog/MOTD updates.
   - Structural changes trigger changelog entry. Metrics changes do NOT.
-  - 'Timezone: system internals (logs, timestamps, cron) MUST use UTC. User-facing output (MOTD, CLI, reports) MUST convert
-    to KST (UTC+9).'
+  - 'Timezone: system internals (logs, timestamps, systemd timers) MUST use UTC. User-facing output (MOTD, CLI, reports) MUST
+    convert to KST (UTC+9).'
+  - Container orchestration is Quadlet-only under ~/.config/containers/systemd/. Do not restore legacy generated unit files
+    from ~/.config/systemd/user/_legacy-generate-systemd/.
+  - Secrets are injected only via EnvironmentFile=~/.config/devforge/secrets.env (chmod 600). Never store credentials inline
+    in Quadlet or app config.
   - 'tmux: source-file only adds hooks, never removes them. After deleting a hook from .tmux.conf, MUST run tmux set-hook
     -gu <hook-name> to purge from running server.'
   should:
   - 'Prefer Python stdlib. Only dependency: pyyaml.'
   - 'changelog.archive policy: entries > 3 months move to changelog_archive.yaml.'
   - MOTD reflects real-time state; state.yaml reflects last collected snapshot.
+  - Monitoring should treat transient podman healthcheck units/scopes as noise; alert on stable unit health (ai-pod.service,
+    data-pod.service, container-*.service, devforge-*.timer/service).

@@ -1,4 +1,4 @@
-# DevForge v3.0 Final — 실행 계획서 (수정본)
+# DevForge v3.0 Final — 실행 계획서 (수정본, Historical)
 
 **버전**: 3.0 Final (Corrected)
 **대상**: OCI ARM 인스턴스, OL9.7, Rootless Podman 5.6, SELinux enforcing
@@ -19,7 +19,8 @@ ocivolume VG (44.5G, 0 free)          datavg VG (150G, 20G free)
 현재 /opt/project 내용: server, seedling, litellm, common-lib, aider-env
 ```
 
-**관리 방식**: `podman generate systemd` 기반 systemd user units (Quadlet 아님)
+**관리 방식 (현재 최신)**: Quadlet 기반 systemd user units (`~/.config/containers/systemd/`)
+**참고**: 본 문서는 초기 마이그레이션 기록(Historical)이며, 최신 운영 정책은 `CLAUDE.yaml`/`handover.yaml`을 우선한다.
 
 현재 실행 중인 유닛:
 ```
@@ -240,10 +241,11 @@ SCRIPT
 sudo chmod +x /usr/local/bin/dump_postgres.sh
 ```
 
-### 5.3 Cron 등록 (opc 유저)
+### 5.3 systemd timer 활성화
 
 ```bash
-(crontab -l 2>/dev/null; echo "13 3 * * * /usr/local/bin/dump_postgres.sh") | crontab -
+sudo systemctl daemon-reload
+sudo systemctl enable --now devforge-backup.timer
 ```
 
 ### 5.4 수동 테스트
@@ -303,7 +305,7 @@ curl -sf http://127.0.0.1:19999/api/v1/info | jq -r '.version'
 
 ---
 
-## 7단계: 덤프 복원 테스트 (월 1회)
+## 7단계: 덤프 복원 테스트 (월 1회, systemd timer)
 
 ```bash
 sudo tee /usr/local/bin/test_dump_restore.sh << 'SCRIPT'
@@ -336,8 +338,33 @@ echo "Restore OK: ${TABLE_COUNT} tables"
 SCRIPT
 sudo chmod +x /usr/local/bin/test_dump_restore.sh
 
-# Cron: 매월 1일 04:13
-(crontab -l 2>/dev/null; echo "13 4 1 * * /usr/local/bin/test_dump_restore.sh") | crontab -
+sudo tee /etc/systemd/system/devforge-restore-test.service << 'SCRIPT'
+[Unit]
+Description=DevForge Monthly PostgreSQL Restore Test
+Wants=devforge-backup.service
+After=devforge-backup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/test_dump_restore.sh
+User=opc
+SCRIPT
+
+sudo tee /etc/systemd/system/devforge-restore-test.timer << 'SCRIPT'
+[Unit]
+Description=DevForge Monthly PostgreSQL Restore Test Timer (04:13 UTC)
+
+[Timer]
+OnCalendar=*-*-01 04:13:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+SCRIPT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now devforge-restore-test.timer
 ```
 
 ---
@@ -379,9 +406,9 @@ systemctl --user start pod-ai-pod.service
 [ ] 2단계: 서비스 중지 → rsync /opt/project → /opt/projects → 심볼릭 링크
 [ ] 3단계: lv_dev 언마운트 → /mnt/secure_meta 마운트 → 디렉토리 구조 → SELinux → fstab
 [ ] 4단계: container-litellm.service 경로 수정 → daemon-reload → 서비스 재시작
-[ ] 5단계: .pgpass → dump_postgres.sh → cron 등록 → 수동 테스트
+[ ] 5단계: .pgpass → dump_postgres.sh → systemd timer 활성화 → 수동 테스트
 [ ] 6단계: pod ps, df, curl API, pg_isready, E2E 추론
-[ ] 7단계: test_dump_restore.sh → cron 등록
+[ ] 7단계: test_dump_restore.sh → systemd timer 활성화
 [ ] 선택: sudo reboot 후 6단계 반복
 ```
 
@@ -393,8 +420,8 @@ systemctl --user start pod-ai-pod.service
 |------|------|--------|------|
 | 신규 LV 소스 | `ocivolume` (0 free) | `datavg` (20G free) | 실제 VG 여유 공간 |
 | 4.5GB LV 위치 | `/mnt/small_vol` (존재하지 않음) | `ocivolume/lv_dev` → `/opt/project` | 실제 LVM 구성 |
-| 관리 방식 | Quadlet `.container` 파일 | `podman generate systemd` 유닛 | 현재 운영 중인 검증된 방식 |
-| `Pod=` | `Pod=ai-pod` | 해당 없음 (`--pod-id-file` 사용) | Quadlet 미사용 |
+| 관리 방식 | Quadlet `.container` 파일 | Quadlet `.container/.pod` 유닛 | 최신 운영 정책(2026-05-13) |
+| `Pod=` | `Pod=ai-pod` | `Pod=pod-ai-pod.pod` | Quadlet 기준 참조 정합 |
 | `Memory=` in `[Pod]` | 사용 | `--memory=2g` (ExecStartPre) | Quadlet `[Pod]` 미지원 키 |
 | `CPUQuota=` | `CPUQuota=350000` | 해당 없음 | Quadlet `[Pod]` 미지원 키 |
 | 볼륨 마운트 | `:ro` | `:Z,ro` | SELinux enforcing |
@@ -402,5 +429,5 @@ systemctl --user start pod-ai-pod.service
 | `loginctl enable-linger` | 누락 | 0.4단계에서 확인 | 이미 설정됨 |
 | `PGPASSWORD` env | 스크립트 내 하드코딩 | `.pgpass` 파일 | 보안 |
 | `pg_dump` 옵션 | 없음 | `--no-owner --no-acl` | rootless 복원 호환성 |
-| 덤프 복원 테스트 | 없음 | `test_dump_restore.sh` 추가 | 운영 안정성 |
+| 덤프 복원 테스트 | 없음 | `devforge-restore-test.timer` 추가 | 운영 안정성 |
 | `:Z` 플래그 | `:ro`만 사용 | 모든 마운트에 `:Z` 또는 `:Z,ro` | SELinux |

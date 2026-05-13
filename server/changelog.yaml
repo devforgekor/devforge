@@ -1,4 +1,932 @@
 entries:
+- time: '2026-05-13T11:50:20.562766+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 19 hours (healthy) -> Up 20 hours (healthy); structural.containers[devforge-llm].status:
+    Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[litellm].status: Up About an hour (healthy)
+    -> Up 2 hours (healthy); structural.containers[pod:ai].status: Up About an hour -> Up 2 hours; structural.containers[pod:data].status:
+    Up About an hour -> Up 2 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 19 hours (healthy)
+    after: Up 20 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[pod:ai].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  decisions: []
+- time: '2026-05-13T11:19:51.624365+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 46 minutes (healthy) -> Up About an hour (healthy); structural.containers[litellm].status:
+    Up 46 minutes (healthy) -> Up About an hour (healthy); structural.containers[pod:ai].status: Up 46 minutes -> Up About
+    an hour; structural.containers[pod:data].status: Up 46 minutes -> Up About an hour; structural.containers[postgres].status:
+    Up 46 minutes (healthy) -> Up About an hour (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[pod:ai].status
+    type: changed
+    before: Up 46 minutes
+    after: Up About an hour
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 46 minutes
+    after: Up About an hour
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  decisions: []
+- time: '2026-05-13T11:04:47.573074+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 31 minutes (healthy) -> Up 46 minutes (healthy); structural.containers[litellm].status:
+    Up 31 minutes (healthy) -> Up 46 minutes (healthy); structural.containers[pod:ai].status: Up 31 minutes -> Up 46 minutes;
+    structural.containers[pod:data].status: Up 31 minutes -> Up 46 minutes; structural.containers[postgres].status: Up 31
+    minutes (healthy) -> Up 46 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 31 minutes (healthy)
+    after: Up 46 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 31 minutes (healthy)
+    after: Up 46 minutes (healthy)
+  - path: structural.containers[pod:ai].status
+    type: changed
+    before: Up 31 minutes
+    after: Up 46 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 31 minutes
+    after: Up 46 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 31 minutes (healthy)
+    after: Up 46 minutes (healthy)
+  decisions: []
+- time: '2026-05-13T10:49:37.575678+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 18 hours (healthy) -> Up 19 hours (healthy); structural.containers[devforge-llm].status:
+    Up 24 minutes (healthy) -> Up 31 minutes (healthy); structural.containers[litellm].status: Up 24 minutes (healthy) ->
+    Up 31 minutes (healthy); structural.containers[pod:ai].status: Up 24 minutes -> Up 31 minutes; structural.containers[pod:data].status:
+    Up 24 minutes -> Up 31 minutes (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 18 hours (healthy)
+    after: Up 19 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 24 minutes (healthy)
+    after: Up 31 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 24 minutes (healthy)
+    after: Up 31 minutes (healthy)
+  - path: structural.containers[pod:ai].status
+    type: changed
+    before: Up 24 minutes
+    after: Up 31 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 24 minutes
+    after: Up 31 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 24 minutes (healthy)
+    after: Up 31 minutes (healthy)
+  decisions: []
+- time: '2026-05-13T10:42:23.927179+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 16 minutes (healthy) -> Up 24 minutes (healthy); structural.containers[litellm].status:
+    Up 16 minutes (healthy) -> Up 24 minutes (healthy); structural.containers[pod:ai].status: Up 16 minutes -> Up 24 minutes;
+    structural.containers[pod:data].status: Up 16 minutes -> Up 24 minutes; structural.containers[postgres].status: Up 16
+    minutes (healthy) -> Up 24 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 16 minutes (healthy)
+    after: Up 24 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 16 minutes (healthy)
+    after: Up 24 minutes (healthy)
+  - path: structural.containers[pod:ai].status
+    type: changed
+    before: Up 16 minutes
+    after: Up 24 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 16 minutes
+    after: Up 24 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 16 minutes (healthy)
+    after: Up 24 minutes (healthy)
+  decisions: []
+- time: '2026-05-13T19:34:23.553720+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 58 seconds (starting) -> Up 16 minutes (healthy); structural.containers[litellm].status:
+    Up 58 seconds (healthy) -> Up 16 minutes (healthy); structural.containers[pod:ai].status: Up 58 seconds -> Up 16 minutes;
+    structural.containers[pod:data].status: Up 58 seconds -> Up 16 minutes; structural.containers[postgres].status: Up 58
+    seconds (healthy) -> Up 16 minutes (healthy) (+2 more)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 58 seconds (starting)
+    after: Up 16 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 58 seconds (healthy)
+    after: Up 16 minutes (healthy)
+  - path: structural.containers[pod:ai].status
+    type: changed
+    before: Up 58 seconds
+    after: Up 16 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 58 seconds
+    after: Up 16 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 58 seconds (healthy)
+    after: Up 16 minutes (healthy)
+  - path: structural.services[devforge-backup]
+    type: added
+    after:
+      name: devforge-backup
+      status: inactive
+  - path: structural.services[devforge-restore-test]
+    type: added
+    after:
+      name: devforge-restore-test
+      status: inactive
+  decisions: []
+- time: '2026-05-13T19:19:17.818546+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 6 minutes (healthy) -> Up 58 seconds (starting); structural.containers[litellm].status:
+    Up 6 minutes (healthy) -> Up 58 seconds (healthy); structural.containers[pod:ai].status: Up 6 minutes -> Up 58 seconds;
+    structural.containers[pod:data].status: Up 6 minutes -> Up 58 seconds; structural.containers[postgres].status: Up 6 minutes
+    (healthy) -> Up 58 seconds (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 6 minutes (healthy)
+    after: Up 58 seconds (starting)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 6 minutes (healthy)
+    after: Up 58 seconds (healthy)
+  - path: structural.containers[pod:ai].status
+    type: changed
+    before: Up 6 minutes
+    after: Up 58 seconds
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 6 minutes
+    after: Up 58 seconds
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 6 minutes (healthy)
+    after: Up 58 seconds (healthy)
+  decisions: []
+- time: '2026-05-13T19:04:07.530028+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 18 hours (healthy) -> Up 6 minutes (healthy); structural.containers[litellm].status:
+    Up 18 hours (healthy) -> Up 6 minutes (healthy); structural.containers[pod:ai]: added; structural.containers[pod:ai-pod]:
+    removed; structural.containers[pod:data]: added (+2 more)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 18 hours (healthy)
+    after: Up 6 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 18 hours (healthy)
+    after: Up 6 minutes (healthy)
+  - path: structural.containers[pod:ai]
+    type: added
+    after:
+      name: pod:ai
+      status: Up 6 minutes
+      ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[pod:ai-pod]
+    type: removed
+    before:
+      name: pod:ai-pod
+      status: Up 18 hours
+      ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[pod:data]
+    type: added
+    after:
+      name: pod:data
+      status: Up 6 minutes
+      ports: ''
+      model: null
+      flags: ''
+  - path: structural.containers[pod:data-pod]
+    type: removed
+    before:
+      name: pod:data-pod
+      status: Up 18 hours
+      ports: ''
+      model: null
+      flags: ''
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 18 hours (healthy)
+    after: Up 6 minutes (healthy)
+  decisions: []
+- time: '2026-05-13T18:49:07.540328+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 17 hours (healthy) -> Up 18 hours (healthy); structural.containers[devforge-llm].status:
+    Up 17 hours (healthy) -> Up 18 hours (healthy); structural.containers[litellm].status: Up 17 hours (healthy) -> Up 18
+    hours (healthy); structural.containers[pod:ai-pod].status: Up 17 hours -> Up 18 hours; structural.containers[pod:data-pod].status:
+    Up 17 hours -> Up 18 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 17 hours (healthy)
+    after: Up 18 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 17 hours (healthy)
+    after: Up 18 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 17 hours (healthy)
+    after: Up 18 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 17 hours
+    after: Up 18 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 17 hours
+    after: Up 18 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 17 hours (healthy)
+    after: Up 18 hours (healthy)
+  decisions: []
+- time: '2026-05-13T17:48:07.540643+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 16 hours (healthy) -> Up 17 hours (healthy); structural.containers[devforge-llm].status:
+    Up 16 hours (healthy) -> Up 17 hours (healthy); structural.containers[litellm].status: Up 16 hours (healthy) -> Up 17
+    hours (healthy); structural.containers[pod:ai-pod].status: Up 16 hours -> Up 17 hours; structural.containers[pod:data-pod].status:
+    Up 16 hours -> Up 17 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 16 hours (healthy)
+    after: Up 17 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 16 hours (healthy)
+    after: Up 17 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 16 hours (healthy)
+    after: Up 17 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 16 hours
+    after: Up 17 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 16 hours
+    after: Up 17 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 16 hours (healthy)
+    after: Up 17 hours (healthy)
+  decisions: []
+- time: '2026-05-13T16:47:07.519646+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 15 hours (healthy) -> Up 16 hours (healthy); structural.containers[devforge-llm].status:
+    Up 15 hours (healthy) -> Up 16 hours (healthy); structural.containers[litellm].status: Up 15 hours (healthy) -> Up 16
+    hours (healthy); structural.containers[pod:ai-pod].status: Up 15 hours -> Up 16 hours; structural.containers[pod:data-pod].status:
+    Up 15 hours -> Up 16 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 15 hours (healthy)
+    after: Up 16 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 15 hours (healthy)
+    after: Up 16 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 15 hours (healthy)
+    after: Up 16 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 15 hours
+    after: Up 16 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 15 hours
+    after: Up 16 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 15 hours (healthy)
+    after: Up 16 hours (healthy)
+  decisions: []
+- time: '2026-05-13T15:45:47.567982+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 14 hours (healthy) -> Up 15 hours (healthy); structural.containers[devforge-llm].status:
+    Up 14 hours (healthy) -> Up 15 hours (healthy); structural.containers[litellm].status: Up 14 hours (healthy) -> Up 15
+    hours (healthy); structural.containers[pod:ai-pod].status: Up 14 hours -> Up 15 hours; structural.containers[pod:data-pod].status:
+    Up 14 hours -> Up 15 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 14 hours (healthy)
+    after: Up 15 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 14 hours (healthy)
+    after: Up 15 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 14 hours (healthy)
+    after: Up 15 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 14 hours
+    after: Up 15 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 14 hours
+    after: Up 15 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 14 hours (healthy)
+    after: Up 15 hours (healthy)
+  decisions: []
+- time: '2026-05-13T15:42:19.872195+09:00'
+  type: auto
+  summary: 'structural.storage[datavg-lv_workspace]: added'
+  changed:
+  - path: structural.storage[datavg-lv_workspace]
+    type: added
+    after:
+      device: datavg-lv_workspace
+      vg: datavg
+      lv: lv_workspace
+      size: 6G
+      mounted: true
+      mount: /opt/workspace
+  decisions: []
+- time: '2026-05-13T15:00:17.476906+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 13 hours (healthy) -> Up 14 hours (healthy); structural.containers[devforge-llm].status:
+    Up 13 hours (healthy) -> Up 14 hours (healthy); structural.containers[litellm].status: Up 13 hours (healthy) -> Up 14
+    hours (healthy); structural.containers[pod:ai-pod].status: Up 13 hours -> Up 14 hours; structural.containers[pod:data-pod].status:
+    Up 13 hours -> Up 14 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 13 hours (healthy)
+    after: Up 14 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 13 hours (healthy)
+    after: Up 14 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 13 hours (healthy)
+    after: Up 14 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 13 hours
+    after: Up 14 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 13 hours
+    after: Up 14 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 13 hours (healthy)
+    after: Up 14 hours (healthy)
+  decisions: []
+- time: '2026-05-13T13:59:27.572380+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 12 hours (healthy) -> Up 13 hours (healthy); structural.containers[devforge-llm].status:
+    Up 12 hours (healthy) -> Up 13 hours (healthy); structural.containers[litellm].status: Up 12 hours (healthy) -> Up 13
+    hours (healthy); structural.containers[pod:ai-pod].status: Up 12 hours -> Up 13 hours; structural.containers[pod:data-pod].status:
+    Up 12 hours -> Up 13 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 12 hours (healthy)
+    after: Up 13 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 12 hours (healthy)
+    after: Up 13 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 12 hours (healthy)
+    after: Up 13 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 12 hours
+    after: Up 13 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 12 hours
+    after: Up 13 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 12 hours (healthy)
+    after: Up 13 hours (healthy)
+  decisions: []
+- time: '2026-05-13T12:58:27.497685+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 11 hours (healthy) -> Up 12 hours (healthy); structural.containers[devforge-llm].status:
+    Up 11 hours (healthy) -> Up 12 hours (healthy); structural.containers[litellm].status: Up 11 hours (healthy) -> Up 12
+    hours (healthy); structural.containers[pod:ai-pod].status: Up 11 hours -> Up 12 hours; structural.containers[pod:data-pod].status:
+    Up 11 hours -> Up 12 hours (+2 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 11 hours (healthy)
+    after: Up 12 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 11 hours (healthy)
+    after: Up 12 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 11 hours (healthy)
+    after: Up 12 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 11 hours
+    after: Up 12 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 11 hours
+    after: Up 12 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 11 hours (healthy)
+    after: Up 12 hours (healthy)
+  - path: structural.containers[thirsty_hoover]
+    type: removed
+    before:
+      name: thirsty_hoover
+      status: Up About an hour
+      ports: ''
+      model: null
+      flags: ''
+  decisions: []
+- time: '2026-05-13T12:43:07.494292+09:00'
+  type: auto
+  summary: 'structural.containers[thirsty_hoover].status: Up 54 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[thirsty_hoover].status
+    type: changed
+    before: Up 54 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-13T12:27:37.511498+09:00'
+  type: auto
+  summary: 'structural.containers[thirsty_hoover].status: Up 39 minutes -> Up 54 minutes'
+  changed:
+  - path: structural.containers[thirsty_hoover].status
+    type: changed
+    before: Up 39 minutes
+    after: Up 54 minutes
+  decisions: []
+- time: '2026-05-13T12:12:07.558120+09:00'
+  type: auto
+  summary: 'structural.containers[naughty_ptolemy]: removed; structural.containers[thirsty_hoover].status: Up 23 minutes ->
+    Up 39 minutes'
+  changed:
+  - path: structural.containers[naughty_ptolemy]
+    type: removed
+    before:
+      name: naughty_ptolemy
+      status: Up 17 minutes
+      ports: ''
+      model: null
+      flags: ''
+  - path: structural.containers[thirsty_hoover].status
+    type: changed
+    before: Up 23 minutes
+    after: Up 39 minutes
+  decisions: []
+- time: '2026-05-13T11:56:38.519387+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 10 hours (healthy) -> Up 11 hours (healthy); structural.containers[devforge-llm].status:
+    Up 10 hours (healthy) -> Up 11 hours (healthy); structural.containers[litellm].status: Up 10 hours (healthy) -> Up 11
+    hours (healthy); structural.containers[naughty_ptolemy].status: Up 2 minutes -> Up 17 minutes; structural.containers[pod:ai-pod].status:
+    Up 10 hours -> Up 11 hours (+3 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 10 hours (healthy)
+    after: Up 11 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 10 hours (healthy)
+    after: Up 11 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 10 hours (healthy)
+    after: Up 11 hours (healthy)
+  - path: structural.containers[naughty_ptolemy].status
+    type: changed
+    before: Up 2 minutes
+    after: Up 17 minutes
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 10 hours
+    after: Up 11 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 10 hours
+    after: Up 11 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 10 hours (healthy)
+    after: Up 11 hours (healthy)
+  - path: structural.containers[thirsty_hoover].status
+    type: changed
+    before: Up 8 minutes
+    after: Up 23 minutes
+  decisions: []
+- time: '2026-05-13T11:41:37.533876+09:00'
+  type: auto
+  summary: 'structural.containers[naughty_ptolemy]: added; structural.containers[thirsty_hoover]: added'
+  changed:
+  - path: structural.containers[naughty_ptolemy]
+    type: added
+    after:
+      name: naughty_ptolemy
+      status: Up 2 minutes
+      ports: ''
+      model: null
+      flags: ''
+  - path: structural.containers[thirsty_hoover]
+    type: added
+    after:
+      name: thirsty_hoover
+      status: Up 8 minutes
+      ports: ''
+      model: null
+      flags: ''
+  decisions: []
+- time: '2026-05-13T10:56:07.516984+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 9 hours (healthy) -> Up 10 hours (healthy); structural.containers[devforge-llm].status:
+    Up 9 hours (healthy) -> Up 10 hours (healthy); structural.containers[litellm].status: Up 9 hours (healthy) -> Up 10 hours
+    (healthy); structural.containers[pod:ai-pod].status: Up 9 hours -> Up 10 hours; structural.containers[pod:data-pod].status:
+    Up 9 hours -> Up 10 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 9 hours (healthy)
+    after: Up 10 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 9 hours (healthy)
+    after: Up 10 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 9 hours (healthy)
+    after: Up 10 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 9 hours
+    after: Up 10 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 9 hours
+    after: Up 10 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 9 hours (healthy)
+    after: Up 10 hours (healthy)
+  decisions: []
+- time: '2026-05-13T09:54:07.536754+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 8 hours (healthy) -> Up 9 hours (healthy); structural.containers[devforge-llm].status:
+    Up 8 hours (healthy) -> Up 9 hours (healthy); structural.containers[litellm].status: Up 8 hours (healthy) -> Up 9 hours
+    (healthy); structural.containers[pod:ai-pod].status: Up 8 hours -> Up 9 hours; structural.containers[pod:data-pod].status:
+    Up 8 hours -> Up 9 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 8 hours (healthy)
+    after: Up 9 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 8 hours (healthy)
+    after: Up 9 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 8 hours (healthy)
+    after: Up 9 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 8 hours
+    after: Up 9 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 8 hours
+    after: Up 9 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 8 hours (healthy)
+    after: Up 9 hours (healthy)
+  decisions: []
+- time: '2026-05-13T08:52:37.443783+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 7 hours (healthy) -> Up 8 hours (healthy); structural.containers[devforge-llm].status:
+    Up 7 hours (healthy) -> Up 8 hours (healthy); structural.containers[litellm].status: Up 7 hours (healthy) -> Up 8 hours
+    (healthy); structural.containers[pod:ai-pod].status: Up 7 hours -> Up 8 hours; structural.containers[pod:data-pod].status:
+    Up 7 hours -> Up 8 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 7 hours (healthy)
+    after: Up 8 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 7 hours (healthy)
+    after: Up 8 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 7 hours (healthy)
+    after: Up 8 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 7 hours
+    after: Up 8 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 7 hours
+    after: Up 8 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 7 hours (healthy)
+    after: Up 8 hours (healthy)
+  decisions: []
+- time: '2026-05-13T07:51:37.665803+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 6 hours (healthy) -> Up 7 hours (healthy); structural.containers[devforge-llm].status:
+    Up 6 hours (healthy) -> Up 7 hours (healthy); structural.containers[litellm].status: Up 6 hours (healthy) -> Up 7 hours
+    (healthy); structural.containers[pod:ai-pod].status: Up 6 hours -> Up 7 hours; structural.containers[pod:data-pod].status:
+    Up 6 hours -> Up 7 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 6 hours (healthy)
+    after: Up 7 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 6 hours (healthy)
+    after: Up 7 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 6 hours (healthy)
+    after: Up 7 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 6 hours
+    after: Up 7 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 6 hours
+    after: Up 7 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 6 hours (healthy)
+    after: Up 7 hours (healthy)
+  decisions: []
+- time: '2026-05-13T06:50:37.658413+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 5 hours (healthy) -> Up 6 hours (healthy); structural.containers[devforge-llm].status:
+    Up 5 hours (healthy) -> Up 6 hours (healthy); structural.containers[litellm].status: Up 5 hours (healthy) -> Up 6 hours
+    (healthy); structural.containers[pod:ai-pod].status: Up 5 hours -> Up 6 hours; structural.containers[pod:data-pod].status:
+    Up 5 hours -> Up 6 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 5 hours (healthy)
+    after: Up 6 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 5 hours (healthy)
+    after: Up 6 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 5 hours (healthy)
+    after: Up 6 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 5 hours
+    after: Up 6 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 5 hours
+    after: Up 6 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 5 hours (healthy)
+    after: Up 6 hours (healthy)
+  decisions: []
+- time: '2026-05-13T05:49:46.421951+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 4 hours (healthy) -> Up 5 hours (healthy); structural.containers[devforge-llm].status:
+    Up 4 hours (healthy) -> Up 5 hours (healthy); structural.containers[litellm].status: Up 4 hours (healthy) -> Up 5 hours
+    (healthy); structural.containers[pod:ai-pod].status: Up 4 hours -> Up 5 hours; structural.containers[pod:data-pod].status:
+    Up 4 hours -> Up 5 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 hours (healthy)
+  decisions: []
+- time: '2026-05-13T04:48:49.507258+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 3 hours (healthy) -> Up 4 hours (healthy); structural.containers[devforge-llm].status:
+    Up 3 hours (healthy) -> Up 4 hours (healthy); structural.containers[litellm].status: Up 3 hours (healthy) -> Up 4 hours
+    (healthy); structural.containers[pod:ai-pod].status: Up 3 hours -> Up 4 hours; structural.containers[pod:data-pod].status:
+    Up 3 hours -> Up 4 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  decisions: []
+- time: '2026-05-13T03:48:17.476383+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 2 hours (healthy) -> Up 3 hours (healthy); structural.containers[devforge-llm].status:
+    Up 2 hours (healthy) -> Up 3 hours (healthy); structural.containers[litellm].status: Up 2 hours (healthy) -> Up 3 hours
+    (healthy); structural.containers[pod:ai-pod].status: Up 2 hours -> Up 3 hours; structural.containers[pod:data-pod].status:
+    Up 2 hours -> Up 3 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  decisions: []
+- time: '2026-05-13T02:47:24.459905+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[devforge-llm].status:
+    Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[litellm].status: Up About an hour (healthy)
+    -> Up 2 hours (healthy); structural.containers[pod:ai-pod].status: Up About an hour -> Up 2 hours; structural.containers[pod:data-pod].status:
+    Up About an hour -> Up 2 hours (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  decisions: []
+- time: '2026-05-13T02:16:55.462504+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 46 minutes (healthy) -> Up About an hour (healthy); structural.containers[devforge-llm].status:
+    Up 46 minutes (healthy) -> Up About an hour (healthy); structural.containers[litellm].status: Up 46 minutes (healthy)
+    -> Up About an hour (healthy); structural.containers[pod:ai-pod].status: Up 46 minutes -> Up About an hour; structural.containers[pod:data-pod].status:
+    Up 46 minutes -> Up About an hour (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 46 minutes
+    after: Up About an hour
+  - path: structural.containers[pod:data-pod].status
+    type: changed
+    before: Up 46 minutes
+    after: Up About an hour
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  decisions: []
 - time: '2026-05-13T02:01:47.478424+09:00'
   type: auto
   summary: 'structural.containers[caddy].status: Up 38 minutes (healthy) -> Up 46 minutes (healthy); structural.containers[devforge-llm].status:
