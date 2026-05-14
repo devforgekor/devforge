@@ -1,0 +1,28 @@
+meta:
+  location: /opt/projects/server/docs/tasks.yaml
+  purpose: "Shared task tracker for all AI agents on DevForge server."
+  language: "English only (machine-readable)."
+  related_files:
+    - /opt/projects/server/CLAUDE.yaml
+    - /opt/projects/server/handover.yaml
+    - /opt/projects/server/blueprint.yaml
+    - /opt/projects/server/docs/design.md
+    - /opt/projects/server/docs/phases.md
+    - /opt/projects/server/_archive/README.md
+  must_rules:
+    - "current: exactly 1 task or null. Never leave a completed task in current."
+    - "pending: ordered by priority. Add new tasks to the end."
+    - "done: keep at most 10 recent items. Older items exist only in worklog DB."
+  done_checklist:
+    - "Move current -> done (insert at top of done list)."
+    - "If pending is non-empty: promote pending[0] -> current."
+    - "Log to DB: python3 /opt/workspace/devforge/cli.py worklog add '<title>' '<summary>' --agent '<agent>' --model '<model>' --tags '<tags>'"
+    - "If decisions were made or issues found: update handover.yaml."
+  add_checklist:
+    - "Append new task to pending with date and optional tags."
+
+current: null
+
+pending: []
+
+done: []

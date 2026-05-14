@@ -1,0 +1,6 @@
+# link_turns review
+date: 2026-05-15
+linked: 0
+finding: orphan_turns.claude-code: 16
+finding: empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT
+finding: turn_coverage: 22/38

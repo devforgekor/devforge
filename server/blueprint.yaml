@@ -1,52 +1,48 @@
-# DevForge Blueprint — Target Architecture & Roadmap v1.0
+# DevForge Blueprint — Target Architecture & Roadmap v1.1
 # AI-maintained: updated as phases progress, items complete, or architecture decisions change.
 # Human reads for context; AI writes to keep current.
 # Phase status: planned → active → complete
-# Last updated: 2026-05-13 (AI session)
+# Last updated: 2026-05-14 (AI session — worklog system refactor)
 
 phases:
   - phase: 1
-    name: "Foundation"
+    name: "Basic Infrastructure + MCP Server"
     status: "complete"
-    completed: "2026-05-09"
+    completed: "2026-05-14"
     items:
-      - "Server knowledge system: CLAUDE.yaml → state.yaml → changelog.yaml"
-      - "MOTD dashboard via motd-gen.timer (15min)"
-      - "Tmux session manager (~/.bashrc.d/tmux-session)"
-      - "Mosh connectivity (mconnect wrapper + OCI security list UDP 60000-61000)"
-      - "Session handover: update_handover.py + handover-gen.timer (10min) + SessionEnd hook"
+      - "Podman Quadlet 6 containers (ai-pod + data-pod)"
+      - "PostgreSQL 16 + pg_trgm + JSONB meta"
+      - "MCP SSE server (mem_save, mem_search)"
+      - "POST /ingest (batch conversation storage)"
+      - "Python CLI (search/save/recent/worklog add/recent/search)"
+      - "GET /stats (7-section dashboard)"
+      - "daily pg_dump + monthly restore test"
+      - "RSS upstream version monitoring"
+      - "worklog_entries DB table + tasks.yaml task tracker"
+      - "session_guard.py auto-commit safety net + session_start.py context injection"
 
   - phase: 2
-    name: "LLM Infrastructure v2"
-    status: "complete"
-    completed: "2026-05-10"
+    name: "Enhancement"
+    status: "planned"
     items:
-      - "devforge-llm systemd user service"
-      - "Migrate llm-coder from podman run to systemd unit"
-      - "llama-server flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0 --port 8080"
-      - "Quadlet-managed pod networking (devforge-net)"
-      - "LiteLLM container: API gateway for model routing"
-      - "PostgreSQL on lv_db: mount /dev/datavg/lv_db to target path"
-    completed:
-      - "devforge-llm systemd user service"
-      - "Migrate llm-coder from podman run to systemd unit"
-      - "Quadlet-managed pod networking (devforge-net)"
-      - "Full flags applied: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0"
-      - "lv_db mounted at /mnt/lv_db, fstab registered"
-      - "LiteLLM container: systemd user unit, 127.0.0.1:4000 -> llama-server:8080"
-      - "PostgreSQL 16 on lv_db: Quadlet user unit, SELinux configured, seedling DB removed"
+      - "pgvector embedding search (semantic search)"
+      - "MemPalace classification (wing/room, auto conversation classification)"
+      - "CLI Search-Augmented integration"
+      - "Web UI (conversation search dashboard)"
 
   - phase: 3
-    name: "Application Hosting"
-    status: "cancelled"
-    reason: "Wrong direction — discarded 2026-05-10"
-    items: []
+    name: "Someday/Maybe"
+    status: "planned"
+    items:
+      - "Chrome Extension → direct server upload"
+      - "iOS Shortcuts integration"
+      - "Multi-LLM routing (additional models via litellm)"
 
 target:
   services:
-    - name: "llama-server"
+    - name: "devforge-llm"
       type: "systemd user"
-      image: "localhost/devforge-llama:2026.05.13"
+      image: "localhost/devforge-llama:2026.05.14"
       model: "qwen2.5-coder-7b-instruct-q8_0.gguf"
       flags:
         threads: 4
@@ -60,14 +56,21 @@ target:
 
     - name: "litellm"
       type: "systemd user / Quadlet container"
+      image: "localhost/devforge-litellm:2026.05.14"
       purpose: "API gateway — unified OpenAI-compatible endpoint with model routing"
       endpoint: "127.0.0.1:4000"
+
+    - name: "devforge-api"
+      type: "systemd user / Quadlet container"
+      image: "localhost/devforge-api:2026.05.14"
+      purpose: "MCP SSE server + POST /ingest + GET /stats"
+      endpoint: "127.0.0.1:8000"
 
     - name: "postgresql"
       type: "systemd user / Quadlet container"
       data_dir: "/dev/datavg/lv_db"
       mount: "/mnt/lv_db"
-      purpose: "Application databases for seedling, litellm metadata"
+      purpose: "devforge_app database (conversations, turns, worklog_entries)"
 
     - name: "netdata"
       type: "systemd system"
@@ -75,10 +78,10 @@ target:
       purpose: "Real-time system monitoring dashboard with auto-discovery"
 
   network:
-    internal_api: "ai-pod:8080 via devforge-net (published on host 8080)"
-    gateway_api: "ai-pod:4000 via devforge-net (published on host 4000)"
+    internal_api: "ai-pod:8080 via devforge-net (published on host 127.0.0.1:8080)"
+    gateway_api: "ai-pod:4000 via devforge-net (published on host 127.0.0.1:4000)"
+    application: "ai-pod:8000 via devforge-net (published on host 127.0.0.1:8000)"
     monitoring: "127.0.0.1:19999 (Netdata)"
-    application: "TBD (FastAPI on UNIX socket or localhost port)"
 
   storage:
     lv_db:

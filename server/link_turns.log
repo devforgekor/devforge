@@ -1,0 +1,60 @@
+[2026-05-14T14:30:26Z] worklog 1 (): linked 1 turns
+[2026-05-14T14:30:26Z] worklog 2 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 3 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 4 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 5 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 6 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 7 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 12 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 13 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 14 (): no turns found in window
+[2026-05-14T14:30:28Z] worklog 15 (): no turns found in window
+[2026-05-14T14:30:28Z] worklog 21 (): no turns found in window
+[2026-05-14T14:30:28Z] Done: 1 turns linked across 12 worklog entries
+[2026-05-14T14:40:56Z] worklog 2 (): no turns found in window
+[2026-05-14T14:40:56Z] worklog 1 (): no turns found in window
+[2026-05-14T14:40:56Z] worklog 3 (): no turns found in window
+[2026-05-14T14:40:56Z] worklog 4 (): no turns found in window
+[2026-05-14T14:40:56Z] worklog 5 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 6 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 7 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 12 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 13 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 14 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 15 (): no turns found in window
+[2026-05-14T14:40:58Z] worklog 21 (): no turns found in window
+[2026-05-14T14:40:58Z] Done: 0 turns linked across 12 worklog entries
+[2026-05-14T14:45:33Z] worklog 2 (): no turns found in window
+[2026-05-14T14:45:33Z] worklog 1 (): no turns found in window
+[2026-05-14T14:45:33Z] worklog 3 (): no turns found in window
+[2026-05-14T14:45:33Z] worklog 4 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 5 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 6 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 7 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 12 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 13 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 14 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 15 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 21 (): no turns found in window
+[2026-05-14T14:45:34Z] Done: 0 turns linked across 12 worklog entries
+[2026-05-14T15:00:56Z] No worklog entries for 2026-05-15
+[2026-05-14T15:05:57Z] No worklog entries for 2026-05-15
+[2026-05-14T15:16:02Z] No worklog entries for 2026-05-15
+[2026-05-14T15:19:30Z] === link_turns 2026-05-15 ===
+[2026-05-14T15:19:30Z] No worklog entries for 2026-05-15
+[2026-05-14T15:19:31Z] Review: orphan_turns.claude: 12; empty_worklog: 0; turn_coverage: 0/12
+[2026-05-14T15:35:47Z] === link_turns 2026-05-15 ===
+[2026-05-14T15:35:47Z] worklog 26 (claude): linked 12 turns
+[2026-05-14T15:35:48Z] worklog 27 (claude): linked 4 turns
+[2026-05-14T15:35:48Z] Matched: 16 turns across 2 worklog entries
+[2026-05-14T15:35:49Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 16/16
+[2026-05-14T15:45:23Z] === link_turns 2026-05-15 ===
+[2026-05-14T15:45:24Z] Matched: 0 turns across 2 worklog entries
+[2026-05-14T15:45:24Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 16/16
+[2026-05-14T15:49:12Z] === link_turns 2026-05-15 ===
+[2026-05-14T15:49:13Z] worklog 29 (claude-code): linked 6 turns
+[2026-05-14T15:49:13Z] Matched: 6 turns across 3 worklog entries
+[2026-05-14T15:49:13Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 22/22
+[2026-05-14T21:55:17Z] === link_turns 2026-05-15 ===
+[2026-05-14T21:55:17Z] Matched: 0 turns across 4 worklog entries
+[2026-05-14T21:55:18Z] Review: orphan_turns.claude-code: 16; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; turn_coverage: 22/38

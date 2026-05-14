@@ -1,0 +1,101 @@
+structural:
+  storage:
+  - device: datavg-lv_ai_data
+    vg: datavg
+    lv: lv_ai_data
+    size: 100G
+    mounted: true
+    mount: /opt/ai_data
+  - device: datavg-lv_db
+    vg: datavg
+    lv: lv_db
+    size: 30G
+    mounted: false
+    mount: null
+  - device: ocivolume-lv_logs
+    vg: ocivolume
+    lv: lv_logs
+    size: 8G
+    mounted: true
+    mount: /var/log
+  - device: ocivolume-lv_project
+    vg: ocivolume
+    lv: lv_project
+    size: 10G
+    mounted: true
+    mount: /opt/project
+  - device: ocivolume-lv_tmp
+    vg: ocivolume
+    lv: lv_tmp
+    size: 5G
+    mounted: true
+    mount: /tmp
+  - device: ocivolume-root
+    vg: ocivolume
+    lv: root
+    size: 20G
+    mounted: true
+    mount: /
+  containers:
+  - name: devforge-llm
+    status: Up 59 minutes (healthy)
+    ports: ''
+    model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  services:
+  - name: devforge-llm
+    status: active
+  - name: litellm
+    status: not-installed
+  network:
+    ip: 10.0.0.75/24
+    ports:
+    - '111'
+    - '22'
+    - '8080'
+metrics:
+  generated: '2026-05-10T20:32:36.094682+09:00'
+  system:
+    cpu_load:
+    - 0.69
+    - 0.25
+    - 0.14
+    memory:
+      used: 10Gi
+      total: 22Gi
+      percent: 47
+    zram: 4G 74B
+  storage_use:
+  - device: ocivolume-root
+    size: 20G
+    used: 13G
+    avail: 7.2G
+    use_pct: 64
+    mount: /
+  - device: ocivolume-lv_project
+    size: 10G
+    used: 1.2G
+    avail: 8.8G
+    use_pct: 12
+    mount: /opt/project
+  - device: ocivolume-lv_tmp
+    size: 5.0G
+    used: 71M
+    avail: 4.9G
+    use_pct: 2
+    mount: /tmp
+  - device: ocivolume-lv_logs
+    size: 8.0G
+    used: 114M
+    avail: 7.9G
+    use_pct: 2
+    mount: /var/log
+  - device: datavg-lv_ai_data
+    size: 100G
+    used: 10G
+    avail: 91G
+    use_pct: 10
+    mount: /opt/ai_data
+  containers_uptime:
+  - name: devforge-llm
+    uptime: Up 59 minutes (healthy)
+  alerts: []

@@ -5,7 +5,6 @@ Triggered by SessionEnd hook AND 10-min checkpoint timer.
 Captures file changes and system fingerprint. AI writes decisions/tasks inline.
 """
 
-import fcntl
 import hashlib
 import json
 import subprocess
@@ -15,19 +14,18 @@ from pathlib import Path
 
 import yaml
 
-SERVER_DIR = Path("/opt/projects/server")
+SERVER_DIR = Path("/opt/project/server")
 HANDOVER_FILE = SERVER_DIR / "handover.yaml"
-LOCK_FILE = SERVER_DIR / ".handover.lock"
 PROJECT_DIRS = [
-    Path("/opt/projects/seedling"),
-    Path("/opt/projects/common-lib"),
-    Path("/opt/projects/server"),
+    Path("/opt/project/seedling"),
+    Path("/opt/project/common-lib"),
+    Path("/opt/project/server"),
 ]
 TZ = timezone(timedelta(hours=9))
 CHECKPOINT_WINDOW_HOURS = 1  # scan files modified within this window
 
 
-def _run(cmd, timeout=15, cwd="/opt/projects/seedling"):
+def _run(cmd, timeout=15, cwd="/opt/project/seedling"):
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
         return r.stdout.strip()
@@ -49,11 +47,13 @@ def save_handover(data):
 def scan_recent_files():
     """Find files modified in the last CHECKPOINT_WINDOW_HOURS."""
     recent = []
+    cutoff = datetime.now() - timedelta(hours=CHECKPOINT_WINDOW_HOURS)
     for proj in PROJECT_DIRS:
         if not proj.exists():
             continue
+        # Use find to get recently modified files
         out = _run(["find", str(proj), "-type", "f",
-                     "-mmin", f"-{CHECKPOINT_WINDOW_HOURS * 60}",
+                     "-newermt", cutoff.strftime("%Y-%m-%d %H:%M"),
                      "-not", "-path", "*/.git/*",
                      "-not", "-path", "*/__pycache__/*",
                      "-not", "-path", "*/.venv/*",
@@ -107,10 +107,9 @@ def main():
     now = datetime.now(TZ)
     data = load_handover()
 
-    # Preserve AI-written sections (decisions, known_issues, completed_log)
-    # current_task and pending now live in tasks.yaml, not here
+    # Preserve AI-written sections
     ai_sections = {}
-    for key in ("decisions", "known_issues", "completed_log"):
+    for key in ("current_task", "decisions", "pending", "known_issues"):
         if key in data:
             ai_sections[key] = data[key]
 
@@ -120,7 +119,7 @@ def main():
 
     checkpoint = {
         "time": now.isoformat(),
-        "recent_files": recent_files[:30],
+        "recent_files": recent_files[:30],  # cap at 30
         "git": git_state,
     }
 
@@ -130,17 +129,16 @@ def main():
     if old_hash and old_hash == new_hash:
         return 0
 
+    # Merge: AI content preserved, mechanical updated
     data = {
         "last_checkpoint": checkpoint,
+        "current_task": ai_sections.get("current_task", {"summary": "", "started": "", "branch": ""}),
         "decisions": ai_sections.get("decisions", []),
+        "pending": ai_sections.get("pending", []),
         "known_issues": ai_sections.get("known_issues", []),
-        "completed_log": ai_sections.get("completed_log", data.get("completed_log", [])),
     }
 
-    with open(LOCK_FILE, "w") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        save_handover(data)
-
+    save_handover(data)
     return 0
 
 

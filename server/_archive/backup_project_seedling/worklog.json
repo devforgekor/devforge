@@ -1,0 +1,854 @@
+{
+	"project": "seedling (DURU-DURU)",
+	"updated": "2026-05-10T05:45:00+09:00",
+	"design_intent": {
+		"purpose": "AI 챗봇 백엔드 — TIR(검색)+QDP(질문분해) 파이프라인으로 정확도 높은 응답 생성",
+		"key_decisions": [
+			"PostgreSQL 16 + pgvector + pg_trgm: OCI ARM HNSW + RLS + asyncpg + LISTEN/NOTIFY + Alembic + Caddy",
+			"Azure 코드 common-lib 이전: 5개 파일(~700줄) common-lib/azure/로 이전 (삭제 X), 추후 재사용 가능",
+			"Backup: pg_dump -Fc -Z4 --no-owner + 7일 로테이션 (WAL 보류)",
+			"Key Store: keys 스키마로 통합, DB 연결 암호는 .env에 격리",
+			"Admin Auth: Google OAuth 유지 (verify_google_token), Entra ID 제거, ADMIN_EMAILS로 접근 제어",
+			"SQLite bypass 9 files: db.py pool.acquire()로 통합 (갭 분석 발견)",
+			"Flash-2.5 2-tier (thinking_budget 1/1024) → Gemma-4-26b MoE fallback: fast/slow 구분으로 단순화",
+			"Reasoning Language Policy: English-First for COMPLEX/EXPERT tiers",
+			"Stateless API with Stateful Knowledge Graph"
+		]
+	},
+	"non_functional_requirements": {
+		"cold_start": "사용자 체감 0초 (onFocus 웜업으로 은폐), 실제 컨테이너 기동 25~42초",
+		"api_latency": "DB 적중 시 1~2초, Gemini 호출 시 3~8초 (모델/복잡도 의존)",
+		"monthly_budget": "$8 목표 (OCI ARM 단일 서버)",
+		"concurrent_users": "최대 5명 동시 (FastAPI 비동기, 1.0 vCPU/2Gi)",
+		"data_durability": "pg_dump RPO < 24h, RTO < 5min (pg_restore 기준)"
+	},
+	"phases": {
+		"phase_1": {
+			"status": "current",
+			"features": [
+				"FTS5 키워드 검색 + TIR 임베딩 검색",
+				"Flash-2.5 2-tier (thinking_budget 1/1024) → Gemma-4-26b MoE fallback",
+				"FastAPI 메인 서버 + 사이드카 지식 크롤링",
+				"SSE 스트리밍 채팅",
+				"SQLite + Litestream (단일 DB)",
+				"3단계 검색 엔진 아키텍처 (Brave/Tavily/Exa/You.com)",
+				"Cascading 검증 파이프라인 (Flash-2.5→Gemma-4-26b MoE)",
+				"통합 Gemini 키 풀 (GEMINI_API_KEYS)",
+				"경량/집중 배치 분리 (run_light_job / run_overnight_job)"
+			],
+			"excluded": [
+				"Babelfy Entity/Relation 추출",
+				"MagmaTracker (턴 간 그래프 관계 추적)",
+				"Hybrid RRF (FTS5 + 벡터 + 그래프)",
+				"사용자별 DB 분리",
+				"Cosmos DB 전환",
+				"Gemini Batch API (Flex tier로 대체)",
+				"InteractionLogs_fts 실제 사용 (DDL만 준비)"
+			]
+		},
+		"phase_2": {
+			"status": "completed",
+			"completed_at": "2026-05-02",
+			"trigger": "일일 대화 100건+ or DB 10MB+",
+			"features": [
+				"Babelfy Entity/Relation 추출",
+				"CID-GraphRAG 의도 그래프",
+				"RRF 고도화 (FTS5 + 벡터 + 그래프)",
+				"사용자별 SQLite 파일 분리",
+				"Cosmos DB 무료 티어(1000 RU/s)로 메타데이터 이전",
+				"InteractionLogs_fts 실제 검색 활성화",
+				"Gemini Batch API 도입 (대량 처리)",
+				"context_cache 용량 기반 정리 (1,000건 초과 시 오래된 순 삭제)",
+				"pending_complexity_fixes 피드백 학습 적용",
+				"outbox 패턴 백그라운드 작업 큐 활성화"
+			]
+		},
+		"phase_3": {
+			"status": "completed",
+			"completed_at": "2026-05-02",
+			"features": [
+				"Azure 배포 전 테스트 (검색 엔진별 fallback 동작 확인)",
+				"Azure Bing Search 활성화 (API 키만 추가)",
+				"GPT-4.1 / GPT-4o-mini 추가 (OpenAI API 키 필요)",
+				"비용 최적화 (모니터링 기반 모델 다운그레이드 자동화)",
+				"Litestream 복제 모니터링 정기화"
+			]
+		}
+	},
+	"file_tree": {
+		"AGENTS.md": "Repo-wide Copilot instruction file",
+		"app/": {
+			"main.py": "FastAPI 진입점, 라우터 등록, 미들웨어, CORS",
+			"gemini_pool.py": "Gemini API 키 풀 관리 (백오프/할당량/키 순환)",
+			"http_client.py": "공유 httpx.AsyncClient (TCP 커넥션 풀 재사용)",
+			"llm_client.py": "LLM 호출 추상화 (CircuitBreaker/TokenBucket 분리)",
+			"search_engines.py": "검색 엔진 6종 (Tavily/Brave/Exa/You.com/Azure Bing)",
+			"prompt_builder.py": "프롬프트 생성/언어 감지/실시간 패턴",
+			"db.py": "SQLite DB 연결 + Litestream 복원",
+			"routes_chat.py": "/chat 엔드포인트 (SSE 분리)",
+			"routes_chat_stream.py": "SSE 스트리밍 채팅 핸들러",
+			"routes_history.py": "/history/* 히스토리 조회",
+			"routes_feedback.py": "/feedback 피드백 수집",
+			"routes_graph.py": "/api/graph 지식 그래프",
+			"routes_upload.py": "/upload 파일 업로드",
+			"routes_channels.py": "메신저 채널 웹훅 라우팅",
+			"routes_admin.py": "/admin/* 관리자 API 키 관리",
+			"routes_monitor.py": "/health, /warmup, /monitor/*",
+			"routes_ui.py": "/, /dashboard HTML 페이지",
+			"routes_knowledge.py": "/knowledge/update 사이드카 지식 수신",
+			"routes_plugin.py": "POST /plugin/ingest 플러그인 데이터 staging",
+			"routes_chat_file.py": "/files/{file_id} 파일 조회",
+			"sidecar_main.py": "사이드카 진입점 (지식 파이프라인)",
+			"sidecar_knowledge.py": "사이드카 지식 처리 로직",
+			"knowledge_pipeline.py": "위키데이터 크롤링 + 지식 정제",
+			"concept_mapper.py": "개념 매핑 (v2.2 source_hash prefix + meta/weight)",
+			"error_signature.py": "API 에러 시그니처 분류",
+			"retrieval.py": "TIR/RRF/QDP 검색 로직 (MagmaTracker 분리)",
+			"structuring.py": "QDP 질문 분해",
+			"verification.py": "응답 검증 (v3.0 Cascading Lite→Flash→Gemma4→Pro)",
+			"magma_tracker.py": "MAGMA 경량 그래프 관계 추적 (v2, CID 의도 그래프)",
+			"circuit_breaker.py": "Circuit Breaker + Token Bucket 속도 제한/장애 격리",
+			"security.py": "Azure AD 토큰 검증",
+			"azure_sync.py": "Azure Blob/Table 동기화 (Cosmos 분리)",
+			"azure_cosmos.py": "Cosmos DB 무료 티어 싱크 (SQLite → Cosmos)",
+			"session_finalizer.py": "세션 종료 처리",
+			"feedback.py": "피드백 분석",
+			"monitoring.py": "모니터링 집계",
+			"monitoring_cost.py": "비용 모니터링 (예산 알림/모델 다운그레이드)",
+			"monitoring_infra.py": "인프라 모니터링 (Litestream 복제 지연)",
+			"batch_jobs.py": "배치 작업 진입점 (v2.2, CLI 라우팅 + 통합 예외 처리)",
+			"batch/": {
+				"__init__.py": "batch 패키지 (비워둠, 순환 참조 방지)",
+				"utils.py": "공통 유틸 (비용 알림/모델 다운그레이드/Litestream 복제 확인)",
+				"daily.py": "일간 배치 (pending 승격/세션 정리/DailyMetrics/DeepSeek 검증)",
+				"weekly.py": "주간 배치 (지식 그래프 무결성/Concept 재검증/참조 동기화)",
+				"light.py": "경량 배치 (세션 정리/outbox 소비/Litestream 복제 확인)",
+				"quarterly.py": "분기 배치 (4개월 주기 레퍼런스 업데이트 스캔)"
+			},
+			"batch_api.py": "Gemini Batch API + Flex tier 클라이언트",
+			"pending_processor.py": "지연 처리 큐",
+			"file_handler.py": "파일 처리 (이미지 설명 추출)",
+			"language_balance.py": "언어 밸런싱",
+			"complexity_classifier.py": "복잡도 분류기 (URGENCY/KNOWLEDGE_DEPTH/MULTILINGUAL)",
+			"key_store.py": "API 키 안전 저장소 (암호화/복호화)",
+			"sidecar_client.py": "사이드카 HTTP 클라이언트 (지식 확장 요청)",
+			"utils.py": "공통 유틸리티",
+			"templates.py": "Jinja2 템플릿 헬퍼",
+			"token_export.py": "토큰 CSV 내보내기 (3종)",
+			"servicebus_ingest.py": "Service Bus 수신 + Blob 아카이브 + 개념 추출 (v2.2)",
+			"schema.sql": "SQLite 스키마 정의 (Phase 2 DDL 포함)",
+			"channels/": {
+				"telegram.py": "텔레그램 봇",
+				"kakao.py": "카카오톡 채널",
+				"slack.py": "슬랙 앱",
+				"line.py": "라인 메신저"
+			},
+			"templates/": {
+				"index.html": "메인 채팅 UI (11줄, Jinja2 include 조립)",
+				"_chat_style.html": "CSS 스타일 (206줄)",
+				"_chat_body.html": "HTML 마크업 (51줄)",
+				"_chat_script.html": "JS 로직 (334줄, SSE/웜업/히스토리/파일/음성)",
+				"dashboard.html": "대시보드 (비용/절약/모니터링/보안/활동)",
+				"graph.html": "지식 그래프 (D3.js)",
+				"admin.html": "관리자 페이지"
+			},
+			"prompts/": {
+				"__init__.py": "프롬프트 거버넌스 (로드/버전 확인/목록)"
+			},
+			"static/": "정적 파일",
+			"blob_offload.py": "대용량 컨텍스트 Blob 오프로드 헬퍼 (pending: chat path 연동)",
+			"counters.py": "In-memory counter persistence (ServerCounters table, startup/shutdown save/restore)"
+		},
+		"scripts/": {
+			"migrate_worklog_v2.py": "worklog.json v1.x → v2.0 마이그레이션 (Phase 4)",
+			"dump_refs.py": "worklog_references DB → SQL 텍스트 덤프",
+			"dump_db.py": "worklog_meta DB 3개 테이블(references/decisions/history) SQL 덤프",
+			"query_refs.py": "역방향 참조 쿼리 CLI (ref_key/entry_key/orphan/all)",
+			"export_tokens.py": "토큰 CSV 내보내기 CLI",
+			"push_claude_sessions.py": "Claude Code JSONL → Service Bus 전송 (SessionStart hook)"
+		},
+		"infra/": {
+			"main.bicep": "Bicep 메인 템플릿 (subscription scope)",
+			"resources.bicep": "리소스 정의 (ACA 서버A/B + Job 3종 + Storage + ACR + SB, 키리스)",
+			"deploy.py": "배포 CLI (대화형/비대화형, What-if, Apidog 동기화)"
+		},
+		"docs/": {
+			"api.md": "API 문서",
+			"architecture.md": "자동 생성 봇 최적화 코드 네비게이션 맵",
+			"openapi.yaml": "OpenAPI 3.0.3 스펙 (Apidog 동기화 대상)",
+			"worklog.json": "작업 기록 (이 파일)"
+		},
+		"docker/": {
+			"Dockerfile": "메인 앱 도커파일",
+			"docker-compose.yml": "로컬 개발용",
+			"docker-entrypoint.sh": "컨테이너 진입점",
+			"litestream.yml": "Litestream 설정"
+		},
+		"tests/": "테스트 코드",
+		"data/": "로컬 SQLite DB (memory.db)",
+		"uploads/": "업로드 파일 저장소",
+		"logs/": "부하 테스트 로그",
+		"app": {
+			"chrome-extension/content_common.js": "v0.4.1 — Observer + debounce + noise guard + time-window dedup",
+			"chrome-extension/content_gemini.js": "v0.4.1 — Gemini selectors + 4-stage model detection",
+			"config.py": "pydantic-settings 중앙 설정 (36+ env vars)",
+			"db.py": "asyncpg PostgreSQL 연결 풀 + RLS",
+			"key_store.py": "PostgresKeyStore (keys 스키마, async)"
+		}
+	},
+	"module_dependencies": {
+		"main.py": [
+			"routes_chat",
+			"routes_history",
+			"routes_feedback",
+			"routes_graph",
+			"routes_upload",
+			"routes_channels",
+			"routes_admin",
+			"routes_monitor",
+			"routes_ui",
+			"routes_knowledge",
+			"routes_chat_file",
+			"db",
+			"security",
+			"counters"
+		],
+		"routes_chat.py": [
+			"llm_client",
+			"gemini_pool",
+			"db",
+			"retrieval",
+			"magma_tracker",
+			"structuring",
+			"verification",
+			"concept_mapper",
+			"feedback",
+			"sidecar_client",
+			"session_finalizer",
+			"routes_chat_stream"
+		],
+		"llm_client.py": [
+			"gemini_pool",
+			"search_engines",
+			"prompt_builder",
+			"complexity_classifier",
+			"circuit_breaker",
+			"structuring (decompose_query)",
+			"counters"
+		],
+		"routes_chat_stream.py": [
+			"db",
+			"llm_client",
+			"concept_mapper",
+			"feedback",
+			"retrieval"
+		],
+		"magma_tracker.py": [
+			"db"
+		],
+		"circuit_breaker.py": [],
+		"gemini_pool.py": [
+			"db"
+		],
+		"servicebus_ingest.py": [
+			"db",
+			"concept_mapper"
+		],
+		"blob_offload.py": [
+			"azure-storage-blob"
+		],
+		"counters.py": [
+			"db"
+		]
+	},
+	"data_flow": {
+		"chat_request": "사용자 질문 → routes_chat.py → llm_client.py → Gemini API → 응답 + DB 저장",
+		"token_tracking": "Gemini API → async_execute → APICallLogs 기록 → monitoring_cost.py 집계 → 대시보드 표시",
+		"sidecar": "사이드카 HTTP 클라이언트 → 지식 확장 요청 → 위키데이터 크롤링 → DB 저장"
+	},
+	"gemini_pool_behavior": {
+		"key_rotation": "최소 사용 키 우선, 백오프/할당량 기반 자동 순환",
+		"backoff": "retryDelay 기반 실제 대기 시간 준수, KST 17시 자동 리셋",
+		"circuit_breaker": "연속 실패 5회 → 회로 차단 → fallback 체인",
+		"fallback_chain": "flash-2.5 (연속 thinking_budget 1~4096, 신호 기반 추정) → gemma-4-26b-a4b-it MoE, 모든 키 1회 시도"
+	},
+	"db_schemas": {
+		"concurrency_settings": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=30000;",
+		"gemini_pool_db": {
+			"location": "/tmp/pool/gemini_{model}.db",
+			"tables": {
+				"pool_status_{model}": {
+					"columns": [
+						"id INTEGER PRIMARY KEY",
+						"backoff_step INTEGER DEFAULT 0",
+						"backoff_until REAL DEFAULT 0",
+						"fail_count INTEGER DEFAULT 0",
+						"last_reset REAL DEFAULT 0",
+						"status TEXT DEFAULT 'active'",
+						"consecutive_failures INTEGER DEFAULT 0",
+						"last_error TEXT DEFAULT ''"
+					]
+				},
+				"pool_keys_{model}": {
+					"columns": [
+						"id INTEGER PRIMARY KEY",
+						"display_name TEXT UNIQUE",
+						"api_key TEXT",
+						"model_type TEXT",
+						"account_prefix TEXT DEFAULT ''",
+						"is_active INTEGER DEFAULT 1",
+						"note TEXT DEFAULT ''"
+					]
+				}
+			}
+		},
+		"memory_db": {
+			"location": "/data/core/memory.db",
+			"note": "Litestream으로 Azure Blob에 복제됨. /data/core/ 디렉토리 사용."
+		},
+		"gemini_keys_db": {
+			"location": "/data/keys/gemini.db",
+			"note": "KeyStore DB. /data/keys/ 디렉토리 사용. Azure Blob과 동기화."
+		},
+		"user_dbs": {
+			"location": "/data/users/{user_id}.db",
+			"note": "사용자별 DB. /data/users/ 디렉토리 사용. InteractionLogs에 token_count 컬럼 포함 (ALTER TABLE 마이그레이션)."
+		},
+		"api_call_logs": {
+			"location": "/data/core/memory.db",
+			"table": "APICallLogs",
+			"columns": "id, model_used, token_count, prompt_tokens, candidates_tokens, cached_tokens, thoughts_tokens, service_tier, timestamp",
+			"note": "Gemini API 호출 시 토큰 사용량 기록. monitoring_cost.py에서 비용 집계에 사용."
+		}
+	},
+	"env_keys": {
+		"format": "이름:API_KEY (콜론 구분, 이름 생략 시 자동 생성)",
+		"example": "GEMINI_LITE_KEYS=\"my-key-1:AIza... my-key-2:AIza...\"",
+		"note": "display_name이 '이름'으로 설정됨, 없으면 'key-N' 자동 생성",
+		"additional": {
+			"KNOWLEDGE_SEARCH_DEPTH": "1|2 (복잡도에 따른 검색 깊이 제어 플래그)",
+			"ADMIN_GROUP_ID": "Azure AD 관리자 그룹 ID (RBAC 권한 부여용)"
+		}
+	},
+	"entries": [
+		{
+			"time": "2026-05-10T05:50:00+09:00",
+			"summary": "CLAUDE.md 규칙 감사 및 수정: docstring 첫 줄 한글→영문 (14파일), LLM 프롬프트 한글 제거",
+			"files": [
+				"app/prompts/__init__.py (SYSTEM_PROMPT (한국어) 제거, MOCK_RESPONSE 영문화, 모듈 docstring 영문화)",
+				"app/session_finalizer.py (docstring 첫 줄 영문화)",
+				"app/routes_plugin.py (docstring 첫 줄 영문화)",
+				"app/db.py (docstring 첫 줄 영문화)",
+				"app/token_export.py (docstring 첫 줄 영문화)",
+				"app/routes_feedback.py (docstring 첫 줄 영문화)",
+				"app/http_client.py (docstring 첫 줄 영문화)",
+				"app/routes_chat_stream.py (docstring 첫 줄 영문화)",
+				"app/magma_tracker.py (docstring 첫 줄 영문화)",
+				"app/routes_monitor.py (docstring 첫 줄 영문화)",
+				"app/circuit_breaker.py (docstring 첫 줄 영문화)",
+				"app/id_utils.py (docstring 첫 줄 영문화)",
+				"app/routes_channels.py (docstring 첫 줄 영문화)",
+				"app/templates.py (docstring 첫 줄 영문화)",
+				"app/routes_ui.py (docstring 첫 줄 영문화)",
+				"app/channels/utils.py (docstring 첫 줄 영문화)"
+			],
+			"decisions": [
+				"docstring 첫 줄(summary line)은 반드시 영문 — CLAUDE.md 규칙",
+				"LLM 프롬프트 문자열에 한국어 금지 — 기계 명령어이므로 영문만 허용",
+				"로거 메시지/print() 한국어는 유지 — 사용자/운영자 대상 출력이므로 허용",
+				"pydantic Field description 한국어는 유지 — OpenAPI 문서용 사용자 대상",
+				"SLOC 위반 7개 파일(422~734줄)은 known_issues에 이미 문서화, 즉시 조치 불필요",
+				"utcnow()/bare except: 위반 없음 확인"
+			]
+		},
+		{
+			"time": "2026-05-10T04:00:00+09:00",
+			"summary": "1g 완료: 14개 개선사항 + 1h 테스트 + 1i 배치/파티션 + 1j 문서/설정 정리",
+			"files": [
+				"app/verification.py (N+1 병렬화: asyncio.gather)",
+				"app/routes_plugin.py (pydantic PluginIngestRequest)",
+				"app/main.py (python-json-logger JsonFormatter)",
+				"app/config.py (pydantic-settings 신규)",
+				"app/security.py (Entra ID 제거, decrypt_data→None)",
+				"app/retrieval.py (cachetools.TTLCache)",
+				"app/llm_client.py (asyncio.Semaphore(5))",
+				"app/babelfy_client.py (urllib→httpx async)",
+				"app/batch/monthly.py (신규: 파티션 관리 + HNSW REINDEX)",
+				"app/batch/daily.py (Dead Tuple 관찰 추가)",
+				".env.example (Azure/Entra/Cosmos 제거)",
+				"requirements.txt (azure-* 제거, asyncpg/pgvector 추가)",
+				"readme.md (아키텍처/DB/배치 갱신)",
+				"docs/update_azure.md (update.md 아카이브)",
+				"tests/test_security.py (RBAC→AdminCheck)",
+				"14개 파일 print()→logger (structured JSON logging)"
+			],
+			"decisions": [
+				"python-json-logger JsonFormatter (CLI 출력은 보존: gemini_pool, batch_jobs)",
+				"verification.py: asyncio.gather + return_exceptions=True",
+				"monthly.py: REINDEX CONCURRENTLY → VACUUM + Index Warming",
+				"daily.py: Dead Tuple 관찰 로깅만 (3~6개월 후 Signal-Driven REINDEX)",
+				"pytest: 37 passed, 30 skipped (PostgreSQL 필요 테스트는 서버에서)",
+				"requiremnts.txt: azure-* 5종 + PyJWT + aiofiles 제거"
+			]
+		},
+		{
+			"time": "2026-05-09T22:00:00+09:00",
+			"summary": "1e 완료: Azure 코드 common_lib 이전 (6개 파일) + seedling import 정리",
+			"files": [
+				"common_lib/azure/sync.py (from app/azure_sync.py)",
+				"common_lib/azure/seedling_cosmos.py (from app/azure_cosmos.py, renamed to avoid conflict)",
+				"common_lib/azure/servicebus.py (from app/servicebus_ingest.py)",
+				"common_lib/azure/blob_offload.py (from app/blob_offload.py)",
+				"app/llm_client.py (blob_offload -> None)",
+				"app/routes_admin.py (upload_keys_db 제거)",
+				"app/batch/light.py (ServiceBus -> direct DB)",
+				"app/batch/daily.py (run_azure_sync 제거)"
+			],
+			"decisions": [
+				"azure_cosmos.py -> seedling_cosmos.py로 rename (common_lib/azure/cosmos.py와 충돌 방지)",
+				"store_context_blob: no-op (PostgreSQL JSONB가 대용량 context 처리)",
+				"upload_keys_db: no-op (keys는 PostgreSQL keys 스키마로)",
+				"receive_and_ingest: PluginIngest 직접 DB 조회로 대체",
+				"run_azure_sync: 완전 제거",
+				"infra/: git rm 보류 (untracked 상태, 추후 처리)"
+			]
+		},
+		{
+			"time": "2026-05-09T21:00:00+09:00",
+			"summary": "1d 완료: db.py asyncpg 재작성 (193줄) + main.py startup 갱신",
+			"files": [
+				"app/db.py (전면 재작성: asyncpg pool + pgvector hook + RLS SET LOCAL + LISTEN/NOTIFY)",
+				"app/main.py (lifespan async 갱신, Azure Blob import 제거)"
+			],
+			"decisions": [
+				"db.py: 193줄 (목표 250줄 이내)",
+				"asyncpg pool: min=2, max=20, timeout=5s, max_queries=50000",
+				"pgvector: init hook으로 각 커넥션에 register_vector 등록",
+				"RLS: SET LOCAL app.current_user_id (트랜잭션 종료 시 자동 해제)",
+				"LISTEN/NOTIFY: 전용 커넥션 (pool 외), outbox_channel 구독",
+				"get_db_connection/get_refs_connection: RuntimeError로 deprecated 알림",
+				"get_restore_status: pg_dump 기반으로 재구현",
+				"update_referenced_in(): JSONB @> + - 연산자로 실시간 갱신",
+				"main.py: init_db/init_refs_db를 lifespan startup으로 이동 (async)"
+			]
+		}
+	],
+	"known_issues": [
+		"Wikidata SPARQL latency (3s~30s) — Managed by Tenacity with Exponential Backoff & Circuit Breaker",
+		"verification.py v3.0: Pro 모델이 flash-2.5로 대체됨 (Pro API 키 없음) — Phase 2에서 Pro 키 도입 필요",
+		"2026-05-05 해결: decisions → refs 양방향 참조 9건 복구 (존재하지 않는 ref_key 등록 + sync_refs)",
+		"llm_client.py 724 lines (SLOC limit 400). Counters extracted to app/counters.py. Remaining: _call_gemini_with_key+call_gemini->gemini_client.py(~190 lines), _golden_context_guard->prompt_builder.py(~35 lines), _compress_segment_turns->structuring.py(~70 lines). Not splitting now: generate_response() is a single-thread orchestrator — splitting would scatter the core flow across files and make debugging harder. The file has a single responsibility (Gemini call + response assembly). Split when target files are naturally touched for other reasons."
+	],
+	"references_config": {
+		"type": "sqlite",
+		"source": "data/references.db",
+		"table": "worklog_references",
+		"migrated_at": "2026-05-03T10:57:47+09:00",
+		"note": "references는 SQLite DB로 분리됨. docs/worklog.json에는 메타데이터만 보관."
+	},
+	"decisions_config": {
+		"type": "sqlite",
+		"source": "data/references.db",
+		"table": "worklog_decisions",
+		"migrated_at": "2026-05-03T11:22:41+09:00",
+		"note": "decisions는 SQLite DB로 분리됨. docs/worklog.json에는 메타데이터만 보관."
+	},
+	"entries_archive": [
+		{
+			"date": "2026-05-08T03:30:00+09:00",
+			"task": "Google OAuth 로그인 연동 (Google Identity Services)",
+			"summary": "Backend: verify_google_token()을 security.py로 추출 (main.py에서 제거). CSP에 Google 도메인 추가 (accounts.google.com, oauth2.googleapis.com, lh3.googleusercontent.com). routes_ui.py에서 GOOGLE_CLIENT_ID 템플릿 주입. Frontend: GIS 라이브러리 로드, initGoogleAuth()로 초기화, handleGoogleCredential() JWT 디코딩, authenticatedFetch()로 모든 fetch 래핑 (401 시 token refresh 후 재시도). Sign-in 버튼/User 프로필/Sign-out 버튼 추가. GOOGLE_CLIENT_ID 미설정 시 완전 하위 호환 (transitional mode). 69/69 tests pass.",
+			"files_changed": [
+				"app/security.py",
+				"app/main.py",
+				"app/routes_ui.py",
+				"app/templates/index.html",
+				"app/templates/_chat_script.html",
+				"app/templates/_chat_style.html"
+			]
+		},
+		{
+			"date": "2026-05-08T03:45:00+09:00",
+			"task": "Apidog 연동 — 정적 openapi.yaml → app.openapi() 자동 생성",
+			"summary": "infra/deploy.py의 apidog_sync()를 정적 docs/openapi.yaml 읽기에서 app.openapi() 호출로 변경. 42개 path 자동 생성, 임시 JSON으로 apidog-cli import. docs/openapi.yaml 삭제. APIDOG_ACCESS_TOKEN 없으면 건너뜀. 테스트 완료: 토큰 없을 때 skip, 가짜 토큰일 때 spec 생성→npx 호출까지 정상.",
+			"files_changed": [
+				"infra/deploy.py (apidog_sync 재작성)",
+				"docs/openapi.yaml (삭제 — 자동 생성으로 대체)"
+			]
+		},
+		{
+			"date": "2026-05-08T03:55:00+09:00",
+			"task": "Apidog 연동 재구현 — apidog-cli import 제거, /openapi.json 엔드포인트 + 로컬 JSON 생성",
+			"summary": "apidog-cli에서 import 명령어가 제거되어 접근 방식 변경. FastAPI에 /openapi.json 엔드포인트 추가 (app.openapi() 반환, public). infra/deploy.py의 apidog_sync()를 docs/openapi.json 생성으로 변경. scripts/generate_openapi.py 추가. APIDOG_ACCESS_TOKEN은 .env.example에 추가. Apidog Scheduled Import로 배포된 서버의 /openapi.json URL 등록하여 자동 동기화 가능. 69/69 tests pass.",
+			"files_changed": [
+				"app/main.py (/openapi.json 엔드포인트 추가)",
+				"infra/deploy.py (apidog_sync 간소화 — JSON 파일 생성)",
+				"scripts/generate_openapi.py (신규)",
+				"docs/openapi.json (자동 생성)",
+				".env (APIDOG_ACCESS_TOKEN 추가)",
+				".env.example (APIDOG_ACCESS_TOKEN 항목 추가)"
+			]
+		},
+		{
+			"date": "2026-05-07T23:30:00+09:00",
+			"task": "P8 HyQE 가상 질문 생성 (조건부 활성화 + QDP 보완)",
+			"summary": "structuring.py에 hyqe_generate() 추가(Gemini Flash로 2~3개 재표현 질문 생성), prompts에 HYQE_GENERATE_PROMPT 추가. llm_client.py에서 QDP 검색 후 결과가 3건 미만이면 HyQE 발동 → 병렬 TIR 추가 검색 → 결과 병합. 조건부 활성화로 비용 통제.",
+			"files_changed": [
+				"app/structuring.py (hyqe_generate 함수 추가)",
+				"app/prompts/__init__.py (HYQE_GENERATE_PROMPT 추가)",
+				"app/llm_client.py (QDP 결과 부족 시 HyQE 조건부 호출 + 병렬 검색)"
+			]
+		},
+		{
+			"date": "2026-05-04",
+			"session": "google-generativeai -> google-genai 마이그레이션 (FutureWarning 해결)",
+			"changes": [
+				"requirements.txt: google-generativeai==0.8.3 -> google-genai==1.74.0",
+				"app/llm_client.py: import 변경 + genai.configure() 제거 + get_embedding() 새 SDK",
+				"app/gemini_pool.py: import google.generativeai 제거",
+				"app/batch_api.py: genai.configure()→genai.Client()",
+				"app/sidecar_knowledge.py: 3개 메서드 새 SDK로 변경",
+				"app/routes_upload.py: _describe_image() 새 SDK"
+			],
+			"notes": [
+				"google-generativeai 0.8.3은 지원 종료 → google-genai 1.74.0으로 교체"
+			]
+		},
+		{
+			"date": "2026-05-07T11:35:00+09:00",
+			"task": "SYSTEM_PROMPT Gemini 스타일로 변경 (ANSWER: prefix + JSON 메타데이터 블록 제거)",
+			"summary": "기존 ANSWER: 프리픽스 + JSON 메타데이터 강제 포맷을 Gemini 스타일 자연스러운 대화체로 변경. 코드 블록/마크다운 허용, emoji 금지. llm_client.py 파싱은 ANSWER: 없으면 응답 전체를 answer로, JSON 없으면 기본값(flash_score=7) 사용하므로 하위 호환성 유지.",
+			"files_changed": [
+				"app/prompts/__init__.py (SYSTEM_PROMPT 간소화)"
+			]
+		},
+		{
+			"date": "2026-05-04T19:41:53+09:00",
+			"task": "AGENTS.md 규칙 통합",
+			"summary": "CLAUDE.md와 .claude/rules/worklog.md에 흩어진 repo 규칙을 root AGENTS.md로 통합. SLOC, Korean/English 언어 규칙, worklog 절차, references.db 조회, Python 스타일, over-engineering 경고를 한 파일에 정리.",
+			"files_changed": [
+				"AGENTS.md (신규, repo-wide Copilot 규칙)",
+				"docs/worklog.json (작업 기록 갱신)",
+				"docs/worklog_entries.json (작업 기록 추가)"
+			]
+		},
+		{
+			"date": "2026-05-07T11:30:00+09:00",
+			"task": "maxOutputTokens 버그 수정 (thinking+answer 합산 cap 미반영)",
+			"summary": "Gemini API의 maxOutputTokens는 thinking+answer 합산 hard cap인데, llm_client.py에서 thinking_budget과 maxOutputTokens를 독립 설정해 answer 공간이 thinking만큼 잠식당함. slow: 2048-1024=1024토큰만 answer에 사용 가능했음. COMPLEXITY_MAX_TOKENS를 answer 전용 예산으로 재정의하고 API 호출 시 maxOutputTokens = thinking_budget + answer_tokens로 계산. slow answer 실효 예산: 1024→2048.",
+			"files_changed": [
+				"app/llm_client.py (COMPLEXITY_MAX_TOKENS 주석, max_tokens = thinking_budget + answer_tokens 계산, reasoning_hint에 answer_tokens 표시)"
+			]
+		},
+		{
+			"date": "2026-05-07T11:25:00+09:00",
+			"task": "응답 잘림 수정 (COMPLEXITY_MAX_TOKENS 상향 + classifier Rule 5 추가)",
+			"summary": "비교+기술용어 질의가 fast(1500토큰)로 분류되어 maxOutputTokens에 잘림. fast: 1500→2000. classifier에 Rule 5 추가: evidence_quantity==multiple + technical_term_density>0.0 → slow. ping 25초 블로킹도 _next_ping()에 asyncio.wait_for(timeout=0.05) 적용해 해결.",
+			"files_changed": [
+				"app/llm_client.py (COMPLEXITY_MAX_TOKENS fast: 2000)",
+				"app/complexity_classifier.py (Rule 5 추가)",
+				"app/routes_chat_stream.py (_next_ping timeout)"
+			]
+		},
+		{
+			"date": "2026-05-06T23:30:00+09:00",
+			"task": "불필요한 간결성 제약 제거 (Be direct/No fluff/Reason concisely)",
+			"summary": "ANSWER_LENGTH_HINT에서 \"Be direct, get to the point. No fluff.\" 제거. reasoning_hint에서 \"[Reason concisely in max N lines.]\" 제거 → \"[Thinking budget: N tokens. Plan your reasoning depth accordingly.]\"로 대체. 모든 복잡도 티어에서 \"Use the full token budget if needed.\"로 통일.",
+			"files_changed": [
+				"app/llm_client.py (ANSWER_LENGTH_HINT, reasoning_hint)"
+			]
+		},
+		{
+			"date": "2026-05-06T01:30:00+09:00",
+			"task": "turn_id 재사용 버그 수정 (모든 대화가 하나로 병합되던 문제)",
+			"summary": "백엔드 routes_chat.py에서 req.turn_id or uuid4() 패턴이 프론트엔드가 보낸 lastTurnId를 재사용하여 모든 대화가 동일 turn_id로 저장됨. _build_turn_response()가 turn_id 기준 그룹핑으로 인해 모든 대화가 하나의 turn으로 축소. 백엔드에서 항상 새 UUID 생성하도록 수정, 프론트엔드에서도 turn_id 전송 제거.",
+			"files_changed": [
+				"app/routes_chat.py (turn_id = str(uuid.uuid4()) 고정)",
+				"app/templates/_chat_script.html (body에서 turn_id 필드 제거)"
+			]
+		},
+		{
+			"date": "2026-05-06T11:45:00+09:00",
+			"task": "retrieval 25초 지연 + DB 초기화 ERROR 로그 노이즈 수정",
+			"summary": "1) stream_chat의 tir_retrieve가 get_db_readonly()를 user_id 없이 호출해 공통DB 풀스캔(25초). user_id 전달하도록 수정. 2) _get_or_create_user_connection에서 CREATE TRIGGER/ALTER TABLE을 try/except로만 처리해 LoggedConnection이 매번 [ERROR] 로그를 남기던 문제. IF NOT EXISTS + PRAGMA table_info 사전 체크로 전환.",
+			"files_changed": [
+				"app/routes_chat_stream.py (tir_retrieve에 user_id 전달)",
+				"app/db.py (TRIGGER IF NOT EXISTS, token_count 사전 체크)"
+			]
+		},
+		{
+			"date": "2026-05-06T02:30:00+09:00",
+			"task": "SSE 스트리밍 경로에서 대화 히스토리 누락 수정",
+			"summary": "프론트엔드는 SSE /chat/stream을 기본 사용하지만, stream_chat()에서 generate_response() 호출 시 history가 항상 []로 하드코딩되어 LLM이 이전 대화 맥락을 전혀 받지 못함. routes_chat.py와 동일하게 사용자 DB에서 최근 20개 exchange를 로드하도록 수정.",
+			"files_changed": [
+				"app/routes_chat_stream.py (history 로드 로직 추가, get_db_readonly import)"
+			]
+		},
+		{
+			"date": "2026-05-06T02:10:00+09:00",
+			"task": "토큰 기반 길이 제한으로 통일 (문장 수 제한 삭제)",
+			"summary": "ANSWER_LENGTH_HINT에서 문장 수 제한(2-5/8-15 등) 삭제 → 'Use the full token budget'으로 변경. SYSTEM_PROMPT의 정적 MAX 600 tokens 제거 → reasoning_hint에 동적 [Output budget: max N tokens] 추가. 이제 COMPLEXITY_MAX_TOKENS 한 곳에서 토큰 제한 관리.",
+			"files_changed": [
+				"app/llm_client.py (ANSWER_LENGTH_HINT, reasoning_hint)",
+				"app/prompts/__init__.py (SYSTEM_PROMPT)"
+			]
+		},
+		{
+			"date": "2026-05-06T02:00:00+09:00",
+			"task": "Gemini API 호출 실패 수정 (_GeminiPoolProxy 파라미터 누락)",
+			"summary": "_GeminiPoolProxy.async_execute()가 thinking_budget, use_grounding 등 kwargs를 받지 못해 TypeError 발생. call_gemini()가 모든 예외를 삼키면서 폴백 메시지('죄송합니다...')만 반환. 프록시 서명을 (fn, model, prompt, **kwargs)로 수정.",
+			"files_changed": [
+				"app/llm_client.py (_GeminiPoolProxy.async_execute 시그니처 수정)"
+			]
+		},
+		{
+			"date": "2026-05-06T01:45:00+09:00",
+			"task": "LLM 응답 포맷 정리 (서론/본론/결론 제거 + 코드블록 회색박스 제거)",
+			"summary": "1) 시스템 프롬프트에서 서론/본론/결론 구조 강제 라인 제거, 자연스러운 문단 응답으로 변경. 2) 코드블록(```), 가로줄(---), 인용문(>) 사용 금지 지시 추가. 3) CSS에서 pre/code 배경을 transparent로 변경해 남아있을 수 있는 회색박스 제거.",
+			"files_changed": [
+				"app/prompts/__init__.py (ANSWER Rules 단순화)",
+				"app/templates/_chat_style.html (pre/code 배경 transparent)"
+			]
+		},
+		{
+			"date": "2026-05-05T23:00:00+09:00",
+			"task": "미구현 로직 pending 작성 (plugin_refine, budget_analyzer, gpt_fallback)",
+			"summary": "_pending/에 3개 통합 대기 로직 작성: 1) plugin_refine.py — PluginIngest→InteractionLogs 정제 배치, 2) budget_analyzer.py — thinking_budget 소진율 분석+자동튜닝 권고, 3) gpt_fallback.py — OpenAI GPT-4o-mini 최종 안전망.",
+			"related_refs": [
+				"budget-guidance-2025"
+			],
+			"files_changed": [
+				"_pending/plugin_refine.py (신규)",
+				"_pending/budget_analyzer.py (신규)",
+				"_pending/gpt_fallback.py (신규)"
+			]
+		},
+		{
+			"date": "2026-05-05T20:30:00+09:00",
+			"task": "v6.0: 4-tier 토큰 배분 + 연속 thinking_budget 추정 (TALE-EP + BudgetThinker 하이브리드)",
+			"summary": "fast/slow/retry/expert 4단계(answer=800/2048/4096/8192). 신호 기반 연속 thinking_budget 추정 (1~4096). Budget-Aware 힌트. 예산 소진율 로깅.",
+			"related_refs": [
+				"tale-ep-2025",
+				"budget-thinker-2025",
+				"budget-guidance-2025"
+			],
+			"files_changed": [
+				"app/llm_client.py (expert tier, estimate_thinking_budget, BudgetThinker 힌트, 소진율 로그)",
+				"app/complexity_classifier.py (estimate_thinking_budget 신규, 8신호→연속값)",
+				"app/prompt_builder.py (MAX_LINES_MAP expert 추가)",
+				"app/search_engines.py (FALLBACK_CHAIN expert 추가)"
+			]
+		},
+		{
+			"date": "2026-05-05T19:00:00+09:00",
+			"task": "크롬 플러그인 데이터 staging (PluginIngest + POST /plugin/ingest)",
+			"summary": "schema.sql에 PluginIngest 테이블 추가. routes_plugin.py 신규 — POST /plugin/ingest 엔드포인트. 향후 batch/light.py에서 정제 후 InteractionLogs로 승격 예정.",
+			"files_changed": [
+				"app/schema.sql (PluginIngest 테이블 + 인덱스)",
+				"app/routes_plugin.py (신규, POST /plugin/ingest)",
+				"app/main.py (plugin_router 등록)"
+			]
+		},
+		{
+			"date": "2026-05-05T18:00:00+09:00",
+			"task": "달력/히스토리 DB 불일치 수정 + 토큰 제한 + http_client 안전장치",
+			"summary": "routes_chat_stream.py → 사용자DB 쓰기로 수정 (달력 점 복구). 복잡도별 maxOutputTokens + 프롬프트 길이 가이드. http_client에 reset_client() 추가.",
+			"files_changed": [
+				"app/routes_chat_stream.py",
+				"app/db.py",
+				"app/llm_client.py",
+				"app/http_client.py"
+			]
+		},
+		{
+			"date": "2026-05-04",
+			"session": "DB 캐시 히트 -> 웹 검색 생략 로직 (llm_client.py)",
+			"changes": [
+				"app/llm_client.py: generate_response()의 실시간 질문 웹 검색 섹션에서 retrieved_context 존재/최신성 확인 후 생략",
+				"app/llm_client.py: 로깅 추가"
+			],
+			"notes": [
+				"실시간 질문(is_realtime_query)이라도 DB에 3개 이상의 결과가 있고 1시간 이내면 웹 검색 생략",
+				"DB 결과 부족/오래됨/None이면 기존대로 웹 검색 수행"
+			]
+		},
+		{
+			"date": "2026-05-04",
+			"session": "AGENTS.md 규칙 통합",
+			"changes": [
+				"AGENTS.md: CLAUDE.md와 .claude/rules/worklog.md의 repo 규칙을 통합",
+				"docs/worklog.json: updated timestamp refresh + archive entry recorded",
+				"docs/worklog_entries.json: task history appended"
+			],
+			"notes": [
+				"Root AGENTS.md added so future Copilot tasks inherit the repo rules automatically."
+			]
+		},
+		{
+			"date": "2026-05-04",
+			"session": "환각 검증 시스템 Ver 1.2 — 배치 스케줄러 연동",
+			"changes": [
+				"app/batch/light.py: outbox verify 태스크의 insert_answer_log() 시그니처 수정",
+				"app/batch_jobs.py: quick_check 커맨드 추가",
+				"app/batch/daily.py: run_quick_only() 진입점 추가"
+			],
+			"notes": [
+				"Quick Check: 10분 크론",
+				"Deep Verify: KST 04:30 daily_batch 자동 실행",
+				"undefined 재검증: daily_batch에서 run_reverify_undefined() 호출"
+			]
+		},
+		{
+			"date": "2026-05-08T00:00:00+09:00",
+			"task": "Extract in-memory counters from llm_client.py into app/counters.py",
+			"summary": "Moved 6 counter variables (answer_cache_hits/misses, web_search_skips/calls, context_cache_hits, complexity_counts) + save/restore functions (~80 lines) to app/counters.py. llm_client.py 808->724 lines. Updated main.py imports. 69/69 tests pass.",
+			"files_changed": [
+				"app/counters.py (new, 99 lines)",
+				"app/llm_client.py (removed counter code, import counters)",
+				"app/main.py (updated import path)"
+			]
+		},
+		{
+			"date": "2026-05-08",
+			"task": "History sidebar search + pagination + load more",
+			"summary": "Date endpoint LIMIT/offset/has_more, FTS5 keyword search via InteractionLogs_fts, sidebar search UI with debounce, chat area 50-turn page with load-more prepend. Pro-2.5 removed from real-time fallback chain, kept for verification only. Last user message action layer now visible alongside last bot message. Bot answer regenerate: in-place streaming replace + left/right arrow version navigation. Input focus border clash fixed (body.input-focused). Security audit completed: CRITICAL 2, HIGH 7, MEDIUM 6 findings.",
+			"files_changed": [
+				"app/routes_history.py",
+				"app/retrieval.py",
+				"app/llm_client.py",
+				"app/templates/_chat_body.html",
+				"app/templates/_chat_style.html",
+				"app/templates/_chat_script.html"
+			]
+		},
+		{
+			"date": "2026-05-08T01:30:00+09:00",
+			"task": "채팅 UI 구분선 정리 (h2/h3 border-top 제거, .message.bot border-bottom 제거, date-separator 위로 이동)",
+			"summary": "h2/h3 border-top 제거 → LLM 출력 내 <hr>만 구분선으로 남김. .message.bot border-bottom 제거 → answer-user 사이 turn-separator와 이중 라인 해결. date-separator에 border-top 추가 + padding-top 20px. turn-separator 날짜 변경 직후 생략 (dateChanged 플래그). 69/69 tests pass.",
+			"files_changed": [
+				"app/templates/_chat_style.html",
+				"app/templates/_chat_script.html"
+			]
+		},
+		{
+			"date": "2026-05-08T02:30:00+09:00",
+			"task": "보안 감사 조치 — 전역 인증 미들웨어, user_id 강제, rate limiting, 에러 마스킹, ADMIN_BYPASS 제한, /files 인증",
+			"summary": "#1 Entra group-based RBAC (security.py). #3 Global AuthMiddleware + CSP headers + RequestLogMiddleware (main.py). #2 user_id enforcement: history, feedback, plugin, upload, channels/link (6 routes). #5 ADMIN_BYPASS localhost-only (routes_admin.py, main.py). #8 /files authenticated route (routes_chat_file.py, main.py StaticFiles mount replaced). #9 IP rate limiting: /chat + /chat/stream (routes_chat.py). #10 SSE error message masking (routes_chat_stream.py). 69/69 tests pass.",
+			"files_changed": [
+				"app/security.py",
+				"app/main.py",
+				"app/routes_history.py",
+				"app/routes_feedback.py",
+				"app/routes_plugin.py",
+				"app/routes_upload.py",
+				"app/routes_channels.py",
+				"app/routes_admin.py",
+				"app/routes_chat_file.py",
+				"app/routes_chat.py",
+				"app/routes_chat_stream.py"
+			]
+		},
+		{
+			"date": "2026-05-08T03:00:00+09:00",
+			"task": "보안 감사 후속 — #7 marked.js XSS, #11 f-string SQL 검증, #12 sidecar root, #4 passphrase 강화",
+			"summary": "#7: DOMPurify CDN 추가 + renderMarkdown()으로 모든 marked.parse() 래핑 (_chat_script.html, index.html). #11: GeminiPoolManager.__init__에 pool_name whitelist 검증 추가 (gemini_pool.py). #12: Dockerfile.sidecar에 비루트 seedling 유저 추가. #4: ENCRYPTION_PASSPHRASE 랜덤 64자 hex로 교체 + gemini_keys.db 재마이그레이션 (.env). 69/69 tests pass.",
+			"files_changed": [
+				"app/templates/index.html",
+				"app/templates/_chat_script.html",
+				"app/gemini_pool.py",
+				"Dockerfile.sidecar",
+				".env",
+				"data/keys/gemini.db"
+			]
+		},
+		{
+			"time": "2026-05-09T20:00:00+09:00",
+			"summary": "1c 완료: schema.sql PostgreSQL 변환 + Alembic 설정",
+			"files": [
+				"migrations/env.py (asyncpg async engine)",
+				"migrations/versions/de517551fab2_initial_postgresql_schema.py (29 tables, RLS, HNSW, pg_trgm, partitioning, LISTEN/NOTIFY)",
+				"alembic.ini (DATABASE_URL from env)"
+			],
+			"decisions": [
+				"SQLite REAL timestamps -> PostgreSQL TIMESTAMPTZ",
+				"SQLite INTEGER PRIMARY KEY AUTOINCREMENT -> BIGINT GENERATED ALWAYS AS IDENTITY",
+				"FTS5 virtual tables (4) -> pg_trgm GIN indexes",
+				"ConceptFTS, context_cache_fts, InteractionLogs_fts, paper_chunks_fts: removed",
+				"context_cache: UNLOGGED TABLE",
+				"InteractionLogs: HASH(user_id) 16 partitions + HNSW vector + pg_trgm GIN",
+				"APICallLogs: RANGE(timestamp) 3 initial monthly partitions",
+				"RLS on 5 tables: InteractionLogs, UserSessions, UserProfile, answer_logs, PluginIngest",
+				"LISTEN/NOTIFY trigger on outbox",
+				"keys schema: keys.data_keys + keys.gemini_keys",
+				"api_call_counters: new table replacing counters.db",
+				"Offline SQL verification passed (102 DDL statements)"
+			]
+		}
+	],
+	"entries_file": "docs/worklog_entries.json",
+	"pending_items": [
+		{
+			"id": "P1",
+			"item": "reference_blob_path 연동",
+			"status": "completed",
+			"desc": "app/blob_offload.py 구현 완료. generate_response()에서 context_str >= 2000자 시 store_context_blob() 호출 → llm_result[\"blob_path\"]로 반환. 6개 chat path에서 reference_blob_path 컬럼에 blob_path 저장.",
+			"files": [
+				"app/blob_offload.py"
+			]
+		},
+		{
+			"id": "P2",
+			"item": "FIC (Frequent Intentional Compaction)",
+			"status": "documented",
+			"desc": "의도적 빈번 컨텍스트 압축 전략. 현재 30초 세그먼트 분리 + 실시간 압축(8턴)으로 대부분 커버. 실제 문제 발생 시 구현 검토.",
+			"files": []
+		},
+		{
+			"id": "P3",
+			"item": "대시보드 토큰 절약 시계열 차트",
+			"status": "waiting_data",
+			"desc": "토큰 절약 그래프 중첩 표시. 데이터 충분히 쌓인 후 구현."
+		},
+		{
+			"id": "P4",
+			"item": "모델 다운그레이드 효과 추정",
+			"status": "waiting_data",
+			"desc": "복잡도 분포 x APICallLogs 평균토큰으로 가상 절약액 계산."
+		},
+		{
+			"id": "P5",
+			"item": "카운터 영속화",
+			"status": "completed",
+			"desc": "ServerCounters 테이블을 core DB(memory.db)에 생성, _save_counters()로 주기적 저장 + _restore_counters()로 시작 시 복원. get_token_metrics() 호출 시 자동 복원/저장. main.py lifespan에 shutdown save/startup restore 추가."
+		},
+		{
+			"id": "P6",
+			"item": "Babelfy QID 완성",
+			"status": "completed",
+			"desc": "babelfy_client.py의 _lookup_babelnet_to_wikidata() 구현 완료. BabelNetMapping 로컬 캐시(SQLite) → BabelNet API v7(키 있는 경우) → Wikidata SPARQL(P2581) 3단계 QID 조회. Babelfy API /disambiguate 연동은 이미 구현되어 있었고, QID 매핑만 누락된 상태였음.",
+			"files": [
+				"app/sidecar_knowledge.py",
+				"app/knowledge_pipeline.py"
+			]
+		},
+		{
+			"id": "P7",
+			"item": "ELERAG 통합 (Entity Linking Enhanced RAG)",
+			"status": "completed",
+			"desc": "retrieval.py에 ELERAG entity scoring 추가. _extract_query_entities()로 쿼리에서 Concept 테이블 기반 entity 추출(로컬 캐시 10분), _entity_match_score()로 문서별 entity 중첩도 계산. rrf_fuse() 가중치에 entity 0.15 추가, 문서마다 entity 매칭 점수 부여.",
+			"files": [
+				"app/retrieval.py"
+			]
+		},
+		{
+			"id": "P8",
+			"item": "HyQE 가상 질문 생성",
+			"status": "completed",
+			"desc": "QDP 검색 결과가 3건 미만일 때만 조건부 활성화. hyqe_generate()로 Gemini Flash에서 2~3개 재표현 질문 생성, 병렬 TIR 추가 검색 후 결과 병합. 비용 통제를 위해 복잡도 slow/retry/expert에서만 발동.",
+			"files": [
+				"app/structuring.py",
+				"app/retrieval.py"
+			]
+		}
+	]
+}

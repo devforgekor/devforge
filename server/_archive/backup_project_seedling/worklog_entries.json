@@ -1,0 +1,529 @@
+{
+	"description": "worklog entries full history (Cold Context — search-only)",
+	"updated": "2026-05-09T04:30:00+09:00",
+	"entries": [
+		{
+			"date": "2026-05-09T09:00:00+09:00",
+			"task": "chrome-extension v0.4.8: DeepSeek reasoning 추출 수정",
+			"summary": "R1 thinking block이 ds-markdown의 형제요소인데, __seedlingExtractLastTurn에서 answer.includes(thinking_text)로 교차검증하여 항상 실패. content_deepseek.js, popup.js 둘 다 answer.includes() 검증 제거하고 thinking 컨테이너에서 직접 reason 추출하도록 변경. DB기준 DeepSeek 235건 중 reason 4건(1.7%) → 수정 후 reason 정상추출 기대. Gemini는 101건 중 51건(50.5%) reason 추출 정상.",
+			"files_changed": [
+				"chrome-extension/content_deepseek.js (reasoning 추출 간소화)",
+				"chrome-extension/popup.js (DeepSeek reasoning 추출 동일 수정)",
+				"chrome-extension/manifest.json (v0.4.8)"
+			]
+		},
+		{
+			"date": "2026-05-09T04:30:00+09:00",
+			"task": "chrome-extension v0.4.7: DeepSeek/Gemini 캡처 안정화 완료",
+			"summary": "v0.4.3(16회중복)→v0.4.7(100% 1회) 최종 도달. (1) trackNewAnswer: _doneTimer 활성 시 force-capture 방지 (2) setupObserver: chatContainer 우선 + 개별메시지 공통부모 검색 (3) popup.js: DeepSeek v0.4.7 ds-markdown 추출로 교체 (4) detectDeepSeekModel: 3단계 폴백 (5) User-Turn Gating: _waitingForUser + isInsideAnswer 형제감지 (6) MIN_SEND_INTERVAL_MS=8s: 초기로드 경합 방지. 공통엔진 변경으로 Gemini/ChatGPT/Claude/AI Studio 모두 적용.",
+			"files_changed": [
+				"chrome-extension/content_common.js (v0.4.7 최종)",
+				"chrome-extension/content_deepseek.js (v0.4.7: chatContainer, answerContainer 간소화, 모델감지)",
+				"chrome-extension/popup.js (DeepSeek v0.4.7 추출)",
+				"chrome-extension/manifest.json (v0.4.7)"
+			]
+		},
+		{
+			"date": "2026-05-09T04:00:00+09:00",
+			"task": "chrome-extension v0.4.5: isInsideAnswer 조상 체크 추가 (R1 thinking block 오탐 수정)",
+			"summary": "setupObserver의 사용자 메시지 감지 로직이 R1 <details> thinking block을 사용자 메시지로 오탐 → _waitingForUser=false 초기화 → gate 무력화. isInsideAnswer(node)로 answerContainer 조상 체크 추가. thinking block이 어시스턴트 메시지 내부에 있으면 사용자 메시지로 분류되지 않음.",
+			"files_changed": [
+				"chrome-extension/content_common.js (v0.4.5: isInsideAnswer 함수 추가, 사용자 감지에 조상 체크 추가)",
+				"chrome-extension/manifest.json (v0.4.5)"
+			]
+		},
+		{
+			"date": "2026-05-09T03:30:00+09:00",
+			"task": "chrome-extension v0.4.4: User-Turn Gating (사용자 질문 1개 = 캡처 1개)",
+			"summary": "setupObserver에 사용자 메시지 감지 추가 (answerContainer 미포함 새 노드 → _waitingForUser=false). trackNewAnswer에 _waitingForUser 게이트 추가 (true면 skip). finishCapture/sendTurn 후 _waitingForUser=true 설정. initCapture 초기 캡처 후에도 동일. 플랫폼 공통: chatList/answerContainer 셀렉터 차이만으로 모든 AI 채팅 UI 커버.",
+			"files_changed": [
+				"chrome-extension/content_common.js (v0.4.4: _waitingForUser 상태, setupObserver 사용자 감지, trackNewAnswer 게이트, finishCapture/initCapture 플래그)",
+				"chrome-extension/content_deepseek.js (v0.4.4 bump)",
+				"chrome-extension/manifest.json (v0.4.4)"
+			]
+		},
+		{
+			"date": "2026-05-09T03:00:00+09:00",
+			"task": "chrome-extension v0.4.3: DeepSeek 중복 캡처 방지 + chatList 컨테이너 감지 + popup.js 갱신",
+			"summary": "1) trackNewAnswer force-capture 방지: _doneTimer 활성 시(스트리밍 중) DOM 교체되어도 이전 부분 캡처 건너뜀. 2) setupObserver chatContainer 추가 + chatList가 개별 메시지 매칭 시 공통 부모 컨테이너 검색. 3) popup.js DeepSeek 4-strategy brute-force 제거 → v0.4.3 ds-markdown/ds-message 방식으로 교체. 4) detectDeepSeekModel 3단계 폴백: selector → 전체 span/button 검색 → thinking indicator → 기본값 DeepSeek-Chat.",
+			"files_changed": [
+				"chrome-extension/content_common.js (v0.4.3: trackNewAnswer force-capture 방지, chatContainer 지원, setupObserver 컨테이너 검색)",
+				"chrome-extension/content_deepseek.js (v0.4.3: chatContainer 추가, answerContainer 간소화, detectDeepSeekModel 3단계 폴백)",
+				"chrome-extension/popup.js (DeepSeek v0.4.3 ds-markdown/ds-message 방식 + model 반환)",
+				"chrome-extension/manifest.json (v0.4.3)"
+			]
+		},
+		{
+			"date": "2026-05-09T04:00:00+09:00",
+			"task": "content_common v0.4.2: triple-check stability for streaming capture guard",
+			"summary": "DeepSeek R1 스트리밍 중 2s pause마다 부분 캡처 발생 (단일 질문에 8회 전송). 안정성 체크를 1회→3회(약 6초)로 강화. _stableCount 추가: 3회 연속 동일 길이 확인 후 캡처. trackNewAnswer에서 _stableCount 초기화. content_deepseek answerContent=null로 하위 문단 감시 방지. manifest v0.4.2. 69/69 tests pass.",
+			"files_changed": [
+				"chrome-extension/content_common.js (triple-check stability, v0.4.2)",
+				"chrome-extension/content_deepseek.js (answerContent=null)",
+				"chrome-extension/manifest.json (v0.4.2)"
+			]
+		},
+		{
+			"date": "2026-05-09T03:45:00+09:00",
+			"task": "content_deepseek v0.4.2: DOM 기반 추출 전면 재작성 (ds-markdown/ds-message)",
+			"summary": "4-strategy brute-force 제거. 실제 DeepSeek DOM 분석 결과 ds-markdown(봇응답), ds-message(메시지 래퍼) 클래스가 안정적임을 확인. 답변: ds-markdown 중 마지막 요소 (pickLongest 버그 수정 — 이전 긴 답변 선택 방지). 사용자: ds-message 중 ds-markdown 자식 없는 마지막 요소. 해시 클래스 의존성 제거. detectDeepSeekModel() 추가. 69/69 tests pass.",
+			"files_changed": [
+				"chrome-extension/content_deepseek.js (v0.4.2: ds-markdown + ds-message 기반 추출, 마지막 요소 우선, model detection)"
+			]
+		},
+		{
+			"date": "2026-05-09T03:20:00+09:00",
+			"task": "content_deepseek v0.4.1: Strategy 1/2 smallest-element preference",
+			"summary": "Strategy 1(role-based)과 Strategy 2(class-based)가 모든 div 순회 시 큰 컨테이너(사이드바 등)를 매칭하는 문제 수정. 가장 작은 textContent를 가진 요소를 우선 선택하도록 bestUser/bestAnswer + bestLen 추적. 사이드바 노이즈 캡처 감소 기대.",
+			"files_changed": [
+				"chrome-extension/content_deepseek.js (Strategy 1/2 smallest-element, v0.4.1 bump)"
+			]
+		},
+		{
+			"date": "2026-05-09T03:15:00+09:00",
+			"task": "content_common v0.4.1: session-level dedup with _lastSentKey",
+			"summary": "30초 타임윈도우 dedup만으로는 모델 전환 시 재캡처(53s, 79s 간격)를 막지 못함. _lastSentKey 문자열 비교를 _recentKeys 앞에 추가하여 페이지 세션 내 동일 콘텐츠 영구 차단. 2단계 dedup: _lastSentKey(세션레벨) -> _recentKeys(30s 타임윈도우, init+observer race 방지). 69/69 tests pass.",
+			"files_changed": [
+				"chrome-extension/content_common.js (add _lastSentKey session-level dedup before time-window check)"
+			]
+		},
+		{
+			"date": "2026-05-09T02:30:00+09:00",
+			"task": "content_common v0.4.1: sendTurn noise guard + time-window dedup",
+			"summary": "랜딩페이지 캡처(user=0,answer=greeting) 방지용 최소 길이 가드 추가(user>=5 or answer>=50). 30초 타임윈도우 Map 기반 중복 전송 방지. _lastSentKey 단순 문자열 비교를 _recentKeys Map + DEDUP_WINDOW_MS로 교체. Gemini 3개 모델(빠른/사고/Pro) 모두 감지 성공 확인. 사고 모델 reason 미추출은 미해결.",
+			"files_changed": [
+				"chrome-extension/content_common.js (sendTurn: noise guard + time-window dedup)",
+				"chrome-extension/content_gemini.js (version bump v0.4.1)"
+			]
+		},
+		{
+			"date": "2026-05-09T01:00:00+09:00",
+			"task": "Gemini model detection fix: bard-mode-switcher DOM targeting",
+			"summary": "detectGeminiModel()가 실제 Gemini DOM 구조를 타겟팅하지 못해 항상 '' 반환하던 문제 수정. 1) [data-test-id=\"bard-mode-menu-button\"] 내부 span 텍스트 (주 경로, '빠른 모델' 등) 2) bard-mode-switcher 커스텀 엘리먼트 직접 쿼리 3) 기존 [class*=\"model\"] 범용 셀렉터 (레거시 폴백) 4) [aria-selected=\"true\"] 폴백 순으로 4단계 감지.",
+			"files_changed": [
+				"chrome-extension/content_gemini.js (detectGeminiModel 4단계 폴백)"
+			]
+		},
+		{
+			"date": "2026-05-08T23:20:00+09:00",
+			"task": "chrome-extension v0.4.0: 전체 플랫폼 분할 완료 (ChatGPT/Claude/AI Studio + DeepSeek)",
+			"summary": "content_deepseek.js(4-strategy extraction), content_chatgpt.js(data-message-author-role), content_claude.js(font-claude-message), content_aistudio.js(data-role) 생성. 기존 content.js의 Gemini/DeepSeek 추출 로직을 각 플랫폼 파일로 이관. manifest.json 5개 content_scripts로 분할 완료. 기존 content.js(폴링 기반) 삭제. 모든 플랫폼 MutationObserver + debounce + content_common.js 공유 엔진 사용.",
+			"files_changed": [
+				"chrome-extension/content_deepseek.js (신규)",
+				"chrome-extension/content_chatgpt.js (신규)",
+				"chrome-extension/content_claude.js (신규)",
+				"chrome-extension/content_aistudio.js (신규)",
+				"chrome-extension/manifest.json (5개 플랫폼 분할)",
+				"chrome-extension/content.js (삭제)"
+			]
+		},
+		{
+			"date": "2026-05-08T21:45:00+09:00",
+			"task": "chrome-extension v0.4.0: Polling -> MutationObserver + debounce + 파일분할 (Gemini 우선)",
+			"summary": "content.js를 content_common.js(공통 Observer/debounce/dedup/send) + content_gemini.js(Gemini 셀렉터+추출)로 분할. Polling 제거, MutationObserver 기반 debounce(2s) + max timeout(15s) + addedNodes 새 턴 감지 + init 2초 초기 캡처(refresh 대응) + turnSeq 해시 dedup. Gemini 추출 pickLongest로 잘림 버그 수정. manifest 0.4.0, popup.js Gemini 수동 캡처도 pickLongest 적용.",
+			"files_changed": [
+				"chrome-extension/content_common.js (신규, 194줄)",
+				"chrome-extension/content_gemini.js (신규, 79줄)",
+				"chrome-extension/content.js (Gemini matches 제외, polling 유지)",
+				"chrome-extension/manifest.json (v0.4.0, Gemini 분할)",
+				"chrome-extension/popup.js (Gemini pickLongest)",
+				"chrome-extension/popup.html (v0.4)"
+			]
+		},
+		{
+			"date": "2026-05-08T10:25:00+09:00",
+			"task": "content.js SyntaxError 핫픽스 (Python and -> JS &&)",
+			"summary": "content.js 336번째 줄에 Python and 연산자가 들어가 JavaScript SyntaxError 발생 -> init 콜백 전체 실행 안 됨 -> auto-capture 완전 중단. and를 &&로 교체.",
+			"files_changed": [
+				"chrome-extension/content.js"
+			]
+		},
+		{
+			"date": "2026-05-08T03:00:00+09:00",
+			"task": "보안 감사 후속 — #7 marked.js XSS, #11 f-string SQL 검증, #12 sidecar root, #4 passphrase 강화",
+			"summary": "#7: DOMPurify CDN 추가 + renderMarkdown()으로 모든 marked.parse() 래핑 (_chat_script.html, index.html). #11: GeminiPoolManager.__init__에 pool_name whitelist 검증 추가 (gemini_pool.py). #12: Dockerfile.sidecar에 비루트 seedling 유저 추가. #4: ENCRYPTION_PASSPHRASE 랜덤 64자 hex로 교체 + gemini_keys.db 재마이그레이션 (.env). 69/69 tests pass.",
+			"files_changed": [
+				"app/templates/index.html",
+				"app/templates/_chat_script.html",
+				"app/gemini_pool.py",
+				"Dockerfile.sidecar",
+				".env",
+				"data/keys/gemini.db"
+			]
+		},
+		{
+			"date": "2026-05-08T03:00:00+09:00",
+			"task": "보안 감사 후속 — #7 marked.js XSS, #11 f-string SQL 검증, #12 sidecar root, #4 passphrase 강화",
+			"summary": "#7: DOMPurify CDN 추가 + renderMarkdown()으로 모든 marked.parse() 래핑 (_chat_script.html, index.html). #11: GeminiPoolManager.__init__에 pool_name whitelist 검증 추가 (gemini_pool.py). #12: Dockerfile.sidecar에 비루트 seedling 유저 추가. #4: ENCRYPTION_PASSPHRASE 랜덤 64자 hex로 교체 + gemini_keys.db 재마이그레이션 (.env). 69/69 tests pass.",
+			"files_changed": [
+				"app/templates/index.html",
+				"app/templates/_chat_script.html",
+				"app/gemini_pool.py",
+				"Dockerfile.sidecar",
+				".env",
+				"data/keys/gemini.db"
+			]
+		},
+		{
+			"date": "2026-05-08T02:30:00+09:00",
+			"task": "보안 감사 조치 — 전역 인증 미들웨어, user_id 강제, rate limiting, 에러 마스킹, ADMIN_BYPASS 제한, /files 인증",
+			"summary": "#1 Entra group-based RBAC (security.py). #3 Global AuthMiddleware + CSP headers + RequestLogMiddleware (main.py). #2 user_id enforcement: history, feedback, plugin, upload, channels/link (6 routes). #5 ADMIN_BYPASS localhost-only (routes_admin.py, main.py). #8 /files authenticated route (routes_chat_file.py, main.py StaticFiles mount replaced). #9 IP rate limiting: /chat + /chat/stream (routes_chat.py). #10 SSE error message masking (routes_chat_stream.py). 69/69 tests pass.",
+			"files_changed": [
+				"app/security.py",
+				"app/main.py",
+				"app/routes_history.py",
+				"app/routes_feedback.py",
+				"app/routes_plugin.py",
+				"app/routes_upload.py",
+				"app/routes_channels.py",
+				"app/routes_admin.py",
+				"app/routes_chat_file.py",
+				"app/routes_chat.py",
+				"app/routes_chat_stream.py"
+			]
+		},
+		{
+			"date": "2026-05-08T01:30:00+09:00",
+			"task": "채팅 UI 구분선 정리 (h2/h3 border-top 제거, .message.bot border-bottom 제거, date-separator 위로 이동)",
+			"summary": "h2/h3 border-top 제거 → LLM 출력 내 <hr>만 구분선으로 남김. .message.bot border-bottom 제거 → answer-user 사이 turn-separator와 이중 라인 해결. date-separator에 border-top 추가 + padding-top 20px. turn-separator 날짜 변경 직후 생략 (dateChanged 플래그). 69/69 tests pass.",
+			"files_changed": [
+				"app/templates/_chat_style.html",
+				"app/templates/_chat_script.html"
+			]
+		},
+		{
+			"date": "2026-05-08",
+			"task": "History sidebar search + pagination + load more",
+			"summary": "Date endpoint LIMIT/offset/has_more, FTS5 keyword search via InteractionLogs_fts, sidebar search UI with debounce, chat area 50-turn page with load-more prepend. Pro-2.5 removed from real-time fallback chain, kept for verification only. Last user message action layer now visible alongside last bot message. Bot answer regenerate: in-place streaming replace + left/right arrow version navigation.",
+			"files_changed": [
+				"app/routes_history.py",
+				"app/retrieval.py",
+				"app/llm_client.py",
+				"app/templates/_chat_body.html",
+				"app/templates/_chat_style.html",
+				"app/templates/_chat_script.html"
+			]
+		},
+		{
+			"date": "2026-05-08T00:00:00+09:00",
+			"task": "Extract in-memory counters from llm_client.py into app/counters.py",
+			"summary": "Moved 6 counter variables + save/restore functions (~80 lines) to app/counters.py. llm_client.py 808->724 lines. Updated main.py imports. 69/69 tests pass.",
+			"files_changed": [
+				"app/counters.py",
+				"app/llm_client.py",
+				"app/main.py"
+			]
+		}
+	],
+	"entries_archive": [
+		{
+			"date": "2026-05-07T15:00:00+09:00",
+			"task": "메타데이터 추가 누락분 수정 (KnowledgeGraph INSERT + db.py CREATE TABLE)",
+			"summary": "1) KnowledgeGraph INSERT에 context, updated_at 컬럼 추가. context 별도 UPDATE 블록 제거 (INSERT로 통합). 2) db.py 사용자별 InteractionLogs CREATE TABLE에 token_count INTEGER DEFAULT 0 추가. answer_logs/UserSessions 누락 컬럼은 의도된 패턴 확인.",
+			"files_changed": [
+				"app/routes_knowledge.py (INSERT에 context/updated_at 추가, context UPDATE 제거)",
+				"app/db.py (사용자별 CREATE TABLE에 token_count 추가)"
+			]
+		},
+		{
+			"date": "2026-05-05T23:00:00+09:00",
+			"task": "미구현 로직 pending 작성",
+			"summary": "_pending/plugin_refine.py: PluginIngest→InteractionLogs 정제 배치. _pending/budget_analyzer.py: thinking_budget 소진율 분석+자동튜닝 권고. _pending/gpt_fallback.py: GPT-4o-mini 최종 안전망.",
+			"related_refs": [
+				"budget-guidance-2025"
+			],
+			"files_changed": [
+				"_pending/plugin_refine.py (신규, 150줄)",
+				"_pending/budget_analyzer.py (신규, 120줄)",
+				"_pending/gpt_fallback.py (신규, 110줄)"
+			]
+		},
+		{
+			"date": "2026-05-05T20:30:00+09:00",
+			"related_refs": [
+				"tale-ep-2025",
+				"budget-thinker-2025",
+				"budget-guidance-2025"
+			],
+			"task": "2-tier Fast/Slow + thinking_budget 리팩토링 (v6.0)",
+			"summary": "복잡도 3→2단계(simple/medium→fast, complex→slow). Flash-lite 제거, flash-2.5가 양쪽 기본 모델. thinking_budget: fast=1(사고 억제), slow=1024(중간 추론). Gemma-4-26b-a4b-it MoE가 단일 폴백(31b, GPT 제거). Gemma는 thinkingConfig 대신 chatTemplateKwargs 사용. 모든 키 1회 시도 후 즉시 폴백(3회 재시도 제거). 최종 안전망: 한국어 정적 메시지.",
+			"files_changed": [
+				"app/llm_client.py (v6.0, thinking_budget, 폴백체인 단순화, 3회 재시도→1회, MODEL_NAME_MAP/FALLBACK_CHAIN/COMPLEXITY_MAP/THINKING_BUDGET_MAP 갱신)",
+				"app/complexity_classifier.py (SLOW_KEYWORDS/FAST_KEYWORDS, classify 2단계)",
+				"app/prompt_builder.py (MAX_LINES_MAP fast/slow)",
+				"app/search_engines.py (FALLBACK_CHAIN fast/slow)",
+				"app/verification.py (flash-lite-2.5→flash-2.5+thinking_budget=1)",
+				"app/batch/utils.py (_apply_model_downgrade no-op)",
+				"app/routes_chat.py (complexity 기본값 fast)",
+				"docs/worklog.json (design_intent, phases, gemini_pool_behavior 갱신)"
+			]
+		},
+		{
+			"date": "2026-05-05T19:00:00+09:00",
+			"task": "크롬 플러그인 데이터 staging (PluginIngest + POST /plugin/ingest)",
+			"summary": "schema.sql에 PluginIngest 테이블 추가 (user_id, turn_id, source, raw_payload TEXT, status TEXT, created_at). raw_payload에 플러그인에서 받은 user/reason/answer/meta JSON 통째로 저장. status 기본값 pending. batch/light.py에서 정제 후 InteractionLogs로 승격하는 flow는 추후 구현. routes_plugin.py 신규 — POST /plugin/ingest 엔드포인트 (user_id, turn_id, payload 필수 검증). main.py에 plugin_router 등록.",
+			"files_changed": [
+				"app/schema.sql (PluginIngest 테이블 + idx_plugin_ingest_user/status 인덱스)",
+				"app/routes_plugin.py (신규, POST /plugin/ingest)",
+				"app/main.py (plugin_router 등록)"
+			]
+		},
+		{
+			"date": "2026-05-05T18:00:00+09:00",
+			"task": "달력/히스토리 DB 불일치 수정 + 토큰 제한 도입 + http_client 안전장치",
+			"summary": "1) 달력/히스토리 버그 수정: routes_chat_stream.py가 InteractionLogs를 공통 DB에 쓰고 routes_history.py가 사용자별 DB에서 읽던 불일치 해결. routes_chat_stream.py를 routes_chat.py와 동일한 패턴으로 수정 (InteractionLogs→사용자DB, UserSessions→공통DB). db.py _get_or_create_user_connection에 UserSessions 테이블 추가. 2) 복잡도별 토큰 제한 도입: COMPLEXITY_MAX_TOKENS (simple=600, medium=1000, complex/expert=1500) + ANSWER_LENGTH_HINT 프롬프트 가이드. call_gemini에 max_tokens 전달 완료. 3) http_client.py 안전장치: reset_client() 추가, keepalive 20→10 축소. async_execute의 iscoroutinefunction 체크 확인 (async func는 event loop에서 직접 실행, thread X).",
+			"files_changed": [
+				"app/routes_chat_stream.py (InteractionLogs→사용자DB / UserSessions→공통DB 분리)",
+				"app/db.py (_get_or_create_user_connection에 UserSessions 테이블 추가)",
+				"app/llm_client.py (COMPLEXITY_MAX_TOKENS + ANSWER_LENGTH_HINT + max_tokens 전달)",
+				"app/http_client.py (reset_client + keepalive 축소 + 안전장치 문서화)",
+				"app/routes_history.py (사용자DB 읽기 유지 — 변경 없음, 확인 완료)"
+			]
+		},
+		{
+			"date": "2026-05-05T04:00:00+09:00",
+			"task": "CLAUDE.md 경량화 + worklog entries 분리 + references FTS5 인덱스",
+			"summary": "CLAUDE.md 13줄→14줄 [MUST]/[SHOULD] 태그 적용 + 토큰 효율 메타지시 추가. worklog.json entries를 worklog_entries.json으로 분리 (15.9K, -13%). references.db에 refs_fts FTS5 가상 테이블 + 트리거 추가, retrieval.search_references() 연동. 신규 레퍼런스 25건 FTS5 인덱싱 완료 (총 139건).",
+			"files_changed": [
+				"CLAUDE.md ([MUST]/[SHOULD] 태그 + 토큰 메타지시)",
+				".claude/rules/worklog.md (entries 분리 규칙 반영)",
+				"docs/worklog.json (entries 최근 3건만 유지)",
+				"docs/worklog_entries.json (신규, 전체 entries 보관)",
+				"app/db.py (init_refs_db FTS5 + 트리거 + 데이터 채우기)",
+				"app/retrieval.py (search_references 함수 추가)"
+			],
+			"related_refs": [
+				"lost-in-the-middle-2026",
+				"llm-wiki-karpathy-2026",
+				"memory-as-metabolism-2026"
+			]
+		},
+		{
+			"date": "2026-05-05T03:30:00+09:00",
+			"task": "ConceptRelation meta/weight 추가 + concept_id source_hash prefix + Service Bus 개념 추출",
+			"summary": "ConceptRelation에 meta TEXT DEFAULT '{}'와 weight REAL DEFAULT 1.0 컬럼 추가 (schema.sql + db.py 마이그레이션). concept_mapper.py의 get_concept_id/find_or_create_concept/mark_concept_undefined/add_relation_if_high_confidence에 optional source 파라미터 추가 — 주입 시 {source_hash}_{text_hash} 형식으로 concept_id 생성, 미주입 시 기존 md5 해시 유지 (하위 호환). servicebus_ingest.py에 _extract_terms() 간단한 한/영 용어 추출기 + _ingest_concepts_to_graph() 추가 — Service Bus 메시지에서 용어 추출 후 Concept 생성 및 source:{plugin} → term 관계 pending_relations 기록.",
+			"files_changed": [
+				"app/schema.sql (ConceptRelation meta/weight 컬럼 추가)",
+				"app/db.py (ConceptRelation meta/weight ALTER TABLE 마이그레이션)",
+				"app/concept_mapper.py (get_concept_id/find_or_create_concept/mark_concept_undefined/add_relation_if_high_confidence source 파라미터)",
+				"app/servicebus_ingest.py (_extract_terms, _ingest_concepts_to_graph 추가)"
+			],
+			"related_refs": [
+				"yodoca-2026",
+				"ontokg-2026",
+				"optimuskg-2026",
+				"sqlite-graph-db-2026"
+			]
+		},
+		{
+			"date": "2026-05-04",
+			"session": "DB 캐시 히트 -> 웹 검색 생략 로직 (llm_client.py)",
+			"changes": [
+				"app/llm_client.py: generate_response()의 실시간 질문 웹 검색 섹션에서 retrieved_context 존재/최신성 확인 후 생략",
+				"app/llm_client.py: 로깅 추가"
+			],
+			"notes": [
+				"실시간 질문(is_realtime_query)이라도 DB에 3개 이상의 결과가 있고 1시간 이내면 웹 검색 생략",
+				"DB 결과 부족/오래됨/None이면 기존대로 웹 검색 수행"
+			]
+		},
+		{
+			"date": "2026-05-04",
+			"session": "환각 검증 시스템 Ver 1.2 — 배치 스케줄러 연동",
+			"changes": [
+				"app/batch/light.py: outbox verify 태스크의 insert_answer_log() 시그니처 수정",
+				"app/batch_jobs.py: quick_check 커맨드 추가",
+				"app/batch/daily.py: run_quick_only() 진입점 추가"
+			],
+			"notes": [
+				"Quick Check: 10분 크론",
+				"Deep Verify: KST 04:30 daily_batch 자동 실행",
+				"undefined 재검증: daily_batch에서 run_reverify_undefined() 호출"
+			]
+		},
+		{
+			"date": "2026-05-04T23:59:00+09:00",
+			"task": "app/prompts 패키지로 모든 LLM 프롬프트 중앙화",
+			"summary": "15개 프롬프트 템플릿을 app/prompts/__init__.py에 모듈 레벨 상수로 통합. 기존 10개 파일에 분산되어 있던 인라인/상수 프롬프트를 모두 import 방식으로 전환. 프롬프트 1회 감사 시 토큰 비용 29,101 -> 1,667 tokens (94.3% 절감).",
+			"files_changed": [
+				"app/prompts/__init__.py (신규, 206줄, 15개 상수)",
+				"app/prompts.py (삭제 — 패키지와 충돌)",
+				"app/prompt_builder.py (SYSTEM_PROMPT import)",
+				"app/verification.py (QUICK_CHECK_PROMPT, THREE_STAGE_SELF_VERIFY_PROMPT import)",
+				"app/sidecar_knowledge.py (ENTITY_EXTRACTION_PROMPT, WIKIDATA_PROXY_PROMPT, KNOWLEDGE_REFINEMENT_PROMPT import)",
+				"app/knowledge_pipeline.py (CONCEPT_EXTRACTION_PROMPT, HOMONYM_RESOLUTION_PROMPT, REFINE_AND_EVALUATE_PROMPT import)",
+				"app/language_balance.py (CROSS_LINGUAL_TRANSFER_PROMPT import)",
+				"app/session_finalizer.py (CONVERSATION_SUMMARY_PROMPT import)",
+				"app/structuring.py (RAG_ANSWER_PROMPT import)",
+				"app/batch_api.py (BATCH_VERIFY_PROMPT import)",
+				"app/batch/daily.py (DEEPSEEK_VERIFY_PROMPT import)",
+				"app/llm_client.py (MOCK_RESPONSE import)"
+			],
+			"fixes": [
+				"QUICK_CHECK_PROMPT, THREE_STAGE_SELF_VERIFY_PROMPT: JSON 중괄호 {{}} 이스케이프 — 기존 코드도 .format()에서 KeyError 발생하는 버그였음"
+			]
+		},
+		{
+			"date": "2026-05-04T23:59:00+09:00",
+			"task": "references.db 규칙화 + 스코어링 관련 레퍼런스 4건 등록",
+			"summary": "CLAUDE.md에 references.db 조회/등록 규칙 추가. unified_confidence 설계 근거가 된 TrustJudge(ICLR 2026), DeQA-Score(CVPR 2025), Arize 연속 척도 연구, Hamel 0-3 스케일 사례 등 4건 등록.",
+			"files_changed": [
+				"CLAUDE.md (references.db 규칙 추가)",
+				"data/references.db (worklog_references 4건 INSERT)"
+			]
+		},
+		{
+			"date": "2026-05-04T23:59:00+09:00",
+			"task": "Don't Overthink + LCPO 적용: MAX_LINES_MAP 프롬프트 wiring",
+			"summary": "generate_response()에서 complexity별 MAX_LINES_MAP(simple:3, medium:5, complex:8, expert:12)을 reasoning_hint로 프롬프트에 주입. 시스템 프롬프트(캐시)가 아닌 사용자 측에 추가하여 prefix cache 영향 없음. references.db에 적용된 3건 등록 + TrustJudge/DeQA-Score 공식 정보 갱신.",
+			"files_changed": [
+				"app/llm_client.py (MAX_LINES_MAP import + reasoning_hint 주입)",
+				"data/references.db (3건 신규 + 2건 갱신)"
+			]
+		},
+		{
+			"date": "2026-05-05T04:30:00+09:00",
+			"task": "양방향 참조 동기화 시스템 구현 (sync_refs.py + query_refs.py 보강)",
+			"summary": "scripts/sync_refs.py 생성 — decisions.related_refs_json + entries.related_refs → refs.referenced_in 양방향 동기화. query_refs.py --report 보강 — worklog_entries.json 지원 추가. worklog.md에 related_refs 필드 규칙 추가. weekly.py에 sync_refs 연동. FTS5 trigger SQLite 3.51.3 호환성 수정 (DELETE+INSERT 패턴). 최근 3개 entry에 related_refs 적용. 동기화 결과 11건 참조 연결, 무결성 검사로 9건 끊어진 참조 탐지.",
+			"related_refs": [
+				"yodoca-2026",
+				"sqlite-graph-db-2026",
+				"lost-in-the-middle-2026"
+			],
+			"files_changed": [
+				"scripts/sync_refs.py (신규, 양방향 동기화 엔진)",
+				"scripts/query_refs.py (worklog_entries.json 지원 + os import)",
+				"app/db.py (FTS5 trigger SQLite 3.51.3 호환성 수정)",
+				"app/batch/weekly.py (sync_referenced_in 연동)",
+				".claude/rules/worklog.md (related_refs 규칙 추가)",
+				"docs/worklog_entries.json (entries에 related_refs 필드)",
+				"docs/worklog.json (entries 동기화)"
+			]
+		},
+		{
+			"date": "2026-05-05T05:30:00+09:00",
+			"task": "코드베이스 오류 수정: id_utils.py 신규 + 채널 중복 제거",
+			"summary": "1) app/id_utils.py 신규 생성 — azure_sync.py가 import하던 get_deterministic_shard/get_azure_partition_key/get_azure_row_key 3개 함수 구현. 2) app/channels/utils.py 신규 생성 — 4개 채널 파일(kakao/telegram/line/slack)에 복붙된 _cached_embedding/tir_retrieve/qdp_prune/_sentiment_to_score 4개 공통 헬퍼(약 35줄씩, 총 ~161줄 중복)를 utils.py로 추출. 3) 4개 채널 파일에서 중복 정의 제거 및 import 전환. 4) kakao.py에서 미사용 os import 제거.",
+			"files_changed": [
+				"app/id_utils.py (신규, 29줄)",
+				"app/channels/utils.py (신규, 50줄)",
+				"app/channels/kakao.py (중복 제거 -37줄 + os import 정리)",
+				"app/channels/telegram.py (중복 제거 -42줄)",
+				"app/channels/line.py (중복 제거 -41줄)",
+				"app/channels/slack.py (중복 제거 -41줄)"
+			]
+		},
+		{
+			"date": "2026-05-05T15:00:00+09:00",
+			"task": "외부 통신 성능 최적화 (httpx 연결 풀 공유 + SSE 청크 + 타임아웃)",
+			"summary": "1) app/http_client.py 신규 생성 — lazy-init 공유 httpx.AsyncClient로 TCP 커넥션 풀 재사용 (keepalive 20, max 100). 2) app/llm_client.py: _call_gemini_with_key, _call_openai → 공유 클라이언트 사용 + 타임아웃 120s→60s 단축. 3) app/search_engines.py: 6개 검색 함수(tavily/brave/exa/youcom/youcom_llm/azure_bing) → 공유 클라이언트 사용. 4) app/routes_chat_stream.py: SSE 청크 5→80자로 확대, asyncio.sleep(0.01) 제거 (응답당 ~2s 지연 제거). 5) app/gemini_pool.py: _log_api_call → raw sqlite3.connect 대신 db 연결 풀 사용. 6) app/main.py: shutdown 이벤트 추가 — 공유 httpx 클라이언트 정리.",
+			"files_changed": [
+				"app/http_client.py (신규, 22줄)",
+				"app/llm_client.py (httpx 공유 + 타임아웃 60s)",
+				"app/search_engines.py (6개 함수 공유 클라이언트 전환)",
+				"app/routes_chat_stream.py (청크 80자, sleep 제거)",
+				"app/gemini_pool.py (_log_api_call 풀 사용)",
+				"app/main.py (shutdown 이벤트 추가)"
+			]
+		},
+		{
+			"date": "2026-05-07T16:00:00+09:00",
+			"task": "InteractionLogs meta 컬럼에 LLM 응답 메타데이터 JSON 저장 (로직 누락 수정)",
+			"summary": "llm_result에는 concept/confidence/model_used/complexity/tokens_used 등 응답 메타데이터가 있지만, InteractionLogs INSERT 시 meta 컬럼이 제외되어 모든 채팅 경로에서 NULL로 저장되던 문제 수정. routes_chat.py, routes_chat_stream.py, kakao/telegram/line/slack 4개 채널 총 6곳에 meta_json(concept+confidence+model_used+complexity+tokens_used JSON) 추가, INSERT 컬럼 목록과 VALUES에 meta 포함.",
+			"files_changed": [
+				"app/routes_chat.py (meta_json + INSERT 컬럼/VALUES에 meta 추가)",
+				"app/routes_chat_stream.py (meta_json + INSERT 컬럼/VALUES에 meta 추가)",
+				"app/channels/kakao.py (meta_json + INSERT 컬럼/VALUES에 meta 추가)",
+				"app/channels/telegram.py (meta_json + INSERT 컬럼/VALUES에 meta 추가)",
+				"app/channels/line.py (meta_json + INSERT 컬럼/VALUES에 meta 추가)",
+				"app/channels/slack.py (meta_json + INSERT 컬럼/VALUES에 meta 추가)"
+			]
+		},
+		{
+			"date": "2026-05-07T18:30:00+09:00",
+			"task": "Claude Code 세션 데이터 수집 파이프라인 추가",
+			"summary": "로컬 Mac의 Claude Code JSONL 세션 파일을 Azure Service Bus를 통해 seedling 서버로 전송하여 dev-claude-cli-mac 사용자로 저장하는 파이프라인 구축. scripts/push_claude_sessions.py(JSONL→SB 전송, .pushed_sessions로 중복 방지), servicebus_ingest.py(Claude Code 메시지 포맷 처리, thinking→reasoning 분리 저장), SessionStart hook 등록.",
+			"files_changed": [
+				"scripts/push_claude_sessions.py (신규)",
+				"app/servicebus_ingest.py (Claude Code thinking/text 분리 저장 로직 추가)",
+				"~/.claude/settings.json (SessionStart hook 등록)"
+			]
+		},
+		{
+			"date": "2026-05-07T20:30:00+09:00",
+			"task": "컨텍스트 엔지니어링 3단계 적용 (Golden Context + 실시간 압축 + QDP 분해)",
+			"summary": "1) Golden Context 보호: _golden_context_guard() — system prompt+마지막 대화+user query 보호, 예산 초과 시 middle(context_str)부터 trimming. 2) 실시간 세그먼트 압축: _compress_segment_turns() — 8턴 초과 시 오래된 턴 요약하여 context에 주입, generate_response()에 user_id 전달(6곳). 3) QDP 질문 분해: decompose_query() — Gemini Flash로 복합 질문을 2~4개 하위 질문으로 분해, asyncio.gather 병렬 TIR 검색, 결과 병합. 통합 테스트 69건 통과.",
+			"files_changed": [
+				"app/llm_client.py",
+				"app/prompts/__init__.py",
+				"app/structuring.py",
+				"app/routes_chat.py",
+				"app/routes_chat_stream.py",
+				"app/channels/kakao.py",
+				"app/channels/telegram.py",
+				"app/channels/line.py",
+				"app/channels/slack.py",
+				"app/concept_mapper.py"
+			]
+		},
+		{
+			"date": "2026-05-07T21:00:00+09:00",
+			"task": "Babelfy/Semantic Ranking/LangChain 검토 및 pending 등록",
+			"summary": "Babelfy entity linking(스텁), RRF 시멘틱 랭킹, Knowledge Graph(Wikidata), User-Reason-Answer 3단 분리, 3단계 검증 → 이미 적용 확인. Babelfy QID 완성(P6), ELERAG 통합(P7), HyQE 가상 질문 생성(P8) 3건을 pending에 추가. WSD/SGR/도메인 특화는 현재 규모에서 불필요로 분류.",
+			"files_changed": [
+				"docs/worklog.json (P6-P8 pending_items 추가)",
+				"docs/worklog_entries.json (본 항목)"
+			]
+		},
+		{
+			"date": "2026-05-07T21:30:00+09:00",
+			"task": "P1 reference_blob_path 연동 (blob_offload → chat paths)",
+			"summary": "generate_response() 내 context_str 조립 직후 store_context_blob() 호출하여 blob_path를 llm_result에 포함. routes_chat, routes_chat_stream, kakao/telegram/line/slack 6곳의 InteractionLogs INSERT에서 reference_blob_path 컬럼에 blob_path 전달. 로직 연동 완료, 69개 테스트 통과.",
+			"files_changed": [
+				"app/llm_client.py",
+				"app/routes_chat.py",
+				"app/routes_chat_stream.py",
+				"app/channels/kakao.py",
+				"app/channels/telegram.py",
+				"app/channels/line.py",
+				"app/channels/slack.py",
+				"app/blob_offload.py"
+			]
+		},
+		{
+			"date": "2026-05-07T22:00:00+09:00",
+			"task": "P5 카운터 영속화 (ServerCounters 테이블 + startup/shutdown)",
+			"summary": "in-memory 카운터 4종을 core DB의 ServerCounters 테이블에 영속화. _restore_counters()로 시작 시 복원, get_token_metrics() 호출 시 자동 저장, shutdown 시 최종 저장. 69개 테스트 통과.",
+			"files_changed": [
+				"app/llm_client.py",
+				"app/main.py"
+			]
+		},
+		{
+			"date": "2026-05-07T22:30:00+09:00",
+			"task": "P6 Babelfy QID 완성 (_lookup_babelnet_to_wikidata 구현)",
+			"summary": "babelfy_client.py의 유일한 스텁이었던 _lookup_babelnet_to_wikidata() 구현. BabelNetMapping 로컬 캐시(SQLite) → BabelNet API v7 → Wikidata SPARQL 3단계 QID 조회. 69개 테스트 통과.",
+			"files_changed": [
+				"app/babelfy_client.py"
+			]
+		},
+		{
+			"date": "2026-05-07T23:00:00+09:00",
+			"task": "P7 ELERAG 통합 (Entity 신호 → retrieval ranking)",
+			"summary": "retrieval.py에 _extract_query_entities()(Concept 테이블 기반 entity 조회, 로컬 캐시 TTL 10분) + _entity_match_score()(문서별 entity 중첩도) 추가. rrf_fuse() weights에 entity:0.15 포함, per-document entity scoring. 69/69 테스트 통과.",
+			"files_changed": [
+				"app/retrieval.py"
+			]
+		},
+		{
+			"date": "2026-05-07T23:30:00+09:00",
+			"task": "P8 HyQE 가상 질문 생성 (조건부 활성화 + QDP 보완)",
+			"summary": "structuring.py에 hyqe_generate() 추가, HYQE_GENERATE_PROMPT 추가. llm_client.py에서 QDP 결과 3건 미만 시 HyQE 발동 → 병렬 TIR 추가 검색 → 결과 병합. 69/69 테스트 통과.",
+			"files_changed": [
+				"app/structuring.py",
+				"app/prompts/__init__.py",
+				"app/llm_client.py"
+			]
+		}
+	]
+}

@@ -1,66 +1,26 @@
 last_checkpoint:
-  time: '2026-05-13T15:45:45.992998+09:00'
+  time: '2026-05-14T18:33:36.009182+09:00'
   recent_files: []
   git: {}
-current_task:
-  summary: DevForge v3.0 infrastructure migration (completed)
-  started: '2026-05-11'
-  completed: '2026-05-11T22:50:00+09:00'
-  plan: '0. Backup /opt/project + systemd units, verify Linger=yes, install SELinux tools
-
-    1. Create datavg/lv_projects 10GB XFS → /opt/projects, fstab UUID
-
-    2. Stop pods → rsync /opt/project → /opt/projects → SELinux container_file_t → symlink /opt/project → /opt/projects
-
-    3. Unmount ocivolume/lv_dev → mount at /mnt/secure_meta → mkdir configs/secrets/snapshots/tmp → SELinux → fstab update
-
-    4. Update container-litellm.service path → daemon-reload → start data-pod → start ai-pod → 180s model loading timeout
-
-    5. .pgpass (devforge_app, devforge_meta) → devforge-backup.timer (both DBs, gzip integrity) → journald 30day
-    retention
-
-    6. Verification: pods, mounts, API, PG, E2E inference, dump dir, Netdata
-
-    7. devforge-restore-test.timer (monthly restore test)
-
-    '
-  result: 'All 7 stages completed:
-
-    - /opt/projects: datavg/lv_projects 10GB (13% used)
-
-    - /mnt/secure_meta: ocivolume/lv_meta 4.5GB (27% used)
-
-    - /opt/project → /opt/projects symlink
-
-    - ai-pod (llm healthy + litellm) + data-pod (postgres) both running
-
-    - E2E inference: "1+1=2" via qwen2.5-coder-7b
-
-    - DB dump: 2 files (devforge_app + devforge_meta), restore test passed
-
-    - seedling DB dropped (empty), replaced with devforge_app + devforge_meta
-
-    - lv_dev renamed to lv_meta (ocivolume)
-
-    - template1 collation version mismatch fixed
-
-    '
-  risks:
-  - /opt/project was busy during symlink creation (CWD held by tmux/bash/podman); resolved with umount -l (lazy unmount)
-  - fstab sed pattern caught /opt/projects in crossfire; fixed with device-anchored pattern
-  - Initial backup tar hit root fs 92% full; skipped full backup, targeted critical data only
 decisions:
-- 'Ops finalization 2026-05-13T10:25Z: migrated to Quadlet-only runtime (pod/container files in ~/.config/containers/systemd), fixed image tags (localhost/devforge-*:2026.05.13), and UTC-only timers under user systemd (devforge-backup.timer 20:00 UTC, devforge-restore-test.timer 20:30 UTC on day 1).'
-- 'Secrets policy finalized: single injection path via ~/.config/devforge/secrets.env (chmod 600). Removed inline POSTGRES_PASSWORD from Quadlet and switched LiteLLM config to os.environ/* references.'
+- 'Ops finalization 2026-05-13T10:25Z: migrated to Quadlet-only runtime (pod/container files in ~/.config/containers/systemd),
+  fixed image tags (localhost/devforge-*:2026.05.13), and UTC-only timers under user systemd (devforge-backup.timer 20:00
+  UTC, devforge-restore-test.timer 20:30 UTC on day 1).'
+- 'Secrets policy finalized: single injection path via ~/.config/devforge/secrets.env (chmod 600). Removed inline POSTGRES_PASSWORD
+  from Quadlet and switched LiteLLM config to os.environ/* references.'
 - 'Legacy generated unit files moved out of active path and reduced to archive note: ~/.config/systemd/user/_legacy-generate-systemd/README.txt.'
-- 'Healthcheck noise handling: ignore transient podman healthcheck units/scopes in alerting; use stable unit status for SLO checks.'
-- 'Runbook (fixed-tag update): 1) podman tag <upstream-image> localhost/devforge-<svc>:<version>; 2) systemctl --user daemon-reload; 3) systemctl --user restart data-pod.service ai-pod.service container-postgres.service container-devforge-llm.service container-litellm.service; 4) verify podman ps health + LiteLLM /v1/models.'
+- 'Healthcheck noise handling: ignore transient podman healthcheck units/scopes in alerting; use stable unit status for SLO
+  checks.'
+- 'Runbook (fixed-tag update): 1) podman tag <upstream-image> localhost/devforge-<svc>:<version>; 2) systemctl --user daemon-reload;
+  3) systemctl --user restart data-pod.service ai-pod.service container-postgres.service container-devforge-llm.service container-litellm.service;
+  4) verify podman ps health + LiteLLM /v1/models.'
 - 'Reboot verification 2026-05-11T14:10 KST: all services verified, 3 issues found and resolved.'
 - 'Normalization pass 2026-05-11T14:35 KST: 3 workarounds properly fixed — (1) netdata RPM fully removed via dnf, (2) --mlock
   flag removed from container-devforge-llm.service (rootless podman lacks CAP_IPC_LOCK, model works fine without it, swappiness=10),
   (3) LiteLLM connected to postgres via devforge-net bridge (listen_addresses=*, pg_hba 10.89.0.0/24, litellm DB created,
   database_url in config.yaml) → /health now returns healthy_count=1 unhealthy_count=0.'
-- 'Quadlet cleanup: 6 stale .container/.pod/.network files removed from ~/.config/containers/systemd/ (historical conflict resolved). Final policy as of 2026-05-13 is Quadlet-only runtime; older generate-systemd path is retired.'
+- 'Quadlet cleanup: 6 stale .container/.pod/.network files removed from ~/.config/containers/systemd/ (historical conflict
+  resolved). Final policy as of 2026-05-13 is Quadlet-only runtime; older generate-systemd path is retired.'
 - 'ai-pod auto-start fix 2026-05-11T14:15 KST: pod-ai-pod.service + pod-data-pod.service both patched. Root cause: reboot
   clears /run tmpfs but podman DB retains stale pod records → pod create --replace races with DB cleanup → FOREIGN KEY constraint
   / no such pod errors → containers fail with dependency failure on BindsTo. Fix: (1) explicit ExecStartPre=-podman pod rm
@@ -82,11 +42,11 @@ decisions:
 - systemd 유닛명 통일: container-litellm.service → litellm.service (유닛 파일 rename + gen_server_state.py:98 매핑 제거)
 - 'Cross-validation fix: zram removed from CLAUDE.yaml (nonexistent), swap 7.7G→3.7G, flags synced with actual unit, netdata
   added to services, blueprint Phase 2 ctx-size claim corrected, network section updated for host networking'
-- 'Handover is hybrid: mechanical (file scan + git status every 10min + SessionEnd hook) + AI-written sections (current_task,
-  decisions, pending, known_issues)'
+- 'Handover is hybrid: mechanical (file scan + git status every 10min + SessionEnd hook) + AI-written sections (decisions,
+  known_issues). current_task and pending now live in tasks.yaml.'
 - systemd user timer handover-gen.timer runs every 10min with 30s randomized delay
-- SessionEnd hook in ~/.claude/settings.json triggers update_handover.py on session exit
-- 'CLAUDE.md includes Handover Protocol rule: read handover.yaml on start, write to it before end'
+- SessionEnd hook in ~/.claude/settings.json triggers session_guard.py (auto-commit safety net) then update_handover.py on session exit
+- 'CLAUDE.yaml rules.must #2: read handover.yaml + tasks.yaml on start, update both before end'
 - CLAUDE.yaml entry_points includes handover.yaml; handover section documents triggers and flow
 - seedling removed from CLAUDE.yaml projects.active — maintained as standalone dev project under /opt/project/seedling/
 - lv_db fstab UUID fixed: old 90f73063 was stale after mkfs.xfs regeneration, replaced with actual ad421235
@@ -103,7 +63,8 @@ decisions:
   shadow-utils update
 - 'DevForge v3.0: 2-Pod architecture (ai-pod: llm+litellm, data-pod: postgres) with bridge network devforge-net, host Netdata
   v2.2.6'
-- 'DevForge v3.0 historical note: podman generate systemd was used temporarily. Superseded by 2026-05-13 decision: Quadlet-only operation with fixed local tags and user-systemd timers.'
+- 'DevForge v3.0 historical note: podman generate systemd was used temporarily. Superseded by 2026-05-13 decision: Quadlet-only
+  operation with fixed local tags and user-systemd timers.'
 - 'DevForge v3.0: all volume mounts use :Z or :Z,ro for SELinux enforcing compatibility'
 - 'DevForge v3.0: llm.container uses TimeoutStartSec=300 for 7.7GB model (--mlock removed — CAP_IPC_LOCK unavailable in rootless
   podman)'
@@ -122,8 +83,6 @@ decisions:
 - 'GitHub repo 설정 2026-05-13: git@github.com:devforgekor/devforge.git — /opt/projects 초기화, server/ common-lib/ litellm/ scripts/
   systemd/ 등 102개 파일 커밋 + 푸시 (main). M4 Air SSH 키(~/.ssh/id_ed25519)로 인증. systemd 유닛 파일 9개 추가 커밋으로 컨테이너 오케스트레이션 정의(Docker
   Compose 역할) 포함.'
-pending:
-- 'tmux: session devforge running (auto-started on boot)'
 known_issues: []
 completed_log:
 - /tmp.old cleanup — completed, directory no longer exists

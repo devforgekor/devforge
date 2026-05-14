@@ -51,6 +51,8 @@ containers:
     --batch-size 4096 --ubatch-size 1024
   target_flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0
 services:
+- name: devforge-api
+  status: active
 - name: devforge-llm
   status: active
   type: systemd user
@@ -101,7 +103,8 @@ entry_points:
   metrics_snapshot: state.yaml#metrics
   change_log: changelog.yaml (< 3 months, always read)
   change_archive: changelog_archive.yaml (> 3 months, read on demand)
-  session_handover: handover.yaml (last checkpoint + AI decisions/tasks, always read on session start)
+  session_handover: handover.yaml (last checkpoint + AI decisions/known_issues, always read on session start)
+  task_tracker: tasks.yaml (current/pending/done — all AI agents share this file)
   retention: indefinite — no deletion, archive-only after 3 months
 refresh:
   trigger: motd-gen.timer (systemd user, 15min interval)
@@ -114,9 +117,7 @@ handover:
   flow: scan recent files -> git status -> preserve AI sections -> write handover.yaml
   auto: true
   ai_writes:
-  - current_task
   - decisions
-  - pending
   - known_issues
 tracked:
   structural:
@@ -139,8 +140,11 @@ not_tracked:
 rules:
   must:
   - CLAUDE.yaml is the single entry point — read this first.
-  - Read handover.yaml on session start. Write current_task, decisions, pending, known_issues before session ends.
-  - Update blueprint.yaml when phases progress or architecture decisions change.
+  - ? Read handover.yaml on session start for decisions and known_issues. Read tasks.yaml for current/pending tasks. Before
+      session end
+    : update tasks.yaml (move done, promote pending), update handover.yaml decisions/known_issues, log completed work with
+      cli.py worklog add.
+  - Update blueprint.yaml and phases.md when phases progress or architecture decisions change.
   - All machine-readable content MUST be English.
   - state.yaml is auto-generated. NEVER edit manually.
   - changelog.yaml is append-only. NEVER modify existing entries.
@@ -154,6 +158,16 @@ rules:
     in Quadlet or app config.
   - 'tmux: source-file only adds hooks, never removes them. After deleting a hook from .tmux.conf, MUST run tmux set-hook
     -gu <hook-name> to purge from running server.'
+  - 'Documentation cleanup: obsolete files MUST move to _archive/ first, never delete directly. Update _archive/README.md
+    with: 보관 사유 (why), 삭제 조건 (when safe to delete), 대체 위치 (replacement), 주의 (warnings). Delete original only after archive
+    copy and README entry confirmed.'
+  - 'Single source of truth for DevForge: /opt/projects/server/docs/ (design.md, phases.md, tasks.yaml) + devforge_app.worklog_entries
+    (DB). No DevForge documentation outside /opt/projects/server/.'
+  - 'tasks.yaml is the single task tracker. All AI agents read it on session start. current: max 1. pending: priority order.
+    done: max 10. Follow meta.done_checklist when completing a task.'
+  - 'File naming: Python/Shell/JS → snake_case (link_turns.py, nightly_batch.sh). Config/Docs → lowercase (blueprint.yaml,
+    design.md). Directories → single English word (app/, scripts/, docs/). CLI entry point → cli.py at repo root. Reserved:
+    routes_ prefix for grouped router modules (routes_search.py) — only when a single router file grows beyond 700 lines.'
   should:
   - 'Prefer Python stdlib. Only dependency: pyyaml.'
   - 'changelog.archive policy: entries > 3 months move to changelog_archive.yaml.'

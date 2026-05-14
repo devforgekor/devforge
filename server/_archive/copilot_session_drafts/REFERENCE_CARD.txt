@@ -1,0 +1,86 @@
+╔═══════════════════════════════════════════════════════════════════╗
+║           DevForge: 1인 개발자 레퍼런스 카드 (인쇄용)            ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+📋 읽기 순서 (총 15분)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. plan.md (1분) - 미션과 구조
+2. DEVFORGE_SIMPLE.md (5분) - 템플릿 숙지
+3. QUICK_START_SOLO_DEV.md (2분) - 체크리스트
+4. 시작 (7분) - docker compose up
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 5 Files to Copy (DEVFORGE_SIMPLE.md에서)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. docker-compose.yml
+2. requirements.txt
+3. Dockerfile
+4. app/main.py
+5. .github/dependabot.yml
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Golden Rules (필수 암기)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Exact versions: fastapi==0.104.1 (never ^0.104.1)
+2. Lock files: commit poetry.lock or package-lock.json
+3. Watch releases: GitHub → Custom → Releases
+4. Dependabot: .github/dependabot.yml (monthly)
+5. Test locally: docker compose up (5 min before merge)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 Day 1 Commands
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+$ docker compose up
+$ curl http://localhost:8000/health
+{"status":"ok"}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 4-Week Timeline
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Week 1-2: PostgreSQL + FastAPI
+Week 3:   Integration Test
+Week 4:   Web UI + CLI
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 Monthly Maintenance (30 min)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1st Friday of month:
+  1. Check Dependabot PRs
+  2. docker compose up → quick test
+  3. Merge if green
+  Done!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ Things We DON'T Do
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ GitHub Release Monitor (GitHub Watch suffices)
+❌ Private Registry (PyPI is fine)
+❌ Staging server (local docker-compose is enough)
+❌ Breaking Changes deep analysis
+❌ All enterprise practices
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Philosophy
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Sustainable negligence > Perfect control
+Done > Perfect
+5 rules + automation > Hundred checklists
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 Current Status
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Architecture Confirmed
+✅ Templates Ready
+✅ Rules Defined
+✅ Documentation Simplified
+⏳ Ready to START Phase 1
+
+Print this card. Put on your desk. That's your DevForge Bible.
