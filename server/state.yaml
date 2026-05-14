@@ -56,37 +56,37 @@ structural:
     mount: /
   containers:
   - name: pod:data
-    status: Up 36 hours
+    status: Up 37 hours
     ports: ''
     model: null
     flags: ''
   - name: postgres
-    status: Up 36 hours (healthy)
+    status: Up 37 hours (healthy)
     ports: 5432/tcp
     model: null
     flags: ''
   - name: pod:ai
-    status: Up 23 hours
+    status: Up 24 hours
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
   - name: litellm
-    status: Up 23 hours (healthy)
+    status: Up 24 hours (healthy)
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
   - name: devforge-llm
-    status: Up 23 hours (healthy)
+    status: Up 24 hours (healthy)
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
   - name: devforge-api
-    status: Up 7 hours (healthy)
+    status: Up 8 hours (healthy)
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
   - name: caddy
-    status: Up 23 hours (healthy)
+    status: Up 24 hours (healthy)
     ports: 80/tcp, 443/tcp, 2019/tcp, 443/udp
     model: null
     flags: ''
@@ -121,23 +121,23 @@ structural:
     - '8000'
     - '8125'
 metrics:
-  generated: '2026-05-14T21:49:36.910761+00:00'
+  generated: '2026-05-14T22:49:51.984966+00:00'
   system:
     cpu_load:
-    - 0.0
-    - 0.04
-    - 0.06
+    - 0.48
+    - 0.4
+    - 0.3
     memory:
       used: 11Gi
       total: 22Gi
-      percent: 52
+      percent: 51
     zram: 4G 59B
   storage_use:
   - device: ocivolume-root
     size: 20G
-    used: 7.4G
+    used: 7.2G
     avail: 13G
-    use_pct: 37
+    use_pct: 36
     mount: /
   - device: datavg-lv_db
     size: 30G
@@ -165,7 +165,7 @@ metrics:
     mount: /opt/projects
   - device: ocivolume-lv_logs
     size: 10G
-    used: 420M
+    used: 422M
     avail: 9.6G
     use_pct: 5
     mount: /var/log
@@ -183,15 +183,15 @@ metrics:
     mount: /opt/workspace
   containers_uptime:
   - name: data-pod-infra
-    uptime: Up 36 hours
+    uptime: Up 37 hours
   - name: postgres
-    uptime: Up 36 hours (healthy)
+    uptime: Up 37 hours (healthy)
   - name: ai-pod-infra
-    uptime: Up 23 hours
+    uptime: Up 24 hours
   - name: litellm
-    uptime: Up 23 hours (healthy)
+    uptime: Up 24 hours (healthy)
   - name: devforge-llm
-    uptime: Up 23 hours (healthy)
+    uptime: Up 24 hours (healthy)
   - name: devforge-api
-    uptime: Up 7 hours (healthy)
+    uptime: Up 8 hours (healthy)
   alerts: []

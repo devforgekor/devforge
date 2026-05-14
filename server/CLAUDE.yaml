@@ -79,7 +79,7 @@ network:
   exposed_ports:
   - 22/tcp (SSH, key-only)
   - 111/tcp (rpcbind)
-  llm_api: 127.0.0.1:8080 (host networking)
+  llm_api: 127.0.0.1:4000 (LiteLLM proxy to llama.cpp)
   litellm_api: 127.0.0.1:4000 (host networking)
   netdata: 127.0.0.1:19999
 projects:
