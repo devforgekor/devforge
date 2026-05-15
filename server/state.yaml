@@ -56,12 +56,12 @@ structural:
     mount: /
   containers:
   - name: pod:data
-    status: Up 44 hours
+    status: Up 45 hours
     ports: ''
     model: null
     flags: ''
   - name: postgres
-    status: Up 44 hours (healthy)
+    status: Up 45 hours (healthy)
     ports: 5432/tcp
     model: null
     flags: ''
@@ -81,7 +81,7 @@ structural:
     model: null
     flags: ''
   - name: devforge-api
-    status: Up 16 hours (healthy)
+    status: Up 17 hours (healthy)
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
@@ -121,11 +121,11 @@ structural:
     - '8000'
     - '8125'
 metrics:
-  generated: '2026-05-15T06:37:38.921787+00:00'
+  generated: '2026-05-15T07:07:51.988206+00:00'
   system:
     cpu_load:
-    - 0.22
-    - 0.22
+    - 0.19
+    - 0.19
     - 0.18
     memory:
       used: 11Gi
@@ -165,7 +165,7 @@ metrics:
     mount: /opt/projects
   - device: ocivolume-lv_logs
     size: 10G
-    used: 444M
+    used: 445M
     avail: 9.6G
     use_pct: 5
     mount: /var/log
@@ -183,9 +183,9 @@ metrics:
     mount: /opt/workspace
   containers_uptime:
   - name: data-pod-infra
-    uptime: Up 44 hours
+    uptime: Up 45 hours
   - name: postgres
-    uptime: Up 44 hours (healthy)
+    uptime: Up 45 hours (healthy)
   - name: ai-pod-infra
     uptime: Up 32 hours
   - name: litellm
@@ -193,5 +193,5 @@ metrics:
   - name: devforge-llm
     uptime: Up 32 hours (healthy)
   - name: devforge-api
-    uptime: Up 16 hours (healthy)
+    uptime: Up 17 hours (healthy)
   alerts: []
