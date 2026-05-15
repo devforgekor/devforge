@@ -1,0 +1,225 @@
+last_checkpoint:
+  time: '2026-05-11T18:24:00+09:00'
+  recent_files:
+  - /opt/project/server/CLAUDE.yaml
+  git:
+    /opt/project/seedling:
+      branch: main
+      changes: (clean)
+      untracked:
+      - '"# seedling \354\204\244\352\263\204 \352\263\204\355\232\215\354\204\234.md"'
+      - .claude/rules/worklog.md
+      - .dockerignore
+      - .env.example
+      - .github/workflows/deploy.yml
+      - .gitignore
+      - AGENTS.md
+      - CLAUDE.md
+      - Dockerfile.sidecar
+      - _pending/budget_analyzer.py
+      - _pending/gpt_fallback.py
+      - _pending/hallucination_verification_v1.2.md
+      - _pending/handover_20260501.md
+      - _pending/metadata_architecture_v1.md
+      - _pending/phase2_plan.md
+      - _pending/phase3_plan.md
+      - _pending/plugin_refine.py
+      - _pending/review_references_separation_20260503.md
+      - _pending/system_review_20260502.md
+      - _test_keys.py
+      - _test_keystore.py
+      - _test_pool.py
+      - alembic.ini
+      - amount-2026-4.csv
+      - amount-2026-5.csv
+      - app/__init__.py
+      - app/babelfy_client.py
+      - app/batch/__init__.py
+      - app/batch/daily.py
+      - app/batch/light.py
+      - app/batch/monthly.py
+      - app/batch/quarterly.py
+      - app/batch/utils.py
+      - app/batch/weekly.py
+      - app/batch_api.py
+      - app/batch_jobs.py
+      - app/channels/__init__.py
+      - app/channels/kakao.py
+      - app/channels/line.py
+      - app/channels/slack.py
+      - app/channels/telegram.py
+      - app/channels/utils.py
+      - app/circuit_breaker.py
+      - app/complexity_classifier.py
+      - app/concept_mapper.py
+      - app/config.py
+      - app/counters.py
+      - app/db.py
+      - app/error_signature.py
+      - app/feedback.py
+      - app/file_handler.py
+      - app/gemini_pool.py
+      - app/http_client.py
+      - app/id_utils.py
+      - app/key_store.py
+      - app/knowledge_pipeline.py
+      - app/language_balance.py
+      - app/llm_client.py
+      - app/magma_tracker.py
+      - app/main.py
+      - app/monitoring.py
+      - app/monitoring_cost.py
+      - app/monitoring_infra.py
+      - app/pending_processor.py
+      - app/prompt_builder.py
+      - app/prompts/__init__.py
+      - app/retrieval.py
+      - app/routes_admin.py
+      - app/routes_channels.py
+      - app/routes_chat.py
+      - app/routes_chat_file.py
+      - app/routes_chat_stream.py
+      - app/routes_feedback.py
+      - app/routes_graph.py
+      - app/routes_history.py
+      - app/routes_knowledge.py
+      - app/routes_monitor.py
+      - app/routes_plugin.py
+      - app/routes_ui.py
+      - app/routes_upload.py
+      - app/schema.sql
+      - app/search_engines.py
+      - app/security.py
+      - app/session_finalizer.py
+      - app/sidecar_client.py
+      - app/sidecar_knowledge.py
+      - app/sidecar_main.py
+      - app/structuring.py
+      - app/templates.py
+      - app/templates/_chat_body.html
+      - app/templates/_chat_script.html
+      - app/templates/_chat_style.html
+      - app/templates/admin.html
+      - app/templates/dashboard.html
+      - app/templates/graph.html
+      - app/templates/index.html
+      - app/token_export.py
+      - app/utils.py
+      - app/verification.py
+      - check.py
+      - chrome-extension/background.js
+      - chrome-extension/content_aistudio.js
+      - chrome-extension/content_chatgpt.js
+      - chrome-extension/content_claude.js
+      - chrome-extension/content_common.js
+      - chrome-extension/content_deepseek.js
+      - chrome-extension/content_gemini.js
+      - chrome-extension/manifest.json
+      - chrome-extension/popup.html
+      - chrome-extension/popup.js
+      - cost-2026-4.csv
+      - cost-2026-5.csv
+      - deploy/caddy/Caddyfile
+      - deploy/selinux/fcontext.txt
+      - deploy/systemd/devforge-postgres.service
+      - deploy/systemd/devforge.service
+      - deploy/systemd/seedling-postgres.service
+      - deploy/systemd/seedling.service
+      - docker/Dockerfile
+      - docker/docker-compose.yml
+      - docker/docker-entrypoint.sh
+      - docker/litestream.yml
+      - docs/api.md
+      - docs/architecture.md
+      - docs/openapi.json
+      - docs/pg_ref/migration_reference.md
+      - docs/project_code_review.json
+      - docs/update_azure.md
+      - docs/worklog.json
+      - docs/worklog_entries.json
+      - guide.md
+      - infra/deploy.py
+      - infra/deploy.sh
+      - infra/main.bicep
+      - infra/main.json
+      - infra/resources.bicep
+      - migrations/README
+      - migrations/env.py
+      - migrations/script.py.mako
+      - migrations/versions/de517551fab2_initial_postgresql_schema.py
+      - pyproject.toml
+      - pytest.ini
+      - readme.md
+      - requirements.txt
+      - scripts/dump_db.py
+      - scripts/dump_refs.py
+      - scripts/export_tokens.py
+      - scripts/generate_code_review.py
+      - scripts/generate_openapi.py
+      - scripts/migrate_worklog_v2.py
+      - scripts/oci/reconfig-boot-volume.sh
+      - scripts/oci/setup-data-volume.sh
+      - scripts/push_claude_sessions.py
+      - scripts/query_refs.py
+      - scripts/seedling-backup.sh
+      - scripts/seedling-crontab
+      - scripts/sync_refs.py
+      - tests/conftest.py
+      - tests/load_test.py
+      - tests/test_concept_mapper.py
+      - tests/test_feedback.py
+      - tests/test_integration.py
+      - tests/test_security.py
+      - tests/test_utils.py
+      - update.md
+current_task:
+  summary: '/tmp → /var/tmp symlink switch (completed)'
+  started: '2026-05-11'
+  completed: '2026-05-11T10:35:00+09:00'
+  plan: |
+    1. Kill tmux server (sessions: devforge) — socket at /tmp/tmux-1000/default
+    2. mv /tmp /tmp.old (atomic rename)
+    3. ln -s /var/tmp /tmp
+    4. cp -a /tmp.old/. /tmp/ (preserves newuidmap/newgidmap custom binaries)
+    5. Schedule /tmp.old cleanup
+  result: |
+    All 4 verifications passed:
+    - ls -ld /tmp = lrwxrwxrwx /tmp -> /var/tmp
+    - newuidmap + newgidmap exist in /var/tmp
+    - df /tmp shows lv_tmp (10G XFS)
+    - Claude survived the switch (2-second window between mv and ln)
+  risks:
+    - Claude Code uses /tmp/claude-1000/ — survived due to short window + open fd to inodes
+    - newuidmap/newgidmap pre-copied to /var/tmp before switch as safety net
+decisions:
+- '/tmp → /var/tmp switch completed 2026-05-11: atomic mv + symlink via atd job. All verifications passed. newuidmap/newgidmap
+  preserved. /tmp.old cleanup scheduled for Tue May 12 10:35 KST.'
+- 'gen_server_state.py v5: discover_services() scans systemctl list-unit-files — no hardcoded service names'
+- 'gen_server_state.py v5: collect_container_flags() parses ExecStart= → CLAUDE.yaml flags auto-synced every 15min'
+- 'gen_server_state.py v5: build_memory_line() from free/swapon/zramctl/sysctl → CLAUDE.yaml memory auto-generated'
+- 'gen_server_state.py v5: --validate compares CLAUDE.yaml+blueprint vs live → state.yaml#validation → MOTD RED alerts'
+- 'gen_server_state.py v5: validate-gen.timer runs daily with 600s RandomizedDelaySec'
+- systemd 유닛명 통일: container-litellm.service → litellm.service (유닛 파일 rename + gen_server_state.py:98 매핑 제거)
+- 'Cross-validation fix: zram removed from CLAUDE.yaml (nonexistent), swap 7.7G→3.7G, flags synced with actual unit, netdata
+  added to services, blueprint Phase 2 ctx-size claim corrected, network section updated for host networking'
+- 'Handover is hybrid: mechanical (file scan + git status every 10min + SessionEnd hook) + AI-written sections (current_task,
+  decisions, pending, known_issues)'
+- systemd user timer handover-gen.timer runs every 10min with 30s randomized delay
+- SessionEnd hook in ~/.claude/settings.json triggers update_handover.py on session exit
+- 'CLAUDE.md includes Handover Protocol rule: read handover.yaml on start, write to it before end'
+- CLAUDE.yaml entry_points includes handover.yaml; handover section documents triggers and flow
+- seedling removed from CLAUDE.yaml projects.active — maintained as standalone dev project under /opt/project/seedling/
+- lv_db fstab UUID fixed: old 90f73063 was stale after mkfs.xfs regeneration, replaced with actual ad421235
+- 'PostgreSQL 16 on /mnt/lv_db: boot-time start failure resolved (cascade from unmounted lv_db), now active+enabled'
+- 'Containerization: Caddy → rootful podman (setcap failed for rootless, SELinux blocks privileged port bind)'
+- 'Containerization: Netdata → rootless podman with --pid=host and 5 capabilities, port 19999'
+- 'Containerization: PostgreSQL 16 → rootless podman, data dir chown to 1000:1000 (rootless maps container root → host opc)'
+- 'Containerization: caddy.service at /etc/systemd/system/ (rootful), netdata+postgres at ~/.config/systemd/user/ (rootless)'
+- 'Cleanup: removed caddy.service placeholder, fixed PG collation version, blueprint ctx-size → 8192'
+  - 'UEK7 kernel (6.12) uid_map write restriction: only 1 or 5 lines per write() — stock newuidmap writes 2 lines → EPERM'
+  - 'Fix: custom C replacement for newuidmap/newgidmap compiled to /usr/bin/ (setuid root), splits 2 triples → 5 by quartering subuid range. Source at /tmp/newidmap.c'
+  - 'shadow-utils update will overwrite the replacement — recompile from /tmp/newidmap.c and reinstall setuid bits after any shadow-utils update'
+pending:
+  - '[POST-SWITCH CLEANUP] rm -rf /tmp.old scheduled via atd (job 2, Tue May 12 10:35 KST)'
+  - 'tmux restarted: session devforge running, attach with tmux attach -t devforge'
+known_issues: []

@@ -39,6 +39,9 @@ Caddy (host network)
 - data-pod: no published ports (pod 내부 통신)
 - Caddy: host network, ports 80/443
 
+## 접근 제한
+- `/opt/workspace/` — 사용자 명시적 지시 없이 접근 금지 (Seedling 등 타 프로젝트 포함)
+
 ## 애플리케이션 구조
 
 ```

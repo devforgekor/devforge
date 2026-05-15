@@ -1,0 +1,173 @@
+structural:
+  storage:
+  - device: datavg-lv_ai_data
+    vg: datavg
+    lv: lv_ai_data
+    size: 100G
+    mounted: true
+    mount: /opt/ai_data
+  - device: datavg-lv_db
+    vg: datavg
+    lv: lv_db
+    size: 30G
+    mounted: true
+    mount: /mnt/lv_db
+  - device: datavg-lv_projects
+    vg: datavg
+    lv: lv_projects
+    size: 10G
+    mounted: true
+    mount: /opt/projects
+  - device: ocivolume-lv_dev
+    vg: ocivolume
+    lv: lv_dev
+    size: 4.5G
+    mounted: true
+    mount: '/opt/project
+
+      /mnt/secure_meta'
+  - device: ocivolume-lv_logs
+    vg: ocivolume
+    lv: lv_logs
+    size: 10G
+    mounted: true
+    mount: /var/log
+  - device: ocivolume-lv_tmp
+    vg: ocivolume
+    lv: lv_tmp
+    size: 10G
+    mounted: true
+    mount: /var/tmp
+  - device: ocivolume-root
+    vg: ocivolume
+    lv: root
+    size: 20G
+    mounted: true
+    mount: '/
+
+      /var/lib/containers/storage/overlay'
+  containers:
+  - name: e21a154320d6-infra
+    status: Up 50 minutes
+    ports: ''
+    model: null
+    flags: ''
+  - name: postgres
+    status: Up 50 minutes
+    ports: 5432/tcp
+    model: null
+    flags: ''
+  - name: 45f8cfabb6db-infra
+    status: Up 49 minutes
+    ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+    model: null
+    flags: ''
+  - name: devforge-llm
+    status: Up 49 minutes (healthy)
+    ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+    model: null
+    flags: ''
+  - name: litellm
+    status: Up 49 minutes
+    ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+    model: null
+    flags: ''
+  - name: caddy
+    status: Up 4 hours
+    ports: 80/tcp, 443/tcp, 2019/tcp, 443/udp
+    model: null
+    flags: ''
+  services:
+  - name: devforge-llm
+    status: active
+  - name: litellm
+    status: active
+  - name: postgres
+    status: active
+  - name: litellm
+    status: failed
+  - name: netdata
+    status: inactive
+  - name: postgres
+    status: inactive
+  - name: caddy
+    status: active
+  network:
+    ip: 10.0.0.75/24
+    ports:
+    - '111'
+    - '19999'
+    - '2019'
+    - '22'
+    - '4000'
+    - '443'
+    - '80'
+    - '8080'
+    - '8125'
+metrics:
+  generated: '2026-05-11T21:43:45.022331+09:00'
+  system:
+    cpu_load:
+    - 0.15
+    - 0.21
+    - 0.27
+    memory:
+      used: 11Gi
+      total: 22Gi
+      percent: 51
+    zram: ''
+  storage_use:
+  - device: ocivolume-root
+    size: 20G
+    used: 11G
+    avail: 9.8G
+    use_pct: 52
+    mount: /
+  - device: datavg-lv_db
+    size: 30G
+    used: 294M
+    avail: 30G
+    use_pct: 1
+    mount: /mnt/lv_db
+  - device: datavg-lv_ai_data
+    size: 100G
+    used: 15G
+    avail: 86G
+    use_pct: 15
+    mount: /opt/ai_data
+  - device: ocivolume-lv_logs
+    size: 10G
+    used: 195M
+    avail: 9.8G
+    use_pct: 2
+    mount: /var/log
+  - device: ocivolume-lv_dev
+    size: 4.5G
+    used: 1.2G
+    avail: 3.3G
+    use_pct: 27
+    mount: /opt/project
+  - device: ocivolume-lv_tmp
+    size: 10G
+    used: 1.4G
+    avail: 8.6G
+    use_pct: 14
+    mount: /var/tmp
+  - device: datavg-lv_projects
+    size: 10G
+    used: 1.2G
+    avail: 8.8G
+    use_pct: 13
+    mount: /opt/projects
+  containers_uptime:
+  - name: e21a154320d6-infra
+    uptime: Up 50 minutes
+  - name: postgres
+    uptime: Up 50 minutes
+  - name: 45f8cfabb6db-infra
+    uptime: Up 49 minutes
+  - name: devforge-llm
+    uptime: Up 49 minutes (healthy)
+  - name: litellm
+    uptime: Up 49 minutes
+  alerts: []

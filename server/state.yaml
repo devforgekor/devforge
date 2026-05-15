@@ -56,37 +56,37 @@ structural:
     mount: /
   containers:
   - name: pod:data
-    status: Up 40 hours
+    status: Up 44 hours
     ports: ''
     model: null
     flags: ''
   - name: postgres
-    status: Up 40 hours (healthy)
+    status: Up 44 hours (healthy)
     ports: 5432/tcp
     model: null
     flags: ''
   - name: pod:ai
-    status: Up 28 hours
+    status: Up 32 hours
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
   - name: litellm
-    status: Up 28 hours (healthy)
+    status: Up 32 hours (healthy)
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
   - name: devforge-llm
-    status: Up 28 hours (healthy)
+    status: Up 32 hours (healthy)
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
   - name: devforge-api
-    status: Up 12 hours (healthy)
+    status: Up 16 hours (healthy)
     ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
     model: null
     flags: ''
   - name: caddy
-    status: Up 28 hours (healthy)
+    status: Up 32 hours (healthy)
     ports: 80/tcp, 443/tcp, 2019/tcp, 443/udp
     model: null
     flags: ''
@@ -121,23 +121,23 @@ structural:
     - '8000'
     - '8125'
 metrics:
-  generated: '2026-05-15T02:36:21.947283+00:00'
+  generated: '2026-05-15T06:37:38.921787+00:00'
   system:
     cpu_load:
+    - 0.22
+    - 0.22
     - 0.18
-    - 0.23
-    - 0.29
     memory:
       used: 11Gi
       total: 22Gi
       percent: 53
-    zram: 4G 59B
+    zram: 4G 2.2M
   storage_use:
   - device: ocivolume-root
     size: 20G
-    used: 7.5G
+    used: 7.3G
     avail: 13G
-    use_pct: 38
+    use_pct: 37
     mount: /
   - device: datavg-lv_db
     size: 30G
@@ -159,13 +159,13 @@ metrics:
     mount: /opt/ai_data
   - device: datavg-lv_projects
     size: 10G
-    used: 713M
+    used: 714M
     avail: 9.3G
     use_pct: 8
     mount: /opt/projects
   - device: ocivolume-lv_logs
     size: 10G
-    used: 442M
+    used: 444M
     avail: 9.6G
     use_pct: 5
     mount: /var/log
@@ -183,15 +183,15 @@ metrics:
     mount: /opt/workspace
   containers_uptime:
   - name: data-pod-infra
-    uptime: Up 40 hours
+    uptime: Up 44 hours
   - name: postgres
-    uptime: Up 40 hours (healthy)
+    uptime: Up 44 hours (healthy)
   - name: ai-pod-infra
-    uptime: Up 28 hours
+    uptime: Up 32 hours
   - name: litellm
-    uptime: Up 28 hours (healthy)
+    uptime: Up 32 hours (healthy)
   - name: devforge-llm
-    uptime: Up 28 hours (healthy)
+    uptime: Up 32 hours (healthy)
   - name: devforge-api
-    uptime: Up 12 hours (healthy)
+    uptime: Up 16 hours (healthy)
   alerts: []

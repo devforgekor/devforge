@@ -3,24 +3,28 @@ overview:
   purpose: OCI ARM development server — LLM inference + FastAPI application hosting
   os: Oracle Linux Server 9.7 (aarch64)
   cpu: ARM Neoverse-N1, 4-core
-  memory: 22Gi + 4G zram (2.2M) + 8G swap (swappiness=10)
+  memory: 22Gi + 3.7G swap (swappiness=10)
 storage:
   boot_disk:
     device: /dev/sda (50GB)
     vg: ocivolume
     lvs:
+    - lv: lv_dev
+      size: 4.5G
+      mount: '/opt/project
+
+        /mnt/secure_meta'
     - lv: lv_logs
       size: 10G
       mount: /var/log
-    - lv: lv_meta
-      size: 4.5G
-      mount: /mnt/secure_meta
     - lv: lv_tmp
       size: 10G
       mount: /var/tmp
     - lv: root
       size: 20G
-      mount: /
+      mount: '/
+
+        /var/lib/containers/storage/overlay'
     free: 0G
   data_disk:
     device: /dev/sdb (150GB)
@@ -35,24 +39,15 @@ storage:
     - lv: lv_projects
       size: 10G
       mount: /opt/projects
-    - lv: lv_swap
-      size: 4G
-      mount: SWAP
-    - lv: lv_workspace
-      size: 6G
-      mount: /opt/workspace
-    free: 0G
+    free: 10G
 containers:
   runtime: Podman (rootless, user opc)
-  image: localhost/devforge-llama:2026.05.13 (fixed local tag)
+  image: docker.io/amperecomputingai/llama.cpp:latest (OpenBLAS + KleidiAI)
   model: qwen2.5-coder-7b-instruct-q8_0.gguf (8.1GB)
-  flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --host 0.0.0.0 --port 8080 --threads 4 --threads-batch 4 --ctx-size
-    16384 --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 --cache-reuse 256 --slot-save-path /cache/ --cache-ram 16384
-    --batch-size 4096 --ubatch-size 1024
-  target_flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0
+  flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --port 8080 --host 127.0.0.1 --threads 4 --ctx-size 8192 --mlock --cache-reuse
+    256 --api-key unused
+  target_flags: --threads 4 --ctx-size 16384 --mlock --cache-reuse 256 --host 127.0.0.1
 services:
-- name: devforge-api
-  status: active
 - name: devforge-llm
   status: active
   type: systemd user
@@ -62,16 +57,18 @@ services:
 - name: postgres
   status: active
   type: systemd user
-- name: devforge-backup
+- name: litellm
+  status: failed
+  type: systemd user
+- name: netdata
   status: inactive
-- name: devforge-restore-test
+  type: systemd user
+- name: postgres
   status: inactive
+  type: systemd user
 - name: caddy
   status: active
   type: systemd system (rootful podman)
-- name: netdata
-  status: active
-  type: systemd system (native)
 network:
   interface: enp0s6
   ip: 10.0.0.75/24
@@ -79,22 +76,22 @@ network:
   exposed_ports:
   - 22/tcp (SSH, key-only)
   - 111/tcp (rpcbind)
-  llm_api: 127.0.0.1:4000 (LiteLLM proxy to llama.cpp)
+  llm_api: 127.0.0.1:8080 (host networking)
   litellm_api: 127.0.0.1:4000 (host networking)
   netdata: 127.0.0.1:19999
 projects:
-  root: /opt/projects
+  root: /opt/project
   active: []
   shared:
   - name: common-lib
-    path: /opt/projects/common-lib/
+    path: /opt/project/common-lib/
     what: LEGO-block modular Python library, 32 modules
   dormant:
-  - path: /opt/projects/common-lib/harvest/
+  - path: /opt/project/common-lib/harvest/
     what: 9 harvested projects awaiting module extraction
   venv:
   - name: aider-env
-    path: /opt/projects/aider-env/
+    path: /opt/project/aider-env/
     what: Python 3.11 venv for AI coding assistants
 entry_points:
   overview: CLAUDE.yaml (this file)
@@ -103,21 +100,22 @@ entry_points:
   metrics_snapshot: state.yaml#metrics
   change_log: changelog.yaml (< 3 months, always read)
   change_archive: changelog_archive.yaml (> 3 months, read on demand)
-  session_handover: handover.yaml (last checkpoint + AI decisions/known_issues, always read on session start)
-  task_tracker: tasks.yaml (current/pending/done — all AI agents share this file)
+  session_handover: handover.yaml (last checkpoint + AI decisions/tasks, always read on session start)
   retention: indefinite — no deletion, archive-only after 3 months
 refresh:
   trigger: motd-gen.timer (systemd user, 15min interval)
-  script: /opt/projects/server/scripts/gen_server_state.py
+  script: /opt/project/server/scripts/gen_server_state.py
   flow: collect -> state.yaml -> hash detect -> changelog (if changed) -> archive -> CLAUDE.yaml -> MOTD
   auto: true
 handover:
   trigger: handover-gen.timer (systemd user, 10min interval) + SessionEnd hook
-  script: /opt/projects/server/scripts/update_handover.py
+  script: /opt/project/server/scripts/update_handover.py
   flow: scan recent files -> git status -> preserve AI sections -> write handover.yaml
   auto: true
   ai_writes:
+  - current_task
   - decisions
+  - pending
   - known_issues
 tracked:
   structural:
@@ -140,37 +138,16 @@ not_tracked:
 rules:
   must:
   - CLAUDE.yaml is the single entry point — read this first.
-  - ? Read handover.yaml on session start for decisions and known_issues. Read tasks.yaml for current/pending tasks. Before
-      session end
-    : update tasks.yaml (move done, promote pending), update handover.yaml decisions/known_issues, log completed work with
-      cli.py worklog add.
-  - Update blueprint.yaml and phases.md when phases progress or architecture decisions change.
+  - Read handover.yaml on session start. Write current_task, decisions, pending, known_issues before session ends.
+  - Update blueprint.yaml when phases progress or architecture decisions change.
   - All machine-readable content MUST be English.
   - state.yaml is auto-generated. NEVER edit manually.
   - changelog.yaml is append-only. NEVER modify existing entries.
   - Use gen_server_state.py for all state/changelog/MOTD updates.
   - Structural changes trigger changelog entry. Metrics changes do NOT.
-  - 'Timezone: system internals (logs, timestamps, systemd timers) MUST use UTC. User-facing output (MOTD, CLI, reports) MUST
-    convert to KST (UTC+9).'
-  - Container orchestration is Quadlet-only under ~/.config/containers/systemd/. Do not restore legacy generated unit files
-    from ~/.config/systemd/user/_legacy-generate-systemd/.
-  - Secrets are injected only via EnvironmentFile=~/.config/devforge/secrets.env (chmod 600). Never store credentials inline
-    in Quadlet or app config.
-  - 'tmux: source-file only adds hooks, never removes them. After deleting a hook from .tmux.conf, MUST run tmux set-hook
-    -gu <hook-name> to purge from running server.'
-  - 'Documentation cleanup: obsolete files MUST move to _archive/ first, never delete directly. Update _archive/README.md
-    with: 보관 사유 (why), 삭제 조건 (when safe to delete), 대체 위치 (replacement), 주의 (warnings). Delete original only after archive
-    copy and README entry confirmed.'
-  - 'Single source of truth for DevForge: /opt/projects/server/docs/ (design.md, phases.md, tasks.yaml) + devforge_app.worklog_entries
-    (DB). No DevForge documentation outside /opt/projects/server/.'
-  - 'tasks.yaml is the single task tracker. All AI agents read it on session start. current: max 1. pending: priority order.
-    done: max 10. Follow meta.done_checklist when completing a task.'
-  - 'File naming: Python/Shell/JS → snake_case (link_turns.py, nightly_batch.sh). Config/Docs → lowercase (blueprint.yaml,
-    design.md). Directories → single English word (app/, scripts/, docs/). CLI entry point → cli.py at repo root. Reserved:
-    routes_ prefix for grouped router modules (routes_search.py) — only when a single router file grows beyond 700 lines.'
+  - 'Timezone: system internals (logs, timestamps, cron) MUST use UTC. User-facing output (MOTD, CLI, reports) MUST convert
+    to KST (UTC+9).'
   should:
   - 'Prefer Python stdlib. Only dependency: pyyaml.'
   - 'changelog.archive policy: entries > 3 months move to changelog_archive.yaml.'
   - MOTD reflects real-time state; state.yaml reflects last collected snapshot.
-  - Monitoring should treat transient podman healthcheck units/scopes as noise; alert on stable unit health (ai-pod.service,
-    data-pod.service, container-*.service, devforge-*.timer/service).
