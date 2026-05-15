@@ -3,6 +3,8 @@ last_checkpoint:
   recent_files: []
   git: {}
 decisions:
+- 'Server-side Copilot instruction sync removed from session_guard; the server now keeps only the auto-commit safety net and does not call the helper.'
+- 'Copilot instruction sync now lives in common_lib.core.copilot_rules; server/scripts/session_guard.py keeps the auto-commit safety net and only delegates file synchronization.'
 - 'Ops finalization 2026-05-13T10:25Z: migrated to Quadlet-only runtime (pod/container files in ~/.config/containers/systemd),
   fixed image tags (localhost/devforge-*:2026.05.13), and UTC-only timers under user systemd (devforge-backup.timer 20:00
   UTC, devforge-restore-test.timer 20:30 UTC on day 1).'

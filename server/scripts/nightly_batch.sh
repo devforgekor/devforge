@@ -30,15 +30,18 @@ retry() {
 link_ok=true
 retry "link_turns" 3 python3 /opt/projects/server/scripts/link_turns.py || link_ok=false
 
-# ── Phase 2: heavy jobs (reserved) ────────────────────────────
-# retry "embed_turns" 2 python3 /opt/projects/server/scripts/embed_turns.py || true
+# ── Phase 2: heavy jobs ───────────────────────────────────────
+set -a && source ~/.config/devforge/secrets.env && set +a
+
+embed_ok=true
+retry "embed_turns" 2 python3 /opt/projects/server/scripts/embed_turns.py || embed_ok=false
 # retry "classify_turns" 2 python3 /opt/projects/server/scripts/classify_turns.py || true
 
 # ── Status summary (consumed by 9 AM Slack hook) ──────────────
 cat > "$STATUS_FILE" <<YAML
 timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 link_turns: $($link_ok && echo ok || echo failed)
-# embed_turns: pending
+embed_turns: $($embed_ok && echo ok || echo failed)
 # classify_turns: pending
 YAML
 

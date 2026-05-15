@@ -25,4 +25,6 @@ current: null
 
 pending: []
 
-done: []
+done:
+  - "Remove server-side Copilot sync usage"
+  - "Move Copilot rule sync into common-lib helper"

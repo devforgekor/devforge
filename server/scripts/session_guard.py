@@ -5,25 +5,6 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-RULE_SRC = Path("/home/opc/common-rule.md")
-COPILOT_INSTR = Path("/home/opc/.copilot/copilot-instructions.md")
-COPILOT_INSTR_HEADER = (
-    "# Copilot Instructions\n\n"
-    "> 인프라/배포 관련 작업 시 `/home/opc/common-main.md`를 읽어라.\n\n"
-    "---\n\n"
-)
-
-
-def _sync_copilot_instructions() -> None:
-    """Rebuild copilot-instructions.md from common-rule.md on every session end."""
-    try:
-        if not RULE_SRC.exists():
-            return
-        COPILOT_INSTR.parent.mkdir(parents=True, exist_ok=True)
-        COPILOT_INSTR.write_text(COPILOT_INSTR_HEADER + RULE_SRC.read_text())
-    except Exception as e:
-        print(f"[session_guard] copilot-instructions sync failed: {e}", file=sys.stderr)
-
 SERVER = Path("/opt/projects/server")
 PSQL = ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
         "-d", "devforge_app", "--no-align", "--tuples-only", "--quiet"]
@@ -90,5 +71,4 @@ def main():
 
 
 if __name__ == "__main__":
-    _sync_copilot_instructions()
     sys.exit(main())
