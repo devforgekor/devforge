@@ -1,10 +1,69 @@
 last_checkpoint:
-  time: '2026-05-14T18:33:36.009182+09:00'
+  time: '2026-05-16T22:44:00.952589+09:00'
   recent_files: []
   git: {}
 decisions:
-- 'Server-side Copilot instruction sync removed from session_guard; the server now keeps only the auto-commit safety net and does not call the helper.'
-- 'Copilot instruction sync now lives in common_lib.core.copilot_rules; server/scripts/session_guard.py keeps the auto-commit safety net and only delegates file synchronization.'
+- '/opt/workspace reference audit: searched entire codebase (Python, YAML, JSON, Shell, systemd, Quadlet, common-lib). Zero
+  active code references found outside _archive/. Updated common-main.md Storage entry from "access restricted" to "out of
+  scope (consolidated into /opt/projects/server/)". GEMINI.md inherits via @ include.'
+- 'Reboot validation 2026-05-16T22:25 KST: all containers up/healthy (19min uptime), Quadlet services active, caddy+netdata
+  active, devforge-api /health OK, PostgreSQL accepting connections (884 turns, 31 worklog, 10 decisions intact), aider-gemini
+  config+script present, worklog CLI functional, all 12 timers active on schedule, SessionStart hook executed. No issues found.'
+- 'Aider is now connected to Gemini free-tier usage via /home/opc/.config/aider/aider.conf.yml (model: gemini-exp) and /home/opc/.local/bin/aider-gemini,
+  which injects a rotated GEMINI_API_KEY before launch.'
+- Active task tracker terminology standardized to todo/in_progress/blocked/done with Kanban labels To Do/In Progress/Blocked/Done.
+  session_start.py and CLAUDE.yaml now read in_progress/todo instead of current/pending.
+- Decision history is now stored in a dedicated `decisions` table keyed by `turn_id`; `save_memory` writes decision rows when
+  `meta.type = decision`, and the live DB was backfilled with 10 conservative historical decisions.
+- 'devforge workspace consolidated 2026-05-16: /opt/workspace/devforge/ was a May 14 build-source snapshot that had become
+  stale (ingest.py missing created_at, search.py missing agent-based dedup/ON CONFLICT). Meanwhile server/api/ingest.py and
+  search.py had been patched directly (May 15-16) via Quadlet Volume mounts — creating two diverged copies with no sync mechanism.
+  Resolution: (1) canonical ingest.py/search.py remain at server/api/, (2) unique files (db.py, mcp_server.py, stats.py) moved
+  into server/api/ to form a complete package, (3) cli.py moved to server/scripts/, (4) Dockerfile/healthcheck.py/requirements.txt
+  moved to server/, (5) schema.sql moved to server/docs/, (6) entire old workspace preserved at _archive/devforge-workspace/.
+  db.py SCHEMA_SQL synced to match schema.sql (agent, source_message_id columns added). All path references in tasks.yaml,
+  session_start.py, common-rule.md, design.md updated. Quadlet volume mounts unchanged (still point to server/api/ — same
+  host path). Old /opt/workspace/ access restriction retained for seedling.'
+- 'qwen_worker architecture split: ingestion is ALWAYS deterministic (Python parser + POST /ingest), Qwen handles only linkage/fixes/observations.
+  This eliminates hallucinated session IDs entirely.'
+- qwen_worker linkage time windows are computed deterministically (worklog.created_at ± 24h). Qwen-proposed time_start/time_end
+  are ignored — the 7B model hallucinates them.
+- execute_fixes uses AGENT_MAP SSOT from agents.py with identity mapping skip (copilot→copilot, etc.). Only non-canonical→canonical
+  mappings are applied.
+- '2차 감사 8개 버그 수정: has_linking stale flag, agent validation in execute_linkages (CANONICAL_AGENTS), attempt count display,
+  prompt label, dead code cleanup, retry backoff, canonical set inconsistency (deepseek), int/str type coercion in _validate_linkages.'
+- CANONICAL_AGENTS = set(AGENT_MAP.values()) is the single source of truth for agent name validation. Defined once in qwen_executor.py,
+  used by both gather_context and execute_linkages.
+- 'Auto-worklog creation: _ensure_worklog creates daily worklog entries at noon UTC (±24h window covers full day). _backfill_missing_worklogs
+  finds gaps where orphan turns exist but no worklog for that agent+date.'
+- 'DeepSeek web CLI: added scripts/deepseek_web.py as an isolated Playwright-based experimental browser client. It is not
+  wired into collect_turns.py or the ingestion pipeline. The script supports custom selectors, optional storage-state/profile
+  reuse, and local smoke testing on a data URL.'
+- 'Qwen Code CLI integration: (1) Fixed Qwen Code CLI config — baseUrl changed from 127.0.0.1:8080/v1 to 127.0.0.1:4000/v1
+  (LiteLLM), QWEN_LOCAL_API_KEY set to devforge-litellm-key via settings.json+env. (2) New parser_qwen.py handles Qwen Code
+  JSONL format: user/assistant type matching, message.parts[].text extraction, model from assistant event, uuid/timestamp
+  fields. (3) collect_turns.py updated with QWEN_DIR (~/.qwen/projects) scanning */chats/*.jsonl, project name passed as title,
+  UUID as conversation_id. (4) agents.py AGENT_MAP has qwen normalization. (5) Existing devforge-collect.timer (15min) auto-collects
+  all sources including qwen — no timer changes needed.'
+- 'Qwen CLI (Python): changed default endpoint from 127.0.0.1:8080 to 127.0.0.1:4000 (LiteLLM), model from qwen2.5-coder-7b-instruct-q8_0.gguf
+  to qwen2.5-coder-7b, auto-reads LITELLM_MASTER_KEY from secrets file, health check uses BASE_URL with auth header.'
+- 'API created_at timestamp preservation: save_memory now accepts Optional[str] created_at, converts ISO 8601 via _parse_ts()
+  helper to timezone-aware datetime before INSERT. Column uses timestamptz cast conditional: pass datetime when provided,
+  fall back to DEFAULT NOW() when null. All four parsers (claude, copilot, gemini, qwen) now emit created_at from event timestamp.'
+- 'Quadlet Volume mount: Volume= directive works; the stale ~/.config/systemd/user/container-devforge-api.service was masking
+  the generator output at /run/user/1000/systemd/generator/. Deleted the stale file. Volumes now correctly mounted: /opt/projects/server/api/ingest.py:/app/app/ingest.py:Z
+  and /opt/projects/server/api/search.py:/app/app/search.py:Z. Generator output must be checked at /run/user/1000/systemd/generator/,
+  not ~/.config/systemd/user/.'
+- 'Nightly link_turns date window bug fixed: was using today_kst (03:00 KST = next day) instead of review_date (yesterday).
+  Changed main() to compute review_date = now_kst - 1 day. Also added copilot-cli normalization to agents.py and fixed DB
+  worklog entries #32/#33 agent from copilot-cli to copilot.'
+- 'Orphan turn backfill 2026-05-15: 202 claude-code + 6 copilot turns linked to worklog entries #34 and #35. Coverage now
+  274/274 (100%). Empty worklog entries #30 and #33 remain (turns outside review window).'
+- Consistency report warnings cleared after backfill. 6 unlogged sessions from May 15-16 addressed.
+- Server-side Copilot instruction sync removed from session_guard; the server now keeps only the auto-commit safety net and
+  does not call the helper.
+- Copilot instruction sync now lives in common_lib.core.copilot_rules; server/scripts/session_guard.py keeps the auto-commit
+  safety net and only delegates file synchronization.
 - 'Ops finalization 2026-05-13T10:25Z: migrated to Quadlet-only runtime (pod/container files in ~/.config/containers/systemd),
   fixed image tags (localhost/devforge-*:2026.05.13), and UTC-only timers under user systemd (devforge-backup.timer 20:00
   UTC, devforge-restore-test.timer 20:30 UTC on day 1).'
@@ -45,9 +104,10 @@ decisions:
 - 'Cross-validation fix: zram removed from CLAUDE.yaml (nonexistent), swap 7.7G→3.7G, flags synced with actual unit, netdata
   added to services, blueprint Phase 2 ctx-size claim corrected, network section updated for host networking'
 - 'Handover is hybrid: mechanical (file scan + git status every 10min + SessionEnd hook) + AI-written sections (decisions,
-  known_issues). current_task and pending now live in tasks.yaml.'
+  known_issues). todo / in_progress / blocked / done now live in tasks.yaml.'
 - systemd user timer handover-gen.timer runs every 10min with 30s randomized delay
-- SessionEnd hook in ~/.claude/settings.json triggers session_guard.py (auto-commit safety net) then update_handover.py on session exit
+- SessionEnd hook in ~/.claude/settings.json triggers session_guard.py (auto-commit safety net) then update_handover.py on
+  session exit
 - 'CLAUDE.yaml rules.must #2: read handover.yaml + tasks.yaml on start, update both before end'
 - CLAUDE.yaml entry_points includes handover.yaml; handover section documents triggers and flow
 - seedling removed from CLAUDE.yaml projects.active — maintained as standalone dev project under /opt/project/seedling/
@@ -85,6 +145,10 @@ decisions:
 - 'GitHub repo 설정 2026-05-13: git@github.com:devforgekor/devforge.git — /opt/projects 초기화, server/ common-lib/ litellm/ scripts/
   systemd/ 등 102개 파일 커밋 + 푸시 (main). M4 Air SSH 키(~/.ssh/id_ed25519)로 인증. systemd 유닛 파일 9개 추가 커밋으로 컨테이너 오케스트레이션 정의(Docker
   Compose 역할) 포함.'
-known_issues: []
+known_issues:
+- DeepSeek web chat is still blocked from this server by CloudFront/WAF; diagnostics are saved to --dump-dir, but browser
+  automation does not reach the chat UI.
+- DeepSeek web chat is protected by CloudFront/WAF and may reject non-human sessions; the CLI is experimental and may require
+  a pre-authenticated storage-state file or profile.
 completed_log:
 - /tmp.old cleanup — completed, directory no longer exists

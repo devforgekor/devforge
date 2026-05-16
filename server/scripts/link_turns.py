@@ -80,7 +80,7 @@ def _match(kst_start, kst_end, today_kst):
             f"{window_sql} "
             f"  AND t.id NOT IN ("
             f"    SELECT unnest(COALESCE(turn_ids, '{{}}'::uuid[])) "
-            f"    FROM worklog_entries WHERE id = {entry_id}"
+            f"    FROM worklog_entries WHERE turn_ids IS NOT NULL"
             f"  ) "
             f"ORDER BY t.created_at"
         )
@@ -185,20 +185,21 @@ def _review(kst_start, kst_end, today_kst):
 def main():
     kst = timezone(timedelta(hours=9))
     now_kst = datetime.now(kst)
-    today_kst = now_kst.strftime("%Y-%m-%d")
-    kst_start = f"{today_kst} 00:00:00+09"
-    kst_end = f"{now_kst + timedelta(days=1):%Y-%m-%d} 00:00:00+09"
+    # At 03:00 KST, review the completed previous day
+    review_date = (now_kst - timedelta(days=1)).strftime("%Y-%m-%d")
+    kst_start = f"{review_date} 00:00:00+09"
+    kst_end = f"{now_kst:%Y-%m-%d} 00:00:00+09"
 
-    _log(f"=== link_turns {today_kst} ===")
+    _log(f"=== link_turns {review_date} ===")
 
     # Phase 1: matching
-    linked = _match(kst_start, kst_end, today_kst)
+    linked = _match(kst_start, kst_end, review_date)
 
     # Phase 2: deep review
-    findings = _review(kst_start, kst_end, today_kst)
+    findings = _review(kst_start, kst_end, review_date)
 
     # Write review file (consumed by session_start + 9am Slack)
-    lines = ["# link_turns review", f"date: {today_kst}", f"linked: {linked}"]
+    lines = ["# link_turns review", f"date: {review_date}", f"linked: {linked}"]
     lines.extend(f"finding: {f}" for f in findings)
     REVIEW_FILE.write_text("\n".join(lines) + "\n")
 

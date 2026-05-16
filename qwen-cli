@@ -10,10 +10,23 @@ import time
 
 import requests
 
-ENDPOINT = os.environ.get("QWEN_API_URL", "http://127.0.0.1:8080/v1")
-API_KEY = os.environ.get("QWEN_API_KEY", "unused")
+def _read_secret(key: str) -> str:
+    """Read a value from ~/.config/devforge/secrets.env."""
+    try:
+        with open(os.path.expanduser("~/.config/devforge/secrets.env")) as f:
+            for line in f:
+                if line.startswith(key + "="):
+                    return line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return ""
+
+
+ENDPOINT = os.environ.get("QWEN_API_URL", "http://127.0.0.1:4000/v1")
+BASE_URL = os.environ.get("QWEN_BASE_URL", "http://127.0.0.1:4000")
+API_KEY = os.environ.get("QWEN_API_KEY") or os.environ.get("LITELLM_MASTER_KEY") or _read_secret("LITELLM_MASTER_KEY") or "unused"
 MODEL = os.environ.get(
-    "QWEN_MODEL", "qwen2.5-coder-7b-instruct-q8_0.gguf"
+    "QWEN_MODEL", "qwen2.5-coder-7b"
 )
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Always respond in Korean (한국어). "
@@ -144,7 +157,11 @@ _keepalive_stop = threading.Event()
 
 def _check_health() -> bool:
     try:
-        return requests.get(f"{ENDPOINT}/health", timeout=5).ok
+        return requests.get(
+            f"{BASE_URL}/health",
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            timeout=5,
+        ).ok
     except Exception:
         return False
 

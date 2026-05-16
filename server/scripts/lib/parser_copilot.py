@@ -45,6 +45,7 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
                     "reasoning": "\n".join(current_reasoning) or None,
                     "assistant_answer": "\n".join(current_answer) or "",
                     "source_message_id": current_interaction_id,
+                    "created_at": ev.get("timestamp"),
                 })
             current_user = data.get("content", "")
             current_interaction_id = data.get("interactionId")
@@ -72,6 +73,7 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
                     "reasoning": "\n".join(current_reasoning) or None,
                     "assistant_answer": "\n".join(current_answer) or "",
                     "source_message_id": current_interaction_id,
+                    "created_at": ev.get("timestamp"),
                 })
                 current_user = None
             in_turn = False
@@ -84,6 +86,7 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
             "reasoning": "\n".join(current_reasoning) or None,
             "assistant_answer": "\n".join(current_answer) or "",
             "source_message_id": current_interaction_id,
+            "created_at": events[-1].get("timestamp") if events else None,
         })
 
     # Active session: only drop last turn if assistant was writing, not user typing

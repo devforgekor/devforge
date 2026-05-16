@@ -64,6 +64,7 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
                     "reasoning": reasoning,
                     "assistant_answer": answer,
                     "source_message_id": assistant_uuid,
+                    "created_at": ev.get("timestamp"),
                 })
                 current_user = None
 

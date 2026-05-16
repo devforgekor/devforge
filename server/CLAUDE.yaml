@@ -3,7 +3,7 @@ overview:
   purpose: OCI ARM development server — LLM inference + FastAPI application hosting
   os: Oracle Linux Server 9.7 (aarch64)
   cpu: ARM Neoverse-N1, 4-core
-  memory: 22Gi + 4G zram (2.2M) + 8G swap (swappiness=10)
+  memory: 22Gi + 4G zram (59B) + 8G swap (swappiness=10)
 storage:
   boot_disk:
     device: /dev/sda (50GB)
@@ -104,7 +104,7 @@ entry_points:
   change_log: changelog.yaml (< 3 months, always read)
   change_archive: changelog_archive.yaml (> 3 months, read on demand)
   session_handover: handover.yaml (last checkpoint + AI decisions/known_issues, always read on session start)
-  task_tracker: tasks.yaml (current/pending/done — all AI agents share this file)
+  task_tracker: 'tasks.yaml (todo/in_progress/blocked/done — all AI agents share this file; labels: To Do/In Progress/Blocked/Done)'
   retention: indefinite — no deletion, archive-only after 3 months
 refresh:
   trigger: motd-gen.timer (systemd user, 15min interval)
@@ -140,10 +140,10 @@ not_tracked:
 rules:
   must:
   - CLAUDE.yaml is the single entry point — read this first.
-  - ? Read handover.yaml on session start for decisions and known_issues. Read tasks.yaml for current/pending tasks. Before
+  - ? Read handover.yaml on session start for decisions and known_issues. Read tasks.yaml for todo/in_progress tasks. Before
       session end
-    : update tasks.yaml (move done, promote pending), update handover.yaml decisions/known_issues, log completed work with
-      cli.py worklog add.
+    : update tasks.yaml (move done, promote todo), update handover.yaml decisions/known_issues, log completed work with cli.py
+      worklog add.
   - Update blueprint.yaml and phases.md when phases progress or architecture decisions change.
   - All machine-readable content MUST be English.
   - state.yaml is auto-generated. NEVER edit manually.
@@ -163,8 +163,8 @@ rules:
     copy and README entry confirmed.'
   - 'Single source of truth for DevForge: /opt/projects/server/docs/ (design.md, phases.md, tasks.yaml) + devforge_app.worklog_entries
     (DB). No DevForge documentation outside /opt/projects/server/.'
-  - 'tasks.yaml is the single task tracker. All AI agents read it on session start. current: max 1. pending: priority order.
-    done: max 10. Follow meta.done_checklist when completing a task.'
+  - 'tasks.yaml is the single task tracker. All AI agents read it on session start. in_progress: max 1. todo: priority order.
+    blocked: separate queue. done: max 10. Follow meta.done_checklist when completing a task.'
   - 'File naming: Python/Shell/JS → snake_case (link_turns.py, nightly_batch.sh). Config/Docs → lowercase (blueprint.yaml,
     design.md). Directories → single English word (app/, scripts/, docs/). CLI entry point → cli.py at repo root. Reserved:
     routes_ prefix for grouped router modules (routes_search.py) — only when a single router file grows beyond 700 lines.'

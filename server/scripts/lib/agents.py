@@ -5,6 +5,10 @@ All code paths that set or read agent names MUST go through normalize().
 AGENT_MAP = {
     "claude": "claude-code",
     "copilot": "copilot",
+    "copilot-cli": "copilot",
+    "gemini": "gemini",
+    "qwen": "qwen",
+    "deepseek": "deepseek",
 }
 
 

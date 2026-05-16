@@ -108,7 +108,7 @@ def main():
     data = load_handover()
 
     # Preserve AI-written sections (decisions, known_issues, completed_log)
-    # current_task and pending now live in tasks.yaml, not here
+    # todo, in_progress, blocked, and done now live in tasks.yaml, not here
     ai_sections = {}
     for key in ("decisions", "known_issues", "completed_log"):
         if key in data:

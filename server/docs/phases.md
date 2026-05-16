@@ -10,7 +10,7 @@
 - [x] GET /stats (7섹션 대시보드)
 - [x] daily pg_dump + monthly restore test
 - [x] RSS 업스트림 버전 모니터링
-- [x] worklog_entries DB + tasks.yaml 작업 추적기
+- [x] worklog_entries DB + tasks.yaml Kanban 작업 추적기
 - [x] session_guard.py 자동 커밋 + session_start.py 컨텍스트 주입
 - [x] collect_turns.py 15분 주기 자동 수집 (Claude Code + Copilot 세션)
 - [x] link_turns.py KST 기준 턴↔워크로그 nightly 매칭

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""collect_turns.py — ingest Claude Code + Copilot session transcripts into DevForge DB.
+"""collect_turns.py — ingest Claude Code + Copilot + Gemini + Qwen session transcripts into DevForge DB.
 
 Incremental: tracks per-session turn count via checkpoint, only sends new turns each run.
 Active sessions (mtime < 30s) skip the last turn to avoid partial ingestion.
@@ -8,6 +8,8 @@ Usage:
   python3 collect_turns.py                    # all sources, incremental
   python3 collect_turns.py --source claude    # only Claude Code
   python3 collect_turns.py --source copilot   # only Copilot
+  python3 collect_turns.py --source gemini    # only Gemini
+  python3 collect_turns.py --source qwen      # only Qwen
   python3 collect_turns.py --reset            # re-ingest all sessions
 """
 import json
@@ -21,12 +23,16 @@ import requests
 from lib.agents import normalize as normalize_agent
 from lib.parser_claude import parse as parse_claude
 from lib.parser_copilot import parse as parse_copilot
+from lib.parser_gemini import parse as parse_gemini
+from lib.parser_qwen import parse as parse_qwen
 
 API = "http://localhost:8000/ingest"
 CHECKPOINT_FILE = Path("/opt/projects/server/collect_checkpoint.json")
 STATUS_FILE = Path("/opt/projects/server/docs/collect_status.yaml")
 CLAUDE_DIR = Path("/home/opc/.claude/projects/-home-opc")
 COPILOT_DIR = Path("/home/opc/.copilot/session-state")
+GEMINI_DIR = Path("/home/opc/.gemini/tmp/opc/chats")
+QWEN_DIR = Path("/home/opc/.qwen/projects")
 
 
 # ── checkpoint ──────────────────────────────────────────────────
@@ -47,7 +53,7 @@ def _list_sessions(source):
         if not CLAUDE_DIR.exists():
             return []
         return [(p.stem, p) for p in sorted(CLAUDE_DIR.glob("*.jsonl"))]
-    else:
+    elif source == "copilot":
         if not COPILOT_DIR.exists():
             return []
         paths = []
@@ -57,11 +63,33 @@ def _list_sessions(source):
                 if ef.exists():
                     paths.append((d.name, ef))
         return paths
+    elif source == "gemini":
+        if not GEMINI_DIR.exists():
+            return []
+        paths = []
+        for p in sorted(GEMINI_DIR.glob("session-*.jsonl")):
+            try:
+                with open(p) as f:
+                    header = json.loads(f.readline().strip())
+                sid = header.get("sessionId", p.stem.replace("session-", ""))
+            except Exception:
+                sid = p.stem.replace("session-", "")
+            paths.append((sid, p))
+        return paths
+    else:  # qwen
+        if not QWEN_DIR.exists():
+            return []
+        paths = []
+        for chat_file in sorted(QWEN_DIR.glob("*/chats/*.jsonl")):
+            project = chat_file.parent.parent.name
+            sid = chat_file.stem  # UUID only, API uses UUID for conversation_id
+            paths.append((sid, chat_file, project))
+        return paths
 
 
 # ── ingestion ───────────────────────────────────────────────────
 
-def _ingest(source, session_id, parser_fn, prev_count):
+def _ingest(source, session_id, parser_fn, prev_count, title=None):
     """Parse, slice new turns, POST. Returns (new_turns_count, success_bool)."""
     parsed, model, is_active = parser_fn(session_id)
     if parsed is None:
@@ -75,7 +103,7 @@ def _ingest(source, session_id, parser_fn, prev_count):
         "source": normalize_agent(source),
         "model": model,
         "conversation_id": session_id,
-        "title": session_id[:8],
+        "title": title or session_id[:8],
         "turns": new_turns,
     }
 
@@ -108,7 +136,7 @@ def _ingest(source, session_id, parser_fn, prev_count):
 def main():
     import argparse
     ap = argparse.ArgumentParser(description="Collect session turns into DevForge DB")
-    ap.add_argument("--source", choices=["claude", "copilot"])
+    ap.add_argument("--source", choices=["claude", "copilot", "gemini", "qwen"])
     ap.add_argument("--reset", action="store_true")
     args = ap.parse_args()
 
@@ -117,6 +145,8 @@ def main():
     sources = {
         "claude": parse_claude,
         "copilot": parse_copilot,
+        "gemini": parse_gemini,
+        "qwen": parse_qwen,
     }
     if args.source:
         sources = {args.source: sources[args.source]}
@@ -134,11 +164,15 @@ def main():
         src_sessions = 0
         errors = []
 
-        for sid, path in sessions:
+        for entry in sessions:
+            sid = entry[0]
+            path = entry[1]
+            title = entry[2] if len(entry) > 2 else None
             prev_count = cp.get(source, {}).get(sid, 0) if not args.reset else 0
 
             count, ok = _ingest(source, sid,
-                                  lambda _sid, p=path: parser_fn(p), prev_count)
+                                  lambda _sid, p=path: parser_fn(p), prev_count,
+                                  title=title)
             if count > 0:
                 src_turns += count
                 src_sessions += 1

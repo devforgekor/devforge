@@ -26,12 +26,14 @@ DAILY_QUOTA_THRESHOLD = 300  # seconds — >= 5min = daily quota exhaustion
 class KeyRotator:
     """Round-robin key rotation converging to even distribution."""
 
-    def __init__(self, keys: list[tuple[str, str]]):
+    def __init__(self, keys: list[tuple[str, str]], state_file: str = ""):
         """
         keys: [(display_name, api_key), ...]
+        state_file: optional path to JSON state file for persistence across runs.
         """
         self.keys = keys
         self.n = len(keys)
+        self._state_file = state_file
 
         # in-memory state (no DB)
         self._index = 0
@@ -39,6 +41,9 @@ class KeyRotator:
         self._fails: dict[int, int] = {}       # total failures per key
         self._last_used: dict[int, float] = {}  # last use timestamp
         self._backoff_until: dict[int, float] = {}  # backoff expiry
+
+        if state_file:
+            self._load_state()
 
     def pick(self) -> Optional[tuple[int, str, str]]:
         """
@@ -72,6 +77,51 @@ class KeyRotator:
         self._last_used[idx] = now
         return idx, self.keys[idx][0], self.keys[idx][1]
 
+    def _load_state(self):
+        """Restore rotation state from disk (JSON)."""
+        import json
+        from pathlib import Path
+
+        path = Path(self._state_file).expanduser()
+        if not path.exists():
+            return
+        try:
+            state = json.loads(path.read_text())
+            for i_str, v in state.get("_calls", {}).items():
+                self._calls[int(i_str)] = v
+            for i_str, v in state.get("_fails", {}).items():
+                self._fails[int(i_str)] = v
+            for i_str, v in state.get("_last_used", {}).items():
+                self._last_used[int(i_str)] = v
+            for i_str, v in state.get("_backoff_until", {}).items():
+                self._backoff_until[int(i_str)] = v
+        except Exception:
+            pass  # corrupt state → start fresh
+
+    def _save_state(self):
+        """Persist rotation state to disk (atomic write)."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        path = Path(self._state_file).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        state = {
+            "_calls": {str(k): v for k, v in self._calls.items()},
+            "_fails": {str(k): v for k, v in self._fails.items()},
+            "_last_used": {str(k): v for k, v in self._last_used.items()},
+            "_backoff_until": {str(k): v for k, v in self._backoff_until.items()},
+        }
+        payload = json.dumps(state, indent=2, ensure_ascii=False)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+        try:
+            with open(fd, "w") as f:
+                f.write(payload)
+            Path(tmp).rename(path)
+        except Exception:
+            Path(tmp).unlink(missing_ok=True)
+
     def wait_seconds(self) -> float:
         """Return seconds until the next key becomes available, or 0."""
         now = time.time()
@@ -83,6 +133,8 @@ class KeyRotator:
         self._calls[idx] = self._calls.get(idx, 0) + 1
         self._fails[idx] = 0
         self._backoff_until.pop(idx, None)
+        if self._state_file:
+            self._save_state()
 
     def rate_limited(self, idx: int, retry_seconds: int):
         """
@@ -105,6 +157,9 @@ class KeyRotator:
             jitter = retry_seconds * random.uniform(-0.2, 0.2)
             delay = max(1, retry_seconds + jitter)
             self._backoff_until[idx] = time.time() + delay
+
+        if self._state_file:
+            self._save_state()
 
     def stats(self) -> dict:
         """Return current rotation stats for monitoring."""

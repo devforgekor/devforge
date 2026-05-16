@@ -8,7 +8,7 @@ general_settings:
 litellm_settings:
   drop_params: true
   set_verbose: false
-  request_timeout: 120
+  request_timeout: 600
 
 model_list:
   - model_name: qwen2.5-coder-7b

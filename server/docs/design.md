@@ -45,18 +45,21 @@ Caddy (host network)
 ## 애플리케이션 구조
 
 ```
-/opt/workspace/devforge/
+/opt/projects/server/
 ├── Dockerfile
 ├── requirements.txt
-├── schema.sql              ← DB 스키마 정본
-├── cli.py                  ← CLI (search/save/recent/worklog add/recent/search)
-├── app/
+├── healthcheck.py
+├── api/
 │   ├── mcp_server.py       ← MCP SSE 서버
 │   ├── ingest.py           ← POST /ingest
-│   ├── db.py               ← PostgreSQL pool + init
 │   ├── search.py           ← 검색 + 저장 로직
-│   └── stats.py            ← GET /stats (7섹션)
-└── tests/
+│   ├── db.py               ← PostgreSQL pool + init
+│   ├── stats.py            ← GET /stats (7섹션)
+│   └── __init__.py
+├── scripts/
+│   └── cli.py              ← CLI (search/save/recent/worklog add/recent/search)
+└── docs/
+    └── schema.sql          ← DB 스키마 정본
 ```
 
 ## MCP 도구
@@ -70,13 +73,13 @@ Caddy (host network)
 
 ```bash
 # 대화 검색/저장
-python cli.py search "쿼리"
-python cli.py save --source claude
-python cli.py recent
+python3 /opt/projects/server/scripts/cli.py search "쿼리"
+python3 /opt/projects/server/scripts/cli.py save --source claude
+python3 /opt/projects/server/scripts/cli.py recent
 
 # 작업 기록 (worklog)
-python cli.py worklog add "제목" "요약" --tags "A,B"    # 완료한 작업 DB 기록
-python cli.py worklog recent --limit 5                  # 최근 작업 조회
+python3 /opt/projects/server/scripts/cli.py worklog add "제목" "요약" --tags "A,B"
+python3 /opt/projects/server/scripts/cli.py worklog recent --limit 5
 python cli.py worklog search "키워드" --tag "A"         # 작업 검색
 ```
 
@@ -85,7 +88,7 @@ python cli.py worklog search "키워드" --tag "A"         # 작업 검색
 정본: `schema.sql` (app container 내)  
 대상 DB: `devforge_app` (PostgreSQL 16)
 
-테이블: `conversations`, `turns`, `user_decisions`, `worklog_entries`  
+테이블: `conversations`, `turns`, `decisions`, `worklog_entries`  
 인덱스: pg_trgm (검색), GIN (tags, meta), UNIQUE (date, title), UNIQUE partial (status='in_progress', dormant)  
 worklog_entries 컬럼: status (dormant, always 'done'), kind (dormant, always 'task'), agent (AI 도구명), model (모델명), turn_ids (연결된 턴 UUID 배열)
 
@@ -99,6 +102,6 @@ worklog_entries 컬럼: status (dormant, always 'done'), kind (dormant, always '
 ## 관련 문서
 
 - 현황/계획: `docs/phases.md`
-- 작업 추적: `docs/tasks.yaml` (현재/대기/완료 작업)
+- 작업 추적: `docs/tasks.yaml` (todo / in_progress / blocked / done, Kanban labels: To Do / In Progress / Blocked / Done)
 - 작업 이력: `devforge_app.worklog_entries` (PostgreSQL, cli.py worklog로 조회)
 - 운영 설정: `/opt/projects/server/CLAUDE.yaml`, `handover.yaml`, `blueprint.yaml`

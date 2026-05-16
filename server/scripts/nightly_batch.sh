@@ -42,7 +42,7 @@ cat > "$STATUS_FILE" <<YAML
 timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 link_turns: $($link_ok && echo ok || echo failed)
 embed_turns: $($embed_ok && echo ok || echo failed)
-# classify_turns: pending
+# classify_turns: todo
 YAML
 
 echo "[$(LOG_TS)] nightly_batch complete"

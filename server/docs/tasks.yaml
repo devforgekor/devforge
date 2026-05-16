@@ -1,6 +1,6 @@
 meta:
   location: /opt/projects/server/docs/tasks.yaml
-  purpose: "Shared task tracker for all AI agents on DevForge server."
+  purpose: "Shared Kanban task tracker for all AI agents on DevForge server."
   language: "English only (machine-readable)."
   related_files:
     - /opt/projects/server/CLAUDE.yaml
@@ -10,21 +10,40 @@ meta:
     - /opt/projects/server/docs/phases.md
     - /opt/projects/server/_archive/README.md
   must_rules:
-    - "current: exactly 1 task or null. Never leave a completed task in current."
-    - "pending: ordered by priority. Add new tasks to the end."
+    - "in_progress: exactly 1 task or null. Never leave a completed task in in_progress."
+    - "todo: ordered by priority. Add new tasks to the end."
+    - "blocked: keep blocked items separate from todo."
     - "done: keep at most 10 recent items. Older items exist only in worklog DB."
   done_checklist:
-    - "Move current -> done (insert at top of done list)."
-    - "If pending is non-empty: promote pending[0] -> current."
-    - "Log to DB: python3 /opt/workspace/devforge/cli.py worklog add '<title>' '<summary>' --agent '<agent>' --model '<model>' --tags '<tags>'"
+    - "Move in_progress -> done (insert at top of done list)."
+    - "If todo is non-empty: promote todo[0] -> in_progress."
+    - "If a task becomes blocked, move it to blocked and record the blocker."
+    - "Log to DB: python3 /opt/projects/server/scripts/cli.py worklog add '<title>' '<summary>' --agent '<agent>' --model '<model>' --tags '<tags>'"
     - "If decisions were made or issues found: update handover.yaml."
   add_checklist:
-    - "Append new task to pending with date and optional tags."
+    - "Append new task to todo with date and optional tags."
 
-current: null
+kanban_labels:
+  todo: "To Do"
+  in_progress: "In Progress"
+  blocked: "Blocked"
+  done: "Done"
 
-pending: []
+in_progress: null
+
+todo: []
+
+blocked: []
 
 done:
+  - "Reboot validation 2026-05-16 — all containers healthy, DB intact (884 turns), 12 timers active, handover known_issues cleared."
+  - "/opt/workspace reference audit and cleanup — searched entire codebase, confirmed zero active code references, updated common-main.md Storage entry to out-of-scope."
+  - "Decision table migration — added a dedicated decisions table keyed by turn_id, wired save_memory to write decision rows when meta.type = decision, updated schema/docs/stats, and backfilled 10 conservative historical decisions."
+  - "Qwen worker 2차 로직 감사 — 8개 버그 발견/수정: (1) has_linking stale after backfill ctx refresh, (2) agent 미검증 SQL injection 위험, (3) call_qwen attempt 표기 오류, (4) prompt 레이블 7/30일 불일치, (5) execute_ingestions dead code 제거 + import 정리, (6) _ingest_sessions retry backoff 누락, (7) gather_context canonical set 불일치(deepseek 누락), (8) _validate_linkages int/str 타입 불일치. 단위 테스트 15/15 통과."
+  - "DeepSeek diagnostics — scripts/deepseek_web.py now supports --dump-dir to save blocked-page HTML, screenshots, and JSON metadata for diagnosis; verified against the CloudFront bot challenge page"
+  - "DeepSeek web CLI — scripts/deepseek_web.py added as an isolated Playwright-based browser CLI, Playwright and Chromium installed locally, browser runtime dependencies installed on the host, local smoke test on a data URL passed"
+  - "Qwen Code CLI 수집 파이프라인 — parser_qwen.py 생성, agents.py에 qwen 추가, collect_turns.py에 QWEN_DIR 연동, Qwen Code CLI settings.json LiteLLM 경유로 수정 (8080→4000), 5턴 수집 완료, devforge-collect.timer(15분)로 자동 수집"
+  - "API created_at 타임스탬프 보존 — parser에서 전송된 원본 대화 시간을 NOW() 대신 사용하도록 ingest.py/search.py 수정, Quadlet Volume 마운트로 컨테이너에 적용, Gemini/Claude/Copilot 모든 parser에 created_at 필드 추가, Gemini 23턴 재수집 완료"
+  - "새벽 nightly link_turns 날짜 윈도우 버그 수정 및 orphan 턴 백필"
+  - "copilot-cli agent 정규화 추가 및 DB worklog agent 수정"
   - "Remove server-side Copilot sync usage"
-  - "Move Copilot rule sync into common-lib helper"

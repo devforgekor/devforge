@@ -77,7 +77,7 @@ def main():
                 lines.append(f"## ACTION REQUIRED: {orphan_count} orphan turns detected")
                 lines.append(f"  These turns have no worklog entry. AI MUST:")
                 lines.append(f"  1. Review orphan turns in DB")
-                lines.append(f"  2. Run: python3 /opt/workspace/devforge/cli.py worklog add '<title>' '<summary>'")
+                lines.append(f"  2. Run: python3 /opt/projects/server/scripts/cli.py worklog add '<title>' '<summary>'")
                 lines.append(f"  3. Re-run link_turns to match them")
                 lines.append(f"  User message: 미완료 작업이 있습니다. 지금 수행합니다.")
                 lines.append("")
@@ -110,14 +110,14 @@ def main():
         import yaml
         try:
             tasks = yaml.safe_load(TASKS_FILE.read_text()) or {}
-            cur = tasks.get("current")
+            cur = tasks.get("in_progress")
             if cur and isinstance(cur, dict):
                 task_line = f"{cur.get('title', '?')} [{cur.get('date', '?')}]"
             else:
-                task_line = "(no current task)"
+                task_line = "(no in_progress task)"
         except Exception:
             task_line = "(tasks.yaml parse error)"
-    lines.append(f"Current task: {task_line}")
+    lines.append(f"In progress task: {task_line}")
     lines.append("")
 
     # ── Unlogged sessions ──────────────────────────────────
@@ -151,8 +151,8 @@ def main():
     lines.append("  blueprint.yaml — phases, target services, roadmap")
     lines.append("  phases.md    — progress tracker (Phase 1 complete, Phase 2 planned)")
     lines.append("  state.yaml   — live system state (storage, containers, metrics)")
-    lines.append("  tasks.yaml   — current/pending/done task tracker")
-    lines.append("Worklog: python3 /opt/workspace/devforge/cli.py worklog add/recent/search")
+    lines.append("  tasks.yaml   — todo/in_progress/blocked/done task tracker")
+    lines.append("Worklog: python3 /opt/projects/server/scripts/cli.py worklog add/recent/search")
 
     output = {
         "hookSpecificOutput": {
