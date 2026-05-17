@@ -117,7 +117,8 @@ handover:
   flow: scan recent files -> git status -> preserve AI sections -> write handover.yaml
   auto: true
   ai_writes:
-  - decisions
+  - obs_dec
+  - mcp_dec
   - known_issues
 tracked:
   structural:

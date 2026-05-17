@@ -12,9 +12,9 @@ router = APIRouter()
 
 
 class TurnIn(BaseModel):
-    user_query: str
-    assistant_answer: str
-    reasoning: Optional[str] = None
+    user_turn: str
+    text: str
+    thinking: Optional[str] = None
     source_message_id: Optional[str] = None
     created_at: Optional[str] = None  # ISO 8601 timestamp from parser
     meta: Dict[str, Any] = Field(default_factory=dict)
@@ -60,18 +60,17 @@ async def ingest(body: IngestRequest):
             turn_meta["tools_used"] = turn.tools_used
         result = await save_memory(
             source=body.source,
-            user_query=turn.user_query,
-            assistant_answer=turn.assistant_answer,
+            user_turn=turn.user_turn,
+            text=turn.text,
             title=body.title,
             model=body.model,
-            reasoning=turn.reasoning,
+            thinking=turn.thinking,
             meta=turn_meta,
             conversation_id=cid,
             source_message_id=turn.source_message_id,
             created_at=turn.created_at,
         )
-        if cid is None:
-            cid = result["conversation_id"]
+        cid = result["conversation_id"]
         turn_ids.append(result["turn_id"])
 
     logger.info("Ingested %d turns from %s -> %s", len(turn_ids), body.source, cid)

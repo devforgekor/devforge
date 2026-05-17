@@ -24,6 +24,51 @@ PARSERS = {
 
 CANONICAL_AGENTS = set(AGENT_MAP.values())
 
+CLASSIFY_SYSTEM_PROMPT = (
+    "You are a worklog classifier. Your ONLY task: infer the AI agent from a worklog title.\n"
+    "Output ONLY a JSON object:\n"
+    '{"classifications": [{"worklog_id": <int>, "agent": "<agent>"}]}\n\n'
+    "Canonical agents: claude-code, copilot, gemini, qwen, deepseek\n\n"
+    "Rules:\n"
+    "- \"YYYY-MM-DD claude-code session\" → agent = \"claude-code\"\n"
+    "- \"Copilot CLI statusline quota tracking\" → agent = \"copilot\"\n"
+    "- If the title describes a specific AI tool's activity, use that agent.\n"
+    "- If you cannot confidently determine the agent, do NOT include that worklog_id.\n"
+    "- Do NOT invent agents. Only use the canonical names above.\n"
+    "- Do NOT include any text outside the JSON object."
+)
+
+OBSERVE_SYSTEM_PROMPT = (
+    "You are an intermediate dialogue observer. "
+    "Your ONLY task is to extract explicit facts from conversation content.\n"
+    "Output ONLY a JSON object:\n"
+    '{"observations": [\n'
+    '  {\n'
+    '    "id": 1,\n'
+    '    "timestamp": "<ISO8601 or null>",\n'
+    '    "speaker": "<agent name>",\n'
+    '    "fact_type": "<statement|decision|action_item|question|answer|data_given>",\n'
+    '    "subject": "<agent or entity>",\n'
+    '    "predicate": "<action or relation>",\n'
+    '    "object": "<target or value>",\n'
+    '    "evidence": "<verbatim quote from TURN CONTENT, max 200 chars>",\n'
+    '    "entities": ["<key term>"],\n'
+    '    "status": "<confirmed|tentative>"\n'
+    '  }\n'
+    ']}\n\n'
+    "RULES:\n"
+    "- Do NOT summarize. Do NOT infer. Do NOT interpret emotion or intent.\n"
+    "- Only record facts explicitly present in the turn content below.\n"
+    "- evidence MUST be verbatim from a turn line WITHOUT the [agent] label prefix.\n"
+    '  Example: "[claude-code] user: hello" → evidence = "hello"\n'
+    "- speaker must match the agent tag shown in the turn line exactly.\n"
+    "- fact_type: \"statement\" for claims, \"decision\" for conclusions, "
+    "\"action_item\" for tasks, \"question\" for queries, \"answer\" for responses, "
+    "\"data_given\" for numbers/stats.\n"
+    "- If no facts to extract, return empty observations array [].\n"
+    "- Do NOT include any text outside the JSON object."
+)
+
 SESSION_DIRS = {
     "claude": Path("/home/opc/.claude/projects/-home-opc"),
     "copilot": Path("/home/opc/.copilot/session-state"),
@@ -223,17 +268,43 @@ def gather_context(
     )
     bad_agents = [a for a in bad_agents_str.split("\n") if a.strip()]
 
+    # Recent turn content (last 8 turns with actual text for Qwen to observe)
+    # Use replace() (literal, not regex) to collapse newlines → space and | → /
+    recent_turns_rows = _psql(
+        "SELECT COALESCE(t.agent, ''), "
+        "  replace(replace(COALESCE(t.user_turn, ''), E'\n', ' '), '|', '/'), "
+        "  replace(replace(COALESCE(t.thinking, ''), E'\n', ' '), '|', '/'), "
+        "  replace(replace(COALESCE(t.text, ''), E'\n', ' '), '|', '/'), "
+        "  t.created_at::text "
+        "FROM turns t ORDER BY t.created_at DESC LIMIT 8"
+    )
+    recent_turns = []
+    for line in recent_turns_rows.split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split("|")
+        if len(parts) >= 5:
+            recent_turns.append({
+                "agent": parts[0],
+                "user_turn": parts[1][:300] if parts[1] else "",
+                "thinking": parts[2][:300] if parts[2] else "",
+                "text": parts[3][:300] if parts[3] else "",
+                "created_at": parts[4][:19] if parts[4] else "",
+            })
+
     return {
         "orphan_turns": orphans,
         "unlinked_worklogs": unlinked_worklogs,
         "sessions": sessions,
         "recent_activity": recent,
+        "recent_turns": recent_turns,
         "total_turns": total_turns,
         "bad_agents": bad_agents,
     }
 
 
-def call_qwen(system_prompt: str, user_prompt: str) -> Optional[Dict[str, Any]]:
+def call_qwen(system_prompt: str, user_prompt: str,
+              max_tokens: int = 2048) -> Optional[Dict[str, Any]]:
     """Send context to Qwen and parse the JSON response."""
     api_key = _read_secret("LITELLM_MASTER_KEY") or "unused"
 
@@ -243,7 +314,7 @@ def call_qwen(system_prompt: str, user_prompt: str) -> Optional[Dict[str, Any]]:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "max_tokens": 2048,
+        "max_tokens": max_tokens,
         "temperature": 0.1,
     }
 
@@ -256,7 +327,7 @@ def call_qwen(system_prompt: str, user_prompt: str) -> Optional[Dict[str, Any]]:
                     "Authorization": f"Bearer {api_key}",
                 },
                 json=payload,
-                timeout=300,
+                timeout=600,
             )
             if r.status_code != 200:
                 print(f"Qwen API returned {r.status_code} (attempt {attempt+1}/2)")
@@ -347,6 +418,62 @@ def execute_linkages(actions: List[Dict[str, Any]]) -> int:
     return linked
 
 
+def execute_deterministic_linkage() -> int:
+    """Link agent-known worklogs to turns via SQL JOIN ±24h (no Qwen). Returns count of linked turns."""
+    rows = _psql(
+        "SELECT w.id, w.agent, w.created_at::text "
+        "FROM worklog_entries w "
+        "WHERE w.created_at >= NOW() - INTERVAL '30 days' "
+        "  AND (w.turn_ids IS NULL OR array_length(w.turn_ids, 1) = 0 "
+        "       OR array_length(w.turn_ids, 1) IS NULL) "
+        "  AND w.agent IS NOT NULL AND w.agent != '' "
+        "ORDER BY w.created_at DESC LIMIT 50"
+    )
+    if not rows:
+        return 0
+
+    linked = 0
+    for line in rows.split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split("|")
+        if len(parts) < 3:
+            continue
+        wid = parts[0]
+        agent = parts[1]
+        ts = parts[2][:19]
+
+        if agent not in CANONICAL_AGENTS:
+            continue
+
+        result = _psql(
+            f"SELECT t.id FROM turns t "
+            f"WHERE t.agent = '{agent}' "
+            f"  AND t.created_at >= '{ts}'::timestamptz - INTERVAL '24 hours' "
+            f"  AND t.created_at <= '{ts}'::timestamptz + INTERVAL '24 hours' "
+            f"  AND t.id NOT IN (SELECT unnest(COALESCE(w2.turn_ids, '{{}}'::uuid[])) "
+            f"                   FROM worklog_entries w2 WHERE w2.turn_ids IS NOT NULL) "
+            f"ORDER BY t.created_at"
+        )
+        if not result:
+            continue
+
+        turn_ids = [ln.strip() for ln in result.split("\n") if ln.strip()]
+        if not turn_ids:
+            continue
+
+        ids_str = "{" + ",".join(turn_ids) + "}"
+        _psql(
+            f"UPDATE worklog_entries "
+            f"SET turn_ids = COALESCE(turn_ids, '{{}}'::uuid[]) || '{ids_str}'::uuid[] "
+            f"WHERE id = {wid}"
+        )
+        print(f"  Deterministic link worklog #{wid}: {len(turn_ids)} turns ({agent})")
+        linked += len(turn_ids)
+
+    return linked
+
+
 def validate_linkages() -> int:
     """Check all worklogs for turn_id integrity. Returns count of broken linkages."""
     broken = 0
@@ -395,3 +522,55 @@ def execute_fixes(actions: List[Dict[str, Any]]) -> int:
                     fixed += 1
 
     return fixed
+
+
+def execute_observations(observations: list, category: str = "general",
+                         context: dict = None) -> int:
+    """Persist structured facts (or legacy free-text observations) to DB. Returns count saved."""
+    if not observations:
+        return 0
+
+    _psql("""
+        CREATE TABLE IF NOT EXISTS observations (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            observation TEXT NOT NULL CHECK (length(trim(observation)) > 0),
+            category TEXT NOT NULL DEFAULT 'general',
+            source TEXT NOT NULL DEFAULT 'qwen_worker',
+            context JSONB DEFAULT '{}',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    run_ctx = context or {}
+    count = 0
+    for obs in observations:
+        if isinstance(obs, dict):
+            # Structured fact: evidence → observation column, full fact → context JSONB
+            evidence = (obs.get("evidence") or "").strip()
+            if not evidence:
+                continue
+            fact_type = (obs.get("fact_type") or "data_given").strip()
+            # Merge run-level context into fact metadata
+            fact_ctx = {k: v for k, v in obs.items() if k != "evidence"}
+            fact_ctx.update(run_ctx)
+            ctx_json = json.dumps(fact_ctx, ensure_ascii=False)
+            safe_evidence = evidence.replace("'", "''")
+            safe_ctx = ctx_json.replace("'", "''")
+            safe_category = fact_type.replace("'", "''")
+            _psql(
+                f"INSERT INTO observations (observation, category, source, context) "
+                f"VALUES ('{safe_evidence}', '{safe_category}', 'qwen_worker', '{safe_ctx}'::jsonb)"
+            )
+        elif isinstance(obs, str):
+            # Legacy free-text observation
+            safe = obs.replace("'", "''")
+            ctx_json = json.dumps(run_ctx, ensure_ascii=False)
+            safe_ctx = ctx_json.replace("'", "''")
+            _psql(
+                f"INSERT INTO observations (observation, category, source, context) "
+                f"VALUES ('{safe}', '{category}', 'qwen_worker', '{safe_ctx}'::jsonb)"
+            )
+        count += 1
+
+    print(f"  Observations saved: {count}")
+    return count

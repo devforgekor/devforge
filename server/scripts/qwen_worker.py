@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
-"""qwen_worker.py — Qwen-driven turn collector + linker, runs every 15 min.
+"""qwen_worker.py — 3-phase turn worker, runs every 15 min.
 
-Ingestion is ALWAYS deterministic (no LLM). Qwen handles only:
-  - linkage (matching orphan turns to worklog entries)
-  - fixes (agent normalization, etc.)
-  - observations (anomalies, patterns)
+Phase 1 (deterministic, no Qwen):
+  - ingest new turns from session files
+  - backfill missing daily worklogs
+  - link agent-known worklogs to turns via SQL JOIN ±24h
+  - apply agent normalization fixes (AGENT_MAP)
 
-This split eliminates hallucinated session IDs entirely.
+Phase 2 (light Qwen classify, only if agent-less worklogs exist):
+  - send worklog titles to Qwen for agent inference
+  - update worklog agents, then deterministic linkage
+
+Phase 3 (light Qwen observe, only if recent turns exist):
+  - send recent turn content to Qwen for fact extraction
+  - validate and save observations
+
+Each Qwen call is stateless and lightweight (~200-500 token prompts).
+llama.cpp server stays alive between calls preserving KV cache.
 
 Usage:
-  python3 qwen_worker.py                    # full run
-  python3 qwen_worker.py --dry-run          # show prompt without executing
+  python3 qwen_worker.py                    # full 3-phase run
+  python3 qwen_worker.py --dry-run          # show prompts without executing
   python3 qwen_worker.py --source qwen      # only process one source
-  python3 qwen_worker.py --no-llm           # deterministic ingestion only
+  python3 qwen_worker.py --no-llm           # Phase 1 deterministic only
 """
 
 import argparse
 import json
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -29,42 +40,22 @@ from lib.qwen_executor import (
     _discover_sessions,
     _psql,
     PARSERS,
+    CANONICAL_AGENTS,
+    CLASSIFY_SYSTEM_PROMPT,
+    OBSERVE_SYSTEM_PROMPT,
     gather_context,
     enrich_with_search,
     call_qwen,
+    execute_deterministic_linkage,
     execute_linkages,
     execute_fixes,
+    execute_observations,
     validate_linkages,
 )
 
 CHECKPOINT_FILE = Path("/opt/projects/server/scripts/qwen_worker_checkpoint.json")
 COLLECT_CHECKPOINT = Path("/opt/projects/server/collect_checkpoint.json")
 INGEST_URL = "http://localhost:8000/ingest"
-
-SYSTEM_PROMPT = (
-    "You are the DevForge database maintenance agent. "
-    "Ingestion has already been completed deterministically. "
-    "Your job is ONLY to propose linkages and fixes.\n"
-    "Output ONLY a JSON object with this structure:\n"
-    "{\n"
-    '  "linkages": [\n'
-    '    {"worklog_id": <int>, "agent": "<agent>"}\n'
-    "  ],\n"
-    '  "fixes": [\n'
-    '    {"type": "agent_normalization", "detail": "<what to fix>"}\n'
-    "  ],\n"
-    '  "observations": ["<observation>"]\n'
-    "}\n\n"
-    "RULES:\n"
-    "- Canonical agent names: claude-code, copilot, gemini, qwen.\n"
-    "- Link orphans ONLY when the orphan agent matches a worklog entry agent.\n"
-    "  Skip worklogs with empty agent — they cannot be matched.\n"
-    "  Time windows are computed automatically (± 24h from worklog created_at).\n"
-    "- If an orphan group has no matching worklog entry, mention it in observations.\n"
-    "- Agent names in turns must be canonical. Flag non-canonical agents as fixes.\n"
-    "- If nothing needs to be done, return empty arrays.\n"
-    "- CRITICAL: Only propose actions for items that actually appear in the context above."
-)
 
 
 def _load_checkpoint() -> dict:
@@ -200,61 +191,107 @@ def _ingest_sessions(ctx: dict, checkpoint: dict) -> int:
     return ingested
 
 
-def _build_prompt(ctx: dict) -> str:
-    """Format context for Qwen — linkage/fix decisions only (ingestion already done)."""
+def _build_classify_prompt(worklogs: list) -> str:
+    """Build a minimal prompt for agent classification from worklog titles."""
     lines = []
-
-    uw = ctx.get("unlinked_worklogs", [])
-    if uw:
-        lines.append("## UNLINKED WORKLOG ENTRIES (last 30 days)")
-        for w in uw:
-            lines.append(
-                f"worklog_id: {w['worklog_id']} | agent: {w['agent']} | "
-                f"title: {w['title']} | created_at: {w['created_at']}"
-            )
-        lines.append("")
-
-    ot = ctx.get("orphan_turns", [])
-    if ot:
-        lines.append("## ORPHAN TURNS (not linked to any worklog)")
-        for o in ot:
-            lines.append(
-                f"agent: {o['agent']} | count: {o['count']} | "
-                f"earliest: {o['earliest']} | latest: {o['latest']}"
-            )
-        lines.append("")
-
-    recent = ctx.get("recent_activity", {})
-    if recent:
-        lines.append("## RECENT ACTIVITY (last 6 hours)")
-        for agent, count in sorted(recent.items(), key=lambda x: -x[1]):
-            lines.append(f"agent: {agent} | turns_created: {count}")
-        lines.append("")
-
-    search = ctx.get("search_results", [])
-    if search:
-        lines.append("## WEB SEARCH RESULTS (for unresolved orphans/unknowns)")
-        for s in search:
-            lines.append(f"query: {s['query']} | via: {s['source']}")
-            for r in s.get("results", []):
-                lines.append(f"  - {r['title']}: {r['snippet'][:200]}")
-        lines.append("")
-
-    lines.append(f"## TOTAL TURNS IN DB: {ctx.get('total_turns', 0)}")
+    lines.append("Infer the AI agent for each worklog from its title.")
     lines.append("")
-
-    bad = ctx.get("bad_agents", [])
-    if bad:
-        lines.append(f"## NON-CANONICAL AGENTS IN DB: {', '.join(bad)}")
-        lines.append("")
-
-    lines.append(
-        "## INSTRUCTIONS\n"
-        "Ingestion has already been completed. Only propose linkages and fixes.\n"
-        "Output ONLY a JSON object with linkages, fixes, and observations.\n"
-        "If no actions are needed, return empty arrays for all keys."
-    )
+    for w in worklogs:
+        lines.append(
+            f"worklog_id: {w['worklog_id']} | "
+            f"title: {w['title']} | "
+            f"date: {w.get('created_at', '')[:10]}"
+        )
+    lines.append("")
+    lines.append("Return a JSON object with classifications array.")
     return "\n".join(lines)
+
+
+def _build_observe_prompt(turns: list, agent: str = "") -> str:
+    """Build a minimal prompt for fact extraction from a single agent batch."""
+    lines = []
+    if agent:
+        lines.append(f"## AGENT: {agent}  (3 turns from the same conversation context)")
+        lines.append("")
+    lines.append("## TURN CONTENT — extract facts from these turns")
+    lines.append("")
+    for t in turns:
+        ut = (t["user_turn"] or "")[:200]
+        th = (t.get("thinking") or "")[:200]
+        tx = (t["text"] or "")[:200]
+        lines.append(f"[{t['agent']}] user: {ut}")
+        if th:
+            lines.append(f"[{t['agent']}] thinking: {th}")
+        lines.append(f"[{t['agent']}] text: {tx}")
+        lines.append("--")
+    lines.append("")
+    lines.append("## INSTRUCTIONS")
+    lines.append("Extract self-contained facts ONLY. Skip context-dependent fragments:")
+    lines.append('  SKIP: "yes", "apply it", "ok", "진행해", "그래", "맞아" — requires prior context')
+    lines.append('  SKIP: "what about the 3-chunk approach?" — question references unknown prior topic')
+    lines.append('  KEEP: "Redis 대신 SQL JOIN으로 결정론적 링크 처리" — self-contained decision')
+    lines.append('  KEEP: "orphans: 602개, coverage: 183/183" — self-contained data')
+    lines.append("If no self-contained facts, return empty observations array [].")
+    return "\n".join(lines)
+
+
+def _next_observe_batch(observed_through: dict) -> tuple:
+    """Get next batch: oldest agent group with unobserved turns (3 turns max).
+    Returns (turns_list, agent) or ([], None)."""
+    # Find the globally oldest agent group with unobserved turns
+    all_groups = _psql(
+        "SELECT t.agent, MIN(t.created_at)::text "
+        "FROM turns t "
+        "GROUP BY t.agent "
+        "ORDER BY MIN(t.created_at) "
+        "LIMIT 10"
+    )
+    best_agent, best_oldest = None, None
+    for line in all_groups.split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split("|")
+        if len(parts) < 2:
+            continue
+        agent, oldest = parts[0], parts[1][:19]
+        cursor = observed_through.get(agent, "")
+        if not cursor or oldest > cursor:
+            if best_oldest is None or oldest < best_oldest:
+                best_agent, best_oldest = agent, oldest
+
+    if best_agent is None:
+        return [], None
+
+    # Fetch up to 3 turns for this agent after the cursor
+    cursor = observed_through.get(best_agent, "")
+    cursor_clause = (
+        f"AND t.created_at > '{cursor}'::timestamptz" if cursor else ""
+    )
+    turns_rows = _psql(
+        f"SELECT COALESCE(t.agent, ''), "
+        f"  replace(replace(COALESCE(t.user_turn, ''), E'\n', ' '), '|', '/'), "
+        f"  replace(replace(COALESCE(t.thinking, ''), E'\n', ' '), '|', '/'), "
+        f"  replace(replace(COALESCE(t.text, ''), E'\n', ' '), '|', '/'), "
+        f"  t.created_at::text "
+        f"FROM turns t "
+        f"WHERE t.agent = '{best_agent}' "
+        f"  {cursor_clause} "
+        f"ORDER BY t.created_at LIMIT 3"
+    )
+    turns = []
+    for line in turns_rows.split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split("|")
+        if len(parts) >= 5:
+            turns.append({
+                "agent": parts[0],
+                "user_turn": parts[1][:200] if parts[1] else "",
+                "thinking": parts[2][:200] if parts[2] else "",
+                "text": parts[3][:200] if parts[3] else "",
+                "created_at": parts[4][:19] if parts[4] else "",
+            })
+    return turns, best_agent
 
 
 def _validate_linkages(actions: list) -> list:
@@ -285,12 +322,136 @@ def _validate_linkages(actions: list) -> list:
     return valid
 
 
+def _validate_observations(observations: list, turns: list) -> list:
+    """Validate structured facts against the batch turns. Returns only valid fact objects."""
+    if not observations:
+        return []
+
+    # Gather all text from batch turns for verbatim evidence verification
+    turn_texts = []
+    turn_agents = set()
+    for t in turns:
+        a = t.get("agent", "")
+        if a:
+            turn_agents.add(a)
+        ut = t.get("user_turn", "") or ""
+        th = t.get("thinking", "") or ""
+        tx = t.get("text", "") or ""
+        if ut:
+            turn_texts.append(ut)
+        if th:
+            turn_texts.append(th)
+        if tx:
+            turn_texts.append(tx)
+
+    # Fetch existing observations from last 24h for dedup (by evidence)
+    existing_raw = _psql(
+        "SELECT observation FROM observations "
+        "WHERE created_at >= NOW() - INTERVAL '24 hours'"
+    )
+    existing_evidence = set()
+    for line in existing_raw.split("\n"):
+        text = line.strip()
+        if text:
+            existing_evidence.add(text)
+
+    VALID_FACT_TYPES = {"statement", "decision", "action_item", "question", "answer", "data_given"}
+    VALID_STATUSES = {"confirmed", "tentative"}
+    CANONICAL = {"claude-code", "copilot", "gemini", "qwen", ""}
+
+    # Patterns that indicate context metadata, not turn content
+    METADATA_REJECT = re.compile(
+        r'^(##|Total turns|agent:.*\|.*turns_created|worklog_id:|query:.*\| via:'
+        r'|Non-canonical agents|###\s|Orphan Turns|Unlinked Worklogs)'
+    )
+    PREFIX_RE = re.compile(r'^\[([\w-]+)\]\s*(user|thinking|text):\s*')
+
+    skipped_hallucination = 0
+
+    valid = []
+    for fact in observations:
+        if not isinstance(fact, dict):
+            skipped_hallucination += 1
+            continue
+
+        evidence = (fact.get("evidence") or "").strip()
+        speaker = (fact.get("speaker") or "").strip()
+        fact_type = (fact.get("fact_type") or "").strip()
+        status = (fact.get("status") or "confirmed").strip()
+
+        # Mandatory fields
+        if not evidence or not fact_type:
+            print(f"  Skipping fact: missing evidence or fact_type (id={fact.get('id')})")
+            skipped_hallucination += 1
+            continue
+
+        # Reject context metadata patterns
+        if METADATA_REJECT.match(evidence):
+            print(f"  Skipping fact: evidence is context metadata, not turn content (id={fact.get('id')})")
+            skipped_hallucination += 1
+            continue
+
+        # Strip [agent] type: prefix from evidence
+        prefix_match = PREFIX_RE.match(evidence)
+        if prefix_match:
+            evidence_agent = prefix_match.group(1)
+            # Validate speaker matches evidence prefix agent
+            if speaker and evidence_agent != speaker:
+                print(f"  Skipping fact: speaker '{speaker}' != evidence prefix '{evidence_agent}' (id={fact.get('id')})")
+                skipped_hallucination += 1
+                continue
+            # Auto-fill speaker from evidence prefix if missing
+            if not speaker:
+                speaker = evidence_agent
+                fact["speaker"] = speaker
+            # Strip the prefix
+            evidence = evidence[prefix_match.end():].strip()
+            fact["evidence"] = evidence
+
+        # Validate fact_type enum
+        if fact_type not in VALID_FACT_TYPES:
+            print(f"  Skipping fact: invalid fact_type '{fact_type}' (id={fact.get('id')})")
+            skipped_hallucination += 1
+            continue
+
+        # Validate status enum
+        if status not in VALID_STATUSES:
+            print(f"  Skipping fact: invalid status '{status}' (id={fact.get('id')})")
+            skipped_hallucination += 1
+            continue
+
+        # Dedup by evidence within 24h
+        if evidence in existing_evidence:
+            print(f"  Skipping fact: duplicate evidence (id={fact.get('id')})")
+            skipped_hallucination += 1
+            continue
+
+        # Evidence must be verbatim from recent turns (substring match, lenient)
+        evidence_found = any(evidence[:40] in tt or tt in evidence[:40]
+                            for tt in turn_texts if tt)
+        if not evidence_found and speaker in turn_agents:
+            # Allow if speaker is in recent turns (Qwen may have slightly reformatted)
+            pass
+        elif not evidence_found and speaker and speaker not in CANONICAL:
+            print(f"  Skipping fact: speaker '{speaker}' not canonical (id={fact.get('id')})")
+            skipped_hallucination += 1
+            continue
+
+        valid.append(fact)
+        existing_evidence.add(evidence)  # dedup within batch
+
+    skipped = len(observations) - len(valid)
+    if skipped:
+        print(f"  Facts filtered: {skipped} hallucinated/rejected, {len(valid)} valid")
+    return valid
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Qwen-driven turn worker")
+    ap = argparse.ArgumentParser(description="Qwen-driven turn worker (3-phase)")
     ap.add_argument("--dry-run", action="store_true",
-                    help="Show prompt but do not call Qwen or execute")
+                    help="Show prompts but do not call Qwen or execute")
     ap.add_argument("--no-llm", action="store_true",
-                    help="Skip Qwen, deterministic ingestion only")
+                    help="Skip Qwen, deterministic phases only")
     ap.add_argument("--source", choices=["claude", "copilot", "gemini", "qwen"],
                     help="Only process one source")
     ap.add_argument("--search", action="store_true",
@@ -304,102 +465,198 @@ def main():
           + (" (search)" if args.search else ""))
 
     checkpoint = _load_checkpoint()
+    results = {"ingested": 0, "linked": 0, "classified": 0, "observed": 0}
 
-    # Phase 1: Gather context
+    # Initial context gather
     ctx = gather_context(checkpoint, args.source)
     if args.search:
         ctx = enrich_with_search(ctx)
 
     has_ingestion = bool(ctx.get("sessions"))
-    has_linking = bool(ctx.get("orphan_turns") or ctx.get("unlinked_worklogs"))
-    has_work = has_ingestion or has_linking
+    has_work = has_ingestion or bool(ctx.get("orphan_turns") or ctx.get("unlinked_worklogs"))
 
     if not has_work:
         print("No work to do (no new sessions, no orphans, no unlinked worklogs)")
         return 0
 
-    results = {"ingested": 0, "linked": 0, "fixed": 0, "mode": "none"}
+    # ═══════════════════════════════════════════════
+    # Phase 1: DETERMINISTIC (no Qwen)
+    #   - ingest new turns
+    #   - backfill missing worklogs
+    #   - link worklogs that already have agents
+    #   - apply agent normalization fixes
+    # ═══════════════════════════════════════════════
+    print("── Phase 1: Deterministic ──")
 
     if args.dry_run:
-        # Show what WOULD happen, don't execute anything
         if has_ingestion:
-            print(f"Would ingest {len(ctx['sessions'])} session(s) deterministically")
-        if has_linking:
-            prompt = _build_prompt(ctx)
-            print("=== SYSTEM PROMPT ===")
-            print(SYSTEM_PROMPT[:500])
-            print("=== USER PROMPT (context) ===")
-            print(prompt[:3000])
+            print(f"  Would ingest {len(ctx['sessions'])} session(s)")
+        print(f"  Would backfill missing worklogs")
+        print(f"  Would run deterministic linkage (agent-known worklogs)")
+        print(f"  Would apply agent normalization fixes")
+
+    if has_ingestion and not args.dry_run:
+        print(f"  Ingesting {len(ctx['sessions'])} session(s)...")
+        results["ingested"] = _ingest_sessions(ctx, checkpoint)
+
+    backfilled = _backfill_missing_worklogs() if not args.dry_run else 0
+    if backfilled:
+        print(f"  Backfilled {backfilled} missing worklog(s)")
+
+    # Deterministic linkage for agent-known worklogs
+    det_linked = execute_deterministic_linkage() if not args.dry_run else 0
+    if det_linked:
+        print(f"  Deterministic linked: {det_linked} turns")
+    results["linked"] += det_linked
+
+    # Agent normalization (always deterministic, AGENT_MAP-based)
+    fixed = execute_fixes([{"type": "agent_normalization"}]) if not args.dry_run else 0
+    if fixed:
+        print(f"  Agent normalizations: {fixed}")
+
+    # Re-gather context after Phase 1 changes
+    if not args.dry_run:
+        ctx = gather_context(checkpoint, args.source)
+
+    # ═══════════════════════════════════════════════
+    # Phase 2: QWEN CLASSIFY (agent-less worklogs only)
+    #   - send worklog titles to Qwen for agent inference
+    #   - update worklog agents
+    #   - deterministic linkage for newly agent-ed worklogs
+    # ═══════════════════════════════════════════════
+    unlinked = ctx.get("unlinked_worklogs", [])
+    agentless = [w for w in unlinked if not w["agent"]]
+    if agentless and not args.no_llm:
+        print(f"── Phase 2: Classify ({len(agentless)} agent-less worklogs) ──")
+
+        if args.dry_run:
+            classify_prompt = _build_classify_prompt(agentless)
+            print("=== CLASSIFY SYSTEM PROMPT ===")
+            print(CLASSIFY_SYSTEM_PROMPT)
+            print("=== CLASSIFY USER PROMPT ===")
+            print(classify_prompt)
             print("=== End ===")
         else:
-            print("No linkage work for Qwen to analyze")
-        return 0
-
-    # Phase 2: Deterministic ingestion (ALWAYS, no LLM)
-    if has_ingestion:
-        print(f"Ingesting {len(ctx['sessions'])} session(s) deterministically...")
-        results["ingested"] = _ingest_sessions(ctx, checkpoint)
-        results["mode"] = "deterministic"
-
-    # Phase 2b: Backfill missing worklogs for orphan dates
-    backfilled = _backfill_missing_worklogs()
-    if backfilled:
-        print(f"Backfilled {backfilled} missing worklog(s)")
-        # Refresh context so Qwen sees the new worklogs
-        ctx = gather_context(checkpoint, args.source)
-        has_linking = bool(ctx.get("orphan_turns") or ctx.get("unlinked_worklogs"))
-
-    # Phase 3: Qwen for linkage + fixes (only if orphans/worklogs exist)
-    if has_linking and not args.no_llm:
-        prompt = _build_prompt(ctx)
-        actions = call_qwen(SYSTEM_PROMPT, prompt)
-
-        if actions is None:
-            print("Qwen unavailable — skipping linkage phase")
-        else:
-            linkages = actions.get("linkages", [])
-            fixes = actions.get("fixes", [])
-            obs = actions.get("observations", [])
-            for o in obs:
-                print(f"  Qwen: {o}")
-
-            # Validate before execution
-            linkages = _validate_linkages(linkages)
-
-            if linkages or fixes:
-                print(f"Actions: {len(linkages)} linkages, {len(fixes)} fixes")
-                results["linked"] = execute_linkages(linkages)
-                results["fixed"] = execute_fixes(fixes)
-                results["mode"] = "qwen+deterministic"
+            classify_prompt = _build_classify_prompt(agentless)
+            result = call_qwen(CLASSIFY_SYSTEM_PROMPT, classify_prompt, max_tokens=512)
+            if result is None:
+                print("  Qwen unavailable — skipping classify phase")
             else:
-                print("Qwen proposed no valid actions")
+                classifications = result.get("classifications", [])
+                for c in classifications:
+                    wid = c.get("worklog_id")
+                    agent = (c.get("agent") or "").strip()
+                    if not wid or agent not in CANONICAL_AGENTS:
+                        continue
+                    _psql(
+                        f"UPDATE worklog_entries SET agent = '{agent}' WHERE id = {wid}"
+                    )
+                    print(f"  Classified worklog #{wid}: agent={agent}")
+                    results["classified"] += 1
 
-    elif has_linking and args.no_llm:
-        print("Skipping linkage (--no-llm)")
+                # Deterministic linkage for newly classified worklogs
+                if classifications:
+                    det_linked2 = execute_deterministic_linkage()
+                    if det_linked2:
+                        print(f"  Post-classify deterministic linked: {det_linked2} turns")
+                    results["linked"] += det_linked2
 
-    # Phase 4: Validate linkage integrity
-    broken = validate_linkages()
-    if broken:
-        print(f"  WARNING: {broken} worklog(s) have broken turn_id references")
+    elif agentless and args.no_llm:
+        print(f"── Phase 2: Skipped ({len(agentless)} agent-less worklogs, --no-llm) ──")
 
-    # Phase 5: Save checkpoint
-    checkpoint["last_run_utc"] = ts.isoformat()
-    _save_checkpoint(checkpoint)
+    # ═══════════════════════════════════════════════
+    # Phase 3: QWEN OBSERVE (batch loop, 3 turns per call)
+    #   - group by (conversation_id, agent) for coherent context
+    #   - 3 turns per batch, light prompt (~300 tokens)
+    #   - loop until all unobserved turns consumed or 12 min elapsed
+    # ═══════════════════════════════════════════════
+    observed_through = checkpoint.get("observed_through", {})
 
-    # Verify
-    orphan_str = _psql(
-        "SELECT COUNT(*) FROM turns t "
-        "WHERE t.id NOT IN (SELECT unnest(COALESCE(w.turn_ids, '{}'::uuid[])) "
-        "FROM worklog_entries w WHERE w.turn_ids IS NOT NULL)"
-    )
-    orphan_after = int(orphan_str.strip()) if orphan_str.strip().lstrip("-").isdigit() else 0
+    if args.dry_run:
+        # Show first batch prompt only for brevity
+        batch_turns, agent = _next_observe_batch(observed_through)
+        if batch_turns and not args.no_llm:
+            print(f"── Phase 3: Observe (batch loop, showing 1st batch) ──")
+            observe_prompt = _build_observe_prompt(batch_turns, agent=agent)
+            print(f"=== OBSERVE BATCH: {agent} ({len(batch_turns)} turns) ===")
+            print(OBSERVE_SYSTEM_PROMPT)
+            print("=== OBSERVE USER PROMPT ===")
+            print(observe_prompt)
+            print("=== End ===")
+        elif args.no_llm:
+            print(f"── Phase 3: Skipped (--no-llm) ──")
+    elif not args.no_llm:
+        print(f"── Phase 3: Observe (batch loop, 3 turns/call) ──")
+        batches = 0
+
+        while True:
+            elapsed = (datetime.now(timezone.utc) - ts).total_seconds()
+            if elapsed > 720:
+                print(f"  Phase 3 timeout at {elapsed:.0f}s, {batches} batches done")
+                break
+
+            batch_turns, agent = _next_observe_batch(observed_through)
+            if not batch_turns:
+                if batches == 0:
+                    print("  No unobserved turns")
+                else:
+                    print(f"  All unobserved turns consumed ({batches} batches)")
+                break
+
+            observe_prompt = _build_observe_prompt(batch_turns, agent=agent)
+            result = call_qwen(OBSERVE_SYSTEM_PROMPT, observe_prompt, max_tokens=1024)
+            if result is None:
+                print(f"  Qwen unavailable — stopping ({batches} batches done)")
+                break
+
+            obs = result.get("observations", [])
+            obs = _validate_observations(obs, batch_turns)
+            if obs:
+                saved = execute_observations(obs, category="qwen_analysis", context={
+                    "agent": agent,
+                    "batch_size": len(batch_turns),
+                    "run_ts": ts.isoformat(),
+                })
+                results["observed"] += saved
+
+            # Advance per-agent cursor
+            batch_max = max((t.get("created_at") or "") for t in batch_turns)
+            observed_through[agent] = batch_max
+            checkpoint["observed_through"] = observed_through
+            batches += 1
+
+        results["observe_batches"] = batches
+    else:
+        print(f"── Phase 3: Skipped (--no-llm) ──")
+
+    # ═══════════════════════════════════════════════
+    # Final: validation + checkpoint
+    # ═══════════════════════════════════════════════
+    if not args.dry_run:
+        broken = validate_linkages()
+        if broken:
+            print(f"  WARNING: {broken} worklog(s) have broken turn_id references")
+
+        checkpoint["last_run_utc"] = ts.isoformat()
+        _save_checkpoint(checkpoint)
+
+        orphan_str = _psql(
+            "SELECT COUNT(*) FROM turns t "
+            "WHERE t.id NOT IN (SELECT unnest(COALESCE(w.turn_ids, '{}'::uuid[])) "
+            "FROM worklog_entries w WHERE w.turn_ids IS NOT NULL)"
+        )
+        orphan_after = int(orphan_str.strip()) if orphan_str.strip().lstrip("-").isdigit() else 0
+    else:
+        orphan_after = 0
 
     ts_end = datetime.now(timezone.utc)
     elapsed = (ts_end - ts).total_seconds()
+    mode = "qwen+deterministic" if (results["classified"] or results["observed"]) else "deterministic"
     print(f"[{ts_end.isoformat()}] done: ingested={results['ingested']} "
-          f"linked={results['linked']} fixed={results['fixed']} "
+          f"linked={results['linked']} classified={results['classified']} "
+          f"observed={results['observed']} "
           f"orphans_remaining={orphan_after} elapsed={elapsed:.1f}s "
-          f"mode={results['mode']}")
+          f"mode={mode}")
 
     return 0
 

@@ -41,9 +41,9 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
         if t == "user.message":
             if current_user is not None and (current_answer or current_reasoning):
                 turns.append({
-                    "user_query": current_user,
-                    "reasoning": "\n".join(current_reasoning) or None,
-                    "assistant_answer": "\n".join(current_answer) or "",
+                    "user_turn": current_user,
+                    "thinking": "\n".join(current_reasoning) or None,
+                    "text": "\n".join(current_answer) or "",
                     "source_message_id": current_interaction_id,
                     "created_at": ev.get("timestamp"),
                 })
@@ -69,9 +69,9 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
         elif t == "assistant.turn_end":
             if current_user is not None and in_turn:
                 turns.append({
-                    "user_query": current_user,
-                    "reasoning": "\n".join(current_reasoning) or None,
-                    "assistant_answer": "\n".join(current_answer) or "",
+                    "user_turn": current_user,
+                    "thinking": "\n".join(current_reasoning) or None,
+                    "text": "\n".join(current_answer) or "",
                     "source_message_id": current_interaction_id,
                     "created_at": ev.get("timestamp"),
                 })
@@ -82,9 +82,9 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
 
     if current_user is not None and (current_answer or current_reasoning):
         turns.append({
-            "user_query": current_user,
-            "reasoning": "\n".join(current_reasoning) or None,
-            "assistant_answer": "\n".join(current_answer) or "",
+            "user_turn": current_user,
+            "thinking": "\n".join(current_reasoning) or None,
+            "text": "\n".join(current_answer) or "",
             "source_message_id": current_interaction_id,
             "created_at": events[-1].get("timestamp") if events else None,
         })

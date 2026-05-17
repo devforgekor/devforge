@@ -88,7 +88,7 @@ python cli.py worklog search "키워드" --tag "A"         # 작업 검색
 정본: `schema.sql` (app container 내)  
 대상 DB: `devforge_app` (PostgreSQL 16)
 
-테이블: `conversations`, `turns`, `decisions`, `worklog_entries`  
+테이블: `conversations`, `turns`, `obs_dec`, `mcp_dec`, `observations`, `worklog_entries`  
 인덱스: pg_trgm (검색), GIN (tags, meta), UNIQUE (date, title), UNIQUE partial (status='in_progress', dormant)  
 worklog_entries 컬럼: status (dormant, always 'done'), kind (dormant, always 'task'), agent (AI 도구명), model (모델명), turn_ids (연결된 턴 UUID 배열)
 

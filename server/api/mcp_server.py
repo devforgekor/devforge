@@ -46,7 +46,7 @@ TOOLS = [
                 },
                 "detail": {
                     "type": "string",
-                    "description": "전체 대화 내용 (user/reasoning/assistant JSON 구조)",
+                    "description": "전체 대화 내용 (user/thinking/text JSON 구조)",
                 },
                 "model": {
                     "type": "string",
@@ -106,7 +106,7 @@ def _parse_detail(detail: str) -> Dict[str, Any]:
     try:
         return json.loads(detail)
     except (json.JSONDecodeError, TypeError):
-        return {"user_query": detail, "assistant_answer": ""}
+        return {"user_turn": detail, "text": ""}
 
 
 @app.on_event("startup")
@@ -250,8 +250,8 @@ async def _tool_mem_search(query: str, tag: Optional[str] = None) -> Dict[str, A
                 "source": r["source"],
                 "model": r["model"],
                 "seq": r["seq"],
-                "user_query": r["user_query"],
-                "assistant_answer": r["assistant_answer"],
+                "user_turn": r["user_turn"],
+                "text": r["text"],
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             }
             for r in rows
@@ -276,9 +276,9 @@ async def _tool_mem_save(
 
     parsed = _parse_detail(detail)
 
-    user_query = parsed.get("user_query", detail)
-    assistant_answer = parsed.get("assistant_answer", "")
-    reasoning = parsed.get("reasoning")
+    user_turn = parsed.get("user_turn", detail)
+    text = parsed.get("text", "")
+    thinking = parsed.get("thinking")
     meta = parsed.get("meta", {})
 
     if meta_type:
@@ -296,11 +296,11 @@ async def _tool_mem_save(
 
     result = await save_memory(
         source=tag,
-        user_query=user_query,
-        assistant_answer=assistant_answer or summary,
+        user_turn=user_turn,
+        text=text or summary,
         title=summary,
         model=model,
-        reasoning=reasoning,
+        thinking=thinking,
         meta=meta,
         wing=parsed.get("wing"),
         room=parsed.get("room"),

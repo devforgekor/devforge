@@ -94,3 +94,10 @@
 [2026-05-15T23:26:48Z] === link_turns 2026-05-15 ===
 [2026-05-15T23:26:50Z] Matched: 0 turns across 10 worklog entries
 [2026-05-15T23:26:50Z] Review: orphan_turns: 0; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; turn_coverage: 297/297
+[2026-05-16T18:00:28Z] === link_turns 2026-05-16 ===
+[2026-05-16T18:00:30Z] Matched: 0 turns across 10 worklog entries
+[2026-05-16T18:00:32Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 183/183
+[2026-05-17T18:00:31Z] === link_turns 2026-05-17 ===
+[2026-05-17T18:00:32Z] worklog 58 (claude-code): linked 547 turns
+[2026-05-17T18:00:32Z] Matched: 547 turns across 12 worklog entries
+[2026-05-17T18:00:33Z] Review: orphan_turns.claude-code: 52; orphan_turns.copilot: 37; empty_worklog: 0; turn_coverage: 690/779

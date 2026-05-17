@@ -24,9 +24,9 @@ CREATE TABLE IF NOT EXISTS turns (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     seq INT NOT NULL,
-    user_query TEXT NOT NULL,
-    reasoning TEXT,
-    assistant_answer TEXT NOT NULL,
+    user_turn TEXT NOT NULL,
+    thinking TEXT,
+    text TEXT NOT NULL,
     meta JSONB NOT NULL DEFAULT '{}',
     wing TEXT,
     room TEXT,
@@ -39,9 +39,9 @@ CREATE TABLE IF NOT EXISTS turns (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_source_msg ON turns(source_message_id) WHERE source_message_id IS NOT NULL;
 
 -- ============================================================
--- 3. 결정 기록
+-- 3. 관찰 기반 결정 (obs_dec)
 -- ============================================================
-CREATE TABLE IF NOT EXISTS decisions (
+CREATE TABLE IF NOT EXISTS obs_dec (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     turn_id UUID NOT NULL UNIQUE REFERENCES turns(id) ON DELETE CASCADE,
     decision TEXT NOT NULL CHECK (length(trim(decision)) > 0),
@@ -51,7 +51,31 @@ CREATE TABLE IF NOT EXISTS decisions (
 );
 
 -- ============================================================
--- 4. 인덱스
+-- 3a. MCP 기반 결정 (mcp_dec)
+CREATE TABLE IF NOT EXISTS mcp_dec (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+    summary TEXT,
+    detail TEXT,
+    turn_ids UUID[] DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 4. 관찰 기록 (Qwen worker observations)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS observations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    observation TEXT NOT NULL CHECK (length(trim(observation)) > 0),
+    category TEXT NOT NULL DEFAULT 'general',
+    source TEXT NOT NULL DEFAULT 'qwen_worker',
+    context JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_observations_created ON observations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_observations_category ON observations(category);
+
+-- ============================================================
+-- 5. 인덱스
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_conversations_source ON conversations(source);
 CREATE INDEX IF NOT EXISTS idx_conversations_created ON conversations(created_at DESC);
@@ -60,16 +84,18 @@ CREATE INDEX IF NOT EXISTS idx_turns_created ON turns(created_at DESC);
 
 -- 통합 검색 인덱스 (pg_trgm — ILIKE '%keyword%' 가속)
 CREATE INDEX IF NOT EXISTS idx_turns_search ON turns USING GIN (
-    (COALESCE(user_query, '') || ' ' ||
-     COALESCE(assistant_answer, '') || ' ' ||
-     COALESCE(reasoning, '')) gin_trgm_ops
+    (COALESCE(user_turn, '') || ' ' ||
+     COALESCE(text, '') || ' ' ||
+     COALESCE(thinking, '')) gin_trgm_ops
 );
 
 -- meta.type 태그 검색 (decision, error, code 등 필터링)
 CREATE INDEX IF NOT EXISTS idx_turns_meta_type ON turns ((meta->>'type'));
 
-CREATE INDEX IF NOT EXISTS idx_decisions_created ON decisions(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_decisions_decision ON decisions USING GIN (decision gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_obs_dec_created ON obs_dec(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_obs_dec_decision ON obs_dec USING GIN (decision gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_mcp_dec_created ON mcp_dec(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mcp_dec_summary ON mcp_dec USING GIN (summary gin_trgm_ops);
 
 -- ============================================================
 -- Phase 2 예약 (주석)

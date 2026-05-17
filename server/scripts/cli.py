@@ -23,10 +23,10 @@ def _format_results(rows):
         print(f"--- [{r['source']}] {r['title'] or '(no title)'} ---")
         print(f"  conversation: {r['conversation_id']}")
         print(f"  model: {r['model']}  seq: {r['seq']}  created: {r['created_at']}")
-        q = (r["user_query"] or "")[:120]
-        a = (r["assistant_answer"] or "")[:120]
-        print(f"  Q: {q}")
-        print(f"  A: {a}")
+        ut = (r["user_turn"] or "")[:120]
+        tx = (r["text"] or "")[:120]
+        print(f"  user: {ut}")
+        print(f"  text: {tx}")
         print()
 
 
@@ -46,15 +46,15 @@ async def cmd_save(args):
         try:
             detail = json.loads(args.detail)
         except json.JSONDecodeError:
-            detail = {"user_query": args.detail, "assistant_answer": args.summary or ""}
+            detail = {"user_turn": args.detail, "text": args.summary or ""}
 
     result = await save_memory(
         source=args.source,
-        user_query=detail.get("user_query", args.detail or ""),
-        assistant_answer=detail.get("assistant_answer", args.summary or ""),
+        user_turn=detail.get("user_turn", args.detail or ""),
+        text=detail.get("text", args.summary or ""),
         title=args.summary,
         model=args.model,
-        reasoning=detail.get("reasoning"),
+        thinking=detail.get("thinking"),
         meta=detail.get("meta", {}),
     )
     print(json.dumps(result, indent=2))

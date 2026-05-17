@@ -151,8 +151,8 @@ def _fetch_unembedded() -> list[dict]:
     raw = _psql(
         f"SELECT json_build_object("
         f"  'id', id::text,"
-        f"  'q', left(user_query, {MAX_TEXT_CHARS}),"
-        f"  'a', left(assistant_answer, {MAX_TEXT_CHARS})"
+        f"  'q', left(user_turn, {MAX_TEXT_CHARS}),"
+        f"  'a', left(text, {MAX_TEXT_CHARS})"
         f") FROM turns"
         f" WHERE embedding IS NULL"
         f" ORDER BY created_at"

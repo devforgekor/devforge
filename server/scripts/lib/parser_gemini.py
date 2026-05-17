@@ -70,12 +70,21 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
             ) or None
 
             if current_user is not None:
+                token_meta = ev.get("tokens") or {}
+                token_total = token_meta.get("total")
+                token_count = None
+                try:
+                    if token_total is not None:
+                        token_count = int(token_total)
+                except (TypeError, ValueError):
+                    token_count = None
                 turns.append({
-                    "user_query": current_user,
-                    "reasoning": reasoning,
-                    "assistant_answer": answer,
+                    "user_turn": current_user,
+                    "thinking": reasoning,
+                    "text": answer,
                     "source_message_id": ev.get("id"),
                     "created_at": ev.get("timestamp"),
+                    "tokens": token_count,
                 })
                 current_user = None
 

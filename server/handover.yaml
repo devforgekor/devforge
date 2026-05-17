@@ -3,17 +3,32 @@ last_checkpoint:
   recent_files: []
   git: {}
 decisions:
+- 'Copilot statusline quota parsing 2026-05-17: copilot-statusline.py now parses live quotaSnapshots from Copilot payload (entitlementRequests, usedRequests, remainingPercentage) to show Student Benefit usage. Falls back to DevForge API total token count (435K/1M) when quota is unavailable. settings.json showQuota enabled to receive quota data. Format: progress bar + context% + session tokens (2 decimals) + quota remaining (requests or %).'
+- 'Copilot statusline context warnings 2026-05-17: progress bar and percent now color-coded based on remaining context (30%↓ yellow, 20%↓ orange, 10%↓ red) to warn users before hitting token limits.'
+- 'Copilot footer format 2026-05-16: copilot-statusline.py now renders a compact bar + percent + used/total + 남은토큰 line, with model names and request labels removed. Token counts are shown in K/M units and the bar uses a 10-cell visual indicator.'
+- 'Copilot statusline fallback 2026-05-16: copilot-statusline.py now falls back to the newest useful ~/.copilot/session-state/*/events.jsonl snapshot when no live payload is supplied. It prefers snapshots with both used tokens and tokenLimit, then used-only snapshots. Remaining request percentage still requires live quotaSnapshots payloads; local logs do not expose a global account quota.'
+- 'MOTD token summary 2026-05-16: gen_server_state.py now renders current-session and total token usage in [TOKENS], replacing the previous 7d-only view. Session totals are derived from the latest conversation; overall totals still span all token-bearing turns.'
+- 'MOTD token section restored 2026-05-16: gen_server_state.py now renders a [TOKENS] section again and sources it from turns.meta.tokens via psql.'
+- 'MOTD token simplification 2026-05-16: gen_server_state.py now renders only a single copilot percentage line in [TOKENS], using session tokens as a share of total token-bearing usage.'
+- 'MOTD token percentage 2026-05-16: the single copilot line now uses total token volume against a 1,000,000-token reference, producing a visible usage percentage (currently 56%).'
+- 'Gemini token backfill 2026-05-16: parser_gemini.py now reads tokens.total from Gemini session JSONL; save_memory merges token metadata into duplicate turns; session_start.py also shows the live token summary. container-devforge-api.service must be restarted after search.py changes, then collect_turns --source gemini --reset backfills 24 Gemini turns (564,954 tokens).'
+- 'Gemini crash diagnostics 2026-05-16: tmux-based Gemini session loop now appends stdout/stderr to ~/.cache/devforge/gemini-session.log and backs off for 60s after 5 consecutive failures. SIGSEGV exit code 139 is annotated for coredumpctl follow-up. Do not log API keys.'
+- 'Gemini launcher 2026-05-16: restored the foreground launcher. gemini_session_start.sh now runs Gemini in the current shell, keeps per-request key rotation and log capture, and exits with the shell/session instead of keeping a long-lived tmux wrapper alive.'
+- 'Copilot CLI binary NOTE phdr patch 2026-05-16: UEK kernel 6.12.0-201.74.2.3 rejects copilot ELF binary (Exec format error)
+  due to oversized NOTE segment (~34MB overlapping Node.js SEA blob). Patched NOTE program header filesz/memsz from 0x205e4d4
+  → 0x200 via Python struct at /home/opc/.local/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-arm64/copilot.
+  Fix must be re-applied after npm updates the package. Patch script: read ELF→find PT_NOTE phdr→shrink filesz/memsz→write.'
 - '/opt/workspace reference audit: searched entire codebase (Python, YAML, JSON, Shell, systemd, Quadlet, common-lib). Zero
   active code references found outside _archive/. Updated common-main.md Storage entry from "access restricted" to "out of
   scope (consolidated into /opt/projects/server/)". GEMINI.md inherits via @ include.'
 - 'Reboot validation 2026-05-16T22:25 KST: all containers up/healthy (19min uptime), Quadlet services active, caddy+netdata
-  active, devforge-api /health OK, PostgreSQL accepting connections (884 turns, 31 worklog, 10 decisions intact), aider-gemini
+  active, devforge-api /health OK, PostgreSQL accepting connections (884 turns, 31 worklog, 10 obs_dec intact), aider-gemini
   config+script present, worklog CLI functional, all 12 timers active on schedule, SessionStart hook executed. No issues found.'
 - 'Aider is now connected to Gemini free-tier usage via /home/opc/.config/aider/aider.conf.yml (model: gemini-exp) and /home/opc/.local/bin/aider-gemini,
   which injects a rotated GEMINI_API_KEY before launch.'
 - Active task tracker terminology standardized to todo/in_progress/blocked/done with Kanban labels To Do/In Progress/Blocked/Done.
   session_start.py and CLAUDE.yaml now read in_progress/todo instead of current/pending.
-- Decision history is now stored in a dedicated `decisions` table keyed by `turn_id`; `save_memory` writes decision rows when
+- Decision history is now stored in a dedicated `obs_dec` table keyed by `turn_id`; `save_memory` writes decision rows when
   `meta.type = decision`, and the live DB was backfilled with 10 conservative historical decisions.
 - 'devforge workspace consolidated 2026-05-16: /opt/workspace/devforge/ was a May 14 build-source snapshot that had become
   stale (ingest.py missing created_at, search.py missing agent-based dedup/ON CONFLICT). Meanwhile server/api/ingest.py and
@@ -24,8 +39,14 @@ decisions:
   db.py SCHEMA_SQL synced to match schema.sql (agent, source_message_id columns added). All path references in tasks.yaml,
   session_start.py, common-rule.md, design.md updated. Quadlet volume mounts unchanged (still point to server/api/ — same
   host path). Old /opt/workspace/ access restriction retained for seedling.'
-- 'qwen_worker architecture split: ingestion is ALWAYS deterministic (Python parser + POST /ingest), Qwen handles only linkage/fixes/observations.
-  This eliminates hallucinated session IDs entirely.'
+- 'qwen_worker 3-phase split 2026-05-17: monolithic call replaced with 3 sequential phases.
+  Phase 1 (deterministic, no Qwen): ingestion + backfill + deterministic linkage (SQL JOIN ±24h for agent-known worklogs) + agent normalization (AGENT_MAP).
+  Phase 2 (light Qwen classify): only agent-less worklog titles → agent inference (CLASSIFY_SYSTEM_PROMPT, max_tokens=512) → update agents → deterministic linkage.
+  Phase 3 (light Qwen observe): only recent turns → fact extraction (OBSERVE_SYSTEM_PROMPT, max_tokens=1024) → validate → save.
+  Each Qwen call is ~200-500 token prompt vs old 2500 token monolithic. llama.cpp server stays alive — KV cache verified working (LCP sim_best=1.000).'
+- 'KV cache verified 2026-05-17: llama.cpp --cache-reuse 256 + --slot-save-path /cache/ active. Logs show LCP similarity slot reuse (sim_best = 1.000, f_keep = 0.953). Qwen calls are stateless HTTP requests to persistent server — no restart needed, cache stays warm between phases.'
+- 'execute_deterministic_linkage() added 2026-05-17: queries unlinked worklogs WITH agents, SQL JOINs turns ±24h from worklog created_at, updates turn_ids. Eliminates Qwen hallucination risk for agent-known worklogs.'
+- 'System prompts split: CLASSIFY_SYSTEM_PROMPT + OBSERVE_SYSTEM_PROMPT moved to qwen_executor.py. Old monolithic SYSTEM_PROMPT removed from qwen_worker.py. call_qwen() now accepts max_tokens parameter for per-phase tuning.'
 - qwen_worker linkage time windows are computed deterministically (worklog.created_at ± 24h). Qwen-proposed time_start/time_end
   are ignored — the 7B model hallucinates them.
 - execute_fixes uses AGENT_MAP SSOT from agents.py with identity mapping skip (copilot→copilot, etc.). Only non-canonical→canonical
@@ -146,6 +167,7 @@ decisions:
   systemd/ 등 102개 파일 커밋 + 푸시 (main). M4 Air SSH 키(~/.ssh/id_ed25519)로 인증. systemd 유닛 파일 9개 추가 커밋으로 컨테이너 오케스트레이션 정의(Docker
   Compose 역할) 포함.'
 known_issues:
+- Gemini CLI still needs a root-cause pass for the node-22 SIGSEGV path when launched on demand; the persistent crash-loop path has been removed.
 - DeepSeek web chat is still blocked from this server by CloudFront/WAF; diagnostics are saved to --dump-dir, but browser
   automation does not reach the chat UI.
 - DeepSeek web chat is protected by CloudFront/WAF and may reject non-human sessions; the CLI is experimental and may require

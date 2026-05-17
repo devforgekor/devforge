@@ -58,8 +58,8 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
 
             if current_user is not None and answer:
                 turns.append({
-                    "user_query": current_user,
-                    "assistant_answer": answer,
+                    "user_turn": current_user,
+                    "text": answer,
                     "source_message_id": ev.get("uuid"),
                     "created_at": ev.get("timestamp"),
                 })

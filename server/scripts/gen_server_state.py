@@ -28,6 +28,7 @@ MOTD_FILE = Path("/etc/motd")
 
 TZ = timezone.utc
 CHANGELOG_ARCHIVE_DAYS = 90
+TOKEN_USAGE_BASE = 1_000_000
 
 # ── ANSI ───────────────────────────────────────────────────────────────
 GREEN = "\033[0;32m"
@@ -54,6 +55,30 @@ def _run(cmd, timeout=15):
 def _run_lines(cmd, timeout=15):
     out = _run(cmd, timeout)
     return [l for l in out.split("\n") if l.strip()] if out else []
+
+
+PSQL = [
+    "podman",
+    "exec",
+    "-i",
+    "postgres",
+    "psql",
+    "-U",
+    "postgres",
+    "-d",
+    "devforge_app",
+    "--no-align",
+    "--tuples-only",
+    "--quiet",
+]
+
+
+def _psql(sql, timeout=10):
+    try:
+        r = subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=timeout)
+        return r.stdout.strip()
+    except Exception:
+        return ""
 
 
 def discover_services():
@@ -330,6 +355,59 @@ def collect_metrics():
         if len(parts) >= 2:
             containers_uptime.append({"name": parts[0], "uptime": parts[1]})
     data["containers_uptime"] = containers_uptime
+
+    # Token usage (current session + all-time)
+    token_usage = {
+        "session": {"turns": 0, "total_tokens": 0, "avg_tokens": 0},
+        "total": {"turns": 0, "total_tokens": 0, "avg_tokens": 0},
+    }
+    token_rows = _psql(
+        """
+        WITH latest_conv AS (
+            SELECT conversation_id AS id
+            FROM turns
+            WHERE meta ? 'tokens'
+            ORDER BY created_at DESC
+            LIMIT 1
+        ),
+        session_period AS (
+            SELECT COUNT(*) AS turns,
+                   COALESCE(SUM((t.meta->>'tokens')::int), 0) AS total_tokens,
+                   COALESCE(AVG((t.meta->>'tokens')::numeric), 0) AS avg_tokens
+            FROM turns t
+            JOIN latest_conv lc ON t.conversation_id = lc.id
+            WHERE t.meta ? 'tokens'
+        ),
+        total_period AS (
+            SELECT COUNT(*) AS turns,
+                   COALESCE(SUM((meta->>'tokens')::int), 0) AS total_tokens,
+                   COALESCE(AVG((meta->>'tokens')::numeric), 0) AS avg_tokens
+            FROM turns
+            WHERE meta ? 'tokens'
+        )
+        SELECT session_period.turns,
+               session_period.total_tokens,
+               ROUND(session_period.avg_tokens, 0)::int AS avg_tokens,
+               total_period.turns,
+               total_period.total_tokens,
+               ROUND(total_period.avg_tokens, 0)::int AS total_avg_tokens
+        FROM session_period
+        CROSS JOIN total_period
+        """
+    )
+    if token_rows:
+        parts = token_rows.split("|")
+        if len(parts) >= 6:
+            try:
+                token_usage["session"]["turns"] = int(parts[0])
+                token_usage["session"]["total_tokens"] = int(parts[1])
+                token_usage["session"]["avg_tokens"] = int(parts[2])
+                token_usage["total"]["turns"] = int(parts[3])
+                token_usage["total"]["total_tokens"] = int(parts[4])
+                token_usage["total"]["avg_tokens"] = int(parts[5])
+            except ValueError:
+                pass
+    data["tokens"] = token_usage
 
     # Alerts
     alerts = []
@@ -790,6 +868,17 @@ def generate_motd(structural, metrics):
     llm_port = llm_port_match.group(1) if llm_port_match else "8080"
     lines.append(f"\n{GREEN}[NETWORK]{NC}")
     lines.append(f"  IP: {ip}   SSH: 22   LLM: {llm_port}   LiteLLM: 4000   Netdata: 19999")
+
+    # Tokens
+    token = metrics.get("tokens", {})
+    lines.append(f"\n{GREEN}[TOKENS]{NC}")
+    total = token.get("total", {})
+    total_tokens = total.get("total_tokens", 0)
+    if total_tokens:
+        pct = round(total_tokens / TOKEN_USAGE_BASE * 100)
+        lines.append(f"  copilot: {pct}%")
+    else:
+        lines.append("  copilot: no token data")
 
     # Services
     svc_parts = []

@@ -60,7 +60,7 @@ async def _query_overview(conn) -> Dict[str, Any]:
     total_conv = row["c"]
     row = await conn.fetchrow("SELECT COUNT(*) AS c FROM turns")
     total_turns = row["c"]
-    row = await conn.fetchrow("SELECT COUNT(*) AS c FROM decisions")
+    row = await conn.fetchrow("SELECT COUNT(*) AS c FROM obs_dec")
     total_dec = row["c"]
 
     sources = await conn.fetch(

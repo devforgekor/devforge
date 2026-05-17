@@ -49,6 +49,60 @@ def main():
 
     lines.append("")
 
+    # ── Token status ───────────────────────────────────────
+    token_rows = _psql(
+        """
+        WITH latest_conv AS (
+            SELECT conversation_id AS id
+            FROM turns
+            WHERE meta ? 'tokens'
+            ORDER BY created_at DESC
+            LIMIT 1
+        ),
+        session_period AS (
+            SELECT COUNT(*) AS turns,
+                   COALESCE(SUM((t.meta->>'tokens')::int), 0) AS total_tokens,
+                   COALESCE(AVG((t.meta->>'tokens')::numeric), 0) AS avg_tokens
+            FROM turns t
+            JOIN latest_conv lc ON t.conversation_id = lc.id
+            WHERE t.meta ? 'tokens'
+        ),
+        total_period AS (
+            SELECT COUNT(*) AS turns,
+                   COALESCE(SUM((meta->>'tokens')::int), 0) AS total_tokens,
+                   COALESCE(AVG((meta->>'tokens')::numeric), 0) AS avg_tokens
+            FROM turns
+            WHERE meta ? 'tokens'
+        )
+        SELECT session_period.turns,
+               session_period.total_tokens,
+               ROUND(session_period.avg_tokens, 0)::int AS avg_tokens,
+               total_period.turns,
+               total_period.total_tokens,
+               ROUND(total_period.avg_tokens, 0)::int AS total_avg_tokens
+        FROM session_period
+        CROSS JOIN total_period
+        """
+    )
+    lines.append("Token status:")
+    if token_rows and "|" in token_rows:
+        parts = token_rows.split("|")
+        if len(parts) >= 6:
+            lines.append(
+                f"  session: {parts[0]} turns / {int(parts[1]):,} tokens / avg {int(parts[2]):,} per turn"
+            )
+            lines.append(
+                f"  total: {parts[3]} turns / {int(parts[4]):,} tokens / avg {int(parts[5]):,} per turn"
+            )
+        else:
+            lines.append("  session: no token data")
+            lines.append("  total: no token data")
+    else:
+        lines.append("  session: no token data")
+        lines.append("  total: no token data")
+
+    lines.append("")
+
     # ── Collection status ──────────────────────────────────
     if COLLECT_STATUS.exists():
         lines.append("Collection (last run):")
