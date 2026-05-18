@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate compact tmux banner cache file.
+"""gen_motd_task.py — Generate DevForge MOTD+Task summary cache file.
 
-Default: writes /tmp/devforge-banner.txt (called by motd-gen.service timer).
+Default: writes /tmp/devforge-motd-task.txt (called by motd-gen.service timer).
 With --stdout: prints to stdout.
 
 Data sources: state.yaml, tasks.yaml, handover.yaml, nightly_status.yaml,
@@ -21,7 +21,7 @@ TASKS_FILE = SERVER / "docs/tasks.yaml"
 HANDOVER_FILE = SERVER / "handover.yaml"
 NIGHTLY_FILE = SERVER / "docs/nightly_status.yaml"
 CLI = str(SERVER / "scripts/cli.py")
-CACHE_FILE = Path("/tmp/devforge-banner.txt")
+CACHE_FILE = Path("/tmp/devforge-motd-task.txt")
 
 # ANSI
 GREEN  = "\033[0;32m"
@@ -232,7 +232,7 @@ def format_decision_row(label, db_stats, color):
     return row.rstrip()
 
 
-def build_banner():
+def build_motd_task(include_legend=False):
     state = load_yaml(STATE_FILE)
     structural = state.get("structural", {})
     metrics    = state.get("metrics", {})
@@ -249,6 +249,7 @@ def build_banner():
 
     sys_m = metrics.get("system", {})
     cpu_load = sys_m.get("cpu_load", [0, 0, 0])
+    cpu_cores = sys_m.get("cpu_cores", 4)
     mem = sys_m.get("memory", {})
     mem_used = mem.get("used", "?")
     mem_total = mem.get("total", "?")
@@ -279,11 +280,16 @@ def build_banner():
         svc_text += f" {RED}{len(failed_svc)}↓{NC}"
     parts.append(svc_text)
 
-    cpu_parts = [color_cpu(v) for v in cpu_load[:3]]
+    cpu_parts = [color_cpu(v) for v in cpu_load[:3]] + [str(cpu_cores)]
     parts.append(f"CPU {'/'.join(cpu_parts)}")
 
     mp = color_pct(mem_pct, 80, 90)
-    parts.append(f"Mem {mem_used}/{mem_total} ({mp})")
+    zram = sys_m.get("zram", "")
+    zram_cycles = sys_m.get("zram_cycles", 0)
+    if zram:
+        parts.append(f"Mem {mem_used}/{mem_total} ({mp}) | Zram {zram} (×{zram_cycles})")
+    else:
+        parts.append(f"Mem {mem_used}/{mem_total} ({mp})")
 
     obs_count = yesterday_observations()
     if obs_count > 0:
@@ -362,19 +368,22 @@ def build_banner():
             lines.append(f"  {DIM}{line}{NC}")
 
     # ── Color legend ────────────────────────────────────────────────
-    lines.append(f"\n{DIM}[색상]{NC} {YELLOW}노랑{NC}=nightly 미실행  {ORANGE}주황{NC}=embed깨짐/진행중  {RED}빨강{NC}=링크깨짐")
+    if include_legend:
+        lines.append(f"\n{DIM}[색상]{NC} {YELLOW}노랑{NC}=nightly 미실행  {ORANGE}주황{NC}=embed깨짐/진행중  {RED}빨강{NC}=링크깨짐")
 
     return "\n".join(lines) + "\n"
 
 
 def main():
-    banner = build_banner()
+    # Include legend only if explicitly requested via --with-legend
+    include_legend = "--with-legend" in sys.argv
+    motd_task = build_motd_task(include_legend=include_legend)
 
     if "--stdout" in sys.argv:
-        print(banner, end="")
+        print(motd_task, end="")
     else:
         try:
-            CACHE_FILE.write_text(banner)
+            CACHE_FILE.write_text(motd_task)
         except Exception:
             pass
 

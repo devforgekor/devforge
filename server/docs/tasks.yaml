@@ -1,53 +1,96 @@
-meta:
-  location: /opt/projects/server/docs/tasks.yaml
-  purpose: "Shared Kanban task tracker for all AI agents on DevForge server."
-  language: "English only (machine-readable)."
-  related_files:
-    - /opt/projects/server/CLAUDE.yaml
-    - /opt/projects/server/handover.yaml
-    - /opt/projects/server/blueprint.yaml
-    - /opt/projects/server/docs/design.md
-    - /opt/projects/server/docs/phases.md
-    - /opt/projects/server/_archive/README.md
-  must_rules:
-    - "in_progress: exactly 1 task or null. Never leave a completed task in in_progress."
-    - "todo: ordered by priority. Add new tasks to the end."
-    - "blocked: keep blocked items separate from todo."
-    - "done: keep at most 10 recent items. Older items exist only in worklog DB."
-  done_checklist:
-    - "Move in_progress -> done (insert at top of done list)."
-    - "If todo is non-empty: promote todo[0] -> in_progress."
-    - "If a task becomes blocked, move it to blocked and record the blocker."
-    - "Log to DB: python3 /opt/projects/server/scripts/cli.py worklog add '<title>' '<summary>' --agent '<agent>' --model '<model>' --tags '<tags>'"
-    - "If decisions were made or issues found: update handover.yaml."
-  add_checklist:
-    - "Append new task to todo with date and optional tags."
-
-kanban_labels:
-  todo: "To Do"
-  in_progress: "In Progress"
-  blocked: "Blocked"
-  done: "Done"
-
-in_progress: null
-
-todo: []
-
 blocked: []
-
 done:
-  - "Copilot statusline quota tracking — statusline now parses Copilot Student Benefit quota (entitlementRequests/usedRequests/remainingPercentage) from live payload, falls back to DevForge API when unavailable, and shows context warnings with color-coded progress bar (yellow/orange/red)."
-  - "Copilot statusline format — the Copilot footer now shows a compact progress bar, percent, used/total tokens, and remaining tokens, with model names and request labels removed."
-  - "Copilot statusline fallback — copilot-statusline.py now reads the newest useful ~/.copilot/session-state/*/events.jsonl snapshot when no live payload is provided, preferring full used/limit snapshots and falling back to used-only snapshots."
-  - "Show overall token percentage — the MOTD [TOKENS] block now shows only `copilot: 56%` style usage based on total token volume."
-  - "Simplify MOTD token block — the generated MOTD now shows only a single `copilot` percentage line for overall token usage."
-  - "Restore visible token status — Gemini token usage is now ingested from raw session logs, duplicate rows merge token metadata, and both MOTD and SessionStart show live token totals."
-  - "Restore MOTD token summary — the generated MOTD now shows current-session and total token usage instead of a 7d-only token line."
-  - "Restore MOTD token info — re-added the [TOKENS] section to the generated MOTD and state snapshot; it now reads from turns.meta.tokens when available."
-  - "Gemini shell-bound exit 2026-05-16 — restored the foreground Gemini launcher so it exits with the shell/session, matching the original install-time behavior."
-  - "Reboot validation 2026-05-16 — all containers healthy, DB intact (884 turns), 12 timers active, handover known_issues cleared."
-  - "/opt/workspace reference audit and cleanup — searched entire codebase, confirmed zero active code references, updated common-main.md Storage entry to out-of-scope."
-  - "Decision table migration — added a dedicated obs_dec table keyed by turn_id, wired save_memory to write decision rows when meta.type = decision, updated schema/docs/stats, and backfilled 10 conservative historical decisions."
-  - "Qwen worker 2차 로직 감사 — 8개 버그 발견/수정: (1) has_linking stale after backfill ctx refresh, (2) agent 미검증 SQL injection 위험, (3) call_qwen attempt 표기 오류, (4) prompt 레이블 7/30일 불일치, (5) execute_ingestions dead code 제거 + import 정리, (6) _ingest_sessions retry backoff 누락, (7) gather_context canonical set 불일치(deepseek 누락), (8) _validate_linkages int/str 타입 불일치. 단위 테스트 15/15 통과."
-  - "DeepSeek diagnostics — scripts/deepseek_web.py now supports --dump-dir to save blocked-page HTML, screenshots, and JSON metadata for diagnosis; verified against the CloudFront bot challenge page"
-  - "DeepSeek web CLI — scripts/deepseek_web.py added as an isolated Playwright-based browser CLI, Playwright and Chromium installed locally, browser runtime dependencies installed on the host, local smoke test on a data URL passed"
+- 'requests → http.client 마이그레이션 (2026-05-18): collect_turns.py, qwen_worker.py, qwen_executor.py에서 requests 라이브러리 제거. http.client.HTTPConnection으로 교체 (connection pooling 이슈 해소, 외부 의존성 감소). review_worker.py와 동일 패턴 적용.'
+- 'SQL escaping 전면 적용 (2026-05-18): qwen_worker.py _ensure_worklog() + Phase 2 UPDATE + qwen_executor.py execute_linkages/execute_deterministic_linkage/execute_fixes. esc_sql() import 추가. 모든 사용자/에이전트 입력 SQL interpolation에 escaping 적용.'
+- 'qwen_worker.py Phase 3 (observe) 비활성화 (2026-05-18): review_worker.py 2-phase pipeline(Qwen14B→Phi-4)이 fact extraction+verification 담당. qwen_worker Phase 3은 단일모델 observe로 교차검증 부재 — inferior. docstring, argparse description, main() Phase 3 섹션 모두 갱신.'
+- 'test_review_models.py:384 symlink restore fix (2026-05-18): qwen2.5-coder-7b-instruct-q8_0.gguf(존재하지 않음) → Qwen2.5-Coder-14B-Instruct-Q8_0.gguf(실제 기본 모델). print 메시지도 qwen2.5-coder-14b로 수정.'
+- 'lib/db.py 신설 + 10개 파일 마이그레이션 완료 (2026-05-18): PEP 8/Django/Celery 패턴 적용. _psql 중복 10개 제거, timeout/에러 처리/escaping 단일화. review_worker.py, session_guard.py, cli.py, link_turns.py, embed_turns.py, session_start.py, gen_server_state.py, test_review_models.py, qwen_executor.py 전환. embed_turns.py -U devforge→postgres 동시 해결. PLAN.md File Map 갱신.'
+- 'Code-as-documentation 리서치 완료 (2026-05-18): PEP 8, Django, Celery, Flask, Python stdlib 패턴 분석. 모든 주요 프로젝트가 DB 헬퍼 단일 공유 모듈 사용. _psql 10개 정의 불일치 확인 (timeout 10/15/30s, 반환타입 str/CompletedProcess, 에러처리 5종). lib/db.py 신설 + 전면 마이그레이션 결정. 보고서: docs/code-as-documentation-review.md'
+- 'v1.1 배포 완료 (2026-05-18): worklog_entries.git_commit_hash TEXT 컬럼 + UNIQUE(date, git_commit_hash) constraint + idx_wl_commit_hash partial index. session_guard.py에 log_commits_to_worklog() 추가 (git log --since=24h 스캔, RETURNING id로 idempotent 확인). review_worker.py main()에서 호출 연동. ON CONFLICT DO NOTHING 으로 중복 방지 검증 완료.'
+- '전체 서버 감사 완료 — audit-2026-05-18.md (2026-05-18). 발견: CRITICAL 2건 (qwen_executor.py 모델명 오류로 Phase 2/3 broken, test_review_models.py 심링크 복원 7B 참조), HIGH 4건 (worker 중복, SQL escaping, DB user 불일치, requests/http.client 혼재), MEDIUM 3건, LOW 3건. qwen_executor.py 모델명 즉시 수정 완료.'
+- 'Mistral-Nemo-12B vs Qwen14B extraction 비교 완료 — 동일 10턴 기준 Qwen14B 97.9% valid (1/48 hallucinated)
+  vs Mistral 88.1% valid (4/42 hallucinated). Mistral hallucination rate 4.5x 높음. 속도는 Mistral 우세(2.63
+  vs 1.82 t/s)하나 정확도에서 Qwen14B 압승. EXTRACT_MODEL = qwen14 유지 결정. (2026-05-18)'
+- DeepSeek-R1-Distill-Qwen-14B Q8_0 테스트 완료 — qwen2 아키텍처 호환, 1.76 tok/s 생성 속도. 그러나
+  CoT 추론으로 턴당 300-500+ 토큰 생성 (Qwen14B 6-50 대비). 턴당 4-8분 소요로 extraction 파이프라인 부적합.
+  FuseO1 variant가 대안. (2026-05-18)
+- OOM kill fix — cache-ram 16384→8192, ctx-size 16384→8192. Quadlet container-devforge-llm.container도
+  동일 수정. (2026-05-18)
+- Gemma-2-27B Q4_K_M 삭제 — 16GB 확보. 0.72 tok/s로 실용성 없음. DeepSeek-R1-Distill-Qwen-14B
+  Q8_0 다운로드 완료. (2026-05-18)
+- 'review_worker 6차 실행 — 6 facts, 6 valid (100%). 오늘 누적: 60 facts, 54 valid (90%),
+  5 hallucinated. 파이프라인 안정화 완료. (2026-05-18)'
+- review_worker 4-5차 실행 — 4차 20f/19v(95%), 5차 15f/13v(87%). regexp_replace 개행 처리 +
+  _esc_sql escaping + _psql_ok 수정 검증 완료. (2026-05-18)
+- 'DB 저장 버그 2건 fix — (1) fetch_unprocessed_turns: psql t.text 개행 파싱 깨짐 → regexp_replace로
+  개행 제거 + 빈 turn_id 필터. (2) save_review_facts: INSERT 성공해도 _psql 반환값 '''' 때문에 WARNING
+  false positive → _psql_ok(returncode 체크) 추가. (3) _esc_sql: 백슬래시+개행 escaping 추가.
+  (2026-05-18)'
+- handover.yaml YAML 오류 수정 — decisions 키 중복 + shell escape(역슬래시) 제거. handover-gen.service
+  복구. (2026-05-18)
+- drop_caches 롤백 — /proc/sys/vm/drop_caches PermissionError (root 필요)로 3차 실행 크래시.
+  _podman_restart_llama() 원복 + LLAMA_RUN_ARGS에 --replace 추가하여 컨테이너 경합 방지. (2026-05-18)
+- 'HTTP timeout 300s → 600s — call_llm() timeout increased to accommodate slow Phi-4
+  verification (2.18 tok/s × 344 tokens + prompt encoding ≈ 158s). Worst-case triple
+  retry: 3×600+6s=1806s < 30min timer window. (2026-05-18)'
+- review_worker 첫 운영 실행 완료 — 17턴 중 5턴에서 14개 fact 추출, 12개 valid (85.7%), 2개 hallucinated.
+  Turn 2 hallucinated fact 1건 (Phi-4가 Qwen14B fabrication 감지), Turn 3 1건 hallucinated.
+  Turn 8 HTTP 300s timeout → retry 성공. Qwen 7B 정상 복구 확인. (2026-05-18)
+- Review worker timer enabled — timer active, next trigger 03:35 UTC (2026-05-18)
+- review_worker.py created — 2-phase LLM pipeline (Qwen14B extract → Phi-4 verify),
+  checkpoint-based, review_facts DB table (2026-05-18)
+- 'Model combo tests completed — Combo A (Qwen14B→Phi-4): 100% valid (8/8), 0% hallucination;
+  Gemma-2-27B: too slow (0.72 tok/s) for practical use (2026-05-18)'
+- Gemma-2-27B Q4_K_M confirmed working with llama.cpp b7834 — arch=gemma2, 27B, 16GB
+  load, but inference 0.72 tok/s on 4-core ARM (2026-05-18)
+- 'Model swap bugs fixed: (1) stale systemd unit at ~/.config/systemd/user/ shadowing
+  Quadlet — removed; (2) absolute symlink paths don''t resolve in container — changed
+  to relative; (3) http.client replaces requests library to avoid connection pooling
+  issues (2026-05-18)'
+- 3개 LLM 모델 다운로드 완료 — Qwen14B (Q8_0, 15GB), Phi-4 (Q8_0, 15GB), Gemma-2-27B (Q4_K_M,
+  16GB), 총 46GB (2026-05-18)
+- Copilot statusline quota tracking — statusline now parses Copilot Student Benefit
+  quota (entitlementRequests/usedRequests/remainingPercentage) from live payload,
+  falls back to DevForge API when unavailable, and shows context warnings with color-coded
+  progress bar (yellow/orange/red).
+- Copilot statusline format — the Copilot footer now shows a compact progress bar,
+  percent, used/total tokens, and remaining tokens, with model names and request labels
+  removed.
+- Copilot statusline fallback — copilot-statusline.py now reads the newest useful
+  ~/.copilot/session-state/*/events.jsonl snapshot when no live payload is provided,
+  preferring full used/limit snapshots and falling back to used-only snapshots.
+in_progress: null
+kanban_labels:
+  blocked: Blocked
+  done: Done
+  in_progress: In Progress
+  todo: To Do
+meta:
+  add_checklist:
+  - Append new task to todo with date and optional tags.
+  done_checklist:
+  - Move in_progress -> done (insert at top of done list).
+  - 'If todo is non-empty: promote todo[0] -> in_progress.'
+  - If a task becomes blocked, move it to blocked and record the blocker.
+  - 'Log to DB: python3 /opt/projects/server/scripts/cli.py worklog add ''<title>''
+    ''<summary>'' --agent ''<agent>'' --model ''<model>'' --tags ''<tags>'''
+  - 'If decisions were made or issues found: update handover.yaml.'
+  language: English only (machine-readable).
+  location: /opt/projects/server/docs/tasks.yaml
+  must_rules:
+  - 'in_progress: exactly 1 task or null. Never leave a completed task in in_progress.'
+  - 'todo: ordered by priority. Add new tasks to the end.'
+  - 'blocked: keep blocked items separate from todo.'
+  - 'done: keep at most 10 recent items. Older items exist only in worklog DB.'
+  purpose: Shared Kanban task tracker for all AI agents on DevForge server.
+  related_files:
+  - /opt/projects/server/CLAUDE.yaml
+  - /opt/projects/server/handover.yaml
+  - /opt/projects/server/blueprint.yaml
+  - /opt/projects/server/docs/design.md
+  - /opt/projects/server/docs/phases.md
+  - /opt/projects/server/_archive/README.md
+todo:
+- Extraction prompt 튜닝 — Qwen14B hallucination rate 2.1% → 1% 미만 목표 (2026-05-18)
+- FuseO1-DeepSeekR1-Qwen2.5-Coder-14B-Preview Q8_0 테스트 (코드 특화, CoT 적을 가능성) (2026-05-18)
+- review_facts 테이블 데이터 기반 통계 대시보드 (2026-05-18)

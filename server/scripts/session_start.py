@@ -4,20 +4,12 @@ import json
 import subprocess
 from pathlib import Path
 
-PSQL = ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
-        "-d", "devforge_app", "--no-align", "--tuples-only", "--quiet"]
+from lib.db import psql
 TASKS_FILE = Path("/opt/projects/server/docs/tasks.yaml")
 COLLECT_STATUS = Path("/opt/projects/server/docs/collect_status.yaml")
 REPORT_FILE = Path("/opt/projects/server/docs/consistency_report.yaml")
 LINK_REVIEW = Path("/opt/projects/server/docs/link_review.yaml")
 SERVER_DIR = Path("/opt/projects/server")
-
-def _psql(sql):
-    try:
-        r = subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=10)
-        return r.stdout.strip() if r.returncode == 0 else ""
-    except Exception:
-        return ""
 
 def _git(cmd):
     try:
@@ -30,7 +22,7 @@ def main():
     lines = ["## DevForge Session Context"]
 
     # ── DB turn stats ──────────────────────────────────────
-    counts = _psql(
+    counts = psql(
         "SELECT c.source, COUNT(*) FROM turns t "
         "JOIN conversations c ON t.conversation_id = c.id "
         "GROUP BY c.source ORDER BY COUNT(*) DESC"
@@ -44,13 +36,13 @@ def main():
     else:
         lines.append("  (empty)")
 
-    today_turns = _psql("SELECT COUNT(*) FROM turns WHERE created_at::date = CURRENT_DATE")
+    today_turns = psql("SELECT COUNT(*) FROM turns WHERE created_at::date = CURRENT_DATE")
     lines.append(f"  today: {today_turns or '0'} new")
 
     lines.append("")
 
     # ── Token status ───────────────────────────────────────
-    token_rows = _psql(
+    token_rows = psql(
         """
         WITH latest_conv AS (
             SELECT conversation_id AS id
@@ -147,7 +139,7 @@ def main():
             pass
 
     # ── Recent worklog ─────────────────────────────────────
-    rows = _psql("SELECT date, title FROM worklog_entries ORDER BY created_at DESC LIMIT 5")
+    rows = psql("SELECT date, title FROM worklog_entries ORDER BY created_at DESC LIMIT 5")
     recent_lines = []
     if rows:
         for line in rows.split("\n"):

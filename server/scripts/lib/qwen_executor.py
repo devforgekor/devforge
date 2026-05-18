@@ -7,8 +7,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import requests
+import http.client as hc
 
+from .db import psql as _psql, esc_sql
 from .agents import AGENT_MAP
 from .parser_claude import parse as parse_claude
 from .parser_copilot import parse as parse_copilot
@@ -75,21 +76,6 @@ SESSION_DIRS = {
     "gemini": Path("/home/opc/.gemini/tmp/opc/chats"),
     "qwen": Path("/home/opc/.qwen/projects"),
 }
-
-PSQL = [
-    "podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
-    "-d", "devforge_app", "--no-align", "--tuples-only", "--quiet",
-]
-
-
-def _psql(sql: str) -> str:
-    try:
-        r = subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=30)
-        return r.stdout.strip() if r.returncode == 0 else ""
-    except Exception as e:
-        print(f"DB error: {e}", file=sys.stderr)
-        return ""
-
 
 def _discover_sessions(source: str) -> List[Tuple[str, Path, Optional[str]]]:
     """Return [(session_id, path, optional_project), ...] for a source."""
@@ -309,7 +295,7 @@ def call_qwen(system_prompt: str, user_prompt: str,
     api_key = _read_secret("LITELLM_MASTER_KEY") or "unused"
 
     payload = {
-        "model": "qwen2.5-coder-7b",
+        "model": "qwen2.5-coder-14b",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -318,23 +304,22 @@ def call_qwen(system_prompt: str, user_prompt: str,
         "temperature": 0.1,
     }
 
+    body = json.dumps(payload)
     for attempt in range(2):
         try:
-            r = requests.post(
-                "http://127.0.0.1:4000/v1/chat/completions",
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                },
-                json=payload,
-                timeout=600,
-            )
-            if r.status_code != 200:
-                print(f"Qwen API returned {r.status_code} (attempt {attempt+1}/2)")
+            conn = hc.HTTPConnection("127.0.0.1", 4000, timeout=600)
+            conn.request("POST", "/v1/chat/completions", body,
+                         {"Content-Type": "application/json",
+                          "Authorization": f"Bearer {api_key}"})
+            resp = conn.getresponse()
+            resp_body = resp.read().decode()
+            conn.close()
+            if resp.status != 200:
+                print(f"Qwen API returned {resp.status} (attempt {attempt+1}/2)")
                 time.sleep(2 ** attempt)
                 continue
 
-            content = r.json()["choices"][0]["message"]["content"]
+            content = json.loads(resp_body)["choices"][0]["message"]["content"]
 
             # Extract JSON from response (may be in markdown fence)
             start = content.find("{")
@@ -351,7 +336,7 @@ def call_qwen(system_prompt: str, user_prompt: str,
                 time.sleep(2 ** attempt)
                 continue
 
-        except requests.ConnectionError:
+        except (ConnectionRefusedError, OSError):
             print(f"Qwen API unreachable (attempt {attempt+1}/2)")
             time.sleep(2 ** attempt)
         except Exception as e:
@@ -385,10 +370,11 @@ def execute_linkages(actions: List[Dict[str, Any]]) -> int:
             continue
 
         ts = wl.strip()
+        safe_agent = esc_sql(agent)
 
         sql = (
             f"SELECT t.id FROM turns t "
-            f"WHERE t.agent = '{agent}' "
+            f"WHERE t.agent = '{safe_agent}' "
             f"  AND t.created_at >= '{ts}'::timestamptz - INTERVAL '24 hours' "
             f"  AND t.created_at <= '{ts}'::timestamptz + INTERVAL '24 hours' "
             f"  AND t.id NOT IN (SELECT unnest(COALESCE(w.turn_ids, '{{}}'::uuid[])) "
@@ -446,9 +432,10 @@ def execute_deterministic_linkage() -> int:
         if agent not in CANONICAL_AGENTS:
             continue
 
+        safe_agent = esc_sql(agent)
         result = _psql(
             f"SELECT t.id FROM turns t "
-            f"WHERE t.agent = '{agent}' "
+            f"WHERE t.agent = '{safe_agent}' "
             f"  AND t.created_at >= '{ts}'::timestamptz - INTERVAL '24 hours' "
             f"  AND t.created_at <= '{ts}'::timestamptz + INTERVAL '24 hours' "
             f"  AND t.id NOT IN (SELECT unnest(COALESCE(w2.turn_ids, '{{}}'::uuid[])) "
@@ -514,10 +501,12 @@ def execute_fixes(actions: List[Dict[str, Any]]) -> int:
             for bad, good in AGENT_MAP.items():
                 if bad == good:
                     continue  # skip identity mappings (copilot→copilot, etc.)
-                rows = _psql(f"SELECT COUNT(*) FROM turns WHERE agent = '{bad}'")
+                safe_bad = esc_sql(bad)
+                rows = _psql(f"SELECT COUNT(*) FROM turns WHERE agent = '{safe_bad}'")
                 count = int(rows.strip()) if rows.strip().isdigit() else 0
                 if count > 0:
-                    _psql(f"UPDATE turns SET agent = '{good}' WHERE agent = '{bad}'")
+                    safe_good = esc_sql(good)
+                    _psql(f"UPDATE turns SET agent = '{safe_good}' WHERE agent = '{safe_bad}'")
                     print(f"  Fixed agent: {bad} -> {good} ({count} turns)")
                     fixed += 1
 

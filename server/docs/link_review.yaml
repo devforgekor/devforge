@@ -1,7 +1,8 @@
 # link_turns review
-date: 2026-05-17
-linked: 547
-finding: orphan_turns.claude-code: 52
-finding: orphan_turns.copilot: 37
-finding: empty_worklog: 0
-finding: turn_coverage: 690/779
+date: 2026-05-18
+linked: 0
+finding: orphan_turns: 0
+finding: empty_worklog: #67 Review pipeline deployed
+finding: empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01
+finding: turn_coverage: 368/368
+finding: worklog_without_turns_agent: devforge

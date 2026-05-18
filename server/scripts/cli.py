@@ -13,9 +13,7 @@ sys.path.insert(0, "/opt/projects/server")
 sys.path.insert(0, "/opt/projects/server/scripts")
 
 from lib.agents import normalize as normalize_agent
-
-PSQL = ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres", "-d", "devforge_app",
-        "--no-align", "--tuples-only", "--quiet"]
+from lib.db import psql as _sql, esc_sql
 
 
 def _format_results(rows):
@@ -67,14 +65,6 @@ async def cmd_recent(args):
     _format_results(results)
 
 
-def _psql(sql: str) -> subprocess.CompletedProcess:
-    return subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=10)
-
-
-def _escape_sql(value: str) -> str:
-    return value.replace("'", "''").replace("\\", "\\\\")
-
-
 def cmd_worklog_add(args):
     """Insert a new worklog entry directly into PostgreSQL."""
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] if args.tags else []
@@ -82,11 +72,11 @@ def cmd_worklog_add(args):
     details_json = json.dumps(args.details.split(",") if args.details else [])
     files_json = json.dumps(files)
     tags_array = "{" + ",".join(tags) + "}"
-    agent_val = _escape_sql(normalize_agent(args.agent)) if args.agent else ""
-    model_val = _escape_sql(args.model) if args.model else ""
+    agent_val = esc_sql(normalize_agent(args.agent)) if args.agent else ""
+    model_val = esc_sql(args.model) if args.model else ""
 
     columns = "date, title, summary, details, files, tags, status, kind"
-    values = f"CURRENT_DATE, '{_escape_sql(args.title)}', '{_escape_sql(args.summary)}', '{details_json}'::jsonb, '{files_json}'::jsonb, '{tags_array}', 'done', 'task'"
+    values = f"CURRENT_DATE, '{esc_sql(args.title)}', '{esc_sql(args.summary)}', '{details_json}'::jsonb, '{files_json}'::jsonb, '{tags_array}', 'done', 'task'"
     if agent_val:
         columns += ", agent"
         values += f", '{agent_val}'"
@@ -95,9 +85,8 @@ def cmd_worklog_add(args):
         values += f", '{model_val}'"
 
     sql = f"INSERT INTO worklog_entries ({columns}) VALUES ({values}) RETURNING id"
-    proc = _psql(sql)
-    if proc.returncode != 0:
-        print(f"DB error: {proc.stderr.strip()}", file=sys.stderr)
+    result = _sql(sql)
+    if not result or not result.strip().isdigit():
         return
     print(f"+ {args.title[:60]}")
     if agent_val:
@@ -112,11 +101,10 @@ def cmd_worklog_recent(args):
     """Show recent worklog entries."""
     limit = args.limit or 3
     sql = f"SELECT date, title, summary, tags, agent, model FROM worklog_entries ORDER BY created_at DESC LIMIT {limit}"
-    proc = _psql(sql)
-    if proc.returncode != 0:
-        print(f"DB error: {proc.stderr.strip()}", file=sys.stderr)
+    result = _sql(sql)
+    if not result:
         return
-    for line in proc.stdout.strip().split("\n"):
+    for line in result.split("\n"):
         if not line:
             continue
         parts = line.split("|", 5)
@@ -143,22 +131,21 @@ def cmd_worklog_search(args):
     """Search worklog entries by keyword or tag."""
     conditions = []
     if args.tag:
-        tag_esc = _escape_sql(args.tag)
+        tag_esc = esc_sql(args.tag)
         conditions.append(f"tags @> '{{{tag_esc}}}'")
     if args.query:
-        query_esc = _escape_sql(args.query)
+        query_esc = esc_sql(args.query)
         conditions.append(f"(title ILIKE '%{query_esc}%' OR summary ILIKE '%{query_esc}%')")
 
     where = " AND ".join(conditions) if conditions else "TRUE"
     limit = args.limit or 20
     sql = f"SELECT date, title, summary, tags, agent, model FROM worklog_entries WHERE {where} ORDER BY created_at DESC LIMIT {limit}"
-    proc = _psql(sql)
-    if proc.returncode != 0:
-        print(f"DB error: {proc.stderr.strip()}", file=sys.stderr)
+    result = _sql(sql)
+    if not result:
         return
 
     count = 0
-    for line in proc.stdout.strip().split("\n"):
+    for line in result.split("\n"):
         if not line:
             continue
         parts = line.split("|", 5)

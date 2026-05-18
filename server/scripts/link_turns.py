@@ -12,19 +12,10 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-PSQL = ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
-        "-d", "devforge_app", "--no-align", "--tuples-only", "--quiet"]
+from lib.db import psql
 
 LOG_FILE = Path("/opt/projects/server/link_turns.log")
 REVIEW_FILE = Path("/opt/projects/server/docs/link_review.yaml")
-
-def _psql(sql):
-    try:
-        r = subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=30)
-        return r.stdout.strip() if r.returncode == 0 else ""
-    except Exception as e:
-        print(f"DB error: {e}", file=sys.stderr)
-        return ""
 
 def _log(msg):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -36,7 +27,7 @@ def _log(msg):
 
 def _match(kst_start, kst_end, today_kst):
     """Phase 1: match today's worklog entries to turns by agent + time window."""
-    rows = _psql(
+    rows = psql(
         f"SELECT id, agent, created_at FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz "
@@ -84,13 +75,13 @@ def _match(kst_start, kst_end, today_kst):
             f"  ) "
             f"ORDER BY t.created_at"
         )
-        turn_rows = _psql(sql)
+        turn_rows = psql(sql)
 
         if turn_rows:
             turn_ids = [t for t in turn_rows.split("\n") if t]
             if turn_ids:
                 ids_array = "{" + ",".join(turn_ids) + "}"
-                _psql(
+                psql(
                     f"UPDATE worklog_entries SET turn_ids = turn_ids || "
                     f"'{ids_array}'::uuid[] WHERE id = {entry_id}"
                 )
@@ -106,7 +97,7 @@ def _review(kst_start, kst_end, today_kst):
     findings = []
 
     # Orphan turns: yesterday's turns not linked to any worklog
-    orphans = _psql(
+    orphans = psql(
         f"SELECT t.agent, COUNT(*) FROM turns t "
         f"WHERE t.created_at >= '{kst_start}'::timestamptz "
         f"  AND t.created_at <  '{kst_end}'::timestamptz "
@@ -125,7 +116,7 @@ def _review(kst_start, kst_end, today_kst):
         findings.append("orphan_turns: 0")
 
     # Empty worklog: today's worklog entries with zero linked turns
-    empties = _psql(
+    empties = psql(
         f"SELECT id, title FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz "
@@ -141,12 +132,12 @@ def _review(kst_start, kst_end, today_kst):
         findings.append("empty_worklog: 0")
 
     # Stats: total turns vs linked turns for the review window
-    total = _psql(
+    total = psql(
         f"SELECT COUNT(*) FROM turns "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz"
     )
-    linked = _psql(
+    linked = psql(
         f"SELECT COUNT(*) FROM turns t "
         f"WHERE t.created_at >= '{kst_start}'::timestamptz "
         f"  AND t.created_at <  '{kst_end}'::timestamptz "
@@ -158,12 +149,12 @@ def _review(kst_start, kst_end, today_kst):
     findings.append(f"turn_coverage: {linked}/{total}")
 
     # Cross-source mismatch: worklog with agent=X but no turns from agent X today
-    agents = _psql(
+    agents = psql(
         f"SELECT DISTINCT agent FROM turns "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz"
     )
-    worklog_agents = _psql(
+    worklog_agents = psql(
         f"SELECT DISTINCT agent FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz"

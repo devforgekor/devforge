@@ -25,6 +25,7 @@ ARCHIVE_FILE = SERVER_DIR / "changelog_archive.yaml"
 CLAUDE_FILE = SERVER_DIR / "CLAUDE.yaml"
 LAST_STRUCTURAL_HASH = SERVER_DIR / ".last-structural-hash"
 MOTD_FILE = Path("/etc/motd")
+ZRAM_STATE_FILE = Path.home() / ".cache/devforge/zram-state.json"
 
 TZ = timezone.utc
 CHANGELOG_ARCHIVE_DAYS = 90
@@ -57,28 +58,68 @@ def _run_lines(cmd, timeout=15):
     return [l for l in out.split("\n") if l.strip()] if out else []
 
 
-PSQL = [
-    "podman",
-    "exec",
-    "-i",
-    "postgres",
-    "psql",
-    "-U",
-    "postgres",
-    "-d",
-    "devforge_app",
-    "--no-align",
-    "--tuples-only",
-    "--quiet",
-]
+from lib.db import psql as _psql
 
 
-def _psql(sql, timeout=10):
+def track_zram_cycles():
+    """Track zram active/inactive cycles. Returns (current_active, daily_cycles, total_cycles)."""
     try:
-        r = subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=timeout)
-        return r.stdout.strip()
+        lines = _run_lines(["zramctl"])
+        if len(lines) >= 2:
+            parts = lines[1].split()
+            if len(parts) >= 4:
+                # parts[3] = DATA (e.g., "1G", "500M", "0B")
+                data_str = parts[3]
+                current_active = 0 if data_str in ("0B", "0") else 1
+                
+                # Get current KST date (UTC+9)
+                from datetime import datetime, timezone, timedelta
+                kst = timezone(timedelta(hours=9))
+                today = datetime.now(kst).strftime("%Y-%m-%d")
+                
+                # Read previous state
+                prev_active = None
+                daily_cycles = 0
+                total_cycles = 0
+                last_reset_date = None
+                try:
+                    ZRAM_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    with open(ZRAM_STATE_FILE) as f:
+                        state = json.load(f)
+                        prev_active = state.get("prev_active")
+                        daily_cycles = state.get("daily_cycles", 0)
+                        total_cycles = state.get("total_cycles", 0)
+                        last_reset_date = state.get("last_reset_date")
+                except Exception:
+                    pass
+                
+                # Reset daily counter at KST 00:00
+                if last_reset_date != today:
+                    daily_cycles = 0
+                    last_reset_date = today
+                
+                # Detect state change (0→1 or 1→0 = cycle completion)
+                if prev_active is not None and prev_active != current_active:
+                    daily_cycles += 1
+                    total_cycles += 1
+                
+                # Save state
+                try:
+                    with open(ZRAM_STATE_FILE, "w") as f:
+                        json.dump({
+                            "prev_active": current_active,
+                            "daily_cycles": daily_cycles,
+                            "total_cycles": total_cycles,
+                            "last_reset_date": last_reset_date
+                        }, f)
+                except Exception:
+                    pass
+                
+                return current_active, daily_cycles, total_cycles
     except Exception:
-        return ""
+        pass
+    
+    return None, 0, 0
 
 
 def discover_services():
@@ -292,21 +333,36 @@ def collect_structural():
 def collect_metrics():
     data = {"generated": datetime.now(TZ).isoformat()}
 
-    # Memory
+    # Memory (use /proc/meminfo for exact values)
     mem_total = mem_used = mem_pct = 0
     mem_h_total = mem_h_used = ""
+    
+    # Get human-readable from free -h
     for line in _run_lines(["free", "-h"]):
         if line.startswith("Mem:"):
             parts = line.split()
             mem_h_total, mem_h_used = parts[1], parts[2]
             break
-    for line in _run_lines(["free"]):
-        if line.startswith("Mem:"):
-            parts = line.split()
-            mem_total = int(parts[1])
-            mem_used = int(parts[2])
-            mem_pct = round(mem_used / mem_total * 100) if mem_total else 0
-            break
+    
+    # Get exact from /proc/meminfo
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    mem_total = int(line.split()[1])
+                elif line.startswith("MemAvailable:"):
+                    mem_used = mem_total - int(line.split()[1])
+            if mem_total:
+                mem_pct = round(mem_used / mem_total * 100)
+    except Exception:
+        # Fallback to free command
+        for line in _run_lines(["free"]):
+            if line.startswith("Mem:"):
+                parts = line.split()
+                mem_total = int(parts[1])
+                mem_used = int(parts[2])
+                mem_pct = round(mem_used / mem_total * 100) if mem_total else 0
+                break
 
     # CPU load
     cpu_load = []
@@ -314,19 +370,36 @@ def collect_metrics():
     if "load average" in uptime_out:
         loads = uptime_out.split("load average:")[-1].strip()
         cpu_load = [float(l.strip()) for l in loads.split(",")]
+    
+    # CPU cores
+    cpu_cores = 4
+    try:
+        import os
+        cpu_cores = os.cpu_count() or 4
+    except Exception:
+        pass
 
-    # Zram
+    # Zram (with daily cycle tracking)
     zram = ""
+    zram_cycles = 0
+    zram_total_cycles = 0
+    current_active, zram_cycles, zram_total_cycles = track_zram_cycles()
     lines = _run_lines(["zramctl"])
     if len(lines) >= 2:
         parts = lines[1].split()
         if len(parts) >= 5:
-            zram = f"{parts[2]} {parts[4]}"
+            # Format: DISKSIZE(4G) DATA(1G) COMPR(186.9M) TOTAL(230.6M)
+            disksize = parts[2]
+            data_used = parts[3]
+            zram = f"{data_used}/{disksize}"
 
     data["system"] = {
         "cpu_load": cpu_load,
+        "cpu_cores": cpu_cores,
         "memory": {"used": mem_h_used, "total": mem_h_total, "percent": mem_pct},
         "zram": zram,
+        "zram_cycles": zram_cycles,
+        "zram_total_cycles": zram_total_cycles,
     }
 
     # Storage usage

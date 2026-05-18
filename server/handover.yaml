@@ -1,19 +1,73 @@
 last_checkpoint:
-  time: '2026-05-16T22:44:00.952589+09:00'
+  time: '2026-05-18T22:16:00+09:00'
   recent_files: []
   git: {}
 decisions:
-- 'Copilot statusline quota parsing 2026-05-17: copilot-statusline.py now parses live quotaSnapshots from Copilot payload (entitlementRequests, usedRequests, remainingPercentage) to show Student Benefit usage. Falls back to DevForge API total token count (435K/1M) when quota is unavailable. settings.json showQuota enabled to receive quota data. Format: progress bar + context% + session tokens (2 decimals) + quota remaining (requests or %).'
-- 'Copilot statusline context warnings 2026-05-17: progress bar and percent now color-coded based on remaining context (30%↓ yellow, 20%↓ orange, 10%↓ red) to warn users before hitting token limits.'
-- 'Copilot footer format 2026-05-16: copilot-statusline.py now renders a compact bar + percent + used/total + 남은토큰 line, with model names and request labels removed. Token counts are shown in K/M units and the bar uses a 10-cell visual indicator.'
-- 'Copilot statusline fallback 2026-05-16: copilot-statusline.py now falls back to the newest useful ~/.copilot/session-state/*/events.jsonl snapshot when no live payload is supplied. It prefers snapshots with both used tokens and tokenLimit, then used-only snapshots. Remaining request percentage still requires live quotaSnapshots payloads; local logs do not expose a global account quota.'
-- 'MOTD token summary 2026-05-16: gen_server_state.py now renders current-session and total token usage in [TOKENS], replacing the previous 7d-only view. Session totals are derived from the latest conversation; overall totals still span all token-bearing turns.'
-- 'MOTD token section restored 2026-05-16: gen_server_state.py now renders a [TOKENS] section again and sources it from turns.meta.tokens via psql.'
-- 'MOTD token simplification 2026-05-16: gen_server_state.py now renders only a single copilot percentage line in [TOKENS], using session tokens as a share of total token-bearing usage.'
-- 'MOTD token percentage 2026-05-16: the single copilot line now uses total token volume against a 1,000,000-token reference, producing a visible usage percentage (currently 56%).'
-- 'Gemini token backfill 2026-05-16: parser_gemini.py now reads tokens.total from Gemini session JSONL; save_memory merges token metadata into duplicate turns; session_start.py also shows the live token summary. container-devforge-api.service must be restarted after search.py changes, then collect_turns --source gemini --reset backfills 24 Gemini turns (564,954 tokens).'
-- 'Gemini crash diagnostics 2026-05-16: tmux-based Gemini session loop now appends stdout/stderr to ~/.cache/devforge/gemini-session.log and backs off for 60s after 5 consecutive failures. SIGSEGV exit code 139 is annotated for coredumpctl follow-up. Do not log API keys.'
-- 'Gemini launcher 2026-05-16: restored the foreground launcher. gemini_session_start.sh now runs Gemini in the current shell, keeps per-request key rotation and log capture, and exits with the shell/session instead of keeping a long-lived tmux wrapper alive.'
+- 'Orphan turn link_turns 수동 연결 (2026-05-18): 97개 copilot orphan turn을 worklog #66에 수동 연결. link_turns.py sequential windowing 버그 — copilot worklog #66(21:00 KST)이 직전 claude-code worklog와 동일 timestamp로 시간 윈도우 0초. 또한 copilot 턴들(10:36~19:40 KST)이 window 이전에 위치. turn_coverage 368/368(100%) 복구. root cause fix 필요: per-agent windowing 또는 daily worklog 기준 매칭으로 전환.'
+- 'requests → http.client 마이그레이션 (2026-05-18): collect_turns.py, qwen_worker.py, qwen_executor.py 3개 파일에서 requests 라이브러리 제거. http.client.HTTPConnection으로 POST 호출 교체 (connection pooling timeout 이슈 해소). ConnectionRefusedError/OSError로 예외처리 통일. lib/search_manager.py만 외부 API(HTTPS) 호출로 requests 유지.'
+- 'qwen_worker Phase 3 disabled + SQL escaping hardened (2026-05-18): Phase 3 (Qwen observe) 비활성화 — review_worker.py 2-phase pipeline(Qwen14B→Phi-4)이 fact extraction+verification 담당. qwen_worker.py/_ensure_worklog() + Phase 2 UPDATE + qwen_executor.py execute_linkages/execute_deterministic_linkage/execute_fixes 모든 SQL interpolation에 esc_sql() 적용. lib.db에서 esc_sql import.'
+- 'test_review_models.py:384 symlink restore fixed (2026-05-18): qwen2.5-coder-7b-instruct-q8_0.gguf(존재하지 않음) → Qwen2.5-Coder-14B-Instruct-Q8_0.gguf. 모델 파일 6개 확인 완료.'
+- 'v1.1 deployed (2026-05-18): git_commit_hash TEXT column added to worklog_entries with UNIQUE(date, git_commit_hash) + partial index idx_wl_commit_hash. session_guard.py extended with log_commits_to_worklog() — scans git log --since=24h, INSERT ON CONFLICT DO NOTHING RETURNING id for idempotency. review_worker.py imports and calls it each run. Verified: 1 auto-commit recorded, idempotent on re-run.'
+- 'Server audit completed (2026-05-18): Full report at docs/audit-2026-05-18.md. CRITICAL fix applied: qwen_executor.py model name qwen2.5-coder-7b → qwen2.5-coder-14b (7B model doesn''t exist in litellm — Phase 2/3 were returning HTTP 400). Next: qwen_worker Phase 3 disable, v1.1 deployment, SQL escaping fixes.'
+- 'EXTRACT_MODEL = qwen14 confirmed (2026-05-18): Mistral-Nemo-12B tested head-to-head on same 10 turns. Qwen14B: 48 facts, 47 valid (97.9%), 1 hallucinated (2.1%). Mistral: 42 facts, 37 valid (88.1%), 4 hallucinated (9.5%) + 1 JSON parse failure. Mistral is faster (2.63 vs 1.82 t/s) but hallucinates 4.5x more. Qwen14B retained as extraction model. Mistral+Nemo kept in MODELS dict for future reference.'
+- 'OOM kill + memory reduction (2026-05-18): 7차 review_worker 실행 중 llama-server가 OOM kill됨 (17.9GB 사용, system 24GB). 원인: Qwen14B Q8_0 (15GB) + cache-ram 16384 + KV cache (ctx-size 16384) + 기타 오버헤드. 수정: cache-ram 16384→8192, ctx-size 16384→8192. 예상 메모리 사용량 19GB로 감소. Quadlet container-devforge-llm.container도 동일하게 수정.'
+- 'Gemma-2-27B 삭제 + DeepSeek-R1-Distill-Qwen-14B Q8_0 다운로드 (2026-05-18): Gemma 0.72 tok/s로 실용성 없어 16GB 삭제. DeepSeek-R1-Distill-Qwen-14B Q8_0 (15.7GB, bartowski) 다운로드 완료. GGUF v3, qwen2 아키텍처, gpt2 토크나이저 — llama.cpp b7834 호환. LiteLLM config에 deepseek-r1-distill-qwen-14b 추가, Gemma 엔트리 제거. review_worker.py MODELS에 deepseek_r1 추가. FuseO1-DeepSeekR1-Qwen2.5-Coder-14B-Preview-Q8_0 (코드 특화 merge variant)도 유망 후보로 식별됨.'
+- 'Review pipeline first production run (2026-05-18 04:34 UTC): 17 turns fetched, 5 turns yielded 14 facts (Qwen14B extract).'
+  Phi-4 verification: 12 valid (85.7%), 2 hallucinated. False positive rate 14.3% — pipeline correctly catches Qwen14B fabrications.
+  1 HTTP timeout (Turn 8, 300s) recovered by retry. Qwen 7B restored successfully after run. Model swap via podman stop/run
+  --no-healthcheck works reliably. Pipeline verified operational.'
+- 'HTTP timeout 300s → 600s (2026-05-18): call_llm() timeout increased to accommodate slow Phi-4 verification (2.18 tok/s
+  on 4-core ARM). Worst-case triple retry 3×600+6s=1806s fits in 30min timer window.'
+- 'DB save fixes (2026-05-18): (1) fetch_unprocessed_turns uses regexp_replace to strip newlines+pipes from t.text/t.user_turn — multiline text was breaking psql --no-align pipe parsing, causing empty turn_ids. (2) save_review_facts now uses _psql_ok (checks returncode) instead of checking stdout which is always empty for INSERT. (3) _esc_sql escapes backslashes+newlines+quotes. First verified in 4th run: 20/20 facts saved correctly.'
+- 'Podman LLAMA_RUN_ARGS --replace added (2026-05-18): consecutive runs within <2min caused container name conflict. drop_caches attempt reverted (root required, crashed 3rd run). System now uses podman run --replace to prevent stale container conflicts.'
+- 'Review pipeline 2-stage (2026-05-18): Qwen2.5-Coder-14B Q8_0 (extract) → Phi-4 Q8_0 (verify). Combo A tested: 8/8 facts
+  valid (100%), 0% hallucination. Gemma-2-27B tested but too slow (0.72 tok/s on 4-core ARM). 3개 모델 다운로드 완료 (46GB total).'
+- 'Model swap mechanism fixed (2026-05-18): (1) Stale ~/.config/systemd/user/container-devforge-llm.service was shadowing
+  Quadlet-generated unit at /run/user/1000/systemd/generator/ — deleted. (2) Absolute symlink paths fail inside container
+  — changed to relative paths in current.gguf. (3) Python requests library connection pooling causes timeouts with slow models
+  — switched to http.client with fresh connections.'
+- 'review_worker.py created (2026-05-18): 2-phase LLM review pipeline with checkpoint-based processing (24h rolling window).
+  review_facts DB table stores per-turn extracted+verified facts. Timer enabled at :05 and :35 each hour (offset from collector
+  :00/:15/:30/:45).'
+- LiteLLM configured with 4 models (qwen2.5-coder-7b, qwen2.5-coder-14b, phi-4, deepseek-r1-distill-qwen-14b) all routing to same llama.cpp
+  backend — actual model determined by current.gguf symlink.
+  backend — actual model determined by current.gguf symlink.
+- 'Orphan turns fix 2026-05-18: 91 orphan turns (54 claude-code + 37 copilot from post-21:00 KST May 17) linked to existing
+  daily worklog entries #58 and #59 via direct SQL UPDATE. Two empty late-session worklog entries (#61, #62) removed. Coverage:
+  779/779 (100%). Daily auto-worklogs created at noon UTC only cover turns up to that time — turns after ~21:00 KST remain
+  orphaned until the next day''s worklog or manual linking.'
+- 'Consistency warnings cleared 2026-05-18: two stale unlogged-session warnings (d86f6a9 May 17, c516e69 May 18) removed from
+  consistency_report.yaml. Both dates now have proper worklog entries, so session_guard.py would not re-flag them.'
+- 'Copilot statusline quota parsing 2026-05-17: copilot-statusline.py now parses live quotaSnapshots from Copilot payload
+  (entitlementRequests, usedRequests, remainingPercentage) to show Student Benefit usage. Falls back to DevForge API total
+  token count (435K/1M) when quota is unavailable. settings.json showQuota enabled to receive quota data. Format: progress
+  bar + context% + session tokens (2 decimals) + quota remaining (requests or %).'
+- 'Copilot statusline context warnings 2026-05-17: progress bar and percent now color-coded based on remaining context (30%↓
+  yellow, 20%↓ orange, 10%↓ red) to warn users before hitting token limits.'
+- 'Copilot footer format 2026-05-16: copilot-statusline.py now renders a compact bar + percent + used/total + 남은토큰 line, with
+  model names and request labels removed. Token counts are shown in K/M units and the bar uses a 10-cell visual indicator.'
+- 'Copilot statusline fallback 2026-05-16: copilot-statusline.py now falls back to the newest useful ~/.copilot/session-state/*/events.jsonl
+  snapshot when no live payload is supplied. It prefers snapshots with both used tokens and tokenLimit, then used-only snapshots.
+  Remaining request percentage still requires live quotaSnapshots payloads; local logs do not expose a global account quota.'
+- 'MOTD token summary 2026-05-16: gen_server_state.py now renders current-session and total token usage in [TOKENS], replacing
+  the previous 7d-only view. Session totals are derived from the latest conversation; overall totals still span all token-bearing
+  turns.'
+- 'MOTD token section restored 2026-05-16: gen_server_state.py now renders a [TOKENS] section again and sources it from turns.meta.tokens
+  via psql.'
+- 'MOTD token simplification 2026-05-16: gen_server_state.py now renders only a single copilot percentage line in [TOKENS],
+  using session tokens as a share of total token-bearing usage.'
+- 'MOTD token percentage 2026-05-16: the single copilot line now uses total token volume against a 1,000,000-token reference,
+  producing a visible usage percentage (currently 56%).'
+- 'Gemini token backfill 2026-05-16: parser_gemini.py now reads tokens.total from Gemini session JSONL; save_memory merges
+  token metadata into duplicate turns; session_start.py also shows the live token summary. container-devforge-api.service
+  must be restarted after search.py changes, then collect_turns --source gemini --reset backfills 24 Gemini turns (564,954
+  tokens).'
+- 'Gemini crash diagnostics 2026-05-16: tmux-based Gemini session loop now appends stdout/stderr to ~/.cache/devforge/gemini-session.log
+  and backs off for 60s after 5 consecutive failures. SIGSEGV exit code 139 is annotated for coredumpctl follow-up. Do not
+  log API keys.'
+- 'Gemini launcher 2026-05-16: restored the foreground launcher. gemini_session_start.sh now runs Gemini in the current shell,
+  keeps per-request key rotation and log capture, and exits with the shell/session instead of keeping a long-lived tmux wrapper
+  alive.'
 - 'Copilot CLI binary NOTE phdr patch 2026-05-16: UEK kernel 6.12.0-201.74.2.3 rejects copilot ELF binary (Exec format error)
   due to oversized NOTE segment (~34MB overlapping Node.js SEA blob). Patched NOTE program header filesz/memsz from 0x205e4d4
   → 0x200 via Python struct at /home/opc/.local/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-arm64/copilot.
@@ -39,14 +93,19 @@ decisions:
   db.py SCHEMA_SQL synced to match schema.sql (agent, source_message_id columns added). All path references in tasks.yaml,
   session_start.py, common-rule.md, design.md updated. Quadlet volume mounts unchanged (still point to server/api/ — same
   host path). Old /opt/workspace/ access restriction retained for seedling.'
-- 'qwen_worker 3-phase split 2026-05-17: monolithic call replaced with 3 sequential phases.
-  Phase 1 (deterministic, no Qwen): ingestion + backfill + deterministic linkage (SQL JOIN ±24h for agent-known worklogs) + agent normalization (AGENT_MAP).
-  Phase 2 (light Qwen classify): only agent-less worklog titles → agent inference (CLASSIFY_SYSTEM_PROMPT, max_tokens=512) → update agents → deterministic linkage.
-  Phase 3 (light Qwen observe): only recent turns → fact extraction (OBSERVE_SYSTEM_PROMPT, max_tokens=1024) → validate → save.
-  Each Qwen call is ~200-500 token prompt vs old 2500 token monolithic. llama.cpp server stays alive — KV cache verified working (LCP sim_best=1.000).'
-- 'KV cache verified 2026-05-17: llama.cpp --cache-reuse 256 + --slot-save-path /cache/ active. Logs show LCP similarity slot reuse (sim_best = 1.000, f_keep = 0.953). Qwen calls are stateless HTTP requests to persistent server — no restart needed, cache stays warm between phases.'
-- 'execute_deterministic_linkage() added 2026-05-17: queries unlinked worklogs WITH agents, SQL JOINs turns ±24h from worklog created_at, updates turn_ids. Eliminates Qwen hallucination risk for agent-known worklogs.'
-- 'System prompts split: CLASSIFY_SYSTEM_PROMPT + OBSERVE_SYSTEM_PROMPT moved to qwen_executor.py. Old monolithic SYSTEM_PROMPT removed from qwen_worker.py. call_qwen() now accepts max_tokens parameter for per-phase tuning.'
+- 'qwen_worker 3-phase split 2026-05-17: monolithic call replaced with 3 sequential phases. Phase 1 (deterministic, no Qwen):
+  ingestion + backfill + deterministic linkage (SQL JOIN ±24h for agent-known worklogs) + agent normalization (AGENT_MAP).
+  Phase 2 (light Qwen classify): only agent-less worklog titles → agent inference (CLASSIFY_SYSTEM_PROMPT, max_tokens=512)
+  → update agents → deterministic linkage. Phase 3 (light Qwen observe): only recent turns → fact extraction (OBSERVE_SYSTEM_PROMPT,
+  max_tokens=1024) → validate → save. Each Qwen call is ~200-500 token prompt vs old 2500 token monolithic. llama.cpp server
+  stays alive — KV cache verified working (LCP sim_best=1.000).'
+- 'KV cache verified 2026-05-17: llama.cpp --cache-reuse 256 + --slot-save-path /cache/ active. Logs show LCP similarity slot
+  reuse (sim_best = 1.000, f_keep = 0.953). Qwen calls are stateless HTTP requests to persistent server — no restart needed,
+  cache stays warm between phases.'
+- 'execute_deterministic_linkage() added 2026-05-17: queries unlinked worklogs WITH agents, SQL JOINs turns ±24h from worklog
+  created_at, updates turn_ids. Eliminates Qwen hallucination risk for agent-known worklogs.'
+- 'System prompts split: CLASSIFY_SYSTEM_PROMPT + OBSERVE_SYSTEM_PROMPT moved to qwen_executor.py. Old monolithic SYSTEM_PROMPT
+  removed from qwen_worker.py. call_qwen() now accepts max_tokens parameter for per-phase tuning.'
 - qwen_worker linkage time windows are computed deterministically (worklog.created_at ± 24h). Qwen-proposed time_start/time_end
   are ignored — the 7B model hallucinates them.
 - execute_fixes uses AGENT_MAP SSOT from agents.py with identity mapping skip (copilot→copilot, etc.). Only non-canonical→canonical
@@ -167,10 +226,26 @@ decisions:
   systemd/ 등 102개 파일 커밋 + 푸시 (main). M4 Air SSH 키(~/.ssh/id_ed25519)로 인증. systemd 유닛 파일 9개 추가 커밋으로 컨테이너 오케스트레이션 정의(Docker
   Compose 역할) 포함.'
 known_issues:
-- Gemini CLI still needs a root-cause pass for the node-22 SIGSEGV path when launched on demand; the persistent crash-loop path has been removed.
+- 'DeepSeek R1 CoT overhead (2026-05-18): DeepSeek-R1-Distill-Qwen-14B Q8_0 모델 로딩/호환성 확인 (qwen2, llama.cpp b7834). 그러나 CoT 추론으로 턴당 300-500+ 토큰 생성 (Qwen14B 6-50). 턴당 4-8분 소요. Extraction 파이프라인에 부적합. FuseO1-DeepSeekR1-Qwen2.5-Coder-14B-Preview (코드 특화 merge, CoT 적을 가능성) 검토 필요.'
+- 'OOM kill 위험 (2026-05-18): Qwen14B Q8_0 (15GB) + cache-ram 16GB + KV cache 6.7GB (ctx 16384) = 22GB+ → 시스템 24GB 초과. 7차 실행 중 OOM kill 발생. cache-ram 8192 + ctx-size 8192로 축소하여 예상 19GB로 감소. 검증 필요.'
+- 'Qwen14B extraction non-determinism (2026-05-18): temperature=0.0 yet consecutive runs produce different facts for same turns (2nd run: 10 facts, 3rd: 5, 4th: 20). Likely ARM NEON float precision variance or KV cache state differences. Phi-4 verification catches fabrications, so pipeline remains functional. Reproducibility gap needs investigation.'
+- 'CRITICAL: systemd user instance private socket (/run/user/1000/systemd/private) refuses connections — Podman cannot register
+  healthcheck timers. All Quadlet containers with HealthCmd fail: "create healthcheck: unable to get systemd connection to
+  add healthchecks: dial unix /run/user/1000/systemd/private: connect: connection refused". Workaround: podman run --no-healthcheck
+  directly. Root cause unknown. Stale transient healthcheck units cleaned up but did not resolve. (2026-05-18)'
+- 'Qwen14B hallucination rate: 2/14 facts fabricated (14.3%) in first production run. Phi-4 successfully caught both (100%
+  recall on hallucinations). Extraction prompt tuning may reduce false positive rate at source. Monitor over next 5-10 runs
+  before deciding on prompt changes. (2026-05-18)'
+- systemctl --user restart --no-block can take 7+ minutes for the new container to start after restart command. Root cause
+  not yet determined — possible systemd rate limiting or Podman cleanup delays. Direct podman stop/start may be more reliable.
+- Large model swaps (15GB+) cause SIGKILL on old container due to TimeoutStopSec=70s not being enough for graceful shutdown.
+  Expected and non-fatal.
+- Gemini CLI still needs a root-cause pass for the node-22 SIGSEGV path when launched on demand; the persistent crash-loop
+  path has been removed.
 - DeepSeek web chat is still blocked from this server by CloudFront/WAF; diagnostics are saved to --dump-dir, but browser
   automation does not reach the chat UI.
 - DeepSeek web chat is protected by CloudFront/WAF and may reject non-human sessions; the CLI is experimental and may require
   a pre-authenticated storage-state file or profile.
 completed_log:
 - /tmp.old cleanup — completed, directory no longer exists
+- 'Worklog auto-reconciliation decision (2026-05-18): Two-phase approach chosen: Phase 1: v1.1 immediate deployment (quote escaping + DB UNIQUE constraint) within this week, targeting 100% success rate after 2-week monitoring window. Phase 2: B-Plan full implementation (exit codes, JSON logging, lock protocol, LLM integration) after v1.1 stability proven. Rationale: v1.1 provides quick win (1h implementation), de-risks current service, provides 2-week production data baseline before committing to 4.5-hour B-Plan engineering. B-Plan architecture is sound but requires production validation first. Three critical system mitigations identified: (1) systemd SuccessExitStatus=0,2 to prevent alert fatigue; (2) Lock PID validation (psutil.Process.name() check + hostname + timestamp stale detection); (3) JSON logging via stdout→journald to guarantee atomic writes (no race conditions). Environment validation (Phase 3 / P0 checks) scheduled after v1.1 stability window. Document: /opt/projects/server/docs/worklog-v1.1-to-b-plan-roadmap.md'

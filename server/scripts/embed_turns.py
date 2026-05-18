@@ -25,10 +25,7 @@ sys.path.insert(0, "/opt/projects/server")
 from lib.key_rotator import KeyRotator
 from scripts.gemini_rotate import _load_keys, STATE_FILE
 
-PSQL = [
-    "podman", "exec", "-i", "postgres", "psql", "-U", "devforge",
-    "-d", "devforge_app", "--no-align", "--tuples-only", "--quiet",
-]
+from lib.db import psql, psql_ok, PSQL
 
 EMBED_MODEL = "gemini-embedding-001"
 EMBED_DIM = 768
@@ -36,17 +33,6 @@ BATCH_SIZE = 100
 MAX_TEXT_CHARS = 1500
 MIN_TEXT_CHARS = 20
 FETCH_LIMIT = 500
-
-
-def _psql(sql: str) -> str:
-    try:
-        r = subprocess.run(
-            PSQL + ["-c", sql], capture_output=True, text=True, timeout=30,
-        )
-        return r.stdout.strip() if r.returncode == 0 else ""
-    except Exception as e:
-        print(f"[embed] DB 오류: {e}", file=sys.stderr)
-        return ""
 
 
 def _psql_pipe(sql: str) -> bool:
@@ -148,7 +134,7 @@ def _prepare_text(query: str, answer: str) -> Optional[str]:
 
 
 def _fetch_unembedded() -> list[dict]:
-    raw = _psql(
+    raw = psql(
         f"SELECT json_build_object("
         f"  'id', id::text,"
         f"  'q', left(user_turn, {MAX_TEXT_CHARS}),"

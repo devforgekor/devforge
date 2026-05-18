@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""qwen_worker.py — 3-phase turn worker, runs every 15 min.
+"""qwen_worker.py — 2-phase turn worker, runs every 15 min.
 
 Phase 1 (deterministic, no Qwen):
   - ingest new turns from session files
@@ -11,18 +11,16 @@ Phase 2 (light Qwen classify, only if agent-less worklogs exist):
   - send worklog titles to Qwen for agent inference
   - update worklog agents, then deterministic linkage
 
-Phase 3 (light Qwen observe, only if recent turns exist):
-  - send recent turn content to Qwen for fact extraction
-  - validate and save observations
-
-Each Qwen call is stateless and lightweight (~200-500 token prompts).
-llama.cpp server stays alive between calls preserving KV cache.
+Phase 3 (Qwen observe) — DISABLED (2026-05-18):
+  Fact extraction is now handled by review_worker.py (2-phase pipeline:
+  Qwen14B extract → Phi-4 verify). qwen_worker Phase 3 was a single-model
+  observe that lacked cross-validation.
 
 Usage:
-  python3 qwen_worker.py                    # full 3-phase run
+  python3 qwen_worker.py                    # 2-phase run (Phase 3 disabled)
   python3 qwen_worker.py --dry-run          # show prompts without executing
   python3 qwen_worker.py --source qwen      # only process one source
-  python3 qwen_worker.py --no-llm           # Phase 1 deterministic only
+  python3 qwen_worker.py --no-llm           # Phase 1 deterministic only (same as default now)
 """
 
 import argparse
@@ -33,12 +31,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
+import http.client as hc
 
 from lib.agents import normalize as normalize_agent
+from lib.db import psql as _psql, esc_sql
 from lib.qwen_executor import (
     _discover_sessions,
-    _psql,
     PARSERS,
     CANONICAL_AGENTS,
     CLASSIFY_SYSTEM_PROMPT,
@@ -80,20 +78,24 @@ def _save_checkpoint(cp: dict) -> None:
 
 def _ensure_worklog(agent: str, model: str, date_str: str) -> bool:
     """Create a daily worklog for agent+date if one doesn't exist. Returns True if created."""
+    safe_agent = esc_sql(agent)
     existing = _psql(
         f"SELECT id FROM worklog_entries "
-        f"WHERE agent = '{agent}' AND date = '{date_str}'::date"
+        f"WHERE agent = '{safe_agent}' AND date = '{date_str}'::date"
     )
     if existing.strip():
         return False
 
     # Set created_at to noon UTC on that date so ±24h window covers the full day
+    safe_model = esc_sql(model or agent)
     ts = f"{date_str} 12:00:00+00"
     title = f"{date_str} {agent} session"
+    safe_title = esc_sql(title)
+    safe_summary = esc_sql(f"Auto-generated daily worklog for {agent}")
     result = _psql(
         f"INSERT INTO worklog_entries (agent, model, title, summary, date, created_at) "
-        f"VALUES ('{agent}', '{model or agent}', '{title}', "
-        f"'Auto-generated daily worklog for {agent}', "
+        f"VALUES ('{safe_agent}', '{safe_model}', '{safe_title}', "
+        f"'{safe_summary}', "
         f"'{date_str}'::date, '{ts}'::timestamptz) "
         f"RETURNING id"
     )
@@ -161,17 +163,23 @@ def _ingest_sessions(ctx: dict, checkpoint: dict) -> int:
         new_turns = parsed[start_idx:]
         agent = normalize_agent(source)
 
+        payload = json.dumps({
+            "source": agent,
+            "model": model,
+            "conversation_id": sid,
+            "title": project or sid[:8],
+            "turns": new_turns,
+        })
         for attempt in range(3):
             try:
-                r = requests.post(INGEST_URL, json={
-                    "source": agent,
-                    "model": model,
-                    "conversation_id": sid,
-                    "title": project or sid[:8],
-                    "turns": new_turns,
-                }, timeout=30)
-                if r.status_code == 200:
-                    count = r.json().get("count", 0)
+                conn = hc.HTTPConnection("localhost", 8000, timeout=30)
+                conn.request("POST", "/ingest", payload,
+                             {"Content-Type": "application/json"})
+                resp = conn.getresponse()
+                body = resp.read().decode()
+                conn.close()
+                if resp.status == 200:
+                    count = json.loads(body).get("count", 0)
                     ingested += count
                     checkpoint.setdefault("sessions", {}).setdefault(source, {})[sid] = \
                         start_idx + len(new_turns)
@@ -182,7 +190,7 @@ def _ingest_sessions(ctx: dict, checkpoint: dict) -> int:
                         _ensure_worklog(agent, model or agent, today_str)
                     break
                 else:
-                    print(f"  Ingest {source}/{sid[:8]}: HTTP {r.status_code} (attempt {attempt+1}/3)")
+                    print(f"  Ingest {source}/{sid[:8]}: HTTP {resp.status} (attempt {attempt+1}/3)")
                     time.sleep(2 ** attempt)
             except Exception as e:
                 print(f"  Ingest error {source}/{sid[:8]}: {e} (attempt {attempt+1}/3)")
@@ -447,7 +455,7 @@ def _validate_observations(observations: list, turns: list) -> list:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Qwen-driven turn worker (3-phase)")
+    ap = argparse.ArgumentParser(description="Qwen-driven turn worker (2-phase, Phase 3 disabled)")
     ap.add_argument("--dry-run", action="store_true",
                     help="Show prompts but do not call Qwen or execute")
     ap.add_argument("--no-llm", action="store_true",
@@ -548,8 +556,9 @@ def main():
                     agent = (c.get("agent") or "").strip()
                     if not wid or agent not in CANONICAL_AGENTS:
                         continue
+                    safe_agent = esc_sql(agent)
                     _psql(
-                        f"UPDATE worklog_entries SET agent = '{agent}' WHERE id = {wid}"
+                        f"UPDATE worklog_entries SET agent = '{safe_agent}' WHERE id = {wid}"
                     )
                     print(f"  Classified worklog #{wid}: agent={agent}")
                     results["classified"] += 1
@@ -565,69 +574,13 @@ def main():
         print(f"── Phase 2: Skipped ({len(agentless)} agent-less worklogs, --no-llm) ──")
 
     # ═══════════════════════════════════════════════
-    # Phase 3: QWEN OBSERVE (batch loop, 3 turns per call)
-    #   - group by (conversation_id, agent) for coherent context
-    #   - 3 turns per batch, light prompt (~300 tokens)
-    #   - loop until all unobserved turns consumed or 12 min elapsed
+    # Phase 3: QWEN OBSERVE — DISABLED (2026-05-18)
+    #   Fact extraction is now handled by review_worker.py Phase 1
+    #   (2-phase pipeline: Qwen14B extract → Phi-4 verify).
+    #   qwen_worker Phase 3 was a single-model observe that lacked
+    #   cross-validation — inferior to the dedicated pipeline.
     # ═══════════════════════════════════════════════
-    observed_through = checkpoint.get("observed_through", {})
-
-    if args.dry_run:
-        # Show first batch prompt only for brevity
-        batch_turns, agent = _next_observe_batch(observed_through)
-        if batch_turns and not args.no_llm:
-            print(f"── Phase 3: Observe (batch loop, showing 1st batch) ──")
-            observe_prompt = _build_observe_prompt(batch_turns, agent=agent)
-            print(f"=== OBSERVE BATCH: {agent} ({len(batch_turns)} turns) ===")
-            print(OBSERVE_SYSTEM_PROMPT)
-            print("=== OBSERVE USER PROMPT ===")
-            print(observe_prompt)
-            print("=== End ===")
-        elif args.no_llm:
-            print(f"── Phase 3: Skipped (--no-llm) ──")
-    elif not args.no_llm:
-        print(f"── Phase 3: Observe (batch loop, 3 turns/call) ──")
-        batches = 0
-
-        while True:
-            elapsed = (datetime.now(timezone.utc) - ts).total_seconds()
-            if elapsed > 720:
-                print(f"  Phase 3 timeout at {elapsed:.0f}s, {batches} batches done")
-                break
-
-            batch_turns, agent = _next_observe_batch(observed_through)
-            if not batch_turns:
-                if batches == 0:
-                    print("  No unobserved turns")
-                else:
-                    print(f"  All unobserved turns consumed ({batches} batches)")
-                break
-
-            observe_prompt = _build_observe_prompt(batch_turns, agent=agent)
-            result = call_qwen(OBSERVE_SYSTEM_PROMPT, observe_prompt, max_tokens=1024)
-            if result is None:
-                print(f"  Qwen unavailable — stopping ({batches} batches done)")
-                break
-
-            obs = result.get("observations", [])
-            obs = _validate_observations(obs, batch_turns)
-            if obs:
-                saved = execute_observations(obs, category="qwen_analysis", context={
-                    "agent": agent,
-                    "batch_size": len(batch_turns),
-                    "run_ts": ts.isoformat(),
-                })
-                results["observed"] += saved
-
-            # Advance per-agent cursor
-            batch_max = max((t.get("created_at") or "") for t in batch_turns)
-            observed_through[agent] = batch_max
-            checkpoint["observed_through"] = observed_through
-            batches += 1
-
-        results["observe_batches"] = batches
-    else:
-        print(f"── Phase 3: Skipped (--no-llm) ──")
+    print(f"── Phase 3: Skipped (review_worker.py handles fact extraction) ──")
 
     # ═══════════════════════════════════════════════
     # Final: validation + checkpoint

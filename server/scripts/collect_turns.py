@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
+import http.client as hc
 
 from lib.agents import normalize as normalize_agent
 from lib.parser_claude import parse as parse_claude
@@ -109,20 +109,25 @@ def _ingest(source, session_id, parser_fn, prev_count, title=None):
 
     for attempt in range(3):
         try:
-            r = requests.post(API, json=payload, timeout=30)
-            if r.status_code == 200:
-                data = r.json()
+            conn = hc.HTTPConnection("localhost", 8000, timeout=30)
+            conn.request("POST", "/ingest", json.dumps(payload),
+                         {"Content-Type": "application/json"})
+            resp = conn.getresponse()
+            body = resp.read().decode()
+            conn.close()
+            if resp.status == 200:
+                data = json.loads(body)
                 tag = " [active]" if is_active else ""
                 print(f"  {source}/{session_id[:8]}: +{data['count']} turns "
                       f"({prev_count}→{prev_count + len(new_turns)}){tag}")
                 return data["count"], True
-            elif 400 <= r.status_code < 500:
-                print(f"  {source}/{session_id[:8]}: HTTP {r.status_code}")
+            elif 400 <= resp.status < 500:
+                print(f"  {source}/{session_id[:8]}: HTTP {resp.status}")
                 return 0, False
             else:
-                print(f"  {source}/{session_id[:8]}: HTTP {r.status_code} "
+                print(f"  {source}/{session_id[:8]}: HTTP {resp.status} "
                       f"(attempt {attempt+1}/3)")
-        except requests.ConnectionError:
+        except (ConnectionRefusedError, OSError):
             print(f"  {source}/{session_id[:8]}: API unreachable (attempt {attempt+1}/3)")
             time.sleep(2 ** attempt)
         except Exception as e:

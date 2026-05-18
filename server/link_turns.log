@@ -101,3 +101,13 @@
 [2026-05-17T18:00:32Z] worklog 58 (claude-code): linked 547 turns
 [2026-05-17T18:00:32Z] Matched: 547 turns across 12 worklog entries
 [2026-05-17T18:00:33Z] Review: orphan_turns.claude-code: 52; orphan_turns.copilot: 37; empty_worklog: 0; turn_coverage: 690/779
+[2026-05-18T18:01:50Z] === link_turns 2026-05-18 ===
+[2026-05-18T18:01:52Z] worklog 66 (copilot): linked 4 turns
+[2026-05-18T18:01:52Z] Matched: 4 turns across 12 worklog entries
+[2026-05-18T18:01:53Z] Review: orphan_turns.copilot: 97; empty_worklog: #67 Review pipeline deployed; empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01; turn_coverage: 271/368; worklog_without_turns_agent: devforge
+[2026-05-18T22:14:24Z] === link_turns 2026-05-18 ===
+[2026-05-18T22:14:25Z] Matched: 0 turns across 12 worklog entries
+[2026-05-18T22:14:26Z] Review: orphan_turns.copilot: 97; empty_worklog: #67 Review pipeline deployed; empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01; turn_coverage: 271/368; worklog_without_turns_agent: devforge
+[2026-05-18T22:16:25Z] === link_turns 2026-05-18 ===
+[2026-05-18T22:16:27Z] Matched: 0 turns across 12 worklog entries
+[2026-05-18T22:16:27Z] Review: orphan_turns: 0; empty_worklog: #67 Review pipeline deployed; empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01; turn_coverage: 368/368; worklog_without_turns_agent: devforge

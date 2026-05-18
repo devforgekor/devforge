@@ -20,7 +20,7 @@
 | 2 | `docs/schema.sql` | observations 스키마 문서화 |
 | 3 | `scripts/lib/qwen_executor.py` | `execute_observations()` 함수 추가 |
 | 4 | `scripts/qwen_worker.py` | `print()` → `execute_observations()` 호출 |
-| 5 | `scripts/gen_tmux_banner.py` | observations 총계 조회, 배너에 표시 |
+| 5 | `scripts/gen_motd_task.py` | observations 총계 조회, MOTD-Task에 표시 |
 
 ### P1 — 후속 (7개 파일)
 
@@ -37,7 +37,7 @@
 ### 시스템 파일 — 변경 없음
 
 - `devforge-qwen-worker.timer` — 기존 15분 주기 그대로 사용
-- `motd-gen.timer` — gen_tmux_banner.py가 observations 포함하므로 자동 반영
+- `motd-gen.timer` — gen_motd_task.py가 observations 포함하므로 자동 반영
 
 ## DB 스키마
 
@@ -94,7 +94,7 @@ def execute_observations(observations: list, category: str = "general",
     return count
 ```
 
-### 배너 표시 — gen_tmux_banner.py
+### 배너 표시 — gen_motd_task.py
 
 ```
 DevForge | 컨테이너 5/5 | 서비스 6 | CPU 0.3/0.6/0.6 | Mem 12Gi/22Gi (56%) | Obs 15
@@ -111,10 +111,10 @@ DevForge | 컨테이너 5/5 | 서비스 6 | CPU 0.3/0.6/0.6 | Mem 12Gi/22Gi (56%
 1. **스키마**: `api/db.py` + `docs/schema.sql` 수정
 2. **저장 로직**: `qwen_executor.py`에 `execute_observations()` 추가
 3. **호출부**: `qwen_worker.py` L362-364 교체
-4. **배너**: `gen_tmux_banner.py`에 observations 쿼리 + 표시 추가
-5. **검증**: `python3 scripts/gen_tmux_banner.py --stdout` 테스트
+4. **배너**: `gen_motd_task.py`에 observations 쿼리 + 표시 추가
+5. **검증**: `python3 scripts/gen_motd_task.py --stdout` 테스트
 6. **DB 마이그레이션**: API 재시작 또는 수동으로 테이블 생성
-7. **캐시 갱신**: `python3 scripts/gen_tmux_banner.py` 실행
+7. **캐시 갱신**: `python3 scripts/gen_motd_task.py` 실행
 
 ## 검증 항목
 
