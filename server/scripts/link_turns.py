@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """link_turns.py — nightly: match turns to worklog entries + deep review.
 
-Phase 1 — matching: each worklog entry claims turns with matching agent created
-between the previous worklog's created_at (or KST midnight) and this worklog's created_at.
+Phase 1 — matching: each worklog entry claims turns with matching agent
+via per-agent independent time windows (last entry covers to midnight KST).
 Phase 2 — review: detect orphan turns, empty worklogs, and mismatches.
 
 Runs at 03:00 KST via nightly_batch.sh.
@@ -26,7 +26,12 @@ def _log(msg):
 
 
 def _match(kst_start, kst_end, today_kst):
-    """Phase 1: match today's worklog entries to turns by agent + time window."""
+    """Phase 1: per-agent independent time windows.
+
+    Each worklog claims unlinked turns of its agent between the previous
+    same-agent worklog's created_at (or kst_start for the first) and its own
+    created_at. The last worklog of each agent covers to kst_end (midnight).
+    """
     rows = psql(
         f"SELECT id, agent, created_at FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
@@ -47,16 +52,38 @@ def _match(kst_start, kst_end, today_kst):
         _log(f"No worklog entries for {today_kst}")
         return 0
 
+    # Per-agent: find last index for each agent
+    agent_last_idx = {}
+    for i, e in enumerate(entries):
+        agent = e["agent"]
+        if agent:
+            agent_last_idx[agent] = i
+
     total_linked = 0
 
     for i, entry in enumerate(entries):
         entry_id = entry["id"]
-        source = entry["agent"]
-        ts = entry["ts"]
+        agent = entry["agent"]
 
-        if i > 0:
-            window_sql = (f"AND t.created_at > '{entries[i-1]['ts']}' "
-                          f"AND t.created_at <= '{ts}'")
+        if not agent:
+            _log(f"worklog {entry_id}: skipped (no agent)")
+            continue
+
+        # Find previous same-agent worklog
+        prev_ts = None
+        for j in range(i - 1, -1, -1):
+            if entries[j]["agent"] == agent:
+                prev_ts = entries[j]["ts"]
+                break
+
+        ts = entry["ts"]
+        is_last = (agent_last_idx.get(agent) == i)
+
+        if prev_ts:
+            window_sql = (
+                f"AND t.created_at > '{prev_ts}' "
+                f"AND t.created_at <= '{ts}'"
+            )
         else:
             window_sql = (
                 f"AND t.created_at > GREATEST("
@@ -65,9 +92,16 @@ def _match(kst_start, kst_end, today_kst):
                 f") AND t.created_at <= '{ts}'"
             )
 
+        # Last worklog for this agent: extend upper bound to kst_end
+        if is_last:
+            window_sql = window_sql.replace(
+                f"AND t.created_at <= '{ts}'",
+                f"AND t.created_at <  '{kst_end}'::timestamptz"
+            )
+
         sql = (
             f"SELECT t.id FROM turns t "
-            f"WHERE t.agent = '{source}' "
+            f"WHERE t.agent = '{agent}' "
             f"{window_sql} "
             f"  AND t.id NOT IN ("
             f"    SELECT unnest(COALESCE(turn_ids, '{{}}'::uuid[])) "
@@ -85,7 +119,7 @@ def _match(kst_start, kst_end, today_kst):
                     f"UPDATE worklog_entries SET turn_ids = turn_ids || "
                     f"'{ids_array}'::uuid[] WHERE id = {entry_id}"
                 )
-                _log(f"worklog {entry_id} ({source}): linked {len(turn_ids)} turns")
+                _log(f"worklog {entry_id} ({agent}): linked {len(turn_ids)} turns")
                 total_linked += len(turn_ids)
 
     _log(f"Matched: {total_linked} turns across {len(entries)} worklog entries")
@@ -96,7 +130,7 @@ def _review(kst_start, kst_end, today_kst):
     """Phase 2: deep review — find orphans, empties, anomalies."""
     findings = []
 
-    # Orphan turns: yesterday's turns not linked to any worklog
+    # Orphan turns: turns not linked to any worklog
     orphans = psql(
         f"SELECT t.agent, COUNT(*) FROM turns t "
         f"WHERE t.created_at >= '{kst_start}'::timestamptz "
@@ -115,13 +149,14 @@ def _review(kst_start, kst_end, today_kst):
     else:
         findings.append("orphan_turns: 0")
 
-    # Empty worklog: today's worklog entries with zero linked turns
+    # Empty worklog: no turns AND no git_commit_hash
     empties = psql(
         f"SELECT id, title FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz "
         f"  AND (turn_ids IS NULL OR array_length(turn_ids, 1) IS NULL "
         f"       OR array_length(turn_ids, 1) = 0)"
+        f"  AND git_commit_hash IS NULL"
     )
     if empties:
         for line in empties.split("\n"):
@@ -130,6 +165,32 @@ def _review(kst_start, kst_end, today_kst):
                 findings.append(f"empty_worklog: #{wid} {title}")
     else:
         findings.append("empty_worklog: 0")
+
+    # Agent-less worklog: entries with no agent (informational, never match)
+    no_agent = psql(
+        f"SELECT id, title FROM worklog_entries "
+        f"WHERE created_at >= '{kst_start}'::timestamptz "
+        f"  AND created_at <  '{kst_end}'::timestamptz "
+        f"  AND (agent IS NULL OR agent = '')"
+    )
+    if no_agent:
+        for line in no_agent.split("\n"):
+            if "|" in line:
+                wid, title = line.split("|", 1)
+                findings.append(f"agentless_worklog: #{wid} {title}")
+
+    # Commit-only worklog: has git_commit_hash but no turns (correct state)
+    commit_only = psql(
+        f"SELECT id FROM worklog_entries "
+        f"WHERE created_at >= '{kst_start}'::timestamptz "
+        f"  AND created_at <  '{kst_end}'::timestamptz "
+        f"  AND git_commit_hash IS NOT NULL"
+        f"  AND (turn_ids IS NULL OR array_length(turn_ids, 1) IS NULL "
+        f"       OR array_length(turn_ids, 1) = 0)"
+    )
+    if commit_only:
+        ids = [line for line in commit_only.split("\n") if line]
+        findings.append(f"commit_only_worklog: {', '.join('#' + i for i in ids)}")
 
     # Stats: total turns vs linked turns for the review window
     total = psql(
@@ -148,7 +209,7 @@ def _review(kst_start, kst_end, today_kst):
     )
     findings.append(f"turn_coverage: {linked}/{total}")
 
-    # Cross-source mismatch: worklog with agent=X but no turns from agent X today
+    # Cross-source mismatch: worklog with agent=X but no turns from agent X
     agents = psql(
         f"SELECT DISTINCT agent FROM turns "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
@@ -158,6 +219,7 @@ def _review(kst_start, kst_end, today_kst):
         f"SELECT DISTINCT agent FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz"
+        f"  AND agent IS NOT NULL AND agent != ''"
     )
     if agents and worklog_agents:
         turn_agents = set(agents.split("\n"))
