@@ -3,6 +3,7 @@ date: 2026-05-18
 linked: 0
 finding: orphan_turns: 0
 finding: empty_worklog: #67 Review pipeline deployed
-finding: empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01
+finding: agentless_worklog: #67 Review pipeline deployed
+finding: commit_only_worklog: #74
 finding: turn_coverage: 368/368
 finding: worklog_without_turns_agent: devforge

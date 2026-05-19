@@ -1,0 +1,11 @@
+[2026-05-19T14:40:54Z] 100턴 풀배치 시작
+Loaded 100 turns for testing
+============================================================
+
+[2026-05-19T14:41:07.068657+00:00] Phase 1 — Extracting with granite-8b-code-instruct (granite_8b)
+  Swapped to granite_8b (granite-8b-code-instruct.Q8_0.gguf)
+  Cycling llama for granite_8b...
+    still waiting... (68s elapsed)
+    still waiting... (128s elapsed)
+  llama healthy (granite_8b) after 140s
+  Extracting with granite-8b-code-instruct (100 turns)...

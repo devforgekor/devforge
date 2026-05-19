@@ -91,6 +91,10 @@ meta:
   - /opt/projects/server/docs/phases.md
   - /opt/projects/server/_archive/README.md
 todo:
-- Extraction prompt 튜닝 — Qwen14B hallucination rate 2.1% → 1% 미만 목표 (2026-05-18)
-- FuseO1-DeepSeekR1-Qwen2.5-Coder-14B-Preview Q8_0 테스트 (코드 특화, CoT 적을 가능성) (2026-05-18)
-- review_facts 테이블 데이터 기반 통계 대시보드 (2026-05-18)
+- review_facts 통계 기반 모델 성능 대시보드 (2026-05-19)
+- 순차적 extraction 모델 테스트:
+  1. Granite-8B-Code-Instruct Q8_0 (8.0GB) — 24h extraction 테스트, Qwen14B 93.0%와 비교
+  2. Qwen2.5-Coder-7B-Instruct Q8_0 (7.5GB) — 24h extraction 테스트
+  3. 차순위: DeepSeek-Coder-V2-Lite (16B MoE), StarCoder2-15B, Qwen2.5-14B-Instruct
+  - testing_plan: 하루 1개 모델, 동일 조건(30분 주기, 24시간), hallucination rate 기준 평가
+  - disk: 100GB 중 61GB 여유. 항시 Qwen14B+Phi-4 30GB 상주. 후보는 1~2개씩 로테이션.

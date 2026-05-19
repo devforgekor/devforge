@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""collect_turns.py — ingest Claude Code + Copilot + Gemini + Qwen session transcripts into DevForge DB.
+"""collect_turns.py — ingest Claude Code + Copilot + Gemini + Aider session transcripts into DevForge DB.
 
 Incremental: tracks per-session turn count via checkpoint, only sends new turns each run.
 Active sessions (mtime < 30s) skip the last turn to avoid partial ingestion.
@@ -9,7 +9,7 @@ Usage:
   python3 collect_turns.py --source claude    # only Claude Code
   python3 collect_turns.py --source copilot   # only Copilot
   python3 collect_turns.py --source gemini    # only Gemini
-  python3 collect_turns.py --source qwen      # only Qwen
+  python3 collect_turns.py --source aider     # only Aider
   python3 collect_turns.py --reset            # re-ingest all sessions
 """
 import json
@@ -24,7 +24,7 @@ from lib.agents import normalize as normalize_agent
 from lib.parser_claude import parse as parse_claude
 from lib.parser_copilot import parse as parse_copilot
 from lib.parser_gemini import parse as parse_gemini
-from lib.parser_qwen import parse as parse_qwen
+from lib.parser_aider import parse as parse_aider
 
 API = "http://localhost:8000/ingest"
 CHECKPOINT_FILE = Path("/opt/projects/server/collect_checkpoint.json")
@@ -32,7 +32,7 @@ STATUS_FILE = Path("/opt/projects/server/docs/collect_status.yaml")
 CLAUDE_DIR = Path("/home/opc/.claude/projects/-home-opc")
 COPILOT_DIR = Path("/home/opc/.copilot/session-state")
 GEMINI_DIR = Path("/home/opc/.gemini/tmp/opc/chats")
-QWEN_DIR = Path("/home/opc/.qwen/projects")
+AIDER_FILE = Path("/home/opc/.aider.chat.history.md")
 
 
 # ── checkpoint ──────────────────────────────────────────────────
@@ -76,15 +76,12 @@ def _list_sessions(source):
                 sid = p.stem.replace("session-", "")
             paths.append((sid, p))
         return paths
-    else:  # qwen
-        if not QWEN_DIR.exists():
+    elif source == "aider":
+        if not AIDER_FILE.exists():
             return []
-        paths = []
-        for chat_file in sorted(QWEN_DIR.glob("*/chats/*.jsonl")):
-            project = chat_file.parent.parent.name
-            sid = chat_file.stem  # UUID only, API uses UUID for conversation_id
-            paths.append((sid, chat_file, project))
-        return paths
+        return [("aider", AIDER_FILE)]
+    else:
+        return []
 
 
 # ── ingestion ───────────────────────────────────────────────────
@@ -141,7 +138,7 @@ def _ingest(source, session_id, parser_fn, prev_count, title=None):
 def main():
     import argparse
     ap = argparse.ArgumentParser(description="Collect session turns into DevForge DB")
-    ap.add_argument("--source", choices=["claude", "copilot", "gemini", "qwen"])
+    ap.add_argument("--source", choices=["claude", "copilot", "gemini", "aider"])
     ap.add_argument("--reset", action="store_true")
     args = ap.parse_args()
 
@@ -151,7 +148,7 @@ def main():
         "claude": parse_claude,
         "copilot": parse_copilot,
         "gemini": parse_gemini,
-        "qwen": parse_qwen,
+        "aider": parse_aider,
     }
     if args.source:
         sources = {args.source: sources[args.source]}

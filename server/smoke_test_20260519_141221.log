@@ -1,0 +1,9 @@
+[2026-05-19T14:12:21Z] Smoke test 시작 (10턴 × 3모델)
+Loaded 10 turns for testing
+============================================================
+
+[2026-05-19T14:12:22.975885+00:00] Phase 1 — Extracting with granite-8b-code-instruct (granite_8b)
+  Model granite_8b already linked but dead — restarting...
+  Cycling llama for granite_8b...
+  llama healthy (granite_8b) after 26s
+  Extracting with granite-8b-code-instruct (10 turns)...

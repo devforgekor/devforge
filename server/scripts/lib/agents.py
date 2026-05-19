@@ -9,6 +9,7 @@ AGENT_MAP = {
     "gemini": "gemini",
     "qwen": "qwen",
     "deepseek": "deepseek",
+    "aider": "aider",
 }
 
 

@@ -1,0 +1,16 @@
+[
+  {
+    "turn_id": "05b136d0-a67e-42f2-ab4b-f5019d21cbed",
+    "facts": []
+  },
+  {
+    "turn_id": "c2c84efd-15d8-481f-aff7-38dd08c9fd33",
+    "facts": [
+      {
+        "evidence": "작업 내역을 확인하겠습니다. handover, tasks, worklog를 확인해보겠습니다.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  }
+]

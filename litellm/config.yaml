@@ -56,3 +56,12 @@ model_list:
       max_retries: 3
       tpm: 100000
       rpm: 1000
+
+  - model_name: granite-8b-code-instruct
+    litellm_params:
+      model: openai/granite-8b-code-instruct
+      api_base: http://127.0.0.1:8080/v1
+      api_key: unused
+      max_retries: 3
+      tpm: 100000
+      rpm: 1000

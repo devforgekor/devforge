@@ -1,8 +1,13 @@
 last_checkpoint:
-  time: '2026-05-18T22:16:00+09:00'
+  time: '2026-05-19T03:10:00+00:00'
   recent_files: []
   git: {}
 decisions:
+- '로컬 LLM 인프라 전면 제거 (2026-05-19): qwen2.5-coder-7b 더 이상 사용하지 않음. devforge-llm/litellm 컨테이너, ai-pod, Quadlet 파일(3개), Caddy /api/* 라우트, systemd qwen-worker.timer, ~/.bashrc.d/qc, /opt/projects/qwen-cli, qwen_worker.py/parser_qwen.py/qwen_executor.py 모두 삭제. 컨테이너 5→3, 이미지 8GB 확보. 시스템 단순화: Caddy→litellm→llm 2단계 홉 제거.'
+- 'devforge-api standalone 전환 (2026-05-19): ai-pod에서 분리하여 Network=devforge-net, PublishPort=127.0.0.1:8000:8000 standalone container로 실행. systemd로 관리 (container-devforge-api.service).'
+- 'Aider DeepSeek v4-flash 고정 (2026-05-19): 래퍼 스크립트(~/.local/bin/aider) 수정 — exec aider→aider-cli 재귀버그 수정, OPENAI_BASE_URL/OPENAI_API_BASE unset, --assistant-output-color white 추가. reasoning_tags.py ANSI 코드: thinking → dim gray(\033[2m\033[90m), answer → white(\033[0m). common-main.md AI 모델 구분 명확화.'
+- 'Qwen14B 100턴 baseline 테스트 OOM 실패 (2026-05-19): 40/100턴까지만 처리, 5 facts 추출 후 llama crash 반복. 원인: Qwen14B(15GB) + cache-ram(8GB) + KV cache > pod memory limit(16GB). 해결: ctx-size 8192→4096, cache-ram 8192→4096 으로 줄이고 재시도 필요. model_test_harness.py --model qwen14 로 재실행. 결과는 review_facts DB에서 확인 (extract_model=qwen2.5-coder-14b, created_at > 2026-05-19). 테스트셋: /opt/projects/server/model_testset.json (100턴, copilot 37 / claude-code 63, 길이별 균등분포).'
+- '컨테이너 불안정성: Quadlet systemd가 아닌 podman 직접 실행 필요 (ai-pod + litellm + llama). 다른 세션에서 Quadlet restart하면 ai-pod 손상됨.'
 - 'Orphan turn link_turns 수동 연결 (2026-05-18): 97개 copilot orphan turn을 worklog #66에 수동 연결. link_turns.py sequential windowing 버그 — copilot worklog #66(21:00 KST)이 직전 claude-code worklog와 동일 timestamp로 시간 윈도우 0초. 또한 copilot 턴들(10:36~19:40 KST)이 window 이전에 위치. turn_coverage 368/368(100%) 복구. root cause fix 필요: per-agent windowing 또는 daily worklog 기준 매칭으로 전환.'
 - 'requests → http.client 마이그레이션 (2026-05-18): collect_turns.py, qwen_worker.py, qwen_executor.py 3개 파일에서 requests 라이브러리 제거. http.client.HTTPConnection으로 POST 호출 교체 (connection pooling timeout 이슈 해소). ConnectionRefusedError/OSError로 예외처리 통일. lib/search_manager.py만 외부 API(HTTPS) 호출로 requests 유지.'
 - 'qwen_worker Phase 3 disabled + SQL escaping hardened (2026-05-18): Phase 3 (Qwen observe) 비활성화 — review_worker.py 2-phase pipeline(Qwen14B→Phi-4)이 fact extraction+verification 담당. qwen_worker.py/_ensure_worklog() + Phase 2 UPDATE + qwen_executor.py execute_linkages/execute_deterministic_linkage/execute_fixes 모든 SQL interpolation에 esc_sql() 적용. lib.db에서 esc_sql import.'
@@ -153,8 +158,8 @@ decisions:
 - 'Healthcheck noise handling: ignore transient podman healthcheck units/scopes in alerting; use stable unit status for SLO
   checks.'
 - 'Runbook (fixed-tag update): 1) podman tag <upstream-image> localhost/devforge-<svc>:<version>; 2) systemctl --user daemon-reload;
-  3) systemctl --user restart data-pod.service ai-pod.service container-postgres.service container-devforge-llm.service container-litellm.service;
-  4) verify podman ps health + LiteLLM /v1/models.'
+  3) systemctl --user restart data-pod.service container-postgres.service container-devforge-api.service;
+  4) verify podman ps health + curl localhost:8000/health.'
 - 'Reboot verification 2026-05-11T14:10 KST: all services verified, 3 issues found and resolved.'
 - 'Normalization pass 2026-05-11T14:35 KST: 3 workarounds properly fixed — (1) netdata RPM fully removed via dnf, (2) --mlock
   flag removed from container-devforge-llm.service (rootless podman lacks CAP_IPC_LOCK, model works fine without it, swappiness=10),
@@ -226,20 +231,9 @@ decisions:
   systemd/ 등 102개 파일 커밋 + 푸시 (main). M4 Air SSH 키(~/.ssh/id_ed25519)로 인증. systemd 유닛 파일 9개 추가 커밋으로 컨테이너 오케스트레이션 정의(Docker
   Compose 역할) 포함.'
 known_issues:
-- 'DeepSeek R1 CoT overhead (2026-05-18): DeepSeek-R1-Distill-Qwen-14B Q8_0 모델 로딩/호환성 확인 (qwen2, llama.cpp b7834). 그러나 CoT 추론으로 턴당 300-500+ 토큰 생성 (Qwen14B 6-50). 턴당 4-8분 소요. Extraction 파이프라인에 부적합. FuseO1-DeepSeekR1-Qwen2.5-Coder-14B-Preview (코드 특화 merge, CoT 적을 가능성) 검토 필요.'
-- 'OOM kill 위험 (2026-05-18): Qwen14B Q8_0 (15GB) + cache-ram 16GB + KV cache 6.7GB (ctx 16384) = 22GB+ → 시스템 24GB 초과. 7차 실행 중 OOM kill 발생. cache-ram 8192 + ctx-size 8192로 축소하여 예상 19GB로 감소. 검증 필요.'
-- 'Qwen14B extraction non-determinism (2026-05-18): temperature=0.0 yet consecutive runs produce different facts for same turns (2nd run: 10 facts, 3rd: 5, 4th: 20). Likely ARM NEON float precision variance or KV cache state differences. Phi-4 verification catches fabrications, so pipeline remains functional. Reproducibility gap needs investigation.'
-- 'CRITICAL: systemd user instance private socket (/run/user/1000/systemd/private) refuses connections — Podman cannot register
-  healthcheck timers. All Quadlet containers with HealthCmd fail: "create healthcheck: unable to get systemd connection to
-  add healthchecks: dial unix /run/user/1000/systemd/private: connect: connection refused". Workaround: podman run --no-healthcheck
-  directly. Root cause unknown. Stale transient healthcheck units cleaned up but did not resolve. (2026-05-18)'
-- 'Qwen14B hallucination rate: 2/14 facts fabricated (14.3%) in first production run. Phi-4 successfully caught both (100%
-  recall on hallucinations). Extraction prompt tuning may reduce false positive rate at source. Monitor over next 5-10 runs
-  before deciding on prompt changes. (2026-05-18)'
+- 'systemd v252 healthcheck bug: daemon-reload on user instance causes private socket inode desync → ECONNREFUSED. Workaround: containers run without HealthCmd. systemd v252→v256 upgrade needed for fix. (2026-05-19)'
 - systemctl --user restart --no-block can take 7+ minutes for the new container to start after restart command. Root cause
   not yet determined — possible systemd rate limiting or Podman cleanup delays. Direct podman stop/start may be more reliable.
-- Large model swaps (15GB+) cause SIGKILL on old container due to TimeoutStopSec=70s not being enough for graceful shutdown.
-  Expected and non-fatal.
 - Gemini CLI still needs a root-cause pass for the node-22 SIGSEGV path when launched on demand; the persistent crash-loop
   path has been removed.
 - DeepSeek web chat is still blocked from this server by CloudFront/WAF; diagnostics are saved to --dump-dir, but browser

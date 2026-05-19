@@ -1,0 +1,13 @@
+[2026-05-19T14:01:09Z] Waiting for current harness to finish...
+[2026-05-19T14:01:09Z] Starting batch test (3 models → Phi-4 once → DeepSeek once)
+Loaded 100 turns for testing
+============================================================
+
+[2026-05-19T14:01:21.605747+00:00] Phase 1 — Extracting with granite-8b-code-instruct (granite_8b)
+  Swapped to granite_8b (granite-8b-code-instruct.Q8_0.gguf)
+  Cycling llama for granite_8b...
+    still waiting... (68s elapsed)
+    still waiting... (128s elapsed)
+  llama healthy (granite_8b) after 140s
+  Extracting with granite-8b-code-instruct (100 turns)...
+[2026-05-19T14:11:13Z] Batch completed.

@@ -3,7 +3,7 @@ overview:
   purpose: OCI ARM development server — LLM inference + FastAPI application hosting
   os: Oracle Linux Server 9.7 (aarch64)
   cpu: ARM Neoverse-N1, 4-core
-  memory: 22Gi + 4G zram (50.5M) + 8G swap (swappiness=10)
+  memory: 22Gi + 4G zram (162.2M) + 8G swap (swappiness=10)
 storage:
   boot_disk:
     device: /dev/sda (50GB)
@@ -52,13 +52,7 @@ containers:
   target_flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0
 services:
 - name: devforge-api
-  status: failed
-- name: devforge-llm
-  status: inactive
-  type: systemd user
-- name: litellm
-  status: failed
-  type: systemd user
+  status: active
 - name: postgres
   status: active
   type: systemd user
@@ -72,6 +66,12 @@ services:
 - name: netdata
   status: active
   type: systemd system (native)
+- name: devforge-llm
+  status: failed
+  type: systemd user
+- name: litellm
+  status: failed
+  type: systemd user
 network:
   interface: enp0s6
   ip: 10.0.0.75/24

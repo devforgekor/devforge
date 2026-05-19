@@ -1,4 +1,847 @@
 entries:
+- time: '2026-05-19T14:55:48.859416+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: added'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 14 minutes (reset)
+      ports: 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  decisions: []
+- time: '2026-05-19T14:40:47.772581+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: removed'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: removed
+    before:
+      name: devforge-llm
+      status: Up 2 minutes (reset)
+      ports: 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  decisions: []
+- time: '2026-05-19T14:24:52.369034+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 5 hours (healthy) -> Up 6 hours (healthy); structural.containers[devforge-api].status:
+    Up 5 hours -> Up 6 hours; structural.containers[devforge-llm].status: Up 7 minutes (reset) -> Up 2 minutes (reset); structural.containers[pod:ai-pod].status:
+    Up 5 hours -> Up 6 hours'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 5 hours (healthy)
+    after: Up 6 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 5 hours
+    after: Up 6 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 7 minutes (reset)
+    after: Up 2 minutes (reset)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 5 hours
+    after: Up 6 hours
+  decisions: []
+- time: '2026-05-19T14:08:48.363468+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 40 minutes (reset) -> Up 7 minutes (reset)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 40 minutes (reset)
+    after: Up 7 minutes (reset)
+  decisions: []
+- time: '2026-05-19T13:52:48.212141+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 24 minutes (reset) -> Up 40 minutes (reset)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 24 minutes (reset)
+    after: Up 40 minutes (reset)
+  decisions: []
+- time: '2026-05-19T13:36:48.212980+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 8 minutes (reset) -> Up 24 minutes (reset)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 8 minutes (reset)
+    after: Up 24 minutes (reset)
+  decisions: []
+- time: '2026-05-19T13:20:49.044596+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 4 hours (healthy) -> Up 5 hours (healthy); structural.containers[devforge-api].status:
+    Up 4 hours -> Up 5 hours; structural.containers[devforge-llm].status: Up 2 hours -> Up 8 minutes (reset); structural.containers[pod:ai-pod].status:
+    Up 4 hours -> Up 5 hours'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 2 hours
+    after: Up 8 minutes (reset)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  decisions: []
+- time: '2026-05-19T12:34:46.150130+00:00'
+  type: auto
+  summary: 'structural.containers[pod:data].status: Up 2 days -> Up 3 days; structural.containers[postgres].status: Up 2 days
+    (healthy) -> Up 3 days (healthy)'
+  changed:
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 2 days
+    after: Up 3 days
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 2 days (healthy)
+    after: Up 3 days (healthy)
+  decisions: []
+- time: '2026-05-19T12:19:01.974754+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 3 hours (healthy) -> Up 4 hours (healthy); structural.containers[devforge-api].status:
+    Up 3 hours -> Up 4 hours; structural.containers[devforge-llm].status: Up About an hour -> Up 2 hours; structural.containers[pod:ai-pod].status:
+    Up 3 hours -> Up 4 hours'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  decisions: []
+- time: '2026-05-19T11:46:48.896285+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 50 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 50 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-19T11:30:48.228417+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 34 minutes -> Up 50 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 34 minutes
+    after: Up 50 minutes
+  decisions: []
+- time: '2026-05-19T11:14:48.239580+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 2 hours (healthy) -> Up 3 hours (healthy); structural.containers[devforge-api].status:
+    Up 2 hours -> Up 3 hours; structural.containers[devforge-llm].status: Up 18 minutes -> Up 34 minutes; structural.containers[pod:ai-pod].status:
+    Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 18 minutes
+    after: Up 34 minutes
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-19T10:58:48.967961+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 2 minutes -> Up 18 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 2 minutes
+    after: Up 18 minutes
+  decisions: []
+- time: '2026-05-19T10:42:53.062207+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: added'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 2 minutes
+      ports: 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  decisions: []
+- time: '2026-05-19T10:26:51.006883+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up About an hour (healthy) -> Up 2 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  decisions: []
+- time: '2026-05-19T10:11:48.102741+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up About an hour -> Up 2 hours; structural.containers[pod:ai-pod].status:
+    Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-19T09:55:47.959815+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 55 minutes (healthy) -> Up About an hour (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 55 minutes (healthy)
+    after: Up About an hour (healthy)
+  decisions: []
+- time: '2026-05-19T09:39:47.968255+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 39 minutes (healthy) -> Up 55 minutes (healthy); structural.containers[devforge-api].status:
+    Up 44 minutes -> Up About an hour; structural.containers[pod:ai-pod].status: Up 44 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 39 minutes (healthy)
+    after: Up 55 minutes (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 44 minutes
+    after: Up About an hour
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 44 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-19T09:23:47.972768+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 23 minutes (healthy) -> Up 39 minutes (healthy); structural.containers[devforge-api].status:
+    Up 28 minutes -> Up 44 minutes; structural.containers[pod:ai-pod].status: Up 28 minutes -> Up 44 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 23 minutes (healthy)
+    after: Up 39 minutes (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 28 minutes
+    after: Up 44 minutes
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 28 minutes
+    after: Up 44 minutes
+  decisions: []
+- time: '2026-05-19T09:07:47.958073+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 8 minutes (healthy) -> Up 23 minutes (healthy); structural.containers[devforge-api].status:
+    Up 13 minutes -> Up 28 minutes; structural.containers[pod:ai-pod].status: Up 13 minutes -> Up 28 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 8 minutes (healthy)
+    after: Up 23 minutes (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 13 minutes
+    after: Up 28 minutes
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 13 minutes
+    after: Up 28 minutes
+  decisions: []
+- time: '2026-05-19T08:52:23.626154+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 2 days (healthy) -> Up 8 minutes (healthy); structural.containers[devforge-api]:
+    added; structural.containers[pod:ai-pod]: added; structural.services[devforge-api].status: inactive -> active; structural.services[devforge-llm]:
+    removed (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 2 days (healthy)
+    after: Up 8 minutes (healthy)
+  - path: structural.containers[devforge-api]
+    type: added
+    after:
+      name: devforge-api
+      status: Up 13 minutes
+      ports: 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[pod:ai-pod]
+    type: added
+    after:
+      name: pod:ai-pod
+      status: Up 13 minutes
+      ports: ''
+      model: null
+      flags: ''
+  - path: structural.services[devforge-api].status
+    type: changed
+    before: inactive
+    after: active
+  - path: structural.services[devforge-llm]
+    type: removed
+    before:
+      name: devforge-llm
+      status: failed
+  - path: structural.services[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: failed
+  decisions: []
+- time: '2026-05-19T08:36:56.307301+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api]: removed; structural.containers[devforge-llm]: removed; structural.containers[litellm]:
+    removed; structural.containers[pod:ai-pod]: removed'
+  changed:
+  - path: structural.containers[devforge-api]
+    type: removed
+    before:
+      name: devforge-api
+      status: Up 5 hours
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-llm]
+    type: removed
+    before:
+      name: devforge-llm
+      status: Up 35 minutes (reset)
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 5 hours
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[pod:ai-pod]
+    type: removed
+    before:
+      name: pod:ai-pod
+      status: Up 5 hours
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  decisions: []
+- time: '2026-05-19T08:21:49.836546+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 19 minutes (reset) -> Up 35 minutes (reset)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 19 minutes (reset)
+    after: Up 35 minutes (reset)
+  decisions: []
+- time: '2026-05-19T08:05:49.431536+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up 4 hours -> Up 5 hours; structural.containers[devforge-llm].status:
+    Up 3 minutes (reset) -> Up 19 minutes (reset); structural.containers[litellm].status: Up 4 hours -> Up 5 hours; structural.containers[pod:ai-pod].status:
+    Up 4 hours -> Up 5 hours'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 3 minutes (reset)
+    after: Up 19 minutes (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  decisions: []
+- time: '2026-05-19T07:49:51.667614+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 3 hours (reset) -> Up 3 minutes (reset)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 3 hours (reset)
+    after: Up 3 minutes (reset)
+  decisions: []
+- time: '2026-05-19T07:01:51.820518+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up 3 hours -> Up 4 hours; structural.containers[devforge-llm].status:
+    Up 2 hours (reset) -> Up 3 hours (reset); structural.containers[litellm].status: Up 3 hours -> Up 4 hours; structural.containers[pod:ai-pod].status:
+    Up 3 hours -> Up 4 hours'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 2 hours (reset)
+    after: Up 3 hours (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  decisions: []
+- time: '2026-05-19T05:58:49.740252+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up 2 hours -> Up 3 hours; structural.containers[devforge-llm].status:
+    Up About an hour (reset) -> Up 2 hours (reset); structural.containers[litellm].status: Up 2 hours -> Up 3 hours; structural.containers[pod:ai-pod].status:
+    Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour (reset)
+    after: Up 2 hours (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-19T05:26:49.384238+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 48 minutes (reset) -> Up About an hour (reset)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 48 minutes (reset)
+    after: Up About an hour (reset)
+  decisions: []
+- time: '2026-05-19T05:10:50.552538+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up About an hour -> Up 2 hours; structural.containers[devforge-llm].status:
+    Up 32 minutes (reset) -> Up 48 minutes (reset)'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 32 minutes (reset)
+    after: Up 48 minutes (reset)
+  decisions: []
+- time: '2026-05-19T04:54:49.279953+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 16 minutes (reset) -> Up 32 minutes (reset); structural.containers[litellm].status:
+    Up About an hour -> Up 2 hours; structural.containers[pod:ai-pod].status: Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 16 minutes (reset)
+    after: Up 32 minutes (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-19T04:38:49.367274+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up 57 minutes -> Up About an hour; structural.containers[devforge-llm].status:
+    Up About a minute (reset) -> Up 16 minutes (reset); structural.containers[litellm].status: Up 59 minutes -> Up About an
+    hour; structural.containers[pod:ai-pod].status: Up 59 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 57 minutes
+    after: Up About an hour
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About a minute (reset)
+    after: Up 16 minutes (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 59 minutes
+    after: Up About an hour
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 59 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-19T04:23:49.074625+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up 41 minutes -> Up 57 minutes; structural.containers[devforge-llm].status:
+    Up 43 minutes (reset) -> Up About a minute (reset); structural.containers[litellm].status: Up 43 minutes -> Up 59 minutes;
+    structural.containers[pod:ai-pod].status: Up 43 minutes -> Up 59 minutes'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 41 minutes
+    after: Up 57 minutes
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 43 minutes (reset)
+    after: Up About a minute (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 43 minutes
+    after: Up 59 minutes
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 43 minutes
+    after: Up 59 minutes
+  decisions: []
+- time: '2026-05-19T04:07:50.662618+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up 26 minutes -> Up 41 minutes; structural.containers[devforge-llm].status:
+    Up 28 minutes (reset) -> Up 43 minutes (reset); structural.containers[litellm].status: Up 28 minutes -> Up 43 minutes;
+    structural.containers[pod:ai-pod].status: Up 28 minutes -> Up 43 minutes'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 26 minutes
+    after: Up 41 minutes
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 28 minutes (reset)
+    after: Up 43 minutes (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 28 minutes
+    after: Up 43 minutes
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 28 minutes
+    after: Up 43 minutes
+  decisions: []
+- time: '2026-05-19T03:52:50.796232+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up 11 minutes -> Up 26 minutes; structural.containers[devforge-llm].status:
+    Up 13 minutes (reset) -> Up 28 minutes (reset); structural.containers[litellm].status: Up 13 minutes -> Up 28 minutes;
+    structural.containers[pod:ai-pod].status: Up 13 minutes -> Up 28 minutes'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 11 minutes
+    after: Up 26 minutes
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 13 minutes (reset)
+    after: Up 28 minutes (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 13 minutes
+    after: Up 28 minutes
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 13 minutes
+    after: Up 28 minutes
+  decisions: []
+- time: '2026-05-19T03:37:50.054895+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api]: added; structural.containers[devforge-llm].status: Up 7 minutes (reset) ->
+    Up 13 minutes (reset); structural.containers[litellm].status: Up 8 minutes -> Up 13 minutes; structural.containers[pod:ai]:
+    removed; structural.containers[pod:ai-pod]: added'
+  changed:
+  - path: structural.containers[devforge-api]
+    type: added
+    after:
+      name: devforge-api
+      status: Up 11 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 7 minutes (reset)
+    after: Up 13 minutes (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 8 minutes
+    after: Up 13 minutes
+  - path: structural.containers[pod:ai]
+    type: removed
+    before:
+      name: pod:ai
+      status: Up 10 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[pod:ai-pod]
+    type: added
+    after:
+      name: pod:ai-pod
+      status: Up 13 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  decisions: []
+- time: '2026-05-19T03:22:50.712016+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 13 minutes (reset) -> Up 7 minutes (reset); structural.containers[litellm].status:
+    Up 13 minutes -> Up 8 minutes; structural.containers[pod:ai]: added; structural.containers[pod:ai-pod]: removed; structural.services[devforge-llm].status:
+    inactive -> failed (+1 more)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 13 minutes (reset)
+    after: Up 7 minutes (reset)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 13 minutes
+    after: Up 8 minutes
+  - path: structural.containers[pod:ai]
+    type: added
+    after:
+      name: pod:ai
+      status: Up 10 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[pod:ai-pod]
+    type: removed
+    before:
+      name: pod:ai-pod
+      status: Up 13 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: inactive
+    after: failed
+  - path: structural.services[litellm].status
+    type: changed
+    before: inactive
+    after: failed
+  decisions: []
+- time: '2026-05-19T03:07:51.127437+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: added; structural.containers[litellm]: added; structural.containers[pod:ai-pod]:
+    added; structural.services[devforge-llm].status: failed -> inactive; structural.services[litellm].status: failed -> inactive'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 13 minutes (reset)
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 13 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[pod:ai-pod]
+    type: added
+    after:
+      name: pod:ai-pod
+      status: Up 13 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: failed
+    after: inactive
+  - path: structural.services[litellm].status
+    type: changed
+    before: failed
+    after: inactive
+  decisions: []
+- time: '2026-05-19T02:21:47.944961+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api]: removed; structural.containers[devforge-llm]: removed; structural.containers[litellm]:
+    removed; structural.containers[pod:ai-pod]: removed; structural.services[devforge-api].status: failed -> inactive (+1
+    more)'
+  changed:
+  - path: structural.containers[devforge-api]
+    type: removed
+    before:
+      name: devforge-api
+      status: Up 4 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-llm]
+    type: removed
+    before:
+      name: devforge-llm
+      status: Up 4 minutes (reset)
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 5 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[pod:ai-pod]
+    type: removed
+    before:
+      name: pod:ai-pod
+      status: Up 5 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.services[devforge-api].status
+    type: changed
+    before: failed
+    after: inactive
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: inactive
+    after: failed
+  decisions: []
+- time: '2026-05-19T02:05:47.972878+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api]: added; structural.containers[devforge-llm].ports: 127.0.0.1:4000->4000/tcp,
+    127.0.0.1:8000->8000/tcp, 127.0.0.1:8080->8080/tcp -> 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp; structural.containers[devforge-llm].status:
+    Up 11 minutes (reset) -> Up 4 minutes (reset); structural.containers[litellm].ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp,
+    127.0.0.1:8080->8080/tcp -> 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp; structural.containers[litellm].status:
+    Up 13 hours (reset) -> Up 5 minutes (+2 more)'
+  changed:
+  - path: structural.containers[devforge-api]
+    type: added
+    after:
+      name: devforge-api
+      status: Up 4 minutes
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-llm].ports
+    type: changed
+    before: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp, 127.0.0.1:8080->8080/tcp
+    after: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 11 minutes (reset)
+    after: Up 4 minutes (reset)
+  - path: structural.containers[litellm].ports
+    type: changed
+    before: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp, 127.0.0.1:8080->8080/tcp
+    after: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 13 hours (reset)
+    after: Up 5 minutes
+  - path: structural.containers[pod:ai-pod].ports
+    type: changed
+    before: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp, 127.0.0.1:8080->8080/tcp
+    after: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 13 hours
+    after: Up 5 minutes
+  decisions: []
+- time: '2026-05-19T01:49:50.202738+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: added'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 11 minutes (reset)
+      ports: 127.0.0.1:4000->4000/tcp, 127.0.0.1:8000->8000/tcp, 127.0.0.1:8080->8080/tcp
+      model: null
+      flags: ''
+  decisions: []
+- time: '2026-05-19T01:04:37.019280+00:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 12 hours (reset) -> Up 13 hours (reset); structural.containers[pod:ai-pod].status:
+    Up 12 hours -> Up 13 hours'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 12 hours (reset)
+    after: Up 13 hours (reset)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 12 hours
+    after: Up 13 hours
+  decisions: []
+- time: '2026-05-19T00:01:47.198459+00:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 11 hours (reset) -> Up 12 hours (reset); structural.containers[pod:ai-pod].status:
+    Up 11 hours -> Up 12 hours'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 11 hours (reset)
+    after: Up 12 hours (reset)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 11 hours
+    after: Up 12 hours
+  decisions: []
+- time: '2026-05-18T23:14:47.971157+00:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 10 hours (reset) -> Up 11 hours (reset); structural.containers[pod:ai-pod].status:
+    Up 10 hours -> Up 11 hours'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 10 hours (reset)
+    after: Up 11 hours (reset)
+  - path: structural.containers[pod:ai-pod].status
+    type: changed
+    before: Up 10 hours
+    after: Up 11 hours
+  decisions: []
 - time: '2026-05-18T22:11:47.917798+00:00'
   type: auto
   summary: 'structural.containers[litellm].status: Up 9 hours (reset) -> Up 10 hours (reset); structural.containers[pod:ai-pod].status:

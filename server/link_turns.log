@@ -111,3 +111,7 @@
 [2026-05-18T22:16:25Z] === link_turns 2026-05-18 ===
 [2026-05-18T22:16:27Z] Matched: 0 turns across 12 worklog entries
 [2026-05-18T22:16:27Z] Review: orphan_turns: 0; empty_worklog: #67 Review pipeline deployed; empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01; turn_coverage: 368/368; worklog_without_turns_agent: devforge
+[2026-05-18T23:08:16Z] === link_turns 2026-05-18 ===
+[2026-05-18T23:08:16Z] worklog 67: skipped (no agent)
+[2026-05-18T23:08:17Z] Matched: 0 turns across 12 worklog entries
+[2026-05-18T23:08:18Z] Review: orphan_turns: 0; empty_worklog: #67 Review pipeline deployed; agentless_worklog: #67 Review pipeline deployed; commit_only_worklog: #74; turn_coverage: 368/368; worklog_without_turns_agent: devforge

@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -105,6 +106,11 @@ async def save_memory(
 
         async with conn.transaction():
             cid = conversation_id
+            if cid:
+                try:
+                    uuid.UUID(cid)
+                except (ValueError, AttributeError):
+                    cid = None
             if cid:
                 exists = await conn.fetchval(
                     "SELECT 1 FROM conversations WHERE id = $1", cid
