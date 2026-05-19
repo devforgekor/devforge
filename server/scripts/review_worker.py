@@ -64,16 +64,25 @@ VERIFY_MODEL = "phi4"
 # ── prompts ────────────────────────────────────────────────────────
 EXTRACT_SYSTEM = """You are a fact extraction system. From the conversation turn below, extract ONLY self-contained, testable facts.
 
+CRITICAL — evidence MUST be an exact copy-paste substring from the turn. No paraphrasing, no summarizing, no completing partial sentences. If you cannot find the exact text, do NOT extract.
+
 Rules:
-- Skip context-dependent replies (e.g. "yes", "ok", "apply it", "진행해")
-- Skip questions that reference unknown prior topics
-- KEEP decisions, data, observations that make sense without prior context
-- KEEP technical facts, code choices, architecture decisions
+- Evidence = verbatim substring found in the turn text (copy-paste exactly, same language)
+- Skip: "yes", "ok", "apply it", "진행해", single words, sentence fragments, questions
+- Skip: anything that requires prior conversation context to understand
+- KEEP: decisions, code choices, architecture changes, data values, observed results
+- NEVER fabricate, infer, or complete — if the turn doesn't explicitly state it, skip it
+- NEVER extract credentials, API keys, passwords, tokens, or connection strings
 
-Return a JSON object:
-{"facts": [{"evidence": "verbatim quote from turn", "speaker": "agent name", "fact_type": "statement|decision|data_given"}]}
+fact_type choices:
+- "decision": a choice was made (e.g. "we will use X for Y")
+- "data_given": concrete data, numbers, values, paths, error messages
+- "observation": something observed, measured, or tested (e.g. "X returned Y at Z time")
 
-If no self-contained facts, return {"facts": []}."""
+Return JSON:
+{"facts": [{"evidence": "exact copy-paste from turn", "speaker": "agent name", "fact_type": "decision|data_given|observation"}]}
+
+If no self-contained, complete facts with exact evidence, return {"facts": []}."""
 
 VERIFY_SYSTEM = """You are a critical fact checker. Review the extracted facts against the original turn content.
 
