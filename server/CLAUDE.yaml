@@ -3,7 +3,7 @@ overview:
   purpose: OCI ARM development server — LLM inference + FastAPI application hosting
   os: Oracle Linux Server 9.7 (aarch64)
   cpu: ARM Neoverse-N1, 4-core
-  memory: 22Gi + 4G zram (162.2M) + 8G swap (swappiness=10)
+  memory: 22Gi + 4G zram (358.4M) + 8G swap (swappiness=10)
 storage:
   boot_disk:
     device: /dev/sda (50GB)

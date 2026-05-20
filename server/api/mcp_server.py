@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .db import init_db
 from .ingest import router as ingest_router
+from .slack_operator import router as slack_router
 from .search import save_memory, search_memories
 from .stats import get_stats, record_api_call
 
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="DevForge", version="0.1.0")
 app.include_router(ingest_router)
+app.include_router(slack_router)
 
 
 @app.middleware("http")

@@ -1,9 +1,8 @@
 # link_turns review
-date: 2026-05-18
-linked: 0
+date: 2026-05-19
+linked: 210
 finding: orphan_turns: 0
-finding: empty_worklog: #67 Review pipeline deployed
-finding: agentless_worklog: #67 Review pipeline deployed
-finding: commit_only_worklog: #74
-finding: turn_coverage: 368/368
+finding: empty_worklog: 0
+finding: commit_only_worklog: #89, #91, #92, #100
+finding: turn_coverage: 660/660
 finding: worklog_without_turns_agent: devforge

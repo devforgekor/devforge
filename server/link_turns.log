@@ -115,3 +115,8 @@
 [2026-05-18T23:08:16Z] worklog 67: skipped (no agent)
 [2026-05-18T23:08:17Z] Matched: 0 turns across 12 worklog entries
 [2026-05-18T23:08:18Z] Review: orphan_turns: 0; empty_worklog: #67 Review pipeline deployed; agentless_worklog: #67 Review pipeline deployed; commit_only_worklog: #74; turn_coverage: 368/368; worklog_without_turns_agent: devforge
+[2026-05-19T18:01:19Z] === link_turns 2026-05-19 ===
+[2026-05-19T18:01:22Z] worklog 136 (claude-code): linked 191 turns
+[2026-05-19T18:01:22Z] worklog 126 (aider): linked 19 turns
+[2026-05-19T18:01:22Z] Matched: 210 turns across 13 worklog entries
+[2026-05-19T18:01:24Z] Review: orphan_turns: 0; empty_worklog: 0; commit_only_worklog: #89, #91, #92, #100; turn_coverage: 660/660; worklog_without_turns_agent: devforge

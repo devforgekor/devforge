@@ -19,6 +19,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, List
@@ -71,12 +72,23 @@ MODELS = {
         "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
         "tier": "<=9B",
     },
+    "deepseek_coder_v2_lite": {
+        "name": "deepseek-coder-v2-lite-instruct",
+        "file": "DeepSeek-Coder-V2-Lite-Instruct-Q8_0.gguf",
+        "tier": "16B",
+    },
+    "starcoder2_15b": {
+        "name": "starcoder2-15b-instruct",
+        "file": "starcoder2-15b-instruct-Q8_0.gguf",
+        "tier": "16B",
+    },
 }
 
 # Resource profiles per tier — single source of truth for container args
 TIERS = {
     "32B":  {"ctx_size": 2048, "cache_ram": 2048, "batch_size": 512,  "ubatch_size": 256,
              "require_mem_mb": 23000, "stop_services": ["devforge-api", "collect_turns.timer"]},
+    "16B":  {"ctx_size": 2048, "cache_ram": 2048, "batch_size": 1024, "ubatch_size": 512},
     "14B":  {"ctx_size": 2048, "cache_ram": 2048, "batch_size": 2048, "ubatch_size": 512},
     "12B":  {"ctx_size": 3072, "cache_ram": 3072, "batch_size": 3072, "ubatch_size": 768},
     "<=9B": {"ctx_size": 4096, "cache_ram": 4096, "batch_size": 4096, "ubatch_size": 1024},
@@ -433,8 +445,33 @@ def _verify_serving(model_key: str) -> bool:
 
 
 # ── LLM calls ──────────────────────────────────────────────────────
+
+def _llm_request_worker(payload: bytes, headers: dict, result_queue):
+    """Run in a child process so we can enforce a hard timeout via terminate()."""
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:8080/v1/chat/completions",
+            data=payload,
+            headers=headers,
+        )
+        with urllib.request.urlopen(req) as resp:
+            body = resp.read().decode()
+        if resp.status == 200:
+            content = json.loads(body)["choices"][0]["message"]["content"]
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match:
+                result_queue.put(("ok", match.group(0)))
+            else:
+                result_queue.put(("ok", None))
+        else:
+            result_queue.put(("error", str(resp.status)))
+    except Exception as e:
+        result_queue.put(("exception", str(e)))
+
+
 def call_llm(model_name: str, system_prompt: str, user_prompt: str,
-             max_tokens: int = 512, retries: int = 2) -> Optional[Dict]:
+             max_tokens: int = 512, retries: int = 2,
+             timeout: int = 300) -> Optional[Dict]:
     payload = json.dumps({
         "model": model_name,
         "messages": [
@@ -443,27 +480,43 @@ def call_llm(model_name: str, system_prompt: str, user_prompt: str,
         ],
         "max_tokens": max_tokens,
         "temperature": 0.0,
-    })
+    }).encode()
+    headers = {
+        "Authorization": f"Bearer {LITELLM_KEY}",
+        "Content-Type": "application/json",
+    }
     for attempt in range(retries + 1):
-        try:
-            conn = hc.HTTPConnection("127.0.0.1", 8080, timeout=600)
-            conn.request("POST", "/v1/chat/completions", payload,
-                         {"Authorization": f"Bearer {LITELLM_KEY}", "Content-Type": "application/json"})
-            resp = conn.getresponse()
-            body = resp.read().decode()
-            conn.close()
-            if resp.status == 200:
-                content = json.loads(body)["choices"][0]["message"]["content"]
-                match = re.search(r'\{.*\}', content, re.DOTALL)
-                if match:
-                    return json.loads(match.group(0))
-                return None
-            else:
-                print(f"    LLM error: {resp.status} (attempt {attempt+1}/{retries+1})")
-                time.sleep(2 ** attempt)
-        except Exception as e:
-            print(f"    LLM exception: {e} (attempt {attempt+1}/{retries+1})")
+        from multiprocessing import Process, Queue
+        q: Queue = Queue()
+        p = Process(target=_llm_request_worker, args=(payload, headers, q))
+        p.start()
+        p.join(timeout)
+        if p.is_alive():
+            p.terminate()
+            p.join()
+            print(f"    LLM timeout: {timeout}s exceeded (attempt {attempt+1}/{retries+1})")
             time.sleep(2 ** attempt)
+            continue
+        if p.exitcode != 0:
+            print(f"    LLM process error: exitcode={p.exitcode} (attempt {attempt+1}/{retries+1})")
+            time.sleep(2 ** attempt)
+            continue
+        try:
+            status, value = q.get_nowait()
+        except Exception:
+            status, value = "exception", "queue read failed"
+        if status == "ok":
+            if value is None:
+                return None
+            try:
+                return json.loads(value)
+            except Exception as e:
+                print(f"    LLM exception: {e} (attempt {attempt+1}/{retries+1})")
+                time.sleep(2 ** attempt)
+                continue
+        else:
+            print(f"    LLM exception: {value} (attempt {attempt+1}/{retries+1})")
+        time.sleep(2 ** attempt)
     return None
 
 

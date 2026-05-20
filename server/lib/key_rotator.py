@@ -21,10 +21,31 @@ from typing import Optional
 
 
 DAILY_QUOTA_THRESHOLD = 300  # seconds — >= 5min = daily quota exhaustion
+ACCOUNT_RPM_INTERVAL = 3.0  # seconds between uses of keys from the same account
+STALE_FAIL_SECONDS = 300    # clear fail counts older than 5 min
+
+
+def _extract_account(name: str) -> str:
+    """Extract account prefix from key name.
+
+    Gemini keys:  'mesids_senedu_gemini_09' → 'mesids_senedu'
+    Search keys:  'brave:mesids_kuhwa_brave_search_1' → 'brave'
+    """
+    idx = name.rfind("_gemini_")
+    if idx != -1:
+        return name[:idx]
+    if ":" in name:
+        return name.split(":", 1)[0]
+    return name
 
 
 class KeyRotator:
-    """Round-robin key rotation converging to even distribution."""
+    """Key rotation converging to even distribution across keys and accounts.
+
+    Per-turn rotation: each pick() prefers keys with fewer calls and
+    deprioritizes accounts used within the RPM window. 429 → backoff,
+    200 → call count increases → next pick naturally picks another key.
+    """
 
     def __init__(self, keys: list[tuple[str, str]], state_file: str = ""):
         """
@@ -35,15 +56,21 @@ class KeyRotator:
         self.n = len(keys)
         self._state_file = state_file
 
-        # in-memory state (no DB)
-        self._index = 0
-        self._calls: dict[int, int] = {}       # total calls per key
-        self._fails: dict[int, int] = {}       # total failures per key
-        self._last_used: dict[int, float] = {}  # last use timestamp
-        self._backoff_until: dict[int, float] = {}  # backoff expiry
+        self._calls: dict[int, int] = {}           # total calls per key
+        self._fails: dict[int, int] = {}           # total failures per key
+        self._last_used: dict[int, float] = {}     # last use timestamp
+        self._backoff_until: dict[int, float] = {} # backoff expiry
 
         if state_file:
             self._load_state()
+
+    def _clear_stale_fails(self):
+        """Clear fail counts for keys not used recently — their RPM quota has reset."""
+        now = time.time()
+        for i in list(self._fails.keys()):
+            last = self._last_used.get(i, 0)
+            if self._fails[i] > 0 and (now - last) > STALE_FAIL_SECONDS:
+                self._fails[i] = 0
 
     def pick(self) -> Optional[tuple[int, str, str]]:
         """
@@ -51,28 +78,65 @@ class KeyRotator:
 
         Selection priority:
         1. Skip keys in backoff
-        2. Among available: fewest fails, then fewest calls, then oldest last_used
-        → converges to balanced distribution over time.
+        2. Skip keys from accounts used within ACCOUNT_RPM_INTERVAL
+           (falls back to inside-window keys only when none outside)
+        3. Among available: fewest fails → fewest calls → oldest last_used
+        → converges to even distribution across all keys over time,
+        with hard RPM guard per account.
         """
         now = time.time()
+        self._clear_stale_fails()
 
-        # Collect available keys
-        available = []
+        # Find the most recent use time for each account
+        account_last_used: dict[str, float] = {}
         for i in range(self.n):
-            if self._backoff_until.get(i, 0) <= now:
-                available.append((
-                    self._fails.get(i, 0),
-                    self._calls.get(i, 0),
-                    self._last_used.get(i, 0),
-                    i,
-                ))
+            acct = _extract_account(self.keys[i][0])
+            last = self._last_used.get(i, 0)
+            account_last_used[acct] = max(account_last_used.get(acct, 0), last)
 
-        if not available:
+        # Build sort key for a given index
+        def _sort_key(i: int, acct: str) -> tuple:
+            return (
+                self._fails.get(i, 0),
+                self._calls.get(i, 0),
+                account_last_used.get(acct, 0),
+                self._last_used.get(i, 0),
+            )
+
+        # Collect non-backoff keys, split by RPM window
+        outside: list[tuple[tuple, int]] = []
+        inside: list[tuple[tuple, int]] = []
+        for i in range(self.n):
+            if self._backoff_until.get(i, 0) > now:
+                continue
+            acct = _extract_account(self.keys[i][0])
+            acct_last = account_last_used.get(acct, 0)
+            if acct_last == 0:
+                in_window = False  # never used — allow first pick
+            else:
+                in_window = (now - acct_last) < ACCOUNT_RPM_INTERVAL
+            sk = _sort_key(i, acct)
+            if in_window:
+                inside.append((sk, i))
+            else:
+                outside.append((sk, i))
+
+        # Prefer outside-window keys; fall back to inside-window only when none available
+        if outside:
+            pool = outside
+        elif inside:
+            # All accounts inside RPM window — wait until the oldest exits
+            oldest_acct_last = min(account_last_used.get(_extract_account(self.keys[i][0]), 0)
+                                   for _, i in inside)
+            wait = ACCOUNT_RPM_INTERVAL - (now - oldest_acct_last)
+            if wait > 0:
+                time.sleep(wait)
+            pool = inside
+        else:
             return None  # all keys in backoff
 
-        # Sort: fewest fails → fewest calls → oldest last_used
-        available.sort()
-        idx = available[0][3]
+        pool.sort()
+        idx = pool[0][1]
 
         self._last_used[idx] = now
         return idx, self.keys[idx][0], self.keys[idx][1]
@@ -129,9 +193,11 @@ class KeyRotator:
         return max(waits) if waits else 0.0
 
     def success(self, idx: int):
-        """Record successful call — reset failure counters."""
+        """Record successful call. Fails are NOT reset — they clear naturally
+        via _clear_stale_fails() after STALE_FAIL_SECONDS of inactivity.
+        Calls counter increase deprioritizes this key for the next pick(),
+        ensuring natural rotation across all keys."""
         self._calls[idx] = self._calls.get(idx, 0) + 1
-        self._fails[idx] = 0
         self._backoff_until.pop(idx, None)
         if self._state_file:
             self._save_state()

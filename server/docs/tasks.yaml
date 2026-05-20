@@ -1,5 +1,7 @@
 blocked: []
 done:
+- 'Qwen14B 100턴 baseline 완료 — Run 3: 100턴/280 facts, Phi-4 검증 58건, valid 52 (89.7%), hallucinated 5 (8.6%), context_dependent 1 (1.7%). DB review_facts에 2026-05-19 저장. 코드: review_worker.py LLAMA_RUN_ARGS 4096 fix 적용 완료. (2026-05-19)'
+
 - 'requests → http.client 마이그레이션 (2026-05-18): collect_turns.py, qwen_worker.py, qwen_executor.py에서 requests 라이브러리 제거. http.client.HTTPConnection으로 교체 (connection pooling 이슈 해소, 외부 의존성 감소). review_worker.py와 동일 패턴 적용.'
 - 'SQL escaping 전면 적용 (2026-05-18): qwen_worker.py _ensure_worklog() + Phase 2 UPDATE + qwen_executor.py execute_linkages/execute_deterministic_linkage/execute_fixes. esc_sql() import 추가. 모든 사용자/에이전트 입력 SQL interpolation에 escaping 적용.'
 - 'qwen_worker.py Phase 3 (observe) 비활성화 (2026-05-18): review_worker.py 2-phase pipeline(Qwen14B→Phi-4)이 fact extraction+verification 담당. qwen_worker Phase 3은 단일모델 observe로 교차검증 부재 — inferior. docstring, argparse description, main() Phase 3 섹션 모두 갱신.'
@@ -59,7 +61,8 @@ done:
 - Copilot statusline fallback — copilot-statusline.py now reads the newest useful
   ~/.copilot/session-state/*/events.jsonl snapshot when no live payload is provided,
   preferring full used/limit snapshots and falling back to used-only snapshots.
-in_progress: null
+in_progress:
+	- Granite-8B-Code-Instruct Q8_0 Day1 extraction 테스트 (2026-05-20) — 기존 0건, 이전 실행 중단됨. 재시작 필요.
 kanban_labels:
   blocked: Blocked
   done: Done
@@ -92,9 +95,10 @@ meta:
   - /opt/projects/server/_archive/README.md
 todo:
 - review_facts 통계 기반 모델 성능 대시보드 (2026-05-19)
-- 순차적 extraction 모델 테스트:
-  1. Granite-8B-Code-Instruct Q8_0 (8.0GB) — 24h extraction 테스트, Qwen14B 93.0%와 비교
-  2. Qwen2.5-Coder-7B-Instruct Q8_0 (7.5GB) — 24h extraction 테스트
-  3. 차순위: DeepSeek-Coder-V2-Lite (16B MoE), StarCoder2-15B, Qwen2.5-14B-Instruct
+- 순차적 extraction 모델 테스트 (Granite-8B 완료 후):
+  1. Qwen2.5-Coder-7B-Instruct Q8_0 (7.5GB) — 24h extraction 테스트
+  2. DeepSeek-Coder-V2-Lite (16B MoE) — 24h extraction 테스트
+  3. 차순위: StarCoder2-15B, Qwen2.5-14B-Instruct
   - testing_plan: 하루 1개 모델, 동일 조건(30분 주기, 24시간), hallucination rate 기준 평가
   - disk: 100GB 중 61GB 여유. 항시 Qwen14B+Phi-4 30GB 상주. 후보는 1~2개씩 로테이션.
+  - baseline: Qwen14B 100턴 89.7% valid (2026-05-19 완료)

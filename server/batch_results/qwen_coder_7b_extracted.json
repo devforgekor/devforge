@@ -12,5 +12,1731 @@
         "fact_type": "decision"
       }
     ]
+  },
+  {
+    "turn_id": "303d84ec-62f0-4241-a61e-493d3e8cf591",
+    "facts": []
+  },
+  {
+    "turn_id": "958ec4a1-0f98-4909-a360-99aa031667f2",
+    "facts": []
+  },
+  {
+    "turn_id": "f1bc41ec-ba0d-49a2-8469-f29ec58be566",
+    "facts": [
+      {
+        "evidence": "기록할 수 있는 저장소에 남기고, 나중에 다시 확인하기 쉽게 정리하겠습니다.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "42c773c9-2d1b-4c0b-9c87-43dbd09f49b3",
+    "facts": []
+  },
+  {
+    "turn_id": "c6c2e3f0-35bf-4423-aa2c-7b6d98aeee18",
+    "facts": []
+  },
+  {
+    "turn_id": "4324c78d-2cb3-44eb-910b-120406698b88",
+    "facts": []
+  },
+  {
+    "turn_id": "774c5016-e31a-4483-a238-92242966415e",
+    "facts": []
+  },
+  {
+    "turn_id": "ea2cb32d-161e-4ec7-9c47-931d95db5bf5",
+    "facts": []
+  },
+  {
+    "turn_id": "86c34280-b3fe-41bd-b702-21163843e5a6",
+    "facts": [
+      {
+        "evidence": "서버 전체 구성. 전체 로직을 다시 꼼꼼히 확인하고, 이서버에 맞는것, 맞지 않은것 을 구분해서 최종 보고서 제출",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "f3cfddaa-7a25-436d-8d45-fce4ac9e27eb",
+    "facts": []
+  },
+  {
+    "turn_id": "279c36e0-fc09-4d92-b121-e0a372da5506",
+    "facts": [
+      {
+        "evidence": "motd",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "a563f0ec-befe-4662-aaaf-31cd9aca4c20",
+    "facts": []
+  },
+  {
+    "turn_id": "6e961bfa-f818-400f-9459-1eff59543c22",
+    "facts": [
+      {
+        "evidence": "git 히스토리에서 원래 버전을 찾아보겠습니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "24a6c934-82dc-4af8-bbd6-e0b7d1ec26a2",
+    "facts": [
+      {
+        "evidence": "이것은 토큰이 아니라 \"컨텍스트 윈도우\"의 사용량이고, 남은 양이 20% 미만이면 (= 사용률 80% 초과) 새 세션을 열라고 안내해야 하는군요!",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "9984bc1e-1d6f-4336-b38b-87ab184fe914",
+    "facts": [
+      {
+        "evidence": "lo 함수가 아직 `browserctl session login-gemini`를 호출하고 있습니다. `~/.bashrc.d/ai-sessions` 변경 후 셸을 재로드 안 한 것 같습니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "3aeacacf-803e-4c5a-92bf-6cb83e7b6009",
+    "facts": [
+      {
+        "evidence": "정확한 남은량을 계산할 실제 한도가 어디에 있는지 찾겠습니다.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "하드코딩 비율이 아니라, 시스템이 알고 있는 실제 제한값을 연결해야 합니다.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "b5065c84-66fc-4008-a4c6-88d91f0da048",
+    "facts": [
+      {
+        "evidence": "좋은 접근입니다. 먼저 common-lib 구조를 확인해보겠습니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "40500f4f-99da-4e0e-b5e4-489bef2f834b",
+    "facts": [
+      {
+        "evidence": "대충 잡은 기준값이에요.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "퍼센트를 보여주기 위한 고정 환산 기준으로 `1,000,000`을 넣었습니다.",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "원하면 이걸 정확한 실제 한도로 바꿔서 계산하도록 다시 맞출게요.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "138ac369-2ca7-4a58-8264-30fe5f7f4603",
+    "facts": [
+      {
+        "evidence": "통계를 위한 matrix 데이터도 meta로 수집해야 하지 않을까?",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "seedling이 별도 `APICallLogs` 테이블로 분리했던 통계 데이터를 DevForge는 `meta` JSONB 하나로 흡수할 수 있습니다.",
+        "speaker": "text",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "현재 4개 필드에서 빠진 것들을 점검해보겠습니다.",
+        "speaker": "text",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "bb37909c-7f55-41a9-9d3b-76c82f1c2ea3",
+    "facts": [
+      {
+        "evidence": "레이어 로직",
+        "speaker": "user",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "5f37df08-d3fa-489e-bcf6-27f933dfb9d6",
+    "facts": []
+  },
+  {
+    "turn_id": "ffd99efc-4435-418c-b425-e8813ada83d7",
+    "facts": [
+      {
+        "evidence": "매일 3시에 세션을 종료할까?",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "세션을 종료할 때까지 세션이 남아있잖아.",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "하루에 세션을 종료하지 않으면 1개로 마무리.",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "nightly_batch.sh 마지막에 Claude Code 프로세스 종료를 추가하면 SessionEnd 훅이 자연스럽게 발동돼.",
+        "speaker": "text",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "c2c31cf9-143f-4c5c-b1bd-2b85d1d45679",
+    "facts": [
+      {
+        "evidence": "Copilot CLI 하단부 statusline만 수정하겠습니다. MOTD는 건드리지 않겠습니다.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "66042c98-d0aa-441e-99a4-541703999e23",
+    "facts": [
+      {
+        "evidence": "래퍼를 “세션 진입 후 계속 입력” 형태로 바꾸겠습니다.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "f7127042-9c05-4a65-ac68-52e7622da06a",
+    "facts": [
+      {
+        "evidence": "명령어 alias/함수를 찾아야겠네요:",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "4b8e8d09-1489-4638-b348-fa91bdfa37e3",
+    "facts": [
+      {
+        "evidence": "목표 구성의 LVM 섹션만 실제 2-VG 구조에 맞게 정정합니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "MOTD 스크립트도 실제 경로에 맞춰 함께 수정하겠습니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "f2ac119d-f092-4452-9a60-ce5f77e4ef71",
+    "facts": [
+      {
+        "evidence": "예전 파일들은 `/home/opc/server-env/_archive/`에 복사되어 있고, `/opt/projects/server/`는 그대로입니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "9a252152-5b87-4aa7-b6ca-5b6f2a6b1fbf",
+    "facts": [
+      {
+        "evidence": "표시 형식을 짧게 바꾸겠습니다. 먼저 현재 대기 작업이 있는지 확인하고, 동시에 statusline 출력부를 손보겠습니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "56766e68-a801-4faf-9614-d26d69e24bed",
+    "facts": [
+      {
+        "evidence": "맞다. 새 도구 나올 때마다 help 텍스트를 고쳐야 한다. 예시를 빼고 일반적인 설명으로 바꾼다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "4ece6d36-24a4-437a-b891-25ef9524ddd3",
+    "facts": [
+      {
+        "evidence": "좋은 생각입니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "`state.yaml`에 이미 alert 데이터가 있으니 그걸 작업 정리본에 반영하겠습니다.",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "7816ffb4-dc07-43b5-9da7-c7b9dc1cf8b9",
+    "facts": [
+      {
+        "evidence": "`gen_motd.py`가 자세한 정보를 생성해서 저장하고, `mota`에서 그걸 참조하는 구조로요.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "`gen_motd.py`를 자세한 시스템 정보 생성기로 수정하겠습니다:",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "46606676-7024-4d38-aa79-b31797a33d5c",
+    "facts": [
+      {
+        "evidence": "API 코드 찾아서 수정할게요.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "e1bd6f60-d3e1-4e11-8003-4e8bdb4f3353",
+    "facts": [
+      {
+        "evidence": "flash가 구분하게 하자. 간단한건 flash가 어려운건 26b로 넘기는거지. 그리고 내부 로직을 수정하거나 검토 등을 해야하는 작업이면 모두 32b로 변경",
+        "speaker": "user",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "flash가 분류기 역할을 하고, 복잡도에 따라 26b/31b로 에스컬레이션하는 구조군요.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "94a1965d-f6c5-4837-8195-3ab05739338a",
+    "facts": [
+      {
+        "evidence": "4개월마다 동일하게 업데이트 하면서 레퍼런스 추적하는 로직이 서버에  있어.",
+        "speaker": "user",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "4개월 주기 업데이트와 레퍼런스 추적 로직을 찾아서, 어떤 부분이 현재 서버에 적용 가능한지 보겠습니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "25efde9d-29b9-4bcc-a54e-fea78d21ed75",
+    "facts": []
+  },
+  {
+    "turn_id": "519b84b3-0383-4244-95a7-dbd9901add86",
+    "facts": [
+      {
+        "evidence": "둘 다다. 추적 대상은 AI가 state.yaml에서 무엇을 기대할지 알려주고, 미추적 대상은 \"mosh 설치했는데 changelog에 왜 없지?\" 같은 오추론을 방지한다. 전자는 finite, 후자는 infinite지만 핵심 항목만 명시하면 된다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "1c605bcf-14de-425d-a97a-1d456396ed27",
+    "facts": [
+      {
+        "evidence": "보고서 문서를 작성하겠습니다. 현재 로직을 정리하고, 강화 방향까지 검토용으로 구조화하겠습니다.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "d0ade300-3547-4fa0-b261-a037e47f4ed0",
+    "facts": []
+  },
+  {
+    "turn_id": "012373c9-a7e9-4f71-9fe7-bf3ce1aa38eb",
+    "facts": [
+      {
+        "evidence": "흐름: ``` 낮: mem_save → turns (UUID 자동 생성)      worklog add → worklog_entries (agent/model 기록) 밤: link_conversations.py      → 오늘 생성된 turns + worklog 조회      → 시간대 + 키워드 유사도로 후보 추출      → LLM(litellm → qwen)이 최종 매칭 판단      → worklog_entries",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "fcbafe4a-c473-4860-9435-5de5dbad2c92",
+    "facts": []
+  },
+  {
+    "turn_id": "1f5ec6d5-4a9c-4b18-b302-80035f4c051d",
+    "facts": [
+      {
+        "evidence": "claude code CLI, copiilot CLI, geimini CLI",
+        "speaker": "agent name",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "웹에서 하면 느려서",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "DevForge 서버는 AI를 실행하지 않음. 저장 + 검색만.",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "29973aff-e068-4a51-b30d-5a4d6b87d261",
+    "facts": [
+      {
+        "evidence": "2단계로 확정",
+        "speaker": "user",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "KV 캐시는 교체하면 사라지니까 모델 크기 제약이 없고",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "24시간 동안 데이터 들어올 때만 처리하면 됩니다",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "매 15분: 00,15,30,45",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "매 30분: 05,35, checkpoint 기반 이어서",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "LLM (매 30분: 05,35, checkpoint 기반 이어서)",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "collect_turns",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "Qwen 14B Q6_K  — 1차 기록 (사실 추출)",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "ingestion",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "Phi-4 14B Q6_K  — 2차 비판 검토",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "deter",
+        "speaker": "text",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "920b49a5-a03a-4bdf-b7e9-b0f43547bfb7",
+    "facts": [
+      {
+        "evidence": "`CLAUDE.md`는 규칙에 명시된 게 아니라 **Copilot CLI(Claude Code)의 내장 동작**입니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "현재 작업 디렉토리(`/home/opc`)에 `CLAUDE.md`가 있으면 세션 시작 시 자동으로 로드됩니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "사용자가 지시하지 않아도 항상 읽힙니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "`CLAUDE.md`에 `@./common-main.md`, `@./common-rule.md`를 넣어두면 → 그것들도 자동으로 함께 로드되는 구조입니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "`handover.yaml`과 `tasks.yaml`도 같은 방식으로 `CLAUDE.md`에 추가하면",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "f7c07f5b-0141-42a8-96ba-85f08d79496c",
+    "facts": [
+      {
+        "evidence": "/opt/에 있을 때 진입점으로 쓰던 내용을 common-main으로 수정한건데.",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "``` /home/opc/ ├── CLAUDE.md              ← @./common-main.md + @./common-rule.md ├── common-main.md         ← 서버 소개/개요 (이전 /opt/ 진입점 내용) ├── common-rule.md         ← 운영 규칙 (시크릿, 타임존, 컨테이너, 워크스페이스) └── server-env/            ← 서버 문서 ```",
+        "speaker": "text",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "81dc29bc-4b82-4ea1-baf8-acb9db2c7c96",
+    "facts": [
+      {
+        "evidence": "웹 UI를 자동화하는 방식이라서 technically는 가능하지만 운영 안정성은 떨어집니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "웹 UI를 브라우저 자동화(Playwright/puppeteer)",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "비공식 웹 엔드포인트 호출",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "공식 API",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "60bed6f2-fe11-44d8-b2ed-2a0c2a0a7fd9",
+    "facts": [
+      {
+        "evidence": "초기 단계면 바꾸는 게 더 낫습니다.",
+        "speaker": "copilot",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "GitHub/문서 검색 결과도 `To Do / In Progress / Done / Blocked` 쪽이 더 많이 걸릴 가능성이 큽니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "활성 문서/UI/운영표기: `To Do / In Progress / Done / Blocked`",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "결정 상태: `Proposed / Accepted / Superseded / Deferred` 유지",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "50490d55-c06a-427f-9194-529b98d8dc6f",
+    "facts": [
+      {
+        "evidence": "글자색을 변경시켜. 기본 - white, 주의 - yellow 경고 - red",
+        "speaker": "user",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "색상이 적용되었습니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "구분   색상   적용 대상  ------ ------ -----------  `WHITE`   기본   CPU 정상, 메모리 정상, 마운트된 LV, 디스크 <80%, 컨테이너 healthy, 서비스 active   `YELLOW`   주의   unmounted LV (`lv_db`), 서비스 inactive   `RED`   경고   서비스 not-installed, 컨테이너 unhealthy, 디스크 ≥90%, CPU ≥3.5  섹션 헤더(`[SYSTEM]`, `[STORAGE]` 등)",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "731f258f-713d-4678-b0db-34f2cb58f12a",
+    "facts": []
+  },
+  {
+    "turn_id": "44d2032d-9dec-4762-9ab2-9d29e7ecb7f7",
+    "facts": [
+      {
+        "evidence": "회사에서 Gemini와 대화",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "Gemini가 내 MCP 서버 호출",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "mem_search(\"postgres 설정 어떻게 했더라\")",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "인터넷 검색 (Gemini 기본 기능)",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "최신 postgres 문서, 스택오버플로",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "예전에 이런 식으로 설정했고, 지금은 이렇게",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "2a044ce9-6372-4146-8271-00201268f8a6",
+    "facts": [
+      {
+        "evidence": "그게 더 맞습니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "common-rule.md",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "common-main.md",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "행동 규칙",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "인프라 작업 시만 필요",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "낮음",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "낮음",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "직접 포함",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "필요 시 읽어라 지시",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "common-rule.md는 47줄로 짧고, AI가 항상 따라야 할 규칙이니 직접 주입이 맞습니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "common-main.md는 인프라 정보라 코딩 작업엔 불필요한 토큰 낭",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "d219985c-5ec8-4481-83d5-bfa179260852",
+    "facts": []
+  },
+  {
+    "turn_id": "b6247856-0391-4331-9c75-d45c9f5cf573",
+    "facts": [
+      {
+        "evidence": "alias 방식은 구멍이 있습니다.",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "Claude Code의 Edit 도구나 vim으로 편집하면 동기화가 깨집니다.",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "더 확실한 방법: 이미 설정된 SessionEnd 훅에 동기화 추가.",
+        "speaker": "user",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "# /opt/projects/server/scripts/session_guard.py 안 또는 별도 스크립트",
+        "speaker": "user",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "cat /home/opc/common-rule.md > /home/opc/.copilot/copilot-instructions.md",
+        "speaker": "user",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "세션 종료 시 무조건 실행되므로:",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "- 누가 편집했든 (Claude, nano, vim) 항상",
+        "speaker": "user",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "5216e9d8-0a67-4316-aeba-7c06307b6cb1",
+    "facts": [
+      {
+        "evidence": "CLAUDE.md가 `/opt/workspace/seedling/CLAUDE.md`로 심링크되어 있습니다.",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "시스템 구조 문서는 **`/opt/projects/server/docs/design.md`** 입니다 — 어제(5/14 13:26) 수정되었고 아키텍처, 컨테이너, DB 구조를 담고 있습니다.",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "1. 심링크를 끊고 `/home/opc/CLAUDE.md`를 실파일로 교체",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "2. 심링크 대상(`/opt/workspace/seedling/CLAUDE.md`)에 직접 편집하려면 심링크를 교체해야 합니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "521376d6-0a09-40b7-a6e7-f9cb5c58dc4c",
+    "facts": [
+      {
+        "evidence": "15분마다 돌아간다. 이때 작업을 분산시키면? 1시간에 4번이니까.",
+        "speaker": "user",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "15분 주기 4회를 이렇게 분산할 수 있다:  분   작업   Qwen 필요  ---- ------ ----------  :00   ingestion + linkage (결정론적)   ❌   :15   ingestion + observations (3턴)   ✅ 경량   :30   ingestion only   ❌   :45   ingestion + observations (3턴)   ✅ 경량",
+        "speaker": "text",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "092c5571-43ed-4a2f-8f68-49ea4d87cd80",
+    "facts": [
+      {
+        "evidence": "차단 페이지가 떴을 때 증거를 남기는 진단용 모드",
+        "speaker": "copilot",
+        "fact_type": "description"
+      },
+      {
+        "evidence": "현재 페이지 HTML 저장",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "스크린샷 저장",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "페이지 제목/본문 일부 저장",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "응답 코드/리다이렉트 정보 기록",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "차단을 우회하는 기능이 아니라",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "왜 막혔는지",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "5065ab46-c549-42fa-b4c5-0bfce315c00d",
+    "facts": [
+      {
+        "evidence": "26b가 분석/기획에서 더 상세한 chain-of-thought(2385자 vs 2102자)를 제공합니다.",
+        "speaker": "text",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "31b는 코드 수정에 빠르고 정확하고요.",
+        "speaker": "text",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "같은 API 할당량을 공유한다면, 용도별로 최적 모델을 나누는 현재 3단계 전략이 합리적입니다.",
+        "speaker": "text",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "기존 전략 그대로 가는 게 맞습니다.",
+        "speaker": "text",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "f2de54eb-b1bc-40f1-a91b-2c200094ffd6",
+    "facts": [
+      {
+        "evidence": "맞다. 각 Qwen 호출이 완전히 독립적이다",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "Phase 1: ingest + linkage   (Qwen 없음, 결정론적)          → 종료",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "Phase 2: Qwen classify      (새 메모리, worklog title만 주입)          → agent 추론 → 종료 → 메모리 소멸",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "Phase 3: Qwen observe       (새 메모리, 3턴 대화만 주입)          → 사실 추출 → 종료 → 메모리 소멸",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "각 Qwen 호출은 stateless, 공유 컨텍스트 없음",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "프롬프트가 작",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "0d3a7b62-e162-42b8-ac41-1ec5257c250d",
+    "facts": [
+      {
+        "evidence": "코파일럿 Student Benefit의 **실제 할당량**을 정확히 파악해야 하는군요.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "7397b1d4-b404-45a7-b104-f690d7b4f01c",
+    "facts": [
+      {
+        "evidence": "네, 정상입니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "/opt/workspace는 별도 디스크가 아니라 /opt/projects의 같은 datavg-lv_projects를 bind mount로 보여주는 경로라서",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "사용량이 동일하게 1.3G로 보입니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "즉 지금은 “공간이 2배로 든 것”이 아니라, 같은 데이터를 두 경로로 보는 상태입니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "4b09b0b8-e758-489f-a375-3fd3706ea01a",
+    "facts": [
+      {
+        "evidence": "Claude Code JSONL `type` 값과 정확히 1:1 매핑된다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "PostgreSQL에서 `user`는 예약어라서 DB 컬럼명으로 쓰려면 항상 따옴표 감싸야 한다 (`\"user\"`).",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "7435286e-04f4-4087-9393-8b6c4b147c2b",
+    "facts": [
+      {
+        "evidence": "/home/opc/server-env/ai-agent/의 내용은 없어.",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "각 agent 마다 진입점이 다르니까 각자 특수규칙은 진입점에 기록하고 common-main를 import.",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "common-rule도 /home/opc/ 에 위치",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "정리하면: ``` /home/opc/ ├── CLAUDE.md              ← Claude Code 진입점 (기존 유지, 수정 안 함) ├── common-main.md         ← 모든 에이전트 공통 @import (인프라, 시크릿, 타임존, 워크스페이스) ├── common-rule.md         ← Python/코드 표준 (Tenacity, snake_case, stdlib 등) └── server-env/            ← 서버 관리 문서     ├── design.md     ├── phases.",
+        "speaker": "text",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "d8e0b647-5af4-4e8a-af98-cc1bc48d9d5f",
+    "facts": [
+      {
+        "evidence": "`settings.json`은 Claude Code의 **훅 설정**이고, 턴-워크로그 매칭과는 무관해.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "매칭 로직은 이 쪽: ``` systemd timer (03:00 KST)   └─ nightly_batch.sh        └─ link_turns.py   ← UUID 매칭 담당             └─ podman exec postgres psql ... (SQL로 매칭) ```",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "settings.json 훅이 하는 일:  훅   실행 시점   스크립트   역할  ---- ---------- ---",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "5f1b783d-5d12-4a6d-89aa-885babe8961c",
+    "facts": []
+  },
+  {
+    "turn_id": "913ed228-4cbd-4d24-b6b8-4f595d617c24",
+    "facts": [
+      {
+        "evidence": "Qwen의 책임 범위를 줄이는 것",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "현재: Qwen이 ingest + link + fix 모두 판단",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "개선: Ingest는 무조건 deterministic 실행",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "Qwen은 link + fix + observat",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "c8d98b93-2e1d-4573-a0a7-523328c798a0",
+    "facts": [
+      {
+        "evidence": "/home/opc/server-env/_archive/를 /opt/projects/server/_archive로 이동하고 /home/opc/server-env/는 삭제",
+        "speaker": "user",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "완료. `_archive`로 모두 통합, `server-env/` 삭제.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "/opt/projects/server/_archive/",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "backup_project_server/",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "backup_project_seedling/",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "copilot_session_drafts/",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "secure-meta-server/",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "caddy-docs/",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "data-docs/",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "4929f2b5-6977-43f0-b176-007e453e0a4b",
+    "facts": [
+      {
+        "evidence": "중복 방지: 이전 ingest된 턴들(기존 테스트 데이터)은 conversation_id가 달라서 별도로 존재하지만, collect_turns 자기 자신과의 중복은 체크포인트 턴 카운트로 완전히 차단돼.",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "경로 A — MCP `mem_save`** (수동/실시간): - conversation_id = 새로 생성 (랜덤 UUID) - 예: 테스트로 `mem_save` 호출 → `conversation_id = abc-123`",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "경로 B — `collect_turns.py`** (15분 자동): - conversation_id = 세션 UUID (Claude Code가 정한 값) - 예: 같은 대화를 collect_turns가 수집 → `conversation_id = 33e6e",
+        "speaker": "text",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "4eb230d6-462c-4953-a194-ff430a70b39b",
+    "facts": [
+      {
+        "evidence": "문서 정리 규칙 — obsolete 파일은 즉시 삭제하지 않고 `_archive/`로 이동 → `README.md`에 보관 사유/삭제 조건/대체 위치/주의사항 기록 → 원본 삭제",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "DevForge 문서 단일화 — 모든 DevForge 문서는 `/opt/projects/server/docs/` (design.md, phases.md, worklog.json) 외부에 두지 않음",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "24acdf93-f5b6-49a8-8ddd-f41d78116b18",
+    "facts": [
+      {
+        "evidence": "mcp_dec, mcp_user_dec qwen_obs_dec 이렇게 하면 decisions 라는 느낌이 안나나?",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "`dec`는 decision의 관용적 축약이고, 패턴이 일관됩니다",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "mcp_dec        ← {source}_{type}_dec",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "mcp_user_dec   ← MCP에서 오지만 주체가 user임을 명시",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "qwen_obs_dec   ← Qwen의 observation을 기반으로 한 decision",
+        "speaker": "text",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "_dec` 접미사로 세 테이블 모두 \"결정\"이라는 성격이 유지됩니다.",
+        "speaker": "text",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "각각 누가/어디서 만든 결정인지 prefix만으로 구분되고요.",
+        "speaker": "text",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "확정된 구조:  테이블   소스   결정 주체  -------- ------",
+        "speaker": "text",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "a0fc843a-5a3a-4b7e-b7d0-cca6226a2e5f",
+    "facts": [
+      {
+        "evidence": "Claude Code의 로드 순서는: ``` 루트(/) → /home/ → /home/opc/ → /home/opc/server-env/   ↓         ↓          ↓               ↓ (먼저 로드) ..........→ (나중 로드, 우선순위 높음) ```",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "기계가 서버 구조 파일을 가장 효율적으로 이해하려면 `/home/opc/` 평면에 두는 게 좋",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "748b58ca-eebd-4c41-8fd7-6465c31927ef",
+    "facts": [
+      {
+        "evidence": "룰을 먼저 적용하게 변경했어. 효율적입니다",
+        "speaker": "user",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "rule이 항상 최신 상태로 주입됨",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "common-rule.md 하나만 수정하면 끝 (Single Source of Truth 유지)",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "copilot-instructions.md를 직접 건드릴 필요 없음",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "스크립트를 \"언제 실행하느냐\" 가 핵심입니다",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "alias 방식은 구멍이 있습니다. Claude Code의 Edit 도구나 vim으로 편집하면 동기화가 깨집니다",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "더 확실한 방법: 이미 설정된 SessionEnd 훅에 동기화 추가",
+        "speaker": "user",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "cat /home/opc/common-rule.md > /home/opc/.copilot/copilot-instructions.md",
+        "speaker": "user",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "세션 종료 시 무조건 실행되므로",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "누가 편집했든 (Claude, nano, vi",
+        "speaker": "user",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "62b1900e-81f6-4434-8d7e-ecd7b08edde0",
+    "facts": [
+      {
+        "evidence": "처리 속도 관련 데이터를 모으고 있나? 만약 사용자 입력을 기준으로 한다면 user 의 입력시간을 항상 기록. 이것을 기준으로 uuid 를 찾고 기록. 이 데이터가 있으면 처리 속도, 반응 속도 모두 계산 가능. 이후 새벽에 처리할 때도 이 시간만 매칭하면 모든게 다 맞는다",
+        "speaker": "user",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "정확하다. 시간만으로 충분히 매칭된다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "turns 테이블:   created_at  TIMESTAMPTZ  ← mem_save 호출 시점 (사용자 입력 직후)",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "worklog_entries:   created_at  TIMESTAMPTZ  ← worklog add 실행 시점 (세션 종료 직전)",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "date        DATE         ← 작업일",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "SELECT id FROM t",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "391e4b1b-218d-415a-a26d-be0e7793a6da",
+    "facts": [
+      {
+        "evidence": "LLM(Gemini 등)의 자동화 작업으로 인해 발생하는 Worklog 기록 누락 문제를 해결하기 위한 매우 체계적이고 견고한 아키텍처",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "실시간성(Hook)과 안정성(Reconciliation)을 동시에 챙긴 C안(이중 레이어 구조)",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "실패를 가정하고 설계한 다단계 Fallback 경로(L0~L4)",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "b89d455b-c710-4745-8225-506fcdd2c088",
+    "facts": [
+      {
+        "evidence": "Phase 1에선 **검색/필터링에 실용적 가치가 있는 것만** 수집한다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "dba5b8ec-3371-4a07-a928-ec7eded5c685",
+    "facts": [
+      {
+        "evidence": "`devforge_meta` DB는 없고 `devforge_app` 하나만 있습니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "backup 스크립트에도 아직 `devforge_meta`가 남아있었네요.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "최종 구조로 바로 만들겠습니다.",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "이제 문서들을 작성합니다.",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "이전 이력 몇 건을 DB에 시드하고, schema.sql에도 반영합니다.",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "정리된 구조입니다: ``` /opt/projects/server/docs/ ├── worklog.json     ← entries 3건 + 포인터 (design.md, phases.md, entries_db) ├── desig",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "6e49ae59-897f-45f3-973b-181502dfa1a2",
+    "facts": []
+  },
+  {
+    "turn_id": "8c12a843-d9c7-48d6-9f54-61e2c5dcf3ce",
+    "facts": [
+      {
+        "evidence": "네, 가능합니다!",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "두 도구는 독립적이므로 다른 계정으로 인증할 수 있습니다",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "copilot /login",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "VS Code 열기",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "Sign In → B 계정으로 인증",
+        "speaker": "copilot",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "c0afbbf9-ea39-4319-86db-68ed7ebb401a",
+    "facts": [
+      {
+        "evidence": "102개 파일 스테이징 완료",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "커밋 완료",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "푸시 완료!",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "102개 파일 커밋 + 푸시 완료",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "2375bfbb-3fc6-46f0-bd6e-10ac3dd1c0aa",
+    "facts": []
+  },
+  {
+    "turn_id": "be49c67d-d8dd-410f-a46c-78d15e6d98b5",
+    "facts": [
+      {
+        "evidence": "/opt/devforge-env/",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "자동 발견 경로",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "CLAUDE.md",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": ".claude/rules/*.md",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "하위 디렉토리 CLAUDE.md → 해당 디렉토리 열 때 로드",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "7e8b8649-e2cf-4940-93e4-9804125d5306",
+    "facts": [
+      {
+        "evidence": "Qwen만 보지 말고 다양한 계열 검색.",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "비Qwen 대안 — 24GB ARM 시스템 적합 모델",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "Mistral-Nemo-12B",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "12B",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "13GB",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "llama",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "✓",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "강한 추론, 코드특화 아님",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "Yi-Coder-9B-Chat",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "9B",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "9.4GB",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "✓",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "코드 특화, 작고 빠름",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "3e54cc00-bf7f-43eb-814e-c433ce1c4620",
+    "facts": []
+  },
+  {
+    "turn_id": "1f1b56ea-c269-410a-b685-5fb128b27d78",
+    "facts": [
+      {
+        "evidence": "현재 아키텍처에서 \"기억\"은 두 경로로 작동합니다: ## 경로 1: 자동 수집 (작동 중) ``` collect_turns.py (15분 주기)   → JSONL 파일 파싱   → POST /ingest   → save_memory() → conversations + turns 테이블 ``` 세션 종료 후 15분 내에 모든 대화가 DB에 저장됩니다. **사후 자동 기억**. ## 경로 2: MCP 실시간 (서버는 떠 있으나 미연결) ``` Claude Code / Copilot   → MCP SSE 연결 (/mcp/sse)   →",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "cc49066b-9678-4292-bc8d-f2b7e1b2b4df",
+    "facts": []
+  },
+  {
+    "turn_id": "b01978e8-7b1e-40d3-84d7-824b9a88e2b9",
+    "facts": [
+      {
+        "evidence": "Seedling의 실수는 **자주 바뀌는 것(entries)과 가끔 바뀌는 것(설계, 계획)**을 한 파일에 욱여넣어 877줄이 된 겁니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "분리하는 게 낫습니다",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "/opt/projects/server/docs/ ├── worklog.json          ← entries만 (3건, ~30줄). 매 세션 읽기/쓰기 ├── design.md             ← 설계 + 핵심 결정 (~40줄). 가끔 읽기 ├── phases.md             ← 현재 상태 + 미래 계획 (~30줄). 가끔 업데이트",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "2c85905b-9cd1-454e-9de6-f8d59dc67121",
+    "facts": [
+      {
+        "evidence": "교차 검증 결과를 요약하면: **확정 사항:** - `meta` JSONB 4개 필드 최종 구조 록인 - `tokens`는 Phase 1 단일 int, Phase 2에서 `{prompt, completion}` 객체로 확장 가능 - `tools_used`는 `@>` 연산자로 검색, 기존 GIN 인덱스 활용 - 서버 측 유효성 검증 없음 — 클라이언트가 책임",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "`meta` 4개 필드 (`mem_save` + `ingest`)   ✅ 적용 완료",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "0f09121d-7f4f-4339-a6c3-17772ef97d7b",
+    "facts": [
+      {
+        "evidence": "You.com은 유료 크레딧이니 신중하게 써야 한다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "1차: Brave (일반 검색) + Exa (코드/문서 시맨틱 검색)",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "2차: Travily (구조화된 검색, fallback)",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      },
+      {
+        "evidence": "3차: You.com ($100 크레딧, 최후 백업)",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "5da3cf4b-1c45-4cb2-baea-f7539d69098b",
+    "facts": [
+      {
+        "evidence": "continuous append-only data",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "DB is suitable",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "PostgreSQL already exists",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "asyncpg connection is available",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "no dependency addition needed",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "CREATE TABLE IF NOT EXISTS worklog_entries",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "6818aceb-407c-4eae-acab-725f27aba650",
+    "facts": [
+      {
+        "evidence": "패턴을 찾았습니다. reasoning-only 68건, answer-only는 **0건**입니다.",
+        "speaker": "claude-code",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "Claude Code의 도구 호출 패턴: ``` USER: \"질문\"   ASSISTANT: [thinking]    ← 사고 시작   ASSISTANT: [tool_use]    ← 도구 호출 USER: <tool_result>         ← 도구 결과가 \"user\" 이벤트로 옴 → flush_turn() 발동!   ASSISTANT: [thinking]     ← 이어서 사고   ASSISTANT: [text]        ```",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "0f588731-9933-4298-b94d-3b5a0165d7aa",
+    "facts": [
+      {
+        "evidence": "DevForge = 개인용 (현재 서버에서 즉시 구축)",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "Seedling = 다중 사용자 (별도 서버, 추후)",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "5 Golden Rules로 간소화 (enterprise 과정 전부 폐기)",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "템플릿 4개 파일로 즉시 시작 가능",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "Phase 1 목표: 4주 안에 동작하는 MCP 서버 1개",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "Week 1-2: PostgreSQL + FastAPI",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "Week 3: Chrome Ex",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "58ffbd6c-45c8-4ae2-b250-316a002326b3",
+    "facts": []
+  },
+  {
+    "turn_id": "480da810-afe5-4499-96b1-d57021652311",
+    "facts": [
+      {
+        "evidence": "전체 테이블 구조를 Phase 1→2로 나눠서 작성한다.",
+        "speaker": "claude-code",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "93ca7550-ebeb-4bae-a641-6b5811d81860",
+    "facts": []
+  },
+  {
+    "turn_id": "f8259813-ed95-4bf4-9ef8-f893a2a19521",
+    "facts": [
+      {
+        "evidence": "세 검토의견을 교차 검증했다.",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "인덱스 표현식 불일치",
+        "speaker": "agent name",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "적용",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "적용",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      },
+      {
+        "evidence": "적용 (DO NOTHIN",
+        "speaker": "agent name",
+        "fact_type": "decision"
+      }
+    ]
+  },
+  {
+    "turn_id": "d70b1784-7d57-44c9-8364-a1cf60470b1a",
+    "facts": [
+      {
+        "evidence": "현재안은 “과거 누락 복구”에는 꽤 효과적이지만, “향후 누락 방지”의 근본 해결책은 아닙니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "실무 우선순위는 **C(직접 hook) > B(단순 backfill) > A(Ollama 검증)** 에 가깝습니다.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "backfill만으로는 누락 문제를 근본 해결하지 못함",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "영향**: Gemini가 계속 worklog를 빼먹으면, 운영자가 주기적으로 뒤늦게 메우는 구조가 됨.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      },
+      {
+        "evidence": "이건 복구책이지 예방책이 아님.",
+        "speaker": "copilot",
+        "fact_type": "observation"
+      }
+    ]
+  },
+  {
+    "turn_id": "ea6cebb5-42bc-468e-a2e8-3fe39332ec3c",
+    "facts": []
+  },
+  {
+    "turn_id": "82102ff5-436f-47a2-8d8f-2f0d301f9bb0",
+    "facts": []
+  },
+  {
+    "turn_id": "c11bd3e5-b41a-45bf-ae5a-ac4628657d1a",
+    "facts": [
+      {
+        "evidence": "2건만 적용: 1. Line 47: `stop` → `ask for confirmation`, File Modification Priority 참조 추가 2. Python 버전 확인 후 line 35 수정",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
+  },
+  {
+    "turn_id": "e6b9b049-c452-4bbc-bf2c-23b08c9043c4",
+    "facts": [
+      {
+        "evidence": "seedling `db.py:81`: ```python _pool = await asyncpg.create_pool(     max_queries=50000,  # 5만 쿼리 후 연결 재생성 → 메모리 누수 방지 ) ```",
+        "speaker": "claude-code",
+        "fact_type": "data_given"
+      }
+    ]
   }
 ]
