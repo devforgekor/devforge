@@ -1,8 +1,17 @@
 last_checkpoint:
-  time: '2026-05-19T03:10:00+00:00'
-  recent_files: []
+  time: '2026-05-21T16:15:00+00:00'
+  recent_files:
+    - /opt/projects/server/scripts/review_worker.py
+    - /opt/projects/server/scripts/swap_mode.sh
+    - /opt/ai_data/scripts/dual-server-entrypoint.sh
+    - /opt/ai_data/scripts/current-mode.env
+    - /opt/projects/server/docs/tasks.yaml
   git: {}
 decisions:
+- '양방향 리뷰 버그 수정 (2026-05-21): (1) RateEstimator._samples 0값 median 왜곡 → gr>0 조건부 append. (2) prompt_tokens 단어 수 기반 과소추정 → 1.3x 보정 적용. (3) tenacity after callback 성공 시 빈 줄 → else None. (4) --flash-attn auto 확인 — ARM CPU-only에서 효과 없음, 기본값 auto로 충분. (5) phi-4-Q8_0.gguf(14.5GB) 삭제, Qwen14B는 추가 테스트 위해 보존. (6) 잔여 작업 우선순위: Gemini header → consistency warnings → 대시보드 → 32B 재테스트.'
+- 'DevForge v3.0 완결 (2026-05-21): review_worker.py timings 기반 RateEstimator + 동적 timeout + DB 성능추적(6컬럼) + cache hit 모니터링. systemd auto-start 2개 unit + review-worker.timer(:05) + swap-batch/normal.timer(KST 07-08/12-13/17-18). swap_mode.sh 수동 전환 스크립트. Qwen3-4B /no_think 필수 (chat template 메커니즘, thinking 토큰 낭비 방지).'
+- '32B 동적 timeout 전환 (2026-05-21): 고정 STAGE_TIMEOUTS → 토큰 기반 동적 calc_timeout(). T01 실측 기반 3 tok/s 보정. slack_operator.py 4300토큰 S2 57분 필요 → 기존 50분 timeout 100% 실패. T01~T08 동적 timeout 전체 재실행 중.'
+- '동적 스와핑 아키텍처 v2.1 완결 (2026-05-21): 2-Container 3-Model 동시 구동. 외부 2회 검토 통과, Blocker 2건 + 8건 개선 적용. Azure Blob 업로드 완료. 32B 테스트 완료 후 구현 예정.'
 - 'KeyRotator RPM 가드 하드 차단 (2026-05-20): pick()에서 outside/inside pool 분리. 계정이 RPM 윈도우(3초) 내에 있으면 아예 건너뛰고, 모든 계정이 윈도우 내일 때만 가장 오래된 계정의 윈도우 만료까지 대기 후 inside pool에서 선택. 계정당 최대 20 RPM, 키당 ~10 RPM으로 Gemini 무료 티어(키당 20 RPM) 준수. state 파일 초기화, gemini-proxy 재시작 완료.'
 - 'search_proxy HTML 필터 추가 (2026-05-20): _clean_text() — re.compile(r"<[^>]*>")로 태그 제거 + html.unescape()로 엔티티 디코딩. 모든 제공자(Brave/Exa/Tavily/you.com) title/description에 적용.'
 - 'Cline rules injection 자동화 완료 (2026-05-20): sync_gemini_rules.py가 common-main.md + common-rule.md → GEMINI.md 생성. gemini_proxy.py Patch 3이 GEMINI.md body 부분(header --- 이후)을 systemInstruction에 주입. Cline 3.0.8이 파일시스템 rules를 지원하지 않아 프록시 방식으로 해결. managed.json 필요 (i6 함수가 디렉토리 검증용으로 사용). ~/Documents/Cline/Rules/cline-specific.md에 Cline 전용 설정 보관.'
@@ -245,6 +254,7 @@ known_issues:
 - 'Cline filesystem rules 미지원 (2026-05-20): Cline 3.0.8은 .clinerules, ~/Documents/Cline/Rules/, .cline/rules/ 등 파일시스템 기반 rules 로딩을 지원하지 않음. 프록시 systemInstruction 주입으로 우회 중. 향후 Cline 버전 업데이트 시 파일시스템 rules 지원 확인 필요.'
 - 'Copilot NOTE phdr 패치 자동화 필요: npm auto-update 시 NOTE program header가 원복되어 copilot CLI 실행 불가 상태가 됨. 현재는 수동 패치로 대응 중. /opt/projects/server/scripts/patch_copilot_elf.py 형태로 스크립트화하거나 npm postinstall hook 검토 필요. (2026-05-19)'
 - 'systemd v252 healthcheck bug: daemon-reload on user instance causes private socket inode desync → ECONNREFUSED. Workaround: containers run without HealthCmd. systemd v252→v256 upgrade needed for fix. (2026-05-19)'
+- 'Warning: v252 Quadlet does not support MemoryMax in [Container] section. Use [Service] MemoryMax= instead or omit. (2026-05-21)'
 - systemctl --user restart --no-block can take 7+ minutes for the new container to start after restart command. Root cause
   not yet determined — possible systemd rate limiting or Podman cleanup delays. Direct podman stop/start may be more reliable.
 - Gemini CLI still needs a root-cause pass for the node-22 SIGSEGV path when launched on demand; the persistent crash-loop

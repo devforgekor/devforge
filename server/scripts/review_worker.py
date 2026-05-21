@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """review_worker.py — 2-phase LLM review pipeline for DevForge.
 
-Phase 1 (extract): Qwen2.5-Coder-14B extracts self-contained facts from turns.
-Phase 2 (verify):  Phi-4 cross-validates facts against original turn content.
+Phase 1 (extract): Qwen3-4B (Podman A, port 8080) extracts facts from turns.
+Phase 2 (verify):  Phi-4-mini (Podman B, port 8081) cross-validates facts.
 
 24h rolling window, checkpoint-based incremental processing.
-Models swap via /opt/ai_data/models/gguf/current.gguf symlink.
+Both containers are always running — no model swapping needed.
 
 Usage:
   python3 review_worker.py                 # normal incremental run
@@ -14,92 +14,46 @@ Usage:
 
 import http.client as hc
 import json
-import os
 import re
-import subprocess
+import statistics
 import sys
-import time
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
+
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from lib.db import psql, psql_ok, esc_sql
 from session_guard import log_commits_to_worklog
 
-# ── paths ──────────────────────────────────────────────────────────
-SYMLINK = Path("/opt/ai_data/models/gguf/current.gguf")
-MODEL_DIR = Path("/opt/ai_data/models/gguf")
-LLAMA_URL = "http://localhost:8080/v1/chat/completions"
-LITELLM_KEY = "devforge-litellm-key"
+# ── endpoints ──────────────────────────────────────────────────────
+EXTRACT_URL = "http://127.0.0.1:8080/v1/chat/completions"  # Podman A — Qwen3-4B, always on
+VERIFY_URL = "http://127.0.0.1:8081/v1/chat/completions"   # Podman B — mode-switchable
 CHECKPOINT_FILE = Path("/opt/projects/server/review_checkpoint.json")
 
 # ── models ─────────────────────────────────────────────────────────
-# Per-model config: tier determines resource allocation, optional prompt overrides
 MODELS = {
-    "qwen14": {
-        "name": "qwen2.5-coder-14b",
-        "file": "Qwen2.5-Coder-14B-Instruct-Q8_0.gguf",
-        "tier": "14B",
+    "qwen4b": {
+        "name": "qwen3-4b",
+        "port": 8080,
+    },
+    "phi4mini": {
+        "name": "phi-4-mini",
+        "port": 8081,
     },
     "phi4": {
         "name": "phi-4",
-        "file": "phi-4-Q8_0.gguf",
-        "tier": "14B",
+        "port": 8081,
     },
-    "deepseek_r1": {
-        "name": "deepseek-r1-distill-qwen-14b",
-        "file": "DeepSeek-R1-Distill-Qwen-14B-Q8_0.gguf",
-        "tier": "14B",
-    },
-    "yi_coder_9b": {
-        "name": "yi-coder-9b-chat",
-        "file": "Yi-Coder-9B-Chat-Q8_0.gguf",
-        "tier": "<=9B",
-    },
-    "mistral_nemo_12b": {
-        "name": "mistral-nemo-12b-instruct",
-        "file": "Mistral-Nemo-Instruct-2407-Q8_0.gguf",
-        "tier": "12B",
-    },
-    "granite_8b": {
-        "name": "granite-8b-code-instruct",
-        "file": "granite-8b-code-instruct.Q8_0.gguf",
-        "tier": "<=9B",
-    },
-    "qwen_coder_7b": {
-        "name": "qwen2.5-coder-7b-instruct",
-        "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
-        "tier": "<=9B",
-    },
-    "deepseek_coder_v2_lite": {
-        "name": "deepseek-coder-v2-lite-instruct",
-        "file": "DeepSeek-Coder-V2-Lite-Instruct-Q8_0.gguf",
-        "tier": "16B",
-    },
-    "starcoder2_15b": {
-        "name": "starcoder2-15b-instruct",
-        "file": "starcoder2-15b-instruct-Q8_0.gguf",
-        "tier": "16B",
+    "llama3b": {
+        "name": "llama-3.2-3b",
+        "port": 8081,
     },
 }
 
-# Resource profiles per tier — single source of truth for container args
-TIERS = {
-    "32B":  {"ctx_size": 2048, "cache_ram": 2048, "batch_size": 512,  "ubatch_size": 256,
-             "require_mem_mb": 23000, "stop_services": ["devforge-api", "collect_turns.timer"]},
-    "16B":  {"ctx_size": 2048, "cache_ram": 2048, "batch_size": 1024, "ubatch_size": 512},
-    "14B":  {"ctx_size": 2048, "cache_ram": 2048, "batch_size": 2048, "ubatch_size": 512},
-    "12B":  {"ctx_size": 3072, "cache_ram": 3072, "batch_size": 3072, "ubatch_size": 768},
-    "<=9B": {"ctx_size": 4096, "cache_ram": 4096, "batch_size": 4096, "ubatch_size": 1024},
-}
-
-# Track tier-level service state for restore
-_tier_stopped_services: List[str] = []
-
-# Pipeline: extract with model1, verify with model2
-EXTRACT_MODEL = "qwen14"
-VERIFY_MODEL = "phi4"
+# Pipeline: extract with Podman A (8080), verify with Podman B (8081)
+EXTRACT_MODEL = "qwen4b"
+VERIFY_MODEL = "phi4mini"
 
 # ── prompts ────────────────────────────────────────────────────────
 EXTRACT_SYSTEM = """You are a fact extraction system. From the conversation turn below, extract ONLY self-contained, testable facts.
@@ -172,6 +126,10 @@ def ensure_review_table():
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE (turn_id, fact_index, extract_model)
     )""")
+    for col, col_type in [("prompt_tokens", "INTEGER"), ("gen_tokens", "INTEGER"),
+                           ("gen_rate", "REAL"), ("elapsed_ms", "REAL"),
+                           ("cache_hit", "INTEGER"), ("phase", "TEXT")]:
+        psql(f"ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS {col} {col_type}")
     psql("CREATE INDEX IF NOT EXISTS idx_review_facts_turn ON review_facts(turn_id)")
     psql("CREATE INDEX IF NOT EXISTS idx_review_facts_created ON review_facts(created_at DESC)")
 
@@ -218,13 +176,11 @@ def fetch_unprocessed_turns(limit: int = 20, checkpoint: dict = None,
     return turns
 
 
-def esc_sql(s: str) -> str:
-    return s.replace("'", "''").replace("\\", "\\\\").replace("\n", " ").replace("\r", " ")
-
-
 def save_review_facts(turn_id: str, facts: List[Dict], reviews: List[Dict],
-                      extract_model: str, verify_model: str):
-    """Save extracted and verified facts to DB."""
+                      extract_model: str, verify_model: str,
+                      phase: str = "", timings: Optional[Dict] = None):
+    """Save extracted and verified facts to DB with optional timing data."""
+    t = timings or {}
     saved = 0
     for review in reviews:
         idx = review.get("fact_index", 0)
@@ -233,15 +189,28 @@ def save_review_facts(turn_id: str, facts: List[Dict], reviews: List[Dict],
         fact_type = esc_sql(fact.get("fact_type", ""))
         verdict = esc_sql(review.get("verdict", "pending"))
         reason = esc_sql(review.get("reason", "")[:500])
+        prompt_n = t.get("prompt_n", 0) or 0
+        pred_n = t.get("predicted_n", 0) or 0
+        gen_rate = round(t.get("predicted_per_second", 0) or 0, 1)
+        elapsed = round((t.get("prompt_ms", 0) or 0) + (t.get("predicted_ms", 0) or 0), 0)
+        cache_n = t.get("cache_n", 0) or 0
 
         ok = psql_ok(f"""
-        INSERT INTO review_facts (turn_id, fact_index, evidence, fact_type, verdict, reason, extract_model, verify_model)
-        VALUES ('{turn_id}', {idx}, '{evidence}', '{fact_type}', '{verdict}', '{reason}', '{extract_model}', '{verify_model}')
+        INSERT INTO review_facts (turn_id, fact_index, evidence, fact_type, verdict, reason,
+            extract_model, verify_model, phase, prompt_tokens, gen_tokens, gen_rate, elapsed_ms, cache_hit)
+        VALUES ('{turn_id}', {idx}, '{evidence}', '{fact_type}', '{verdict}', '{reason}',
+            '{extract_model}', '{verify_model}', '{phase}', {prompt_n}, {pred_n}, {gen_rate}, {elapsed}, {cache_n})
         ON CONFLICT (turn_id, fact_index, extract_model) DO UPDATE SET
             verdict = EXCLUDED.verdict,
             reason = EXCLUDED.reason,
             extract_model = EXCLUDED.extract_model,
-            verify_model = EXCLUDED.verify_model
+            verify_model = EXCLUDED.verify_model,
+            phase = EXCLUDED.phase,
+            prompt_tokens = EXCLUDED.prompt_tokens,
+            gen_tokens = EXCLUDED.gen_tokens,
+            gen_rate = EXCLUDED.gen_rate,
+            elapsed_ms = EXCLUDED.elapsed_ms,
+            cache_hit = EXCLUDED.cache_hit
         """)
         if ok:
             saved += 1
@@ -249,193 +218,12 @@ def save_review_facts(turn_id: str, facts: List[Dict], reviews: List[Dict],
         print(f"  WARNING: DB save {saved}/{len(reviews)} for turn {turn_id[:8]}...")
 
 
-# ── model swap ─────────────────────────────────────────────────────
-def _llama_create_args(model_key: str) -> list:
-    """Build podman create args from model tier."""
-    m = MODELS[model_key]
-    t = TIERS[m["tier"]]
-    return [
-        "create", "--name", "devforge-llm", "--no-healthcheck",
-        "-p", "8080:8080",
-        "-v", "/opt/ai_data/models/gguf:/models:Z,ro",
-        "-v", "/opt/ai_data/cache:/cache:Z",
-        "--env-file", "/home/opc/.config/devforge/secrets.env",
-        "localhost/devforge-llama:2026.05.19",
-        "-m", "/models/current.gguf", "--host", "0.0.0.0", "--port", "8080",
-        "--threads", "4", "--threads-batch", "4",
-        "--ctx-size", str(t["ctx_size"]),
-        "--flash-attn", "on", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
-        "--cache-reuse", "256", "--slot-save-path", "/cache/",
-        "--cache-ram", str(t["cache_ram"]),
-        "--batch-size", str(t["batch_size"]),
-        "--ubatch-size", str(t["ubatch_size"]),
-    ]
-
-
-def _ensure_llama_container(model_key: str) -> bool:
-    """Create devforge-llm container with model-specific args. Recreates if args changed."""
-    desired_args = _llama_create_args(model_key)
-    # Check if existing container matches desired args
-    r = subprocess.run(["podman", "inspect", "devforge-llm"],
-                       capture_output=True, text=True, timeout=10)
-    if r.returncode == 0:
-        # Compare the running/stopped container's command with desired args
-        try:
-            info = json.loads(r.stdout)
-            existing_cmd = info[0].get("Config", {}).get("Cmd", [])
-            # desired_args splits at image name: everything after image are llama-server args
-            img_idx = next((i for i, a in enumerate(desired_args) if a == "localhost/devforge-llama:2026.05.19"), -1)
-            desired_llama_args = desired_args[img_idx + 1:] if img_idx >= 0 else []
-            if existing_cmd == desired_llama_args:
-                return True
-        except Exception:
-            pass
-        # Args differ — recreate container
-        subprocess.run(["podman", "rm", "-f", "devforge-llm"],
-                       capture_output=True, text=True, timeout=30)
-    r = subprocess.run(["podman"] + desired_args,
-                       capture_output=True, text=True, timeout=30)
-    return r.returncode == 0
-
-
-def _podman_cycle_llama() -> bool:
-    """Stop and start pre-created devforge-llm container.
-
-    Only stops if currently running. If stop fails on a running container,
-    aborts (start would conflict). Created/exited containers skip stop.
-    """
-    inspect = subprocess.run(["podman", "inspect", "devforge-llm", "--format", "{{.State.Status}}"],
-                             capture_output=True, text=True, timeout=10)
-    state = inspect.stdout.strip() if inspect.returncode == 0 else ""
-    if state == "running":
-        r = subprocess.run(["podman", "stop", "--time", "5", "devforge-llm"],
-                           capture_output=True, text=True, timeout=30)
-        if r.returncode != 0:
-            print(f"    ERROR: podman stop failed on running container (rc={r.returncode}): {r.stderr.strip()[:200]}")
-            return False
-        time.sleep(2)
-
-    r = subprocess.run(["podman", "start", "devforge-llm"],
-                       capture_output=True, text=True, timeout=30)
-    if r.returncode != 0:
-        print(f"    ERROR: podman start failed (rc={r.returncode}): {r.stderr.strip()[:300]}")
-    return r.returncode == 0
-
-
-def _prepare_for_tier(tier: str) -> bool:
-    """Pre-swap hook: stop services, check memory for heavyweight tiers."""
-    cfg = TIERS.get(tier, {})
-    required_mb = cfg.get("require_mem_mb", 0)
-    if required_mb:
-        mem = _get_available_mb()
-        if mem < required_mb:
-            print(f"  FATAL: only {mem}MB free, need {required_mb}MB for {tier} tier")
-            return False
-    to_stop = cfg.get("stop_services", [])
-    for svc in to_stop:
-        r = subprocess.run(["systemctl", "--user", "stop", svc],
-                           capture_output=True, text=True, timeout=15)
-        if r.returncode == 0:
-            _tier_stopped_services.append(svc)
-            print(f"  tier prep: stopped {svc}")
-    return True
-
-
-def _restore_tier_services():
-    """Post-swap hook: restart services that were stopped for heavyweight tier."""
-    for svc in _tier_stopped_services:
-        subprocess.run(["systemctl", "--user", "start", svc],
-                       capture_output=True, text=True, timeout=15)
-        print(f"  tier restore: started {svc}")
-    _tier_stopped_services.clear()
-
-
-def _get_available_mb() -> int:
+# ── health check ──────────────────────────────────────────────────
+def check_endpoint(port: int, label: str) -> bool:
+    """Quick health check — confirm LLM server on port is responding."""
     try:
-        with open("/proc/meminfo") as f:
-            for line in f:
-                if line.startswith("MemAvailable:"):
-                    return int(line.split()[1]) // 1024
-    except Exception:
-        pass
-    return 0
-
-
-def swap_model(model_key: str) -> bool:
-    """Change current.gguf symlink and restart llama container if needed."""
-    model_file = MODELS[model_key]["file"]
-    target = MODEL_DIR / model_file
-    if not target.exists():
-        print(f"  ERROR: model file not found: {target}")
-        return False
-
-    tier = MODELS[model_key].get("tier", "")
-
-    symlink_matches = False
-    try:
-        symlink_matches = (SYMLINK.resolve() == target)
-    except Exception:
-        pass
-
-    if not _ensure_llama_container(model_key):
-        print(f"  ERROR: cannot create llama container for {model_key}")
-        return False
-
-    if symlink_matches:
-        if _verify_serving(model_key):
-            print(f"  Model {model_key} already loaded and healthy")
-            return True
-        print(f"  Model {model_key} already linked but dead — restarting...")
-        if not _prepare_for_tier(tier):
-            return False
-        if not _podman_cycle_llama():
-            print(f"  ERROR: failed to cycle llama container for {model_key}")
-            _restore_tier_services()
-            return False
-        print(f"  Cycling llama for {model_key}...")
-    else:
-        SYMLINK.unlink(missing_ok=True)
-        SYMLINK.symlink_to(model_file)
-        print(f"  Swapped to {model_key} ({model_file})")
-
-        if not _prepare_for_tier(tier):
-            return False
-        if not _podman_cycle_llama():
-            print(f"  ERROR: failed to cycle llama container for {model_key}")
-            _restore_tier_services()
-            return False
-        print(f"  Cycling llama for {model_key}...")
-
-    for attempt in range(180):
-        time.sleep(3)
-        if _verify_serving(model_key):
-            elapsed = 8 + (attempt + 1) * 3
-            print(f"  llama healthy ({model_key}) after {elapsed}s")
-            _restore_tier_services()
-            return True
-        if (attempt + 1) % 20 == 0:
-            elapsed = 8 + (attempt + 1) * 3
-            # Check if container is still alive
-            alive = subprocess.run(
-                ["podman", "inspect", "devforge-llm", "--format", "{{.State.Status}}"],
-                capture_output=True, text=True, timeout=10)
-            if alive.returncode != 0 or alive.stdout.strip() not in ("running", "created", "starting"):
-                print(f"    container died (state={alive.stdout.strip()}) — aborting wait")
-                _restore_tier_services()
-                return False
-            print(f"    still waiting... ({elapsed}s elapsed)")
-    print(f"  ERROR: llama failed to become healthy for {model_key}")
-    _restore_tier_services()
-    return False
-
-
-def _verify_serving(model_key: str) -> bool:
-    model_name = MODELS[model_key]["name"]
-    payload = json.dumps({"model": model_name, "messages": [{"role": "user", "content": "OK"}], "max_tokens": 5})
-    try:
-        conn = hc.HTTPConnection("127.0.0.1", 8080, timeout=60)
-        conn.request("POST", "/v1/chat/completions", payload,
-                     {"Authorization": f"Bearer {LITELLM_KEY}", "Content-Type": "application/json"})
+        conn = hc.HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request("GET", "/health")
         resp = conn.getresponse()
         resp.read()
         conn.close()
@@ -446,77 +234,123 @@ def _verify_serving(model_key: str) -> bool:
 
 # ── LLM calls ──────────────────────────────────────────────────────
 
-def _llm_request_worker(payload: bytes, headers: dict, result_queue):
-    """Run in a child process so we can enforce a hard timeout via terminate()."""
-    try:
-        req = urllib.request.Request(
-            "http://127.0.0.1:8080/v1/chat/completions",
-            data=payload,
-            headers=headers,
-        )
-        with urllib.request.urlopen(req) as resp:
-            body = resp.read().decode()
-        if resp.status == 200:
-            content = json.loads(body)["choices"][0]["message"]["content"]
-            match = re.search(r'\{.*\}', content, re.DOTALL)
-            if match:
-                result_queue.put(("ok", match.group(0)))
-            else:
-                result_queue.put(("ok", None))
-        else:
-            result_queue.put(("error", str(resp.status)))
-    except Exception as e:
-        result_queue.put(("exception", str(e)))
+# ── Rate Estimator ────────────────────────────────────────────────────
+class RateEstimator:
+    """EMA + median rate tracker, self-calibrating from timings field."""
+    def __init__(self, label: str = "", initial_prompt: float = 15.0,
+                 initial_gen: float = 5.0, alpha: float = 0.3):
+        self.label = label
+        self.prompt_rate = initial_prompt
+        self.gen_rate = initial_gen
+        self.alpha = alpha
+        self._samples: list = []
+        self.calls = 0
+        self.cache_hits = 0
+        self._total_prompt = 0
+        self._total_gen = 0
+        self._total_elapsed = 0.0
+
+    def update(self, timings: dict):
+        pr = timings.get("prompt_per_second", 0)
+        gr = timings.get("predicted_per_second", 0)
+        if pr > 0:
+            self.prompt_rate = self._ema(self.prompt_rate, pr)
+        if gr > 0:
+            self.gen_rate = self._ema(self.gen_rate, gr)
+            self._samples.append(gr)
+            if len(self._samples) > 50:
+                self._samples.pop(0)
+        self.calls += 1
+        self._total_prompt += timings.get("prompt_n", 0)
+        self._total_gen += timings.get("predicted_n", 0)
+        self._total_elapsed += timings.get("predicted_ms", 0) + timings.get("prompt_ms", 0)
+        if timings.get("cache_n", 0) > 0:
+            self.cache_hits += 1
+
+    def _ema(self, old: float, new: float) -> float:
+        return self.alpha * new + (1 - self.alpha) * old
+
+    def calc_timeout(self, prompt_tokens: int, max_tokens: int, buffer: int = 30) -> int:
+        return int(prompt_tokens / max(self.prompt_rate, 0.5)
+                   + max_tokens / max(self.gen_rate, 0.5) + buffer)
+
+    def stats(self) -> dict:
+        result = {
+            "prompt_rate": round(self.prompt_rate, 1),
+            "gen_rate": round(self.gen_rate, 1),
+            "calls": self.calls,
+            "cache_hits": self.cache_hits,
+            "total_prompt": self._total_prompt,
+            "total_gen": self._total_gen,
+            "total_elapsed_s": round(self._total_elapsed / 1000, 1),
+        }
+        if self._samples:
+            result["median_gen_rate"] = round(statistics.median(self._samples), 1)
+        return result
 
 
-def call_llm(model_name: str, system_prompt: str, user_prompt: str,
-             max_tokens: int = 512, retries: int = 2,
-             timeout: int = 300) -> Optional[Dict]:
+def call_llm(port: int, model_name: str, system_prompt: str, user_prompt: str,
+             max_tokens: int = 512, timeout: int = 180, retries: int = 2
+             ) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """Call LLM endpoint via http.client. Returns (parsed_json, timings_dict) or (None, None)."""
     payload = json.dumps({
         "model": model_name,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {"role": "user", "content": user_prompt + "\n/no_think"},
         ],
         "max_tokens": max_tokens,
         "temperature": 0.0,
     }).encode()
-    headers = {
-        "Authorization": f"Bearer {LITELLM_KEY}",
-        "Content-Type": "application/json",
-    }
-    for attempt in range(retries + 1):
-        from multiprocessing import Process, Queue
-        q: Queue = Queue()
-        p = Process(target=_llm_request_worker, args=(payload, headers, q))
-        p.start()
-        p.join(timeout)
-        if p.is_alive():
-            p.terminate()
-            p.join()
-            print(f"    LLM timeout: {timeout}s exceeded (attempt {attempt+1}/{retries+1})")
-            time.sleep(2 ** attempt)
-            continue
-        if p.exitcode != 0:
-            print(f"    LLM process error: exitcode={p.exitcode} (attempt {attempt+1}/{retries+1})")
-            time.sleep(2 ** attempt)
-            continue
+    headers = {"Content-Type": "application/json"}
+
+    @retry(stop=stop_after_attempt(retries + 1),
+           wait=wait_exponential(multiplier=1, min=1, max=8),
+           retry=retry_if_exception_type((TimeoutError, OSError, ConnectionError, Exception)),
+           after=lambda rs: print(f"    LLM retry: {rs.outcome.exception()}")
+           if rs.failed else None)
+    def _do_call():
+        conn = hc.HTTPConnection("127.0.0.1", port, timeout=timeout)
+        conn.request("POST", "/v1/chat/completions", payload, headers)
+        resp = conn.getresponse()
+        body = resp.read().decode()
+        conn.close()
+        if resp.status != 200:
+            raise ConnectionError(f"HTTP {resp.status}")
+        data = json.loads(body)
+        content = data["choices"][0]["message"]["content"]
+        result = _parse_llm_json(content)
+        return result, data.get("timings", {})
+
+    try:
+        return _do_call()
+    except Exception:
+        return (None, None)
+
+
+def _parse_llm_json(content: str) -> Optional[Dict]:
+    """Extract JSON from LLM output, handling common formatting issues."""
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.startswith("```")]
+        text = "\n".join(lines).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r'\{[^{}]*"(?:facts|reviews)"[^{}]*\[.*?\][^{}]*\}', text, re.DOTALL)
+    if match:
         try:
-            status, value = q.get_nowait()
-        except Exception:
-            status, value = "exception", "queue read failed"
-        if status == "ok":
-            if value is None:
-                return None
-            try:
-                return json.loads(value)
-            except Exception as e:
-                print(f"    LLM exception: {e} (attempt {attempt+1}/{retries+1})")
-                time.sleep(2 ** attempt)
-                continue
-        else:
-            print(f"    LLM exception: {value} (attempt {attempt+1}/{retries+1})")
-        time.sleep(2 ** attempt)
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
     return None
 
 
@@ -547,8 +381,6 @@ def main():
     print(f"[{ts.isoformat()}] review_worker starting")
 
     ensure_review_table()
-
-    # Record any new git commits (v1.1: idempotent, ON CONFLICT DO NOTHING)
     log_commits_to_worklog()
 
     checkpoint = load_checkpoint()
@@ -557,7 +389,6 @@ def main():
         checkpoint = {}
         print("  Reset: cleared checkpoint")
 
-    # Fetch unprocessed turns (skip already-checkpointed turns)
     extract_model_name = MODELS[EXTRACT_MODEL]["name"]
     turns = fetch_unprocessed_turns(args.limit, checkpoint, extract_model_name)
     if not turns:
@@ -565,43 +396,56 @@ def main():
         return 0
     print(f"Fetched {len(turns)} unprocessed turns")
 
-    # Phase 1: Extract with Qwen14B
+    # ── init estimators ────────────────────────────────────────────
+    est_extract = RateEstimator("extract")
+    est_verify = RateEstimator("verify", initial_gen=3.0)
+
+    # Phase 1: Extract with Podman A (Qwen3-4B on 8080)
     extract_model = MODELS[EXTRACT_MODEL]
-    if not swap_model(EXTRACT_MODEL):
-        print("FATAL: cannot load extract model")
+    if not check_endpoint(extract_model["port"], EXTRACT_MODEL):
+        print(f"FATAL: extract endpoint :{extract_model['port']} not responding")
         return 1
-    time.sleep(3)
 
     combo_facts = []
     print(f"Phase 1 — extracting facts with {extract_model['name']}...")
     for i, turn in enumerate(turns):
         prompt = build_extract_prompt(turn)
-        result = call_llm(extract_model["name"], get_extract_system(EXTRACT_MODEL), prompt, max_tokens=512)
+        prompt_tokens = int((len(get_extract_system(EXTRACT_MODEL).split()) + len(prompt.split())) * 1.3)
+        timeout = est_extract.calc_timeout(prompt_tokens, 512) if est_extract.calls > 0 else 180
+        result, timings = call_llm(extract_model["port"], extract_model["name"],
+                                   get_extract_system(EXTRACT_MODEL), prompt,
+                                   max_tokens=512, timeout=timeout)
         facts = result.get("facts", []) if result else []
+        if timings:
+            est_extract.update(timings)
+            rate_now = timings.get("predicted_per_second", 0)
+            cache = timings.get("cache_n", 0)
+        else:
+            rate_now, cache = 0, 0
         combo_facts.append({
-            "turn_index": i,
-            "turn_id": turn["id"],
-            "turn_agent": turn["agent"],
-            "turn_data": turn,
-            "facts": facts,
+            "turn_index": i, "turn_id": turn["id"], "turn_agent": turn["agent"],
+            "turn_data": turn, "facts": facts,
+            "extract_timings": timings,
         })
-        status = f"{len(facts)} facts" if result else "FAILED"
+        status = f"{len(facts)} facts @ {rate_now:.1f}t/s" if result else "FAILED"
+        if cache:
+            status += f" [cache:{cache}]"
         print(f"  Turn {i+1}/{len(turns)}: {status}")
 
-    # Phase 2: Verify with Phi-4 (skip if no facts extracted)
+    # Phase 2: Verify with Podman B (Phi-4-mini on 8081)
     facts_extracted = [e for e in combo_facts if e["facts"]]
     if not facts_extracted:
         max_ts = max((t.get("created_at", "") for t in turns), default="")
         if max_ts:
             save_checkpoint({"last_ts": max_ts})
+        _print_stats(est_extract, est_verify)
         print(f"Phase 2 — skipped (0 facts from {len(turns)} turns)")
         return 0
 
     verify_model = MODELS[VERIFY_MODEL]
-    if not swap_model(VERIFY_MODEL):
-        print("FATAL: cannot load verify model")
+    if not check_endpoint(verify_model["port"], VERIFY_MODEL):
+        print(f"FATAL: verify endpoint :{verify_model['port']} not responding")
         return 1
-    time.sleep(3)
 
     total_valid = 0
     total_hallucinated = 0
@@ -611,8 +455,17 @@ def main():
         if not entry["facts"]:
             continue
         prompt = build_verify_prompt(entry["turn_data"], entry["facts"])
-        result = call_llm(verify_model["name"], get_verify_system(VERIFY_MODEL), prompt, max_tokens=512)
+        prompt_tokens = int((len(get_verify_system(VERIFY_MODEL).split()) + len(prompt.split())) * 1.3)
+        timeout = est_verify.calc_timeout(prompt_tokens, 512) if est_verify.calls > 0 else 120
+        result, timings = call_llm(verify_model["port"], verify_model["name"],
+                                   get_verify_system(VERIFY_MODEL), prompt,
+                                   max_tokens=512, timeout=timeout)
         reviews = result.get("reviews", []) if result else []
+        if timings:
+            est_verify.update(timings)
+            rate_now = timings.get("predicted_per_second", 0)
+        else:
+            rate_now = 0
 
         valid = sum(1 for r in reviews if r.get("verdict") == "valid")
         hallucinated = sum(1 for r in reviews if r.get("verdict") == "hallucinated")
@@ -622,22 +475,39 @@ def main():
 
         save_review_facts(
             entry["turn_id"], entry["facts"], reviews,
-            extract_model["name"], verify_model["name"]
+            extract_model["name"], verify_model["name"], phase="verify",
+            timings=timings
         )
         print(f"  Turn {entry['turn_index']+1}: {len(entry['facts'])} facts → "
-              f"{valid} valid, {hallucinated} hallucinated")
+              f"{valid} valid, {hallucinated} hallucinated @ {rate_now:.1f}t/s")
 
     valid_rate = round(total_valid / max(total_facts, 1) * 100, 1)
     print(f"\nDone: {total_facts} facts, {total_valid} valid ({valid_rate}%), "
           f"{total_hallucinated} hallucinated")
 
-    # Leave Phi-4 loaded (already serving from Phase 2)
+    _print_stats(est_extract, est_verify)
+
     max_ts = max((t.get("created_at", "") for t in turns), default="")
     if max_ts:
         save_checkpoint({"last_ts": max_ts})
-    print("Done — Phi-4 left loaded, no restore needed")
 
     return 0
+
+
+def _print_stats(est_extract: RateEstimator, est_verify: RateEstimator):
+    """Print per-model performance stats from timings data."""
+    print("\n── performance stats ──")
+    for est in (est_extract, est_verify):
+        if est.calls == 0:
+            continue
+        s = est.stats()
+        cache_pct = round(est.cache_hits / max(est.calls, 1) * 100, 1)
+        print(f"  {est.label}:")
+        print(f"    rate: prompt_eval={s['prompt_rate']:.1f} t/s, gen={s['gen_rate']:.1f} t/s"
+              f" (median={s['median_gen_rate']:.1f})")
+        print(f"    tokens: prompt={s['total_prompt']}, gen={s['total_gen']},"
+              f" elapsed={s['total_elapsed_s']:.0f}s")
+        print(f"    calls: {est.calls}, cache_hits: {est.cache_hits} ({cache_pct}%)")
 
 
 if __name__ == "__main__":

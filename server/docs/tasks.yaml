@@ -1,5 +1,9 @@
 blocked: []
 done:
+- '양방향 코드 리뷰 + 버그 수정 (2026-05-21): review_worker.py 이슈 3건 수정 — RateEstimator._samples 0값 필터링, prompt_tokens 1.3x 보정, tenacity after callback 빈 줄 제거. --flash-attn auto 확인(ARM에서 불필요). phi-4-Q8_0.gguf(14.5GB) 삭제. tasks.yaml 잔여 작업 정렬.'
+- 'DevForge v3.0 완결 (2026-05-21): 2-Container 아키텍처 — Podman A(Qwen3-4B 8080) + Podman B(mode-switchable 8081). 모델 4종 다운로드(17.8GB). review_worker.py 전면 재작성(644→514줄): container mgmt 제거, http.client, RateEstimator(timings 기반 동적 timeout), /no_think. DB review_facts에 6개 성능 컬럼 추가(prompt_tokens, gen_tokens, gen_rate, elapsed_ms, cache_hit, phase). systemd auto-start(2개 unit), review-worker.timer(매시간 :05), swap-batch/normal.timer(KST 07/12/17시 14B 전환). cache hit 100% 확인.'
+- 'Qwen32B 코드 수정 테스트 완료 (2026-05-20): IQ4_XS(16.5GB) 안정적 swap 345MB. 8/8 tasks 완료, 5개 conf 0.93 avg. 4-stage 53분. API: v4-pro 0.97(7.8s), v4-flash 0.98(8.2s), Gemini down. API 50x faster. Q4_K_M(19GB) 삭제, 서비스 복구. 결과: /var/tmp/code_mod_tests/'
+- 'Extraction 모델 최종 결정: Qwen2.5-Coder-14B-Instruct Q8_0 (2026-05-20). 4개 모델 비교 완료 — Qwen14B 91.0% (145f/132v/11h), Qwen7B 86.3% (227f/196v/26h), Mistral-Nemo 88.1% (42f/37v/4h), DeepSeek-Coder-V2-Lite 82.8% (64f/53v/10h). Granite-8B 테스트 미실행. 모든 테스트 데이터 삭제, Qwen14B 단독 운영 체제 전환.'
 - 'Qwen14B 100턴 baseline 완료 — Run 3: 100턴/280 facts, Phi-4 검증 58건, valid 52 (89.7%), hallucinated 5 (8.6%), context_dependent 1 (1.7%). DB review_facts에 2026-05-19 저장. 코드: review_worker.py LLAMA_RUN_ARGS 4096 fix 적용 완료. (2026-05-19)'
 
 - 'requests → http.client 마이그레이션 (2026-05-18): collect_turns.py, qwen_worker.py, qwen_executor.py에서 requests 라이브러리 제거. http.client.HTTPConnection으로 교체 (connection pooling 이슈 해소, 외부 의존성 감소). review_worker.py와 동일 패턴 적용.'
@@ -61,8 +65,7 @@ done:
 - Copilot statusline fallback — copilot-statusline.py now reads the newest useful
   ~/.copilot/session-state/*/events.jsonl snapshot when no live payload is provided,
   preferring full used/limit snapshots and falling back to used-only snapshots.
-in_progress:
-	- Granite-8B-Code-Instruct Q8_0 Day1 extraction 테스트 (2026-05-20) — 기존 0건, 이전 실행 중단됨. 재시작 필요.
+in_progress: []
 kanban_labels:
   blocked: Blocked
   done: Done
@@ -94,11 +97,8 @@ meta:
   - /opt/projects/server/docs/phases.md
   - /opt/projects/server/_archive/README.md
 todo:
-- review_facts 통계 기반 모델 성능 대시보드 (2026-05-19)
-- 순차적 extraction 모델 테스트 (Granite-8B 완료 후):
-  1. Qwen2.5-Coder-7B-Instruct Q8_0 (7.5GB) — 24h extraction 테스트
-  2. DeepSeek-Coder-V2-Lite (16B MoE) — 24h extraction 테스트
-  3. 차순위: StarCoder2-15B, Qwen2.5-14B-Instruct
-  - testing_plan: 하루 1개 모델, 동일 조건(30분 주기, 24시간), hallucination rate 기준 평가
-  - disk: 100GB 중 61GB 여유. 항시 Qwen14B+Phi-4 30GB 상주. 후보는 1~2개씩 로테이션.
-  - baseline: Qwen14B 100턴 89.7% valid (2026-05-19 완료)
+- 'Gemini header 갱신: ~/.gemini/header.md flash-first → 현행 계층 라우팅(flash→Gemma31B→pro→Gemma26B→flash) 반영 (2026-05-21)'
+- 'Consistency warnings 해소: unlogged session 3건 정리 + orphan turn 12건(aider) link_turns (2026-05-21)'
+- 'review_facts 통계 기반 모델 성능 대시보드 (2026-05-19)'
+- 'T01~T08 32B 코드 수정 재테스트: v3.0 인프라 + 동적 timeout으로 8개 task 전체 재실행 (2026-05-21)'
+- 'Qwen14B 추가 테스트 (추후 예정)'
