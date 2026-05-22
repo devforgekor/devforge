@@ -99,6 +99,11 @@ worklog_entries 컬럼: status (dormant, always 'done'), kind (dormant, always '
 - `nightly_batch.sh`: daily batch pipeline (03:00 UTC) — light jobs first (retry 3x) → heavy jobs after
 - 대상: `/mnt/secure_meta/snapshots/`
 
+## 외부 레퍼런스
+
+- **totem** (mmnto-ai/totem, Apache-2.0) — 주 레퍼런스. lesson → rule 자동 변환, doctor 자가교정 루프. golden_diffs 자동 수집 및 품질 모니터링 설계의 근간.
+- diff0, Repeton — 구현 단계에서 필요 시 아이디어만 발췌 (multi-provider 검증, rollback 루프).
+
 ## 관련 문서
 
 - 현황/계획: `docs/phases.md`

@@ -1,5 +1,8 @@
 blocked: []
 done:
+- 'Task 2 32B 4-stage 완료 (2026-05-22): ANALYZE(55분/92tok)→PLAN(54분/151tok)→IMPL(52분/121tok)→PACKAGE(7분/301tok). 총 10,126초, 4/4 HTTP 200. diff 정확도 높음(confidence 0.95). dynamic timeout + TCP keepalive + retry 안정적. swap timer 중단 상태로 6시간+ 연속 실행 검증.'
+- 'code_mod_pipeline.py 구현 + activity_log 통합 (2026-05-22): test_code_mod.py → code_mod_pipeline.py로 rename. _insert_activity_stage() 추가 — 각 스테이지 완료 시 activity_log에 type=stage row 기록 (agent=qwen2.5-coder-32b). api/db.py SCHEMA_SQL에 activity_log 테이블 DDL 추가. Task 2 32B 4-stage 파이프라인 전체 완료 (10,126초, 4/4 HTTP 200). swap-batch/normal.timer 복구.'
+- 'Gemini header 확인 + Consistency 해소 + 대시보드 구현 (2026-05-21): header 이미 최신(sync 재확인). aider orphan 12건→worklog#164 연결, consistency_report 경고 초기화. cli.py dashboard 명령 추가(모델별 valid%/rate/cache, 일별 통계).'
 - '양방향 코드 리뷰 + 버그 수정 (2026-05-21): review_worker.py 이슈 3건 수정 — RateEstimator._samples 0값 필터링, prompt_tokens 1.3x 보정, tenacity after callback 빈 줄 제거. --flash-attn auto 확인(ARM에서 불필요). phi-4-Q8_0.gguf(14.5GB) 삭제. tasks.yaml 잔여 작업 정렬.'
 - 'DevForge v3.0 완결 (2026-05-21): 2-Container 아키텍처 — Podman A(Qwen3-4B 8080) + Podman B(mode-switchable 8081). 모델 4종 다운로드(17.8GB). review_worker.py 전면 재작성(644→514줄): container mgmt 제거, http.client, RateEstimator(timings 기반 동적 timeout), /no_think. DB review_facts에 6개 성능 컬럼 추가(prompt_tokens, gen_tokens, gen_rate, elapsed_ms, cache_hit, phase). systemd auto-start(2개 unit), review-worker.timer(매시간 :05), swap-batch/normal.timer(KST 07/12/17시 14B 전환). cache hit 100% 확인.'
 - 'Qwen32B 코드 수정 테스트 완료 (2026-05-20): IQ4_XS(16.5GB) 안정적 swap 345MB. 8/8 tasks 완료, 5개 conf 0.93 avg. 4-stage 53분. API: v4-pro 0.97(7.8s), v4-flash 0.98(8.2s), Gemini down. API 50x faster. Q4_K_M(19GB) 삭제, 서비스 복구. 결과: /var/tmp/code_mod_tests/'
@@ -65,7 +68,7 @@ done:
 - Copilot statusline fallback — copilot-statusline.py now reads the newest useful
   ~/.copilot/session-state/*/events.jsonl snapshot when no live payload is provided,
   preferring full used/limit snapshots and falling back to used-only snapshots.
-in_progress: []
+in_progress: null
 kanban_labels:
   blocked: Blocked
   done: Done
@@ -97,8 +100,4 @@ meta:
   - /opt/projects/server/docs/phases.md
   - /opt/projects/server/_archive/README.md
 todo:
-- 'Gemini header 갱신: ~/.gemini/header.md flash-first → 현행 계층 라우팅(flash→Gemma31B→pro→Gemma26B→flash) 반영 (2026-05-21)'
-- 'Consistency warnings 해소: unlogged session 3건 정리 + orphan turn 12건(aider) link_turns (2026-05-21)'
-- 'review_facts 통계 기반 모델 성능 대시보드 (2026-05-19)'
-- 'T01~T08 32B 코드 수정 재테스트: v3.0 인프라 + 동적 timeout으로 8개 task 전체 재실행 (2026-05-21)'
 - 'Qwen14B 추가 테스트 (추후 예정)'

@@ -8,6 +8,9 @@ last_checkpoint:
     - /opt/projects/server/docs/tasks.yaml
   git: {}
 decisions:
+- 'code_mod_pipeline.py 완성 (2026-05-22): test_code_mod.py에서 rename, 4-stage pipeline 결과를 activity_log에 기록하는 _insert_activity_stage() 추가. activity_log 테이블 DDL을 api/db.py SCHEMA_SQL에 포함. Task 2 지역 버그 수정(slack_operator.py _find_pid_file) 4-stage 파이프라인 검증 완료 — 10,126초, 4/4 HTTP 200, confidence 0.95. swap-batch/normal.timer 복구 완료.'
+- '아키텍처 복구 + 최적화 완료 (2026-05-22): (1) Podman A(devforge-qwen, Qwen3-4B 8080) 재생성 — 5/21 삭제했던 컨테이너 복구, qwen-entrypoint.sh 신규 생성. (2) Podman B dual-server 복구 — normal 모드에서 Phi-4-mini(8081) + Llama(8082) 동시 실행, SERVER2_* 환경변수 추가. (3) swap_mode.sh 32B 전환 시 정지 목록 확대 — swap-batch/normal 외에 review-worker.timer, devforge-nightly.timer 추가. (4) swap_mode.sh code→normal 복귀 시 Podman A 자동 재시작 추가. (5) Phase 1-4 최적화 완료: bs=1024, threads=4, threads-batch=4, mlock=1, flash-attn=skip(GPU전용). mlock 성능 영향 없음(1.86-2.00 vs baseline 1.95 tok/s). (6) container-devforge-swap에 LD_LIBRARY_PATH=/app 추가 — b9282 이미지 라이브러리 버그 대응. (7) Telegram 미설치, Qwen operator 연결은 테스트 종료 후 구현. 보조 오퍼레이터 없음. 환각방지 계획 준비 중.'
+
 - '양방향 리뷰 버그 수정 (2026-05-21): (1) RateEstimator._samples 0값 median 왜곡 → gr>0 조건부 append. (2) prompt_tokens 단어 수 기반 과소추정 → 1.3x 보정 적용. (3) tenacity after callback 성공 시 빈 줄 → else None. (4) --flash-attn auto 확인 — ARM CPU-only에서 효과 없음, 기본값 auto로 충분. (5) phi-4-Q8_0.gguf(14.5GB) 삭제, Qwen14B는 추가 테스트 위해 보존. (6) 잔여 작업 우선순위: Gemini header → consistency warnings → 대시보드 → 32B 재테스트.'
 - 'DevForge v3.0 완결 (2026-05-21): review_worker.py timings 기반 RateEstimator + 동적 timeout + DB 성능추적(6컬럼) + cache hit 모니터링. systemd auto-start 2개 unit + review-worker.timer(:05) + swap-batch/normal.timer(KST 07-08/12-13/17-18). swap_mode.sh 수동 전환 스크립트. Qwen3-4B /no_think 필수 (chat template 메커니즘, thinking 토큰 낭비 방지).'
 - '32B 동적 timeout 전환 (2026-05-21): 고정 STAGE_TIMEOUTS → 토큰 기반 동적 calc_timeout(). T01 실측 기반 3 tok/s 보정. slack_operator.py 4300토큰 S2 57분 필요 → 기존 50분 timeout 100% 실패. T01~T08 동적 timeout 전체 재실행 중.'
@@ -249,8 +252,6 @@ decisions:
   Compose 역할) 포함.'
 known_issues:
 - 'search_proxy.py 구현 완료 (2026-05-20): Brave×4+Exa×4+Tavily×4 Tier1 균등 로테이션 + you.com×4 Tier2 최종 폴백. 단일 MCP stdio 서버, KeyRotator 기반. 429 시 자동 다음 provider 폴백. Cline MCP 설정 unified 서버로 교체. search-mcp-wrapper 대체.'
-- 'KeyRotator _extract_account 개선 (2026-05-20): provider:name 형식(검색 키) 인식. acct_last=0 미사용 키는 RPM 윈도우 안으로 처리하여 Tier2 폴백 우선순위 보장. 튜플 인덱스 [4]→[5] 버그 수정.'
-- 'GEMINI.md header outdated (2026-05-20): header에 "flash-first" 수동 모델 전환 안내가 남아있음. 실제로는 gemini_proxy.py가 자동 계층 라우팅 중. header를 현행 라우팅 체계(flash→Gemma31B→pro→Gemma26B→flash)에 맞게 갱신 필요. ~/.gemini/header.md 수정 후 sync_gemini_rules.py 실행.'
 - 'Cline filesystem rules 미지원 (2026-05-20): Cline 3.0.8은 .clinerules, ~/Documents/Cline/Rules/, .cline/rules/ 등 파일시스템 기반 rules 로딩을 지원하지 않음. 프록시 systemInstruction 주입으로 우회 중. 향후 Cline 버전 업데이트 시 파일시스템 rules 지원 확인 필요.'
 - 'Copilot NOTE phdr 패치 자동화 필요: npm auto-update 시 NOTE program header가 원복되어 copilot CLI 실행 불가 상태가 됨. 현재는 수동 패치로 대응 중. /opt/projects/server/scripts/patch_copilot_elf.py 형태로 스크립트화하거나 npm postinstall hook 검토 필요. (2026-05-19)'
 - 'systemd v252 healthcheck bug: daemon-reload on user instance causes private socket inode desync → ECONNREFUSED. Workaround: containers run without HealthCmd. systemd v252→v256 upgrade needed for fix. (2026-05-19)'

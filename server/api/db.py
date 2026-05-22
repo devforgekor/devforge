@@ -90,6 +90,26 @@ CREATE INDEX IF NOT EXISTS idx_turns_meta_type ON turns ((meta->>'type'));
 
 CREATE INDEX IF NOT EXISTS idx_obs_dec_created ON obs_dec(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_obs_dec_decision ON obs_dec USING GIN (decision gin_trgm_ops);
+
+CREATE TABLE IF NOT EXISTS activity_log (
+    id SERIAL PRIMARY KEY,
+    type TEXT NOT NULL,
+    source TEXT,
+    title TEXT,
+    summary TEXT,
+    body JSONB DEFAULT '{}',
+    agent TEXT,
+    model TEXT,
+    tags TEXT[] DEFAULT '{}',
+    summary_status TEXT DEFAULT 'raw',
+    queue_status TEXT,
+    run_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_log_type ON activity_log(type);
+CREATE INDEX IF NOT EXISTS idx_activity_log_summary_status ON activity_log(summary_status);
+CREATE INDEX IF NOT EXISTS idx_activity_log_run_id ON activity_log(run_id);
 """
 
 

@@ -160,3 +160,50 @@ CREATE INDEX IF NOT EXISTS idx_worklog_date ON worklog_entries(date DESC);
 CREATE INDEX IF NOT EXISTS idx_worklog_tags ON worklog_entries USING GIN(tags);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_worklog_unique ON worklog_entries(date, title);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_worklog_one_in_progress ON worklog_entries (status) WHERE status = 'in_progress';
+
+-- ============================================================
+-- 운영: activity_log (통합 이벤트 기록 — v1.3)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS activity_log (
+    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    type            TEXT NOT NULL,
+    source          TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    summary         TEXT NOT NULL DEFAULT '',
+    agent           TEXT,
+    model           TEXT,
+    body            JSONB DEFAULT '{}',
+    tags            TEXT[] DEFAULT '{}',
+    git_commit_hash TEXT,
+    run_id          TEXT,
+    trace_id        TEXT,
+    parent_id       BIGINT,
+    turn_ids        UUID[] DEFAULT '{}',
+    summary_status  TEXT NOT NULL DEFAULT 'raw',
+    queue_status    TEXT NOT NULL DEFAULT 'unprocessed',
+    exec_status     TEXT NOT NULL DEFAULT 'DONE'
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_type ON activity_log(type);
+CREATE INDEX IF NOT EXISTS idx_activity_source ON activity_log(source);
+CREATE INDEX IF NOT EXISTS idx_activity_tags ON activity_log USING GIN(tags);
+CREATE INDEX IF NOT EXISTS idx_activity_body_gin ON activity_log USING GIN(body);
+CREATE INDEX IF NOT EXISTS idx_activity_commit ON activity_log(git_commit_hash)
+    WHERE git_commit_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_activity_run ON activity_log(run_id)
+    WHERE run_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_activity_trace ON activity_log(trace_id)
+    WHERE trace_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_activity_parent ON activity_log(parent_id)
+    WHERE parent_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_activity_queue ON activity_log(queue_status, created_at)
+    WHERE queue_status = 'unprocessed';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_commit_unique
+    ON activity_log(git_commit_hash)
+    WHERE git_commit_hash IS NOT NULL AND type = 'commit';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_stage_unique
+    ON activity_log(run_id, type, parent_id)
+    WHERE run_id IS NOT NULL AND type = 'stage' AND exec_status = 'DONE';
