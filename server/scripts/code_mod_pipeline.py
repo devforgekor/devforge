@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """code_mod_pipeline.py — Qwen32B 4-stage code modification pipeline.
 
+SLOC-exempt: 852 lines — single cohesive 4-stage pipeline (ANALYZE→PLAN→IMPLEMENT
+→PACKAGE). Each stage shares RateEstimator, prompt templates, LLM client, Slack
+notifier, and activity logger. Splitting would scatter shared state across files.
+
 4-stage pipeline (32B local llama.cpp):
   Stage 1: ANALYZE   — identify affected sections, change type, dependencies
   Stage 2: PLAN      — design minimal change approach, estimate impact
@@ -18,10 +22,7 @@ Usage:
   python3 code_mod_pipeline.py --start-stage 3 --resume-from result.json  # resume
 """
 import glob
-import http.client
 import json
-import os
-import socket
 import sys
 import time
 import urllib.request
@@ -31,75 +32,30 @@ from typing import Dict, List, Optional, Tuple
 
 import yaml
 
-TASKS_FILE = Path(__file__).parent.parent / "code_mod_test_tasks.yaml"
-OUTPUT_DIR = Path("/var/tmp/code_mod_tests")
-DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-LLAMA_ENDPOINT = "http://127.0.0.1:8081"
+from lib.llm.client import call_llm
+from lib.llm.rate_estimator import PromptCompletionRateEstimator as RateEstimator
+from lib.code_mod.shared import (
+    read_file, extract_json_from_llm_response, save_result,
+    TASKS_FILE, OUTPUT_DIR, DEEPSEEK_KEY, LLAMA_ENDPOINT,
+)
 SLACK_BOT_TOKEN = "xoxb-10781519811159-11168454462293-A9nR8gdlZiPkrSwdE656CAHK"
 SLACK_CHANNEL = "U0APJGD8CBW"  # DM
 # token-based dynamic timeout parameters
-# Formula: timeout = (prompt_tokens / PROMPT_EVAL_RATE) + (max_tokens / GEN_RATE) + BUFFER
+# Formula: timeout = (prompt_tokens / prompt_eval_rate) + (max_tokens / GEN_RATE) + BUFFER
 # 32B IQ4_XS on ARM CPU benchmarked at:
 #   - prompt eval:  ~3-5 tok/s (CPU prefill, degrades with longer ctx)
 #   - generation:   ~2.15 tok/s (measured from prior runs)
-# Conservative prompt eval rate (3 tok/s) accounts for ctx degradation
-PROMPT_EVAL_RATE = 2.0   # tokens/sec — T01/T02 실측 기반 보정 (was 3.0)
 GEN_RATE = 2.15          # tokens/sec for generation (stable)
 TIMEOUT_BUFFER = 120     # extra seconds for network/overhead
 
 STAGE_MAX_TOKENS = {1: 2048, 2: 3072, 3: 3072, 4: 2048}
-
-class RateEstimator:
-    """EMA + median 기반 rate tracker. 실측값으로 self-calibrating."""
-    def __init__(self, initial_prompt_eval: float = 2.0, initial_gen: float = 2.15,
-                 alpha: float = 0.3):
-        self.prompt_eval_rate = initial_prompt_eval
-        self.gen_rate = initial_gen
-        self.alpha = alpha
-        self.prompt_samples: list = []
-        self.gen_samples: list = []
-
-    def update(self, prompt_tokens: int, completion_tokens: int, elapsed_s: float):
-        """실측 elapsed + usage token으로 rate 갱신.
-        /v1/chat/completions는 timings 필드가 없으므로 근사 방식 사용:
-        eval_time = elapsed * 0.7, gen_time = elapsed * 0.3"""
-        if elapsed_s <= 0 or (prompt_tokens <= 0 and completion_tokens <= 0):
-            return
-        eval_time = elapsed_s * 0.7
-        gen_time = elapsed_s * 0.3
-        if eval_time > 0 and prompt_tokens > 0:
-            rate = prompt_tokens / eval_time
-            self.prompt_samples.append(rate)
-            if len(self.prompt_samples) > 20:
-                self.prompt_samples.pop(0)
-            self.prompt_eval_rate = self._ema(self.prompt_eval_rate, rate)
-        if gen_time > 0 and completion_tokens > 0:
-            rate = completion_tokens / gen_time
-            self.gen_samples.append(rate)
-            if len(self.gen_samples) > 20:
-                self.gen_samples.pop(0)
-            self.gen_rate = self._ema(self.gen_rate, rate)
-
-    def _ema(self, old: float, new: float) -> float:
-        return self.alpha * new + (1 - self.alpha) * old
-
-    def median_prompt_rate(self) -> float:
-        if len(self.prompt_samples) >= 3:
-            return sorted(self.prompt_samples)[len(self.prompt_samples) // 2]
-        return self.prompt_eval_rate
-
-    def median_gen_rate(self) -> float:
-        if len(self.gen_samples) >= 3:
-            return sorted(self.gen_samples)[len(self.gen_samples) // 2]
-        return self.gen_rate
-
 
 def calc_timeout_v2(estimator: RateEstimator, prompt_tokens: int,
                      max_tokens: int) -> int:
     """RateEstimator의 실측 rate로 timeout 계산. self-calibrating."""
     rate = estimator.median_prompt_rate()
     prompt_time = prompt_tokens / rate if rate > 0 else prompt_tokens / 2.0
-    gen_time = max_tokens / estimator.gen_rate if estimator.gen_rate > 0 else max_tokens / 2.15
+    gen_time = max_tokens / estimator.gen_rate if estimator.gen_rate > 0 else max_tokens / GEN_RATE
     return int(prompt_time + gen_time + TIMEOUT_BUFFER)
 
 
@@ -134,23 +90,6 @@ def estimate_prompt_tokens(code: str, task_desc: str, stage: int,
         return diff_tokens + 230
     return 1000
 
-def calc_timeout(prompt_tokens: int, max_tokens: int) -> int:
-    """Dynamic timeout based on actual token counts + known inference rates."""
-    prompt_time = prompt_tokens / PROMPT_EVAL_RATE
-    gen_time = max_tokens / GEN_RATE
-    return int(prompt_time + gen_time + TIMEOUT_BUFFER)
-
-def estimate_and_timeout(stage: int, code: str, task_desc: str,
-                         stage1_body: dict = None,
-                         stage2_body: dict = None,
-                         stage3_body: dict = None) -> int:
-    """One-shot: estimate prompt tokens and return dynamic timeout for a stage."""
-    prompt_tokens = estimate_prompt_tokens(code, task_desc, stage,
-                                           stage1_body, stage2_body, stage3_body)
-    timeout = calc_timeout(prompt_tokens, STAGE_MAX_TOKENS[stage])
-    return timeout
-
-# ── prompt templates ────────────────────────────────────────────────────
 SYSTEM_32B = (
     "You are a CODE PREPROCESSOR. Your output is NOT final — it will be reviewed "
     "by a senior engineer via API. Your job: produce minimal, surgical changes. "
@@ -242,11 +181,6 @@ def load_tasks() -> dict:
         return yaml.safe_load(f)
 
 
-def read_file(path: str) -> str:
-    with open(path) as f:
-        return f.read()
-
-
 def _notify_slack(text: str) -> None:
     """Send Slack DM notification. Non-blocking — failures are silent."""
     try:
@@ -333,69 +267,6 @@ def _slice_code(code: str, affected_sections: list) -> str:
     return "\n\n".join(chunks)
 
 
-def _enable_keepalive(sock: socket.socket) -> None:
-    """Enable aggressive TCP keepalive to prevent idle connection drops by pasta/podman.
-    Probes start at 10s idle, every 10s — keeps connection alive during long prompt eval."""
-    try:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 10)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 127)
-    except (OSError, AttributeError):
-        pass
-
-
-def call_llm(endpoint: str, messages: list, api_key: str = "",
-             model: str = "", timeout: int = 1200, max_tokens: int = 2048) -> Tuple[int, dict]:
-    """Call any OpenAI-compatible chat completions endpoint. Returns (status, body).
-
-    Uses TCP keepalive to prevent pasta/podman from dropping idle connections
-    during long prompt evaluation (32B on ARM CPU: ~1.87 tok/s).
-    """
-    body = {"messages": messages, "temperature": 0.1, "max_tokens": max_tokens}
-    if model:
-        body["model"] = model
-
-    data = json.dumps(body).encode()
-    u = endpoint
-    if u.endswith("/"):
-        u = u[:-1]
-    path = "/v1/chat/completions"
-    base = u
-    if u.endswith("/v1/chat/completions"):
-        base = u[: -len(path)]
-        path = "/v1/chat/completions"
-
-    host = base.replace("https://", "").replace("http://", "")
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    try:
-        if endpoint.startswith("https://"):
-            import ssl
-            conn = http.client.HTTPSConnection(
-                host, timeout=timeout,
-                context=ssl.create_default_context()
-            )
-        else:
-            conn = http.client.HTTPConnection(host, timeout=timeout)
-
-        conn.connect()
-        _enable_keepalive(conn.sock)
-        conn.request("POST", path, body=data, headers=headers)
-        resp = conn.getresponse()
-        raw = resp.read()
-        status = resp.status
-        if status == 200:
-            return status, json.loads(raw)
-        return status, {"error": raw.decode()[:500]}
-    except Exception as e:
-        return 0, {"error": str(e)}
-    finally:
-        conn.close()
-
-
 def _call_stage_with_retry(endpoint: str, messages: list, model: str,
                            timeout: int, max_tokens: int,
                            max_retries: int = 2) -> Tuple[int, dict, float]:
@@ -431,6 +302,53 @@ def _call_stage_with_retry(endpoint: str, messages: list, model: str,
             continue
         break
     return status, body, total_elapsed
+
+
+STAGE_NAMES = {1: "ANALYZE", 2: "PLAN   ", 3: "IMPL   ", 4: "PACKAGE"}
+
+
+def _build_stage_user_msg(stage_num: int, code: str, task_desc: str,
+                          s1_body: dict, s2_body: dict, s3_body: dict,
+                          sliced_code: str) -> str:
+    """Build the user message for a pipeline stage."""
+    if stage_num == 1:
+        return STAGE1_ANALYZE.format(code=code, task=task_desc)
+    elif stage_num == 2:
+        return STAGE2_PLAN.format(
+            analysis=json.dumps(s1_body, indent=2), code=sliced_code, task=task_desc)
+    elif stage_num == 3:
+        plan = json.dumps(s2_body, indent=2) if s2_body else "{}"
+        return STAGE3_IMPLEMENT.format(plan=plan, code=sliced_code)
+    else:  # stage 4
+        diff_text = json.dumps(s3_body) if isinstance(s3_body, dict) else str(s3_body)
+        return STAGE4_PACKAGE.format(diff=diff_text)
+
+
+def _estimate_stage_tokens(stage_num: int, code: str, task_desc: str,
+                           s1_body: dict, s2_body: dict, s3_body: dict,
+                           sliced_code: str) -> int:
+    """Estimate prompt tokens for a pipeline stage."""
+    kwargs = {}
+    if stage_num >= 2:
+        kwargs["stage1_body"] = s1_body
+        kwargs["sliced_code"] = sliced_code
+    if stage_num >= 3:
+        kwargs["stage2_body"] = s2_body
+    if stage_num >= 4:
+        kwargs["stage3_body"] = s3_body
+    return estimate_prompt_tokens(code, task_desc, stage_num, **kwargs)
+
+
+def _stage_label(stage_num: int, prompt_tokens: int, timeout: int,
+                 sliced_tokens: int, total_tokens: int) -> str:
+    """Build the 'Stage N/4 NAME — timeout=...' print label."""
+    name = STAGE_NAMES[stage_num]
+    base = f"  Stage {stage_num}/4 {name} — timeout={timeout}s, ~{prompt_tokens} prompt tokens"
+    if stage_num == 2:
+        return f"{base} (sliced {sliced_tokens}/{total_tokens} tok)"
+    elif stage_num == 3:
+        return f"{base} (sliced {sliced_tokens} tok)"
+    return base
 
 
 def run_32b_4stage(task: dict, start_stage: int = 1,
@@ -470,155 +388,72 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
             "prompt_eval": round(estimator.prompt_eval_rate, 2),
             "gen": round(estimator.gen_rate, 2)}
 
-    # Stage 1: ANALYZE
-    if start_stage <= 1:
-        t1 = estimate_and_timeout(1, code, task_desc)
-        results["stage1_timeout_calc"] = t1
-        print(f"  Stage 1/4 ANALYZE — timeout={t1}s, ~{code_tokens+task_tokens+300} prompt tokens",
-              flush=True)
-        s1_status, s1_body_dict, elapsed1 = _call_stage_with_retry(
-            LLAMA_ENDPOINT, [
-                {"role": "system", "content": SYSTEM_32B},
-                {"role": "user", "content": STAGE1_ANALYZE.format(code=code, task=task_desc)},
-            ], "qwen2.5-coder-32b", t1, STAGE_MAX_TOKENS[1])
-        results["stage1"] = _safe_json((s1_status, s1_body_dict))
-        results["stage1"]["elapsed_s"] = round(elapsed1, 1)
-        _update_estimator(s1_status, s1_body_dict, elapsed1)
-        _record_rate("stage1")
-        if s1_status == 200:
-            _insert_activity_stage(task["id"], 1, s1_status,
-                                   results["stage1"].get("body", {}),
-                                   elapsed1,
-                                   results["stage1"].get("tokens", {}).get("prompt", 0),
-                                   results["stage1"].get("tokens", {}).get("completion", 0),
-                                   run_id)
-        print(f"  Stage 1 done: {elapsed1:.0f}s, status={s1_status}", flush=True)
-        if s1_status == 200:
-            s1t = results["stage1"].get("tokens", {})
-            _notify_slack(f"T{task['id']} Stage 1/4 ANALYZE 완료 — {elapsed1:.0f}s, status=200, tokens={s1t.get('prompt','?')}/{s1t.get('completion','?')}")
-        else:
-            _notify_slack(f"T{task['id']} Stage 1/4 ANALYZE 실패 — status={s1_status}")
-        if s1_status != 200:
-            results["finished"] = datetime.now(timezone.utc).isoformat()
-            results["error"] = f"Stage 1 failed (status={s1_status})"
-            return results
-    else:
-        print(f"  Stage 1/4 ANALYZE — skipped (resuming from stage {start_stage})", flush=True)
-
-    # Stage 2: PLAN (sliced code — only affected sections from Stage 1)
+    # Pre-compute sliced_code from resume data (fresh run: stage1 not done yet, so sliced_code = code)
     s1_body = results.get("stage1", {}).get("body", {})
     sliced_code = _slice_code(code, s1_body.get("affected_sections", [])) if s1_body else code
-    results["sliced_code_tokens_est"] = len(sliced_code) // 3
-    if start_stage <= 2:
-        prompt2 = estimate_prompt_tokens(code, task_desc, 2, stage1_body=s1_body,
-                                         sliced_code=sliced_code)
-        t2 = calc_timeout_v2(estimator, prompt2, STAGE_MAX_TOKENS[2])
-        results["stage2_timeout_calc"] = t2
-        print(f"  Stage 2/4 PLAN    — timeout={t2}s, ~{prompt2} prompt tokens "
-              f"(sliced {len(sliced_code)//3}/{len(code)//3} tok)", flush=True)
-        s2_status, s2_body_dict, elapsed2 = _call_stage_with_retry(
-            LLAMA_ENDPOINT, [
-                {"role": "system", "content": SYSTEM_32B},
-                {"role": "user", "content": STAGE2_PLAN.format(
-                    analysis=json.dumps(s1_body, indent=2), code=sliced_code, task=task_desc)},
-            ], "qwen2.5-coder-32b", t2, STAGE_MAX_TOKENS[2])
-        results["stage2"] = _safe_json((s2_status, s2_body_dict))
-        results["stage2"]["elapsed_s"] = round(elapsed2, 1)
-        _update_estimator(s2_status, s2_body_dict, elapsed2)
-        _record_rate("stage2")
-        if s2_status == 200:
-            _insert_activity_stage(task["id"], 2, s2_status,
-                                   results["stage2"].get("body", {}),
-                                   elapsed2,
-                                   results["stage2"].get("tokens", {}).get("prompt", 0),
-                                   results["stage2"].get("tokens", {}).get("completion", 0),
-                                   run_id)
-        print(f"  Stage 2 done: {elapsed2:.0f}s, status={s2_status}", flush=True)
-        if s2_status == 200:
-            s2t = results["stage2"].get("tokens", {})
-            _notify_slack(f"T{task['id']} Stage 2/4 PLAN 완료 — {elapsed2:.0f}s, status=200, tokens={s2t.get('prompt','?')}/{s2t.get('completion','?')}")
-        else:
-            _notify_slack(f"T{task['id']} Stage 2/4 PLAN 실패 — status={s2_status}")
-        if s2_status != 200:
-            results["finished"] = datetime.now(timezone.utc).isoformat()
-            results["error"] = f"Stage 2 failed (status={s2_status})"
-            return results
-    else:
-        print(f"  Stage 2/4 PLAN    — skipped (resuming from stage {start_stage})", flush=True)
+    if sliced_code != code:
+        results["sliced_code_tokens_est"] = len(sliced_code) // 3
 
-    # Stage 3: IMPLEMENT (sliced code + estimator rate + retry)
-    s2_body = results["stage2"].get("body", {})
-    if start_stage <= 3:
-        prompt3 = estimate_prompt_tokens(code, task_desc, 3, stage2_body=s2_body,
-                                         sliced_code=sliced_code)
-        t3 = calc_timeout_v2(estimator, prompt3, STAGE_MAX_TOKENS[3])
-        results["stage3_timeout_calc"] = t3
-        print(f"  Stage 3/4 IMPL    — timeout={t3}s, ~{prompt3} prompt tokens "
-              f"(sliced {len(sliced_code)//3} tok)", flush=True)
-        s3_status, s3_body_dict, elapsed3 = _call_stage_with_retry(
-            LLAMA_ENDPOINT, [
-                {"role": "system", "content": SYSTEM_32B},
-                {"role": "user", "content": STAGE3_IMPLEMENT.format(
-                    plan=json.dumps(s2_body, indent=2) if s2_body else "{}", code=sliced_code)},
-            ], "qwen2.5-coder-32b", t3, STAGE_MAX_TOKENS[3])
-        results["stage3"] = _safe_json((s3_status, s3_body_dict))
-        results["stage3"]["elapsed_s"] = round(elapsed3, 1)
-        _update_estimator(s3_status, s3_body_dict, elapsed3)
-        _record_rate("stage3")
-        if s3_status == 200:
-            _insert_activity_stage(task["id"], 3, s3_status,
-                                   results["stage3"].get("body", {}),
-                                   elapsed3,
-                                   results["stage3"].get("tokens", {}).get("prompt", 0),
-                                   results["stage3"].get("tokens", {}).get("completion", 0),
-                                   run_id)
-        print(f"  Stage 3 done: {elapsed3:.0f}s, status={s3_status}", flush=True)
-        if s3_status == 200:
-            s3t = results["stage3"].get("tokens", {})
-            _notify_slack(f"T{task['id']} Stage 3/4 IMPL 완료 — {elapsed3:.0f}s, status=200, tokens={s3t.get('prompt','?')}/{s3t.get('completion','?')}")
-        else:
-            _notify_slack(f"T{task['id']} Stage 3/4 IMPL 실패 — status={s3_status}")
-        if s3_status != 200:
-            results["finished"] = datetime.now(timezone.utc).isoformat()
-            results["error"] = f"Stage 3 failed (status={s3_status})"
-            return results
-    else:
-        print(f"  Stage 3/4 IMPL    — skipped (resuming from stage {start_stage})", flush=True)
+    for stage_num in range(1, 5):
+        stage_key = f"stage{stage_num}"
+        name = STAGE_NAMES[stage_num]
 
-    # Stage 4: PACKAGE (diff only, no REQUEST needed)
-    s3_body = results["stage3"].get("body", {})
-    if start_stage <= 4:
-        prompt4 = estimate_prompt_tokens(code, task_desc, 4, stage3_body=s3_body)
-        t4 = calc_timeout_v2(estimator, prompt4, STAGE_MAX_TOKENS[4])
-        results["stage4_timeout_calc"] = t4
-        print(f"  Stage 4/4 PACKAGE — timeout={t4}s, ~{prompt4} prompt tokens", flush=True)
-        s4_status, s4_body_dict, elapsed4 = _call_stage_with_retry(
-            LLAMA_ENDPOINT, [
-                {"role": "system", "content": SYSTEM_32B},
-                {"role": "user", "content": STAGE4_PACKAGE.format(
-                    diff=json.dumps(s3_body) if isinstance(s3_body, dict) else str(s3_body))},
-            ], "qwen2.5-coder-32b", t4, STAGE_MAX_TOKENS[4])
-        results["stage4"] = _safe_json((s4_status, s4_body_dict))
-        results["stage4"]["elapsed_s"] = round(elapsed4, 1)
-        _update_estimator(s4_status, s4_body_dict, elapsed4)
-        _record_rate("stage4")
-        if s4_status == 200:
-            _insert_activity_stage(task["id"], 4, s4_status,
-                                   results["stage4"].get("body", {}),
-                                   elapsed4,
-                                   results["stage4"].get("tokens", {}).get("prompt", 0),
-                                   results["stage4"].get("tokens", {}).get("completion", 0),
+        if start_stage > stage_num:
+            print(f"  Stage {stage_num}/4 {name} — skipped (resuming from stage {start_stage})", flush=True)
+            continue
+
+        # Body references from previous stages
+        s1 = results.get("stage1", {}).get("body", {})
+        s2 = results.get("stage2", {}).get("body", {})
+        s3 = results.get("stage3", {}).get("body", {})
+
+        prompt_tokens = _estimate_stage_tokens(stage_num, code, task_desc, s1, s2, s3, sliced_code)
+        timeout = calc_timeout_v2(estimator, prompt_tokens, STAGE_MAX_TOKENS[stage_num])
+        results[f"{stage_key}_timeout_calc"] = timeout
+        print(_stage_label(stage_num, prompt_tokens, timeout,
+                          len(sliced_code) // 3, len(code) // 3), flush=True)
+
+        messages = [
+            {"role": "system", "content": SYSTEM_32B},
+            {"role": "user", "content": _build_stage_user_msg(stage_num, code, task_desc, s1, s2, s3, sliced_code)},
+        ]
+        status, body_dict, elapsed = _call_stage_with_retry(
+            LLAMA_ENDPOINT, messages, "qwen2.5-coder-32b", timeout, STAGE_MAX_TOKENS[stage_num])
+
+        results[stage_key] = extract_json_from_llm_response((status, body_dict))
+        results[stage_key]["elapsed_s"] = round(elapsed, 1)
+        _update_estimator(status, body_dict, elapsed)
+        _record_rate(stage_key)
+
+        if status == 200:
+            _insert_activity_stage(task["id"], stage_num, status,
+                                   results[stage_key].get("body", {}),
+                                   elapsed,
+                                   results[stage_key].get("tokens", {}).get("prompt", 0),
+                                   results[stage_key].get("tokens", {}).get("completion", 0),
                                    run_id)
-        print(f"  Stage 4 done: {elapsed4:.0f}s, status={s4_status}", flush=True)
-        if s4_status == 200:
-            s4t = results["stage4"].get("tokens", {})
-            pkg = results["stage4"].get("body", {})
-            conf = pkg.get("confidence", "?")
-            _notify_slack(f"T{task['id']} Stage 4/4 PACKAGE 완료 — {elapsed4:.0f}s, status=200, confidence={conf}")
+
+        print(f"  Stage {stage_num} done: {elapsed:.0f}s, status={status}", flush=True)
+        if status == 200:
+            st = results[stage_key].get("tokens", {})
+            extra = ""
+            if stage_num == 4:
+                conf = results[stage_key].get("body", {}).get("confidence", "?")
+                extra = f", confidence={conf}"
+            _notify_slack(f"T{task['id']} Stage {stage_num}/4 {name.strip()} 완료 — {elapsed:.0f}s, status=200, tokens={st.get('prompt','?')}/{st.get('completion','?')}{extra}")
         else:
-            _notify_slack(f"T{task['id']} Stage 4/4 PACKAGE 실패 — status={s4_status}")
-    else:
-        print(f"  Stage 4/4 PACKAGE — skipped", flush=True)
+            _notify_slack(f"T{task['id']} Stage {stage_num}/4 {name.strip()} 실패 — status={status}")
+
+        if status != 200:
+            results["finished"] = datetime.now(timezone.utc).isoformat()
+            results["error"] = f"Stage {stage_num} failed (status={status})"
+            return results
+
+        # After stage 1: recompute sliced_code from fresh analysis
+        if stage_num == 1:
+            s1_body = results["stage1"].get("body", {})
+            sliced_code = _slice_code(code, s1_body.get("affected_sections", [])) if s1_body else code
+            results["sliced_code_tokens_est"] = len(sliced_code) // 3
 
     results["rate_final"] = {"prompt_eval": round(estimator.prompt_eval_rate, 2),
                              "gen": round(estimator.gen_rate, 2)}
@@ -656,63 +491,10 @@ def run_api(task: dict, api_cfg: dict) -> dict:
         "task_id": task["id"],
         "task_name": task["name"],
         "status": status,
-        "body": _safe_json((status, body))["body"] if status == 200 else body,
+        "body": extract_json_from_llm_response((status, body))["body"] if status == 200 else body,
         "elapsed_s": round(elapsed, 1),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-
-
-def _safe_json(llm_result: tuple) -> dict:
-    """Extract JSON from LLM response, with fallback."""
-    status, body = llm_result
-    if status != 200:
-        return {"error": body.get("error", f"HTTP {status}"), "body": body}
-
-    content = ""
-    try:
-        choices = body.get("choices", [])
-        if choices:
-            content = choices[0].get("message", {}).get("content", "")
-    except Exception:
-        pass
-
-    result = {"status": status, "raw_content": content, "body": {}}
-
-    # Try to extract JSON from content
-    if content:
-        # Try direct JSON parse first
-        try:
-            result["body"] = json.loads(content)
-        except json.JSONDecodeError:
-            # Try to find JSON block
-            for marker in ("```json", "```"):
-                if marker in content:
-                    start = content.find(marker) + len(marker)
-                    end = content.find("```", start)
-                    if end > start:
-                        try:
-                            result["body"] = json.loads(content[start:end].strip())
-                        except json.JSONDecodeError:
-                            pass
-                        break
-            # Fallback: store as text
-            if not result["body"]:
-                result["body"] = {"text": content}
-
-    prompt_tokens = body.get("usage", {}).get("prompt_tokens", 0)
-    completion_tokens = body.get("usage", {}).get("completion_tokens", 0)
-    result["tokens"] = {"prompt": prompt_tokens, "completion": completion_tokens}
-
-    return result
-
-
-def save_result(data: dict, prefix: str, task_id: int, suffix: str = ""):
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    name = f"{prefix}_task{task_id:02d}{suffix}_{ts}.json"
-    with open(OUTPUT_DIR / name, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    return name
 
 
 def _insert_activity_stage(task_id: int, stage: int, status: int,

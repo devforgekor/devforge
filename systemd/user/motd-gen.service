@@ -1,6 +1,0 @@
-[Unit]
-Description=DevForge Server Knowledge Engine — state + changelog + MOTD
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/python3 /opt/projects/server/scripts/gen_server_state.py

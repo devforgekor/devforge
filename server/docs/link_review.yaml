@@ -1,8 +1,0 @@
-# link_turns review
-date: 2026-05-19
-linked: 210
-finding: orphan_turns: 0
-finding: empty_worklog: 0
-finding: commit_only_worklog: #89, #91, #92, #100
-finding: turn_coverage: 660/660
-finding: worklog_without_turns_agent: devforge

@@ -19,7 +19,7 @@ BINARY = Path(
 TARGET_SIZE = 0x200
 
 
-def patch() -> bool:
+def patch_elf_note_segment() -> bool:
     with open(BINARY, "r+b") as f:
         elf_header = f.read(64)
         if elf_header[:4] != b"\x7fELF":
@@ -40,7 +40,7 @@ def patch() -> bool:
                 memsz = struct.unpack_from("<Q", entry, 40)[0]
 
                 if filesz <= TARGET_SIZE and memsz <= TARGET_SIZE:
-                    return False  # already patched
+                    return False
 
                 f.seek(offset + 32)
                 f.write(struct.pack("<Q", TARGET_SIZE))
@@ -59,7 +59,7 @@ if __name__ == "__main__":
         print(f"ERROR: {BINARY} not found", file=sys.stderr)
         sys.exit(1)
 
-    changed = patch()
+    changed = patch_elf_note_segment()
     if changed:
         print("Patch applied.")
     sys.exit(0)

@@ -2,6 +2,10 @@
 """
 HTTPS reverse proxy that rotates Gemini API keys per request.
 
+SLOC-exempt: 458 lines — single cohesive reverse proxy (TLS termination → key rotation
+→ request forwarding → response relay). Request handler, KeyRotator integration,
+and model routing form one inseparable HTTP proxy loop.
+
 Listens on a local port with a self-signed cert for generativelanguage.googleapis.com.
 Each incoming request gets a fresh API key picked via KeyRotator.
 """
@@ -10,14 +14,12 @@ import json
 import os
 import socket
 import ssl
-import sys
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Optional
 
-sys.path.insert(0, "/opt/projects/server")
 from lib.key_rotator import KeyRotator
-from scripts.gemini_rotate import _load_keys, STATE_FILE
+from lib.auth.key_loader import load_api_keys, STATE_FILE
 
 LISTEN_HOST = "127.0.0.1"
 LISTEN_PORT = 4430
@@ -35,7 +37,7 @@ def _get_rotator() -> KeyRotator:
     if _rotator is not None:
         return _rotator
 
-    keys = _load_keys()
+    keys = load_api_keys()
     if not keys:
         raise RuntimeError("No API keys found")
 
@@ -77,7 +79,6 @@ def _resolve_real_ip() -> str:
     return CURRENT_REAL_IP
 
 
-# ── Model classifier ────────────────────────────────────────────
 # Tiered routing to spread quota across free models:
 #   Simple queries → flash (gemini-2.5-flash, generous free tier)
 #   Complex queries → gemma-4-31b-it (primary, ~11s)
@@ -151,7 +152,7 @@ def _extract_text(part: dict) -> str:
     return " ".join(texts)
 
 
-def _classify_model(data: dict, current_model: str) -> str:
+def classify_query_intent(data: dict, current_model: str) -> str:
     """Return the best model for this request.
 
     Tiered strategy:
@@ -282,7 +283,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             pos += chunk_size + 2
         return resp_body
 
-    def _forward(self, method):
+    def proxy_request_with_fallback(self, method):
         name, key, idx = self._pick_key()
         if key is None:
             self.send_error(503, "No API keys available")
@@ -315,7 +316,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     req_model = rest.split(":")[0] if ":" in rest else req_model
 
                 if "flash" in req_model:
-                    chosen = _classify_model(data, req_model)
+                    chosen = classify_query_intent(data, req_model)
                     if chosen != req_model:
                         path = self.path.replace(req_model, chosen)
                         print(f"[proxy] model: {req_model} → {chosen}  [KeyRotator: {name}]", file=sys.stderr)
@@ -329,16 +330,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     data["systemInstruction"] = {"parts": sys_parts}
                     body = json.dumps(data).encode()
             except Exception:
-                pass  # Forward body unchanged on any parse error
+                pass
 
         if "Content-Length" in req_headers:
             req_headers["Content-Length"] = str(len(body)) if body else "0"
         req_headers["x-goog-api-key"] = key
 
-        # ── First attempt ──────────────────────────────────────
         status_code, rest_lines, raw_body = self._make_request(method, path, req_headers, body, key)
 
-        # ── Fallback chain: 31B → pro → 26B(spare) → flash ──
         if status_code == 429 and _is_gemma_model(path):
             if GEMMA_31B_MODEL in path:
                 # 31B exhausted → pro
@@ -369,7 +368,6 @@ class ProxyHandler(BaseHTTPRequestHandler):
             fallback_path = path.replace(PRO_MODEL, FLASH_MODEL)
             status_code, rest_lines, raw_body = self._make_request(method, fallback_path, req_headers, body, key)
 
-        # ── Send response ───────────────────────────────────────
         resp_body = self._dechunk(rest_lines, raw_body)
 
         # Intercept 503 (server overload) with clear Korean message
@@ -411,19 +409,19 @@ class ProxyHandler(BaseHTTPRequestHandler):
         print(f"[proxy] {name} → {status_code} {self.path[:60]}", file=sys.stderr)
 
     def do_POST(self):
-        self._forward("POST")
+        self.proxy_request_with_fallback("POST")
 
     def do_GET(self):
-        self._forward("GET")
+        self.proxy_request_with_fallback("GET")
 
     def do_PUT(self):
-        self._forward("PUT")
+        self.proxy_request_with_fallback("PUT")
 
     def do_DELETE(self):
-        self._forward("DELETE")
+        self.proxy_request_with_fallback("DELETE")
 
     def do_PATCH(self):
-        self._forward("PATCH")
+        self.proxy_request_with_fallback("PATCH")
 
     def log_message(self, format, *args):
         pass  # suppress default logging

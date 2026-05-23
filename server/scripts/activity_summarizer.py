@@ -11,11 +11,9 @@ Single file, no new dependencies. ~250 lines.
 import json
 import os
 import sys
-import http.client
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.db import psql, psql_ok, esc_sql
 
 LLAMA_HOST = "127.0.0.1"
@@ -85,7 +83,9 @@ No markdown, no explanation — JSON array only."""
 
 
 def call_llm(prompt: str) -> list:
-    """Call llama.cpp at 127.0.0.1:8081. Returns parsed JSON list on success, [] on failure."""
+    """Call llama.cpp at 127.0.0.1:8081. Returns parsed JSON list on success, None on failure."""
+    import http.client
+
     body = json.dumps({
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -95,7 +95,6 @@ def call_llm(prompt: str) -> list:
         "max_tokens": SUMMARY_MAX_TOKENS,
         "stream": False,
     })
-
     try:
         conn = http.client.HTTPConnection(LLAMA_HOST, LLAMA_PORT, timeout=HTTP_TIMEOUT)
         conn.request("POST", "/v1/chat/completions", body,
@@ -103,9 +102,7 @@ def call_llm(prompt: str) -> list:
         resp = conn.getresponse()
         data = json.loads(resp.read().decode())
         conn.close()
-
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        # Strip markdown fences if present
         content = content.strip()
         if content.startswith("```"):
             content = content.split("\n", 1)[-1]
@@ -113,12 +110,13 @@ def call_llm(prompt: str) -> list:
                 content = content[:-3]
             content = content.strip()
         return json.loads(content)
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
         print(f"  JSON parse error for LLM response: {e}")
         return None
     except Exception as e:
         print(f"  LLM call failed: {e}")
         return None
+
 
 
 def mark_parse_failed(event_ids: list):

@@ -6,7 +6,7 @@
 set -o pipefail
 
 LOG_TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
-STATUS_FILE="/opt/projects/server/docs/nightly_status.yaml"
+STATUS_FILE="/opt/projects/server/data/nightly_status.yaml"
 
 retry() {
     local name="$1"; shift
@@ -35,14 +35,12 @@ set -a && source ~/.config/devforge/secrets.env && set +a
 
 embed_ok=true
 retry "embed_turns" 2 python3 /opt/projects/server/scripts/embed_turns.py || embed_ok=false
-# retry "classify_turns" 2 python3 /opt/projects/server/scripts/classify_turns.py || true
 
 # ── Status summary (consumed by 9 AM Slack hook) ──────────────
 cat > "$STATUS_FILE" <<YAML
 timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 link_turns: $($link_ok && echo ok || echo failed)
 embed_turns: $($embed_ok && echo ok || echo failed)
-# classify_turns: todo
 YAML
 
 echo "[$(LOG_TS)] nightly_batch complete"

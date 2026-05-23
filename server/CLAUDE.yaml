@@ -3,7 +3,7 @@ overview:
   purpose: OCI ARM development server — LLM inference + FastAPI application hosting
   os: Oracle Linux Server 9.7 (aarch64)
   cpu: ARM Neoverse-N1, 4-core
-  memory: 22Gi + 4G zram (358.4M) + 8G swap (swappiness=10)
+  memory: 22Gi + 4G zram (2.4G) + 8G swap (swappiness=10)
 storage:
   boot_disk:
     device: /dev/sda (50GB)
@@ -44,14 +44,16 @@ storage:
     free: 0G
 containers:
   runtime: Podman (rootless, user opc)
-  image: localhost/devforge-llama:2026.05.13 (fixed local tag)
-  model: qwen2.5-coder-7b-instruct-q8_0.gguf (8.1GB)
-  flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --host 0.0.0.0 --port 8080 --threads 4 --threads-batch 4 --ctx-size
-    16384 --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 --cache-reuse 256 --slot-save-path /cache/ --cache-ram 16384
-    --batch-size 4096 --ubatch-size 1024
+  image: ghcr.io/ggml-org/llama.cpp:server
+  model: phi-4-Q4_K_M.gguf
+  flags: (dynamic entrypoint — query /v1/models for live config)
   target_flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0
 services:
 - name: devforge-api
+  status: active
+- name: devforge-qwen
+  status: active
+- name: devforge-swap
   status: active
 - name: postgres
   status: active
@@ -66,12 +68,6 @@ services:
 - name: netdata
   status: active
   type: systemd system (native)
-- name: devforge-llm
-  status: failed
-  type: systemd user
-- name: litellm
-  status: failed
-  type: systemd user
 network:
   interface: enp0s6
   ip: 10.0.0.75/24
@@ -79,8 +75,7 @@ network:
   exposed_ports:
   - 22/tcp (SSH, key-only)
   - 111/tcp (rpcbind)
-  llm_api: 127.0.0.1:4000 (LiteLLM proxy to llama.cpp)
-  litellm_api: 127.0.0.1:4000 (host networking)
+  llm_api: localhost:8081
   netdata: 127.0.0.1:19999
 projects:
   root: /opt/projects
@@ -105,11 +100,18 @@ entry_points:
   change_archive: changelog_archive.yaml (> 3 months, read on demand)
   session_handover: handover.yaml (last checkpoint + AI decisions/known_issues, always read on session start)
   task_tracker: 'tasks.yaml (todo/in_progress/blocked/done — all AI agents share this file; labels: To Do/In Progress/Blocked/Done)'
+  timer_registry: docs/timer-registry.yaml (all systemd timers, schedules, and script mappings)
+  references: docs/references.md (external tools, frameworks, research — LLM/AI)
+  infra_references: _archive/reference-watchlist.md + reference-tracking-policy.yaml (infrastructure version tracking, 4-month
+    cycle)
   retention: indefinite — no deletion, archive-only after 3 months
 refresh:
-  trigger: motd-gen.timer (systemd user, 15min interval)
+  trigger: server-state-collector.timer (systemd user, 15min interval)
   script: /opt/projects/server/scripts/gen_server_state.py
   flow: collect -> state.yaml -> hash detect -> changelog (if changed) -> archive -> CLAUDE.yaml -> MOTD
+  legacy_removed: gen_motd.py, gen_motd_system.py, gen_tasks.py, gen_motd_task_unified.py, gen_motd_task.py (2026-05-23)
+  dead_code_cleanup_2026-05-23: slack_notify.py, monitor_health.py, test_review_models.py, install_dark_theme.sh, run_model_sequence.sh,
+    debug_run_t01_t08.sh, devforge-qwen-worker.{service,timer}, /opt/projects/systemd/user/ (stale snapshot)
   auto: true
 handover:
   trigger: handover-gen.timer (systemd user, 10min interval) + SessionEnd hook

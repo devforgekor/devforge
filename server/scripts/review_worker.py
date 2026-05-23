@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """review_worker.py — 3-LLM debate pipeline for DevForge.
 
+SLOC-exempt: 695 lines — single cohesive 3-LLM debate pipeline (extract A+B
+→ compare → arbitrate → store). Shared checkpoint, RateEstimator instances,
+LLM client, and DB inserts tie all stages together.
+
 Phase 1 (extract A+B): Qwen3-4B (Podman A :8080) + Llama-3B (Podman B :8082)
                        independently extract facts from turns — parallel HTTP.
 Phase 2 (compare):     Match facts by evidence overlap. Identical → confirmed.
@@ -27,12 +31,10 @@ from typing import Optional, Dict, List, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from lib.db import psql, psql_ok, esc_sql
-from session_guard import log_commits_to_worklog
+from lib.llm.rate_estimator import TimingsBasedRateEstimator
 
-# ── endpoints ──────────────────────────────────────────────────────
 CHECKPOINT_FILE = Path("/opt/projects/server/review_checkpoint.json")
 
-# ── models ─────────────────────────────────────────────────────────
 MODELS = {
     "qwen4b": {
         "name": "qwen3-4b",
@@ -56,7 +58,6 @@ EXTRACT_MODEL_A = "qwen4b"
 EXTRACT_MODEL_B = "llama3b"
 ARBITRATOR_MODEL = "phi4mini"
 
-# ── prompts ────────────────────────────────────────────────────────
 EXTRACT_SYSTEM = """You are a fact extraction system. From the conversation turn below, extract ONLY self-contained, testable facts.
 
 CRITICAL — evidence MUST be an exact copy-paste substring from the turn. No paraphrasing, no summarizing, no completing partial sentences. If you cannot find the exact text, do NOT extract.
@@ -96,7 +97,6 @@ def get_extract_system(model_key: str) -> str:
     return MODELS.get(model_key, {}).get("extract_system", EXTRACT_SYSTEM)
 
 
-# ── checkpoint ─────────────────────────────────────────────────────
 def load_checkpoint() -> Dict[str, str]:
     if CHECKPOINT_FILE.exists():
         return json.loads(CHECKPOINT_FILE.read_text())
@@ -107,7 +107,6 @@ def save_checkpoint(cp: Dict[str, str]):
     CHECKPOINT_FILE.write_text(json.dumps(cp, indent=2, ensure_ascii=False))
 
 
-# ── DB helpers ─────────────────────────────────────────────────────
 def ensure_review_table():
     psql("""
     CREATE TABLE IF NOT EXISTS review_facts (
@@ -179,7 +178,6 @@ def save_review_facts(turn_id: str, facts: List[Dict], decisions: List[Dict],
                       extract_model_a: str, extract_model_b: str,
                       arbitrator_model: str = "",
                       phase: str = "", timings: Optional[Dict] = None):
-    """Save extracted + arbitrated facts to DB."""
     t = timings or {}
     saved = 0
     for dec in decisions:
@@ -246,10 +244,11 @@ def _insert_activity_review(turn_id: str, facts: List[Dict], reviews: List[Dict]
             "evidence": evidence, "verdict": verdict, "reason": reason
         }, ensure_ascii=False)
 
+        body_esc = body.replace("'", "''")
         ok = psql_ok(f"""INSERT INTO activity_log (type, source, title, summary, body,
             model, turn_ids, summary_status, queue_status, exec_status)
         VALUES ('review', 'review_worker', '{esc_sql(title)}',
-                '{esc_sql(summary)}', '{esc_sql(body)}',
+                '{esc_sql(summary)}', '{body_esc}',
                 '{esc_sql(verify_model)}', ARRAY['{turn_id}']::UUID[],
                 'raw', 'unprocessed', 'DONE')""")
         if ok:
@@ -257,7 +256,6 @@ def _insert_activity_review(turn_id: str, facts: List[Dict], reviews: List[Dict]
     return count
 
 
-# ── health check ──────────────────────────────────────────────────
 def check_endpoint(port: int, label: str) -> bool:
     """Quick health check — confirm LLM server on port is responding."""
     try:
@@ -271,77 +269,23 @@ def check_endpoint(port: int, label: str) -> bool:
         return False
 
 
-# ── LLM calls ──────────────────────────────────────────────────────
+RateEstimator = TimingsBasedRateEstimator  # old name → new location
 
-# ── Rate Estimator ────────────────────────────────────────────────────
-class RateEstimator:
-    """EMA + median rate tracker, self-calibrating from timings field."""
-    def __init__(self, label: str = "", initial_prompt: float = 15.0,
-                 initial_gen: float = 5.0, alpha: float = 0.3):
-        self.label = label
-        self.prompt_rate = initial_prompt
-        self.gen_rate = initial_gen
-        self.alpha = alpha
-        self._samples: list = []
-        self.calls = 0
-        self.cache_hits = 0
-        self._total_prompt = 0
-        self._total_gen = 0
-        self._total_elapsed = 0.0
 
-    def update(self, timings: dict):
-        pr = timings.get("prompt_per_second", 0)
-        gr = timings.get("predicted_per_second", 0)
-        if pr > 0:
-            self.prompt_rate = self._ema(self.prompt_rate, pr)
-        if gr > 0:
-            self.gen_rate = self._ema(self.gen_rate, gr)
-            self._samples.append(gr)
-            if len(self._samples) > 50:
-                self._samples.pop(0)
-        self.calls += 1
-        self._total_prompt += timings.get("prompt_n", 0)
-        self._total_gen += timings.get("predicted_n", 0)
-        self._total_elapsed += timings.get("predicted_ms", 0) + timings.get("prompt_ms", 0)
-        if timings.get("cache_n", 0) > 0:
-            self.cache_hits += 1
-
-    def _ema(self, old: float, new: float) -> float:
-        return self.alpha * new + (1 - self.alpha) * old
-
-    def calc_timeout(self, prompt_tokens: int, max_tokens: int, buffer: int = 30) -> int:
-        return int(prompt_tokens / max(self.prompt_rate, 0.5)
-                   + max_tokens / max(self.gen_rate, 0.5) + buffer)
-
-    def stats(self) -> dict:
-        result = {
-            "prompt_rate": round(self.prompt_rate, 1),
-            "gen_rate": round(self.gen_rate, 1),
-            "calls": self.calls,
-            "cache_hits": self.cache_hits,
-            "total_prompt": self._total_prompt,
-            "total_gen": self._total_gen,
-            "total_elapsed_s": round(self._total_elapsed / 1000, 1),
-        }
-        if self._samples:
-            result["median_gen_rate"] = round(statistics.median(self._samples), 1)
-        return result
+from lib.llm.client import call_llm as _call_llm_endpoint
 
 
 def call_llm(port: int, model_name: str, system_prompt: str, user_prompt: str,
              max_tokens: int = 512, timeout: int = 180, retries: int = 2
              ) -> Tuple[Optional[Dict], Optional[Dict]]:
-    """Call LLM endpoint via http.client. Returns (parsed_json, timings_dict) or (None, None)."""
-    payload = json.dumps({
-        "model": model_name,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt + "\n/no_think"},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": 0.0,
-    }).encode()
-    headers = {"Content-Type": "application/json"}
+    """Call LLM via lib.llm.client — adapter for review_worker's port-based signature."""
+    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+    endpoint = f"http://127.0.0.1:{port}/v1/chat/completions"
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt + "\n/no_think"},
+    ]
 
     @retry(stop=stop_after_attempt(retries + 1),
            wait=wait_exponential(multiplier=1, min=1, max=8),
@@ -349,17 +293,14 @@ def call_llm(port: int, model_name: str, system_prompt: str, user_prompt: str,
            after=lambda rs: print(f"    LLM retry: {rs.outcome.exception()}")
            if rs.failed else None)
     def _do_call():
-        conn = hc.HTTPConnection("127.0.0.1", port, timeout=timeout)
-        conn.request("POST", "/v1/chat/completions", payload, headers)
-        resp = conn.getresponse()
-        body = resp.read().decode()
-        conn.close()
-        if resp.status != 200:
-            raise ConnectionError(f"HTTP {resp.status}")
-        data = json.loads(body)
-        content = data["choices"][0]["message"]["content"]
+        status, body = _call_llm_endpoint(
+            endpoint, messages, model=model_name, timeout=timeout, max_tokens=max_tokens,
+        )
+        if status != 200:
+            raise ConnectionError(f"HTTP {status}: {body.get('error', 'unknown')}")
+        content = body["choices"][0]["message"]["content"]
         result = _parse_llm_json(content)
-        return result, data.get("timings", {})
+        return result, body.get("usage", {})
 
     try:
         return _do_call()
@@ -393,7 +334,6 @@ def _parse_llm_json(content: str) -> Optional[Dict]:
     return None
 
 
-# ── prompts ────────────────────────────────────────────────────────
 def build_extract_prompt(turn: Dict) -> str:
     return f"[{turn['agent']}] user: {turn['user_turn']}\n[{turn['agent']}] text: {turn['text']}"
 
@@ -412,7 +352,6 @@ def build_arbitration_prompt(turn: Dict, conflicts: List[Dict]) -> str:
 
 
 def _evidence_overlap(a: str, b: str) -> float:
-    """Simple token overlap ratio between two evidence strings."""
     if not a or not b:
         return 0.0
     ta = set(a.lower().split())
@@ -491,7 +430,6 @@ def compare_facts(facts_a: List[Dict], facts_b: List[Dict]) -> Tuple[List[Dict],
     return confirmed_both, conflicts
 
 
-# ── main ───────────────────────────────────────────────────────────
 def main():
     import argparse
     from concurrent.futures import ThreadPoolExecutor
@@ -506,6 +444,7 @@ def main():
     _notify_slack(f"review_worker 3-LLM debate start — {ts.strftime('%H:%M:%S')} UTC")
 
     ensure_review_table()
+    from lib.worklog import log_commits_to_worklog
     log_commits_to_worklog()
 
     checkpoint = load_checkpoint()
@@ -523,7 +462,6 @@ def main():
         return 0
     print(f"Fetched {len(turns)} unprocessed turns")
 
-    # ── health checks ──────────────────────────────────────────────
     for key, mdl in [(EXTRACT_MODEL_A, model_a), (EXTRACT_MODEL_B, model_b),
                       (ARBITRATOR_MODEL, model_arb)]:
         if not check_endpoint(mdl["port"], key):
@@ -531,14 +469,11 @@ def main():
             _notify_slack(f"FATAL: {key} :{mdl['port']} down")
             return 1
 
-    # ── init estimators ────────────────────────────────────────────
     est_a = RateEstimator(EXTRACT_MODEL_A)
     est_b = RateEstimator(EXTRACT_MODEL_B)
     est_arb = RateEstimator(ARBITRATOR_MODEL, initial_gen=3.0)
 
-    # ═══════════════════════════════════════════════════════════════
     # Phase 1: Parallel independent extraction (Qwen3-4B + Llama-3B)
-    # ═══════════════════════════════════════════════════════════════
     print(f"\nPhase 1 — parallel extract: {model_a['name']} + {model_b['name']}...")
     combo_facts = []
 
@@ -576,9 +511,7 @@ def main():
             "timings_a": timings_a, "timings_b": timings_b,
         })
 
-    # ═══════════════════════════════════════════════════════════════
     # Phase 2: Compare + Phase 3: Arbitrate
-    # ═══════════════════════════════════════════════════════════════
     total_confirmed = total_conflicts = total_valid = total_hall = 0
 
     for entry in combo_facts:
@@ -596,8 +529,14 @@ def main():
             entry["decisions"] = decisions
             total_valid += len(decisions)
             print(f"  Turn {entry['turn_index']+1}: {len(confirmed)} confirmed (all agree)")
+            combined_timings = {}
+            for k in ("prompt_n", "predicted_n", "predicted_per_second",
+                       "prompt_ms", "predicted_ms", "cache_n"):
+                combined_timings[k] = (entry.get("timings_a", {}) or {}).get(k, 0) + \
+                                      (entry.get("timings_b", {}) or {}).get(k, 0)
             save_review_facts(entry["turn_id"], confirmed, decisions,
-                              model_a["name"], model_b["name"], phase="debate")
+                              model_a["name"], model_b["name"], phase="debate",
+                              timings=combined_timings)
             continue
 
         # Phase 3: Arbitrate conflicts
@@ -608,13 +547,20 @@ def main():
                                     ARBITRATOR_SYSTEM, prompt,
                                     max_tokens=512, timeout=timeout)
         arb_decisions = result.get("decisions", []) if result else []
+        if not isinstance(arb_decisions, list):
+            print(f"  WARNING: arb_decisions is {type(arb_decisions).__name__}, expected list — treating as empty")
+            arb_decisions = []
         if timings: est_arb.update(timings)
 
         all_decisions = [{"fact_index": i, "verdict": "valid",
                            "reason": "both agree", "source": "both"}
                           for i in range(len(confirmed))]
         for d in arb_decisions:
-            d["fact_index"] = len(all_decisions)
+            arb_idx = d.get("fact_index")
+            if isinstance(arb_idx, int) and arb_idx >= 0:
+                d["fact_index"] = len(confirmed) + arb_idx
+            else:
+                d["fact_index"] = len(all_decisions)
             all_decisions.append(d)
 
         entry["decisions"] = all_decisions

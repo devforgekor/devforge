@@ -1,0 +1,312 @@
+# 8-stage code modification test for Qwen2.5-Coder-32B Q4_K_M
+# Each task runs: Qwen32B local (4-stage pipeline) + 3 APIs for comparison
+#
+# Stage complexity: L1(simple add) → L8(analysis only)
+# Target files: slack_operator.py (state machine + HTTP), session_guard.py (git + DB)
+#
+# Metrics per task:
+#   - 32B: diff quality, rationale accuracy, confidence, review_points usefulness
+#   - APIs: same metrics + token usage, latency
+#   - Cross: agreement rate, unique insights per model
+
+tasks:
+  - id: 1
+    stage: L1
+    name: "함수 추가 (단순)"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      _post_to_slack() 과 _post_to_response_url() 이 동일한 JSON 직렬화+인코딩 패턴을 반복한다.
+      payload dict를 받아 bytes로 변환하는 _encode_payload(payload: dict) -> bytes 헬퍼 함수를 추가하라.
+      기존 _post_to_response_url()과 _post_to_slack()에서 이 함수를 사용하도록 변경하라.
+    expected_category: "helper_extraction"
+    evaluation:
+      - helper 함수가 정확히 추출되었는가
+      - 두 호출부가 모두 변경되었는가
+      - 기존 동작이 보존되었는가
+
+  - id: 2
+    stage: L2
+    name: "지역 버그 수정"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      _find_pid_file() 는 glob 결과 중 mtime 기준 최신 파일을 선택하지만,
+      glob과 max() 사이에 다른 프로세스가 파일을 삭제하면 FileNotFoundError가 발생한다.
+      glob 결과가 없으면 None을 반환하고, 있는 경우 가장 최신 파일을 안전하게 선택하도록 수정하라.
+      또한 PID_DIR이 없을 경우 FileNotFoundError 대신 None을 반환해야 한다.
+    expected_category: "bug_fix"
+    evaluation:
+      - race condition이 해결되었는가
+      - PID_DIR 부재 시 graceful handling
+      - 기존 반환 타입(Optional[Path]) 유지
+
+  - id: 3
+    stage: L3
+    name: "에러 처리/검증 추가"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      verify_slack_signature() 의 body 파라미터가 빈 bytes(b'')일 때도 timestamp 검증을 통과하면
+      hmac.compare_digest(expected, '') → True 가 되어 빈 서명을 허용할 수 있다.
+      body가 비어있거나, timestamp가 0이거나, signature가 'v0=' 포맷이 아닌 경우 명시적으로 False를
+      반환하는 입력 검증을 추가하라.
+    expected_category: "validation"
+    evaluation:
+      - 빈 body 감지
+      - timestamp 0 방어
+      - signature 포맷 검증
+      - 기존 정상 케이스 영향 없음
+
+  - id: 4
+    stage: L4
+    name: "크로스 함수 수정"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      cmd_status(), cmd_log(), cmd_test_result() 모두 로그/결과 파일을 읽고 _truncate()로 자르는
+      동일한 패턴을 사용한다. 이 함수들은 읽기 실패 시 서로 다른 에러 메시지를 반환하는데,
+      일관된 에러 포맷으로 통일하라.
+      또한 _read_and_truncate(filepath: str, max_chars: int = 2500) -> str 공통 함수를 추출하고,
+      위 세 함수가 이를 사용하도록 변경하라.
+    expected_category: "cross_function_refactor"
+    evaluation:
+      - 공통 함수 추출 정확성
+      - 세 호출부 모두 변경
+      - 에러 메시지 일관성
+      - cmd_test_result()의 JSON 파싱 케이스 처리 유지
+
+  - id: 5
+    stage: L5
+    name: "중간 리팩토링 (중복 제거)"
+    file: "/opt/projects/server/scripts/session_guard.py"
+    description: |
+      session_guard.py 의 여러 함수들이 _git() 헬퍼를 통해 git 명령을 실행하고 있으나,
+      _git() 호출마다 동일한 에러 처리(return "" on failure)와 strip()이 반복된다.
+      _git() 호출 패턴을 분석하고, 실패 시 기본값을 지정할 수 있는 _git_or(default: str = "")
+      패턴으로 개선하라. 또한 _git() 결과가 빈 문자열인 경우와 실제 git 출력이 빈 문자열인
+      경우를 구분할 수 있도록 반환 타입을 Optional[str]로 변경하라.
+    expected_category: "deduplication"
+    evaluation:
+      - Optional[str] 반환 타입 정확성
+      - 호출부 None 체크 추가
+      - 기존 fallback 동작 유지
+
+  - id: 6
+    stage: L6
+    name: "인터페이스 변경"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      _post_to_slack(), _update_slack_message(), _post_to_response_url() 의 timeout이
+      각각 10, 10, 5초로 하드코딩되어 있다. 이 값들을 모듈 레벨 상수로 추출하고,
+      각 함수가 키워드 인자 timeout_override: Optional[int] = None 을 받아
+      호출자가 timeout을 오버라이드할 수 있도록 인터페이스를 변경하라.
+      DEFAULT_SLACK_TIMEOUT = 10, DEFAULT_RESPONSE_TIMEOUT = 5 상수를 정의하라.
+    expected_category: "interface_change"
+    evaluation:
+      - 상수 추출 정확성
+      - timeout_override 파라미터 추가
+      - 기본 동작 변경 없음
+      - 타입 힌트 적절성
+
+  - id: 7
+    stage: L7
+    name: "구조 변경 (클래스 추출)"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      _interaction_state dict와 _get_state(), _prune_expired(), _state_key() 함수가
+      하나의 논리적 단위(SessionStore)를 구성한다. 이를 SessionStore 클래스로 추출하라.
+      클래스는 __init__(ttl: int = 1800), get(user_id, channel_id), _prune() 메서드를 가져야 한다.
+      _advance()와 slack_interactions()에서의 사용법도 함께 변경하라.
+      기존 모듈 레벨 _interaction_state는 제거한다.
+    expected_category: "structural_refactor"
+    evaluation:
+      - SessionStore 클래스 설계 적절성
+      - 모든 호출부 마이그레이션
+      - TTL 만료 동작 보존
+      - thread-safe 고려 여부
+
+  - id: 8
+    stage: L8
+    name: "분석+계획 전용 (코드 수정 없음)"
+    file: "/opt/projects/server/scripts/session_guard.py"
+    description: |
+      session_guard.py 전체를 분석하고, 동시 실행 시 발생할 수 있는 race condition과
+      안전성 이슈를 식별하라. 특히:
+      1. 두 세션이 동시에 log_commits_to_worklog()를 호출할 때 안전한가?
+      2. psql() 호출이 실패할 때 recovery 동작은 적절한가?
+      3. git log --since=24h 윈도우가 DST/시간대 변경에 안전한가?
+      코드 수정은 하지 말고, 발견된 이슈와 추천 해결 방안만 마크다운 리포트로 출력하라.
+    expected_category: "analysis_only"
+    evaluation:
+      - race condition 식별 정확성
+      - 실패 시나리오 커버리지
+      - 해결 방안 실현 가능성
+      - 우선순위 부여 적절성
+
+  - id: 9
+    stage: L9
+    name: "버그 수정 — _fill_pool() 무한 증식"
+    file: "/opt/projects/server/scripts/gemini_pool.py"
+    description: |
+      GeminiPoolManager._fill_pool()이 min_size=2로 설정되어 있는데,
+      get()에서 에러 발생 시 await self._fill_pool()을 호출한다.
+      이로 인해 새 키가 지속적으로 풀에 추가되어 무한 증식하는 버그가 있다.
+      also_start_keys()가 반환하는 키는 DB에서 가져오지만 실패한 기존 키는 제거되지 않아
+      pool size가 통제 불가능하게 커진다.
+      _fill_pool()을 수정하여 max_size=4 제한을 추가하고, 실패한 키는 풀에서 제거하도록 변경하라.
+    expected_category: "bug_fix"
+    evaluation:
+      - max_size 제한 추가
+      - 실패 키 제거 로직
+      - 풀 크기가 max_size 이하로 유지되는지
+
+  - id: 10
+    stage: L10
+    name: "동시성 개선 — SQLite WAL 모드"
+    file: "/opt/projects/server/scripts/gemini_pool.py"
+    description: |
+      GeminiPoolManager가 SQLite를 동시성 큐로 사용하면서 쓰기 경합이 발생한다.
+      여러 코루틴이 동시에 get() → _fill_pool() → _insert_key() 경로를 타면
+      SQLITE_BUSY로 실패할 수 있다.
+      WAL 모드(PRAGMA journal_mode=WAL)를 활성화하고, 연결 풀링을 추가하라.
+      DB 초기화 시 WAL 모드 설정, aiosqlite 연결을 모듈 레벨에서 공유하는 방식으로 변경.
+    expected_category: "concurrency_fix"
+    evaluation:
+      - WAL 모드 활성화
+      - 동시 get() 호출 시 경합 해결
+      - 기존 API 호환성 유지
+
+  - id: 11
+    stage: L11
+    name: "ASSERT 파서 + 검증기 추출"
+    file: "/opt/projects/server/scripts/code_mod_pipeline.py"
+    description: |
+      hybrid_pipeline.py의 extract_assert()와 execute_steps() 내 ASSERT 검증 로직을
+      code_mod_pipeline.py로 이식하고 lib 모듈로 일반화하라.
+      현재 code_mod_pipeline.py의 4-stage에는 ASSERT 검증이 없다.
+      각 스테이지의 출력이 계약(contract)을 만족하는지 검증하는 AssertValidator 클래스를
+      lib/assert_check.py로 추출하고, code_mod_pipeline.py의 Stage 3(IMPL) 결과에 적용하라.
+    expected_category: "feature_addition"
+    evaluation:
+      - AssertValidator 클래스 설계
+      - Stage 3 IMPL 결과 검증 적용
+      - 기존 파이프라인 동작 유지
+      - TYPE_ENV / TYPE_CODE 에러 분류 보존
+
+  - id: 12
+    stage: L12
+    name: "에러 분류기 일반화"
+    file: "/opt/projects/server/scripts/code_mod_pipeline.py"
+    description: |
+      hybrid_pipeline.py의 classify_error() 로직을 code_mod_pipeline.py로 이식하라.
+      현재 32B 4-stage 파이프라인은 스테이지 실패 시 모든 에러를 동일하게 처리한다.
+      classify_error()는 에러를 TYPE_ENV(치명, 즉시 중단)와 TYPE_CODE(재시도 가능)로 구분한다.
+      이 분류 로직을 lib/error_classifier.py로 추출하고,
+      code_mod_pipeline.py의 Stage 2-4 실패 처리에 통합하라.
+      TYPE_ENV → 즉시 abort, TYPE_CODE → 최대 2회 web fallback retry.
+      web fallback은 DeepSeek API를 사용한다.
+    expected_category: "feature_addition"
+    evaluation:
+      - error_classifier 모듈 분리
+      - TYPE_ENV 즉시 중단
+      - TYPE_CODE 재시도 + web fallback
+      - retry 초과 시 graceful failure
+
+  - id: 13
+    stage: L13
+    name: "Stage 실패 복구 — web retry fallback"
+    file: "/opt/projects/server/scripts/code_mod_pipeline.py"
+    description: |
+      T12에서 추가한 에러 분류기를 기반으로, Stage 2-4 실패 시 DeepSeek API를 통한
+      web retry fallback을 구현하라.
+      TYPE_CODE로 분류된 실패에 대해:
+      1. 실패한 스테이지의 프롬프트 + 에러 메시지를 DeepSeek API로 전송
+      2. 응답을 파싱하여 수정된 결과를 원래 스테이지 출력 포맷으로 변환
+      3. 최대 2회 retry, 실패 시 이전 결과로 fallback
+      web retry 타임아웃은 60초, max_tokens=2048.
+    expected_category: "feature_addition"
+    evaluation:
+      - web retry fallback 동작
+      - 응답 포맷 변환 정확성
+      - retry 제한 준수
+      - 실패 시 graceful degradation
+
+  - id: 14
+    stage: L14
+    name: "KeyRotator — exponential backoff + jitter"
+    file: "/opt/projects/server/scripts/lib/key_rotator.py"
+    description: |
+      KeyRotator.rate_limited()가 현재 고정 backoff(60s)를 사용한다.
+      rate limit 응답 헤더(Retry-After)를 파싱하여 동적 backoff를 적용하고,
+      Retry-After가 없으면 exponential backoff에 jitter(±25%)를 추가하라.
+      base_delay=30s, backoff_multiplier=2.0, max_delay=600s.
+      backoff_until이 만료된 키는 자동으로 재활성화되어야 한다.
+    expected_category: "feature_addition"
+    evaluation:
+      - Retry-After 헤더 파싱
+      - exponential backoff 계산 정확성
+      - jitter 적용 (±25%)
+      - max_delay 초과 방지
+      - 만료 키 자동 재활성화
+
+  - id: 15
+    stage: L15
+    name: "KeyRotator — 다중 키 rotation 아키텍처"
+    file: "/opt/projects/server/scripts/lib/key_rotator.py"
+    description: |
+      현재 KeyRotator는 _calls 기반 round-robin으로 키를 선택한다.
+      실제 사용 패턴을 보면 특정 키에 부하가 편중되는 문제가 있다.
+      이를 fair-queue 기반 rotation으로 개선하라:
+      1. _calls 대신 _weight(float) 필드 추가 (낮을수록 우선)
+      2. pick()이 가장 낮은 _weight의 키를 선택
+      3. success() 시 weight += 1.0, rate_limited() 시 weight += 10.0
+      4. backoff_until이 지난 키는 weight = min(weights)로 복귀
+      5. KeyRotator.pick()의 반환 타입을 유지하고 기존 호출부와 호환될 것
+    expected_category: "structural_refactor"
+    evaluation:
+      - weight 기반 selection 정확성
+      - 기존 pick() 인터페이스 호환
+      - rate_limited 키 격리
+      - backoff 만료 후 복귀
+
+  - id: 16
+    stage: L16
+    name: "429 감지 + 자동 backoff 테스트 추가"
+    file: "/opt/projects/server/scripts/lib/key_rotator.py"
+    description: |
+      KeyRotator에 429 응답을 자동 감지하고 backoff를 적용하는 로직이 있지만,
+      이에 대한 단위 테스트가 없다. lib/ 디렉토리에 pytest 기반 테스트를 추가하라:
+      1. test_key_rotator.py 생성
+      2. 테스트 케이스:
+         - 기본 pick()→success() 사이클 (정상 동작)
+         - rate_limited() 후 해당 키가 일정 시간 제외되는지
+         - 모든 키가 backoff 상태일 때 pick()이 None을 반환하는지
+         - backoff 만료 후 재활성화
+         - weight 기반 selection (T15 구현 시)
+      3. monkeypatch로 time.time()을 제어하여 시간 의존성 제거
+    expected_category: "test_addition"
+    evaluation:
+      - 모든 시나리오 커버
+      - monkeypatch 사용
+      - pytest --tb=short 통과
+      - 기존 호출부 영향 없음
+
+# ── API comparison config ──────────────────────────────────────────
+api_targets:
+  - name: "deepseek-v4-pro"
+    endpoint: "https://api.deepseek.com/v1/chat/completions"
+    model: "deepseek-chat"
+    role: "Claude Code primary"
+  - name: "deepseek-v4-flash"
+    endpoint: "https://api.deepseek.com/v1/chat/completions"
+    model: "deepseek-chat"  # same model, different usage pattern
+    role: "Aider primary"
+  - name: "gemini"
+    endpoint: "http://127.0.0.1:9099/v1/chat/completions"
+    model: "auto"  # gemini-proxy auto-routing
+    role: "Gemini free tier"
+
+# ── Qwen32B local config ──────────────────────────────────────────
+local_32b:
+  endpoint: "http://127.0.0.1:8081/v1/chat/completions"
+  model: "qwen2.5-coder-32b"
+  ctx_size: 10240
+  tier: "32B"
+  require_mem_mb: 26000

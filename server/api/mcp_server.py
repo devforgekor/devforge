@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .db import init_db
+from .async_pg import init_db
 from .ingest import router as ingest_router
 from .slack_operator import router as slack_router
 from .search import save_memory, search_memories

@@ -13,17 +13,14 @@ Uses KeyRotator for API key rotation. Runs nightly via nightly_batch.sh.
 import json
 import os
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from typing import Optional
 
-sys.path.insert(0, "/opt/projects/server")
-
 from lib.key_rotator import KeyRotator
-from scripts.gemini_rotate import _load_keys, STATE_FILE
+from lib.auth.key_loader import load_api_keys, STATE_FILE
 
 from lib.db import psql, psql_ok, PSQL
 
@@ -35,7 +32,7 @@ MIN_TEXT_CHARS = 20
 FETCH_LIMIT = 500
 
 
-def _psql_pipe(sql: str) -> bool:
+def psql_via_stdin(sql: str) -> bool:
     try:
         r = subprocess.run(
             PSQL, input=sql, capture_output=True, text=True, timeout=120,
@@ -49,7 +46,7 @@ def _psql_pipe(sql: str) -> bool:
 
 
 def _get_rotator() -> KeyRotator:
-    keys = _load_keys()
+    keys = load_api_keys()
     if not keys:
         raise RuntimeError("No API keys found")
     rotator = KeyRotator(keys)
@@ -167,7 +164,7 @@ def _store_embeddings(pairs: list[tuple[str, list[float]]]) -> bool:
             f"UPDATE turns SET embedding = '{vec_literal}'"
             f" WHERE id = '{turn_id}';"
         )
-    return _psql_pipe("BEGIN;\n" + "\n".join(stmts) + "\nCOMMIT;\n")
+    return psql_via_stdin("BEGIN;\n" + "\n".join(stmts) + "\nCOMMIT;\n")
 
 
 def main():

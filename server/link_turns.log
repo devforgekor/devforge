@@ -120,3 +120,45 @@
 [2026-05-19T18:01:22Z] worklog 126 (aider): linked 19 turns
 [2026-05-19T18:01:22Z] Matched: 210 turns across 13 worklog entries
 [2026-05-19T18:01:24Z] Review: orphan_turns: 0; empty_worklog: 0; commit_only_worklog: #89, #91, #92, #100; turn_coverage: 660/660; worklog_without_turns_agent: devforge
+[2026-05-20T18:01:50Z] === link_turns 2026-05-20 ===
+[2026-05-20T18:01:51Z] worklog 138 (claude-code): linked 101 turns
+[2026-05-20T18:01:51Z] worklog 139 (claude-code): linked 5 turns
+[2026-05-20T18:01:51Z] worklog 140 (claude-code): linked 13 turns
+[2026-05-20T18:01:52Z] worklog 141 (claude-code): linked 230 turns
+[2026-05-20T18:01:52Z] worklog 142: skipped (no agent)
+[2026-05-20T18:01:52Z] Matched: 349 turns across 6 worklog entries
+[2026-05-20T18:01:52Z] Review: orphan_turns.aider: 12; empty_worklog: #142 KeyRotator RPM 가드 하드 차단 + search_proxy HTML 필터; agentless_worklog: #142 KeyRotator RPM 가드 하드 차단 + search_proxy HTML 필터; commit_only_worklog: #137; turn_coverage: 349/361; turns_without_worklog_agent: aider; worklog_without_turns_agent: devforge
+[2026-05-21T18:01:07Z] === link_turns 2026-05-21 ===
+[2026-05-21T18:01:08Z] worklog 143 (claude-code): linked 29 turns
+[2026-05-21T18:01:08Z] worklog 144 (claude-code): linked 159 turns
+[2026-05-21T18:01:08Z] worklog 145: skipped (no agent)
+[2026-05-21T18:01:08Z] worklog 146: skipped (no agent)
+[2026-05-21T18:01:08Z] worklog 155: skipped (no agent)
+[2026-05-21T18:01:08Z] Matched: 188 turns across 6 worklog entries
+[2026-05-21T18:01:10Z] Review: orphan_turns: 0; empty_worklog: #145 동적 스와핑 아키텍처 v2.1 완결 및 32B 재테스트 진행; empty_worklog: #146 32B 동적 timeout 전환 및 전체 재테스트 시작; empty_worklog: #155 DevForge v3.0 동적 스와핑 인프라 구현 완료; agentless_worklog: #145 동적 스와핑 아키텍처 v2.1 완결 및 32B 재테스트 진행; agentless_worklog: #146 32B 동적 timeout 전환 및 전체 재테스트 시작; agentless_worklog: #155 DevForge v3.0 동적 스와핑 인프라 구현 완료; commit_only_worklog: #147; turn_coverage: 188/188; worklog_without_turns_agent: devforge
+[2026-05-23T12:58:37Z] === link_turns 2026-05-22 ===
+[2026-05-23T12:58:37Z] worklog 162: skipped (no agent)
+[2026-05-23T12:58:37Z] worklog 163: skipped (no agent)
+[2026-05-23T12:58:37Z] worklog 168 (claude-code): linked 194 turns
+[2026-05-23T12:58:37Z] Matched: 194 turns across 5 worklog entries
+[2026-05-23T12:58:39Z] Review: orphan_turns.claude-code: 51; empty_worklog: #162 DevForge v3.0 완결 — timings 통합, systemd, swap 스케줄링; empty_worklog: #163 양방향 코드 리뷰 + 버그 수정 + 잔여 작업 계획; agentless_worklog: #162 DevForge v3.0 완결 — timings 통합, systemd, swap 스케줄링; agentless_worklog: #163 양방향 코드 리뷰 + 버그 수정 + 잔여 작업 계획; commit_only_worklog: #165; turn_coverage: 194/245; worklog_without_turns_agent: aider, devforge
+[2026-05-23T13:12:21Z] === Processing 2026-05-21 ===
+[2026-05-23T13:12:22Z] Matched: 0 turns across 6 worklog entries
+[2026-05-23T13:12:23Z] Review: orphan_turns: 0; empty_worklog: #145 동적 스와핑 아키텍처 v2.1 완결 및 32B 재테스트 진행; empty_worklog: #146 32B 동적 timeout 전환 및 전체 재테스트 시작; empty_worklog: #155 DevForge v3.0 동적 스와핑 인프라 구현 완료; commit_only_worklog: #147; turn_coverage: 188/188; worklog_without_turns_agent: devforge
+[2026-05-23T13:12:23Z] === Processing 2026-05-22 ===
+[2026-05-23T13:12:23Z] worklog 162 (claude-code): linked 7 turns
+[2026-05-23T13:12:24Z] worklog 163 (claude-code): linked 16 turns
+[2026-05-23T13:12:24Z] worklog 165 (claude-code): linked 9 turns
+[2026-05-23T13:12:24Z] worklog 168 (claude-code): linked 19 turns
+[2026-05-23T13:12:24Z] Matched: 51 turns across 5 worklog entries
+[2026-05-23T13:12:25Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 245/245; worklog_without_turns_agent: aider
+[2026-05-23T13:12:25Z] === Processing 2026-05-23 ===
+[2026-05-23T13:12:26Z] No worklog entries for 2026-05-23
+[2026-05-23T13:12:27Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 0/0
+[2026-05-23T13:13:05Z] === Processing 2026-05-23 (start=2026-05-23 00:00:00+09, end=2026-05-24 00:00:00+09) ===
+[2026-05-23T13:13:06Z] worklog 169 (claude-code): linked 333 turns
+[2026-05-23T13:13:06Z] worklog 170 (claude-code): linked 55 turns
+[2026-05-23T13:13:06Z] worklog 172 (claude-code): linked 129 turns
+[2026-05-23T13:13:06Z] Matched: 517 turns across 3 worklog entries
+[2026-05-23T13:13:07Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 517/517
+[2026-05-23T13:13:26Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 517/517

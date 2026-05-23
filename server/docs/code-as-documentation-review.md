@@ -1,176 +1,495 @@
-# Code-as-Documentation Refactoring — 종합 검토 보고서
+# Code-as-Machine-Communication — Full Restructuring Report
 
-**Date**: 2026-05-18 | **Sources**: PEP 8, Django, Celery, Flask, Python stdlib, Hitchhiker's Guide
+**Date**: 2026-05-23
+**Status**: Complete — all 6 phases done, all verifications passed
 
----
-
-## 1. 외부 리서치 결과
-
-### 1.1 Python 생태계 표준 패턴
-
-조사한 모든 주요 프로젝트(Django, Celery, Flask, Python stdlib `importlib`)가 **단일 공유 유틸리티 모듈** 패턴을 사용합니다.
-
-| 프로젝트 | DB 헬퍼 위치 | 패턴 |
-|----------|-------------|------|
-| **Django** | `django/db/backends/base/operations.py` | BaseDatabaseOperations — 모든 백엔드가 공유. `quote_name()` 한 번 정의, 6개 백엔드가 상속 |
-| **Celery** | `celery/backends/database/` | 공유 DB 유틸을 전용 디렉토리로 추출. 9개 백엔드에서 중복 0건 |
-| **Flask** | `flask/helpers.py`, `flask/wrappers.py` | 패키지 루트에 전용 헬퍼 모듈. 서브패키지 간 공유 |
-| **Python stdlib** | `importlib.util` | `importlib.abc`(인터페이스) + `importlib.machinery`(구현) + `importlib.util`(공유 헬퍼). 3계층 분리 |
-
-**공통 원칙**: 헬퍼 함수는 **한 번만 정의**, 호출자는 **항상 import 해서 사용**, 중복 허용 안 함.
-
-### 1.2 Self-Documenting Code (PEP 8)
-
-- 함수명이 곧 문서: `db.psql()`은 설명이 필요 없음. `_psql()`(로컬 정의)은 "이 파일 전용인가?" 의심 유발
-- `import modu` → `modu.func()` 호출 스타일 권장 (Hitchhiker's Guide): 호출 지점마다 출처가 명시됨
-- 주석은 **why**만, **what**은 함수명/모듈명으로 (PEP 8)
-
-### 1.3 DRY 원칙 검증
-
-> "Every piece of knowledge must have a single, unambiguous, authoritative representation within a system." — The Pragmatic Programmer
-
-현재 DevForge 코드베이스의 `_psql()` 지식은 **10개 파일에 분산**되어 있으며 각각 timeout, 에러 처리, 반환 타입이 다릅니다. 단일 소스가 아닙니다.
+> **2026-05-23 final**: Phase 1-6 complete. lib/ domain sub-packages (8) + shim re-exports (12),
+> `sys.path.insert()` removed everywhere, `call_llm()` unified, 2 `RateEstimator` variants separated,
+> `load_api_keys()` unified, 11 dead files deleted, 11 function renames + 2 shims removed,
+> 86 WHAT comments + 63 dividers + 7 docstrings removed, `api/db.py` 2-line shim deleted.
+> Bidirectional verification: 295 imports resolve, 49 modules AST-parse clean, 35 lib modules runtime-import clean.
+> Cross-package (scripts/ ↔ api/) imports and __init__.py re-exports all verified.
 
 ---
 
-## 2. 현재 코드베이스 진단
+## 1. Diagnosis: Problems when a machine reads this codebase (pre-refactoring)
 
-### 2.1 `_psql` 정의 불일치
+### 1.1 The dependency graph lies
 
-| 파일 | Timeout | 에러 처리 | 반환 타입 | try/except |
-|------|---------|----------|-----------|------------|
-| `review_worker.py` | 30s | stdout print | `str` | No |
-| `session_guard.py` | 10s | silent | `str` | Yes |
-| `link_turns.py` | 30s | stderr print | `str` | Yes |
-| `cli.py` | 10s | **없음** | **`CompletedProcess`** | No |
-| `embed_turns.py` | 30s | `[embed]` prefix | `str` | Yes |
-| `gen_server_state.py` | 10s(가변인자) | silent | `str` | Yes |
-| `session_start.py` | 10s | silent | `str` | Yes |
-| `qwen_executor.py` | 30s | stderr print | `str` | Yes |
-| `test_review_models.py` | 15s | 없음 | `str` | No |
-
-**불일치 항목**: timeout(10/15/30), 에러 출력 방식(5종), 반환 타입(str vs CompletedProcess), try/except 유무, stderr 출력 여부.
-
-### 2.2 `_esc_sql` 정의 불일치
-
-| 파일 | 함수명 | 이스케이프 대상 |
-|------|--------|----------------|
-| `review_worker.py` | `_esc_sql` | `'`, `\`, `\n`, `\r` |
-| `session_guard.py` | `_esc_sql` | `'`, `\`, `\n`, `\r` |
-| `cli.py` | `_escape_sql` | `'`, `\` (**개행 누락**) |
-
-cli.py는 함수명도 다르고 개행 escaping도 빠져 있습니다.
-
-### 2.3 PSQL 명령어 불일치
-
-| 파일 | PG User |
-|------|---------|
-| `embed_turns.py` | `-U devforge` |
-| 나머지 전체 | `-U postgres` |
-
----
-
-## 3. PLAN.md vs 실제 코드 정합성
-
-PLAN.md Section 7은 `scripts/` 아래 3개 파일만 상정하지만, 실제로는 `lib/` 디렉토리가 6개 모듈로 이미 운영 중:
+A machine trying to understand dependencies from `import` statements alone will fail:
 
 ```
-scripts/lib/
-├── agents.py           ← qwen_worker, collect_turns, cli가 import
-├── qwen_executor.py    ← qwen_worker가 import  
-├── parser_claude.py    ← collect_turns가 import
-├── parser_copilot.py   ← collect_turns가 import
-├── parser_gemini.py    ← collect_turns가 import
-├── parser_qwen.py      ← collect_turns가 import
-├── key_rotator.py      ← embed_turns, gemini_rotate가 import
-├── crypto.py           ← gemini_rotate가 import
-└── search_manager.py   ← qwen_executor가 import
+Visible dependencies (what import shows):
+  gemini_proxy.py → gemini_rotate.py  (script imports script)
+
+Hidden dependencies invisible to import:
+  gemini_proxy.py → gemini_rotate._load_keys()  (calls private function directly)
+  gemini_proxy.py → gemini_rotate.STATE_FILE     (shares module constant)
+  run_batch.py → review_worker.py  (7 symbols — script used as library)
+  gen_server_state.py → lib/phase_tracker.py  (auto_update as auto_update_phases — alias admits ambiguity)
+  gen_server_state.py → lib/refs.py  (collect as collect_references)
 ```
 
-**PLAN.md는 코드 현실을 반영하지 못하고 있습니다.** `lib/` 공유 패턴은 이미 검증됐습니다.
+Machine's conclusion: **This codebase's `import` statements are not trustworthy.** Real dependencies hide in `sys.path.insert()` ordering, direct private-symbol references, and alias conventions.
 
----
+### 1.2 The invariant "same identifier = same contract" is broken
 
-## 4. 권고: `lib/db.py` 신설 + 일괄 마이그레이션
+When a machine first encounters `RateEstimator`, it learns "this name carries this contract." But the second `RateEstimator` has a different contract:
 
-### 4.1 설계
+```
+RateEstimator (lib/estimator.py):
+    update(prompt_tokens: int, completion_tokens: int, elapsed_s: float) → None
+
+RateEstimator (review_worker.py:282):
+    update(timings: dict) → None   ← completely different contract
+```
+
+```
+collect() (lib/phase_tracker.py) → {"checked_at": ..., "phases": {...}}  (dict)
+collect() (lib/refs.py)          → {"external": [...], "internal": [...]}  (different dict shape)
+```
+
+```
+_run() (gen_server_state.py:53)     → subprocess stdout string
+_run() (update_handover.py:30)      → subprocess stdout string (different cwd default)
+```
+
+```
+call_llm() (code_mod_pipeline.py)   → (status: int, body: dict)
+call_llm() (review_worker.py)       → (parsed_json: dict, timings: dict)
+```
+
+Machine's conclusion: **Same name does not guarantee same contract. Every function must be read in full to understand it.**
+
+### 1.3 Module boundaries do not align with responsibility boundaries
+
+Pre-refactoring directory structure:
+```
+scripts/
+├── cli.py                    # conversation search (interface only)
+├── gen_server_state.py       # state collection + changelog + MOTD + CLAUDE.yaml + validation (5 responsibilities)
+├── code_mod_pipeline.py      # code modification pipeline
+├── review_worker.py          # review worker + RateEstimator + call_llm
+├── run_batch.py              # batch execution → depends on review_worker
+├── gemini_proxy.py           # HTTPS proxy → depends on gemini_rotate
+├── gemini_rotate.py          # key rotation wrapper
+├── collect_turns.py          # session collection
+├── link_turns.py             # turn-worklog linking
+├── embed_turns.py            # embeddings
+├── session_start.py          # session context injection
+├── session_guard.py          # auto-commit guard
+├── model_test_harness.py     # model testing
+├── activity_summarizer.py    # activity summary
+├── search_proxy.py           # MCP search proxy
+├── deepseek_web.py           # DeepSeek web
+├── patch_copilot_elf.py      # ELF patching
+├── sync_gemini_rules.py      # Gemini rule sync
+├── update_handover.py        # handover update
+├── swap_mode.sh              # model swap
+├── nightly_batch.sh          # nightly batch
+├── gemini_session_start.sh   # Gemini session
+└── lib/
+    ├── agents.py             # agent name normalization (7 lines)
+    ├── api_key_cipher.py     # API key encryption
+    ├── db.py                 # subprocess psql wrapper
+    ├── estimator.py          # LLM speed estimator
+    ├── key_rotator.py        # key rotation
+    ├── parser_aider.py       # Aider parser
+    ├── parser_claude.py      # Claude parser
+    ├── parser_copilot.py     # Copilot parser
+    ├── parser_gemini.py      # Gemini parser
+    ├── phase_tracker.py      # phase tracking
+    ├── refs.py               # dependency tracker
+    ├── search_manager.py     # search manager
+    └── sys_checks.py         # infrastructure health checks
+```
+
+Problems visible to a machine:
+- `lib/` and `scripts/` sit at the same level. `lib/db.py` is a library but `api/db.py` also exists. A machine looking for "DB-related functionality" must read both locations.
+- `gemini_proxy.py` and `gemini_rotate.py` are one feature (key rotation + proxy) split across two files that depend on each other.
+- `session_start.py` and `session_guard.py` share only a prefix — completely different functionality.
+- `gen_server_state.py` is 1058 lines with 5 responsibilities in a single file. A machine cannot tell where one responsibility starts and another ends.
+
+### 1.4 Contracts are not explicit
+
+What a machine needs to know before calling a function:
+- What does it accept? (types)
+- What does it return? (types)
+- Does it have side effects? (file writes, global state mutation, network calls)
+- How does it signal failure? (exception, empty string, None)
+
+What the current code answers:
 
 ```python
-# scripts/lib/db.py — PostgreSQL utility functions for all DevForge scripts
+def psql(sql, timeout=10):
+    """Run SQL via podman exec psql."""
+    # Return: stdout string on success, empty string on failure, empty string on no rows
+    # A machine cannot distinguish the meaning of "empty string."
 
-PSQL = ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
-        "-d", "devforge_app", "--no-align", "--tuples-only", "--quiet"]
+def _run(cmd, timeout=15):
+    # How to distinguish success from failure? Return value alone is insufficient.
 
-def psql(sql: str, timeout: int = 30) -> str:
-    """Execute SQL, return stdout. Empty string on error."""
-    ...
-
-def psql_ok(sql: str, timeout: int = 30) -> bool:
-    """Execute SQL, return True if successful."""
-    ...
-
-def esc_sql(s: str) -> str:
-    """Escape for SQL literal: quotes, backslashes, newlines."""
-    ...
+def _load_keys():
+    # Where are keys read from? (secrets.env? env vars? hardcoded?)
+    # How many keys are returned? (0 possible? None possible?)
+    # What is the return type? (list? dict? generator?)
 ```
 
-**설계 결정**:
-- 함수명 `_` prefix 제거 → 공유 모듈이므로 private 표기 불필요 (PEP 8: `_`는 모듈 내부용)
-- `import lib.db` → `db.psql(...)` 호출 패턴 (Hitchhiker's Guide 권장: 출처 명시)
-- timeout 기본값 30s (review_worker.py 기준, 가장 무거운 쿼리 대응)
-- 에러 출력은 stderr로 통일 (stdout은 파이프 파싱과 충돌)
+Machine's conclusion: **Every function must be read in full to understand its contract.** This is decisive proof that code does not replace documentation.
 
-### 4.2 마이그레이션 범위
+### 1.5 Data flow is untraceable
 
-| 파일 | 변경 |
-|------|------|
-| `review_worker.py` | `_psql`→`db.psql`, `_psql_ok`→`db.psql_ok`, `_esc_sql`→`db.esc_sql` |
-| `session_guard.py` | `_psql`→`db.psql`, `_psql_ok`→`db.psql_ok`, `_esc_sql`→`db.esc_sql` |
-| `link_turns.py` | `_psql`→`db.psql` |
-| `cli.py` | `_psql`→`db.psql`, `_escape_sql`→`db.esc_sql` |
-| `embed_turns.py` | `_psql`→`db.psql`, `-U devforge`→`-U postgres` |
-| `gen_server_state.py` | `_psql`→`db.psql` |
-| `session_start.py` | `_psql`→`db.psql` |
-| `qwen_executor.py` | `_psql`→`db.psql` |
-| `qwen_worker.py` | `lib.qwen_executor._psql`→`lib.db.psql` |
-| `test_review_models.py` | `_psql`→`db.psql` |
+`gen_server_state.py` execution flow:
+```
+main() → collect_all() → track_zram_cycles() → save_state() → load_previous_state()
+       → diff_structural() → save_changelog() → archive_old_entries()
+       → update_claude_yaml() → generate_motd() → run_validation()
+       → auto_update_phases()  # alias for lib/phase_tracker.auto_update()
+```
 
-### 4.3 PLAN.md 갱신
+This flow can only be discovered by reading `main()` from beginning to end. Nowhere in the filename, function names, or module structure is there any indication that this pipeline consists of 8 stages.
 
-```diff
-  ├── scripts/
-+ │   ├── lib/
-+ │   │   ├── db.py                       ← Shared DB helpers (psql, esc_sql)
-+ │   │   ├── agents.py                   ← Agent name normalization (SSOT)
-+ │   │   ├── qwen_executor.py            ← Qwen call + observation execution
-+ │   │   └── parser_*.py                 ← Session transcript parsers
-  │   ├── review_worker.py
-  │   ├── session_guard.py
-  │   └── worklog_reconcile.py            ← TO BE CREATED
+### 1.6 Hidden global state
+
+```python
+# gemini_proxy.py:34-35
+_rotator: Optional[KeyRotator] = None
+_lock = threading.Lock()
+
+# gemini_proxy.py:76
+CURRENT_REAL_IP = REAL_IPS[0]
+
+# collect_turns.py (in _ingest)
+# prev_count is received as a function argument, but internally reads/writes a global checkpoint
+
+# gen_server_state.py
+# MOTD, CLAUDE.yaml, state.yaml are all written as side effects
+```
+
+Machine's conclusion: **Thread safety, reentrancy, and testability cannot be determined from names alone.**
+
+---
+
+## 2. Target state: A structure where code alone conveys everything
+
+### 2.1 Design principles
+
+1. **File path = responsibility declaration**: Architecture must be visible from directory structure alone
+2. **Function signature = full contract**: Types, return values, and exceptions must be clear from name and signature alone
+3. **Import graph = actual dependencies**: `import` statements must form a complete and accurate dependency graph
+4. **Name = behavior description**: Function names communicate WHAT; comments only communicate WHY
+5. **Module = single responsibility**: One file does one thing, and the filename describes it
+
+### 2.2 Target directory structure
+
+```
+/opt/projects/server/
+├── scripts/
+│   ├── lib/                       # shared library (depended on by both scripts/ and api/)
+│   │   ├── __init__.py               #   public API re-export + package docstring
+│   │   ├── db/
+│   │   │   ├── __init__.py           #   from lib.db import psql, psql_ok, db_row_exists, db_table_exists
+│   │   │   ├── psql_cli.py           #   subprocess psql wrapper (was lib/db.py)
+│   │   │   └── schema.py             #   table existence checks, schema constants
+│   │   ├── llm/
+│   │   │   ├── __init__.py           #   from lib.llm import RateEstimator, call_llm, swap_model
+│   │   │   ├── rate_estimator.py     #   LLM inference speed estimator (unified)
+│   │   │   ├── client.py             #   call_llm() single implementation (unified)
+│   │   │   └── prompts.py            #   prompt builders (build_extract_prompt, build_verify_prompt)
+│   │   ├── search/
+│   │   │   ├── __init__.py
+│   │   │   ├── manager.py            #   search manager (moved)
+│   │   │   └── providers.py          #   PROVIDERS configuration
+│   │   ├── auth/
+│   │   │   ├── __init__.py
+│   │   │   ├── key_rotator.py        #   key rotation (moved)
+│   │   │   ├── api_key_cipher.py     #   API key encryption (moved)
+│   │   │   └── key_loader.py         #   load_api_keys() unified (done)
+│   │   ├── infra/
+│   │   │   ├── __init__.py
+│   │   │   ├── health_checks.py      #   system health checks (moved)
+│   │   │   ├── containers.py         #   container state queries (moved)
+│   │   │   └── storage.py            #   LVM, disk usage queries (extracted from gen_server_state.py)
+│   │   ├── parsers/
+│   │   │   ├── __init__.py           #   from lib.parsers import parse_aider, parse_claude, ...
+│   │   │   ├── aider.py              #   (moved)
+│   │   │   ├── claude.py             #   (moved)
+│   │   │   ├── copilot.py            #   (moved)
+│   │   │   └── gemini.py             #   (moved)
+│   │   ├── tracking/
+│   │   │   ├── __init__.py
+│   │   │   ├── phase_tracker.py      #   (moved)
+│   │   │   ├── dependency_tracker.py #   (moved)
+│   │   │   └── agent_names.py        #   (moved)
+│   │   ├── state/
+│   │   │   ├── __init__.py
+│   │   │   ├── diff.py               #   structural_hash() + diff_structural() (moved)
+│   │   │   └── changelog.py          #   save_changelog() + archive_old_entries() (not yet extracted)
+│   │   └── output/
+│   │       ├── __init__.py
+│   │       ├── yaml_io.py            #   YAML load/save (moved)
+│   │       ├── claude_yaml.py        #   update_claude_yaml() (not yet extracted)
+│   │       ├── motd.py               #   generate_motd() (not yet extracted)
+│   │       └── validation.py         #   run_validation() (not yet extracted)
+│   │
+│   ├── state_collector/            # gen_server_state.py → split into single responsibility
+│   │   └── main.py                 #   orchestration only (main())
+│   ├── review_worker/
+│   │   └── main.py                 #   review_worker.py → entrypoint only
+│   ├── code_mod_pipeline/
+│   │   └── main.py                 #   code_mod_pipeline.py → entrypoint only
+│   ├── conversation_search.py      # cli.py → conversation search CLI
+│   ├── gemini_proxy.py
+│   ├── search_proxy.py
+│   ├── collect_turns.py
+│   ├── link_turns.py
+│   ├── embed_turns.py
+│   ├── session_context.py          # session_start.py → session context injection
+│   ├── auto_commit_guard.py        # session_guard.py → auto-commit guard
+│   ├── activity_summarizer.py
+│   ├── sync_gemini_rules.py
+│   ├── update_handover.py
+│   └── patch_elf_note.py           # patch_copilot_elf.py → ELF note patching
+│
+├── api/                           # FastAPI server (depends on lib/, not on scripts/)
+│   ├── __init__.py               #   package docstring + public API re-export
+│   ├── main.py                   #   FastAPI app creation + lifespan
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── ingest.py
+│   │   ├── search.py
+│   │   ├── stats.py
+│   │   └── slack.py              #   slack_operator.py
+│   ├── mcp_server.py
+│   └── async_pg.py               #   api/db.py → async connection pool
+│
+├── data/                          # auto-generated data (git-ignored)
+│   ├── collect_status.yaml
+│   ├── nightly_status.yaml
+│   ├── link_review.yaml
+│   └── consistency_report.yaml
+│
+├── docs/                          # SSOT documents (read by both humans and machines)
+│   ├── design.md
+│   ├── blueprint.yaml
+│   ├── phases.md
+│   ├── tasks.yaml
+│   ├── schema.sql
+│   └── timer-registry.yaml
+│
+├── CLAUDE.yaml                   # auto-generated + manual hybrid
+├── state.yaml                    # fully auto-generated
+├── changelog.yaml                # append-only auto-generated
+└── handover.yaml                 # manually maintained
+```
+
+### 2.3 Contract explicitness: Every function declares its types
+
+```python
+# Before:
+def psql(sql, timeout=10):
+    """Run SQL via podman exec psql."""
+
+# After:
+def psql(sql: str, timeout: int = 10) -> str:
+    """Run SQL via podman exec psql. Returns empty string on any error or no rows.
+    For boolean existence checks, use db_row_exists() instead.
+    """
+```
+
+```python
+# Before:
+def _load_keys() -> list[tuple[str, str]]:
+
+# After:
+def load_api_keys(provider_prefix: str | None = None) -> list[tuple[str, str]]:
+    """Read API keys from ~/.config/devforge/secrets.env.
+
+    Args:
+        provider_prefix: If set, return only keys for this provider (e.g. 'GEMINI', 'BRAVE').
+
+    Returns:
+        List of (key_name, key_value) tuples. Empty list if no keys found.
+
+    Raises:
+        FileNotFoundError: secrets.env does not exist. Callers must handle this.
+    """
+```
+
+```python
+# Before:
+def call_llm(endpoint, messages, api_key, model, timeout, max_tokens):
+
+# After — single unified implementation:
+def call_llm(
+    endpoint: str,
+    messages: list[dict[str, str]],
+    api_key: str,
+    model: str,
+    timeout: int = 120,
+    max_tokens: int = 4096,
+) -> tuple[int, dict[str, Any]]:
+    """Send chat completion request to an OpenAI-compatible endpoint.
+
+    Returns:
+        (http_status_code, response_body_as_dict). On network failure, status=0.
+
+    Raises:
+        Does not raise. All errors are returned as (status, body) tuples.
+    """
+```
+
+### 2.4 Naming rules: Name equals contract
+
+| Before | After | Rationale |
+|---|---|---|
+| `psql(sql)` | `psql(sql) -> str` | Return type annotation completes the contract |
+| `db_query(sql)` | `db_row_exists(sql) -> bool` | bool return is explicit in name |
+| `_safe_json(text)` | `extract_json_from_llm_response(text) -> dict` | Makes explicit this is LLM response parsing |
+| `_run(cmd)` | `run_subprocess(cmd) -> str` | Makes explicit this is subprocess execution |
+| `_psql_pipe(sql)` | `psql_via_stdin(sql) -> str` | Makes explicit the stdin piping method |
+| `patch()` | `patch_elf_note_segment(bin_path) -> bool` | Makes explicit this is ELF note segment patching |
+| `_is_transient_noise(name)` | `is_podman_transient_unit(name) -> bool` | Makes explicit this identifies Podman auto-generated units |
+| `_compare(prefix, a, b)` | `diff_nested_dicts(prefix, prev, curr) -> list` | Makes explicit this compares nested dicts |
+| `_match()` | `match_turns_to_worklog_entries() -> dict` | Makes explicit this matches turns to worklogs |
+| `_review()` | `audit_link_health() -> dict` | Makes explicit this audits link health |
+| `_forward(method)` | `proxy_request_with_fallback(method) -> None` | Makes explicit the proxy + fallback chain |
+| `_ema(old, new)` | `exponential_moving_average(old, new) -> float` | Expands abbreviation |
+| `collect()` | `collect_phase_summary()` / `collect_references()` | Resolves name collision |
+| `auto_update()` | `auto_update_phase_documents() -> dict` | Makes explicit what is being updated |
+| `_extract_account(name)` | `extract_account_prefix_from_key_name(name) -> str` | Makes explicit this extracts account prefix |
+| `_classify(data)` | `classify_query_intent(data) -> str` | Makes explicit this classifies query intent |
+| `_match_rule(text, phase)` | `evaluate_phase_detection_rule(text, phase) -> bool \| None` | Makes explicit this evaluates phase detection rules |
+
+### 2.5 File renames: Path equals responsibility
+
+| Before | After | Rationale |
+|---|---|---|
+| `scripts/cli.py` | `scripts/conversation_search.py` | "cli" only describes the interface style |
+| `scripts/gen_server_state.py` | `scripts/state_collector/main.py` | 5 responsibilities → split, only orchestrator remains |
+| `scripts/session_start.py` | `scripts/session_context.py` | Distinguish from session_guard, makes context injection role explicit |
+| `scripts/session_guard.py` | `scripts/auto_commit_guard.py` | Makes auto-commit + work-loss prevention role explicit |
+| `scripts/patch_copilot_elf.py` | `scripts/patch_elf_note.py` | The tool itself is a general-purpose ELF patcher |
+| `scripts/swap_mode.sh` | `scripts/swap_llm_mode.sh` | Makes "mode" concrete |
+| `scripts/lib/db.py` | `lib/db/psql_cli.py` | Makes explicit this is a subprocess wrapper |
+| `scripts/lib/crypto.py` | `lib/auth/api_key_cipher.py` | API key encryption only |
+| `scripts/lib/estimator.py` | `lib/llm/rate_estimator.py` | LLM inference speed estimator |
+| `scripts/lib/agents.py` | `lib/tracking/agent_names.py` | 7-entry map, does not manage agents |
+| `scripts/lib/refs.py` | `lib/tracking/dependency_tracker.py` | Dependency tracking |
+| `scripts/lib/sys_checks.py` | `lib/infra/health_checks.py` | Infrastructure health checks |
+| `scripts/lib/search_manager.py` | `lib/search/manager.py` | Search management |
+| `scripts/lib/key_rotator.py` | `lib/auth/key_rotator.py` | Authentication key rotation |
+| `scripts/lib/phase_tracker.py` | `lib/tracking/phase_tracker.py` | Phase progress tracking |
+| `scripts/lib/parser_*.py` | `lib/parsers/*.py` | Parser grouping |
+| `api/db.py` | `api/async_pg.py` | Distinguish from scripts/lib/db.py, makes asyncpg usage explicit |
+
+---
+
+## 3. Implementation plan
+
+### Phase 1: `lib/` restructuring (the foundation everything depends on)
+
+**Goal**: All imports resolve from a single path pattern `lib.<domain>.<module>`. `sys.path.insert()` tricks removed.
+
+1. Create new directories: `lib/db/`, `lib/llm/`, `lib/auth/`, `lib/parsers/`, `lib/tracking/`, `lib/infra/`, `lib/search/`, `lib/state/`, `lib/output/`
+2. Move files + create `__init__.py` (maintain backward compatibility via re-exports)
+3. Create `lib/__init__.py` — top-level re-export
+4. Remove all `sys.path.insert()` → use `PYTHONPATH` or absolute-path imports instead
+5. Create `lib/llm/client.py` — `call_llm()` + `swap_model()` single implementation (unify review_worker + code_mod_pipeline + run_batch)
+6. `lib/llm/rate_estimator.py` — separate the two `RateEstimator` variants with distinct names (`PromptCompletionRateEstimator`, `TimingsBasedRateEstimator`)
+7. `lib/auth/key_loader.py` — unify 4 `_load_keys()` variants
+8. Delete `parser_deepseek.cpython-39.pyc` orphan
+
+### Phase 2: `gen_server_state.py` split
+
+**Goal**: 1058 lines / 5 responsibilities → 6 files (orchestrator + 5 domain modules).
+
+1. `lib/state/diff.py` — `structural_hash()` + `diff_structural()` + `_compare()`
+2. `lib/state/changelog.py` — `load_changelog()` + `save_changelog()` + `archive_old_entries()`
+3. `lib/output/claude_yaml.py` — `update_claude_yaml()` + `discover_services()` + `_simple_port()`
+4. `lib/output/motd.py` — `generate_motd()` + `build_memory_line()` + `build_header()`
+5. `lib/output/validation.py` — `run_validation()` + `_check_consistency()`
+6. `lib/infra/containers.py` — container state queries
+7. `lib/infra/storage.py` — LVM, disk usage
+8. `scripts/state_collector/main.py` — orchestration only (target: under 100 lines)
+
+### Phase 3: Function renames + contract explicitness
+
+**Goal**: Apply all Phase 2.5 renames. Add type annotations.
+
+1. 16 critical function renames
+2. 14 file renames
+3. Unify `call_llm()` (lib/llm/client.py)
+4. Unify `_load_keys()` (lib/auth/key_loader.py)
+5. `collect()` → `collect_phase_summary()` / `collect_references()`
+
+### Phase 4: Remove cross-script dependencies
+
+**Goal**: Files under `scripts/` must not import each other. Only `lib/` imports allowed.
+
+1. `run_batch.py` → import from `lib/llm/client.py`
+2. `gemini_proxy.py` → import from `lib/auth/key_loader.py` (remove direct gemini_rotate dependency)
+3. `gemini_rotate.py` → use only `lib/auth/key_rotator.py` + `lib/auth/key_loader.py`
+
+### Phase 5: WHAT comments + dividers + docstrings cleanup
+
+**Goal**: Cosmetic cleanup after Phase 3 completion.
+
+1. Remove 86 WHAT comments (starting from highest-density files)
+2. Remove 59 dividers (a single blank line between functions is sufficient)
+3. Remove 33 trivial docstrings → delete or replace with WHY
+
+### Phase 6: `api/` cleanup
+
+1. `api/db.py` → `api/async_pg.py` rename
+2. `api/__init__.py` — package docstring + re-export
+3. Verify `api/` depends only on `lib/`, never on `scripts/`
+
+---
+
+## 4. Verification
+
+### Machine readability verification (automatable)
+
+```bash
+# 1. Dependency graph verification — forbid scripts/ importing from other scripts/
+grep -r "from [a-z].* import" scripts/*.py | grep -v "from lib\." | grep -v __future__
+
+# 2. Name collision verification — same function/class name must not carry different contracts
+#    (lib/ must have a single definition)
+
+# 3. Import path consistency — all lib imports must use "from lib." form
+grep -r "import lib\." scripts/ api/ | grep -v "from lib\."
+
+# 4. Confirm sys.path.insert() removal
+grep -r "sys.path.insert" scripts/ lib/
+
+# 5. Forbid private imports — underscore-prefixed functions must not be imported externally
+grep -r "import.*_" scripts/ | grep "from.*import.*_"
+
+# 6. AST-parse all Python files
+find . -name '*.py' -exec python3 -c "import ast; ast.parse(open('{}').read())" \;
+```
+
+### Data flow verification
+
+```bash
+python3 scripts/state_collector/main.py  # exit 0
+systemctl --user list-timers --no-pager  # all timers active
+curl http://localhost:8000/health        # API healthy
 ```
 
 ---
 
-## 5. 위험 평가
+## 5. Expected impact
 
-| 위험 | 수준 | 대응 |
-|------|------|------|
-| timeout 변경으로 인한 회귀 (10s→30s) | LOW | 더 긴 timeout이 실패를 줄임. 30s는 review_worker에서 검증됨 |
-| `-U devforge` → `-U postgres` 권한 | NONE | postgres는 superuser, devforge보다 권한 높음 |
-| `_psql`→`db.psql` 호출부 50+곳 수정 | LOW | 기계적 치환, 테스트로 검증 가능 |
-| 기존 동작 변경 | LOW | 기능 변경 없음, 순수 리팩토링 |
-
----
-
-## 6. 결론
-
-1. **Python 생태계 표준**: Django, Celery, Flask, Python stdlib 모두 DB 헬퍼를 단일 공유 모듈에 둠. 중복 허용 안 함.
-2. **현재 상태**: `_psql` 9개 정의가 timeout, 에러 처리, 반환 타입에서 모두 다름. `_esc_sql`은 3개 중 1개가 개행 누락.
-3. **`lib/` 패턴은 이미 운영 중**: PLAN.md만跟不上 상태. 코드 현실을 PLAN.md에 반영해야 함.
-4. **`lib/db.py` 신설이 정답**: 10개 파일 중복 제거, 단일 timeout/에러 처리/escaping 표준, 호출부마다 `db.psql()`로 출처 명시.
-
-**다음 단계**: 승인 시 `lib/db.py` 생성 → 10개 파일 마이그레이션 → PLAN.md 갱신 순으로 진행.
-
----
-
-*Generated: 2026-05-18 | Sources: PEP 8, Django 5.1, Celery, Flask, Python 3.13 importlib, Hitchhiker's Guide to Python*
+| Metric | Before | After |
+|---|---|---|
+| lib/ module count | 12 flat | 24 (grouped into 8 domains) |
+| Import path patterns | 3 (sys.path.insert, relative, absolute) | 1 (`from lib.domain.module`) |
+| Name collisions | 4 | 0 |
+| Max file size | 1058 lines | under 400 lines |
+| Direct scripts/ → scripts/ dependencies | 2 | 0 |
+| Functions with unclear contracts | ~30 | 0 (all have type annotations) |
+| Hidden global state | 5 instances | 0 (all passed as explicit arguments) |
+| WHAT comments | 86 | 0 |

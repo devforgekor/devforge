@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from .db import get_pool
+from .async_pg import get_pool
 
 logger = logging.getLogger(__name__)
 

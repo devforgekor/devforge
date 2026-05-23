@@ -56,37 +56,47 @@ structural:
     mount: /
   containers:
   - name: pod:data
-    status: Up 4 days
+    status: Up 45 hours
     ports: ''
+    image: ''
     model: null
     flags: ''
   - name: postgres
-    status: Up 4 days (healthy)
+    status: Up 45 hours (healthy)
     ports: 5432/tcp
-    model: null
-    flags: ''
-  - name: pod:ai-pod
-    status: Up 31 hours
-    ports: ''
+    image: localhost/devforge-postgres:2026.05.15
     model: null
     flags: ''
   - name: devforge-api
-    status: Up 15 minutes
+    status: Up 23 hours
     ports: 127.0.0.1:8000->8000/tcp
+    image: localhost/devforge-api:2026.05.14
     model: null
     flags: ''
-  - name: devforge-llm
-    status: Up 4 minutes (reset)
-    ports: 0.0.0.0:8080->8080/tcp
+  - name: devforge-swap
+    status: Up 29 minutes
+    ports: 127.0.0.1:8081-8082->8081-8082/tcp
+    image: ghcr.io/ggml-org/llama.cpp:server
+    model: null
+    flags: ''
+  - name: devforge-qwen
+    status: Up 29 minutes
+    ports: 127.0.0.1:8080->8080/tcp
+    image: ghcr.io/ggml-org/llama.cpp:server
     model: null
     flags: ''
   - name: caddy
-    status: Up 31 hours (healthy)
+    status: Up 24 hours (healthy)
     ports: 80/tcp, 443/tcp, 2019/tcp, 443/udp
+    image: docker.io/library/caddy:2.11.2
     model: null
     flags: ''
   services:
   - name: devforge-api
+    status: active
+  - name: devforge-qwen
+    status: active
+  - name: devforge-swap
     status: active
   - name: postgres
     status: active
@@ -105,40 +115,40 @@ structural:
     - '19999'
     - '2019'
     - '22'
-    - '25463'
     - '4317'
     - '443'
     - '4430'
-    - '44599'
     - '80'
     - '8000'
     - '8080'
+    - '8081'
+    - '8082'
     - '8125'
 metrics:
-  generated: '2026-05-20T15:19:46.945304+00:00'
+  generated: '2026-05-23T13:28:17.438543+00:00'
   system:
     cpu_load:
-    - 1.62
-    - 2.01
-    - 3.33
+    - 0.14
+    - 0.37
+    - 0.73
     cpu_cores: 4
     memory:
-      used: 10Gi
+      used: 19Gi
       total: 22Gi
-      percent: 45
-    zram: 1.6G/4G
+      percent: 88
+    zram: 2.6G/4G
     zram_cycles: 0
     zram_total_cycles: 0
   storage_use:
   - device: ocivolume-root
     size: 20G
     used: 13G
-    avail: 7.2G
-    use_pct: 65
+    avail: 7.4G
+    use_pct: 64
     mount: /
   - device: datavg-lv_db
     size: 30G
-    used: 355M
+    used: 363M
     avail: 30G
     use_pct: 2
     mount: /mnt/lv_db
@@ -150,13 +160,13 @@ metrics:
     mount: /mnt/secure_meta
   - device: datavg-lv_ai_data
     size: 100G
-    used: 38G
-    avail: 62G
-    use_pct: 38
+    used: 55G
+    avail: 46G
+    use_pct: 55
     mount: /opt/ai_data
   - device: datavg-lv_projects
     size: 10G
-    used: 717M
+    used: 718M
     avail: 9.3G
     use_pct: 8
     mount: /opt/projects
@@ -168,27 +178,27 @@ metrics:
     mount: /opt/workspace
   - device: ocivolume-lv_logs
     size: 10G
-    used: 924M
-    avail: 9.1G
-    use_pct: 10
-    mount: /var/log
-  - device: ocivolume-lv_tmp
-    size: 10G
     used: 1.3G
     avail: 8.7G
     use_pct: 13
+    mount: /var/log
+  - device: ocivolume-lv_tmp
+    size: 10G
+    used: 3.3G
+    avail: 6.8G
+    use_pct: 33
     mount: /var/tmp
   containers_uptime:
   - name: data-pod-infra
-    uptime: Up 4 days
+    uptime: Up 45 hours
   - name: postgres
-    uptime: Up 4 days (healthy)
-  - name: c80e077e4619-infra
-    uptime: Up 31 hours
+    uptime: Up 45 hours (healthy)
   - name: devforge-api
-    uptime: Up 15 minutes
-  - name: devforge-llm
-    uptime: Up 4 minutes (reset)
+    uptime: Up 23 hours
+  - name: devforge-swap
+    uptime: Up 29 minutes
+  - name: devforge-qwen
+    uptime: Up 29 minutes
   tokens:
     session:
       turns: 1
@@ -198,4 +208,126 @@ metrics:
       turns: 24
       total_tokens: 564954
       avg_tokens: 23540
-  alerts: []
+  alerts:
+  - level: warning
+    item: memory 88%
+references:
+  llama.cpp:
+    category: inference
+    url: https://github.com/ggml-org/llama.cpp
+    external:
+      latest: b9296
+      published: '2026-05-23T12:59:51Z'
+      prerelease: false
+      breaking_mentioned: false
+    internal:
+      usage_count: 9
+      files:
+      - CLAUDE.yaml
+      - blueprint.yaml
+      - changelog.yaml
+      - docs/tasks.yaml
+      - handover.yaml
+    checked_at: '2026-05-23T13:28:19.541595+00:00'
+  DSPy:
+    category: prompt-optimization
+    url: https://github.com/stanfordnlp/dspy
+    external:
+      latest: 3.2.1
+      published: '2026-05-05T19:37:48Z'
+      prerelease: false
+      breaking_mentioned: true
+    internal:
+      usage_count: 1
+      files:
+      - state.yaml
+    checked_at: '2026-05-23T13:28:19.541612+00:00'
+  LLMLingua:
+    category: prompt-optimization
+    url: https://github.com/microsoft/LLMLingua
+    external:
+      latest: v0.2.2
+      published: '2024-04-09T08:19:16Z'
+      prerelease: false
+      breaking_mentioned: false
+    internal:
+      usage_count: 1
+      files:
+      - state.yaml
+    checked_at: '2026-05-23T13:28:19.541625+00:00'
+  tenacity:
+    category: dependency
+    url: https://github.com/jd/tenacity
+    external:
+      latest: 9.1.4
+      published: '2026-02-07T10:45:04Z'
+      prerelease: false
+      breaking_mentioned: false
+    internal:
+      usage_count: 1
+      files:
+      - scripts/review_worker.py
+    checked_at: '2026-05-23T13:28:19.541630+00:00'
+  Podman:
+    category: infrastructure
+    url: https://github.com/containers/podman
+    external:
+      latest: v5.8.2
+      published: '2026-04-14T17:56:41Z'
+      prerelease: false
+      breaking_mentioned: true
+    internal:
+      usage_count: 5
+      files:
+      - CLAUDE.yaml
+      - blueprint.yaml
+      - docs/tasks.yaml
+      - handover.yaml
+      - state.yaml
+    checked_at: '2026-05-23T13:28:19.541634+00:00'
+phases:
+  checked_at: '2026-05-23T13:28:28.090718+00:00'
+  phases:
+    'Phase 1: 기본 인프라 + MCP 서버 (완료, 2026-05-14)':
+      status: complete
+      checked: 14
+      total: 14
+    'Phase 1.5: LLM 추론 인프라 (완료, 2026-05-23)':
+      status: complete
+      checked: 10
+      total: 10
+    'Phase 2: 고도화 (계획)':
+      status: planned
+      checked: 0
+      total: 0
+    Phase 2.1 복구 / 안정화 (바로):
+      status: partial
+      checked: 4
+      total: 5
+    Phase 2.2 시멘틱 검색 (pgvector):
+      status: partial
+      checked: 3
+      total: 4
+    Phase 2.3 MemPalace 분류:
+      status: planned
+      checked: 0
+      total: 4
+    Phase 2.4 Search-Augmented 통합:
+      status: planned
+      checked: 0
+      total: 4
+    Phase 2.5 레퍼런스 추적 고도화:
+      status: partial
+      checked: 2
+      total: 4
+    Phase 2.6 Web UI:
+      status: planned
+      checked: 0
+      total: 3
+    'Phase 3: someday/maybe':
+      status: planned
+      checked: 0
+      total: 4
+  docs_updated:
+    phases.md: false
+    blueprint.yaml: false

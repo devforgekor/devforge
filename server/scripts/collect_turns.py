@@ -28,14 +28,12 @@ from lib.parser_aider import parse as parse_aider
 
 API = "http://localhost:8000/ingest"
 CHECKPOINT_FILE = Path("/opt/projects/server/collect_checkpoint.json")
-STATUS_FILE = Path("/opt/projects/server/docs/collect_status.yaml")
+STATUS_FILE = Path("/opt/projects/server/data/collect_status.yaml")
 CLAUDE_DIR = Path("/home/opc/.claude/projects/-home-opc")
 COPILOT_DIR = Path("/home/opc/.copilot/session-state")
 GEMINI_DIR = Path("/home/opc/.gemini/tmp/opc/chats")
 AIDER_FILE = Path("/home/opc/.aider.chat.history.md")
 
-
-# ── checkpoint ──────────────────────────────────────────────────
 
 def _load_checkpoint():
     if CHECKPOINT_FILE.exists():
@@ -45,8 +43,6 @@ def _load_checkpoint():
 def _save_checkpoint(cp):
     CHECKPOINT_FILE.write_text(json.dumps(cp, indent=2, ensure_ascii=False))
 
-
-# ── session discovery ───────────────────────────────────────────
 
 def _list_sessions(source):
     if source == "claude":
@@ -84,11 +80,9 @@ def _list_sessions(source):
         return []
 
 
-# ── ingestion ───────────────────────────────────────────────────
-
-def _ingest(source, session_id, parser_fn, prev_count, title=None):
+def _ingest(source, session_id, path, parser_fn, prev_count, title=None):
     """Parse, slice new turns, POST. Returns (new_turns_count, success_bool)."""
-    parsed, model, is_active = parser_fn(session_id)
+    parsed, model, is_active = parser_fn(path)
     if parsed is None:
         return 0, True
 
@@ -133,8 +127,6 @@ def _ingest(source, session_id, parser_fn, prev_count, title=None):
     return 0, False
 
 
-# ── main ────────────────────────────────────────────────────────
-
 def main():
     import argparse
     ap = argparse.ArgumentParser(description="Collect session turns into DevForge DB")
@@ -172,9 +164,7 @@ def main():
             title = entry[2] if len(entry) > 2 else None
             prev_count = cp.get(source, {}).get(sid, 0) if not args.reset else 0
 
-            count, ok = _ingest(source, sid,
-                                  lambda _sid, p=path: parser_fn(p), prev_count,
-                                  title=title)
+            count, ok = _ingest(source, sid, path, parser_fn, prev_count, title=title)
             if count > 0:
                 src_turns += count
                 src_sessions += 1
@@ -193,7 +183,6 @@ def main():
 
     _save_checkpoint(cp)
 
-    # ── status file ───────────────────────────────────────────
     status["timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     flat = ["# collect_turns status (consumed by 9am Slack hook)",
             f"timestamp: {status['timestamp']}"]

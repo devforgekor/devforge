@@ -47,7 +47,6 @@ def save_handover(data):
 
 
 def scan_recent_files():
-    """Find files modified in the last CHECKPOINT_WINDOW_HOURS."""
     recent = []
     for proj in PROJECT_DIRS:
         if not proj.exists():
@@ -75,7 +74,6 @@ def scan_recent_files():
 
 
 def git_status():
-    """Get git status summaries for project dirs."""
     result = {}
     for proj in PROJECT_DIRS:
         git_dir = proj / ".git"
@@ -114,7 +112,6 @@ def main():
         if key in data:
             ai_sections[key] = data[key]
 
-    # Build mechanical checkpoint
     recent_files = scan_recent_files()
     git_state = git_status()
 
@@ -124,7 +121,6 @@ def main():
         "git": git_state,
     }
 
-    # Skip write if mechanical data unchanged
     old_hash = checkpoint_hash(data.get("last_checkpoint"))
     new_hash = checkpoint_hash(checkpoint)
     if old_hash and old_hash == new_hash:

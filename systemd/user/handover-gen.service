@@ -1,9 +1,0 @@
-[Unit]
-Description=DevForge Session Handover Checkpoint
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/python3 /opt/projects/server/scripts/update_handover.py
-StandardOutput=null
-StandardError=journal

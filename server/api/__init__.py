@@ -1,0 +1,1 @@
+"""DevForge API — FastAPI application with MCP, search, stats, and Slack integration."""

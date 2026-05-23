@@ -2,6 +2,11 @@
 """
 Unified MCP search proxy with cross-provider key rotation.
 
+SLOC-exempt: 448 lines — single cohesive search proxy (key rotation → provider
+dispatch → API call → result formatting). MultiProviderRotator, per-provider
+response parsers, and HTTP client share key state. Splitting would scatter
+rotation logic across files.
+
 Providers (Tier 1): Brave ×4 + Exa ×4 + Tavily ×4 = 12 keys, even rotation
 Provider  (Tier 2): you.com ×4 — only when Tier 1 all in backoff
 
@@ -13,16 +18,13 @@ import html
 import json
 import os
 import re
-import sys
 import time
 import urllib.request
 import urllib.error
 
-sys.path.insert(0, "/opt/projects/server")
-from lib.key_rotator import KeyRotator, _extract_account
+from lib.key_rotator import KeyRotator
 from lib.crypto import decrypt_data
 
-# ── Provider config ──────────────────────────────────────────────
 # Each provider: env prefix, REST endpoint, auth style, max results.
 PROVIDERS = {
     "brave": {
@@ -303,13 +305,12 @@ class SearchProxy:
                 desc = "-"
             lines.append(f"{title} | {url} | {desc}")
         return ["\n".join(lines)]
-        """Return current rotation stats as JSON string."""
+
+    def stats(self) -> str:
         if self._rotator is None:
             return json.dumps({"error": "No keys"})
         return json.dumps(self._rotator.stats(), ensure_ascii=False)
 
-
-# ── MCP stdio server ─────────────────────────────────────────────
 
 TOOLS = [
     {

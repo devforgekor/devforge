@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import signal
-import subprocess
+
 import time
 import urllib.parse
 import urllib.request
@@ -31,8 +31,6 @@ SLACK_API = "https://slack.com/api"
 PID_DIR = Path("/var/tmp")
 LOG_GLOB = "/var/tmp/batch_*.log"
 RESULTS_GLOB = "/opt/projects/server/batch_results/*.json"
-BATCH_SCRIPT = "/opt/projects/server/scripts/model_test_harness.py"
-
 # ── state machine ────────────────────────────────────────────────────
 _interaction_state: Dict[str, dict] = {}
 STATE_TTL = 1800  # 30 min
@@ -247,31 +245,6 @@ def cmd_status() -> str:
         return f"Log read error: {e}"
 
 
-def cmd_test_start(model_key: str, user_id: str) -> str:
-    existing = _find_pid_file()
-    if existing:
-        try:
-            pid = int(existing.read_text().strip())
-            os.kill(pid, 0)
-            return f"Already running (PID {pid})."
-        except (OSError, ValueError):
-            existing.unlink(missing_ok=True)
-
-    ts = int(time.time())
-    pid_path = PID_DIR / f"batch_{user_id}_{ts}.pid"
-    log_path = PID_DIR / f"batch_{model_key}_{ts}.log"
-    try:
-        p = subprocess.Popen(
-            ["python3", "-u", BATCH_SCRIPT, "--testset",
-             "/var/tmp/model_testset_30.json", "--models", model_key],
-            stdout=open(log_path, "w"), stderr=subprocess.STDOUT,
-        )
-        pid_path.write_text(str(p.pid))
-        return f"Started: {model_key} (PID {p.pid}, log: {log_path})"
-    except Exception as e:
-        return f"Start failed: {e}"
-
-
 def cmd_test_stop(user_id: str) -> str:
     pf = _find_pid_file()
     if not pf:
@@ -340,9 +313,8 @@ def _advance(state: dict, action_id: str, action_value: str, user_id: str) -> tu
     elif action_id == "df_model_select":
         state["state"] = "WAITING_RESULT"
         state["context"]["model"] = action_value
-        result = cmd_test_start(action_value, user_id)
-        state["context"]["result"] = result
-        return result, None
+        state["context"]["result"] = "Batch testing disabled — model_test_harness.py removed"
+        return "Batch testing disabled — model_test_harness.py removed", None
 
     elif action_id == "df_test_result":
         return cmd_test_result(), None

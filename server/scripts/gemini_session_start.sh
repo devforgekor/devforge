@@ -20,11 +20,10 @@ fi
 start_session() {
     local api_key=$(python3 -c "
 import json, os, sys
-sys.path.insert(0, '/opt/projects/server')
-from scripts.gemini_rotate import _load_keys, STATE_FILE
+from lib.auth.key_loader import load_api_keys, STATE_FILE
 from lib.key_rotator import KeyRotator
 
-keys = _load_keys()
+keys = load_api_keys()
 if not keys:
     print('ERROR:no keys', file=sys.stderr)
     sys.exit(1)

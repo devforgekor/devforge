@@ -1,0 +1,14 @@
+# collect_turns status (consumed by 9am Slack hook)
+timestamp: 2026-05-23T14:27:53Z
+claude.status: ok
+claude.sessions: 1
+claude.turns: 5
+copilot.status: ok
+copilot.sessions: 0
+copilot.turns: 0
+gemini.status: ok
+gemini.sessions: 0
+gemini.turns: 0
+aider.status: ok
+aider.sessions: 0
+aider.turns: 0

@@ -15,7 +15,7 @@ from pathlib import Path
 from lib.db import psql
 
 LOG_FILE = Path("/opt/projects/server/link_turns.log")
-REVIEW_FILE = Path("/opt/projects/server/docs/link_review.yaml")
+REVIEW_FILE = Path("/opt/projects/server/data/link_review.yaml")
 
 def _log(msg):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -25,7 +25,7 @@ def _log(msg):
         f.write(line + "\n")
 
 
-def _match(kst_start, kst_end, today_kst):
+def match_turns_to_worklog_entries(kst_start, kst_end, today_kst):
     """Phase 1: per-agent independent time windows.
 
     Each worklog claims unlinked turns of its agent between the previous
@@ -52,7 +52,6 @@ def _match(kst_start, kst_end, today_kst):
         _log(f"No worklog entries for {today_kst}")
         return 0
 
-    # Per-agent: find last index for each agent
     agent_last_idx = {}
     for i, e in enumerate(entries):
         agent = e["agent"]
@@ -126,7 +125,7 @@ def _match(kst_start, kst_end, today_kst):
     return total_linked
 
 
-def _review(kst_start, kst_end, today_kst):
+def audit_link_health(kst_start, kst_end, today_kst):
     """Phase 2: deep review — find orphans, empties, anomalies."""
     findings = []
 
@@ -166,7 +165,6 @@ def _review(kst_start, kst_end, today_kst):
     else:
         findings.append("empty_worklog: 0")
 
-    # Agent-less worklog: entries with no agent (informational, never match)
     no_agent = psql(
         f"SELECT id, title FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
@@ -246,10 +244,10 @@ def main():
     _log(f"=== link_turns {review_date} ===")
 
     # Phase 1: matching
-    linked = _match(kst_start, kst_end, review_date)
+    linked = match_turns_to_worklog_entries(kst_start, kst_end, review_date)
 
     # Phase 2: deep review
-    findings = _review(kst_start, kst_end, review_date)
+    findings = audit_link_health(kst_start, kst_end, review_date)
 
     # Write review file (consumed by session_start + 9am Slack)
     lines = ["# link_turns review", f"date: {review_date}", f"linked: {linked}"]

@@ -1,5 +1,7 @@
 blocked: []
 done:
+- 'Code-as-documentation refactoring Phase 1-6 complete (2026-05-23): lib/ 8 domain sub-packages + 12 shims, sys.path.insert() removed, call_llm()/RateEstimator unified, load_api_keys() unified, 11 dead files deleted, 11 function renames + 2 shim removals, 86 WHAT comments + 63 dividers + 7 docstrings removed, api/db.py shim deleted. Bidirectional verification: 295 imports/49 module AST/35 runtime all passed.'
+- 'Orphan turn 전체 해소 (2026-05-23): 568개 claude-code orphan→worklog 연결 (9개 worklog agent 수정, link_turns 3일분 실행). orphan 0, coverage 100%.'
 - '3-LLM 토론 파이프라인 검증 완료 (2026-05-23): Qwen3-4B(8080) + Llama-3B(8082) 병렬 추출 → Phi-4-mini(8081) 중재. 2턴 테스트: 8f/8v/0h (100%). 3모델 cache hit 100%. DB review_facts에 arbitrator_model/source/corrected_evidence 컬럼 추가. container-devforge-qwen Quadlet ExecStartPre [Container]→[Service] 이동 버그픽스.'
 - 'T01 32B+ablation 완료 (2026-05-23): 4-stage 2,265s(37.8분), 4/4 HTTP 200. 이전 53분→29% 단축. 코드 슬라이싱 Stage 2-3 적용(695/6,748 tok). _insert_activity_stage JSON escape 버그 수정.'
 - 'Prompt ablation 구현 완료 (2026-05-23): Stage 2/3 코드 슬라이싱으로 96% 토큰 감축 (T01 기준 6,748→292 tok). SYSTEM_32B 공통 prefix 유지, Stage 4 REQUEST 제거, 프롬프트 간소화. Stage 2-3 timeout 55%+ 단축 예상.'

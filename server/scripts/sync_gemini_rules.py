@@ -64,7 +64,6 @@ def sync_gemini_instructions(
 
     new_text = "".join(parts)
 
-    # Skip write if unchanged
     target = Path(gemini_instructions)
     if target.exists() and target.read_text(encoding="utf-8") == new_text:
         return False

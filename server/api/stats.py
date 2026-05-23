@@ -2,7 +2,7 @@ import logging
 from collections import deque
 from typing import Any, Dict, List
 
-from .db import get_pool
+from .async_pg import get_pool
 
 logger = logging.getLogger(__name__)
 
