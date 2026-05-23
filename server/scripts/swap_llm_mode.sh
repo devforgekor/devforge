@@ -1,6 +1,6 @@
 #!/bin/bash
 # DevForge — Podman B mode switcher
-# Usage: swap_mode.sh normal|batch|code
+# Usage: swap_llm_mode.sh normal|batch|code
 
 set -e
 MODE="${1:-}"

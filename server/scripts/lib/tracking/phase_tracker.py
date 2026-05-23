@@ -5,8 +5,8 @@ detection rules → update checkboxes → sync blueprint.yaml). RULES dict, phas
 parsing, and document update functions share the same detection engine. Splitting
 would decouple rules from their evaluator.
 
-Pattern: same as lib/refs.py — scan system, report status.
-Integrated by gen_server_state.py every 15min → updates phases.md + blueprint.yaml.
+Pattern: same as lib/tracking/dependency_tracker.py — scan system, report status.
+Integrated by state_collector every 15min → updates phases.md + blueprint.yaml.
 
 Uses shared helpers from:
   lib.db          — db_table_exists, db_row_exists
@@ -428,7 +428,7 @@ def collect_phase_summary() -> dict:
 
 
 def auto_update_phase_documents() -> dict:
-    """Run full auto-update cycle. Called by gen_server_state.py every 15min."""
+    """Run full auto-update cycle. Called by state_collector every 15min."""
     md_changed = update_phases_md()
     bp_changed = update_blueprint_yaml()
     summary = collect_phase_summary()

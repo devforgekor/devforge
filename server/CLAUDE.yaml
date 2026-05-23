@@ -151,7 +151,7 @@ rules:
   - All machine-readable content MUST be English.
   - state.yaml is auto-generated. NEVER edit manually.
   - changelog.yaml is append-only. NEVER modify existing entries.
-  - Use gen_server_state.py for all state/changelog/MOTD updates.
+  - Use state_collector/main.py for all state/changelog/MOTD updates.
   - Structural changes trigger changelog entry. Metrics changes do NOT.
   - 'Timezone: system internals (logs, timestamps, systemd timers) MUST use UTC. User-facing output (MOTD, CLI, reports) MUST
     convert to KST (UTC+9).'

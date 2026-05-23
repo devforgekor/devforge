@@ -4,7 +4,7 @@ Two sources, one output:
   1. External: GitHub releases API poll → new versions, breaking changes
   2. Internal: git grep patterns → usage trends over time
 
-Integrated by gen_server_state.py every 15min → state.yaml#references
+Integrated by state_collector every 15min → state.yaml#references
 """
 
 import json

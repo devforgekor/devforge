@@ -18,7 +18,7 @@ phases:
       - "GET /stats (7-section dashboard)"
       - "daily pg_dump + monthly restore test"
       - "worklog_entries DB table + tasks.yaml Kanban task tracker"
-      - "session_guard.py auto-commit + session_start.py context injection"
+      - "auto_commit_guard.py auto-commit + session_context.py context injection"
       - "collect_turns.py 15min auto-collect (Claude Code + Copilot)"
       - "link_turns.py nightly turn↔worklog matching"
       - "activity_log table + commit/stage/review logging"
@@ -37,7 +37,7 @@ phases:
       - "RateEstimator dynamic timeout"
       - "Slack notification integration (stage completion DM)"
       - "Reference tracking — lib/refs.py (GitHub API 5 projects + git grep, 15min cycle)"
-      - "DB references table + gen_server_state.py integration"
+      - "DB references table + state_collector/main.py integration"
 
   - phase: 2
     name: "Enhancement"
