@@ -22,9 +22,12 @@ Infrastructure:
 import json
 import os
 import re
+import sys
 import time
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
+from types import ModuleType
 from typing import Optional, Dict, List
 
 from lib.llm.client import call_llm
@@ -32,6 +35,46 @@ from lib.code_mod.shared import (
     extract_json_from_llm_response, save_result, read_file, DEEPSEEK_KEY, LLAMA_ENDPOINT,
     TASKS_FILE,
 )
+
+
+def _build_module_namespace(file_path: str) -> dict:
+    """Build namespace dict from target Python file, stubbing unavailable imports.
+
+    Some target files (e.g. api/slack_operator.py) import container-only deps
+    like fastapi / asyncpg that aren't installable on the host. We create
+    lightweight stubs so exec() can build the module-level namespace (router,
+    app, etc.) that generated code steps may reference.
+    """
+    # Modules not available on host — stub them before exec
+    _STUBBED = {
+        "fastapi": ["APIRouter", "FastAPI", "Request", "Depends", "HTTPException"],
+        "fastapi.responses": ["JSONResponse", "HTMLResponse"],
+        "asyncpg": ["create_pool", "Connection"],
+    }
+
+    saved = {}
+    for mod_name, attrs in _STUBBED.items():
+        saved[mod_name] = sys.modules.get(mod_name)
+        if mod_name not in sys.modules:
+            stub = ModuleType(mod_name)
+            for attr in attrs:
+                setattr(stub, attr, type(attr, (), {}))
+            sys.modules[mod_name] = stub
+
+    namespace: dict = {}
+    try:
+        exec(Path(file_path).read_text(), namespace)
+    except Exception:
+        pass  # best-effort: whatever loaded is in namespace
+
+    # Restore original modules
+    for mod_name, original in saved.items():
+        if original is None:
+            sys.modules.pop(mod_name, None)
+        else:
+            sys.modules[mod_name] = original
+
+    return namespace
 
 WEB_PLANNER_URL = "https://api.deepseek.com/v1/chat/completions"
 WEB_PLANNER_MODEL = "deepseek-chat"
@@ -544,9 +587,15 @@ Fixed code for step {step_id}:"""
 
 
 def execute_steps(steps: dict, executor_cfg: dict, models: dict = None,
-                  use_web_fix: bool = False, max_retries: int = 2) -> dict:
-    """Execute steps sequentially, validate ASSERTs, retry on TYPE_CODE."""
-    namespace = {}
+                  use_web_fix: bool = False, max_retries: int = 2,
+                  target_file: Optional[str] = None) -> dict:
+    """Execute steps sequentially, validate ASSERTs, retry on TYPE_CODE.
+
+    target_file: If provided, the file's module-level namespace is loaded
+                 as the base namespace so generated code can reference
+                 module-level objects (router, app, etc.).
+    """
+    namespace = _build_module_namespace(target_file) if target_file else {}
     results = {}
     context_steps = []
 
@@ -700,7 +749,7 @@ def run_hybrid(task: dict) -> dict:
     models = detect_models()
     executor_cfg = models.get("qwen-32b", {"url": LLAMA_ENDPOINT, "model": "qwen2.5-coder-32b"})
 
-    exec_results = execute_steps(plan["steps"], executor_cfg, models, use_web_fix=True)
+    exec_results = execute_steps(plan["steps"], executor_cfg, models, use_web_fix=True, target_file=task["file"])
 
     ok_count = sum(1 for r in exec_results.values() if r["status"] == "ok")
     total = len(exec_results)
@@ -759,7 +808,7 @@ def run_local_multi(task: dict) -> dict:
     executor_cfg = models[executor_key]
     print(f"\n  Executor: {executor_key} ({executor_cfg['model']})")
 
-    exec_results = execute_steps(plan["steps"], executor_cfg, models, use_web_fix=False)
+    exec_results = execute_steps(plan["steps"], executor_cfg, models, use_web_fix=False, target_file=task["file"])
     ok_count = sum(1 for r in exec_results.values() if r["status"] == "ok")
     print(f"  Execution: {ok_count}/{len(exec_results)} steps OK")
 
@@ -839,7 +888,7 @@ def run_web_multi(task: dict) -> dict:
     executor_cfg = models.get(executor_key, {"url": LLAMA_ENDPOINT, "model": "qwen2.5-coder-32b"})
     print(f"\n  Executor: {executor_key} ({executor_cfg.get('model', '?')})")
 
-    exec_results = execute_steps(plan["steps"], executor_cfg, models, use_web_fix=True)
+    exec_results = execute_steps(plan["steps"], executor_cfg, models, use_web_fix=True, target_file=task["file"])
     ok_count = sum(1 for r in exec_results.values() if r["status"] == "ok")
     print(f"  Execution: {ok_count}/{len(exec_results)} steps OK")
 
