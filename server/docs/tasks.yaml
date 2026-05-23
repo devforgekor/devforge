@@ -1,73 +1,15 @@
 blocked: []
 done:
-- 'Task 2 32B 4-stage 완료 (2026-05-22): ANALYZE(55분/92tok)→PLAN(54분/151tok)→IMPL(52분/121tok)→PACKAGE(7분/301tok). 총 10,126초, 4/4 HTTP 200. diff 정확도 높음(confidence 0.95). dynamic timeout + TCP keepalive + retry 안정적. swap timer 중단 상태로 6시간+ 연속 실행 검증.'
-- 'code_mod_pipeline.py 구현 + activity_log 통합 (2026-05-22): test_code_mod.py → code_mod_pipeline.py로 rename. _insert_activity_stage() 추가 — 각 스테이지 완료 시 activity_log에 type=stage row 기록 (agent=qwen2.5-coder-32b). api/db.py SCHEMA_SQL에 activity_log 테이블 DDL 추가. Task 2 32B 4-stage 파이프라인 전체 완료 (10,126초, 4/4 HTTP 200). swap-batch/normal.timer 복구.'
-- 'Gemini header 확인 + Consistency 해소 + 대시보드 구현 (2026-05-21): header 이미 최신(sync 재확인). aider orphan 12건→worklog#164 연결, consistency_report 경고 초기화. cli.py dashboard 명령 추가(모델별 valid%/rate/cache, 일별 통계).'
-- '양방향 코드 리뷰 + 버그 수정 (2026-05-21): review_worker.py 이슈 3건 수정 — RateEstimator._samples 0값 필터링, prompt_tokens 1.3x 보정, tenacity after callback 빈 줄 제거. --flash-attn auto 확인(ARM에서 불필요). phi-4-Q8_0.gguf(14.5GB) 삭제. tasks.yaml 잔여 작업 정렬.'
-- 'DevForge v3.0 완결 (2026-05-21): 2-Container 아키텍처 — Podman A(Qwen3-4B 8080) + Podman B(mode-switchable 8081). 모델 4종 다운로드(17.8GB). review_worker.py 전면 재작성(644→514줄): container mgmt 제거, http.client, RateEstimator(timings 기반 동적 timeout), /no_think. DB review_facts에 6개 성능 컬럼 추가(prompt_tokens, gen_tokens, gen_rate, elapsed_ms, cache_hit, phase). systemd auto-start(2개 unit), review-worker.timer(매시간 :05), swap-batch/normal.timer(KST 07/12/17시 14B 전환). cache hit 100% 확인.'
-- 'Qwen32B 코드 수정 테스트 완료 (2026-05-20): IQ4_XS(16.5GB) 안정적 swap 345MB. 8/8 tasks 완료, 5개 conf 0.93 avg. 4-stage 53분. API: v4-pro 0.97(7.8s), v4-flash 0.98(8.2s), Gemini down. API 50x faster. Q4_K_M(19GB) 삭제, 서비스 복구. 결과: /var/tmp/code_mod_tests/'
-- 'Extraction 모델 최종 결정: Qwen2.5-Coder-14B-Instruct Q8_0 (2026-05-20). 4개 모델 비교 완료 — Qwen14B 91.0% (145f/132v/11h), Qwen7B 86.3% (227f/196v/26h), Mistral-Nemo 88.1% (42f/37v/4h), DeepSeek-Coder-V2-Lite 82.8% (64f/53v/10h). Granite-8B 테스트 미실행. 모든 테스트 데이터 삭제, Qwen14B 단독 운영 체제 전환.'
-- 'Qwen14B 100턴 baseline 완료 — Run 3: 100턴/280 facts, Phi-4 검증 58건, valid 52 (89.7%), hallucinated 5 (8.6%), context_dependent 1 (1.7%). DB review_facts에 2026-05-19 저장. 코드: review_worker.py LLAMA_RUN_ARGS 4096 fix 적용 완료. (2026-05-19)'
-
-- 'requests → http.client 마이그레이션 (2026-05-18): collect_turns.py, qwen_worker.py, qwen_executor.py에서 requests 라이브러리 제거. http.client.HTTPConnection으로 교체 (connection pooling 이슈 해소, 외부 의존성 감소). review_worker.py와 동일 패턴 적용.'
-- 'SQL escaping 전면 적용 (2026-05-18): qwen_worker.py _ensure_worklog() + Phase 2 UPDATE + qwen_executor.py execute_linkages/execute_deterministic_linkage/execute_fixes. esc_sql() import 추가. 모든 사용자/에이전트 입력 SQL interpolation에 escaping 적용.'
-- 'qwen_worker.py Phase 3 (observe) 비활성화 (2026-05-18): review_worker.py 2-phase pipeline(Qwen14B→Phi-4)이 fact extraction+verification 담당. qwen_worker Phase 3은 단일모델 observe로 교차검증 부재 — inferior. docstring, argparse description, main() Phase 3 섹션 모두 갱신.'
-- 'test_review_models.py:384 symlink restore fix (2026-05-18): qwen2.5-coder-7b-instruct-q8_0.gguf(존재하지 않음) → Qwen2.5-Coder-14B-Instruct-Q8_0.gguf(실제 기본 모델). print 메시지도 qwen2.5-coder-14b로 수정.'
-- 'lib/db.py 신설 + 10개 파일 마이그레이션 완료 (2026-05-18): PEP 8/Django/Celery 패턴 적용. _psql 중복 10개 제거, timeout/에러 처리/escaping 단일화. review_worker.py, session_guard.py, cli.py, link_turns.py, embed_turns.py, session_start.py, gen_server_state.py, test_review_models.py, qwen_executor.py 전환. embed_turns.py -U devforge→postgres 동시 해결. PLAN.md File Map 갱신.'
-- 'Code-as-documentation 리서치 완료 (2026-05-18): PEP 8, Django, Celery, Flask, Python stdlib 패턴 분석. 모든 주요 프로젝트가 DB 헬퍼 단일 공유 모듈 사용. _psql 10개 정의 불일치 확인 (timeout 10/15/30s, 반환타입 str/CompletedProcess, 에러처리 5종). lib/db.py 신설 + 전면 마이그레이션 결정. 보고서: docs/code-as-documentation-review.md'
-- 'v1.1 배포 완료 (2026-05-18): worklog_entries.git_commit_hash TEXT 컬럼 + UNIQUE(date, git_commit_hash) constraint + idx_wl_commit_hash partial index. session_guard.py에 log_commits_to_worklog() 추가 (git log --since=24h 스캔, RETURNING id로 idempotent 확인). review_worker.py main()에서 호출 연동. ON CONFLICT DO NOTHING 으로 중복 방지 검증 완료.'
-- '전체 서버 감사 완료 — audit-2026-05-18.md (2026-05-18). 발견: CRITICAL 2건 (qwen_executor.py 모델명 오류로 Phase 2/3 broken, test_review_models.py 심링크 복원 7B 참조), HIGH 4건 (worker 중복, SQL escaping, DB user 불일치, requests/http.client 혼재), MEDIUM 3건, LOW 3건. qwen_executor.py 모델명 즉시 수정 완료.'
-- 'Mistral-Nemo-12B vs Qwen14B extraction 비교 완료 — 동일 10턴 기준 Qwen14B 97.9% valid (1/48 hallucinated)
-  vs Mistral 88.1% valid (4/42 hallucinated). Mistral hallucination rate 4.5x 높음. 속도는 Mistral 우세(2.63
-  vs 1.82 t/s)하나 정확도에서 Qwen14B 압승. EXTRACT_MODEL = qwen14 유지 결정. (2026-05-18)'
-- DeepSeek-R1-Distill-Qwen-14B Q8_0 테스트 완료 — qwen2 아키텍처 호환, 1.76 tok/s 생성 속도. 그러나
-  CoT 추론으로 턴당 300-500+ 토큰 생성 (Qwen14B 6-50 대비). 턴당 4-8분 소요로 extraction 파이프라인 부적합.
-  FuseO1 variant가 대안. (2026-05-18)
-- OOM kill fix — cache-ram 16384→8192, ctx-size 16384→8192. Quadlet container-devforge-llm.container도
-  동일 수정. (2026-05-18)
-- Gemma-2-27B Q4_K_M 삭제 — 16GB 확보. 0.72 tok/s로 실용성 없음. DeepSeek-R1-Distill-Qwen-14B
-  Q8_0 다운로드 완료. (2026-05-18)
-- 'review_worker 6차 실행 — 6 facts, 6 valid (100%). 오늘 누적: 60 facts, 54 valid (90%),
-  5 hallucinated. 파이프라인 안정화 완료. (2026-05-18)'
-- review_worker 4-5차 실행 — 4차 20f/19v(95%), 5차 15f/13v(87%). regexp_replace 개행 처리 +
-  _esc_sql escaping + _psql_ok 수정 검증 완료. (2026-05-18)
-- 'DB 저장 버그 2건 fix — (1) fetch_unprocessed_turns: psql t.text 개행 파싱 깨짐 → regexp_replace로
-  개행 제거 + 빈 turn_id 필터. (2) save_review_facts: INSERT 성공해도 _psql 반환값 '''' 때문에 WARNING
-  false positive → _psql_ok(returncode 체크) 추가. (3) _esc_sql: 백슬래시+개행 escaping 추가.
-  (2026-05-18)'
-- handover.yaml YAML 오류 수정 — decisions 키 중복 + shell escape(역슬래시) 제거. handover-gen.service
-  복구. (2026-05-18)
-- drop_caches 롤백 — /proc/sys/vm/drop_caches PermissionError (root 필요)로 3차 실행 크래시.
-  _podman_restart_llama() 원복 + LLAMA_RUN_ARGS에 --replace 추가하여 컨테이너 경합 방지. (2026-05-18)
-- 'HTTP timeout 300s → 600s — call_llm() timeout increased to accommodate slow Phi-4
-  verification (2.18 tok/s × 344 tokens + prompt encoding ≈ 158s). Worst-case triple
-  retry: 3×600+6s=1806s < 30min timer window. (2026-05-18)'
-- review_worker 첫 운영 실행 완료 — 17턴 중 5턴에서 14개 fact 추출, 12개 valid (85.7%), 2개 hallucinated.
-  Turn 2 hallucinated fact 1건 (Phi-4가 Qwen14B fabrication 감지), Turn 3 1건 hallucinated.
-  Turn 8 HTTP 300s timeout → retry 성공. Qwen 7B 정상 복구 확인. (2026-05-18)
-- Review worker timer enabled — timer active, next trigger 03:35 UTC (2026-05-18)
-- review_worker.py created — 2-phase LLM pipeline (Qwen14B extract → Phi-4 verify),
-  checkpoint-based, review_facts DB table (2026-05-18)
-- 'Model combo tests completed — Combo A (Qwen14B→Phi-4): 100% valid (8/8), 0% hallucination;
-  Gemma-2-27B: too slow (0.72 tok/s) for practical use (2026-05-18)'
-- Gemma-2-27B Q4_K_M confirmed working with llama.cpp b7834 — arch=gemma2, 27B, 16GB
-  load, but inference 0.72 tok/s on 4-core ARM (2026-05-18)
-- 'Model swap bugs fixed: (1) stale systemd unit at ~/.config/systemd/user/ shadowing
-  Quadlet — removed; (2) absolute symlink paths don''t resolve in container — changed
-  to relative; (3) http.client replaces requests library to avoid connection pooling
-  issues (2026-05-18)'
-- 3개 LLM 모델 다운로드 완료 — Qwen14B (Q8_0, 15GB), Phi-4 (Q8_0, 15GB), Gemma-2-27B (Q4_K_M,
-  16GB), 총 46GB (2026-05-18)
-- Copilot statusline quota tracking — statusline now parses Copilot Student Benefit
-  quota (entitlementRequests/usedRequests/remainingPercentage) from live payload,
-  falls back to DevForge API when unavailable, and shows context warnings with color-coded
-  progress bar (yellow/orange/red).
-- Copilot statusline format — the Copilot footer now shows a compact progress bar,
-  percent, used/total tokens, and remaining tokens, with model names and request labels
-  removed.
-- Copilot statusline fallback — copilot-statusline.py now reads the newest useful
-  ~/.copilot/session-state/*/events.jsonl snapshot when no live payload is provided,
-  preferring full used/limit snapshots and falling back to used-only snapshots.
+- '3-LLM 토론 파이프라인 검증 완료 (2026-05-23): Qwen3-4B(8080) + Llama-3B(8082) 병렬 추출 → Phi-4-mini(8081) 중재. 2턴 테스트: 8f/8v/0h (100%). 3모델 cache hit 100%. DB review_facts에 arbitrator_model/source/corrected_evidence 컬럼 추가. container-devforge-qwen Quadlet ExecStartPre [Container]→[Service] 이동 버그픽스.'
+- 'T01 32B+ablation 완료 (2026-05-23): 4-stage 2,265s(37.8분), 4/4 HTTP 200. 이전 53분→29% 단축. 코드 슬라이싱 Stage 2-3 적용(695/6,748 tok). _insert_activity_stage JSON escape 버그 수정.'
+- 'Prompt ablation 구현 완료 (2026-05-23): Stage 2/3 코드 슬라이싱으로 96% 토큰 감축 (T01 기준 6,748→292 tok). SYSTEM_32B 공통 prefix 유지, Stage 4 REQUEST 제거, 프롬프트 간소화. Stage 2-3 timeout 55%+ 단축 예상.'
+- '레퍼런스 추적 시스템 구현 완료 (2026-05-23): lib/refs.py — GitHub API 5개 프로젝트 폴링 + 내부 git grep 스캔. gen_server_state.py 15분마다 collect() → state.yaml + DB references 테이블 upsert. tasks.yaml pending→done 정리.'
+- 'Task 2 32B 4-stage 완료 (2026-05-22): ANALYZE(55분/92tok)→PLAN(54분/151tok)→IMPL(52분/121tok)→PACKAGE(7분/301tok). 총 10,126초, 4/4 HTTP 200. diff 정확도 높음(confidence 0.95).'
+- 'code_mod_pipeline.py 구현 + activity_log 통합 (2026-05-22): test_code_mod.py → code_mod_pipeline.py로 rename. _insert_activity_stage() 추가. api/db.py SCHEMA_SQL에 activity_log 테이블 DDL 추가. Task 2 32B 4-stage 전체 완료 (10,126초).'
+- 'Gemini header 확인 + Consistency 해소 + 대시보드 구현 (2026-05-21): header 이미 최신. aider orphan 12건→worklog#164 연결. cli.py dashboard 명령 추가(모델별 valid%/rate/cache, 일별 통계).'
+- '양방향 코드 리뷰 + 버그 수정 (2026-05-21): review_worker.py 이슈 3건 수정. phi-4-Q8_0.gguf(14.5GB) 삭제. tasks.yaml 잔여 작업 정렬.'
+- 'DevForge v3.0 완결 (2026-05-21): 2-Container 아키텍처 — Podman A(Qwen3-4B 8080) + Podman B(mode-switchable 8081). review_worker.py 전면 재작성. systemd auto-start. swap-batch/normal.timer. cache hit 100% 확인.'
+- 'Qwen32B 코드 수정 테스트 완료 (2026-05-20): IQ4_XS(16.5GB) 안정적. 8/8 tasks 완료, 4-stage 53분. API 50x faster. Q4_K_M(19GB) 삭제, 서비스 복구.'
 in_progress: null
 kanban_labels:
   blocked: Blocked

@@ -504,8 +504,10 @@ def collect_metrics():
 # STATE I/O
 # ═══════════════════════════════════════════════════════════════════════
 
-def save_state(structural, metrics):
+def save_state(structural, metrics, references=None):
     doc = {"structural": structural, "metrics": metrics}
+    if references:
+        doc["references"] = references
     STATE_FILE.write_text(yaml.dump(doc, default_flow_style=False, allow_unicode=True, sort_keys=False, width=120))
 
 
@@ -995,6 +997,37 @@ def main():
     # 2. Collect fresh data
     structural = collect_structural()
     metrics = collect_metrics()
+    try:
+        from lib.refs import collect as collect_references
+        references = collect_references()
+        # Persist to DB for historical tracking
+        _psql(
+            'CREATE TABLE IF NOT EXISTS "references" ('
+            '  id SERIAL PRIMARY KEY,'
+            '  url TEXT NOT NULL UNIQUE,'
+            '  name TEXT NOT NULL,'
+            '  category TEXT,'
+            '  latest_version TEXT,'
+            '  usage_count INT DEFAULT 0,'
+            '  first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),'
+            '  last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()'
+            ');'
+            'CREATE INDEX IF NOT EXISTS idx_references_url ON "references"(url);'
+            'CREATE INDEX IF NOT EXISTS idx_references_last ON "references"(last_seen DESC);'
+        )
+        for name, ref in references.items():
+            _psql(
+                f'INSERT INTO "references" (url, name, category, latest_version, usage_count) '
+                f"VALUES ('{ref['url']}', '{name}', '{ref['category']}', "
+                f"'{ref['external']['latest']}', {ref['internal']['usage_count']}) "
+                f"ON CONFLICT (url) DO UPDATE SET "
+                f"  latest_version = EXCLUDED.latest_version, "
+                f"  usage_count = EXCLUDED.usage_count, "
+                f"  last_seen = NOW()"
+            )
+    except Exception as e:
+        print(f"  [refs] collection failed: {e}", file=sys.stderr)
+        references = {}
 
     # ── Validate-only mode: compare, write alerts, exit ────────────────
     if validate_mode:
@@ -1017,7 +1050,7 @@ def main():
         return 0 if status == "pass" else 1
 
     # 3. Save new state
-    save_state(structural, metrics)
+    save_state(structural, metrics, references)
 
     # 4. Detect changes against previous structural state
     new_hash = structural_hash(structural)
@@ -1056,7 +1089,7 @@ def main():
     if prev_state and prev_validation:
         metrics["validation"] = prev_validation
         # Re-save with validation preserved
-        save_state(structural, metrics)
+        save_state(structural, metrics, references)
 
     # 7. Generate MOTD
     generate_motd(structural, metrics)

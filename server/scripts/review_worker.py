@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""review_worker.py — 2-phase LLM review pipeline for DevForge.
+"""review_worker.py — 3-LLM debate pipeline for DevForge.
 
-Phase 1 (extract): Qwen3-4B (Podman A, port 8080) extracts facts from turns.
-Phase 2 (verify):  Phi-4-mini (Podman B, port 8081) cross-validates facts.
+Phase 1 (extract A+B): Qwen3-4B (Podman A :8080) + Llama-3B (Podman B :8082)
+                       independently extract facts from turns — parallel HTTP.
+Phase 2 (compare):     Match facts by evidence overlap. Identical → confirmed.
+                       Only one model found → conflict.
+Phase 3 (arbitrate):   Phi-4-mini (Podman B :8081) adjudicates conflicts.
 
 24h rolling window, checkpoint-based incremental processing.
-Both containers are always running — no model swapping needed.
+All 3 containers are always running in normal mode — no model swapping needed.
 
 Usage:
   python3 review_worker.py                 # normal incremental run
@@ -27,8 +30,6 @@ from lib.db import psql, psql_ok, esc_sql
 from session_guard import log_commits_to_worklog
 
 # ── endpoints ──────────────────────────────────────────────────────
-EXTRACT_URL = "http://127.0.0.1:8080/v1/chat/completions"  # Podman A — Qwen3-4B, always on
-VERIFY_URL = "http://127.0.0.1:8081/v1/chat/completions"   # Podman B — mode-switchable
 CHECKPOINT_FILE = Path("/opt/projects/server/review_checkpoint.json")
 
 # ── models ─────────────────────────────────────────────────────────
@@ -41,19 +42,19 @@ MODELS = {
         "name": "phi-4-mini",
         "port": 8081,
     },
-    "phi4": {
-        "name": "phi-4",
-        "port": 8081,
-    },
     "llama3b": {
         "name": "llama-3.2-3b",
-        "port": 8081,
+        "port": 8082,
     },
 }
 
-# Pipeline: extract with Podman A (8080), verify with Podman B (8081)
-EXTRACT_MODEL = "qwen4b"
-VERIFY_MODEL = "phi4mini"
+# 3-LLM debate pipeline:
+# Phase 1: Qwen3-4B (:8080) + Llama-3B (:8082) extract independently (parallel)
+# Phase 2: Compare facts — match by evidence overlap
+# Phase 3: Phi-4-mini (:8081) arbitrates conflicts
+EXTRACT_MODEL_A = "qwen4b"
+EXTRACT_MODEL_B = "llama3b"
+ARBITRATOR_MODEL = "phi4mini"
 
 # ── prompts ────────────────────────────────────────────────────────
 EXTRACT_SYSTEM = """You are a fact extraction system. From the conversation turn below, extract ONLY self-contained, testable facts.
@@ -78,25 +79,21 @@ Return JSON:
 
 If no self-contained, complete facts with exact evidence, return {"facts": []}."""
 
-VERIFY_SYSTEM = """You are a critical fact checker. Review the extracted facts against the original turn content.
+ARBITRATOR_SYSTEM = """You are an impartial fact arbitrator. Two models independently extracted facts from the same conversation turn. They disagree on some facts. Your job: decide which facts are correct.
 
-For each fact, check:
-1. Is the evidence VERBATIM from the turn? Mark "hallucinated" if not.
-2. Is the fact_type correct? Mark "mismatch" if type is wrong.
-3. Is the fact truly self-contained? Mark "context_dependent" if it requires prior knowledge.
+For each conflicting fact:
+1. Check if the evidence is VERBATIM in the original turn text
+2. If yes → "valid" (the fact is correct)
+3. If paraphrased or inferred → "modified" (fact is true but evidence isn't exact — provide corrected evidence)
+4. If not present at all → "hallucinated" (reject)
+5. If needs prior context → "context_dependent"
 
 Return JSON:
-{"reviews": [{"fact_index": 0, "verdict": "valid|hallucinated|mismatch|context_dependent", "reason": "short explanation"}]}"""
+{"decisions": [{"fact_index": 0, "source": "A|B", "verdict": "valid|hallucinated|modified|context_dependent", "corrected_evidence": "exact text from turn or null", "reason": "short explanation"}]}"""
 
 
 def get_extract_system(model_key: str) -> str:
-    """Return model-specific extract prompt or global default."""
     return MODELS.get(model_key, {}).get("extract_system", EXTRACT_SYSTEM)
-
-
-def get_verify_system(model_key: str) -> str:
-    """Return model-specific verify prompt or global default."""
-    return MODELS.get(model_key, {}).get("verify_system", VERIFY_SYSTEM)
 
 
 # ── checkpoint ─────────────────────────────────────────────────────
@@ -128,7 +125,9 @@ def ensure_review_table():
     )""")
     for col, col_type in [("prompt_tokens", "INTEGER"), ("gen_tokens", "INTEGER"),
                            ("gen_rate", "REAL"), ("elapsed_ms", "REAL"),
-                           ("cache_hit", "INTEGER"), ("phase", "TEXT")]:
+                           ("cache_hit", "INTEGER"), ("phase", "TEXT"),
+                           ("arbitrator_model", "TEXT"), ("source", "TEXT"),
+                           ("corrected_evidence", "TEXT")]:
         psql(f"ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS {col} {col_type}")
     psql("CREATE INDEX IF NOT EXISTS idx_review_facts_turn ON review_facts(turn_id)")
     psql("CREATE INDEX IF NOT EXISTS idx_review_facts_created ON review_facts(created_at DESC)")
@@ -176,19 +175,22 @@ def fetch_unprocessed_turns(limit: int = 20, checkpoint: dict = None,
     return turns
 
 
-def save_review_facts(turn_id: str, facts: List[Dict], reviews: List[Dict],
-                      extract_model: str, verify_model: str,
+def save_review_facts(turn_id: str, facts: List[Dict], decisions: List[Dict],
+                      extract_model_a: str, extract_model_b: str,
+                      arbitrator_model: str = "",
                       phase: str = "", timings: Optional[Dict] = None):
-    """Save extracted and verified facts to DB with optional timing data."""
+    """Save extracted + arbitrated facts to DB."""
     t = timings or {}
     saved = 0
-    for review in reviews:
-        idx = review.get("fact_index", 0)
+    for dec in decisions:
+        idx = dec.get("fact_index", 0)
         fact = facts[idx] if idx < len(facts) else {}
         evidence = esc_sql(fact.get("evidence", "")[:500])
         fact_type = esc_sql(fact.get("fact_type", ""))
-        verdict = esc_sql(review.get("verdict", "pending"))
-        reason = esc_sql(review.get("reason", "")[:500])
+        verdict = esc_sql(dec.get("verdict", "pending"))
+        reason = esc_sql(dec.get("reason", "")[:500])
+        corrected = esc_sql(dec.get("corrected_evidence", "")[:500] or "")
+        source = esc_sql(dec.get("source", ""))
         prompt_n = t.get("prompt_n", 0) or 0
         pred_n = t.get("predicted_n", 0) or 0
         gen_rate = round(t.get("predicted_per_second", 0) or 0, 1)
@@ -197,14 +199,18 @@ def save_review_facts(turn_id: str, facts: List[Dict], reviews: List[Dict],
 
         ok = psql_ok(f"""
         INSERT INTO review_facts (turn_id, fact_index, evidence, fact_type, verdict, reason,
-            extract_model, verify_model, phase, prompt_tokens, gen_tokens, gen_rate, elapsed_ms, cache_hit)
+            extract_model, verify_model, arbitrator_model, source, corrected_evidence,
+            phase, prompt_tokens, gen_tokens, gen_rate, elapsed_ms, cache_hit)
         VALUES ('{turn_id}', {idx}, '{evidence}', '{fact_type}', '{verdict}', '{reason}',
-            '{extract_model}', '{verify_model}', '{phase}', {prompt_n}, {pred_n}, {gen_rate}, {elapsed}, {cache_n})
+            '{extract_model_a}', '{extract_model_b}', '{arbitrator_model}', '{source}',
+            '{corrected}', '{phase}', {prompt_n}, {pred_n}, {gen_rate}, {elapsed}, {cache_n})
         ON CONFLICT (turn_id, fact_index, extract_model) DO UPDATE SET
             verdict = EXCLUDED.verdict,
             reason = EXCLUDED.reason,
-            extract_model = EXCLUDED.extract_model,
             verify_model = EXCLUDED.verify_model,
+            arbitrator_model = EXCLUDED.arbitrator_model,
+            source = EXCLUDED.source,
+            corrected_evidence = EXCLUDED.corrected_evidence,
             phase = EXCLUDED.phase,
             prompt_tokens = EXCLUDED.prompt_tokens,
             gen_tokens = EXCLUDED.gen_tokens,
@@ -214,8 +220,41 @@ def save_review_facts(turn_id: str, facts: List[Dict], reviews: List[Dict],
         """)
         if ok:
             saved += 1
-    if saved < len(reviews):
-        print(f"  WARNING: DB save {saved}/{len(reviews)} for turn {turn_id[:8]}...")
+    if saved < len(decisions):
+        print(f"  WARNING: DB save {saved}/{len(decisions)} for turn {turn_id[:8]}...")
+
+
+def _insert_activity_review(turn_id: str, facts: List[Dict], reviews: List[Dict],
+                            verify_model: str) -> int:
+    """Insert verified findings into activity_log for nightly relay consumption.
+    Each finding is a separate row with queue_status='unprocessed'.
+    Returns number of rows inserted."""
+    import json as _json
+    count = 0
+    for review in reviews:
+        idx = review.get("fact_index", 0)
+        fact = facts[idx] if idx < len(facts) else {}
+        evidence = fact.get("evidence", "")[:200]
+        fact_type = fact.get("fact_type", "general")
+        verdict = review.get("verdict", "pending")
+        reason = review.get("reason", "")[:200]
+
+        title = f"review: {fact_type} — {evidence[:80]}"
+        summary = f"[{verdict}] {reason}"
+        body = _json.dumps({
+            "fact_index": idx, "fact_type": fact_type,
+            "evidence": evidence, "verdict": verdict, "reason": reason
+        }, ensure_ascii=False)
+
+        ok = psql_ok(f"""INSERT INTO activity_log (type, source, title, summary, body,
+            model, turn_ids, summary_status, queue_status, exec_status)
+        VALUES ('review', 'review_worker', '{esc_sql(title)}',
+                '{esc_sql(summary)}', '{esc_sql(body)}',
+                '{esc_sql(verify_model)}', ARRAY['{turn_id}']::UUID[],
+                'raw', 'unprocessed', 'DONE')""")
+        if ok:
+            count += 1
+    return count
 
 
 # ── health check ──────────────────────────────────────────────────
@@ -359,26 +398,112 @@ def build_extract_prompt(turn: Dict) -> str:
     return f"[{turn['agent']}] user: {turn['user_turn']}\n[{turn['agent']}] text: {turn['text']}"
 
 
-def build_verify_prompt(turn: Dict, facts: List[Dict]) -> str:
+def build_arbitration_prompt(turn: Dict, conflicts: List[Dict]) -> str:
+    """Build prompt for Phi-4-mini to arbitrate conflicting facts."""
     lines = [
         f"## Original Turn\n[{turn['agent']}] user: {turn['user_turn']}\n[{turn['agent']}] text: {turn['text']}",
-        "\n## Extracted Facts"
+        "\n## Conflicting Facts (A=Qwen3-4B, B=Llama-3B)",
     ]
-    for i, f in enumerate(facts):
-        lines.append(f"{i}. [{f.get('fact_type', '')}] {f.get('evidence', '')} (speaker: {f.get('speaker', '')})")
+    for c in conflicts:
+        lines.append(f"\nFact {c['index']}:")
+        lines.append(f"  A: [{c.get('fact_type_a', '?')}] {c.get('evidence_a', '')}")
+        lines.append(f"  B: [{c.get('fact_type_b', '?')}] {c.get('evidence_b', '')}")
     return "\n".join(lines)
+
+
+def _evidence_overlap(a: str, b: str) -> float:
+    """Simple token overlap ratio between two evidence strings."""
+    if not a or not b:
+        return 0.0
+    ta = set(a.lower().split())
+    tb = set(b.lower().split())
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / min(len(ta), len(tb))
+
+
+def compare_facts(facts_a: List[Dict], facts_b: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    """Compare facts from two models. Returns (confirmed, conflicts).
+
+    confirmed: facts both models agree on (overlap > 0.6)
+    conflicts: facts only one model found (overlap < 0.4 to any counterpart)
+    """
+    confirmed = []
+    used_b = set()
+
+    for fa in facts_a:
+        best_overlap = 0.0
+        best_j = -1
+        for j, fb in enumerate(facts_b):
+            if j in used_b:
+                continue
+            overlap = _evidence_overlap(fa.get("evidence", ""), fb.get("evidence", ""))
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_j = j
+
+        if best_overlap >= 0.6:
+            used_b.add(best_j)
+            confirmed.append({
+                "evidence": fa["evidence"],  # use A's evidence
+                "fact_type": fa.get("fact_type", ""),
+                "speaker": fa.get("speaker", ""),
+                "source": "both",
+            })
+        else:
+            # No match in B — this is a conflict candidate
+            confirmed.append({
+                "evidence": fa.get("evidence", ""),
+                "fact_type": fa.get("fact_type", ""),
+                "speaker": fa.get("speaker", ""),
+                "source": "A_only",
+                "index": len(confirmed),
+                "evidence_a": fa.get("evidence", ""),
+                "fact_type_a": fa.get("fact_type", ""),
+                "evidence_b": facts_b[best_j].get("evidence", "") if best_j >= 0 else "",
+                "fact_type_b": facts_b[best_j].get("fact_type", "") if best_j >= 0 else "",
+            })
+
+    # Remaining B facts (not matched to any A fact)
+    conflicts = [c for c in confirmed if c.get("source") == "A_only"]
+    for j, fb in enumerate(facts_b):
+        if j not in used_b:
+            conflicts.append({
+                "evidence": fb.get("evidence", ""),
+                "fact_type": fb.get("fact_type", ""),
+                "speaker": fb.get("speaker", ""),
+                "source": "B_only",
+                "index": len(conflicts),
+                "evidence_a": "",
+                "fact_type_a": "",
+                "evidence_b": fb.get("evidence", ""),
+                "fact_type_b": fb.get("fact_type", ""),
+            })
+            confirmed.append({
+                "evidence": fb.get("evidence", ""),
+                "fact_type": fb.get("fact_type", ""),
+                "speaker": fb.get("speaker", ""),
+                "source": "B_only",
+            })
+
+    # Filter confirmed to only "both" sources
+    confirmed_both = [c for c in confirmed if c.get("source") == "both"]
+    return confirmed_both, conflicts
 
 
 # ── main ───────────────────────────────────────────────────────────
 def main():
     import argparse
-    ap = argparse.ArgumentParser(description="2-phase LLM review pipeline")
+    from concurrent.futures import ThreadPoolExecutor
+
+    ap = argparse.ArgumentParser(description="3-LLM debate review pipeline")
     ap.add_argument("--reset", action="store_true", help="Re-review all turns in 24h window")
     ap.add_argument("--limit", type=int, default=20, help="Max turns per run (default: 20)")
     args = ap.parse_args()
 
     ts = datetime.now(timezone.utc)
-    print(f"[{ts.isoformat()}] review_worker starting")
+    print(f"[{ts.isoformat()}] review_worker starting (3-LLM debate)")
+    _notify_slack(f"review_worker 3-LLM debate start — {ts.strftime('%H:%M:%S')} UTC")
 
     ensure_review_table()
     log_commits_to_worklog()
@@ -389,125 +514,167 @@ def main():
         checkpoint = {}
         print("  Reset: cleared checkpoint")
 
-    extract_model_name = MODELS[EXTRACT_MODEL]["name"]
-    turns = fetch_unprocessed_turns(args.limit, checkpoint, extract_model_name)
+    model_a = MODELS[EXTRACT_MODEL_A]
+    model_b = MODELS[EXTRACT_MODEL_B]
+    model_arb = MODELS[ARBITRATOR_MODEL]
+    turns = fetch_unprocessed_turns(args.limit, checkpoint, model_a["name"])
     if not turns:
         print("No unprocessed turns in 24h window")
         return 0
     print(f"Fetched {len(turns)} unprocessed turns")
 
+    # ── health checks ──────────────────────────────────────────────
+    for key, mdl in [(EXTRACT_MODEL_A, model_a), (EXTRACT_MODEL_B, model_b),
+                      (ARBITRATOR_MODEL, model_arb)]:
+        if not check_endpoint(mdl["port"], key):
+            print(f"FATAL: {key} endpoint :{mdl['port']} not responding")
+            _notify_slack(f"FATAL: {key} :{mdl['port']} down")
+            return 1
+
     # ── init estimators ────────────────────────────────────────────
-    est_extract = RateEstimator("extract")
-    est_verify = RateEstimator("verify", initial_gen=3.0)
+    est_a = RateEstimator(EXTRACT_MODEL_A)
+    est_b = RateEstimator(EXTRACT_MODEL_B)
+    est_arb = RateEstimator(ARBITRATOR_MODEL, initial_gen=3.0)
 
-    # Phase 1: Extract with Podman A (Qwen3-4B on 8080)
-    extract_model = MODELS[EXTRACT_MODEL]
-    if not check_endpoint(extract_model["port"], EXTRACT_MODEL):
-        print(f"FATAL: extract endpoint :{extract_model['port']} not responding")
-        return 1
-
+    # ═══════════════════════════════════════════════════════════════
+    # Phase 1: Parallel independent extraction (Qwen3-4B + Llama-3B)
+    # ═══════════════════════════════════════════════════════════════
+    print(f"\nPhase 1 — parallel extract: {model_a['name']} + {model_b['name']}...")
     combo_facts = []
-    print(f"Phase 1 — extracting facts with {extract_model['name']}...")
+
     for i, turn in enumerate(turns):
         prompt = build_extract_prompt(turn)
-        prompt_tokens = int((len(get_extract_system(EXTRACT_MODEL).split()) + len(prompt.split())) * 1.3)
-        timeout = est_extract.calc_timeout(prompt_tokens, 512) if est_extract.calls > 0 else 180
-        result, timings = call_llm(extract_model["port"], extract_model["name"],
-                                   get_extract_system(EXTRACT_MODEL), prompt,
-                                   max_tokens=512, timeout=timeout)
-        facts = result.get("facts", []) if result else []
-        if timings:
-            est_extract.update(timings)
-            rate_now = timings.get("predicted_per_second", 0)
-            cache = timings.get("cache_n", 0)
-        else:
-            rate_now, cache = 0, 0
+        sys_a = get_extract_system(EXTRACT_MODEL_A)
+        sys_b = get_extract_system(EXTRACT_MODEL_B)
+
+        def _extract(mdl, sys_prompt, est):
+            ptok = int((len(sys_prompt.split()) + len(prompt.split())) * 1.3)
+            timeout = est.calc_timeout(ptok, 512) if est.calls > 0 else 180
+            result, timings = call_llm(mdl["port"], mdl["name"],
+                                        sys_prompt, prompt,
+                                        max_tokens=512, timeout=timeout)
+            return result.get("facts", []) if result else [], timings, result is not None
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_a = pool.submit(_extract, model_a, sys_a, est_a)
+            f_b = pool.submit(_extract, model_b, sys_b, est_b)
+            facts_a, timings_a, ok_a = f_a.result()
+            facts_b, timings_b, ok_b = f_b.result()
+
+        if timings_a: est_a.update(timings_a)
+        if timings_b: est_b.update(timings_b)
+        ra = timings_a.get("predicted_per_second", 0) if timings_a else 0
+        rb = timings_b.get("predicted_per_second", 0) if timings_b else 0
+
+        print(f"  Turn {i+1}/{len(turns)}: A={len(facts_a)}f @{ra:.1f}t/s  "
+              f"B={len(facts_b)}f @{rb:.1f}t/s")
+
         combo_facts.append({
             "turn_index": i, "turn_id": turn["id"], "turn_agent": turn["agent"],
-            "turn_data": turn, "facts": facts,
-            "extract_timings": timings,
+            "turn_data": turn,
+            "facts_a": facts_a, "facts_b": facts_b,
+            "timings_a": timings_a, "timings_b": timings_b,
         })
-        status = f"{len(facts)} facts @ {rate_now:.1f}t/s" if result else "FAILED"
-        if cache:
-            status += f" [cache:{cache}]"
-        print(f"  Turn {i+1}/{len(turns)}: {status}")
 
-    # Phase 2: Verify with Podman B (Phi-4-mini on 8081)
-    facts_extracted = [e for e in combo_facts if e["facts"]]
-    if not facts_extracted:
-        max_ts = max((t.get("created_at", "") for t in turns), default="")
-        if max_ts:
-            save_checkpoint({"last_ts": max_ts})
-        _print_stats(est_extract, est_verify)
-        print(f"Phase 2 — skipped (0 facts from {len(turns)} turns)")
-        return 0
+    # ═══════════════════════════════════════════════════════════════
+    # Phase 2: Compare + Phase 3: Arbitrate
+    # ═══════════════════════════════════════════════════════════════
+    total_confirmed = total_conflicts = total_valid = total_hall = 0
 
-    verify_model = MODELS[VERIFY_MODEL]
-    if not check_endpoint(verify_model["port"], VERIFY_MODEL):
-        print(f"FATAL: verify endpoint :{verify_model['port']} not responding")
-        return 1
-
-    total_valid = 0
-    total_hallucinated = 0
-    total_facts = 0
-    print(f"Phase 2 — verifying with {verify_model['name']}...")
     for entry in combo_facts:
-        if not entry["facts"]:
+        if not entry["facts_a"] and not entry["facts_b"]:
             continue
-        prompt = build_verify_prompt(entry["turn_data"], entry["facts"])
-        prompt_tokens = int((len(get_verify_system(VERIFY_MODEL).split()) + len(prompt.split())) * 1.3)
-        timeout = est_verify.calc_timeout(prompt_tokens, 512) if est_verify.calls > 0 else 120
-        result, timings = call_llm(verify_model["port"], verify_model["name"],
-                                   get_verify_system(VERIFY_MODEL), prompt,
-                                   max_tokens=512, timeout=timeout)
-        reviews = result.get("reviews", []) if result else []
-        if timings:
-            est_verify.update(timings)
-            rate_now = timings.get("predicted_per_second", 0)
-        else:
-            rate_now = 0
 
-        valid = sum(1 for r in reviews if r.get("verdict") == "valid")
-        hallucinated = sum(1 for r in reviews if r.get("verdict") == "hallucinated")
-        total_valid += valid
-        total_hallucinated += hallucinated
-        total_facts += len(entry["facts"])
+        confirmed, conflicts = compare_facts(entry["facts_a"], entry["facts_b"])
+        total_confirmed += len(confirmed)
+        total_conflicts += len(conflicts)
 
-        save_review_facts(
-            entry["turn_id"], entry["facts"], reviews,
-            extract_model["name"], verify_model["name"], phase="verify",
-            timings=timings
-        )
-        print(f"  Turn {entry['turn_index']+1}: {len(entry['facts'])} facts → "
-              f"{valid} valid, {hallucinated} hallucinated @ {rate_now:.1f}t/s")
+        if not conflicts:
+            decisions = [{"fact_index": i, "verdict": "valid",
+                          "reason": "both models agree", "source": "both"}
+                         for i in range(len(confirmed))]
+            entry["decisions"] = decisions
+            total_valid += len(decisions)
+            print(f"  Turn {entry['turn_index']+1}: {len(confirmed)} confirmed (all agree)")
+            save_review_facts(entry["turn_id"], confirmed, decisions,
+                              model_a["name"], model_b["name"], phase="debate")
+            continue
 
-    valid_rate = round(total_valid / max(total_facts, 1) * 100, 1)
-    print(f"\nDone: {total_facts} facts, {total_valid} valid ({valid_rate}%), "
-          f"{total_hallucinated} hallucinated")
+        # Phase 3: Arbitrate conflicts
+        prompt = build_arbitration_prompt(entry["turn_data"], conflicts)
+        ptok = int((len(ARBITRATOR_SYSTEM.split()) + len(prompt.split())) * 1.3)
+        timeout = est_arb.calc_timeout(ptok, 512) if est_arb.calls > 0 else 120
+        result, timings = call_llm(model_arb["port"], model_arb["name"],
+                                    ARBITRATOR_SYSTEM, prompt,
+                                    max_tokens=512, timeout=timeout)
+        arb_decisions = result.get("decisions", []) if result else []
+        if timings: est_arb.update(timings)
 
-    _print_stats(est_extract, est_verify)
+        all_decisions = [{"fact_index": i, "verdict": "valid",
+                           "reason": "both agree", "source": "both"}
+                          for i in range(len(confirmed))]
+        for d in arb_decisions:
+            d["fact_index"] = len(all_decisions)
+            all_decisions.append(d)
+
+        entry["decisions"] = all_decisions
+        v = sum(1 for d in arb_decisions if d.get("verdict") == "valid")
+        h = sum(1 for d in arb_decisions if d.get("verdict") == "hallucinated")
+        total_valid += len(confirmed) + v
+        total_hall += h
+
+        all_facts = confirmed + conflicts
+        save_review_facts(entry["turn_id"], all_facts, all_decisions,
+                          model_a["name"], model_b["name"],
+                          arbitrator_model=model_arb["name"],
+                          phase="debate", timings=timings)
+        _insert_activity_review(entry["turn_id"], all_facts, all_decisions,
+                                 model_arb["name"])
+        rate = timings.get("predicted_per_second", 0) if timings else 0
+        print(f"  Turn {entry['turn_index']+1}: {len(confirmed)}✓ + "
+              f"{len(conflicts)}⚡ → {v}v/{h}h @{rate:.1f}t/s")
+
+    total_facts = total_confirmed + total_conflicts
+    vr = round(total_valid / max(total_facts, 1) * 100, 1)
+    print(f"\nDone: {total_facts}f, {total_valid}v ({vr}%), {total_hall}h")
+    print(f"  confirmed: {total_confirmed}, arbitrated: {total_conflicts}")
+
+    _print_stats_3llm(est_a, est_b, est_arb)
+    _notify_slack(f"review_worker done — {total_facts}f/{total_valid}v ({vr}%), "
+                   f"confirmed={total_confirmed}, arbitrated={total_conflicts}")
 
     max_ts = max((t.get("created_at", "") for t in turns), default="")
     if max_ts:
         save_checkpoint({"last_ts": max_ts})
-
     return 0
 
 
-def _print_stats(est_extract: RateEstimator, est_verify: RateEstimator):
-    """Print per-model performance stats from timings data."""
+def _notify_slack(text: str) -> None:
+    try:
+        import urllib.request as _ur
+        payload = json.dumps({"channel": "U0APJGD8CBW", "text": text}).encode()
+        req = _ur.Request("https://slack.com/api/chat.postMessage", data=payload,
+                          headers={"Authorization": "Bearer xoxb-10781519811159-11168454462293-A9nR8gdlZiPkrSwdE656CAHK",
+                                   "Content-Type": "application/json"})
+        _ur.urlopen(req, timeout=5)
+    except Exception:
+        pass
+
+
+def _print_stats_3llm(est_a: RateEstimator, est_b: RateEstimator,
+                        est_arb: RateEstimator):
     print("\n── performance stats ──")
-    for est in (est_extract, est_verify):
+    for est in (est_a, est_b, est_arb):
         if est.calls == 0:
             continue
         s = est.stats()
-        cache_pct = round(est.cache_hits / max(est.calls, 1) * 100, 1)
+        cp = round(est.cache_hits / max(est.calls, 1) * 100, 1)
         print(f"  {est.label}:")
-        print(f"    rate: prompt_eval={s['prompt_rate']:.1f} t/s, gen={s['gen_rate']:.1f} t/s"
+        print(f"    rate: prompt={s['prompt_rate']:.1f} t/s, gen={s['gen_rate']:.1f} t/s"
               f" (median={s['median_gen_rate']:.1f})")
         print(f"    tokens: prompt={s['total_prompt']}, gen={s['total_gen']},"
               f" elapsed={s['total_elapsed_s']:.0f}s")
-        print(f"    calls: {est.calls}, cache_hits: {est.cache_hits} ({cache_pct}%)")
+        print(f"    calls: {est.calls}, cache_hits: {est.cache_hits} ({cp}%)")
 
 
 if __name__ == "__main__":

@@ -110,6 +110,18 @@ CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at D
 CREATE INDEX IF NOT EXISTS idx_activity_log_type ON activity_log(type);
 CREATE INDEX IF NOT EXISTS idx_activity_log_summary_status ON activity_log(summary_status);
 CREATE INDEX IF NOT EXISTS idx_activity_log_run_id ON activity_log(run_id);
+
+CREATE TABLE IF NOT EXISTS references (
+    id SERIAL PRIMARY KEY,
+    url TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    source_file TEXT,
+    first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    seen_count INT DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_references_url ON references(url);
+CREATE INDEX IF NOT EXISTS idx_references_last ON references(last_seen DESC);
 """
 
 
