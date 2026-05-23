@@ -107,7 +107,7 @@ entry_points:
   retention: indefinite — no deletion, archive-only after 3 months
 refresh:
   trigger: server-state-collector.timer (systemd user, 15min interval)
-  script: /opt/projects/server/scripts/gen_server_state.py
+  script: /opt/projects/server/scripts/state_collector/main.py
   flow: collect -> state.yaml -> hash detect -> changelog (if changed) -> archive -> CLAUDE.yaml -> MOTD
   legacy_removed: gen_motd.py, gen_motd_system.py, gen_tasks.py, gen_motd_task_unified.py, gen_motd_task.py (2026-05-23)
   dead_code_cleanup_2026-05-23: slack_notify.py, monitor_health.py, test_review_models.py, install_dark_theme.sh, run_model_sequence.sh,

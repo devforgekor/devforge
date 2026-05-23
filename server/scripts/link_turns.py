@@ -239,7 +239,10 @@ def main():
     # At 03:00 KST, review the completed previous day
     review_date = (now_kst - timedelta(days=1)).strftime("%Y-%m-%d")
     kst_start = f"{review_date} 00:00:00+09"
-    kst_end = f"{now_kst:%Y-%m-%d} 00:00:00+09"
+    # Derive end from start+24h to guarantee a full window (prevents
+    # kst_start==kst_end when processing today's date manually)
+    end_dt = datetime.strptime(review_date, "%Y-%m-%d") + timedelta(days=1)
+    kst_end = f"{end_dt:%Y-%m-%d} 00:00:00+09"
 
     _log(f"=== link_turns {review_date} ===")
 

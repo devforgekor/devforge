@@ -6,7 +6,7 @@ timers:
   - timer: server-state-collector.timer
     schedule: every 15min
     service: server-state-collector.service
-    script: scripts/gen_server_state.py
+    script: scripts/state_collector/main.py
     purpose: server state collection, changelog, CLAUDE.yaml update, MOTD generation, phase tracking
 
   - timer: devforge-collect.timer
@@ -48,13 +48,13 @@ timers:
   - timer: swap-batch.timer
     schedule: 3x daily at 22:00, 03:00, 08:00 UTC (KST 07:00, 12:00, 17:00)
     service: swap-batch.service
-    script: scripts/swap_mode.sh batch
+    script: scripts/swap_llm_mode.sh batch
     purpose: switch to batch mode (Phi-4 14B + Qwen32B)
 
   - timer: swap-normal.timer
     schedule: 3x daily at 23:00, 04:00, 09:00 UTC (KST 08:00, 13:00, 18:00)
     service: swap-normal.service
-    script: scripts/swap_mode.sh normal
+    script: scripts/swap_llm_mode.sh normal
     purpose: restore normal mode (Qwen3-4B)
 
   - timer: activity-summarizer.timer
@@ -66,7 +66,7 @@ timers:
   - timer: validate-gen.timer
     schedule: daily at 00:00 UTC (KST 09:00)
     service: validate-gen.service
-    script: scripts/gen_server_state.py --validate
+    script: scripts/state_collector/main.py --validate
     purpose: compare CLAUDE.yaml and blueprint.yaml claims against live system state
 
   - timer: reference-monitor.timer

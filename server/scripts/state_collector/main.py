@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""gen_server_state.py — DevForge Server Knowledge Engine v4.3
+"""state_collector — DevForge Server Knowledge Engine v4.4
 
 Thin orchestrator: collect → detect changes → update docs → MOTD.
-Heavy lifting delegated to scripts/lib/ (state, infra, output).
+Heavy lifting delegated to lib/ (state, infra, output).
 """
 
 import os
@@ -10,6 +10,8 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.db import psql as _psql, get_token_stats
 from lib.infra.containers import discover_services, collect_container_flags

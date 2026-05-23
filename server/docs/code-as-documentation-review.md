@@ -224,13 +224,13 @@ Machine's conclusion: **Thread safety, reentrancy, and testability cannot be det
 │   │   ├── state/
 │   │   │   ├── __init__.py
 │   │   │   ├── diff.py               #   structural_hash() + diff_structural() (moved)
-│   │   │   └── changelog.py          #   save_changelog() + archive_old_entries() (not yet extracted)
+│   │   │   └── changelog.py          #   save_changelog() + archive_old_entries() (extracted)
 │   │   └── output/
 │   │       ├── __init__.py
 │   │       ├── yaml_io.py            #   YAML load/save (moved)
-│   │       ├── claude_yaml.py        #   update_claude_yaml() (not yet extracted)
-│   │       ├── motd.py               #   generate_motd() (not yet extracted)
-│   │       └── validation.py         #   run_validation() (not yet extracted)
+│   │       ├── claude_yaml.py        #   update_claude_yaml() (extracted)
+│   │       ├── motd.py               #   generate_motd() (extracted)
+│   │       └── validation.py         #   run_validation() (extracted)
 │   │
 │   ├── state_collector/            # gen_server_state.py → split into single responsibility
 │   │   └── main.py                 #   orchestration only (main())
@@ -365,12 +365,12 @@ def call_llm(
 
 | Before | After | Rationale |
 |---|---|---|
-| `scripts/cli.py` | `scripts/conversation_search.py` | "cli" only describes the interface style |
-| `scripts/gen_server_state.py` | `scripts/state_collector/main.py` | 5 responsibilities → split, only orchestrator remains |
-| `scripts/session_start.py` | `scripts/session_context.py` | Distinguish from session_guard, makes context injection role explicit |
-| `scripts/session_guard.py` | `scripts/auto_commit_guard.py` | Makes auto-commit + work-loss prevention role explicit |
-| `scripts/patch_copilot_elf.py` | `scripts/patch_elf_note.py` | The tool itself is a general-purpose ELF patcher |
-| `scripts/swap_mode.sh` | `scripts/swap_llm_mode.sh` | Makes "mode" concrete |
+| `scripts/cli.py` | `scripts/conversation_search.py` | Skipped — user-facing CLI, rename would break daily workflow |
+| `scripts/gen_server_state.py` | `scripts/state_collector/main.py` | Done — 5 responsibilities → split, only orchestrator remains |
+| `scripts/session_start.py` | `scripts/session_context.py` | Done — distinguish from session_guard, context injection role |
+| `scripts/session_guard.py` | `scripts/auto_commit_guard.py` | Done — auto-commit + work-loss prevention role explicit |
+| `scripts/patch_copilot_elf.py` | `scripts/patch_elf_note.py` | Done — general-purpose ELF patcher |
+| `scripts/swap_mode.sh` | `scripts/swap_llm_mode.sh` | Done — makes mode concrete |
 | `scripts/lib/db.py` | `lib/db/psql_cli.py` | Makes explicit this is a subprocess wrapper |
 | `scripts/lib/crypto.py` | `lib/auth/api_key_cipher.py` | API key encryption only |
 | `scripts/lib/estimator.py` | `lib/llm/rate_estimator.py` | LLM inference speed estimator |
