@@ -2,7 +2,7 @@
 # Each task runs: Qwen32B local (4-stage pipeline) + 3 APIs for comparison
 #
 # Stage complexity: L1(simple add) → L8(analysis only)
-# Target files: slack_operator.py (state machine + HTTP), session_guard.py (git + DB)
+# Target files: slack_operator.py (state machine + HTTP), auto_commit_guard.py (git + DB)
 #
 # Metrics per task:
 #   - 32B: diff quality, rationale accuracy, confidence, review_points usefulness
@@ -75,9 +75,9 @@ tasks:
   - id: 5
     stage: L5
     name: "중간 리팩토링 (중복 제거)"
-    file: "/opt/projects/server/scripts/session_guard.py"
+    file: "/opt/projects/server/scripts/auto_commit_guard.py"
     description: |
-      session_guard.py 의 여러 함수들이 _git() 헬퍼를 통해 git 명령을 실행하고 있으나,
+      auto_commit_guard.py 의 여러 함수들이 _git() 헬퍼를 통해 git 명령을 실행하고 있으나,
       _git() 호출마다 동일한 에러 처리(return "" on failure)와 strip()이 반복된다.
       _git() 호출 패턴을 분석하고, 실패 시 기본값을 지정할 수 있는 _git_or(default: str = "")
       패턴으로 개선하라. 또한 _git() 결과가 빈 문자열인 경우와 실제 git 출력이 빈 문자열인
@@ -125,9 +125,9 @@ tasks:
   - id: 8
     stage: L8
     name: "분석+계획 전용 (코드 수정 없음)"
-    file: "/opt/projects/server/scripts/session_guard.py"
+    file: "/opt/projects/server/scripts/auto_commit_guard.py"
     description: |
-      session_guard.py 전체를 분석하고, 동시 실행 시 발생할 수 있는 race condition과
+      auto_commit_guard.py 전체를 분석하고, 동시 실행 시 발생할 수 있는 race condition과
       안전성 이슈를 식별하라. 특히:
       1. 두 세션이 동시에 log_commits_to_worklog()를 호출할 때 안전한가?
       2. psql() 호출이 실패할 때 recovery 동작은 적절한가?

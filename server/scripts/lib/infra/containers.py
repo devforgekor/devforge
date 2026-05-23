@@ -1,4 +1,4 @@
-"""Container and service discovery for gen_server_state."""
+"""Container and service discovery for state_collector."""
 import json
 import os
 import re
@@ -17,6 +17,8 @@ def discover_services() -> list:
 
     known_user = {"postgres", "devforge-backup", "devforge-restore-test"}
     for line in _run_lines(["systemctl", "--user", "list-unit-files", "--no-legend", "--type=service"]):
+        if not line.strip():
+            continue
         name = line.strip().split()[0].replace(".service", "")
         if is_podman_transient_unit(name):
             continue
@@ -26,6 +28,8 @@ def discover_services() -> list:
 
     known_system = {"caddy", "netdata"}
     for line in _run_lines(["systemctl", "list-unit-files", "--no-legend", "--type=service"]):
+        if not line.strip():
+            continue
         name = line.strip().split()[0].replace(".service", "")
         if name in known_system:
             services.append((name, name, "system"))

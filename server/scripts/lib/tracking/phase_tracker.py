@@ -48,8 +48,8 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
         ),
         "worklog_entries": lambda: db_table_exists("worklog_entries"),
         "tasks.yaml": lambda: file_exists("/opt/projects/server/docs/tasks.yaml"),
-        "session_guard": lambda: file_exists("/opt/projects/server/scripts/auto_commit_guard.py"),
-        "session_start": lambda: file_exists("/opt/projects/server/scripts/session_context.py"),
+        "auto_commit_guard": lambda: file_exists("/opt/projects/server/scripts/auto_commit_guard.py"),
+        "session_context": lambda: file_exists("/opt/projects/server/scripts/session_context.py"),
         "collect_turns": lambda: file_exists("/opt/projects/server/scripts/collect_turns.py"),
         "link_turns": lambda: file_exists("/opt/projects/server/scripts/link_turns.py"),
         "activity_log": lambda: db_table_exists("activity_log"),
@@ -64,18 +64,16 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
         "Podman B": lambda: file_exists(
             "/home/opc/.config/containers/systemd/container-devforge-swap.container"
         ),
-        # Korean keyword — matches "모드 전환 시스템 (normal / batch / code)"
-        "모드 전환": lambda: file_exists("/opt/ai_data/scripts/current-mode.env"),
+        "Mode switching": lambda: file_exists("/opt/ai_data/scripts/current-mode.env"),
         "code_mod_pipeline": lambda: file_exists("/opt/projects/server/scripts/code_mod_pipeline.py"),
         "prompt ablation": lambda: file_exists("/opt/projects/server/scripts/code_mod_pipeline.py"),
         "review_worker": lambda: file_exists("/opt/projects/server/scripts/review_worker.py"),
         "review_facts": lambda: db_table_exists("review_facts"),
         "RateEstimator": lambda: file_exists("/opt/projects/server/scripts/review_worker.py"),
         "Slack": lambda: file_exists("/opt/projects/server/scripts/review_worker.py"),
-        # Korean keyword — matches "레퍼런스 추적 — lib/refs.py ..."
-        "레퍼런스 추적": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
+        "Reference tracking": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
         "lib/refs": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
-        # Simplified from "references table" to match "DB references 테이블 ..."
+        # Matches "DB references table" in phases.md
         "references": lambda: db_table_exists("references"),
     },
 
@@ -116,8 +114,8 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
         "MCP mem_search": lambda: (
             db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%mcp%vector%'")
         ),
-        "벡터": lambda: (
-            db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%벡터%'")
+        "vector column": lambda: (
+            db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%vector%'")
         ),
     },
 
@@ -126,13 +124,13 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
         "wing/room": lambda: db_row_exists(
             "SELECT 1 FROM activity_log WHERE title ILIKE '%mempalace%' OR title ILIKE '%wing%room%'"
         ),
-        "자동 분류": lambda: db_row_exists(
-            "SELECT 1 FROM activity_log WHERE (title ILIKE '%mempalace%' OR title ILIKE '%분류%') AND NOT title ILIKE '%review%'"
+        "Auto-classification": lambda: db_row_exists(
+            "SELECT 1 FROM activity_log WHERE (title ILIKE '%mempalace%' OR title ILIKE '%classification%') AND NOT title ILIKE '%review%'"
         ),
         "--wing/--room": lambda: db_row_exists(
             "SELECT 1 FROM activity_log WHERE title ILIKE '%--wing%' OR title ILIKE '%--room%'"
         ),
-        "activity_log 기록": lambda: db_row_exists(
+        "activity_log recording": lambda: db_row_exists(
             "SELECT 1 FROM activity_log WHERE title ILIKE '%mempalace%' AND type='classify'"
         ),
     },
@@ -142,7 +140,7 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
         "DuckDuckGo": lambda: db_row_exists(
             "SELECT 1 FROM activity_log WHERE title ILIKE '%duckduckgo%' OR title ILIKE '%search%augmented%'"
         ),
-        "qwen-cli 기반": lambda: db_row_exists(
+        "qwen-cli based": lambda: db_row_exists(
             "SELECT 1 FROM activity_log WHERE title ILIKE '%qwen-cli%'"
         ),
         "search --augmented": lambda: db_row_exists(
@@ -170,10 +168,10 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
 
     # Phase 2.6: Web UI
     "2.6": {
-        "대시보드": lambda: db_row_exists(
+        "dashboard": lambda: db_row_exists(
             "SELECT 1 FROM activity_log WHERE title ILIKE '%dashboard%' OR title ILIKE '%web ui%' OR title ILIKE '%fastapi%frontend%'"
         ),
-        "실시간 피드": lambda: db_row_exists(
+        "real-time feed": lambda: db_row_exists(
             "SELECT 1 FROM activity_log WHERE title ILIKE '%activity_log%feed%' OR title ILIKE '%realtime%feed%'"
         ),
     },
