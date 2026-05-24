@@ -44,6 +44,9 @@ OFFSET_FILE = Path("/var/tmp/telegram_bot_offset.txt")
 SYSTEM_PROMPT = """You are the DevForge operator assistant on an ARM server (Oracle Linux, Podman rootless, 22GB RAM).
 You receive Korean messages from the server admin. Respond with a JSON action object ONLY, no other text.
 
+For "reply" action: write conversational Korean that naturally answers the user.
+For "ssh" action: the "reply" field should briefly describe what you found — use natural Korean like a helpful colleague. Keep it under 15 words.
+
 Available actions:
 - {"action": "reply", "text": "Korean answer"} — answer a question
 - {"action": "ssh", "command": "shell command", "reply": "Korean description"} — run a command
@@ -103,6 +106,37 @@ def _ask_qwen(user_msg: str) -> Optional[dict]:
     body = {"messages": [{"role": "system", "content": SYSTEM_PROMPT},
                          {"role": "user", "content": user_msg + "\n/no_think"}],
             "temperature": 0.1, "max_tokens": 512}
+    return _call_qwen(body)
+
+
+def _summarize_result(action: dict, raw_output: str) -> str:
+    """Feed command output back to Qwen for natural Korean summary."""
+    # If output is short enough, just show it directly
+    if len(raw_output) <= 600:
+        return raw_output
+
+    summary_prompt = f"""Summarize this command output in 1-2 sentences of natural conversational Korean.
+Be brief and helpful, like you're telling a colleague what you found.
+
+command: {action.get('command', 'unknown')}
+output:
+{raw_output[:2000]}"""
+
+    body = {"messages": [
+        {"role": "system", "content": "You summarize command outputs into conversational Korean. Reply with plain Korean text only — no JSON, no formatting."},
+        {"role": "user", "content": summary_prompt + "\n/no_think"},
+    ], "temperature": 0.3, "max_tokens": 256}
+    result = _call_qwen(body)
+    if result:
+        # result may be {"action":"reply","text":"..."} or {"text":"..."}
+        # If it's the error format, just use raw output
+        text = result.get("text", "")
+        if text and "응답 파싱 실패" not in text and "연결 실패" not in text:
+            return text
+    return raw_output[:1500]
+
+
+def _call_qwen(body: dict) -> Optional[dict]:
     req = urllib.request.Request(QWEN_ENDPOINT, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
@@ -134,23 +168,25 @@ def _ask_qwen(user_msg: str) -> Optional[dict]:
 
 # ── action executors ────────────────────────────────────────────────
 def _exec_status() -> str:
-    lines = ["*DevForge 상태*\n"]
+    lines = []
     mode_file = Path("/opt/ai_data/scripts/current-mode.env")
     if mode_file.exists():
-        lines.append(f"모드: `{mode_file.read_text().strip().replace('MODE=', '')}`")
+        mode = mode_file.read_text().strip().replace("MODE=", "")
+        lines.append(f"현재 {mode} 모드로 운영 중이야.")
     try:
         r = subprocess.run(["free", "-h"], capture_output=True, text=True, timeout=5)
         for l in r.stdout.split("\n"):
             if "Mem:" in l:
-                lines.append(f"메모리: {l.split()[1:]}")  # total used free ...
+                parts = l.split()
+                lines.append(f"메모리는 전체 {parts[1]} 중 {parts[2]} 사용 중이고, {parts[-1]} 남았어.")
     except Exception:
         pass
     try:
-        r = subprocess.run(["podman", "ps", "--format", "{{.Names}} {{.Status}}"],
+        r = subprocess.run(["podman", "ps", "--format", "{{.Names}} ({{.Status}})"],
                           capture_output=True, text=True, timeout=5)
-        lines.append("\n*컨테이너:*")
-        for cl in r.stdout.strip().split("\n")[:10]:
-            lines.append(f"  `{cl}`")
+        containers = [cl.strip() for cl in r.stdout.strip().split("\n")[:8] if cl.strip()]
+        if containers:
+            lines.append("실행 중인 컨테이너는 " + ", ".join(containers) + ".")
     except Exception:
         pass
     return "\n".join(lines)
@@ -161,9 +197,9 @@ def _exec_ssh(command: str) -> str:
         r = subprocess.run(command, shell=True, capture_output=True, text=True,
                           timeout=30, cwd="/opt/projects/server")
         out = r.stdout.strip() or r.stderr.strip() or "(no output)"
-        if len(out) > 2800:
-            out = out[:2800] + "\n... (truncated)"
-        return f"```\n{out}\n```\n종료코드: {r.returncode}"
+        if len(out) > 2500:
+            out = out[:2500] + "\n... (truncated)"
+        return out
     except subprocess.TimeoutExpired:
         return "명령 시간 초과 (30s)"
     except Exception as e:
@@ -175,9 +211,9 @@ def _exec_log(lines_count: int = 20) -> str:
         r = subprocess.run(["journalctl", "--user", "-n", str(lines_count), "--no-pager", "-q"],
                           capture_output=True, text=True, timeout=10)
         out = r.stdout.strip()
-        if len(out) > 2800:
-            out = out[-2800:]
-        return f"```\n{out}\n```"
+        if len(out) > 2500:
+            out = "..." + out[-2500:]
+        return out
     except Exception as e:
         return f"로그 조회 실패: {e}"
 
@@ -244,12 +280,13 @@ def _process(msg: dict) -> str:
                     "`/status` — 시스템 상태\n"
                     "`/mode` — 현재 모드\n"
                     "`/log` — 최근 로그")
-        return ("*DevForge Telegram Bot — SSH 모드*\n\n"
-                "`!<command>` — 셸 명령 직접 실행 (예: `!podman ps`)\n"
+        return ("무엇을 도와드릴까요?\n\n"
+                "그냥 한국어로 말씀하시면 됩니다.\n"
+                "예: \"오늘 작업 내역 보여줘\", \"메모리 상태 어때?\"\n\n"
+                "`!<command>` — 셸 명령 직접 실행\n"
                 "`/status` — 시스템 상태\n"
-                "`/mode` — 현재 LLM 모드\n"
-                "`/log` — 최근 로그\n\n"
-                "`!` 없이 한국어로 말하면 Qwen3-4B가 해석하여 실행합니다.")
+                "`/mode` — 현재 모드\n"
+                "`/log` — 최근 로그")
 
     if text == "/status":
         return _exec_status()
@@ -289,7 +326,8 @@ def _process(msg: dict) -> str:
         if not cmd:
             return "명령이 지정되지 않았습니다."
         result = _exec_ssh(cmd)
-        return f"{reply}\n\n{result}" if reply else result
+        summary = _summarize_result(action, result)
+        return f"{reply}\n\n{summary}" if reply else summary
     elif act == "search":
         query = action.get("query", "")
         if not query:
