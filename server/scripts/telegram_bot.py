@@ -18,6 +18,10 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from lib.search.manager import WebSearchManager
+
+_search_manager = WebSearchManager()
+
 # ── config ──────────────────────────────────────────────────────────
 def _load_secrets():
     secrets = {}
@@ -43,10 +47,16 @@ You receive Korean messages from the server admin. Respond with a JSON action ob
 Available actions:
 - {"action": "reply", "text": "Korean answer"} — answer a question
 - {"action": "ssh", "command": "shell command", "reply": "Korean description"} — run a command
+- {"action": "search", "query": "search keywords"} — web search (code/docs/fact/general auto-routed, Brave/Exa/Tavily/you.com)
 - {"action": "status"} — show system status (memory, containers, mode)
 - {"action": "log", "lines": 20} — show recent journal logs
 - {"action": "mode_switch", "target": "normal|batch|code"} — switch LLM mode
 - {"action": "none"} — no action needed
+
+When to use search:
+- External knowledge questions (pricing, latest news, documentation references, error codes)
+- Code/library documentation that is NOT in the local codebase
+- DO NOT use search for: local system state, container status, file paths — use ssh or status instead.
 
 Command rules:
 - Use podman (NOT docker). This is a Podman rootless server.
@@ -174,6 +184,27 @@ def _exec_mode_switch(target: str) -> str:
         return f"모드 전환 실패: {e}"
 
 
+def _exec_search(query: str) -> str:
+    try:
+        result = _search_manager.search(query)
+        if result is None:
+            return "검색 결과 없음 — 모든 프로바이더 소진."
+        source = result["source"]
+        intent = result["intent"]
+        results = result["results"][:5]
+        lines = [f"*검색: {query}*  ({source}, {intent})\n"]
+        for i, r in enumerate(results, 1):
+            title = r.get("title", "")[:120]
+            url = r.get("url", "")
+            snippet = r.get("snippet", "")[:200]
+            lines.append(f"{i}. [{title}]({url})")
+            if snippet:
+                lines.append(f"   {snippet}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"검색 실패: {e}"
+
+
 def _current_mode() -> str:
     """Read current LLM mode from mode file."""
     mf = Path("/opt/ai_data/scripts/current-mode.env")
@@ -245,6 +276,11 @@ def _process(msg: dict) -> str:
             return "명령이 지정되지 않았습니다."
         result = _exec_ssh(cmd)
         return f"{reply}\n\n{result}" if reply else result
+    elif act == "search":
+        query = action.get("query", "")
+        if not query:
+            return "검색어가 지정되지 않았습니다."
+        return _exec_search(query)
     elif act == "mode_switch":
         return _exec_mode_switch(action.get("target", ""))
     elif act == "log":
