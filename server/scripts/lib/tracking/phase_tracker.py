@@ -79,10 +79,6 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
 
     # Phase 2.1: Recovery / Stabilization
     "2.1": {
-        # Combined: checks BOTH timers to avoid swap-normal.timer being shadowed
-        "swap-batch.timer": lambda: (
-            timer_active("swap-batch.timer") and timer_active("swap-normal.timer")
-        ),
         "review-worker.timer": lambda: timer_active("review-worker.timer"),
         # LiteLLM/devforge-llm: detected as complete if NEITHER container nor Quadlet file exists
         # (evidence of intentional removal on 2026-05-19)

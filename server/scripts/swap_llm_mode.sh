@@ -25,9 +25,8 @@ echo "MODE=$MODE" > "$MODE_FILE"
 
 # code mode: stop ALL other LLM containers + timers to free memory for 32B
 if [[ "$MODE" == "code" ]]; then
-    echo "[swap_mode] Stopping ALL scheduled timers (32B needs uninterrupted runtime)..."
-    systemctl --user stop swap-normal.timer swap-batch.timer \
-        review-worker.timer devforge-nightly.timer 2>/dev/null || true
+    echo "[swap_mode] Stopping scheduled timers (32B needs uninterrupted runtime)..."
+    systemctl --user stop review-worker.timer devforge-nightly.timer 2>/dev/null || true
 
     echo "[swap_mode] Stopping all other LLM containers..."
     for cid in $(podman ps --format '{{.ID}} {{.Names}}' | grep -v 'devforge-swap' | awk '{print $1}'); do
@@ -56,9 +55,8 @@ if [[ "$MODE" == "code" ]]; then
 fi
 
 if [[ "$CURRENT" == "code" ]]; then
-    echo "[swap_mode] Restoring all scheduled timers..."
-    systemctl --user start swap-normal.timer swap-batch.timer \
-        review-worker.timer devforge-nightly.timer 2>/dev/null || true
+    echo "[swap_mode] Restoring scheduled timers..."
+    systemctl --user start review-worker.timer devforge-nightly.timer 2>/dev/null || true
 fi
 
 echo "[swap_mode] Restarting devforge-swap with $MODE mode..."

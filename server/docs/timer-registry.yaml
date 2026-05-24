@@ -45,18 +45,6 @@ timers:
     script: scripts/review_worker.py
     purpose: 3-LLM review pipeline during batch windows
 
-  - timer: swap-batch.timer
-    schedule: 3x daily at 22:00, 03:00, 08:00 UTC (KST 07:00, 12:00, 17:00)
-    service: swap-batch.service
-    script: scripts/swap_llm_mode.sh batch
-    purpose: switch to batch mode (Phi-4 14B + Qwen32B)
-
-  - timer: swap-normal.timer
-    schedule: 3x daily at 23:00, 04:00, 09:00 UTC (KST 08:00, 13:00, 18:00)
-    service: swap-normal.service
-    script: scripts/swap_llm_mode.sh normal
-    purpose: restore normal mode (Qwen3-4B)
-
   - timer: activity-summarizer.timer
     schedule: daily at 22:30 UTC (KST 07:30)
     service: activity-summarizer.service
@@ -74,6 +62,11 @@ timers:
     service: reference-monitor.service
     script: ~/.config/devforge/bin/rss-monitor
     purpose: GitHub RSS polling for reference watchlist updates
+
+  - service: telegram-bot.service
+    schedule: continuous (daemon, poll every 5s)
+    script: scripts/telegram_bot.py
+    purpose: Telegram bot — Qwen3-4B operator for remote SSH command relay and system status
 
   - timer: devforge-refresh-reminder.timer
     schedule: 3x yearly (Apr 15, Aug 15, Dec 15) at 00:00 UTC
