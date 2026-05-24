@@ -1,16 +1,26 @@
 last_checkpoint:
-  time: '2026-05-24T15:01:51.419713+09:00'
+  time: '2026-05-25T00:16:31.419712+09:00'
   recent_files: []
   git: {}
 decisions:
+- 'Recovery Ladder unification (2026-05-24): shared lib/llm/json_parser.py (json.loads → json_repair) replacing 56 lines of
+  regex-based JSON parsing across 3 pipeline files. debate.py 33→3 lines, review_worker.py 23→3 lines, code_mod_pipeline.py
+  thin wrapper. Feedback path now uses json_repair too. json_repair handles trailing commas, unclosed braces, single quotes,
+  markdown fences, truncated literals — zero dependencies, 22KB. 16-item bidirectional verification passed. Commit: 5f90349.'
+- 'Token estimation fix (2026-05-24): //3 → int(len/3.5) across code_mod_pipeline.py (6 locations + tok() helper). Verified
+  against actual 32B prompt_tokens: 4634 actual vs 5365 estimated — error 15%→1.5%. RateEstimator self-calibrates from real
+  API metrics, so estimation precision is non-critical but improves initial timeout accuracy.'
+- 'Warmup retry + head+tail truncation (2026-05-24): warmup_32b() 600s timeout + 30s sleep + retry for mlock-initial-load
+  delay. debate.py round_5_synthesis history_summary 1798+5+1197=3000 head+tail preserving intro+conclusion (was front-only
+  [:3000] losing conclusion). Commit: 5f90349.'
 - 'Prompt bloat fix (2026-05-24): _read_previous_feedback() was injecting raw Stage 4 body (≤2000 chars) into Stage 1 ANALYZE
   prompt → +552 tokens/+428s per run. Fix: removed feedback from Stage 1, moved to Stage 2 PLAN with JSON field extraction
-  (analysis/rationale/review_points) capped at 600 chars. Stage 1 prompt expected 4634→4082 tokens. code_mod_pipeline.py, cli.py
-  committed.'
-- 'debate.py v2.0 + cross-file bug fixes (2026-05-24): Dual-pod debate orchestrator with mode-specific model assignment. 8 bugs
-  fixed: _check_early_exit double-call, disagreement_points wrong value, _write_switch_file missing cache_ram, Podman A restart
-  on mode switch, POD_A_START unused→now used for post-debate restore, SWITCH_WRITER dead code removed, v1.0→v2.0 footer, debate-supervisor.sh
-  "debate"→"discussion" mode check. 16-item bidirectional cross-file verification passed.'
+  (analysis/rationale/review_points) capped at 600 chars. Stage 1 prompt expected 4634→4082 tokens. code_mod_pipeline.py,
+  cli.py committed.'
+- 'debate.py v2.0 + cross-file bug fixes (2026-05-24): Dual-pod debate orchestrator with mode-specific model assignment. 8
+  bugs fixed: _check_early_exit double-call, disagreement_points wrong value, _write_switch_file missing cache_ram, Podman
+  A restart on mode switch, POD_A_START unused→now used for post-debate restore, SWITCH_WRITER dead code removed, v1.0→v2.0
+  footer, debate-supervisor.sh "debate"→"discussion" mode check. 16-item bidirectional cross-file verification passed.'
 - 'cache-ram=6656 (optimal) applied (2026-05-24): code mode default changed from 7168 to 6656 in dual-server-entrypoint.sh.
   MLOCK confirmed active via quadlet Environment=MLOCK=1. T01 test running with feedback fix + 6656 + mlock.'
 - '8 code review fixes applied (2026-05-24): code_mod_pipeline.py + client.py — NameError fix, partial result save on exception,
@@ -18,8 +28,8 @@ decisions:
   pre-check fail skip instead of abort.'
 - 'Rich Slack notifications added (2026-05-24): _system_info() helper, per-stage notifications with memory/rate/slicing/timeout
   info.'
-- 'cache-ram management infrastructure (2026-05-24): dual-server-entrypoint.sh launch_server() accepts optional cache_ram arg.
-  --cache-ram + --kv-unified + --cache-idle-slots ready.'
+- 'cache-ram management infrastructure (2026-05-24): dual-server-entrypoint.sh launch_server() accepts optional cache_ram
+  arg. --cache-ram + --kv-unified + --cache-idle-slots ready.'
 - 'Telegram bot deployed (2026-05-24): telegram_bot.py polls getUpdates every 5s, forwards Korean messages to Qwen3-4B (localhost:8080)
   for interpretation. Supports 6 actions: reply, ssh, status, mode_switch, log, none. Built-in fast-path commands: /start,
   /help, /status, /mode, /log. Systemd user service (telegram-bot.service) daemon mode, auto-starts after container-devforge-qwen.
