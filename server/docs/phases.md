@@ -43,7 +43,7 @@ Phase 2 is structured in 3 tiers. Tier 1 must complete before Tier 2 begins; Tie
 - [ ] swap-batch.timer + swap-normal.timer re-enable — mode auto-switching
 - [x] journald log retention config (MaxRetentionSec=30day)
 - [x] Language pipeline guardrails — `lib/text_quality.py` (script purity validation for Korean output, token budget enforcement 10~500 chars, think-tag artifact detection)
-- [ ] update_handover.py context selection — quality-score-based prioritization of high-fidelity turns
+- [x] update_handover.py context selection — quality-score-based prioritization of high-fidelity turns
 - [ ] T01-T16 32B batch test results → apply verified diffs (currently T11 in progress)
 
 ### Tier 2 — Vector Intelligence (2-4 Weeks)
