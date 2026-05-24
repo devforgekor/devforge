@@ -34,6 +34,7 @@ import yaml
 
 from lib.llm.client import call_llm
 from lib.llm.rate_estimator import PromptCompletionRateEstimator as RateEstimator
+from lib.db import esc_sql
 from lib.code_mod.shared import (
     read_file, extract_json_from_llm_response, save_result,
     TASKS_FILE, OUTPUT_DIR, DEEPSEEK_KEY, LLAMA_ENDPOINT,
@@ -101,6 +102,7 @@ Read the following code and the modification request.
 Identify: (a) which lines/functions are affected, (b) what type of change is needed,
 (c) any cross-dependencies or side effects.
 
+{feedback}
 CODE:
 {code}
 
@@ -254,6 +256,59 @@ def _notify_slack(text: str) -> None:
         pass
 
 
+def _read_previous_feedback(task_id: int) -> str:
+    """Read prior pipeline results + worklog feedback for this task from DB.
+
+    Returns empty string if no prior data. Otherwise returns a formatted
+    feedback block for injection into the Stage 1 prompt.
+    """
+    import subprocess
+
+    PSQL_TAB = ["podman", "exec", "-i", "postgres", "psql",
+                "-U", "postgres", "-d", "devforge_app",
+                "--no-align", "--tuples-only", "--quiet",
+                "--field-separator=\t"]
+    tid = esc_sql(str(task_id))
+    parts = []
+
+    # Prior pipeline result (most recent completed Stage 4)
+    try:
+        r = subprocess.run(PSQL_TAB + ["-c",
+            f"SELECT summary, left(body::text, 2000) FROM activity_log "
+            f"WHERE run_id LIKE 'task{tid}\\_%' AND type='stage' "
+            f"AND summary LIKE '%Stage 4%' AND summary LIKE '%status=200%' "
+            f"ORDER BY id DESC LIMIT 1"],
+            capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            row = r.stdout.strip().split("\t", 1)
+            if len(row) == 2:
+                parts.append(f"[Previous pipeline result]\n  {row[0]}\n  {row[1][:2000]}")
+    except Exception:
+        pass
+
+    # Worklog feedback entries tagged with this task
+    try:
+        r = subprocess.run(PSQL_TAB + ["-c",
+            f"SELECT created_at::date, title, summary FROM worklog_entries "
+            f"WHERE tags @> ARRAY['task-{tid}'] "
+            f"ORDER BY created_at DESC LIMIT 5"],
+            capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            entries = []
+            for line in r.stdout.strip().split("\n")[:5]:
+                parts_line = line.split("\t", 2)
+                if len(parts_line) >= 3:
+                    entries.append(f"  [{parts_line[0][:10]}] {parts_line[1]}: {parts_line[2][:300]}")
+            if entries:
+                parts.append(f"[Worklog feedback]\n" + "\n".join(entries))
+    except Exception:
+        pass
+
+    if not parts:
+        return ""
+    return "PREVIOUS WORK:\n" + "\n".join(parts)
+
+
 def _slice_code(code: str, affected_sections: list) -> str:
     """Extract only affected function/line ranges from code.
 
@@ -373,10 +428,12 @@ STAGE_NAMES_ANALYSIS = {1: "ANALYZE", 2: "PLAN   ", 3: "REPORT ", 4: "SUMMARY"}
 
 def _build_stage_user_msg(stage_num: int, code: str, task_desc: str,
                           s1_body: dict, s2_body: dict, s3_body: dict,
-                          sliced_code: str, analysis_only: bool = False) -> str:
+                          sliced_code: str, analysis_only: bool = False,
+                          feedback: str = "") -> str:
     """Build the user message for a pipeline stage."""
     if stage_num == 1:
-        return STAGE1_ANALYZE.format(code=code, task=task_desc)
+        fb = feedback if feedback else ""
+        return STAGE1_ANALYZE.format(feedback=fb, code=code, task=task_desc)
     elif stage_num == 2:
         return STAGE2_PLAN.format(
             analysis=json.dumps(s1_body, indent=2), code=sliced_code, task=task_desc)
@@ -472,6 +529,14 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
             "prompt_eval": round(estimator.prompt_eval_rate, 2),
             "gen": round(estimator.gen_rate, 2)}
 
+    # Read previous feedback from DB for closed-loop iteration
+    feedback = ""
+    if start_stage == 1 and not resume_from:
+        feedback = _read_previous_feedback(task["id"])
+        if feedback:
+            results["feedback_found"] = True
+            print(f"  Feedback from prior work found for Task {task['id']}", flush=True)
+
     # Pre-compute sliced_code from resume data (fresh run: stage1 not done yet, so sliced_code = code)
     s1_body = results.get("stage1", {}).get("body", {})
     sliced_code = _slice_code(code, s1_body.get("affected_sections", [])) if s1_body else code
@@ -499,7 +564,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
 
         messages = [
             {"role": "system", "content": SYSTEM_32B},
-            {"role": "user", "content": _build_stage_user_msg(stage_num, code, task_desc, s1, s2, s3, sliced_code, analysis_only)},
+            {"role": "user", "content": _build_stage_user_msg(stage_num, code, task_desc, s1, s2, s3, sliced_code, analysis_only, feedback)},
         ]
         status, body_dict, elapsed, was_retry = _call_stage_with_retry(
             LLAMA_ENDPOINT, messages, "qwen2.5-coder-32b", timeout, STAGE_MAX_TOKENS[stage_num])
