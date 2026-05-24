@@ -111,28 +111,27 @@ def _ask_qwen(user_msg: str) -> Optional[dict]:
 
 def _summarize_result(action: dict, raw_output: str) -> str:
     """Feed command output back to Qwen for natural Korean summary."""
-    # If output is short enough, just show it directly
-    if len(raw_output) <= 600:
+    # Short output: show directly, no LLM summarization needed
+    if len(raw_output) <= 1200:
         return raw_output
 
-    summary_prompt = f"""Summarize this command output in 1-2 sentences of natural conversational Korean.
-Be brief and helpful, like you're telling a colleague what you found.
+    summary_prompt = f"""command output:
+{raw_output[:2000]}
 
-command: {action.get('command', 'unknown')}
-output:
-{raw_output[:2000]}"""
+Summarize this in 1-2 sentences of conversational Korean.
+Respond ONLY with: {{\"text\": \"your summary here\"}}"""
 
     body = {"messages": [
-        {"role": "system", "content": "You summarize command outputs into conversational Korean. Reply with plain Korean text only — no JSON, no formatting."},
+        {"role": "system", "content": "You convert command output into natural Korean summaries. You MUST respond in JSON format: {\"text\": \"summary\"}"},
         {"role": "user", "content": summary_prompt + "\n/no_think"},
     ], "temperature": 0.3, "max_tokens": 256}
     result = _call_qwen(body)
     if result:
-        # result may be {"action":"reply","text":"..."} or {"text":"..."}
-        # If it's the error format, just use raw output
         text = result.get("text", "")
-        if text and "응답 파싱 실패" not in text and "연결 실패" not in text:
+        # Only use the summary if it came through clean (not an error fallback)
+        if text and "응답 파싱 실패" not in text and "연결 실패" not in text and len(text) > 10:
             return text
+    # Fallback: return raw output (truncated if needed)
     return raw_output[:1500]
 
 
@@ -296,6 +295,21 @@ def _process(msg: dict) -> str:
 
     if text == "/log":
         return _exec_log(20)
+
+    # Fast path: common queries → direct command execution (no Qwen, fast + reliable)
+    _fast_paths = [
+        (["오늘", "작업", "했"], "python3 scripts/cli.py worklog recent", "오늘 작업 내역이야:"),
+        (["오늘", "뭐", "했"], "python3 scripts/cli.py worklog recent", "오늘 작업 내역이야:"),
+        (["작업", "내역"], "python3 scripts/cli.py worklog recent", "작업 내역이야:"),
+        (["진행", "작업"], "cat docs/tasks.yaml", "현재 작업 상태야:"),
+        (["할 일", "todo"], "cat docs/tasks.yaml", "할 일 목록이야:"),
+        (["컨테이너", "목록"], "podman ps --format '{{.Names}} {{.Status}}'", "컨테이너 목록이야:"),
+        (["컨테이너", "상태"], "podman ps --format '{{.Names}} {{.Status}}'", "컨테이너 상태야:"),
+    ]
+    for keywords, cmd, prefix in _fast_paths:
+        if all(kw in text for kw in keywords):
+            result = _exec_ssh(cmd)
+            return f"{prefix}\n\n{result}"
 
     # Direct command mode: ! prefix = SSH shell (always available)
     if text.startswith("!"):
