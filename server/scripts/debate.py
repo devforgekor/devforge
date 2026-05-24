@@ -273,6 +273,29 @@ PROMPTS = {
             '"confidence": 0-100}}'
         ),
     },
+    "final_diff": {
+        "system": (
+            "You are the final synthesizer for a multi-agent code debate. "
+            "You have access to the complete debate record and all search results. "
+            "Your job: produce the definitive, executable code modification diff."
+        ),
+        "user": (
+            "Topic: {question}\n\n"
+            "History Summary:\n{history_summary}\n\n"
+            "Last 2 Complete Rounds:\n{last_two_rounds}\n\n"
+            "All Search Results:\n{shared_context}\n\n"
+            "Consensus Trend: {consensus_trend}\n\n"
+            "Produce the final code modification as a unified diff:\n"
+            "1. The diff must be complete and directly applicable (--- / +++ headers, @@ hunks).\n"
+            "2. Analysis — why this approach was chosen.\n"
+            "3. Rationale — key points that drove the decision.\n\n"
+            "Output STRICT JSON:\n"
+            '{{"diff": "--- a/file\\n+++ b/file\\n@@ ...", '
+            '"analysis": "3-5 sentence reasoning", '
+            '"rationale": ["point1", "point2"], '
+            '"confidence": 0.0-1.0}}'
+        ),
+    },
 }
 
 
@@ -405,12 +428,18 @@ class DebateSession:
             self.proposer_model = "qwen3-4b"
             self.refuter_model = "phi-4-mini"
             self.judge_model = "selene-mini"
-            self.synthesizer_model = "selene-mini"  # same as judge in normal mode
+            self.synthesizer_model = "selene-mini"
         else:  # discussion
             self.proposer_model = "qwen25-coder-14b"
             self.refuter_model = "deepcoder-14b"
             self.judge_model = "phi-4-14b"
             self.synthesizer_model = "qwen-32b"
+
+        # Neutral history summarizer (always on port 8082 — no switching needed)
+        self.summary_model = "selene-mini"
+
+        # Secondary synthesizer for dual-judge comparison (discussion mode)
+        self.synthesizer_b_model = "phi-4-14b"
 
     # ── Persistence ────────────────────────────────────────────────────
 
@@ -789,9 +818,14 @@ class DebateSession:
         return True
 
     def round_5_synthesis(self) -> Optional[dict]:
-        """Final synthesis: Phi-4 history summary → Qwen-32B."""
+        """Dual-judge synthesis: Selene (8082) summary → 32B + Phi-4-14B (8081).
+
+        Selene Mini on 8082 is always running — no switching needed.
+        32B and Phi-4-14B share 8081 sequentially with switch_model().
+        Returns {"32b": {...}, "phi4": {...}} for external comparison.
+        """
         print(f"\n{'='*60}")
-        print(f"Round 5: Final Synthesis (32B Judge)")
+        print(f"Round 5: Final Synthesis (Dual Judge)")
         print(f"{'='*60}\n")
         self.current_round = 5
         self._save_state({"type": "round_start", "phase": "final_synthesis"})
@@ -804,66 +838,90 @@ class DebateSession:
 
         consensus_trend = self._trend_str()
 
-        # A2/D6: Phi-4 history summary (500 words)
-        print("  Generating history summary with Phi-4...")
-        if not self.switch_model(self.judge_model):
-            return None
+        # ── Step 1: Selene Mini history summary (neutral 3rd party, port 8082) ──
+        summary_model = self.summary_model
+        print(f"  Generating history summary with {summary_model} (neutral, :8082)...")
         summary_raw = self.call_llm(
-            _build_messages("history_summary", self.judge_model,
-                            full_history=full_history[-8000:],  # last ~8k chars
+            _build_messages("history_summary", summary_model,
+                            full_history=full_history[-8000:],
                             consensus_trend=consensus_trend),
-            self.judge_model,
+            summary_model,
         )
         if summary_raw:
             if len(summary_raw) > 3000:
-                # Head+tail: keep intro + conclusion, discard middle, total ≤ 3000 chars
                 history_summary = summary_raw[:1798] + "\n...\n" + summary_raw[-1197:]
             else:
                 history_summary = summary_raw
         else:
-            # Fallback: raw history — most recent rounds at the tail
             history_summary = full_history[-3000:]
-        self._save_state({"type": "history_summary", "content": history_summary})
+        self._save_state({"type": "history_summary", "model": summary_model,
+                          "content": history_summary})
 
         # Build last 2 rounds from JSONL
         last_two = ""
         if state_path.exists():
             lines = state_path.read_text().strip().split("\n")
             dart_lines = [l for l in lines if '"phase": "dart_' in l.lower() or 'dart_' in l.lower()]
-            last_two = "\n".join(dart_lines[-6:])  # ~3 lines per phase × 2 rounds
+            last_two = "\n".join(dart_lines[-6:])
 
-        # ── R5 pre-hook: stop Podman A to free RAM for 32B (discussion mode) ──
-        if self.mode == "discussion":
-            print("  [pod] stopping Podman A to free RAM for 32B...")
-            if not self.dry_run:
-                subprocess.run(POD_A_STOP.split(), capture_output=True)
-                time.sleep(3)
-                print("  [pod] Podman A stopped")
+        # ── Step 2: 32B synthesis A (port 8081) ──
+        synth_a_model = self.synthesizer_model      # "qwen-32b"
+        synth_b_model = self.synthesizer_b_model    # "phi-4-14b"
 
-        # Final synthesis with Qwen-32B (or Selene Mini in normal mode)
-        synthesizer_name = MODELS[self.synthesizer_model]["filename"]
-        print(f"  Loading {synthesizer_name} for final synthesis...")
-        if not self.switch_model(self.synthesizer_model):
+        synth_a_name = MODELS[synth_a_model]["filename"]
+        print(f"\n  [Synth A] Loading {synth_a_name} for 32B synthesis...")
+        if not self.switch_model(synth_a_model):
             return None
 
-        final = self.call_llm_json(
-            "final_synthesis", self.synthesizer_model,
+        synth_a = self.call_llm_json(
+            "final_diff", synth_a_model,
             question=self.question,
             history_summary=history_summary,
             last_two_rounds=last_two or "(see history summary)",
             shared_context=json.dumps(self.shared_context, indent=2),
             consensus_trend=consensus_trend,
         )
-        if not final:
-            print("  [ERROR] final synthesis failed")
-            return None
+        if not synth_a:
+            print("  [ERROR] 32B synthesis failed")
+            synth_a = {"error": "synthesis failed"}
 
         self._save_state({
             "type": "final_synthesis",
-            "model": self.synthesizer_model,
-            "output": final,
+            "model": synth_a_model,
+            "judge": "A",
+            "output": synth_a,
         })
-        return final
+
+        # ── Step 3: Phi-4-14B synthesis B (port 8081) ──
+        synth_b_name = MODELS[synth_b_model]["filename"]
+        print(f"\n  [Synth B] Loading {synth_b_name} for Phi-4-14B synthesis...")
+        if not self.switch_model(synth_b_model):
+            synth_b = {"error": "model switch failed"}
+        else:
+            synth_b = self.call_llm_json(
+                "final_diff", synth_b_model,
+                question=self.question,
+                history_summary=history_summary,
+                last_two_rounds=last_two or "(see history summary)",
+                shared_context=json.dumps(self.shared_context, indent=2),
+                consensus_trend=consensus_trend,
+            )
+            if not synth_b:
+                print("  [ERROR] Phi-4-14B synthesis failed")
+                synth_b = {"error": "synthesis failed"}
+
+        self._save_state({
+            "type": "final_synthesis",
+            "model": synth_b_model,
+            "judge": "B",
+            "output": synth_b,
+        })
+
+        result = {"32b": synth_a, "phi4": synth_b}
+        print(f"\n  [done] Dual synthesis complete: "
+              f"32B={synth_a.get('confidence', 'N/A')}, "
+              f"Phi-4={synth_b.get('confidence', 'N/A')}")
+        return result
 
     # ── Helpers ────────────────────────────────────────────────────────
 
@@ -922,7 +980,12 @@ class DebateSession:
             print(f"\n{'█'*60}")
             print(f"█ DEBATE COMPLETE")
             print(f"█ Session: {self.session_id}")
-            print(f"█ Confidence: {final.get('confidence', '?')}%")
+            if isinstance(final, dict) and "32b" in final:
+                c32 = final["32b"].get("confidence", "?")
+                cp4 = final["phi4"].get("confidence", "?")
+                print(f"█ 32B confidence: {c32}  |  Phi-4 confidence: {cp4}")
+            else:
+                print(f"█ Confidence: {final.get('confidence', '?')}")
             print(f"█ Local: {report_path}")
 
             # Auto-upload review bundle to Azure Blob
