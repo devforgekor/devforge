@@ -17,7 +17,7 @@ done:
 - 'Bidirectional code review + bug fixes (2026-05-21): review_worker.py 3 issues fixed. phi-4-Q8_0.gguf(14.5GB) deleted. tasks.yaml remaining work sorted.'
 - 'DevForge v3.0 finalized (2026-05-21): 2-Container architecture — Podman A(Qwen3-4B 8080) + Podman B(mode-switchable 8081). review_worker.py full rewrite. systemd auto-start. swap-batch/normal.timer. cache hit 100% confirmed.'
 - 'Qwen32B code modification test complete (2026-05-20): IQ4_XS(16.5GB) stable. 8/8 tasks completed, 4-stage 53min. API 50x faster. Q4_K_M(19GB) deleted, services restored.'
-in_progress: 'Update handover + commit all changes (Task #28)'
+in_progress: null
 kanban_labels:
   blocked: Blocked
   done: Done
