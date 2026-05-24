@@ -281,38 +281,9 @@ PROMPTS = {
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _parse_json(raw: str) -> Optional[dict]:
-    """stdlib json.loads with regex fallback for malformed output."""
-    # Strip markdown fences
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```\w*\n?", "", cleaned)
-        cleaned = re.sub(r"\n?```$", "", cleaned)
-
-    # 1st: standard parse
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
-
-    # 2nd: extract last complete { } block
-    matches = list(re.finditer(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", cleaned, re.DOTALL))
-    if matches:
-        for m in reversed(matches):
-            try:
-                return json.loads(m.group(0))
-            except json.JSONDecodeError:
-                continue
-
-    # 3rd: try to extract from mixed text — find outermost braces
-    try:
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(cleaned[start:end + 1])
-    except json.JSONDecodeError:
-        pass
-
-    return None
+    """Thin wrapper — delegates to shared Recovery Ladder in lib.llm.json_parser."""
+    from lib.llm.json_parser import parse_llm_json
+    return parse_llm_json(raw)
 
 
 def _build_messages(prompt_key: str, model_id: str, **kwargs) -> List[Dict[str, str]]:
@@ -843,7 +814,15 @@ class DebateSession:
                             consensus_trend=consensus_trend),
             self.judge_model,
         )
-        history_summary = summary_raw[:3000] if summary_raw else full_history[-3000:]
+        if summary_raw:
+            if len(summary_raw) > 3000:
+                # Head+tail: keep intro + conclusion, discard middle, total ≤ 3000 chars
+                history_summary = summary_raw[:1798] + "\n...\n" + summary_raw[-1197:]
+            else:
+                history_summary = summary_raw
+        else:
+            # Fallback: raw history — most recent rounds at the tail
+            history_summary = full_history[-3000:]
         self._save_state({"type": "history_summary", "content": history_summary})
 
         # Build last 2 rounds from JSONL

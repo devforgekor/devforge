@@ -66,28 +66,30 @@ def estimate_prompt_tokens(code: str, task_desc: str, stage: int,
                            stage3_body: dict = None,
                            sliced_code: str = "") -> int:
     """Estimate prompt tokens for each stage before execution.
-    Uses char/3 heuristic (English code ≈ 3 chars/token).
-    Stages 2-3 use sliced_code (affected sections only) ≈ 55% reduction."""
-    code_tokens = len(code) // 3
-    sliced_tokens = len(sliced_code) // 3 if sliced_code else code_tokens
-    task_tokens = len(task_desc) // 3
+    Uses char/3.5 heuristic (Python code ≈ 3.5-3.7 chars/token, verified against
+    32B actual prompt_tokens from activity_log: 4634 actual vs 5365 estimated).
+    Stages 2-3 use sliced_code (affected sections only)."""
+    def tok(s: str) -> int:
+        return int(len(s) / 3.5)
+    code_tokens = tok(code)
+    sliced_tokens = tok(sliced_code) if sliced_code else code_tokens
+    task_tokens = tok(task_desc)
 
     if stage == 1:
         return code_tokens + task_tokens + 300
     elif stage == 2:
-        analysis_tokens = len(json.dumps(stage1_body or {})) // 3
+        analysis_tokens = tok(json.dumps(stage1_body or {}))
         return sliced_tokens + task_tokens + analysis_tokens + 280
     elif stage == 3:
-        plan_tokens = len(json.dumps(stage2_body or {})) // 3
+        plan_tokens = tok(json.dumps(stage2_body or {}))
         return sliced_tokens + plan_tokens + 230
     elif stage == 4:
-        # REQUEST removed from Stage 4 — diff + template + SYSTEM_32B
         diff_text = ""
         if isinstance(stage3_body, dict):
             diff_text = stage3_body.get("text", str(stage3_body))
         elif isinstance(stage3_body, str):
             diff_text = stage3_body
-        diff_tokens = len(diff_text) // 3
+        diff_tokens = tok(diff_text)
         return diff_tokens + 230
     return 1000
 
@@ -257,10 +259,11 @@ def _notify_slack(text: str) -> None:
 
 
 def _read_previous_feedback(task_id: int) -> str:
-    """Read prior pipeline results from DB, extract key fields, cap at 400 chars.
+    """Read prior pipeline results from DB, extract key fields, cap at 600 chars.
 
     Returns empty string if no prior data. Otherwise returns a compact
     feedback line for injection into Stage 2 PLAN.
+    Uses the Recovery Ladder pattern: json.loads → json_repair → raw fallback.
     """
     import subprocess
 
@@ -281,21 +284,21 @@ def _read_previous_feedback(task_id: int) -> str:
             capture_output=True, text=True, timeout=10)
         if r.returncode == 0 and r.stdout.strip():
             raw_body = r.stdout.strip()
-            # Try to extract structured fields from the JSON body
-            try:
-                body_json = json.loads(raw_body)
-                if isinstance(body_json, dict):
-                    analysis = body_json.get("analysis", "")
-                    if analysis:
-                        snippets.append(f"prev_analysis: {analysis[:200]}")
-                    rationale = body_json.get("rationale", [])
-                    if isinstance(rationale, list) and rationale:
-                        snippets.append(f"prev_rationale: {'; '.join(rationale)[:200]}")
-                    review = body_json.get("review_points", [])
-                    if isinstance(review, list) and review:
-                        snippets.append(f"prev_review: {'; '.join(review)[:200]}")
-            except (json.JSONDecodeError, TypeError):
-                # Non-JSON body: take the last 400 chars (usually has the conclusion)
+
+            # Recovery Ladder: Rung 1 → Rung 2 → Rung 3 (raw fallback)
+            body_json = _parse_llm_json(raw_body)
+            if body_json and isinstance(body_json, dict):
+                analysis = body_json.get("analysis", "")
+                if analysis:
+                    snippets.append(f"prev_analysis: {analysis[:200]}")
+                rationale = body_json.get("rationale", [])
+                if isinstance(rationale, list) and rationale:
+                    snippets.append(f"prev_rationale: {'; '.join(rationale)[:200]}")
+                review = body_json.get("review_points", [])
+                if isinstance(review, list) and review:
+                    snippets.append(f"prev_review: {'; '.join(review)[:200]}")
+            elif not body_json:
+                # Rung 3: raw fallback — tracebacks have the useful info at the tail
                 clean = raw_body.strip()[-400:]
                 if clean:
                     snippets.append(f"prev_result: {clean}")
@@ -310,6 +313,12 @@ def _read_previous_feedback(task_id: int) -> str:
     if len(combined) > 600:
         combined = combined[:597] + "..."
     return f"PREVIOUS ATTEMPT: {combined}"
+
+
+def _parse_llm_json(text: str):
+    """Thin wrapper — delegates to shared Recovery Ladder in lib.llm.json_parser."""
+    from lib.llm.json_parser import parse_llm_json
+    return parse_llm_json(text)
 
 
 def _slice_code(code: str, affected_sections: list) -> str:
@@ -496,8 +505,8 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
     start_stage: 1-4, skip earlier stages if resume_from provided."""
     code = read_file(task["file"])
     task_desc = task["description"]
-    code_tokens = len(code) // 3
-    task_tokens = len(task_desc) // 3
+    code_tokens = int(len(code) / 3.5)
+    task_tokens = int(len(task_desc) / 3.5)
 
     sinfo = _system_info()
     _notify_slack(
@@ -551,7 +560,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
     s1_body = results.get("stage1", {}).get("body", {})
     sliced_code = _slice_code(code, s1_body.get("affected_sections", [])) if s1_body else code
     if sliced_code != code:
-        results["sliced_code_tokens_est"] = len(sliced_code) // 3
+        results["sliced_code_tokens_est"] = int(len(sliced_code) / 3.5)
 
     for stage_num in range(1, 5):
         stage_key = f"stage{stage_num}"
@@ -570,7 +579,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
         timeout = calc_timeout_v2(estimator, prompt_tokens, STAGE_MAX_TOKENS[stage_num])
         results[f"{stage_key}_timeout_calc"] = timeout
         print(_stage_label(stage_num, prompt_tokens, timeout,
-                          len(sliced_code) // 3, len(code) // 3), flush=True)
+                          int(len(sliced_code) / 3.5), int(len(code) / 3.5)), flush=True)
 
         messages = [
             {"role": "system", "content": SYSTEM_32B},
@@ -641,7 +650,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
         if stage_num == 1:
             s1_body = results["stage1"].get("body", {})
             sliced_code = _slice_code(code, s1_body.get("affected_sections", [])) if s1_body else code
-            results["sliced_code_tokens_est"] = len(sliced_code) // 3
+            results["sliced_code_tokens_est"] = int(len(sliced_code) / 3.5)
 
     results["rate_final"] = {"prompt_eval": round(estimator.prompt_eval_rate, 2),
                              "gen": round(estimator.gen_rate, 2)}
@@ -870,17 +879,22 @@ def print_comparison(comparison: dict):
 
 def warmup_32b() -> bool:
     """Send a tiny request to load model weights and verify connectivity.
+    Retries once after a 30s wait if the first attempt fails (mlock can delay loading).
     Returns True if server responded successfully."""
-    print("[warmup] Sending small request to load 32B model weights...", flush=True)
-    t0 = time.monotonic()
-    status, body = call_llm(LLAMA_ENDPOINT, [
-        {"role": "user", "content": "Return the word 'ready'."},
-    ], model="qwen2.5-coder-32b", timeout=300, max_tokens=16)
-    elapsed = time.monotonic() - t0
-    if status == 200:
-        print(f"[warmup] OK in {elapsed:.1f}s — model loaded", flush=True)
-        return True
-    print(f"[warmup] FAILED (status={status}): {body.get('error', '')[:100]}", flush=True)
+    for attempt in (1, 2):
+        print(f"[warmup] Sending small request to load 32B model weights... (attempt {attempt}/2)", flush=True)
+        t0 = time.monotonic()
+        status, body = call_llm(LLAMA_ENDPOINT, [
+            {"role": "user", "content": "Return the word 'ready'."},
+        ], model="qwen2.5-coder-32b", timeout=600, max_tokens=16)
+        elapsed = time.monotonic() - t0
+        if status == 200:
+            print(f"[warmup] OK in {elapsed:.1f}s — model loaded", flush=True)
+            return True
+        print(f"[warmup] FAILED (status={status}): {body.get('error', '')[:100]}", flush=True)
+        if attempt == 1:
+            print("[warmup] Waiting 30s then retrying...", flush=True)
+            time.sleep(30)
     return False
 
 

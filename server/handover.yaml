@@ -1,19 +1,35 @@
 last_checkpoint:
-  time: '2026-05-24T14:54:16+09:00'
-  recent_files:
-  - scripts/telegram_bot.py
-  - docs/tasks.yaml
-  - docs/timer-registry.yaml
-  - '~/.config/systemd/user/telegram-bot.service'
+  time: '2026-05-24T15:01:51.419713+09:00'
+  recent_files: []
   git: {}
 decisions:
-- 'Telegram bot deployed (2026-05-24): telegram_bot.py polls getUpdates every 5s, forwards Korean messages to Qwen3-4B (localhost:8080) for interpretation. Supports 6 actions: reply, ssh, status, mode_switch, log, none. Built-in fast-path commands: /start, /help, /status, /mode, /log. Systemd user service (telegram-bot.service) daemon mode, auto-starts after container-devforge-qwen. Bot username: @mesids_bot.'
+- 'Prompt bloat fix (2026-05-24): _read_previous_feedback() was injecting raw Stage 4 body (≤2000 chars) into Stage 1 ANALYZE
+  prompt → +552 tokens/+428s per run. Fix: removed feedback from Stage 1, moved to Stage 2 PLAN with JSON field extraction
+  (analysis/rationale/review_points) capped at 600 chars. Stage 1 prompt expected 4634→4082 tokens. code_mod_pipeline.py, cli.py
+  committed.'
+- 'debate.py v2.0 + cross-file bug fixes (2026-05-24): Dual-pod debate orchestrator with mode-specific model assignment. 8 bugs
+  fixed: _check_early_exit double-call, disagreement_points wrong value, _write_switch_file missing cache_ram, Podman A restart
+  on mode switch, POD_A_START unused→now used for post-debate restore, SWITCH_WRITER dead code removed, v1.0→v2.0 footer, debate-supervisor.sh
+  "debate"→"discussion" mode check. 16-item bidirectional cross-file verification passed.'
+- 'cache-ram=6656 (optimal) applied (2026-05-24): code mode default changed from 7168 to 6656 in dual-server-entrypoint.sh.
+  MLOCK confirmed active via quadlet Environment=MLOCK=1. T01 test running with feedback fix + 6656 + mlock.'
+- '8 code review fixes applied (2026-05-24): code_mod_pipeline.py + client.py — NameError fix, partial result save on exception,
+  DB insert failure warn, retry cache-hit rate skip, _slice_code parse warn, Stage 4 diff_text extraction, resume validation,
+  pre-check fail skip instead of abort.'
+- 'Rich Slack notifications added (2026-05-24): _system_info() helper, per-stage notifications with memory/rate/slicing/timeout
+  info.'
+- 'cache-ram management infrastructure (2026-05-24): dual-server-entrypoint.sh launch_server() accepts optional cache_ram arg.
+  --cache-ram + --kv-unified + --cache-idle-slots ready.'
+- 'Telegram bot deployed (2026-05-24): telegram_bot.py polls getUpdates every 5s, forwards Korean messages to Qwen3-4B (localhost:8080)
+  for interpretation. Supports 6 actions: reply, ssh, status, mode_switch, log, none. Built-in fast-path commands: /start,
+  /help, /status, /mode, /log. Systemd user service (telegram-bot.service) daemon mode, auto-starts after container-devforge-qwen.
+  Bot username: @mesids_bot.'
 - 'T11 complete + T12-T16 deferred (2026-05-24): T11 32B 4-stage all success — 8,357s (2h19m). Stage 1: 6,365s (full code
   ~11K tok, swap thrashing dominant). Stage 2: 569s (sliced 359/10,432 tok, 96.6% reduction). Stage 3: 624s. Stage 4: 799s.
   8GB cache-ram baseline collected — swap went 601MB→4.3GB, generation speed degraded 2.59→0.59 tok/s during swap thrashing.
   User paused for other work; T12-T16 resume later. cache-ram 6144 fix code ready in dual-server-entrypoint.sh but deferred
-  to collect 8GB baseline data for comparison. 3 commits today: 476d666 (8 fixes) + 0d3d7c1 (rich Slack) in server repo,
-  404c8d5 (;; syntax fix) + 4612c3f (gitignore) in ai_data repo (new).'
+  to collect 8GB baseline data for comparison. 3 commits today: 476d666 (8 fixes) + 0d3d7c1 (rich Slack) in server repo, 404c8d5
+  (;; syntax fix) + 4612c3f (gitignore) in ai_data repo (new).'
 - 'Closed-loop feedback for 32B pipeline (2026-05-24): _read_previous_feedback() reads prior Stage 4 results + tagged worklog
   entries from DB, injects as PREVIOUS WORK: context into Stage 1 ANALYZE prompt. Night pipeline builds on prior day feedback.
   Commit: a8cf44e in server repo.'

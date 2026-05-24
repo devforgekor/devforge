@@ -309,29 +309,9 @@ def call_llm(port: int, model_name: str, system_prompt: str, user_prompt: str,
 
 
 def _parse_llm_json(content: str) -> Optional[Dict]:
-    """Extract JSON from LLM output, handling common formatting issues."""
-    text = content.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = [l for l in lines if not l.startswith("```")]
-        text = "\n".join(lines).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    match = re.search(r'\{[^{}]*"(?:facts|reviews)"[^{}]*\[.*?\][^{}]*\}', text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            pass
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            pass
-    return None
+    """Thin wrapper — delegates to shared Recovery Ladder in lib.llm.json_parser."""
+    from lib.llm.json_parser import parse_llm_json
+    return parse_llm_json(content)
 
 
 def build_extract_prompt(turn: Dict) -> str:
