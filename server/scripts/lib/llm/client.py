@@ -47,6 +47,7 @@ def call_llm(endpoint: str, messages: list, api_key: str = "",
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
+    conn = None
     try:
         if endpoint.startswith("https://"):
             import ssl
@@ -69,4 +70,5 @@ def call_llm(endpoint: str, messages: list, api_key: str = "",
     except Exception as e:
         return 0, {"error": str(e)}
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()

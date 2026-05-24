@@ -156,6 +156,42 @@ Output JSON:
   "confidence": 0.0-1.0,
   "review_points": ["verification items", ...]}}"""
 
+# Prompts for analysis-only tasks (expected_category=analysis_only).
+# Stages 1-2 run normally (analyze + plan). Stages 3-4 switch to these.
+STAGE3_ANALYSIS_REPORT = """Stage 3: ANALYSIS REPORT. Based on the plan, produce a detailed
+analysis report. Do NOT produce code changes — this is analysis-only.
+
+PLAN:
+{plan}
+
+CODE (for reference):
+{code}
+
+Output JSON:
+{{"issues_found": [{{"severity": "critical|high|medium|low",
+                      "description": "...",
+                      "location": "func_name:line_range"}}, ...],
+  "root_causes": ["cause1", ...],
+  "recommendations": [{{"action": "...",
+                          "effort": "small|medium|large",
+                          "risk": "low|medium|high",
+                          "rationale": "..."}}, ...],
+  "priority_order": ["most-urgent", "next", ..., "lowest"]}}"""
+
+STAGE4_ANALYSIS_PACKAGE = """Stage 4: PACKAGE ANALYSIS. Format the analysis report for review.
+
+ANALYSIS RESULT:
+{analysis}
+
+Output JSON:
+{{"task": "<one-line summary>",
+  "analysis_type": "code_review|security_audit|race_condition|architecture_review",
+  "summary": "<executive summary in 2-3 sentences>",
+  "critical_issues": N,
+  "total_issues": N,
+  "top_recommendations": ["rec1", "rec2", "rec3"],
+  "confidence": 0.0-1.0}}"""
+
 API_PROMPT = """You are a senior code reviewer. Given a code file and modification request,
 produce the change as a structured JSON output.
 
@@ -247,6 +283,9 @@ def _slice_code(code: str, affected_sections: list) -> str:
                     break
 
     if not ranges:
+        print(f"  [WARN] _slice_code could not parse any line ranges from "
+              f"affected_sections={affected_sections[:3]} — using full code",
+              flush=True)
         return code  # fallback: couldn't parse
 
     # Merge overlapping ranges
@@ -269,7 +308,7 @@ def _slice_code(code: str, affected_sections: list) -> str:
 
 def _call_stage_with_retry(endpoint: str, messages: list, model: str,
                            timeout: int, max_tokens: int,
-                           max_retries: int = 2) -> Tuple[int, dict, float]:
+                           max_retries: int = 2) -> Tuple[int, dict, float, bool]:
     """Stage 호출 + connection drop 시 재시도 (prompt cache 활용).
 
     32B ARM CPU에서 prompt eval이 38분+ 걸릴 수 있음.
@@ -278,6 +317,7 @@ def _call_stage_with_retry(endpoint: str, messages: list, model: str,
     - 대기 후 재시도하면 cache hit으로 빠르게 완료
     """
     total_elapsed = 0.0
+    was_retry = False
     for attempt in range(max_retries + 1):
         t0 = time.monotonic()
         status, body = call_llm(endpoint, messages, model=model,
@@ -285,7 +325,7 @@ def _call_stage_with_retry(endpoint: str, messages: list, model: str,
         elapsed = time.monotonic() - t0
         total_elapsed += elapsed
         if status == 200:
-            return status, body, total_elapsed
+            return status, body, total_elapsed, was_retry
         err_msg = body.get("error", "")
         is_connection_drop = any(s in err_msg for s in
             ("RemoteDisconnected", "Remote end closed", "ConnectionReset",
@@ -299,17 +339,19 @@ def _call_stage_with_retry(endpoint: str, messages: list, model: str,
                   f"waiting {wait}s... (attempt {attempt+1}/{max_retries})",
                   flush=True)
             time.sleep(wait)
+            was_retry = True
             continue
         break
-    return status, body, total_elapsed
+    return status, body, total_elapsed, was_retry
 
 
 STAGE_NAMES = {1: "ANALYZE", 2: "PLAN   ", 3: "IMPL   ", 4: "PACKAGE"}
+STAGE_NAMES_ANALYSIS = {1: "ANALYZE", 2: "PLAN   ", 3: "REPORT ", 4: "SUMMARY"}
 
 
 def _build_stage_user_msg(stage_num: int, code: str, task_desc: str,
                           s1_body: dict, s2_body: dict, s3_body: dict,
-                          sliced_code: str) -> str:
+                          sliced_code: str, analysis_only: bool = False) -> str:
     """Build the user message for a pipeline stage."""
     if stage_num == 1:
         return STAGE1_ANALYZE.format(code=code, task=task_desc)
@@ -317,10 +359,19 @@ def _build_stage_user_msg(stage_num: int, code: str, task_desc: str,
         return STAGE2_PLAN.format(
             analysis=json.dumps(s1_body, indent=2), code=sliced_code, task=task_desc)
     elif stage_num == 3:
+        if analysis_only:
+            plan = json.dumps(s2_body, indent=2) if s2_body else "{}"
+            return STAGE3_ANALYSIS_REPORT.format(plan=plan, code=code)
         plan = json.dumps(s2_body, indent=2) if s2_body else "{}"
         return STAGE3_IMPLEMENT.format(plan=plan, code=sliced_code)
     else:  # stage 4
-        diff_text = json.dumps(s3_body) if isinstance(s3_body, dict) else str(s3_body)
+        if analysis_only:
+            analysis = json.dumps(s3_body, indent=2) if s3_body else "{}"
+            return STAGE4_ANALYSIS_PACKAGE.format(analysis=analysis)
+        if isinstance(s3_body, dict):
+            diff_text = s3_body.get("text", "") or json.dumps(s3_body)
+        else:
+            diff_text = str(s3_body) if s3_body else ""
         return STAGE4_PACKAGE.format(diff=diff_text)
 
 
@@ -370,6 +421,11 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
                    "file": task["file"], "started": datetime.now(timezone.utc).isoformat(),
                    "code_tokens_est": code_tokens, "task_tokens_est": task_tokens}
 
+    analysis_only = task.get("expected_category") == "analysis_only"
+    stage_names = STAGE_NAMES_ANALYSIS if analysis_only else STAGE_NAMES
+    if analysis_only:
+        results["analysis_only"] = True
+
     run_id = f"task{task['id']}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}"
 
     estimator = RateEstimator()
@@ -396,7 +452,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
 
     for stage_num in range(1, 5):
         stage_key = f"stage{stage_num}"
-        name = STAGE_NAMES[stage_num]
+        name = stage_names[stage_num]
 
         if start_stage > stage_num:
             print(f"  Stage {stage_num}/4 {name} — skipped (resuming from stage {start_stage})", flush=True)
@@ -415,14 +471,17 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
 
         messages = [
             {"role": "system", "content": SYSTEM_32B},
-            {"role": "user", "content": _build_stage_user_msg(stage_num, code, task_desc, s1, s2, s3, sliced_code)},
+            {"role": "user", "content": _build_stage_user_msg(stage_num, code, task_desc, s1, s2, s3, sliced_code, analysis_only)},
         ]
-        status, body_dict, elapsed = _call_stage_with_retry(
+        status, body_dict, elapsed, was_retry = _call_stage_with_retry(
             LLAMA_ENDPOINT, messages, "qwen2.5-coder-32b", timeout, STAGE_MAX_TOKENS[stage_num])
 
         results[stage_key] = extract_json_from_llm_response((status, body_dict))
         results[stage_key]["elapsed_s"] = round(elapsed, 1)
-        _update_estimator(status, body_dict, elapsed)
+        if not was_retry:
+            _update_estimator(status, body_dict, elapsed)
+        else:
+            results[stage_key]["rate_skip"] = "retry_cache_hit"
         _record_rate(stage_key)
 
         if status == 200:
@@ -512,16 +571,18 @@ def _insert_activity_stage(task_id: int, stage: int, status: int,
         f"Stage {stage}/4 status={status} elapsed={elapsed_s:.0f}s "
         f"tokens={prompt_tokens}/{completion_tokens}")
     body_json = json.dumps(body, ensure_ascii=False)
-    # Only escape single quotes for JSONB — backslash doubling would break JSON escapes
     body_esc = body_json.replace("'", "''")
     run_id_esc = esc_sql(run_id)
 
-    return psql_ok(
+    ok = psql_ok(
         f"INSERT INTO activity_log (type, source, title, summary, body, "
         f"agent, model, run_id, summary_status) "
         f"VALUES ('stage', 'pipeline', '{title}', '{summary}', "
         f"'{body_esc}', 'qwen2.5-coder-32b', 'qwen2.5-coder-32b', "
         f"'{run_id_esc}', 'raw')")
+    if not ok:
+        print(f"  [WARN] activity_log insert failed for Task {task_id} Stage {stage}", flush=True)
+    return ok
 
 
 def compare_results(task_id: int) -> dict:
@@ -675,9 +736,8 @@ def main():
                 if status != 200:
                     err = body.get("error", "unknown")[:100]
                     print(f"  FATAL: Model unloaded before Task {task['id']}: {err}", flush=True)
-                    print(f"  Previous task may have triggered container restart.", flush=True)
-                    print(f"  Saving partial results and aborting.", flush=True)
-                    sys.exit(1)
+                    print(f"  Skipping Task {task['id']} — container restart required.", flush=True)
+                    continue
                 print(f"  Model OK", flush=True)
 
             # Load resume data if start_stage > 1
@@ -696,7 +756,17 @@ def main():
                         print(f"  No previous result found for task {task['id']}, starting fresh", flush=True)
                         args.start_stage = 1
 
+                # Validate resume data has required previous stage
+                if resume_data and args.start_stage > 1:
+                    required = f"stage{args.start_stage - 1}"
+                    if required not in resume_data:
+                        print(f"  [WARN] Resume data missing '{required}' key — starting fresh",
+                              flush=True)
+                        resume_data = None
+                        args.start_stage = 1
+
             print(f"\n[32B 4-Stage Pipeline] Starting from stage {args.start_stage}...")
+            result = None
             try:
                 result = run_32b_4stage(task, start_stage=args.start_stage,
                                         resume_from=resume_data)
@@ -709,6 +779,9 @@ def main():
                 print(f"  32B pipeline failed: {e}")
                 import traceback
                 traceback.print_exc()
+                if result is not None:
+                    name = save_result(result, "local32b", task["id"])
+                    print(f"  Partial results saved: {name}")
 
         if not args.local_only:
             for api in api_targets:
