@@ -37,26 +37,41 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 QWEN_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
 OFFSET_FILE = Path("/var/tmp/telegram_bot_offset.txt")
 
-SYSTEM_PROMPT = """너는 DevForge 서버의 AI 운영자야. ARM 서버(Oracle Linux, Podman, 22GB RAM)에서 동작 중이야.
+SYSTEM_PROMPT = """너는 DevForge 서버의 AI 운영자야. ARM 서버(Oracle Linux, Podman rootless, 22GB RAM)에서 작동 중이야.
 
-사용자와 자연스러운 한국어로 대화해. 간결하고 친근하게.
+사용자와 자연스러운 한국어로 대화해. 간결하고 친근하게. 명령어 실행이 필요하면 아래 도구를 호출하고, 그 결과를 바탕으로 자연스럽게 답변해.
 
-네가 할 수 있는 일:
-- 서버 상태, 메모리, 컨테이너 정보 알려주기
-- 작업 내역, 로그 조회 결과 설명하기
-- 코드, 문서, 기술 질문에 답변하기
-- 시스템 명령어 추천해주기
+[사용 가능한 도구]
+아래 형식으로 정확히 한 줄을 출력하면 도구가 실행되고 결과를 받을 수 있어:
 
-네가 직접 명령어를 실행할 수는 없어. 대신 사용자가 `!`로 시작하는 메시지를 보내면 명령어가 직접 실행돼.
-명령어 실행이 필요해 보이면 `!명령어` 형식으로 추천해줘.
-예: "작업 내역을 보려면 `!python3 scripts/cli.py worklog recent` 명령어를 실행하시면 됩니다."
+CMD: <셸 명령어>
 
-주요 명령어:
-- !podman ps — 컨테이너 목록
-- !free -h — 메모리 상태
-- !python3 scripts/cli.py worklog recent — 최근 작업 로그
-- !cat docs/tasks.yaml — 현재 작업 상태
-- !systemctl --user status <서비스명> — 서비스 상태"""
+예:
+CMD: free -h
+CMD: podman ps --format '{{.Names}} {{.Status}}'
+CMD: python3 scripts/cli.py worklog recent
+CMD: cat docs/tasks.yaml
+CMD: systemctl --user status devforge-api
+CMD: journalctl --user -n 20 --no-pager -q
+
+[주요 명령어 레퍼런스]
+- free -h — 메모리 상태
+- df -h / /mnt/lv_db /mnt/secure_meta — 디스크 용량
+- podman ps — 컨테이너 목록
+- python3 scripts/cli.py worklog recent — 최근 작업 로그
+- python3 scripts/cli.py worklog search <키워드> — 작업 로그 검색
+- python3 scripts/cli.py activity recent --today — 오늘 활동 로그
+- cat docs/tasks.yaml — 현재 작업 보드
+- cat data/nightly_status.yaml — nightly 파이프라인 상태
+- systemctl --user status <서비스> — 서비스 상태
+- journalctl --user -n N --no-pager -q — 저널 로그
+
+[중요 규칙]
+- 명령어는 Podman rootless 환경에서 실행돼. docker 대신 podman 사용.
+- systemctl은 --user 붙여야 해.
+- CMD: 한 번에 하나의 명령어만 요청. 여러 개가 필요하면 순차적으로 해.
+- 단순 대화나 질문에는 CMD: 없이 바로 한국어로 답변해.
+- 명령어 실행 결과는 [RESULT]로 시작하는 블록으로 받게 돼. 그걸 보고 자연스럽게 설명해줘."""
 
 
 # ── Telegram API ────────────────────────────────────────────────────
@@ -78,25 +93,53 @@ def _send(text: str, chat_id: str = ""):
     return _tg("sendMessage", {"chat_id": target, "text": text})
 
 
-# ── Qwen chat ──────────────────────────────────────────────────────
-def _chat_qwen(user_msg: str) -> str:
-    """Send message to Qwen, return raw Korean response. No JSON parsing."""
-    body = {"messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                         {"role": "user", "content": user_msg + "\n/no_think"}],
-            "temperature": 0.3, "max_tokens": 512}
+# ── Qwen operator ──────────────────────────────────────────────────
+def _call_qwen_raw(messages: list, max_tokens: int = 512) -> str:
+    """Single Qwen call, returns raw text."""
+    body = {"messages": messages, "temperature": 0.3, "max_tokens": max_tokens}
     req = urllib.request.Request(QWEN_ENDPOINT, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
             result = json.loads(resp.read())
             choice = result.get("choices", [{}])[0]
-            msg = choice.get("message", {})
-            content = msg.get("content", "")
-            if not content:
-                content = msg.get("reasoning_content", "")
-        return content.strip() or "(응답 없음)"
+            m = choice.get("message", {})
+            content = m.get("content", "") or m.get("reasoning_content", "")
+        return content.strip()
     except Exception as e:
-        return f"Qwen 연결 실패: {e}"
+        return f"[ERROR: {e}]"
+
+
+def _chat_qwen(user_msg: str) -> str:
+    """Qwen operator: can execute commands via CMD: protocol. Multi-turn."""
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_msg + "\n/no_think"},
+    ]
+
+    # Turn 1: Qwen decides — reply directly or request CMD
+    resp1 = _call_qwen_raw(messages)
+    if not resp1 or resp1.startswith("[ERROR"):
+        return resp1 or "(응답 없음)"
+
+    # No CMD request → direct reply
+    if not resp1.startswith("CMD:"):
+        return resp1
+
+    # Extract and execute command
+    cmd = resp1[len("CMD:"):].strip()
+    if not cmd:
+        return "(빈 명령어)"
+
+    print(f"[telegram_bot] Qwen 요청: {cmd[:100]}", flush=True)
+    result = _exec_ssh(cmd)
+
+    # Turn 2: Feed result back, Qwen composes natural response
+    messages.append({"role": "assistant", "content": resp1})
+    messages.append({"role": "user", "content": f"[RESULT]\n{result[:3000]}\n[/RESULT]\n\n위 결과를 바탕으로 자연스러운 한국어로 답변해줘.\n/no_think"})
+
+    resp2 = _call_qwen_raw(messages, max_tokens=512)
+    return resp2 or result[:1500]
 
 
 # ── action executors ────────────────────────────────────────────────
@@ -193,27 +236,7 @@ def _process(msg: dict) -> str:
     if text == "/log":
         return _exec_log(20)
 
-    # Fast path: common queries → direct command execution (no Qwen, fast + reliable)
-    _fast_paths = [
-        (["오늘", "작업", "했"], "python3 scripts/cli.py worklog recent", "오늘 작업 내역이야:"),
-        (["오늘", "뭐", "했"], "python3 scripts/cli.py worklog recent", "오늘 작업 내역이야:"),
-        (["작업", "내역"], "python3 scripts/cli.py worklog recent", "작업 내역이야:"),
-        (["진행", "작업"], "cat docs/tasks.yaml", "현재 작업 상태야:"),
-        (["할 일", "todo"], "cat docs/tasks.yaml", "할 일 목록이야:"),
-        (["컨테이너", "목록"], "podman ps --format '{{.Names}} {{.Status}}'", "컨테이너 목록이야:"),
-        (["컨테이너", "상태"], "podman ps --format '{{.Names}} {{.Status}}'", "컨테이너 상태야:"),
-        (["메모리", "상태"], "free -h", "메모리 상태야:"),
-        (["메모리"], "free -h", "메모리 상태야:"),
-        (["디스크", "용량"], "df -h / /mnt/lv_db /mnt/secure_meta", "디스크 용량이야:"),
-        (["디스크"], "df -h / /mnt/lv_db /mnt/secure_meta", "디스크 용량이야:"),
-        (["모드", "변경"], "cat /opt/ai_data/scripts/current-mode.env", "현재 모드야 (변경은 SSH로):"),
-    ]
-    for keywords, cmd, prefix in _fast_paths:
-        if all(kw in text for kw in keywords):
-            result = _exec_ssh(cmd)
-            return f"{prefix}\n\n{result}"
-
-    # Direct command mode: ! prefix = SSH shell (always available)
+    # Direct command mode: ! prefix = SSH shell (always available, bypasses Qwen)
     if text.startswith("!"):
         cmd = text[1:].strip()
         if not cmd:
