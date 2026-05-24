@@ -86,17 +86,19 @@ MODELS: Dict[str, Dict[str, Any]] = {
     },
     "phi-4-14b": {
         "filename": "phi-4-Q4_K_M.gguf",
-        "port": 8080, "ctx": 4096, "threads": 4, "mlock": 0,
+        # port=8080 in discussion mode (fixed on Podman A).
+        # port=8081 in code/debate mode (supervisor-managed, Podman A stopped).
+        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
         "max_tokens": 2048, "temperature": 0.1,
         "system_prompt_support": True,
         "bench_load_s": 40, "bench_toks": 2.1,
     },
     "qwen-32b": {
         "filename": "Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf",
-        "port": 8081, "ctx": 10240, "threads": 4, "mlock": 0,
+        "port": 8081, "ctx": 16384, "threads": 4, "mlock": 0,
         "max_tokens": 2048, "temperature": 0.1,
         "system_prompt_support": True,
-        "cache_ram": 7168,
+        "cache_ram": 6656,
         "bench_load_s": 280, "bench_toks": 0.5,
     },
 }
