@@ -7,6 +7,10 @@ import json
 import os
 import subprocess
 import sys
+import time
+import urllib.request
+from pathlib import Path
+from typing import Optional
 
 from lib.agents import normalize as normalize_agent
 from lib.db import psql as _sql, esc_sql
@@ -213,6 +217,186 @@ def cmd_activity_add(args):
         print("  Failed to add entry")
 
 
+MODE_FILE = "/opt/ai_data/scripts/current-mode.env"
+
+def _switch_mode(mode: str) -> bool:
+    """Write mode file and restart affected containers. Returns True on success."""
+    current = ""
+    if os.path.exists(MODE_FILE):
+        with open(MODE_FILE) as f:
+            current = f.read().strip()
+    if current == f"MODE={mode}":
+        print(f"Already in {mode} mode")
+        return True
+
+    with open(MODE_FILE, "w") as f:
+        f.write(f"MODE={mode}\n")
+    print(f"Switched to {mode} mode")
+
+    # Restart the swap container (Podman B) to pick up new mode
+    print("Restarting container-devforge-swap...")
+    r = subprocess.run(
+        ["systemctl", "--user", "restart", "container-devforge-swap"],
+        capture_output=True, text=True, timeout=120,
+    )
+    if r.returncode != 0:
+        print(f"Error restarting container-devforge-swap: {r.stderr}")
+        return False
+
+    # Handle Podman A: stop for code/batch (no memory), restart otherwise
+    if mode in ("code", "batch"):
+        print("Stopping container-devforge-qwen (Podman A, not needed in code/batch)...")
+        subprocess.run(
+            ["systemctl", "--user", "stop", "container-devforge-qwen"],
+            capture_output=True, text=True, timeout=30,
+        )
+    else:
+        print("Restarting container-devforge-qwen (Podman A)...")
+        r = subprocess.run(
+            ["systemctl", "--user", "restart", "container-devforge-qwen"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if r.returncode != 0:
+            print(f"Warning: container-devforge-qwen restart: {r.stderr}")
+
+    # Wait for model to load (Phi-4 14B takes ~60-120s)
+    print("Waiting for models to load...")
+    for _ in range(120):
+        try:
+            req = urllib.request.Request("http://127.0.0.1:8081/health")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read())
+                    if data.get("status") == "ok":
+                        print(f"  Ready: {data.get('slots_idle', '?')} idle / {data.get('slots_processing', '?')} processing")
+                        return True
+        except Exception:
+            pass
+        time.sleep(2)
+    print("Warning: model health check timed out, may still be loading")
+    return True
+
+
+def cmd_discussion(args):
+    """Launch multi-agent LLM debate (DRAG or Tool-MAD)."""
+    method = args.method  # "drag" or "toolmad"
+    question = getattr(args, "question", None)
+    skip_drag = getattr(args, "skip_drag", False)
+    dry_run = getattr(args, "dry_run", False)
+
+    # Ensure container is in discussion mode (debate-supervisor)
+    if not _container_in_discussion_mode():
+        print("Switching container to discussion mode...")
+        if not _switch_mode("discussion"):
+            print("ERROR: failed to switch to discussion mode")
+            return
+
+    # Prompt for question if not provided
+    if not question:
+        try:
+            question = input("Enter your question: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nCancelled.")
+            return
+    if not question:
+        print("ERROR: question required")
+        return
+
+    print(f"\nStarting debate [{method.upper()}]...")
+    print(f"  Question: {question}")
+    if skip_drag:
+        print(f"  DRAG: skipped")
+    if dry_run:
+        print(f"  Dry-run: enabled")
+
+    # Import and run
+    from debate import DebateSession
+    session = DebateSession(
+        question=question,
+        method=method,
+        mode="discussion",
+        skip_drag=skip_drag,
+        dry_run=dry_run,
+    )
+    result = session.run_session()
+    if result is None:
+        print("\nDebate FAILED — check logs above for details.")
+    else:
+        print(f"\nReport: /opt/ai_data/debate_sessions/{session.session_id}/final_report.md")
+
+
+def _container_in_discussion_mode() -> bool:
+    """Check if devforge-swap container is running in debate mode."""
+    try:
+        r = subprocess.run(
+            ["podman", "exec", "devforge-swap", "pgrep", "-f", "debate-supervisor"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def cmd_upload(args):
+    """Upload a pipeline result or raw file to Azure Blob."""
+    pipeline = args.pipeline
+    session_id = getattr(args, "session_id", None)
+    file_path = getattr(args, "file", None)
+    title = getattr(args, "title", None)
+
+    if not session_id:
+        print("ERROR: --session-id is required")
+        return
+
+    from lib.blob_uploader import upload_review_bundle, upload_raw
+
+    if file_path:
+        # Raw file upload
+        path = Path(file_path)
+        if not path.exists():
+            print(f"ERROR: file not found: {file_path}")
+            return
+        content = path.read_text()
+        url = upload_raw(content, pipeline, session_id, path.name)
+        print(f"Uploaded raw: {path.name}")
+    else:
+        # Auto-generate review-bundle from known output locations
+        content = _find_pipeline_output(pipeline, session_id)
+        if content is None:
+            print(f"ERROR: no output found for {pipeline}/{session_id}")
+            print(f"  Use --file to upload a specific file")
+            return
+        url = upload_review_bundle(
+            content=content,
+            pipeline=pipeline,
+            session_id=session_id,
+            metadata={"title": title} if title else None,
+        )
+        print(f"Uploaded review-bundle")
+
+    print(f"  Pipeline: {pipeline}")
+    print(f"  Session:  {session_id}")
+    print(f"  SAS URL:  {url}")
+
+
+def _find_pipeline_output(pipeline: str, session_id: str) -> Optional[str]:
+    """Auto-find pipeline output for review-bundle generation."""
+    candidates = {
+        "debate": [
+            f"/opt/ai_data/debate_sessions/{session_id}/final_report.md",
+        ],
+        "code_mod": [
+            f"/var/tmp/code_mod_tests/local32b_task{session_id}_*.json",
+        ],
+    }
+    patterns = candidates.get(pipeline, [])
+    for pattern in patterns:
+        import glob as _glob
+        for p in sorted(_glob.glob(pattern)):
+            return Path(p).read_text()
+    return None
+
+
 def cmd_dashboard(args):
     """Show review_facts model performance dashboard."""
     sql_model = """
@@ -330,7 +514,29 @@ async def main():
     wl_search.add_argument("--tag", "-t", help="Filter by tag")
     wl_search.add_argument("--limit", "-n", type=int, default=20)
 
+    p_disc = sub.add_parser("discussion", help="Start multi-agent LLM debate (DRAG or Tool-MAD)")
+    disc_sub = p_disc.add_subparsers(dest="method")
+    drag_p = disc_sub.add_parser("drag", help="DRAG: 2-stage debate — query consensus → fetch → synthesize")
+    drag_p.add_argument("question", nargs="?", help="Debate topic / question")
+    drag_p.add_argument("--skip-drag", action="store_true", help="Skip Round 0 DRAG query consensus")
+    drag_p.add_argument("--dry-run", action="store_true", help="Simulate without LLM calls")
+    tmad_p = disc_sub.add_parser("toolmad", help="Tool-MAD: adaptive real-time search during debate rounds")
+    tmad_p.add_argument("question", nargs="?", help="Debate topic / question")
+    tmad_p.add_argument("--skip-drag", action="store_true", help="Skip Round 0 DRAG query consensus")
+    tmad_p.add_argument("--dry-run", action="store_true", help="Simulate without LLM calls")
+
     sub.add_parser("dashboard", help="Model performance dashboard")
+
+    p_upload = sub.add_parser("upload", help="Upload pipeline result to Azure Blob")
+    p_upload.add_argument("--pipeline", "-p", required=True,
+                          choices=["debate", "code_mod", "extract"],
+                          help="Pipeline name")
+    p_upload.add_argument("--session-id", "-s", required=True,
+                          help="Session identifier")
+    p_upload.add_argument("--file", "-f",
+                          help="Raw file path to upload (skip review-bundle wrapping)")
+    p_upload.add_argument("--title", "-t",
+                          help="Bundle title (for review-bundle mode)")
 
     p_act = sub.add_parser("activity", help="Activity log management")
     act_sub = p_act.add_subparsers(dest="act_command")
@@ -372,6 +578,13 @@ async def main():
             cmd_activity_add(args)
         else:
             p_act.print_help()
+    elif args.command == "discussion":
+        if args.method in ("drag", "toolmad"):
+            cmd_discussion(args)
+        else:
+            p_disc.print_help()
+    elif args.command == "upload":
+        cmd_upload(args)
     elif args.command == "dashboard":
         cmd_dashboard(args)
     else:

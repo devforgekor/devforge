@@ -102,7 +102,6 @@ Read the following code and the modification request.
 Identify: (a) which lines/functions are affected, (b) what type of change is needed,
 (c) any cross-dependencies or side effects.
 
-{feedback}
 CODE:
 {code}
 
@@ -127,6 +126,7 @@ AFFECTED CODE (only the sections that need changes):
 REQUEST:
 {task}
 
+{feedback}
 Output JSON:
 {{"approach": "...",
   "steps": ["step1", ...],
@@ -257,10 +257,10 @@ def _notify_slack(text: str) -> None:
 
 
 def _read_previous_feedback(task_id: int) -> str:
-    """Read prior pipeline results + worklog feedback for this task from DB.
+    """Read prior pipeline results from DB, extract key fields, cap at 400 chars.
 
-    Returns empty string if no prior data. Otherwise returns a formatted
-    feedback block for injection into the Stage 1 prompt.
+    Returns empty string if no prior data. Otherwise returns a compact
+    feedback line for injection into Stage 2 PLAN.
     """
     import subprocess
 
@@ -269,44 +269,47 @@ def _read_previous_feedback(task_id: int) -> str:
                 "--no-align", "--tuples-only", "--quiet",
                 "--field-separator=\t"]
     tid = esc_sql(str(task_id))
-    parts = []
+    snippets = []
 
     # Prior pipeline result (most recent completed Stage 4)
     try:
         r = subprocess.run(PSQL_TAB + ["-c",
-            f"SELECT summary, left(body::text, 2000) FROM activity_log "
+            f"SELECT left(body::text, 3000) FROM activity_log "
             f"WHERE run_id LIKE 'task{tid}\\_%' AND type='stage' "
             f"AND summary LIKE '%Stage 4%' AND summary LIKE '%status=200%' "
             f"ORDER BY id DESC LIMIT 1"],
             capture_output=True, text=True, timeout=10)
         if r.returncode == 0 and r.stdout.strip():
-            row = r.stdout.strip().split("\t", 1)
-            if len(row) == 2:
-                parts.append(f"[Previous pipeline result]\n  {row[0]}\n  {row[1][:2000]}")
+            raw_body = r.stdout.strip()
+            # Try to extract structured fields from the JSON body
+            try:
+                body_json = json.loads(raw_body)
+                if isinstance(body_json, dict):
+                    analysis = body_json.get("analysis", "")
+                    if analysis:
+                        snippets.append(f"prev_analysis: {analysis[:200]}")
+                    rationale = body_json.get("rationale", [])
+                    if isinstance(rationale, list) and rationale:
+                        snippets.append(f"prev_rationale: {'; '.join(rationale)[:200]}")
+                    review = body_json.get("review_points", [])
+                    if isinstance(review, list) and review:
+                        snippets.append(f"prev_review: {'; '.join(review)[:200]}")
+            except (json.JSONDecodeError, TypeError):
+                # Non-JSON body: take the last 400 chars (usually has the conclusion)
+                clean = raw_body.strip()[-400:]
+                if clean:
+                    snippets.append(f"prev_result: {clean}")
     except Exception:
         pass
 
-    # Worklog feedback entries tagged with this task
-    try:
-        r = subprocess.run(PSQL_TAB + ["-c",
-            f"SELECT created_at::date, title, summary FROM worklog_entries "
-            f"WHERE tags @> ARRAY['task-{tid}'] "
-            f"ORDER BY created_at DESC LIMIT 5"],
-            capture_output=True, text=True, timeout=10)
-        if r.returncode == 0 and r.stdout.strip():
-            entries = []
-            for line in r.stdout.strip().split("\n")[:5]:
-                parts_line = line.split("\t", 2)
-                if len(parts_line) >= 3:
-                    entries.append(f"  [{parts_line[0][:10]}] {parts_line[1]}: {parts_line[2][:300]}")
-            if entries:
-                parts.append(f"[Worklog feedback]\n" + "\n".join(entries))
-    except Exception:
-        pass
-
-    if not parts:
+    if not snippets:
         return ""
-    return "PREVIOUS WORK:\n" + "\n".join(parts)
+
+    # Build compact feedback, hard cap at 600 chars
+    combined = " | ".join(snippets)
+    if len(combined) > 600:
+        combined = combined[:597] + "..."
+    return f"PREVIOUS ATTEMPT: {combined}"
 
 
 def _slice_code(code: str, affected_sections: list) -> str:
@@ -430,13 +433,19 @@ def _build_stage_user_msg(stage_num: int, code: str, task_desc: str,
                           s1_body: dict, s2_body: dict, s3_body: dict,
                           sliced_code: str, analysis_only: bool = False,
                           feedback: str = "") -> str:
-    """Build the user message for a pipeline stage."""
+    """Build the user message for a pipeline stage.
+
+    Stage 1: no feedback (unbiased structural analysis).
+    Stage 2: feedback injected for informed planning.
+    Stages 3-4: no feedback (execution stages).
+    """
     if stage_num == 1:
-        fb = feedback if feedback else ""
-        return STAGE1_ANALYZE.format(feedback=fb, code=code, task=task_desc)
+        return STAGE1_ANALYZE.format(code=code, task=task_desc)
     elif stage_num == 2:
+        fb = f"PREVIOUS ATTEMPT NOTES:\n{feedback}\n\n" if feedback else ""
         return STAGE2_PLAN.format(
-            analysis=json.dumps(s1_body, indent=2), code=sliced_code, task=task_desc)
+            analysis=json.dumps(s1_body, indent=2), code=sliced_code, task=task_desc,
+            feedback=fb)
     elif stage_num == 3:
         if analysis_only:
             plan = json.dumps(s2_body, indent=2) if s2_body else "{}"
@@ -535,7 +544,8 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
         feedback = _read_previous_feedback(task["id"])
         if feedback:
             results["feedback_found"] = True
-            print(f"  Feedback from prior work found for Task {task['id']}", flush=True)
+            results["feedback_chars"] = len(feedback)
+            print(f"  Feedback from prior work found for Task {task['id']} ({len(feedback)} chars)", flush=True)
 
     # Pre-compute sliced_code from resume data (fresh run: stage1 not done yet, so sliced_code = code)
     s1_body = results.get("stage1", {}).get("body", {})
@@ -588,7 +598,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
         print(f"  Stage {stage_num} done: {elapsed:.0f}s, status={status}", flush=True)
         sinfo = _system_info()
         rate_info = ""
-        if estimator.calls > 0:
+        if estimator.prompt_samples:
             rate_info = f"rate: prompt={estimator.prompt_eval_rate:.1f} gen={estimator.gen_rate:.1f} t/s"
         else:
             rate_info = f"rate: calib... (1st call)"
@@ -666,7 +676,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
             sliced_line = f" | code slicing: ~{sliced_pct:.0f}% token reduction"
         _notify_slack(
             f"T{task['id']} [{task['name']}] 파이프라인 완료\n"
-            f"  total: {total_elapsed:.0f}s ({mins:.1f}분) | confidence: {conf} | stages: {estimator.calls} calls{sliced_line}\n"
+            f"  total: {total_elapsed:.0f}s ({mins:.1f}분) | confidence: {conf} | stages: {len(estimator.prompt_samples)} calls{sliced_line}\n"
             f"  {rate_delta}\n"
             f"  {sinfo}"
         )
@@ -762,6 +772,63 @@ def compare_results(task_id: int) -> dict:
         comparison["models"][name] = entry
 
     return comparison
+
+
+def _upload_pipeline_result(result: dict, task: dict) -> Optional[str]:
+    """Upload pipeline result as review-bundle to Azure Blob.
+
+    Returns SAS URL on success, None on failure.
+    """
+    try:
+        from lib.blob_uploader import upload_review_bundle
+    except ImportError:
+        return None
+
+    pkg = result.get("stage4", {}).get("body", {})
+    diff = pkg.get("diff", "")
+    if isinstance(diff, str) and len(diff) > 8000:
+        diff = diff[:8000] + "\n... (truncated)"
+
+    rationale_lines = "\n".join(f"- {r}" for r in pkg.get("rationale", [])[:10])
+    stages_elapsed = ", ".join(
+        f"Stage {i}: {result.get(f'stage{i}', {}).get('elapsed_s', '?')}s"
+        for i in range(1, 5)
+    )
+
+    bundle = f"""## Task {task['id']}: {task['name']}
+
+**File:** `{task['file']}`
+**Stage:** {task.get('stage', 'N/A')}
+**Confidence:** {pkg.get('confidence', 'N/A')}
+
+### Timings
+{stages_elapsed}
+
+### Diff
+```diff
+{diff if diff else 'N/A'}
+```
+
+### Rationale
+{rationale_lines if rationale_lines else 'N/A'}
+
+### Review Points
+{chr(10).join(f'- {r}' for r in pkg.get('review_points', [])[:10]) if pkg.get('review_points') else 'N/A'}
+"""
+    session_id = f"task{task['id']}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}"
+    return upload_review_bundle(
+        content=bundle,
+        pipeline="code_mod",
+        session_id=session_id,
+        metadata={
+            "task": task["name"],
+            "file": task["file"],
+            "confidence": str(pkg.get("confidence", "")),
+            "elapsed_total_s": str(sum(
+                result.get(f"stage{i}", {}).get("elapsed_s", 0) for i in range(1, 5)
+            )),
+        },
+    )
 
 
 def _parse_elapsed(started: Optional[str], finished: Optional[str]) -> Optional[float]:
@@ -917,6 +984,10 @@ def main():
                 pkg = result.get("stage4", {}).get("body", {})
                 conf = pkg.get("confidence", "N/A")
                 print(f"  Confidence: {conf}")
+                if not result.get("error"):
+                    url = _upload_pipeline_result(result, task)
+                    if url:
+                        print(f"  Review: {url}")
             except Exception as e:
                 print(f"  32B pipeline failed: {e}")
                 import traceback
