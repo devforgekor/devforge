@@ -58,11 +58,25 @@ When to use search:
 - Code/library documentation that is NOT in the local codebase
 - DO NOT use search for: local system state, container status, file paths — use ssh or status instead.
 
+DevForge CLI tools (in /opt/projects/server/scripts/):
+- python3 scripts/cli.py worklog recent — today's work log entries
+- python3 scripts/cli.py worklog search <keyword> — search worklog by keyword
+- python3 scripts/cli.py worklog add "<title>" "<summary>" — add worklog entry
+- python3 scripts/cli.py activity recent --today — today's activity log
+- python3 scripts/cli.py activity search <keyword> — search activity log
+- python3 scripts/cli.py save "<text>" — save memory
+- python3 scripts/cli.py search "<query>" — search saved memories
+- python3 scripts/cli.py recent — recent conversation turns
+- cat docs/tasks.yaml — current task status (todo/in_progress/done)
+- cat data/nightly_status.yaml — nightly pipeline status
+
+For questions like "what did I work on today?", "what's the task status?", "show recent worklog" — use python3 scripts/cli.py.
+
 Command rules:
 - Use podman (NOT docker). This is a Podman rootless server.
 - Use systemctl --user for user services.
 - Prefer read-only commands. Only use write commands (restart, stop) when explicitly requested.
-- Common commands: podman ps, free -h, df -h, systemctl --user status <svc>, journalctl --user -n N"""
+- Run CLI from /opt/projects/server/scripts/ directory."""
 
 
 # ── Telegram API ────────────────────────────────────────────────────
