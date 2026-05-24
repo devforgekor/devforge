@@ -175,16 +175,19 @@ def _process(msg: dict) -> str:
 
     # Fast path: built-in commands (no LLM call needed)
     if text in ("/start", "/help"):
-        mode_note = ""
         if mode != "normal":
-            mode_note = f"\n현재 모드: `{mode}` — 자연어 명령 불가, `!` 직접 실행만 가능"
+            return (f"지금은 {mode} 모드로 운영되고 있어 사용자의 요청에 응답할 수 없습니다.\n\n"
+                    "사용 가능한 명령어:\n"
+                    "`!<command>` — 셸 직접 실행\n"
+                    "`/status` — 시스템 상태\n"
+                    "`/mode` — 현재 모드\n"
+                    "`/log` — 최근 로그")
         return ("*DevForge Telegram Bot — SSH 모드*\n\n"
                 "`!<command>` — 셸 명령 직접 실행 (예: `!podman ps`)\n"
                 "`/status` — 시스템 상태\n"
                 "`/mode` — 현재 LLM 모드\n"
                 "`/log` — 최근 로그\n\n"
-                "`!` 없이 한국어로 말하면 Qwen3-4B가 해석하여 실행합니다."
-                + mode_note)
+                "`!` 없이 한국어로 말하면 Qwen3-4B가 해석하여 실행합니다.")
 
     if text == "/status":
         return _exec_status()
@@ -203,8 +206,9 @@ def _process(msg: dict) -> str:
         return _exec_ssh(cmd)
 
     # Natural language only in normal mode (Qwen3-4B available)
+    # No LLM calls in batch/code — pure Python, no RAM increase
     if mode != "normal":
-        return f"현재 `{mode}` 모드 — Qwen3-4B unavailable. `!` prefix로 직접 실행하세요.\n예: `!podman ps`, `!free -h`"
+        return f"지금은 {mode} 모드로 운영되고 있어 사용자의 요청에 응답할 수 없습니다.\n`!` 명령어는 사용 가능합니다. (예: `!podman ps`, `!free -h`)"
 
     # Natural language → Qwen interprets
     action = _ask_qwen(text)
