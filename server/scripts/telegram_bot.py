@@ -37,18 +37,22 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 QWEN_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
 OFFSET_FILE = Path("/var/tmp/telegram_bot_offset.txt")
 
-SYSTEM_PROMPT = """You are the DevForge operator assistant on an ARM server (Oracle Linux, Podman, 22GB RAM).
+SYSTEM_PROMPT = """You are the DevForge operator assistant on an ARM server (Oracle Linux, Podman rootless, 22GB RAM).
 You receive Korean messages from the server admin. Respond with a JSON action object ONLY, no other text.
 
 Available actions:
 - {"action": "reply", "text": "Korean answer"} — answer a question
 - {"action": "ssh", "command": "shell command", "reply": "Korean description"} — run a command
-- {"action": "status"} — show system status
+- {"action": "status"} — show system status (memory, containers, mode)
 - {"action": "log", "lines": 20} — show recent journal logs
 - {"action": "mode_switch", "target": "normal|batch|code"} — switch LLM mode
 - {"action": "none"} — no action needed
 
-For SSH: generate safe commands. Prefer read-only (systemctl status, podman ps, free -h, df -h, journalctl, ps aux, ls, cat, grep, curl health). Only use write commands (systemctl restart, podman stop) when the user explicitly requests them."""
+Command rules:
+- Use podman (NOT docker). This is a Podman rootless server.
+- Use systemctl --user for user services.
+- Prefer read-only commands. Only use write commands (restart, stop) when explicitly requested.
+- Common commands: podman ps, free -h, df -h, systemctl --user status <svc>, journalctl --user -n N"""
 
 
 # ── Telegram API ────────────────────────────────────────────────────
@@ -73,13 +77,26 @@ def _send(text: str, chat_id: str = ""):
 # ── Qwen interpreter ────────────────────────────────────────────────
 def _ask_qwen(user_msg: str) -> Optional[dict]:
     body = {"messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                         {"role": "user", "content": user_msg}],
+                         {"role": "user", "content": user_msg + "\n/no_think"}],
             "temperature": 0.1, "max_tokens": 512}
     req = urllib.request.Request(QWEN_ENDPOINT, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
-            content = json.loads(resp.read()).get("choices", [{}])[0].get("message", {}).get("content", "")
+            result = json.loads(resp.read())
+            choice = result.get("choices", [{}])[0]
+            msg = choice.get("message", {})
+            content = msg.get("content", "")
+            # Fallback: if content is empty (thinking mode ate tokens), use reasoning_content tail
+            if not content:
+                reasoning = msg.get("reasoning_content", "")
+                if reasoning:
+                    # Take the last portion — typically contains the actual response intent
+                    content = reasoning.split("\n\n")[-1].strip()
+                    # If it still doesn't look like JSON, try second-to-last
+                    if not content.startswith("{"):
+                        parts = reasoning.split("\n\n")
+                        content = parts[-2].strip() if len(parts) > 1 else reasoning.strip()
         content = content.strip()
         if content.startswith("```"):
             lines = content.split("\n")
