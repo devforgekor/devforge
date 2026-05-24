@@ -100,9 +100,8 @@ SYSTEM_32B = (
 )
 
 STAGE1_ANALYZE = """You are in STAGE 1: ANALYZE.
-Read the following code and the modification request.
-Identify: (a) which lines/functions are affected, (b) what type of change is needed,
-(c) any cross-dependencies or side effects.
+Read the code and the modification request.
+Identify affected lines/functions and cross-dependencies.
 
 CODE:
 {code}
@@ -110,12 +109,10 @@ CODE:
 REQUEST:
 {task}
 
-Output format (JSON):
+Output JSON:
 {{"affected_sections": ["func_name:line_range", ...],
-  "change_type": "helper_extraction|bug_fix|validation|cross_function|dedup|interface|structural|analysis",
-  "dependencies": ["func_name", ...],
-  "risk_assessment": "low|medium|high",
-  "notes": "..."}}"""
+  "change_type": "bug_fix|refactor|new_feature|structural",
+  "dependencies": ["func_name", ...]}}"""
 
 STAGE2_PLAN = """Stage 2: PLAN. Based on the analysis, design the minimal change.
 

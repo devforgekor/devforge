@@ -42,5 +42,4 @@ meta:
   - /opt/projects/server/docs/phases.md
   - /opt/projects/server/_archive/README.md
 todo:
-- 'Qwen14B additional testing (TBD)'
 - 'Improve update_handover.py context selection logic — session context quality directly impacts downstream LLM handover comprehension. Research: model-radar translation quality lessons applied to language pipeline (Korean→English translation fidelity, script purity, structured output for handover docs).'
