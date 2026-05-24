@@ -52,12 +52,12 @@ For SSH: generate safe commands. Prefer read-only (systemctl status, podman ps, 
 
 
 # ── Telegram API ────────────────────────────────────────────────────
-def _tg(method: str, data: dict) -> dict:
+def _tg(method: str, data: dict, timeout: int = 15) -> dict:
     url = f"{BASE_URL}/{method}"
     req = urllib.request.Request(url, data=json.dumps(data).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read())
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -157,37 +157,59 @@ def _exec_mode_switch(target: str) -> str:
         return f"모드 전환 실패: {e}"
 
 
+def _current_mode() -> str:
+    """Read current LLM mode from mode file."""
+    mf = Path("/opt/ai_data/scripts/current-mode.env")
+    if mf.exists():
+        return mf.read_text().strip().replace("MODE=", "")
+    return "unknown"
+
+
 # ── message processor ───────────────────────────────────────────────
 def _process(msg: dict) -> str:
     text = msg.get("text", "").strip()
     if not text:
         return ""
 
+    mode = _current_mode()
+
     # Fast path: built-in commands (no LLM call needed)
     if text in ("/start", "/help"):
-        return ("*DevForge Telegram Bot*\n\n"
+        mode_note = ""
+        if mode != "normal":
+            mode_note = f"\n현재 모드: `{mode}` — 자연어 명령 불가, `!` 직접 실행만 가능"
+        return ("*DevForge Telegram Bot — SSH 모드*\n\n"
+                "`!<command>` — 셸 명령 직접 실행 (예: `!podman ps`)\n"
                 "`/status` — 시스템 상태\n"
                 "`/mode` — 현재 LLM 모드\n"
-                "`/log` — 최근 로그\n"
-                "`/help` — 도움말\n\n"
-                "한국어로 원하는 작업을 설명하면 Qwen3-4B가 해석하여 실행합니다.")
+                "`/log` — 최근 로그\n\n"
+                "`!` 없이 한국어로 말하면 Qwen3-4B가 해석하여 실행합니다."
+                + mode_note)
 
     if text == "/status":
         return _exec_status()
 
     if text == "/mode":
-        mf = Path("/opt/ai_data/scripts/current-mode.env")
-        if mf.exists():
-            return f"현재 모드: `{mf.read_text().strip().replace('MODE=', '')}`"
-        return "모드 파일을 찾을 수 없습니다."
+        return f"현재 모드: `{mode}`"
 
     if text == "/log":
         return _exec_log(20)
 
+    # Direct command mode: ! prefix = SSH shell (always available)
+    if text.startswith("!"):
+        cmd = text[1:].strip()
+        if not cmd:
+            return "명령을 입력하세요. 예: `!podman ps`"
+        return _exec_ssh(cmd)
+
+    # Natural language only in normal mode (Qwen3-4B available)
+    if mode != "normal":
+        return f"현재 `{mode}` 모드 — Qwen3-4B unavailable. `!` prefix로 직접 실행하세요.\n예: `!podman ps`, `!free -h`"
+
     # Natural language → Qwen interprets
     action = _ask_qwen(text)
     if action is None:
-        return "Qwen3-4B 응답 없음 — 서버가 실행 중인지 확인하세요."
+        return "Qwen3-4B 응답 없음 — 서버가 실행 중인지 확인하세요. `!` prefix로 직접 실행 가능."
 
     act = action.get("action", "reply")
 
@@ -221,9 +243,13 @@ def run_once():
         except Exception:
             pass
 
-    updates = _tg("getUpdates", {"timeout": 30, "offset": offset, "allowed_updates": ["message"]})
+    # timeout=55s: Telegram long-poll is 30s + buffer. 409 Conflict on retry.
+    updates = _tg("getUpdates", {"timeout": 30, "offset": offset, "allowed_updates": ["message"]}, timeout=55)
     if not updates.get("ok"):
-        print(f"[telegram_bot] getUpdates failed: {updates.get('error')}", flush=True)
+        err = str(updates.get("error", ""))
+        # Timeout is expected when no messages — not an error. 409 Conflict: another poll in flight, retry next cycle.
+        if "conflict" not in err.lower() and "time" not in err.lower() and "read" not in err.lower():
+            print(f"[telegram_bot] getUpdates failed: {err}", flush=True)
         return
 
     for upd in updates.get("result", []):
