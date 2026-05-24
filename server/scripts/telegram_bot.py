@@ -18,10 +18,6 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from lib.search.manager import WebSearchManager
-
-_search_manager = WebSearchManager()
-
 # ── config ──────────────────────────────────────────────────────────
 def _load_secrets():
     secrets = {}
@@ -41,45 +37,26 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 QWEN_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
 OFFSET_FILE = Path("/var/tmp/telegram_bot_offset.txt")
 
-SYSTEM_PROMPT = """You are the DevForge operator assistant on an ARM server (Oracle Linux, Podman rootless, 22GB RAM).
-You receive Korean messages from the server admin. Respond with a JSON action object ONLY, no other text.
+SYSTEM_PROMPT = """너는 DevForge 서버의 AI 운영자야. ARM 서버(Oracle Linux, Podman, 22GB RAM)에서 동작 중이야.
 
-For "reply" action: write conversational Korean that naturally answers the user.
-For "ssh" action: the "reply" field should briefly describe what you found — use natural Korean like a helpful colleague. Keep it under 15 words.
+사용자와 자연스러운 한국어로 대화해. 간결하고 친근하게.
 
-Available actions:
-- {"action": "reply", "text": "Korean answer"} — answer a question
-- {"action": "ssh", "command": "shell command", "reply": "Korean description"} — run a command
-- {"action": "search", "query": "search keywords"} — web search (code/docs/fact/general auto-routed, Brave/Exa/Tavily/you.com)
-- {"action": "status"} — show system status (memory, containers, mode)
-- {"action": "log", "lines": 20} — show recent journal logs
-- {"action": "mode_switch", "target": "normal|batch|code"} — switch LLM mode
-- {"action": "none"} — no action needed
+네가 할 수 있는 일:
+- 서버 상태, 메모리, 컨테이너 정보 알려주기
+- 작업 내역, 로그 조회 결과 설명하기
+- 코드, 문서, 기술 질문에 답변하기
+- 시스템 명령어 추천해주기
 
-When to use search:
-- External knowledge questions (pricing, latest news, documentation references, error codes)
-- Code/library documentation that is NOT in the local codebase
-- DO NOT use search for: local system state, container status, file paths — use ssh or status instead.
+네가 직접 명령어를 실행할 수는 없어. 대신 사용자가 `!`로 시작하는 메시지를 보내면 명령어가 직접 실행돼.
+명령어 실행이 필요해 보이면 `!명령어` 형식으로 추천해줘.
+예: "작업 내역을 보려면 `!python3 scripts/cli.py worklog recent` 명령어를 실행하시면 됩니다."
 
-DevForge CLI tools (in /opt/projects/server/scripts/):
-- python3 scripts/cli.py worklog recent — today's work log entries
-- python3 scripts/cli.py worklog search <keyword> — search worklog by keyword
-- python3 scripts/cli.py worklog add "<title>" "<summary>" — add worklog entry
-- python3 scripts/cli.py activity recent --today — today's activity log
-- python3 scripts/cli.py activity search <keyword> — search activity log
-- python3 scripts/cli.py save "<text>" — save memory
-- python3 scripts/cli.py search "<query>" — search saved memories
-- python3 scripts/cli.py recent — recent conversation turns
-- cat docs/tasks.yaml — current task status (todo/in_progress/done)
-- cat data/nightly_status.yaml — nightly pipeline status
-
-For questions like "what did I work on today?", "what's the task status?", "show recent worklog" — use python3 scripts/cli.py.
-
-Command rules:
-- Use podman (NOT docker). This is a Podman rootless server.
-- Use systemctl --user for user services.
-- Prefer read-only commands. Only use write commands (restart, stop) when explicitly requested.
-- Run CLI from /opt/projects/server/scripts/ directory."""
+주요 명령어:
+- !podman ps — 컨테이너 목록
+- !free -h — 메모리 상태
+- !python3 scripts/cli.py worklog recent — 최근 작업 로그
+- !cat docs/tasks.yaml — 현재 작업 상태
+- !systemctl --user status <서비스명> — 서비스 상태"""
 
 
 # ── Telegram API ────────────────────────────────────────────────────
@@ -101,41 +78,12 @@ def _send(text: str, chat_id: str = ""):
     return _tg("sendMessage", {"chat_id": target, "text": text})
 
 
-# ── Qwen interpreter ────────────────────────────────────────────────
-def _ask_qwen(user_msg: str) -> Optional[dict]:
+# ── Qwen chat ──────────────────────────────────────────────────────
+def _chat_qwen(user_msg: str) -> str:
+    """Send message to Qwen, return raw Korean response. No JSON parsing."""
     body = {"messages": [{"role": "system", "content": SYSTEM_PROMPT},
                          {"role": "user", "content": user_msg + "\n/no_think"}],
-            "temperature": 0.1, "max_tokens": 512}
-    return _call_qwen(body)
-
-
-def _summarize_result(action: dict, raw_output: str) -> str:
-    """Feed command output back to Qwen for natural Korean summary."""
-    # Short output: show directly, no LLM summarization needed
-    if len(raw_output) <= 1200:
-        return raw_output
-
-    summary_prompt = f"""command output:
-{raw_output[:2000]}
-
-Summarize this in 1-2 sentences of conversational Korean.
-Respond ONLY with: {{\"text\": \"your summary here\"}}"""
-
-    body = {"messages": [
-        {"role": "system", "content": "You convert command output into natural Korean summaries. You MUST respond in JSON format: {\"text\": \"summary\"}"},
-        {"role": "user", "content": summary_prompt + "\n/no_think"},
-    ], "temperature": 0.3, "max_tokens": 256}
-    result = _call_qwen(body)
-    if result:
-        text = result.get("text", "")
-        # Only use the summary if it came through clean (not an error fallback)
-        if text and "응답 파싱 실패" not in text and "연결 실패" not in text and len(text) > 10:
-            return text
-    # Fallback: return raw output (truncated if needed)
-    return raw_output[:1500]
-
-
-def _call_qwen(body: dict) -> Optional[dict]:
+            "temperature": 0.3, "max_tokens": 512}
     req = urllib.request.Request(QWEN_ENDPOINT, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
@@ -144,25 +92,11 @@ def _call_qwen(body: dict) -> Optional[dict]:
             choice = result.get("choices", [{}])[0]
             msg = choice.get("message", {})
             content = msg.get("content", "")
-            # Fallback: if content is empty (thinking mode ate tokens), use reasoning_content tail
             if not content:
-                reasoning = msg.get("reasoning_content", "")
-                if reasoning:
-                    # Take the last portion — typically contains the actual response intent
-                    content = reasoning.split("\n\n")[-1].strip()
-                    # If it still doesn't look like JSON, try second-to-last
-                    if not content.startswith("{"):
-                        parts = reasoning.split("\n\n")
-                        content = parts[-2].strip() if len(parts) > 1 else reasoning.strip()
-        content = content.strip()
-        if content.startswith("```"):
-            lines = content.split("\n")
-            content = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-        return json.loads(content)
-    except json.JSONDecodeError:
-        return {"action": "reply", "text": f"Qwen 응답 파싱 실패: {content[:300]}"}
+                content = msg.get("reasoning_content", "")
+        return content.strip() or "(응답 없음)"
     except Exception as e:
-        return {"action": "reply", "text": f"Qwen 연결 실패: {e}"}
+        return f"Qwen 연결 실패: {e}"
 
 
 # ── action executors ────────────────────────────────────────────────
@@ -217,43 +151,6 @@ def _exec_log(lines_count: int = 20) -> str:
         return f"로그 조회 실패: {e}"
 
 
-def _exec_mode_switch(target: str) -> str:
-    if target not in ("normal", "batch", "code"):
-        return f"잘못된 모드: {target}. normal/batch/code 중 하나를 지정하세요."
-    script = "/opt/projects/server/scripts/swap_llm_mode.sh"
-    try:
-        r = subprocess.run(["bash", script, target], capture_output=True, text=True, timeout=900)
-        out = r.stdout.strip()
-        if len(out) > 2500:
-            out = out[-2500:]
-        return f"모드 전환 (종료코드 {r.returncode}):\n```\n{out}\n```"
-    except subprocess.TimeoutExpired:
-        return "모드 전환 시간 초과 (15분)"
-    except Exception as e:
-        return f"모드 전환 실패: {e}"
-
-
-def _exec_search(query: str) -> str:
-    try:
-        result = _search_manager.search(query)
-        if result is None:
-            return "검색 결과 없음 — 모든 프로바이더 소진."
-        source = result["source"]
-        intent = result["intent"]
-        results = result["results"][:5]
-        lines = [f"*검색: {query}*  ({source}, {intent})\n"]
-        for i, r in enumerate(results, 1):
-            title = r.get("title", "")[:120]
-            url = r.get("url", "")
-            snippet = r.get("snippet", "")[:200]
-            lines.append(f"{i}. [{title}]({url})")
-            if snippet:
-                lines.append(f"   {snippet}")
-        return "\n".join(lines)
-    except Exception as e:
-        return f"검색 실패: {e}"
-
-
 def _current_mode() -> str:
     """Read current LLM mode from mode file."""
     mf = Path("/opt/ai_data/scripts/current-mode.env")
@@ -305,6 +202,11 @@ def _process(msg: dict) -> str:
         (["할 일", "todo"], "cat docs/tasks.yaml", "할 일 목록이야:"),
         (["컨테이너", "목록"], "podman ps --format '{{.Names}} {{.Status}}'", "컨테이너 목록이야:"),
         (["컨테이너", "상태"], "podman ps --format '{{.Names}} {{.Status}}'", "컨테이너 상태야:"),
+        (["메모리", "상태"], "free -h", "메모리 상태야:"),
+        (["메모리"], "free -h", "메모리 상태야:"),
+        (["디스크", "용량"], "df -h / /mnt/lv_db /mnt/secure_meta", "디스크 용량이야:"),
+        (["디스크"], "df -h / /mnt/lv_db /mnt/secure_meta", "디스크 용량이야:"),
+        (["모드", "변경"], "cat /opt/ai_data/scripts/current-mode.env", "현재 모드야 (변경은 SSH로):"),
     ]
     for keywords, cmd, prefix in _fast_paths:
         if all(kw in text for kw in keywords):
@@ -319,42 +221,11 @@ def _process(msg: dict) -> str:
         return _exec_ssh(cmd)
 
     # Natural language only in normal mode (Qwen3-4B available)
-    # No LLM calls in batch/code — pure Python, no RAM increase
     if mode != "normal":
         return f"지금은 {mode} 모드로 운영되고 있어 사용자의 요청에 응답할 수 없습니다.\n`!` 명령어는 사용 가능합니다. (예: `!podman ps`, `!free -h`)"
 
-    # Natural language → Qwen interprets
-    action = _ask_qwen(text)
-    if action is None:
-        return "Qwen3-4B 응답 없음 — 서버가 실행 중인지 확인하세요. `!` prefix로 직접 실행 가능."
-
-    act = action.get("action", "reply")
-
-    if act == "reply":
-        return action.get("text", "처리 완료")
-    elif act == "status":
-        return _exec_status()
-    elif act == "ssh":
-        cmd = action.get("command", "")
-        reply = action.get("reply", "")
-        if not cmd:
-            return "명령이 지정되지 않았습니다."
-        result = _exec_ssh(cmd)
-        summary = _summarize_result(action, result)
-        return f"{reply}\n\n{summary}" if reply else summary
-    elif act == "search":
-        query = action.get("query", "")
-        if not query:
-            return "검색어가 지정되지 않았습니다."
-        return _exec_search(query)
-    elif act == "mode_switch":
-        return _exec_mode_switch(action.get("target", ""))
-    elif act == "log":
-        return _exec_log(int(action.get("lines", 20)))
-    elif act == "none":
-        return ""
-    else:
-        return f"알 수 없는 액션: {act}"
+    # Everything else → straight to Qwen, raw response
+    return _chat_qwen(text)
 
 
 # ── entry points ────────────────────────────────────────────────────
