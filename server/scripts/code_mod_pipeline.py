@@ -217,6 +217,28 @@ def load_tasks() -> dict:
         return yaml.safe_load(f)
 
 
+def _system_info() -> str:
+    """Read /proc/meminfo for lightweight memory snapshot. Returns short string."""
+    try:
+        d = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith(("MemTotal:", "MemFree:", "MemAvailable:",
+                                    "SwapTotal:", "SwapFree:")):
+                    key, val = line.split(":", 1)
+                    d[key.strip()] = int(val.strip().split()[0]) // 1024
+        mem_total = d.get("MemTotal", 0)
+        mem_free = d.get("MemFree", 0)
+        mem_avail = d.get("MemAvailable", 0)
+        swap_total = d.get("SwapTotal", 0)
+        swap_free = d.get("SwapFree", 0)
+        swap_used = swap_total - swap_free if swap_total > 0 else 0
+        return (f"mem: {mem_free}M free / {mem_avail}M avail ({mem_total}M total)"
+                f" | swap: {swap_used}M / {swap_total}M")
+    except Exception:
+        return "mem: n/a"
+
+
 def _notify_slack(text: str) -> None:
     """Send Slack DM notification. Non-blocking — failures are silent."""
     try:
@@ -411,7 +433,13 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
     code_tokens = len(code) // 3
     task_tokens = len(task_desc) // 3
 
-    _notify_slack(f"T{task['id']} [{task['name']}] 파이프라인 시작 — Stage {start_stage}/4, 예상 코드토큰 ~{code_tokens}")
+    sinfo = _system_info()
+    _notify_slack(
+        f"T{task['id']} [{task['name']}] 파이프라인 시작 (Stage {start_stage}/4)\n"
+        f"  code: ~{code_tokens} tok, task: ~{task_tokens} tok | file: {task['file']}\n"
+        f"  initial rate: prompt=~2.0 gen=~{GEN_RATE} t/s (default, calibrates after Stage 1)\n"
+        f"  {sinfo}"
+    )
 
     if resume_from and start_stage > 1:
         results = resume_from.copy()
@@ -493,15 +521,41 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
                                    run_id)
 
         print(f"  Stage {stage_num} done: {elapsed:.0f}s, status={status}", flush=True)
+        sinfo = _system_info()
+        rate_info = ""
+        if estimator.calls > 0:
+            rate_info = f"rate: prompt={estimator.prompt_eval_rate:.1f} gen={estimator.gen_rate:.1f} t/s"
+        else:
+            rate_info = f"rate: calib... (1st call)"
+        sliced_info = ""
+        if stage_num >= 2 and sliced_code != code:
+            reduction = (1 - len(sliced_code) / max(len(code), 1)) * 100
+            sliced_info = f" | sliced: {len(sliced_code)//3} tok ({reduction:.0f}% reduction)"
+        timeout_info = f" | timeout: {timeout}s"
+
         if status == 200:
             st = results[stage_key].get("tokens", {})
+            p_tok = st.get("prompt", "?")
+            c_tok = st.get("completion", "?")
+            mins = elapsed / 60
             extra = ""
             if stage_num == 4:
                 conf = results[stage_key].get("body", {}).get("confidence", "?")
-                extra = f", confidence={conf}"
-            _notify_slack(f"T{task['id']} Stage {stage_num}/4 {name.strip()} 완료 — {elapsed:.0f}s, status=200, tokens={st.get('prompt','?')}/{st.get('completion','?')}{extra}")
+                extra = f" | confidence: {conf}"
+            retry_note = " [CACHE HIT retry]" if was_retry else ""
+            _notify_slack(
+                f"T{task['id']} [{task['name']}] Stage {stage_num}/4 {name.strip()} 완료{retry_note}\n"
+                f"  elapsed: {elapsed:.0f}s ({mins:.1f}분) | tokens: {p_tok}/{c_tok}{extra}\n"
+                f"  {rate_info}{sliced_info}{timeout_info}\n"
+                f"  {sinfo}"
+            )
         else:
-            _notify_slack(f"T{task['id']} Stage {stage_num}/4 {name.strip()} 실패 — status={status}")
+            err = results[stage_key].get("body", {}).get("error", "unknown")[:200]
+            _notify_slack(
+                f"T{task['id']} [{task['name']}] Stage {stage_num}/4 {name.strip()} 실패\n"
+                f"  elapsed: {elapsed:.0f}s | status={status} | error: {err}\n"
+                f"  {sinfo}"
+            )
 
         if status != 200:
             results["finished"] = datetime.now(timezone.utc).isoformat()
@@ -519,15 +573,38 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
     results["rate_samples_n"] = len(estimator.prompt_samples)
     results["finished"] = datetime.now(timezone.utc).isoformat()
     # Final notification
+    sinfo = _system_info()
+    total_elapsed = sum(
+        results.get(k, {}).get("elapsed_s", 0)
+        for k in ["stage1", "stage2", "stage3", "stage4"])
+    rate_init = results.get("rate_initial", {})
+    rate_end = results.get("rate_final", {})
+    rate_delta = ""
+    if rate_init and rate_end:
+        rate_delta = (f" | rate evolution: prompt {rate_init.get('prompt_eval','?')}→{rate_end.get('prompt_eval','?')}"
+                      f" gen {rate_init.get('gen','?')}→{rate_end.get('gen','?')} t/s")
     if results.get("error"):
-        _notify_slack(f"T{task['id']} 파이프라인 중단 — {results['error']}")
+        _notify_slack(
+            f"T{task['id']} [{task['name']}] 파이프라인 중단\n"
+            f"  {results['error']} | elapsed: {total_elapsed:.0f}s\n"
+            f"  {sinfo}"
+        )
     else:
         pkg = results.get("stage4", {}).get("body", {})
         conf = pkg.get("confidence", "?")
-        total_elapsed = sum(
-            results.get(k, {}).get("elapsed_s", 0)
-            for k in ["stage1", "stage2", "stage3", "stage4"])
-        _notify_slack(f"T{task['id']} 파이프라인 완료 — 총 {total_elapsed:.0f}s, confidence={conf}")
+        mins = total_elapsed / 60
+        sliced_saved = results.get("sliced_code_tokens_est", 0)
+        orig_tokens = results.get("code_tokens_est", 1)
+        sliced_pct = (1 - sliced_saved / max(orig_tokens, 1)) * 100 if sliced_saved > 0 else 0
+        sliced_line = ""
+        if sliced_pct > 0:
+            sliced_line = f" | code slicing: ~{sliced_pct:.0f}% token reduction"
+        _notify_slack(
+            f"T{task['id']} [{task['name']}] 파이프라인 완료\n"
+            f"  total: {total_elapsed:.0f}s ({mins:.1f}분) | confidence: {conf} | stages: {estimator.calls} calls{sliced_line}\n"
+            f"  {rate_delta}\n"
+            f"  {sinfo}"
+        )
     return results
 
 
