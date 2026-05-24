@@ -30,47 +30,55 @@
 - [x] Reference tracking — lib/refs.py (GitHub API 5 projects + internal grep, 15min cycle)
 - [x] DB references table + state_collector/main.py integration
 
-## Phase 2: Enhancement (Planned)
+## Phase 2: Intelligence & Quality (Active, 2026-05-24)
 
-### 2.1 Recovery / Stabilization (Immediate)
-- [x] swap-batch.timer + swap-normal.timer reactivated
-- [x] review-worker.timer reactivated
-- [x] LiteLLM recovery or removal decision (was failed, unused) → removed (2026-05-19)
-- [x] devforge-llm recovery or removal decision (was failed, replaced by swap) → removed (2026-05-19)
-- [ ] journald log retention config (MaxRetentionSec=30day)
+Phase 2 is structured in 3 tiers. Tier 1 must complete before Tier 2 begins; Tiers 2 and 3 can overlap.
 
-### 2.2 Semantic Search (pgvector)
-- [x] pgvector extension installed + turns.text embedding vector column
-- [x] Embedding generation (embed_turns.py, local Qwen or API)
-- [x] CLI search --semantic (pgvector ANN + ILIKE hybrid)
-- [ ] MCP mem_search vector search upgrade
+### Tier 1 — Stabilization (This Week)
 
-### 2.3 MemPalace Classification
-- [ ] wing/room category schema definition
-- [ ] Auto-classification (LLM-based, similar pattern to review_worker)
+- [x] LiteLLM removal decision (was failed, unused) → removed (2026-05-19)
+- [x] devforge-llm removal decision (was failed, replaced by swap) → removed (2026-05-19)
+- [ ] Qwen3-4B (Podman A) re-enable — currently down after 32B code mode
+- [ ] review-worker.timer re-enable — 3-LLM debate pipeline reactivation
+- [ ] swap-batch.timer + swap-normal.timer re-enable — mode auto-switching
+- [x] journald log retention config (MaxRetentionSec=30day)
+- [x] Language pipeline guardrails — `lib/text_quality.py` (script purity validation for Korean output, token budget enforcement 10~500 chars, think-tag artifact detection)
+- [ ] update_handover.py context selection — quality-score-based prioritization of high-fidelity turns
+- [ ] T01-T16 32B batch test results → apply verified diffs (currently T11 in progress)
+
+### Tier 2 — Vector Intelligence (2-4 Weeks)
+
+> Research references: `docs/translation-quality-report.md` (model-radar lessons), `docs/translation-quality-feedback-loop.md` (TEaR + xCOMET + DCSQE feedback architecture). LLM selection for translation tasks deferred pending Qwen/Phi-14B/32B quality comparison test results.
+
+- [x] pgvector extension installed (vector 0.8.2) + turns.embedding vector(768) column
+- [x] HNSW index on turns.embedding (vector_cosine_ops)
+- [x] embed_turns.py operational — 1015/4180 turns embedded (Gemini embedding-embedding-001)
+- [ ] embed_turns.py complete remaining 3165 turns
+- [ ] Cross-lingual Wikipedia anchor corpus — ko.wikipedia + en.wikipedia embeddings keyed by shared Q-item (Wikidata ID), pgvector table
+- [ ] Translation quality estimation — cosine_similarity(embed_ko, embed_en) using Wikipedia Q-item anchor as ground truth
+- [ ] embed_turns.py cost optimization — skip trivial turns (< 20 chars), prioritize decisions/observations
+- [ ] MemPalace auto-classification — LLM-based wing/room assignment (follows review_worker parallel extraction pattern)
+- [ ] CLI search --semantic (pgvector ANN + ILIKE hybrid)
 - [ ] CLI search --wing/--room filtering
-- [ ] Classification results activity_log recording
+- [ ] MCP mem_search vector search upgrade (pgvector ANN)
+- [ ] search --augmented — DuckDuckGo + local LLM inference pipeline
+- [ ] Ref: `/opt/projects/server/docs/translation-quality-report.md` (model-radar lessons applied)
 
-### 2.4 Search-Augmented Integration
-- [ ] DuckDuckGo search → LLM inference pipeline
-- [ ] /opt/projects/qwen-cli based extension (if available)
-- [ ] cli.py search --augmented (search + LLM analysis results)
-- [ ] Ref: memory/qwen-cli-reference.md (2026-05-14)
+### Tier 3 — Operations & Visibility (1-3 Months)
 
-### 2.5 Reference Tracking Upgrade
-- [x] rss-monitor.service — GitHub RSS periodic polling (all 9 reference-watchlist.md items)
-- [ ] Snyk/CISA vulnerability auto-scan (container images)
+- [x] rss-monitor.service — GitHub RSS periodic polling (all 9 references)
 - [x] 4-month refresh cycle alert → automated (first run 2026-08-15)
-- [ ] refresh-log.md recording automation
-
-### 2.6 Web UI
-- [ ] Conversation search dashboard (FastAPI + simple frontend)
-- [ ] Model performance dashboard (review_facts stats visualization)
-- [ ] activity_log real-time feed
+- [ ] Snyk/CISA vulnerability auto-scan (container images)
+- [ ] refresh-log.md auto-recording
+- [ ] Web UI — Conversation search dashboard (FastAPI + simple frontend)
+- [ ] Web UI — Model performance dashboard (review_facts stats visualization)
+- [ ] Web UI — activity_log real-time feed
 
 ## Phase 3: Someday/Maybe
 
 - [ ] Chrome Extension → direct server submission (currently Mac-relayed)
 - [ ] iOS Shortcuts integration
 - [ ] Multi-LLM routing (additional model integration)
-- [ ] T01~T08 32B code modification full re-test (intermittent execution)
+- [ ] User decision rationale tracking — structured decision logging with evidence chain
+- [ ] Back-translation fidelity check — when fast translation API available
+- [ ] T01-T16 32B code modification full re-test (intermittent execution)

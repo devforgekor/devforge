@@ -18,6 +18,8 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from lib.text_quality import validate as validate_korean
+
 # ── config ──────────────────────────────────────────────────────────
 def _load_secrets():
     secrets = {}
@@ -37,16 +39,37 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 QWEN_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
 OFFSET_FILE = Path("/var/tmp/telegram_bot_offset.txt")
 
-SYSTEM_PROMPT = """너는 DevForge 서버의 AI 운영자야. ARM 서버(Oracle Linux, Podman rootless, 22GB RAM)에서 작동 중이야.
+SYSTEM_PROMPT = """You are the AI operator of a DevForge ARM server (Oracle Linux, Podman rootless, 22GB RAM).
 
-사용자와 자연스러운 한국어로 대화해. 간결하고 친근하게. 명령어 실행이 필요하면 아래 도구를 호출하고, 그 결과를 바탕으로 자연스럽게 답변해.
+Communicate with the user in natural, concise, friendly Korean. When you need real data, use the CMD: tool below. Feed the result back into a natural Korean response.
 
-[사용 가능한 도구]
-아래 형식으로 정확히 한 줄을 출력하면 도구가 실행되고 결과를 받을 수 있어:
+[Response format — CRITICAL for mobile readability]
+The user reads on a phone. Structure every response clearly:
 
-CMD: <셸 명령어>
+- Separate each information block with a BLANK LINE.
+- Section headers: <b>bold</b>, followed by content on the next line.
+- List items: each on its own line, starting with •.
+- Values/stats: wrap in <code>code</code> tags.
+- Summarize long command output to 5–10 key lines.
+- Example:
 
-예:
+<b>메모리 상태</b>
+• 전체 22GB 중 4.2GB 사용 중 (19%).
+• 여유 12GB, 가용 16GB.
+
+<b>실행 중인 컨테이너</b>
+• <code>devforge-qwen</code> — Up 3h (healthy)
+• <code>postgres</code> — Up 2d (healthy)
+• <code>devforge-api</code> — Up 2d (healthy)
+
+총 3개 정상 작동 중이야.
+
+[Available tool — CMD: protocol]
+To execute a shell command, output exactly one line:
+
+CMD: <shell command>
+
+Examples:
 CMD: free -h
 CMD: podman ps --format '{{.Names}} {{.Status}}'
 CMD: python3 scripts/cli.py worklog recent
@@ -54,24 +77,26 @@ CMD: cat docs/tasks.yaml
 CMD: systemctl --user status devforge-api
 CMD: journalctl --user -n 20 --no-pager -q
 
-[주요 명령어 레퍼런스]
-- free -h — 메모리 상태
-- df -h / /mnt/lv_db /mnt/secure_meta — 디스크 용량
-- podman ps — 컨테이너 목록
-- python3 scripts/cli.py worklog recent — 최근 작업 로그
-- python3 scripts/cli.py worklog search <키워드> — 작업 로그 검색
-- python3 scripts/cli.py activity recent --today — 오늘 활동 로그
-- cat docs/tasks.yaml — 현재 작업 보드
-- cat data/nightly_status.yaml — nightly 파이프라인 상태
-- systemctl --user status <서비스> — 서비스 상태
-- journalctl --user -n N --no-pager -q — 저널 로그
+[Command reference]
+- free -h — memory usage
+- df -h / /mnt/lv_db /mnt/secure_meta — disk usage
+- podman ps — container list
+- python3 scripts/cli.py worklog recent — recent work log
+- python3 scripts/cli.py worklog search <keyword> — search work log
+- python3 scripts/cli.py activity recent --today — today's activity log
+- cat docs/tasks.yaml — current task board
+- cat data/nightly_status.yaml — nightly pipeline status
+- systemctl --user status <service> — service status
+- journalctl --user -n N --no-pager -q — journal logs
 
-[중요 규칙]
-- 명령어는 Podman rootless 환경에서 실행돼. docker 대신 podman 사용.
-- systemctl은 --user 붙여야 해.
-- CMD: 한 번에 하나의 명령어만 요청. 여러 개가 필요하면 순차적으로 해.
-- 단순 대화나 질문에는 CMD: 없이 바로 한국어로 답변해.
-- 명령어 실행 결과는 [RESULT]로 시작하는 블록으로 받게 돼. 그걸 보고 자연스럽게 설명해줘."""
+[Rules]
+- The server uses Podman rootless. Never use "docker" — always use "podman".
+- systemctl needs --user flag.
+- Request ONE command per CMD: line. If you need multiple, do them sequentially across turns.
+- For simple conversation or questions, respond directly in Korean — no CMD: needed.
+- When you receive a [RESULT] block, compose a natural Korean explanation from it.
+- HTML tags must be properly closed: <b>...</b>, <code>...</code>, <i>...</i>
+- Avoid raw <, >, & characters in plain text — only use them inside HTML tags."""
 
 
 # ── Telegram API ────────────────────────────────────────────────────
@@ -90,7 +115,19 @@ def _send(text: str, chat_id: str = ""):
     target = chat_id or CHAT_ID
     if len(text) > 4000:
         text = text[:4000] + "\n... (truncated)"
-    return _tg("sendMessage", {"chat_id": target, "text": text})
+    # Phase 2 guardrail: soft-check Korean output quality before sending
+    q = validate_korean(text)
+    if not q["ok"]:
+        issues = []
+        for name, check in q["checks"].items():
+            if not check["ok"]:
+                issues.append(f"{name}={check}")
+        print(f"[quality:warn] _send: {issues}", flush=True)
+    # Try HTML parse mode first for rich formatting; fall back to plain text
+    result = _tg("sendMessage", {"chat_id": target, "text": text, "parse_mode": "HTML"})
+    if not result.get("ok"):
+        result = _tg("sendMessage", {"chat_id": target, "text": text})
+    return result
 
 
 # ── Qwen operator ──────────────────────────────────────────────────
@@ -131,12 +168,12 @@ def _chat_qwen(user_msg: str) -> str:
     if not cmd:
         return "(빈 명령어)"
 
-    print(f"[telegram_bot] Qwen 요청: {cmd[:100]}", flush=True)
+    print(f"[telegram_bot] Qwen requested: {cmd[:100]}", flush=True)
     result = _exec_ssh(cmd)
 
     # Turn 2: Feed result back, Qwen composes natural response
     messages.append({"role": "assistant", "content": resp1})
-    messages.append({"role": "user", "content": f"[RESULT]\n{result[:3000]}\n[/RESULT]\n\n위 결과를 바탕으로 자연스러운 한국어로 답변해줘.\n/no_think"})
+    messages.append({"role": "user", "content": f"[RESULT]\n{result[:3000]}\n[/RESULT]\n\nCompose a natural Korean response based on the result above.\n/no_think"})
 
     resp2 = _call_qwen_raw(messages, max_tokens=512)
     return resp2 or result[:1500]
@@ -148,13 +185,13 @@ def _exec_status() -> str:
     mode_file = Path("/opt/ai_data/scripts/current-mode.env")
     if mode_file.exists():
         mode = mode_file.read_text().strip().replace("MODE=", "")
-        lines.append(f"현재 {mode} 모드로 운영 중이야.")
+        lines.append(f"<b>운영 모드</b>\n<code>{mode}</code>")
     try:
         r = subprocess.run(["free", "-h"], capture_output=True, text=True, timeout=5)
         for l in r.stdout.split("\n"):
             if "Mem:" in l:
                 parts = l.split()
-                lines.append(f"메모리는 전체 {parts[1]} 중 {parts[2]} 사용 중이고, {parts[-1]} 남았어.")
+                lines.append(f"\n<b>메모리</b>\n전체 {parts[1]} / 사용 {parts[2]} / 여유 {parts[-1]}")
     except Exception:
         pass
     try:
@@ -162,7 +199,9 @@ def _exec_status() -> str:
                           capture_output=True, text=True, timeout=5)
         containers = [cl.strip() for cl in r.stdout.strip().split("\n")[:8] if cl.strip()]
         if containers:
-            lines.append("실행 중인 컨테이너는 " + ", ".join(containers) + ".")
+            lines.append(f"\n<b>컨테이너</b>")
+            for c in containers:
+                lines.append(f"• <code>{c}</code>")
     except Exception:
         pass
     return "\n".join(lines)
