@@ -1,0 +1,1076 @@
+# =============================================================================
+# DevForge Multi-Agent LLM Debate System — Architecture Specification v1.0
+# =============================================================================
+# Purpose: AI review target — complete system design for code-centric multi-agent
+#          debate on a single ARM server with 22GB RAM.
+# Language: English (machine-readable).
+# =============================================================================
+
+meta:
+  title: "Multi-Agent LLM Debate System"
+  version: "1.1"
+  date: "2026-05-24"
+  status: "Phase 1-2 complete. Supervisor validated. Ready for Phase 3 (orchestrator)."
+  domain: "Software development — code generation, review, debugging, planning"
+  goals:
+    - "Reduce hallucination vs single-LLM baseline by 50%"
+    - "Eliminate style/length bias via blind comparison"
+    - "Auto-escalate unresolved disputes to web search (DART trigger)"
+    - "Operate within 22GB RAM via sequential single-model execution"
+
+  prior_review:
+    reviewers: ["Qwen3-4B", "DeepCoder-14B-Preview", "Phi-4 14B"]
+    method: "Independent blind review → consolidated synthesis"
+    verdict: "APPROVED — Production-ready with minor amendments"
+    report: "docs/debate-review-report.yaml"
+    amendments_incorporated: 7  # D1-D7 all resolved
+
+  validated:
+    supervisor_v1_0: true
+    grep_sed_json_parsing: true
+    hot_swap_works: true
+    health_endpoint: true
+    deepcoder_downloaded: true
+
+# =============================================================================
+# 1. HOST SYSTEM SPECIFICATIONS
+# =============================================================================
+host:
+  hardware:
+    cpu: "ARM Ampere Altra (aarch64), 4 cores"
+    ram_total_gb: 22
+    swap_gb: 8
+    swap_type: "ZRAM (compressed in-memory)"
+    disk:
+      root: { size_gb: 20, used_gb: 13, mount: "/" }
+      lv_db: { size_gb: 30, used_mb: 363, mount: "/mnt/lv_db" }
+      lv_meta: { size_gb: 4.5, used_gb: 1.2, mount: "/mnt/secure_meta" }
+  os: "Oracle Linux 9.7"
+  runtime: "Podman rootless (user opc), Quadlet systemd"
+  database: "PostgreSQL 16 (pg_trgm, JSONB)"
+  proxy: "Caddy (host network, auto-HTTPS)"
+
+# =============================================================================
+# 2. MODEL INVENTORY
+# =============================================================================
+models:
+  owned:
+    - id: "qwen3-4b"
+      filename: "Qwen3-4B-Q4_K_M.gguf"
+      size_gb: 2.4
+      quantization: "Q4_K_M"
+      params_b: 4
+      estimated_rss_gb: 4.0
+      role: "telegram-operator"
+      system_prompt_support: true
+
+    - id: "qwen25-coder-14b"
+      filename: "qwen2.5-coder-14b-instruct-q4_k_m.gguf"
+      size_gb: 8.4
+      quantization: "Q4_K_M"
+      params_b: 14
+      estimated_rss_gb: 9.5
+      role: "proposer"
+      system_prompt_support: true
+
+    - id: "phi-4-14b"
+      filename: "phi-4-Q4_K_M.gguf"
+      size_gb: 8.3
+      quantization: "Q4_K_M"
+      params_b: 14
+      estimated_rss_gb: 12.0
+      estimated_rss_gb_no_mlock: 9.0
+      role: "judge-rounds-1-4"
+      system_prompt_support: true
+      notes: "MLOCK costs ~3GB extra RSS but ensures stable inference"
+
+    - id: "phi-4-mini"
+      filename: "Phi-4-mini-instruct.Q8_0.gguf"
+      size_gb: 3.9
+      quantization: "Q8_0"
+      params_b: 3.8
+      estimated_rss_gb: 8.6
+      role: "normal-mode-arbitrator"
+      system_prompt_support: true
+
+    - id: "llama-3b"
+      filename: "Llama-3.2-3B-Instruct-Q8_0.gguf"
+      size_gb: 3.2
+      quantization: "Q8_0"
+      params_b: 3
+      estimated_rss_gb: 4.6
+      role: "normal-mode-analyst"
+      system_prompt_support: true
+
+    - id: "qwen-32b"
+      filename: "Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf"
+      size_gb: 17.0
+      quantization: "IQ4_XS"
+      params_b: 32
+      estimated_rss_gb: 17.0
+      role: "judge-round-5"
+      system_prompt_support: true
+      notes: "Heavy. Single-model-only. ctx=10240 uses ~2.5GB KV cache."
+
+  downloaded:
+    - id: "deepcoder-14b"
+      source: "bartowski/agentica-org_DeepCoder-14B-Preview-GGUF (HuggingFace)"
+      filename: "agentica-org_DeepCoder-14B-Preview-Q4_K_M.gguf"
+      quantization: "Q4_K_M"
+      actual_size_gb: 8.4
+      measured_rss_gb: 8.5  # from container metrics during load test
+      role: "refuter"
+      system_prompt_support: false
+      chat_template: "<｜User｜>...<｜Assistant｜><think>...</think>..."
+      thinking: true  # native <think> chain support
+      critical_notes:
+        - "NO system prompt — role instructions MUST be in user message prefix"
+        - "max_tokens=8192 (per review D7; 64000 impractical on CPU. Increase only if <think> truncation observed)"
+        - "temperature=0.6, top_p=0.95 (official recommended)"
+        - "Put persona/role in User message prefix as [ROLE: ...] block"
+        - "benchmark: cold load ~102s, cached reload ~132s (limited page-cache benefit when alternating models)"
+
+# =============================================================================
+# 3. CONTAINER ARCHITECTURE
+# =============================================================================
+containers:
+  podman_a:
+    name: "devforge-qwen"
+    image: "ghcr.io/ggml-org/llama.cpp:server"
+    ports: ["127.0.0.1:8080:8080"]
+    memory_max_gb: 6
+    entrypoint: "/opt/ai_data/scripts/qwen-entrypoint.sh"
+    models_mounted: "/opt/ai_data/models/gguf:/models:Z"
+    role: "Dedicated lightweight model server. Runs in normal + discussion modes."
+    stop_condition: "MODE=code (Qwen3-4B stopped to free RAM for 32B)"
+
+  podman_b:
+    name: "devforge-swap"
+    image: "ghcr.io/ggml-org/llama.cpp:server"
+    ports: ["127.0.0.1:8081:8081", "127.0.0.1:8082:8082"]
+    memory_max_gb: 26
+    entrypoint: "/bin/bash"
+    exec: "/entrypoint.d/dual-server-entrypoint.sh"
+    models_mounted: "/opt/ai_data/models/gguf:/models:Z"
+    volumes:
+      - "/opt/ai_data/scripts/dual-server-entrypoint.sh:/entrypoint.d/dual-server-entrypoint.sh:Z"
+      - "/opt/ai_data/scripts/debate-supervisor.sh:/entrypoint.d/debate-supervisor.sh:Z"
+      - "/opt/ai_data/scripts/current-mode.env:/entrypoint.d/current-mode.env:Z"
+      - "/opt/ai_data/debate/switch:/entrypoint.d/debate_state:Z"
+    role: "Mode-switchable. In debate mode, delegates to persistent supervisor for hot-swap without container restart."
+    environment:
+      SERVER_TIMEOUT: 28800
+      BATCH_SIZE: 1024
+      MLOCK: 1
+    capabilities:
+      - "IPC_LOCK"  # required for mlock
+
+  mode_file: "/opt/ai_data/scripts/current-mode.env"
+
+# =============================================================================
+# 4. MODE DEFINITIONS
+# =============================================================================
+modes:
+  normal:
+    purpose: "Telegram operator + lightweight review pipeline"
+    podman_a:
+      port_8080: { model: "qwen3-4b", ctx: 4096 }
+    podman_b:
+      port_8081: { model: "phi-4-mini", ctx: 8192 }
+      port_8082: { model: "llama-3b", ctx: 4096 }
+    total_model_rss_gb: 17.2
+    concurrent_models: 3
+
+  debate:
+    purpose: "Supervisor-based hot-swap. No container restart between rounds. Page cache preserved."
+    podman_a:
+      port_8080: "stopped (Qwen3-4B not needed for debate)"
+    podman_b:
+      port_8081: "round-dependent (one at a time: qwen25-coder-14b, deepcoder-14b, phi-4-14b, qwen-32b)"
+      port_8082: "stopped (unused in debate)"
+    total_model_rss_gb: "8-17 (varies by round, single model)"
+    concurrent_models: 1
+    switch_method: "Write model-switch.json → supervisor detects md5sum change → kill current → launch new"
+    switch_file: "/opt/ai_data/debate/switch/model-switch.json"
+    container_restart_required: false
+    notes: >
+      The debate-supervisor.sh runs as a persistent PID 1 in the container.
+      It polls model-switch.json every 2 seconds. On md5sum change, it
+      gracefully kills the current llama-server and launches the new one.
+      This preserves the Linux page cache for the GGUF files, though
+      benefit is limited when alternating between 8GB+ models.
+      All JSON parsing inside the container uses grep/sed (no python3).
+
+  code:
+    purpose: "Heavy single-model code generation (32B IQ4_XS)"
+    podman_a:
+      port_8080: "stopped"
+    podman_b:
+      port_8081: { model: "qwen-32b", ctx: 10240 }
+      port_8082: "stopped"
+    total_model_rss_gb: 17.0
+    concurrent_models: 1
+
+# =============================================================================
+# 5. DEBATE ROUND STRUCTURE
+# =============================================================================
+debate:
+  max_rounds: 5
+  early_exit:
+    - condition: "consensus_score >= 95%"
+      action: "skip remaining rounds → jump to final synthesis"
+    - condition: "consensus_score improvement < 5% for 2 consecutive rounds"
+      action: "stagnation detected → jump to final synthesis"
+
+  web_search:
+    provider: "Tavily (primary), SerpAPI (fallback)"
+    max_searches_per_session: 3
+    trigger: "DART: consensus_score < 70% AND search_count < max"
+    query_source: "suggested_search_query from judge output"
+    result_injection: "Appended to shared_context, cited as [Search N]"
+    dedup_filter:
+      method: "Compare suggested_search_query against prior queries"
+      rule: "Skip if keyword overlap > 80% or > 70% token overlap"
+      note: "F2 from review report — prevents exhausting search quota on near-identical queries"
+
+    search_cache:
+      implementation: "in-memory dict in orchestrator process"
+      key: "md5(query_lowercase_stripped)"
+      ttl_seconds: 3600
+      note: "F7 from review report — prevents duplicate API calls across sessions"
+
+  # ── Round 0: DRAG Query Consensus (optional, per D2 review decision) ──
+  round_0:
+    name: "DRAG — Query Consensus"
+    purpose: "Prevent information contamination by agreeing on search queries first"
+    optional: true
+    skip_conditions:
+      - "--skip-drag CLI flag set"
+      - "File paths present in user question (closed-domain task)"
+      - "Error messages / stack traces present (debugging task)"
+    auto_detection: >
+      Before Round 0, orchestrator sends a 0.5-round routing prompt to Phi-4-mini:
+      "Does this task need external web search? Answer Y/N with 1-sentence reason."
+      If N → skip to Round 1. If Y → proceed with DRAG.
+    steps:
+      - step: 1
+        model: "qwen25-coder-14b"
+        action: "propose_queries"
+        prompt_key: "drag_proposer"
+        output: "3 search keywords + rationale per keyword"
+
+      - step: 2
+        model: "deepcoder-14b"
+        action: "critique_queries"
+        prompt_key: "drag_refuter"
+        output: "bias/blindspot critique + 1-2 alternative queries"
+
+      - step: 3
+        model: "phi-4-14b"
+        action: "select_final_queries"
+        prompt_key: "drag_judge"
+        output: "final query set (3-5 queries) with purpose per query"
+
+      - step: 4
+        executor: "orchestrator (Python)"
+        action: "execute_search"
+        detail: "Call Tavily/SerpAPI with final queries. Store top 5-10 results per query."
+        output: "shared_context (appended to session state)"
+
+  # ── Rounds 1-4: DART Debate ──
+  round_1_to_4:
+    name: "DART — Debate with Adaptive Retrieval"
+    purpose: "Iterative proposal, refutation, and blind judging with conditional web search"
+    sub_rounds:
+      - phase: "A — Proposer"
+        model: "qwen25-coder-14b"
+        input:
+          - "Full history from all prior rounds"
+          - "Judge consensus_score and disagreement_points from previous round"
+          - "shared_context (search results)"
+        output_format: "JSON (strict)"
+        output_fields:
+          - "logic_summary: string (max 3 sentences)"
+          - "code_snippet: string (```python ... ```)"
+          - "confidence_score: integer (0-100)"
+          - "disagreement_points: list[string]"
+          - "citations: list[source_id] (optional)"
+        prompt_key: "dart_proposer"
+
+      - phase: "B — Refuter"
+        model: "deepcoder-14b"
+        input:
+          - "Same history + Proposer's new argument"
+          - "shared_context"
+        output_format: "JSON (strict, same schema as A)"
+        notes: >
+          DeepCoder-14B-Preview DOES NOT support system prompts.
+          Role instructions must be embedded in the first user message
+          as a prefix block. temperature=0.6, top_p=0.95, max_tokens>=64000.
+        prompt_key: "dart_refuter"
+
+      - phase: "C — Judge"
+        model: "phi-4-14b"
+        input:
+          - "Both anonymized proposals (A/B, randomly shuffled)"
+          - "Author identity stripped, order randomized"
+          - "shared_context"
+        output_format: "JSON (strict)"
+        output_fields:
+          - "jury_opinions: {security: string, performance: string, readability: string}"
+          - "consensus_score: integer (0-100)"
+          - "winner: 'A' | 'B' | 'tie'"
+          - "suggested_search_query: string | null"
+          - "disagreement_analysis: string"
+        bias_defenses:
+          - "shuffle(): randomize A/B order"
+          - "Labels: 'Draft Alpha' / 'Draft Beta' (never model names)"
+          - "Instruction: 'Ignore response length, comment style, and politeness. Judge ONLY logical accuracy and code integrity.'"
+        prompt_key: "dart_judge"
+
+      - phase: "C-prime — Winner Mapping (F4 from review)"
+        executor: "orchestrator (Python)"
+        action: >
+          After judge returns winner ('alpha' or 'beta'), the orchestrator
+          maps this back to the actual model. The mapping is logged BEFORE
+          the shuffle, so the orchestrator always knows which model was
+          assigned to Alpha and which to Beta.
+        log_entry: "winner_map: {round: N, alpha: 'qwen25-coder-14b', beta: 'deepcoder-14b', winner: 'alpha'}"
+        note: >
+          This mapping MUST be written to state.jsonl BEFORE shuffling.
+          Without it, we lose track of which model won each round.
+
+      - phase: "D — DART Trigger Check (orchestrator)"
+        condition: >
+          consensus_score < 70%
+          AND search_count < max_searches
+          AND suggested_search_query NOT IN (null, "", "none", "null")
+        action:
+          - "Extract suggested_search_query from judge output"
+          - "Run dedup check against prior queries (F2)"
+          - "Execute web search if not duplicate"
+          - "Append results to shared_context"
+          - "Increment search_count"
+        skip_if: "consensus_score >= 70% OR search_count >= max_searches OR suggested_search_query is empty/null"
+
+  # ── Round 5: Final Synthesis (32B) ──
+  round_5:
+    name: "Final Synthesis — 32B Judge"
+    purpose: "Comprehensive final answer from accumulated debate + search results"
+    model: "qwen-32b"
+    model_config:
+      ctx: 10240
+      threads: 4
+      mlock: false
+
+    # D6 from review: Phi-4 summarizes history to prevent 32B context overflow
+    pre_step_history_summary:
+      model: "phi-4-14b"
+      purpose: "Condense full 5-round debate history into 500-word summary for 32B"
+      input:
+        - "Full debate history (all rounds)"
+        - "All consensus_score trends"
+        - "All DART search results"
+      output: "500-word structured summary covering: key arguments, resolved/disputed points, search findings"
+      rationale: >
+        Full 5-round history + shared_context + prompt template could exceed
+        32B's ctx=10240. Phi-4 summarizes the debate into a compact form.
+        Qwen-32B receives: summary + last 2 complete rounds + shared_context.
+        This keeps total context safely within 10k tokens.
+
+    input:
+      - "Phi-4 generated history summary (500 words)"
+      - "Last 2 complete rounds (full detail)"
+      - "All shared_context (search results)"
+      - "All consensus_score trends"
+      - "Blind lifted — model identities revealed for final synthesis"
+    output:
+      - "final_code: string (executable, complete)"
+      - "decision_summary: string"
+      - "security_notes: list[string]"
+      - "performance_notes: list[string]"
+      - "confidence: integer (0-100)"
+    prompt_key: "final_synthesis"
+
+# =============================================================================
+# 6. MODEL SWITCHING MECHANISM (Supervisor v1.0 — Validated)
+# =============================================================================
+model_switching:
+  mechanism: "Persistent supervisor + model-switch.json (NO container restart)"
+  version: "1.0"
+  status: "validated (2026-05-24)"
+
+  supervisor:
+    script: "/opt/ai_data/scripts/debate-supervisor.sh"
+    script_in_container: "/entrypoint.d/debate-supervisor.sh"
+    switch_file_host: "/opt/ai_data/debate/switch/model-switch.json"
+    switch_file_container: "/entrypoint.d/debate_state/model-switch.json"
+    ready_marker: "/var/tmp/supervisor_ready"
+    poll_interval_seconds: 2
+    detection_method: "md5sum comparison"
+    json_parsing: "grep + sed (no python3 dependency)"
+    cleanup_method: "kill -TERM → wait 20s → kill -9 → wait 2s for port release"
+
+  switch_file_format: |
+    {
+      "model_file": "phi-4-Q4_K_M.gguf",
+      "port": 8081,
+      "ctx": 4096,
+      "threads": 4,
+      "mlock": 1
+    }
+
+  procedure_from_orchestrator:
+    - step: 1
+      action: "Write model-switch.json with target model config"
+      file: "/opt/ai_data/debate/switch/model-switch.json"
+      note: "Supervisor detects md5sum change within 2s"
+
+    - step: 2
+      action: "Poll health endpoint until ready (supervisor sets ready marker when 'server is listening')"
+      url: "http://127.0.0.1:8081/health"
+      expected: '{"status":"ok"}'
+      timeout_seconds: 240
+      poll_interval_seconds: 2
+
+    - step: 3
+      action: "Execute LLM call via HTTP API"
+      endpoint: "http://127.0.0.1:8081/v1/chat/completions"
+
+  measured_loading_times:
+    cold_start_seconds:
+      qwen25-coder-14b: { estimated: 45, measured: null, note: "not yet benchmarked" }
+      deepcoder-14b: { estimated: 50, measured: 102, note: "8.4GB GGUF. First load includes disk read." }
+      phi-4-14b: { estimated: 90, measured: 40, note: "8.3GB GGUF. Faster than estimated." }
+      qwen-32b: { estimated: 180, measured: null, note: "17GB GGUF. Expected slowest." }
+
+    cached_repeat_seconds:
+      note: >
+        Page cache benefit is LIMITED when alternating between different 8GB+ models.
+        Each new model evicts the previous model's pages from cache.
+        Measured DeepCoder→Phi→DeepCoder: second DeepCoder load was ~132s (slower than
+        cold start, likely due to Phi-4's pages still occupying cache).
+        Page cache acceleration expected ONLY for same-model consecutive loads
+        (e.g., Phi-4 judge used in rounds 1-4 back-to-back without other models
+        in between — but our round design alternates: Qwen→DeepCoder→Phi, so
+        each model load is effectively cold).
+      recommendation: "Budget for cold-start times in all round estimates."
+
+  per_round_total_seconds:
+    round_0_drag: 272    # 45 + 102 + 40 + 30 (search) + 55 (inference)
+    round_1_to_4: 197    # 45 + 102 + 40 + 10 (inference, shorter ctx)
+    round_5_synthesis: 220  # 180 (32B cold) + 40 (history summary by Phi-4 + inference)
+    phi4_history_summary: 50  # extra step before R5: Phi-4 condenses full history
+
+  five_round_total_estimated:
+    worst_case_minutes: 22  # R0 + R1-4 + R5 + 3 web searches: 272+788+220+90=1370s
+    typical_minutes: 14     # R0 + R1-4 (2 rounds) + R5 (no DART triggers): 272+394+220=886s
+    best_case_minutes: 11   # R0 + R1 + early-exit at R2 + R5 (DRAG not skipped): 272+197+220=689s
+    best_case_drag_skipped_minutes: 7  # DRAG skipped + R1 + early-exit + R5: 197+220=417s
+    measured_note: "These are COLD-START estimates based on supervisor v1.0 benchmarks. Actual may vary with model quantization and system load."
+
+  supervisor_lifecycle: |
+    1. Container starts → dual-server-entrypoint.sh reads MODE=debate → execs debate-supervisor.sh
+    2. Supervisor enters idle loop, waiting for model-switch.json to appear
+    3. Orchestrator writes model-switch.json → supervisor detects md5sum change
+    4. Supervisor kills current llama-server (if any), launches new model
+    5. When llama-server outputs "server is listening", supervisor writes READY to /var/tmp/supervisor_ready
+    6. Orchestrator polls :8081/health → returns {"status":"ok"} → proceeds with LLM call
+    7. For next round: orchestrator writes new model-switch.json → goto step 3
+
+# =============================================================================
+# 7. DUAL-SERVER-ENTRYPOINT.SH — IMPLEMENTED (v3.1)
+# =============================================================================
+entrypoint_design:
+  current_version: "v3.1"
+  current_modes: ["normal", "discussion", "debate", "batch", "code"]
+  status: "implemented and tested"
+
+  mode_normal:
+    models:
+      - { port: 8081, model: "Phi-4-mini-instruct.Q8_0.gguf", ctx: 8192, mlock: 1 }
+      - { port: 8082, model: "Llama-3.2-3B-Instruct-Q8_0.gguf", ctx: 4096, mlock: 0 }
+
+  mode_discussion:
+    models:
+      - { port: 8081, model: "phi-4-Q4_K_M.gguf", ctx: 4096, mlock: 1 }
+      - { port: 8082, model: "Llama-3.2-3B-Instruct-Q8_0.gguf", ctx: 4096, mlock: 0 }
+
+  mode_batch:
+    models:
+      - { port: 8081, model: "phi-4-Q4_K_M.gguf", ctx: 8192, mlock: 1 }
+      - { port: 8082, model: "qwen2.5-coder-14b-instruct-q4_k_m.gguf", ctx: 8192, mlock: 0 }
+
+  mode_code:
+    models:
+      - { port: 8081, model: "Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf", ctx: 10240, mlock: 0 }
+
+  mode_debate:
+    implementation: "exec /bin/bash /entrypoint.d/debate-supervisor.sh"
+    note: >
+      Entrypoint delegates entirely to the supervisor. No launch_server() calls.
+      The supervisor handles all model lifecycle internally via model-switch.json.
+      This keeps the entrypoint simple and avoids duplicating model launch logic.
+
+  launch_server_signature: |
+    launch_server() {
+        local name="$1" port="$2" model_file="$3" ctx="$4" threads="$5" threads_batch="$6"
+        local cache_ram="${7:-}"       # optional: cache RAM limit in MiB
+        local mlock_flag="${8:-${MLOCK:-0}}"  # per-model MLOCK override
+        # ...
+    }
+    # 8th parameter (mlock_flag) added to support per-model MLOCK control.
+    # Discussion mode: Phi-4 gets mlock=1, Llama-3B gets mlock=0.
+
+# =============================================================================
+# 8. PROMPT TEMPLATES
+# =============================================================================
+prompts:
+  # ── Round 0 Prompts ──
+  drag_proposer:
+    model: "qwen25-coder-14b"
+    system: |
+      You are a search strategist for a code review debate system.
+      Your job is to propose search queries that will gather objective,
+      comprehensive information about the topic before any debate begins.
+    user: |
+      Topic: {question}
+
+      Propose 3 search keywords with a 1-sentence rationale for each.
+      Consider: official documentation, recent changes, common pitfalls,
+      security implications, and performance trade-offs.
+
+      Output as JSON:
+      {
+        "queries": [
+          {"keyword": "...", "rationale": "..."},
+          {"keyword": "...", "rationale": "..."},
+          {"keyword": "...", "rationale": "..."}
+        ]
+      }
+
+  drag_refuter:
+    model: "deepcoder-14b"
+    system: null  # DeepCoder does NOT support system prompts
+    user: |
+      [ROLE: You are a critical search strategist. Your job is to find bias,
+      blind spots, and missing perspectives in the proposed search queries.]
+
+      Topic: {question}
+
+      Proposed queries:
+      {proposer_queries_json}
+
+      Critically examine these queries:
+      1. What biases do they embed?
+      2. What perspectives are missing?
+      3. Propose 1-2 alternative queries that address these gaps.
+
+      Output as JSON:
+      {
+        "critique": "2-sentence assessment",
+        "biases_found": ["bias1", "bias2"],
+        "alternative_queries": [
+          {"keyword": "...", "rationale": "..."}
+        ]
+      }
+
+  drag_judge:
+    model: "phi-4-14b"
+    system: |
+      You are a neutral search arbitrator. Your job is to synthesize competing
+      query proposals into a balanced, comprehensive final query set.
+    user: |
+      Topic: {question}
+
+      Original queries (Proposer):
+      {proposer_queries_json}
+
+      Critique and alternatives (Refuter):
+      {refuter_output_json}
+
+      Select 3-5 final search queries that together provide balanced coverage.
+      For each, explain WHY it was chosen.
+
+      Output as JSON:
+      {
+        "final_queries": [
+          {"keyword": "...", "purpose": "..."}
+        ]
+      }
+
+  # ── Rounds 1-4 Prompts ──
+  dart_proposer:
+    model: "qwen25-coder-14b"
+    system: |
+      You are a solution PROPOSER in a code debate. Your role:
+      1. Build on your previous arguments using new evidence.
+      2. Clearly state what you AGREE and DISAGREE with in the refuter's last response.
+      3. Strengthen weak points. Abandon positions that evidence contradicts.
+      4. Cite sources from shared_context where applicable.
+    user: |
+      Topic: {question}
+
+      History:
+      {history_summary}
+
+      Shared Context (search results):
+      {shared_context}
+
+      Judge's last assessment: consensus={consensus_score}%, disagreements={disagreement_points}
+
+      Refuter's last argument:
+      {refuter_last_output}
+
+      Your task: Respond with a strengthened proposal.
+      Output STRICT JSON (no extra text):
+      {
+        "logic_summary": "max 3 sentences",
+        "code_snippet": "```python\\n...\\n```",
+        "confidence_score": 0-100,
+        "disagreement_points": ["point1", "point2"],
+        "citations": ["source_id_1"]
+      }
+
+  dart_refuter:
+    model: "deepcoder-14b"
+    system: null  # DeepCoder: NO system prompt
+    user: |
+      [ROLE: You are a CRITICAL REFUTER in a code debate. Find weaknesses,
+      propose alternatives, and challenge assumptions. Be constructive —
+      every critique must come with an alternative suggestion.]
+
+      Topic: {question}
+
+      History:
+      {history_summary}
+
+      Shared Context (search results):
+      {shared_context}
+
+      Judge's last assessment: consensus={consensus_score}%, disagreements={disagreement_points}
+
+      Proposer's latest argument:
+      {proposer_last_output}
+
+      Your task:
+      1. Identify logical flaws, missing edge cases, or performance issues.
+      2. Propose a concrete alternative for each weakness found.
+      3. Cite sources from shared_context where applicable.
+
+      Output STRICT JSON (no extra text, no markdown wrapper):
+      {
+        "logic_summary": "max 3 sentences",
+        "code_snippet": "```python\\n...\\n```",
+        "confidence_score": 0-100,
+        "disagreement_points": ["point1", "point2"],
+        "citations": ["source_id_1"]
+      }
+
+  dart_judge:
+    model: "phi-4-14b"
+    system: |
+      You are a 3-person jury panel for a code debate:
+      - Juror 1: Security expert
+      - Juror 2: Performance optimization expert
+      - Juror 3: Code readability/maintainability expert
+
+      Rules:
+      - You see two ANONYMIZED proposals (Draft Alpha, Draft Beta). Order is random.
+      - IGNORE: response length, comment style, politeness, formatting verbosity.
+      - JUDGE ONLY: logical correctness, code integrity, factual accuracy.
+      - If consensus < 70%, suggest a search query to resolve the dispute.
+    user: |
+      Topic: {question}
+
+      Shared Context:
+      {shared_context}
+
+      Draft Alpha:
+      {proposal_a_anonymized}
+
+      Draft Beta:
+      {proposal_b_anonymized}
+
+      Each juror: which draft is stronger and why?
+      Overall consensus score (0-100).
+
+      Output STRICT JSON:
+      {
+        "jury_opinions": {
+          "security": "verdict and reasoning",
+          "performance": "verdict and reasoning",
+          "readability": "verdict and reasoning"
+        },
+        "consensus_score": 0-100,
+        "winner": "alpha|beta|tie",
+        "suggested_search_query": "keyword or null",
+        "disagreement_analysis": "1-sentence summary of key unresolved issues"
+      }
+
+  # ── Round 5 Prompt ──
+  final_synthesis:
+    model: "qwen-32b"
+    system: |
+      You are the final synthesizer for a multi-agent code debate.
+      You have access to the complete debate record and all search results.
+      The blind is now lifted — you know which model produced which argument.
+      Your job: produce the definitive, executable final answer.
+    user: |
+      Topic: {question}
+
+      Complete Debate Record:
+      {full_history}
+
+      All Search Results:
+      {shared_context}
+
+      Consensus Trend: {consensus_trend}
+
+      Produce the final answer:
+      1. Executable final code (complete, not fragmentary).
+      2. Decision summary — why this solution was chosen.
+      3. Security concerns note.
+      4. Performance considerations note.
+
+      Output STRICT JSON:
+      {
+        "final_code": "```python\\n...\\n```",
+        "decision_summary": "3-5 sentence reasoning",
+        "security_notes": ["note1", "note2"],
+        "performance_notes": ["note1", "note2"],
+        "confidence": 0-100
+      }
+
+# =============================================================================
+# 9. DATA STORAGE & STATE MANAGEMENT
+# =============================================================================
+state:
+  session_format: "JSON Lines (.jsonl) — append-only, crash-resumable"
+  session_path: "/opt/ai_data/debate_sessions/{session_id}/"
+  files:
+    - "state.jsonl     — round-by-round incremental log"
+    - "shared_context.json — accumulated search results"
+    - "consensus_trend.json — per-round scores for early-exit checks"
+    - "session_meta.yaml — question, timestamps, model versions"
+
+  schema_state_jsonl: |
+    {"type": "round_start",  "round": 0, "phase": "drag_proposer", "timestamp": "..."}
+    {"type": "llm_request",  "round": 0, "phase": "drag_proposer", "model": "qwen25-coder-14b", "prompt_hash": "...", "timestamp": "..."}
+    {"type": "llm_response", "round": 0, "phase": "drag_proposer", "model": "qwen25-coder-14b", "raw_output": "...", "parsed_json": {...}, "elapsed_ms": 12345, "timestamp": "..."}
+    {"type": "search_exec",  "round": 0, "queries": [...], "results": [...], "timestamp": "..."}
+    {"type": "judge_verdict", "round": 1, "consensus_score": 75, "winner": "alpha", "dart_triggered": false, "timestamp": "..."}
+    {"type": "early_exit",   "reason": "consensus >= 95%", "round": 3, "timestamp": "..."}
+    {"type": "final_synthesis", "round": 5, "model": "qwen-32b", "output": {...}, "timestamp": "..."}
+
+# =============================================================================
+# 10. ORCHESTRATOR DESIGN (scripts/debate.py)
+# =============================================================================
+orchestrator:
+  file: "/opt/projects/server/scripts/debate.py"
+  cli_entry: "python3 scripts/cli.py discussion {drag|toolmad} <question>"
+
+  class_debate_session:
+    attributes:
+      - session_id: str
+      - question: str
+      - method: "drag | toolmad"
+      - current_round: int
+      - consensus_scores: list[int]
+      - shared_context: list[dict]
+      - search_count: int
+      - state_dir: Path
+
+    methods:
+      - switch_model(model_id, ctx, mlock) → bool
+      - call_llm(messages, model_config) → dict
+      - parse_json_response(raw, schema) → dict | None
+      - execute_search(queries) → list[dict]
+      - anonymize_and_shuffle(prop_a, prop_b) → tuple
+      - check_early_exit() → bool | str
+      - save_state(entry)
+      - run_session() → final_output
+
+  error_handling:
+    llm_call_failure:
+      max_retries: 2
+      backoff: "exponential (2s, 4s)"
+    json_parse_failure:
+      max_retries: 1
+      action: "Re-send raw output to model with 'Output STRICT JSON only. No extra text.'"
+    container_start_timeout:
+      max_wait_seconds: 180
+      fallback: "Log error, mark round as failed, attempt next round"
+    search_api_failure:
+      fallback: "Skip search for this round, note in state, continue debate"
+
+# =============================================================================
+# 11. MEMORY BUDGET PER MODE
+# =============================================================================
+memory_budget:
+  normal_mode:
+    qwen3_4b: { rss_gb: 4.0, port: 8080 }
+    phi4_mini: { rss_gb: 8.6, port: 8081 }
+    llama_3b: { rss_gb: 4.6, port: 8082 }
+    postgres_api: { rss_gb: 1.5 }
+    total_gb: 18.7
+    headroom_gb: 3.3
+
+  debate_mode_per_round:
+    system_overhead: { rss_gb: 1.5 }
+    qwen25_coder_14b: { rss_gb: 9.5, measured: null, headroom_gb: 11.0 }
+    deepcoder_14b: { rss_gb: 8.5, measured: "~8.5GB during load test", headroom_gb: 12.0 }
+    phi4_14b_mlock: { rss_gb: 12.0, measured: null, headroom_gb: 8.5 }
+    phi4_14b_no_mlock: { rss_gb: 9.0, headroom_gb: 11.5 }
+    qwen_32b: { rss_gb: 17.0, measured: null, headroom_gb: 3.5 }
+
+    conclusion: >
+      All models fit comfortably as single-instance (RSS 8.5-17GB vs 22GB total).
+      The worst case (32B at 17GB) leaves 3.5GB for system + ZRAM buffering.
+      No OOM risk with sequential execution.
+      DeepCoder-14B measured cold load ~102s, Phi-4 ~40s.
+      Container restart not required — supervisor preserves container memory.
+
+# =============================================================================
+# 12. CLI INTEGRATION
+# =============================================================================
+cli:
+  command: "python3 scripts/cli.py discussion {drag|toolmad} [question]"
+
+  flow: |
+    1. cli.py parses args, calls debate.py run_session()
+    2. debate.py writes MODE=debate to current-mode.env (container starts in supervisor mode)
+    3. debate.py writes model-switch.json per round with target model config
+    4. Supervisor detects md5sum change → hot-swaps model WITHOUT container restart
+    5. debate.py polls :8081/health → proceeds when ready
+    6. debate.py handles all LLM calls, JSON parsing, search
+    7. debate.py writes session to /opt/ai_data/debate_sessions/{id}/
+    8. Final output printed to stdout + saved as final_report.md
+
+  interactive_mode:
+    description: "If question is omitted, enter interactive prompt"
+    prompt: "Enter your question/request: "
+
+# =============================================================================
+# 13. IMPLEMENTATION PHASES (Updated v1.1)
+# =============================================================================
+phases:
+  - phase: 1
+    name: "Model Acquisition"
+    status: "COMPLETE"
+    tasks:
+      - "[DONE] Download DeepCoder-14B-Preview Q4_K_M from HuggingFace (8.4GB)"
+      - "[DONE] Verify model loads on llama.cpp server"
+      - "[TODO] Test DeepCoder-specific prompt format (no system prompt, thinking template)"
+
+  - phase: 2
+    name: "Entrypoint + Supervisor"
+    status: "COMPLETE"
+    tasks:
+      - "[DONE] Add 'debate' mode to dual-server-entrypoint.sh (delegates to supervisor)"
+      - "[DONE] Create debate-supervisor.sh v1.0 with grep/sed JSON parsing"
+      - "[DONE] Update container-devforge-swap.container with supervisor mounts"
+      - "[DONE] Test hot-swap: DeepCoder → Phi-4 → DeepCoder (all successful)"
+      - "[DONE] Verify health endpoint after each swap"
+      - "[TODO] Benchmark remaining models (Qwen-14B, Qwen-32B)"
+
+  - phase: 3
+    name: "Orchestrator Implementation (scripts/debate.py)"
+    status: "PENDING"
+    tasks:
+      - "Create DebateSession class"
+      - "Implement supervisor switch-file writer + health polling"
+      - "Implement JSON parsing with regex fallback (stdlib only)"
+      - "Implement Round 0 DRAG (with --skip-drag support + auto-detection)"
+      - "Implement Rounds 1-4 DART (proposer → refuter → judge → winner_map → search check)"
+      - "Implement DART dedup filter (F2)"
+      - "Implement Winner Mapping table (F4)"
+      - "Implement Phi-4 history summary step before Round 5 (F1/D6)"
+      - "Implement Round 5 Final Synthesis (32B with summary + last 2 rounds)"
+      - "Implement early-exit logic"
+      - "Implement retry + error handling"
+
+  - phase: 4
+    name: "CLI & State Management"
+    status: "PENDING"
+    tasks:
+      - "Wire cli.py discussion {drag|toolmad} → debate.py"
+      - "Add --skip-drag flag"
+      - "Implement JSONL append-only state persistence"
+      - "Implement session resume on crash"
+      - "Implement final_report.md generation"
+      - "Add search result cache (F7)"
+      - "Add consensus trend ASCII visualization (F8)"
+
+  - phase: 5
+    name: "Knowledge Base Integration"
+    status: "PENDING"
+    tasks:
+      - "Add PostgreSQL-backed session metadata storage"
+      - "Implement local DB search before external API (Q5/D5)"
+      - "Add decision_summary + final_code auto-save to DB"
+      - "Add TTL-based cache invalidation (30 days)"
+
+  - phase: 6
+    name: "Testing & Calibration"
+    status: "PENDING"
+    tasks:
+      - "End-to-end dry run with mock search"
+      - "Live test with real search API"
+      - "Measure per-round timing"
+      - "Calibrate consensus thresholds (start with 90%, not 95%)"
+      - "Monitor <think> chain truncation for DeepCoder (max_tokens=8192)"
+
+# =============================================================================
+# 14. REVIEW QUESTIONS — ALL RESOLVED
+# =============================================================================
+review_questions:
+  - id: "Q1"
+    question: "DeepCoder-14B vs DeepSeek-Coder-6.7B for refuter role?"
+    answer: "DeepCoder-14B-Preview Q4_K_M. 3/3 reviewers agree."
+    rationale: "Refutation quality ≥ proposer quality is non-negotiable for debate efficacy."
+    status: "RESOLVED (D1)"
+
+  - id: "Q2"
+    question: "Should Round 0 (DRAG) be optional?"
+    answer: "Yes. Add --skip-drag CLI flag + auto-detection heuristics."
+    implementation: "Skip if: (a) file paths present, (b) error messages present, (c) --skip-drag flag set."
+    status: "RESOLVED (D2)"
+
+  - id: "Q3"
+    question: "Fixed 5 rounds or dynamic?"
+    answer: "Fixed max=5 + early exit. No change from spec."
+    status: "RESOLVED (D3)"
+
+  - id: "Q4"
+    question: "Phi-4-14B MLOCK in debate mode?"
+    answer: "mlock=1. 3/3 reviewers agree."
+    rationale: "Sequential execution = no RAM contention. 12GB RSS is safe within 22GB."
+    status: "RESOLVED (D4)"
+
+  - id: "Q5"
+    question: "Persist shared_context across sessions as knowledge base?"
+    answer: "Persist decision_summary + final_code to PostgreSQL instead."
+    rationale: "Raw context grows unbounded. Summarized knowledge is more useful for future sessions."
+    status: "RESOLVED (D5)"
+
+  - id: "Q6"
+    question: "32B context overflow risk with full 5-round history?"
+    answer: "Phi-4-14B generates 500-word history summary before Round 5. 32B receives summary + last 2 rounds only."
+    status: "RESOLVED (D6)"
+
+  - id: "Q7"
+    question: "DeepCoder max_tokens=64000 vs 8192?"
+    answer: "Start with 8192. Increase only if <think> chain truncation observed."
+    status: "RESOLVED (D7)"
+
+  - id: "Q8"
+    question: "JSON parsing strategy?"
+    answer: "stdlib json.loads() with regex fallback. No external parser library."
+    rationale: "Keep stdlib-only policy. Regex recovery handles 90% of malformed JSON cases."
+    status: "RESOLVED (D8)"
+
+# =============================================================================
+# 15. REVIEW AMENDMENTS — IMPLEMENTATION TRACKER
+# =============================================================================
+amendments:
+  required:
+    - id: "A1"
+      description: "--skip-drag CLI flag"
+      source: "3/3 reviewers, D2"
+      status: "not implemented"
+      location: "cli.py + debate.py"
+
+    - id: "A2"
+      description: "Phi-4 history summary before Round 5 (32B context overflow prevention)"
+      source: "DeepCoder-14B, D6"
+      status: "not implemented"
+      location: "debate.py round_5 handler"
+
+    - id: "A3"
+      description: "DART search query dedup filter"
+      source: "DeepCoder-14B, F2"
+      status: "not implemented"
+      location: "debate.py DART trigger check"
+
+    - id: "A4"
+      description: "Winner mapping table (alpha/beta → actual model)"
+      source: "DeepCoder-14B, F4"
+      status: "not implemented"
+      location: "debate.py judge phase + state.jsonl"
+
+    - id: "A5"
+      description: "MLOCK=1 for Phi-4-14B in debate mode"
+      source: "3/3 reviewers, D4"
+      status: "implemented"
+      location: "model-switch.json (mlock: 1)"
+
+    - id: "A6"
+      description: "DeepCoder max_tokens=8192 (not 64000)"
+      source: "DeepCoder-14B, D7"
+      status: "not implemented"
+      location: "debate.py LLM call params"
+
+    - id: "A7"
+      description: "PostgreSQL-backed knowledge base for decision summaries"
+      source: "3/3 reviewers, D5"
+      status: "not implemented"
+      location: "Phase 5"
+
+  nice_to_have:
+    - id: "N1"
+      description: "Search result caching (in-memory dict)"
+      source: "Phi-4 14B, F7"
+      status: "not implemented"
+
+    - id: "N2"
+      description: "ASCII consensus trend visualization"
+      source: "Phi-4 14B, F8"
+      status: "not implemented"
+
+    - id: "N3"
+      description: "Page cache awareness documentation"
+      source: "Qwen3-4B, F6"
+      status: "documented in spec v1.1"
+
+# =============================================================================
+# 16. CONSENSUS TREND VISUALIZATION (F8)
+# =============================================================================
+consensus_visualization:
+  description: "ASCII bar chart printed after each round for user readability"
+  format: |
+    Round 0 (DRAG):   N/A (query consensus only)
+    Round 1 (DART):   ████████░░  72%  [Alpha wins]
+    Round 2 (DART):   █████████░  85%  [Alpha wins]
+    Round 3 (DART):   ██████████  93%  [Tie — Early Exit triggered]
+    Round 5 (Final):  ██████████  95%  [32B Synthesis complete]
+  render_rule: "Each █ = 10%, ░ for partial 10%. Width = 10 chars for 0-100%."
+
+# =============================================================================
+# 17. RISK REGISTER (from consolidated review)
+# =============================================================================
+risks:
+  - risk: "Model switch timeout during hot-swap"
+    likelihood: "low"
+    impact: "medium (round skipped, session continues)"
+    mitigation: "240s timeout in orchestrator + 2 retries. If still fails, skip round and log."
+
+  - risk: "DeepCoder JSON malformation due to <think> chain bleed"
+    likelihood: "medium"
+    impact: "low (regex recovery, re-prompt once)"
+    mitigation: "Extract JSON from last complete object in response. Re-prompt with STRICT JSON ONLY if parse fails."
+
+  - risk: "Search API rate limit during DART triggers"
+    likelihood: "low"
+    impact: "medium (missing context, debate continues)"
+    mitigation: "Dedup filter (A3). Max 3 searches/session. Fallback: continue without search."
+
+  - risk: "22GB RAM ceiling with Qwen-32B + full context"
+    likelihood: "low"
+    impact: "high (OOM kill, session lost)"
+    mitigation: "History summary step (A2) reduces context size. JSONL state enables resume."
+
+  - risk: "Page cache thrashing when alternating large models"
+    likelihood: "high"
+    impact: "low (slower loads, but system remains stable)"
+    mitigation: "Accept 40-132s load times as baseline. Supervisor preserves container uptime across switches."

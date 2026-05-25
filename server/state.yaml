@@ -22,8 +22,8 @@ structural:
     vg: datavg
     lv: lv_swap
     size: 4G
-    mounted: true
-    mount: SWAP
+    mounted: false
+    mount: null
   - device: datavg-lv_workspace
     vg: datavg
     lv: lv_workspace
@@ -56,46 +56,34 @@ structural:
     mount: /
   containers:
   - name: pod:data
-    status: Up 45 hours
+    status: Up 9 hours
     ports: ''
     image: ''
     model: null
     flags: ''
   - name: postgres
-    status: Up 45 hours (healthy)
+    status: Up 9 hours (healthy)
     ports: 5432/tcp
     image: localhost/devforge-postgres:2026.05.15
     model: null
     flags: ''
-  - name: devforge-api
-    status: Up 23 hours
-    ports: 127.0.0.1:8000->8000/tcp
-    image: localhost/devforge-api:2026.05.14
-    model: null
-    flags: ''
   - name: devforge-swap
-    status: Up 29 minutes
+    status: Up About an hour
     ports: 127.0.0.1:8081-8082->8081-8082/tcp
     image: ghcr.io/ggml-org/llama.cpp:server
     model: null
     flags: ''
-  - name: devforge-qwen
-    status: Up 29 minutes
-    ports: 127.0.0.1:8080->8080/tcp
-    image: ghcr.io/ggml-org/llama.cpp:server
-    model: null
-    flags: ''
   - name: caddy
-    status: Up 24 hours (healthy)
+    status: Up 9 hours (healthy)
     ports: 80/tcp, 443/tcp, 2019/tcp, 443/udp
     image: docker.io/library/caddy:2.11.2
     model: null
     flags: ''
   services:
   - name: devforge-api
-    status: active
+    status: failed
   - name: devforge-qwen
-    status: active
+    status: failed
   - name: devforge-swap
     status: active
   - name: postgres
@@ -117,88 +105,81 @@ structural:
     - '22'
     - '4317'
     - '443'
-    - '4430'
     - '80'
-    - '8000'
-    - '8080'
     - '8081'
     - '8082'
     - '8125'
 metrics:
-  generated: '2026-05-23T13:28:17.438543+00:00'
+  generated: '2026-05-25T17:55:33.649080+00:00'
   system:
     cpu_load:
-    - 0.14
-    - 0.37
-    - 0.73
+    - 0.03
+    - 0.09
+    - 0.25
     cpu_cores: 4
     memory:
-      used: 19Gi
+      used: 3.8Gi
       total: 22Gi
-      percent: 88
-    zram: 2.6G/4G
+      percent: 17
+    zram: 779.2M/4G
     zram_cycles: 0
     zram_total_cycles: 0
   storage_use:
   - device: ocivolume-root
     size: 20G
     used: 13G
-    avail: 7.4G
-    use_pct: 64
+    avail: 7.1G
+    use_pct: 65
     mount: /
-  - device: datavg-lv_db
-    size: 30G
-    used: 363M
-    avail: 30G
-    use_pct: 2
-    mount: /mnt/lv_db
-  - device: ocivolume-lv_meta
-    size: 4.5G
-    used: 1.2G
-    avail: 3.3G
-    use_pct: 27
-    mount: /mnt/secure_meta
-  - device: datavg-lv_ai_data
-    size: 100G
-    used: 55G
-    avail: 46G
-    use_pct: 55
-    mount: /opt/ai_data
-  - device: datavg-lv_projects
-    size: 10G
-    used: 718M
-    avail: 9.3G
-    use_pct: 8
-    mount: /opt/projects
   - device: datavg-lv_workspace
     size: 6.0G
     used: 614M
     avail: 5.4G
     use_pct: 11
     mount: /opt/workspace
-  - device: ocivolume-lv_logs
-    size: 10G
+  - device: datavg-lv_db
+    size: 30G
+    used: 365M
+    avail: 30G
+    use_pct: 2
+    mount: /mnt/lv_db
+  - device: ocivolume-lv_meta
+    size: 4.5G
     used: 1.3G
-    avail: 8.7G
-    use_pct: 13
-    mount: /var/log
+    avail: 3.3G
+    use_pct: 28
+    mount: /mnt/secure_meta
+  - device: datavg-lv_projects
+    size: 10G
+    used: 721M
+    avail: 9.3G
+    use_pct: 8
+    mount: /opt/projects
   - device: ocivolume-lv_tmp
     size: 10G
     used: 3.3G
-    avail: 6.8G
+    avail: 6.7G
     use_pct: 33
     mount: /var/tmp
+  - device: datavg-lv_ai_data
+    size: 100G
+    used: 76G
+    avail: 25G
+    use_pct: 76
+    mount: /opt/ai_data
+  - device: ocivolume-lv_logs
+    size: 10G
+    used: 1.6G
+    avail: 8.5G
+    use_pct: 16
+    mount: /var/log
   containers_uptime:
   - name: data-pod-infra
-    uptime: Up 45 hours
+    uptime: Up 9 hours
   - name: postgres
-    uptime: Up 45 hours (healthy)
-  - name: devforge-api
-    uptime: Up 23 hours
+    uptime: Up 9 hours (healthy)
   - name: devforge-swap
-    uptime: Up 29 minutes
-  - name: devforge-qwen
-    uptime: Up 29 minutes
+    uptime: Up About an hour
   tokens:
     session:
       turns: 1
@@ -208,27 +189,25 @@ metrics:
       turns: 24
       total_tokens: 564954
       avg_tokens: 23540
-  alerts:
-  - level: warning
-    item: memory 88%
+  alerts: []
 references:
   llama.cpp:
     category: inference
     url: https://github.com/ggml-org/llama.cpp
     external:
-      latest: b9296
-      published: '2026-05-23T12:59:51Z'
+      latest: b9313
+      published: '2026-05-25T17:12:20Z'
       prerelease: false
       breaking_mentioned: false
     internal:
-      usage_count: 9
+      usage_count: 13
       files:
       - CLAUDE.yaml
       - blueprint.yaml
       - changelog.yaml
-      - docs/tasks.yaml
       - handover.yaml
-    checked_at: '2026-05-23T13:28:19.541595+00:00'
+      - scripts/activity_summarizer.py
+    checked_at: '2026-05-25T17:55:35.680665+00:00'
   DSPy:
     category: prompt-optimization
     url: https://github.com/stanfordnlp/dspy
@@ -238,10 +217,11 @@ references:
       prerelease: false
       breaking_mentioned: true
     internal:
-      usage_count: 1
+      usage_count: 2
       files:
+      - scripts/lib/tracking/dependency_tracker.py
       - state.yaml
-    checked_at: '2026-05-23T13:28:19.541612+00:00'
+    checked_at: '2026-05-25T17:55:35.680694+00:00'
   LLMLingua:
     category: prompt-optimization
     url: https://github.com/microsoft/LLMLingua
@@ -251,10 +231,11 @@ references:
       prerelease: false
       breaking_mentioned: false
     internal:
-      usage_count: 1
+      usage_count: 2
       files:
+      - scripts/lib/tracking/dependency_tracker.py
       - state.yaml
-    checked_at: '2026-05-23T13:28:19.541625+00:00'
+    checked_at: '2026-05-25T17:55:35.680721+00:00'
   tenacity:
     category: dependency
     url: https://github.com/jd/tenacity
@@ -264,10 +245,11 @@ references:
       prerelease: false
       breaking_mentioned: false
     internal:
-      usage_count: 1
+      usage_count: 2
       files:
+      - scripts/lib/tracking/dependency_tracker.py
       - scripts/review_worker.py
-    checked_at: '2026-05-23T13:28:19.541630+00:00'
+    checked_at: '2026-05-25T17:55:35.680726+00:00'
   Podman:
     category: infrastructure
     url: https://github.com/containers/podman
@@ -277,57 +259,33 @@ references:
       prerelease: false
       breaking_mentioned: true
     internal:
-      usage_count: 5
+      usage_count: 7
       files:
       - CLAUDE.yaml
       - blueprint.yaml
-      - docs/tasks.yaml
       - handover.yaml
-      - state.yaml
-    checked_at: '2026-05-23T13:28:19.541634+00:00'
+      - scripts/lib/search/manager.py
+      - scripts/lib/tracking/dependency_tracker.py
+    checked_at: '2026-05-25T17:55:35.680730+00:00'
 phases:
-  checked_at: '2026-05-23T13:28:28.090718+00:00'
+  checked_at: '2026-05-25T17:55:38.346705+00:00'
   phases:
-    'Phase 1: 기본 인프라 + MCP 서버 (완료, 2026-05-14)':
-      status: complete
-      checked: 14
+    'Phase 1: Basic Infrastructure + MCP Server (Complete, 2026-05-14)':
+      status: partial
+      checked: 11
       total: 14
-    'Phase 1.5: LLM 추론 인프라 (완료, 2026-05-23)':
+    'Phase 1.5: LLM Inference Infrastructure (Complete, 2026-05-23)':
       status: complete
       checked: 10
       total: 10
-    'Phase 2: 고도화 (계획)':
-      status: planned
-      checked: 0
-      total: 0
-    Phase 2.1 복구 / 안정화 (바로):
+    'Phase 2: Intelligence & Quality (Active, 2026-05-24)':
       status: partial
-      checked: 4
-      total: 5
-    Phase 2.2 시멘틱 검색 (pgvector):
-      status: partial
-      checked: 3
-      total: 4
-    Phase 2.3 MemPalace 분류:
+      checked: 10
+      total: 29
+    'Phase 3: Someday/Maybe':
       status: planned
       checked: 0
-      total: 4
-    Phase 2.4 Search-Augmented 통합:
-      status: planned
-      checked: 0
-      total: 4
-    Phase 2.5 레퍼런스 추적 고도화:
-      status: partial
-      checked: 2
-      total: 4
-    Phase 2.6 Web UI:
-      status: planned
-      checked: 0
-      total: 3
-    'Phase 3: someday/maybe':
-      status: planned
-      checked: 0
-      total: 4
+      total: 6
   docs_updated:
     phases.md: false
     blueprint.yaml: false

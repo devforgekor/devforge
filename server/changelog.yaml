@@ -1,4 +1,1538 @@
 entries:
+- time: '2026-05-25T17:55:40.384131+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 8 hours (healthy) -> Up 9 hours (healthy); structural.containers[devforge-swap].status:
+    Up 59 minutes -> Up About an hour; structural.containers[pod:data].status: Up 8 hours -> Up 9 hours; structural.containers[postgres].status:
+    Up 8 hours (healthy) -> Up 9 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 8 hours (healthy)
+    after: Up 9 hours (healthy)
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 59 minutes
+    after: Up About an hour
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 8 hours
+    after: Up 9 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 8 hours (healthy)
+    after: Up 9 hours (healthy)
+  decisions: []
+- time: '2026-05-25T17:40:39.605581+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 44 minutes -> Up 59 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 44 minutes
+    after: Up 59 minutes
+  decisions: []
+- time: '2026-05-25T17:25:39.485475+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 29 minutes -> Up 44 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 29 minutes
+    after: Up 44 minutes
+  decisions: []
+- time: '2026-05-25T17:10:37.847817+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 14 minutes -> Up 29 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 14 minutes
+    after: Up 29 minutes
+  decisions: []
+- time: '2026-05-25T16:55:40.047550+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 7 hours (healthy) -> Up 8 hours (healthy); structural.containers[devforge-swap].status:
+    Up 4 hours -> Up 14 minutes; structural.containers[pod:data].status: Up 7 hours -> Up 8 hours; structural.containers[postgres].status:
+    Up 7 hours (healthy) -> Up 8 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 7 hours (healthy)
+    after: Up 8 hours (healthy)
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 4 hours
+    after: Up 14 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 7 hours
+    after: Up 8 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 7 hours (healthy)
+    after: Up 8 hours (healthy)
+  decisions: []
+- time: '2026-05-25T16:10:30.375073+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 3 hours -> Up 4 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  decisions: []
+- time: '2026-05-25T15:55:27.670405+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 6 hours (healthy) -> Up 7 hours (healthy); structural.containers[pod:data].status:
+    Up 6 hours -> Up 7 hours; structural.containers[postgres].status: Up 6 hours (healthy) -> Up 7 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 6 hours (healthy)
+    after: Up 7 hours (healthy)
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 6 hours
+    after: Up 7 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 6 hours (healthy)
+    after: Up 7 hours (healthy)
+  decisions: []
+- time: '2026-05-25T15:10:36.910462+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-25T14:55:21.620427+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 5 hours (healthy) -> Up 6 hours (healthy); structural.containers[pod:data].status:
+    Up 5 hours -> Up 6 hours; structural.containers[postgres].status: Up 5 hours (healthy) -> Up 6 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 5 hours (healthy)
+    after: Up 6 hours (healthy)
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 5 hours
+    after: Up 6 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 5 hours (healthy)
+    after: Up 6 hours (healthy)
+  decisions: []
+- time: '2026-05-25T14:10:43.721046+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-25T13:55:39.535671+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 4 hours (healthy) -> Up 5 hours (healthy); structural.containers[pod:data].status:
+    Up 4 hours -> Up 5 hours; structural.containers[postgres].status: Up 4 hours (healthy) -> Up 5 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 hours (healthy)
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 hours (healthy)
+  decisions: []
+- time: '2026-05-25T13:40:18.407849+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 47 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 47 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-25T13:25:16.959686+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 32 minutes -> Up 47 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 32 minutes
+    after: Up 47 minutes
+  decisions: []
+- time: '2026-05-25T13:10:14.523569+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 17 minutes -> Up 32 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 17 minutes
+    after: Up 32 minutes
+  decisions: []
+- time: '2026-05-25T12:55:10.492001+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 3 hours (healthy) -> Up 4 hours (healthy); structural.containers[devforge-swap].status:
+    Up 2 minutes -> Up 17 minutes; structural.containers[pod:data].status: Up 3 hours -> Up 4 hours; structural.containers[postgres].status:
+    Up 3 hours (healthy) -> Up 4 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 2 minutes
+    after: Up 17 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  decisions: []
+- time: '2026-05-25T12:40:36.020708+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 44 minutes -> Up 2 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 44 minutes
+    after: Up 2 minutes
+  decisions: []
+- time: '2026-05-25T12:25:21.992561+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 29 minutes -> Up 44 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 29 minutes
+    after: Up 44 minutes
+  decisions: []
+- time: '2026-05-25T12:10:07.958586+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 14 minutes -> Up 29 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 14 minutes
+    after: Up 29 minutes
+  decisions: []
+- time: '2026-05-25T11:55:11.553534+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 2 hours (healthy) -> Up 3 hours (healthy); structural.containers[devforge-swap].status:
+    Up About a minute -> Up 14 minutes; structural.containers[pod:data].status: Up 2 hours -> Up 3 hours; structural.containers[postgres].status:
+    Up 2 hours (healthy) -> Up 3 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About a minute
+    after: Up 14 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  decisions: []
+- time: '2026-05-25T11:40:05.830655+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 7 minutes -> Up About a minute'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 7 minutes
+    after: Up About a minute
+  decisions: []
+- time: '2026-05-25T11:25:07.403618+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen]: removed; structural.containers[devforge-swap]: added; structural.services[devforge-qwen].status:
+    active -> failed; structural.services[devforge-swap].status: failed -> active'
+  changed:
+  - path: structural.containers[devforge-qwen]
+    type: removed
+    before:
+      name: devforge-qwen
+      status: Up 33 minutes
+      ports: 127.0.0.1:8080->8080/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-swap]
+    type: added
+    after:
+      name: devforge-swap
+      status: Up 7 minutes
+      ports: 127.0.0.1:8081-8082->8081-8082/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.services[devforge-qwen].status
+    type: changed
+    before: active
+    after: failed
+  - path: structural.services[devforge-swap].status
+    type: changed
+    before: failed
+    after: active
+  decisions: []
+- time: '2026-05-25T11:10:04.733835+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 18 minutes -> Up 33 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 18 minutes
+    after: Up 33 minutes
+  decisions: []
+- time: '2026-05-25T10:55:04.975799+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[devforge-qwen].status:
+    Up 3 minutes -> Up 18 minutes; structural.containers[pod:data].status: Up About an hour -> Up 2 hours; structural.containers[postgres].status:
+    Up About an hour (healthy) -> Up 2 hours (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 18 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  decisions: []
+- time: '2026-05-25T10:40:04.939801+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up About an hour -> Up 3 minutes; structural.containers[devforge-swap]:
+    removed; structural.services[devforge-swap].status: active -> failed; structural.storage[datavg-lv_swap].mount: SWAP ->
+    None; structural.storage[datavg-lv_swap].mounted: True -> False'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up About an hour
+    after: Up 3 minutes
+  - path: structural.containers[devforge-swap]
+    type: removed
+    before:
+      name: devforge-swap
+      status: Up About a minute
+      ports: 127.0.0.1:8081-8082->8081-8082/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.services[devforge-swap].status
+    type: changed
+    before: active
+    after: failed
+  - path: structural.storage[datavg-lv_swap].mount
+    type: changed
+    before: SWAP
+    after: null
+  - path: structural.storage[datavg-lv_swap].mounted
+    type: changed
+    before: true
+    after: false
+  decisions: []
+- time: '2026-05-25T10:25:23.195597+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 45 minutes (healthy) -> Up About an hour (healthy); structural.containers[devforge-qwen].status:
+    Up 45 minutes -> Up About an hour; structural.containers[devforge-swap].status: Up 45 minutes -> Up About a minute; structural.containers[pod:data].status:
+    Up 45 minutes -> Up About an hour; structural.containers[postgres].status: Up 45 minutes (healthy) -> Up About an hour
+    (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 45 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 45 minutes
+    after: Up About an hour
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 45 minutes
+    after: Up About a minute
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 45 minutes
+    after: Up About an hour
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 45 minutes (healthy)
+    after: Up About an hour (healthy)
+  decisions: []
+- time: '2026-05-25T10:10:13.269941+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 30 minutes (healthy) -> Up 45 minutes (healthy); structural.containers[devforge-qwen].status:
+    Up 30 minutes -> Up 45 minutes; structural.containers[devforge-swap].status: Up 30 minutes -> Up 45 minutes; structural.containers[pod:data].status:
+    Up 30 minutes -> Up 45 minutes; structural.containers[postgres].status: Up 30 minutes (healthy) -> Up 45 minutes (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 30 minutes (healthy)
+    after: Up 45 minutes (healthy)
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 30 minutes
+    after: Up 45 minutes
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 30 minutes
+    after: Up 45 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 30 minutes
+    after: Up 45 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 30 minutes (healthy)
+    after: Up 45 minutes (healthy)
+  decisions: []
+- time: '2026-05-25T09:54:56.282579+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 15 minutes (healthy) -> Up 30 minutes (healthy); structural.containers[devforge-qwen].status:
+    Up 15 minutes -> Up 30 minutes; structural.containers[devforge-swap].status: Up 15 minutes -> Up 30 minutes; structural.containers[pod:data].status:
+    Up 15 minutes -> Up 30 minutes; structural.containers[postgres].status: Up 15 minutes (healthy) -> Up 30 minutes (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 15 minutes (healthy)
+    after: Up 30 minutes (healthy)
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 15 minutes
+    after: Up 30 minutes
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 15 minutes
+    after: Up 30 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 15 minutes
+    after: Up 30 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 15 minutes (healthy)
+    after: Up 30 minutes (healthy)
+  decisions: []
+- time: '2026-05-25T09:39:54.067539+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 52 seconds (healthy) -> Up 15 minutes (healthy); structural.containers[devforge-qwen].status:
+    Up 49 seconds -> Up 15 minutes; structural.containers[devforge-swap].status: Up 33 seconds -> Up 15 minutes; structural.containers[pod:data].status:
+    Up 49 seconds -> Up 15 minutes; structural.containers[postgres].status: Up 49 seconds (healthy) -> Up 15 minutes (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 52 seconds (healthy)
+    after: Up 15 minutes (healthy)
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 49 seconds
+    after: Up 15 minutes
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 33 seconds
+    after: Up 15 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 49 seconds
+    after: Up 15 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 49 seconds (healthy)
+    after: Up 15 minutes (healthy)
+  decisions: []
+- time: '2026-05-25T09:25:14.044523+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 30 minutes (healthy) -> Up 52 seconds (healthy); structural.containers[devforge-qwen].status:
+    Up 13 minutes -> Up 49 seconds; structural.containers[devforge-swap].status: Up 5 minutes -> Up 33 seconds; structural.containers[pod:data].status:
+    Up 30 minutes -> Up 49 seconds; structural.containers[postgres].status: Up 30 minutes (healthy) -> Up 49 seconds (healthy)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 30 minutes (healthy)
+    after: Up 52 seconds (healthy)
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 13 minutes
+    after: Up 49 seconds
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 5 minutes
+    after: Up 33 seconds
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 30 minutes
+    after: Up 49 seconds
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 30 minutes (healthy)
+    after: Up 49 seconds (healthy)
+  decisions: []
+- time: '2026-05-25T09:09:42.124959+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 15 minutes (healthy) -> Up 30 minutes (healthy); structural.containers[devforge-qwen]:
+    added; structural.containers[devforge-swap].status: Up 8 minutes -> Up 5 minutes; structural.containers[pod:data].status:
+    Up 15 minutes -> Up 30 minutes; structural.containers[postgres].status: Up 15 minutes (healthy) -> Up 30 minutes (healthy)
+    (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 15 minutes (healthy)
+    after: Up 30 minutes (healthy)
+  - path: structural.containers[devforge-qwen]
+    type: added
+    after:
+      name: devforge-qwen
+      status: Up 13 minutes
+      ports: 127.0.0.1:8080->8080/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 8 minutes
+    after: Up 5 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 15 minutes
+    after: Up 30 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 15 minutes (healthy)
+    after: Up 30 minutes (healthy)
+  - path: structural.services[devforge-qwen].status
+    type: changed
+    before: failed
+    after: active
+  decisions: []
+- time: '2026-05-25T08:54:41.209767+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 53 seconds (healthy) -> Up 15 minutes (healthy); structural.containers[devforge-qwen]:
+    removed; structural.containers[devforge-swap].status: Up 50 seconds -> Up 8 minutes; structural.containers[pod:data].status:
+    Up 50 seconds -> Up 15 minutes; structural.containers[postgres].status: Up 50 seconds (healthy) -> Up 15 minutes (healthy)
+    (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 53 seconds (healthy)
+    after: Up 15 minutes (healthy)
+  - path: structural.containers[devforge-qwen]
+    type: removed
+    before:
+      name: devforge-qwen
+      status: Up 33 seconds
+      ports: 127.0.0.1:8080->8080/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 50 seconds
+    after: Up 8 minutes
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 50 seconds
+    after: Up 15 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 50 seconds (healthy)
+    after: Up 15 minutes (healthy)
+  - path: structural.services[devforge-qwen].status
+    type: changed
+    before: active
+    after: failed
+  decisions: []
+- time: '2026-05-25T08:40:56.645656+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 2 days (healthy) -> Up 53 seconds (healthy); structural.containers[devforge-api]:
+    removed; structural.containers[devforge-qwen].status: Up 18 minutes -> Up 33 seconds; structural.containers[devforge-swap].status:
+    Up 3 minutes -> Up 50 seconds; structural.containers[pod:data].status: Up 3 days -> Up 50 seconds (+2 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 2 days (healthy)
+    after: Up 53 seconds (healthy)
+  - path: structural.containers[devforge-api]
+    type: removed
+    before:
+      name: devforge-api
+      status: Up 2 days
+      ports: 127.0.0.1:8000->8000/tcp
+      image: localhost/devforge-api:2026.05.14
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 18 minutes
+    after: Up 33 seconds
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 50 seconds
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 3 days
+    after: Up 50 seconds
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 3 days (healthy)
+    after: Up 50 seconds (healthy)
+  - path: structural.services[devforge-api].status
+    type: changed
+    before: active
+    after: failed
+  decisions: []
+- time: '2026-05-25T08:19:54.094412+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 3 minutes -> Up 18 minutes; structural.containers[devforge-swap].status:
+    Up 55 seconds -> Up 3 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 18 minutes
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 55 seconds
+    after: Up 3 minutes
+  decisions: []
+- time: '2026-05-25T08:05:08.083716+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 4 hours -> Up 3 minutes; structural.containers[devforge-swap].status:
+    Up About an hour -> Up 55 seconds'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 4 hours
+    after: Up 3 minutes
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About an hour
+    after: Up 55 seconds
+  decisions: []
+- time: '2026-05-25T07:49:53.077147+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 46 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 46 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-25T07:34:51.398230+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 31 minutes -> Up 46 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 31 minutes
+    after: Up 46 minutes
+  decisions: []
+- time: '2026-05-25T07:19:54.267254+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 3 hours -> Up 4 hours; structural.containers[devforge-swap].status:
+    Up 16 minutes -> Up 31 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 16 minutes
+    after: Up 31 minutes
+  decisions: []
+- time: '2026-05-25T07:04:52.181460+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up About a minute -> Up 16 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About a minute
+    after: Up 16 minutes
+  decisions: []
+- time: '2026-05-25T06:49:47.715634+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 10 minutes -> Up About a minute'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 10 minutes
+    after: Up About a minute
+  decisions: []
+- time: '2026-05-25T06:34:44.102605+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 51 seconds -> Up 10 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 51 seconds
+    after: Up 10 minutes
+  decisions: []
+- time: '2026-05-25T06:19:53.425385+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 2 hours -> Up 3 hours; structural.containers[devforge-swap].status:
+    Up About a minute -> Up 51 seconds'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About a minute
+    after: Up 51 seconds
+  decisions: []
+- time: '2026-05-25T06:04:48.994777+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 38 minutes -> Up About a minute'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 38 minutes
+    after: Up About a minute
+  decisions: []
+- time: '2026-05-25T05:49:34.918880+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 23 minutes -> Up 38 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 23 minutes
+    after: Up 38 minutes
+  decisions: []
+- time: '2026-05-25T05:34:33.857258+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 8 minutes -> Up 23 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 8 minutes
+    after: Up 23 minutes
+  decisions: []
+- time: '2026-05-25T05:19:32.567030+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up About an hour -> Up 2 hours; structural.containers[devforge-swap].status:
+    Up 21 minutes -> Up 8 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 21 minutes
+    after: Up 8 minutes
+  decisions: []
+- time: '2026-05-25T05:04:29.711440+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 6 minutes -> Up 21 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 6 minutes
+    after: Up 21 minutes
+  decisions: []
+- time: '2026-05-25T04:49:26.992131+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 55 minutes -> Up About an hour; structural.containers[devforge-swap].status:
+    Up 2 minutes -> Up 6 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 55 minutes
+    after: Up About an hour
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 2 minutes
+    after: Up 6 minutes
+  decisions: []
+- time: '2026-05-25T04:34:23.644013+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 40 minutes -> Up 55 minutes; structural.containers[devforge-swap].status:
+    Up 12 minutes -> Up 2 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 40 minutes
+    after: Up 55 minutes
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 12 minutes
+    after: Up 2 minutes
+  decisions: []
+- time: '2026-05-25T04:19:24.795431+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 25 minutes -> Up 40 minutes; structural.containers[devforge-swap].status:
+    Up 2 minutes -> Up 12 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 25 minutes
+    after: Up 40 minutes
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 2 minutes
+    after: Up 12 minutes
+  decisions: []
+- time: '2026-05-25T04:04:20.787703+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 10 minutes -> Up 25 minutes; structural.containers[devforge-swap].status:
+    Up About a minute -> Up 2 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 10 minutes
+    after: Up 25 minutes
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About a minute
+    after: Up 2 minutes
+  decisions: []
+- time: '2026-05-25T03:49:25.216457+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen]: added; structural.services[devforge-qwen].status: failed -> active'
+  changed:
+  - path: structural.containers[devforge-qwen]
+    type: added
+    after:
+      name: devforge-qwen
+      status: Up 10 minutes
+      ports: 127.0.0.1:8080->8080/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.services[devforge-qwen].status
+    type: changed
+    before: failed
+    after: active
+  decisions: []
+- time: '2026-05-25T03:19:27.785086+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 3 hours -> Up About a minute'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 3 hours
+    after: Up About a minute
+  decisions: []
+- time: '2026-05-25T02:49:05.378351+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-25T01:48:56.229484+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-25T01:18:52.478580+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 46 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 46 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-25T01:03:50.584498+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 31 minutes -> Up 46 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 31 minutes
+    after: Up 46 minutes
+  decisions: []
+- time: '2026-05-25T00:48:48.548804+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 16 minutes -> Up 31 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 16 minutes
+    after: Up 31 minutes
+  decisions: []
+- time: '2026-05-25T00:33:43.941082+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up About a minute -> Up 16 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About a minute
+    after: Up 16 minutes
+  decisions: []
+- time: '2026-05-25T00:18:42.506394+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 7 hours -> Up About a minute'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 7 hours
+    after: Up About a minute
+  decisions: []
+- time: '2026-05-24T23:18:34.573235+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 6 hours -> Up 7 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 6 hours
+    after: Up 7 hours
+  decisions: []
+- time: '2026-05-24T22:18:30.089863+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 5 hours -> Up 6 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 5 hours
+    after: Up 6 hours
+  decisions: []
+- time: '2026-05-24T21:18:09.311661+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 4 hours -> Up 5 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  decisions: []
+- time: '2026-05-24T20:17:55.283205+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 3 hours -> Up 4 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  decisions: []
+- time: '2026-05-24T19:17:39.206690+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-24T18:17:28.168041+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-24T17:47:29.864942+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 56 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 56 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-24T17:32:29.110080+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 41 minutes -> Up 56 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 41 minutes
+    after: Up 56 minutes
+  decisions: []
+- time: '2026-05-24T17:17:28.981080+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 26 minutes -> Up 41 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 26 minutes
+    after: Up 41 minutes
+  decisions: []
+- time: '2026-05-24T17:02:29.388684+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 11 minutes -> Up 26 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 11 minutes
+    after: Up 26 minutes
+  decisions: []
+- time: '2026-05-24T16:47:28.148039+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen]: removed; structural.containers[devforge-swap].status: Up About a minute
+    -> Up 11 minutes; structural.services[devforge-qwen].status: active -> failed'
+  changed:
+  - path: structural.containers[devforge-qwen]
+    type: removed
+    before:
+      name: devforge-qwen
+      status: Up About a minute
+      ports: 127.0.0.1:8080->8080/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About a minute
+    after: Up 11 minutes
+  - path: structural.services[devforge-qwen].status
+    type: changed
+    before: active
+    after: failed
+  decisions: []
+- time: '2026-05-24T16:32:26.733043+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen]: added; structural.containers[devforge-swap].status: Up 2 hours -> Up About
+    a minute; structural.services[devforge-qwen].status: inactive -> active'
+  changed:
+  - path: structural.containers[devforge-qwen]
+    type: added
+    after:
+      name: devforge-qwen
+      status: Up About a minute
+      ports: 127.0.0.1:8080->8080/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 2 hours
+    after: Up About a minute
+  - path: structural.services[devforge-qwen].status
+    type: changed
+    before: inactive
+    after: active
+  decisions: []
+- time: '2026-05-24T16:02:20.432839+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-24T15:47:25.175181+00:00'
+  type: auto
+  summary: 'structural.containers[pod:data].status: Up 2 days -> Up 3 days; structural.containers[postgres].status: Up 2 days
+    (healthy) -> Up 3 days (healthy)'
+  changed:
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 2 days
+    after: Up 3 days
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 2 days (healthy)
+    after: Up 3 days (healthy)
+  decisions: []
+- time: '2026-05-24T15:32:21.965602+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 59 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 59 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-24T15:17:19.454640+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 44 minutes -> Up 59 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 44 minutes
+    after: Up 59 minutes
+  decisions: []
+- time: '2026-05-24T15:02:21.033397+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 29 minutes -> Up 44 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 29 minutes
+    after: Up 44 minutes
+  decisions: []
+- time: '2026-05-24T14:47:19.115300+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 14 minutes -> Up 29 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 14 minutes
+    after: Up 29 minutes
+  decisions: []
+- time: '2026-05-24T14:32:18.274985+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up About an hour -> Up 14 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About an hour
+    after: Up 14 minutes
+  decisions: []
+- time: '2026-05-24T14:17:13.318111+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-api].status: Up 47 hours -> Up 2 days; structural.containers[devforge-swap].status:
+    Up 46 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 47 hours
+    after: Up 2 days
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 46 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-24T14:02:14.362474+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 31 minutes -> Up 46 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 31 minutes
+    after: Up 46 minutes
+  decisions: []
+- time: '2026-05-24T13:47:13.723001+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 16 minutes -> Up 31 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 16 minutes
+    after: Up 31 minutes
+  decisions: []
+- time: '2026-05-24T13:32:10.942440+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up About a minute -> Up 16 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About a minute
+    after: Up 16 minutes
+  decisions: []
+- time: '2026-05-24T13:17:10.894621+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 47 hours (healthy) -> Up 2 days (healthy); structural.containers[devforge-api].status:
+    Up 46 hours -> Up 47 hours; structural.containers[devforge-swap].status: Up About an hour -> Up About a minute'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 47 hours (healthy)
+    after: Up 2 days (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 46 hours
+    after: Up 47 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About an hour
+    after: Up About a minute
+  decisions: []
+- time: '2026-05-24T13:02:08.967782+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 50 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 50 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-24T12:47:07.495179+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 35 minutes -> Up 50 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 35 minutes
+    after: Up 50 minutes
+  decisions: []
+- time: '2026-05-24T12:32:06.690958+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen]: removed; structural.containers[devforge-swap].status: Up 20 minutes -> Up
+    35 minutes; structural.services[devforge-qwen].status: active -> inactive'
+  changed:
+  - path: structural.containers[devforge-qwen]
+    type: removed
+    before:
+      name: devforge-qwen
+      status: Up 7 hours
+      ports: 127.0.0.1:8080->8080/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 20 minutes
+    after: Up 35 minutes
+  - path: structural.services[devforge-qwen].status
+    type: changed
+    before: active
+    after: inactive
+  decisions: []
+- time: '2026-05-24T12:17:05.027360+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 46 hours (healthy) -> Up 47 hours (healthy); structural.containers[devforge-api].status:
+    Up 45 hours -> Up 46 hours; structural.containers[devforge-swap].status: Up 5 minutes -> Up 20 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 46 hours (healthy)
+    after: Up 47 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 45 hours
+    after: Up 46 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 5 minutes
+    after: Up 20 minutes
+  decisions: []
+- time: '2026-05-24T12:01:57.897754+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 28 seconds -> Up 5 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 28 seconds
+    after: Up 5 minutes
+  decisions: []
+- time: '2026-05-24T11:47:04.645245+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 39 minutes -> Up 28 seconds'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 39 minutes
+    after: Up 28 seconds
+  decisions: []
+- time: '2026-05-24T11:31:59.255973+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 6 hours -> Up 7 hours; structural.containers[devforge-swap].status:
+    Up 24 minutes -> Up 39 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 6 hours
+    after: Up 7 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 24 minutes
+    after: Up 39 minutes
+  decisions: []
+- time: '2026-05-24T11:16:57.326657+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 45 hours (healthy) -> Up 46 hours (healthy); structural.containers[devforge-api].status:
+    Up 44 hours -> Up 45 hours; structural.containers[devforge-swap].status: Up 9 minutes -> Up 24 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 45 hours (healthy)
+    after: Up 46 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 44 hours
+    after: Up 45 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 9 minutes
+    after: Up 24 minutes
+  decisions: []
+- time: '2026-05-24T11:01:55.727978+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 37 minutes -> Up 9 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 37 minutes
+    after: Up 9 minutes
+  decisions: []
+- time: '2026-05-24T10:46:49.065257+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 22 minutes -> Up 37 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 22 minutes
+    after: Up 37 minutes
+  decisions: []
+- time: '2026-05-24T10:31:40.254037+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 5 hours -> Up 6 hours; structural.containers[devforge-swap].status:
+    Up 7 minutes -> Up 22 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 5 hours
+    after: Up 6 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 7 minutes
+    after: Up 22 minutes
+  decisions: []
+- time: '2026-05-24T10:16:39.843530+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 44 hours (healthy) -> Up 45 hours (healthy); structural.containers[devforge-api].status:
+    Up 43 hours -> Up 44 hours; structural.containers[devforge-swap].status: Up 3 minutes -> Up 7 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 44 hours (healthy)
+    after: Up 45 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 43 hours
+    after: Up 44 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 7 minutes
+  decisions: []
+- time: '2026-05-24T09:46:39.771013+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 20 minutes -> Up 3 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 20 minutes
+    after: Up 3 minutes
+  decisions: []
+- time: '2026-05-24T09:31:29.308820+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 4 hours -> Up 5 hours; structural.containers[devforge-swap].status:
+    Up 5 minutes -> Up 20 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 5 minutes
+    after: Up 20 minutes
+  decisions: []
+- time: '2026-05-24T09:16:28.431903+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 43 hours (healthy) -> Up 44 hours (healthy); structural.containers[devforge-api].status:
+    Up 42 hours -> Up 43 hours; structural.containers[devforge-swap]: added; structural.services[devforge-swap].status: activating
+    -> active'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 43 hours (healthy)
+    after: Up 44 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 42 hours
+    after: Up 43 hours
+  - path: structural.containers[devforge-swap]
+    type: added
+    after:
+      name: devforge-swap
+      status: Up 5 minutes
+      ports: 127.0.0.1:8081-8082->8081-8082/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.services[devforge-swap].status
+    type: changed
+    before: activating
+    after: active
+  decisions: []
+- time: '2026-05-24T09:01:28.370923+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap]: removed; structural.services[devforge-swap].status: active -> activating'
+  changed:
+  - path: structural.containers[devforge-swap]
+    type: removed
+    before:
+      name: devforge-swap
+      status: Up 41 minutes
+      ports: 127.0.0.1:8081-8082->8081-8082/tcp
+      image: ghcr.io/ggml-org/llama.cpp:server
+      model: null
+      flags: ''
+  - path: structural.services[devforge-swap].status
+    type: changed
+    before: active
+    after: activating
+  decisions: []
+- time: '2026-05-24T08:46:19.424541+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 26 minutes -> Up 41 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 26 minutes
+    after: Up 41 minutes
+  decisions: []
+- time: '2026-05-24T08:31:19.116856+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 3 hours -> Up 4 hours; structural.containers[devforge-swap].status:
+    Up 11 minutes -> Up 26 minutes'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 11 minutes
+    after: Up 26 minutes
+  decisions: []
+- time: '2026-05-24T08:16:17.764919+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 42 hours (healthy) -> Up 43 hours (healthy); structural.containers[devforge-api].status:
+    Up 41 hours -> Up 42 hours; structural.containers[devforge-swap].status: Up 5 minutes -> Up 11 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 42 hours (healthy)
+    after: Up 43 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 41 hours
+    after: Up 42 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 5 minutes
+    after: Up 11 minutes
+  decisions: []
+- time: '2026-05-24T08:01:10.782958+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-swap].status: Up 3 hours -> Up 5 minutes'
+  changed:
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 3 hours
+    after: Up 5 minutes
+  decisions: []
+- time: '2026-05-24T07:30:59.349135+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up 2 hours -> Up 3 hours; structural.containers[devforge-swap].status:
+    Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-24T07:15:56.626996+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 41 hours (healthy) -> Up 42 hours (healthy); structural.containers[devforge-api].status:
+    Up 40 hours -> Up 41 hours'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 41 hours (healthy)
+    after: Up 42 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 40 hours
+    after: Up 41 hours
+  decisions: []
+- time: '2026-05-24T06:30:47.136283+00:00'
+  type: auto
+  summary: 'structural.containers[devforge-qwen].status: Up About an hour -> Up 2 hours; structural.containers[devforge-swap].status:
+    Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-24T06:15:39.350631+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 40 hours (healthy) -> Up 41 hours (healthy); structural.containers[devforge-api].status:
+    Up 39 hours -> Up 40 hours'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 40 hours (healthy)
+    after: Up 41 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 39 hours
+    after: Up 40 hours
+  decisions: []
+- time: '2026-05-24T06:00:38.499605+00:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 24 hours (healthy) -> Up 40 hours (healthy); structural.containers[devforge-api].status:
+    Up 23 hours -> Up 39 hours; structural.containers[devforge-qwen].status: Up 29 minutes -> Up About an hour; structural.containers[devforge-swap].status:
+    Up 29 minutes -> Up About an hour; structural.containers[pod:data].status: Up 45 hours -> Up 2 days (+1 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 24 hours (healthy)
+    after: Up 40 hours (healthy)
+  - path: structural.containers[devforge-api].status
+    type: changed
+    before: Up 23 hours
+    after: Up 39 hours
+  - path: structural.containers[devforge-qwen].status
+    type: changed
+    before: Up 29 minutes
+    after: Up About an hour
+  - path: structural.containers[devforge-swap].status
+    type: changed
+    before: Up 29 minutes
+    after: Up About an hour
+  - path: structural.containers[pod:data].status
+    type: changed
+    before: Up 45 hours
+    after: Up 2 days
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 45 hours (healthy)
+    after: Up 2 days (healthy)
+  decisions: []
 - time: '2026-05-23T13:28:30.032852+00:00'
   type: auto
   summary: 'structural.containers[caddy].status: Up 23 hours (healthy) -> Up 24 hours (healthy); structural.containers[devforge-qwen].status:

@@ -1,7 +1,16 @@
 last_checkpoint:
-  time: '2026-05-25T00:16:31.419712+09:00'
-  recent_files: []
+  time: '2026-05-25T00:31:14.161840+09:00'
+  summary: no files
+  total_files: 0
+  recent_files:
+    source: []
+    config: []
+    docs: []
+    data: []
+    generated: []
   git: {}
+  task: 'T01 6656+mlock test running (2026-05-24): cache-ram=6656 + mlock + feedback fix + token fix + warmup retry. Stage
+    1: 122'
 decisions:
 - 'Recovery Ladder unification (2026-05-24): shared lib/llm/json_parser.py (json.loads → json_repair) replacing 56 lines of
   regex-based JSON parsing across 3 pipeline files. debate.py 33→3 lines, review_worker.py 23→3 lines, code_mod_pipeline.py
@@ -386,7 +395,12 @@ decisions:
 - 'GitHub repo setup 2026-05-13: git@github.com:devforgekor/devforge.git — /opt/projects initialized, 102 files committed
   + pushed (main) including server/ common-lib/ litellm/ scripts/ systemd/. M4 Air SSH key (~/.ssh/id_ed25519) authentication.
   9 systemd unit files added in additional commit for container orchestration definition (Docker Compose equivalent).'
+decisions:
+- 'OOM Recovery Procedure (2026-05-25): When OOM or swap thrashing occurs during model switch: (1) rm -f /opt/ai_data/debate/switch/model-switch.json — stop new model request. (2) kill -TERM <loading_llama_pid> — kill stuck loader, wait 3s, kill -9 if needed. (3) swapoff -a && swapon -a — reset swap to clear thrashing (optional, kernel reclaims over time). (4) systemctl --user restart container-devforge-swap — restart with fresh memory guard. (5) Verify free -h: ~8GB+ available before next attempt. Prevention: always restart container-devforge-swap after memory_guard.sh updates — old supervisor lacks eviction. Current issue: supervisor running pre-eviction code needs restart to activate posix_fadvise eviction.'
+- 'Swap sizing note (2026-05-25): 8GB swap (4GB zram + 4GB disk) too small for dual MoE operation. GLM(~9GB RSS) + Qwen30B(~10GB RSS) = 19GB active + page cache > 24GB. Only works WITH page cache eviction (posix_fadvise DONTNEED on GLM before Pod B load). Without eviction, swap fills and system thrashes. Consider increasing zram to 8GB for more headroom.'
 known_issues:
+- 'container-devforge-swap NOT restarted after memory guard update (2026-05-25): Old supervisor binary running without eviction. daemon-reload done, quadlet updated, but container still running old code. Must systemctl --user restart container-devforge-swap to activate.'
+- 'Swap 100% full after Qwen30B load attempt (2026-05-25): GLM loaded on Pod A consumed 14GB RAM + 7.5GB swap before test. Loading Qwen30B pushed swap to 8.0/8.0GB → thrashing → load stuck at 503 for 5+ min. Recovery: killed loader + cleared switch file. Next attempt needs: (1) container restart with eviction, (2) verify 8GB+ free before switch.'
 - 'link_turns.py kst_end bug (2026-05-23): FIXED. kst_end now derived from review_date+timedelta(days=1) instead of now_kst,
   guaranteeing a full 24h window even when processing today.'
 - 'search_proxy.py implemented (2026-05-20): Brave×4+Exa×4+Tavily×4 Tier1 even rotation + you.com×4 Tier2 final fallback.

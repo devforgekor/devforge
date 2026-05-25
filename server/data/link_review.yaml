@@ -1,6 +1,15 @@
 # link_turns review
-date: 2026-05-23
-linked: 568
-finding: orphan_turns: 0
-finding: empty_worklog: 0
-finding: turn_coverage: 517/517
+date: 2026-05-25
+linked: 0
+finding: orphan_turns.claude-code: 57
+finding: empty_worklog: #179 MoE 모델 후보군 조사 및 Debate 아키텍처 재설계
+finding: empty_worklog: #180 Normal 모드 MoE 확정 및 debate 로직 버그 수정 + OOM 발생
+finding: empty_worklog: #181 OOM 분석 및 MoE debate 테스트 준비
+finding: empty_worklog: #182 OOM 방지 자동화: memory guard + page cache eviction
+finding: empty_worklog: #183 batch 모드 제거 및 debate 정리
+finding: empty_worklog: #184 debate.py v3.0 메모리 관리 강화 및 MoE 검증 준비
+finding: empty_worklog: #185 debate Pod B 단일화 및 순차 실행 전환
+finding: empty_worklog: #186 debate bench_load_s 보정 및 PID 버그 수정
+finding: agentless_worklog: #185 debate Pod B 단일화 및 순차 실행 전환
+finding: agentless_worklog: #186 debate bench_load_s 보정 및 PID 버그 수정
+finding: turn_coverage: 125/182

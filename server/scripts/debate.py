@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-"""DevForge Multi-Agent LLM Debate Orchestrator v4.0
+"""DevForge Multi-Agent LLM Debate Orchestrator v4.1
 
-Cooperative debate — GLM + 32B on local Pod B (:8081), Qwen3-30B and Nemotron
-as remote spot models on Azure VMs (SSH-tunneled, activated per-turn).
+14B-class local-only debate — all models on Pod B (:8081) sequential loading.
 
 Role assignment:
-  P — Qwen3-30B-A3B (remote, azureqwen) — code-specialized proposal generation
-  R — Nemotron-Cascade-2  (remote, azure2)  — systematic critique, reasoning
-  J — GLM-4.7-Flash       (local, :8081)    — neutral judge
-  S — Qwen2.5-Coder-32B   (local, :8081)    — final synthesis (dense, IQ4_XS)
-
-Remote models are spot-activated: SSH start llama-server → health poll → SSH
-tunnel port forward → LLM call → tunnel kill + remote server kill.
+  D — DeepSeek-Coder-V2-Lite  (local, :8081) — DRAG analysis + Judge + Summary
+  P — Qwen2.5-Coder-14B       (local, :8081) — code-specialized proposal generation
+  R — StarCoder2-15B           (local, :8081) — code-focused critique
+  S — Qwen2.5-Coder-32B        (local, :8081) — final synthesis (dense, IQ4_XS)
 
 Usage:
   python3 scripts/debate.py --question "File: ...\nTask: ..." [--skip-drag] [--dry-run]
@@ -33,7 +29,7 @@ SESSIONS_DIR = Path("/opt/ai_data/debate_sessions")
 
 # ── Model catalogue (MoE lineup) ──────────────────────────────────────────
 MODELS: Dict[str, Dict[str, Any]] = {
-    # GLM-4.7-Flash — DRAG + Judge + Summary (supervisor-managed on :8081)
+    # GLM-4.7-Flash — standby (not used in 14B lineup, kept for fallback)
     # enable_thinking=false required: thinking tokens consume max_tokens budget leaving empty content
     "glm-47-flash": {
         "filename": "GLM-4.7-Flash-Q4_K_M.gguf",
@@ -74,6 +70,31 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "system_prompt_support": True,
         "cache_ram": 2048,
         "bench_load_s": 480, "bench_toks": 0.5,
+    },
+    # 14B class — lighter local models for debate roles
+    "qwen-14b": {
+        "filename": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
+        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
+        "max_tokens": 1024, "temperature": 0.1,
+        "system_prompt_support": True,
+        "cache_ram": 1024,
+        "bench_load_s": 240, "bench_toks": 3.0,
+    },
+    "deepseek-v2-lite": {
+        "filename": "DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf",
+        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
+        "max_tokens": 1024, "temperature": 0.1,
+        "system_prompt_support": True,
+        "cache_ram": 1024,
+        "bench_load_s": 280, "bench_toks": 8.0,
+    },
+    "starcoder2-15b": {
+        "filename": "starcoder2-15b-instruct-Q4_K_M.gguf",
+        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
+        "max_tokens": 1024, "temperature": 0.3,
+        "system_prompt_support": True,
+        "cache_ram": 1024,
+        "bench_load_s": 300, "bench_toks": 5.0,
     },
 }
 
@@ -372,12 +393,11 @@ def _kill_ssh_tunnel(local_port: int) -> None:
         pass
 
 
-def _remote_activate(model_id: str) -> bool:
-    """Activate spot model on remote Azure VM via SSH tunnel.
+def _remote_activate(model_id: str, session_tunnels: set) -> bool:
+    """Ensure remote model is accessible via SSH tunnel.
 
-    Model is always-on (OpenAI-compatible API on remote), so we just:
-    1. Open SSH tunnel (port forward with keepalive)
-    2. Verify health through tunnel
+    Tunnel is opened once per session and reused across rounds.
+    Model is always-on (OpenAI-compatible API on remote).
     """
     cfg = MODELS[model_id]
     host = cfg["host"]
@@ -386,9 +406,16 @@ def _remote_activate(model_id: str) -> bool:
     local_port = cfg["local_port"]
     remote_port = cfg["port"]
 
-    _kill_ssh_tunnel(local_port)
+    # Tunnel already open — just verify health
+    if host in session_tunnels:
+        if _poll_health(port=local_port, timeout=3):
+            print(f"  [tunnel] Reusing :{local_port} -> {host}:{remote_port}")
+            return True
+        # Tunnel died — clean up and re-open
+        _kill_ssh_tunnel(local_port)
+        session_tunnels.discard(host)
 
-    # 1. Open SSH tunnel
+    # Open SSH tunnel
     print(f"  [tunnel] Opening :{local_port} -> {host}:{remote_port}")
     try:
         tunnel_result = subprocess.run(
@@ -413,12 +440,12 @@ def _remote_activate(model_id: str) -> bool:
         print(f"  [tunnel] ERROR: SSH tunnel failed to {host}: {e}")
         return False
 
-    # 2. Verify health through tunnel
     time.sleep(1)
     timeout = cfg.get("bench_load_s", 10) + 5
     if not _poll_health(port=local_port, timeout=timeout):
         print(f"  [remote] ERROR: health check failed through tunnel :{local_port}")
         return False
+    session_tunnels.add(host)
     return True
 
 
@@ -439,16 +466,12 @@ def _remote_deactivate(model_id: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class DebateSession:
-    """Cooperative debate orchestrator — local GLM/32B + remote spot models.
+    """14B-class local-only debate — all models on Pod B (:8081) sequential loading.
 
-    Local (:8081, supervisor-managed):
-      Round 0: GLM-4.7-Flash (DRAG)
-      Rounds 1-4: GLM-4.7-Flash (Judge)
-      Round 5: GLM-4.7-Flash (Summary) → Qwen2.5-Coder-32B (Synthesis)
-
-    Remote (Azure spot, SSH-tunneled, activated per-turn):
-      Proposer: Qwen3-30B-A3B (azureqwen)
-      Refuter:  Nemotron-Cascade-2 (azure2)
+    Pod B (:8081, supervisor-managed):
+      Round 0: DeepSeek-Coder-V2-Lite (DRAG)
+      Rounds 1-4: Qwen-14B (Proposer) → StarCoder2-15B (Refuter) → DeepSeek-V2-Lite (Judge)
+      Round 5: DeepSeek-V2-Lite (Summary) → Qwen2.5-Coder-32B (Synthesis)
     """
 
     def __init__(
@@ -471,14 +494,15 @@ class DebateSession:
         self.consensus_scores: List[int] = []
         self.winner_map: List[Dict] = []
         self.drag_context: str = ""
+        self._tunnels_open: set = set()  # Track active SSH tunnels
 
-        # Fixed role assignment — all models served via Pod B (:8081)
-        self.drag_model = "glm-47-flash"         # Pod B — DRAG analysis
-        self.proposer_model = "qwen3-30b-a3b"     # Pod B
-        self.refuter_model = "nemotron-cascade-2"  # Pod B
-        self.judge_model = "glm-47-flash"          # Pod B — Judge (switches each round)
-        self.summary_model = "glm-47-flash"        # Pod B — History summary
-        self.synthesizer_model = "qwen-32b"        # Pod B
+        # Fixed role assignment — 14B local-only lineup
+        self.drag_model = "deepseek-v2-lite"     # Local — DRAG analysis
+        self.proposer_model = "qwen-14b"          # Local — Proposer
+        self.refuter_model = "starcoder2-15b"     # Local — Refuter
+        self.judge_model = "deepseek-v2-lite"     # Local — Judge
+        self.summary_model = "deepseek-v2-lite"   # Local — History summary
+        self.synthesizer_model = "qwen-32b"       # Local — Final synthesis
 
     # ── Persistence ────────────────────────────────────────────────────
 
@@ -490,6 +514,16 @@ class DebateSession:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     # ── Model switching ────────────────────────────────────────────────
+
+    def _close_all_tunnels(self) -> None:
+        """Close all SSH tunnels opened during this session."""
+        for host in list(self._tunnels_open):
+            for model_id, cfg in MODELS.items():
+                if cfg.get("host") == host:
+                    _kill_ssh_tunnel(cfg["local_port"])
+                    break
+        print(f"  [tunnel] Session tunnels closed ({len(self._tunnels_open)} were open)")
+        self._tunnels_open.clear()
 
     def switch_model(self, model_id: str) -> bool:
         """Ensure model is ready — local supervisor or remote spot activation."""
@@ -506,7 +540,7 @@ class DebateSession:
             time.sleep(3)
             return _poll_health(port=8081, timeout=cfg.get("bench_load_s", 120) + 60)
         else:
-            return _remote_activate(model_id)
+            return _remote_activate(model_id, self._tunnels_open)
 
     # ── LLM calling ────────────────────────────────────────────────────
 
@@ -672,9 +706,9 @@ class DebateSession:
     # ═══════════════════════════════════════════════════════════════════
 
     def round_0_drag(self) -> bool:
-        """DRAG: GLM analyzes target file and sets debate context.
+        """DRAG: DeepSeek analyzes target file and sets debate context.
 
-        Pod B (:8081) loads GLM-4.7-Flash for the first time.
+        Pod B (:8081) loads DeepSeek-Coder-V2-Lite for the first time.
         Returns False if skipped.
         """
         if self.skip_drag:
@@ -687,7 +721,7 @@ class DebateSession:
             return False
 
         print(f"\n{'='*60}")
-        print(f"Round 0: DRAG — Context Analysis (GLM-4.7-Flash)")
+        print(f"Round 0: DRAG — Context Analysis (DeepSeek-Coder-V2-Lite)")
         print(f"{'='*60}\n")
         self._save_state({"type": "round_start", "phase": "drag"})
 
@@ -756,7 +790,7 @@ class DebateSession:
             })
             drag_ctx = self.drag_context or json.dumps({"note": "DRAG skipped, no pre-debate context"})
 
-            # A — Proposer (Pod B: Qwen3-30B-A3B)
+            # A — Proposer (Pod B: Qwen2.5-Coder-14B)
             if not self.switch_model(self.proposer_model):
                 print("  [ERROR] switch to proposer model failed")
                 consecutive_failures += 1
@@ -782,10 +816,8 @@ class DebateSession:
                 continue
             self._save_state({"type": "llm_response", "phase": "dart_proposer",
                               "model": self.proposer_model, "output": proposer_output})
-            if not self.dry_run and MODELS[self.proposer_model].get("host", "local") != "local":
-                _remote_deactivate(self.proposer_model)
 
-            # B — Refuter (Pod B: Nemotron-Cascade-2)
+            # B — Refuter (Pod B: StarCoder2-15B)
             if not self.switch_model(self.refuter_model):
                 print("  [ERROR] switch to refuter model failed")
                 consecutive_failures += 1
@@ -811,10 +843,8 @@ class DebateSession:
                 continue
             self._save_state({"type": "llm_response", "phase": "dart_refuter",
                               "model": self.refuter_model, "output": refuter_output})
-            if not self.dry_run and MODELS[self.refuter_model].get("host", "local") != "local":
-                _remote_deactivate(self.refuter_model)
 
-            # C — Judge (Pod B: GLM-4.7-Flash, switched in from Refuter)
+            # C — Judge (Pod B: DeepSeek-Coder-V2-Lite)
             if not self.switch_model(self.judge_model):
                 print("  [ERROR] judge model switch failed")
                 continue
@@ -862,7 +892,7 @@ class DebateSession:
         consensus_trend = self._trend_str()
 
         # ── Step 1: GLM history summary (Pod B) ──
-        print(f"  [summary] Switching to GLM-4.7-Flash for history summary (Pod B)...")
+        print(f"  [summary] Switching to DeepSeek-Coder-V2-Lite for history summary (Pod B)...")
         if not self.switch_model(self.summary_model):
             print("  [ERROR] GLM summary switch failed")
             return None
@@ -930,10 +960,10 @@ class DebateSession:
 
     def run_session(self) -> Optional[dict]:
         print(f"\n{'█'*60}")
-        print(f"█ DevForge Multi-Agent LLM Debate v4.0 (Cooperative)")
+        print(f"█ DevForge Multi-Agent LLM Debate v4.1 (14B Local)")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print(f"█ Local (:8081): GLM + 32B | Remote: Qwen3-30B (azureqwen) + Nemotron (azure2)")
+        print(f"█ Pod B (:8081): DeepSeek-V2-Lite → Qwen-14B → StarCoder2-15B → 32B")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
 
@@ -966,11 +996,9 @@ class DebateSession:
             print("\n[DART aborted — skipping synthesis]")
         final = self.round_5_synthesis() if dart_ok else None
 
-        # Cleanup remote spot models
+        # Close all SSH tunnels (session end)
         if not self.dry_run:
-            for model_id in [self.proposer_model, self.refuter_model]:
-                if MODELS[model_id].get("host", "local") != "local":
-                    _remote_deactivate(model_id)
+            self._close_all_tunnels()
 
         # Write report + upload
         if final:

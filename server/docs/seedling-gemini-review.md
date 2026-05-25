@@ -1,80 +1,80 @@
-# Seedling → DevForge Gemini 로직 선별 보고서
+# Seedling → DevForge Gemini Logic Selection Report
 
-**작성일:** 2026-05-15
-**대상:** Gemini CLI 운영을 위한 DevForge 서버 인프라 보강
-**기준:** common-main.md 기반 DevForge 아키텍처 (Podman rootless, PostgreSQL 16, 경량 MCP 서버)
+**Written:** 2026-05-15
+**Target:** DevForge server infrastructure reinforcement for Gemini CLI operation
+**Basis:** common-main.md based DevForge architecture (Podman rootless, PostgreSQL 16, lightweight MCP server)
 
 ---
 
-## 선별 로직
+## Selected Logic
 
-### 1. AES-256-GCM 암호화 (`app/security.py` — encrypt_data / decrypt_data)
+### 1. AES-256-GCM Encryption (`app/security.py` — encrypt_data / decrypt_data)
 
-**채택 이유:**
-- 현재 Gemini CLI는 `GEMINI_API_KEY`를 `settings.json` 평문 또는 환경변수로 저장
-- DevForge는 PostgreSQL을 보유하므로, 암호화 키만 `ENCRYPTION_PASSPHRASE`로 관리하고 API 키 본문은 암호화 저장 가능
-- PBKDF2-HMAC-SHA256 (100,000 iterations) → HKDF 키 유도로 무차별 대입 저항성 확보
-- `common-rule.md`의 "Secrets: secrets.env (chmod 600) only" 원칙과 일관된 보안 수준
+**Reason for adoption:**
+- Currently Gemini CLI stores `GEMINI_API_KEY` in `settings.json` plaintext or env vars
+- DevForge has PostgreSQL, so encryption key can be managed via `ENCRYPTION_PASSPHRASE` and the API key body can be encrypted in storage
+- PBKDF2-HMAC-SHA256 (100,000 iterations) → HKDF key derivation provides brute-force resistance
+- Security level consistent with `common-rule.md`'s "Secrets: secrets.env (chmod 600) only" principle
 
-**적용 방안:**
+**Application plan:**
 ```python
-# /opt/projects/server/lib/crypto.py 로 이식
-# ENCRYPTION_PASSPHRASE → secrets.env 에서 주입
-# Gemini API 키를 암호화하여 DB나 secrets 파일에 저장
+# Port to /opt/projects/server/lib/crypto.py
+# ENCRYPTION_PASSPHRASE → injected from secrets.env
+# Encrypt Gemini API key and store in DB or secrets file
 ```
 
-**SLOC:** ~50 (함수 2개 + 키 유도)
+**SLOC:** ~50 (2 functions + key derivation)
 
 ---
 
 ### 2. Circuit Breaker + Token Bucket (`app/circuit_breaker.py`)
 
-**채택 이유:**
-- DevForge는 LiteLLM을 통해 외부 API에 의존 — 장애 전파 방지 필요
-- Gemini CLI 자체는 내부적으로 재시도하지만, CLI를 headless 모드로 스케줄링할 경우 연속 실패 시 리소스 낭비
-- 60라인 경량 구현으로 의존성 없음
-- 장애 감지 → 폴백 → 자동 복구 패턴은 범용적으로 유용
+**Reason for adoption:**
+- DevForge depends on external APIs via LiteLLM — needs failure propagation prevention
+- Gemini CLI itself retries internally, but scheduling CLI in headless mode wastes resources on consecutive failures
+- 60-line lightweight implementation with zero dependencies
+- Fault detection → fallback → auto-recovery pattern is universally useful
 
-**적용 방안:**
+**Application plan:**
 ```python
-# /opt/projects/server/lib/circuit.py 로 이식
-# LiteLLM health check 실패 시 circuit open → 알림
-# Gemini CLI cron 실행 전 circuit 상태 확인
+# Port to /opt/projects/server/lib/circuit.py
+# Circuit open on LiteLLM health check failure → alert
+# Check circuit state before Gemini CLI cron execution
 ```
 
-**SLOC:** ~60 (TokenBucket 클래스 + circuit_state dict)
+**SLOC:** ~60 (TokenBucket class + circuit_state dict)
 
 ---
 
-### 3. 공유 HTTP 클라이언트 (`app/http_client.py`)
+### 3. Shared HTTP Client (`app/http_client.py`)
 
-**채택 이유:**
-- DevForge 서버에서 외부 API 호출 시 매번 새 connection 생성하는 비효율 제거
-- TCP Keep-Alive + Connection Pool로 지연시간 감소
-- `reset_client()`로 stale connection 복구 패턴 내장
-- httpx 의존성 하나만 추가 (순수 Python, aarch64 호환)
+**Reason for adoption:**
+- Eliminates inefficiency of creating new connections for every external API call from DevForge server
+- TCP Keep-Alive + Connection Pool reduces latency
+- `reset_client()` for built-in stale connection recovery pattern
+- Only one dependency added: httpx (pure Python, aarch64 compatible)
 
-**적용 방안:**
+**Application plan:**
 ```python
-# /opt/projects/server/lib/http_client.py 로 이식
-# LiteLLM 호출, health check, 외부 웹훅 등에 공유 클라이언트 사용
+# Port to /opt/projects/server/lib/http_client.py
+# Shared client for LiteLLM calls, health checks, external webhooks, etc.
 ```
 
 **SLOC:** ~40
 
 ---
 
-### 4. API 호출 로깅 — 토큰 사용량 추적 (`gemini_pool.py` — _log_api_call)
+### 4. API Call Logging — Token Usage Tracking (`gemini_pool.py` — _log_api_call)
 
-**채택 이유:**
-- Gemini API는 토큰 기반 과금이므로 사용량 모니터링은 비용 관리의 기본
-- DevForge는 이미 `devforge_app.worklog_entries` 테이블 보유 → 동일 패턴으로 `api_call_logs` 추가 가능
-- APICallLogs 스키마를 그대로 가져오면 prompt/cached/candidates/thoughts 토큰 구분 추적 가능
-- `last_token_detail` 패턴으로 세션당 토큰 사용량 실시간 확인
+**Reason for adoption:**
+- Gemini API billing is token-based, so usage monitoring is the foundation of cost management
+- DevForge already has `devforge_app.worklog_entries` table → can add `api_call_logs` using the same pattern
+- Importing the APICallLogs schema directly enables tracking by prompt/cached/candidates/thoughts token breakdown
+- `last_token_detail` pattern for real-time per-session token usage visibility
 
-**적용 방안:**
+**Application plan:**
 ```sql
--- api_call_logs 테이블 추가
+-- Add api_call_logs table
 CREATE TABLE IF NOT EXISTS api_call_logs (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     model_used TEXT NOT NULL,
@@ -89,116 +89,116 @@ CREATE TABLE IF NOT EXISTS api_call_logs (
 );
 ```
 
-**SLOC:** ~30 (함수 1개 + INSERT)
+**SLOC:** ~30 (1 function + INSERT)
 
 ---
 
-### 1. GeminiPoolManager — 경량 KeyRotator로 부분 채택 (`app/gemini_pool.py`)
+### 1. GeminiPoolManager — Partial Adoption as Lightweight KeyRotator (`app/gemini_pool.py`)
 
-**미선별 부분 (전체 PoolManager):**
-- DB 트랜잭션 + 키 상태 머신 + pool_status/pool_keys 테이블 + health_check → 600+ SLOC
-- `pool_name`(lite/flash/gemma/combined) 단위로만 키 그룹핑 가능 → 특정 키 인덱스(9, 10번) 지정 불가
-- `_SAFE_POOL_NAMES` 하드코딩 → 새로운 풀 추가 불가
+**Rejected portions (full PoolManager):**
+- DB transactions + key state machine + pool_status/pool_keys tables + health_check → 600+ SLOC
+- Keys groupable only by `pool_name`(lite/flash/gemma/combined) → cannot specify specific key indexes (e.g. #9, #10)
+- `_SAFE_POOL_NAMES` hardcoded → cannot add new pools
 
-**선별 부분 (로테이션 + 백오프):**
-- round-robin + 429 감지 + 지터 백오프 + 일일 할당량 격리는 재사용 가치 충분
-- in-memory로 구현 시 DB 의존성 제거, ~60 SLOC로 경량화 가능
-- 특정 키만 골라서 로테이션 가능
+**Selected portions (rotation + backoff):**
+- round-robin + 429 detection + jitter backoff + daily quota isolation — sufficient reuse value
+- In-memory implementation removes DB dependency, lightweight at ~60 SLOC
+- Can rotate only specific keys
 
-**경량 KeyRotator 설계:**
+**Lightweight KeyRotator Design:**
 
 ```
-입력: [("key9_name", "key9_value"), ("key10_name", "key10_value")]
-동작:
-  1. pick() → 라운드로빈으로 다음 키 반환 (백오프 중인 키는 skip)
-  2. success() → 백오프/실패 카운트 리셋
-  3. rate_limited() → retry_delay 기준으로 백오프 설정
-     - 분당 할당량(5분 미만) → 지터 적용 일시 백오프
-     - 일일 할당량(5분 이상) → 다음날 KST 17시까지 격리
-  4. 둘 다 백오프 → 가장 빠른 해제 시간 반환 (wait)
+Input: [("key9_name", "key9_value"), ("key10_name", "key10_value")]
+Behavior:
+  1. pick() → returns next key via round-robin (skip keys in backoff)
+  2. success() → reset backoff/failure count
+  3. rate_limited() → set backoff based on retry_delay
+     - Per-minute quota (<5min) → temporary backoff with jitter
+     - Daily quota (>=5min) → isolate until next day 17:00 KST
+  4. Both in backoff → return earliest release time (wait)
 ```
 
-**예상 SLOC:** ~60 (DB 없음, in-memory dict만 사용)
+**Estimated SLOC:** ~60 (No DB, in-memory dict only)
 
-**Gemini CLI 연동 방식:**
+**Gemini CLI Integration:**
 ```bash
-# CLI 실행 전 KeyRotator가 키 하나를 선택 → GEMINI_API_KEY로 주입
+# KeyRotator selects one key before CLI execution → inject as GEMINI_API_KEY
 export GEMINI_API_KEY=$(python3 /opt/projects/server/scripts/rotate_key.py pick)
 gemini "$@"
-python3 /opt/projects/server/scripts/rotate_key.py success  # 또는 rate_limited <retry_sec>
+python3 /opt/projects/server/scripts/rotate_key.py success  # or rate_limited <retry_sec>
 ```
 
 ---
 
-### 2. LLM Client 2-Tier 모델 라우팅 (`app/llm_client.py` — call_gemini, generate_response)
+### 2. LLM Client 2-Tier Model Routing (`app/llm_client.py` — call_gemini, generate_response)
 
-**미선별 이유:**
-- flash-2.5 → gemma-4-26b 폴백 체인은 seedling의 챗봇 응답 생성용
-- Gemini CLI는 자체 모델 선택 로직 보유 (`-m` 플래그, settings.json)
-- Complexity classifier + thinking budget 조정은 대화형 챗봇에 특화
-- QDP/HyQE 쿼리 분해, 응답 캐시, 세션별 적응적 승급 — 모두 CLI와 무관
+**Reason for rejection:**
+- flash-2.5 → gemma-4-26b fallback chain is for seedling's chatbot response generation
+- Gemini CLI has its own model selection logic (`-m` flag, settings.json)
+- Complexity classifier + thinking budget adjustment is specialized for conversational chatbot
+- QDP/HyQE query decomposition, response cache, per-session adaptive promotion — all irrelevant to CLI
 
-**SLOC:** 600+ — 이식 비용 대비 CLI 운영에 기여도 0
-
----
-
-### 3. PostgresKeyStore (`app/key_store.py` — 전체)
-
-**미선별 이유:**
-- `add_key`, `remove_key`, `reactivate_key`, `migrate_from_env` 등 CRUD 풀셋은 키 1개에 불필요
-- `model_type` 분류(lite/flash/gemma), `account_prefix` 기반 분산 — 멀티 키/멀티 모델 시나리오 전용
-- 암호화 함수 자체는 채택(선별 1번)하되, 전체 KeyStore 추상화는 과잉
-
-**대안:** 암호화 함수만 이식하고, 단일 키 로드는 `secrets.env` + `ENCRYPTION_PASSPHRASE` 조합으로 단순화
+**SLOC:** 600+ — zero contribution to CLI operations relative to porting cost
 
 ---
 
-### 4. 검색 엔진 라우팅 (`app/search_engines.py`)
+### 3. PostgresKeyStore (`app/key_store.py` — entire module)
 
-**미선별 이유:**
-- Gemini CLI에 `google_web_search` 도구가 내장되어 있음 (추가 키 불필요)
-- Brave, Exa, Azure Bing, You.com — 각각 별도 API 키 필요
-- DevForge는 검색 기능을 제공하지 않으며, 검색이 필요하면 Gemini CLI의 내장 도구로 충분
+**Reason for rejection:**
+- Full CRUD set (`add_key`, `remove_key`, `reactivate_key`, `migrate_from_env`) is unnecessary for a single key
+- `model_type` classification (lite/flash/gemma), `account_prefix`-based distribution — multi-key/multi-model scenario only
+- Encryption functions themselves are adopted (Selection #1), but full KeyStore abstraction is overkill
+
+**Alternative:** Port only the encryption functions; simplify single key loading to `secrets.env` + `ENCRYPTION_PASSPHRASE` combination
+
+---
+
+### 4. Search Engine Routing (`app/search_engines.py`)
+
+**Reason for rejection:**
+- Gemini CLI has built-in `google_web_search` tool (no additional key required)
+- Brave, Exa, Azure Bing, You.com — each requires a separate API key
+- DevForge does not provide search functionality; built-in Gemini CLI tools are sufficient for searches
 
 ---
 
 ### 5. Prompt Builder + Complexity Classifier (`app/prompt_builder.py`, `app/complexity_classifier.py`)
 
-**미선별 이유:**
-- seedling의 챗봇 응답 생성 프롬프트 엔지니어링 로직
-- Gemini CLI는 GEMINI.md + system prompt를 자체 관리
-- 언어 감지, 실시간 질문 판단, 에러 타입 분류 — 모두 대화형 챗봇 도메인
+**Reason for rejection:**
+- seedling's chatbot response generation prompt engineering logic
+- Gemini CLI manages GEMINI.md + system prompt itself
+- Language detection, real-time question judgment, error type classification — all in conversational chatbot domain
 
 ---
 
 ### 6. Config (`app/config.py` — pydantic-settings)
 
-**미선별 이유:**
-- DevForge는 소수의 환경변수만 사용 (DB 접속, LiteLLM URL, API 키)
-- pydantic-settings 의존성 추가할 만큼 환경변수 복잡도가 높지 않음
-- `common-rule.md`의 "Prefer stdlib before adding dependencies" 원칙 위배
-- 현재 `os.getenv` + `load_dotenv`로 충분
+**Reason for rejection:**
+- DevForge uses a small number of environment variables (DB connection, LiteLLM URL, API key)
+- Environment variable complexity is not high enough to justify adding pydantic-settings dependency
+- Violates `common-rule.md`'s "Prefer stdlib before adding dependencies" principle
+- Current `os.getenv` + `load_dotenv` is sufficient
 
 ---
 
-## 우선순위 요약
+## Priority Summary
 
-| 우선순위 | 로직 | SLOC | 기대 효과 |
+| Priority | Logic | SLOC | Expected Effect |
 |:---:|---|:---:|---|
-| 1 | 암호화 (encrypt/decrypt) | ~50 | API 키 보안 수준 향상 |
-| 2 | **KeyRotator (경량 로테이션)** | ~60 | 2개 키 round-robin + 429 백오프 |
-| 3 | Circuit Breaker | ~60 | 외부 API 장애 격리 |
-| 4 | HTTP Client | ~40 | 커넥션 풀 재사용 |
-| 5 | API 호출 로깅 | ~30 | 토큰 사용량/비용 추적 |
+| 1 | Encryption (encrypt/decrypt) | ~50 | API key security level improvement |
+| 2 | **KeyRotator (lightweight rotation)** | ~60 | 2-key round-robin + 429 backoff |
+| 3 | Circuit Breaker | ~60 | External API failure isolation |
+| 4 | HTTP Client | ~40 | Connection pool reuse |
+| 5 | API Call Logging | ~30 | Token usage/cost tracking |
 
-**총 예상 SLOC:** ~240 (의존성 없음, 순수 stdlib + httpx)
+**Total Estimated SLOC:** ~240 (No dependencies, pure stdlib + httpx)
 
 ---
 
-## 적용 권고
+## Adoption Recommendation
 
-1. **Phase 1 (즉시):** KeyRotator → 9·10번 키 로테이션, Gemini CLI 연동
-2. **Phase 2 (즉시):** `encrypt_data`/`decrypt_data` → API 키 암호화 저장
-3. **Phase 3 (단기):** Circuit Breaker + Token Bucket → LiteLLM 헬스체크에 연동
-4. **Phase 4 (필요 시):** HTTP Client → 외부 API 호출이 늘어날 때 도입
-5. **Phase 5 (필요 시):** API Call Logging → 비용 모니터링이 필요할 때 도입
+1. **Phase 1 (Immediate):** KeyRotator → Key #9·10 rotation, Gemini CLI integration
+2. **Phase 2 (Immediate):** `encrypt_data`/`decrypt_data` → API key encrypted storage
+3. **Phase 3 (Short-term):** Circuit Breaker + Token Bucket → Linked to LiteLLM health check
+4. **Phase 4 (As needed):** HTTP Client → Introduce when external API calls increase
+5. **Phase 5 (As needed):** API Call Logging → Introduce when cost monitoring is needed

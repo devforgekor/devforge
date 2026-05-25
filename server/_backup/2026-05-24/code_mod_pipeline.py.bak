@@ -394,24 +394,20 @@ def _slice_code(code: str, affected_sections: list) -> str:
 
 def _call_stage_with_retry(endpoint: str, messages: list, model: str,
                            timeout: int, max_tokens: int,
-                           max_retries: int = 2,
-                           api_key: str = "") -> Tuple[int, dict, float, bool]:
+                           max_retries: int = 2) -> Tuple[int, dict, float, bool]:
     """Stage 호출 + connection drop 시 재시도 (prompt cache 활용).
 
     32B ARM CPU에서 prompt eval이 38분+ 걸릴 수 있음.
     TCP keepalive로 대부분 해결되지만, 만약 connection이 끊기면:
     - 서버는 계속 처리 중 (prompt cache에 저장됨)
     - 대기 후 재시도하면 cache hit으로 빠르게 완료
-
-    api_key가 제공되면 Authorization 헤더를 추가 (DeepSeek 등 원격 API).
     """
     total_elapsed = 0.0
     was_retry = False
     for attempt in range(max_retries + 1):
         t0 = time.monotonic()
         status, body = call_llm(endpoint, messages, model=model,
-                                timeout=timeout, max_tokens=max_tokens,
-                                api_key=api_key)
+                                timeout=timeout, max_tokens=max_tokens)
         elapsed = time.monotonic() - t0
         total_elapsed += elapsed
         if status == 200:
@@ -501,11 +497,9 @@ def _stage_label(stage_num: int, prompt_tokens: int, timeout: int,
 
 
 def run_32b_4stage(task: dict, start_stage: int = 1,
-                   resume_from: dict = None,
-                   with_api: bool = False) -> dict:
+                   resume_from: dict = None) -> dict:
     """Run a single task through Qwen32B 4-stage pipeline with dynamic timeouts.
-    start_stage: 1-4, skip earlier stages if resume_from provided.
-    with_api: use DeepSeek API for Stage 2 PLAN (internet knowledge)."""
+    start_stage: 1-4, skip earlier stages if resume_from provided."""
     code = read_file(task["file"])
     task_desc = task["description"]
     code_tokens = int(len(code) / 3.5)
@@ -588,29 +582,14 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
             {"role": "system", "content": SYSTEM_32B},
             {"role": "user", "content": _build_stage_user_msg(stage_num, code, task_desc, s1, s2, s3, sliced_code, analysis_only, feedback)},
         ]
-        stage_model = "qwen2.5-coder-32b"
-        if with_api and stage_num == 2:
-            if not DEEPSEEK_KEY:
-                print("  [WARN] --with-api set but DEEPSEEK_API_KEY empty — falling back to local 32B",
-                      flush=True)
-            else:
-                status, body_dict, elapsed, was_retry = _call_stage_with_retry(
-                    "https://api.deepseek.com/v1/chat/completions", messages,
-                    "deepseek-chat", timeout, STAGE_MAX_TOKENS[stage_num],
-                    api_key=DEEPSEEK_KEY)
-                stage_model = "deepseek-chat"
-        if stage_model == "qwen2.5-coder-32b":
-            status, body_dict, elapsed, was_retry = _call_stage_with_retry(
-                LLAMA_ENDPOINT, messages, "qwen2.5-coder-32b", timeout, STAGE_MAX_TOKENS[stage_num])
+        status, body_dict, elapsed, was_retry = _call_stage_with_retry(
+            LLAMA_ENDPOINT, messages, "qwen2.5-coder-32b", timeout, STAGE_MAX_TOKENS[stage_num])
 
         results[stage_key] = extract_json_from_llm_response((status, body_dict))
         results[stage_key]["elapsed_s"] = round(elapsed, 1)
-        results[stage_key]["model"] = stage_model
-        if not was_retry and stage_model == "qwen2.5-coder-32b":
+        if not was_retry:
             _update_estimator(status, body_dict, elapsed)
-        elif stage_model != "qwen2.5-coder-32b":
-            results[stage_key]["rate_skip"] = "api_call"
-        elif was_retry:
+        else:
             results[stage_key]["rate_skip"] = "retry_cache_hit"
         _record_rate(stage_key)
 
@@ -620,7 +599,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
                                    elapsed,
                                    results[stage_key].get("tokens", {}).get("prompt", 0),
                                    results[stage_key].get("tokens", {}).get("completion", 0),
-                                   run_id, model_name=stage_model)
+                                   run_id)
 
         print(f"  Stage {stage_num} done: {elapsed:.0f}s, status={status}", flush=True)
         sinfo = _system_info()
@@ -738,14 +717,13 @@ def run_api(task: dict, api_cfg: dict) -> dict:
 def _insert_activity_stage(task_id: int, stage: int, status: int,
                            body: dict, elapsed_s: float,
                            prompt_tokens: int, completion_tokens: int,
-                           run_id: str, model_name: str = "qwen2.5-coder-32b") -> bool:
+                           run_id: str) -> bool:
     """Insert a pipeline stage result into activity_log for traceability."""
     try:
         from lib.db import psql_ok, esc_sql
     except ImportError:
         return False
 
-    model_esc = esc_sql(model_name)
     title = esc_sql(f"Task {task_id} Stage {stage} {'OK' if status == 200 else 'FAIL'}")
     summary = esc_sql(
         f"Stage {stage}/4 status={status} elapsed={elapsed_s:.0f}s "
@@ -758,7 +736,7 @@ def _insert_activity_stage(task_id: int, stage: int, status: int,
         f"INSERT INTO activity_log (type, source, title, summary, body, "
         f"agent, model, run_id, summary_status) "
         f"VALUES ('stage', 'pipeline', '{title}', '{summary}', "
-        f"'{body_esc}', '{model_esc}', '{model_esc}', "
+        f"'{body_esc}', 'qwen2.5-coder-32b', 'qwen2.5-coder-32b', "
         f"'{run_id_esc}', 'raw')")
     if not ok:
         print(f"  [WARN] activity_log insert failed for Task {task_id} Stage {stage}", flush=True)
@@ -929,8 +907,6 @@ def main():
                     help="Skip to stage (requires previous results)")
     ap.add_argument("--resume-from", type=str,
                     help="Path to previous result JSON for stage skip")
-    ap.add_argument("--with-api", action="store_true",
-                    help="Use DeepSeek API for Stage 2 PLAN (internet knowledge)")
     args = ap.parse_args()
 
     config = load_tasks()
@@ -1013,8 +989,7 @@ def main():
             result = None
             try:
                 result = run_32b_4stage(task, start_stage=args.start_stage,
-                                        resume_from=resume_data,
-                                        with_api=args.with_api)
+                                        resume_from=resume_data)
                 name = save_result(result, "local32b", task["id"])
                 print(f"  Saved: {name}")
                 pkg = result.get("stage4", {}).get("body", {})

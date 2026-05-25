@@ -1,6 +1,6 @@
 # References
 
-LLM 도구, 프레임워크, 연구 프로젝트 레퍼런스. 인프라 의존성은 `_archive/reference-watchlist.md` 참고.
+LLM tools, frameworks, and research project references. For infrastructure dependencies, see `_archive/reference-watchlist.md`.
 
 ## Prompt Optimization & Ablation
 

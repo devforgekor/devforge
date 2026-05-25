@@ -3,7 +3,7 @@ overview:
   purpose: OCI ARM development server — LLM inference + FastAPI application hosting
   os: Oracle Linux Server 9.7 (aarch64)
   cpu: ARM Neoverse-N1, 4-core
-  memory: 22Gi + 4G zram (2.4G) + 8G swap (swappiness=10)
+  memory: 22Gi + 4G zram (150.7M) + 4G swap (swappiness=10)
 storage:
   boot_disk:
     device: /dev/sda (50GB)
@@ -37,7 +37,7 @@ storage:
       mount: /opt/projects
     - lv: lv_swap
       size: 4G
-      mount: SWAP
+      mount: unmounted
     - lv: lv_workspace
       size: 6G
       mount: /opt/workspace
@@ -45,14 +45,14 @@ storage:
 containers:
   runtime: Podman (rootless, user opc)
   image: ghcr.io/ggml-org/llama.cpp:server
-  model: phi-4-Q4_K_M.gguf
+  model: Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf
   flags: (dynamic entrypoint — query /v1/models for live config)
   target_flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0
 services:
 - name: devforge-api
-  status: active
+  status: failed
 - name: devforge-qwen
-  status: active
+  status: failed
 - name: devforge-swap
   status: active
 - name: postgres
@@ -162,8 +162,8 @@ rules:
   - 'tmux: source-file only adds hooks, never removes them. After deleting a hook from .tmux.conf, MUST run tmux set-hook
     -gu <hook-name> to purge from running server.'
   - 'Documentation cleanup: obsolete files MUST move to _archive/ first, never delete directly. Update _archive/README.md
-    with: 보관 사유 (why), 삭제 조건 (when safe to delete), 대체 위치 (replacement), 주의 (warnings). Delete original only after archive
-    copy and README entry confirmed.'
+    with: archive reason (why), deletion criteria (when safe to delete), replacement location, warnings. Delete original only
+    after archive copy and README entry confirmed.'
   - 'Single source of truth for DevForge: /opt/projects/server/docs/ (design.md, phases.md, tasks.yaml) + devforge_app.worklog_entries
     (DB). No DevForge documentation outside /opt/projects/server/.'
   - 'tasks.yaml is the single task tracker. All AI agents read it on session start. in_progress: max 1. todo: priority order.

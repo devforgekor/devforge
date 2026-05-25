@@ -1,9 +1,9 @@
 # collect_turns status (consumed by 9am Slack hook)
-timestamp: 2026-05-23T14:43:23Z
-claude.status: ok
-claude.sessions: 1
-claude.turns: 7
-copilot.status: ok
+timestamp: 2026-05-25T17:52:50Z
+claude.status: errors: ['0ed10101', '32eae482', '62d8602d', 'beb5cd45']
+claude.sessions: 0
+claude.turns: 0
+copilot.status: errors: ['22a79b4b']
 copilot.sessions: 0
 copilot.turns: 0
 gemini.status: ok

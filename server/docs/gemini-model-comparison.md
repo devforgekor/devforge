@@ -1,102 +1,102 @@
-# Gemini 모델 라우팅 전략 비교 분석
+# Gemini Model Routing Strategy Comparative Analysis
 
-> 2026-05-15 실측 테스트 기반
+> Based on empirical testing 2026-05-15
 
-## 테스트 환경
+## Test Environment
 
-- **서버**: OCI ARM 4ocpu 24GB (aarch64)
-- **API**: Gemini Free Tier, 6개 키 (3계정) 로테이션
-- **연결**: HTTPS 프록시 → Google 직접 IP (142.250.21.95)
-- **측정 방식**: Python raw socket, 왕복 시간 측정, 청크 디코딩 포함
+- **Server**: OCI ARM 4ocpu 24GB (aarch64)
+- **API**: Gemini Free Tier, 6 keys (3 accounts) rotation
+- **Connection**: HTTPS proxy → Google direct IP (142.250.21.95)
+- **Measurement method**: Python raw socket, round-trip time measurement, chunk decoding included
 
-## 테스트 모델
+## Test Models
 
-| 모델 | 코드명 | 역할 |
+| Model | Code Name | Role |
 |------|--------|------|
-| gemini-2.5-flash | flash | 분류기 + 간단 응답 |
-| gemma-4-26b-a4b-it | 26b | 분석/기획 |
-| gemma-4-31b-it | 31b | 코드 수정 |
+| gemini-2.5-flash | flash | Classifier + simple response |
+| gemma-4-26b-a4b-it | 26b | Analysis/planning |
+| gemma-4-31b-it | 31b | Code modification |
 
-## 질문 유형
+## Question Types
 
-| 유형 | 내용 |
+| Type | Content |
 |------|------|
-| 간단검색 | "리눅스 find 명령어로 최근 수정된 파일 찾는법 짧게" |
-| 분석기획 | "이 서버의 컨테이너 구성을 분석하고 개선점을 계획해줘" |
-| 코드수정 | "다음 함수의 버그를 찾아서 수정해줘: def div(a,b): return a/b" |
+| Simple search | "How to find recently modified files with Linux find command, brief" |
+| Analysis/planning | "Analyze this server's container configuration and plan improvements" |
+| Code modification | "Find and fix the bug in this function: def div(a,b): return a/b" |
 
-## 모델별 응답 시간
+## Response Time by Model
 
 ```
-질문유형     flash      26b         31b
+Question Type    flash      26b         31b
 ────────────────────────────────────────────
-간단검색     3.3s (21)   23.8s (1251)  21.3s (796)
-분석기획     2.5s (20)   53.8s (2385)  37.3s (2102)
-코드수정     2.0s (21)   41.7s (2314)  25.2s (1345)
+Simple search    3.3s (21)    23.8s (1251)  21.3s (796)
+Analysis/plan    2.5s (20)    53.8s (2385)  37.3s (2102)
+Code modify      2.0s (21)    41.7s (2314)  25.2s (1345)
 ```
-*(괄호 안은 응답 글자 수)*
+*(Values in parentheses are response character counts)*
 
-**핵심 발견**:
-- flash: 모든 질문에 2-3s로 빠르게 응답하지만, 복잡한 질문에는 20자 내외로 한계를 인식하고 짧게 응답
-- 26b: 24-54s 소요, chain-of-thought 기반 상세 분석 (1251-2385자)
-- 31b: 21-37s 소요, 26b보다 코드 작업에 빠름 (796-2102자)
+**Key findings**:
+- flash: Responds quickly to all questions at 2-3s, but for complex questions recognizes its limits and responds briefly around 20 chars
+- 26b: Takes 24-54s, chain-of-thought based detailed analysis (1251-2385 chars)
+- 31b: Takes 21-37s, faster than 26b for code tasks (796-2102 chars)
 
-## 접근 방식 비교
+## Approach Comparison
 
-### 방식 A: flash-first (현재 전략)
+### Approach A: flash-first (Current strategy)
 ```
-간단검색:  flash 즉시 응답                           →  3.3s
-분석기획:  flash 한계 인식(2.5s) → 26b 재질문(53.8s)  → 56.3s
-코드수정:  flash 한계 인식(2.0s) → 31b 재질문(25.2s)  → 27.2s
-                                          총합: 86.9s
-```
-
-### 방식 B: Gemini CLI auto-routing (NumericalClassifierStrategy)
-```
-간단검색:  분류기(3.3s) → flash(3.3s)                 →  6.6s
-분석기획:  분류기(3.3s) → 26b(53.8s)                  → 57.1s
-코드수정:  분류기(3.3s) → 31b(25.2s)                  → 28.6s
-                                          총합: 92.3s
+Simple search:   flash immediate response                   →  3.3s
+Analysis/plan:   flash recognizes limit (2.5s) → 26b retry (53.8s)  → 56.3s
+Code modify:     flash recognizes limit (2.0s) → 31b retry (25.2s)  → 27.2s
+                                                       Total: 86.9s
 ```
 
-### 결과
+### Approach B: Gemini CLI auto-routing (NumericalClassifierStrategy)
+```
+Simple search:   classifier (3.3s) → flash (3.3s)         →  6.6s
+Analysis/plan:   classifier (3.3s) → 26b (53.8s)          → 57.1s
+Code modify:     classifier (3.3s) → 31b (25.2s)          → 28.6s
+                                                       Total: 92.3s
+```
 
-| 지표 | flash-first | auto-routing | 차이 |
+### Results
+
+| Metric | flash-first | auto-routing | Difference |
 |------|-------------|--------------|------|
-| 총 소요시간 | **86.9s** | 92.3s | **+5.4s (6.2%)** |
-| 간단질문 응답속도 | **3.3s** | 6.6s | 2배 느림 |
-| 복합질문 오버헤드 | 2-3s (flash 선행) | 3.3s (분류기) | 유사 |
+| Total time | **86.9s** | 92.3s | **+5.4s (6.2%)** |
+| Simple question response speed | **3.3s** | 6.6s | 2x slower |
+| Complex question overhead | 2-3s (flash preceding) | 3.3s (classifier) | Similar |
 
-## 승자: flash-first
+## Winner: flash-first
 
-### 이유
+### Reasons
 
-1. **간단한 질문에서 2배 빠름** — flash가 직접 답변하므로 분류기 API 호출이 불필요
-2. **복잡한 질문에서 차이 미미** — 26b/31b 응답이 25-54초로 대부분을 차지, 초기 오버헤드(2-3s vs 3.3s)는 전체 시간에 영향 적음
-3. **flash의 자연스러운 분류기 역할** — 복잡한 요청에 "직접 할 수 없다"고 2초 만에 응답, 사용자가 `/model` 전환 판단 가능
-4. **API 호출 절약** — 분류기 호출 1회를 flash 직접 응답으로 대체 → 무료 할당량 효율적 사용
+1. **2x faster for simple questions** — flash answers directly, no classifier API call needed
+2. **Minimal difference for complex questions** — 26b/31b response at 25-54s dominates total time, initial overhead difference (2-3s vs 3.3s) has minimal impact on overall time
+3. **flash as natural classifier** — responds "cannot do this directly" in 2s to complex requests, user can decide `/model` switch
+4. **API call savings** — replaces 1 classifier call with flash direct response → efficient free quota usage
 
-### 손익 분석 (일일 50회 사용 가정)
+### Cost-benefit analysis (assuming 50 daily uses)
 
-| 시나리오 | flash-first | auto-routing |
+| Scenario | flash-first | auto-routing |
 |----------|-------------|--------------|
-| 간단질문 30회 | 30회 API 호출 | 60회 (분류기+라우팅) |
-| 복합질문 20회 | 40회 (flash+heavy) | 40회 (분류기+heavy) |
-| 일일 총 호출 | **70회** | 100회 |
-| 시간 절약 | — | **+30% 호출, +6% 시간** |
+| Simple questions 30 | 30 API calls | 60 (classifier+routing) |
+| Complex questions 20 | 40 (flash+heavy) | 40 (classifier+heavy) |
+| Daily total calls | **70 calls** | 100 calls |
+| Time saved | — | **+30% calls, +6% time** |
 
-## 적용 방법
+## Application Method
 
-1. **기본값**: `gemini-2.5-flash` (모든 질문의 첫 진입점)
-2. **분석/기획 필요 시**: `/model gemma-4-26b-a4b-it`
-3. **코드 수정 필요 시**: `/model gemma-4-31b-it`
+1. **Default**: `gemini-2.5-flash` (first entry point for all questions)
+2. **When analysis/planning needed**: `/model gemma-4-26b-a4b-it`
+3. **When code modification needed**: `/model gemma-4-31b-it`
 
-세션 내에서 `/model` 명령어로 즉시 전환 가능. 재시작 불필요.
+Switch instantly with `/model` command during session. No restart required.
 
-## 관련 파일
+## Related Files
 
-- `~/.gemini/header.md` — 라우팅 전략 문서
-- `/opt/projects/server/scripts/gemini_rotate.py` — 키 로테이션 + headless 실행
-- `/opt/projects/server/scripts/gemini_session_start.sh` — tmux 세션 (flash-first)
-- `/opt/projects/server/scripts/gemini_proxy.py` — HTTPS 프록시 (요청별 키 교체)
-- `/var/tmp/gemini_compare.json` — 실측 데이터 원본
+- `~/.gemini/header.md` — routing strategy document
+- `/opt/projects/server/scripts/gemini_rotate.py` — key rotation + headless execution
+- `/opt/projects/server/scripts/gemini_session_start.sh` — tmux session (flash-first)
+- `/opt/projects/server/scripts/gemini_proxy.py` — HTTPS proxy (per-request key rotation)
+- `/var/tmp/gemini_compare.json` — empirical data source

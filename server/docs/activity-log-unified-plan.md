@@ -422,7 +422,7 @@ REMOVED: exit codes 2-5        → 0/1 only (systemd handles retry)
 The 2026-05-18 `code-as-documentation-review.md` (PEP 8 + Django + Celery + Flask + Python stdlib analysis) established 4 operational rules for DevForge. These rules are the mechanism that prevents the plan document from drifting out of sync with reality:
 
 #### Rule 1: Naming is documentation (PEP 8)
-> 함수명/파일명이 곧 문서. `db.psql()`은 설명이 필요 없음. 주석은 **why**만, **what**은 이름으로.
+> Function names / file names are documentation. `db.psql()` needs no explanation. Comments explain **why**, not **what** — names handle the what.
 
 **Applied here**: `test_code_mod.py` (770 lines) is misnamed. Despite `test_` prefix, it is a production 4-stage pipeline (ANALYZE → PLAN → IMPL → PACKAGE) generating real code diffs via Qwen32B. The `test_` prefix is a historical artifact — it now runs as part of the nightly pipeline and INSERTs directly into activity_log.
 
@@ -433,7 +433,7 @@ The 2026-05-18 `code-as-documentation-review.md` (PEP 8 + Django + Celery + Flas
 All downstream references (systemd units, swap_mode.sh, import paths, this document) updated accordingly.
 
 #### Rule 2: Code is the SSOT, not the plan document
-> PLAN.md Section 7은 `scripts/` 아래 3개 파일만 상정하지만, 실제로는 `lib/` 디렉토리가 6개 모듈로 이미 운영 중. 문서보다 코드가 현실.
+> PLAN.md Section 7 assumes only 3 files under `scripts/`, but in reality the `lib/` directory already operates with 6 modules. Code is more real than documentation.
 
 **Applied here**: This document describes **intent and architecture**. The actual implementation is the authoritative source. When code and document disagree, the code is correct. This document must be updated within the same session as any implementation that changes the architecture.
 
@@ -443,7 +443,7 @@ All downstream references (systemd units, swap_mode.sh, import paths, this docum
 **Applied here**: `activity_log` replaces 3 separate recording systems (worklog_entries + pipeline_traces + observations). `lib/db.py` psql() replaces 10 divergent `_psql()` definitions. The summarizer is 1 file (~250 lines), not 7 B-Plan modules.
 
 #### Rule 4: Import path documents origin
-> `import lib.db` → `db.psql(...)` 호출. 호출 지점마다 출처가 명시됨 (Hitchhiker's Guide).
+> `import lib.db` → `db.psql(...)` call. Every call site documents its origin (Hitchhiker's Guide).
 
 **Applied here**: All new modules (`activity_summarizer.py`, updated `review_worker.py`, `code_mod_pipeline.py`) use `from lib.db import psql, esc_sql` — never local `_psql()` redefinitions.
 

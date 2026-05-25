@@ -4,10 +4,10 @@
 
 - [x] Podman Quadlet containers (devforge-api, devforge-swap, devforge-qwen, postgres)
 - [x] PostgreSQL 16 + pg_trgm + JSONB meta
-- [x] MCP SSE server (mem_save, mem_search)
-- [x] POST /ingest (batch conversation storage)
+- [ ] MCP SSE server (mem_save, mem_search)
+- [ ] POST /ingest (batch conversation storage)
 - [x] Python CLI (search/save/recent/worklog add/recent/search)
-- [x] GET /stats (7-section dashboard)
+- [ ] GET /stats (7-section dashboard)
 - [x] daily pg_dump + monthly restore test
 - [x] worklog_entries DB + tasks.yaml Kanban task tracker
 - [x] auto_commit_guard.py auto-commit + session_context.py context injection
@@ -82,3 +82,6 @@ Phase 2 is structured in 3 tiers. Tier 1 must complete before Tier 2 begins; Tie
 - [ ] User decision rationale tracking — structured decision logging with evidence chain
 - [ ] Back-translation fidelity check — when fast translation API available
 - [ ] T01-T16 32B code modification full re-test (intermittent execution)
+
+
+
