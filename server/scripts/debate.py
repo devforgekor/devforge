@@ -38,7 +38,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
-        "bench_load_s": 280, "bench_toks": 10.0,
+        "bench_load_s": 370, "bench_toks": 10.0,
         "cache_ram": 1024,
     },
     # Pod B — supervisor-managed (switching, port 8081)
@@ -47,7 +47,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
-        "bench_load_s": 240, "bench_toks": 4.0,
+        "bench_load_s": 360, "bench_toks": 4.0,
         "cache_ram": 2048,
     },
     "nemotron-cascade-2": {
@@ -55,7 +55,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.6, "top_p": 0.95,
         "system_prompt_support": True,
-        "bench_load_s": 240, "bench_toks": 4.0,
+        "bench_load_s": 360, "bench_toks": 4.0,
         "cache_ram": 2048,
     },
     "qwen-32b": {
@@ -64,7 +64,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
         "cache_ram": 2048,
-        "bench_load_s": 300, "bench_toks": 0.5,
+        "bench_load_s": 360, "bench_toks": 0.5,
     },
 }
 
@@ -816,7 +816,9 @@ class DebateSession:
 
         # Round 0: DRAG — Pod B loads GLM for analysis
         self.current_round = 0
-        self.round_0_drag()
+        if not self.round_0_drag() and not self.skip_drag:
+            print("\n[ABORT] DRAG analysis failed — cannot proceed without context")
+            return None
 
         # Rounds 1-4: DART — Pod B switches P → R → J sequentially
         dart_ok = self.round_1_to_4_dart()
