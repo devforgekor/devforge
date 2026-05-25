@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""DevForge Multi-Agent LLM Debate Orchestrator v3.0
+"""DevForge Multi-Agent LLM Debate Orchestrator v3.1
 
-MoE-optimized debate with dual-pod overlap architecture.
-Pod A (:8080) runs GLM-4.7-Flash fixed — DRAG + Judge + Summary (no switching).
-Pod B (:8081) runs supervisor-managed Proposer/Refuter/Synthesizer.
+MoE debate — all models served sequentially via Pod B supervisor (:8081).
+Pod A is idle during debate (available for future lightweight models).
 
 Role assignment (all MoE except 32B):
-  P — Qwen3-30B-A3B (17GB)  — code-specialized proposal generation
-  R — Nemotron-Cascade-2  (18GB) — systematic critique, reasoning
-  J — GLM-4.7-Flash       (17GB) — neutral judge, fixed on Pod A
+  P — Qwen3-30B-A3B (18GB)  — code-specialized proposal generation
+  R — Nemotron-Cascade-2  (17GB) — systematic critique, reasoning
+  J — GLM-4.7-Flash       (17GB) — neutral judge
   S — Qwen2.5-Coder-32B   (17GB) — final synthesis (dense, IQ4_XS)
 
-Overlap: Pod A runs Judge while Pod B loads next model → zero switch overhead
-for Judge calls. Pod A terminates after summary; Pod B loads 32B for synthesis.
+All models load sequentially on Pod B; supervisor evicts old model cache on each switch.
 
 Usage:
   python3 scripts/debate.py --question "File: ...\nTask: ..." [--skip-drag] [--dry-run]
@@ -31,14 +29,13 @@ from typing import Any, Dict, List, Optional, Tuple
 # ── Paths ──────────────────────────────────────────────────────────────────
 SWITCH_FILE = "/opt/ai_data/debate/switch/model-switch.json"
 SESSIONS_DIR = Path("/opt/ai_data/debate_sessions")
-POD_A_STOP = "systemctl --user stop container-devforge-qwen.service"
 
 # ── Model catalogue (MoE lineup) ──────────────────────────────────────────
 MODELS: Dict[str, Dict[str, Any]] = {
-    # Pod A — fixed (no switching, port 8080)
+    # GLM-4.7-Flash — DRAG + Judge + Summary (supervisor-managed on :8081)
     "glm-47-flash": {
         "filename": "GLM-4.7-Flash-Q4_K_M.gguf",
-        "port": 8080, "ctx": 4096, "threads": 4, "mlock": 0,
+        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
         "bench_load_s": 280, "bench_toks": 10.0,
@@ -282,28 +279,6 @@ def _evict_file_cache(filepath: str) -> bool:
         return False
 
 
-def _evict_all_except(keep_filename: Optional[str] = None) -> None:
-    """Evict all .gguf model page caches except the keep file.
-
-    Used before loading 32B (evict everything) or before loading
-    a new Pod B model (evict all except Pod A's active model).
-    """
-    models_dir = Path("/opt/ai_data/models/gguf")
-    if not models_dir.exists():
-        return
-    for m in sorted(models_dir.glob("*.gguf")):
-        if keep_filename and m.name == keep_filename:
-            continue
-        _evict_file_cache(str(m))
-    os.sync()
-
-
-def _memory_reset() -> None:
-    """Evict all model page caches to free RAM for a new model load.
-
-    Uses targeted posix_fadvise(DONTNEED) per file — no root required.
-    """
-    _evict_all_except(keep_filename=None)
 
 
 def _poll_health(port: int, timeout: int = 240, backoff_base: float = 2.0) -> bool:
@@ -357,15 +332,14 @@ def _read_file_content(file_path: str) -> Optional[str]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class DebateSession:
-    """Dual-pod MoE debate orchestrator.
+    """MoE debate orchestrator — all models on Pod B (:8081) supervisor.
 
-    Pod A (:8080) — GLM-4.7-Flash fixed (no switching):
-      Round 0 (DRAG) → Rounds 1-4 (Judge) → Summary
+    Pod B sequential switching:
+      Round 0: GLM-4.7-Flash (DRAG)
+      Rounds 1-4: Qwen3-30B-A3B → Nemotron-Cascade-2 → GLM-4.7-Flash (Judge)
+      Round 5: GLM-4.7-Flash (Summary) → Qwen2.5-Coder-32B (Synthesis)
 
-    Pod B (:8081) — supervisor-managed switching:
-      Rounds 1-4 (Proposer → Refuter) → Round 5 (32B Synthesis)
-
-    Overlap: Pod A judges while Pod B loads next model.
+    Pod A is idle during debate (available for future lightweight models).
     """
 
     def __init__(
@@ -389,12 +363,12 @@ class DebateSession:
         self.winner_map: List[Dict] = []
         self.drag_context: str = ""
 
-        # Fixed role assignment
-        self.drag_model = "glm-47-flash"         # Pod A — DRAG analysis
+        # Fixed role assignment — all models served via Pod B (:8081)
+        self.drag_model = "glm-47-flash"         # Pod B — DRAG analysis
         self.proposer_model = "qwen3-30b-a3b"     # Pod B
         self.refuter_model = "nemotron-cascade-2"  # Pod B
-        self.judge_model = "glm-47-flash"          # Pod A — same as DRAG, no reload
-        self.summary_model = "glm-47-flash"        # Pod A — same as DRAG, no reload
+        self.judge_model = "glm-47-flash"          # Pod B — Judge (switches each round)
+        self.summary_model = "glm-47-flash"        # Pod B — History summary
         self.synthesizer_model = "qwen-32b"        # Pod B
 
     # ── Persistence ────────────────────────────────────────────────────
@@ -409,32 +383,16 @@ class DebateSession:
     # ── Model switching ────────────────────────────────────────────────
 
     def switch_model(self, model_id: str) -> bool:
-        """Ensure model is ready on its port.
-
-        port=8080 (Pod A, GLM fixed) → poll health only (no switching)
-        port=8081 (Pod B, supervisor) → write switch file + poll
-        """
+        """Ensure model is ready on Pod B (:8081) via supervisor switch."""
         cfg = MODELS[model_id]
-        port = cfg["port"]
 
         if self.dry_run:
-            print(f"  [dry-run] switch to {model_id} ({cfg['filename']}) on :{port}")
+            print(f"  [dry-run] switch to {model_id} ({cfg['filename']}) on :8081")
             return True
 
-        if port == 8081:
-            # Evict Pod A model (GLM) page cache to free RAM for new Pod B model.
-            # GLM pages will fault back when Pod A needs them for the next round.
-            # Skip if loading 32B — Pod A is already stopped + full eviction done.
-            if model_id != self.synthesizer_model:
-                glm_path = f"/opt/ai_data/models/gguf/{MODELS['glm-47-flash']['filename']}"
-                _evict_file_cache(glm_path)
-                os.sync()
-            _write_switch_file(model_id)
-            time.sleep(3)
-            return _poll_health(port=port, timeout=cfg.get("bench_load_s", 120) + 60)
-        else:
-            # Pod A — fixed, already loaded (or loading for the first time)
-            return _poll_health(port=port, timeout=cfg.get("bench_load_s", 120) + 60)
+        _write_switch_file(model_id)
+        time.sleep(3)
+        return _poll_health(port=8081, timeout=cfg.get("bench_load_s", 120) + 60)
 
     # ── LLM calling ────────────────────────────────────────────────────
 
@@ -583,7 +541,7 @@ class DebateSession:
     def round_0_drag(self) -> bool:
         """DRAG: GLM analyzes target file and sets debate context.
 
-        Pod A (:8080) loads GLM-4.7-Flash for the first time.
+        Pod B (:8081) loads GLM-4.7-Flash for the first time.
         Returns False if skipped.
         """
         if self.skip_drag:
@@ -591,7 +549,7 @@ class DebateSession:
             self._save_state({"type": "round_skip", "reason": "--skip-drag flag"})
             # Load GLM anyway for Judge role later
             if not self.switch_model(self.drag_model):
-                print("  [ERROR] GLM failed to load on Pod A (skip_drag path)")
+                print("  [ERROR] GLM failed to load on Pod B (skip_drag path)")
                 return False
             return False
 
@@ -600,9 +558,9 @@ class DebateSession:
         print(f"{'='*60}\n")
         self._save_state({"type": "round_start", "phase": "drag"})
 
-        # Load GLM on Pod A (will stay loaded for Judge + Summary)
+        # Load GLM on Pod B via supervisor
         if not self.switch_model(self.drag_model):
-            print("  [ERROR] GLM failed to load on Pod A")
+            print("  [ERROR] GLM failed to load on Pod B")
             return False
 
         # Extract and read target file
@@ -630,16 +588,14 @@ class DebateSession:
 
         decision_points = len(analysis.get("decision_points", []))
         print(f"\n  [drag] Analysis complete: {decision_points} decision points identified")
-        print(f"  [drag] GLM-4.7-Flash stays loaded on Pod A for Judge + Summary")
+        print(f"  [drag] DRAG analysis complete — GLM will be reloaded for Judge + Summary")
         return True
 
     def round_1_to_4_dart(self) -> bool:
         """DART: Rounds 1-4 — Proposer → Refuter → Judge.
 
-        Pod B switching: P (Qwen3-30B) → R (Nemotron-Cascade-2)
-        Pod A fixed:      J (GLM-4.7-Flash)
-
-        Overlap benefit: Judge is always ready (no loading overhead per round).
+        Pod B switching: P (Qwen3-30B) → R (Nemotron-Cascade-2) → J (GLM-4.7-Flash)
+        All three load sequentially via supervisor; old model cache evicted per switch.
         """
         proposer_output = None
         refuter_output = None
@@ -720,7 +676,10 @@ class DebateSession:
             self._save_state({"type": "llm_response", "phase": "dart_refuter",
                               "model": self.refuter_model, "output": refuter_output})
 
-            # C — Judge (Pod A: GLM-4.7-Flash, already loaded — no switch overhead!)
+            # C — Judge (Pod B: GLM-4.7-Flash, switched in from Refuter)
+            if not self.switch_model(self.judge_model):
+                print("  [ERROR] judge model switch failed")
+                continue
             alpha, beta, _, _ = self._shuffle_proposals(proposer_output, refuter_output)
             judge_output = self.call_llm_json(
                 "dart_judge", self.judge_model,
@@ -753,11 +712,7 @@ class DebateSession:
         return True
 
     def round_5_synthesis(self) -> Optional[dict]:
-        """Synthesis: GLM summary (Pod A) → 32B final code (Pod B).
-
-        Overlap: Pod B loads 32B while GLM writes summary on Pod A.
-        After summary, Pod A is terminated (frees ~17GB RAM for 32B).
-        """
+        """Synthesis: GLM history summary → 32B final code (all on Pod B)."""
         print(f"\n{'='*60}")
         print(f"Round 5: Synthesis (GLM Summary + 32B Final Code)")
         print(f"{'='*60}\n")
@@ -768,8 +723,11 @@ class DebateSession:
         full_history = state_path.read_text() if state_path.exists() else ""
         consensus_trend = self._trend_str()
 
-        # ── Step 1: GLM history summary (Pod A, already loaded) ──
-        print(f"  [summary] GLM-4.7-Flash summarizing debate history (Pod A)...")
+        # ── Step 1: GLM history summary (Pod B) ──
+        print(f"  [summary] Switching to GLM-4.7-Flash for history summary (Pod B)...")
+        if not self.switch_model(self.summary_model):
+            print("  [ERROR] GLM summary switch failed")
+            return None
         summary_raw = self.call_llm(
             _build_messages("history_summary", self.summary_model,
                             question=self.question,
@@ -786,29 +744,6 @@ class DebateSession:
             history_summary = full_history[-3000:]
         self._save_state({"type": "history_summary", "model": self.summary_model,
                           "content": history_summary})
-
-        # ── Stop Pod A (GLM) to free RAM for 32B ──
-        print(f"  [pod] stopping Pod A (GLM-4.7-Flash) to free 17GB RAM for 32B...")
-        if not self.dry_run:
-            subprocess.run(POD_A_STOP.split(), capture_output=True)
-            # Wait for GLM process to actually exit (supervisor cooldown is 5s)
-            time.sleep(8)
-            print(f"  [pod] Pod A stopped — evicting all model page caches for 32B...")
-            # Evict everything except 32B itself so it loads into clean RAM
-            _evict_all_except(keep_filename=MODELS["qwen-32b"]["filename"])
-            os.sync()
-            # Verify memory state
-            try:
-                with open("/proc/meminfo") as f:
-                    for line in f:
-                        if line.startswith("MemAvailable:"):
-                            avail_mb = int(line.split()[1]) // 1024
-                            print(f"  [mem] Available: {avail_mb}MB (need ~21000MB for 32B)")
-                            if avail_mb < 19000:
-                                print(f"  [mem] WARNING: tight memory — swap may be used")
-                            break
-            except Exception:
-                pass
 
         # ── Step 2: 32B final synthesis (Pod B) ──
         synth_cfg = MODELS[self.synthesizer_model]
@@ -857,11 +792,10 @@ class DebateSession:
 
     def run_session(self) -> Optional[dict]:
         print(f"\n{'█'*60}")
-        print(f"█ DevForge Multi-Agent LLM Debate v3.0 (MoE)")
+        print(f"█ DevForge Multi-Agent LLM Debate v3.1 (MoE)")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print(f"█ Pod A (:8080): GLM-4.7-Flash (DRAG + Judge + Summary)")
-        print(f"█ Pod B (:8081): Qwen3-30B (P) → Nemotron-C2 (R) → 32B (S)")
+        print(f"█ Pod B (:8081): GLM → Qwen3-30B → Nemotron → 32B")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
 
@@ -872,14 +806,22 @@ class DebateSession:
             "skip_drag": self.skip_drag,
         })
 
-        # Round 0: DRAG — Pod A loads GLM (stays for Judge)
+        # Stop Pod A if running — free its RAM for Pod B model switches
+        if not self.dry_run:
+            subprocess.run(
+                ["systemctl", "--user", "stop", "container-devforge-qwen.service"],
+                capture_output=True)
+            print("  [pod] Pod A stopped (idle during debate)")
+            time.sleep(3)  # brief cooldown for container process exit
+
+        # Round 0: DRAG — Pod B loads GLM for analysis
         self.current_round = 0
         self.round_0_drag()
 
-        # Rounds 1-4: DART — Pod B switches P/R, Pod A judges
+        # Rounds 1-4: DART — Pod B switches P → R → J sequentially
         dart_ok = self.round_1_to_4_dart()
 
-        # Round 5: Synthesis — GLM summary (Pod A) → 32B code (Pod B)
+        # Round 5: Synthesis — Pod B loads GLM summary → 32B code
         if not dart_ok:
             print("\n[DART aborted — skipping synthesis]")
         final = self.round_5_synthesis() if dart_ok else None
