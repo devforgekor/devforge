@@ -243,9 +243,9 @@ def _switch_mode(mode: str) -> bool:
         print(f"Error restarting container-devforge-swap: {r.stderr}")
         return False
 
-    # Handle Podman A: stop for code/batch (no memory), restart otherwise
-    if mode in ("code", "batch"):
-        print("Stopping container-devforge-qwen (Podman A, not needed in code/batch)...")
+    # Handle Podman A: stop for code (no memory), restart otherwise
+    if mode == "code":
+        print("Stopping container-devforge-qwen (Podman A, not needed in code)...")
         subprocess.run(
             ["systemctl", "--user", "stop", "container-devforge-qwen"],
             capture_output=True, text=True, timeout=30,
@@ -283,6 +283,7 @@ def cmd_discussion(args):
     question = getattr(args, "question", None)
     skip_drag = getattr(args, "skip_drag", False)
     dry_run = getattr(args, "dry_run", False)
+    with_api = getattr(args, "with_api", False)
 
     # Ensure container is in discussion mode (debate-supervisor)
     if not _container_in_discussion_mode():
@@ -317,6 +318,7 @@ def cmd_discussion(args):
         mode="discussion",
         skip_drag=skip_drag,
         dry_run=dry_run,
+        with_api=with_api,
     )
     result = session.run_session()
     if result is None:
@@ -520,10 +522,12 @@ async def main():
     drag_p.add_argument("question", nargs="?", help="Debate topic / question")
     drag_p.add_argument("--skip-drag", action="store_true", help="Skip Round 0 DRAG query consensus")
     drag_p.add_argument("--dry-run", action="store_true", help="Simulate without LLM calls")
+    drag_p.add_argument("--with-api", action="store_true", help="Use DeepSeek API for real search (internet knowledge)")
     tmad_p = disc_sub.add_parser("toolmad", help="Tool-MAD: adaptive real-time search during debate rounds")
     tmad_p.add_argument("question", nargs="?", help="Debate topic / question")
     tmad_p.add_argument("--skip-drag", action="store_true", help="Skip Round 0 DRAG query consensus")
     tmad_p.add_argument("--dry-run", action="store_true", help="Simulate without LLM calls")
+    tmad_p.add_argument("--with-api", action="store_true", help="Use DeepSeek API for real search (internet knowledge)")
 
     sub.add_parser("dashboard", help="Model performance dashboard")
 

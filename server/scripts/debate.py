@@ -1,28 +1,22 @@
 #!/usr/bin/env python3
-"""DevForge Multi-Agent LLM Debate Orchestrator v2.0
+"""DevForge Multi-Agent LLM Debate Orchestrator v3.0
 
-SLOC-exempt: 500+ lines — single cohesive orchestrator coordinating 4 models
-across 6 debate rounds (DRAG + DART + Synthesis). Splitting would scatter
-shared prompt templates, model configs, and round state across files.
+MoE-optimized debate with dual-pod overlap architecture.
+Pod A (:8080) runs GLM-4.7-Flash fixed — DRAG + Judge + Summary (no switching).
+Pod B (:8081) runs supervisor-managed Proposer/Refuter/Synthesizer.
 
-v2.0 — Dual-pod architecture:
-  normal:     Pod A :8080 (Qwen3-4B Proposer) + Pod B :8081 (Phi-4-mini Refuter) + Pod B :8082 (Selene Mini Judge)
-              All fixed, no switching.
+Role assignment (all MoE except 32B):
+  P — Qwen3-30B-A3B (17GB)  — code-specialized proposal generation
+  R — Nemotron-Cascade-2  (18GB) — systematic critique, reasoning
+  J — GLM-4.7-Flash       (17GB) — neutral judge, fixed on Pod A
+  S — Qwen2.5-Coder-32B   (17GB) — final synthesis (dense, IQ4_XS)
 
-  discussion: Pod A :8080 (Phi-4 14B Judge, fixed) + Pod B :8081 (debate-supervisor, Proposer/Refuter/Synthesizer)
-              Overlap: B loads next model while A runs Judge → zero switch overhead.
-              R5: stop Pod A, load 32B for final synthesis.
-
-  debate:     Alias for discussion (backward-compatible).
-
-DRAG (Round 0) + DART (Rounds 1-4) + Final Synthesis (Round 5, 32B).
+Overlap: Pod A runs Judge while Pod B loads next model → zero switch overhead
+for Judge calls. Pod A terminates after summary; Pod B loads 32B for synthesis.
 
 Usage:
-  python3 scripts/cli.py discussion drag "How to implement X?"
-  python3 scripts/cli.py discussion toolmad "Fix this bug: ..." --skip-drag
-  python3 scripts/debate.py --question "..." --method drag [--mode discussion] [--dry-run]
+  python3 scripts/debate.py --question "File: ...\nTask: ..." [--skip-drag] [--dry-run]
 """
-import hashlib
 import json
 import os
 import random
@@ -37,121 +31,70 @@ from typing import Any, Dict, List, Optional, Tuple
 # ── Paths ──────────────────────────────────────────────────────────────────
 SWITCH_FILE = "/opt/ai_data/debate/switch/model-switch.json"
 SESSIONS_DIR = Path("/opt/ai_data/debate_sessions")
-
-# Pod management
 POD_A_STOP = "systemctl --user stop container-devforge-qwen.service"
-POD_A_START = "systemctl --user start container-devforge-qwen.service"
 
-# ── Model catalogue ────────────────────────────────────────────────────────
-# port=8080 → Podman A (fixed, no switching)
-# port=8081 → Podman B (debate-supervisor, switching)
-# port=8082 → Podman B secondary (fixed, no switching)
+# ── Model catalogue (MoE lineup) ──────────────────────────────────────────
 MODELS: Dict[str, Dict[str, Any]] = {
-    # ── Normal mode models ──
-    "qwen3-4b": {
-        "filename": "Qwen3-4B-Q4_K_M.gguf",
+    # Pod A — fixed (no switching, port 8080)
+    "glm-47-flash": {
+        "filename": "GLM-4.7-Flash-Q4_K_M.gguf",
         "port": 8080, "ctx": 4096, "threads": 4, "mlock": 0,
-        "max_tokens": 2048, "temperature": 0.1,
+        "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
-        "bench_load_s": 30, "bench_toks": 2.5,
+        "bench_load_s": 280, "bench_toks": 10.0,
+        "cache_ram": 1024,
     },
-    "phi-4-mini": {
-        "filename": "Phi-4-mini-instruct.Q8_0.gguf",
+    # Pod B — supervisor-managed (switching, port 8081)
+    "qwen3-30b-a3b": {
+        "filename": "Qwen3-30B-A3B-Q4_K_M.gguf",
         "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
-        "max_tokens": 2048, "temperature": 0.1,
+        "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
-        "bench_load_s": 20, "bench_toks": 2.5,
+        "bench_load_s": 240, "bench_toks": 4.0,
+        "cache_ram": 2048,
     },
-    "selene-mini": {
-        "filename": "selene-1-mini-llama-3.1-8b-q4_k_m.gguf",
-        "port": 8082, "ctx": 4096, "threads": 4, "mlock": 0,
-        "max_tokens": 2048, "temperature": 0.1,
-        "system_prompt_support": True,
-        "bench_load_s": 30, "bench_toks": 2.0,
-    },
-    # ── Discussion mode models ──
-    "qwen25-coder-14b": {
-        "filename": "qwen2.5-coder-14b-instruct-q4_k_m.gguf",
+    "nemotron-cascade-2": {
+        "filename": "Nemotron-Cascade-2-30B-A3B.IQ4_XS.gguf",
         "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
-        "max_tokens": 2048, "temperature": 0.1,
+        "max_tokens": 1024, "temperature": 0.6, "top_p": 0.95,
         "system_prompt_support": True,
-        "bench_load_s": 144, "bench_toks": 2.2,
-    },
-    "deepcoder-14b": {
-        "filename": "agentica-org_DeepCoder-14B-Preview-Q4_K_M.gguf",
-        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 1,
-        "max_tokens": 2048, "temperature": 0.6, "top_p": 0.95,
-        "system_prompt_support": False,
-        "bench_load_s": 102, "bench_toks": 2.1,
-    },
-    "phi-4-14b": {
-        "filename": "phi-4-Q4_K_M.gguf",
-        # port=8080 in discussion mode (fixed on Podman A).
-        # port=8081 in code/debate mode (supervisor-managed, Podman A stopped).
-        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
-        "max_tokens": 2048, "temperature": 0.1,
-        "system_prompt_support": True,
-        "bench_load_s": 40, "bench_toks": 2.1,
+        "bench_load_s": 240, "bench_toks": 4.0,
+        "cache_ram": 2048,
     },
     "qwen-32b": {
         "filename": "Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf",
-        "port": 8081, "ctx": 16384, "threads": 4, "mlock": 0,
-        "max_tokens": 2048, "temperature": 0.1,
+        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 1,
+        "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
-        "cache_ram": 6656,
-        "bench_load_s": 280, "bench_toks": 0.5,
+        "cache_ram": 2048,
+        "bench_load_s": 300, "bench_toks": 0.5,
     },
 }
 
 # ── Prompt templates ───────────────────────────────────────────────────────
 
 PROMPTS = {
-    # ── Round 0: DRAG ──
-    "drag_proposer": {
+    # ── Round 0: DRAG (GLM: file analysis + debate framing) ──
+    "drag_analysis": {
         "system": (
-            "You are a search strategist for a code review debate system. "
-            "Your job is to propose search queries that will gather objective, "
-            "comprehensive information about the topic before any debate begins."
+            "You are a code analysis strategist preparing context for a multi-agent "
+            "code debate. Your job: read the target file, understand its structure, "
+            "and set up a clear debate framework that the Proposer and Refuter will use."
         ),
         "user": (
-            "Topic: {question}\n\n"
-            "Propose 3 search keywords with a 1-sentence rationale for each. "
-            "Consider: official documentation, recent changes, common pitfalls, "
-            "security implications, and performance trade-offs.\n\n"
-            "Output as JSON:\n"
-            '{{"queries": [{{"keyword": "...", "rationale": "..."}}]}}'
-        ),
-    },
-    "drag_refuter": {
-        "system": None,  # DeepCoder: no system prompt
-        "user": (
-            "[ROLE: You are a critical search strategist. Your job is to find bias, "
-            "blind spots, and missing perspectives in the proposed search queries.]\n\n"
-            "Topic: {question}\n\n"
-            "Proposed queries:\n{proposer_queries_json}\n\n"
-            "Critically examine these queries:\n"
-            "1. What biases do they embed?\n"
-            "2. What perspectives are missing?\n"
-            "3. Propose 1-2 alternative queries that address these gaps.\n\n"
-            "Output as JSON:\n"
-            '{{"critique": "2-sentence assessment", '
-            '"biases_found": ["bias1", "bias2"], '
-            '"alternative_queries": [{{"keyword": "...", "rationale": "..."}}]}}'
-        ),
-    },
-    "drag_judge": {
-        "system": (
-            "You are a neutral search arbitrator. Your job is to synthesize competing "
-            "query proposals into a balanced, comprehensive final query set."
-        ),
-        "user": (
-            "Topic: {question}\n\n"
-            "Original queries (Proposer):\n{proposer_queries_json}\n\n"
-            "Critique and alternatives (Refuter):\n{refuter_output_json}\n\n"
-            "Select 3-5 final search queries that together provide balanced coverage. "
-            "For each, explain WHY it was chosen.\n\n"
-            "Output as JSON:\n"
-            '{{"final_queries": [{{"keyword": "...", "purpose": "..."}}]}}'
+            "Task: {question}\n\n"
+            "Target file content:\n```python\n{file_content}\n```\n\n"
+            "Analyze and produce:\n"
+            "1. Code structure overview — key functions, classes, patterns affected\n"
+            "2. Change scope — what exactly needs to be modified and where\n"
+            "3. Key decision points — 3-5 specific questions the debate must resolve\n"
+            "   (e.g., naming conventions, abstraction level, error handling strategy)\n"
+            "4. Constraints — existing patterns that must be preserved\n\n"
+            "Output STRICT JSON:\n"
+            '{{"structure_overview": "...", '
+            '"change_scope": "...", '
+            '"decision_points": ["point1", "point2", ...], '
+            '"constraints": ["constraint1", "constraint2", ...]}}'
         ),
     },
 
@@ -159,49 +102,47 @@ PROMPTS = {
     "dart_proposer": {
         "system": (
             "You are a solution PROPOSER in a code debate. Your role:\n"
-            "1. Build on your previous arguments using new evidence.\n"
+            "1. Build on your previous arguments using the debate context.\n"
             "2. Clearly state what you AGREE and DISAGREE with in the refuter's last response.\n"
             "3. Strengthen weak points. Abandon positions that evidence contradicts.\n"
-            "4. Cite sources from shared_context where applicable."
+            "4. Ground your proposal in the DRAG analysis framework."
         ),
         "user": (
-            "Topic: {question}\n\n"
-            "History:\n{history_summary}\n\n"
-            "Shared Context (search results):\n{shared_context}\n\n"
-            "Judge's last assessment: consensus={consensus_score}%, "
-            "disagreements={disagreement_points}\n\n"
+            "Task: {question}\n\n"
+            "DRAG Context (from pre-debate analysis):\n{drag_context}\n\n"
+            "Round History:\n{history_summary}\n\n"
+            "Judge's last assessment: consensus={consensus_score}%\n"
+            "Disagreements: {disagreement_points}\n\n"
             "Refuter's last argument:\n{refuter_last_output}\n\n"
             "Your task: Respond with a strengthened proposal.\n"
             "Output STRICT JSON (no extra text):\n"
             '{{"logic_summary": "max 3 sentences", '
             '"code_snippet": "```python\\n...\\n```", '
             '"confidence_score": 0-100, '
-            '"disagreement_points": ["point1", "point2"], '
-            '"citations": ["source_id_1"]}}'
+            '"disagreement_points": ["point1", "point2"]}}'
         ),
     },
     "dart_refuter": {
-        "system": None,  # DeepCoder: no system prompt
-        "user": (
-            "[ROLE: You are a CRITICAL REFUTER in a code debate. Find weaknesses, "
+        "system": (
+            "You are a CRITICAL REFUTER in a code debate. Find weaknesses, "
             "propose alternatives, and challenge assumptions. Be constructive — "
-            "every critique must come with an alternative suggestion.]\n\n"
-            "Topic: {question}\n\n"
-            "History:\n{history_summary}\n\n"
-            "Shared Context (search results):\n{shared_context}\n\n"
-            "Judge's last assessment: consensus={consensus_score}%, "
-            "disagreements={disagreement_points}\n\n"
+            "every critique must come with an alternative suggestion."
+        ),
+        "user": (
+            "Task: {question}\n\n"
+            "DRAG Context (from pre-debate analysis):\n{drag_context}\n\n"
+            "Round History:\n{history_summary}\n\n"
+            "Judge's last assessment: consensus={consensus_score}%\n"
+            "Disagreements: {disagreement_points}\n\n"
             "Proposer's latest argument:\n{proposer_last_output}\n\n"
             "Your task:\n"
             "1. Identify logical flaws, missing edge cases, or performance issues.\n"
-            "2. Propose a concrete alternative for each weakness found.\n"
-            "3. Cite sources from shared_context where applicable.\n\n"
+            "2. Propose a concrete alternative for each weakness found.\n\n"
             "Output STRICT JSON (no extra text, no markdown wrapper):\n"
             '{{"logic_summary": "max 3 sentences", '
             '"code_snippet": "```python\\n...\\n```", '
             '"confidence_score": 0-100, '
-            '"disagreement_points": ["point1", "point2"], '
-            '"citations": ["source_id_1"]}}'
+            '"disagreement_points": ["point1", "point2"]}}'
         ),
     },
     "dart_judge": {
@@ -214,11 +155,11 @@ PROMPTS = {
             "- You see two ANONYMIZED proposals (Draft Alpha, Draft Beta). Order is random.\n"
             "- IGNORE: response length, comment style, politeness, formatting verbosity.\n"
             "- JUDGE ONLY: logical correctness, code integrity, factual accuracy.\n"
-            "- If consensus < 70%, suggest a search query to resolve the dispute."
+            "- If consensus < 70%, note what information would resolve the dispute."
         ),
         "user": (
-            "Topic: {question}\n\n"
-            "Shared Context:\n{shared_context}\n\n"
+            "Task: {question}\n\n"
+            "DRAG Context:\n{drag_context}\n\n"
             "Draft Alpha:\n{proposal_a_anonymized}\n\n"
             "Draft Beta:\n{proposal_b_anonymized}\n\n"
             "Each juror: which draft is stronger and why?\n"
@@ -227,74 +168,50 @@ PROMPTS = {
             '{{"jury_opinions": {{"security": "...", "performance": "...", "readability": "..."}}, '
             '"consensus_score": 0-100, '
             '"winner": "alpha|beta|tie", '
-            '"suggested_search_query": "keyword or null", '
             '"disagreement_analysis": "1-sentence summary of key unresolved issues"}}'
         ),
     },
 
-    # ── Round 5: Final Synthesis ──
+    # ── Round 5: Synthesis ──
     "history_summary": {
         "system": (
             "You are a debate historian. Condense a multi-round code debate into "
-            "a structured 500-word summary suitable for a final judge."
+            "a structured summary suitable for the final synthesizer. "
+            "Include: key arguments from both sides, resolved vs disputed points, "
+            "and your recommended direction."
         ),
         "user": (
+            "Task: {question}\n\n"
             "Full Debate History:\n{full_history}\n\n"
             "Consensus Trend: {consensus_trend}\n\n"
-            "Summarize in ≤500 words:\n"
-            "1. Key arguments from both sides\n"
+            "Summarize the debate. Include:\n"
+            "1. Key arguments from Proposer and Refuter\n"
             "2. Points that were resolved vs. still disputed\n"
-            "3. Search findings that influenced the debate\n"
-            "4. Final recommendation for the synthesizer\n\n"
-            "Output as plain text (no JSON, no markdown)."
+            "3. Recommended approach for the final synthesizer\n\n"
+            "Output as plain text (no JSON, no markdown). Max 500 words."
         ),
     },
     "final_synthesis": {
         "system": (
             "You are the final synthesizer for a multi-agent code debate. "
-            "You have access to the complete debate record and all search results. "
-            "The blind is now lifted — you know which model produced which argument. "
-            "Your job: produce the definitive, executable final answer."
+            "You have access to the complete debate record and the debate summary. "
+            "Your job: produce the definitive, executable final code modification."
         ),
         "user": (
-            "Topic: {question}\n\n"
-            "History Summary:\n{history_summary}\n\n"
-            "Last 2 Complete Rounds:\n{last_two_rounds}\n\n"
-            "All Search Results:\n{shared_context}\n\n"
+            "Task: {question}\n\n"
+            "Debate Summary:\n{history_summary}\n\n"
             "Consensus Trend: {consensus_trend}\n\n"
+            "DRAG Context:\n{drag_context}\n\n"
             "Produce the final answer:\n"
-            "1. Executable final code (complete, not fragmentary).\n"
+            "1. Executable final code diff (complete, unified diff format).\n"
             "2. Decision summary — why this solution was chosen.\n"
             "3. Security concerns note.\n"
             "4. Performance considerations note.\n\n"
             "Output STRICT JSON:\n"
-            '{{"final_code": "```python\\n...\\n```", '
+            '{{"diff": "--- a/file\\n+++ b/file\\n@@ ...", '
             '"decision_summary": "3-5 sentence reasoning", '
             '"security_notes": ["note1", "note2"], '
             '"performance_notes": ["note1", "note2"], '
-            '"confidence": 0-100}}'
-        ),
-    },
-    "final_diff": {
-        "system": (
-            "You are the final synthesizer for a multi-agent code debate. "
-            "You have access to the complete debate record and all search results. "
-            "Your job: produce the definitive, executable code modification diff."
-        ),
-        "user": (
-            "Topic: {question}\n\n"
-            "History Summary:\n{history_summary}\n\n"
-            "Last 2 Complete Rounds:\n{last_two_rounds}\n\n"
-            "All Search Results:\n{shared_context}\n\n"
-            "Consensus Trend: {consensus_trend}\n\n"
-            "Produce the final code modification as a unified diff:\n"
-            "1. The diff must be complete and directly applicable (--- / +++ headers, @@ hunks).\n"
-            "2. Analysis — why this approach was chosen.\n"
-            "3. Rationale — key points that drove the decision.\n\n"
-            "Output STRICT JSON:\n"
-            '{{"diff": "--- a/file\\n+++ b/file\\n@@ ...", '
-            '"analysis": "3-5 sentence reasoning", '
-            '"rationale": ["point1", "point2"], '
             '"confidence": 0.0-1.0}}'
         ),
     },
@@ -326,7 +243,7 @@ def _build_messages(prompt_key: str, model_id: str, **kwargs) -> List[Dict[str, 
 
 
 def _write_switch_file(model_id: str) -> None:
-    """Write model-switch.json for supervisor to detect."""
+    """Write model-switch.json for supervisor on :8081 to detect."""
     cfg = MODELS[model_id]
     data = {
         "model_file": cfg["filename"],
@@ -336,14 +253,60 @@ def _write_switch_file(model_id: str) -> None:
         "mlock": cfg["mlock"],
         "cache_ram": cfg.get("cache_ram", 0),
     }
-    # Write to host path (bind-mounted inside container)
     os.makedirs(os.path.dirname(SWITCH_FILE), exist_ok=True)
     with open(SWITCH_FILE, "w") as f:
         json.dump(data, f, indent=2)
     print(f"  [switch] wrote {cfg['filename']} (mlock={cfg['mlock']})")
 
 
-def _poll_health(port: int = 8081, timeout: int = 240, backoff_base: float = 2.0) -> bool:
+def _evict_file_cache(filepath: str) -> bool:
+    """Evict a file's pages from kernel page cache via posix_fadvise(DONTNEED).
+
+    Targeted eviction — only affects this file, not the entire cache.
+    Returns True on success, False if file not found or eviction failed.
+    """
+    try:
+        fd = os.open(filepath, os.O_RDONLY)
+        try:
+            st_size = os.fstat(fd).st_size
+            os.posix_fadvise(fd, 0, st_size, os.POSIX_FADV_DONTNEED)
+            print(f"  [evict] {os.path.basename(filepath)}: {st_size // (1024*1024)}MB evicted")
+            return True
+        finally:
+            os.close(fd)
+    except FileNotFoundError:
+        print(f"  [evict] file not found: {filepath}")
+        return False
+    except Exception as e:
+        print(f"  [evict] failed: {e}")
+        return False
+
+
+def _evict_all_except(keep_filename: Optional[str] = None) -> None:
+    """Evict all .gguf model page caches except the keep file.
+
+    Used before loading 32B (evict everything) or before loading
+    a new Pod B model (evict all except Pod A's active model).
+    """
+    models_dir = Path("/opt/ai_data/models/gguf")
+    if not models_dir.exists():
+        return
+    for m in sorted(models_dir.glob("*.gguf")):
+        if keep_filename and m.name == keep_filename:
+            continue
+        _evict_file_cache(str(m))
+    os.sync()
+
+
+def _memory_reset() -> None:
+    """Evict all model page caches to free RAM for a new model load.
+
+    Uses targeted posix_fadvise(DONTNEED) per file — no root required.
+    """
+    _evict_all_except(keep_filename=None)
+
+
+def _poll_health(port: int, timeout: int = 240, backoff_base: float = 2.0) -> bool:
     """Poll :<port>/health with exponential backoff."""
     health_url = f"http://127.0.0.1:{port}/health"
     print(f"  [health] waiting for :{port} (timeout={timeout}s)...")
@@ -368,19 +331,25 @@ def _poll_health(port: int = 8081, timeout: int = 240, backoff_base: float = 2.0
     return False
 
 
-def _dedup_query(query: str, prior_queries: List[str]) -> bool:
-    """True if query is a near-duplicate of any prior query (F2)."""
-    if not query or query.lower() in ("null", "none", ""):
-        return True
-    q_words = set(query.lower().split())
-    for prior in prior_queries:
-        p_words = set(prior.lower().split())
-        if not q_words or not p_words:
-            continue
-        overlap = len(q_words & p_words) / max(len(q_words | p_words), 1)
-        if overlap > 0.7:
-            return True
-    return False
+def _is_retryable(err_msg: str) -> bool:
+    """Check if error is a transient connection issue worth retrying."""
+    retryable = ("timed out", "Remote end closed", "Connection reset", "Connection aborted")
+    return any(p in err_msg for p in retryable)
+
+
+def _read_file_content(file_path: str) -> Optional[str]:
+    """Read target file for DRAG analysis. Returns None if file not found."""
+    try:
+        return Path(file_path).read_text()
+    except FileNotFoundError:
+        # Try relative to /opt/projects/server
+        alt = Path("/opt/projects/server") / file_path.lstrip("/")
+        try:
+            return alt.read_text()
+        except Exception:
+            return None
+    except Exception:
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -388,27 +357,26 @@ def _dedup_query(query: str, prior_queries: List[str]) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class DebateSession:
-    """Sequential single-model debate orchestrator.
+    """Dual-pod MoE debate orchestrator.
 
-    Lifecycle:
-      1. Write model-switch.json → supervisor hot-swaps → poll health
-      2. Call LLM via :8081/v1/chat/completions
-      3. Parse JSON response (stdlib + regex fallback)
-      4. Repeat for each phase of each round
-      5. Persist all state to JSONL for crash recovery
+    Pod A (:8080) — GLM-4.7-Flash fixed (no switching):
+      Round 0 (DRAG) → Rounds 1-4 (Judge) → Summary
+
+    Pod B (:8081) — supervisor-managed switching:
+      Rounds 1-4 (Proposer → Refuter) → Round 5 (32B Synthesis)
+
+    Overlap: Pod A judges while Pod B loads next model.
     """
 
     def __init__(
         self,
         question: str,
         method: str = "drag",
-        mode: str = "discussion",
         skip_drag: bool = False,
         dry_run: bool = False,
     ):
         self.question = question
-        self.method = method          # "drag" or "toolmad"
-        self.mode = mode              # "normal" or "discussion"
+        self.method = method
         self.skip_drag = skip_drag
         self.dry_run = dry_run
 
@@ -418,35 +386,20 @@ class DebateSession:
 
         self.current_round: int = 0
         self.consensus_scores: List[int] = []
-        self.shared_context: List[Dict] = []
-        self.search_count: int = 0
-        self.max_searches: int = 3
-        self.winner_map: List[Dict] = []   # F4: round → {alpha, beta, winner}
-        self.search_queries: List[str] = []  # F2: dedup history
-        self.search_cache: Dict[str, Tuple[List[Dict], float]] = {}  # F7
+        self.winner_map: List[Dict] = []
+        self.drag_context: str = ""
 
-        # Mode-specific model assignment
-        if self.mode == "normal":
-            self.proposer_model = "qwen3-4b"
-            self.refuter_model = "phi-4-mini"
-            self.judge_model = "selene-mini"
-            self.synthesizer_model = "selene-mini"
-        else:  # discussion
-            self.proposer_model = "qwen25-coder-14b"
-            self.refuter_model = "deepcoder-14b"
-            self.judge_model = "phi-4-14b"
-            self.synthesizer_model = "qwen-32b"
-
-        # Neutral history summarizer (always on port 8082 — no switching needed)
-        self.summary_model = "selene-mini"
-
-        # Secondary synthesizer for dual-judge comparison (discussion mode)
-        self.synthesizer_b_model = "phi-4-14b"
+        # Fixed role assignment
+        self.drag_model = "glm-47-flash"         # Pod A — DRAG analysis
+        self.proposer_model = "qwen3-30b-a3b"     # Pod B
+        self.refuter_model = "nemotron-cascade-2"  # Pod B
+        self.judge_model = "glm-47-flash"          # Pod A — same as DRAG, no reload
+        self.summary_model = "glm-47-flash"        # Pod A — same as DRAG, no reload
+        self.synthesizer_model = "qwen-32b"        # Pod B
 
     # ── Persistence ────────────────────────────────────────────────────
 
     def _save_state(self, entry: Dict) -> None:
-        """Append one JSON line to state.jsonl."""
         entry.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
         entry.setdefault("round", self.current_round)
         path = self.state_dir / "state.jsonl"
@@ -458,9 +411,8 @@ class DebateSession:
     def switch_model(self, model_id: str) -> bool:
         """Ensure model is ready on its port.
 
-        port=8080 (Podman A) → poll health only (fixed model, no switching)
-        port=8081 (Podman B) → write switch file + poll (debate-supervisor)
-        port=8082 (Podman B secondary) → poll health only (fixed model)
+        port=8080 (Pod A, GLM fixed) → poll health only (no switching)
+        port=8081 (Pod B, supervisor) → write switch file + poll
         """
         cfg = MODELS[model_id]
         port = cfg["port"]
@@ -469,27 +421,39 @@ class DebateSession:
             print(f"  [dry-run] switch to {model_id} ({cfg['filename']}) on :{port}")
             return True
 
-        if port == 8081 and self.mode == "discussion":
-            # Podman B — use debate-supervisor for hot-swap
+        if port == 8081:
+            # Evict Pod A model (GLM) page cache to free RAM for new Pod B model.
+            # GLM pages will fault back when Pod A needs them for the next round.
+            # Skip if loading 32B — Pod A is already stopped + full eviction done.
+            if model_id != self.synthesizer_model:
+                glm_path = f"/opt/ai_data/models/gguf/{MODELS['glm-47-flash']['filename']}"
+                _evict_file_cache(glm_path)
+                os.sync()
             _write_switch_file(model_id)
-            time.sleep(3)  # let supervisor detect change
+            time.sleep(3)
             return _poll_health(port=port, timeout=cfg.get("bench_load_s", 120) + 60)
         else:
-            # Podman A (8080) or Podman B fixed (8082) — already loaded
-            return _poll_health(port=port, timeout=10)
+            # Pod A — fixed, already loaded (or loading for the first time)
+            return _poll_health(port=port, timeout=cfg.get("bench_load_s", 120) + 60)
 
     # ── LLM calling ────────────────────────────────────────────────────
 
-    def call_llm(self, messages: List[Dict], model_id: str) -> Optional[str]:
-        """Call llama-server and return raw text response. Timeout=300s."""
+    def call_llm(self, messages: List[Dict], model_id: str, max_tokens: Optional[int] = None) -> Optional[str]:
+        """Call llama-server and return raw text response.
+
+        Timeout = max_tokens / bench_toks + 300s buffer.
+        MoE models at ~4-10 tok/s, 32B at ~0.5 tok/s.
+        On connection error, retries once with halved max_tokens.
+        """
         cfg = MODELS[model_id]
         port = cfg["port"]
         llm_url = f"http://127.0.0.1:{port}/v1/chat/completions"
 
+        mt = max_tokens if max_tokens is not None else cfg["max_tokens"]
         body = {
             "messages": messages,
             "temperature": cfg["temperature"],
-            "max_tokens": cfg["max_tokens"],
+            "max_tokens": mt,
         }
         if "top_p" in cfg:
             body["top_p"] = cfg["top_p"]
@@ -499,23 +463,37 @@ class DebateSession:
                   f"max_tokens={body['max_tokens']}")
             return '{"dry_run": true}'
 
-        print(f"  [llm] calling {model_id} on :{port} (max_tokens={body['max_tokens']})...")
-        t_start = time.monotonic()
-        try:
-            data = json.dumps(body).encode()
-            req = urllib.request.Request(
-                llm_url, data=data,
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                result = json.loads(resp.read())
-                elapsed = time.monotonic() - t_start
-                content = result["choices"][0]["message"]["content"]
-                print(f"  [llm] response in {elapsed:.1f}s ({len(content)} chars)")
-                return content
-        except Exception as e:
-            print(f"  [llm] ERROR: {e}")
-            return None
+        for attempt in range(2):
+            gen_rate = cfg.get("bench_toks", 2.0)
+            timeout = int(body["max_tokens"] / gen_rate) + 300
+            print(f"  [llm] calling {model_id} on :{port} (max_tokens={body['max_tokens']}, timeout={timeout}s"
+                  f"{', retry' if attempt > 0 else ''})...")
+            t_start = time.monotonic()
+            try:
+                data = json.dumps(body).encode()
+                req = urllib.request.Request(
+                    llm_url, data=data,
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    result = json.loads(resp.read())
+                    elapsed = time.monotonic() - t_start
+                    content = result["choices"][0]["message"]["content"]
+                    print(f"  [llm] response in {elapsed:.1f}s ({len(content)} chars)")
+                    return content
+            except Exception as e:
+                err_msg = str(e)
+                print(f"  [llm] ERROR: {e}")
+                # Retry with halved max_tokens on connection/timeout errors
+                if attempt == 0 and _is_retryable(err_msg) and body["max_tokens"] > 256:
+                    body["max_tokens"] = max(body["max_tokens"] // 2, 256)
+                    body["temperature"] = min(body["temperature"], 0.1)
+                    print(f"  [llm] retrying with max_tokens={body['max_tokens']}...")
+                    time.sleep(3)
+                    continue
+                return None
+
+        return None
 
     def call_llm_json(self, prompt_key: str, model_id: str, retry: int = 1, **kwargs) -> Optional[dict]:
         """Call LLM and parse JSON response. Retry once with strict prompt on failure."""
@@ -528,7 +506,6 @@ class DebateSession:
         if parsed is not None:
             return parsed
 
-        # Retry: re-prompt with STRICT JSON ONLY
         if retry > 0:
             print(f"  [json] parse failed, retrying with strict prompt...")
             strict_msg = ("Your previous response was not valid JSON. "
@@ -540,46 +517,17 @@ class DebateSession:
                 parsed2 = _parse_json(raw2)
                 if parsed2 is not None:
                     return parsed2
-            # Final fallback: regex the combined output
             combined = (raw or "") + "\n" + (raw2 or "")
             parsed = _parse_json(combined)
 
         return parsed
 
-    # ── Web search (stub — real Tavily/SerpAPI integration in Phase 4) ─
-
-    def execute_search(self, queries: List[str]) -> List[Dict]:
-        """Execute web searches. Stub for Phase 3 — returns empty in dry-run."""
-        results = []
-        for q in queries:
-            if self.search_count >= self.max_searches:
-                print(f"  [search] max ({self.max_searches}) reached, skipping")
-                break
-            if _dedup_query(q, self.search_queries):
-                print(f"  [search] dedup skip: '{q[:60]}...'")
-                continue
-            if self.dry_run:
-                print(f"  [search] dry-run: '{q}'")
-                results.append({"query": q, "results": [], "source": "dry-run"})
-                continue
-
-            print(f"  [search] query: '{q}'... (stub — Phase 4)")
-            results.append({"query": q, "results": [], "source": "stub"})
-            self.search_count += 1
-            self.search_queries.append(q)
-            self._save_state({
-                "type": "search_exec", "query": q,
-                "results_count": 0, "source": "stub",
-            })
-        return results
-
-    # ── Anonymize & shuffle (F4/A4) ────────────────────────────────────
+    # ── Anonymize ──────────────────────────────────────────────────────
 
     def _shuffle_proposals(
         self, prop_a: dict, prop_b: dict
     ) -> Tuple[dict, dict, str, str]:
-        """Randomly assign Alpha/Beta. Log winner map BEFORE shuffle."""
-        labels = ["alpha", "beta"]
+        """Randomly assign Alpha/Beta labels for blind judging."""
         if random.random() < 0.5:
             labeled = [("alpha", prop_a), ("beta", prop_b)]
             mapping = {"alpha": self.proposer_model, "beta": self.refuter_model}
@@ -587,7 +535,6 @@ class DebateSession:
             labeled = [("alpha", prop_b), ("beta", prop_a)]
             mapping = {"alpha": self.refuter_model, "beta": self.proposer_model}
 
-        # Log mapping BEFORE returning (F4: critical ordering)
         self._save_state({
             "type": "winner_map",
             "alpha": mapping["alpha"],
@@ -607,7 +554,6 @@ class DebateSession:
         )
 
     def _resolve_winner(self, verdict: dict) -> str:
-        """Map judge's 'alpha'/'beta' to actual model name."""
         if not self.winner_map:
             return verdict.get("winner", "unknown")
         wm = self.winner_map[-1]
@@ -619,11 +565,10 @@ class DebateSession:
     # ── Early exit ─────────────────────────────────────────────────────
 
     def _check_early_exit(self) -> Optional[str]:
-        """Return reason string if debate should end early, else None."""
         if not self.consensus_scores:
             return None
         latest = self.consensus_scores[-1]
-        if latest >= 90:  # Phase 6: calibrate from 95% to 90%
+        if latest >= 90:
             return f"consensus >= 90% ({latest}%)"
         if len(self.consensus_scores) >= 2:
             improvement = latest - self.consensus_scores[-2]
@@ -636,82 +581,70 @@ class DebateSession:
     # ═══════════════════════════════════════════════════════════════════
 
     def round_0_drag(self) -> bool:
-        """DRAG: Query Consensus. Returns False if skipped."""
+        """DRAG: GLM analyzes target file and sets debate context.
+
+        Pod A (:8080) loads GLM-4.7-Flash for the first time.
+        Returns False if skipped.
+        """
         if self.skip_drag:
             print("\n─── Round 0 (DRAG) SKIPPED (--skip-drag) ───\n")
             self._save_state({"type": "round_skip", "reason": "--skip-drag flag"})
-            return False
-
-        # Auto-detect: does this task need search? (simple heuristic for now)
-        if any(kw in self.question.lower() for kw in
-               ["fix this", "error:", "traceback", ".py:", "debug"]):
-            print("\n─── Round 0 (DRAG) SKIPPED (auto-detect: debugging task) ───\n")
-            self._save_state({"type": "round_skip", "reason": "auto-detect: debugging task"})
+            # Load GLM anyway for Judge role later
+            if not self.switch_model(self.drag_model):
+                print("  [ERROR] GLM failed to load on Pod A (skip_drag path)")
+                return False
             return False
 
         print(f"\n{'='*60}")
-        print(f"Round 0: DRAG — Query Consensus")
+        print(f"Round 0: DRAG — Context Analysis (GLM-4.7-Flash)")
         print(f"{'='*60}\n")
         self._save_state({"type": "round_start", "phase": "drag"})
 
-        # 0.1 — Proposer (Qwen2.5-Coder-14B)
-        if not self.switch_model(self.proposer_model):
+        # Load GLM on Pod A (will stay loaded for Judge + Summary)
+        if not self.switch_model(self.drag_model):
+            print("  [ERROR] GLM failed to load on Pod A")
             return False
-        proposer = self.call_llm_json(
-            "drag_proposer", self.proposer_model,
+
+        # Extract and read target file
+        file_path = _extract_file_path(self.question)
+        file_content = _read_file_content(file_path) if file_path else None
+        if not file_content:
+            print(f"  [WARN] Could not read file: {file_path}")
+            file_content = f"# File not found: {file_path}\n# Proceeding with question only."
+
+        print(f"  [drag] Analyzing {file_path} ({len(file_content)} chars)...")
+
+        analysis = self.call_llm_json(
+            "drag_analysis", self.drag_model,
             question=self.question,
+            file_content=file_content[-12000:],  # Truncate to avoid context overflow
         )
-        if not proposer:
-            print("  [ERROR] proposer failed")
+        if not analysis:
+            print("  [ERROR] DRAG analysis failed")
             return False
-        self._save_state({"type": "llm_response", "phase": "drag_proposer",
-                          "model": self.proposer_model, "output": proposer})
 
-        # 0.2 — Refuter (DeepCoder-14B)
-        if not self.switch_model(self.refuter_model):
-            return False
-        refuter = self.call_llm_json(
-            "drag_refuter", self.refuter_model,
-            question=self.question,
-            proposer_queries_json=json.dumps(proposer, indent=2),
-        )
-        if not refuter:
-            print("  [ERROR] refuter failed")
-            return False
-        self._save_state({"type": "llm_response", "phase": "drag_refuter",
-                          "model": self.refuter_model, "output": refuter})
+        self.drag_context = json.dumps(analysis, indent=2)
+        self._save_state({"type": "llm_response", "phase": "drag_analysis",
+                          "model": self.drag_model, "output": analysis,
+                          "file_path": file_path})
 
-        # 0.3 — Judge (Phi-4-14B)
-        if not self.switch_model(self.judge_model):
-            return False
-        judge = self.call_llm_json(
-            "drag_judge", self.judge_model,
-            question=self.question,
-            proposer_queries_json=json.dumps(proposer, indent=2),
-            refuter_output_json=json.dumps(refuter, indent=2),
-        )
-        if not judge:
-            print("  [ERROR] judge failed")
-            return False
-        self._save_state({"type": "llm_response", "phase": "drag_judge",
-                          "model": self.judge_model, "output": judge})
-
-        # 0.4 — Execute search
-        queries = [q["keyword"] for q in judge.get("final_queries", [])]
-        print(f"\n  Selected {len(queries)} queries for search")
-        search_results = self.execute_search(queries)
-        self.shared_context.extend(search_results)
-        with open(self.state_dir / "shared_context.json", "w") as f:
-            json.dump(self.shared_context, f, indent=2, ensure_ascii=False)
-
-        print(f"\n  Round 0 complete: {len(search_results)} searches executed")
+        decision_points = len(analysis.get("decision_points", []))
+        print(f"\n  [drag] Analysis complete: {decision_points} decision points identified")
+        print(f"  [drag] GLM-4.7-Flash stays loaded on Pod A for Judge + Summary")
         return True
 
     def round_1_to_4_dart(self) -> bool:
-        """DART: Rounds 1-4 — Proposer → Refuter → Judge → DART check."""
+        """DART: Rounds 1-4 — Proposer → Refuter → Judge.
+
+        Pod B switching: P (Qwen3-30B) → R (Nemotron-Cascade-2)
+        Pod A fixed:      J (GLM-4.7-Flash)
+
+        Overlap benefit: Judge is always ready (no loading overhead per round).
+        """
         proposer_output = None
         refuter_output = None
         last_disagreement = "N/A (first round)"
+        consecutive_failures = 0
 
         for rnd in range(1, 5):
             self.current_round = rnd
@@ -727,57 +660,72 @@ class DebateSession:
             print(f"{'='*60}\n")
             self._save_state({"type": "round_start", "phase": "dart"})
 
-            # Build history summary
             history_summary = json.dumps({
                 "round": rnd,
                 "prior_consensus": self.consensus_scores,
-                "shared_context_count": len(self.shared_context),
             })
+            drag_ctx = self.drag_context or json.dumps({"note": "DRAG skipped, no pre-debate context"})
 
-            # A — Proposer (Qwen2.5-Coder-14B)
+            # A — Proposer (Pod B: Qwen3-30B-A3B)
             if not self.switch_model(self.proposer_model):
+                print("  [ERROR] switch to proposer model failed")
+                consecutive_failures += 1
+                if consecutive_failures >= 2:
+                    print("  [ABORT] 2 consecutive switch failures — debate cannot continue")
+                    return False
                 continue
             proposer_output = self.call_llm_json(
                 "dart_proposer", self.proposer_model,
                 question=self.question,
+                drag_context=drag_ctx,
                 history_summary=history_summary,
-                shared_context=json.dumps(self.shared_context, indent=2),
                 consensus_score=str(self.consensus_scores[-1] if self.consensus_scores else "N/A"),
                 disagreement_points=last_disagreement,
                 refuter_last_output=json.dumps(refuter_output, indent=2) if refuter_output else "N/A (first round)",
             )
             if not proposer_output:
                 print("  [ERROR] proposer failed")
+                consecutive_failures += 1
+                if consecutive_failures >= 2:
+                    print("  [ABORT] 2 consecutive round failures — debate cannot continue")
+                    return False
                 continue
             self._save_state({"type": "llm_response", "phase": "dart_proposer",
                               "model": self.proposer_model, "output": proposer_output})
 
-            # B — Refuter (DeepCoder-14B)
+            # B — Refuter (Pod B: Nemotron-Cascade-2)
             if not self.switch_model(self.refuter_model):
+                print("  [ERROR] switch to refuter model failed")
+                consecutive_failures += 1
+                if consecutive_failures >= 2:
+                    print("  [ABORT] 2 consecutive switch failures — debate cannot continue")
+                    return False
                 continue
             refuter_output = self.call_llm_json(
                 "dart_refuter", self.refuter_model,
                 question=self.question,
+                drag_context=drag_ctx,
                 history_summary=history_summary,
-                shared_context=json.dumps(self.shared_context, indent=2),
                 consensus_score=str(self.consensus_scores[-1] if self.consensus_scores else "N/A"),
                 disagreement_points=last_disagreement,
                 proposer_last_output=json.dumps(proposer_output, indent=2),
             )
             if not refuter_output:
                 print("  [ERROR] refuter failed")
+                consecutive_failures += 1
+                if consecutive_failures >= 2:
+                    print("  [ABORT] 2 consecutive round failures — debate cannot continue")
+                    return False
                 continue
             self._save_state({"type": "llm_response", "phase": "dart_refuter",
                               "model": self.refuter_model, "output": refuter_output})
 
-            # C — Judge (Phi-4-14B) + Winner Mapping
-            if not self.switch_model(self.judge_model):
-                continue
+            # C — Judge (Pod A: GLM-4.7-Flash, already loaded — no switch overhead!)
             alpha, beta, _, _ = self._shuffle_proposals(proposer_output, refuter_output)
             judge_output = self.call_llm_json(
                 "dart_judge", self.judge_model,
                 question=self.question,
-                shared_context=json.dumps(self.shared_context, indent=2),
+                drag_context=drag_ctx,
                 proposal_a_anonymized=json.dumps(alpha, indent=2),
                 proposal_b_anonymized=json.dumps(beta, indent=2),
             )
@@ -786,68 +734,48 @@ class DebateSession:
                 continue
 
             winner = self._resolve_winner(judge_output)
-            self._save_state({
-                "type": "judge_verdict",
-                "consensus_score": judge_output.get("consensus_score", 0),
-                "winner_label": judge_output.get("winner"),
-                "winner_model": winner,
-                "dart_triggered": False,
-                "output": judge_output,
-            })
-
             score = judge_output.get("consensus_score", 0)
             self.consensus_scores.append(score)
             last_disagreement = judge_output.get("disagreement_analysis", "no specific disagreements")
+
+            consecutive_failures = 0  # reset on successful round
+            self._save_state({
+                "type": "judge_verdict",
+                "consensus_score": score,
+                "winner_label": judge_output.get("winner"),
+                "winner_model": winner,
+                "output": judge_output,
+            })
+
             print(f"  Consensus: {score}% | Winner: {winner} | "
                   f"Trend: {self._trend_str()}")
-
-            # D — DART Trigger Check (with dedup + null guard, FIX-3)
-            query = judge_output.get("suggested_search_query")
-            if (score < 70 and self.search_count < self.max_searches
-                    and query and str(query).lower() not in ("null", "none", "")):
-                if not _dedup_query(str(query), self.search_queries):
-                    print(f"  DART trigger: searching '{query}'")
-                    results = self.execute_search([str(query)])
-                    self.shared_context.extend(results)
-                    self._save_state({
-                        "type": "dart_trigger",
-                        "query": query,
-                        "results_count": len(results),
-                    })
-                else:
-                    print(f"  DART trigger: dedup skip '{query}'")
 
         return True
 
     def round_5_synthesis(self) -> Optional[dict]:
-        """Dual-judge synthesis: Selene (8082) summary → 32B + Phi-4-14B (8081).
+        """Synthesis: GLM summary (Pod A) → 32B final code (Pod B).
 
-        Selene Mini on 8082 is always running — no switching needed.
-        32B and Phi-4-14B share 8081 sequentially with switch_model().
-        Returns {"32b": {...}, "phi4": {...}} for external comparison.
+        Overlap: Pod B loads 32B while GLM writes summary on Pod A.
+        After summary, Pod A is terminated (frees ~17GB RAM for 32B).
         """
         print(f"\n{'='*60}")
-        print(f"Round 5: Final Synthesis (Dual Judge)")
+        print(f"Round 5: Synthesis (GLM Summary + 32B Final Code)")
         print(f"{'='*60}\n")
         self.current_round = 5
-        self._save_state({"type": "round_start", "phase": "final_synthesis"})
+        self._save_state({"type": "round_start", "phase": "synthesis"})
 
-        # Build full history from state file
         state_path = self.state_dir / "state.jsonl"
-        full_history = ""
-        if state_path.exists():
-            full_history = state_path.read_text()
-
+        full_history = state_path.read_text() if state_path.exists() else ""
         consensus_trend = self._trend_str()
 
-        # ── Step 1: Selene Mini history summary (neutral 3rd party, port 8082) ──
-        summary_model = self.summary_model
-        print(f"  Generating history summary with {summary_model} (neutral, :8082)...")
+        # ── Step 1: GLM history summary (Pod A, already loaded) ──
+        print(f"  [summary] GLM-4.7-Flash summarizing debate history (Pod A)...")
         summary_raw = self.call_llm(
-            _build_messages("history_summary", summary_model,
+            _build_messages("history_summary", self.summary_model,
+                            question=self.question,
                             full_history=full_history[-8000:],
                             consensus_trend=consensus_trend),
-            summary_model,
+            self.summary_model,
         )
         if summary_raw:
             if len(summary_raw) > 3000:
@@ -856,79 +784,64 @@ class DebateSession:
                 history_summary = summary_raw
         else:
             history_summary = full_history[-3000:]
-        self._save_state({"type": "history_summary", "model": summary_model,
+        self._save_state({"type": "history_summary", "model": self.summary_model,
                           "content": history_summary})
 
-        # Build last 2 rounds from JSONL
-        last_two = ""
-        if state_path.exists():
-            lines = state_path.read_text().strip().split("\n")
-            dart_lines = [l for l in lines if '"phase": "dart_' in l.lower() or 'dart_' in l.lower()]
-            last_two = "\n".join(dart_lines[-6:])
+        # ── Stop Pod A (GLM) to free RAM for 32B ──
+        print(f"  [pod] stopping Pod A (GLM-4.7-Flash) to free 17GB RAM for 32B...")
+        if not self.dry_run:
+            subprocess.run(POD_A_STOP.split(), capture_output=True)
+            # Wait for GLM process to actually exit (supervisor cooldown is 5s)
+            time.sleep(8)
+            print(f"  [pod] Pod A stopped — evicting all model page caches for 32B...")
+            # Evict everything except 32B itself so it loads into clean RAM
+            _evict_all_except(keep_filename=MODELS["qwen-32b"]["filename"])
+            os.sync()
+            # Verify memory state
+            try:
+                with open("/proc/meminfo") as f:
+                    for line in f:
+                        if line.startswith("MemAvailable:"):
+                            avail_mb = int(line.split()[1]) // 1024
+                            print(f"  [mem] Available: {avail_mb}MB (need ~21000MB for 32B)")
+                            if avail_mb < 19000:
+                                print(f"  [mem] WARNING: tight memory — swap may be used")
+                            break
+            except Exception:
+                pass
 
-        # ── Step 2: 32B synthesis A (port 8081) ──
-        synth_a_model = self.synthesizer_model      # "qwen-32b"
-        synth_b_model = self.synthesizer_b_model    # "phi-4-14b"
-
-        synth_a_name = MODELS[synth_a_model]["filename"]
-        print(f"\n  [Synth A] Loading {synth_a_name} for 32B synthesis...")
-        if not self.switch_model(synth_a_model):
+        # ── Step 2: 32B final synthesis (Pod B) ──
+        synth_cfg = MODELS[self.synthesizer_model]
+        print(f"\n  [synthesis] Loading {synth_cfg['filename']} for 32B final synthesis (Pod B)...")
+        print(f"  [synthesis] ctx={synth_cfg['ctx']}, cache={synth_cfg.get('cache_ram',0)}MB")
+        if not self.switch_model(self.synthesizer_model):
+            print("  [ERROR] 32B failed to load (health timeout or supervisor error)")
             return None
 
-        synth_a = self.call_llm_json(
-            "final_diff", synth_a_model,
+        drag_ctx = self.drag_context or json.dumps({"note": "no DRAG context"})
+        final = self.call_llm_json(
+            "final_synthesis", self.synthesizer_model,
             question=self.question,
             history_summary=history_summary,
-            last_two_rounds=last_two or "(see history summary)",
-            shared_context=json.dumps(self.shared_context, indent=2),
             consensus_trend=consensus_trend,
+            drag_context=drag_ctx,
         )
-        if not synth_a:
-            print("  [ERROR] 32B synthesis failed")
-            synth_a = {"error": "synthesis failed"}
+        if not final:
+            print(f"  [ERROR] 32B synthesis failed (max_tokens={synth_cfg['max_tokens']}, "
+                  f"bench_toks={synth_cfg.get('bench_toks',0.5)}, "
+                  f"timeout={int(synth_cfg['max_tokens']/synth_cfg.get('bench_toks',0.5))+300}s)")
+            return None
 
-        self._save_state({
-            "type": "final_synthesis",
-            "model": synth_a_model,
-            "judge": "A",
-            "output": synth_a,
-        })
+        self._save_state({"type": "final_synthesis",
+                          "model": self.synthesizer_model,
+                          "output": final})
 
-        # ── Step 3: Phi-4-14B synthesis B (port 8081) ──
-        synth_b_name = MODELS[synth_b_model]["filename"]
-        print(f"\n  [Synth B] Loading {synth_b_name} for Phi-4-14B synthesis...")
-        if not self.switch_model(synth_b_model):
-            synth_b = {"error": "model switch failed"}
-        else:
-            synth_b = self.call_llm_json(
-                "final_diff", synth_b_model,
-                question=self.question,
-                history_summary=history_summary,
-                last_two_rounds=last_two or "(see history summary)",
-                shared_context=json.dumps(self.shared_context, indent=2),
-                consensus_trend=consensus_trend,
-            )
-            if not synth_b:
-                print("  [ERROR] Phi-4-14B synthesis failed")
-                synth_b = {"error": "synthesis failed"}
-
-        self._save_state({
-            "type": "final_synthesis",
-            "model": synth_b_model,
-            "judge": "B",
-            "output": synth_b,
-        })
-
-        result = {"32b": synth_a, "phi4": synth_b}
-        print(f"\n  [done] Dual synthesis complete: "
-              f"32B={synth_a.get('confidence', 'N/A')}, "
-              f"Phi-4={synth_b.get('confidence', 'N/A')}")
-        return result
+        print(f"\n  [done] Final synthesis complete: confidence={final.get('confidence', 'N/A')}")
+        return final
 
     # ── Helpers ────────────────────────────────────────────────────────
 
     def _trend_str(self) -> str:
-        """ASCII bar chart of consensus trend (F8)."""
         if not self.consensus_scores:
             return "(no data)"
         parts = []
@@ -943,12 +856,12 @@ class DebateSession:
     # ═══════════════════════════════════════════════════════════════════
 
     def run_session(self) -> Optional[dict]:
-        """Execute full debate session. Returns final output or None on failure."""
         print(f"\n{'█'*60}")
-        print(f"█ DevForge Multi-Agent LLM Debate v2.0")
+        print(f"█ DevForge Multi-Agent LLM Debate v3.0 (MoE)")
         print(f"█ Session: {self.session_id}")
-        print(f"█ Mode: {self.mode} | Method: {self.method} | Dry-run: {self.dry_run}")
-        print(f"█ Models: P={self.proposer_model} R={self.refuter_model} J={self.judge_model} S={self.synthesizer_model}")
+        print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
+        print(f"█ Pod A (:8080): GLM-4.7-Flash (DRAG + Judge + Summary)")
+        print(f"█ Pod B (:8081): Qwen3-30B (P) → Nemotron-C2 (R) → 32B (S)")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
 
@@ -959,43 +872,32 @@ class DebateSession:
             "skip_drag": self.skip_drag,
         })
 
-        # Round 0: DRAG
+        # Round 0: DRAG — Pod A loads GLM (stays for Judge)
         self.current_round = 0
         self.round_0_drag()
 
-        # Rounds 1-4: DART
-        self.round_1_to_4_dart()
+        # Rounds 1-4: DART — Pod B switches P/R, Pod A judges
+        dart_ok = self.round_1_to_4_dart()
 
-        # Round 5: Final Synthesis
-        final = self.round_5_synthesis()
+        # Round 5: Synthesis — GLM summary (Pod A) → 32B code (Pod B)
+        if not dart_ok:
+            print("\n[DART aborted — skipping synthesis]")
+        final = self.round_5_synthesis() if dart_ok else None
 
-        # Restore Podman A if stopped during discussion R5
-        if self.mode == "discussion" and not self.dry_run:
-            print("  [pod] restarting Podman A for next session...")
-            subprocess.run(POD_A_START.split(), capture_output=True)
-            time.sleep(2)
-            print("  [pod] Podman A restarted")
-
-        # Write report + upload to Azure Blob
+        # Write report + upload
         if final:
             report_path = self._write_report(final)
             print(f"\n{'█'*60}")
             print(f"█ DEBATE COMPLETE")
             print(f"█ Session: {self.session_id}")
-            if isinstance(final, dict) and "32b" in final:
-                c32 = final["32b"].get("confidence", "?")
-                cp4 = final["phi4"].get("confidence", "?")
-                print(f"█ 32B confidence: {c32}  |  Phi-4 confidence: {cp4}")
-            else:
-                print(f"█ Confidence: {final.get('confidence', '?')}")
+            print(f"█ Confidence: {final.get('confidence', '?')}")
             print(f"█ Local: {report_path}")
 
-            # Auto-upload review bundle to Azure Blob
             try:
                 from lib.blob_uploader import upload_review_bundle
                 url = upload_review_bundle(
                     content=report_path.read_text(),
-                    pipeline="debate",
+                    pipeline="debate_v3",
                     session_id=self.session_id,
                     metadata={
                         "question": self.question[:100],
@@ -1014,7 +916,6 @@ class DebateSession:
         return final
 
     def _write_report(self, final: dict) -> Path:
-        """Generate final_report.md. Returns path."""
         path = self.state_dir / "final_report.md"
         lines = [
             f"# Debate Report — {self.session_id}",
@@ -1023,13 +924,13 @@ class DebateSession:
             f"**Method:** {self.method}",
             f"**Rounds:** {len(self.consensus_scores)} debate + synthesis",
             f"**Consensus Trend:** {self._trend_str()}",
-            f"**Final Confidence:** {final.get('confidence', '?')}%",
+            f"**Final Confidence:** {final.get('confidence', '?')}",
             "",
             "## Decision Summary",
             final.get("decision_summary", "(no summary)"),
             "",
-            "## Final Code",
-            final.get("final_code", "(no code)"),
+            "## Final Diff",
+            final.get("diff", "(no diff)"),
             "",
             "## Security Notes",
             *[f"- {n}" for n in final.get("security_notes", [])],
@@ -1038,12 +939,18 @@ class DebateSession:
             *[f"- {n}" for n in final.get("performance_notes", [])],
             "",
             "---",
-            f"*Generated by DevForge Debate Orchestrator v2.0*",
+            f"*Generated by DevForge Debate Orchestrator v3.0 (MoE)*",
             f"*Session: {self.session_id}*",
         ]
         path.write_text("\n".join(lines))
         print(f"  [report] {path}")
         return path
+
+
+def _extract_file_path(question: str) -> Optional[str]:
+    """Extract file path from question format: 'File: /path/to/file.py\\nTask: ...'"""
+    m = re.search(r"File:\s*(.+?\.py)", question)
+    return m.group(1).strip() if m else None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1052,36 +959,28 @@ class DebateSession:
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser(description="DevForge Multi-Agent LLM Debate v2.0")
-    ap.add_argument("--question", "-q", required=True, help="Debate topic")
+    ap = argparse.ArgumentParser(description="DevForge Multi-Agent LLM Debate v3.0 (MoE)")
+    ap.add_argument("--question", "-q", required=True, help="Debate topic (File: ... Task: ...)")
     ap.add_argument("--method", "-m", default="drag",
-                    choices=["drag", "toolmad"],
+                    choices=["drag"],
                     help="Debate method (default: drag)")
-    ap.add_argument("--mode", default="discussion",
-                    choices=["normal", "discussion", "debate"],
-                    help="Mode: normal (3 fixed models) or discussion (dual-pod overlap). "
-                         "'debate' is an alias for 'discussion'.")
     ap.add_argument("--skip-drag", action="store_true",
-                    help="Skip Round 0 DRAG query consensus")
+                    help="Skip Round 0 DRAG context analysis")
     ap.add_argument("--dry-run", action="store_true",
                     help="Simulate without actual LLM calls")
     args = ap.parse_args()
 
-    # 'debate' is backward-compatible alias for 'discussion'
-    mode = "discussion" if args.mode == "debate" else args.mode
-
     session = DebateSession(
         question=args.question,
         method=args.method,
-        mode=mode,
         skip_drag=args.skip_drag,
         dry_run=args.dry_run,
     )
     result = session.run_session()
     if result is None:
+        import sys
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    import sys
     main()

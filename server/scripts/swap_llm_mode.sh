@@ -1,14 +1,22 @@
 #!/bin/bash
 # DevForge — Podman B mode switcher
-# Usage: swap_llm_mode.sh normal|batch|code
+# Usage: swap_llm_mode.sh normal|code
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MEMORY_GUARD="/opt/ai_data/scripts/lib/memory_guard.sh"
+if [[ -f "$MEMORY_GUARD" ]]; then
+    source "$MEMORY_GUARD"
+else
+    echo "[swap_mode] WARNING: memory_guard.sh not found at $MEMORY_GUARD"
+fi
+
 MODE="${1:-}"
-if [[ ! "$MODE" =~ ^(normal|batch|code)$ ]]; then
-    echo "Usage: $0 normal|batch|code"
-    echo "  normal  — Phi-4-mini Q8_0  (8081, 4.1GB)"
-    echo "  batch   — Phi-4 14B Q4_K_M  (8081, 8.3GB, 야간 리뷰)"
-    echo "  code    — Qwen-32B IQ4_XS   (8081, 16.5GB, swap timers 중지)"
+if [[ ! "$MODE" =~ ^(normal|code)$ ]]; then
+    echo "Usage: $0 normal|code"
+    echo "  normal  — Phi-mini-MoE 7.6B/2.4B (8081) + Selene Mini 8B (8082)"
+    echo "  code    — Qwen-32B IQ4_XS (8081, 16.5GB, swap timers 중지)"
     exit 1
 fi
 
@@ -39,24 +47,58 @@ if [[ "$MODE" == "code" ]]; then
         fi
     done
 
-    # Wait for stopped containers to release memory
+    # Wait for stopped containers to release memory (with verification)
     echo "[swap_mode] Waiting for stopped containers to release memory..."
-    sleep 3
-
-    # Sync dirty pages + report memory state
     sync
+
+    # Evict all other model page caches — 32B needs every MB
+    if declare -f evict_page_cache >/dev/null 2>&1; then
+        echo "[swap_mode] Evicting all non-32B model page caches..."
+        for m in /opt/ai_data/models/gguf/*.gguf; do
+            case "$(basename "$m")" in
+                *32B*|*32b*) ;;  # skip 32B itself
+                *) evict_page_cache "$m" ;;
+            esac
+        done
+        sync
+    fi
+
+    if declare -f wait_memory_release >/dev/null 2>&1; then
+        wait_memory_release 19000 30 "32B model load" || {
+            echo "[swap_mode] FATAL: Insufficient memory for 32B model. Aborting switch to code mode."
+            echo "MODE=$CURRENT" > "$MODE_FILE"
+            systemctl --user start review-worker.timer devforge-nightly.timer 2>/dev/null || true
+            exit 1
+        }
+    else
+        # Fallback: old behavior with sleep + check
+        sleep 5
+        sync
+        avail_mb=$(free -m | awk 'NR==2{print $7}')
+        if [[ "$avail_mb" -lt 19000 ]]; then
+            echo "[swap_mode] FATAL: Only ${avail_mb}MB available, 32B needs ~19GB. Aborting."
+            echo "MODE=$CURRENT" > "$MODE_FILE"
+            systemctl --user start review-worker.timer devforge-nightly.timer 2>/dev/null || true
+            exit 1
+        fi
+    fi
+
     echo "[swap_mode] Memory after cleanup:"
     free -h | grep -E '^Mem:|^Swap:'
-
-    avail_mb=$(free -m | awk 'NR==2{print $7}')
-    if [[ "$avail_mb" -lt 19000 ]]; then
-        echo "[swap_mode] WARNING: Only ${avail_mb}MB available, 32B needs ~19GB. Risk of OOM."
-    fi
 fi
 
 if [[ "$CURRENT" == "code" ]]; then
-    echo "[swap_mode] Restoring scheduled timers..."
+    echo "[swap_mode] Leaving code mode — restoring timers + evicting 32B page cache..."
     systemctl --user start review-worker.timer devforge-nightly.timer 2>/dev/null || true
+
+    # Evict 32B model from page cache before loading new models
+    # 32B is 17GB — if we don't evict, normal mode (14GB) starts with only 7GB free
+    if declare -f evict_page_cache >/dev/null 2>&1; then
+        evict_page_cache "/opt/ai_data/models/gguf/Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf"
+        sync
+        echo "[swap_mode] Memory after 32B eviction:"
+        free -h | grep -E '^Mem:|^Swap:'
+    fi
 fi
 
 echo "[swap_mode] Restarting devforge-swap with $MODE mode..."
