@@ -25,12 +25,18 @@ def parse_llm_json(text: str) -> Optional[dict]:
         cleaned = "\n".join(lines).strip()
     # Rung 1
     try:
-        return json.loads(cleaned)
+        result = json.loads(cleaned)
+        if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+            return result[0]
+        return result if isinstance(result, dict) else None
     except (json.JSONDecodeError, TypeError):
         pass
     # Rung 2
     try:
         from json_repair import repair_json
-        return repair_json(cleaned, return_objects=True)
+        result = repair_json(cleaned, return_objects=True)
+        if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
+            return result[0]
+        return result if isinstance(result, dict) else None
     except Exception:
         return None
