@@ -106,6 +106,9 @@ target:
     ram: 42 GiB
     speed: ~6.5 tok/sec
     image: Azure Compute Gallery — img-qwen3-30b-a3b
+    gallery: gallery_devforge_prod_cin
+    version: 0.0.1
+    image_capture_date: '2026-05-25'
     ssh: azureqwen (~/.ssh/vm-azure-qwen-30B-A3B-key.pem)
     doc: docs/azure-qwen-setup.md
     setup_date: '2026-05-25'
