@@ -33,13 +33,15 @@ SESSIONS_DIR = Path("/opt/ai_data/debate_sessions")
 # ── Model catalogue (MoE lineup) ──────────────────────────────────────────
 MODELS: Dict[str, Dict[str, Any]] = {
     # GLM-4.7-Flash — DRAG + Judge + Summary (supervisor-managed on :8081)
+    # enable_thinking=false required: thinking tokens consume max_tokens budget leaving empty content
     "glm-47-flash": {
         "filename": "GLM-4.7-Flash-Q4_K_M.gguf",
         "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
-        "max_tokens": 1024, "temperature": 0.1,
+        "max_tokens": 2048, "temperature": 0.1,
         "system_prompt_support": True,
-        "bench_load_s": 370, "bench_toks": 10.0,
+        "bench_load_s": 370, "bench_toks": 2.8,
         "cache_ram": 1024,
+        "chat_template_kwargs": {"enable_thinking": False},
     },
     # Pod B — supervisor-managed (switching, port 8081)
     "qwen3-30b-a3b": {
@@ -415,6 +417,8 @@ class DebateSession:
         }
         if "top_p" in cfg:
             body["top_p"] = cfg["top_p"]
+        if "chat_template_kwargs" in cfg:
+            body["chat_template_kwargs"] = cfg["chat_template_kwargs"]
 
         if self.dry_run:
             print(f"  [dry-run] LLM call :{port}: {len(body['messages'])} msgs, "
@@ -423,7 +427,7 @@ class DebateSession:
 
         for attempt in range(2):
             gen_rate = cfg.get("bench_toks", 2.0)
-            timeout = int(body["max_tokens"] / gen_rate) + 300
+            timeout = int(body["max_tokens"] / gen_rate) + 600
             print(f"  [llm] calling {model_id} on :{port} (max_tokens={body['max_tokens']}, timeout={timeout}s"
                   f"{', retry' if attempt > 0 else ''})...")
             t_start = time.monotonic()
@@ -436,8 +440,23 @@ class DebateSession:
                 with urllib.request.urlopen(req, timeout=timeout) as resp:
                     result = json.loads(resp.read())
                     elapsed = time.monotonic() - t_start
-                    content = result["choices"][0]["message"]["content"]
-                    print(f"  [llm] response in {elapsed:.1f}s ({len(content)} chars)")
+                    content = result["choices"][0]["message"]["content"] or ""
+                    if not content.strip():
+                        reasoning = result["choices"][0]["message"].get("reasoning_content", "")
+                        if reasoning:
+                            content = reasoning
+                            print(f"  [llm] response in {elapsed:.1f}s ({len(content)} chars, from reasoning_content)")
+                        else:
+                            print(f"  [llm] response in {elapsed:.1f}s (0 chars, empty)")
+                            if attempt == 0 and body["max_tokens"] > 256:
+                                body["max_tokens"] = max(body["max_tokens"] // 2, 256)
+                                body["temperature"] = min(body["temperature"], 0.1)
+                                print(f"  [llm] retrying with max_tokens={body['max_tokens']}...")
+                                time.sleep(3)
+                                continue
+                            return None
+                    else:
+                        print(f"  [llm] response in {elapsed:.1f}s ({len(content)} chars)")
                     return content
             except Exception as e:
                 err_msg = str(e)
