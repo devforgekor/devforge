@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""DevForge Multi-Agent LLM Debate Orchestrator v3.1
+"""DevForge Multi-Agent LLM Debate Orchestrator v4.0
 
-MoE debate — all models served sequentially via Pod B supervisor (:8081).
-Pod A is idle during debate (available for future lightweight models).
+Cooperative debate — GLM + 32B on local Pod B (:8081), Qwen3-30B and Nemotron
+as remote spot models on Azure VMs (SSH-tunneled, activated per-turn).
 
-Role assignment (all MoE except 32B):
-  P — Qwen3-30B-A3B (18GB)  — code-specialized proposal generation
-  R — Nemotron-Cascade-2  (17GB) — systematic critique, reasoning
-  J — GLM-4.7-Flash       (17GB) — neutral judge
-  S — Qwen2.5-Coder-32B   (17GB) — final synthesis (dense, IQ4_XS)
+Role assignment:
+  P — Qwen3-30B-A3B (remote, azureqwen) — code-specialized proposal generation
+  R — Nemotron-Cascade-2  (remote, azure2)  — systematic critique, reasoning
+  J — GLM-4.7-Flash       (local, :8081)    — neutral judge
+  S — Qwen2.5-Coder-32B   (local, :8081)    — final synthesis (dense, IQ4_XS)
 
-All models load sequentially on Pod B; supervisor evicts old model cache on each switch.
+Remote models are spot-activated: SSH start llama-server → health poll → SSH
+tunnel port forward → LLM call → tunnel kill + remote server kill.
 
 Usage:
   python3 scripts/debate.py --question "File: ...\nTask: ..." [--skip-drag] [--dry-run]
@@ -43,30 +44,50 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "cache_ram": 1024,
         "chat_template_kwargs": {"enable_thinking": False},
     },
-    # Pod B — supervisor-managed (switching, port 8081)
+    # Remote spot model — Azure (SSH-tunneled to OpenAI-compatible API, always-on)
     "qwen3-30b-a3b": {
         "filename": "Qwen3-30B-A3B-Q4_K_M.gguf",
-        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
+        "host": "azureqwen", "port": 400, "local_port": 8082,
+        "model_name": "qwen",  # model name on remote API
+        "ctx": 4096, "threads": 2, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
-        "bench_load_s": 500, "bench_toks": 4.0,
-        "cache_ram": 2048,
+        "bench_load_s": 10, "bench_toks": 6.0,
+        "cache_ram": 0,
+        "chat_template_kwargs": {"enable_thinking": False},
     },
+    # Remote spot model — Azure 2 (tomorrow)
     "nemotron-cascade-2": {
         "filename": "Nemotron-Cascade-2-30B-A3B.IQ4_XS.gguf",
-        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
+        "host": "azure2", "port": 400, "local_port": 8083,
+        "ctx": 4096, "threads": 2, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.6, "top_p": 0.95,
         "system_prompt_support": True,
-        "bench_load_s": 480, "bench_toks": 4.0,
-        "cache_ram": 2048,
+        "bench_load_s": 10, "bench_toks": 6.0,
+        "cache_ram": 0,
+        "chat_template_kwargs": {"enable_thinking": False},
     },
     "qwen-32b": {
         "filename": "Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf",
-        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 1,
+        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
         "cache_ram": 2048,
         "bench_load_s": 480, "bench_toks": 0.5,
+    },
+}
+
+# ── Remote host catalogue ─────────────────────────────────────────────────
+REMOTE_HOSTS: Dict[str, Dict[str, str]] = {
+    "azureqwen": {
+        "ssh_host": "azureqwen",
+        "model_dir": "/models",
+        "description": "Azure spot VM — 41GB RAM, 2-core x86_64",
+    },
+    "azure2": {
+        "ssh_host": "azure2",
+        "model_dir": "/models",
+        "description": "Azure spot VM 2 (pending)",
     },
 }
 
@@ -329,19 +350,105 @@ def _read_file_content(file_path: str) -> Optional[str]:
         return None
 
 
+# ── Remote spot model management ──────────────────────────────────────────
+
+def _kill_ssh_tunnel(local_port: int) -> None:
+    """Kill SSH tunnel process bound to local_port. Only kills ssh processes."""
+    try:
+        result = subprocess.run(
+            ["ss", "-tlnp"], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if f":{local_port}" in line and "ssh" in line.lower():
+                m = re.search(r"pid=(\d+)", line)
+                if m:
+                    pid = int(m.group(1))
+                    try:
+                        os.kill(pid, 15)
+                        print(f"  [tunnel] Closed :{local_port} (pid={pid})")
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+def _remote_activate(model_id: str) -> bool:
+    """Activate spot model on remote Azure VM via SSH tunnel.
+
+    Model is always-on (OpenAI-compatible API on remote), so we just:
+    1. Open SSH tunnel (port forward with keepalive)
+    2. Verify health through tunnel
+    """
+    cfg = MODELS[model_id]
+    host = cfg["host"]
+    rh = REMOTE_HOSTS[host]
+    ssh_host = rh["ssh_host"]
+    local_port = cfg["local_port"]
+    remote_port = cfg["port"]
+
+    _kill_ssh_tunnel(local_port)
+
+    # 1. Open SSH tunnel
+    print(f"  [tunnel] Opening :{local_port} -> {host}:{remote_port}")
+    try:
+        tunnel_result = subprocess.run(
+            [
+                "ssh", "-f", "-N",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ExitOnForwardFailure=yes",
+                "-o", "ServerAliveInterval=60",
+                "-o", "ServerAliveCountMax=3",
+                "-L", f"{local_port}:localhost:{remote_port}",
+                ssh_host,
+            ],
+            capture_output=True, timeout=10,
+        )
+        if tunnel_result.returncode != 0:
+            print(f"  [tunnel] ERROR: {tunnel_result.stderr.decode()}")
+            return False
+    except subprocess.TimeoutExpired:
+        print(f"  [tunnel] ERROR: SSH tunnel timeout to {host}")
+        return False
+    except Exception as e:
+        print(f"  [tunnel] ERROR: SSH tunnel failed to {host}: {e}")
+        return False
+
+    # 2. Verify health through tunnel
+    time.sleep(1)
+    timeout = cfg.get("bench_load_s", 10) + 5
+    if not _poll_health(port=local_port, timeout=timeout):
+        print(f"  [remote] ERROR: health check failed through tunnel :{local_port}")
+        return False
+    return True
+
+
+def _remote_deactivate(model_id: str) -> None:
+    """Deactivate spot model — kill SSH tunnel only (model stays running on remote)."""
+    cfg = MODELS[model_id]
+    host = cfg.get("host", "local")
+    if host == "local":
+        return
+
+    local_port = cfg["local_port"]
+    _kill_ssh_tunnel(local_port)
+    print(f"  [remote] Deactivated {model_id} tunnel :{local_port}")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # DebateSession
 # ═══════════════════════════════════════════════════════════════════════════
 
 class DebateSession:
-    """MoE debate orchestrator — all models on Pod B (:8081) supervisor.
+    """Cooperative debate orchestrator — local GLM/32B + remote spot models.
 
-    Pod B sequential switching:
+    Local (:8081, supervisor-managed):
       Round 0: GLM-4.7-Flash (DRAG)
-      Rounds 1-4: Qwen3-30B-A3B → Nemotron-Cascade-2 → GLM-4.7-Flash (Judge)
+      Rounds 1-4: GLM-4.7-Flash (Judge)
       Round 5: GLM-4.7-Flash (Summary) → Qwen2.5-Coder-32B (Synthesis)
 
-    Pod A is idle during debate (available for future lightweight models).
+    Remote (Azure spot, SSH-tunneled, activated per-turn):
+      Proposer: Qwen3-30B-A3B (azureqwen)
+      Refuter:  Nemotron-Cascade-2 (azure2)
     """
 
     def __init__(
@@ -385,16 +492,21 @@ class DebateSession:
     # ── Model switching ────────────────────────────────────────────────
 
     def switch_model(self, model_id: str) -> bool:
-        """Ensure model is ready on Pod B (:8081) via supervisor switch."""
+        """Ensure model is ready — local supervisor or remote spot activation."""
         cfg = MODELS[model_id]
+        host = cfg.get("host", "local")
 
         if self.dry_run:
-            print(f"  [dry-run] switch to {model_id} ({cfg['filename']}) on :8081")
+            loc = f"remote {host}:{cfg.get('local_port', cfg['port'])}" if host != "local" else f":{cfg['port']}"
+            print(f"  [dry-run] switch to {model_id} ({cfg['filename']}) on {loc}")
             return True
 
-        _write_switch_file(model_id)
-        time.sleep(3)
-        return _poll_health(port=8081, timeout=cfg.get("bench_load_s", 120) + 60)
+        if host == "local":
+            _write_switch_file(model_id)
+            time.sleep(3)
+            return _poll_health(port=8081, timeout=cfg.get("bench_load_s", 120) + 60)
+        else:
+            return _remote_activate(model_id)
 
     # ── LLM calling ────────────────────────────────────────────────────
 
@@ -406,15 +518,17 @@ class DebateSession:
         On connection error, retries once with halved max_tokens.
         """
         cfg = MODELS[model_id]
-        port = cfg["port"]
+        port = cfg.get("local_port", cfg["port"])
         llm_url = f"http://127.0.0.1:{port}/v1/chat/completions"
 
         mt = max_tokens if max_tokens is not None else cfg["max_tokens"]
-        body = {
+        body: Dict[str, Any] = {
             "messages": messages,
             "temperature": cfg["temperature"],
             "max_tokens": mt,
         }
+        if "model_name" in cfg:
+            body["model"] = cfg["model_name"]
         if "top_p" in cfg:
             body["top_p"] = cfg["top_p"]
         if "chat_template_kwargs" in cfg:
@@ -613,8 +727,9 @@ class DebateSession:
     def round_1_to_4_dart(self) -> bool:
         """DART: Rounds 1-4 — Proposer → Refuter → Judge.
 
-        Pod B switching: P (Qwen3-30B) → R (Nemotron-Cascade-2) → J (GLM-4.7-Flash)
-        All three load sequentially via supervisor; old model cache evicted per switch.
+        Proposer/Refuter run as remote spot models (SSH-tunneled).
+        Judge runs locally on Pod B (:8081) via supervisor.
+        Remote models are deactivated after each turn.
         """
         proposer_output = None
         refuter_output = None
@@ -667,6 +782,8 @@ class DebateSession:
                 continue
             self._save_state({"type": "llm_response", "phase": "dart_proposer",
                               "model": self.proposer_model, "output": proposer_output})
+            if not self.dry_run and MODELS[self.proposer_model].get("host", "local") != "local":
+                _remote_deactivate(self.proposer_model)
 
             # B — Refuter (Pod B: Nemotron-Cascade-2)
             if not self.switch_model(self.refuter_model):
@@ -694,6 +811,8 @@ class DebateSession:
                 continue
             self._save_state({"type": "llm_response", "phase": "dart_refuter",
                               "model": self.refuter_model, "output": refuter_output})
+            if not self.dry_run and MODELS[self.refuter_model].get("host", "local") != "local":
+                _remote_deactivate(self.refuter_model)
 
             # C — Judge (Pod B: GLM-4.7-Flash, switched in from Refuter)
             if not self.switch_model(self.judge_model):
@@ -811,10 +930,10 @@ class DebateSession:
 
     def run_session(self) -> Optional[dict]:
         print(f"\n{'█'*60}")
-        print(f"█ DevForge Multi-Agent LLM Debate v3.1 (MoE)")
+        print(f"█ DevForge Multi-Agent LLM Debate v4.0 (Cooperative)")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print(f"█ Pod B (:8081): GLM → Qwen3-30B → Nemotron → 32B")
+        print(f"█ Local (:8081): GLM + 32B | Remote: Qwen3-30B (azureqwen) + Nemotron (azure2)")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
 
@@ -846,6 +965,12 @@ class DebateSession:
         if not dart_ok:
             print("\n[DART aborted — skipping synthesis]")
         final = self.round_5_synthesis() if dart_ok else None
+
+        # Cleanup remote spot models
+        if not self.dry_run:
+            for model_id in [self.proposer_model, self.refuter_model]:
+                if MODELS[model_id].get("host", "local") != "local":
+                    _remote_deactivate(model_id)
 
         # Write report + upload
         if final:
