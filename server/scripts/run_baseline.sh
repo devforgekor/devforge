@@ -1,7 +1,6 @@
 #!/bin/bash
-# 32B IQ4_XS baseline test — 9 selected tasks
-# Tasks: T01, T03, T05, T07, T08, T11, T12, T14, T16
-# Difficulty: L1 → L16, diverse coding skills
+# 32B IQ4_XS baseline test — 9 selected tasks (renumbered 1-9 by difficulty)
+# L1→L16: slack_operator, auto_commit_guard, code_mod_pipeline, key_rotator
 
 set -e
 

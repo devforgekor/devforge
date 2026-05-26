@@ -78,9 +78,10 @@ tasks:
     description: |
       Analyze the entire auto_commit_guard.py and identify race conditions and safety issues
       that may occur during concurrent execution. Specifically:
-      1. Is log_commits_to_worklog() safe when two sessions call it simultaneously?
-      2. Is the recovery behavior appropriate when psql() calls fail?
-      3. Is the git log --since=24h window safe against DST/timezone changes?
+      1. Is main() safe from race conditions when two sessions call it simultaneously?
+         (git add -A + git commit without locking)
+      2. Is the psql() query on line 31 safe against SQL injection or connection failures?
+      3. Is the timezone handling (datetime.now(KST)) correct across DST transitions?
       Do not modify code; output only discovered issues and recommended solutions as a markdown report.
     expected_category: "analysis_only"
     evaluation:
@@ -190,10 +191,10 @@ tasks:
       1. Create test_key_rotator.py
       2. Test cases:
          - Basic pick()→success() cycle (normal behavior)
-         - After rate_limited(), the key is excluded for a certain time
+         - After rate_limited(), the key is excluded for backoff duration
          - pick() returns None when all keys are in backoff state
          - Reactivation after backoff expiry
-         - Weight-based selection (if T15 is implemented)
+         - Daily quota backoff (retry_seconds >= DAILY_QUOTA_THRESHOLD)
       3. Use monkeypatch to control time.time() to remove time dependency
     expected_category: "test_addition"
     evaluation:
