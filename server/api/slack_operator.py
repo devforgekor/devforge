@@ -59,6 +59,12 @@ def _prune_expired():
 def verify_slack_signature(body: bytes, timestamp: str, signature: str) -> bool:
     if not SLACK_SIGNING_SECRET:
         return True
+    if not body:
+        return False
+    if not timestamp or timestamp == "0":
+        return False
+    if not signature or not signature.startswith("v0="):
+        return False
     try:
         if abs(time.time() - int(timestamp)) > 300:
             return False

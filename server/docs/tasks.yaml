@@ -1,5 +1,7 @@
 blocked: []
 done:
+- 'Spot VM orchestration implemented (2026-05-26): scripts/azure_spot.py (SpotVMManager + SpotOrchestrator), debate.py v4.5 cooperative+spot mode. Golden images: Qwen (img-qwen3-30b-a3b-spot v1.0.0, Account 1) + Nemotron (img-nemotron3-nano-30b-spot v0.0.1, Account 2). Blocked by: Spot quota (LowPriorityCores 3 limit in centralindia, 2 in use) + SP lacks gallery read permissions in Account 2. Pending: add Reader role to SP → delete existing VMs → E2E --spot test.'
+- 'Azure Nemotron-3-Nano-30B-A3B MoE setup + debate v4.0 integration (2026-05-26): azurenemo VM (70.153.138.59) configured with llama.cpp + IQ4_XS GGUF (19GB). Port 400, systemd auto-start. debate.py MODELS + REMOTE_HOSTS updated — model_id=nemotron3-nano-30b, SSH tunnel :8083->azurenemo:400. chat_template_kwargs={enable_thinking:false} required. Bug found+fixed: apt autoremove removed libgomp1 causing exit 127; runtime libs now apt-mark protected. Docs: docs/azure-nemotron-setup.md. E2E integration verified (health + chat completions through tunnel).'
 - 'Orphan turn cleanup (2026-05-26): 57 orphan claude-code turns linked to worklog #200. 10 empty/duplicate worklogs (#179-#188) removed, 4 agentless worklogs fixed. 2026-05-25 turn_coverage: 182/182 (100%).'
 - 'T01 6656+mlock test completed (2026-05-24): cache-ram=6656 + mlock + feedback fix + token fix + warmup retry. Stage 1: 1227s (53% faster). Pipeline optimizations validated and committed.'
 - 'Recovery Ladder unification (2026-05-24): shared lib/llm/json_parser.py (json.loads → json_repair) replacing 56 lines across 3 pipeline files. debate.py _parse_json 33→3 lines, review_worker.py _parse_llm_json 23→3 lines, code_mod_pipeline.py thin wrapper + feedback uses json_repair. Bidirectional verification: 16/16 passed.'
@@ -10,7 +12,7 @@ done:
 - 'cache-ram=6656 (optimal) applied (2026-05-24): code mode default changed from 7168 to 6656 in dual-server-entrypoint.sh. MLOCK confirmed active via quadlet Environment=MLOCK=1.'
 - 'Telegram bot deployed (2026-05-24): telegram_bot.py created — polls getUpdates every 5s, Qwen3-4B interprets Korean messages, supports 6 JSON actions (reply/ssh/status/mode_switch/log/none) + fast-path commands (/start/help/status/mode/log). Systemd user service telegram-bot.service daemon mode.'
 - '8 code review fixes applied (2026-05-24): code_mod_pipeline.py + client.py — NameError fix, partial result save on exception, DB insert failure warn, retry cache-hit rate skip, _slice_code parse warn, Stage 4 diff_text extraction, resume validation, pre-check fail skip.'
-in_progress: 'Improve update_handover.py context selection logic — session context quality directly impacts downstream LLM handover comprehension. Research: model-radar translation quality lessons applied to language pipeline (Korean→English translation fidelity, script purity, structured output for handover docs).'
+in_progress: null
 kanban_labels:
   blocked: Blocked
   done: Done

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""DevForge Multi-Agent LLM Debate Orchestrator v4.2
+"""DevForge Multi-Agent LLM Debate Orchestrator v4.6
 
-14B+MoE dual-pod debate — Pod A (:8080) Judge + Pod B (:8081) sequential.
-32B excluded from debate (batch/review pipeline only).
+Multi-mode debate — debate (local Pod A+B) or cooperative (spot VMs + local).
+No 32B — batch pipeline only.
 
-Role assignment:
-  D — DeepSeek-Coder-V2-Lite  (MoE, 9.7GB) — DRAG + Judge + Summary + Synthesis
-  P — Qwen2.5-Coder-14B       (dense, 8.4GB) — code proposal generation
-  R — Phi-mini-MoE-instruct   (MoE, 4.7GB) — fast refutation
+Modes:
+  debate:      Pod A (:8080) Judge + Pod B (:8081) sequential (14B+MoE local)
+  cooperative: provision spot VMs from golden images → Proposer(Qwen3-30B) + Refuter(Nemotron-3-Nano) ×4 rounds
+               → terminate VMs → Judge/DRAG/Summary/Synthesis on local Pod B
 
 Usage:
-  python3 scripts/debate.py --question "File: ...\nTask: ..." [--skip-drag] [--dry-run]
+  python3 scripts/debate.py --question "File: ...\nTask: ..." [--mode cooperative] [--skip-drag] [--dry-run]
 """
 import json
 import os
@@ -22,6 +22,18 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+import sys as _sys
+_scripts_dir = str(Path(__file__).resolve().parent)
+if _scripts_dir not in _sys.path:
+    _sys.path.insert(0, _scripts_dir)
+from azure_spot import (
+    QWEN_SPOT_CONFIG,
+    NEMOTRON_SPOT_CONFIG,
+    SpotOrchestrator,
+    open_spot_tunnel,
+    close_spot_tunnel,
+)
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 SWITCH_FILE = "/opt/ai_data/debate/switch/model-switch.json"
@@ -43,7 +55,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
     # Remote spot model — Azure (SSH-tunneled to OpenAI-compatible API, always-on)
     "qwen3-30b-a3b": {
         "filename": "Qwen3-30B-A3B-Q4_K_M.gguf",
-        "host": "azureqwen", "port": 400, "local_port": 8082,
+        "host": "azureqwen", "port": 400, "local_port": 8084,
         "model_name": "qwen",  # model name on remote API
         "ctx": 4096, "threads": 2, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
@@ -52,14 +64,15 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "cache_ram": 0,
         "chat_template_kwargs": {"enable_thinking": False},
     },
-    # Remote spot model — Azure 2 (tomorrow)
-    "nemotron-cascade-2": {
-        "filename": "Nemotron-Cascade-2-30B-A3B.IQ4_XS.gguf",
-        "host": "azure2", "port": 400, "local_port": 8083,
+    # Remote spot model — Azure Nemotron-3-Nano-30B-A3B MoE (SSH-tunneled)
+    "nemotron3-nano-30b": {
+        "filename": "Nemotron-3-Nano-30B-A3B-IQ4_XS.gguf",
+        "host": "azurenemo", "port": 400, "local_port": 8083,
+        "model_name": "nemotron",
         "ctx": 4096, "threads": 2, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.6, "top_p": 0.95,
         "system_prompt_support": True,
-        "bench_load_s": 10, "bench_toks": 6.0,
+        "bench_load_s": 10, "bench_toks": 5.5,
         "cache_ram": 0,
         "chat_template_kwargs": {"enable_thinking": False},
     },
@@ -131,12 +144,12 @@ REMOTE_HOSTS: Dict[str, Dict[str, str]] = {
     "azureqwen": {
         "ssh_host": "azureqwen",
         "model_dir": "/models",
-        "description": "Azure spot VM — 41GB RAM, 2-core x86_64",
+        "description": "Azure spot VM — Qwen3-30B-A3B, 41GB RAM, 2-core x86_64",
     },
-    "azure2": {
-        "ssh_host": "azure2",
+    "azurenemo": {
+        "ssh_host": "azurenemo",
         "model_dir": "/models",
-        "description": "Azure spot VM 2 (pending)",
+        "description": "Azure spot VM — Nemotron-3-Nano-30B-A3B MoE, 41GB RAM, 2-core x86_64",
     },
 }
 
@@ -494,13 +507,15 @@ def _remote_deactivate(model_id: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class DebateSession:
-    """14B+MoE dual-pod debate — Pod A (:8080) Judge + Pod B (:8081) sequential.
-    No 32B — batch pipeline only.
+    """Multi-agent debate orchestrator with mode-based model assignment.
 
-    Pod B (:8081, supervisor-managed):
-      Round 0: DeepSeek-Coder-V2-Lite (DRAG)
-      Rounds 1-4: Qwen-14B (Proposer) → Phi-mini-MoE (Refuter) → DeepSeek-V2-Lite (Judge)
-      Round 5: DeepSeek-V2-Lite (Summary + Synthesis)
+    Modes:
+      debate (default): Pod A (:8080) Judge + Pod B (:8081) sequential.
+        DRAG/Summary → Qwen-14B, Proposer/Synthesis → DeepSeek-V2-Lite, Refuter → Phi-mini-MoE.
+      cooperative: provision spot VMs → Proposer(Qwen3-30B) + Refuter(Nemotron-3-Nano) ×4 rounds
+        → terminate VMs → Judge/DRAG/Summary/Synthesis on local Pod B.
+
+    No 32B — batch pipeline only.
     """
 
     def __init__(
@@ -509,11 +524,13 @@ class DebateSession:
         method: str = "drag",
         skip_drag: bool = False,
         dry_run: bool = False,
+        mode: str = "debate",
     ):
         self.question = question
         self.method = method
         self.skip_drag = skip_drag
         self.dry_run = dry_run
+        self.mode = mode
 
         self.session_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         self.state_dir = SESSIONS_DIR / self.session_id
@@ -524,14 +541,25 @@ class DebateSession:
         self.winner_map: List[Dict] = []
         self.drag_context: str = ""
         self._tunnels_open: set = set()  # Track active SSH tunnels
+        self._spot_orch: Optional[SpotOrchestrator] = None  # Spot VM orchestrator
+        self._spot_tunnel_ports: List[int] = []  # Local ports for spot tunnels
 
-        # Fixed role assignment — v4.3: Pod A (Qwen3-4B Judge) + Pod B (14B+MoE)
-        self.drag_model = "qwen-14b"              # Pod B — DRAG analysis (dense, thorough)
-        self.proposer_model = "deepseek-v2-lite"  # Pod B — Proposer (MoE, fast code gen)
-        self.refuter_model = "phi-mini-moe"       # Pod B — Refuter (MoE, fast)
-        self.judge_model = "selene-mini"           # Pod A :8080 — Judge (always-on, no switch)
-        self.summary_model = "qwen-14b"           # Pod B — History summary (reuse drag model)
-        self.synthesizer_model = "deepseek-v2-lite"  # Pod B — Final synthesis (reuse proposer)
+        if mode == "cooperative":
+            # Azure: Proposer(Qwen3-30B) + Refuter(Nemotron-3-Nano), rest local Podcast B
+            self.drag_model = "deepseek-v2-lite"        # local Pod B — DRAG analysis
+            self.proposer_model = "qwen3-30b-a3b"       # azureqwen :8084 — Proposer
+            self.refuter_model = "nemotron3-nano-30b"   # azurenemo :8083 — Refuter
+            self.judge_model = "glm-47-flash"           # local Pod B — Judge (glm4moe)
+            self.summary_model = "deepseek-v2-lite"      # local Pod B — History summary
+            self.synthesizer_model = "qwen-14b"          # local Pod B — Final synthesis
+        else:
+            # Default debate mode: Pod A Judge + Pod B sequential
+            self.drag_model = "qwen-14b"                # Pod B — DRAG analysis
+            self.proposer_model = "deepseek-v2-lite"    # Pod B — Proposer
+            self.refuter_model = "phi-mini-moe"         # Pod B — Refuter
+            self.judge_model = "selene-mini"             # Pod A :8080 — always-on
+            self.summary_model = "qwen-14b"             # Pod B — History summary
+            self.synthesizer_model = "deepseek-v2-lite"  # Pod B — Final synthesis
 
     # ── Persistence ────────────────────────────────────────────────────
 
@@ -553,6 +581,81 @@ class DebateSession:
                     break
         print(f"  [tunnel] Session tunnels closed ({len(self._tunnels_open)} were open)")
         self._tunnels_open.clear()
+
+    # ── Spot VM lifecycle ──────────────────────────────────────────────
+
+    def _provision_spot_vms(self) -> bool:
+        """Create spot VMs for Proposer (Qwen) and Refuter (Nemotron)."""
+        print(f"\n{'─'*40}")
+        print(f"  [spot] Provisioning spot VMs from golden images...")
+        print(f"{'─'*40}")
+
+        if self.dry_run:
+            print("  [spot] DRY RUN — would create: qwen3-30b + nemotron3-nano spot VMs")
+            return True
+
+        try:
+            orch = SpotOrchestrator(self.session_id)
+            orch.add("qwen", QWEN_SPOT_CONFIG)
+            orch.add("nemotron", NEMOTRON_SPOT_CONFIG)
+            if not orch.provision_all():
+                print("  [spot] ERROR: Spot VM provisioning failed")
+                return False
+            self._spot_orch = orch
+            return True
+        except Exception as e:
+            print(f"  [spot] ERROR: {e}")
+            return False
+
+    def _open_spot_tunnels(self) -> bool:
+        """Open SSH tunnels to spot VM IPs on the same local ports."""
+        if self.dry_run:
+            print("  [spot] DRY RUN — would open tunnels to spot VMs")
+            return True
+
+        if not self._spot_orch:
+            print("  [spot] No orchestrator — cannot open tunnels")
+            return False
+
+        ssh_keys = {
+            "qwen": os.path.expanduser("~/.ssh/vm-azure-qwen-30B-A3B-key.pem"),
+            "nemotron": os.path.expanduser("~/.ssh/vm-azure-nvidia-nemotron3-nano-30B-key.pem"),
+        }
+        tunnel_map = {
+            "qwen": ("qwen3-30b-a3b", 8084, "azureqwen"),
+            "nemotron": ("nemotron3-nano-30b", 8083, "azurenemo"),
+        }
+
+        for label, (model_key, local_port, host_name) in tunnel_map.items():
+            mgr = self._spot_orch.managers.get(label)
+            if not mgr or not mgr.cfg.public_ip:
+                print(f"  [spot] No IP for {label} — skipping tunnel")
+                return False
+
+            key_path = ssh_keys[label]
+            ip = mgr.cfg.public_ip
+            if not open_spot_tunnel(label, ip, 400, local_port, key_path):
+                print(f"  [spot] Tunnel failed for {label}")
+                return False
+            self._spot_tunnel_ports.append(local_port)
+            self._tunnels_open.add(host_name)  # Match MODELS host key for reuse detection
+
+        return True
+
+    def _terminate_spot_vms(self) -> None:
+        """Close spot tunnels and delete all spot VMs."""
+        for port in self._spot_tunnel_ports:
+            close_spot_tunnel(port)
+        self._spot_tunnel_ports.clear()
+
+        if self._spot_orch:
+            print(f"\n{'─'*40}")
+            print(f"  [spot] Terminating spot VMs...")
+            print(f"{'─'*40}")
+            self._spot_orch.terminate_all()
+            self._spot_orch = None
+        elif not self.dry_run:
+            print("  [spot] No spot VMs to terminate")
 
     def switch_model(self, model_id: str) -> bool:
         """Ensure model is ready — local supervisor or remote spot activation."""
@@ -1004,10 +1107,13 @@ class DebateSession:
 
     def run_session(self) -> Optional[dict]:
         print(f"\n{'█'*60}")
-        print(f"█ DevForge Multi-Agent LLM Debate v4.2 (14B+MoE)")
+        print(f"█ DevForge Multi-Agent LLM Debate v4.6 ({self.mode})")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print(f"█ Pod A (:8080): Selene-8B Judge | Pod B (:8081): Qwen-14B → DeepSeek-V2-Lite → Phi-mini-MoE")
+        if self.mode == "cooperative":
+            print(f"█ Spot VMs → P:Qwen3-30B(:8084) R:Nemotron(:8083) | J/DRAG/Summary/Synthesis: local")
+        else:
+            print(f"█ Pod A (:8080): Selene-8B Judge | Pod B (:8081): Qwen-14B → DeepSeek-V2-Lite → Phi-mini-MoE")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
 
@@ -1016,6 +1122,7 @@ class DebateSession:
             "question": self.question,
             "method": self.method,
             "skip_drag": self.skip_drag,
+            "mode": self.mode,
         })
 
         # Stop Pod A if running — free its RAM for Pod B model switches
@@ -1026,16 +1133,32 @@ class DebateSession:
             print("  [pod] Pod A stopped (idle during debate)")
             time.sleep(3)  # brief cooldown for container process exit
 
-        # Round 0: DRAG — Pod B loads GLM for analysis
+        # Round 0: DRAG — Pod B loads model for analysis
         self.current_round = 0
         if not self.round_0_drag() and not self.skip_drag:
             print("\n[ABORT] DRAG analysis failed — cannot proceed without context")
+            self._terminate_spot_vms()
             return None
+
+        # ── Cooperative: provision Azure spot VMs ──
+        spot_ok = True
+        if self.mode == "cooperative":
+            spot_ok = self._provision_spot_vms()
+            if spot_ok:
+                spot_ok = self._open_spot_tunnels()
+            if not spot_ok:
+                print("\n[ABORT] Spot VM provisioning failed")
+                self._terminate_spot_vms()
+                return None
 
         # Rounds 1-4: DART — Pod B switches P → R → J sequentially
         dart_ok = self.round_1_to_4_dart()
 
-        # Round 5: Synthesis — Pod B loads DeepSeek summary → DeepSeek final code
+        # ── Cooperative: terminate spot VMs after debate rounds ──
+        if self.mode == "cooperative":
+            self._terminate_spot_vms()
+
+        # Round 5: Synthesis — Pod B loads summary → final code
         if not dart_ok:
             print("\n[DART aborted — skipping synthesis]")
         final = self.round_5_synthesis() if dart_ok else None
@@ -1119,7 +1242,7 @@ def _extract_file_path(question: str) -> Optional[str]:
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser(description="DevForge Multi-Agent LLM Debate v3.0 (MoE)")
+    ap = argparse.ArgumentParser(description="DevForge Multi-Agent LLM Debate v4.6")
     ap.add_argument("--question", "-q", required=True, help="Debate topic (File: ... Task: ...)")
     ap.add_argument("--method", "-m", default="drag",
                     choices=["drag"],
@@ -1128,6 +1251,9 @@ def main():
                     help="Skip Round 0 DRAG context analysis")
     ap.add_argument("--dry-run", action="store_true",
                     help="Simulate without actual LLM calls")
+    ap.add_argument("--mode", default="debate",
+                    choices=["debate", "cooperative"],
+                    help="debate (local only) or cooperative (spot VMs + local)")
     args = ap.parse_args()
 
     session = DebateSession(
@@ -1135,6 +1261,7 @@ def main():
         method=args.method,
         skip_drag=args.skip_drag,
         dry_run=args.dry_run,
+        mode=args.mode,
     )
     result = session.run_session()
     if result is None:

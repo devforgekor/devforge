@@ -282,7 +282,7 @@ def _pre_task_memory_check(task_id: int, warn_mb: int = 1500,
     if avail < warn_mb:
         print(f"\n[memory] Tight: {avail}MB available before Task {task_id} "
               f"(warn={warn_mb}MB) — evicting unused page cache...", flush=True)
-        models_dir = "/models"
+        models_dir = "/opt/ai_data/models/gguf"
         if os.path.isdir(models_dir):
             for f in sorted(os.listdir(models_dir)):
                 if f.endswith(".gguf") and f != keep_model:
@@ -511,7 +511,8 @@ def _build_stage_user_msg(stage_num: int, code: str, task_desc: str,
     Stages 3-4: no feedback (execution stages).
     """
     if stage_num == 1:
-        return STAGE1_ANALYZE.format(code=code, task=task_desc)
+        nonce = f"[cache:{time.time():.6f}]"
+        return nonce + "\n" + STAGE1_ANALYZE.format(code=code, task=task_desc)
     elif stage_num == 2:
         fb = f"PREVIOUS ATTEMPT NOTES:\n{feedback}\n\n" if feedback else ""
         return STAGE2_PLAN.format(

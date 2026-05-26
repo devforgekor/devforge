@@ -200,3 +200,6 @@
 [2026-05-26T01:57:53Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 182/182
 [2026-05-26T01:58:12Z] Matched: 0 turns across 2 worklog entries
 [2026-05-26T01:58:13Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 182/182
+[2026-05-26T18:00:07Z] === link_turns 2026-05-26 ===
+[2026-05-26T18:00:10Z] Matched: 0 turns across 23 worklog entries
+[2026-05-26T18:00:11Z] Review: orphan_turns: 0; empty_worklog: #199 OOM recovery and session resume (2026-05-26); empty_worklog: #220 feat: Azure Nemotron-3-Nano-30B-A3B MoE spot VM setup; empty_worklog: #221 feat: Nemotron-3-Nano-30B-A3B integrated to debate v4.0; empty_worklog: #241 fix: Nemotron VM recreated — Ubuntu 22.04 Minimal, IP 48.193.42.76; commit_only_worklog: #192, #193, #194, #195, #189, #190, #191, #196, #197, #198, #201, #202, #203, #204, #205, #206, #207, #208, #209; turn_coverage: 0/0

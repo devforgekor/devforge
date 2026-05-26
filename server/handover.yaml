@@ -1,6 +1,6 @@
 last_checkpoint:
-  time: '2026-05-26T11:00:00+09:00'
-  summary: orphan turn cleanup — 57 turns linked to worklog #200, 10 empty worklogs removed
+  time: '2026-05-26T21:06:04.527289+09:00'
+  summary: no files
   total_files: 0
   recent_files:
     source: []
@@ -9,398 +9,38 @@ last_checkpoint:
     data: []
     generated: []
   git: {}
-  task: 'Improve update_handover.py context selection logic (2026-05-26): session context quality directly impacts downstream LLM handover comprehension.'
+  task: null
 decisions:
-- 'Orphan turn cleanup (2026-05-26): 57 orphan turns linked to worklog #200. 10 empty/duplicate worklogs removed (#179-#188). 4 agentless worklogs fixed. 2026-05-25 turn_coverage now 182/182 (100%), 0 orphans, 0 empty worklogs.'
-- 'Recovery Ladder unification (2026-05-24): shared lib/llm/json_parser.py (json.loads → json_repair) replacing 56 lines of
-  regex-based JSON parsing across 3 pipeline files. debate.py 33→3 lines, review_worker.py 23→3 lines, code_mod_pipeline.py
-  thin wrapper. Feedback path now uses json_repair too. json_repair handles trailing commas, unclosed braces, single quotes,
-  markdown fences, truncated literals — zero dependencies, 22KB. 16-item bidirectional verification passed. Commit: 5f90349.'
-- 'Token estimation fix (2026-05-24): //3 → int(len/3.5) across code_mod_pipeline.py (6 locations + tok() helper). Verified
-  against actual 32B prompt_tokens: 4634 actual vs 5365 estimated — error 15%→1.5%. RateEstimator self-calibrates from real
-  API metrics, so estimation precision is non-critical but improves initial timeout accuracy.'
-- 'Warmup retry + head+tail truncation (2026-05-24): warmup_32b() 600s timeout + 30s sleep + retry for mlock-initial-load
-  delay. debate.py round_5_synthesis history_summary 1798+5+1197=3000 head+tail preserving intro+conclusion (was front-only
-  [:3000] losing conclusion). Commit: 5f90349.'
-- 'Prompt bloat fix (2026-05-24): _read_previous_feedback() was injecting raw Stage 4 body (≤2000 chars) into Stage 1 ANALYZE
-  prompt → +552 tokens/+428s per run. Fix: removed feedback from Stage 1, moved to Stage 2 PLAN with JSON field extraction
-  (analysis/rationale/review_points) capped at 600 chars. Stage 1 prompt expected 4634→4082 tokens. code_mod_pipeline.py,
-  cli.py committed.'
-- 'debate.py v2.0 + cross-file bug fixes (2026-05-24): Dual-pod debate orchestrator with mode-specific model assignment. 8
-  bugs fixed: _check_early_exit double-call, disagreement_points wrong value, _write_switch_file missing cache_ram, Podman
-  A restart on mode switch, POD_A_START unused→now used for post-debate restore, SWITCH_WRITER dead code removed, v1.0→v2.0
-  footer, debate-supervisor.sh "debate"→"discussion" mode check. 16-item bidirectional cross-file verification passed.'
-- 'cache-ram=6656 (optimal) applied (2026-05-24): code mode default changed from 7168 to 6656 in dual-server-entrypoint.sh.
-  MLOCK confirmed active via quadlet Environment=MLOCK=1. T01 test running with feedback fix + 6656 + mlock.'
-- '8 code review fixes applied (2026-05-24): code_mod_pipeline.py + client.py — NameError fix, partial result save on exception,
-  DB insert failure warn, retry cache-hit rate skip, _slice_code parse warn, Stage 4 diff_text extraction, resume validation,
-  pre-check fail skip instead of abort.'
-- 'Rich Slack notifications added (2026-05-24): _system_info() helper, per-stage notifications with memory/rate/slicing/timeout
-  info.'
-- 'cache-ram management infrastructure (2026-05-24): dual-server-entrypoint.sh launch_server() accepts optional cache_ram
-  arg. --cache-ram + --kv-unified + --cache-idle-slots ready.'
-- 'Telegram bot deployed (2026-05-24): telegram_bot.py polls getUpdates every 5s, forwards Korean messages to Qwen3-4B (localhost:8080)
-  for interpretation. Supports 6 actions: reply, ssh, status, mode_switch, log, none. Built-in fast-path commands: /start,
-  /help, /status, /mode, /log. Systemd user service (telegram-bot.service) daemon mode, auto-starts after container-devforge-qwen.
-  Bot username: @mesids_bot.'
-- 'T11 complete + T12-T16 deferred (2026-05-24): T11 32B 4-stage all success — 8,357s (2h19m). Stage 1: 6,365s (full code
-  ~11K tok, swap thrashing dominant). Stage 2: 569s (sliced 359/10,432 tok, 96.6% reduction). Stage 3: 624s. Stage 4: 799s.
-  8GB cache-ram baseline collected — swap went 601MB→4.3GB, generation speed degraded 2.59→0.59 tok/s during swap thrashing.
-  User paused for other work; T12-T16 resume later. cache-ram 6144 fix code ready in dual-server-entrypoint.sh but deferred
-  to collect 8GB baseline data for comparison. 3 commits today: 476d666 (8 fixes) + 0d3d7c1 (rich Slack) in server repo, 404c8d5
-  (;; syntax fix) + 4612c3f (gitignore) in ai_data repo (new).'
-- 'Closed-loop feedback for 32B pipeline (2026-05-24): _read_previous_feedback() reads prior Stage 4 results + tagged worklog
-  entries from DB, injects as PREVIOUS WORK: context into Stage 1 ANALYZE prompt. Night pipeline builds on prior day feedback.
-  Commit: a8cf44e in server repo.'
-- 'Mode switched code→normal (2026-05-24 04:50 KST): devforge-swap (Phi-4-mini :8081 + Llama-3.2-3B :8082) + devforge-qwen
-  (Qwen3-4B :8080). All 3 models serving, memory available 2.8GB. dual-server-entrypoint.sh line 107 duplicate ;; syntax error
-  fixed. /opt/ai_data/ git repo initialized to track infrastructure scripts.'
-- 'Code-as-documentation refactoring complete (2026-05-23): All 6 phases done. lib/ domain sub-package structure established
-  (8 packages), 11 function renames, 14 backward-compat shims removed, 86 WHAT comments + 63 dividers + 7 docstrings cleaned.
-  Bidirectional verification passed (295 imports resolve, 49 modules AST-parse clean, 35 lib modules runtime-import clean).
-  Full report in code-as-documentation-review.md.'
-- 'Orphan turn resolution complete (2026-05-23): 568 claude-code orphan turns linked to worklogs. 9 worklog agents corrected
-  from devforge/empty→claude-code (#145,146,155,162,163,165,169,170,172). link_turns run manually for 3 days (May21-23) —
-  568 turns linked, orphan 0, coverage 517/517. link_turns.py kst_end bug discovered (start==end when processing today).'
-- 'lib/phase_tracker.py implemented (2026-05-23): Phase auto-detection integrated into gen_server_state.py every 15min. Detection
-  rule registry — keyword→system check mapping (systemd active, DB table exists, file exists, container running). scan_phases_md()
-  evaluates phases.md checkboxes, update_phases_md() auto-updates the document. Phase 1: 11/14 detected, Phase 1.5: 9/10 detected,
-  Phase 2: 7/24 detected (based on actual timer/container state). Phase 2.1 swap-batch/normal.timer and review-worker.timer
-  correctly detected as inactive.'
-- 'Phase 2+ plan consolidation complete (2026-05-23): phases.md + blueprint.yaml v2.0 — all plan items from scattered documents
-  (reference-watchlist.md, DevForge_v3.0_FINAL.md) consolidated into a single roadmap. Phase 2: 6 sub-phases (2.1 Recovery→2.2
-  pgvector→2.3 MemPalace→2.4 Search-Augmented→2.5 Reference Upgrade→2.6 Web UI). Phase 3: 4 someday/maybe items. blueprint.yaml
-  target architecture now details 2-Container model (Qwen3-4B/Phi-4-mini/Llama-3B/32B).'
-- 'Prompt ablation implemented (2026-05-23): code_mod_pipeline.py _slice_code() — code slicing based on Stage 1 ANALYZE affected_sections
-  output (±3 before, ±5 after padding). Stage 2/3 use {sliced_code}, Stage 4 REQUEST removed. T01: 695/6,748 tokens (89% reduction),
-  2,265s (53min→37.8min, 29% faster). SYSTEM_32B common prefix for KV cache reuse.'
-- '3-LLM debate pipeline implemented (2026-05-23): review_worker.py full rewrite — Qwen3-4B(8080)+Llama-3B(8082) ThreadPoolExecutor
-  parallel extraction → compare_facts() token-overlap matching (≥0.6 confirm, <0.4 conflict) → Phi-4-mini(8081) arbitration.
-  2-turn test: 8f/8v/0h, 3-model cache hit 100%. DB review_facts 3+6 columns added. Slack DM notification integration. ExecStartPre
-  Quadlet bug fixed.'
-- 'code_mod_pipeline.py completed (2026-05-22): Renamed from test_code_mod.py, _insert_activity_stage() added to record 4-stage
-  pipeline results to activity_log. activity_log table DDL included in api/db.py SCHEMA_SQL. Task 2 local bug fix (slack_operator.py
-  _find_pid_file). 4-stage pipeline verified — 10,126s, 4/4 HTTP 200, confidence 0.95. swap-batch/normal.timer restored.'
-- 'Architecture recovery + optimization complete (2026-05-22): (1) Podman A (devforge-qwen, Qwen3-4B 8080) recreated — container
-  deleted on 5/21 restored, qwen-entrypoint.sh newly created. (2) Podman B dual-server restored — normal mode runs Phi-4-mini(8081)
-  + Llama(8082) simultaneously, SERVER2_* env vars added. (3) swap_mode.sh stop list expanded for 32B switch — added review-worker.timer,
-  devforge-nightly.timer beyond swap-batch/normal. (4) swap_mode.sh code→normal return now auto-restarts Podman A. (5) Phase
-  1-4 optimization: bs=1024, threads=4, threads-batch=4, mlock=1, flash-attn=skip (GPU only). mlock no perf impact (1.86-2.00
-  vs baseline 1.95 tok/s). (6) LD_LIBRARY_PATH=/app added to container-devforge-swap — b9282 image library bug workaround.
-  (7) Telegram not installed, Qwen operator connection deferred to post-testing. No auxiliary operators. Anti-hallucination
-  plan in preparation.'
-- 'Bidirectional review bug fixes (2026-05-21): (1) RateEstimator._samples 0-value median distortion → conditional append
-  on gr>0. (2) prompt_tokens word-count based underestimation → 1.3x correction factor applied. (3) tenacity after callback
-  empty line on success → else None. (4) --flash-attn auto confirmed — no effect on ARM CPU-only, default auto sufficient.
-  (5) phi-4-Q8_0.gguf (14.5GB) deleted, Qwen14B kept for further testing. (6) Remaining work priority: Gemini header → consistency
-  warnings → dashboard → 32B retest.'
-- 'DevForge v3.0 finalized (2026-05-21): review_worker.py timings-based RateEstimator + dynamic timeout + DB performance tracking
-  (6 columns) + cache hit monitoring. systemd auto-start 2 units + review-worker.timer (:05) + swap-batch/normal.timer (KST
-  07-08/12-13/17-18). swap_mode.sh manual switch script. Qwen3-4B /no_think required (chat template mechanism, prevents thinking
-  token waste).'
-- '32B dynamic timeout switch (2026-05-21): Fixed STAGE_TIMEOUTS → token-based dynamic calc_timeout(). T01 measured baseline
-  3 tok/s correction. slack_operator.py 4300-token S2 needed 57min → old 50min timeout was 100% failure. T01~T08 dynamic timeout
-  full rerun in progress.'
-- 'Dynamic swapping architecture v2.1 finalized (2026-05-21): 2-Container 3-Model concurrent operation. 2 external reviews
-  passed, 2 Blockers + 8 improvements applied. Azure Blob upload complete. Implementation pending 32B test completion.'
-- 'KeyRotator RPM guard hard-block (2026-05-20): pick() separates outside/inside pool. Accounts within RPM window (3s) are
-  skipped entirely; only when all accounts are within window, wait for oldest account window expiry then select from inside
-  pool. Max 20 RPM per account, ~10 RPM per key — complies with Gemini free tier (20 RPM per key). State file reset, gemini-proxy
-  restart complete.'
-- 'search_proxy HTML filter added (2026-05-20): _clean_text() — re.compile(r"<[^>]*>") tag removal + html.unescape() entity
-  decoding. Applied to title/description for all providers (Brave/Exa/Tavily/you.com).'
-- 'Cline rules injection automation complete (2026-05-20): sync_gemini_rules.py generates GEMINI.md from common-main.md +
-  common-rule.md. gemini_proxy.py Patch 3 injects GEMINI.md body (after header ---) into systemInstruction. Cline 3.0.8 does
-  not support filesystem rules — worked around via proxy injection. managed.json required (i6 function uses it for directory
-  validation). Cline-specific settings kept at ~/Documents/Cline/Rules/cline-specific.md.'
-- 'Gemini account-level RPM guard implemented (2026-05-20): Discovered free tier 20 RPM is per-account, not per-key. _extract_account()
-  parses account from key name, _clear_stale_fails() clears fail counts older than 5min, _pick_key_rpm_safe() enforces min
-  3s interval between same-account keys. 3 accounts × 20 RPM = 60 RPM effective capacity. Uses _pick_key_rpm_safe() instead
-  of raw KeyRotator.pick().'
-- 'Gemini model tiered routing implemented (2026-05-20): Simple query→flash, complex query→Gemma 31B, 31B exhausted (429)→pro,
-  pro exhausted (429)→Gemma 26B (spare), 26B exhausted→flash. _classify_model() routes based on prompt complexity. Gemma-4-26b-a4b-it
-  slow (27s+) but kept as spare.'
-- 'GEMINI.md header split (2026-05-20): sync_gemini_rules.py generates header (~/.gemini/header.md) + body (common-*.md) structure.
-  Proxy extracts body only via content.rfind("\n---\n") for systemInstruction injection. Header is for Gemini CLI manual reference
-  only.'
-- 'Cline managed.json required (2026-05-20): Cline 3.0.8 a2 function checks for managed.json file when validating rules directory.
-  Created ~/.cline/rules/managed.json with {} to resolve.'
-- 'Copilot NOTE phdr patch automation complete (2026-05-19): (1) patch_copilot_elf.py created — idempotent ELF binary NOTE
-  program header filesz/memsz patch from 0x253f1b0 → 0x200. (2) ~/.local/bin/copilot changed from symlink to wrapper script
-  — auto-patches before exec to npm-loader.js. Survives npm auto-update via first-run auto-recovery. copilot v1.0.49 verified
-  working.'
-- 'Local LLM infrastructure fully removed (2026-05-19): qwen2.5-coder-7b no longer used. Deleted: devforge-llm/litellm containers,
-  ai-pod, Quadlet files (3), Caddy /api/* routes, systemd qwen-worker.timer, ~/.bashrc.d/qc, /opt/projects/qwen-cli, qwen_worker.py/parser_qwen.py/qwen_executor.py.
-  Containers 5→3, 8GB image space freed. System simplified: Caddy→litellm→llm 2-hop removed.'
-- 'devforge-api standalone conversion (2026-05-19): Separated from ai-pod to standalone container with Network=devforge-net,
-  PublishPort=127.0.0.1:8000:8000. Managed via systemd (container-devforge-api.service).'
-- 'Aider DeepSeek v4-flash pinned (2026-05-19): Wrapper script (~/.local/bin/aider) fixed — exec aider→aider-cli recursion
-  bug fixed, OPENAI_BASE_URL/OPENAI_API_BASE unset, --assistant-output-color white added. reasoning_tags.py ANSI codes: thinking
-  → dim gray (\033[2m\033[90m), answer → white (\033[0m). common-main.md AI model distinctions clarified.'
-- 'Qwen14B 100-turn baseline test OOM failure (2026-05-19): Only 40/100 turns processed, 5 facts extracted then llama crash
-  loop. Root cause: Qwen14B (15GB) + cache-ram (8GB) + KV cache > pod memory limit (16GB). Fix: ctx-size 8192→4096, cache-ram
-  8192→4096, retry needed. model_test_harness.py --model qwen14 to re-run. Results in review_facts DB (extract_model=qwen2.5-coder-14b,
-  created_at > 2026-05-19). Test set: /opt/projects/server/model_testset.json (100 turns, copilot 37 / claude-code 63, even
-  length distribution).'
-- 'Container instability: Quadlet systemd not suitable for direct podman execution (ai-pod + litellm + llama). Other sessions
-  restarting Quadlet would corrupt ai-pod.'
-- 'Orphan turn link_turns manual linking (2026-05-18): 97 copilot orphan turns manually linked to worklog #66. link_turns.py
-  sequential windowing bug — copilot worklog #66 (21:00 KST) had same timestamp as preceding claude-code worklog, resulting
-  in 0s time window. Additionally copilot turns (10:36~19:40 KST) fell before the window. turn_coverage 368/368 (100%) restored.
-  Root cause fix needed: per-agent windowing or daily worklog-based matching.'
-- 'requests → http.client migration (2026-05-18): requests library removed from collect_turns.py, qwen_worker.py, qwen_executor.py
-  (3 files). Replaced with http.client.HTTPConnection POST calls (resolves connection pooling timeout issues). Exception handling
-  unified to ConnectionRefusedError/OSError. Only lib/search_manager.py retains requests for external API (HTTPS) calls.'
-- 'qwen_worker Phase 3 disabled + SQL escaping hardened (2026-05-18): Phase 3 (Qwen observe) disabled — review_worker.py 2-phase
-  pipeline (Qwen14B→Phi-4) handles fact extraction+verification. esc_sql() applied to all SQL interpolation in qwen_worker.py/_ensure_worklog()
-  + Phase 2 UPDATE + qwen_executor.py execute_linkages/execute_deterministic_linkage/execute_fixes. esc_sql imported from
-  lib.db.'
-- 'test_review_models.py:384 symlink restore fixed (2026-05-18): qwen2.5-coder-7b-instruct-q8_0.gguf (nonexistent) → Qwen2.5-Coder-14B-Instruct-Q8_0.gguf.
-  6 model files verified.'
-- 'v1.1 deployed (2026-05-18): git_commit_hash TEXT column added to worklog_entries with UNIQUE(date, git_commit_hash) + partial
-  index idx_wl_commit_hash. session_guard.py extended with log_commits_to_worklog() — scans git log --since=24h, INSERT ON
-  CONFLICT DO NOTHING RETURNING id for idempotency. review_worker.py imports and calls it each run. Verified: 1 auto-commit
-  recorded, idempotent on re-run.'
-- 'Server audit completed (2026-05-18): Full report at docs/audit-2026-05-18.md. CRITICAL fix applied: qwen_executor.py model
-  name qwen2.5-coder-7b → qwen2.5-coder-14b (7B model does not exist in litellm — Phase 2/3 were returning HTTP 400). Next:
-  qwen_worker Phase 3 disable, v1.1 deployment, SQL escaping fixes.'
-- 'EXTRACT_MODEL = qwen14 confirmed (2026-05-18): Mistral-Nemo-12B tested head-to-head on same 10 turns. Qwen14B: 48 facts,
-  47 valid (97.9%), 1 hallucinated (2.1%). Mistral: 42 facts, 37 valid (88.1%), 4 hallucinated (9.5%) + 1 JSON parse failure.
-  Mistral is faster (2.63 vs 1.82 t/s) but hallucinates 4.5x more. Qwen14B retained as extraction model. Mistral+Nemo kept
-  in MODELS dict for future reference.'
-- 'OOM kill + memory reduction (2026-05-18): 7th review_worker run — llama-server OOM killed (17.9GB used, system 24GB). Root
-  cause: Qwen14B Q8_0 (15GB) + cache-ram 16384 + KV cache (ctx-size 16384) + overhead. Fix: cache-ram 16384→8192, ctx-size
-  16384→8192. Estimated memory usage reduced to 19GB. Quadlet container-devforge-llm.container also updated.'
-- 'Gemma-2-27B deleted + DeepSeek-R1-Distill-Qwen-14B Q8_0 downloaded (2026-05-18): Gemma 0.72 tok/s impractical — 16GB deleted.
-  DeepSeek-R1-Distill-Qwen-14B Q8_0 (15.7GB, bartowski) download complete. GGUF v3, qwen2 architecture, gpt2 tokenizer — llama.cpp
-  b7834 compatible. deepseek-r1-distill-qwen-14b added to LiteLLM config, Gemma entry removed. deepseek_r1 added to review_worker.py
-  MODELS. FuseO1-DeepSeekR1-Qwen2.5-Coder-14B-Preview-Q8_0 (code-specialized merge variant) also identified as promising candidate.'
-- 'Review pipeline first production run (2026-05-18 04:34 UTC): 17 turns fetched, 5 turns yielded 14 facts (Qwen14B extract).
-  Phi-4 verification: 12 valid (85.7%), 2 hallucinated. False positive rate 14.3%. 1 HTTP timeout (Turn 8, 300s) recovered
-  by retry. Qwen 7B restored successfully. Model swap via podman stop/run --no-healthcheck works reliably.'
-- 'HTTP timeout 300s → 600s (2026-05-18): call_llm() timeout increased to accommodate slow Phi-4 verification (2.18 tok/s
-  on 4-core ARM). Worst-case triple retry 3×600+6s=1806s fits in 30min timer window.'
-- 'DB save fixes (2026-05-18): (1) fetch_unprocessed_turns uses regexp_replace to strip newlines+pipes from t.text/t.user_turn
-  — multiline text was breaking psql --no-align pipe parsing, causing empty turn_ids. (2) save_review_facts now uses _psql_ok
-  (checks returncode) instead of checking stdout which is always empty for INSERT. (3) _esc_sql escapes backslashes+newlines+quotes.
-  First verified in 4th run: 20/20 facts saved correctly.'
-- 'Podman LLAMA_RUN_ARGS --replace added (2026-05-18): consecutive runs within <2min caused container name conflict. drop_caches
-  attempt reverted (root required, crashed 3rd run). System now uses podman run --replace to prevent stale container conflicts.'
-- 'Review pipeline 2-stage (2026-05-18): Qwen2.5-Coder-14B Q8_0 (extract) → Phi-4 Q8_0 (verify). Combo A tested: 8/8 facts
-  valid (100%), 0% hallucination. Gemma-2-27B tested but too slow (0.72 tok/s on 4-core ARM). 3 models downloaded (46GB total).'
-- 'Model swap mechanism fixed (2026-05-18): (1) Stale ~/.config/systemd/user/container-devforge-llm.service was shadowing
-  Quadlet-generated unit at /run/user/1000/systemd/generator/ — deleted. (2) Absolute symlink paths fail inside container
-  — changed to relative paths in current.gguf. (3) Python requests library connection pooling causes timeouts with slow models
-  — switched to http.client with fresh connections.'
-- 'review_worker.py created (2026-05-18): 2-phase LLM review pipeline with checkpoint-based processing (24h rolling window).
-  review_facts DB table stores per-turn extracted+verified facts. Timer enabled at :05 and :35 each hour (offset from collector
-  :00/:15/:30/:45).'
-- LiteLLM configured with 4 models (qwen2.5-coder-7b, qwen2.5-coder-14b, phi-4, deepseek-r1-distill-qwen-14b) all routing
-  to same llama.cpp backend — actual model determined by current.gguf symlink.
-- 'Orphan turns fix 2026-05-18: 91 orphan turns (54 claude-code + 37 copilot from post-21:00 KST May 17) linked to existing
-  daily worklog entries #58 and #59 via direct SQL UPDATE. Two empty late-session worklog entries (#61, #62) removed. Coverage:
-  779/779 (100%). Daily auto-worklogs created at noon UTC only cover turns up to that time — turns after ~21:00 KST remain
-  orphaned until the next day''s worklog or manual linking.'
-- 'Consistency warnings cleared 2026-05-18: two stale unlogged-session warnings (d86f6a9 May 17, c516e69 May 18) removed from
-  consistency_report.yaml. Both dates now have proper worklog entries, so session_guard.py would not re-flag them.'
-- 'Copilot statusline quota parsing 2026-05-17: copilot-statusline.py now parses live quotaSnapshots from Copilot payload
-  (entitlementRequests, usedRequests, remainingPercentage) to show Student Benefit usage. Falls back to DevForge API total
-  token count (435K/1M) when quota is unavailable. settings.json showQuota enabled to receive quota data. Format: progress
-  bar + context% + session tokens (2 decimals) + quota remaining (requests or %).'
-- 'Copilot statusline context warnings 2026-05-17: progress bar and percent now color-coded based on remaining context (30%↓
-  yellow, 20%↓ orange, 10%↓ red) to warn users before hitting token limits.'
-- 'Copilot footer format 2026-05-16: copilot-statusline.py now renders a compact bar + percent + used/total + remaining tokens
-  line, with model names and request labels removed. Token counts are shown in K/M units and the bar uses a 10-cell visual
-  indicator.'
-- 'Copilot statusline fallback 2026-05-16: copilot-statusline.py now falls back to the newest useful ~/.copilot/session-state/*/events.jsonl
-  snapshot when no live payload is supplied. It prefers snapshots with both used tokens and tokenLimit, then used-only snapshots.
-  Remaining request percentage still requires live quotaSnapshots payloads; local logs do not expose a global account quota.'
-- 'MOTD token summary 2026-05-16: gen_server_state.py now renders current-session and total token usage in [TOKENS], replacing
-  the previous 7d-only view. Session totals are derived from the latest conversation; overall totals still span all token-bearing
-  turns.'
-- 'MOTD token section restored 2026-05-16: gen_server_state.py now renders a [TOKENS] section again and sources it from turns.meta.tokens
-  via psql.'
-- 'MOTD token simplification 2026-05-16: gen_server_state.py now renders only a single copilot percentage line in [TOKENS],
-  using session tokens as a share of total token-bearing usage.'
-- 'MOTD token percentage 2026-05-16: the single copilot line now uses total token volume against a 1,000,000-token reference,
-  producing a visible usage percentage (currently 56%).'
-- 'Gemini token backfill 2026-05-16: parser_gemini.py now reads tokens.total from Gemini session JSONL; save_memory merges
-  token metadata into duplicate turns; session_start.py also shows the live token summary. container-devforge-api.service
-  must be restarted after search.py changes, then collect_turns --source gemini --reset backfills 24 Gemini turns (564,954
-  tokens).'
-- 'Gemini crash diagnostics 2026-05-16: tmux-based Gemini session loop now appends stdout/stderr to ~/.cache/devforge/gemini-session.log
-  and backs off for 60s after 5 consecutive failures. SIGSEGV exit code 139 is annotated for coredumpctl follow-up. Do not
-  log API keys.'
-- 'Gemini launcher 2026-05-16: restored the foreground launcher. gemini_session_start.sh now runs Gemini in the current shell,
-  keeps per-request key rotation and log capture, and exits with the shell/session instead of keeping a long-lived tmux wrapper
-  alive.'
-- 'Copilot CLI binary NOTE phdr patch 2026-05-16: UEK kernel 6.12.0-201.74.2.3 rejects copilot ELF binary (Exec format error)
-  due to oversized NOTE segment (~34MB overlapping Node.js SEA blob). Patched NOTE program header filesz/memsz from 0x205e4d4
-  → 0x200 via Python struct at /home/opc/.local/lib/node_modules/@github/copilot/node_modules/@github/copilot-linux-arm64/copilot.
-  Fix must be re-applied after npm updates the package. Patch script: read ELF→find PT_NOTE phdr→shrink filesz/memsz→write.'
-- '/opt/workspace reference audit: searched entire codebase (Python, YAML, JSON, Shell, systemd, Quadlet, common-lib). Zero
-  active code references found outside _archive/. Updated common-main.md Storage entry from "access restricted" to "out of
-  scope (consolidated into /opt/projects/server/)". GEMINI.md inherits via @ include.'
-- 'Reboot validation 2026-05-16T22:25 KST: all containers up/healthy (19min uptime), Quadlet services active, caddy+netdata
-  active, devforge-api /health OK, PostgreSQL accepting connections (884 turns, 31 worklog, 10 obs_dec intact), aider-gemini
-  config+script present, worklog CLI functional, all 12 timers active on schedule, SessionStart hook executed. No issues found.'
-- 'Aider is now connected to Gemini free-tier usage via /home/opc/.config/aider/aider.conf.yml (model: gemini-exp) and /home/opc/.local/bin/aider-gemini,
-  which injects a rotated GEMINI_API_KEY before launch.'
-- Active task tracker terminology standardized to todo/in_progress/blocked/done with Kanban labels To Do/In Progress/Blocked/Done.
-  session_start.py and CLAUDE.yaml now read in_progress/todo instead of current/pending.
-- Decision history is now stored in a dedicated `obs_dec` table keyed by `turn_id`; `save_memory` writes decision rows when
-  `meta.type = decision`, and the live DB was backfilled with 10 conservative historical decisions.
-- 'devforge workspace consolidated 2026-05-16: /opt/workspace/devforge/ was a May 14 build-source snapshot that had become
-  stale (ingest.py missing created_at, search.py missing agent-based dedup/ON CONFLICT). Meanwhile server/api/ingest.py and
-  search.py had been patched directly (May 15-16) via Quadlet Volume mounts — creating two diverged copies with no sync mechanism.
-  Resolution: (1) canonical ingest.py/search.py remain at server/api/, (2) unique files (db.py, mcp_server.py, stats.py) moved
-  into server/api/ to form a complete package, (3) cli.py moved to server/scripts/, (4) Dockerfile/healthcheck.py/requirements.txt
-  moved to server/, (5) schema.sql moved to server/docs/, (6) entire old workspace preserved at _archive/devforge-workspace/.
-  db.py SCHEMA_SQL synced to match schema.sql (agent, source_message_id columns added). All path references in tasks.yaml,
-  session_start.py, common-rule.md, design.md updated. Quadlet volume mounts unchanged (still point to server/api/ — same
-  host path). Old /opt/workspace/ access restriction retained for seedling.'
-- 'qwen_worker 3-phase split 2026-05-17: monolithic call replaced with 3 sequential phases. Phase 1 (deterministic, no Qwen):
-  ingestion + backfill + deterministic linkage (SQL JOIN ±24h for agent-known worklogs) + agent normalization (AGENT_MAP).
-  Phase 2 (light Qwen classify): only agent-less worklog titles → agent inference (CLASSIFY_SYSTEM_PROMPT, max_tokens=512)
-  → update agents → deterministic linkage. Phase 3 (light Qwen observe): only recent turns → fact extraction (OBSERVE_SYSTEM_PROMPT,
-  max_tokens=1024) → validate → save. Each Qwen call is ~200-500 token prompt vs old 2500 token monolithic. llama.cpp server
-  stays alive — KV cache verified working (LCP sim_best=1.000).'
-- 'KV cache verified 2026-05-17: llama.cpp --cache-reuse 256 + --slot-save-path /cache/ active. Logs show LCP similarity slot
-  reuse (sim_best = 1.000, f_keep = 0.953). Qwen calls are stateless HTTP requests to persistent server — no restart needed,
-  cache stays warm between phases.'
-- 'execute_deterministic_linkage() added 2026-05-17: queries unlinked worklogs WITH agents, SQL JOINs turns ±24h from worklog
-  created_at, updates turn_ids. Eliminates Qwen hallucination risk for agent-known worklogs.'
-- 'System prompts split: CLASSIFY_SYSTEM_PROMPT + OBSERVE_SYSTEM_PROMPT moved to qwen_executor.py. Old monolithic SYSTEM_PROMPT
-  removed from qwen_worker.py. call_qwen() now accepts max_tokens parameter for per-phase tuning.'
-- qwen_worker linkage time windows are computed deterministically (worklog.created_at ± 24h). Qwen-proposed time_start/time_end
-  are ignored — the 7B model hallucinates them.
-- execute_fixes uses AGENT_MAP SSOT from agents.py with identity mapping skip (copilot→copilot, etc.). Only non-canonical→canonical
-  mappings are applied.
-- '2nd audit 8 bugs fixed: has_linking stale flag, agent validation in execute_linkages (CANONICAL_AGENTS), attempt count
-  display, prompt label, dead code cleanup, retry backoff, canonical set inconsistency (deepseek), int/str type coercion in
-  _validate_linkages.'
-- CANONICAL_AGENTS = set(AGENT_MAP.values()) is the single source of truth for agent name validation. Defined once in qwen_executor.py,
-  used by both gather_context and execute_linkages.
-- 'Auto-worklog creation: _ensure_worklog creates daily worklog entries at noon UTC (±24h window covers full day). _backfill_missing_worklogs
-  finds gaps where orphan turns exist but no worklog for that agent+date.'
-- 'DeepSeek web CLI: added scripts/deepseek_web.py as an isolated Playwright-based experimental browser client. It is not
-  wired into collect_turns.py or the ingestion pipeline. The script supports custom selectors, optional storage-state/profile
-  reuse, and local smoke testing on a data URL.'
-- 'Qwen Code CLI integration: (1) Fixed Qwen Code CLI config — baseUrl changed from 127.0.0.1:8080/v1 to 127.0.0.1:4000/v1
-  (LiteLLM), QWEN_LOCAL_API_KEY set to devforge-litellm-key via settings.json+env. (2) New parser_qwen.py handles Qwen Code
-  JSONL format: user/assistant type matching, message.parts[].text extraction, model from assistant event, uuid/timestamp
-  fields. (3) collect_turns.py updated with QWEN_DIR (~/.qwen/projects) scanning */chats/*.jsonl, project name passed as title,
-  UUID as conversation_id. (4) agents.py AGENT_MAP has qwen normalization. (5) Existing devforge-collect.timer (15min) auto-collects
-  all sources including qwen — no timer changes needed.'
-- 'Qwen CLI (Python): changed default endpoint from 127.0.0.1:8080 to 127.0.0.1:4000 (LiteLLM), model from qwen2.5-coder-7b-instruct-q8_0.gguf
-  to qwen2.5-coder-7b, auto-reads LITELLM_MASTER_KEY from secrets file, health check uses BASE_URL with auth header.'
-- 'API created_at timestamp preservation: save_memory now accepts Optional[str] created_at, converts ISO 8601 via _parse_ts()
-  helper to timezone-aware datetime before INSERT. Column uses timestamptz cast conditional: pass datetime when provided,
-  fall back to DEFAULT NOW() when null. All four parsers (claude, copilot, gemini, qwen) now emit created_at from event timestamp.'
-- 'Quadlet Volume mount: Volume= directive works; the stale ~/.config/systemd/user/container-devforge-api.service was masking
-  the generator output at /run/user/1000/systemd/generator/. Deleted the stale file. Volumes now correctly mounted: /opt/projects/server/api/ingest.py:/app/app/ingest.py:Z
-  and /opt/projects/server/api/search.py:/app/app/search.py:Z. Generator output must be checked at /run/user/1000/systemd/generator/,
-  not ~/.config/systemd/user/.'
-- 'Nightly link_turns date window bug fixed: was using today_kst (03:00 KST = next day) instead of review_date (yesterday).
-  Changed main() to compute review_date = now_kst - 1 day. Also added copilot-cli normalization to agents.py and fixed DB
-  worklog entries #32/#33 agent from copilot-cli to copilot.'
-- 'Orphan turn backfill 2026-05-15: 202 claude-code + 6 copilot turns linked to worklog entries #34 and #35. Coverage now
-  274/274 (100%). Empty worklog entries #30 and #33 remain (turns outside review window).'
-- Consistency report warnings cleared after backfill. 6 unlogged sessions from May 15-16 addressed.
-- Server-side Copilot instruction sync removed from session_guard; the server now keeps only the auto-commit safety net and
-  does not call the helper.
-- Copilot instruction sync now lives in common_lib.core.copilot_rules; server/scripts/session_guard.py keeps the auto-commit
-  safety net and only delegates file synchronization.
-- 'Ops finalization 2026-05-13T10:25Z: migrated to Quadlet-only runtime (pod/container files in ~/.config/containers/systemd),
-  fixed image tags (localhost/devforge-*:2026.05.13), and UTC-only timers under user systemd (devforge-backup.timer 20:00
-  UTC, devforge-restore-test.timer 20:30 UTC on day 1).'
-- 'Secrets policy finalized: single injection path via ~/.config/devforge/secrets.env (chmod 600). Removed inline POSTGRES_PASSWORD
-  from Quadlet and switched LiteLLM config to os.environ/* references.'
-- 'Legacy generated unit files moved out of active path and reduced to archive note: ~/.config/systemd/user/_legacy-generate-systemd/README.txt.'
-- 'Healthcheck noise handling: ignore transient podman healthcheck units/scopes in alerting; use stable unit status for SLO
-  checks.'
-- 'Runbook (fixed-tag update): 1) podman tag <upstream-image> localhost/devforge-<svc>:<version>; 2) systemctl --user daemon-reload;
-  3) systemctl --user restart data-pod.service container-postgres.service container-devforge-api.service; 4) verify podman
-  ps health + curl localhost:8000/health.'
-- 'Reboot verification 2026-05-11T14:10 KST: all services verified, 3 issues found and resolved.'
-- 'Normalization pass 2026-05-11T14:35 KST: 3 workarounds properly fixed — (1) netdata RPM fully removed via dnf, (2) --mlock
-  flag removed from container-devforge-llm.service (rootless podman lacks CAP_IPC_LOCK, model works fine without it, swappiness=10),
-  (3) LiteLLM connected to postgres via devforge-net bridge (listen_addresses=*, pg_hba 10.89.0.0/24, litellm DB created,
-  database_url in config.yaml) → /health now returns healthy_count=1 unhealthy_count=0.'
-- 'Quadlet cleanup: 6 stale .container/.pod/.network files removed from ~/.config/containers/systemd/ (historical conflict
-  resolved). Final policy as of 2026-05-13 is Quadlet-only runtime; older generate-systemd path is retired.'
-- 'ai-pod auto-start fix 2026-05-11T14:15 KST: pod-ai-pod.service + pod-data-pod.service both patched. Root cause: reboot
-  clears /run tmpfs but podman DB retains stale pod records → pod create --replace races with DB cleanup → FOREIGN KEY constraint
-  / no such pod errors → containers fail with dependency failure on BindsTo. Fix: (1) explicit ExecStartPre=-podman pod rm
-  -f --ignore <name> before pod create, (2) drop --replace flag, (3) RestartSec=3s added. Simulated cold start test passed
-  — both pods started on first attempt.'
-- 'postgres networking: listen_addresses changed from 127.0.0.1 to * (in postgresql.conf, persisted on /mnt/lv_db volume)
-  with pg_hba.conf entry for devforge-net subnet (10.89.0.0/24 trust). Enables cross-pod connectivity from litellm@ai-pod
-  to postgres@data-pod over bridge network. Pod DNS resolves data-pod hostname.'
-- '/tmp → /var/tmp switch completed 2026-05-11: atomic mv + symlink via atd job. All verifications passed. newuidmap/newgidmap
-  preserved. /tmp.old cleanup scheduled for Tue May 12 10:35 KST.'
-- 'ZRAM 4GB enabled 2026-05-11T14:53 KST: kernel-uek-modules-6.12.0-201.74.2.2 installed (module was missing), zram.service
-  rewritten — modprobe via ExecStartPre, sleep 1 removed, Before=swap.target + WantedBy=sysinit.target, zstd compression,
-  priority 100 (above swapfile -2)'
-- 'gen_server_state.py v5: discover_services() scans systemctl list-unit-files — no hardcoded service names'
-- 'gen_server_state.py v5: collect_container_flags() parses ExecStart= → CLAUDE.yaml flags auto-synced every 15min'
-- 'gen_server_state.py v5: build_memory_line() from free/swapon/zramctl/sysctl → CLAUDE.yaml memory auto-generated'
-- 'gen_server_state.py v5: --validate compares CLAUDE.yaml+blueprint vs live → state.yaml#validation → MOTD RED alerts'
-- 'gen_server_state.py v5: validate-gen.timer runs daily with 600s RandomizedDelaySec'
-- 'systemd unit name standardization: container-litellm.service → litellm.service (unit file rename + gen_server_state.py:98
-  mapping removed)'
-- 'Cross-validation fix: zram removed from CLAUDE.yaml (nonexistent), swap 7.7G→3.7G, flags synced with actual unit, netdata
-  added to services, blueprint Phase 2 ctx-size claim corrected, network section updated for host networking'
-- 'Handover is hybrid: mechanical (file scan + git status every 10min + SessionEnd hook) + AI-written sections (decisions,
-  known_issues). todo / in_progress / blocked / done now live in tasks.yaml.'
-- systemd user timer handover-gen.timer runs every 10min with 30s randomized delay
-- SessionEnd hook in ~/.claude/settings.json triggers session_guard.py (auto-commit safety net) then update_handover.py on
-  session exit
-- 'CLAUDE.yaml rules.must #2: read handover.yaml + tasks.yaml on start, update both before end'
-- CLAUDE.yaml entry_points includes handover.yaml; handover section documents triggers and flow
-- seedling removed from CLAUDE.yaml projects.active — maintained as standalone dev project under /opt/project/seedling/
-- lv_db fstab UUID fixed: old 90f73063 was stale after mkfs.xfs regeneration, replaced with actual ad421235
-- 'PostgreSQL 16 on /mnt/lv_db: boot-time start failure resolved (cascade from unmounted lv_db), now active+enabled'
-- 'Containerization: Caddy → rootful podman (setcap failed for rootless, SELinux blocks privileged port bind)'
-- 'Containerization: Netdata → rootless podman with --pid=host and 5 capabilities, port 19999'
-- 'Containerization: PostgreSQL 16 → rootless podman, data dir chown to 1000:1000 (rootless maps container root → host opc)'
-- 'Containerization: caddy.service at /etc/systemd/system/ (rootful), netdata+postgres at ~/.config/systemd/user/ (rootless)'
-- 'Cleanup: removed caddy.service placeholder, fixed PG collation version, blueprint ctx-size → 8192'
-- 'UEK7 kernel (6.12) uid_map write restriction: only 1 or 5 lines per write() — stock newuidmap writes 2 lines → EPERM'
-- 'Fix: custom C replacement for newuidmap/newgidmap compiled to /usr/bin/ (setuid root), splits 2 triples → 5 by quartering
-  subuid range. Source at /tmp/newidmap.c'
-- shadow-utils update will overwrite the replacement — recompile from /tmp/newidmap.c and reinstall setuid bits after any
-  shadow-utils update
-- 'DevForge v3.0: 2-Pod architecture (ai-pod: llm+litellm, data-pod: postgres) with bridge network devforge-net, host Netdata
-  v2.2.6'
-- 'DevForge v3.0 historical note: podman generate systemd was used temporarily. Superseded by 2026-05-13 decision: Quadlet-only
-  operation with fixed local tags and user-systemd timers.'
-- 'DevForge v3.0: all volume mounts use :Z or :Z,ro for SELinux enforcing compatibility'
-- 'DevForge v3.0: llm.container uses TimeoutStartSec=300 for 7.7GB model (--mlock removed — CAP_IPC_LOCK unavailable in rootless
-  podman)'
-- 'DevForge v3.0: Caddy reverse proxy on host (:443) → litellm (:4000), docs at /docs/* from /data/docs'
-- 'DevForge v3.0: postgres databases = devforge_app + devforge_meta; seedling DB deleted (was empty)'
-- 'DevForge v3.0: DB dump → /mnt/secure_meta/snapshots/db_{name}_{timestamp}.sql.gz, 7-day retention, gzip integrity check,
-  logger -t pg-dump'
-- 'DevForge v3.0: journald MaxRetentionSec=30day for pg-dump log history'
-- 'DevForge v3.0: /opt/project → /opt/projects symlink for backwards compatibility'
-- 'DevForge v3.0: LVM naming — lv_dev renamed to lv_meta to match /mnt/secure_meta purpose'
-- 'tmux MOTD deduplication complete: client-attached hook removed from ~/.tmux.conf + runtime release via tmux set-hook -gu
-  client-attached. source-file does not remove existing hooks so config-only changes are insufficient. prefix+M manual popup
-  preserved.'
-- 'MOTD format cleanup 2026-05-13: (1) STORAGE — removed duplicate VG/LV table from LVM, kept Device table only via df -h.
-  (2) SYSTEM 2-line column alignment (Spec/OS/Arch, CPU Load/Mem/Zram). (3) NETWORK, SERVICES header-content separation —
-  all sections unified to [HEADER] + indented format. (4) Header banner (DevForge Server Env) removed, ==== separator only.
-  gen_server_state.py and backup_project synced.'
-- 'GitHub repo setup 2026-05-13: git@github.com:devforgekor/devforge.git — /opt/projects initialized, 102 files committed
-  + pushed (main) including server/ common-lib/ litellm/ scripts/ systemd/. M4 Air SSH key (~/.ssh/id_ed25519) authentication.
-  9 systemd unit files added in additional commit for container orchestration definition (Docker Compose equivalent).'
-decisions:
-- 'OOM Recovery Procedure (2026-05-25): When OOM or swap thrashing occurs during model switch: (1) rm -f /opt/ai_data/debate/switch/model-switch.json — stop new model request. (2) kill -TERM <loading_llama_pid> — kill stuck loader, wait 3s, kill -9 if needed. (3) swapoff -a && swapon -a — reset swap to clear thrashing (optional, kernel reclaims over time). (4) systemctl --user restart container-devforge-swap — restart with fresh memory guard. (5) Verify free -h: ~8GB+ available before next attempt. Prevention: always restart container-devforge-swap after memory_guard.sh updates — old supervisor lacks eviction. Current issue: supervisor running pre-eviction code needs restart to activate posix_fadvise eviction.'
-- 'Swap sizing note (2026-05-25): 8GB swap (4GB zram + 4GB disk) too small for dual MoE operation. GLM(~9GB RSS) + Qwen30B(~10GB RSS) = 19GB active + page cache > 24GB. Only works WITH page cache eviction (posix_fadvise DONTNEED on GLM before Pod B load). Without eviction, swap fills and system thrashes. Consider increasing zram to 8GB for more headroom.'
+- 'Spot VM orchestration implemented (2026-05-26): scripts/azure_spot.py (SpotVMManager + SpotOrchestrator) + debate.py v4.5
+  (--mode cooperative --spot). Flow: DRAG(local) → provision spot VMs from golden images → SSH tunnels with dynamic IPs →
+  Proposer+Refuter ×4 rounds → terminate VMs → Judge+Summary+Synthesis(local). Golden images: Account 1 img-qwen3-30b-a3b-spot
+  v1.0.0 (Specialized), Account 2 img-nemotron3-nano-30b-spot v0.0.1 (Specialized, portal-created). SSH tunnels use PEM keys
+  directly (not SSH config aliases) because spot VM IPs are dynamic. Local ports fixed: Qwen :8084, Nemotron :8083.'
+- 'Azure Nemotron integrated to debate v4.0 (2026-05-26): debate.py MODELS[nemotron3-nano-30b] — host=azurenemo, port=400,
+  local_port=:8083, model_name=nemotron. VM recreated on Ubuntu 22.04 Minimal (IP 48.193.42.76, was 70.153.138.59). SAFE cleanup:
+  runtime libs (libgomp1, libopenblas0, libopenblas0-pthread, libstdc++6) apt-mark manual before autoremove. ALL LIBS OK.
+  Disk: 9.2GB free (69%). E2E verified. SSH config updated.'
+- 'OOM Recovery Procedure (2026-05-25): When OOM or swap thrashing occurs during model switch: (1) rm -f /opt/ai_data/debate/switch/model-switch.json
+  — stop new model request. (2) kill -TERM <loading_llama_pid> — kill stuck loader, wait 3s, kill -9 if needed. (3) swapoff
+  -a && swapon -a — reset swap to clear thrashing (optional, kernel reclaims over time). (4) systemctl --user restart container-devforge-swap
+  — restart with fresh memory guard. (5) Verify free -h: ~8GB+ available before next attempt. Prevention: always restart container-devforge-swap
+  after memory_guard.sh updates — old supervisor lacks eviction. Current issue: supervisor running pre-eviction code needs
+  restart to activate posix_fadvise eviction.'
+- 'Swap sizing note (2026-05-25): 8GB swap (4GB zram + 4GB disk) too small for dual MoE operation. GLM(~9GB RSS) + Qwen30B(~10GB
+  RSS) = 19GB active + page cache > 24GB. Only works WITH page cache eviction (posix_fadvise DONTNEED on GLM before Pod B
+  load). Without eviction, swap fills and system thrashes. Consider increasing zram to 8GB for more headroom.'
 known_issues:
-- 'container-devforge-swap NOT restarted after memory guard update (2026-05-25): Old supervisor binary running without eviction. daemon-reload done, quadlet updated, but container still running old code. Must systemctl --user restart container-devforge-swap to activate.'
-- 'Swap 100% full after Qwen30B load attempt (2026-05-25): GLM loaded on Pod A consumed 14GB RAM + 7.5GB swap before test. Loading Qwen30B pushed swap to 8.0/8.0GB → thrashing → load stuck at 503 for 5+ min. Recovery: killed loader + cleared switch file. Next attempt needs: (1) container restart with eviction, (2) verify 8GB+ free before switch.'
+- 'Spot VM quota exceeded (2026-05-26): Azure for Students LowPriorityCores limit 3 in centralindia, current usage 2 (existing
+  Qwen VM). Need 4 to run both persistent + spot. Resolution: delete existing VMs before creating spot VMs, or increase quota.
+  Account 2 indonesiacentral quota also likely limited (2 cores).'
+- 'SP lacks gallery read permission (2026-05-26): Service principal 24c1a30b-... in Account 2 has VM Contributor only. Cannot
+  read gallery images for spot VM creation. Need to add Reader role to SP at gallery/resource group scope.'
+- 'container-devforge-swap NOT restarted after memory guard update (2026-05-25): Old supervisor binary running without eviction.
+  daemon-reload done, quadlet updated, but container still running old code. Must systemctl --user restart container-devforge-swap
+  to activate.'
+- 'Swap 100% full after Qwen30B load attempt (2026-05-25): GLM loaded on Pod A consumed 14GB RAM + 7.5GB swap before test.
+  Loading Qwen30B pushed swap to 8.0/8.0GB → thrashing → load stuck at 503 for 5+ min. Recovery: killed loader + cleared switch
+  file. Next attempt needs: (1) container restart with eviction, (2) verify 8GB+ free before switch.'
 - 'link_turns.py kst_end bug (2026-05-23): FIXED. kst_end now derived from review_date+timedelta(days=1) instead of now_kst,
   guaranteeing a full 24h window even when processing today.'
 - 'search_proxy.py implemented (2026-05-20): Brave×4+Exa×4+Tavily×4 Tier1 even rotation + you.com×4 Tier2 final fallback.
