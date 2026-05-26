@@ -6,7 +6,7 @@
 set -e
 
 cd /opt/projects/server
-TASKS=(1 3 5 7 8 11 12 14 16)
+TASKS=(1 2 3 4 5 6 7 8 9)
 LOGDIR="/var/tmp/code_mod_tests"
 mkdir -p "$LOGDIR"
 

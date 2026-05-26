@@ -21,7 +21,7 @@ tasks:
       - Were both call sites modified?
       - Was existing behavior preserved?
 
-  - id: 3
+  - id: 2
     stage: L3
     name: "Add Error Handling/Validation"
     file: "/opt/projects/server/api/slack_operator.py"
@@ -37,7 +37,7 @@ tasks:
       - Signature format validation
       - No impact on existing normal cases
 
-  - id: 5
+  - id: 3
     stage: L5
     name: "Intermediate Refactoring (Deduplication)"
     file: "/opt/projects/server/scripts/auto_commit_guard.py"
@@ -54,7 +54,7 @@ tasks:
       - None checks added at call sites
       - Existing fallback behavior preserved
 
-  - id: 7
+  - id: 4
     stage: L7
     name: "Structural Change (Class Extraction)"
     file: "/opt/projects/server/api/slack_operator.py"
@@ -71,7 +71,7 @@ tasks:
       - TTL expiration behavior preserved
       - Thread-safety consideration
 
-  - id: 8
+  - id: 5
     stage: L8
     name: "Analysis+Planning Only (No Code Modification)"
     file: "/opt/projects/server/scripts/auto_commit_guard.py"
@@ -89,7 +89,7 @@ tasks:
       - Solution feasibility
       - Priority assignment appropriateness
 
-  - id: 11
+  - id: 6
     stage: L11
     name: "Extract ASSERT Parser + Validator"
     file: "/opt/projects/server/scripts/code_mod_pipeline.py"
@@ -119,7 +119,7 @@ tasks:
       - Existing pipeline behavior preserved
       - TYPE_ENV / TYPE_CODE error classification preserved
 
-  - id: 12
+  - id: 7
     stage: L12
     name: "Generalize Error Classifier"
     file: "/opt/projects/server/scripts/code_mod_pipeline.py"
@@ -162,7 +162,7 @@ tasks:
       - TYPE_CODE retry + web fallback
       - Graceful failure on retry exhaustion
 
-  - id: 14
+  - id: 8
     stage: L14
     name: "KeyRotator — Exponential Backoff + Jitter"
     file: "/opt/projects/server/scripts/lib/auth/key_rotator.py"
@@ -180,7 +180,7 @@ tasks:
       - max_delay not exceeded
       - Expired key auto-reactivation
 
-  - id: 16
+  - id: 9
     stage: L16
     name: "Add 429 Detection + Auto-Backoff Tests"
     file: "/opt/projects/server/scripts/lib/auth/key_rotator.py"
