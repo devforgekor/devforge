@@ -513,7 +513,7 @@ class DebateSession:
       debate (default): Pod A (:8080) Judge + Pod B (:8081) sequential.
         DRAG/Summary → Qwen-14B, Proposer/Synthesis → DeepSeek-V2-Lite, Refuter → Phi-mini-MoE.
       cooperative: provision spot VMs → Proposer(Qwen3-30B) + Refuter(Nemotron-3-Nano) ×4 rounds
-        → terminate VMs → Judge/DRAG/Summary/Synthesis on local Pod B.
+        → terminate VMs → Judge writes summary → Synthesis on local Pod B.
 
     No 32B — batch pipeline only.
     """
@@ -550,7 +550,7 @@ class DebateSession:
             self.proposer_model = "qwen3-30b-a3b"       # azureqwen :8084 — Proposer
             self.refuter_model = "nemotron3-nano-30b"   # azurenemo :8083 — Refuter
             self.judge_model = "glm-47-flash"           # local Pod B — Judge (glm4moe)
-            self.summary_model = "deepseek-v2-lite"      # local Pod B — History summary
+            self.summary_model = "glm-47-flash"            # local Pod B — Judge writes summary (already loaded)
             self.synthesizer_model = "qwen-14b"          # local Pod B — Final synthesis
         else:
             # Default debate mode: Pod A Judge + Pod B sequential
@@ -673,6 +673,18 @@ class DebateSession:
                 # Pod A — always-on persistent model, just verify health
                 return _poll_health(port=8080, timeout=cfg.get("bench_load_s", 30) + 30)
             # Pod B (:8081) — write switch file for supervisor
+            # Check if same model already loaded (skip 60s kill/wait if so)
+            same_model = False
+            try:
+                if os.path.exists(SWITCH_FILE):
+                    with open(SWITCH_FILE) as f:
+                        prev = json.load(f)
+                    if prev.get("model_file") == cfg["filename"]:
+                        same_model = True
+            except Exception:
+                pass
+            if same_model:
+                return _poll_health(port=8081, timeout=cfg.get("bench_load_s", 120) + 60)
             _write_switch_file(model_id)
             # Wait for supervisor to detect the change and kill old server
             # (supervisor polls every 5s; old server must die before we poll health)
@@ -853,9 +865,9 @@ class DebateSession:
     # ═══════════════════════════════════════════════════════════════════
 
     def round_0_drag(self) -> bool:
-        """DRAG: Qwen-14B analyzes target file and sets debate context.
+        """DRAG: DeepSeek-V2-Lite analyzes target file and sets debate context.
 
-        Pod B (:8081) loads Qwen2.5-Coder-14B for the first time.
+        Pod B (:8081) loads DeepSeek-Coder-V2-Lite first.
         Returns False if skipped.
         """
         if self.skip_drag:
@@ -902,7 +914,7 @@ class DebateSession:
 
         decision_points = len(analysis.get("decision_points", []))
         print(f"\n  [drag] Analysis complete: {decision_points} decision points identified")
-        print(f"  [drag] DRAG analysis complete — GLM will be reloaded for Judge + Summary")
+        print(f"  [drag] DRAG analysis complete — Judge model will be loaded for verdict + summary")
         return True
 
     def round_1_to_4_dart(self) -> bool:
@@ -924,6 +936,7 @@ class DebateSession:
             if reason:
                 print(f"\n─── Early exit at Round {rnd}: {reason} ───")
                 self._save_state({"type": "early_exit", "reason": reason})
+                self._terminate_spot_vms()
                 return True
 
             print(f"\n{'='*60}")
@@ -1038,8 +1051,8 @@ class DebateSession:
         full_history = state_path.read_text() if state_path.exists() else ""
         consensus_trend = self._trend_str()
 
-        # ── Step 1: GLM history summary (Pod B) ──
-        print(f"  [summary] Switching to DeepSeek-Coder-V2-Lite for history summary (Pod B)...")
+        # ── Step 1: Judge writes history summary (Pod B, already loaded) ──
+        print(f"  [summary] Judge ({self.summary_model}) writing debate summary...")
         if not self.switch_model(self.summary_model):
             print("  [ERROR] GLM summary switch failed")
             return None
@@ -1111,7 +1124,7 @@ class DebateSession:
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
         if self.mode == "cooperative":
-            print(f"█ Spot VMs → P:Qwen3-30B(:8084) R:Nemotron(:8083) | J/DRAG/Summary/Synthesis: local")
+            print(f"█ Spot VMs → P:Qwen3-30B(:8084) R:Nemotron(:8083) | Judge writes summary, Qwen14B synthesis")
         else:
             print(f"█ Pod A (:8080): Selene-8B Judge | Pod B (:8081): Qwen-14B → DeepSeek-V2-Lite → Phi-mini-MoE")
         print(f"█ Question: {self.question[:80]}...")
