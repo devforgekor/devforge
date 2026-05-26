@@ -332,7 +332,7 @@ class SpotVMManager:
             "--name", self.cfg.vm_name,
             "--resource-group", self.cfg.resource_group,
             "--yes",
-            "--force-deletion", "none",
+            "--force-deletion", "false",
         ], timeout=120)
         if result.returncode != 0:
             print(f"  [spot:{self.cfg.label}] VM delete warning: {result.stderr[:200]}")
