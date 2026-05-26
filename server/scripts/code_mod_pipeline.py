@@ -270,12 +270,13 @@ def _evict_page_cache(file_path: str) -> bool:
 
 
 def _pre_task_memory_check(task_id: int, warn_mb: int = 1500,
-                            critical_mb: int = 400) -> bool:
+                            critical_mb: int = 400,
+                            keep_model: str = "Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf") -> bool:
     """Check available memory before a task. Evict unused model page cache if tight.
 
     Returns True if safe to proceed, False only if critically low (<critical_mb).
-    warn_mb: threshold to trigger page cache eviction (non-fatal).
-    critical_mb: below this, skip the task (model may crash under load).
+    Keeps the actively-loaded model's page cache (skip_model) to avoid refault latency.
+    KV cache (llama.cpp --cache-ram) is in anonymous process memory — unaffected.
     """
     avail = _get_mem_available()
     if avail < warn_mb:
@@ -284,7 +285,7 @@ def _pre_task_memory_check(task_id: int, warn_mb: int = 1500,
         models_dir = "/models"
         if os.path.isdir(models_dir):
             for f in sorted(os.listdir(models_dir)):
-                if f.endswith(".gguf"):
+                if f.endswith(".gguf") and f != keep_model:
                     path = os.path.join(models_dir, f)
                     _evict_page_cache(path)
         avail = _get_mem_available()
