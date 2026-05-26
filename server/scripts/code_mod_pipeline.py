@@ -269,31 +269,34 @@ def _evict_page_cache(file_path: str) -> bool:
         return False
 
 
-def _pre_task_memory_check(task_id: int, required_mb: int = 2000) -> bool:
+def _pre_task_memory_check(task_id: int, warn_mb: int = 1500,
+                            critical_mb: int = 400) -> bool:
     """Check available memory before a task. Evict unused model page cache if tight.
 
-    Returns True if safe to proceed, False if critically low.
+    Returns True if safe to proceed, False only if critically low (<critical_mb).
+    warn_mb: threshold to trigger page cache eviction (non-fatal).
+    critical_mb: below this, skip the task (model may crash under load).
     """
     avail = _get_mem_available()
-    if avail < required_mb:
-        print(f"\n[memory] WARNING: only {avail}MB available (need {required_mb}MB) "
-              f"before Task {task_id}", flush=True)
-        print(f"[memory] Evicting unused model page cache...", flush=True)
+    if avail < warn_mb:
+        print(f"\n[memory] Tight: {avail}MB available before Task {task_id} "
+              f"(warn={warn_mb}MB) — evicting unused page cache...", flush=True)
         models_dir = "/models"
         if os.path.isdir(models_dir):
             for f in sorted(os.listdir(models_dir)):
                 if f.endswith(".gguf"):
                     path = os.path.join(models_dir, f)
                     _evict_page_cache(path)
-                    avail = _get_mem_available()
-                    if avail >= required_mb:
-                        print(f"[memory] Freed enough: {avail}MB available", flush=True)
-                        return True
         avail = _get_mem_available()
-        if avail < required_mb:
+        if avail >= warn_mb:
+            print(f"[memory] Freed enough: {avail}MB available", flush=True)
+        elif avail < critical_mb:
             print(f"[memory] CRITICAL: only {avail}MB after eviction "
-                  f"(need {required_mb}MB)", flush=True)
+                  f"(critical={critical_mb}MB) — skipping Task {task_id}", flush=True)
             return False
+        else:
+            print(f"[memory] Improved to {avail}MB (below warn but above critical) — "
+                  f"proceeding", flush=True)
     return True
 
 
@@ -1041,8 +1044,7 @@ def main():
                     continue
                 print(f"  Model OK", flush=True)
 
-            if not _pre_task_memory_check(task["id"], required_mb=1500):
-                print(f"  Skipping Task {task['id']} — insufficient memory.", flush=True)
+            if not _pre_task_memory_check(task["id"]):
                 continue
 
             # Load resume data if start_stage > 1
