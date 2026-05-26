@@ -224,4 +224,4 @@ local_32b:
   model: "qwen2.5-coder-32b"
   ctx_size: 10240
   tier: "32B"
-  require_mem_mb: 26000
+  require_mem_mb: 21500  # IQ4_XS ~16.9GB + cache-ram 6656 + overhead, matches memory_guard.sh
