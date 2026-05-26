@@ -1,8 +1,5 @@
-# 8-stage code modification test for Qwen2.5-Coder-32B Q4_K_M
-# Each task runs: Qwen32B local (4-stage pipeline) + 3 APIs for comparison
-#
-# Stage complexity: L1(simple add) → L8(analysis only)
-# Target files: slack_operator.py (state machine + HTTP), auto_commit_guard.py (git + DB)
+# 9 selected code modification tests for 32B baseline
+# Diverse difficulty: L1 → L16 across 4 target files
 #
 # Metrics per task:
 #   - 32B: diff quality, rationale accuracy, confidence, review_points usefulness
@@ -24,21 +21,6 @@ tasks:
       - Were both call sites modified?
       - Was existing behavior preserved?
 
-  - id: 2
-    stage: L2
-    name: "Local Bug Fix"
-    file: "/opt/projects/server/api/slack_operator.py"
-    description: |
-      _find_pid_file() selects the most recent file by mtime from glob results,
-      but if another process deletes the file between glob and max(), a FileNotFoundError occurs.
-      Modify so that it returns None if glob results are empty, and safely selects the most recent file if results exist.
-      Also, it should return None instead of FileNotFoundError when PID_DIR does not exist.
-    expected_category: "bug_fix"
-    evaluation:
-      - Was the race condition resolved?
-      - Graceful handling when PID_DIR is absent
-      - Existing return type (Optional[Path]) preserved
-
   - id: 3
     stage: L3
     name: "Add Error Handling/Validation"
@@ -54,23 +36,6 @@ tasks:
       - Timestamp 0 defense
       - Signature format validation
       - No impact on existing normal cases
-
-  - id: 4
-    stage: L4
-    name: "Cross-Function Modification"
-    file: "/opt/projects/server/api/slack_operator.py"
-    description: |
-      cmd_status(), cmd_log(), and cmd_test_result() all use the same pattern of reading log/result files
-      and truncating with _truncate(). These functions return different error messages on read failure;
-      unify them with a consistent error format.
-      Also extract a common _read_and_truncate(filepath: str, max_chars: int = 2500) -> str function
-      and modify the three functions above to use it.
-    expected_category: "cross_function_refactor"
-    evaluation:
-      - Accuracy of common function extraction
-      - All three call sites modified
-      - Error message consistency
-      - cmd_test_result() JSON parsing case handling preserved
 
   - id: 5
     stage: L5
@@ -88,23 +53,6 @@ tasks:
       - Optional[str] return type correctness
       - None checks added at call sites
       - Existing fallback behavior preserved
-
-  - id: 6
-    stage: L6
-    name: "Interface Change"
-    file: "/opt/projects/server/api/slack_operator.py"
-    description: |
-      The timeouts for _post_to_slack(), _update_slack_message(), and _post_to_response_url()
-      are hardcoded at 10, 10, and 5 seconds respectively. Extract these values as module-level
-      constants and change the interface so each function accepts a keyword argument
-      timeout_override: Optional[int] = None, allowing callers to override the timeout.
-      Define DEFAULT_SLACK_TIMEOUT = 10 and DEFAULT_RESPONSE_TIMEOUT = 5 constants.
-    expected_category: "interface_change"
-    evaluation:
-      - Constant extraction accuracy
-      - timeout_override parameter added
-      - No change to default behavior
-      - Type hints appropriateness
 
   - id: 7
     stage: L7
@@ -140,39 +88,6 @@ tasks:
       - Failure scenario coverage
       - Solution feasibility
       - Priority assignment appropriateness
-
-  - id: 9
-    stage: L9
-    name: "Bug Fix — _fill_pool() Infinite Proliferation"
-    file: "/opt/projects/server/scripts/gemini_pool.py"
-    description: |
-      GeminiPoolManager._fill_pool() is configured with min_size=2,
-      and get() calls await self._fill_pool() on error.
-      This causes new keys to be continuously added to the pool, resulting in an infinite proliferation bug.
-      Keys returned by also_start_keys() are fetched from the DB, but failed existing keys are not removed,
-      causing the pool size to grow uncontrollably.
-      Modify _fill_pool() to add a max_size=4 limit and change it to remove failed keys from the pool.
-    expected_category: "bug_fix"
-    evaluation:
-      - max_size limit added
-      - Failed key removal logic
-      - Pool size maintained at or below max_size
-
-  - id: 10
-    stage: L10
-    name: "Concurrency Improvement — SQLite WAL Mode"
-    file: "/opt/projects/server/scripts/gemini_pool.py"
-    description: |
-      GeminiPoolManager uses SQLite as a concurrency queue, causing write contention.
-      When multiple coroutines simultaneously take the get() → _fill_pool() → _insert_key() path,
-      they may fail with SQLITE_BUSY.
-      Enable WAL mode (PRAGMA journal_mode=WAL) and add connection pooling.
-      Set WAL mode during DB initialization, and change to sharing the aiosqlite connection at the module level.
-    expected_category: "concurrency_fix"
-    evaluation:
-      - WAL mode enabled
-      - Contention resolved on concurrent get() calls
-      - Existing API compatibility preserved
 
   - id: 11
     stage: L11
@@ -247,61 +162,6 @@ tasks:
       - TYPE_CODE retry + web fallback
       - Graceful failure on retry exhaustion
 
-  - id: 13
-    stage: L13
-    name: "Stage Failure Recovery — Web Retry Fallback"
-    file: "/opt/projects/server/scripts/code_mod_pipeline.py"
-    description: |
-      Based on the error classifier added in T12, implement web retry fallback via the DeepSeek API
-      for Stage 2-4 failures.
-      For failures classified as TYPE_CODE:
-      1. Send the failed stage's prompt + error message to the DeepSeek API
-      2. Parse the response and convert the fixed result to the original stage output format
-      3. Retry up to 2 times; on failure, fall back to the previous result
-      Web retry timeout: 60 seconds, max_tokens=2048.
-
-      --- Reference: web fix pattern from hybrid_pipeline.py ---
-      DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-      WEB_FIX_URL = "https://api.deepseek.com/v1/chat/completions"
-      WEB_FIX_MODEL = "deepseek-chat"
-
-      def request_web_fix(step_id: int, code: str, error: str, context: str) -> Optional[str]:
-          prompt = f'''Fix this Python code that failed during execution. Output ONLY the fixed code.
-
-      ERROR:
-      {error}
-
-      FAILED CODE (step {step_id}):
-      {code}
-
-      ALL PREVIOUS STEPS (for context):
-      {context}
-
-      Fixed code for step {step_id}:'''
-          status, body = call_llm(
-              WEB_FIX_URL,
-              [{"role": "user", "content": prompt}],
-              api_key=DEEPSEEK_KEY, model=WEB_FIX_MODEL,
-              timeout=60, max_tokens=2048,
-          )
-          if status == 200:
-              result = extract_json_from_llm_response((status, body))
-              fixed = result.get("raw_content", "").strip()
-              fixed = re.sub(r'^```[a-z]*\n?', '', fixed)
-              fixed = re.sub(r'\n?```$', '', fixed)
-              return fixed
-          return None
-
-      lib.llm.client.call_llm() and lib.code_mod.shared.extract_json_from_llm_response()
-      are already available in code_mod_pipeline.py. Integrate web fix into the retry loop
-      in _call_stage_with_retry() or as a new _retry_stage_with_web_fix() helper.
-    expected_category: "feature_addition"
-    evaluation:
-      - Web retry fallback behavior
-      - Response format conversion accuracy
-      - Retry limit compliance
-      - Graceful degradation on failure
-
   - id: 14
     stage: L14
     name: "KeyRotator — Exponential Backoff + Jitter"
@@ -319,26 +179,6 @@ tasks:
       - Jitter applied (±25%)
       - max_delay not exceeded
       - Expired key auto-reactivation
-
-  - id: 15
-    stage: L15
-    name: "KeyRotator — Multi-Key Rotation Architecture"
-    file: "/opt/projects/server/scripts/lib/auth/key_rotator.py"
-    description: |
-      Currently KeyRotator selects keys via _calls-based round-robin.
-      Actual usage patterns show load bias toward specific keys.
-      Improve this with fair-queue based rotation:
-      1. Add a _weight (float) field instead of _calls (lower = higher priority)
-      2. pick() selects the key with the lowest _weight
-      3. success() → weight += 1.0, rate_limited() → weight += 10.0
-      4. Keys whose backoff_until has passed reset to weight = min(weights)
-      5. Maintain KeyRotator.pick()'s return type and compatibility with existing call sites
-    expected_category: "structural_refactor"
-    evaluation:
-      - Weight-based selection correctness
-      - Existing pick() interface compatibility
-      - rate_limited key isolation
-      - Reintegration after backoff expiry
 
   - id: 16
     stage: L16
