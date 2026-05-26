@@ -23,6 +23,7 @@ Usage:
 """
 import glob
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -238,6 +239,62 @@ def _system_info() -> str:
                 f" | swap: {swap_used}M / {swap_total}M")
     except Exception:
         return "mem: n/a"
+
+
+def _get_mem_available() -> int:
+    """Return MemAvailable in MB."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split(":")[1].strip().split()[0]) // 1024
+    except Exception:
+        pass
+    return 0
+
+
+def _evict_page_cache(file_path: str) -> bool:
+    """Evict a file's pages from kernel page cache via posix_fadvise(DONTNEED)."""
+    if not os.path.isfile(file_path):
+        return False
+    try:
+        fd = os.open(file_path, os.O_RDONLY)
+        try:
+            size = os.fstat(fd).st_size
+            os.posix_fadvise(fd, 0, size, os.POSIX_FADV_DONTNEED)
+            return True
+        finally:
+            os.close(fd)
+    except Exception:
+        return False
+
+
+def _pre_task_memory_check(task_id: int, required_mb: int = 2000) -> bool:
+    """Check available memory before a task. Evict unused model page cache if tight.
+
+    Returns True if safe to proceed, False if critically low.
+    """
+    avail = _get_mem_available()
+    if avail < required_mb:
+        print(f"\n[memory] WARNING: only {avail}MB available (need {required_mb}MB) "
+              f"before Task {task_id}", flush=True)
+        print(f"[memory] Evicting unused model page cache...", flush=True)
+        models_dir = "/models"
+        if os.path.isdir(models_dir):
+            for f in sorted(os.listdir(models_dir)):
+                if f.endswith(".gguf"):
+                    path = os.path.join(models_dir, f)
+                    _evict_page_cache(path)
+                    avail = _get_mem_available()
+                    if avail >= required_mb:
+                        print(f"[memory] Freed enough: {avail}MB available", flush=True)
+                        return True
+        avail = _get_mem_available()
+        if avail < required_mb:
+            print(f"[memory] CRITICAL: only {avail}MB after eviction "
+                  f"(need {required_mb}MB)", flush=True)
+            return False
+    return True
 
 
 def _notify_slack(text: str) -> None:
@@ -971,7 +1028,7 @@ def main():
         print(f"{'='*60}")
 
         if not args.api_only:
-            # Verify model is still loaded before each task
+            # Verify model is still loaded + memory is sufficient
             if task["id"] > 1:
                 print(f"\n[Pre-check] Verifying 32B model still loaded...", flush=True)
                 status, body = call_llm(LLAMA_ENDPOINT, [
@@ -983,6 +1040,10 @@ def main():
                     print(f"  Skipping Task {task['id']} — container restart required.", flush=True)
                     continue
                 print(f"  Model OK", flush=True)
+
+            if not _pre_task_memory_check(task["id"], required_mb=1500):
+                print(f"  Skipping Task {task['id']} — insufficient memory.", flush=True)
+                continue
 
             # Load resume data if start_stage > 1
             resume_data = None
