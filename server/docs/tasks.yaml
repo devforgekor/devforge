@@ -1,5 +1,7 @@
 blocked: []
 done:
+- 'Orphan turn cleanup (2026-05-26): 57 orphan claude-code turns linked to worklog #200. 10 empty/duplicate worklogs (#179-#188) removed, 4 agentless worklogs fixed. 2026-05-25 turn_coverage: 182/182 (100%).'
+- 'T01 6656+mlock test completed (2026-05-24): cache-ram=6656 + mlock + feedback fix + token fix + warmup retry. Stage 1: 1227s (53% faster). Pipeline optimizations validated and committed.'
 - 'Recovery Ladder unification (2026-05-24): shared lib/llm/json_parser.py (json.loads → json_repair) replacing 56 lines across 3 pipeline files. debate.py _parse_json 33→3 lines, review_worker.py _parse_llm_json 23→3 lines, code_mod_pipeline.py thin wrapper + feedback uses json_repair. Bidirectional verification: 16/16 passed.'
 - 'Token estimation fix (2026-05-24): //3 → int(len/3.5) across code_mod_pipeline.py (6 locations). Verified against actual 32B prompt_tokens: 4634 actual vs 5365 estimated — error 15%→1.5%.'
 - 'Warmup retry + head+tail truncation (2026-05-24): warmup_32b() 600s timeout + 30s retry for mlock delay. debate.py history_summary 1798+5+1197=3000 head+tail instead of front-only [:3000].'
@@ -8,9 +10,7 @@ done:
 - 'cache-ram=6656 (optimal) applied (2026-05-24): code mode default changed from 7168 to 6656 in dual-server-entrypoint.sh. MLOCK confirmed active via quadlet Environment=MLOCK=1.'
 - 'Telegram bot deployed (2026-05-24): telegram_bot.py created — polls getUpdates every 5s, Qwen3-4B interprets Korean messages, supports 6 JSON actions (reply/ssh/status/mode_switch/log/none) + fast-path commands (/start/help/status/mode/log). Systemd user service telegram-bot.service daemon mode.'
 - '8 code review fixes applied (2026-05-24): code_mod_pipeline.py + client.py — NameError fix, partial result save on exception, DB insert failure warn, retry cache-hit rate skip, _slice_code parse warn, Stage 4 diff_text extraction, resume validation, pre-check fail skip.'
-- 'Rich Slack notifications added (2026-05-24): _system_info() helper, per-stage notifications with memory/rate/slicing/timeout info.'
-- 'cache-ram management infrastructure (2026-05-24): dual-server-entrypoint.sh launch_server() accepts optional cache_ram arg. --cache-ram + --kv-unified + --cache-idle-slots ready.'
-in_progress: 'T01 6656+mlock test running (2026-05-24): cache-ram=6656 + mlock + feedback fix + token fix + warmup retry. Stage 1: 1227s (53% faster). Stage 2: in progress. Monitor active.'
+in_progress: 'Improve update_handover.py context selection logic — session context quality directly impacts downstream LLM handover comprehension. Research: model-radar translation quality lessons applied to language pipeline (Korean→English translation fidelity, script purity, structured output for handover docs).'
 kanban_labels:
   blocked: Blocked
   done: Done
@@ -41,5 +41,4 @@ meta:
   - /opt/projects/server/docs/design.md
   - /opt/projects/server/docs/phases.md
   - /opt/projects/server/_archive/README.md
-todo:
-- 'Improve update_handover.py context selection logic — session context quality directly impacts downstream LLM handover comprehension. Research: model-radar translation quality lessons applied to language pipeline (Korean→English translation fidelity, script purity, structured output for handover docs).'
+todo: []
