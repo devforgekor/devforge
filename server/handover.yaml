@@ -1,6 +1,6 @@
 last_checkpoint:
-  time: '2026-05-25T00:31:14.161840+09:00'
-  summary: no files
+  time: '2026-05-26T11:00:00+09:00'
+  summary: orphan turn cleanup — 57 turns linked to worklog #200, 10 empty worklogs removed
   total_files: 0
   recent_files:
     source: []
@@ -12,6 +12,7 @@ last_checkpoint:
   task: 'T01 6656+mlock test running (2026-05-24): cache-ram=6656 + mlock + feedback fix + token fix + warmup retry. Stage
     1: 122'
 decisions:
+- 'Orphan turn cleanup (2026-05-26): 57 orphan turns linked to worklog #200. 10 empty/duplicate worklogs removed (#179-#188). 4 agentless worklogs fixed. 2026-05-25 turn_coverage now 182/182 (100%), 0 orphans, 0 empty worklogs.'
 - 'Recovery Ladder unification (2026-05-24): shared lib/llm/json_parser.py (json.loads → json_repair) replacing 56 lines of
   regex-based JSON parsing across 3 pipeline files. debate.py 33→3 lines, review_worker.py 23→3 lines, code_mod_pipeline.py
   thin wrapper. Feedback path now uses json_repair too. json_repair handles trailing commas, unclosed braces, single quotes,

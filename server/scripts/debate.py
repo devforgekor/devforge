@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""DevForge Multi-Agent LLM Debate Orchestrator v4.1
+"""DevForge Multi-Agent LLM Debate Orchestrator v4.2
 
-14B-class local-only debate — all models on Pod B (:8081) sequential loading.
+14B+MoE dual-pod debate — Pod A (:8080) Judge + Pod B (:8081) sequential.
+32B excluded from debate (batch/review pipeline only).
 
 Role assignment:
-  D — DeepSeek-Coder-V2-Lite  (local, :8081) — DRAG analysis + Judge + Summary
-  P — Qwen2.5-Coder-14B       (local, :8081) — code-specialized proposal generation
-  R — StarCoder2-15B           (local, :8081) — code-focused critique
-  S — Qwen2.5-Coder-32B        (local, :8081) — final synthesis (dense, IQ4_XS)
+  D — DeepSeek-Coder-V2-Lite  (MoE, 9.7GB) — DRAG + Judge + Summary + Synthesis
+  P — Qwen2.5-Coder-14B       (dense, 8.4GB) — code proposal generation
+  R — Phi-mini-MoE-instruct   (MoE, 4.7GB) — fast refutation
 
 Usage:
   python3 scripts/debate.py --question "File: ...\nTask: ..." [--skip-drag] [--dry-run]
@@ -63,6 +63,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "cache_ram": 0,
         "chat_template_kwargs": {"enable_thinking": False},
     },
+    # 32B — batch pipeline only, excluded from debate
     "qwen-32b": {
         "filename": "Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf",
         "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
@@ -95,6 +96,33 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "system_prompt_support": True,
         "cache_ram": 1024,
         "bench_load_s": 300, "bench_toks": 5.0,
+    },
+    # MoE refuter — small active params, fast inference
+    "phi-mini-moe": {
+        "filename": "Phi-mini-MoE-instruct-Q4_K_M.gguf",
+        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
+        "max_tokens": 1024, "temperature": 0.4,
+        "system_prompt_support": True,
+        "cache_ram": 512,
+        "bench_load_s": 140, "bench_toks": 10.0,
+    },
+    # Pod A (:8080) — always-on Qwen3-4B Judge
+    "qwen3-4b": {
+        "filename": "Qwen3-4B-Q4_K_M.gguf",
+        "port": 8080, "ctx": 4096, "threads": 4, "mlock": 0,
+        "max_tokens": 1024, "temperature": 0.1,
+        "system_prompt_support": True,
+        "cache_ram": 256,
+        "bench_load_s": 30, "bench_toks": 5.0,
+    },
+    # 8B judge — lightweight, proven in normal mode (backup)
+    "selene-mini": {
+        "filename": "selene-1-mini-llama-3.1-8b-q4_k_m.gguf",
+        "port": 8080, "ctx": 4096, "threads": 4, "mlock": 0,
+        "max_tokens": 1024, "temperature": 0.1,
+        "system_prompt_support": True,
+        "cache_ram": 512,
+        "bench_load_s": 90, "bench_toks": 5.0,
     },
 }
 
@@ -466,12 +494,13 @@ def _remote_deactivate(model_id: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class DebateSession:
-    """14B-class local-only debate — all models on Pod B (:8081) sequential loading.
+    """14B+MoE dual-pod debate — Pod A (:8080) Judge + Pod B (:8081) sequential.
+    No 32B — batch pipeline only.
 
     Pod B (:8081, supervisor-managed):
       Round 0: DeepSeek-Coder-V2-Lite (DRAG)
-      Rounds 1-4: Qwen-14B (Proposer) → StarCoder2-15B (Refuter) → DeepSeek-V2-Lite (Judge)
-      Round 5: DeepSeek-V2-Lite (Summary) → Qwen2.5-Coder-32B (Synthesis)
+      Rounds 1-4: Qwen-14B (Proposer) → Phi-mini-MoE (Refuter) → DeepSeek-V2-Lite (Judge)
+      Round 5: DeepSeek-V2-Lite (Summary + Synthesis)
     """
 
     def __init__(
@@ -496,13 +525,13 @@ class DebateSession:
         self.drag_context: str = ""
         self._tunnels_open: set = set()  # Track active SSH tunnels
 
-        # Fixed role assignment — 14B local-only lineup
-        self.drag_model = "deepseek-v2-lite"     # Local — DRAG analysis
-        self.proposer_model = "qwen-14b"          # Local — Proposer
-        self.refuter_model = "starcoder2-15b"     # Local — Refuter
-        self.judge_model = "deepseek-v2-lite"     # Local — Judge
-        self.summary_model = "deepseek-v2-lite"   # Local — History summary
-        self.synthesizer_model = "qwen-32b"       # Local — Final synthesis
+        # Fixed role assignment — v4.3: Pod A (Qwen3-4B Judge) + Pod B (14B+MoE)
+        self.drag_model = "qwen-14b"              # Pod B — DRAG analysis (dense, thorough)
+        self.proposer_model = "deepseek-v2-lite"  # Pod B — Proposer (MoE, fast code gen)
+        self.refuter_model = "phi-mini-moe"       # Pod B — Refuter (MoE, fast)
+        self.judge_model = "selene-mini"           # Pod A :8080 — Judge (always-on, no switch)
+        self.summary_model = "qwen-14b"           # Pod B — History summary (reuse drag model)
+        self.synthesizer_model = "deepseek-v2-lite"  # Pod B — Final synthesis (reuse proposer)
 
     # ── Persistence ────────────────────────────────────────────────────
 
@@ -536,8 +565,23 @@ class DebateSession:
             return True
 
         if host == "local":
+            port = cfg["port"]
+            if port == 8080:
+                # Pod A — always-on persistent model, just verify health
+                return _poll_health(port=8080, timeout=cfg.get("bench_load_s", 30) + 30)
+            # Pod B (:8081) — write switch file for supervisor
             _write_switch_file(model_id)
-            time.sleep(3)
+            # Wait for supervisor to detect the change and kill old server
+            # (supervisor polls every 5s; old server must die before we poll health)
+            time.sleep(5)
+            for _ in range(12):  # wait up to 60s for old server to go down
+                try:
+                    req = urllib.request.Request(f"http://127.0.0.1:8081/health")
+                    with urllib.request.urlopen(req, timeout=3):
+                        pass
+                    time.sleep(5)  # old server still up — supervisor hasn't acted yet
+                except Exception:
+                    break  # old server down — supervisor is switching
             return _poll_health(port=8081, timeout=cfg.get("bench_load_s", 120) + 60)
         else:
             return _remote_activate(model_id, self._tunnels_open)
@@ -706,22 +750,22 @@ class DebateSession:
     # ═══════════════════════════════════════════════════════════════════
 
     def round_0_drag(self) -> bool:
-        """DRAG: DeepSeek analyzes target file and sets debate context.
+        """DRAG: Qwen-14B analyzes target file and sets debate context.
 
-        Pod B (:8081) loads DeepSeek-Coder-V2-Lite for the first time.
+        Pod B (:8081) loads Qwen2.5-Coder-14B for the first time.
         Returns False if skipped.
         """
         if self.skip_drag:
             print("\n─── Round 0 (DRAG) SKIPPED (--skip-drag) ───\n")
             self._save_state({"type": "round_skip", "reason": "--skip-drag flag"})
-            # Load GLM anyway for Judge role later
+            # Load drag model for summary role later
             if not self.switch_model(self.drag_model):
-                print("  [ERROR] GLM failed to load on Pod B (skip_drag path)")
+                print("  [ERROR] Drag model failed to load on Pod B (skip_drag path)")
                 return False
             return False
 
         print(f"\n{'='*60}")
-        print(f"Round 0: DRAG — Context Analysis (DeepSeek-Coder-V2-Lite)")
+        print(f"Round 0: DRAG — Context Analysis (Qwen2.5-Coder-14B)")
         print(f"{'='*60}\n")
         self._save_state({"type": "round_start", "phase": "drag"})
 
@@ -761,9 +805,9 @@ class DebateSession:
     def round_1_to_4_dart(self) -> bool:
         """DART: Rounds 1-4 — Proposer → Refuter → Judge.
 
-        Proposer/Refuter run as remote spot models (SSH-tunneled).
-        Judge runs locally on Pod B (:8081) via supervisor.
-        Remote models are deactivated after each turn.
+        Proposer/Refuter run on Pod B (:8081) sequentially.
+        Judge runs on Pod A (:8080) — always-on, no switch needed.
+
         """
         proposer_output = None
         refuter_output = None
@@ -817,7 +861,7 @@ class DebateSession:
             self._save_state({"type": "llm_response", "phase": "dart_proposer",
                               "model": self.proposer_model, "output": proposer_output})
 
-            # B — Refuter (Pod B: StarCoder2-15B)
+            # B — Refuter (Pod B: Phi-mini-MoE)
             if not self.switch_model(self.refuter_model):
                 print("  [ERROR] switch to refuter model failed")
                 consecutive_failures += 1
@@ -880,9 +924,9 @@ class DebateSession:
         return True
 
     def round_5_synthesis(self) -> Optional[dict]:
-        """Synthesis: GLM history summary → 32B final code (all on Pod B)."""
+        """Synthesis: MoE history summary + final code (all on Pod B, no 32B)."""
         print(f"\n{'='*60}")
-        print(f"Round 5: Synthesis (GLM Summary + 32B Final Code)")
+        print(f"Round 5: Synthesis (DeepSeek Summary + Synthesis)")
         print(f"{'='*60}\n")
         self.current_round = 5
         self._save_state({"type": "round_start", "phase": "synthesis"})
@@ -913,12 +957,12 @@ class DebateSession:
         self._save_state({"type": "history_summary", "model": self.summary_model,
                           "content": history_summary})
 
-        # ── Step 2: 32B final synthesis (Pod B) ──
+        # ── Step 2: MoE final synthesis (Pod B) ──
         synth_cfg = MODELS[self.synthesizer_model]
-        print(f"\n  [synthesis] Loading {synth_cfg['filename']} for 32B final synthesis (Pod B)...")
+        print(f"\n  [synthesis] Loading {synth_cfg['filename']} for MoE final synthesis (Pod B)...")
         print(f"  [synthesis] ctx={synth_cfg['ctx']}, cache={synth_cfg.get('cache_ram',0)}MB")
         if not self.switch_model(self.synthesizer_model):
-            print("  [ERROR] 32B failed to load (health timeout or supervisor error)")
+            print("  [ERROR] Synthesizer failed to load (health timeout or supervisor error)")
             return None
 
         drag_ctx = self.drag_context or json.dumps({"note": "no DRAG context"})
@@ -930,7 +974,7 @@ class DebateSession:
             drag_context=drag_ctx,
         )
         if not final:
-            print(f"  [ERROR] 32B synthesis failed (max_tokens={synth_cfg['max_tokens']}, "
+            print(f"  [ERROR] MoE synthesis failed (max_tokens={synth_cfg['max_tokens']}, "
                   f"bench_toks={synth_cfg.get('bench_toks',0.5)}, "
                   f"timeout={int(synth_cfg['max_tokens']/synth_cfg.get('bench_toks',0.5))+300}s)")
             return None
@@ -960,10 +1004,10 @@ class DebateSession:
 
     def run_session(self) -> Optional[dict]:
         print(f"\n{'█'*60}")
-        print(f"█ DevForge Multi-Agent LLM Debate v4.1 (14B Local)")
+        print(f"█ DevForge Multi-Agent LLM Debate v4.2 (14B+MoE)")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print(f"█ Pod B (:8081): DeepSeek-V2-Lite → Qwen-14B → StarCoder2-15B → 32B")
+        print(f"█ Pod A (:8080): Selene-8B Judge | Pod B (:8081): Qwen-14B → DeepSeek-V2-Lite → Phi-mini-MoE")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
 
@@ -991,7 +1035,7 @@ class DebateSession:
         # Rounds 1-4: DART — Pod B switches P → R → J sequentially
         dart_ok = self.round_1_to_4_dart()
 
-        # Round 5: Synthesis — Pod B loads GLM summary → 32B code
+        # Round 5: Synthesis — Pod B loads DeepSeek summary → DeepSeek final code
         if not dart_ok:
             print("\n[DART aborted — skipping synthesis]")
         final = self.round_5_synthesis() if dart_ok else None

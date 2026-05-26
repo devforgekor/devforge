@@ -194,3 +194,9 @@
 [2026-05-25T18:01:46Z] worklog 186: skipped (no agent)
 [2026-05-25T18:01:46Z] Matched: 0 turns across 9 worklog entries
 [2026-05-25T18:01:47Z] Review: orphan_turns.claude-code: 57; empty_worklog: #179 MoE 모델 후보군 조사 및 Debate 아키텍처 재설계; empty_worklog: #180 Normal 모드 MoE 확정 및 debate 로직 버그 수정 + OOM 발생; empty_worklog: #181 OOM 분석 및 MoE debate 테스트 준비; empty_worklog: #182 OOM 방지 자동화: memory guard + page cache eviction; empty_worklog: #183 batch 모드 제거 및 debate 정리; empty_worklog: #184 debate.py v3.0 메모리 관리 강화 및 MoE 검증 준비; empty_worklog: #185 debate Pod B 단일화 및 순차 실행 전환; empty_worklog: #186 debate bench_load_s 보정 및 PID 버그 수정; agentless_worklog: #185 debate Pod B 단일화 및 순차 실행 전환; agentless_worklog: #186 debate bench_load_s 보정 및 PID 버그 수정; turn_coverage: 125/182
+[2026-05-26T01:53:15Z] Matched: 0 turns across 10 worklog entries
+[2026-05-26T01:53:16Z] Review: orphan_turns: 0; empty_worklog: #179 MoE 모델 후보군 조사 및 Debate 아키텍처 재설계; empty_worklog: #180 Normal 모드 MoE 확정 및 debate 로직 버그 수정 + OOM 발생; empty_worklog: #181 OOM 분석 및 MoE debate 테스트 준비; empty_worklog: #182 OOM 방지 자동화: memory guard + page cache eviction; empty_worklog: #183 batch 모드 제거 및 debate 정리; empty_worklog: #184 debate.py v3.0 메모리 관리 강화 및 MoE 검증 준비; empty_worklog: #185 debate Pod B 단일화 및 순차 실행 전환; empty_worklog: #186 debate bench_load_s 보정 및 PID 버그 수정; turn_coverage: 182/182
+[2026-05-26T01:57:52Z] Matched: 0 turns across 2 worklog entries
+[2026-05-26T01:57:53Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 182/182
+[2026-05-26T01:58:12Z] Matched: 0 turns across 2 worklog entries
+[2026-05-26T01:58:13Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 182/182

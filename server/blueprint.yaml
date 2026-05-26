@@ -2,7 +2,7 @@
 # AI-maintained: updated as phases progress, items complete, or architecture decisions change.
 # Human reads for context; AI writes to keep current.
 # Phase status: planned → active → complete
-# Last updated: 2026-05-25 (auto — phase_tracker)
+# Last updated: 2026-05-26 (auto — phase_tracker)
 
 phases:
 - phase: 1
@@ -25,7 +25,7 @@ phases:
 - phase: '1.5'
   name: LLM Inference Infrastructure
   status: complete
-  completed: '2026-05-25'
+  completed: '2026-05-26'
   items:
   - 2-Container architecture — Podman A (Qwen3-4B:8080) + Podman B (mode-switchable:8081-8082)
   - Mode switch system (normal / batch / code) via current-mode.env
