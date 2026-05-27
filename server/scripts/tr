@@ -1,0 +1,140 @@
+#!/bin/bash
+# tr — DevForge mode switcher
+#   tr debate      → restore resident debate v4.6 (always-on 3-model)
+#   tr cooperative → switch to cooperative mode (Pod B DeepSeek-only, Azure Spot VMs)
+#   tr auto        → run auto mode now, then auto-restore debate mode
+#
+# All mode switches persist across container restarts via current-mode.env.
+
+set -e
+
+MODE_FILE="/opt/ai_data/scripts/current-mode.env"
+SCRIPTS_DIR="/opt/projects/server/scripts"
+
+log() { echo "[tr] $*"; }
+
+_current_mode() {
+    grep -oP 'MODE=\K.*' "$MODE_FILE" 2>/dev/null || echo "unknown"
+}
+
+_restart_pod_b() {
+    log "restarting container-devforge-swap..."
+    systemctl --user restart container-devforge-swap.service
+}
+
+_wait_pod_b() {
+    local timeout="${1:-300}"
+    log "waiting for Pod B :8081 (max ${timeout}s)..."
+    for i in $(seq 1 "$timeout"); do
+        if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/health 2>/dev/null | grep -q 200; then
+            log "Pod B ready (${i}s)"
+            return 0
+        fi
+        sleep 2
+    done
+    log "WARNING: Pod B :8081 not ready after ${timeout}s"
+    return 1
+}
+
+cmd_debate() {
+    local cur=$(_current_mode)
+    if [ "$cur" = "debate" ] || [ "$cur" = "normal" ]; then
+        log "already in debate mode"
+        # Still verify both containers are running
+        systemctl --user start container-devforge-qwen.service 2>/dev/null || true
+        systemctl --user start container-devforge-swap.service 2>/dev/null || true
+        return 0
+    fi
+
+    log "switching to debate mode (cur=$cur)..."
+
+    # Ensure Pod A is running (DeepSeek-V2-Lite :8080)
+    systemctl --user start container-devforge-qwen.service 2>/dev/null || true
+    sleep 3
+
+    # Stop any cooperative-mode spot tunnels
+    python3 -c "
+from debate_data import MODELS
+from cooperative_remote import remote_deactivate
+for m in ['qwen3-30b-a3b', 'nemotron3-nano-30b', 'gemma-4-26b']:
+    if MODELS[m].get('host', 'local') != 'local':
+        remote_deactivate(m)
+" 2>/dev/null || true
+
+    echo "MODE=debate" > "$MODE_FILE"
+    _restart_pod_b
+    _wait_pod_b 300
+
+    log "debate mode restored"
+    log "  Pod A :8080 → DeepSeek-V2-Lite"
+    log "  Pod B :8081 → Qwen3-4B (Refuter)"
+    log "  Pod B :8082 → Phi-mini-MoE (Proposer)"
+}
+
+cmd_cooperative() {
+    local cur=$(_current_mode)
+
+    log "switching to cooperative mode..."
+
+    # Pod A stays: DeepSeek-V2-Lite :8080 (always-on)
+    systemctl --user start container-devforge-qwen.service 2>/dev/null || true
+
+    # Set Pod B to debate mode (DeepSeek-V2-Lite on :8081 for DRAG+Synthesis)
+    # In cooperative mode, Pod B loads debate config (DeepSeek access via :8081)
+    echo "MODE=debate" > "$MODE_FILE"
+    _restart_pod_b
+    _wait_pod_b 300
+
+    log "cooperative mode ready"
+    log "  Pod A :8080 → DeepSeek-V2-Lite (reserved)"
+    log "  Pod B :8081 → DeepSeek-V2-Lite (DRAG + Synthesis)"
+    log "  Azure Spot → Qwen3-30B :8084 + Nemotron :8083"
+    log "  Azure Judge → Gemma-4-26B :8085"
+    log ""
+    log "  Start debate: python3 cli.py discussion drag 'your question'"
+}
+
+cmd_auto() {
+    local cur=$(_current_mode)
+
+    # Run auto mode immediately
+    log "auto mode: executing tasks from auto_tasks.md..."
+
+    if bash "$SCRIPTS_DIR/auto_mode.sh"; then
+        log "auto mode completed successfully"
+    else
+        log "auto mode completed with errors (check auto_logs/)"
+    fi
+
+    # Auto-restore: always switch back to debate mode
+    log "auto-restoring debate mode..."
+    cmd_debate
+}
+
+# ── Main ─────────────────────────────────────────────────────
+
+case "${1:-}" in
+    debate|d)
+        cmd_debate
+        ;;
+    cooperative|coop|c)
+        cmd_cooperative
+        ;;
+    auto|a)
+        cmd_auto
+        ;;
+    status|s|"")
+        cur=$(_current_mode)
+        echo "Current mode: $cur"
+        echo ""
+        echo "Usage: tr <debate|cooperative|auto|status>"
+        echo "  debate       — resident 3-model debate v4.6"
+        echo "  cooperative  — Azure Spot VM cooperative debate"
+        echo "  auto         — run auto mode tasks now, then restore debate"
+        ;;
+    *)
+        echo "Usage: tr <debate|cooperative|auto|status>"
+        echo "Unknown: $1"
+        exit 1
+        ;;
+esac
