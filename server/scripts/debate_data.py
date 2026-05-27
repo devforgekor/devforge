@@ -30,7 +30,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
     },
     "nemotron3-nano-30b": {
         "filename": "Nemotron-3-Nano-30B-A3B-IQ4_XS.gguf",
-        "host": "azurenemo", "port": 8080, "local_port": 8083,
+        "host": "azurenemo", "port": 400, "local_port": 8083,
         "model_name": "nemotron",
         "ctx": 4096, "threads": 2, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.6, "top_p": 0.95,

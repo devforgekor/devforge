@@ -4,9 +4,10 @@
 Creates spot VMs from Compute Gallery golden images, waits for SSH + llama-server
 health, then deletes after debate rounds complete.
 
-Two-subscription model:
+Three-subscription model:
   - Account 1 (a942e898-...): Qwen3-30B-A3B, gallery img-qwen3-30b-a3b-v3 (centralindia)
   - Account 2 (e71711e2-...): Nemotron-3-Nano-30B-A3B, gallery img-nemotron3-nano-30b-spot (indonesiacentral)
+  - Account 3 (d0a7db48-...): Gemma-4-26B-A4B, gallery img-gemma-4-26b-spot (centralindia)
 """
 
 from __future__ import annotations
@@ -26,12 +27,17 @@ from typing import Dict, List, Tuple
 SUBSCRIPTIONS: Dict[str, str] = {
     "account1": "a942e898-e1ee-47f4-b9b3-d9475672ff4e",  # Qwen gallery
     "account2": "e71711e2-5df5-4259-bd0d-4bd58fd1ca67",  # Nemotron VM (SP)
+    "account3": "d0a7db48-d9a5-4e71-8425-90e90f541520",  # Gemma Judge VM
 }
 
 # SSH key pairs (public keys extracted from PEM files)
+# Unified SSH key for all Azure LLM VMs
+_UNIFIED_SSH_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDOonBd5j4ZrVrxg30AjgFBAhi08BKkcH8IEhdUMeKCi6xyJmhWK96LgzlCIQTyjLVheo+qxq0A6mIafwE6zGqDVFuIYsjLPelaSHd3VtCPaLPsaZUp+FMg1qTGc6OXO4koB4b80jpsdb3ZGKHoceRCjMPDUSoXtzBaJwcveF5ENoHV9SwKovILXlqmPdFpGfNVZhpxjbhszdbx5ixABpOUj5uCRKEhWFF0N1+L4Ep22P5iZWIb0R5JQw2xV71xAiE5NCngFea3KD7vK6SJuXwcmOpoYvidS1QSp8k0zdDHfJ4YCNeI7ajQoLLUMYMQf4As4X1JArnoyh14eChnepnJbwUuyEkpF71psE7zAbBysl64G6WyhagDCvmCFsQGujymddOUQhB0T5K9Gdp7vxhN71xTQhtkSOzexFvneavGXFHMDgH9vXGMs9th6DminKza5Gi6uvSS++ZRUt0i6JngdHCzU5sy51jBaMWktM5OjwyHlohGc3k4ronBZIhQN/5cy8QfpSlGz4jfTdmXOr0EEOrCUlh9iBs835YnDiLDVFLViAaHXuF9lKEryLSmq+/P020x40Q7hn8fLCrk7+kjphOohbIRQh5H8gUcrWv1KCRIxIlS8NqQII3w5PgG6o3YcaAZIlVpm6RKSIipXojt00XO2p/PQJRhs5NAPqeo4Q== azure-llm-unified"
+
 SSH_PUBLIC_KEYS: Dict[str, str] = {
-    "qwen": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCnIC3yx7JBiDgv0Wj4eyqSYb+IQfjSVzp5HGmW4BmmXuhOdOEUJMdnXM6qzcqyC9t5zHk+j3wD9jHiBU7WMxemV2EaTeTFV+P5EMj91mp+4AoO58Z5HmtRuxeMGb634Yn96KtChswqmsNmm4hs3KRsGGlWZCLUzfLKTT3Yb0ecRvPXS/odJc9b911CFhIpQcId5B3jwPBTEsVcljfZUSAuvq3dnYdCTx8WowbceX0cajZZFIGgSY29H0OuWfMZ7anURUkwHrkll4fnxFw6lpvos88D06314fIR4dKB4DZfgHeZ6cXb3lyNMOB8t//eMzjEkvpQXDrc7JkJ7xWEmqXGixkaKpd8QiQDsEfoztk1s4/I1aeLUIZdFbpqwTMMfjb8z4VofogOqjQQNXf5Hj7tuK/R5pg9NHLN8R6RYjPnNKEcqu6xgbJKLfhiTED9kZPfulinNXiL6tNtxfejvhHoasftfiW/lkAktEJQcy7ZJQnVDDsqAsqOVPq0v6kesfE=",
-    "nemotron": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCflUpzOeJ1Fgy+nbgk83J8z7zaWpldMDL3elSTYqIC1uX2iQy6V2WVVln9BdvX/fVGOiz4TwqLII6gos4v0BqxDWhgICFz7w6vvbpbyLBKjPvpURC+p3E/v6wK2W+BagEI2DMN5zLmTq8WWPSatOWHs+v5XJUNLyL82JmxQ9yX1wzRBtqR+6dmIQ0TomqChXBY8LrEhTi5x4eLw+xTuRJ8oAB0B9MUE9NuhF55N8ir02HInhH8Ljcozuu6WSY52VcHPl1WN1ewqJE0UEXfex2vKFIxNU0KS9z8rMu3kETQGfr+MH2oP0dhXrp2ecbCqAGx3mc1to6ZTSCrYjMeaA+ereCxU8IhHKYbCY+WNJd3wv/5XvKEtFewnnPEefDQDt+T3pAeLlYysmdBS4IY1PjXuGP3iOA6t1ABOWVEt6CQhI1MajNDdrKbnXnY2ZyMCfInjW0e5xloT8RjB/cr8uPsXzKFKIKH2r4+HMr+aRh5Gzgj2BqQu9ZQ5unEsA7BfZk=",
+    "qwen": _UNIFIED_SSH_KEY,
+    "nemotron": _UNIFIED_SSH_KEY,
+    "gemma": _UNIFIED_SSH_KEY,
 }
 
 
@@ -59,6 +65,12 @@ class SpotVMConfig:
     # Networking — filled after create
     vm_name: str = ""
     public_ip: str = ""
+    # Specialized image (no OS profile) vs Generalized (requires OS profile)
+    is_specialized: bool = True
+    # Security type for TrustedLaunch images (None = default)
+    security_type: str = ""
+    # Shell command to run on VM after SSH is up (e.g., fix systemd config)
+    post_create_cmd: str = ""
 
 
 # ── Pre-defined spot VM configs ─────────────────────────────────────────────
@@ -66,10 +78,10 @@ class SpotVMConfig:
 QWEN_SPOT_CONFIG = SpotVMConfig(
     label="qwen3-30b-a3b",
     subscription_id=SUBSCRIPTIONS["account1"],
-    resource_group="rg-devforge-prod-cin",
+    resource_group="RG-DEVFORGE-PROD-CIN",
     location="centralindia",
     gallery_name="gallery_devforge_prod_cin",
-    gallery_rg="rg-devforge-prod-cin",
+    gallery_rg="RG-DEVFORGE-PROD-CIN",
     image_definition="img-qwen3-30b-a3b-v3",
     vm_size="Standard_FX2ms_v2",
     admin_username="azureuser",
@@ -84,13 +96,37 @@ NEMOTRON_SPOT_CONFIG = SpotVMConfig(
     resource_group="RG-DEVFORGE-LLM-PROD-CIN",
     location="indonesiacentral",
     gallery_name="gallery_devforge_llm_prod_cin",
-    gallery_rg="rg-devforge-llm-prod-cin",
+    gallery_rg="RG-DEVFORGE-LLM-PROD-CIN",
     image_definition="img-nemotron3-nano-30b-spot",
     vm_size="Standard_FX2ms_v2",
     admin_username="azureuser",
     ssh_pubkey=SSH_PUBLIC_KEYS["nemotron"],
     llama_port=400,
     os_disk_size=30,
+)
+
+GEMMA_SPOT_CONFIG = SpotVMConfig(
+    label="gemma-4-26b",
+    subscription_id=SUBSCRIPTIONS["account3"],
+    resource_group="RG-DEVFORGE-LLM-JUDGE-CIN",
+    location="centralindia",
+    gallery_name="gallery_devforge_llm_judge_cin",
+    gallery_rg="RG-DEVFORGE-LLM-JUDGE-CIN",
+    image_definition="img-gemma-4-26b-spot",
+    vm_size="Standard_E2as_v4",
+    admin_username="azureuser",
+    ssh_pubkey=SSH_PUBLIC_KEYS["gemma"],
+    llama_port=8080,
+    os_disk_size=30,
+    is_specialized=False,
+    security_type="TrustedLaunch",
+    # E2as_v4 has 2 vCPUs — fix golden image's 4-thread default
+    post_create_cmd=(
+        "sudo sed -i 's/--threads [0-9]*/--threads 2/; s/--threads-batch [0-9]*/--threads-batch 2/'"
+        " /etc/systemd/system/llama-server.service"
+        " && sudo systemctl daemon-reload"
+        " && sudo systemctl restart llama-server"
+    ),
 )
 
 
@@ -138,9 +174,8 @@ class SpotVMManager:
         print(f"    Location: {self.cfg.location} | Size: {self.cfg.vm_size}")
         print(f"    Image: {self.cfg.image_definition}")
 
-        # Specialized image: --specialized skips OSProfile server-side.
-        # --generate-ssh-keys satisfies CLI client-side validation (not applied to VM).
-        result = self._az_with_sub([
+        # Build args — conditionally add --specialized for specialized images
+        vm_args = [
             "vm", "create",
             "--name", self.cfg.vm_name,
             "--resource-group", self.cfg.resource_group,
@@ -151,11 +186,22 @@ class SpotVMManager:
             "--max-price", "-1",
             "--eviction-policy", "Deallocate",
             "--os-disk-size-gb", str(self.cfg.os_disk_size),
-            "--specialized",
             "--generate-ssh-keys",
             "--public-ip-address-dns-name", self.cfg.vm_name,
-            "--output", "none",  # none avoids CLI 2.79.0 consumed-content bug
-        ], timeout=300)
+        ]
+        if self.cfg.is_specialized:
+            vm_args.insert(-2, "--specialized")  # before --public-ip-address-dns-name
+        if not self.cfg.is_specialized:
+            vm_args.insert(-2, "--admin-username")
+            vm_args.insert(-2, self.cfg.admin_username)
+            vm_args.insert(-2, "--ssh-key-values")
+            vm_args.insert(-2, self.cfg.ssh_pubkey)
+        if self.cfg.security_type:
+            # insert before --public-ip-address-dns-name, value then flag
+            vm_args.insert(-2, self.cfg.security_type)
+            vm_args.insert(-3, "--security-type")
+
+        result = self._az_with_sub(vm_args + ["--output", "none"], timeout=300)
 
         if result.returncode != 0:
             print(f"  [spot:{self.cfg.label}] ERROR creating VM:")
@@ -222,13 +268,9 @@ class SpotVMManager:
     @property
     def _ssh_key_path(self) -> str:
         """SSH private key path for this VM type."""
-        key_map = {
-            "qwen": "~/.ssh/vm-azure-qwen-30B-A3B-key.pem",
-            "nemotron": "~/.ssh/vm-azure-nvidia-nemotron3-nano-30B-key.pem",
-        }
-        for label, path in key_map.items():
-            if label in self.cfg.label:
-                return os.path.expanduser(path)
+        key_path = os.path.expanduser("~/.ssh/azurellm.pem")
+        if os.path.exists(key_path):
+            return key_path
         return os.path.expanduser("~/.ssh/id_rsa")
 
     def _ssh_base_args(self) -> list:
@@ -258,6 +300,21 @@ class SpotVMManager:
         if not ssh_ok:
             print(f"  [spot:{self.cfg.label}] SSH did not come up")
             return False
+
+        # Phase 1.5: Run post-create command (e.g., fix systemd service for vCPU count)
+        if self.cfg.post_create_cmd:
+            print(f"  [spot:{self.cfg.label}] Running post-create setup...")
+            try:
+                result = subprocess.run(
+                    self._ssh_base_args() + [
+                        f"{self.cfg.admin_username}@{ip}",
+                        self.cfg.post_create_cmd],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if result.returncode != 0:
+                    print(f"  [spot:{self.cfg.label}] Post-create WARNING: {result.stderr[:200]}")
+            except Exception as e:
+                print(f"  [spot:{self.cfg.label}] Post-create ERROR: {e}")
 
         # Phase 2: Wait for llama-server health
         start = time.monotonic()
@@ -499,18 +556,18 @@ def main():
 
     # create
     p_create = sub.add_parser("create", help="Create a spot VM")
-    p_create.add_argument("--label", required=True, choices=["qwen", "nemotron"])
+    p_create.add_argument("--label", required=True, choices=["qwen", "nemotron", "gemma"])
     p_create.add_argument("--session-id", required=True)
 
     # wait
     p_wait = sub.add_parser("wait", help="Wait for VM health")
-    p_wait.add_argument("--label", required=True, choices=["qwen", "nemotron"])
+    p_wait.add_argument("--label", required=True, choices=["qwen", "nemotron", "gemma"])
     p_wait.add_argument("--ip", required=True)
     p_wait.add_argument("--timeout", type=int, default=300)
 
     # delete
     p_del = sub.add_parser("delete", help="Delete spot VM and resources")
-    p_del.add_argument("--label", required=True, choices=["qwen", "nemotron"])
+    p_del.add_argument("--label", required=True, choices=["qwen", "nemotron", "gemma"])
     p_del.add_argument("--vm-name", required=True)
     p_del.add_argument("--pip-name", required=True)
     p_del.add_argument("--nic-name", required=True)
@@ -518,7 +575,12 @@ def main():
     args = ap.parse_args()
 
     if args.command == "create":
-        cfg = QWEN_SPOT_CONFIG if args.label == "qwen" else NEMOTRON_SPOT_CONFIG
+        if args.label == "qwen":
+            cfg = QWEN_SPOT_CONFIG
+        elif args.label == "nemotron":
+            cfg = NEMOTRON_SPOT_CONFIG
+        else:
+            cfg = GEMMA_SPOT_CONFIG
         mgr = SpotVMManager(cfg, args.session_id)
         if mgr.create():
             print(json.dumps({
@@ -532,7 +594,12 @@ def main():
             sys.exit(1)
 
     elif args.command == "wait":
-        cfg = QWEN_SPOT_CONFIG if args.label == "qwen" else NEMOTRON_SPOT_CONFIG
+        if args.label == "qwen":
+            cfg = QWEN_SPOT_CONFIG
+        elif args.label == "nemotron":
+            cfg = NEMOTRON_SPOT_CONFIG
+        else:
+            cfg = GEMMA_SPOT_CONFIG
         mgr = SpotVMManager(cfg, "cli-wait")
         mgr.cfg.public_ip = args.ip
         if not mgr.wait_ready(timeout=args.timeout):
@@ -540,7 +607,12 @@ def main():
             sys.exit(1)
 
     elif args.command == "delete":
-        cfg = QWEN_SPOT_CONFIG if args.label == "qwen" else NEMOTRON_SPOT_CONFIG
+        if args.label == "qwen":
+            cfg = QWEN_SPOT_CONFIG
+        elif args.label == "nemotron":
+            cfg = NEMOTRON_SPOT_CONFIG
+        else:
+            cfg = GEMMA_SPOT_CONFIG
         mgr = SpotVMManager(cfg, "cli-delete")
         mgr.cfg.vm_name = args.vm_name
         mgr._pip_name = args.pip_name

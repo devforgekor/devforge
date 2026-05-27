@@ -42,6 +42,8 @@ def main():
     ap.add_argument("--mode", default="debate",
                     choices=["debate", "cooperative"],
                     help="debate (local only) or cooperative (spot VMs + local)")
+    ap.add_argument("--reuse-vms", action="store_true",
+                    help="Reuse existing spot VMs instead of provisioning new ones")
     args = ap.parse_args()
 
     if args.mode == "cooperative":
@@ -51,6 +53,7 @@ def main():
             method=args.method,
             skip_drag=args.skip_drag,
             dry_run=args.dry_run,
+            reuse_vms=args.reuse_vms,
         )
     else:
         from local_debate import LocalDebate

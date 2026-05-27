@@ -22,9 +22,10 @@ class CooperativeDebate(LocalDebate):
     """Multi-agent debate — spot VM Proposer+Refuter, local Judge+Synthesis."""
 
     def __init__(self, question: str, method: str = "drag", skip_drag: bool = False,
-                 dry_run: bool = False):
+                 dry_run: bool = False, reuse_vms: bool = False):
         super().__init__(question, method, skip_drag, dry_run)
         self.mode = "cooperative"
+        self.reuse_vms = reuse_vms
 
         # Cooperative model assignments
         # Pod B (:8081): DeepSeek-V2-Lite only — DRAG then idle during DART, reused for Synthesis
@@ -132,20 +133,72 @@ class CooperativeDebate(LocalDebate):
         elif not self.dry_run:
             print("  [spot] No spot VMs to terminate")
 
+    def _reuse_existing_vms(self) -> bool:
+        """Scan Azure for already-running spot VMs matching config labels."""
+        print(f"\n{'─'*40}")
+        print(f"  [spot] Reusing existing spot VMs...")
+        print(f"{'─'*40}")
+
+        if self.dry_run:
+            print("  [spot] DRY RUN — would scan for existing VMs")
+            return True
+
+        try:
+            orch = SpotOrchestrator(self.session_id)
+            orch.add("qwen", QWEN_SPOT_CONFIG)
+            orch.add("nemotron", NEMOTRON_SPOT_CONFIG)
+
+            for label, mgr in orch.managers.items():
+                # List VMs in resource group matching the label prefix
+                result = mgr._az_with_sub([
+                    "vm", "list",
+                    "--resource-group", mgr.cfg.resource_group,
+                    "--query", f"[?starts_with(name, 'spot-{mgr.cfg.label[:6]}')].{{Name:name}}",
+                    "-o", "tsv",
+                ], timeout=30)
+                if result.returncode != 0 or not result.stdout.strip():
+                    print(f"  [spot] ERROR: No existing VM found for {label}")
+                    return False
+                vm_name = result.stdout.strip().splitlines()[0]
+                mgr.cfg.vm_name = vm_name
+                mgr._nic_name = f"{vm_name}VMNic"
+                mgr._pip_name = f"{vm_name}PublicIP"
+                ip = mgr._get_public_ip()
+                if not ip:
+                    print(f"  [spot] ERROR: Cannot resolve IP for {label} ({vm_name})")
+                    return False
+                mgr.cfg.public_ip = ip
+                print(f"  [spot] Found {label}: {vm_name} → {ip}")
+            self._spot_orch = orch
+            return True
+        except Exception as e:
+            print(f"  [spot] ERROR: {e}")
+            return False
+
     # ── Hook overrides ──────────────────────────────────────────────────
 
     def _pre_dart_hook(self) -> bool:
-        """Provision spot VMs and open tunnels before DART rounds."""
-        if not self._provision_spot_vms():
-            self._terminate_spot_vms()
-            return False
+        """Provision (or reuse) spot VMs and open tunnels before DART rounds."""
+        if self.reuse_vms:
+            if not self._reuse_existing_vms():
+                return False
+        else:
+            if not self._provision_spot_vms():
+                self._terminate_spot_vms()
+                return False
         if not self._open_spot_tunnels():
-            self._terminate_spot_vms()
+            if not self.reuse_vms:
+                self._terminate_spot_vms()
             return False
         return True
 
     def _post_dart_hook(self) -> None:
-        """Terminate spot VMs after DART rounds."""
+        """Terminate spot VMs after DART rounds (skip if reusing)."""
+        if self.reuse_vms:
+            for port in self._spot_tunnel_ports:
+                close_spot_tunnel(port)
+            self._spot_tunnel_ports.clear()
+            return
         self._terminate_spot_vms()
 
     def _post_summary_hook(self) -> None:
@@ -166,6 +219,6 @@ class CooperativeDebate(LocalDebate):
         print(f"█ DevForge Multi-Agent LLM Debate v4.6 ({self.mode})")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print(f"█ Spot VMs → P:Qwen3-30B(:8084) R:Nemotron(:8083) | J+S:Gemma4-26B(:8085) | DRAG+Synth:DeepSeek-V2-Lite(:8081)")
+        print(f"█ Spot VMs → P:Qwen3-30B(:8084) R:Nemotron(:8083) | J+S:Gemma4-26B(:8085) | DRAG+Synth:DeepSeek-V2-Lite(:8080)")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
