@@ -68,7 +68,10 @@ debate_restored=true
 queue_count=$(cd "$SCRIPTS_DIR" && python3 -c "
 from lib.db import psql
 r = psql(\"SELECT COUNT(*) FROM activity_log WHERE queue_status='unprocessed' AND type IN ('review','debate_result')\")
-print(r.strip() if r else '0')
+# Handle empty/whitespace-only results: strip and default to '0'
+import sys
+val = r.strip() if r else '0'
+print(val if val else '0')
 " 2>/dev/null)
 echo "[$(LOG_TS)] Review queue: $queue_count items"
 

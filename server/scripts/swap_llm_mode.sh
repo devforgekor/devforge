@@ -1,6 +1,6 @@
 #!/bin/bash
 # DevForge — Podman B mode switcher
-# Usage: swap_llm_mode.sh normal|code
+# Usage: swap_llm_mode.sh debate|code (normal is deprecated alias for debate)
 
 set -e
 
@@ -13,10 +13,11 @@ else
 fi
 
 MODE="${1:-}"
-if [[ ! "$MODE" =~ ^(normal|code)$ ]]; then
-    echo "Usage: $0 normal|code"
-    echo "  normal  — Phi-mini-MoE 7.6B/2.4B (8081) + Selene Mini 8B (8082)"
+if [[ ! "$MODE" =~ ^(normal|debate|code)$ ]]; then
+    echo "Usage: $0 debate|code"
+    echo "  debate  — Qwen3-4B (8081) + Phi-mini-MoE (8082) resident debate v4.6"
     echo "  code    — Qwen-32B IQ4_XS (8081, 16.5GB, swap timers 중지)"
+    echo "  (normal is deprecated alias for debate)"
     exit 1
 fi
 
@@ -111,9 +112,9 @@ for i in $(seq 1 $((MAX_WAIT/2))); do
     if [[ "$http_code" == "200" ]]; then
         echo "[swap_mode] 8081 healthy — $MODE mode ready"
 
-        # Restart Podman A (Qwen3-4B) when leaving code mode
+        # Restart Podman A (DeepSeek-V2-Lite) when leaving code mode
         if [[ "$CURRENT" == "code" ]]; then
-            echo "[swap_mode] Restarting Podman A (Qwen3-4B)..."
+            echo "[swap_mode] Restarting Podman A (DeepSeek-V2-Lite :8080)..."
             systemctl --user start container-devforge-qwen.service 2>/dev/null || true
         fi
 

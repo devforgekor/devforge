@@ -5,7 +5,7 @@ Stage 1 (14b): Qwen-14B reviews each queued item — adds findings, recommendati
 Stage 2 (32b): Qwen-32B final verification — approve/reject/escalate decision.
 
 Each item processed independently — context reset between items.
-Updates queue_status: unprocessed → reviewed_14b → verified_32b → done.
+Updates queue_status: unprocessed → reviewed_14b → done.
 
 Usage:
   python3 review_consumer.py --stage 14b       # Qwen-14B review pass
@@ -55,7 +55,10 @@ def fetch_queue(stage: str) -> List[Dict]:
     else:
         raise ValueError(f"Unknown stage: {stage}")
 
-    sql = f"""SELECT id, type, source, title, summary, body, model, turn_ids, tags
+    sql = f"""SELECT id, type, source, title,
+                     regexp_replace(summary, E'[\\n\\r\\\\|]+', ' ', 'g') AS summary,
+                     regexp_replace(body::text, E'[\\n\\r\\\\|]+', ' ', 'g') AS body,
+                     model, turn_ids, tags
               FROM activity_log
               WHERE {where}
                 AND type IN ('review', 'debate_result')
@@ -139,7 +142,7 @@ def update_queue_status(item_id: str, stage: str, result: Dict) -> bool:
     """Update activity_log with review result and advance queue_status."""
     body_merged = {}
     # Fetch existing body
-    existing = psql(f"SELECT body FROM activity_log WHERE id = {item_id}")
+    existing = psql(f"SELECT body FROM activity_log WHERE id = {esc_sql(str(item_id))}")
     if existing:
         try:
             body_merged = json.loads(existing) if existing else {}

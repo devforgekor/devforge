@@ -1,10 +1,10 @@
-"""LocalDebate — multi-agent debate using local Pod A + Pod B (resident mode).
+"""LocalDebate — multi-agent debate using local Pod A + Pod B (resident v4.6).
 
-Pod A (:8080): Qwen3-4B — Judge + Summary (always-on)
-Pod B (:8081): DeepSeek-V2-Lite — DRAG + Proposer + Synthesis (always-on)
-Pod B (:8082): Phi-mini-MoE — Refuter (always-on)
+Pod A (:8080): DeepSeek-V2-Lite — Judge + DRAG + Summary + Synthesis (always-on)
+Pod B (:8081): Qwen3-4B — Refuter (always-on)
+Pod B (:8082): Phi-mini-MoE — Proposer (always-on)
 
-All 3 models resident, no switch_file protocol. ~15.3GB RSS fits 22GB RAM.
+All 3 models resident, no switch_file protocol. ~15.6GB RSS fits 22GB RAM.
 
 SLOC exception (454 lines, limit 400):
   round_1_to_4_dart (~110 lines) cannot be split further without breaking cohesion.
@@ -432,12 +432,12 @@ class LocalDebate:
             "mode": self.mode,
         })
 
-        # Ensure Pod A is running (Qwen3-4B Judge/Summary)
+        # Ensure Pod A is running (DeepSeek-V2-Lite Judge/DRAG/Summary/Synthesis)
         if not self.dry_run:
             subprocess.run(
                 ["systemctl", "--user", "start", "container-devforge-qwen.service"],
                 capture_output=True)
-            print("  [pod] Pod A start requested (Qwen3-4B Judge)")
+            print("  [pod] Pod A start requested (DeepSeek-V2-Lite :8080)")
             # Brief wait for container init, then health check
             time.sleep(5)
             if not _poll_health(port=8080, timeout=30):

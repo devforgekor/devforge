@@ -3,7 +3,7 @@ overview:
   purpose: OCI ARM development server — LLM inference + FastAPI application hosting
   os: Oracle Linux Server 9.7 (aarch64)
   cpu: ARM Neoverse-N1, 4-core
-  memory: 22Gi + 4G zram (117M) + 4G swap (swappiness=10)
+  memory: 22Gi + 4G zram (3.4G) + 4G swap (swappiness=10)
 storage:
   boot_disk:
     device: /dev/sda (50GB)
@@ -45,14 +45,14 @@ storage:
 containers:
   runtime: Podman (rootless, user opc)
   image: ghcr.io/ggml-org/llama.cpp:server
-  model: Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf
+  model: Qwen3-4B-Q4_K_M.gguf
   flags: (dynamic entrypoint — query /v1/models for live config)
   target_flags: --threads 4 --threads-batch 4 --ctx-size 16384 --flash-attn on --cache-reuse 256 --host 0.0.0.0
 services:
 - name: devforge-api
   status: failed
 - name: devforge-qwen
-  status: failed
+  status: active
 - name: devforge-swap
   status: active
 - name: postgres

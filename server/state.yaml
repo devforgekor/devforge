@@ -56,25 +56,31 @@ structural:
     mount: /
   containers:
   - name: pod:data
-    status: Up 11 hours
+    status: Up 15 hours
     ports: ''
     image: ''
     model: null
     flags: ''
   - name: postgres
-    status: Up 11 hours (healthy)
+    status: Up 15 hours (healthy)
     ports: 5432/tcp
     image: localhost/devforge-postgres:2026.05.15
     model: null
     flags: ''
   - name: devforge-swap
-    status: Up 3 hours
+    status: Up About an hour
     ports: 127.0.0.1:8081-8082->8081-8082/tcp
     image: ghcr.io/ggml-org/llama.cpp:server
     model: null
     flags: ''
+  - name: devforge-qwen
+    status: Up About an hour
+    ports: 127.0.0.1:8080->8080/tcp
+    image: ghcr.io/ggml-org/llama.cpp:server
+    model: null
+    flags: ''
   - name: caddy
-    status: Up 11 hours (healthy)
+    status: Up 15 hours (healthy)
     ports: 80/tcp, 443/tcp, 2019/tcp, 443/udp
     image: docker.io/library/caddy:2.11.2
     model: null
@@ -83,7 +89,7 @@ structural:
   - name: devforge-api
     status: failed
   - name: devforge-qwen
-    status: failed
+    status: active
   - name: devforge-swap
     status: active
   - name: postgres
@@ -103,33 +109,38 @@ structural:
     - '19999'
     - '2019'
     - '22'
+    - '39793'
     - '4317'
     - '443'
     - '80'
+    - '8080'
     - '8081'
     - '8082'
+    - '8083'
+    - '8084'
+    - '8085'
     - '8125'
 metrics:
-  generated: '2026-05-26T17:51:23.545803+00:00'
+  generated: '2026-05-27T15:34:29.012354+00:00'
   system:
     cpu_load:
-    - 0.24
-    - 0.15
-    - 0.2
+    - 0.28
+    - 0.37
+    - 0.45
     cpu_cores: 4
     memory:
-      used: 10Gi
+      used: 17Gi
       total: 22Gi
-      percent: 46
-    zram: 598.3M/4G
+      percent: 79
+    zram: 3.8G/4G
     zram_cycles: 0
     zram_total_cycles: 0
   storage_use:
   - device: ocivolume-root
     size: 20G
-    used: 14G
-    avail: 6.4G
-    use_pct: 68
+    used: 15G
+    avail: 5.6G
+    use_pct: 72
     mount: /
   - device: datavg-lv_workspace
     size: 6.0G
@@ -143,6 +154,12 @@ metrics:
     avail: 30G
     use_pct: 2
     mount: /mnt/lv_db
+  - device: datavg-lv_ai_data
+    size: 100G
+    used: 76G
+    avail: 25G
+    use_pct: 76
+    mount: /opt/ai_data
   - device: ocivolume-lv_meta
     size: 4.5G
     used: 1.3G
@@ -157,29 +174,25 @@ metrics:
     mount: /opt/projects
   - device: ocivolume-lv_logs
     size: 10G
-    used: 1.7G
+    used: 1.6G
     avail: 8.4G
-    use_pct: 17
+    use_pct: 16
     mount: /var/log
   - device: ocivolume-lv_tmp
     size: 10G
-    used: 3.3G
-    avail: 6.7G
-    use_pct: 34
+    used: 3.6G
+    avail: 6.4G
+    use_pct: 36
     mount: /var/tmp
-  - device: datavg-lv_ai_data
-    size: 100G
-    used: 76G
-    avail: 25G
-    use_pct: 76
-    mount: /opt/ai_data
   containers_uptime:
   - name: data-pod-infra
-    uptime: Up 11 hours
+    uptime: Up 15 hours
   - name: postgres
-    uptime: Up 11 hours (healthy)
+    uptime: Up 15 hours (healthy)
   - name: devforge-swap
-    uptime: Up 3 hours
+    uptime: Up About an hour
+  - name: devforge-qwen
+    uptime: Up About an hour
   tokens:
     session:
       turns: 1
@@ -195,19 +208,19 @@ references:
     category: inference
     url: https://github.com/ggml-org/llama.cpp
     external:
-      latest: b9334
-      published: '2026-05-26T09:00:23Z'
+      latest: b9360
+      published: '2026-05-27T13:13:43Z'
       prerelease: false
       breaking_mentioned: false
     internal:
-      usage_count: 19
+      usage_count: 18
       files:
       - CLAUDE.yaml
       - blueprint.yaml
       - changelog.yaml
       - code_mod_test_tasks.yaml
       - docs/debate-review-report-v1.1.yaml
-    checked_at: '2026-05-26T17:51:25.653007+00:00'
+    checked_at: '2026-05-27T15:34:31.297305+00:00'
   DSPy:
     category: prompt-optimization
     url: https://github.com/stanfordnlp/dspy
@@ -221,7 +234,7 @@ references:
       files:
       - scripts/lib/tracking/dependency_tracker.py
       - state.yaml
-    checked_at: '2026-05-26T17:51:25.653020+00:00'
+    checked_at: '2026-05-27T15:34:31.297313+00:00'
   LLMLingua:
     category: prompt-optimization
     url: https://github.com/microsoft/LLMLingua
@@ -235,7 +248,7 @@ references:
       files:
       - scripts/lib/tracking/dependency_tracker.py
       - state.yaml
-    checked_at: '2026-05-26T17:51:25.653032+00:00'
+    checked_at: '2026-05-27T15:34:31.297322+00:00'
   tenacity:
     category: dependency
     url: https://github.com/jd/tenacity
@@ -249,7 +262,7 @@ references:
       files:
       - scripts/lib/tracking/dependency_tracker.py
       - scripts/review_worker.py
-    checked_at: '2026-05-26T17:51:25.653037+00:00'
+    checked_at: '2026-05-27T15:34:31.297326+00:00'
   Podman:
     category: infrastructure
     url: https://github.com/containers/podman
@@ -266,9 +279,9 @@ references:
       - docs/debate-system-spec.yaml
       - handover.yaml
       - scripts/lib/search/manager.py
-    checked_at: '2026-05-26T17:51:25.653040+00:00'
+    checked_at: '2026-05-27T15:34:31.297333+00:00'
 phases:
-  checked_at: '2026-05-26T17:51:28.276192+00:00'
+  checked_at: '2026-05-27T15:34:34.060842+00:00'
   phases:
     'Phase 1: Basic Infrastructure + MCP Server (Complete, 2026-05-14)':
       status: partial
