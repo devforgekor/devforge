@@ -399,6 +399,82 @@ def _find_pipeline_output(pipeline: str, session_id: str) -> Optional[str]:
     return None
 
 
+AUTO_TASKS_FILE = "/opt/projects/server/data/auto_tasks.md"
+AUTO_HEADER = "# Auto Tasks"
+AUTO_COMMENT = "<!--"
+AUTO_COMMENT_END = "-->"
+
+
+def _read_auto_tasks():
+    """Return list of (title, body) tuples from auto_tasks.md, excluding comments."""
+    import re
+    try:
+        content = Path(AUTO_TASKS_FILE).read_text()
+    except FileNotFoundError:
+        return []
+    # Remove HTML comment blocks
+    content = re.sub(r"<!--.*?-->", "", content, flags=re.DOTALL)
+    tasks = []
+    for match in re.finditer(r"^## (.+)$", content, re.MULTILINE):
+        title = match.group(1).strip()
+        if title.startswith("Example:"):
+            continue
+        start = match.end()
+        next_match = re.search(r"^## ", content[start:], re.MULTILINE)
+        end = start + next_match.start() if next_match else len(content)
+        body = content[start:end].strip()
+        tasks.append((title, body))
+    return tasks
+
+
+def _write_auto_tasks(tasks):
+    """Write tasks list back to auto_tasks.md with header."""
+    lines = [
+        AUTO_HEADER,
+        "",
+        AUTO_COMMENT,
+        " Tasks execute via nightly_batch.sh Phase 4 (00:00 KST / 15:00 UTC).",
+        " CLI: python3 cli.py auto add \"title\" \"description\"",
+        " Each ## section = a separate Claude Code invocation.",
+        " Full permissions granted. Results logged to auto_logs/.",
+        AUTO_COMMENT_END,
+        "",
+    ]
+    for title, body in tasks:
+        lines.append(f"## {title}")
+        lines.append(body)
+        lines.append("")
+    Path(AUTO_TASKS_FILE).parent.mkdir(parents=True, exist_ok=True)
+    Path(AUTO_TASKS_FILE).write_text("\n".join(lines))
+
+
+def cmd_auto_add(args):
+    """Add a task to auto mode."""
+    tasks = _read_auto_tasks()
+    tasks.append((args.title, args.description))
+    _write_auto_tasks(tasks)
+    print(f"+ auto task: {args.title}")
+
+
+def cmd_auto_list(args):
+    """List current auto mode tasks."""
+    tasks = _read_auto_tasks()
+    if not tasks:
+        print("(empty — no tasks scheduled)")
+        return
+    for i, (title, body) in enumerate(tasks, 1):
+        body_preview = body[:100].replace("\n", " ") + ("..." if len(body) > 100 else "")
+        print(f"[{i}] {title}")
+        print(f"    {body_preview}")
+        print()
+
+
+def cmd_auto_clear(args):
+    """Clear all auto mode tasks."""
+    _write_auto_tasks([])
+    print("Auto tasks cleared")
+
+
 def cmd_dashboard(args):
     """Show review_facts model performance dashboard."""
     sql_model = """
@@ -542,6 +618,17 @@ async def main():
     p_upload.add_argument("--title", "-t",
                           help="Bundle title (for review-bundle mode)")
 
+    p_auto = sub.add_parser("auto", help="Auto mode task management")
+    auto_sub = p_auto.add_subparsers(dest="auto_command")
+
+    auto_add = auto_sub.add_parser("add", help="Add a task to auto mode")
+    auto_add.add_argument("title", help="Task title (## heading)")
+    auto_add.add_argument("description", help="Task description / prompt for Claude Code")
+
+    auto_list = auto_sub.add_parser("list", help="List scheduled auto tasks")
+
+    auto_clear = auto_sub.add_parser("clear", help="Clear all auto tasks")
+
     p_act = sub.add_parser("activity", help="Activity log management")
     act_sub = p_act.add_subparsers(dest="act_command")
 
@@ -589,6 +676,15 @@ async def main():
             p_disc.print_help()
     elif args.command == "upload":
         cmd_upload(args)
+    elif args.command == "auto":
+        if args.auto_command == "add":
+            cmd_auto_add(args)
+        elif args.auto_command == "list":
+            cmd_auto_list(args)
+        elif args.auto_command == "clear":
+            cmd_auto_clear(args)
+        else:
+            p_auto.print_help()
     elif args.command == "dashboard":
         cmd_dashboard(args)
     else:
