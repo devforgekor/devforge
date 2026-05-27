@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-05-26T21:06:04.527289+09:00'
+  time: '2026-05-27T07:10:49.510550+09:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -11,6 +11,40 @@ last_checkpoint:
   git: {}
   task: null
 decisions:
+- 'Extractor + review pipeline tiered architecture (2026-05-27): 5-tier quality strategy.
+  1. Python parsers (deterministic, no LLM) — user_turn/thinking/text extraction.
+  2. DeepSeek-V2-Lite (:8080) — fact extraction with exact-copy-paste evidence rule.
+  3. Python verify_evidence() — deterministic substring check, zero hallucination path.
+  4. Local Debate (3-model) — Aider code changes verified via Proposer→Refuter→Judge.
+  5. Night batch: Qwen-14B review → Qwen-32B final verify (sequential, one pass each).
+  review_worker.py: 695→425L, 2-model parallel→DeepSeek single, LLM arbitrator→Python verify.
+  dual-server-entrypoint.sh v3.2: added review-14b and review-32b modes.
+  lib/queue_writer.py (59L): shared enqueue_review() for review_worker + local_debate → activity_log.
+  local_debate.py: 473→502L, added _enqueue_for_review() to feed debate results into review queue.
+  activity_log serves as unified queue (queue_status=unprocessed). No new table needed.'
+- 'Cooperative debate model reassignment (2026-05-27): All debate roles moved to Azure.
+  Pod B (:8081) runs DeepSeek-V2-Lite only (DRAG + Synthesis, no switch needed).
+  Azure spot VMs: Proposer(Qwen3-30B :8084) + Refuter(Nemotron-3-Nano :8083), terminated on consensus.
+  Azure Judge VM: Gemma-4-26B (:8085) handles Judge + Summary. Tunnel closed via _post_summary_hook()
+  after summary, before Synthesis. local_debate.py: _post_summary_hook() added between Summary and
+  Synthesis steps. cooperative_debate.py: summary_model gemma-4-26b, synthesizer_model deepseek-v2-lite.
+  Mode changed code→discussion in current-mode.env (32B not needed).'
+- 'debate.py refactored into 6 modules (2026-05-27): debate_data.py(271L) → debate_llm.py(357L)
+  → local_debate.py(454L)/cooperative_remote.py(109L) → cooperative_debate.py(171L)
+  → debate.py(71L CLI). Unidirectional dependency chain. SLOC rule exception: local_debate.py at
+  454 lines (54 over 400 target) — round_1_to_4_dart (~110L) DART cycle with 4 shared state vars
+  cannot be split without breaking cohesion. Exception documented in file header. Two bugs
+  found+fixed: switch_local_model using Path.exists() on str SWITCH_FILE (fixed to os.path.exists),
+  _pre_dart_hook missing _terminate_spot_vms() on provision failure (VM leak fixed).
+  Bidirectional verification: MODELS 10/10 identical, REMOTE_HOSTS 2/2 identical,
+  PROMPTS drag_analysis→drag_lite (intentional L1 Lite DRAG), call_llm timeout +600 matches original.
+  Both modes --dry-run pass. Live test pending (Pod B stopped by user during test).'
+- 'E2E cooperative debate smoke test PASSED (2026-05-26): Session 20260526T154843Z completed successfully. DRAG(DeepSeek-V2-Lite
+  101.6s) → Spot VMs provisioned (Qwen3-30B centralindia, Nemotron3-Nano indonesiacentral) → Round 1 Nemotron win 85% → Round
+  2 Nemotron win 95% → Early exit (≥90%) → VMs terminated → Synthesis(DeepSeek-Summary + Qwen14B 636.1s). Full pipeline verified:
+  VM creation, SSH health check (fix confirmed), SSH tunnels, multi-round debate, Judge consensus scoring, early exit threshold,
+  VM cleanup. Minor issues found: --force-deletion value fixed (commit f05ae27), final report diff malformed (JSON serialization
+  bug in synthesis).'
 - 'Spot VM orchestration implemented (2026-05-26): scripts/azure_spot.py (SpotVMManager + SpotOrchestrator) + debate.py v4.5
   (--mode cooperative --spot). Flow: DRAG(local) → provision spot VMs from golden images → SSH tunnels with dynamic IPs →
   Proposer+Refuter ×4 rounds → terminate VMs → Judge+Summary+Synthesis(local). Golden images: Account 1 img-qwen3-30b-a3b-spot
@@ -30,11 +64,16 @@ decisions:
   RSS) = 19GB active + page cache > 24GB. Only works WITH page cache eviction (posix_fadvise DONTNEED on GLM before Pod B
   load). Without eviction, swap fills and system thrashes. Consider increasing zram to 8GB for more headroom.'
 known_issues:
-- 'Spot VM quota exceeded (2026-05-26): Azure for Students LowPriorityCores limit 3 in centralindia, current usage 2 (existing
-  Qwen VM). Need 4 to run both persistent + spot. Resolution: delete existing VMs before creating spot VMs, or increase quota.
-  Account 2 indonesiacentral quota also likely limited (2 cores).'
-- 'SP lacks gallery read permission (2026-05-26): Service principal 24c1a30b-... in Account 2 has VM Contributor only. Cannot
-  read gallery images for spot VM creation. Need to add Reader role to SP at gallery/resource group scope.'
+- '--force-deletion value "none" fixed (2026-05-26): Previously az vm delete --force-deletion none caused warning. Fixed to
+  "false" in commit f05ae27.'
+- 'Final report diff malformed (2026-05-26): synthesis JSON output is not properly serialized to markdown diff format. final_report.md
+  shows truncated/broken diff. Root cause likely in debate.py synthesis post-processing — JSON keys appearing as diff lines.'
+- 'switch_model() 60s wait FIXED (2026-05-26): commit 57be469. Same-model-no-op now reads switch file and skips kill/wait loop. Saves ~60s per round when Judge is already loaded.'
+- 'Debate overhead reduced (2026-05-26): commit 57be469. Judge writes summary (saves 164s model switch). VM termination moved to early exit path (immediate cleanup on consensus). Total ~400s saved per session.'
+- 'Spot VM quota exceeded (2026-05-26): Azure for Students LowPriorityCores limit 3 in centralindia. Resolution: delete existing
+  VMs before creating spot VMs. Account 2 indonesiacentral quota also limited (2 cores).'
+- 'SP gallery permission resolved (2026-05-26): Account 2 SP now has gallery read access — spot VM creation from golden images
+  works.'
 - 'container-devforge-swap NOT restarted after memory guard update (2026-05-25): Old supervisor binary running without eviction.
   daemon-reload done, quadlet updated, but container still running old code. Must systemctl --user restart container-devforge-swap
   to activate.'
