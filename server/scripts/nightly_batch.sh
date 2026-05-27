@@ -1,5 +1,5 @@
 #!/bin/bash
-# nightly_batch.sh — DevForge nightly pipeline (03:00 UTC)
+# nightly_batch.sh — DevForge nightly pipeline (00:00 KST / 15:00 UTC)
 # Phase 1: link_turns (light)
 # Phase 2: review pipeline (14B→32B, stops/resumes debate containers)
 # Phase 3: embed_turns (heavy, Gemini API)
