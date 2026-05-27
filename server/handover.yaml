@@ -23,12 +23,22 @@ decisions:
   local_debate.py: 473→502L, added _enqueue_for_review() to feed debate results into review queue.
   activity_log serves as unified queue (queue_status=unprocessed). No new table needed.'
 - 'Cooperative debate model reassignment (2026-05-27): All debate roles moved to Azure.
-  Pod B (:8081) runs DeepSeek-V2-Lite only (DRAG + Synthesis, no switch needed).
+  Pod A (:8080) runs DeepSeek-V2-Lite only (DRAG + Synthesis, no switch needed).
   Azure spot VMs: Proposer(Qwen3-30B :8084) + Refuter(Nemotron-3-Nano :8083), terminated on consensus.
   Azure Judge VM: Gemma-4-26B (:8085) handles Judge + Summary. Tunnel closed via _post_summary_hook()
   after summary, before Synthesis. local_debate.py: _post_summary_hook() added between Summary and
   Synthesis steps. cooperative_debate.py: summary_model gemma-4-26b, synthesizer_model deepseek-v2-lite.
-  Mode changed code→discussion in current-mode.env (32B not needed).'
+  Mode changed code→discussion in current-mode.env (32B not needed).
+
+  UPDATE (2026-05-27): local model swap — Pod A(:8080) DeepSeek-V2-Lite (Judge+DRAG+Summary+Synthesis),
+  Pod B(:8081) Qwen3-4B (Refuter), Pod B(:8082) Phi-mini-MoE (Proposer). Cooperative mode unaffected
+  (:8081/:8082 idle during cooperative). DeepSeek debate_data.py port already 8080.'
+- 'Cooperative debate --reuse-vms + Nemotron port fix (2026-05-27):
+  --reuse-vms flag skips provisioning/termination — queries Azure for existing spot VMs
+  by name prefix and opens SSH tunnels. VMs preserved across sessions.
+  debate_data.py: Nemotron port 8080→400 (VM actually runs :400, local_port :8083 unchanged).
+  Current 3 VMs: Qwen(20.219.197.71) Nemotron(70.153.146.188) Gemma(20.219.58.198) all healthy.
+  Ready for: python3 scripts/debate.py --mode cooperative --reuse-vms -q "..."'
 - 'debate.py refactored into 6 modules (2026-05-27): debate_data.py(271L) → debate_llm.py(357L)
   → local_debate.py(454L)/cooperative_remote.py(109L) → cooperative_debate.py(171L)
   → debate.py(71L CLI). Unidirectional dependency chain. SLOC rule exception: local_debate.py at
