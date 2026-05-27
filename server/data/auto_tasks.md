@@ -1,10 +1,10 @@
 # Auto Tasks
 
 <!-- Write tasks below using ## headings. One task per heading.
-     Tasks execute overnight via devforge-auto.timer (01:00 KST).
+     Tasks execute via nightly_batch.sh Phase 4 (03:00 UTC).
      Each ## section = a separate Claude Code invocation.
      Full permissions granted. Results logged to auto_logs/.
-     Empty file = nothing to do.
+     Leave empty (or only Example: headings) to skip.
 
 ## Example: Fix the login timeout
 Review auth.py and fix the 30s timeout issue. Check error handling too.

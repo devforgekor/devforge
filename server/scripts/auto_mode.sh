@@ -112,12 +112,19 @@ main() {
     TEMP_DIR=$(mktemp -d)
     trap "rm -rf $TEMP_DIR" EXIT
 
+    # Parse tasks: skip HTML comments (<!-- -->) and Example: headings
     awk '
+    BEGIN { in_comment = 0 }
+    /<!--/ { in_comment = 1 }
+    /-->/  { in_comment = 0; next }
+    { if (in_comment) next }
     /^## / {
         if (task_num > 0) { printf("\n__AUTO_TASK_END__\n") }
         task_num++
         sub(/^## /, "")
         title = $0
+        # Skip Example: tasks from template
+        if (title ~ /^Example:/) { task_num--; next }
         printf("__AUTO_TASK_%d__\n%s\n", task_num, title)
         next
     }
@@ -125,7 +132,9 @@ main() {
     END { if (task_num > 0) printf("\n__AUTO_TASK_END__\n") }
     ' "$TASK_FILE" > "$TEMP_DIR/parsed.md"
 
-    TOTAL_TASKS=$(grep -c "^__AUTO_TASK_[0-9]\+__$" "$TEMP_DIR/parsed.md" 2>/dev/null || echo 0)
+    TOTAL_TASKS=$(grep -cE "^__AUTO_TASK_[0-9]+__$" "$TEMP_DIR/parsed.md" 2>/dev/null || true)
+    TOTAL_TASKS="${TOTAL_TASKS//[^0-9]/}"
+    TOTAL_TASKS="${TOTAL_TASKS:-0}"
     log "Found $TOTAL_TASKS task(s) in $TASK_FILE"
 
     if [ "$TOTAL_TASKS" -eq 0 ]; then

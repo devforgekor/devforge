@@ -120,6 +120,41 @@ set -a && source ~/.config/devforge/secrets.env && set +a
 embed_ok=true
 retry "embed_turns" 2 python3 "$SCRIPTS_DIR/embed_turns.py" || embed_ok=false
 
+# ── Phase 4: auto mode (user tasks) ────────────────────────────
+
+auto_mode_ok=true
+
+# Check if auto_tasks.md has user-written tasks (not just template)
+auto_task_count=$(cd "$SCRIPTS_DIR" && python3 -c "
+import sys
+task_file = '/opt/projects/server/data/auto_tasks.md'
+try:
+    content = open(task_file).read()
+    # Count ## headings that are NOT inside <!-- --> comments
+    import re
+    # Remove HTML comments
+    content_no_comments = re.sub(r'<!--.*?-->', '', content, flags=re.DOTALL)
+    tasks = re.findall(r'^## (.+)$', content_no_comments, re.MULTILINE)
+    # Filter out 'Example:' tasks from template
+    real_tasks = [t for t in tasks if not t.startswith('Example:')]
+    print(len(real_tasks))
+except Exception:
+    print(0)
+" 2>/dev/null)
+
+if [ "${auto_task_count:-0}" -gt 0 ]; then
+    echo "[$(LOG_TS)] Auto mode: $auto_task_count user task(s) found"
+    if bash "$SCRIPTS_DIR/auto_mode.sh"; then
+        echo "[$(LOG_TS)] Auto mode complete"
+        auto_mode_ok=true
+    else
+        echo "[$(LOG_TS)] Auto mode FAILED" >&2
+        auto_mode_ok=false
+    fi
+else
+    echo "[$(LOG_TS)] Auto mode: no user tasks — skipping"
+fi
+
 # ── Status summary (consumed by 9 AM Slack hook) ──────────────
 cat > "$STATUS_FILE" <<YAML
 timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -128,6 +163,7 @@ review_14b: $($review_14b_ok && echo ok || echo failed)
 review_32b: $($review_32b_ok && echo ok || echo failed)
 debate_restored: $($debate_restored && echo ok || echo failed)
 embed_turns: $($embed_ok && echo ok || echo failed)
+auto_mode: $($auto_mode_ok && echo ok || echo skipped)
 YAML
 
 echo "[$(LOG_TS)] nightly_batch complete"
