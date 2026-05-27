@@ -1,0 +1,4 @@
+# Auto mode artifacts
+data/auto_logs/
+data/auto_tasks_*.md
+data/auto_status.yaml
