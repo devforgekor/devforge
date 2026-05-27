@@ -67,15 +67,15 @@ structural:
     image: localhost/devforge-postgres:2026.05.15
     model: null
     flags: ''
-  - name: devforge-swap
-    status: Up 2 hours
-    ports: 127.0.0.1:8081-8082->8081-8082/tcp
-    image: ghcr.io/ggml-org/llama.cpp:server
-    model: null
-    flags: ''
   - name: devforge-qwen
     status: Up 2 hours
     ports: 127.0.0.1:8080->8080/tcp
+    image: ghcr.io/ggml-org/llama.cpp:server
+    model: null
+    flags: ''
+  - name: devforge-swap
+    status: Up 9 minutes
+    ports: 127.0.0.1:8081-8082->8081-8082/tcp
     image: ghcr.io/ggml-org/llama.cpp:server
     model: null
     flags: ''
@@ -121,26 +121,26 @@ structural:
     - '8085'
     - '8125'
 metrics:
-  generated: '2026-05-27T15:49:29.951385+00:00'
+  generated: '2026-05-27T16:04:32.231782+00:00'
   system:
     cpu_load:
-    - 0.77
-    - 0.62
-    - 0.53
+    - 5.11
+    - 3.68
+    - 2.07
     cpu_cores: 4
     memory:
-      used: 17Gi
+      used: 19Gi
       total: 22Gi
-      percent: 79
-    zram: 3.8G/4G
+      percent: 88
+    zram: 3.9G/4G
     zram_cycles: 0
     zram_total_cycles: 0
   storage_use:
   - device: ocivolume-root
     size: 20G
     used: 15G
-    avail: 5.6G
-    use_pct: 72
+    avail: 5.9G
+    use_pct: 71
     mount: /
   - device: datavg-lv_workspace
     size: 6.0G
@@ -189,10 +189,10 @@ metrics:
     uptime: Up 15 hours
   - name: postgres
     uptime: Up 15 hours (healthy)
-  - name: devforge-swap
-    uptime: Up 2 hours
   - name: devforge-qwen
     uptime: Up 2 hours
+  - name: devforge-swap
+    uptime: Up 9 minutes
   tokens:
     session:
       turns: 1
@@ -202,7 +202,9 @@ metrics:
       turns: 24
       total_tokens: 564954
       avg_tokens: 23540
-  alerts: []
+  alerts:
+  - level: warning
+    item: memory 88%
 references:
   llama.cpp:
     category: inference
@@ -220,7 +222,7 @@ references:
       - changelog.yaml
       - code_mod_test_tasks.yaml
       - docs/debate-review-report-v1.1.yaml
-    checked_at: '2026-05-27T15:49:32.133638+00:00'
+    checked_at: '2026-05-27T16:04:34.997171+00:00'
   DSPy:
     category: prompt-optimization
     url: https://github.com/stanfordnlp/dspy
@@ -234,7 +236,7 @@ references:
       files:
       - scripts/lib/tracking/dependency_tracker.py
       - state.yaml
-    checked_at: '2026-05-27T15:49:32.133648+00:00'
+    checked_at: '2026-05-27T16:04:34.997180+00:00'
   LLMLingua:
     category: prompt-optimization
     url: https://github.com/microsoft/LLMLingua
@@ -248,7 +250,7 @@ references:
       files:
       - scripts/lib/tracking/dependency_tracker.py
       - state.yaml
-    checked_at: '2026-05-27T15:49:32.133659+00:00'
+    checked_at: '2026-05-27T16:04:34.997190+00:00'
   tenacity:
     category: dependency
     url: https://github.com/jd/tenacity
@@ -262,7 +264,7 @@ references:
       files:
       - scripts/lib/tracking/dependency_tracker.py
       - scripts/review_worker.py
-    checked_at: '2026-05-27T15:49:32.133662+00:00'
+    checked_at: '2026-05-27T16:04:34.997194+00:00'
   Podman:
     category: infrastructure
     url: https://github.com/containers/podman
@@ -279,9 +281,9 @@ references:
       - docs/debate-system-spec.yaml
       - handover.yaml
       - scripts/lib/search/manager.py
-    checked_at: '2026-05-27T15:49:32.133667+00:00'
+    checked_at: '2026-05-27T16:04:34.997198+00:00'
 phases:
-  checked_at: '2026-05-27T15:49:34.913501+00:00'
+  checked_at: '2026-05-27T16:04:39.459523+00:00'
   phases:
     'Phase 1: Basic Infrastructure + MCP Server (Complete, 2026-05-14)':
       status: partial

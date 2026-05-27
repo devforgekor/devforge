@@ -11,6 +11,38 @@ last_checkpoint:
   git: {}
   task: null
 decisions:
+- 'tr mode switcher + auto-restore (2026-05-27): Shell script scripts/tr symlinked to ~/.local/bin/tr.
+  tr debate: restore resident debate v4.6 (3-model always-on), stop cooperative SSH tunnels.
+  tr cooperative: switch Pod B for Azure Spot VM cooperative debate.
+  tr auto: run auto_mode.sh immediately, then auto-restore debate mode (cmd_debate called on completion).
+  tr status: show current mode from /opt/ai_data/scripts/current-mode.env.
+  Auto-restore guarantee: every mode that disrupts debate (cooperative, auto) ends by calling cmd_debate.
+  Mode persistence across container restarts via current-mode.env. All mode switches restart Pod B
+  via systemctl --user restart container-devforge-swap.service.'
+- 'Auto mode — overnight unattended task execution (2026-05-27):
+  scripts/auto_mode.sh: parses auto_tasks.md with awk, each ## heading = separate Claude Code invocation.
+  Full permissions (--permission-mode bypassPermissions --dangerously-skip-permissions).
+  Fresh session per task (--no-session-persistence), max $1.00 budget per task.
+  Logs to data/auto_logs/auto_<timestamp>.log, individual task logs task_<timestamp>_<N>.log.
+  Task file archived to data/auto_tasks_<timestamp>.md before execution, then template restored.
+  CLI management: python3 cli.py auto add "title" "desc", auto list, auto clear.
+  Context summarization: set to 85% threshold for auto mode (per user request). Note: Claude Code
+  internal context compression is not user-configurable; mitigation is fresh `claude -p` per task.
+  Integrated into nightly_batch.sh Phase 4 (00:00 KST / 15:00 UTC). No timer for manual trigger —
+  user runs `tr auto` to execute immediately. Timer only for nightly scheduled run.'
+- 'Nightly timer changed to 00:00 KST (2026-05-27): devforge-nightly.timer OnCalendar changed from
+  18:00:00 UTC (03:00 KST) to 15:00:00 UTC (00:00 KST). All 5 phases run at midnight Korea time:
+  Phase 1 link_turns → Phase 2 review pipeline (14B→32B sequential) → Phase 3 embed_turns →
+  Phase 4 auto mode (user tasks) → Phase 5 Claude session cleanup.'
+- 'Bug fixes + bidirectional verification (2026-05-27): 7 bugs fixed across 6 files.
+  review_consumer.py: (1) regexp_replace for pipe chars in summary AND body columns preventing COPY
+  delimiter corruption, (2) esc_sql() for item_id SQL injection hardening, (3) docstring
+  verified_32b→done mismatch. local_debate.py: (4) stale docstring from v4.5 model assignments,
+  (5) line 440 comment Qwen3-4B Judge→DeepSeek-V2-Lite :8080. dual-server-entrypoint.sh:
+  (6) merged normal|debate modes, removed duplicate debate case block. swap_llm_mode.sh:
+  (7) added debate to valid modes, updated model descriptions. Bidirectional verification
+  confirmed: MODELS ports 10/10 identical across all files, queue_status transitions consistent,
+  function signatures match across debate_data→debate_llm→local_debate→cooperative_debate chain.'
 - 'Extractor + review pipeline tiered architecture (2026-05-27): 5-tier quality strategy.
   1. Python parsers (deterministic, no LLM) — user_turn/thinking/text extraction.
   2. DeepSeek-V2-Lite (:8080) — fact extraction with exact-copy-paste evidence rule.
