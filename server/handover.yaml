@@ -38,7 +38,15 @@ decisions:
   by name prefix and opens SSH tunnels. VMs preserved across sessions.
   debate_data.py: Nemotron port 8080→400 (VM actually runs :400, local_port :8083 unchanged).
   Current 3 VMs: Qwen(20.219.197.71) Nemotron(70.153.146.188) Gemma(20.219.58.198) all healthy.
-  Ready for: python3 scripts/debate.py --mode cooperative --reuse-vms -q "..."'
+  Ready for: python3 scripts/debate.py --mode cooperative --reuse-vms -q "..."
+  NEXT — cooperative debate live test:
+  1) Verify Pod A(:8080) DeepSeek-V2-Lite healthy for DRAG+Synthesis
+  2) Run:
+     python3 scripts/debate.py --mode cooperative --reuse-vms \
+       -q "File: scripts/azure_spot.py\nTask: Review error handling and resource cleanup"
+  3) Compare with yesterday sessions (20260526T154843Z, 20260526T153353Z):
+     per-round Judge scores, consensus speed, total elapsed
+  4) Record worklog (tags: cooperative,benchmark,compare)'
 - 'debate.py refactored into 6 modules (2026-05-27): debate_data.py(271L) → debate_llm.py(357L)
   → local_debate.py(454L)/cooperative_remote.py(109L) → cooperative_debate.py(171L)
   → debate.py(71L CLI). Unidirectional dependency chain. SLOC rule exception: local_debate.py at
