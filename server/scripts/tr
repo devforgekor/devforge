@@ -1,8 +1,9 @@
 #!/bin/bash
-# tr — DevForge mode switcher
-#   tr debate      → restore resident debate v4.6 (always-on 3-model)
-#   tr cooperative → switch to cooperative mode (Pod B DeepSeek-only, Azure Spot VMs)
-#   tr auto        → run auto mode now, then auto-restore debate mode
+# tr — DevForge mode switcher (v2.0)
+#   tr debate → 3-model resident (DeepSeek + Qwen3-4B + Phi-mini-MoE)
+#   tr review → 2-model (DeepSeek + Qwen-14B) — cooperative / nightly review
+#   tr verify → 1-model (32B only, Pod A stopped) — with memory fallback
+#   tr auto   → run auto mode now, then restore debate
 #
 # All mode switches persist across container restarts via current-mode.env.
 
@@ -15,6 +16,10 @@ log() { echo "[tr] $*"; }
 
 _current_mode() {
     grep -oP 'MODE=\K.*' "$MODE_FILE" 2>/dev/null || echo "unknown"
+}
+
+_get_avail_mb() {
+    awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo
 }
 
 _restart_pod_b() {
@@ -36,68 +41,105 @@ _wait_pod_b() {
     return 1
 }
 
-cmd_debate() {
-    local cur=$(_current_mode)
-    if [ "$cur" = "debate" ] || [ "$cur" = "normal" ]; then
-        log "already in debate mode"
-        # Still verify both containers are running
-        systemctl --user start container-devforge-qwen.service 2>/dev/null || true
+_ensure_pod_a() {
+    log "ensuring Pod A is running..."
+    systemctl --user start container-devforge-qwen.service 2>/dev/null || true
+    sleep 3
+}
+
+_stop_pod_a() {
+    log "stopping Pod A (required for 32B mode)..."
+    systemctl --user stop container-devforge-qwen.service 2>/dev/null || true
+    sleep 5
+}
+
+_switch_to() {
+    local target="$1" cur
+    cur=$(_current_mode)
+
+    # Same-mode? Skip restart.
+    if [ "$cur" = "$target" ]; then
+        log "already in $target mode"
+        if [ "$target" = "verify" ]; then
+            _stop_pod_a
+        else
+            _ensure_pod_a
+        fi
         systemctl --user start container-devforge-swap.service 2>/dev/null || true
         return 0
     fi
 
-    log "switching to debate mode (cur=$cur)..."
+    log "switching $cur → $target..."
 
-    # Ensure Pod A is running (DeepSeek-V2-Lite :8080)
-    systemctl --user start container-devforge-qwen.service 2>/dev/null || true
-    sleep 3
-
-    # Stop any cooperative-mode spot tunnels
-    python3 -c "
+    # Pre-switch cleanup (SSH tunnels etc.)
+    if [ "$cur" = "debate" ]; then
+        python3 -c "
 from debate_data import MODELS
 from cooperative_remote import remote_deactivate
 for m in ['qwen3-30b-a3b', 'nemotron3-nano-30b', 'gemma-4-26b']:
     if MODELS[m].get('host', 'local') != 'local':
         remote_deactivate(m)
 " 2>/dev/null || true
+    fi
 
-    echo "MODE=debate" > "$MODE_FILE"
+    printf '%s' "MODE=$target" > "${MODE_FILE}.tmp" && mv "${MODE_FILE}.tmp" "$MODE_FILE"
     _restart_pod_b
     _wait_pod_b 300
+}
 
-    log "debate mode restored"
-    log "  Pod A :8080 → DeepSeek-V2-Lite"
+# ── Mode commands ──────────────────────────────────────────────
+
+cmd_debate() {
+    _ensure_pod_a
+    _switch_to "debate"
+    log "debate mode ready"
+    log "  Pod A :8080 → DeepSeek-V2-Lite (Judge + DRAG + Synthesis)"
     log "  Pod B :8081 → Qwen3-4B (Refuter)"
     log "  Pod B :8082 → Phi-mini-MoE (Proposer)"
 }
 
+cmd_review() {
+    _ensure_pod_a
+    _switch_to "review"
+    log "review mode ready"
+    log "  Pod A :8080 → DeepSeek-V2-Lite (DRAG)"
+    log "  Pod B :8081 → Qwen-14B (reviewer: Refuter + Judge combined)"
+}
+
 cmd_cooperative() {
-    local cur=$(_current_mode)
-
-    log "switching to cooperative mode..."
-
-    # Pod A stays: DeepSeek-V2-Lite :8080 (always-on)
-    systemctl --user start container-devforge-qwen.service 2>/dev/null || true
-
-    # Set Pod B to debate mode (DeepSeek-V2-Lite on :8081 for DRAG+Synthesis)
-    # In cooperative mode, Pod B loads debate config (DeepSeek access via :8081)
-    echo "MODE=debate" > "$MODE_FILE"
-    _restart_pod_b
-    _wait_pod_b 300
-
-    log "cooperative mode ready"
-    log "  Pod A :8080 → DeepSeek-V2-Lite (reserved)"
-    log "  Pod B :8081 → DeepSeek-V2-Lite (DRAG + Synthesis)"
-    log "  Azure Spot → Qwen3-30B :8084 + Nemotron :8083"
-    log "  Azure Judge → Gemma-4-26B :8085"
+    # Cooperative = review mode + Azure Spot VM debate orchestration.
+    # Review mode handles: DRAG pre-review → cooperative → result review.
+    cmd_review
     log ""
-    log "  Start debate: python3 cli.py discussion drag 'your question'"
+    log "cooperative debate: azure spot VMs for Proposer/Refuter/Judge"
+    log "  Start: python3 scripts/debate.py --mode cooperative --reuse-vms -q '...'"
+}
+
+cmd_verify() {
+    local avail
+    avail=$(_get_avail_mb)
+
+    # Memory-aware fallback: verify(20G) → review(9G) → debate(16G)
+    if [ "$avail" -lt 20000 ]; then
+        log "available=${avail}MB < 20000MB needed for verify — falling back"
+        if [ "$avail" -ge 9500 ]; then
+            log "fallback → review"
+            cmd_review
+            return $?
+        fi
+        log "fallback → debate"
+        cmd_debate
+        return $?
+    fi
+
+    _stop_pod_a
+    _switch_to "verify"
+    log "verify mode ready"
+    log "  Pod A :8080 → STOPPED"
+    log "  Pod B :8081 → Qwen-32B (ctx=16384, cache-ram=6656)"
 }
 
 cmd_auto() {
-    local cur=$(_current_mode)
-
-    # Run auto mode immediately
     log "auto mode: executing tasks from auto_tasks.md..."
 
     if bash "$SCRIPTS_DIR/auto_mode.sh"; then
@@ -106,7 +148,6 @@ cmd_auto() {
         log "auto mode completed with errors (check auto_logs/)"
     fi
 
-    # Auto-restore: always switch back to debate mode
     log "auto-restoring debate mode..."
     cmd_debate
 }
@@ -120,20 +161,30 @@ case "${1:-}" in
     cooperative|coop|c)
         cmd_cooperative
         ;;
+    review|r)
+        cmd_review
+        ;;
+    verify|v)
+        cmd_verify
+        ;;
     auto|a)
         cmd_auto
         ;;
     status|s|"")
         cur=$(_current_mode)
+        avail=$(_get_avail_mb)
         echo "Current mode: $cur"
+        echo "Available memory: ${avail}MB"
         echo ""
-        echo "Usage: tr <debate|cooperative|auto|status>"
-        echo "  debate       — resident 3-model debate v4.6"
-        echo "  cooperative  — Azure Spot VM cooperative debate"
-        echo "  auto         — run auto mode tasks now, then restore debate"
+        echo "Usage: tr <debate|review|verify|auto|status>"
+        echo "  debate      — 3-model resident (DeepSeek + Qwen3-4B + Phi-mini-MoE)"
+        echo "  review      — 2-model (DeepSeek + 14B) for DRAG/review verification"
+        echo "  cooperative — review mode + Azure Spot VM debate"
+        echo "  verify      — 1-model (32B only) with memory fallback"
+        echo "  auto        — run auto mode tasks, then restore debate"
         ;;
     *)
-        echo "Usage: tr <debate|cooperative|auto|status>"
+        echo "Usage: tr <debate|review|verify|cooperative|auto|status>"
         echo "Unknown: $1"
         exit 1
         ;;

@@ -1,6 +1,6 @@
 #!/bin/bash
 # DevForge — Podman B mode switcher
-# Usage: swap_llm_mode.sh debate|code (normal is deprecated alias for debate)
+# Usage: swap_llm_mode.sh debate|verify
 
 set -e
 
@@ -13,11 +13,11 @@ else
 fi
 
 MODE="${1:-}"
-if [[ ! "$MODE" =~ ^(normal|debate|code)$ ]]; then
-    echo "Usage: $0 debate|code"
-    echo "  debate  — Qwen3-4B (8081) + Phi-mini-MoE (8082) resident debate v4.6"
-    echo "  code    — Qwen-32B IQ4_XS (8081, 16.5GB, swap timers 중지)"
-    echo "  (normal is deprecated alias for debate)"
+if [[ ! "$MODE" =~ ^(debate|review|verify)$ ]]; then
+    echo "Usage: $0 debate|review|verify"
+    echo "  debate  — Qwen3-4B (8081) + Phi-mini-MoE (8082) resident debate v5.0"
+    echo "  review  — Qwen-14B (8081) + DeepSeek-V2-Lite (:8080 Proposer)"
+    echo "  verify  — Qwen-32B IQ4_XS (8081, 16.5GB, swap timers 중지)"
     exit 1
 fi
 
@@ -30,10 +30,10 @@ if [[ "$CURRENT" == "$MODE" ]]; then
     exit 0
 fi
 
-echo "MODE=$MODE" > "$MODE_FILE"
+printf '%s' "MODE=$MODE" > "${MODE_FILE}.tmp" && mv "${MODE_FILE}.tmp" "$MODE_FILE"
 
-# code mode: stop ALL other LLM containers + timers to free memory for 32B
-if [[ "$MODE" == "code" ]]; then
+# verify mode: stop ALL other LLM containers + timers to free memory for 32B
+if [[ "$MODE" == "verify" ]]; then
     echo "[swap_mode] Stopping scheduled timers (32B needs uninterrupted runtime)..."
     systemctl --user stop review-worker.timer devforge-nightly.timer 2>/dev/null || true
 
@@ -66,8 +66,8 @@ if [[ "$MODE" == "code" ]]; then
 
     if declare -f wait_memory_release >/dev/null 2>&1; then
         wait_memory_release 19000 30 "32B model load" || {
-            echo "[swap_mode] FATAL: Insufficient memory for 32B model. Aborting switch to code mode."
-            echo "MODE=$CURRENT" > "$MODE_FILE"
+            echo "[swap_mode] FATAL: Insufficient memory for 32B model. Aborting switch to verify mode."
+            printf '%s' "MODE=$CURRENT" > "${MODE_FILE}.tmp" && mv "${MODE_FILE}.tmp" "$MODE_FILE"
             systemctl --user start review-worker.timer devforge-nightly.timer 2>/dev/null || true
             exit 1
         }
@@ -78,7 +78,7 @@ if [[ "$MODE" == "code" ]]; then
         avail_mb=$(free -m | awk 'NR==2{print $7}')
         if [[ "$avail_mb" -lt 19000 ]]; then
             echo "[swap_mode] FATAL: Only ${avail_mb}MB available, 32B needs ~19GB. Aborting."
-            echo "MODE=$CURRENT" > "$MODE_FILE"
+            printf '%s' "MODE=$CURRENT" > "${MODE_FILE}.tmp" && mv "${MODE_FILE}.tmp" "$MODE_FILE"
             systemctl --user start review-worker.timer devforge-nightly.timer 2>/dev/null || true
             exit 1
         fi
@@ -88,8 +88,8 @@ if [[ "$MODE" == "code" ]]; then
     free -h | grep -E '^Mem:|^Swap:'
 fi
 
-if [[ "$CURRENT" == "code" ]]; then
-    echo "[swap_mode] Leaving code mode — restoring timers + evicting 32B page cache..."
+if [[ "$CURRENT" == "verify" ]]; then
+    echo "[swap_mode] Leaving verify mode — restoring timers + evicting 32B page cache..."
     systemctl --user start review-worker.timer devforge-nightly.timer 2>/dev/null || true
 
     # Evict 32B model from page cache before loading new models
@@ -112,8 +112,8 @@ for i in $(seq 1 $((MAX_WAIT/2))); do
     if [[ "$http_code" == "200" ]]; then
         echo "[swap_mode] 8081 healthy — $MODE mode ready"
 
-        # Restart Podman A (DeepSeek-V2-Lite) when leaving code mode
-        if [[ "$CURRENT" == "code" ]]; then
+        # Restart Podman A (DeepSeek-V2-Lite) when leaving verify mode
+        if [[ "$CURRENT" == "verify" ]]; then
             echo "[swap_mode] Restarting Podman A (DeepSeek-V2-Lite :8080)..."
             systemctl --user start container-devforge-qwen.service 2>/dev/null || true
         fi

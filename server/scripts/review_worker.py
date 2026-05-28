@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""review_worker.py — fact extraction + Python evidence verification.
+"""review_worker.py — extract → verify → debate review → store.
 
-Phase 1 (extract):  DeepSeek-V2-Lite (Pod A :8080) extracts facts from turns.
-                    Evidence MUST be exact copy-paste substring. No paraphrase.
-Phase 2 (verify):   Python deterministic check — evidence must be substring of
-                    original turn text. No LLM involved → zero hallucination.
-Phase 3 (store):    review_facts DB + activity_log for downstream debate review.
+Phase 1 (extract):   DeepSeek-V2-Lite (Pod A :8080) extracts facts from turns.
+Phase 2 (verify):    Python deterministic check — evidence substring in turn text.
+Phase 3 (debate):    Qwen-14B (Pod B :8081) reviews verified facts via dart_reviewer.
+Phase 4 (store):     review_facts DB + activity_log (queue_status='reviewed').
 
 24h rolling window, checkpoint-based incremental processing.
-DeepSeek runs resident on :8080 — no model switching.
+DeepSeek runs resident on :8080. Qwen-14B runs on :8081 (Pod B in review mode).
 
 Usage:
   python3 review_worker.py                 # normal incremental run
@@ -34,13 +33,9 @@ MODELS = {
         "name": "deepseek-v2-lite",
         "port": 8080,
     },
-    "qwen3-4b": {
-        "name": "qwen3-4b",
+    "qwen-14b": {
+        "name": "qwen-14b",
         "port": 8081,
-    },
-    "phi-mini-moe": {
-        "name": "phi-mini-moe",
-        "port": 8082,
     },
 }
 
@@ -70,6 +65,17 @@ Return JSON:
 {"facts": [{"evidence": "exact copy-paste from turn", "speaker": "agent name", "fact_type": "decision|data_given|observation"}]}
 
 If no self-contained, complete facts with exact evidence, return {"facts": []}."""
+
+FACT_REVIEWER_SYSTEM = """You are a FACT REVIEWER in a 2-party review. Evaluate facts extracted from AI coding session transcripts.
+
+Your role — combined Refuter AND Judge:
+1. REFUTE: Flag facts that are trivial ("ok", status updates), ambiguous without context, or likely hallucinations that slipped past verification.
+2. JUDGE: Score overall fact quality (0-100). 100 = all valuable and well-evidenced. <70 = explain gaps.
+
+Evidence was Python-verified as verbatim substring of the original turn — trust it unless you find contradictions with other facts in the batch.
+
+Output STRICT JSON (no markdown, no explanation):
+{"verdict": "approved|needs_revision|rejected", "consensus_score": 0-100, "issues": ["..."], "summary": "1-sentence assessment"}"""
 
 
 def verify_evidence(evidence: str, turn_text: str) -> bool:
@@ -208,7 +214,11 @@ def _insert_activity_review(turn_id: str, facts: List[Dict], decisions: List[Dic
     count = 0
     for dec in decisions:
         idx = dec.get("fact_index", 0)
-        fact = facts[idx] if idx < len(facts) else {}
+        if idx >= len(facts):
+            continue
+        fact = facts[idx]
+        if not fact.get("evidence"):
+            continue
         ok = enqueue_review(
             entry_type="review",
             source="review_worker",
@@ -221,6 +231,9 @@ def _insert_activity_review(turn_id: str, facts: List[Dict], decisions: List[Dic
                 "verdict": dec.get("verdict", "pending"),
                 "reason": dec.get("reason", "")[:200],
                 "extract_model": extract_model,
+                "review_verdict": dec.get("review_verdict", "pending"),
+                "review_consensus": dec.get("review_consensus", 0),
+                "review_summary": dec.get("review_summary", ""),
             },
             model=extract_model,
             turn_ids=[turn_id],
@@ -253,8 +266,6 @@ def call_llm(port: int, model_name: str, system_prompt: str, user_prompt: str,
              max_tokens: int = 512, timeout: int = 180, retries: int = 2
              ) -> Tuple[Optional[Dict], Optional[Dict]]:
     """Call LLM via lib.llm.client — adapter for review_worker's port-based signature."""
-    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-
     endpoint = f"http://127.0.0.1:{port}/v1/chat/completions"
     messages = [
         {"role": "system", "content": system_prompt},
@@ -325,9 +336,15 @@ def main():
         return 0
     print(f"Fetched {len(turns)} unprocessed turns")
 
-    if not check_endpoint(model["port"], EXTRACT_MODEL):
+    if not check_endpoint(model["port"], EXTRACT_MODEL + " (DeepSeek extract)"):
         print(f"FATAL: {EXTRACT_MODEL} endpoint :{model['port']} not responding")
         _notify_slack(f"FATAL: {EXTRACT_MODEL} :{model['port']} down")
+        return 1
+
+    review_model = MODELS["qwen-14b"]
+    if not check_endpoint(review_model["port"], "Qwen-14B (debate review)"):
+        print(f"FATAL: Qwen-14B on :{review_model['port']} not responding — review cannot proceed")
+        _notify_slack(f"FATAL: Qwen-14B :{review_model['port']} down")
         return 1
 
     est = RateEstimator(EXTRACT_MODEL)
@@ -377,10 +394,52 @@ def main():
 
         total_facts += len(facts)
 
-        # Phase 3: Store
+        # Phase 3: Qwen-14B debate review — evaluate verified facts as a batch
+        verified_facts = [
+            {"index": d["fact_index"], "type": facts[d["fact_index"]].get("fact_type", ""),
+             "evidence": facts[d["fact_index"]].get("evidence", ""),
+             "speaker": facts[d["fact_index"]].get("speaker", "")}
+            for d in decisions if d["verdict"] == "valid"
+        ]
+
+        review_verdict = {}
+        review_failed = False
+        if verified_facts:
+            review_prompt = (
+                f"Turn by [{turn['agent']}]:\n{turn['user_turn']}\n\n"
+                f"Python-verified facts (evidence confirmed verbatim in turn):\n"
+                f"{json.dumps(verified_facts, ensure_ascii=False, indent=2)}"
+            )
+            review_result, _ = call_llm(
+                review_model["port"], review_model["name"],
+                FACT_REVIEWER_SYSTEM, review_prompt,
+                max_tokens=512, timeout=300,
+            )
+            if review_result:
+                review_verdict = review_result
+                print(f"    review: {review_result.get('verdict','?')} consensus={review_result.get('consensus_score','?')}")
+            else:
+                print(f"    review: FAILED (Qwen-14B unavailable) — turn skipped, will retry next cycle")
+                review_failed = True
+
+        if review_failed:
+            # 14B unavailable: do NOT save to review_facts — that would cause
+            # NOT EXISTS filter to skip this turn forever. Retry next cycle.
+            print(f"    skipped — will retry next cycle")
+            continue
+
+        # Merge review verdict into each decision
+        for dec in decisions:
+            dec["review_verdict"] = review_verdict.get("verdict", "pending")
+            dec["review_consensus"] = review_verdict.get("consensus_score", 0)
+            dec["review_issues"] = review_verdict.get("issues", [])
+            dec["review_summary"] = review_verdict.get("summary", "")
+
+        # Phase 4: Store
+        phase_label = "extract_verify_review"
         save_review_facts(turn["id"], facts, decisions,
                           extract_model=model["name"],
-                          phase="extract_verify", timings=timings)
+                          phase=phase_label, timings=timings)
         _insert_activity_review(turn["id"], facts, decisions,
                                 extract_model=model["name"])
 

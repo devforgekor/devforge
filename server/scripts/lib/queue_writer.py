@@ -1,7 +1,7 @@
 """queue_writer — enqueue items to activity_log for downstream review pipeline.
 
 Shared by review_worker.py (fact extraction) and local_debate.py (debate results).
-Night batch consumer reads activity_log WHERE queue_status='unprocessed'.
+Consumed by review_consumer.py (32B final verify) WHERE queue_status='reviewed'.
 """
 
 import json
@@ -20,10 +20,11 @@ def enqueue_review(
     model: str = "",
     turn_ids: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
+    queue_status: str = "reviewed",
 ) -> bool:
     """Insert a review item into activity_log queue.
 
-    queue_status='unprocessed' — consumed by night batch (14B→32B).
+    queue_status='reviewed' — consumed by 32B verify (nightly final pass).
     exec_status='DONE' — source pipeline already completed its work.
     summary_status='raw' — not yet summarized (night batch handles this).
     """
@@ -53,7 +54,7 @@ def enqueue_review(
         f"'{model_esc}', "
         f"{turn_sql}, "
         f"{tags_sql}, "
-        f"'raw', 'unprocessed', 'DONE'"
+        f"'raw', '{esc_sql(queue_status)}', 'DONE'"
         f")"
     )
     return psql_ok(sql)
