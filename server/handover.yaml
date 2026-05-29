@@ -1,18 +1,26 @@
 last_checkpoint:
-  time: '2026-05-29T15:45:00+09:00'
-  summary: 3-model review plan + BM25 fix + model downloads
-  total_files: 3
+  time: '2026-05-29T15:50:00+09:00'
+  summary: context compaction diagnostic + SAS URL fix
+  total_files: 1
   recent_files:
-    source:
-    - scripts/code_mod_pipeline.py
-    config: []
-    docs:
-    - docs/agent-architecture.yaml
+    source: []
+    config:
+    - ~/.bashrc
+    docs: []
     data: []
     generated: []
   git: {}
-  task: T06/T07 pipeline retry3 running
+  task: null
 decisions:
+- 'Context auto-compaction diagnostic (2026-05-29): Claude Code summarizes at ~83% context instead of 95% despite
+  CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=95 in settings.json. Root cause: GrowthBook server-side flag tengu_sm_config
+  has minimumMessageTokensToInit=150000 which triggers summarization at ~75-83% of 200K window (tengu_hawthorn_window=200000).
+  Server flags take precedence over client-side env vars. Mitigation attempted: export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=95
+  added to ~/.bashrc. If still at 83% after restart, GrowthBook override is confirmed — no client-side workaround
+  currently available. Alternative: manual /compact command for user-controlled summarization timing.'
+- 'SAS URL regenerated (2026-05-29): Previous agent-architecture.yaml link returned PublicAccessNotPermitted error
+  (storage account blocks public access). New SAS token generated with 7-day read permission — SAS-based auth
+  bypasses public access restriction.'
 - '3-Model nightly review plan approved (2026-05-29): Replace current 2-model review (30B extract + 14B review) with 3-model
   pipeline for nightly review ONLY. Step 1: R1-0528-8B (:8081, ~6.4GB) deep review → Step 2: Qwen2.5-Coder-7B (:8081, ~6.2GB)
   reflect → Step 3: Selene Mini 8B (:8081, ~6.1GB) judge → Step 4: 30B (:8080) diff generation. All Pod B models loaded
