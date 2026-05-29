@@ -1,94 +1,120 @@
 last_checkpoint:
-  time: '2026-05-27T07:10:49.510550+09:00'
-  summary: no files
-  total_files: 0
+  time: '2026-05-29T15:45:00+09:00'
+  summary: 3-model review plan + BM25 fix + model downloads
+  total_files: 3
   recent_files:
-    source: []
+    source:
+    - scripts/code_mod_pipeline.py
     config: []
-    docs: []
+    docs:
+    - docs/agent-architecture.yaml
     data: []
     generated: []
   git: {}
-  task: null
+  task: T06/T07 pipeline retry3 running
 decisions:
-- 'tr mode switcher + auto-restore (2026-05-27): Shell script scripts/tr symlinked to ~/.local/bin/tr.
-  tr debate: restore resident debate v4.6 (3-model always-on), stop cooperative SSH tunnels.
-  tr cooperative: switch Pod B for Azure Spot VM cooperative debate.
-  tr auto: run auto_mode.sh immediately, then auto-restore debate mode (cmd_debate called on completion).
-  tr status: show current mode from /opt/ai_data/scripts/current-mode.env.
-  Auto-restore guarantee: every mode that disrupts debate (cooperative, auto) ends by calling cmd_debate.
-  Mode persistence across container restarts via current-mode.env. All mode switches restart Pod B
-  via systemctl --user restart container-devforge-swap.service.'
-- 'Auto mode — overnight unattended task execution (2026-05-27):
-  scripts/auto_mode.sh: parses auto_tasks.md with awk, each ## heading = separate Claude Code invocation.
-  Full permissions (--permission-mode bypassPermissions --dangerously-skip-permissions).
-  Fresh session per task (--no-session-persistence), max $1.00 budget per task.
-  Logs to data/auto_logs/auto_<timestamp>.log, individual task logs task_<timestamp>_<N>.log.
-  Task file archived to data/auto_tasks_<timestamp>.md before execution, then template restored.
-  CLI management: python3 cli.py auto add "title" "desc", auto list, auto clear.
-  Context summarization: set to 85% threshold for auto mode (per user request). Note: Claude Code
-  internal context compression is not user-configurable; mitigation is fresh `claude -p` per task.
-  Integrated into nightly_batch.sh Phase 4 (00:00 KST / 15:00 UTC). No timer for manual trigger —
-  user runs `tr auto` to execute immediately. Timer only for nightly scheduled run.'
-- 'Nightly timer changed to 00:00 KST (2026-05-27): devforge-nightly.timer OnCalendar changed from
-  18:00:00 UTC (03:00 KST) to 15:00:00 UTC (00:00 KST). All 5 phases run at midnight Korea time:
-  Phase 1 link_turns → Phase 2 review pipeline (14B→32B sequential) → Phase 3 embed_turns →
-  Phase 4 auto mode (user tasks) → Phase 5 Claude session cleanup.'
-- 'Bug fixes + bidirectional verification (2026-05-27): 7 bugs fixed across 6 files.
-  review_consumer.py: (1) regexp_replace for pipe chars in summary AND body columns preventing COPY
-  delimiter corruption, (2) esc_sql() for item_id SQL injection hardening, (3) docstring
-  verified_32b→done mismatch. local_debate.py: (4) stale docstring from v4.5 model assignments,
-  (5) line 440 comment Qwen3-4B Judge→DeepSeek-V2-Lite :8080. dual-server-entrypoint.sh:
-  (6) merged normal|debate modes, removed duplicate debate case block. swap_llm_mode.sh:
-  (7) added debate to valid modes, updated model descriptions. Bidirectional verification
-  confirmed: MODELS ports 10/10 identical across all files, queue_status transitions consistent,
-  function signatures match across debate_data→debate_llm→local_debate→cooperative_debate chain.'
-- 'Extractor + review pipeline tiered architecture (2026-05-27): 5-tier quality strategy.
-  1. Python parsers (deterministic, no LLM) — user_turn/thinking/text extraction.
-  2. DeepSeek-V2-Lite (:8080) — fact extraction with exact-copy-paste evidence rule.
-  3. Python verify_evidence() — deterministic substring check, zero hallucination path.
-  4. Local Debate (3-model) — Aider code changes verified via Proposer→Refuter→Judge.
-  5. Night batch: Qwen-14B review → Qwen-32B final verify (sequential, one pass each).
-  review_worker.py: 695→425L, 2-model parallel→DeepSeek single, LLM arbitrator→Python verify.
-  dual-server-entrypoint.sh v3.2: added review-14b and review-32b modes.
-  lib/queue_writer.py (59L): shared enqueue_review() for review_worker + local_debate → activity_log.
-  local_debate.py: 473→502L, added _enqueue_for_review() to feed debate results into review queue.
-  activity_log serves as unified queue (queue_status=unprocessed). No new table needed.'
-- 'Cooperative debate model reassignment (2026-05-27): All debate roles moved to Azure.
-  Pod A (:8080) runs DeepSeek-V2-Lite only (DRAG + Synthesis, no switch needed).
-  Azure spot VMs: Proposer(Qwen3-30B :8084) + Refuter(Nemotron-3-Nano :8083), terminated on consensus.
-  Azure Judge VM: Gemma-4-26B (:8085) handles Judge + Summary. Tunnel closed via _post_summary_hook()
-  after summary, before Synthesis. local_debate.py: _post_summary_hook() added between Summary and
-  Synthesis steps. cooperative_debate.py: summary_model gemma-4-26b, synthesizer_model deepseek-v2-lite.
-  Mode changed code→discussion in current-mode.env (32B not needed).
+- '3-Model nightly review plan approved (2026-05-29): Replace current 2-model review (30B extract + 14B review) with 3-model
+  pipeline for nightly review ONLY. Step 1: R1-0528-8B (:8081, ~6.4GB) deep review → Step 2: Qwen2.5-Coder-7B (:8081, ~6.2GB)
+  reflect → Step 3: Selene Mini 8B (:8081, ~6.1GB) judge → Step 4: 30B (:8080) diff generation. All Pod B models loaded
+  sequentially on single port. 2:0 fast-path voting / 1:1 Selene deciding vote. Diff format cage enforced on Step 4. Plan:
+  /home/opc/.claude/plans/cached-baking-jellyfish.md. Implementation files to create/modify: review_pipeline_3model.py (new
+  ~400L), nightly_batch.sh Phase 5, swap_llm_mode.sh (r1-8b, qwen-7b, selene modes), tr (new aliases). NOT yet implemented
+  — waiting for external LLM review of agent-architecture.yaml first.'
+- 'Models downloaded for 3-model pipeline (2026-05-29): DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf (4.7GB, lmstudio-community),
+  Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf (4.4GB, bartowski). Selene Mini 8B Q4_K_M (4.6GB) already present. 14B (8.4GB file,
+  ~9.9GB loaded) cannot fit with 30B resident (7.5GB) — total would exceed 22GB ARM. Replaced with 7B-class models, all
+  sequential memory budget: 14-18GB per step, 3-4GB headroom.'
+- 'BM25 pre-slice context overflow fix (2026-05-29): code_mod_pipeline.py line 851 — _bm25_pre_slice max_tokens reduced
+  7000→5000 for Stage 2+ fallback. Root cause: Stage 1 analysis JSON (~2,100 tok) + 7,000 tok sliced code + template +
+  feedback = ~9,587 tok > 8,192 ctx → 400 error. Fix verified: T06 retry3 Stage 2 succeeded with 5,078 tok code + 2,251 tok
+  overhead = 7,329 prompt tokens (status=200). T06/T07 retry3 running in background.'
+- 'Agent architecture design decision (2026-05-29): Custom thin layer (Supervisor-Worker-Observer) chosen over CrewAI/LangChain/
+  aider for code creation→inspection→testing→bug fixing loop. Rationale: (1) aider is CLI-only, cannot orchestrate multi-step
+  loops, (2) CrewAI introduces Docker dependency + serialization overhead, (3) OpenAI Agents SDK requires vendor lock-in,
+  (4) Custom approach leverages existing debate.py/review_worker.py patterns, minimal new code, full control over retry/timeout/
+  model assignment. Document: docs/agent-architecture.yaml (1,049 lines, 9 sections). Uploaded for external LLM review via
+  Azure Blob SAS.'
+- 'Agent architecture YAML created (2026-05-29): docs/agent-architecture.yaml — comprehensive single-document reference for
+  external LLM review. 9 sections: Hardware specs, Model catalog (12 GGUF files), Scripts inventory, Current workflow (debate/
+  review/cooperative/nightly), Proposed agent architecture (Supervisor-Worker-Observer), Implementation plan (3 phases),
+  Design rationale (why not CrewAI/aider/OpenAI), Adaptation notes (Ollama→llama.cpp), Verification checklist. Includes
+  corrected LiveCodeBench scores: R1-0528 8B distill = 60.5 (not 73.3 — that is the full 671B R1 score).'
+- 'Qwen3-1.7B + Llama-3.2-3B operator test (2026-05-29): scripts/test_operator.py created. Qwen3-1.7B loaded on Pod B :8081
+  but operator task quality insufficient (too small, needs 3B+). Llama-3.2-3B tested as alternative. Both downloaded to
+  /opt/ai_data/models/gguf/. Operator model selection ongoing — may use Qwen2.5-Coder-3B (already resident on :8082) instead.'
+- 'Final resident architecture deployed (2026-05-28): 2-model always-on. Pod A(:8080) Qwen3-Coder-30B-A3B Q3_K_M (~14GB RSS)
+  — Worklog Draft + Judge. Pod B(:8082) Qwen2.5-Coder-3B Q4_K_M (~4GB RSS) — Review/Refuter/Aider/Operator. Combined
+  ~18GB, fits 22GB. Replaces DeepSeek-V2-Lite(:8080) + Phi-mini-MoE(:8082). Prompt caching via --cache-reuse 256 on both.
+  SERVER2_THREADS reduced 4→2 (4-core CPU, 2 per model). worklog_generator.py: PHI_PORT→REVIEW_PORT, phi_review_flagged()→review_flagged(),
+  DeepSeek→30B references, metrics logging to /opt/ai_data/worklog_metrics.jsonl. debate_data.py: phi-mini-moe→qwen2.5-coder-3b,
+  deepseek-v2-lite removed, qwen3-30b-a3b-local added. ~/.aider.local.yml created for Aider+3B operator (June deployment).
+  Nightly: 30B(:8080)+14B(:8081) Phase 1 review → 32B(:8081) Phase 2 final verify (unchanged).'
+- 'Debate v6.0 2-model simplification (2026-05-28): SUPERSEDED by v6.1 — DeepSeek→Qwen3-Coder-30B-A3B, Phi-mini-MoE→Qwen2.5-Coder-3B.
+  See latest decision (2026-05-28 Final resident architecture).'
+- 'Worklog automation improvements (2026-05-28): turn_watcher.py: shared collect_checkpoint.json with collect_turns.py, mtime-based
+  file skip, batch INSERT (multi-row VALUES), source_message_id pre-filter dedup, empty session recording. worklog_generator.py:
+  2-model pipeline (DeepSeek-V2-Lite :8080 draft + Phi-mini-MoE :8082 review). BATCH_SIZE=5, MAX_BATCHES=2. KST 00:00-07:00
+  quiet window. 15-min systemd timer + nightly Phase 4.5. nightly_batch.sh: moved to KST 03:00 (UTC 18:00).'
+- 'tr mode switcher + auto-restore (2026-05-27, updated 2026-05-28): Shell script scripts/tr symlinked to ~/.local/bin/tr.
+  tr debate: restore resident debate v6.0 (2-model: DeepSeek Proposer+Judge+DRAG+Synthesis :8080, Phi-mini-MoE Refuter :8082).
+  tr cooperative: switch Pod B for Azure Spot VM cooperative debate. tr auto: run auto_mode.sh immediately, then auto-restore
+  debate mode (cmd_debate called on completion). tr status: show current mode from /opt/ai_data/scripts/current-mode.env.
+  Auto-restore guarantee: every mode that disrupts debate (cooperative, auto) ends by calling cmd_debate. Mode persistence
+  across container restarts via current-mode.env. All mode switches restart Pod B via systemctl --user restart container-devforge-swap.service.
+  _wait_pod_b now accepts port param (debate→:8082, others→:8081).'
+- 'Auto mode — overnight unattended task execution (2026-05-27): scripts/auto_mode.sh: parses auto_tasks.md with awk, each
+  ## heading = separate Claude Code invocation. Full permissions (--permission-mode bypassPermissions --dangerously-skip-permissions).
+  Fresh session per task (--no-session-persistence), max $1.00 budget per task. Logs to data/auto_logs/auto_<timestamp>.log,
+  individual task logs task_<timestamp>_<N>.log. Task file archived to data/auto_tasks_<timestamp>.md before execution, then
+  template restored. CLI management: python3 cli.py auto add "title" "desc", auto list, auto clear. Context summarization:
+  set to 85% threshold for auto mode (per user request). Note: Claude Code internal context compression is not user-configurable;
+  mitigation is fresh `claude -p` per task. Integrated into nightly_batch.sh Phase 4 (00:00 KST / 15:00 UTC). No timer for
+  manual trigger — user runs `tr auto` to execute immediately. Timer only for nightly scheduled run.'
+- 'Nightly timer changed to 00:00 KST (2026-05-27): devforge-nightly.timer OnCalendar changed from 18:00:00 UTC (03:00 KST)
+  to 15:00:00 UTC (00:00 KST). All 5 phases run at midnight Korea time: Phase 1 link_turns → Phase 2 review pipeline (14B→32B
+  sequential) → Phase 3 embed_turns → Phase 4 auto mode (user tasks) → Phase 5 Claude session cleanup.'
+- 'Bug fixes + bidirectional verification (2026-05-27): 7 bugs fixed across 6 files. review_consumer.py: (1) regexp_replace
+  for pipe chars in summary AND body columns preventing COPY delimiter corruption, (2) esc_sql() for item_id SQL injection
+  hardening, (3) docstring verified_32b→done mismatch. local_debate.py: (4) stale docstring from v4.5 model assignments, (5)
+  line 440 comment Qwen3-4B Judge→DeepSeek-V2-Lite :8080. dual-server-entrypoint.sh: (6) merged normal|debate modes, removed
+  duplicate debate case block. swap_llm_mode.sh: (7) added debate to valid modes, updated model descriptions. Bidirectional
+  verification confirmed: MODELS ports 10/10 identical across all files, queue_status transitions consistent, function signatures
+  match across debate_data→debate_llm→local_debate→cooperative_debate chain.'
+- 'Extractor + review pipeline tiered architecture (2026-05-27): 5-tier quality strategy. 1. Python parsers (deterministic,
+  no LLM) — user_turn/thinking/text extraction. 2. DeepSeek-V2-Lite (:8080) — fact extraction with exact-copy-paste evidence
+  rule. 3. Python verify_evidence() — deterministic substring check, zero hallucination path. 4. Local Debate (3-model) —
+  Aider code changes verified via Proposer→Refuter→Judge. 5. Night batch: Qwen-14B review → Qwen-32B final verify (sequential,
+  one pass each). review_worker.py: 695→425L, 2-model parallel→DeepSeek single, LLM arbitrator→Python verify. dual-server-entrypoint.sh
+  v3.2: added review-14b and review-32b modes. lib/queue_writer.py (59L): shared enqueue_review() for review_worker + local_debate
+  → activity_log. local_debate.py: 473→502L, added _enqueue_for_review() to feed debate results into review queue. activity_log
+  serves as unified queue (queue_status=unprocessed). No new table needed.'
+- 'Cooperative debate model reassignment (2026-05-27): All debate roles moved to Azure. Pod A (:8080) runs DeepSeek-V2-Lite
+  only (DRAG + Synthesis, no switch needed). Azure spot VMs: Proposer(Qwen3-30B :8084) + Refuter(Nemotron-3-Nano :8083), terminated
+  on consensus. Azure Judge VM: Gemma-4-26B (:8085) handles Judge + Summary. Tunnel closed via _post_summary_hook() after
+  summary, before Synthesis. local_debate.py: _post_summary_hook() added between Summary and Synthesis steps. cooperative_debate.py:
+  summary_model gemma-4-26b, synthesizer_model deepseek-v2-lite. Mode changed code→discussion in current-mode.env (32B not
+  needed).
 
-  UPDATE (2026-05-27): local model swap — Pod A(:8080) DeepSeek-V2-Lite (Judge+DRAG+Summary+Synthesis),
-  Pod B(:8081) Qwen3-4B (Refuter), Pod B(:8082) Phi-mini-MoE (Proposer). Cooperative mode unaffected
-  (:8081/:8082 idle during cooperative). DeepSeek debate_data.py port already 8080.'
-- 'Cooperative debate --reuse-vms + Nemotron port fix (2026-05-27):
-  --reuse-vms flag skips provisioning/termination — queries Azure for existing spot VMs
-  by name prefix and opens SSH tunnels. VMs preserved across sessions.
-  debate_data.py: Nemotron port 8080→400 (VM actually runs :400, local_port :8083 unchanged).
-  Current 3 VMs: Qwen(20.219.197.71) Nemotron(70.153.146.188) Gemma(20.219.58.198) all healthy.
-  Ready for: python3 scripts/debate.py --mode cooperative --reuse-vms -q "..."
-  NEXT — cooperative debate live test:
-  1) Verify Pod A(:8080) DeepSeek-V2-Lite healthy for DRAG+Synthesis
-  2) Run:
-     python3 scripts/debate.py --mode cooperative --reuse-vms \
-       -q "File: scripts/azure_spot.py\nTask: Review error handling and resource cleanup"
-  3) Compare with yesterday sessions (20260526T154843Z, 20260526T153353Z):
-     per-round Judge scores, consensus speed, total elapsed
-  4) Record worklog (tags: cooperative,benchmark,compare)'
-- 'debate.py refactored into 6 modules (2026-05-27): debate_data.py(271L) → debate_llm.py(357L)
-  → local_debate.py(454L)/cooperative_remote.py(109L) → cooperative_debate.py(171L)
-  → debate.py(71L CLI). Unidirectional dependency chain. SLOC rule exception: local_debate.py at
-  454 lines (54 over 400 target) — round_1_to_4_dart (~110L) DART cycle with 4 shared state vars
-  cannot be split without breaking cohesion. Exception documented in file header. Two bugs
-  found+fixed: switch_local_model using Path.exists() on str SWITCH_FILE (fixed to os.path.exists),
-  _pre_dart_hook missing _terminate_spot_vms() on provision failure (VM leak fixed).
-  Bidirectional verification: MODELS 10/10 identical, REMOTE_HOSTS 2/2 identical,
-  PROMPTS drag_analysis→drag_lite (intentional L1 Lite DRAG), call_llm timeout +600 matches original.
-  Both modes --dry-run pass. Live test pending (Pod B stopped by user during test).'
+  UPDATE (2026-05-28): debate simplified to 2-model v6.0 — Pod A(:8080) DeepSeek-V2-Lite (Proposer+Judge+DRAG+Summary+Synthesis),
+  Pod B(:8082) Phi-mini-MoE (Refuter). Qwen3-4B removed (too slow, low quality contribution). Cooperative mode unaffected
+  (:8082 idle during cooperative). Files: debate_data.py, local_debate.py, debate.py, debate_llm.py, nightly_batch.sh, dual-server-entrypoint.sh,
+  tr, swap_llm_mode.sh, telegram_bot.py.'
+- 'Cooperative debate --reuse-vms + Nemotron port fix (2026-05-27): --reuse-vms flag skips provisioning/termination — queries
+  Azure for existing spot VMs by name prefix and opens SSH tunnels. VMs preserved across sessions. debate_data.py: Nemotron
+  port 8080→400 (VM actually runs :400, local_port :8083 unchanged). Current 3 VMs: Qwen(20.219.197.71) Nemotron(70.153.146.188)
+  Gemma(20.219.58.198) all healthy. Ready for: python3 scripts/debate.py --mode cooperative --reuse-vms -q "..." NEXT — cooperative
+  debate live test: 1) Verify Pod A(:8080) DeepSeek-V2-Lite healthy for DRAG+Synthesis 2) Run: python3 scripts/debate.py --mode
+  cooperative --reuse-vms \ -q "File: scripts/azure_spot.py\nTask: Review error handling and resource cleanup" 3) Compare
+  with yesterday sessions (20260526T154843Z, 20260526T153353Z): per-round Judge scores, consensus speed, total elapsed 4)
+  Record worklog (tags: cooperative,benchmark,compare)'
+- 'debate.py refactored into 6 modules (2026-05-27): debate_data.py(271L) → debate_llm.py(357L) → local_debate.py(454L)/cooperative_remote.py(109L)
+  → cooperative_debate.py(171L) → debate.py(71L CLI). Unidirectional dependency chain. SLOC rule exception: local_debate.py
+  at 454 lines (54 over 400 target) — round_1_to_4_dart (~110L) DART cycle with 4 shared state vars cannot be split without
+  breaking cohesion. Exception documented in file header. Two bugs found+fixed: switch_local_model using Path.exists() on
+  str SWITCH_FILE (fixed to os.path.exists), _pre_dart_hook missing _terminate_spot_vms() on provision failure (VM leak fixed).
+  Bidirectional verification: MODELS 10/10 identical, REMOTE_HOSTS 2/2 identical, PROMPTS drag_analysis→drag_lite (intentional
+  L1 Lite DRAG), call_llm timeout +600 matches original. Both modes --dry-run pass. Live test pending (Pod B stopped by user
+  during test).'
 - 'E2E cooperative debate smoke test PASSED (2026-05-26): Session 20260526T154843Z completed successfully. DRAG(DeepSeek-V2-Lite
   101.6s) → Spot VMs provisioned (Qwen3-30B centralindia, Nemotron3-Nano indonesiacentral) → Round 1 Nemotron win 85% → Round
   2 Nemotron win 95% → Early exit (≥90%) → VMs terminated → Synthesis(DeepSeek-Summary + Qwen14B 636.1s). Full pipeline verified:
@@ -114,12 +140,20 @@ decisions:
   RSS) = 19GB active + page cache > 24GB. Only works WITH page cache eviction (posix_fadvise DONTNEED on GLM before Pod B
   load). Without eviction, swap fills and system thrashes. Consider increasing zram to 8GB for more headroom.'
 known_issues:
+- 'Q4 model speed bottleneck (2026-05-28): worklog_generator DeepSeek drafting + Phi-mini-MoE review takes 5-8 minutes for
+  2 batches (BATCH_SIZE=5). 15-minute timer is functional but marginal. Mitigation: MAX_BATCHES=2 limits processing. LLM_TIMEOUT=300
+  prevents infinite hang. KST 00:00-07:00 quiet window prevents night-time LLM competition.'
+- 'debate v6.1 resident (2026-05-28): :8080 Qwen3-Coder-30B-A3B 14GB RSS (UP), :8082 Qwen2.5-Coder-3B 4GB RSS (UP),
+  :8081 unused (DOWN, reserved for review/verify modes). dual-server-entrypoint.sh memory threshold 5000MB.
+  Combined ~18GB RSS, fits 22GB with margin. Cache-reuse 256 enabled on both pods.'
 - '--force-deletion value "none" fixed (2026-05-26): Previously az vm delete --force-deletion none caused warning. Fixed to
   "false" in commit f05ae27.'
 - 'Final report diff malformed (2026-05-26): synthesis JSON output is not properly serialized to markdown diff format. final_report.md
   shows truncated/broken diff. Root cause likely in debate.py synthesis post-processing — JSON keys appearing as diff lines.'
-- 'switch_model() 60s wait FIXED (2026-05-26): commit 57be469. Same-model-no-op now reads switch file and skips kill/wait loop. Saves ~60s per round when Judge is already loaded.'
-- 'Debate overhead reduced (2026-05-26): commit 57be469. Judge writes summary (saves 164s model switch). VM termination moved to early exit path (immediate cleanup on consensus). Total ~400s saved per session.'
+- 'switch_model() 60s wait FIXED (2026-05-26): commit 57be469. Same-model-no-op now reads switch file and skips kill/wait
+  loop. Saves ~60s per round when Judge is already loaded.'
+- 'Debate overhead reduced (2026-05-26): commit 57be469. Judge writes summary (saves 164s model switch). VM termination moved
+  to early exit path (immediate cleanup on consensus). Total ~400s saved per session.'
 - 'Spot VM quota exceeded (2026-05-26): Azure for Students LowPriorityCores limit 3 in centralindia. Resolution: delete existing
   VMs before creating spot VMs. Account 2 indonesiacentral quota also limited (2 cores).'
 - 'SP gallery permission resolved (2026-05-26): Account 2 SP now has gallery read access — spot VM creation from golden images

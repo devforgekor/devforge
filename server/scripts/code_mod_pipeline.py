@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""code_mod_pipeline.py — Qwen32B 4-stage code modification pipeline.
+"""code_mod_pipeline.py — Qwen3-Coder-30B-A3B 4-stage code modification pipeline (ctx=8192).
 
 SLOC-exempt: 852 lines — single cohesive 4-stage pipeline (ANALYZE→PLAN→IMPLEMENT
 →PACKAGE). Each stage shares RateEstimator, prompt templates, LLM client, Slack
@@ -24,6 +24,7 @@ Usage:
 import glob
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.request
@@ -47,7 +48,8 @@ SLACK_CHANNEL = "U0APJGD8CBW"  # DM
 # 32B IQ4_XS on ARM CPU benchmarked at:
 #   - prompt eval:  ~3-5 tok/s (CPU prefill, degrades with longer ctx)
 #   - generation:   ~2.15 tok/s (measured from prior runs)
-GEN_RATE = 2.15          # tokens/sec for generation (stable)
+GEN_RATE = 6.0           # tokens/sec for generation (30B MoE, calibrated by RateEstimator)
+_LOCAL_MODEL = "qwen3-30b-a3b"  # model name matching LLAMA_ENDPOINT (for warmup, cache reset, etc.)
 TIMEOUT_BUFFER = 120     # extra seconds for network/overhead
 
 STAGE_MAX_TOKENS = {1: 2048, 2: 3072, 3: 3072, 4: 2048}
@@ -379,6 +381,102 @@ def _parse_llm_json(text: str):
     return parse_llm_json(text)
 
 
+def _bm25_pre_slice(code: str, task_desc: str, max_tokens: int = 7000) -> str:
+    """BM25-based chunk retrieval for oversized files. Zero VRAM, pure CPU.
+
+    Splits code at function/class boundaries, tokenizes with Python-aware
+    splitting (snake_case, CamelCase), scores chunks against the full task
+    description, and returns top chunks within max_tokens budget.
+
+    Falls back to first-N-lines if BM25 fails to find relevant chunks.
+    """
+    import re as _re
+    from rank_bm25 import BM25Okapi
+
+    lines = code.split("\n")
+
+    # Chunk at def/class boundaries (keep header with body)
+    boundaries = [0]
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if (stripped.startswith("def ") or stripped.startswith("class ")
+                or stripped.startswith("async def ")):
+            boundaries.append(i)
+    boundaries.append(len(lines))
+
+    chunks = []
+    chunk_ranges = []
+    for j in range(len(boundaries) - 1):
+        start = boundaries[j]
+        end = boundaries[j + 1]
+        chunk_lines = lines[start:end]
+        chunks.append("\n".join(chunk_lines))
+        chunk_ranges.append((start + 1, end))  # 1-indexed
+
+    if not chunks or len(chunks) <= 1:
+        return code
+
+    # Python-aware tokenizer: split on CamelCase, snake_case, operators
+    def _tokenize(text: str) -> list:
+        tokens = []
+        # split CamelCase
+        text = _re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+        text = _re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', text)
+        # split on non-alnum
+        for tok in _re.split(r'[^a-zA-Z0-9_]+', text.lower()):
+            tok = tok.strip("_")
+            if len(tok) >= 2:
+                # split snake_case
+                for sub in tok.split("_"):
+                    if len(sub) >= 2:
+                        tokens.append(sub)
+        return tokens
+
+    # Tokenize task and chunks
+    task_tokens = _tokenize(task_desc)
+    chunk_tokens = [_tokenize(c) for c in chunks]
+
+    if not task_tokens or all(not ct for ct in chunk_tokens):
+        # Fallback: first N lines
+        budget = max_tokens
+        result_lines = []
+        for line in lines:
+            result_lines.append(line)
+            budget -= len(line) // 4 + 1
+            if budget <= 0:
+                break
+        return "\n".join(result_lines)
+
+    # BM25 scoring
+    bm25 = BM25Okapi(chunk_tokens)
+    scores = bm25.get_scores(task_tokens)
+
+    # Select top chunks within token budget
+    ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+    selected = []
+    token_used = 0
+    for idx, score in ranked:
+        if score <= 0:
+            continue
+        chunk_text = chunks[idx]
+        chunk_tok = int(len(chunk_text) / 3.5)
+        if token_used + chunk_tok > max_tokens:
+            continue
+        selected.append((idx, chunk_ranges[idx], chunk_text))
+        token_used += chunk_tok
+
+    if not selected:
+        return code  # no relevant chunks — keep full code (will fail but not silently)
+
+    # Sort by original line order and join with markers
+    selected.sort(key=lambda x: x[1][0])
+    parts = []
+    for idx, (start, end), text in selected:
+        parts.append(f"# --- lines {start}-{end} (BM25 score={scores[idx]:.2f}) ---")
+        parts.append(text)
+    return "\n".join(parts)
+
+
 def _slice_code(code: str, affected_sections: list) -> str:
     """Extract only affected function/line ranges from code.
 
@@ -427,7 +525,9 @@ def _slice_code(code: str, affected_sections: list) -> str:
                             end = min(max_line, i + 20)
                             ranges.append((max(1, i - 3), end))
                             break
-                    break
+                    else:
+                        continue  # no match for this segment, try next
+                    break  # match found, stop searching
 
     if not ranges:
         print(f"  [WARN] _slice_code could not parse any line ranges from "
@@ -512,7 +612,9 @@ def _build_stage_user_msg(stage_num: int, code: str, task_desc: str,
     """
     if stage_num == 1:
         nonce = f"[cache:{time.time():.6f}]"
-        return nonce + "\n" + STAGE1_ANALYZE.format(code=code, task=task_desc)
+        # Use sliced_code if pre-trimmed (oversized file), else full code
+        stage1_code = sliced_code if sliced_code != code else code
+        return nonce + "\n" + STAGE1_ANALYZE.format(code=stage1_code, task=task_desc)
     elif stage_num == 2:
         fb = f"PREVIOUS ATTEMPT NOTES:\n{feedback}\n\n" if feedback else ""
         return STAGE2_PLAN.format(
@@ -565,7 +667,7 @@ def _stage_label(stage_num: int, prompt_tokens: int, timeout: int,
 def run_32b_4stage(task: dict, start_stage: int = 1,
                    resume_from: dict = None,
                    with_api: bool = False) -> dict:
-    """Run a single task through Qwen32B 4-stage pipeline with dynamic timeouts.
+    """Run a single task through Qwen3-30B 4-stage pipeline with dynamic timeouts.
     start_stage: 1-4, skip earlier stages if resume_from provided.
     with_api: use DeepSeek API for Stage 2 PLAN (internet knowledge)."""
     code = read_file(task["file"])
@@ -624,6 +726,19 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
     # Pre-compute sliced_code from resume data (fresh run: stage1 not done yet, so sliced_code = code)
     s1_body = results.get("stage1", {}).get("body", {})
     sliced_code = _slice_code(code, s1_body.get("affected_sections", [])) if s1_body else code
+
+    # Pre-Stage-1 BM25 chunk retrieval: if full code exceeds ~7500 tokens (8192 ctx
+    # minus system prompt + task desc), use BM25 keyword search to find relevant chunks.
+    # 0 VRAM, pure CPU — scores code chunks against the full task description.
+    _code_tokens_est = int(len(code) / 3.5)
+    if not s1_body and _code_tokens_est > 7500:
+        _trimmed = _bm25_pre_slice(code, task_desc, max_tokens=7000)
+        if _trimmed != code and len(_trimmed) < len(code) * 0.85:
+            print(f"  [pre-slice] Oversized file ({_code_tokens_est} tok) → "
+                  f"BM25 retrieval ({int(len(_trimmed)/3.5)} tok)", flush=True)
+            sliced_code = _trimmed
+            results["pre_sliced"] = True
+
     if sliced_code != code:
         results["sliced_code_tokens_est"] = int(len(sliced_code) / 3.5)
 
@@ -650,7 +765,7 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
             {"role": "system", "content": SYSTEM_32B},
             {"role": "user", "content": _build_stage_user_msg(stage_num, code, task_desc, s1, s2, s3, sliced_code, analysis_only, feedback)},
         ]
-        stage_model = "qwen2.5-coder-32b"
+        stage_model = "qwen3-30b-a3b"
         if with_api and stage_num == 2:
             if not DEEPSEEK_KEY:
                 print("  [WARN] --with-api set but DEEPSEEK_API_KEY empty — falling back to local 32B",
@@ -661,16 +776,16 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
                     "deepseek-chat", timeout, STAGE_MAX_TOKENS[stage_num],
                     api_key=DEEPSEEK_KEY)
                 stage_model = "deepseek-chat"
-        if stage_model == "qwen2.5-coder-32b":
+        if stage_model == "qwen3-30b-a3b":
             status, body_dict, elapsed, was_retry = _call_stage_with_retry(
-                LLAMA_ENDPOINT, messages, "qwen2.5-coder-32b", timeout, STAGE_MAX_TOKENS[stage_num])
+                LLAMA_ENDPOINT, messages, "qwen3-30b-a3b", timeout, STAGE_MAX_TOKENS[stage_num])
 
         results[stage_key] = extract_json_from_llm_response((status, body_dict))
         results[stage_key]["elapsed_s"] = round(elapsed, 1)
         results[stage_key]["model"] = stage_model
-        if not was_retry and stage_model == "qwen2.5-coder-32b":
+        if not was_retry and stage_model == "qwen3-30b-a3b":
             _update_estimator(status, body_dict, elapsed)
-        elif stage_model != "qwen2.5-coder-32b":
+        elif stage_model != "qwen3-30b-a3b":
             results[stage_key]["rate_skip"] = "api_call"
         elif was_retry:
             results[stage_key]["rate_skip"] = "retry_cache_hit"
@@ -730,6 +845,14 @@ def run_32b_4stage(task: dict, start_stage: int = 1,
         if stage_num == 1:
             s1_body = results["stage1"].get("body", {})
             sliced_code = _slice_code(code, s1_body.get("affected_sections", [])) if s1_body else code
+            # Fallback: if _slice_code can't reduce (affected_sections too broad),
+            # use BM25 to keep Stage 2+ within context limit.
+            if (sliced_code == code or int(len(sliced_code) / 3.5) > 7500) and int(len(code) / 3.5) > 7500:
+                _trim2 = _bm25_pre_slice(code, task_desc, max_tokens=5000)
+                if _trim2 != code and len(_trim2) < len(code) * 0.85:
+                    sliced_code = _trim2
+                    print(f"  [pre-slice] Stage 2+ fallback: BM25 retrieval "
+                          f"({int(len(sliced_code)/3.5)} tok)", flush=True)
             results["sliced_code_tokens_est"] = int(len(sliced_code) / 3.5)
 
     results["rate_final"] = {"prompt_eval": round(estimator.prompt_eval_rate, 2),
@@ -800,7 +923,7 @@ def run_api(task: dict, api_cfg: dict) -> dict:
 def _insert_activity_stage(task_id: int, stage: int, status: int,
                            body: dict, elapsed_s: float,
                            prompt_tokens: int, completion_tokens: int,
-                           run_id: str, model_name: str = "qwen2.5-coder-32b") -> bool:
+                           run_id: str, model_name: str = "qwen3-30b-a3b") -> bool:
     """Insert a pipeline stage result into activity_log for traceability."""
     try:
         from lib.db import psql_ok, esc_sql
@@ -963,11 +1086,11 @@ def warmup_32b() -> bool:
     Retries once after a 30s wait if the first attempt fails (mlock can delay loading).
     Returns True if server responded successfully."""
     for attempt in (1, 2):
-        print(f"[warmup] Sending small request to load 32B model weights... (attempt {attempt}/2)", flush=True)
+        print(f"[warmup] Sending small request to load 30B model weights... (attempt {attempt}/2)", flush=True)
         t0 = time.monotonic()
         status, body = call_llm(LLAMA_ENDPOINT, [
             {"role": "user", "content": "Return the word 'ready'."},
-        ], model="qwen2.5-coder-32b", timeout=600, max_tokens=16)
+        ], model=_LOCAL_MODEL, timeout=600, max_tokens=16)
         elapsed = time.monotonic() - t0
         if status == 200:
             print(f"[warmup] OK in {elapsed:.1f}s — model loaded", flush=True)
@@ -976,6 +1099,44 @@ def warmup_32b() -> bool:
         if attempt == 1:
             print("[warmup] Waiting 30s then retrying...", flush=True)
             time.sleep(30)
+    return False
+
+
+def reset_llama_server(endpoint: str, model_name: str, timeout: int = 120) -> bool:
+    """Restart local llama-server to clear KV cache between tasks.
+
+    Determines which systemd unit to restart based on endpoint port.
+    Model reloads from page cache in ~6s (30B) or ~6s (32B on cached load).
+    """
+    if ":8080" in endpoint:
+        unit = "container-devforge-qwen"
+    else:
+        unit = "container-devforge-swap"
+
+    print(f"\n[Cache Reset] Restarting {unit} to clear KV cache...", flush=True)
+    t0 = time.monotonic()
+    try:
+        subprocess.run(
+            ["systemctl", "--user", "restart", unit],
+            capture_output=True, timeout=30, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"[Cache Reset] systemctl failed: {e.stderr.decode().strip()[:200]}", flush=True)
+        return False
+
+    for _ in range(timeout // 5):
+        try:
+            status, body = call_llm(endpoint,
+                [{"role": "user", "content": "ping"}],
+                model=model_name, timeout=15, max_tokens=4)
+            if status == 200:
+                elapsed = time.monotonic() - t0
+                print(f"[Cache Reset] Server ready in {elapsed:.1f}s — cache cleared", flush=True)
+                return True
+        except Exception:
+            pass
+        time.sleep(5)
+
+    print(f"[Cache Reset] WARNING: server did not respond within {timeout}s", flush=True)
     return False
 
 
@@ -1024,7 +1185,7 @@ def main():
 
     if not args.api_only:
         if not warmup_32b():
-            print("WARNING: 32B warmup failed — server may not be ready", flush=True)
+            print("WARNING: 30B warmup failed — server may not be ready", flush=True)
 
     for task in selected:
         print(f"\n{'='*60}")
@@ -1033,18 +1194,21 @@ def main():
         print(f"{'='*60}")
 
         if not args.api_only:
-            # Verify model is still loaded + memory is sufficient
+            # Skip container restart between tasks — KV cache doesn't affect output
+            # quality, only prompt eval speed. Restart causes TCP connection drops
+            # during long prompt eval (>10min) through podman/pasta.
             if task["id"] > 1:
-                print(f"\n[Pre-check] Verifying 32B model still loaded...", flush=True)
-                status, body = call_llm(LLAMA_ENDPOINT, [
-                    {"role": "user", "content": "Return 'ok'."},
-                ], model="qwen2.5-coder-32b", timeout=60, max_tokens=8)
-                if status != 200:
-                    err = body.get("error", "unknown")[:100]
-                    print(f"  FATAL: Model unloaded before Task {task['id']}: {err}", flush=True)
-                    print(f"  Skipping Task {task['id']} — container restart required.", flush=True)
-                    continue
-                print(f"  Model OK", flush=True)
+                # Just wait for server to be idle from previous task
+                for _ in range(24):
+                    try:
+                        status, body = call_llm(LLAMA_ENDPOINT,
+                            [{"role": "user", "content": "ping"}],
+                            model=_LOCAL_MODEL, timeout=15, max_tokens=4)
+                        if status == 200:
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(5)
 
             if not _pre_task_memory_check(task["id"]):
                 continue
@@ -1074,7 +1238,7 @@ def main():
                         resume_data = None
                         args.start_stage = 1
 
-            print(f"\n[32B 4-Stage Pipeline] Starting from stage {args.start_stage}...")
+            print(f"\n[30B 4-Stage Pipeline] Starting from stage {args.start_stage}...")
             result = None
             try:
                 result = run_32b_4stage(task, start_stage=args.start_stage,
@@ -1090,7 +1254,7 @@ def main():
                     if url:
                         print(f"  Review: {url}")
             except Exception as e:
-                print(f"  32B pipeline failed: {e}")
+                print(f"  30B pipeline failed: {e}")
                 import traceback
                 traceback.print_exc()
                 if result is not None:

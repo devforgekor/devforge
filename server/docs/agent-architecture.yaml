@@ -1,0 +1,1049 @@
+# ============================================================================
+# DevForge Agent Architecture — Complete System Specification
+# ============================================================================
+# Purpose: Single-document reference for external LLM review.
+# Covers: hardware, models, current scripts, proposed architecture,
+#         data flow, deployment plan, design rationale.
+# Author: DevForge / Claude Code
+# Date: 2026-05-29
+# ============================================================================
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 1: HARDWARE & INFRASTRUCTURE
+# ════════════════════════════════════════════════════════════════════════════
+
+hardware:
+  host: OCI Ampere ARM (Oracle Linux 9.7)
+  cpu:
+    architecture: aarch64 (ARM Neoverse-N1)
+    cores: 4
+    bogomips_per_core: 50.00
+  memory:
+    total_ram_gb: 22
+    zram_gb: 4
+    zram_compression: zstd
+    zram_effective_ratio: "5.15:1 for general data, ~1:1 for quantized model weights"
+    disk_swap_gb: 4
+    disk_swap_priority: 10 (low, zram preferred)
+    typical_available_gb: 13  # with 30B running on :8080
+  storage:
+    - device: ocivolume-root
+      size_gb: 20
+      mount: /
+      used_gb: 15
+    - device: datavg-lv_ai_data
+      size_gb: 100
+      mount: /opt/ai_data
+      used_gb: 72
+      contents: "model GGUF files (72GB), debate sessions, worklog"
+    - device: datavg-lv_db
+      size_gb: 30
+      mount: /mnt/lv_db
+      used_gb: 0.4
+      contents: PostgreSQL 16 data
+    - device: datavg-lv_projects
+      size_gb: 10
+      mount: /opt/projects
+      used_gb: 0.7
+      contents: application code, scripts, docs
+    - device: ocivolume-lv_tmp
+      size_gb: 10
+      mount: /var/tmp
+      used_gb: 3.7
+      contents: pipeline outputs, temp files
+
+container_runtime:
+  engine: Podman rootless (user opc)
+  orchestration: Quadlet systemd units
+  network: devforge-net (bridge, 10.89.0.0/24)
+  containers:
+    data-pod:
+      type: pod
+      containers:
+        postgres:
+          image: localhost/devforge-postgres:2026.05.15
+          port: 5432
+          db: devforge_app
+          extensions: [pg_trgm, JSONB]
+    devforge-qwen:
+      unit: container-devforge-qwen.service
+      role: "Pod A — primary model server"
+      image: ghcr.io/ggml-org/llama.cpp:server
+      ports: ["127.0.0.1:8080:8080"]
+      model: Qwen3-Coder-30B-A3B-Instruct-Q3_K_M.gguf (14GB)
+      ctx: 4096
+      threads: 4
+    devforge-swap:
+      unit: container-devforge-swap.service
+      role: "Pod B — swappable model server (mode-dependent)"
+      image: ghcr.io/ggml-org/llama.cpp:server
+      ports: ["127.0.0.1:8081-8082:8081-8082"]
+      modes:
+        debate:
+          model: Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf (1.8GB)
+          port: 8082
+          ctx: 4096
+          threads: 2
+        review:
+          model: Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf (8.4GB)
+          port: 8081
+          ctx: 4096
+          threads: 4
+        r1-8b:
+          model: DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf (4.9GB)
+          port: 8081
+          ctx: 8192
+          threads: 4
+        qwen-7b:
+          model: Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf (4.7GB)
+          port: 8081
+          ctx: 4096
+          threads: 4
+        selene:
+          model: selene-1-mini-llama-3.1-8b-q4_k_m.gguf (4.6GB)
+          port: 8081
+          ctx: 4096
+          threads: 4
+        verify:
+          model: Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf (17GB)
+          port: 8081
+          ctx: 16384
+          threads: 4
+    caddy:
+      type: system service
+      ports: [80, 443, 2019]
+      role: reverse proxy + auto-HTTPS
+  services:
+    - devforge-api (standalone, :8000, MCP SSE)
+    - devforge-turn-watcher (real-time session → PostgreSQL)
+    - netdata (system monitoring, :19999)
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 2: MODEL CATALOG
+# ════════════════════════════════════════════════════════════════════════════
+
+models:
+  local:
+    qwen3-30b-a3b:
+      file: Qwen3-Coder-30B-A3B-Instruct-Q3_K_M.gguf
+      size_gb: 14
+      type: "MoE (30B total, ~3B active per token)"
+      port: 8080
+      ctx: 4096
+      threads: 4
+      quant: Q3_K_M
+      role: "primary code generator, Pod A resident"
+      speed_tok_s: 10.5
+
+    qwen-32b:
+      file: Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf
+      size_gb: 17
+      type: dense
+      port: 8081
+      ctx: 16384
+      threads: 4
+      quant: IQ4_XS
+      role: "nightly final verification (Pod B verify mode)"
+      speed_tok_s: 0.5
+      note: "requires Pod A stop to free RAM"
+
+    # ── Nightly 3-Model Review Pipeline ──
+    r1-0528-8b:
+      file: DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf
+      size_gb: 4.9
+      type: dense
+      base: Qwen3-8B
+      training: "R1 reinforcement-learning distillation (May 2025)"
+      port: 8081
+      ctx: 8192
+      threads: 4
+      quant: Q4_K_M
+      role: "Step 1 — deep reviewer (bug/vuln/edge case discovery)"
+      think_mode: true
+      think_strip: true
+      benchmark:
+        livecode_bench: 60.5
+        aime_2024: 86.0
+      note: "download required (~4.9GB)"
+      speed_tok_s: 12.0
+
+    qwen2.5-coder-7b:
+      file: Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+      size_gb: 4.7
+      type: dense
+      port: 8081
+      ctx: 4096
+      threads: 4
+      quant: Q4_K_M
+      role: "Step 2 — reflector (ACCEPT/REJECT per finding)"
+      bias: "style-override (mitigated by diff format cage)"
+      note: "download required (~4.7GB)"
+      speed_tok_s: 14.0
+
+    selene-mini-8b:
+      file: selene-1-mini-llama-3.1-8b-q4_k_m.gguf
+      size_gb: 4.6
+      type: dense
+      base: Llama-3.1-8B
+      specialization: "LLM-as-Judge"
+      port: 8081
+      ctx: 4096
+      threads: 4
+      quant: Q4_K_M
+      role: "Step 3 — impartial judge (2:0 ratify / 1:1 deciding vote)"
+      note: "already downloaded"
+      speed_tok_s: 13.0
+
+    qwen-14b:
+      file: Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf
+      size_gb: 8.4
+      type: dense
+      port: 8081
+      ctx: 4096
+      threads: 4
+      quant: Q4_K_M
+      role: "nightly review (Pod B review mode)"
+      speed_tok_s: 3.0
+
+    deepseek-v2-lite:
+      file: DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf
+      size_gb: 9.7
+      type: "MoE (16B total, ~2.4B active)"
+      port: 8080
+      ctx: 4096
+      threads: 4
+      quant: Q4_K_M
+      role: "extraction, DRAG analysis, synthesis"
+      note: "previously used on Pod A, still available"
+
+    qwen2.5-coder-3b:
+      file: Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf
+      size_gb: 1.8
+      type: dense
+      port: 8082
+      ctx: 4096
+      threads: 2
+      quant: Q4_K_M
+      role: "debate refuter / reviewer (Pod B debate mode)"
+      speed_tok_s: 18.0
+
+    phi-mini-moe:
+      file: Phi-mini-MoE-instruct-Q4_K_M.gguf
+      size_gb: 4.7
+      type: MoE
+      port: 8082
+      ctx: 4096
+      quant: Q4_K_M
+      role: "previous debate refuter (being replaced by qwen2.5-coder-3b)"
+
+    smallthinker-21b:
+      file: SmallThinker-21B-A3B-Instruct.Q3_K.gguf
+      size_gb: 9.8
+      type: "MoE (21B total, ~3B active)"
+      quant: Q3_K
+      role: "experimental, not in active rotation"
+
+    selene-1-mini-llama-8b:
+      file: selene-1-mini-llama-3.1-8b-q4_k_m.gguf
+      size_gb: 4.6
+      type: dense
+      quant: Q4_K_M
+      role: "Llama-family test model, not in active rotation"
+
+  operator_candidates:
+    qwen3-1.7b:
+      file: Qwen3-1.7B-Q4_K_M.gguf
+      size_gb: 1.1
+      type: dense
+      role: "lightweight dispatch classifier (candidate)"
+      note: "downloaded, test suite ready (test_operator.py), not yet deployed"
+
+    llama-3.2-3b:
+      file: Llama-3.2-3B-Instruct-Q4_K_M.gguf
+      size_gb: 2.0
+      type: dense
+      role: "lightweight dispatch classifier (candidate)"
+      note: "downloaded, test suite ready, different model family from Qwen → bias diversity"
+
+  azure_spot:
+    qwen3-30b-a3b-azure:
+      file: Qwen3-30B-A3B-Q4_K_M.gguf
+      vm_size: Standard_FX2ms_v2
+      location: centralindia
+      subscription: account1
+      resource_group: RG-DEVFORGE-PROD-CIN
+      gallery_image: img-qwen3-30b-a3b-v3
+      role: "cooperative debate Proposer"
+      port: 8084
+
+    nemotron3-nano-30b:
+      file: Nemotron-3-Nano-30B-A3B-IQ4_XS.gguf
+      vm_size: Standard_FX2ms_v2
+      location: indonesiacentral
+      subscription: account2
+      resource_group: RG-DEVFORGE-LLM-PROD-CIN
+      gallery_image: img-nemotron3-nano-30b-spot
+      role: "cooperative debate Refuter"
+      port: 8083
+
+    gemma-4-26b:
+      file: gemma-4-26B-A4B-it-UD-Q4_K_M.gguf
+      vm_size: Standard_E2as_v4
+      location: centralindia
+      subscription: account3
+      resource_group: RG-DEVFORGE-LLM-JUDGE-CIN
+      gallery_image: img-gemma-4-26b-spot
+      role: "cooperative debate Judge + Summary"
+      port: 8085
+
+  prompt_caching:
+    mechanism: "llama.cpp --cache-reuse 256"
+    description: "strict similarity threshold, reuses KV cache for identical system prompts"
+    benefit: "30-50% eval speed improvement across batch runs"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 3: CURRENT SCRIPTS & TOOLS INVENTORY
+# ════════════════════════════════════════════════════════════════════════════
+
+scripts:
+  code_generation:
+    code_mod_pipeline:
+      file: scripts/code_mod_pipeline.py
+      lines: ~1400
+      role: "4-stage code modification pipeline (ANALYZE → PLAN → IMPL → PACKAGE)"
+      model: qwen3-30b-a3b (:8080)
+      features:
+        - "BM25 pre-slice for oversized files (>7500 tokens)"
+        - "Feedback injection from previous failed attempts"
+        - "Self-calibrating rate estimator for timeout calculation"
+        - "KV cache reuse across stages"
+        - "Slack notifications per stage"
+      input:
+        task_id: int
+        task_description: str
+        file_path: str
+        feedback: str (optional, from prior attempts)
+      output:
+        diff: str (unified diff)
+        confidence: float (0.0-1.0)
+        review_url: str (Azure blob SAS URL)
+        stages: dict (4-stage results with tokens, elapsed, status)
+      feedback_mechanism:
+        source: "/var/tmp/code_mod_tests/feedback_task{N}.txt"
+        injects_into: "Stage 2 PLAN via 'PREVIOUS ATTEMPT NOTES:' prefix"
+      issues:
+        - "Stage 1 token estimator uses full code (not sliced) → overestimates timeout"
+        - "Stage 2+ BM25 max_tokens fixed at 5000 (was 7000, reduced for analysis JSON overhead)"
+
+    hybrid_pipeline:
+      file: scripts/hybrid_pipeline.py
+      lines: ~1000
+      role: "older hybrid pipeline (DeepSeek + external API), partially superseded"
+
+  debate_system:
+    debate:
+      file: scripts/debate.py
+      lines: 85
+      role: "CLI entry point for multi-agent debate"
+      modes:
+        debate: "LocalDebate: 30B Proposer+Judge+DRAG + 3B Refuter (Pod A + Pod B)"
+        review: "LocalDebateReview: 30B + 14B reviewer (Pod A + Pod B)"
+        cooperative: "CooperativeDebate: Azure 3 spot VMs + local synthesis"
+
+    local_debate:
+      file: scripts/local_debate.py
+      lines: ~800
+      role: "LocalDebate + LocalDebateReview classes"
+      classes:
+        LocalDebate:
+          rounds: 4 (DRAG → DART×4 → Synthesis)
+          models: [deepseek-v2-lite, qwen2.5-coder-3b]
+        LocalDebateReview:
+          rounds: 1 (DRAG → Review → Synthesis)
+          models: [deepseek-v2-lite, qwen-14b]
+
+    cooperative_debate:
+      file: scripts/cooperative_debate.py
+      lines: 225
+      role: "Extends LocalDebate with Azure spot VM orchestration"
+      flow: "provision VMs → SSH tunnels → 4-round debate → terminate"
+      model_assignment:
+        drag_model: deepseek-v2-lite (:8080)
+        proposer_model: qwen3-30b-a3b (azure, :8084)
+        refuter_model: nemotron3-nano-30b (azure, :8083)
+        judge_model: gemma-4-26b (azure, :8085)
+        summary_model: gemma-4-26b (azure, :8085)
+        synthesizer_model: deepseek-v2-lite (:8080)
+
+    debate_data:
+      file: scripts/debate_data.py
+      lines: 280
+      role: "MODELS dict, REMOTE_HOSTS dict, PROMPTS dict — pure data, no logic"
+
+    debate_llm:
+      file: scripts/debate_llm.py
+      lines: ~430
+      role: "call_llm, call_llm_json, switch_local_model, rate estimator"
+
+  review_system:
+    review_worker:
+      file: scripts/review_worker.py
+      lines: ~650
+      role: "4-phase incremental fact review pipeline"
+      phases:
+        - "Phase 1 extract: DeepSeek-V2-Lite (:8080) extracts facts from turns"
+        - "Phase 2 verify: Python deterministic check — evidence substring in turn text"
+        - "Phase 3 debate: 14B (:8081) reviews verified facts"
+        - "Phase 4 store: review_facts DB + activity_log queue_status='reviewed'"
+      window: "24h rolling, checkpoint-based incremental"
+
+    review_consumer:
+      file: scripts/review_consumer.py
+      lines: ~200
+      role: "consumes review queue for 32B final verification"
+      trigger: "nightly Phase 6"
+
+  worklog_system:
+    turn_watcher:
+      file: scripts/turn_watcher.py
+      lines: ~330
+      role: "real-time session turn watcher (JSONL → PostgreSQL)"
+      service: devforge-turn-watcher.service (always running)
+
+    worklog_generator:
+      file: scripts/worklog_generator.py
+      lines: ~500
+      role: "generates worklog entries from auto mode results"
+      model: deepseek-v2-lite (:8080)
+      trigger: "nightly Phase 4.5"
+
+    link_turns:
+      file: scripts/link_turns.py
+      lines: ~270
+      role: "links commits to turns, worklog entries"
+      trigger: "nightly Phase 1"
+
+    collect_turns:
+      file: scripts/collect_turns.py
+      lines: ~200
+      role: "safety net — catches missed sessions"
+      trigger: "nightly Phase 2"
+
+  operator_test:
+    test_operator:
+      file: scripts/test_operator.py
+      lines: 550
+      role: "operator model evaluation — 50 test cases for mode dispatch"
+      modes_tested: [generate, debate, review, cooperative, verify, general]
+      system_prompt: "proven — role-based dispatch with 6 rules"
+      models:
+        qwen: Qwen3-1.7B-Q4_K_M.gguf
+        llama: Llama-3.2-3B-Instruct-Q4_K_M.gguf
+
+  infrastructure:
+    tr:
+      file: scripts/tr
+      lines: 194
+      role: "DevForge mode switcher CLI"
+      commands:
+        debate: "Pod A 30B :8080 + Pod B 3B :8082"
+        review: "Pod A 30B :8080 + Pod B 14B :8081"
+        cooperative: "review mode + Azure spot VM debate"
+        verify: "Pod A stopped, Pod B 32B :8081"
+        auto: "run auto_mode.sh then restore debate"
+
+    swap_llm_mode:
+      file: scripts/swap_llm_mode.sh
+      lines: 132
+      role: "low-level mode switcher (called by tr and nightly_batch)"
+      modes: [debate, review, verify]
+      memory_guard: "waits for RAM release before loading large models"
+      page_cache: "evicts old model .gguf from page cache to free RAM"
+
+    nightly_batch:
+      file: scripts/nightly_batch.sh
+      lines: 210
+      role: "nightly pipeline orchestrator (KST 03:00 / UTC 18:00)"
+      phases:
+        - "Phase 1: link_turns"
+        - "Phase 2: collect_turns"
+        - "Phase 3: state_collector (MOTD + state.yaml)"
+        - "Phase 4: auto_mode (user tasks via Claude Code)"
+        - "Phase 4.5: worklog_generator"
+        - "Phase 5: review_worker (extract + 14B debate)"
+        - "Phase 6: 32B final verify (review_consumer)"
+        - "Phase 7: restore debate mode"
+        - "Phase 8: embed_turns (Gemini API)"
+
+    auto_mode:
+      file: scripts/auto_mode.sh
+      lines: 270
+      role: "unattended task execution via Claude Code"
+      input: data/auto_tasks.md (## task headings)
+      memory_check: "pre-flight 4GB minimum available RAM check"
+
+  azure:
+    azure_spot:
+      file: scripts/azure_spot.py
+      lines: 760
+      role: "Azure spot VM orchestration"
+      classes:
+        SpotVMConfig: "config for a spot VM deployed from gallery image"
+        SpotVMManager: "single VM lifecycle (create, wait SSH, terminate)"
+        SpotOrchestrator: "multi-VM orchestration"
+      vm_configs:
+        - label: qwen3-30b-a3b (account1, centralindia, FX2ms_v2)
+        - label: nemotron3-nano-30b (account2, indonesiacentral, FX2ms_v2)
+        - label: gemma-4-26b (account3, centralindia, E2as_v4)
+      features:
+        - "golden image deployment (specialized VMs, no OS generalization)"
+        - "SSH tunnel management"
+        - "spot eviction handling"
+        - "reuse-vms mode (skip provision, reuse existing)"
+
+    cooperative_remote:
+      file: scripts/cooperative_remote.py
+      lines: 108
+      role: "remote model activation/deactivation via SSH"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 4: CURRENT WORKFLOW (AS-IS)
+# ════════════════════════════════════════════════════════════════════════════
+
+current_workflow:
+  daytime:
+    description: "Interactive coding sessions (Claude Code, Aider, Copilot)"
+    models_active:
+      pod_a: "30B Qwen3-Coder (:8080) — code generation, DRAG analysis"
+      pod_b: "3B Qwen2.5-Coder (:8082) — debate refuter"
+    data_capture:
+      - "turn_watcher: real-time JSONL → PostgreSQL activity_log"
+      - "git commits: auto-committed by auto_commit_guard"
+      - "worklog: auto-generated from agent sessions"
+    mode_switching:
+      tool: "tr <debate|review|cooperative|verify|auto>"
+      persistence: "/opt/ai_data/scripts/current-mode.env"
+      mechanism: "systemctl restart container-devforge-swap"
+
+  nightly:
+    description: "Batch pipeline (KST 03:00, via systemd timer)"
+    flow:
+      - "Phase 1-3: link_turns → collect_turns → state snapshot (light)"
+      - "Phase 4: auto_mode — execute user tasks from auto_tasks.md"
+      - "Phase 4.5: worklog_generator — reconcile worklog entries"
+      - "Phase 5: review mode — extract facts + 14B debate review"
+      - "Phase 6: verify mode — stop Pod A, load 32B, final verification"
+      - "Phase 7: restore debate mode (30B :8080 + 3B :8082)"
+      - "Phase 8: embed_turns (Gemini API, external)"
+    status: "/opt/projects/server/data/nightly_status.yaml"
+
+  cooperative_flow:
+    description: "Azure spot VM multi-agent debate (on-demand)"
+    trigger: "python3 scripts/debate.py --mode cooperative --reuse-vms -q '...'"
+    flow:
+      - "provision 3 spot VMs from golden images (~3 min)"
+      - "open SSH tunnels to each VM"
+      - "4-round debate: Proposer ↔ Refuter, Judge scores each round"
+      - "local Synthesis on DeepSeek-V2-Lite (:8080)"
+      - "terminate spot VMs (or keep if --reuse-vms)"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 5: PROPOSED ARCHITECTURE — DAYTIME DISPATCH + NIGHTLY AGENT LOOP
+# ════════════════════════════════════════════════════════════════════════════
+
+proposed_architecture:
+  overview:
+    principle: "Lightweight dispatch by day, thorough agent loop by night"
+    code_changes: "~650 new lines across 4 files, ~34 lines added to 3 existing files"
+    rationale: >
+      Existing tools (pipeline, debate, cooperative, review) already handle
+      code generation, review, and verification. What is missing is a
+      SUPERORDINATE CONTROL LAYER that decides WHICH tool to use WHEN,
+      and an AUTOMATED LOOP that collects, reviews, fixes, and re-verifies
+      all work accumulated during the day.
+
+  daytime_dispatch:
+    description: >
+      Simple routing: operator model classifies each incoming task as
+      "local" (simple, quick) or "cooperative" (complex, high-quality needed).
+      No agent loop during daytime — just dispatch and execute.
+    components:
+      operator:
+        file: scripts/agent_operator.py (NEW, ~100 lines)
+        model: Qwen3-1.7B or Llama-3.2-3B (on Pod B :8081 when needed)
+        function: "classify task → local | cooperative | general"
+        reuses: test_operator.py system prompt (already validated, 50 test cases)
+        modes:
+          local:
+            description: "Simple code generation, small fixes, Q&A"
+            workers:
+              - "code_mod_pipeline.py (30B 4-stage)"
+              - "aider (subprocess, 3B, diff editing)"
+              - "debate.py (30B + 3B, architectural decisions)"
+          cooperative:
+            description: "Complex architecture, high-quality code required"
+            workers:
+              - "cooperative_debate.py (Azure 3 spot VMs)"
+              - "Proposer(30B) + Refuter(Nemotron) + Judge(Gemma4-26B)"
+              - "4-round debate → local synthesis → code returned"
+          general:
+            description: "Quick Q&A, no code modification needed"
+            workers: ["any available lightweight model"]
+      routing_flow: |
+        User Request
+          │
+          ▼
+        operator(task_description) → {mode, complexity, reason}
+          │
+          ├── local → execute locally (30B pipeline / aider / debate)
+          │              │
+          │              └── result → worklog DB + git commit
+          │
+          └── cooperative → provision Azure spot VMs
+                             │
+                             ├── Proposer(30B) + Refuter(Nemotron) + Judge(Gemma)
+                             ├── 4-round debate
+                             ├── local Synthesis
+                             └── result → apply code locally → worklog DB
+
+  nightly_agent_loop:
+    description: >
+      Collect ALL work from the day (local pipeline outputs, cooperative results,
+      extractor facts, aider edits, git diffs). Run through systematic REVIEW →
+      VERIFY → FIX_LOOP → FINAL pipeline. This is where the agent loop operates.
+    trigger: "nightly_batch.sh Phase 5-7 (replaces current review/verify phases)"
+    phases:
+      phase_0_collect:
+        file: scripts/agent_collector.py (NEW, ~100 lines)
+        description: "Gather all day's work into a unified review queue"
+        sources:
+          - "pipeline outputs: /var/tmp/code_mod_tests/local32b_task*.json (today's date)"
+          - "cooperative results: /opt/ai_data/debate_sessions/ (today's sessions)"
+          - "extractor facts: devforge_app.worklog_entries (today's linked facts)"
+          - "aider edits: git log --since=today (commits by aider)"
+          - "git diffs: git diff HEAD (unstaged changes)"
+        output: "unified_review_queue (list of {file, diff, source, confidence})"
+
+      phase_1_review:
+        description: "3-Model Review Pipeline (Review → Reflect → Judge)"
+        file: scripts/review_pipeline_3model.py (NEW, ~400 lines)
+        architecture: "sequential load on Pod B :8081, Pod A 30B stays resident"
+        steps:
+          step_1_deep_review:
+            model: r1-0528-8b (Pod B :8081, ~6.4GB loaded)
+            role: "Find bugs, security vulnerabilities, unhandled edge cases"
+            think_mode: true
+            think_strip: true
+            output: "numbered bug report (finding_id, severity, location, description)"
+            constraint: "NO code modification, NO style suggestions, max_tokens: 800"
+          step_2_reflection:
+            model: qwen2.5-coder-7b (Pod B :8081, ~6.2GB loaded)
+            pre_action: "unload R1-8B, load Qwen-7B"
+            role: "Per-finding ACCEPT/REJECT with reasoning"
+            output: "verdict per finding (ACCEPT | REJECT + 1-sentence reason)"
+            constraint: "NO code rewrite, NO alternatives, ONE round, max_tokens: 400"
+          step_3_judgment:
+            model: selene-mini-8b (Pod B :8081, ~6.1GB loaded)
+            pre_action: "unload Qwen-7B, load Selene"
+            role: "Impartial judge — evaluate technical merit only"
+            voting_logic:
+              score_2_0:
+                condition: "R1 and Qwen agree (both ACCEPT or both REJECT)"
+                action: "ratify unanimous decision"
+                result: "immediate final verdict"
+              score_1_1:
+                condition: "R1 and Qwen disagree"
+                action: "Selene casts deciding vote"
+                result: "2:1 final verdict"
+            output: "approved_for_fix list (boolean per finding)"
+            constraint: "NO code modification, structured verdict only"
+          step_4_diff:
+            model: qwen3-30b-a3b (Pod A :8080, resident)
+            role: "Write unified diff for approved findings ONLY"
+            output: "unified diff (---/+++/@@ format)"
+            constraint: "unified diff ONLY, NO style changes, touch ONLY approved lines, max_tokens: 600"
+
+      phase_2_verify:
+        description: "Observer quality gate — deterministic checks"
+        file: scripts/agent_observer.py (NEW, ~150 lines)
+        checks:
+          - "ast.parse() — Python syntax validation"
+          - "diff header validity — ---/+++ must exist"
+          - "empty output guard — diff not blank"
+          - "confidence >= 0.80"
+        note: "Phase 2 (LLM quality gate) only triggered if Phase 1 borderline (0.65-0.80)"
+
+      phase_3_fix_loop:
+        file: scripts/agent_loop.py (NEW, ~300 lines)
+        description: "Auto-fix failed items with retry loop (max 3 iterations)"
+        models: ["30B :8080 (regenerate)", "3B :8082 (aider fixes)"]
+        observer:
+          file: scripts/agent_observer.py (NEW, ~150 lines)
+          checks:
+            phase1_deterministic:
+              - "ast.parse() — Python syntax validation"
+              - "diff header validity — ---/+++ must exist"
+              - "empty output guard — diff not blank"
+              - "confidence >= 0.80"
+            phase2_llm:
+              trigger: "Phase 1 passes but confidence 0.65-0.80 (borderline)"
+              model: "14B (:8081) — minimal quality prompt"
+              fallback: "confidence-only rule if 14B unavailable"
+        loop_rules:
+          state_machine: "INIT → CODE → INSPECT → FIX | REVIEW → INSPECT ... → PASS | ABORT"
+          max_iterations: 5
+          abort_conditions:
+            - "2 consecutive failures → ABORT with best result"
+            - "5 total iterations → ABORT"
+          pass_condition: "confidence >= 0.80 AND observer Phase 1 all pass"
+          fix_strategies:
+            minor_issues: "aider subprocess (3B, diff mode) — surgical fixes"
+            structural_issues: "pipeline re-run with enriched error feedback"
+        feedback_accumulation: |
+          Each failed iteration enriches the error_feedback string.
+          Feedback is injected into the next attempt's Stage 2 PLAN prompt.
+          Format: "PREVIOUS ATTEMPT NOTES:\n{accumulated_issues}"
+
+      phase_4_final:
+        description: "Store final results + generate report + restore debate mode"
+        actions:
+          - "PASSED items → final storage (git commit + worklog DB update)"
+          - "ABORTED items → human_review_queue (Slack notification)"
+          - "worklog_metrics.jsonl update (for future fine-tuning decisions)"
+          - "Pod B → debate mode (3B :8082) for next day"
+
+  data_flow_day_to_night:
+    description: "How daytime outputs feed into the nightly agent loop"
+    flow: |
+      DAYTIME:
+        pipeline output      → /var/tmp/code_mod_tests/local32b_task*.json
+        cooperative output   → /opt/ai_data/debate_sessions/
+        aider edits          → git commits (author: aider)
+        extractor facts      → devforge_app.worklog_entries (PostgreSQL)
+        turn_watcher         → devforge_app.activity_log (PostgreSQL)
+
+      NIGHTLY:
+        agent_collector scans all above
+          → unified_review_queue (normalized format)
+          → REVIEW (14B) → VERIFY (32B) → FIX_LOOP → FINAL
+
+  memory_budget:
+    daytime:
+      pod_a: "30B (7.5GB)"
+      pod_b: "operator 1.7B (1.1GB) or 3B (2GB)"
+      os: "5GB"
+      available: "~13-14GB free"
+    nightly_review_step_1:
+      pod_a: "30B (7.5GB)"
+      pod_b: "R1-0528-8B (6.4GB)"
+      os: "5GB"
+      total: "18.9GB"
+      headroom: "3.1GB"
+    nightly_review_step_2:
+      pod_a: "30B (7.5GB)"
+      pod_b: "Qwen2.5-Coder-7B (6.2GB)"
+      os: "5GB"
+      total: "18.7GB"
+      headroom: "3.3GB"
+    nightly_review_step_3:
+      pod_a: "30B (7.5GB)"
+      pod_b: "Selene Mini 8B (6.1GB)"
+      os: "5GB"
+      total: "18.6GB"
+      headroom: "3.4GB"
+    nightly_review_step_4:
+      pod_a: "30B (7.5GB)"
+      pod_b: "unloaded / debate mode"
+      os: "5GB"
+      total: "12.5GB"
+      headroom: "9.5GB"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 6: IMPLEMENTATION PLAN
+# ════════════════════════════════════════════════════════════════════════════
+
+implementation:
+  new_files:
+    - file: scripts/review_pipeline_3model.py
+      lines: ~400
+      role: "3-Model Review Pipeline (Review → Reflect → Judge → Diff)"
+      dependencies: [lib.llm, debate_llm (for call_llm)]
+      functions:
+        - "strip_think_blocks(text) → str  # <think>...</think> removal"
+        - "run_deep_review(code, task) → bug_report"
+        - "run_reflection(code, bug_report) → verdicts"
+        - "run_judgment(code, bug_report, verdicts) → approved_findings"
+        - "run_diff(code, approved_findings) → unified_diff"
+        - "run_full_review(code, task) → {diff, confidence, report}"
+      test: "python3 scripts/review_pipeline_3model.py --smoke"
+
+    - file: scripts/agent_collector.py
+      lines: ~100
+      dependencies: [lib.db (psql)]
+      functions:
+        - "collect_today_work() → List[dict]  # scan all daytime outputs"
+        - "_scan_pipeline_outputs()  # /var/tmp/code_mod_tests/"
+        - "_scan_cooperative_results()  # /opt/ai_data/debate_sessions/"
+        - "_scan_git_diffs()  # git diff HEAD + git log"
+        - "_scan_extracted_facts()  # PostgreSQL worklog_entries"
+      test: "python3 scripts/agent_collector.py --dry-run"
+
+    - file: scripts/agent_observer.py
+      lines: ~150
+      dependencies: [ast, subprocess]
+      functions:
+        - "observe(diff, confidence, task) → ObserverResult"
+        - "_check_syntax(diff) → bool  # ast.parse"
+        - "_check_diff_headers(diff) → bool  # ---/+++ must exist"
+        - "_check_empty(diff) → bool  # non-blank guard"
+        - "_llm_quality_gate(diff, confidence, task) → ObserverResult  # Phase 2"
+      test: "python3 scripts/agent_observer.py --smoke"
+
+    - file: scripts/agent_operator.py
+      lines: ~100
+      dependencies: [urllib, json, debate_llm (for call_llm)]
+      functions:
+        - "dispatch_mode(task_description, model_key='qwen') → str"
+        - "_classify(task_description) → {mode, complexity, reason}"
+      reuses: "test_operator.py SYSTEM_PROMPT (validated, 50 test cases)"
+      test: "python3 scripts/agent_operator.py --smoke"
+
+    - file: scripts/agent_loop.py
+      lines: ~300
+      dependencies:
+        - agent_collector (Phase 0)
+        - review_worker (Phase 1 — extract + verify + debate pattern)
+        - code_mod_pipeline (Phase 3 — re-generate with feedback)
+        - agent_observer (Phase 3 — quality gate)
+      cli: |
+        python3 scripts/agent_loop.py --mode nightly    # full nightly pipeline
+        python3 scripts/agent_loop.py --mode dry-run    # collect only, no LLM
+        python3 scripts/agent_loop.py --smoke           # unit tests
+      state_machine:
+        states: [COLLECT, REVIEW, VERIFY, FIX, PASS, ABORT]
+        transitions:
+          - "COLLECT → REVIEW (always)"
+          - "REVIEW → VERIFY (always)"
+          - "VERIFY → PASS (all passed)"
+          - "VERIFY → FIX (some failed, < max_iterations)"
+          - "VERIFY → ABORT (some failed, >= max_iterations)"
+          - "FIX → VERIFY (re-check after fix)"
+        data_model:
+          LoopState:
+            iteration: int
+            status: str
+            review_queue: list
+            passed: list
+            failed: list
+            error_feedback: str  # accumulates across iterations
+            best_result: dict  # best attempt so far (for ABORT fallback)
+            confidence_trend: list  # tracks improvement across iterations
+            elapsed_s: float
+
+  modified_files:
+    - file: scripts/code_mod_pipeline.py
+      change: "Add run_single_task(task_desc, file_path, feedback='') → dict"
+      lines: ~8
+      location: "module-level, before main()"
+      purpose: "callable wrapper for agent loop, avoids CLI argument parsing"
+
+    - file: scripts/local_debate.py
+      change: "Add LocalDebateReview.run_review_from_task(file_path, task_desc, feedback='') → Optional[dict]"
+      lines: ~6
+      purpose: "classmethod for agent loop to invoke review without CLI"
+
+    - file: scripts/nightly_batch.sh
+      change: "Phase 5-6: replace old review+verify with 3-model pipeline"
+      lines: ~30
+      new_phases: |
+        # Phase 5: 3-Model Review Pipeline
+        for item in review_queue:
+          python3 scripts/review_pipeline_3model.py --code "$item"
+        # Phase 6: Observer quality gate
+        python3 scripts/agent_observer.py --check-passed
+
+    - file: scripts/swap_llm_mode.sh
+      change: "Add r1-8b, qwen-7b, selene modes"
+      lines: ~15
+
+    - file: scripts/tr
+      change: "Add r1-8b, qwen-7b, selene aliases"
+      lines: ~10
+
+  deployment_order:
+    - "0. Download models: R1-0528-8B (~4.9GB) + Qwen2.5-Coder-7B (~4.7GB)"
+    - "1. review_pipeline_3model.py — 3-model review implementation"
+    - "2. swap_llm_mode.sh + tr: add r1-8b, qwen-7b, selene modes"
+    - "3. Smoke test: each step individually with sample code"
+    - "4. agent_collector.py — simplest, no dependencies, testable immediately"
+    - "5. agent_observer.py — independent, unit-testable"
+    - "6. agent_loop.py — integrates all above + existing tools"
+    - "7. nightly_batch.sh: Phase 5-6 replacement"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 7: DESIGN RATIONALE — WHY NOT X
+# ════════════════════════════════════════════════════════════════════════════
+
+design_rationale:
+  why_not_crewai:
+    - "Python 3.9 incompatibility (project pinned to 3.9, Optional[X] not X|Y)"
+    - "~300MB additional dependencies (pydantic v2, langchain-core, openai)"
+    - "CrewAI agent/task/tool DSL abstracts model selection — we need per-GGUF control"
+    - "Existing code already implements CrewAI's pattern (role agents + sequential execution)"
+    - "Wrapping in CrewAI = rewrite, not integration"
+
+  why_not_langchain:
+    - "AgentExecutor loop is generic and heavier than our state machine"
+    - "ChatPromptTemplate provides no benefit over battle-tested f-string templates"
+    - "Output parsers less robust than our extract_json_from_llm_response recovery ladder"
+    - "Token counting doesn't account for self-calibrating rate estimation on ARM CPU"
+
+  why_not_aider_as_framework:
+    - "Aider is a CLI chat app, not a library — Python API is undocumented and unstable"
+    - "Forces its own edit formats (diff, whole, udiff) and model selection"
+    - "3B model lacks capability for architectural decisions or complex refactoring"
+    - "No concept of quality assessment, iteration loops, or mode dispatch"
+    - "CORRECT USE: aider as a Worker tool (subprocess) for small surgical fixes"
+
+  why_not_openai_api:
+    - "All processing must be local (no cloud dependency for core loop)"
+    - "Cost and latency from API calls"
+    - "30B local model already calibrated for this hardware"
+
+  why_custom_thin_layer:
+    - "Existing code is already 80% of an agent system"
+    - "Only missing piece: supervisor that decides WHEN to call WHAT"
+    - "~650 lines new code vs ~3000+ for framework adaptation"
+    - "Full control over model selection, memory management, and prompt injection"
+    - "Python 3.9 compatible (no new dependencies)"
+    - "Reuses: code_mod_pipeline feedback mechanism, debate prompt templates, review_worker verification pattern"
+
+  key_decisions:
+    supervisor_pure_python:
+      why: "LLM should not make control-flow decisions (hallucination risk, latency)"
+      benefit: "Deterministic, fast, debuggable"
+    observer_two_phase:
+      why: "90% of quality issues caught by deterministic checks (zero cost)"
+      benefit: "LLM only invoked for borderline cases, saving RAM and time"
+    aider_as_subprocess:
+      why: "Isolation — no import coupling, no API instability risk"
+      benefit: "Can upgrade aider independently, graceful fallback if unavailable"
+    operator_model_separate:
+      why: "Dispatch classification is cheap (1.7B model, <1s). Don't load 30B just to classify."
+      benefit: "Saves RAM, faster dispatch, operator always available"
+    feedback_accumulation:
+      why: "Each failed attempt should inform the next. Error context enriches each iteration."
+      benefit: "Same pattern already works in code_mod_pipeline feedback mechanism"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 8: ADAPTATION FROM OLLAMA DESIGN
+# ════════════════════════════════════════════════════════════════════════════
+
+adaptation_from_ollama_design:
+  source: "code_review_pipeline.yaml (Ollama-based, 2025-05-29)"
+  reviewed_by: "Claude Code (DeepSeek v4-pro)"
+  key_changes:
+    - change: "Ollama → llama.cpp server"
+      reason: "Ollama not installed on ARM, llama.cpp already validated"
+    - change: "2-resident + 1-hot-swap → sequential load on Pod B"
+      reason: "ARM 22GB can't fit 30B + two 8B models simultaneously"
+      benefit: "Simpler: single port, no concurrent model management"
+    - change: "14B reviewer → 7B reviewer"
+      reason: "14B dense (9.9GB loaded) exceeds RAM with 30B resident"
+      note: "R1-0528-8B's reasoning (LiveCodeBench 60.5) compensates for 7B's size"
+    - change: "x86_64 → ARM aarch64"
+      risk: "Qwen2.5-Coder-7B GGUF ARM performance not independently benchmarked"
+      mitigation: "Existing Qwen models on ARM perform as expected"
+
+  preserved_from_ollama_design:
+    - "3-step review structure (Review → Reflect → Judge → Diff)"
+    - "2:0 fast-path / 1:1 deciding vote logic"
+    - "Diff format cage (unified diff only, no style changes)"
+    - "Think block stripping (<think>.*?</think> regex — Python compatible)"
+    - "Per-step hard constraints (max_tokens, role restrictions)"
+    - "Selene Mini 8B as judge (already downloaded)"
+
+  errors_corrected:
+    - error: "LiveCodeBench 73.3 claimed for 8B model"
+      correction: "73.3 is full 671B R1-0528. 8B distilled = 60.5. Updated."
+    - error: "Context budget underestimated (3100/7100 vs actual 6000/9000)"
+      correction: "Added ctx=8192 for R1-8B step. 7B models handle tighter budgets."
+    - error: "zRAM 'KV cache exclusive' claim"
+      correction: "Use llama.cpp --cache-type-k q8_0 --cache-type-v q8_0 instead"
+    - error: "Created date 2025-05-29"
+      correction: "2026-05-29"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 9: VERIFICATION & TESTING
+# ════════════════════════════════════════════════════════════════════════════
+
+verification:
+  unit_tests:
+    review_pipeline:
+      - "strip_think_blocks(): <think>...</think> removed, other text preserved"
+      - "run_deep_review(): valid code → bug_report with finding_id, severity, location"
+      - "run_reflection(): bug_report → ACCEPT/REJECT per finding"
+      - "run_judgment(): 2:0 case → ratify, 1:1 case → deciding vote"
+    collector:
+      - "collect_today_work() returns non-empty list after a day with activity"
+      - "dry-run mode produces valid unified_review_queue without LLM calls"
+    observer:
+      - "SyntaxError diff → observe() returns pass=False with syntax issue"
+      - "Valid diff + confidence=0.85 → pass=True"
+      - "Valid diff + confidence=0.65 → pass=False, suggested_mode='fix'"
+      - "Empty diff → pass=False with empty_output issue"
+    operator:
+      - "8-question smoke test accuracy >= 85% (test_operator.py QUICK_TESTS)"
+      - "Qwen3-1.7B vs Llama-3.2-3B side-by-side comparison"
+    loop:
+      - "Single item, all pass: COLLECT → REVIEW → VERIFY → PASS (no fix loop)"
+      - "Single item, 1 fix needed: COLLECT → REVIEW → VERIFY → FIX → VERIFY → PASS"
+      - "3 consecutive failures → ABORT with best_result populated"
+      - "5 total iterations → ABORT"
+
+  integration_tests:
+    - "End-to-end dry-run: all phases execute without LLM (mock results)"
+    - "End-to-end live: 1 real task (L1 simple) through full loop → should PASS in 1 iteration"
+    - "Memory: free -h before/after each phase to verify RAM budget compliance"
+    - "Slack notification: ABORT items generate human_review_queue alert"
+
+  regression_tests:
+    - "code_mod_pipeline.py: existing T01-T09 tasks still produce correct output"
+    - "debate.py: existing debate/review/cooperative modes still work"
+    - "nightly_batch.sh: all Phase 1-4, 8 unchanged"
+    - "tr: mode switching still works (debate ↔ review ↔ verify)"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 9: OPEN QUESTIONS & RISKS
+# ════════════════════════════════════════════════════════════════════════════
+
+open_questions:
+  - question: "Qwen3-1.7B vs Llama-3.2-3B for operator — which one?"
+    status: "Test suite ready (test_operator.py), models downloaded, not yet evaluated"
+    criteria: ["dispatch accuracy", "latency", "RAM usage", "model family diversity from 30B"]
+
+  - question: "Should operator run resident or on-demand?"
+    status: "Undecided"
+    options:
+      resident: "Always on :8081 alongside 30B — instant dispatch, 1.1GB RAM cost"
+      on_demand: "Start when needed — saves RAM, adds ~30s cold start"
+    recommendation: "Start with on-demand, switch to resident if dispatch frequency > 10/day"
+
+  - question: "Cooperative debate: daily quota?"
+    status: "Undecided"
+    note: "Azure spot VM costs ~$0.04/hr per VM. 3 VMs × 30min debate = ~$0.06 per cooperative task."
+
+risks:
+  - risk: "32B verify phase OOM"
+    mitigation: "swap_llm_mode.sh already has memory guard + fallback chain (verify→review→debate)"
+    severity: low
+
+  - risk: "Agent loop feedback poisoning"
+    description: "Accumulated error feedback might mislead subsequent attempts"
+    mitigation: "Observer Phase 1 deterministic checks act as ground-truth anchor"
+    severity: medium
+
+  - risk: "Nightly pipeline time creep"
+    description: "Fix loop could extend nightly runtime beyond morning deadline (KST 09:00)"
+    mitigation: "Max 5 iterations, 2 consecutive failure abort. Worst case ~2h for full pipeline."
+    severity: low
