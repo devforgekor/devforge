@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd:devforge-webhook
 """webhook_server.py --- Slack Events API receiver for DevForge bot.
 
 Receives Slack Events via Caddy (TLS termination), processes messages

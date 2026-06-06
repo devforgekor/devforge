@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Unified API key loader — loads encrypted or plaintext keys from secrets.env.
 
 Used by: gemini_rotate.py, gemini_proxy.py, search_manager.py.
@@ -63,3 +66,4 @@ def load_api_keys(provider_prefix: str = "GEMINI") -> list:
             keys.append((f"key-{len(keys)}", plain))
 
     return keys
+

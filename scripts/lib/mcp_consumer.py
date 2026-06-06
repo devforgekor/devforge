@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """mcp_consumer — read MCP metadata from review_facts and prepare for MCP tools.
 
 Pre-build for Phase 2 (MCP tool integration). Reads fact_type='mcp_meta' facts,
@@ -26,7 +29,7 @@ from typing import Any, Dict, List
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql, psql_ok, esc_sql
+from lib.db import psql_json, psql, psql_ok, esc_sql
 
 BATCH_LIMIT = 50
 MCP_FIELDS = ("tldr", "intent", "entities", "tags", "verified")
@@ -44,30 +47,24 @@ def fetch_unprocessed_mcp(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "ORDER BY rf.created_at ASC "
         f"LIMIT {limit}"
     )
-    rows = psql(sql)
+    rows = psql_json(sql)
     if not rows:
         return []
 
     items = []
-    for line in rows.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split("|")
-        if len(parts) < 6:
-            continue
+    for row in rows:
         try:
-            evidence = json.loads(parts[2])
-        except (json.JSONDecodeError, IndexError):
+            evidence = json.loads(row.get("evidence") or "{}")
+        except (json.JSONDecodeError, TypeError):
             evidence = {}
         items.append({
-            "id": parts[0].strip(),
-            "turn_id": parts[1].strip(),
+            "id": row["id"],
+            "turn_id": row["turn_id"],
             "evidence": evidence,
-            "extract_model": parts[3].strip(),
-            "created_at": parts[4].strip(),
-            "seq": int(parts[5]) if parts[5].strip().isdigit() else 0,
-            "conversation_id": parts[6].strip() if len(parts) > 6 else "",
+            "extract_model": row.get("extract_model", ""),
+            "created_at": row.get("created_at", ""),
+            "seq": int(row["seq"]) if row.get("seq") else 0,
+            "conversation_id": row.get("conversation_id", ""),
         })
     return items
 
@@ -147,3 +144,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

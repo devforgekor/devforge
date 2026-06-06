@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Azure Spot VM lifecycle management for cooperative LLM debate.
 
 Creates spot VMs from Compute Gallery golden images, waits for SSH + llama-server

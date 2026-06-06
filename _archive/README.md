@@ -1,6 +1,9 @@
-# _archive — deprecated docs & logic (2026-05-14 기준)
+## timer-registry.yaml
 
-보관 사유가 소멸되면 디렉터리 전체를 삭제합니다.
+- **보관 사유**: `cli.py status --json` (timers 섹션) + `systemctl --user list-timers` 로 완전 대체. systemd가 SSOT이므로 수동 YAML 문서화가 불필요해짐. Session 26 — Phase A 완료 (2026-06-06).
+- **대체 위치**: `python3 scripts/cli.py status --json` → `timers` 필드. 개별 타이머 정보는 `systemctl --user list-timers --output json` 으로 직접 조회.
+- **삭제 조건**: `cli.py status --json` 1개월 무장애 운영 후 (2026-07-06)
+- **주의**: 타이머별 purpose(설명)는 systemd unit 파일의 `Description=` 필드에서 직접 조회할 것.
 
 ---
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Complete remaining phases (4-5) with 27B too slow on this hardware.
 Phase 4: night_verify → synthetic (hardware limit: 16GB Q4_K_M needs >22GB RAM)
 Phase 5: Feedback loop → real P-R-J re-run with injected feedback"""

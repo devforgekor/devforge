@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: deprecated — replaced by review_consumer.py
 """3-Model Review Pipeline — Nightly Code Review (llama.cpp).
 
 Adversarial 3-stage (P→R→J) pipeline with Scoring Judge:

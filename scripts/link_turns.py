@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: nightly_batch.sh
 """link_turns.py — nightly: match turns to worklog entries + deep review.
 
 Phase 1 — matching: each worklog entry claims turns with matching agent
@@ -12,7 +14,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from lib.db import psql
+from lib.db import psql, psql_json
 
 LOG_FILE = Path("/opt/projects/server/link_turns.log")
 REVIEW_FILE = Path("/opt/projects/server/data/link_review.yaml")
@@ -32,7 +34,7 @@ def match_turns_to_worklog_entries(kst_start, kst_end, today_kst):
     same-agent worklog's created_at (or kst_start for the first) and its own
     created_at. The last worklog of each agent covers to kst_end (midnight).
     """
-    rows = psql(
+    rows = psql_json(
         f"SELECT id, agent, created_at FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz "
@@ -42,11 +44,8 @@ def match_turns_to_worklog_entries(kst_start, kst_end, today_kst):
         _log(f"No worklog entries for {today_kst}")
         return 0
 
-    entries = []
-    for line in rows.split("\n"):
-        parts = line.split("|")
-        if len(parts) >= 3:
-            entries.append({"id": parts[0], "agent": parts[1], "ts": parts[2]})
+    entries = [{"id": row["id"], "agent": row.get("agent", ""), "ts": row["created_at"]}
+               for row in rows]
 
     if not entries:
         _log(f"No worklog entries for {today_kst}")
@@ -130,8 +129,8 @@ def audit_link_health(kst_start, kst_end, today_kst):
     findings = []
 
     # Orphan turns: turns not linked to any worklog
-    orphans = psql(
-        f"SELECT t.agent, COUNT(*) FROM turns t "
+    orphans = psql_json(
+        f"SELECT t.agent AS agent, COUNT(*) AS cnt FROM turns t "
         f"WHERE t.created_at >= '{kst_start}'::timestamptz "
         f"  AND t.created_at <  '{kst_end}'::timestamptz "
         f"  AND t.id NOT IN ("
@@ -141,15 +140,13 @@ def audit_link_health(kst_start, kst_end, today_kst):
         f"GROUP BY t.agent ORDER BY COUNT(*) DESC"
     )
     if orphans:
-        for line in orphans.split("\n"):
-            if "|" in line:
-                agent, cnt = line.split("|", 1)
-                findings.append(f"orphan_turns.{agent}: {cnt}")
+        for row in orphans:
+            findings.append(f"orphan_turns.{row['agent']}: {row['cnt']}")
     else:
         findings.append("orphan_turns: 0")
 
     # Empty worklog: no turns AND no git_commit_hash
-    empties = psql(
+    empties = psql_json(
         f"SELECT id, title FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz "
@@ -158,24 +155,20 @@ def audit_link_health(kst_start, kst_end, today_kst):
         f"  AND git_commit_hash IS NULL"
     )
     if empties:
-        for line in empties.split("\n"):
-            if "|" in line:
-                wid, title = line.split("|", 1)
-                findings.append(f"empty_worklog: #{wid} {title}")
+        for row in empties:
+            findings.append(f"empty_worklog: #{row['id']} {row['title']}")
     else:
         findings.append("empty_worklog: 0")
 
-    no_agent = psql(
+    no_agent = psql_json(
         f"SELECT id, title FROM worklog_entries "
         f"WHERE created_at >= '{kst_start}'::timestamptz "
         f"  AND created_at <  '{kst_end}'::timestamptz "
         f"  AND (agent IS NULL OR agent = '')"
     )
     if no_agent:
-        for line in no_agent.split("\n"):
-            if "|" in line:
-                wid, title = line.split("|", 1)
-                findings.append(f"agentless_worklog: #{wid} {title}")
+        for row in no_agent:
+            findings.append(f"agentless_worklog: #{row['id']} {row['title']}")
 
     # Commit-only worklog: has git_commit_hash but no turns (correct state)
     commit_only = psql(

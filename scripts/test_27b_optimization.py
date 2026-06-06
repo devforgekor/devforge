@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """
 Qwen3.6-27B 최적화 검증 테스트 (Standalone)
 =============================================

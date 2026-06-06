@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Operator model evaluation — mode dispatch for multi-LLM pipeline.
 
 The Operator is a lightweight model that decides WHICH DevForge mode

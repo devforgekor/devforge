@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: run_baseline.sh:28, notify_slack.py, watchdog_j_tests.py
 """code_mod_pipeline.py — Qwen3-Coder-30B-A3B 4-stage code modification pipeline (ctx=8192).
 
 SLOC-exempt: 852 lines — single cohesive 4-stage pipeline (ANALYZE→PLAN→IMPLEMENT
@@ -1109,9 +1111,9 @@ def reset_llama_server(endpoint: str, model_name: str, timeout: int = 120) -> bo
     Model reloads from page cache in ~6s (30B) or ~6s (32B on cached load).
     """
     if ":8080" in endpoint:
-        unit = "container-devforge-qwen"
+        unit = "container-devforge-pod-a"
     elif ":8081" in endpoint:
-        unit = "container-devforge-qwen"  # verify mode holder
+        unit = "container-devforge-pod-a"  # verify mode holder
     else:
         unit = "container-devforge-swap"
 

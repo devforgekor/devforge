@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """
 Transform prj_cycle.py for experiment phases.
 

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Azure Blob uploader — single shared utility for all pipeline outputs.
 
 Generates a self-contained review-bundle.md from any pipeline result
@@ -58,7 +61,7 @@ def _upload_blob(blob_name: str, content: str) -> str:
         blob_name=blob_name,
         account_key=account_key,
         permission=BlobSasPermissions(read=True),
-        expiry=datetime.utcnow() + timedelta(days=7),
+        expiry=datetime.now(timezone.utc) + timedelta(days=7),
     )
     return f"https://{ACCOUNT_NAME}.blob.core.windows.net/{CONTAINER}/{blob_name}?{sas_token}"
 
@@ -125,3 +128,4 @@ def upload_raw(content: str, pipeline: str, session_id: str, filename: str) -> s
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     blob_name = f"{pipeline}/{date_str}/{session_id}/{filename}"
     return _upload_blob(blob_name, content)
+

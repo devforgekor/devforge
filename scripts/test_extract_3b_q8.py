@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """3B Q8_0 vs Q4_K_M — extract faithfulness 비교 테스트"""
 import csv, http.client, io, json, re, subprocess, sys, time
 
@@ -122,7 +124,7 @@ for turn in turns:
         if m:
             try:
                 data = json.loads(m.group(0))
-            except:
+            except Exception:
                 print(f"    JSON parse failed, skipping")
                 continue
         else:

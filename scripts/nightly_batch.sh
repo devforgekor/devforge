@@ -167,7 +167,7 @@ else
     echo "[$(LOG_TS)] === Phase 5: Production verify (night_verify) ==="
     stop_llm_services "verify"
     echo "[$(LOG_TS)] Stopping Pod A (memory for 27B)..."
-    systemctl --user stop container-devforge-qwen 2>&1 || true
+    systemctl --user stop container-devforge-pod-a 2>&1 || true
     sleep 5
 
     if switch_mode_pod_b "verify" && wait_for_model 8081 "Qwen3.6-27B" 600; then
@@ -220,7 +220,7 @@ else
     fi
     # Pod A day_r(:8082)
     echo "[$(LOG_TS)] Restarting Pod A (day_r:8082)...
-    systemctl --user restart container-devforge-qwen 2>&1 || true
+    systemctl --user restart container-devforge-pod-a 2>&1 || true
     sleep 5
     if ! wait_for_model 8082 "day_r (Pod A)" 60; then
         echo "[$(LOG_TS)] WARNING: day_r :8082 not responding" >&2

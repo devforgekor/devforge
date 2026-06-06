@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: nightly_batch.sh
 """
 DevForge Night Pipeline v2.0 — Single-phase P→R→J→27B→32B review/verify.
 
@@ -249,7 +251,7 @@ def swap_pod_a(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
     with open(MODE_FILE_A, "w") as f:
         f.write(f"MODE={mode}")
     r = subprocess.run(
-        ["systemctl", "--user", "restart", "container-devforge-qwen.service"],
+        ["systemctl", "--user", "restart", "container-devforge-pod-a.service"],
         capture_output=True, timeout=60,
     )
     if r.returncode != 0:

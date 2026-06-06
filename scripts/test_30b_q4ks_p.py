@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """30B Q4_K_S vs Q3_K_M P role comparison test.
 
 Starts 30B Q4_K_S, runs P role with same input as Q3_K_M baseline,

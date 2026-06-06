@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Generate infrastructure.md and software.yaml from CLAUDE.yaml.
 
 Reads CLAUDE.yaml and writes:

@@ -1,0 +1,50 @@
+# DevForge Concurrent Pod Optimization (2026-06-06)
+## Day mode: Pod A (3B refuter) + Pod B (7B MCP) simultaneous
+
+## Final Configuration (Config B)
+```yaml
+pod_a:
+  model: Qwen2.5-Coder-3B-Instruct.Q8_0
+  threads: 1
+  threads_batch: 1
+  cpus: "0"               # dedicated core 0
+  port: 8082
+  flash_attn: on
+  cache_type_k/v: q8_0
+  batch: 2048 / ubatch: 512
+
+pod_b:
+  model: Qwen2.5-Coder-7B-Instruct.Q8_0
+  threads: 3
+  threads_batch: 3
+  cpus: "1,2,3"            # dedicated cores 1-3
+  port: 8080
+  flash_attn: off
+  cache_type_k/v: f32 (default)
+  batch: 1024
+```
+
+## Baseline (Unoptimized)
+| Measure | Pod B (7B) | Pod A (3B) |
+|---------|-----------|-----------|
+| Decode t/s | 2.62 | 3.91 |
+| Prefill t/s | 15.29 | 20.82 |
+| Consistency | Poor (1.48-3.23) | Good |
+
+## Optimized (Config B)
+| Measure | Pod B (7B) | Pod A (3B) |
+|---------|-----------|-----------|
+| Decode t/s | **2.85** (+9%) | 3.08 (-21%) |
+| Prefill t/s | 14.26 | 10.45 |
+| Consistency | Excellent (2.81-2.86) | Excellent (3.05-3.10) |
+
+## Key Findings
+1. **CPU pinning alone (no thread change)**: No improvement (2.59 t/s) — bandwidth bound
+2. **7B benefits from 3 threads**: 2 threads insufficient (2.26 t/s)
+3. **No pinning = worst result**: 1.86 t/s (thread migration destroys cache)
+4. **Config B tradeoff accepted**: Pod B +9% at Pod A -21% — prioritizes MCP throughput
+
+## Test Protocol
+- 3 runs per config, medium prompt (477ch), 100 tok generation
+- Both pods benchmarked simultaneously
+- llama-server /completion endpoint, temp=0.0

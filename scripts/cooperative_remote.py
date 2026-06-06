@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: none — imported by cooperative_debate.py
 """SSH tunnel management and remote model activation for cooperative debate mode.
 
 Handles persistent SSH tunnels to Azure spot VMs running llama-server instances.
@@ -107,3 +110,4 @@ def close_all_tunnels(tunnels_open: Set[str]) -> None:
                 break
     print(f"  [tunnel] Session tunnels closed ({len(tunnels_open)} were open)")
     tunnels_open.clear()
+

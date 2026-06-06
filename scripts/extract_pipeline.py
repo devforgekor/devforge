@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: 15m_cycle.sh
 """Extract Pipeline - checkpoint-based perpetual fact extraction.
 
 SSOT: turns.created_at. Checkpoint in pipeline_checkpoint(phase=extract).
@@ -32,8 +34,9 @@ from typing import Any, Dict, List, Optional
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql, psql_ok, esc_sql
+from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.llm_client import call_llm
+from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.queue_writer import enqueue_review
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -171,20 +174,18 @@ Output STRICT JSON:
 _THINK_RE = re.compile(r"<think[^>]*>.*?</think>", re.DOTALL)
 
 
-def _parse_json(raw: str, label: str = "LLM") -> Optional[Dict[str, Any]]:
-    """Extract JSON from LLM output, handling thinking blocks and fences."""
+def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict[str, Any]]:
+    """Extract JSON from LLM output using shared parse_llm_json + DLQ.
+
+    Strips <think> blocks before parsing (R1 reasoning), falls through to
+    parse_llm_json (stdlib → json_repair). Saves parse failures to DLQ.
+    """
     cleaned = _THINK_RE.sub("", raw).strip()
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL)
-    if m:
-        cleaned = m.group(1)
-    if not cleaned.startswith("{"):
-        m = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        if m:
-            cleaned = m.group(0)
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        return None
+    result = parse_llm_json(cleaned)
+    if result is None:
+        save_dlq(raw, stage=f"extract_{label}", error="parse_llm_json returned None",
+                 attempt=attempt)
+    return result
 
 
 # ── Hallucination check ───────────────────────────────────────────────────
@@ -267,7 +268,7 @@ def _extract_facts(user_turn: str, thinking: str, text: str,
         json_mode=True, return_meta=True,
     )
     raw = meta["content"]
-    parsed = _parse_json(raw, "day_extract")
+    parsed = _parse_json(raw, "day_extract", attempt=attempt)
     if parsed is None:
         return None
     ex = parsed.get("extractions", [])
@@ -458,26 +459,20 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "ORDER BY t.created_at ASC "
         f"LIMIT {limit}"
     )
-    rows = psql(sql)
+    rows = psql_json(sql)
     if not rows:
         return []
     turns = []
-    for line in rows.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split("|")
-        if len(parts) < 8:
-            continue
+    for row in rows:
         turns.append({
-            "id": parts[0].strip(),
-            "user_turn": parts[1].strip(),
-            "thinking": parts[2].strip() or None,
-            "text": parts[3].strip(),
-            "source_message_id": parts[4].strip(),
-            "created_at": parts[5].strip(),
-            "conversation_id": parts[6].strip(),
-            "seq": int(parts[7]) if parts[7].strip() else 0,
+            "id": row.get("id", ""),
+            "user_turn": row.get("user_turn", ""),
+            "thinking": row.get("thinking") or None,
+            "text": row.get("text", ""),
+            "source_message_id": row.get("source_message_id", ""),
+            "created_at": row.get("created_at", ""),
+            "conversation_id": row.get("conversation_id", ""),
+            "seq": row.get("seq", 0) or 0,
         })
     return turns
 
@@ -506,16 +501,18 @@ def extract_pipeline(
             "  t.conversation_id, t.seq "
             f"FROM turns t WHERE t.id = '{esc_sql(turn_id)}'::uuid"
         )
-        row = psql(sql)
-        parts = [p.strip() for p in row.split("|")] if row else []
-        if len(parts) < 8:
+        rows = psql_json(sql)
+        if not rows:
             print(f"[extract] Turn not found: {turn_id}")
             return {"processed": 0, "failed": 1, "facts": 0, "ok": False}
+        r = rows[0]
         turns = [{
-            "id": parts[0], "user_turn": parts[1],
-            "thinking": parts[2] or None, "text": parts[3],
-            "source_message_id": parts[4], "created_at": parts[5],
-            "conversation_id": parts[6], "seq": int(parts[7]) if parts[7].strip() else 0,
+            "id": r["id"], "user_turn": r["user_turn"],
+            "thinking": r.get("thinking") or None, "text": r["text"],
+            "source_message_id": r.get("source_message_id", ""),
+            "created_at": r["created_at"],
+            "conversation_id": r["conversation_id"],
+            "seq": r.get("seq", 0) or 0,
         }]
     else:
         turns = _get_unprocessed_turns(limit)

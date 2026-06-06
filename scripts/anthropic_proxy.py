@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd:devforge-pod-a (proxied port)
 """Anthropic-compatible reverse proxy for DeepSeek.
 
 Rewrites system-role messages into the top-level system field before forwarding
@@ -826,7 +828,7 @@ def log_usage(body: Optional[bytes], data: Optional[bytes], resp_status: int) ->
             # bar: body bytes vs actual auto-compact trigger (128K tok × 85% × ~4 chars/tok ≈ 435K)
             body_chars = len(body)  # bytes ≈ chars for ASCII/English
             COMPACT_BODY_LIMIT = int(os.environ.get(
-                "ANTHROPIC_PROXY_BAR_LIMIT", "435200",
+                "ANTHROPIC_PROXY_BAR_LIMIT", "870400",
             ))
             context_bar = _format_context_bar(body_chars, COMPACT_BODY_LIMIT)
             balance = _fetch_deepseek_balance()

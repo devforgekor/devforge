@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Memory overview line for CLAUDE.yaml — generated from live system data."""
 from lib.infra.subprocess import run_subprocess, run_lines
 
@@ -29,3 +32,4 @@ def build_memory_line():
     swappiness = run_subprocess(["sysctl", "-n", "vm.swappiness"]).strip() or "?"
 
     return f"{mem_total}{zram} + {swap_str} swap (swappiness={swappiness})"
+

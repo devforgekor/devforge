@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: none — library
 """
 Nightly extraction faithfulness test.
 

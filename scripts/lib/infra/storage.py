@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Zram cycle tracking."""
 import json
 from datetime import datetime, timezone, timedelta
@@ -58,3 +61,4 @@ def track_zram_cycles(state_file: Path):
         pass
 
     return None, 0, 0, []
+

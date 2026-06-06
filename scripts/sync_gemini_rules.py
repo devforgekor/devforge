@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: none — one-off sync, called from gemini_proxy.py
 """Sync shared rules into Gemini CLI instruction file.
 
 Pattern adapted from common-lib core/copilot_rules.py.
@@ -77,3 +80,4 @@ if __name__ == "__main__":
         print("[sync_gemini] GEMINI.md 업데이트 완료")
     else:
         print("[sync_gemini] 변경 없음")
+

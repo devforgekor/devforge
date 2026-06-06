@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: session end hook
 """slack_notify.py — Session-end report for all agents → Slack DM.
 
 Queries DB for per-agent turn counts and proxy journald for token usage,

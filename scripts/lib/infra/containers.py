@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Container and service discovery for state_collector."""
 import json
 import os
@@ -94,3 +97,4 @@ def _run_lines(cmd, timeout=15):
         return r.stdout.split("\n")
     except Exception:
         return []
+

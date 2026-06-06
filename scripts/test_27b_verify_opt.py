@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """27B Q4_K_M verify — optimized handoff-only prompt (~2000 tok).
 
 Tests: 27B as verifier with handoff-only context. Compares to old 27B run (6000tok full context).

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Qwen3-4B extraction faithfulness test across 20 diverse turns."""
 import csv
 import http.client as hc

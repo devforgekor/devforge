@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 # scripts/lib/bot_processor.py -- Shared bot message processor for Telegram & Slack
 #
 # Uses Qwen2.5-Coder-3B (:8082) for intent classification and conversation.
@@ -196,3 +199,4 @@ def process(text: str) -> str:
         return f"현재 운영 모드: <code>{_current_mode()}</code>"
     else:
         return _chat(text)
+

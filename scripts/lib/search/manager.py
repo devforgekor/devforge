@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """
 Multi-API web search manager with intent-based routing and key rotation.
 
@@ -271,3 +274,4 @@ class WebSearchManager:
     def stats(self) -> dict:
         """Per-service rotation stats."""
         return {name: rotator.stats() for name, rotator in self._rotators.items()}
+

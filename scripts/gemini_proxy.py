@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: Caddy reverse-proxy
 """
 HTTPS reverse proxy that rotates Gemini API keys per request.
 

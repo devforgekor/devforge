@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Unified LLM client — single call_llm() for all OpenAI-compatible endpoints.
 
 Used by: code_mod_pipeline.py, review_worker.py (via adapter), hybrid_pipeline.py,
@@ -100,3 +103,4 @@ def call_llm(endpoint: str, messages: list, api_key: str = "",
     finally:
         if conn is not None:
             conn.close()
+

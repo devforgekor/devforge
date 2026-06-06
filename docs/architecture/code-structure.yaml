@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: "2026-06-03"
+  updated: "2026-06-06"
   rule: "LLM MUST read this file before any file creation or structural modification"
 
 # ── Root Modules ──────────────────────────────────────────────────────────
@@ -26,13 +26,16 @@ modules:
     allow_new_files: false
     files:
       cli.py:
+        status: production
         purpose: "🎯 Main CLI — all user-facing commands (activity, worklog, mode, discussion, drag, toolmad)"
         max_lines: 800
         no_subprocess: false
       orchestrator.py:
+        status: production
         purpose: "🧩 Task orchestrator — routes pipeline/debate/review by task type"
         max_lines: 500
       anthropic_proxy.py:
+        status: production
         purpose: "🔄 Anthropic API proxy → DeepSeek — cch stripping, cache tracking, tool_use_id fix"
         max_lines: 1400
         is_long_term: true  # complex proxy requires higher limit
@@ -50,52 +53,67 @@ modules:
         - "Prefer stdlib. Only allowed external deps: pyyaml, tenacity"
     files:
       db.py:
+        status: production
         purpose: "🐘 PostgreSQL query helpers — psql(), psql_ok(), esc_sql(), db_table_exists()"
         max_lines: 150
         constraint: "MUST use podman exec psql. NEVER psql -h localhost."
       agents.py:
+        status: production
         purpose: "🏷️ Agent name normalization — single source of truth"
         max_lines: 30
       feedback.py:
+        status: production
         purpose: "🔄 Few-shot feedback loop — extracts fix patterns from activity_log for LLM injection"
         max_lines: 550
         is_long_term: true
       blob_uploader.py:
+        status: production
         purpose: "☁️ Azure Blob upload — review bundles, pipeline outputs"
         max_lines: 150
       bot_processor.py:
+        status: production
         purpose: "🤖 Shared bot processor — Telegram & Slack intent classification"
         max_lines: 200
       crypto.py:
+        status: production
         purpose: "🔐 Encryption utilities"
         max_lines: 100
       llm_client.py:
+        status: production
         purpose: "🏗️ Unified LLM entry point — wraps both local (llama.cpp) and remote (DeepSeek) calls"
         max_lines: 150
         import_restrictions:
           - "May call lib/llm/client.py (remote) and lib/llm/llm_client.py (local)"
       mcp_consumer.py:
+        status: production
         purpose: "🔌 MCP metadata consumer — reads review_facts for MCP tool integration"
         max_lines: 150
       parser_aider.py:
+        status: production
         purpose: "⏮️ Backward-compat shim → lib.parsers.aider (3 lines)"
         max_lines: 5
       queue_writer.py:
+        status: production
         purpose: "📤 Enqueue items to activity_log for downstream review pipeline"
         max_lines: 80
       scoring.py:
+        status: production
         purpose: "📊 Veto/gap/early-exit logic — single source of truth for consensus scoring"
         max_lines: 120
       phase_tracker.py:
+        status: production
         purpose: "📐 Phase completion detection from live system state"
         max_lines: 100
       test_sandbox.py:
+        status: experimental
         purpose: "🧪 Podman read-only tmpfs sandbox for safe code execution"
         max_lines: 150
       text_quality.py:
+        status: production
         purpose: "🔤 Korean text quality guardrails — think-tag detection, token budget check"
         max_lines: 100
       worklog.py:
+        status: production
         purpose: "📓 Git commit → worklog sync"
         max_lines: 80
 
@@ -106,12 +124,15 @@ modules:
       no_direct_db: true
     files:
       key_loader.py:
+        status: production
         purpose: "Load encrypted or plaintext keys from secrets.env"
         max_lines: 80
       key_rotator.py:
+        status: production
         purpose: "Key rotation logic"
         max_lines: 260
       api_key_cipher.py:
+        status: production
         purpose: "Encrypt/decrypt API keys"
         max_lines: 60
 
@@ -121,6 +142,7 @@ modules:
       max_lines_per_file: 80
     files:
       shared.py:
+        status: production
         purpose: "Shared code_mod utilities — diff helpers, context extraction"
         max_lines: 80
 
@@ -131,15 +153,19 @@ modules:
       no_direct_db: true
     files:
       containers.py:
+        status: production
         purpose: "Container and service discovery for state_collector"
         max_lines: 100
       health_checks.py:
+        status: production
         purpose: "System health checks — systemd, podman, filesystem"
         max_lines: 70
       storage.py:
+        status: production
         purpose: "Zram cycle tracking"
         max_lines: 70
       subprocess.py:
+        status: production
         purpose: "Subprocess helpers — run commands and collect output"
         max_lines: 20
 
@@ -149,13 +175,16 @@ modules:
       max_lines_per_file: 120
     files:
       client.py:
+        status: production
         purpose: "Remote LLM client — OpenAI-compatible API calls (DeepSeek)"
         max_lines: 120
         import_restrictions: ["MUST NOT import from lib/llm/llm_client.py"]
       json_parser.py:
+        status: production
         purpose: "Recovery ladder: stdlib json → json_repair for LLM output"
         max_lines: 50
       rate_estimator.py:
+        status: production
         purpose: "Token-count and timing-based rate estimators"
         max_lines: 120
     aliases:
@@ -167,18 +196,23 @@ modules:
       max_lines_per_file: 160
     files:
       claude_yaml.py:
+        status: production
         purpose: "CLAUDE.yaml auto-update — sync storage/services/network from live data"
         max_lines: 120
       memory_line.py:
+        status: production
         purpose: "Memory overview line for CLAUDE.yaml"
         max_lines: 40
       motd.py:
+        status: production
         purpose: "MOTD generation — formatted system overview"
         max_lines: 160
       validation.py:
+        status: production
         purpose: "Validate CLAUDE.yaml + blueprint.yaml claims vs live data"
         max_lines: 120
       yaml_io.py:
+        status: production
         purpose: "YAML load/save helpers"
         max_lines: 20
 
@@ -188,15 +222,19 @@ modules:
       max_lines_per_file: 140
     files:
       aider.py:
+        status: production
         purpose: "Parse Aider chat history (.aider.chat.history.md) → turns"
         max_lines: 140
       claude.py:
+        status: production
         purpose: "Parse Claude Code session JSONL → turns"
         max_lines: 100
       copilot.py:
+        status: production
         purpose: "Parse Copilot events.jsonl → turns"
         max_lines: 100
       gemini.py:
+        status: production
         purpose: "Parse Gemini CLI session JSONL → turns"
         max_lines: 100
 
@@ -206,6 +244,7 @@ modules:
       max_lines_per_file: 280
     files:
       manager.py:
+        status: production
         purpose: "Search orchestration — query routing, result ranking"
         max_lines: 280
 
@@ -215,12 +254,15 @@ modules:
       max_lines_per_file: 100
     files:
       changelog.py:
+        status: production
         purpose: "Changelog — load, save, append, archive"
         max_lines: 100
       diff.py:
+        status: production
         purpose: "Structural hashing for state change detection"
         max_lines: 50
       state_io.py:
+        status: production
         purpose: "State file I/O — save and load state.yaml"
         max_lines: 30
 
@@ -230,12 +272,15 @@ modules:
       max_lines_per_file: 150
     files:
       agent_names.py:
+        status: production
         purpose: "🏷️ Agent name normalization — single source of truth"
         max_lines: 30
       dependency_tracker.py:
+        status: production
         purpose: "Reference tracking — external project watch + internal code observation"
         max_lines: 150
       phase_tracker.py:
+        status: production
         purpose: "📐 Phase auto-tracker — detects completed items from live state"
         max_lines: 440  # complex state machine
         is_long_term: true
@@ -247,26 +292,35 @@ modules:
     purpose: "🔧 Pipeline scripts — review, code mod, extract"
     files:
       code_mod_pipeline.py:
+        status: production
         purpose: "4-stage code modification (ANALYZE→PLAN→IMPLEMENT→PACKAGE) on 32B"
         max_lines: 1300
         is_long_term: true
+        status: production
       review_pipeline_steps.py:
+        status: production
         purpose: "Step 1-3 review pipeline (review→reflect→judge)"
         max_lines: 480
       review_pipeline_3model.py:
+        status: production
         purpose: "Nightly 3-model review (R1→Qwen7B→Selene)"
         max_lines: 360
       proxy_reviewer.py:
+        status: production
         purpose: "DeepSeek batch review — token-based batching, audit"
         max_lines: 400
+        status: production
       review_consumer.py:
+        status: production
         purpose: "Review queue consumer — processes review results from queue"
         max_lines: 400
       hybrid_pipeline.py:
+        status: experimental
         purpose: "Hybrid local + API pipeline"
         max_lines: 1020
-        is_long_term: true
+        status: experimental
       extract_pipeline.py:
+        status: production
         purpose: "Fact extraction pipeline"
         max_lines: 630
 
@@ -277,21 +331,27 @@ modules:
     purpose: "🗣️ Multi-agent LLM debate — local DART + remote cooperative"
     files:
       cooperative_debate.py:
+        status: experimental
         purpose: "Proposer/Refuter debate on Azure spot VMs + local Judge/Synthesis"
         max_lines: 240
       cooperative_remote.py:
+        status: experimental
         purpose: "SSH tunnel and remote model activation for cooperative debate"
         max_lines: 120
       debate_data.py:
+        status: experimental
         purpose: "Model catalog, remote hosts, prompt templates — pure data, no logic"
         max_lines: 340
       debate_llm.py:
+        status: experimental
         purpose: "LLM calling, JSON parsing, model switching — shared debate infra"
         max_lines: 380
       deepseek_web.py:
+        status: experimental
         purpose: "DART — web search trigger when debate cannot reach consensus"
         max_lines: 340
       local_debate.py:
+        status: experimental
         purpose: "Local debate using Pod A + Pod B models"
         max_lines: 700
 
@@ -302,69 +362,91 @@ modules:
     purpose: "⚙️ Background services — turn watcher, worklog, state, notifications"
     files:
       turn_watcher.py:
+        status: production
         purpose: "👁️ Turn collection — polls agent JSONL every 3s → turns table"
         max_lines: 320
       worklog_generator.py:
+        status: production
         purpose: "📓 Auto-generate worklog entries from conversation turns"
         max_lines: 410
       activity_summarizer.py:
+        status: production
         purpose: "📊 Daily LLM summarization of activity_log events"
         max_lines: 270
       session_context.py:
+        status: production
         purpose: "Session context builder for LLM handover"
         max_lines: 170
       embed_turns.py:
+        status: production
         purpose: "Generate embeddings for turns table"
         max_lines: 240
       sync_gemini_rules.py:
+        status: experimental
         purpose: "Sync infrastructure.md + llm-common-rule.md → GEMINI.md"
         max_lines: 80
       gemini_proxy.py:
+        status: production
         purpose: "Gemini API proxy — rule injection for Cline/Gemini CLI"
         max_lines: 460
       gemini_pool.py:
+        status: production
         purpose: "Gemini model pool manager"
         max_lines: 250
       telegram_bot.py:
+        status: production
         purpose: "Telegram notification bot — offset tracking in /var/tmp"
         max_lines: 130
       telegram_send.py:
+        status: experimental
         purpose: "Send Telegram messages"
         max_lines: 170
       slack_notify.py:
+        status: production
         purpose: "Slack notification"
         max_lines: 220
       webhook_server.py:
+        status: production
         purpose: "Webhook endpoint for external integrations"
         max_lines: 170
       search_proxy.py:
+        status: production
         purpose: "Search proxy service"
         max_lines: 450
       blob_explorer.py:
+        status: production
         purpose: "Azure Blob explorer"
         max_lines: 410
       auto_commit_guard.py:
+        status: production
         purpose: "🛡️ Git auto-commit safety net — prevents accidental commits to protected branches"
         max_lines: 70
       azure_spot.py:
+        status: experimental
         purpose: "Azure Spot VM lifecycle management"
         max_lines: 630
       gen_architecture.py:
+        status: experimental
         purpose: "Auto-generate infrastructure.md + software.yaml from CLAUDE.yaml (timer KST 09:00)"
         max_lines: 200
       link_turns.py:
+        status: production
         purpose: "Nightly turn ↔ worklog_entries linking via content analysis"
         max_lines: 160
       motd_gen.py:
+        status: production
         purpose: "MOTD generation — system status banner on SSH login"
         max_lines: 100
       observer.py:
+        status: production
         purpose: "Observer Agent — interactive CLI agent for DevForge pipelines"
         max_lines: 300
       patch_elf_note.py:
+        status: experimental
         purpose: "Re-apply NOTE phdr patch to Copilot CLI ELF binary (UEK kernel compat)"
         max_lines: 80
       update_handover.py:
+        status: production
         purpose: "Session context capture → handover.yaml (periodic + session-end)"
         max_lines: 70
 
@@ -406,30 +488,40 @@ modules:
     purpose: "🧪 Test and verification scripts"
     files:
       test_27b_optimization.py:
+        status: experimental
         purpose: "27B nightly optimization verification"
         max_lines: 770
       test_dart_round.py:
+        status: experimental
         purpose: "DART round-trip test"
         max_lines: 230
       test_extraction_faithfulness.py:
+        status: experimental
         purpose: "Extraction faithfulness test"
         max_lines: 300
       test_operator.py:
+        status: experimental
         purpose: "Operator test suite"
         max_lines: 440
       test_qwen3_4b_comprehensive.py:
+        status: experimental
         purpose: "Qwen3-4B comprehensive test"
         max_lines: 280
       test_review_consumer.py:
+        status: experimental
         purpose: "Review consumer end-to-end test"
         max_lines: 220
+        status: experimental
       verify_refactoring.py:
+        status: experimental
         purpose: "Bidirectional refactoring verification — init re-exports, shims, line count drift"
         max_lines: 420
       eval_comparison.py:
+        status: experimental
         purpose: "DeepSeek Pro evaluation — scores 12-run comparison test results"
         max_lines: 300
       nightly_extract_test.py:
+        status: production
         purpose: "Nightly extraction faithfulness test on fixed 15-turn set"
         max_lines: 200
 

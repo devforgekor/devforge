@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """14B Q4_K_M vs Q8_0 — R 역할 비교 테스트
 
 동일한 P findings (12개)를 Q8_0 모델에 투입, Q4_K_M 결과와 비교.

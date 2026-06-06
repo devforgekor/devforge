@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """test_handoff_quality.py v2 — P/R/J 핸드오프 문서 품질 비교 (경량).
 
 접근법: 기존 파이프라인 데이터로 각 모델의 handoff 문서를 구성하고

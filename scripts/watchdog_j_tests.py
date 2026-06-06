@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd timer
 """Watchdog for J model comparison tests.
 Checks progress periodically and sends Slack updates.
 Called by systemd timer / cron every 10 minutes.

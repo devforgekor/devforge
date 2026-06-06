@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Phase auto-tracker — detects completed items from live system state.
 
 SLOC-exempt: 453 lines — single cohesive phase tracker (scan phases.md → evaluate
@@ -47,7 +50,7 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
             and file_exists("/usr/local/bin/test_dump_restore.sh")
         ),
         "worklog_entries": lambda: db_table_exists("worklog_entries"),
-        "tasks.yaml": lambda: file_exists("/opt/projects/server/docs/tasks.yaml"),
+        "tasks_db": lambda: db_table_exists("tasks"),
         "auto_commit_guard": lambda: file_exists("/opt/projects/server/scripts/auto_commit_guard.py"),
         "session_context": lambda: file_exists("/opt/projects/server/scripts/session_context.py"),
         "collect_turns": lambda: svc_active("devforge-turn-watcher"),
@@ -59,7 +62,7 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
     "1.5": {
         "2-Container": lambda: container_running("devforge-swap"),
         "Podman A": lambda: file_exists(
-            "/home/opc/.config/containers/systemd/container-devforge-qwen.container"
+            "/home/opc/.config/containers/systemd/container-devforge-pod-a.container"
         ),
         "Podman B": lambda: file_exists(
             "/home/opc/.config/containers/systemd/container-devforge-swap.container"
@@ -433,3 +436,4 @@ def auto_update_phase_documents() -> dict:
 # Backward-compat aliases
 collect = collect_phase_summary
 auto_update = auto_update_phase_documents
+

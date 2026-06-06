@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Finalize E2E 10-sample pipeline. Skip failed feedback loop; summarize existing phases."""
 import json, os, sys
 sys.path.insert(0, '/opt/projects/server/scripts')

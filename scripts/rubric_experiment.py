@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """
 DevForge Rubric Experiment — Round 1 (no rubric) vs Round 2 (with rubric).
 
@@ -300,7 +302,7 @@ def run_prj_combo(combo: Dict, input_data: Dict, round_num: int,
         log("  [swap] Pod A → review-r1 (for R1-8B :8083)")
         with open("/opt/ai_data/scripts/current-mode-pod-a.env", "w") as f:
             f.write("MODE=review-r1")
-        subprocess.run(["systemctl", "--user", "restart", "container-devforge-qwen.service"],
+        subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-a.service"],
                        capture_output=True, timeout=60)
         time.sleep(30)  # wait for model load
         # Check health
@@ -312,7 +314,8 @@ def run_prj_combo(combo: Dict, input_data: Dict, round_num: int,
                     if resp.status == 200:
                         log("  [swap] Pod A ready :8083")
                         break
-            except: pass
+            except Exception:
+                pass
             time.sleep(5)
 
     log(f"  [llm] Proposer ({combo['proposer_model']})...")

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Phase 2 Tier 1 — Outbound Korean text quality guardrails.
 
 Validates Korean user-facing output from the language pipeline:
@@ -86,3 +89,4 @@ def clean(text: str) -> str:
     # remove stray control characters that survive LLM output
     text = text.replace('\x00', '').replace('\r', '')
     return text.strip()
+

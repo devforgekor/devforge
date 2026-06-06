@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Single DART round live test — Proposer → Refuter → Judge."""
 import json, time, urllib.request, os, sys, re, random
 

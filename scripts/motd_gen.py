@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: nightly_batch.sh
 """motd_gen.py — lightweight MOTD for SSH login. Reads state.yaml + live metrics.
 Runs in <1s via pam_motd.so. State is from nightly batch, metrics are live."""
 

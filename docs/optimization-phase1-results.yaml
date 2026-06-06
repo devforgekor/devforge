@@ -1,0 +1,27 @@
+phase1_parameter_tuning:
+  generated: '2026-06-06T03:30:00+00:00'
+  conclusion: ALL runtime parameters tested show no improvement. Decode is purely
+    memory-bandwidth-bound on Neoverse-N1 4-core.
+  baseline:
+    label: baseline-7b-q8_0
+    decode_tps: 3.27
+    prefill_tps: 18.95
+  tests:
+  - param: MLOCK=1
+    decode_tps: 3.12
+    delta: -4.6%
+    verdict: skip
+  - param: CACHE_TYPE_K/V=q8_0
+    decode_tps: 2.97
+    delta: -9.2%
+    verdict: skip
+  - param: FLASH_ATTN=1
+    decode_tps: 3.13
+    delta: -4.3%
+    verdict: skip
+  - param: UBATCH_SIZE=256
+    decode_tps: 3.12
+    delta: -4.6%
+    verdict: skip
+  recommendation: Q4_K_M quantization to reduce model size from 7.6GB to ~4.6GB. Expected
+    decode 4.0-5.0 t/s.

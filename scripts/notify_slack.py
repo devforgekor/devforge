@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: imported by code_mod_pipeline.py
 """Slack notification helper for J model tests."""
 import sys, json
 sys.path.insert(0, '/opt/projects/server/scripts')

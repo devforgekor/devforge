@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: Caddy reverse-proxy
 """
 Unified MCP search proxy with cross-provider key rotation.
 

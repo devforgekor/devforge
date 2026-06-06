@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """parser_aider.py — extract turns from Aider chat history (.aider.chat.history.md)."""
 import re
 import time
@@ -128,3 +131,4 @@ def _extract_turns(lines):
             i += 1
 
     return turns
+

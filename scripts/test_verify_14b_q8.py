@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """14B Q8_0 → 30B verify 동일 input으로 비교 테스트"""
 import json, time, requests, sys, os
 

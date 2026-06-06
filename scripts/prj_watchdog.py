@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: manual — nohup
 """
 P-R-J pipeline watchdog — 자동 오류 감지, 수정, 재시도.
 
@@ -40,7 +42,7 @@ def run(cmd, timeout=120):
 def kill_all_recover():
     """모든 podman 컨테이너 제거. 실패 무시."""
     run("podman stop -t 5 devforge-swap", timeout=15)
-    run("podman stop -t 5 devforge-qwen", timeout=15)
+    run("podman stop -t 5 devforge-pod-a", timeout=15)
     time.sleep(3)
 
 
@@ -50,7 +52,7 @@ def restore_day():
     run(f"printf '%s' 'MODE=day' > '{MODE_FILE_B}'")
     run(f"printf '%s' 'MODE=day' > '{MODE_FILE_A}'")
     kill_all_recover()
-    run("systemctl --user start container-devforge-qwen", timeout=60)
+    run("systemctl --user start container-devforge-pod-a", timeout=60)
     run("systemctl --user start container-devforge-swap", timeout=60)
     time.sleep(30)
 

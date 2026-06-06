@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: none — imported by cooperative_debate.py, local_debate.py
 """LLM calling, JSON parsing, model switching — shared infrastructure.
 
 Pure functions with no class dependency. Imported by both LocalDebate and CooperativeDebate.
@@ -377,3 +380,4 @@ def check_early_exit(consensus_scores: list) -> Optional[str]:
         if improvement < 5:
             return f"stagnation: improvement < 5% ({improvement}%)"
     return None
+

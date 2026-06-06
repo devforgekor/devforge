@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Unified LLM client — single entry point for all pipeline scripts.
 
 All DevForge LLM calls go through this module.  It handles:
@@ -199,3 +202,4 @@ def call_llm_json(
 ) -> str:
     """Convenience wrapper — same as ``call_llm(…, json_mode=True)``."""
     return call_llm(messages, model, json_mode=True, **kwargs)
+

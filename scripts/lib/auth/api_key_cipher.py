@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """
 AES-256-GCM encryption for API keys and secrets.
 PBKDF2-HMAC-SHA256 key derivation from ENCRYPTION_PASSPHRASE.
@@ -54,3 +57,4 @@ def decrypt_data(cipher_b64: str) -> Optional[str]:
         return plaintext.decode()
     except Exception:
         return None
+

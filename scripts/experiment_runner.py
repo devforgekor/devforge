@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """5-Phase (2x2+baseline) Experiment Runner — 백그라운드 자동 실행.
 
 Usage:
@@ -147,7 +149,7 @@ def apply_transform(phase):
 
 def _stop_all():
     """Stop both LLM containers."""
-    for svc in ["container-devforge-swap.service", "container-devforge-qwen.service"]:
+    for svc in ["container-devforge-swap.service", "container-devforge-pod-a.service"]:
         subprocess.run(["systemctl", "--user", "stop", svc], capture_output=True, timeout=30)
         subprocess.run(["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10)
 
@@ -198,7 +200,7 @@ def _report_mem(label=""):
                     log(f"  MemAvailable: {mb}MB {label}")
                     return
         log(f"  MemAvailable: ? {label}")
-    except:
+    except Exception:
         pass
 
 
@@ -209,7 +211,7 @@ def _get_available_mb():
             for line in f:
                 if line.startswith("MemAvailable:"):
                     return int(line.split()[1]) // 1024
-    except:
+    except Exception:
         return 0
 
 
@@ -225,7 +227,7 @@ def _write_mode(pod, mode):
 def _start_pod_a(timeout=120):
     """Start Pod A (day_r:8082)."""
     log("  Starting Pod A (day_r:8082)...")
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-qwen.service"],
+    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=60)
     return wait_health(8082, timeout)
 
@@ -246,7 +248,7 @@ def wait_health(port, timeout=120):
             with urllib.request.urlopen(req, timeout=5) as r:
                 if r.status == 200:
                     return True
-        except:
+        except Exception:
             pass
         time.sleep(3)
     return False

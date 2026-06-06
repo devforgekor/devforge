@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd:devforge-turn-watcher
 """worklog_generator.py — 3-stage speculative pipeline: 3B draft → Python verify → 30B review.
 
 1. Qwen2.5-Coder-3B (:8082) extracts worklog entries from turns (fast, bulk)
@@ -17,7 +19,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
-from lib.db import esc_sql, psql, psql_ok
+from lib.db import esc_sql, psql, psql_json, psql_ok
 from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import call_llm, call_llm_json
 
@@ -73,11 +75,9 @@ def _today_kst() -> str:
 
 def fetch_unlogged_turns(date_str: str = None) -> Dict[str, List[Dict]]:
     date_str = date_str or _today_kst()
-    rows = psql(f"""
+    rows = psql_json(f"""
     SELECT t.id, t.agent, t.conversation_id,
-           regexp_replace(t.user_turn, E'[\\n\\r\\\\|]+', ' ', 'g'),
-           regexp_replace(t.text, E'[\\n\\r\\\\|]+', ' ', 'g'),
-           t.created_at
+           t.user_turn, t.text, t.created_at
     FROM turns t
     WHERE t.created_at::date = '{date_str}'::date
       AND t.id NOT IN (
@@ -94,20 +94,15 @@ def fetch_unlogged_turns(date_str: str = None) -> Dict[str, List[Dict]]:
         return {}
 
     grouped: Dict[str, List[Dict]] = {}
-    for line in rows.split("\n"):
-        if not line.strip():
-            continue
-        parts = line.split("|", 5)
-        if len(parts) < 5:
-            continue
-        agent = parts[1] or "unknown"
+    for row in rows:
+        agent = row.get("agent") or "unknown"
         grouped.setdefault(agent, []).append({
-            "id": parts[0],
-            "agent": parts[1],
-            "conversation_id": parts[2],
-            "user_turn": parts[3][:500],
-            "text": parts[4][:500],
-            "created_at": parts[5],
+            "id": row["id"],
+            "agent": agent,
+            "conversation_id": row.get("conversation_id", ""),
+            "user_turn": (row.get("user_turn") or "")[:500],
+            "text": (row.get("text") or "")[:500],
+            "created_at": row.get("created_at", ""),
         })
     return grouped
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """DeepSeek Pro evaluation of 12-run comparison test results.
 
 Reads pipeline (local32b_task*.json) and debate (debate_sessions/*/final_report.md)

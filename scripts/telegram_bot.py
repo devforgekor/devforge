@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd:devforge-telegram
 """telegram_bot.py --- DevForge Telegram bot for remote operations.
 
 Polls Telegram getUpdates, interprets Korean messages via bot_processor

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: nightly_batch.sh:199 — parallel verify alongside review_consumer. promote to production when 32B stable.
 """test_review_consumer.py — 32B experimental parallel verify.
 
 Runs alongside 27B production verify (review_consumer.py) as an experimental
@@ -17,7 +19,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from lib.db import psql, psql_ok, esc_sql
+from lib.db import psql_json, psql, psql_ok, esc_sql
 from lib.llm.json_parser import parse_llm_json
 
 REVIEW_HOST = "127.0.0.1"
@@ -51,8 +53,8 @@ Schema:
 def fetch_queue(limit: int = QUEUE_LIMIT) -> List[Dict]:
     """Fetch items from activity_log where 27B verify has run but test_verify hasn't."""
     sql = f"""SELECT id, type, source, title,
-                     regexp_replace(summary, E'[\\n\\r\\\\|]+', ' ', 'g') AS summary,
-                     regexp_replace(body::text, E'[\\n\\r\\\\|]+', ' ', 'g') AS body,
+                     regexp_replace(summary, E'[\\n\\r]+', ' ', 'g') AS summary,
+                     regexp_replace(body::text, E'[\\n\\r]+', ' ', 'g') AS body,
                      model, turn_ids, tags
               FROM activity_log
               WHERE queue_status IN ('reviewed', 'done')
@@ -61,31 +63,30 @@ def fetch_queue(limit: int = QUEUE_LIMIT) -> List[Dict]:
                      OR body->'test_verify_result' = 'null'::jsonb)
               ORDER BY created_at ASC
               LIMIT {limit}"""
-    rows = psql(sql, timeout=30)
+    rows = psql_json(sql, timeout=30)
     if not rows:
         return []
 
     items = []
-    for line in rows.split("\n"):
-        if not line.strip():
-            continue
-        parts = line.split("|", 8)
-        if len(parts) < 7:
-            continue
-        try:
-            body = json.loads(parts[5]) if parts[5] else {}
-        except json.JSONDecodeError:
-            body = {"raw": str(parts[5])[:500]}
+    for row in rows:
+        body_raw = row.get("body")
+        if isinstance(body_raw, dict):
+            body = body_raw
+        else:
+            try:
+                body = json.loads(body_raw) if body_raw else {}
+            except (json.JSONDecodeError, TypeError):
+                body = {"raw": str(body_raw)[:500]}
         items.append({
-            "id": parts[0],
-            "type": parts[1],
-            "source": parts[2],
-            "title": parts[3],
-            "summary": parts[4],
+            "id": row["id"],
+            "type": row["type"],
+            "source": row["source"],
+            "title": row["title"],
+            "summary": row.get("summary", ""),
             "body": body,
-            "model": parts[6],
-            "turn_ids": parts[7] if len(parts) > 7 else "",
-            "tags": parts[8] if len(parts) > 8 else "",
+            "model": row.get("model", ""),
+            "turn_ids": row.get("turn_ids") or "",
+            "tags": row.get("tags") or "",
         })
     return items
 

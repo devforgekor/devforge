@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: manual — interactive CLI
 """DevForge Orchestrator — LLM-based smart router to specialized pipelines.
 
 Architecture:

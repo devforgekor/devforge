@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: Caddy reverse-proxy
 """blob_explorer.py --- Azure Blob web interface: send + receive.
 
 /send     — upload files to Blob (user → system)

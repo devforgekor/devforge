@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: none — imported by cooperative_debate.py, local_debate.py
 """Model catalogue, remote hosts, prompt templates — pure data, no logic."""
 from pathlib import Path
 from typing import Any, Dict
@@ -337,3 +340,4 @@ PROMPTS = {
         ),
     },
 }
+

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Scoring — shared veto/gap/early-exit logic.
 
 Single source of truth for both:
@@ -98,3 +101,4 @@ def next_state_single_pass(verdict: dict) -> str:
     if gap <= THRESHOLDS[1]:  # 10
         return "diff_generation"
     return "manual_review"
+

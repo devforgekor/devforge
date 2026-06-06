@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """prj_complete_monitor.py — PID 595297 완료 대기 → 결과 정리 → Azure Blob 업로드"""
 import json, os, subprocess, sys, time, urllib.request
 from datetime import datetime, timezone

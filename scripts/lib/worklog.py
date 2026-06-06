@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Git commit → worklog sync.
 
 Used by review_worker.py to record git commits into worklog_entries
@@ -68,3 +71,4 @@ def log_commits_to_worklog():
     if saved:
         print(f"  log_commits: {saved} new commit(s) recorded")
     return saved
+

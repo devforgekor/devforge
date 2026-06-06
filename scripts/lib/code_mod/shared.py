@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Shared utilities for code modification pipelines.
 
 Used by both code_mod_pipeline.py and hybrid_pipeline.py.
@@ -66,3 +69,4 @@ def save_result(data: dict, prefix: str, task_id: int, suffix: str = ""):
     with open(OUTPUT_DIR / name, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     return name
+

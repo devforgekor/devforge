@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: none — test utility
 """Test execution sandbox — Podman read-only tmpfs for safe code execution.
 
 Usage:
@@ -132,3 +135,4 @@ def sandbox_available() -> bool:
         return proc.returncode == 0
     except Exception:
         return False
+

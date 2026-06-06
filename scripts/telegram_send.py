@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """telegram_send.py --- Send files or text to your Telegram chat.
 
 Usage:

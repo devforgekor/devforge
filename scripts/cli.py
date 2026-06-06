@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: manual — CLI entry
 """DevForge CLI — AI 대화 검색 및 저장 도구."""
 
 import argparse
@@ -170,6 +172,122 @@ def cmd_worklog_search(args):
     print(f"{count} results")
 
 
+def cmd_experiment_list(args):
+    """List experiments from experiment_registry."""
+    limit = "" if args.all else f"LIMIT {args.limit or 20}"
+    where = ""
+    if args.category:
+        cat = esc_sql(args.category)
+        where = f"WHERE category = '{cat}'"
+    sql = f"""SELECT id, created_at, experiment_id, category, subcategory, verdict,
+       substring(rationale,1,60) AS rationale,
+       results->>'decode_tps' AS tps
+    FROM experiment_registry
+    {where}
+    ORDER BY created_at DESC
+    {limit}"""
+    from lib.db import psql_json as _psql_json
+    rows = _psql_json(sql)
+    if not rows:
+        print("(empty)")
+        return
+    print(f"{'ID':<5} {'Created':<20} {'Experiment ID':<40} {'Verdict':<12} {'TPS':<8} {'Rationale'}")
+    print("-" * 130)
+    for r in rows:
+        print(f"{r['id']:<5} {str(r['created_at'])[:19]:<20} {str(r['experiment_id'])[:38]:<40} "
+              f"{str(r['verdict']):<12} {str(r['tps'] or '?'):<8} {str(r['rationale'] or '')[:50]}")
+
+
+def cmd_experiment_compare(args):
+    """Compare multiple experiments side by side."""
+    ids = args.experiment_ids
+    if not ids:
+        print("ERROR: at least one experiment_id required")
+        return
+    from lib.db import psql_json as _psql_json
+    placeholders = ", ".join(f"'{esc_sql(eid)}'" for eid in ids)
+    sql = f"""SELECT experiment_id, created_at, category, subcategory, verdict, rationale, config, results
+    FROM experiment_registry
+    WHERE experiment_id IN ({placeholders})
+    ORDER BY created_at DESC"""
+    rows = _psql_json(sql)
+    if not rows:
+        print("(empty)")
+        return
+    for r in rows:
+        eid = r["experiment_id"]
+        print(f"=== {eid} ===")
+        print(f"  Created:   {r['created_at']}")
+        print(f"  Category:  {r['category']} / {r['subcategory']}")
+        print(f"  Verdict:   {r['verdict']}")
+        print(f"  Rationale: {r.get('rationale', '')}")
+        print(f"  Config:")
+        cfg = r.get("config", {})
+        if isinstance(cfg, dict):
+            for k, v in cfg.items():
+                print(f"    {k}: {v}")
+        print(f"  Results:")
+        res = r.get("results", {})
+        if isinstance(res, dict):
+            for k, v in res.items():
+                if k != "results":
+                    print(f"    {k}: {v}")
+        print()
+
+
+def cmd_experiment_active(args):
+    """Show active_config entries."""
+    sql = """SELECT component, config, applied_at, experiment_id, rationale FROM active_config ORDER BY component"""
+    from lib.db import psql_json as _psql_json
+    rows = _psql_json(sql)
+    if not rows:
+        print("(empty)")
+        return
+    for r in rows:
+        comp = r["component"]
+        print(f"=== {comp} ===")
+        print(f"  Applied:     {r['applied_at']}")
+        print(f"  Experiment:  {r.get('experiment_id', '-')}")
+        print(f"  Rationale:   {r.get('rationale', '')}")
+        print(f"  Config:")
+        cfg = r.get("config", {})
+        if isinstance(cfg, dict):
+            for k, v in cfg.items():
+                print(f"    {k}: {v}")
+        print()
+
+
+def cmd_experiment_adopt(args):
+    """Adopt an experiment result as active_config."""
+    eid = args.experiment_id
+    component = args.component
+    from lib.db import psql_json as _psql_json
+    rows = _psql_json(
+        f"SELECT experiment_id, config, rationale FROM experiment_registry WHERE experiment_id = '{esc_sql(eid)}'"
+    )
+    if not rows:
+        print(f"ERROR: experiment '{eid}' not found")
+        return
+    row = rows[0]
+    config_json = json.dumps(row["config"])
+    rationale = esc_sql(row.get("rationale") or "")
+
+    sql = f"""INSERT INTO active_config (component, config, experiment_id, rationale)
+    VALUES ('{esc_sql(component)}', $json${config_json}$json$::jsonb, '{esc_sql(eid)}', '{rationale}')
+    ON CONFLICT (component) DO UPDATE SET
+        config = EXCLUDED.config,
+        experiment_id = EXCLUDED.experiment_id,
+        rationale = EXCLUDED.rationale,
+        applied_at = NOW()
+    RETURNING component"""
+    from lib.db import psql as _sql
+    result = _sql(sql)
+    if result:
+        print(f"  Adopted: {eid} → {component}")
+    else:
+        print(f"  ERROR: failed to adopt {eid} → {component}")
+
+
 def cmd_activity_recent(args):
     """Show recent activity_log entries."""
     limit = getattr(args, "limit", 10)
@@ -252,19 +370,19 @@ def _switch_mode(mode: str) -> bool:
 
     # Handle Pod A
     if mode_a == "verify":
-        print("Stopping container-devforge-qwen (Pod A, not needed in verify)...")
+        print("Stopping container-devforge-pod-a (Pod A, not needed in verify)...")
         subprocess.run(
-            ["systemctl", "--user", "stop", "container-devforge-qwen"],
+            ["systemctl", "--user", "stop", "container-devforge-pod-a"],
             capture_output=True, text=True, timeout=30,
         )
     else:
-        print("Restarting container-devforge-qwen (Pod A)...")
+        print("Restarting container-devforge-pod-a (Pod A)...")
         r = subprocess.run(
-            ["systemctl", "--user", "restart", "container-devforge-qwen"],
+            ["systemctl", "--user", "restart", "container-devforge-pod-a"],
             capture_output=True, text=True, timeout=120,
         )
         if r.returncode != 0:
-            print(f"Warning: container-devforge-qwen restart: {r.stderr}")
+            print(f"Warning: container-devforge-pod-a restart: {r.stderr}")
 
     # Wait for Pod B model to load
     print("Waiting for models to load...")
@@ -601,6 +719,467 @@ FROM review_facts
             print(f"\n총 {total} facts / {turns} turns / {models} models — overall valid {valid/total*100:.1f}%")
 
 
+# ═══════════════════════════════════════════════════════════════
+# status — live system query, single source of truth
+# ═══════════════════════════════════════════════════════════════
+
+def _run(cmd, timeout=10):
+    """Run a shell command, return (stdout, stderr, returncode)."""
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.stdout.strip(), p.stderr.strip(), p.returncode
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        return "", str(e), 1
+
+
+def _get_containers():
+    """Query podman for live container status."""
+    out, _, rc = _run(["podman", "ps", "--format", "{{.Names}}|{{.Status}}|{{.Ports}}|{{.Image}}"])
+    if rc != 0:
+        return {"error": out or "podman not available"}
+    containers = {}
+    for line in out.split("\n"):
+        parts = line.split("|", 3)
+        if len(parts) < 2:
+            continue
+        name, status, ports, image = parts[0], parts[1], parts[2] if len(parts) > 2 else "", parts[3] if len(parts) > 3 else ""
+        containers[name] = {"status": status, "ports": ports, "image": image.split("/")[-1] if image else ""}
+    return containers
+
+
+def _get_models():
+    """Query llama.cpp /v1/models on both pods."""
+    import urllib.request
+    models = {}
+    for label, port in [("pod-a", 8082), ("pod-b", 8080)]:
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/models", method="GET")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                models[label] = [m.get("name", m.get("model", "?")) for m in data.get("models", data.get("data", []))]
+        except Exception as e:
+            models[label] = f"unreachable: {e}"
+    return models
+
+
+def _get_timers():
+    """Query systemd user timers. Parse by finding .timer/.service tokens."""
+    import re
+    out, _, rc = _run(["systemctl", "--user", "list-timers", "--no-pager", "--no-legend"])
+    if rc != 0:
+        return {"error": out}
+    timers = {"active": [], "inactive": [], "other": []}
+    for line in out.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        # find timer name — token ending with .timer
+        m = re.search(r"(\S+\.timer)\s+\S+\.service", line)
+        if not m:
+            continue
+        timer_name = m.group(1)
+        # classify by NEXT column: day-of-week → active, "-" → inactive, "n/a" → other
+        if re.match(r"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s", line):
+            timers["active"].append(timer_name)
+        elif line.startswith("n/a"):
+            timers["inactive"].append(timer_name)
+        else:
+            timers["other"].append(timer_name)
+    return timers
+
+
+def _get_services():
+    """Query systemd user services."""
+    out, _, rc = _run(["systemctl", "--user", "list-units", "--type=service", "--no-pager", "--no-legend"])
+    if rc != 0:
+        return {"error": out}
+    services = {}
+    for line in out.split("\n"):
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        name = parts[0].replace(".service", "")
+        load, active, sub_state = parts[1], parts[2], parts[3]
+        desc_start = line.find(parts[3]) + len(parts[3])
+        description = line[desc_start:].strip() if desc_start < len(line) else ""
+        # only report running/failed services
+        if active in ("active", "failed"):
+            services[name] = {"state": active, "sub": sub_state, "desc": description}
+    return services
+
+
+def _get_resources():
+    """Read /proc for live system resources."""
+    resources = {}
+    # memory
+    out, _, _ = _run(["free", "-h"])
+    if out:
+        for line in out.split("\n"):
+            if line.startswith("Mem:"):
+                parts = line.split()
+                resources["memory"] = {"total": parts[1], "used": parts[2], "free": parts[3], "available": parts[6]} if len(parts) >= 7 else {}
+            elif line.startswith("Swap:"):
+                parts = line.split()
+                resources["swap"] = {"total": parts[1], "used": parts[2], "free": parts[3]} if len(parts) >= 4 else {}
+    # disk
+    out, _, _ = _run(["df", "-h", "/", "/opt/ai_data", "/mnt/lv_db", "/mnt/secure_meta", "/var/log", "/var/tmp", "/opt/projects"])
+    disks = {}
+    if out:
+        for line in out.split("\n")[1:]:
+            parts = line.split()
+            if len(parts) >= 6:
+                disks[parts[5]] = {"size": parts[1], "used": parts[2], "avail": parts[3], "use_pct": parts[4]}
+    resources["disks"] = disks
+    # load
+    try:
+        with open("/proc/loadavg") as f:
+            lavg = f.read().split()
+            resources["load"] = {"1min": float(lavg[0]), "5min": float(lavg[1]), "15min": float(lavg[2])}
+        with open("/proc/uptime") as f:
+            up_sec = float(f.read().split()[0])
+            d = int(up_sec) // 86400
+            h = (int(up_sec) % 86400) // 3600
+            m = (int(up_sec) % 3600) // 60
+            resources["uptime"] = f"{d}d {h}h {m}m"
+    except Exception:
+        pass
+    return resources
+
+
+def _get_experiments():
+    """Query experiment_registry from DB."""
+    sql = "SELECT experiment_id, category, verdict, substring(rationale,1,100) as excerpt, created_at FROM experiment_registry ORDER BY created_at DESC LIMIT 7"
+    out = _sql(sql)
+    if not out:
+        return []
+    exps = []
+    for line in out.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("|")
+        if len(parts) < 5:
+            continue
+        exps.append({"id": parts[0].strip(), "category": parts[1].strip(), "verdict": parts[2].strip(),
+                      "excerpt": parts[3].strip(), "created_at": parts[4].strip()})
+    return exps
+
+
+def _get_active_config():
+    """Query active_config from DB."""
+    sql = "SELECT component, config, rationale FROM active_config"
+    out = _sql(sql)
+    if not out:
+        return []
+    configs = []
+    for line in out.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("|", 2)
+        if len(parts) < 3:
+            continue
+        configs.append({"component": parts[0].strip(), "config": parts[1].strip()[:120], "rationale": parts[2].strip()[:120]})
+    return configs
+
+
+def _get_tasks():
+    """Query tasks DB table for current task status."""
+    from lib.db import psql_json as _pj
+    rows = _pj(
+        "SELECT id, title, status, priority FROM tasks WHERE status IN ('in_progress', 'pending', 'blocked', 'completed')"
+    )
+    if not rows:
+        return {"error": "tasks table empty"}
+    summary = {"in_progress": [], "pending": [], "blocked": [], "completed_count": 0, "total": 0}
+    for t in rows:
+        summary["total"] += 1
+        sid = t.get("id", 0)
+        if t["status"] == "in_progress":
+            summary["in_progress"].append({"id": sid, "title": t["title"]})
+        elif t["status"] == "pending":
+            summary["pending"].append({"id": sid, "priority": t.get("priority", ""), "title": t["title"]})
+        elif t["status"] == "blocked":
+            summary["blocked"].append({"id": sid, "title": t["title"]})
+        elif t["status"] == "completed":
+            summary["completed_count"] += 1
+    return summary
+
+
+def cmd_task_list(args):
+    """List tasks from DB."""
+    from lib.db import psql_json as _pj, esc_sql
+    where = ""
+    if args.status:
+        where = f"WHERE status = '{esc_sql(args.status)}'"
+    sql = f"""SELECT id, title, status, priority, substring(description,1,80) AS excerpt,
+       created_at, updated_at FROM tasks
+    {where} ORDER BY
+       CASE status WHEN 'in_progress' THEN 1 WHEN 'pending' THEN 2 WHEN 'blocked' THEN 3 ELSE 4 END,
+       CASE priority WHEN 'P0' THEN 1 WHEN 'P1' THEN 2 WHEN 'P2' THEN 3 ELSE 4 END,
+       created_at DESC"""
+    rows = _pj(sql)
+    if not rows:
+        print("(no tasks)")
+        return
+    print(f"{'ID':<5} {'Status':<12} {'Priority':<8} {'Title':<60} {'Created'}")
+    print("-" * 110)
+    for r in rows:
+        print(f"{r['id']:<5} {r['status']:<12} {str(r['priority'] or ''):<8} "
+              f"{str(r['title'])[:58]:<60} {str(r['created_at'])[:19]}")
+
+
+def cmd_task_add(args):
+    """Add a new task to DB."""
+    from lib.db import psql as _sql, esc_sql
+    title = esc_sql(args.title)
+    priority = args.priority or ''
+    desc = esc_sql(args.description or '')
+    result = _sql(f"""INSERT INTO tasks (title, priority, description)
+    VALUES ('{title}', '{priority}', '{desc}') RETURNING id""")
+    if result and result.strip():
+        print(f"Task created: id={result.strip()} - {args.title[:60]}")
+
+
+def cmd_task_update(args):
+    """Update task status/notes."""
+    from lib.db import psql as _sql, psql_json as _pj, esc_sql
+    import json
+    rows = _pj(f"SELECT id, title, status, notes FROM tasks WHERE id = {args.id}")
+    if not rows:
+        print(f"ERROR: task id={args.id} not found")
+        return
+    t = rows[0]
+    update_cols = []
+    if args.status:
+        update_cols.append(f"status = '{esc_sql(args.status)}'")
+    if args.description:
+        update_cols.append(f"description = '{esc_sql(args.description)}'")
+    if args.status == 'completed' or t['status'] != 'completed' and args.status == 'completed':
+        update_cols.append("completed_at = NOW()")
+    if args.note:
+        notes = t.get('notes', [])
+        if not isinstance(notes, list):
+            notes = []
+        notes.append(args.note)
+        update_cols.append(f"notes = '{json.dumps(notes)}'::jsonb")
+    if not update_cols:
+        print("No changes specified")
+        return
+    update_cols.append("updated_at = NOW()")
+    sql = f"UPDATE tasks SET {', '.join(update_cols)} WHERE id = {args.id} RETURNING title"
+    result = _sql(sql)
+    if result:
+        print(f"Updated: {result.strip()}")
+
+
+def cmd_task_delete(args):
+    """Soft-delete a task (set status = 'deleted')."""
+    from lib.db import psql as _sql
+    sql = f"UPDATE tasks SET status = 'deleted', updated_at = NOW() WHERE id = {args.id} RETURNING title"
+    result = _sql(sql)
+    if result and result.strip():
+        print(f"Deleted: {result.strip()}")
+
+
+def cmd_task_show(args):
+    """Show full task details."""
+    from lib.db import psql_json as _pj
+    rows = _pj(f"SELECT * FROM tasks WHERE id = {args.id}")
+    if not rows:
+        print(f"ERROR: task id={args.id} not found")
+        return
+    r = rows[0]
+    print(f"Task #{r['id']}: {r['title']}")
+    print(f"  Status:    {r['status']}")
+    if r.get('priority'): print(f"  Priority:  {r['priority']}")
+    if r.get('description'):
+        print(f"  Description:")
+        for line in (r['description'] or '').split('\n'): print(f"    {line}")
+    notes = r.get('notes', [])
+    if notes and isinstance(notes, list) and len(notes) > 0:
+        print(f"  Notes:")
+        for n in notes: print(f"    - {n}")
+    print(f"  Created:   {r['created_at']}")
+    print(f"  Updated:   {r['updated_at']}")
+    if r.get('completed_at'): print(f"  Completed: {r['completed_at']}")
+    if r.get('agent'): print(f"  Agent:     {r['agent']}")
+    if r.get('tags') and isinstance(r['tags'], list) and r['tags']:
+        print(f"  Tags:      {', '.join(r['tags'])}")
+
+
+def _get_alerts(containers, resources):
+    """Derive alerts from thresholds."""
+    alerts = []
+    # container down
+    expected = ["postgres", "devforge-pod-a", "devforge-swap"]
+    for name in expected:
+        if name not in containers:
+            alerts.append(f"Container {name} is DOWN")
+    # disk > 90%
+    for mount, info in resources.get("disks", {}).items():
+        pct = info.get("use_pct", "0%").replace("%", "")
+        try:
+            if int(pct) > 90:
+                alerts.append(f"Disk {mount} at {pct}%")
+        except ValueError:
+            pass
+    # memory > 95%
+    mem = resources.get("memory", {})
+    if mem:
+        try:
+            import re
+            used = re.sub(r"[^0-9.]", "", mem.get("used", "0"))
+            total = re.sub(r"[^0-9.]", "", mem.get("total", "1"))
+            if float(used) / float(total) > 0.95:
+                alerts.append(f"Memory {used}/{total}")
+        except (ValueError, ZeroDivisionError):
+            pass
+    return alerts
+
+
+def _get_rule_status():
+    """Run lint_rules and return summary + violation counts."""
+    from lint_rules import run_all_checks, find_python_files, SCRIPTS_DIR as LINT_DIR
+    try:
+        result = run_all_checks(find_python_files(LINT_DIR))
+        return {
+            "passed": result["passed"],
+            "status": result["status"],
+            "files_checked": result["total_files"],
+            "violations": result["violations_by_severity"],
+            # Only include actual violations for P0 (show-stoppers)
+            "p0_violations": [
+                {"file": v["file"], "line": v.get("line", ""), "message": v["message"]}
+                for v in result["violations"] if v["severity"] == "P0"
+            ][:10],  # cap at 10 to avoid bloat
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _get_glossary():
+    """Return glossary terms with bounded context names."""
+    from lib.db import psql_json as _pj
+    return _pj(
+        "SELECT gt.term, gt.definition, bc.name as context "
+        "FROM glossary_terms gt LEFT JOIN bounded_contexts bc ON gt.bounded_context_id = bc.id "
+        "ORDER BY bc.id, gt.term"
+    )
+
+
+def _get_references():
+    """Return static references grouped by category."""
+    from lib.db import psql_json as _pj
+    return _pj(
+        "SELECT category, name, url, description FROM static_references ORDER BY category, name"
+    )
+
+
+def cmd_status(args):
+    """Live system status — single source of truth for LLM and humans."""
+    containers = _get_containers()
+    models = _get_models()
+    resources = _get_resources()
+
+    result = {
+        "host": {"hostname": os.uname().nodename, "arch": os.uname().machine,
+                  "os": f"{os.uname().sysname} {os.uname().release}"},
+        "containers": containers,
+        "models": models,
+        "timers": _get_timers(),
+        "services": _get_services(),
+        "resources": resources,
+        "experiments": _get_experiments(),
+        "active_config": _get_active_config(),
+        "tasks": _get_tasks(),
+        "alerts": _get_alerts(containers, resources),
+        "rules": _get_rule_status(),
+        "glossary": _get_glossary(),
+        "references": _get_references(),
+    }
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    else:
+        # Human-readable summary
+        print("═══ DevForge Status ═══")
+        print(f"Host: {result['host']['hostname']} ({result['host']['arch']}) — {resources.get('uptime', '?')} up")
+        print(f"Load: {resources.get('load', {}).get('1min', '?')} {resources.get('load', {}).get('5min', '?')} {resources.get('load', {}).get('15min', '?')}")
+        mem = resources.get("memory", {})
+        print(f"Mem: {mem.get('used', '?')}/{mem.get('total', '?')} (avail {mem.get('available', '?')})")
+        swap = resources.get("swap", {})
+        if swap:
+            print(f"Swap: {swap.get('used', '?')}/{swap.get('total', '?')}")
+
+        print(f"\n── Containers ──")
+        for name, info in containers.items():
+            print(f"  {name}: {info['status']}")
+
+        print(f"\n── Models ──")
+        for pod, model_list in models.items():
+            if isinstance(model_list, list):
+                print(f"  {pod} ({' '.join(model_list)})")
+            else:
+                print(f"  {pod}: {model_list}")
+
+        tasks = result.get("tasks", {})
+        if isinstance(tasks, dict) and "error" not in tasks:
+            print(f"\n── Tasks ──")
+            print(f"  in_progress: {len(tasks.get('in_progress', []))}")
+            print(f"  pending: {len(tasks.get('pending', []))}")
+            print(f"  blocked: {len(tasks.get('blocked', []))}")
+            print(f"  completed: {tasks.get('completed_count', 0)} / {tasks.get('total', 0)}")
+
+        alerts = result.get("alerts", [])
+        if alerts:
+            print(f"\n── Alerts ──")
+            for a in alerts:
+                print(f"  ⚠ {a}")
+
+        print(f"\nUse --json for machine-readable output.")
+
+
+def cmd_lint(args):
+    """Check code against enforced rules."""
+    from lint_rules import run_all_checks, find_python_files, SCRIPTS_DIR
+
+    if args.files:
+        files = [Path(f) for f in args.files]
+    else:
+        files = find_python_files(SCRIPTS_DIR)
+
+    result = run_all_checks(files)
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    else:
+        if result["passed"]:
+            print("✅ All rules passed — no violations found.")
+        else:
+            print(f"❌ {result['status']}")
+            for v in result["violations"]:
+                loc = f"{v['file']}:{v.get('line', '')}" if v.get("line") else v["file"]
+                print(f"  [{v['severity']}] {v['rule']}: {v['message']}")
+                print(f"        at {loc}")
+            print(f"\n  Files: {result['total_files']} | Violations: {result['violations_total']}")
+            print(f"  P0:{result['violations_by_severity']['P0']} P1:{result['violations_by_severity']['P1']} P2:{result['violations_by_severity']['P2']}")
+
+    if args.fix:
+        print("\n── Suggested Fixes ──")
+        # Group by type
+        seen = set()
+        for v in result["violations"]:
+            key = v["message"][:60]
+            if key not in seen:
+                seen.add(key)
+                if "Rename to" in v["message"]:
+                    print(f"  {v['message']}")
+
+    if not result["passed"]:
+        sys.exit(1)
+
+
 async def main():
     parser = argparse.ArgumentParser(description="DevForge CLI")
     sub = parser.add_subparsers(dest="command")
@@ -690,6 +1269,48 @@ async def main():
 
     auto_clear = auto_sub.add_parser("clear", help="Clear all auto tasks")
 
+    p_experiment = sub.add_parser("experiment", help="실험 레지스트리 관리")
+    exp_sub = p_experiment.add_subparsers(dest="exp_command")
+
+    exp_list = exp_sub.add_parser("list", help="List experiments")
+    exp_list.add_argument("--all", action="store_true", help="Show all experiments")
+    exp_list.add_argument("--category", "-c", help="Filter by category")
+    exp_list.add_argument("--limit", "-n", type=int, default=20, help="Max results (default: 20)")
+
+    exp_compare = exp_sub.add_parser("compare", help="Compare experiments")
+    exp_compare.add_argument("experiment_ids", nargs="+", help="Experiment IDs to compare")
+
+    exp_active = exp_sub.add_parser("active", help="Show active config")
+
+    exp_adopt = exp_sub.add_parser("adopt", help="Adopt experiment as active config")
+    exp_adopt.add_argument("experiment_id", help="Experiment ID to adopt")
+    exp_adopt.add_argument("--component", "-c", required=True,
+                           choices=["pod-a-day", "pod-b-day", "pod-b-night"],
+                           help="Component to update")
+
+    p_task = sub.add_parser("task", help="Task management (DB)")
+    task_sub = p_task.add_subparsers(dest="task_command")
+
+    task_list = task_sub.add_parser("list", help="List tasks")
+    task_list.add_argument("--status", choices=["pending", "in_progress", "blocked", "completed", "deleted"])
+
+    task_add = task_sub.add_parser("add", help="Add a new task")
+    task_add.add_argument("title", help="Task title")
+    task_add.add_argument("--priority", "-p", choices=["P0", "P1", "P2"])
+    task_add.add_argument("--description", "-d")
+
+    task_update = task_sub.add_parser("update", help="Update a task")
+    task_update.add_argument("id", type=int, help="Task ID")
+    task_update.add_argument("--status", choices=["pending", "in_progress", "blocked", "completed", "deleted"])
+    task_update.add_argument("--description", "-d")
+    task_update.add_argument("--note")
+
+    task_delete = task_sub.add_parser("delete", help="Soft-delete a task")
+    task_delete.add_argument("id", type=int, help="Task ID to delete")
+
+    task_show = task_sub.add_parser("show", help="Show full task details")
+    task_show.add_argument("id", type=int, help="Task ID")
+
     p_act = sub.add_parser("activity", help="Activity log management")
     act_sub = p_act.add_subparsers(dest="act_command")
 
@@ -703,6 +1324,14 @@ async def main():
     act_add.add_argument("title", help="Entry title")
     act_add.add_argument("summary", help="Entry summary")
     act_add.add_argument("--tags", help="Comma-separated tags")
+
+    p_status = sub.add_parser("status", help="Live system status — containers, models, timers, tasks, resources")
+    p_status.add_argument("--json", "-j", action="store_true", help="Machine-readable JSON output")
+
+    p_lint = sub.add_parser("lint", help="Check code against enforced rules (naming, status, security)")
+    p_lint.add_argument("--json", "-j", action="store_true", help="Machine-readable JSON output")
+    p_lint.add_argument("--files", nargs="*", help="Specific files to check (default: all scripts/)")
+    p_lint.add_argument("--fix", action="store_true", help="Suggest fixes for violations")
 
     args = parser.parse_args()
 
@@ -730,6 +1359,30 @@ async def main():
             cmd_activity_add(args)
         else:
             p_act.print_help()
+    elif args.command == "experiment":
+        if args.exp_command == "list":
+            cmd_experiment_list(args)
+        elif args.exp_command == "compare":
+            cmd_experiment_compare(args)
+        elif args.exp_command == "active":
+            cmd_experiment_active(args)
+        elif args.exp_command == "adopt":
+            cmd_experiment_adopt(args)
+        else:
+            p_experiment.print_help()
+    elif args.command == "task":
+        if args.task_command == "list":
+            cmd_task_list(args)
+        elif args.task_command == "add":
+            cmd_task_add(args)
+        elif args.task_command == "update":
+            cmd_task_update(args)
+        elif args.task_command == "delete":
+            cmd_task_delete(args)
+        elif args.task_command == "show":
+            cmd_task_show(args)
+        else:
+            p_task.print_help()
     elif args.command == "discussion":
         if args.method in ("drag", "toolmad"):
             cmd_discussion(args)
@@ -752,6 +1405,10 @@ async def main():
             p_auto.print_help()
     elif args.command == "dashboard":
         cmd_dashboard(args)
+    elif args.command == "status":
+        cmd_status(args)
+    elif args.command == "lint":
+        cmd_lint(args)
     else:
         parser.print_help()
 

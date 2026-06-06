@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Changelog management — load, save, append, archive.
 
 Extracted from gen_server_state.py. Paths default to /opt/projects/server/.
@@ -87,3 +90,4 @@ def archive_old_entries() -> None:
     archive_data["entries"] = archived + archive_data.get("entries", [])
     ARCHIVE_FILE.write_text(yaml.dump(archive_data, default_flow_style=False,
                                       allow_unicode=True, sort_keys=False, width=120))
+

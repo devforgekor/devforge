@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Qwen2.5-Coder-3B 30B verify 역할 테스트 — 동일 프롬프트로 3B vs 30B 비교."""
 import json, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

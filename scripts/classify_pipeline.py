@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: 15m_cycle.sh
 """Day pre-review: P(day_p)→R(day_r)→J(day_j) for night prepill defense.
 
 Each cycle reads unclassified turns (created_at > classify checkpoint)
@@ -28,8 +30,9 @@ import time
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql, psql_ok, esc_sql
+from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.llm_client import call_llm
+from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.queue_writer import enqueue_review
 
 BATCH_LIMIT = 5
@@ -145,23 +148,17 @@ def _get_turn_facts(turn_id):
         f"  AND verdict != 'system' "
         "ORDER BY fact_index ASC"
     )
-    rows = psql(sql)
+    rows = psql_json(sql)
     if not rows:
         return []
     facts = []
-    for line in rows.strip().split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split("|")
-        if len(parts) < 3:
-            continue
+    for row in rows:
         facts.append({
-            "fact_index": int(parts[0]) if parts[0].strip() else 0,
-            "fact_type": parts[1].strip(),
-            "evidence": parts[2].strip(),
-            "extract_model": parts[3].strip() if len(parts) > 3 else "",
-            "verdict": parts[4].strip() if len(parts) > 4 else "",
+            "fact_index": row.get("fact_index", 0) or 0,
+            "fact_type": row.get("fact_type", ""),
+            "evidence": row.get("evidence", ""),
+            "extract_model": row.get("extract_model", ""),
+            "verdict": row.get("verdict", ""),
         })
     return facts
 
@@ -203,26 +200,20 @@ def _get_unclassified_turns(limit=BATCH_LIMIT):
         "ORDER BY t.created_at ASC "
         f"LIMIT {limit}"
     )
-    rows = psql(sql)
+    rows = psql_json(sql)
     if not rows:
         return []
     turns = []
-    for line in rows.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split("|")
-        if len(parts) < 8:
-            continue
+    for row in rows:
         turns.append({
-            "id": parts[0].strip(),
-            "user_turn": parts[1].strip(),
-            "thinking": parts[2].strip() or None,
-            "text": parts[3].strip(),
-            "source_message_id": parts[4].strip(),
-            "created_at": parts[5].strip(),
-            "conversation_id": parts[6].strip(),
-            "seq": int(parts[7]) if parts[7].strip() else 0,
+            "id": row.get("id", ""),
+            "user_turn": row.get("user_turn", ""),
+            "thinking": row.get("thinking") or None,
+            "text": row.get("text", ""),
+            "source_message_id": row.get("source_message_id", ""),
+            "created_at": row.get("created_at", ""),
+            "conversation_id": row.get("conversation_id", ""),
+            "seq": row.get("seq", 0) or 0,
         })
     return turns
 
@@ -230,26 +221,18 @@ def _get_unclassified_turns(limit=BATCH_LIMIT):
 # ── LLM call helpers ──────────────────────────────────────────────────
 
 def _call_json(messages, model, max_tokens=MAX_TOKENS, label=""):
-    """Call LLM and parse JSON result. Returns parsed dict or None."""
+    """Call LLM and parse JSON result. Uses shared parse_llm_json + DLQ."""
     meta = call_llm(messages, model=model, max_tokens=max_tokens,
                     timeout=TIMEOUT, json_mode=True, return_meta=True)
     raw = meta["content"]
     if isinstance(raw, str):
         raw = raw.strip()
-        if raw.startswith("```"):
-            start = raw.find("\n")
-            if start != -1:
-                raw = raw[start:]
-            end = raw.rfind("```")
-            if end != -1:
-                raw = raw[:end].strip()
-    try:
-        if isinstance(raw, str):
-            return json.loads(raw)
-        return raw
-    except json.JSONDecodeError as e:
-        log(f"  JSON parse error {label}: {e}")
-        return None
+    result = parse_llm_json(raw)
+    if result is None:
+        save_dlq(raw, stage=f"classify_{label}", model=model,
+                 error="parse_llm_json returned None", attempt=1)
+        log(f"  JSON parse error {label}: None after parse_llm_json")
+    return result
 
 
 # ── Phases ────────────────────────────────────────────────────────────

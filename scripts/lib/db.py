@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Shared PostgreSQL helpers for DevForge scripts.
 
 Usage:
@@ -31,6 +34,33 @@ def psql(sql: str, timeout: int = 30) -> str:
     except Exception as e:
         print(f"  SQL ERROR: {e}")
         return ""
+
+
+def psql_json(sql: str, timeout: int = 30) -> list[dict]:
+    """Execute SQL with row_to_json wrapping, return list of dicts.
+
+    Wraps the query in SELECT row_to_json(r) FROM (...) r so column values
+    containing ``|`` do not break parsing (unlike psql() pipe-delimited output).
+    """
+    import json as _json
+    wrapped = f"SELECT row_to_json(r) FROM ({sql}) r"
+    try:
+        r = subprocess.run(PSQL + ["-c", wrapped], capture_output=True, text=True, timeout=timeout)
+        if r.returncode != 0:
+            print(f"  SQL ERROR: {r.stderr.strip()[:200]}")
+            return []
+        raw = r.stdout.strip()
+        if not raw:
+            return []
+        result = []
+        for line in raw.split("\n"):
+            line = line.strip()
+            if line:
+                result.append(_json.loads(line))
+        return result
+    except Exception as e:
+        print(f"  SQL ERROR: {e}")
+        return []
 
 
 def psql_ok(sql: str, timeout: int = 30) -> bool:
@@ -127,3 +157,4 @@ def get_token_stats() -> Optional[dict]:
             except ValueError:
                 pass
     return None
+

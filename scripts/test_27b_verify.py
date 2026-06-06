@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """test_27b_verify.py — 27B verify 테스트 (기존 P-R-J handoff 데이터 사용)
 
 27B가 기존 P-R-J 결과를 올바르게 verify하는지 검증.

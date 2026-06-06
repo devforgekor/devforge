@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """DSV2 Lite vs 30B — MCP extract verify 비교"""
 import json, sys, os, time, urllib.request, urllib.error
 sys.path.insert(0, "/opt/projects/server/scripts")

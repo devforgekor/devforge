@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """queue_writer — enqueue items to activity_log for downstream review pipeline.
 
 Shared by review_worker.py (fact extraction) and local_debate.py (debate results).
@@ -58,3 +61,4 @@ def enqueue_review(
         f")"
     )
     return psql_ok(sql)
+

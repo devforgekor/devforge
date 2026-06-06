@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: nightly_batch.sh
 """review_consumer.py — 27B production final verify.
 
 Reads activity_log WHERE queue_status='reviewed' (after review_worker.py's
@@ -18,7 +20,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from lib.db import psql, psql_ok, esc_sql
+from lib.db import psql_json, psql, psql_ok, esc_sql
 from lib.feedback import get_feedback_for_model
 from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import resolve_model
@@ -93,40 +95,32 @@ Only flag patterns where you can identify a concrete issue. Avoid speculation.""
 
 def fetch_queue() -> List[Dict]:
     """Fetch items from activity_log queue WHERE queue_status='reviewed'."""
-    sql = f"""SELECT id, type, source, title,
-                     regexp_replace(summary, E'[\\n\\r\\\\|]+', ' ', 'g') AS summary,
-                     regexp_replace(body::text, E'[\\n\\r\\\\|]+', ' ', 'g') AS body,
-                     model, turn_ids, tags
+    sql = f"""SELECT id, type, source, title, summary,
+                     body, model, turn_ids, tags
               FROM activity_log
               WHERE queue_status = 'reviewed'
                 AND type IN ('review', 'debate_result', 'analysis_request', 'extract_result')
               ORDER BY created_at ASC
               LIMIT {QUEUE_LIMIT}"""
-    rows = psql(sql, timeout=30)
+    rows = psql_json(sql, timeout=30)
     if not rows:
         return []
 
     items = []
-    for line in rows.split("\n"):
-        if not line.strip():
-            continue
-        parts = line.split("|", 8)
-        if len(parts) < 7:
-            continue
-        try:
-            body = json.loads(parts[5]) if parts[5] else {}
-        except json.JSONDecodeError:
-            body = {"raw": str(parts[5])[:500]}
+    for row in rows:
+        body = row.get("body")
+        if not isinstance(body, dict):
+            body = {"raw": str(body)[:500]} if body else {}
         items.append({
-            "id": parts[0],
-            "type": parts[1],
-            "source": parts[2],
-            "title": parts[3],
-            "summary": parts[4],
+            "id": row["id"],
+            "type": row["type"],
+            "source": row["source"],
+            "title": row["title"],
+            "summary": row.get("summary", ""),
             "body": body,
-            "model": parts[6],
-            "turn_ids": parts[7] if len(parts) > 7 else "",
-            "tags": parts[8] if len(parts) > 8 else "",
+            "model": row.get("model", ""),
+            "turn_ids": row.get("turn_ids") or "",
+            "tags": row.get("tags") or "",
         })
     return items
 

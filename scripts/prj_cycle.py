@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: nightly_batch.sh / 15m_cycle.sh
 """
 P-R-J 고정 역할 실험: P=night_proposer, R=night_reflector, J=night_judge
 
@@ -14,9 +16,11 @@ Pod B에서 순차 swap (night_proposer -> night_reflector -> night_judge)
   python3 prj_cycle.py
 """
 
-import json, os, subprocess, sys, time, urllib.request
+import json, os, subprocess, sys, time, urllib.request, hashlib, uuid, uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+from lib.llm.json_parser import save_dlq, validate_schema
 
 RESUME_PRJ = "--resume-prj" in sys.argv
 DRY_RUN = "--dry-run" in sys.argv
@@ -31,10 +35,55 @@ if DRY_RUN:
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 EXPER_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "experiment")
+EVENTS_DIR = os.path.join(EXPER_DIR, "events")
 os.makedirs(EXPER_DIR, exist_ok=True)
+os.makedirs(EVENTS_DIR, exist_ok=True)
 sys.path.insert(0, SCRIPTS_DIR)
+
+# ── Schema definitions (JSON Schema subset) ────────────────────────
+# Validated against role outputs in llm_call() and compile_handoff*().
+
+VERIFY_SCHEMA = {
+    "required": ["final_verdict", "confidence", "summary"],
+    "additionalProperties": False,
+    "properties": {
+        "final_verdict":  {"type": "string", "enum": ["PASS", "FAIL", "NEEDS_REVIEW", "ESCALATE"]},
+        "confidence":     {"type": "integer"},
+        "summary":        {"type": "string"},
+        "reasoning":      {"type": "string"},
+        "action":         {"type": "string"},
+        "verification_items": {"type": "array"},
+        "schema_version": {"type": "integer"},
+    },
+}
+
+PRJ_RESULT_SCHEMA = {
+    "required": ["P_score", "R_score", "consensus", "decision"],
+    "additionalProperties": True,
+    "properties": {
+        "P_score":    {"type": "integer"},
+        "R_score":    {"type": "integer"},
+        "consensus":  {"type": "integer"},
+        "decision":   {"type": "string", "enum": ["APPROVED", "REJECT"]},
+        "approved":   {"type": "array"},
+        "rejected":   {"type": "array"},
+        "schema_version": {"type": "integer"},
+    },
+}
+
+HANDOFF_SCHEMA = {
+    "required": ["source"],
+    "additionalProperties": True,
+    "properties": {
+        "source":         {"type": "string"},
+        "approved_ids":   {"type": "array"},
+        "rejected_ids":   {"type": "array"},
+        "schema_version": {"type": "integer"},
+        "checksum":       {"type": "string"},
+    },
+}
 from lib.llm_client import call_llm, resolve_model
-from lib.db import psql, psql_ok, esc_sql
+from lib.db import psql, psql_ok, esc_sql, psql_json
 
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
@@ -107,7 +156,8 @@ def wait_health(port, timeout=600):
             with urllib.request.urlopen(req, timeout=3) as r:
                 if r.status == 200:
                     return True
-        except: pass
+        except Exception:
+            pass
         time.sleep(3)
     return False
 
@@ -132,7 +182,8 @@ def wait_probe(port, model_name, timeout=300):
                 if data.get("choices") and data["choices"][0].get("message"):
                     log(f"  probe OK ({model_name})")
                     return True
-        except: pass
+        except Exception:
+            pass
         time.sleep(5)
     log(f"  probe TIMEOUT ({model_name})")
     return False
@@ -154,11 +205,11 @@ def kill_all():
     log("  systemctl stop containers...")
     subprocess.run(["systemctl", "--user", "stop", "container-devforge-swap.service"],
                    capture_output=True, timeout=30)
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-qwen.service"],
+    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=30)
     subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-swap.service"],
                    capture_output=True, timeout=10)
-    subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-qwen.service"],
+    subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=10)
     # 커널 메모리 회수 시간 확보.
     # 컨테이너가 종료된 후 cgroup/pasta가 port를 해제하고,
@@ -207,7 +258,7 @@ def start_pod_a(mode, port):
     with open(MODE_FILE_A, "w") as f:
         f.write(f"MODE={mode}")
     kill_all()
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-qwen.service"],
+    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=60)
     ok = wait_health(port)
     if ok:
@@ -227,7 +278,7 @@ def start_day_both():
         f.write("MODE=day")
     kill_all()
     # Pod A 먼저 (가벼운 모델, 빠름)
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-qwen.service"],
+    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=60)
     ok_a = wait_health(8082)
     if ok_a: log(f"  :8082 ready (Pod A day_r)")
@@ -257,6 +308,89 @@ def ensure_model(physical_name):
 # ── Pipeline State Blackboard ──────────────────────────────────────────
 # 단일 JSON 파일에 모든 phase 결과를 축적. 각 phase는 add_phase()로 추가,
 # build_context()로 다음 phase의 LLM 프롬프트용 요약문 생성.
+
+# ── Token Budget: priority-based context allocation ──────────────────
+
+CHARS_PER_TOKEN = 2.5  # heuristic: mixed Korean/English
+
+
+def _est_tok(text: str) -> int:
+    """Estimate token count from character length."""
+    return int(len(text) / CHARS_PER_TOKEN)
+
+
+PHASE_BUDGET = {
+    "day_verify": 1500,  # tok
+    "prj_p":      2000,
+    "prj_r":      1200,
+    "prj_j":      1200,
+    "handoff":    1500,
+    "final_verify": 2000,
+}
+
+
+class TokenBudget:
+    """Allocate context tokens by priority. Highest priority fills first.
+
+    Usage:
+        budget = TokenBudget("prj_p")
+        budget.add_section("[HEADER]", header_text, priority=10)
+        budget.add_section("[FINDINGS]", findings_text, priority=5)
+        if budget.add_section("[RUBRIC]", rubric_text, priority=3):
+            ...  # rubric only included if budget remains
+        print(budget.summary())
+    """
+
+    def __init__(self, phase: str):
+        self.limit = PHASE_BUDGET.get(phase, 1500)
+        self.soft_limit = int(self.limit * 0.8)
+        self.used = 0
+        self.sections: list[dict] = []
+        self._over = False
+
+    def add_section(self, label: str, text: str, priority: int = 5) -> bool:
+        """Add text if budget remains. Priority 10=highest, 0=lowest.
+
+        Returns True if section was added, False if skipped due to budget.
+        """
+        if self._over:
+            return False
+        tok = _est_tok(text)
+        if self.used + tok > self.soft_limit:
+            # Partial: include what fits, mark over
+            allowed = max(0, self.limit - self.used - 10)  # 10 tok margin for suffix
+            if allowed > 80:  # at least ~200 chars
+                ratio = allowed / tok
+                cut = int(len(text) * ratio)
+                truncated = text[:cut]
+                suffix = f"\n  ... ({int((1-ratio)*100)}% of this section cut, budget exceeded)"
+                self.sections.append({
+                    "label": label, "tok": allowed + _est_tok(suffix),
+                    "truncated": True, "original_tok": tok,
+                })
+                self.used = self.limit
+                self._over = True
+                # Inject truncated text + suffix into 'text' via side effect: the caller uses 'text'
+                # We can't modify text in-place. Instead, callers should check return value.
+                return False  # caller must handle truncation
+            self._over = True
+            return False
+        self.used += tok
+        self.sections.append({"label": label, "tok": tok, "truncated": False})
+        return True
+
+    def remaining(self) -> int:
+        return max(0, self.limit - self.used)
+
+    def summary(self) -> str:
+        """One-line log-friendly summary of budget usage."""
+        n_total = len(self.sections)
+        n_cut = sum(1 for s in self.sections if s.get("truncated"))
+        cut_str = f", {n_cut} truncated" if n_cut else ""
+        return f"context budget: {self.used}/{self.limit} tok ({n_total} sections{cut_str})"
+
+    def __repr__(self) -> str:
+        return f"<TokenBudget {self.used}/{self.limit} tok>"
 
 
 class PipelineState:
@@ -314,128 +448,165 @@ class PipelineState:
         with open(self.path, "w") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=2)
 
+    def _append_event(self, kind: str, value: dict, event_type: str = "phase") -> None:
+        """Append one event to the append-only events.jsonl log."""
+        event = {
+            "event_id": uuid.uuid4().hex[:12],
+            "event_type": event_type,
+            "ts": time.time(),
+            "kind": kind,
+            "value": value,
+            "schema_version": 1,
+        }
+        ev_path = os.path.join(EVENTS_DIR, f"events_{self.tag}.jsonl")
+        with open(ev_path, "a") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
     def add_phase(self, key, value):
         self.data[key] = value
         self.save()
+        self._append_event("phase", {"key": key, "value": value}, event_type=key)
 
     def add_prj_rotation(self, rotation_result):
         self.data["prj"].append(rotation_result)
         self.save()
+        self._append_event("prj_rotation", rotation_result, event_type="prj_rotation")
 
     def build_context(self, phase, extra=None):
-        """LLM 프롬프트용 컨텍스트 생성.
-        phase controls inclusion: 'prj_p'는 day_verify 결과 포함, 'day_verify'는 python_verify만."""
+        """LLM 프롬프트용 컨텍스트 생성. TokenBudget으로 priority별 예산 할당.
+
+        Phase controls which sections are included and their priority.
+        High-priority sections always fill first; low-priority may be truncated.
+        """
+        budget = TokenBudget(phase)
         parts = []
         inp = self.data["input"]
         findings = inp.get("findings", [])
+        sev = inp.get("severity_distribution", {})
+        day_verify_data = self.data.get("day_verify")
 
-        # Header
+        def _maybe_append(text: str, priority: int = 5) -> bool:
+            """Append *text* to parts if within budget. Returns True if added."""
+            ok = budget.add_section(text.split("\n")[0][:60], text, priority)
+            if ok:
+                parts.append(text)
+            return ok
+
+        # ── 1. Header (priority 10: always included) ──
         rl = f"Round {self.round_num}" + (" (with rubric)" if self.with_rubric else "")
-        parts.append(f"=== PIPELINE CONTEXT: {rl} ===\n")
+        _maybe_append(f"=== PIPELINE CONTEXT: {rl} ===\n", priority=10)
 
-        # ── day_extract summary ──
-        ext = self.data.get("extract", {})
-        extract_models = ext.get("models", [])
-        if extract_models:
-            parts.append(f"[EXTRACT] {len(extract_models)} models x 15 turns")
-            for m in extract_models:
-                fth = f"{m.get('faithfulness_rate',0)*100:.0f}%"
-                sec = m.get('elapsed_seconds', 0)
-                ext_count = m.get('total_extractions', 0)
-                parts.append(f"  {m['model']}: faith={fth} ({m.get('total_faithful',0)}/{ext_count}), "
-                             f"time={sec:.0f}s ({m.get('avg_time_per_turn','?')}s/turn), ok={m.get('turns_ok',0)}/{m.get('turns_total',0)}")
-            parts.append("")
+        # ── 2. Input summary (priority 9: brief, always fits) ──
+        line = f"[INPUT] {inp['total_findings']} findings ({', '.join(f'{k}={v}' for k,v in sorted(sev.items()) if v > 0)})"
+        srcs = inp.get("source_files", {})
+        if srcs:
+            line += f"\n  Sources: {', '.join(s.split('/')[-1]+'='+str(c) for s,c in sorted(srcs.items()))}"
+        _maybe_append(line, priority=9)
 
-        # Input summary
-        sev = inp["severity_distribution"]
-        parts.append(f"[INPUT] {inp['total_findings']} findings ({', '.join(f'{k}={v}' for k,v in sorted(sev.items()) if v > 0)})")
-        srcs = inp["source_files"]
-        parts.append(f"  Sources: {', '.join(s.split('/')[-1]+'='+str(c) for s,c in sorted(srcs.items()))}\n")
+        # ── 3. day_extract summary (priority 5) ──
+        if phase != "day_verify":
+            ext = self.data.get("extract", {})
+            ext_models = ext.get("models", [])
+            if ext_models:
+                ext_lines = [f"[EXTRACT] {len(ext_models)} models x 15 turns"]
+                for m in ext_models:
+                    fth = f"{m.get('faithfulness_rate',0)*100:.0f}%"
+                    sec = m.get('elapsed_seconds', 0)
+                    ext_count = m.get('total_extractions', 0)
+                    ext_lines.append(f"  {m['model']}: faith={fth} ({m.get('total_faithful',0)}/{ext_count}), "
+                                     f"time={sec:.0f}s ({m.get('avg_time_per_turn','?')}s/turn), ok={m.get('turns_ok',0)}/{m.get('turns_total',0)}")
+                _maybe_append("\n".join(ext_lines), priority=5)
 
-        # Python verify (skip for the python_verify phase itself)
+        # ── 4. Python verify (priority 7) ──
         pv = self.data.get("python_verify")
         if pv and pv.get("total_findings") and phase not in ("python_verify",):
             status = "PASS" if pv.get("issues_found", 0) == 0 else f"{pv['issues_found']} ISSUES"
-            parts.append(f"[PYTHON VERIFY] {status}")
+            py_text = f"[PYTHON VERIFY] {status}"
             for iss in pv.get("issues", [])[:3]:
-                parts.append(f"  - {iss['check']}: {iss.get('detail','')[:100]}")
-            parts.append("")
+                py_text += f"\n  - {iss['check']}: {iss.get('detail','')[:100]}"
+            _maybe_append(py_text, priority=7)
 
-        # day_verify (skip for python_verify and "day_verify" phases)
-        day_verify_data = self.data.get("day_verify")
+        # ── 5. day_verify results (skip for day_verify phase itself; priority 6) ──
         if day_verify_data and day_verify_data.get("final_verdict") and phase not in ("python_verify", "day_verify"):
-            parts.append(f"[VERIFY] {day_verify_data['final_verdict']} (confidence={day_verify_data.get('confidence','?')})")
+            v_text = f"[VERIFY] {day_verify_data['final_verdict']} (confidence={day_verify_data.get('confidence','?')})"
             for item in day_verify_data.get("verification_items", [])[:5]:
-                parts.append(f"  [{item.get('result','?')}] {item.get('check','')}")
+                v_text += f"\n  [{item.get('result','?')}] {item.get('check','')}"
             rsn = day_verify_data.get("reasoning", "")
             if rsn:
-                parts.append(f"  Reasoning: {rsn[:200]}")
-            parts.append("")
+                v_text += f"\n  Reasoning: {rsn[:200]}"
+            _maybe_append(v_text, priority=6)
 
-        # P-R-J results (skip for early phases and prj phases themselves)
+        # ── 6. P-R-J rotation summary (for handoff/final_verify/night_verify phases; priority 7) ──
         prj = self.data.get("prj", [])
-        if prj and phase not in ("python_verify", "day_verify", "prj_p", "prj_r", "prj_j"):
-            parts.append(f"[P-R-J] {len(prj)} rotations:")
-            for r in prj:
-                parts.append(f"  {r.get('rotation','?')}: P={r.get('p_model','?')}({r.get('P_score','?')}) R={r.get('r_model','?')}({r.get('R_score','?')}) J={r.get('j_model','?')} → score={r.get('consensus','?')} {r.get('decision','?')}")
-            parts.append("")
+        if prj and phase in ("handoff", "final_verify", "night_verify"):
+            prj_text = f"[P-R-J] {len(prj)} rotations (last 2 shown):"
+            for r in prj[-2:]:
+                prj_text += f"\n  {r.get('rotation','?')}: P={r.get('p_model','?')}({r.get('P_score','?')}) R={r.get('r_model','?')}({r.get('R_score','?')}) J={r.get('j_model','?')} → score={r.get('consensus','?')} {r.get('decision','?')}"
+            _maybe_append(prj_text, priority=7)
 
-        # ── Findings details (all phases except python_verify) ──
+        # ── 7. Findings details (priority: critical=9, high=7, medium=5, low=3, partial/fail=1) ──
         if phase != "python_verify":
-            parts.append("[FINDINGS BY SEVERITY]")
+            sev_priority = {"critical": 9, "high": 7, "medium": 5, "low": 3, "partial": 2, "fail": 1}
             for sev_name in ("critical", "high", "medium", "low", "partial", "fail"):
                 f_list = [f for f in findings if f.get("severity", "").lower() == sev_name]
                 if not f_list:
                     continue
-                parts.append(f"\n[{sev_name.upper()}] ({len(f_list)}):")
-                for f in f_list[:5]:
+                sp = sev_priority.get(sev_name, 5)
+                f_text = f"\n[{sev_name.upper()}] ({len(f_list)}):"
+                for f in f_list:
                     fid = f.get("fid", f.get("id", "?"))
                     desc = f.get("description", "").replace("\n", " ")[:120]
-                    parts.append(f"  {fid}: {desc}")
-                if len(f_list) > 5:
-                    parts.append(f"  ... +{len(f_list)-5} more")
+                    f_text += f"\n  {fid}: {desc}"
+                if not _maybe_append(f_text, priority=sp):
+                    # If budget didn't allow full list, try with count-only
+                    brief = f"\n[{sev_name.upper()}] ({len(f_list)} total — list omitted, budget)"
+                    _maybe_append(brief, priority=sp - 1)  # one priority level lower
 
-            # day_verify results → Proposer 중복 회피 (only for P)
+            # day_verify verified items (only for P; priority 5)
             if phase == "prj_p" and day_verify_data:
                 items = day_verify_data.get("verification_items", [])
                 if items:
-                    parts.append(f"\n[VERIFIED — do not re-review these items]")
-                    for item in items[:8]:
-                        parts.append(f"  [{item.get('result','?')}] {item.get('check','')}: {item.get('detail','')[:100]}")
+                    vi_text = f"\n[VERIFIED — do not re-review these items]"
+                    for item in items:
+                        vi_text += f"\n  [{item.get('result','?')}] {item.get('check','')}: {item.get('detail','')[:100]}"
+                    if not _maybe_append(vi_text, priority=5):
+                        brief = f"\n[VERIFIED] {len(items)} items — list omitted, budget"
+                        _maybe_append(brief, priority=4)
 
-        # ── Phase-specific ──
-
-        # Rubric evaluation context (for P, J, and final_verify)
+        # ── 8. Rubric evaluation (for P, J, final_verify; priority 4) ──
         rub = self.data.get("rubric_evaluation", {})
         rub_evals = rub.get("evaluations", [])
         if rub_evals and phase in ("prj_p", "prj_j", "final_verify"):
-            parts.append("\n[RUBRIC EVALUATION — finding-level scores]")
+            rub_text = "\n[RUBRIC EVALUATION — finding-level scores]"
             low_scorers = [r for r in rub_evals if r.get("weighted_score", 10) < 5.0]
-            for r in rub_evals[:10]:
+            for r in rub_evals:
                 fid = r.get("id", "?")
                 ws = r.get("weighted_score", 0)
                 c = r.get("correctness", 0)
                 a = r.get("actionability", 0)
                 e = r.get("evidence", 0)
                 n = r.get("novelty", 0)
-                parts.append(f"  {fid}: weighted={ws:.1f} C={c} A={a} E={e} N={n}")
+                rub_text += f"\n  {fid}: weighted={ws:.1f} C={c} A={a} E={e} N={n}"
             if low_scorers:
-                parts.append(f"  LOW SCORERS (<5.0): {len(low_scorers)} findings — prioritize review")
-            parts.append("")
+                rub_text += f"\n  LOW SCORERS (<5.0): {len(low_scorers)} findings — prioritize review"
+            _maybe_append(rub_text, priority=4)
 
+        # ── 9. Judge rotation context (only for prj_j; priority 8) ──
         if phase == "prj_j":
-            # Judge: which rotation, previous rotation context
             ri = (extra or {}).get("rotation_index", 0)
-            parts.append(f"[JUDGE ROTATION {ri+1}/3]")
+            j_text = f"[JUDGE ROTATION {ri+1}/3]"
             if ri > 0 and len(prj) > 0:
                 prev = prj[-1]
-                parts.append(f"  Previous: {prev.get('rotation','?')} consensus={prev.get('consensus','?')} decision={prev.get('decision','?')}")
+                j_text += f"\n  Previous: {prev.get('rotation','?')} consensus={prev.get('consensus','?')} decision={prev.get('decision','?')}"
                 if prev.get("report_summary"):
-                    parts.append(f"  Summary: {prev['report_summary'][:150]}")
+                    j_text += f"\n  Summary: {prev['report_summary'][:150]}"
+            _maybe_append(j_text, priority=8)
 
-        elif phase == "final_verify":
-            parts.append(f"\n[FINAL VERIFY] 7 handoff documents below (3 LLM-R + 3 Python + 1 consolidated)")
+        # ── 10. Final verify note (only for final_verify; priority 7) ──
+        if phase == "final_verify":
+            _maybe_append("\n[FINAL VERIFY] 7 handoff documents below (3 LLM-R + 3 Python + 1 consolidated)", priority=7)
 
+        log(budget.summary())
         return "\n".join(parts)
 
 
@@ -491,74 +662,104 @@ def _extract_json(text):
 
 
 def llm_call(messages, model, max_tokens=2048, label=""):
-    """LLM 호출 → JSON 파싱.
+	"""LLM 호출 → JSON 파싱.
 
-    json_mode=True를 지원하지 않는 모델(Mistral계열 Codestral 등)은 system prompt로 JSON을 유도하고
-    응답에서 _extract_json()으로 JSON을 추출한다. R1-8B는 json_mode 유지 + reasoning 소진시
-    max_tokens*2 재시도.
-    """
-    def _try(m):
-        """단일 시도: m=True/False에 따라 json_mode on/off. returns (result, raw_r, raw_content)."""
-        nonlocal _raw
-        r = call_llm(messages, model=model, max_tokens=max_tokens,
-                     timeout=TIMEOUT, json_mode=m, return_meta=True)
-        content = r["content"]
-        raw_content = content
-        _raw = raw_content  # save for self-correction fallback
-        if isinstance(content, str):
-            content = strip_code_fence(content)
-        return _extract_json(content), r, raw_content
+	json_mode=True를 지원하지 않는 모델(Mistral계열 Codestral 등)은 system prompt로 JSON을 유도하고
+	응답에서 _extract_json()으로 JSON을 추출한다. R1-8B는 json_mode 유지 + reasoning 소진시
+	max_tokens*2 재시도.
+	"""
+	raw_content = ""
+	def _try(m):
+		"""단일 시도: m=True/False에 따라 json_mode on/off. returns (result, raw_r, raw_content)."""
+		nonlocal _raw
+		r = call_llm(messages, model=model, max_tokens=max_tokens,
+		             timeout=TIMEOUT, json_mode=m, return_meta=True)
+		content = r["content"]
+		raw_content = content
+		_raw = raw_content  # save for self-correction fallback
+		if isinstance(content, str):
+			content = strip_code_fence(content)
+		return _extract_json(content), r, raw_content
 
-    _raw = ""  # raw response for self-correction fallback
-    try:
-        # R1-8B: json_mode 유지, reasoning 소진시 2x 토큰 재시도
-        if model == "R1-8B":
-            try:
-                result, r, _ = _try(True)
-            except json.JSONDecodeError:
-                log(f"  R1-8B empty content (reasoning consumed all {max_tokens} tokens). Retrying with {max_tokens*2} tokens...")
-                _saved_max = max_tokens
-                max_tokens = max_tokens * 2
-                result, r, _ = _try(True)
-                max_tokens = _saved_max
-            return {
-                "result": result, "usage": r.get("usage", {}),
-                "timings": r.get("timings", {}), "elapsed_ms": r.get("elapsed_ms", 0),
-            }
+	_raw = ""  # raw response for self-correction fallback
+	try:
+		# R1-8B: json_mode 유지, reasoning 소진시 2x 토큰 재시도
+		if model == "R1-8B":
+			try:
+				result, r, _ = _try(True)
+			except json.JSONDecodeError:
+				log(f"  R1-8B empty content (reasoning consumed all {max_tokens} tokens). Retrying with {max_tokens*2} tokens...")
+				_saved_max = max_tokens
+				max_tokens = max_tokens * 2
+				result, r, _ = _try(True)
+				max_tokens = _saved_max
+			_log_schema_warnings(result, label, "R1-8B")
+			return {
+				"result": result, "usage": r.get("usage", {}),
+				"timings": r.get("timings", {}), "elapsed_ms": r.get("elapsed_ms", 0),
+			}
 
-        # Codestral/비Qwen: json_mode 지원 안 함 → 바로 non-json_mode 호출
-        result, r, _raw = _try(False)
-        return {
-            "result": result, "usage": r.get("usage", {}),
-            "timings": r.get("timings", {}), "elapsed_ms": r.get("elapsed_ms", 0),
-        }
+		# Codestral/비Qwen: json_mode 지원 안 함 → 바로 non-json_mode 호출
+		result, r, raw_content = _try(False)
+		_log_schema_warnings(result, label, model)
+		return {
+			"result": result, "usage": r.get("usage", {}),
+			"timings": r.get("timings", {}), "elapsed_ms": r.get("elapsed_ms", 0),
+		}
 
-    except json.JSONDecodeError as e:
-        # 실패시 self-correction: raw 응답을 JSON으로 변환하도록 재요청
-        log(f"  JSON parse error {label}: {e}. Self-correcting...")
-        if not _raw:
-            abort(f"LLM JSON 파싱 실패 (raw 응답 없음)", label, str(e))
-        try:
-            correct_msgs = [
-                {"role": "system", "content": "Convert the following text into valid JSON. Return ONLY the JSON, no markdown."},
-                {"role": "user", "content": f"Convert this to valid JSON:\n\n{_raw[:3000]}"},
-            ]
-            r = call_llm(correct_msgs, model=model, max_tokens=max_tokens,
-                         timeout=TIMEOUT, json_mode=False, return_meta=True)
-            content = strip_code_fence(r["content"])
-            result = _extract_json(content)
-            return {
-                "result": result, "usage": r.get("usage", {}),
-                "timings": r.get("timings", {}), "elapsed_ms": r.get("elapsed_ms", 0),
-            }
-        except Exception as e2:
-            abort(f"LLM 호출 실패 (self-correction도 실패)", label, str(e2))
-            return None
-    except Exception as e:
-        log(f"  ERROR {label}: {e}")
-        abort(f"LLM 호출 실패", label, str(e))
-        return None  # unreachable
+	except json.JSONDecodeError as e:
+		# DLQ 기록
+		save_dlq(_raw, stage=label, model=model, error=str(e), attempt=1)
+		# 실패시 self-correction: raw 응답을 JSON으로 변환하도록 재요청
+		log(f"  JSON parse error {label}: {e}. Self-correcting...")
+		if not _raw:
+			abort(f"LLM JSON 파싱 실패 (raw 응답 없음)", label, str(e))
+		try:
+			correct_msgs = [
+				{"role": "system", "content": "Convert the following text into valid JSON. Return ONLY the JSON, no markdown."},
+				{"role": "user", "content": f"Convert this to valid JSON:\n\n{_raw[:3000]}"},
+			]
+			r = call_llm(correct_msgs, model=model, max_tokens=max_tokens,
+			             timeout=TIMEOUT, json_mode=False, return_meta=True)
+			content = strip_code_fence(r["content"])
+			result = _extract_json(content)
+			_log_schema_warnings(result, label + "_corrected", model)
+			return {
+				"result": result, "usage": r.get("usage", {}),
+				"timings": r.get("timings", {}), "elapsed_ms": r.get("elapsed_ms", 0),
+			}
+		except Exception as e2:
+			save_dlq(_raw, stage=label + "_corrected", model=model, error=str(e2), attempt=2)
+			abort(f"LLM 호출 실패 (self-correction도 실패)", label, str(e2))
+			return None
+	except Exception as e:
+		log(f"  ERROR {label}: {e}")
+		abort(f"LLM 호출 실패", label, str(e))
+		return None  # unreachable
 
+
+# ── Schema validation helper ──────────────────────────────────
+
+def _schema_for_label(label: str) -> dict:
+	"""Pick schema based on label prefix. Returns {} for no validation."""
+	if "day_verify" in label or "night_verify" in label or "verify" in label:
+		return VERIFY_SCHEMA
+	if label.startswith("P_") or label.startswith("J_") or label.startswith("R_"):
+		return PRJ_RESULT_SCHEMA
+	if "handoff" in label:
+		return HANDOFF_SCHEMA
+	return {}
+
+def _log_schema_warnings(data: dict, label: str, model: str) -> None:
+	"""Validate parsed JSON against schema; log warnings without aborting."""
+	schema = _schema_for_label(label)
+	if not schema:
+		return
+	errs = validate_schema(data, schema)
+	if errs:
+		log(f"  Schema warnings ({label}): {{'; '.join(errs[:5])}}")
+		save_dlq(json.dumps(data, ensure_ascii=False), stage=label + "_schema",
+		         model=model, error="; ".join(errs[:3]), attempt=1)
 
 def abort(phase, label, detail):
     """실패 시 파이프라인 중단, Slack 알림 전송, exit."""
@@ -1004,7 +1205,7 @@ J_MODEL = "night_judge"
 
 MODEL_METADATA = {
     "Qwen3B":  {"file": "Qwen2.5-Coder-3B-Instruct.Q8_0.gguf",  "size": "3.1GB", "port": 8082, "mode": "day"},
-    "Qwen7B":  {"file": "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf",  "size": "7.6GB", "port": 8080, "mode": "test-7b"},
+    "Qwen7B":  {"file": "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf",  "size": "7.6GB", "port": 8080, "mode": "day"},
     "Qwen14B": {"file": "Qwen2.5-Coder-14B-Instruct.Q8_0.gguf", "size": "15.7GB","port": 8080, "mode": "review-r"},
     "Qwen30B": {"file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf","size":"17GB","port":8080, "mode":"review-p"},
     "Codestral":{"file":"Codestral-22B-v0.1-Q4_K_M.gguf",       "size":"12.4GB","port":8080, "mode":"review-j"},
@@ -1040,7 +1241,7 @@ def compile_handoff_single(r, round_num, with_rubric):
     """Python-compiled handoff from P-R-J result data."""
     n_approved = len(r.get("approved", []))
     n_rejected = len(r.get("rejected", []))
-    return {
+    handoff = {
         "source": "python_compiled",
         "p_model": r["p_model"],
         "r_model": r["r_model"],
@@ -1056,13 +1257,18 @@ def compile_handoff_single(r, round_num, with_rubric):
         "approved_ids": sorted(r.get("approved", [])),
         "rejected_ids": sorted(r.get("rejected", [])),
         "report_summary": r.get("report_summary", ""),
+        "schema_version": 1,
     }
+    handoff["checksum"] = hashlib.sha256(
+        json.dumps(handoff, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()[:16]
+    return handoff
 
 
 def compile_handoff(prj_results, round_num, with_rubric):
     """Consolidated handoff from P-R-J results."""
     r = prj_results[0] if prj_results else {}
-    return {
+    handoff = {
         "source": "python_consolidated",
         "round": round_num,
         "with_rubric": with_rubric,
@@ -1076,7 +1282,12 @@ def compile_handoff(prj_results, round_num, with_rubric):
         "all_rejected_ids": sorted(r.get("rejected", [])),
         "report_summary": r.get("report_summary", ""),
         "top_issues": r.get("report_top_issues", [])[:5],
+        "schema_version": 1,
     }
+    handoff["checksum"] = hashlib.sha256(
+        json.dumps(handoff, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()[:16]
+    return handoff
 
 
 # ── Round runner ──────────────────────────────────────────────────────
@@ -1523,17 +1734,17 @@ def _get_turn(turn_id):
         "  created_at, conversation_id, seq "
         f"FROM turns WHERE id = '{esc_sql(turn_id)}'::uuid"
     )
-    row = psql(sql)
-    if not row:
+    rows = psql_json(sql)
+    if not rows:
         return None
-    parts = [p.strip() for p in row.split("|")]
-    if len(parts) < 8:
-        return None
+    r = rows[0]
     return {
-        "id": parts[0], "user_turn": parts[1],
-        "thinking": parts[2] or None, "text": parts[3],
-        "source_message_id": parts[4], "created_at": parts[5],
-        "conversation_id": parts[6], "seq": int(parts[7]) if parts[7].strip() else 0,
+        "id": r["id"], "user_turn": r["user_turn"],
+        "thinking": r.get("thinking") or None, "text": r["text"],
+        "source_message_id": r.get("source_message_id", ""),
+        "created_at": r["created_at"],
+        "conversation_id": r["conversation_id"],
+        "seq": r.get("seq", 0) or 0,
     }
 
 
@@ -1546,23 +1757,17 @@ def _get_facts(turn_id):
         f"  AND verdict != 'system' "
         "ORDER BY fact_index ASC"
     )
-    rows = psql(sql)
+    rows = psql_json(sql)
     if not rows:
         return []
     facts = []
-    for line in rows.strip().split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split("|")
-        if len(parts) < 3:
-            continue
+    for row in rows:
         facts.append({
-            "fact_index": int(parts[0]) if parts[0].strip() else 0,
-            "fact_type": parts[1].strip(),
-            "evidence": parts[2].strip(),
-            "extract_model": parts[3].strip() if len(parts) > 3 else "",
-            "verdict": parts[4].strip() if len(parts) > 4 else "",
+            "fact_index": row.get("fact_index", 0) or 0,
+            "fact_type": row.get("fact_type", ""),
+            "evidence": row.get("evidence", ""),
+            "extract_model": row.get("extract_model", ""),
+            "verdict": row.get("verdict", ""),
         })
     return facts
 
@@ -1583,34 +1788,21 @@ def _read_pending_items(limit=5):
         "ORDER BY al.created_at ASC "
         f"LIMIT {limit}"
     )
-    rows = psql(sql)
+    rows = psql_json(sql)
     if not rows:
         return []
     items = []
-    for line in rows.strip().split("\n"):
-        line = line.strip()
-        if not line:
+    for row in rows:
+        body = row.get("body")
+        if not isinstance(body, dict):
             continue
-        parts = line.split("|")
-        if len(parts) < 3:
-            continue
-        try:
-            body = json.loads(parts[1].strip())
-        except json.JSONDecodeError:
-            continue
-        day_review = None
-        if len(parts) > 5 and parts[5].strip():
-            try:
-                day_review = json.loads(parts[5].strip())
-            except json.JSONDecodeError:
-                pass
         items.append({
-            "log_id": int(parts[0].strip()),
+            "log_id": row.get("id", 0) or 0,
             "body": body,
-            "title": parts[2].strip(),
-            "summary": parts[3].strip() if len(parts) > 3 else "",
-            "created_at": parts[4].strip() if len(parts) > 4 else "",
-            "day_review": day_review,
+            "title": row.get("title", ""),
+            "summary": row.get("summary", ""),
+            "created_at": row.get("created_at", ""),
+            "day_review": row.get("day_review_body"),
         })
     return items
 
@@ -1835,7 +2027,7 @@ def run_extract(with_rubric, mcp_model="day_mcp"):
     with open(MODE_FILE_A, "w") as f:
         f.write("MODE=day")
     kill_all()
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-qwen.service"],
+    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=60)
     subprocess.run(["systemctl", "--user", "start", "container-devforge-swap.service"],
                    capture_output=True, timeout=60)

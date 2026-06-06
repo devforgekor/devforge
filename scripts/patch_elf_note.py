@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Re-apply NOTE phdr patch to Copilot CLI ELF binary.
 
 UEK kernel 6.12 rejects the binary due to an oversized NOTE segment

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: nightly_batch.sh:255
 """proxy_reviewer.py — DeepSeek Pro verification of 27B verify reasoning.
 
 Reads activity_log items WHERE queue_status='done' AND verify_result exists but

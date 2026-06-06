@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: 15m_cycle.sh
 """embed_turns.py — batch embed unembedded turns via Gemini gemini-embedding-001.
 
 Pipeline:

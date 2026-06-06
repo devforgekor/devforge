@@ -1,0 +1,24 @@
+baseline:
+  generated: '2026-06-06T03:10:00+00:00'
+  host: ARM Neoverse-N1, 4-core, 22Gi RAM
+  pod_b:
+    model: Qwen2.5-Coder-7B-Instruct.Q8_0
+    mode: day
+    server_params: "--threads 4 --threads-batch 4 --ctx-size 8192 --batch-size 1024 --cache-ram 1024 --temp 0.1 --mlock off --flash-attn off --cache-type-k f32 --cache-type-v f32"
+    short_prompt_100tok:
+      prompt_n: 9
+      n_predict: 100
+      avg_prompt_per_second: 13.87
+      avg_predicted_per_second: 3.32
+      avg_predicted_per_token_ms: 302
+      avg_total_time_s: 30.8
+    medium_prompt_100tok:
+      prompt_n: 100
+      n_predict: 100
+      avg_prompt_per_second: 18.95
+      avg_predicted_per_second: 3.27
+      avg_predicted_per_token_ms: 305
+      avg_total_time_s: 35.9
+  pod_a:
+    status: inactive
+  next_phase: "Phase 1: Runtime parameter tuning"

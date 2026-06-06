@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: none — library
 """state_collector — DevForge Server Knowledge Engine v4.4
 
 Thin orchestrator: collect → detect changes → update docs → MOTD.

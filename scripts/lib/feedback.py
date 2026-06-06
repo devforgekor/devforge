@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Feedback provider — extracts recent fix patterns from activity_log and returns
 them as few-shot message arrays for injection into LLM conversations.
 
@@ -548,3 +551,4 @@ def get_feedback_for_model(
             patterns = rolled_back
 
     return _patterns_to_messages(patterns, max_gold, max_edge)
+

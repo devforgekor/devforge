@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """Extraction faithfulness test: Qwen3-4B vs Qwen2.5-Coder-3B baseline."""
 
 import csv

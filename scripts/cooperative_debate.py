@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: none — debate mode prototype (not on timer/cron)
 """CooperativeDebate — Proposer/Refuter on Azure spot VMs, Judge/Synthesis local.
 
 Extends LocalDebate with spot VM orchestration and remote model tunneling.
@@ -222,3 +225,4 @@ class CooperativeDebate(LocalDebate):
         print("█ Spot VMs → P:Qwen3-30B(:8084) R:Nemotron(:8083) | J+S:Gemma4-26B(:8085) | DRAG+Synth: Qwen3-30B(:8080)")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
+

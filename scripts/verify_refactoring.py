@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: none — development verification tool
 """Bidirectional refactoring verification — checks __init__.py re-exports, shims,
 file references, and stale naming across the codebase.
 
@@ -267,8 +270,7 @@ def verify_file_references() -> bool:
     server_root = Path("/opt/projects/server")
     all_ok = True
 
-    for yaml_file in [server_root / "CLAUDE.yaml",
-                      server_root / "docs" / "timer-registry.yaml"]:
+    for yaml_file in [server_root / "CLAUDE.yaml"]:
         if not yaml_file.exists():
             continue
         for line in yaml_file.read_text().split("\n"):
@@ -304,7 +306,7 @@ def verify_old_name_cleanup() -> bool:
     # Historical docs (handover, changelog, docs/*, archive) naturally
     # contain old names — they're records of what was.
     ACTIVE_SUFFIXES = {".py", ".sh", ".container", ".json"}
-    ACTIVE_YAML = {"CLAUDE.yaml", "blueprint.yaml", "tasks.yaml", "timer-registry.yaml",
+    ACTIVE_YAML = {"CLAUDE.yaml", "blueprint.yaml", "tasks.yaml",
                    "phases.md", "system-design.yaml"}
 
     EXCLUDE_DIRS = {"changelog", "_archive", ".git", "__pycache__", "docs",
@@ -410,3 +412,4 @@ if __name__ == "__main__":
     else:
         print("SOME CHECKS FAILED — review output above")
         sys.exit(1)
+

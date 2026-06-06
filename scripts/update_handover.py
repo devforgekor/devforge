@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd:handover-gen.timer
 """update_handover.py — Quality-scored session context capture.
 
 Triggered by SessionEnd hook AND 10-min checkpoint timer.
@@ -22,7 +24,6 @@ import yaml
 SERVER_DIR = Path("/opt/projects/server")
 HANDOVER_FILE = SERVER_DIR / "handover.yaml"
 LOCK_FILE = SERVER_DIR / ".handover.lock"
-TASKS_FILE = SERVER_DIR / "docs" / "tasks.yaml"
 PROJECT_DIRS = [
     Path("/opt/projects/server"),
 ]
@@ -112,10 +113,11 @@ def save_handover(data: dict):
 
 
 def load_tasks() -> Optional[dict]:
-    """Read tasks.yaml for in_progress context."""
-    if TASKS_FILE.exists():
-        with open(TASKS_FILE) as f:
-            return yaml.safe_load(f)
+    """Query tasks DB for in_progress context."""
+    from lib.db import psql_json
+    rows = psql_json("SELECT title, description FROM tasks WHERE status = 'in_progress' LIMIT 1")
+    if rows:
+        return {"in_progress": rows[0].get("title", "")}
     return None
 
 
@@ -261,7 +263,88 @@ def main():
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         save_handover(data)
 
+    # Write checkpoint to DB (primary store)
+    _db_write_checkpoint(checkpoint, data)
+
     return 0
+
+
+def _db_write_checkpoint(checkpoint: dict, data: dict):
+    """Write handover checkpoint data to DB tables, then regenerate YAML."""
+    from lib.db import psql as _psql, psql_json as _pj, esc_sql
+    import json as _json
+
+    summary = esc_sql(checkpoint.get("summary", ""))
+    total_files = checkpoint.get("total_files", 0)
+    recent_json = _json.dumps(checkpoint.get("recent_files", {}))
+    task = esc_sql(checkpoint.get("task") or "")
+
+    cp_sql = f"""INSERT INTO session_checkpoints (summary, total_files, recent_files, task)
+    VALUES ('{summary}', {total_files}, '{recent_json}'::jsonb, NULLIF('{task}', ''))
+    RETURNING id"""
+    cp_id_str = _psql(cp_sql)
+    if not cp_id_str or not cp_id_str.strip():
+        print("  DB checkpoint write FAILED")
+        return
+    cp_id = int(cp_id_str.strip())
+    print(f"  DB: session_checkpoint id={cp_id}")
+
+    # Write decisions (skip duplicates)
+    for dec in data.get("decisions", []):
+        dt = esc_sql(dec if isinstance(dec, str) else str(dec))
+        exists = _pj(f"SELECT 1 FROM decisions WHERE decision_text = '{dt}' LIMIT 1")
+        if not exists:
+            _psql(f"INSERT INTO decisions (checkpoint_id, decision_text) VALUES ({cp_id}, '{dt}')")
+
+    # Write known issues (skip duplicates)
+    for iss in data.get("known_issues", []):
+        it = esc_sql(iss if isinstance(iss, str) else str(iss))
+        exists = _pj(f"SELECT 1 FROM known_issues WHERE issue_text = '{it}' LIMIT 1")
+        if not exists:
+            _psql(f"INSERT INTO known_issues (checkpoint_id, issue_text) VALUES ({cp_id}, '{it}')")
+
+    # Write completed log
+    for log_entry in data.get("completed_log", []):
+        lt = esc_sql(log_entry if isinstance(log_entry, str) else str(log_entry))
+        _psql(f"INSERT INTO completed_log (checkpoint_id, log_text) VALUES ({cp_id}, '{lt}')")
+
+    # Regenerate YAML from DB
+    _regenerate_handover_yaml()
+
+
+def _regenerate_handover_yaml():
+    """Regenerate handover.yaml from DB (flat-file backup)."""
+    from lib.db import psql_json as _pj
+    import yaml as _yaml
+
+    latest = _pj("SELECT * FROM session_checkpoints ORDER BY id DESC LIMIT 1")
+    if not latest:
+        return
+    cp = latest[0]
+    cp_id = cp["id"]
+
+    decisions = _pj(f"SELECT decision_text FROM decisions WHERE checkpoint_id = {cp_id} ORDER BY id")
+    issues = _pj(f"SELECT issue_text FROM known_issues WHERE checkpoint_id = {cp_id} AND NOT resolved ORDER BY id")
+    completed = _pj("SELECT log_text FROM completed_log ORDER BY id DESC LIMIT 50")
+
+    data = {
+        "last_checkpoint": {
+            "time": str(cp["created_at"]),
+            "summary": cp.get("summary", ""),
+            "total_files": cp.get("total_files", 0),
+            "recent_files": cp.get("recent_files", {}),
+            "git": cp.get("git_state", {}),
+            "task": cp.get("task"),
+        },
+        "decisions": [d["decision_text"] for d in decisions],
+        "known_issues": [i["issue_text"] for i in issues],
+        "completed_log": [l["log_text"] for l in completed],
+    }
+
+    HANDOVER_FILE.write_text(_yaml.dump(
+        data, default_flow_style=False, allow_unicode=True,
+        sort_keys=False, width=120))
+    print(f"  Regenerated handover.yaml from DB (cp#{cp_id})")
 
 
 if __name__ == "__main__":

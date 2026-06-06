@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: imported by review_pipeline_3model.py
 """Step implementations for the 3-Model Review Pipeline.
 
 Contains constants, system prompts, HTTP helpers, and the 4 step functions:

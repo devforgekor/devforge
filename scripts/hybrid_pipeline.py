@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""
-hybrid_pipeline.py — Multi-model code modification pipeline with debate + verification.
+# Status: experimental
+# Path: none — prototype of code_mod_pipeline. exec()/eval() present, not production-safe.
+"""hybrid_pipeline.py — Multi-model code modification pipeline with debate + verification.
 
 Modes:
   hybrid      DeepSeek API plan -> 32B execution with ASSERT validation
@@ -14,7 +15,7 @@ Architecture:
   Phase 4: Cross-verification (32B compares output, measures divergence)
 
 Infrastructure:
-  Pod A (devforge-qwen):  Qwen3-4B @ 8080  (debate analyst)
+  Pod A (devforge-pod-a):  Qwen3-4B @ 8080  (debate analyst)
   Pod B (devforge-swap):  Phi-4 14B @ 8081  (debate critic + verify)
                            Qwen-14B  @ 8082  (debate pragmatist + execute)
   Mode switch -> code:    Qwen-32B  @ 8081  (cross-verify)

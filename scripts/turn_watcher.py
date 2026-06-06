@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd:devforge-turn-watcher
 """turn_watcher.py — real-time session transcript → PostgreSQL.
 
 Polls Claude Code / Copilot / Gemini / Aider jsonl files every few seconds.

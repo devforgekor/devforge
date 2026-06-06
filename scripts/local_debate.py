@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: none — debate mode prototype
 """LocalDebate — multi-agent debate using local Pod A + Pod B.
 
 debate mode (v6.0, 2-person):
@@ -693,3 +696,4 @@ class LocalDebateReview(LocalDebate):
                   f"Trend: {format_trend(self.consensus_scores)}")
 
         return True
+

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """30B Q3_K_M vs Q4_K_M Proposer comparison.
 Loads the original pipeline input, runs 30B Q4_K_M as P, compares with saved Q3 results.
 
