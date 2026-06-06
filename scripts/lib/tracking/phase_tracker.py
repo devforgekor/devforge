@@ -24,7 +24,7 @@ from typing import Callable, Optional
 import yaml
 
 from lib.db import db_table_exists, db_row_exists
-from lib.sys_checks import svc_active, svc_enabled, timer_active, container_running, file_exists
+from lib.infra.health_checks import svc_active, svc_enabled, timer_active, container_running, file_exists
 
 REF_ROOT = Path("/opt/projects/server")
 NOW = lambda: datetime.now(timezone.utc).isoformat()

@@ -80,12 +80,9 @@ known_issues:
   - '5-phase experiment not run — P0'
   - 'Night pipeline simple cycle test not run — P1'
   - 'code-structure.yaml → _archive/ (code headers are SSOT)'
-  - '7B Q8_0 ARM 4-core decode 2.85 t/s (3B+7B concurrent Config B)'
   - '27B Q4_K_M(16GB) on 22GB RAM — OOM risk. recover_and_restart() 3-level escalation'
-  - '@~/ tilde expansion bug (GitHub #8765) — using absolute paths as workaround'
-  - '18 .py files in scripts/_archive/ — deprecated-by-location, no Status header needed'
-  - '11 divider-comment files(P2), 3 wildcard imports(P2), 3 import-time secrets(P3) — fine list'
-  - 'stale __pycache__/.pyc 16 files cleaned (scripts/__pycache__)'
+  - '20 .py files in _archive/ — deprecated-by-location, no Status header needed'
+  - '31 files with divider comments (P2, cosmetic only — see # Section # pattern)'
 
 completed_log:
   - '[Session 30] Phase E follow-up: systemctl daemon-reload, proxy restart, handover cleanup, git commit 88b4ac8.
