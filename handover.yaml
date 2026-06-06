@@ -48,7 +48,7 @@ last_checkpoint:
   task: Phase E code-size refactoring complete. Phase B/C/D completed in prior sessions.
 
 current_context:
-  in_progress: 'systemctl daemon-reload 완료, 서비스 재시작 완료. git commit pending.'
+  in_progress: 'Phase E 완료 — daemon-reload, 서비스 재시작, git commit 88b4ac8 완료.'
   day_mode: 'System Mode=day. Pod A=devforge-pod-a(:8082). Pod B=devforge-swap(:8080).'
   service_rename: 'devforge-qwen → devforge-pod-a complete (prior session)'
   directory_structure: |
@@ -87,9 +87,11 @@ known_issues:
   - '18 .py files in scripts/_archive/ — deprecated-by-location, no Status header needed'
   - '11 divider-comment files(P2), 3 wildcard imports(P2), 3 import-time secrets(P3) — fine list'
   - 'stale __pycache__/.pyc 16 files cleaned (scripts/__pycache__)'
+  - 'git push pending — refactor/ssot-migration branch, 54 files'
 
 completed_log:
-  - '[Session 29] Phase E5-E8 complete: 8 pipeline→pipelines/, 3 proxy→proxies/, 3 test→tests/, observer/azure_spot/worklog_generator→lib/ — 19 file moves, 18 import path updates, 4 systemd updates'
+  - '[Session 30] Phase E follow-up: systemctl daemon-reload, proxy restart, handover cleanup, git commit 88b4ac8.
+  - Session 29 handover current_context updated: daemon-reload/git commit resolved.'
   - '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL in resume_pipeline.py — old naming fully eliminated'
   - '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service description, stale .pyc 16 files'
   - '[Session 29] Verification: full compile 127 .py OK, verify_refactoring.py 77/77 OK, CLI status/task/worklog/experiment OK, old naming 0 hits'
