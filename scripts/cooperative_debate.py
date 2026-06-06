@@ -8,7 +8,7 @@ Extends LocalDebate with spot VM orchestration and remote model tunneling.
 import os
 from typing import Optional
 
-from azure_spot import (
+from lib.infra.azure_spot import (
     NEMOTRON_SPOT_CONFIG,
     QWEN_SPOT_CONFIG,
     SpotOrchestrator,

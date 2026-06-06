@@ -17,9 +17,9 @@ Models: day_p + day_j on Pod B (:8080), day_r on Pod A (:8082).
 Both already running in day mode — no container management needed.
 
 Usage:
-  python3 classify_pipeline.py                 # process from checkpoint
-  python3 classify_pipeline.py --limit 5       # batch cap
-  python3 classify_pipeline.py --dry-run       # simulate, no writes
+  python3 scripts/pipelines/classify.py                 # process from checkpoint
+  python3 scripts/pipelines/classify.py --limit 5       # batch cap
+  python3 scripts/pipelines/classify.py --dry-run       # simulate, no writes
 """
 
 import json
@@ -27,7 +27,7 @@ import os
 import sys
 import time
 
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql, psql_ok, esc_sql, psql_json

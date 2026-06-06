@@ -17,10 +17,10 @@ Flow:
   Phase 6: Store to review_facts + enqueue + advance checkpoint
 
 Usage:
-  python3 extract_pipeline.py                            # process from checkpoint
-  python3 extract_pipeline.py --turn-id <uuid>            # single turn (debug)
-  python3 extract_pipeline.py --limit 50                  # batch cap
-  python3 extract_pipeline.py --dry-run                   # simulate, no writes
+  python3 scripts/pipelines/extract.py                          # process from checkpoint
+  python3 scripts/pipelines/extract.py --turn-id <uuid>            # single turn (debug)
+  python3 scripts/pipelines/extract.py --limit 50                  # batch cap
+  python3 scripts/pipelines/extract.py --dry-run                   # simulate, no writes
 """
 
 import json
@@ -31,7 +31,7 @@ import subprocess as sp
 import time
 from typing import Any, Dict, List, Optional
 
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql, psql_ok, esc_sql, psql_json

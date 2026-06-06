@@ -8,21 +8,21 @@ Compares P-R-J-27B-32B pipeline quality with and without explicit evaluation cri
 
 Usage:
   # Run full experiment (both rounds):
-  python3 rubric_experiment.py
+  python3 scripts/pipelines/rubric.py
 
   # Single round:
-  python3 rubric_experiment.py --round 1
-  python3 rubric_experiment.py --round 2 --best-combo A
+  python3 scripts/pipelines/rubric.py --round 1
+  python3 scripts/pipelines/rubric.py --round 2 --best-combo A
 
   # Quick comparison report:
-  python3 rubric_experiment.py --compare
+  python3 scripts/pipelines/rubric.py --compare
 """
 
 import json, os, subprocess, sys, time, glob, argparse, urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVAL_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "eval")
 EXPERIMENT_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "experiment")
 os.makedirs(EXPERIMENT_DIR, exist_ok=True)

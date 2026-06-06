@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: none — library
-"""test_27b_verify.py — 27B verify 테스트 (기존 P-R-J handoff 데이터 사용)
+"""test_verify_pipeline.py — 27B verify 테스트 (기존 P-R-J handoff 데이터 사용)
 
 27B가 기존 P-R-J 결과를 올바르게 verify하는지 검증.
 SYS_V27 프롬프트로 handoff 문서 3개 전달 → final_verdict 산출 확인.
 
 사용법:
-  python3 test_27b_verify.py
+  python3 test_verify_pipeline.py
 """
 
 import json, sys, time, os

@@ -4,7 +4,7 @@
 """5-Phase (2x2+baseline) Experiment Runner — 백그라운드 자동 실행.
 
 Usage:
-  python3 experiment_runner.py [--phase 0] [--dry-run]
+  python3 scripts/pipelines/runner.py [--phase 0] [--dry-run]
 
 Design (2x2 factorial + baseline):
 
@@ -36,7 +36,7 @@ import json, os, re, shutil, subprocess, sys, time, urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXPER_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "experiment")
 ARCHIVE_DIR = os.path.join(SCRIPTS_DIR, "_archive")
 os.makedirs(EXPER_DIR, exist_ok=True)
@@ -84,7 +84,7 @@ def ts():
 
 # ── Source file management ──────────────────────────────────────
 
-KEY_FILES = ["prj_cycle.py", "extract_pipeline.py", "classify_pipeline.py",
+KEY_FILES = ["prj_cycle.py", "pipelines/extract.py", "pipelines/classify.py",
              "nightly_batch.sh", "15m_cycle.sh"]
 
 

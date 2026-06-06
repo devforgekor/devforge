@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # Status: production
 # Path: manual — interactive CLI
-"""
-DevForge Observer Agent — interactive CLI agent with tool calling.
+"""DevForge Observer Agent — interactive CLI agent with tool calling.
 
 Routes natural language commands to DevForge pipelines, monitors execution,
 and reports errors with root-cause analysis.
@@ -60,7 +59,7 @@ Guidelines:
 
 OBS_SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(OBS_SCRIPTS)
-sys.path.insert(0, OBS_SCRIPTS)
+sys.path.insert(0, PROJECT_ROOT)
 
 
 # ── Tool Definitions ──────────────────────────────────────────────────────

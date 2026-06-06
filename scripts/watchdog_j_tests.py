@@ -11,7 +11,7 @@ State file: /opt/projects/server/data/experiment/.j_test_watchdog.json
 """
 import json, os, sys, time
 sys.path.insert(0, '/opt/projects/server/scripts')
-from code_mod_pipeline import _notify_slack
+from pipelines.code_mod import _notify_slack
 
 EXPER_DIR = '/opt/projects/server/data/experiment'
 OUTPUT_FILE = '/var/tmp/claude-1000/-home-opc/c460d682-5ac4-4bcb-a40e-3716ed1882b8/tasks/bebzb6139.output'

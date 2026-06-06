@@ -68,8 +68,8 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
             "/home/opc/.config/containers/systemd/container-devforge-swap.container"
         ),
         "Mode switching": lambda: file_exists("/opt/ai_data/scripts/current-mode-pod-b.env"),
-        "code_mod_pipeline": lambda: file_exists("/opt/projects/server/scripts/code_mod_pipeline.py"),
-        "prompt ablation": lambda: file_exists("/opt/projects/server/scripts/code_mod_pipeline.py"),
+        "code_mod_pipeline": lambda: file_exists("/opt/projects/server/scripts/pipelines/code_mod.py"),
+        "prompt ablation": lambda: file_exists("/opt/projects/server/scripts/pipelines/code_mod.py"),
         "review_facts": lambda: db_table_exists("review_facts"),
         "Reference tracking": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
         "lib/refs": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),

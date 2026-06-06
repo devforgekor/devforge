@@ -124,7 +124,7 @@ def main():
     ok = run_with_retry("prj_cycle", "prj_cycle.py", max_retries=2, timeout=7200)
 
     # Step 2: 27B optimization test (quick mode)
-    ok2 = run_with_retry("27b_test", "test_27b_optimization.py --quick",
+    ok2 = run_with_retry("27b_test", "../tests/test_verify_optimization.py --quick",
                           max_retries=2, timeout=3600)
 
     # Step 3: restore day mode

@@ -4,7 +4,7 @@
 """27B Q4_K_M verify — optimized handoff-only prompt (~2000 tok).
 
 Tests: 27B as verifier with handoff-only context. Compares to old 27B run (6000tok full context).
-Usage: python3 test_27b_verify_opt.py"""
+Usage: python3 test_verify_optimized_params.py"""
 import json, os, sys, time, subprocess
 sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.llm_client import call_llm, MODEL_REGISTRY
@@ -117,7 +117,7 @@ if start_model():
         for k, fb in r.get("feedback", {}).items():
             print(f'  {k}: score={fb.get("score","?")} | {", ".join(fb.get("improvements",[]) or [])}')
 
-    out = f'{EXPER_DIR}/test_27b_verify_opt.json'
+    out = f'{EXPER_DIR}/test_verify_optimized_params.json'
     with open(out, 'w') as f:
         json.dump({"test": "27B verify optimized", "result": res, "baseline": old}, f, indent=2, ensure_ascii=False)
     print(f'\nSaved: {out}')

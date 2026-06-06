@@ -6,7 +6,7 @@
 Starts 30B Q4_K_S, runs P role with same input as Q3_K_M baseline,
 compares findings count/quality/timing.
 
-Usage: python3 test_30b_q4ks_p.py"""
+Usage: python3 test_proposer_quantization.py"""
 import json, os, sys, time, subprocess
 sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.llm_client import call_llm, MODEL_REGISTRY
@@ -21,7 +21,7 @@ RUBRIC_APPEND = f'\n\n{RUBRIC}'
 SYS_P_PROMPT = SYS_P + RUBRIC_APPEND
 
 def build_context():
-    """Build same P role context as prj_cycle._run_prj()."""
+    """Build same P role context as prj_cycle.run_propose_review_judge()."""
     state = json.load(open(f'{EXPER_DIR}/pipeline_state_r1_norubric.json'))
     inp = state.get('input', {})
     pv = state.get('python_verify', {})
@@ -167,7 +167,7 @@ if start_model():
             print(f'  {f.get("id")} [{f.get("severity")}/{f.get("category")}]: {f.get("description","")[:120]}')
 
     # Save
-    out = f'{EXPER_DIR}/test_30b_q4ks_p.json'
+    out = f'{EXPER_DIR}/test_proposer_quantization.json'
     with open(out, 'w') as f:
         json.dump({
             "test": "30B P role Q4_K_S vs Q3_K_M",

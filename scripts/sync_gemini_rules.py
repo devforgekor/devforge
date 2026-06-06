@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: none — one-off sync, called from gemini_proxy.py
+# Path: none — one-off sync, called from proxies/gemini.py
 """Sync shared rules into Gemini CLI instruction file.
 
 Pattern adapted from common-lib core/copilot_rules.py.

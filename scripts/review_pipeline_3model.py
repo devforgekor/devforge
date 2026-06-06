@@ -39,7 +39,7 @@ from typing import Any, Dict
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from review_pipeline_steps import (  # noqa: E402
+from pipelines.review import (  # noqa: E402
     QWEN7B_PORT,
     SELENE_PORT,
     _poll_health,

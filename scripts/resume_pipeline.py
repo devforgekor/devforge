@@ -8,9 +8,9 @@ import json, os, sys, time
 sys.path.insert(0, '/opt/projects/server/scripts')
 
 from prj_cycle import (
-    EXPER_DIR, save_feedback_to_db, call_one, _run_prj,
+    EXPER_DIR, save_feedback_to_db, call_one, run_propose_review_judge,
     RUBRIC, SYS_R_HANDOFF, model_info,
-    P_MODEL, R_MODEL, J_MODEL, MODEL_METADATA,
+    PROPOSER_MODEL, REFLECTOR_MODEL, JUDGE_MODEL, MODEL_METADATA,
     save, log as plog
 )
 from datetime import datetime, timezone
@@ -95,7 +95,7 @@ fb_count = 3  # mimic saved count to proceed
 # Phase 5a: P-R-J with feedback (REAL LLM calls)
 fb_tag = f'{tag}_fb'
 print('\n--- Phase 5a: P-R-J with injected feedback ---')
-from prj_cycle import _run_prj as run_prj, PipelineState
+from prj_cycle import run_propose_review_judge, PipelineState
 # Reconstruct PipelineState from saved dict
 state_obj = PipelineState(1, False, state["input"], existing_data=state)
 fb_prj_result, fb_hoff, fb_pf, fb_rv = run_prj(state_obj, fb_tag, rubric_append)
@@ -105,7 +105,7 @@ print(f'  P-R-J (feedback): P={fb_prj_result.get("P_score","?")} R={fb_prj_resul
 print('\n--- Phase 5b: R handoff (post-feedback) ---')
 r_ctx_parts = [
     f"=== P-R-J CYCLE (POST-FEEDBACK) ===",
-    f"P_model={P_MODEL} R_model={R_MODEL} J_model={J_MODEL}\n",
+    f"P_model={PROPOSER_MODEL} R_model={REFLECTOR_MODEL} J_model={JUDGE_MODEL}\n",
     f"=== P PROPOSED FINDINGS ({len(fb_pf)}) ===",
 ]
 for pf in fb_pf:
@@ -117,7 +117,7 @@ r_ctx_parts.append(f"\n=== J FINAL DECISION ===")
 r_ctx_parts.append(f"  P_score={fb_prj_result.get('P_score','?')} R_score={fb_prj_result.get('R_score','?')}")
 r_ctx_parts.append(f"  consensus={fb_prj_result.get('consensus','?')} decision={fb_prj_result.get('decision','?')}")
 
-fb_hoff_resp = call_one(R_MODEL, SYS_R_HANDOFF, '\n'.join(r_ctx_parts), f'handoff_R_{fb_tag}')
+fb_hoff_resp = call_one(REFLECTOR_MODEL, SYS_R_HANDOFF, '\n'.join(r_ctx_parts), f'handoff_R_{fb_tag}')
 fb_hoff_data = (fb_hoff_resp or {}).get('result', {}).get('handoff', {})
 print(f'  R handoff: {len(fb_hoff_data.get("approved",[]))} approved, {len(fb_hoff_data.get("rejected",[]))} rejected')
 

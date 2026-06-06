@@ -14,10 +14,10 @@ Architecture (model-loaded-at-switch-time):
 
 Usage:
   # Run full pipeline:
-  python3 night_pipeline.py --all
+  python3 scripts/pipelines/night.py --all
 
   # Single phase (after mode already switched):
-  python3 night_pipeline.py --phase 2
+  python3 scripts/pipelines/night.py --phase 2
 """
 
 import json
@@ -28,7 +28,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVAL_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "eval")
 os.makedirs(EVAL_DIR, exist_ok=True)
 

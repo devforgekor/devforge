@@ -21,7 +21,7 @@ LIB_DIR = SCRIPTS_DIR / "lib"
 # Files where model names in identifiers are legitimate (infrastructure config, model registry)
 MODEL_NAME_OK_FILES = {
     "scripts/debate_data.py",     # MODEL_REGISTRY — model names are data, not identifiers
-    "scripts/azure_spot.py",      # Azure Spot VM config — model names are infrastructure refs
+    "scripts/lib/infra/azure_spot.py",      # Azure Spot VM config — model names are infrastructure refs
     "scripts/lib/llm_client.py",  # LLM client — model names are API params
     "scripts/lint_rules.py",      # Linter — contains regex patterns with model names as example patterns
 }

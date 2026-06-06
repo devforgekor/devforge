@@ -3,7 +3,7 @@
 # Path: imported by — production scripts
 """Unified API key loader — loads encrypted or plaintext keys from secrets.env.
 
-Used by: gemini_rotate.py, gemini_proxy.py, search_manager.py.
+Used by: gemini_rotate.py, proxies/gemini.py, search_manager.py.
 """
 import os
 import sys

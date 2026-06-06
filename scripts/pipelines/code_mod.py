@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Status: production
 # Path: run_baseline.sh:28, notify_slack.py, watchdog_j_tests.py
-"""code_mod_pipeline.py — Qwen3-Coder-30B-A3B 4-stage code modification pipeline (ctx=8192).
+"""4-stage code modification pipeline (ctx=8192) — analyze, plan, implement, package.
 
 SLOC-exempt: 852 lines — single cohesive 4-stage pipeline (ANALYZE→PLAN→IMPLEMENT
 →PACKAGE). Each stage shares RateEstimator, prompt templates, LLM client, Slack
@@ -16,12 +16,12 @@ notifier, and activity logger. Splitting would scatter shared state across files
 Each stage result is recorded in activity_log (type='stage') for traceability.
 
 Usage:
-  python3 code_mod_pipeline.py                    # run all tasks
-  python3 code_mod_pipeline.py --task 1           # single task
-  python3 code_mod_pipeline.py --local-only       # 32B only
-  python3 code_mod_pipeline.py --api-only         # APIs only
-  python3 code_mod_pipeline.py --report           # generate comparison report
-  python3 code_mod_pipeline.py --start-stage 3 --resume-from result.json  # resume
+  python3 scripts/pipelines/code_mod.py                    # run all tasks
+  python3 scripts/pipelines/code_mod.py --task 1           # single task
+  python3 scripts/pipelines/code_mod.py --local-only       # 32B only
+  python3 scripts/pipelines/code_mod.py --api-only         # APIs only
+  python3 scripts/pipelines/code_mod.py --report           # generate comparison report
+  python3 scripts/pipelines/code_mod.py --start-stage 3 --resume-from result.json  # resume
 """
 import glob
 import json

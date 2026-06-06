@@ -9,7 +9,7 @@ Steps:
 2. Feed the original pipeline input findings
 3. Compare output with saved exp_p_r1_norubric.json (Q3 results)
 
-Usage: python3 test_30b_q4.py"""
+Usage: python3 test_q4_quantization.py"""
 
 import json, os, sys, time, subprocess
 sys.path.insert(0, '/opt/projects/server/scripts')
@@ -109,7 +109,7 @@ if not os.path.exists(model_path):
     print(f'\n⚠️  Q4 file not found. Script prepared but cannot run.')
     print(f'   Download: hugggingface-cli download byteshape/... or')
     print(f'   curl -Lo {model_path} <url>')
-    print(f'\nWhen ready, re-run: python3 test_30b_q4.py')
+    print(f'\nWhen ready, re-run: python3 test_q4_quantization.py')
     sys.exit(0)
 
 if not start_model():

@@ -11,9 +11,9 @@ Qwen3.6-27B 최적화 검증 테스트 (Standalone)
   4. 실행 설정 (context, threads, flash-attn)
 
 사용법:
-  python3 test_27b_optimization.py          # 전체 테스트
-  python3 test_27b_optimization.py --quick  # 간단 inference만 확인
-  python3 test_27b_optimization.py --restore # day 모드 복원
+  python3 test_verify_optimization.py          # 전체 테스트
+  python3 test_verify_optimization.py --quick  # 간단 inference만 확인
+  python3 test_verify_optimization.py --restore # day 모드 복원
 
 주의: Pod B(devforge-swap)를 중단하고 27B 모드로 전환합니다.
 """

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by gemini_proxy.py
+# Path: imported by proxies/gemini.py
 """gemini_pool.py — Async Gemini API key pool with SQLite-backed persistence.
 
 Manages a pool of API keys for Gemini requests. Keys are loaded from DB,

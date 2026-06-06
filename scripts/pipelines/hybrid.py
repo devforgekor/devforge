@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: none — prototype of code_mod_pipeline. exec()/eval() present, not production-safe.
-"""hybrid_pipeline.py — Multi-model code modification pipeline with debate + verification.
+"""Multi-model code modification pipeline with debate + verification.
 
 Modes:
   hybrid      DeepSeek API plan -> 32B execution with ASSERT validation

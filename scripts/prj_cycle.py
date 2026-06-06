@@ -16,11 +16,17 @@ Pod B에서 순차 swap (night_proposer -> night_reflector -> night_judge)
   python3 prj_cycle.py
 """
 
-import json, os, subprocess, sys, time, urllib.request, hashlib, uuid, uuid
+import json, os, subprocess, sys, time, urllib.request, hashlib, uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.llm.json_parser import save_dlq, validate_schema
+from lib.pod_manager import (
+    kill_all, start_pod_b, start_pod_a, start_day_both, ensure_model,
+    MODEL_METADATA, model_info, MODE_FILE_B, MODE_FILE_A, TIMEOUT,
+    wait_health, wait_probe,
+)
+from lib.token_budget import TokenBudget
 
 RESUME_PRJ = "--resume-prj" in sys.argv
 DRY_RUN = "--dry-run" in sys.argv
@@ -85,10 +91,6 @@ HANDOFF_SCHEMA = {
 from lib.llm_client import call_llm, resolve_model
 from lib.db import psql, psql_ok, esc_sql, psql_json
 
-MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
-MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
-TIMEOUT = 7200
-
 PASS = "[PASS]"
 FAIL = "[FAIL]"
 WARN = "[WARN]"
@@ -148,250 +150,11 @@ def load_input():
         return json.load(f)
 
 
-def wait_health(port, timeout=600):
-    t0 = time.monotonic()
-    while time.monotonic() - t0 < timeout:
-        try:
-            req = urllib.request.Request(f"http://127.0.0.1:{port}/health")
-            with urllib.request.urlopen(req, timeout=3) as r:
-                if r.status == 200:
-                    return True
-        except Exception:
-            pass
-        time.sleep(3)
-    return False
-
-
-def wait_probe(port, model_name, timeout=300):
-    """헬스 OK 후 모델이 실제 추론 가능할 때까지 probe 요청 전송.
-
-    --no-warmup 모델은 health endpoint가 OK를 리턴해도 모델이
-    아직 로딩 중일 수 있음. 작은 추론 요청을 보내 정상 응답을 확인."""
-    t0 = time.monotonic()
-    body = json.dumps({
-        "messages": [{"role": "user", "content": "hi"}],
-        "max_tokens": 5, "temperature": 0.1, "stream": False,
-    }).encode()
-    while time.monotonic() - t0 < timeout:
-        try:
-            req = urllib.request.Request(
-                f"http://127.0.0.1:{port}/v1/chat/completions",
-                data=body, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read())
-                if data.get("choices") and data["choices"][0].get("message"):
-                    log(f"  probe OK ({model_name})")
-                    return True
-        except Exception:
-            pass
-        time.sleep(5)
-    log(f"  probe TIMEOUT ({model_name})")
-    return False
-
-
-# ── Container management: kill all -> start only what's needed ──────────
-# phase 전환마다 모든 컨테이너를 내리고 새로 시작해야 하는 것만 시작
-
-
-def kill_all():
-    """모든 systemd container 서비스 정지. 메모리 완전 확보.
-
-    systemctl stop을 사용해야 systemd의 Restart=on-failure가 트리거되지 않음.
-    podman stop을 쓰면 entrypoint가 exit 1로 종료되어 systemd가 60초 후
-    의도치 않게 컨테이너를 재시작해 phase 간 OOM을 유발함."""
-    if DRY_RUN:
-        log("  [DRY] kill_all() skipped")
-        return
-    log("  systemctl stop containers...")
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-swap.service"],
-                   capture_output=True, timeout=30)
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
-                   capture_output=True, timeout=30)
-    subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-swap.service"],
-                   capture_output=True, timeout=10)
-    subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
-                   capture_output=True, timeout=10)
-    # 커널 메모리 회수 시간 확보.
-    # 컨테이너가 종료된 후 cgroup/pasta가 port를 해제하고,
-    # 커널이 page cache/slab을 회수하는 데 시간이 필요함 (특히 16GB+ 모델 전환 시).
-    _reclaim_memory()
-
-
-def _reclaim_memory():
-    """모든 컨테이너 정지 후 커널 메모리 회수를 위한 충분한 대기.
-
-    kill_all() 직후 호출됨. 다음 동작 수행:
-    1. sync() — dirty page cache를 디스크에 플러시
-    2. 15초 sleep — 커널이 page cache, dentry, inode cache 회수
-    3. 추가 5초 — cgroup/pasta 네트워크 스택 해제 대기
-
-    총 20초 대기. 16GB+ 모델 전환 시 OOM 방지에 필수.
-    """
-    import os as _os
-    _os.sync()
-    log("  Memory reclaim: synced fs, waiting 15s for kernel reclaim...")
-    time.sleep(15)
-    log("  Memory reclaim: done")
-
-
-def start_pod_b(mode, port):
-    """Pod B만 시작 (먼저 kill_all로 기존 컨테이너 제거)."""
-    log(f"  POD B -> {mode} (:{port})")
-    with open(MODE_FILE_B, "w") as f:
-        f.write(f"MODE={mode}")
-    kill_all()
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-swap.service"],
-                   capture_output=True, timeout=60)
-    ok = wait_health(port)
-    if ok:
-        log(f"  :{port} health OK")
-        ok = wait_probe(port, mode, timeout=600)
-    if ok:
-        log(f"  :{port} ready")
-        time.sleep(5)  # tiny buffer after health OK
-    return ok
-
-
-def start_pod_a(mode, port):
-    """Pod A만 시작 (먼저 kill_all로 기존 컨테이너 제거)."""
-    log(f"  POD A -> {mode} (:{port})")
-    with open(MODE_FILE_A, "w") as f:
-        f.write(f"MODE={mode}")
-    kill_all()
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
-                   capture_output=True, timeout=60)
-    ok = wait_health(port)
-    if ok:
-        log(f"  :{port} health OK")
-        ok = wait_probe(port, mode, timeout=600)
-    else:  log(f"  :{port} TIMEOUT (Pod A {mode})")
-    return ok
-
-
-def start_day_both():
-    """Day 모드 = Pod A (day_r:8082) 먼저 시작 -> Pod B (day용:8080) 순차 시작.
-    day_r(3.1GB) + day_p/day_j(7.6GB) = ~11GB — 순차 로딩으로 RAM 경합 방지."""
-    log("  DAY MODE: Pod A (day_r) -> Pod B (day_p/day_j/day_mcp, 순차)")
-    with open(MODE_FILE_B, "w") as f:
-        f.write("MODE=day")
-    with open(MODE_FILE_A, "w") as f:
-        f.write("MODE=day")
-    kill_all()
-    # Pod A 먼저 (가벼운 모델, 빠름)
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
-                   capture_output=True, timeout=60)
-    ok_a = wait_health(8082)
-    if ok_a: log(f"  :8082 ready (Pod A day_r)")
-    else:    log(f"  :8082 TIMEOUT (Pod A day_r)")
-
-    # Pod B는 Pod A가 안정화된 후 시작
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-swap.service"],
-                   capture_output=True, timeout=60)
-    ok_b = wait_health(8080)
-    if ok_b: log(f"  :8080 ready (Pod B day)")
-    else:    log(f"  :8080 TIMEOUT (Pod B day)")
-    return ok_a and ok_b
-
-
-def ensure_model(physical_name):
-    """단일 모델만 띄움. 이전 모든 컨테이너는 kill_all로 제거."""
-    if DRY_RUN:
-        log(f"  [DRY] ensure_model({physical_name}) → OK (mock)")
-        return True
-    meta = MODEL_METADATA.get(physical_name)
-    if not meta:
-        log(f"  Unknown model: {physical_name}")
-        return False
-    return start_pod_b(meta["mode"], meta["port"])
 
 
 # ── Pipeline State Blackboard ──────────────────────────────────────────
 # 단일 JSON 파일에 모든 phase 결과를 축적. 각 phase는 add_phase()로 추가,
 # build_context()로 다음 phase의 LLM 프롬프트용 요약문 생성.
-
-# ── Token Budget: priority-based context allocation ──────────────────
-
-CHARS_PER_TOKEN = 2.5  # heuristic: mixed Korean/English
-
-
-def _est_tok(text: str) -> int:
-    """Estimate token count from character length."""
-    return int(len(text) / CHARS_PER_TOKEN)
-
-
-PHASE_BUDGET = {
-    "day_verify": 1500,  # tok
-    "prj_p":      2000,
-    "prj_r":      1200,
-    "prj_j":      1200,
-    "handoff":    1500,
-    "final_verify": 2000,
-}
-
-
-class TokenBudget:
-    """Allocate context tokens by priority. Highest priority fills first.
-
-    Usage:
-        budget = TokenBudget("prj_p")
-        budget.add_section("[HEADER]", header_text, priority=10)
-        budget.add_section("[FINDINGS]", findings_text, priority=5)
-        if budget.add_section("[RUBRIC]", rubric_text, priority=3):
-            ...  # rubric only included if budget remains
-        print(budget.summary())
-    """
-
-    def __init__(self, phase: str):
-        self.limit = PHASE_BUDGET.get(phase, 1500)
-        self.soft_limit = int(self.limit * 0.8)
-        self.used = 0
-        self.sections: list[dict] = []
-        self._over = False
-
-    def add_section(self, label: str, text: str, priority: int = 5) -> bool:
-        """Add text if budget remains. Priority 10=highest, 0=lowest.
-
-        Returns True if section was added, False if skipped due to budget.
-        """
-        if self._over:
-            return False
-        tok = _est_tok(text)
-        if self.used + tok > self.soft_limit:
-            # Partial: include what fits, mark over
-            allowed = max(0, self.limit - self.used - 10)  # 10 tok margin for suffix
-            if allowed > 80:  # at least ~200 chars
-                ratio = allowed / tok
-                cut = int(len(text) * ratio)
-                truncated = text[:cut]
-                suffix = f"\n  ... ({int((1-ratio)*100)}% of this section cut, budget exceeded)"
-                self.sections.append({
-                    "label": label, "tok": allowed + _est_tok(suffix),
-                    "truncated": True, "original_tok": tok,
-                })
-                self.used = self.limit
-                self._over = True
-                # Inject truncated text + suffix into 'text' via side effect: the caller uses 'text'
-                # We can't modify text in-place. Instead, callers should check return value.
-                return False  # caller must handle truncation
-            self._over = True
-            return False
-        self.used += tok
-        self.sections.append({"label": label, "tok": tok, "truncated": False})
-        return True
-
-    def remaining(self) -> int:
-        return max(0, self.limit - self.used)
-
-    def summary(self) -> str:
-        """One-line log-friendly summary of budget usage."""
-        n_total = len(self.sections)
-        n_cut = sum(1 for s in self.sections if s.get("truncated"))
-        cut_str = f", {n_cut} truncated" if n_cut else ""
-        return f"context budget: {self.used}/{self.limit} tok ({n_total} sections{cut_str})"
-
-    def __repr__(self) -> str:
-        return f"<TokenBudget {self.used}/{self.limit} tok>"
-
 
 class PipelineState:
     """Blackboard: append-only phase results in 1 JSON file.
@@ -1199,22 +962,9 @@ MOCK_RESULT = {
     "elapsed_ms": 1500,
 }
 
-P_MODEL = "night_proposer"
-R_MODEL = "night_reflector"
-J_MODEL = "night_judge"
-
-MODEL_METADATA = {
-    "Qwen3B":  {"file": "Qwen2.5-Coder-3B-Instruct.Q8_0.gguf",  "size": "3.1GB", "port": 8082, "mode": "day"},
-    "Qwen7B":  {"file": "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf",  "size": "7.6GB", "port": 8080, "mode": "day"},
-    "Qwen14B": {"file": "Qwen2.5-Coder-14B-Instruct.Q8_0.gguf", "size": "15.7GB","port": 8080, "mode": "review-r"},
-    "Qwen30B": {"file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf","size":"17GB","port":8080, "mode":"review-p"},
-    "Codestral":{"file":"Codestral-22B-v0.1-Q4_K_M.gguf",       "size":"12.4GB","port":8080, "mode":"review-j"},
-    "Qwen27B": {"file": "Qwen3.6-27B-Q4_K_M.gguf",             "size": "16GB", "port": 8081, "mode": "verify"},
-}
-
-def model_info(key):
-    m = MODEL_METADATA.get(key, {})
-    return f"{key}({m.get('file','?')} {m.get('size','?')} :{m.get('port','?')})"
+PROPOSER_MODEL = "night_proposer"
+REFLECTOR_MODEL = "night_reflector"
+JUDGE_MODEL = "night_judge"
 
 
 # ── Model call with single-model-at-a-time guarantee ──────────────────
@@ -1292,14 +1042,14 @@ def compile_handoff(prj_results, round_num, with_rubric):
 
 # ── Round runner ──────────────────────────────────────────────────────
 
-def _run_prj(state, tag, rubric_append):
+def run_propose_review_judge(state, tag, rubric_append):
     """P-R-J 1회 패스. kill_all → P → R → J → state 저장."""
     log("\n--- Phase 3: P-R-J (P) ---")
     handoff_fragment = {}
 
     # P — gets findings by severity + P context
     p_max = 4096
-    p_r = call_one(P_MODEL, SYS_P + rubric_append,
+    p_r = call_one(PROPOSER_MODEL, SYS_P + rubric_append,
                    state.build_context("prj_p"),
                    f"P_{tag}", max_tok=p_max)
     save(f"p_{tag}", tag, p_r)
@@ -1307,7 +1057,7 @@ def _run_prj(state, tag, rubric_append):
 
     # R
     r_max = 2048
-    r_r = call_one(R_MODEL, SYS_R + rubric_append,
+    r_r = call_one(REFLECTOR_MODEL, SYS_R + rubric_append,
                    f"Proposer findings:\n{json.dumps(p_findings, ensure_ascii=False, indent=2)[:4000]}",
                    f"R_{tag}", max_tok=r_max)
     save(f"r_{tag}", tag, r_r)
@@ -1315,7 +1065,7 @@ def _run_prj(state, tag, rubric_append):
 
     # J
     j_max = 2048
-    j_r = call_one(J_MODEL, SYS_J + rubric_append,
+    j_r = call_one(JUDGE_MODEL, SYS_J + rubric_append,
                    state.build_context("prj_j", {"rotation_index": 0})
                    + f"\n\n### P findings:\n"
                    + json.dumps(p_findings, ensure_ascii=False, indent=2)[:2000]
@@ -1329,7 +1079,7 @@ def _run_prj(state, tag, rubric_append):
     j_handoff = j_res.get("handoff", {})
     handoff_fragment = j_handoff
     prj_result = {
-        "p_model": P_MODEL, "r_model": R_MODEL, "j_model": J_MODEL,
+        "p_model": PROPOSER_MODEL, "r_model": REFLECTOR_MODEL, "j_model": JUDGE_MODEL,
         "P_score": j_res.get("P_score", 0),
         "R_score": j_res.get("R_score", 0),
         "consensus": j_res.get("consensus_score", 0),
@@ -1350,7 +1100,7 @@ def _run_prj(state, tag, rubric_append):
     rs = prj_result['R_score']
     cs = prj_result['consensus']
     slack_msg = (f"[P-R-J] *Round {state.round_num}*\n"
-                 f"P={P_MODEL}→{ps} | R={R_MODEL}→{rs} | J={J_MODEL}→consensus={cs}\n")
+                 f"P={PROPOSER_MODEL}→{ps} | R={REFLECTOR_MODEL}→{rs} | J={JUDGE_MODEL}→consensus={cs}\n")
     if j_report.get("summary"):
         slack_msg += f"> {j_report['summary'][:120]}"
     slack_send(slack_msg)
@@ -1502,7 +1252,7 @@ def run_round(round_num, with_rubric, resume_state_path=None):
         log("  Rubric evaluation disabled")
 
     # Phase 3: P-R-J 1 pass (single fixed rotation)
-    prj_result, handoff_fragment, p_findings, r_verdicts = _run_prj(state, tag, rubric_append)
+    prj_result, handoff_fragment, p_findings, r_verdicts = run_propose_review_judge(state, tag, rubric_append)
 
     # ── Phase 3.5: R(night_reflector) writes the final handoff ──
     # R has full context: P findings, its own verdicts, and J's final decision.
@@ -1511,7 +1261,7 @@ def run_round(round_num, with_rubric, resume_state_path=None):
 
     r_ctx_parts = [
         f"=== P-R-J CYCLE COMPLETE ===",
-        f"P_model={P_MODEL} R_model={R_MODEL} J_model={J_MODEL}\n",
+        f"P_model={PROPOSER_MODEL} R_model={REFLECTOR_MODEL} J_model={JUDGE_MODEL}\n",
         f"=== P PROPOSED FINDINGS ({len(p_findings)}) ===",
     ]
     for pf in p_findings:
@@ -1530,27 +1280,27 @@ def run_round(round_num, with_rubric, resume_state_path=None):
         r_ctx_parts.append(f"  top issue: {ti}")
     r_handoff_ctx = "\n".join(r_ctx_parts)
 
-    r_hoff_resp = call_one(R_MODEL, SYS_R_HANDOFF, r_handoff_ctx, f"handoff_R_{tag}")
+    r_hoff_resp = call_one(REFLECTOR_MODEL, SYS_R_HANDOFF, r_handoff_ctx, f"handoff_R_{tag}")
     r_hoff_data = (r_hoff_resp or {}).get("result", {}).get("handoff", {})
     save(f"handoff_r_{tag}", tag, {
         "source": "llm_r", "handoff": r_hoff_data,
         "p_findings_count": len(p_findings), "r_verdicts_count": len(r_verdicts),
-        "model_metadata": {k: MODEL_METADATA.get(k) for k in (P_MODEL, R_MODEL, J_MODEL)}})
+        "model_metadata": {k: MODEL_METADATA.get(k) for k in (PROPOSER_MODEL, REFLECTOR_MODEL, JUDGE_MODEL)}})
 
     # ── Save handoffs: 1 LLM-R + 1 Python ────────────
     handoff_models = {
-        "P": {"key": P_MODEL, **MODEL_METADATA.get(P_MODEL, {})},
-        "R": {"key": R_MODEL, **MODEL_METADATA.get(R_MODEL, {})},
-        "J": {"key": J_MODEL, **MODEL_METADATA.get(J_MODEL, {})},
+        "P": {"key": PROPOSER_MODEL, **MODEL_METADATA.get(PROPOSER_MODEL, {})},
+        "R": {"key": REFLECTOR_MODEL, **MODEL_METADATA.get(REFLECTOR_MODEL, {})},
+        "J": {"key": JUDGE_MODEL, **MODEL_METADATA.get(JUDGE_MODEL, {})},
     }
     hoff_meta = json.dumps(handoff_models, ensure_ascii=False, indent=2)
     hoff_header = f"## Model Metadata (for future reference)\n{hoff_meta}\n\n"
 
     llm_save = {"source": "llm_r", "round": round_num,
-                "r_model": R_MODEL, "handoff": r_hoff_data}
+                "r_model": REFLECTOR_MODEL, "handoff": r_hoff_data}
     save(f"handoff_llm_{tag}", tag, llm_save)
     llm_text = (hoff_header
-                + f"## Handoff (R={model_info(R_MODEL)}) [LLM-R]\n"
+                + f"## Handoff (R={model_info(REFLECTOR_MODEL)}) [LLM-R]\n"
                 + json.dumps(llm_save, ensure_ascii=False, indent=2))
     log(f"  R handoff: {len(r_hoff_data.get('approved',[]))} approved, "
         f"{len(r_hoff_data.get('rejected',[]))} rejected")
@@ -1879,9 +1629,9 @@ def _batch_p(items, rubric_append):
                   "description": "Dry-run P finding for extract review", "file": "extract"}]
         return [MOCK for _ in items]
 
-    ok = ensure_model(P_MODEL)
+    ok = ensure_model(PROPOSER_MODEL)
     if not ok:
-        log(f"  FAILED to load {P_MODEL}")
+        log(f"  FAILED to load {PROPOSER_MODEL}")
         return [[] for _ in items]
 
     results = []
@@ -1898,7 +1648,7 @@ def _batch_p(items, rubric_append):
         resp = llm_call(
             [{"role": "system", "content": SYS_P + rubric_append},
              {"role": "user", "content": ctx}],
-            model=P_MODEL, max_tokens=4096, label=f"P_queue_{idx}")
+            model=PROPOSER_MODEL, max_tokens=4096, label=f"P_queue_{idx}")
         findings = resp.get("result", {}).get("findings", [])
         log(f"    P: {len(findings)} findings")
         results.append(findings)
@@ -1913,9 +1663,9 @@ def _batch_r(items, p_results, rubric_append):
         MOCK = [{"id": "M001", "verdict": "accept", "reason": "Dry-run R verdict"}]
         return [MOCK for _ in items]
 
-    ok = ensure_model(R_MODEL)
+    ok = ensure_model(REFLECTOR_MODEL)
     if not ok:
-        log(f"  FAILED to load {R_MODEL}")
+        log(f"  FAILED to load {REFLECTOR_MODEL}")
         return [[] for _ in items]
 
     results = []
@@ -1927,7 +1677,7 @@ def _batch_r(items, p_results, rubric_append):
         resp = llm_call(
             [{"role": "system", "content": SYS_R + rubric_append},
              {"role": "user", "content": ctx}],
-            model=R_MODEL, max_tokens=2048, label=f"R_queue_{idx}")
+            model=REFLECTOR_MODEL, max_tokens=2048, label=f"R_queue_{idx}")
         verdicts = resp.get("result", {}).get("verdicts", [])
         log(f"    R: {len(verdicts)} verdicts")
         results.append(verdicts)
@@ -1943,9 +1693,9 @@ def _batch_j(items, p_results, r_results, rubric_append):
                 "consensus_score": 85, "approved": ["M001"], "rejected": []}
         return [MOCK for _ in items]
 
-    ok = ensure_model(J_MODEL)
+    ok = ensure_model(JUDGE_MODEL)
     if not ok:
-        log(f"  FAILED to load {J_MODEL}")
+        log(f"  FAILED to load {JUDGE_MODEL}")
         return [None for _ in items]
 
     results = []
@@ -1959,7 +1709,7 @@ def _batch_j(items, p_results, r_results, rubric_append):
         resp = llm_call(
             [{"role": "system", "content": SYS_J + rubric_append},
              {"role": "user", "content": "\n".join(ctx_parts)}],
-            model=J_MODEL, max_tokens=2048, label=f"J_queue_{idx}")
+            model=JUDGE_MODEL, max_tokens=2048, label=f"J_queue_{idx}")
         jr = resp.get("result", {})
         log(f"    J: P_score={jr.get('P_score','?')} R_score={jr.get('R_score','?')} "
             f"decision={jr.get('decision','?')}")
@@ -2039,7 +1789,7 @@ def run_extract(with_rubric, mcp_model="day_mcp"):
         return
     log(f"  :8082 ready (day_extract) + :8080 ready (day)")
 
-    from extract_pipeline import extract_pipeline
+    from pipelines.extract import extract_pipeline
     result = extract_pipeline(
         turn_id=None,
         limit=50,

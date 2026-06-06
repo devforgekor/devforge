@@ -1,6 +1,6 @@
 #!/bin/bash
 # 15m_cycle.sh — 30-min cycle with two phases
-#   $1 = extract  (:00/:30) → DuckDNS + worklog + extract_pipeline
+#   $1 = extract  (:00/:30) → DuckDNS + worklog + pipelines/extract
 #   $1 = classify (:15/:45) → 주간 사전검토 P(day_p)→R(day_r)→J(day_j)
 # Skips during nightly pipeline (MODE=night).
 
@@ -29,26 +29,26 @@ case "$PHASE" in
         fi
 
         # ── Worklog auto-generation ─────────────────────────────────────
-        if python3 /opt/projects/server/scripts/worklog_generator.py 2>&1; then
-            echo "[$(LOG_TS)] worklog_generator OK"
+        if python3 /opt/projects/server/scripts/lib/worklog_generator.py 2>&1; then
+            echo "[$(LOG_TS)] lib/worklog_generator OK"
         else
-            echo "[$(LOG_TS)] worklog_generator FAILED" >&2
+            echo "[$(LOG_TS)] lib/worklog_generator FAILED" >&2
         fi
 
         # ── Fact extraction ────────────────────────────────────────────
-        if python3 /opt/projects/server/scripts/extract_pipeline.py --limit 50 2>&1; then
-            echo "[$(LOG_TS)] extract_pipeline OK"
+        if python3 /opt/projects/server/scripts/pipelines/extract.py --limit 50 2>&1; then
+            echo "[$(LOG_TS)] pipelines/extract OK"
         else
-            echo "[$(LOG_TS)] extract_pipeline FAILED" >&2
+            echo "[$(LOG_TS)] pipelines/extract FAILED" >&2
         fi
         ;;
 
     classify)
         # ── Day pre-review (P->R->J via day_p/day_r/day_j) ────────────
-        if python3 /opt/projects/server/scripts/classify_pipeline.py --limit 5 2>&1; then
-            echo "[$(LOG_TS)] classify_pipeline OK"
+        if python3 /opt/projects/server/scripts/pipelines/classify.py --limit 5 2>&1; then
+            echo "[$(LOG_TS)] pipelines/classify OK"
         else
-            echo "[$(LOG_TS)] classify_pipeline FAILED" >&2
+            echo "[$(LOG_TS)] pipelines/classify FAILED" >&2
         fi
         ;;
 esac

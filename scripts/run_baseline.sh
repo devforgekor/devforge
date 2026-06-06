@@ -1,6 +1,6 @@
 #!/bin/bash
 # 32B IQ4_XS baseline test — 9 selected tasks (renumbered 1-9 by difficulty)
-# L1→L16: slack_operator, auto_commit_guard, code_mod_pipeline, key_rotator
+# L1→L16: slack_operator, auto_commit_guard, pipelines/code_mod, key_rotator
 
 set -e
 
@@ -25,7 +25,7 @@ for tid in "${TASKS[@]}"; do
     echo ">>> Task $tid starting at $(date '+%H:%M:%S') <<<"
     task_start=$(date +%s)
 
-    if python3 scripts/code_mod_pipeline.py --local-only --task "$tid" 2>&1 | tee "$LOGDIR/baseline_task${tid}.log"; then
+    if python3 scripts/pipelines/code_mod.py --local-only --task "$tid" 2>&1 | tee "$LOGDIR/baseline_task${tid}.log"; then
         elapsed=$(( $(date +%s) - task_start ))
         echo ">>> Task $tid: PASS (${elapsed}s) <<<"
         passed=$((passed + 1))

@@ -1,67 +1,107 @@
 last_checkpoint:
-  time: '2026-06-06T08:45:16.628879+00:00'
-  summary: no files
-  total_files: 0
+  time: '2026-06-06T09:15:00.000000+00:00'
+  summary: |
+    Session 29 — Phase E complete (E5-E8 + naming fix + verification)
+    - E5: 8 pipeline files → scripts/pipelines/ (import paths, sys.path, shell scripts updated)
+    - E6: 3 proxy files → scripts/proxies/ (3 systemd unit paths updated)
+    - E7: 3 test files → tests/ (prj_watchdog, run_pipeline_bg paths fixed)
+    - E8: observer.py→lib/ + azure_spot.py→lib/infra/ + worklog_generator→lib/ + .bak cleanup
+    - E1 follow-up: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, resume_pipeline.py naming fix
+    - 5 bugs fixed: observer.py sys.path, run_pipeline_bg.sh missing $, prj_watchdog path, 15m-cycle.service description, stale .pyc 16 files
+    - Verification: full compile OK, verify_refactoring.py 77/77 OK, CLI end-to-end OK, old naming 0 hits
+  total_files: 53 changed (26 renames, 27 modifications + 3 new)
   recent_files:
     data: []
     docs: []
-    config: []
-    source: []
-    generated: []
-  git: {}
-  task: null
-decisions: []
-known_issues: []
+    config:
+      - ~/.config/systemd/user/anthropic-proxy.service (ExecStart → proxies/anthropic.py)
+      - ~/.config/systemd/user/gemini-proxy.service (ExecStart → proxies/gemini.py)
+      - /etc/systemd/system/anthropic-proxy.service (ExecStart → proxies/anthropic.py)
+      - ~/.config/systemd/user/devforge-15m-cycle.service (description updated)
+    source:
+      - scripts/pipelines/ (8 files: extract, classify, review, hybrid, code_mod, rubric, runner, night)
+      - scripts/proxies/ (3 files: anthropic, gemini, search)
+      - tests/ (3 files: test_verify_optimization, test_operator_comprehensive, verify_refactoring)
+      - scripts/lib/observer.py (moved from scripts/observer.py)
+      - scripts/lib/infra/azure_spot.py (moved from scripts/azure_spot.py)
+      - scripts/lib/worklog_generator.py (moved from scripts/worklog_generator.py)
+      - scripts/prj_cycle.py (PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL)
+      - scripts/resume_pipeline.py (P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL, _run_prj fix)
+      - scripts/15m_cycle.sh (pipeline/worklog_generator paths updated)
+      - scripts/run_baseline.sh, run_baseline_monitor.sh (paths updated)
+      - scripts/run_pipeline_bg.sh (missing $ fixes + test path)
+      - scripts/prj_watchdog.py (test path fixed)
+      - scripts/cli.py, review_pipeline_3model.py, notify_slack.py, watchdog_j_tests.py
+      - scripts/cooperative_debate.py, gemini_pool.py, sync_gemini_rules.py
+      - scripts/lib/tracking/phase_tracker.py, session_context.py, lint_rules.py
+      - scripts/lib/auth/key_loader.py
+    generated:
+      - scripts/lib/cli_worklog.py (E2, prior session)
+      - scripts/lib/cli_experiment.py (E2, prior session)
+      - scripts/lib/pod_manager.py (E1, prior session)
+      - scripts/lib/token_budget.py (E1, prior session)
+      - scripts/lib/proxy_utils.py (E3, prior session)
+  git:
+    branch: refactor/ssot-migration
+    remote: (not pushed)
+    changes: 47 files, +719/-1969
+  task: Phase E code-size refactoring complete. Phase B/C/D completed in prior sessions.
+
+current_context:
+  in_progress: 'systemctl daemon-reload 완료, 서비스 재시작 완료. git commit pending.'
+  day_mode: 'System Mode=day. Pod A=devforge-pod-a(:8082). Pod B=devforge-swap(:8080).'
+  service_rename: 'devforge-qwen → devforge-pod-a complete (prior session)'
+  directory_structure: |
+    scripts/
+    ├── pipelines/     (extract, classify, review, code_mod, hybrid, rubric, runner, night)
+    ├── proxies/       (anthropic, gemini, search)
+    └── lib/
+        ├── infra/     (azure_spot, containers, health_checks, storage, subprocess)
+        ├── tracking/  (phase_tracker)
+        ├── observer.py, worklog_generator.py
+        └── ... (existing lib files)
+    tests/             (test_verify_optimization, test_operator_comprehensive, verify_refactoring)
+  coverage:
+    - '127 non-archive .py files: all have Status/Path headers'
+    - 'Phase E verification: full compile OK, verify_refactoring.py 77/77 OK, CLI status OK, old naming 0 hits'
+
+decisions:
+  - '[2026-06-06][Session 29] Phase E complete: pipeline→pipelines/, proxy→proxies/, test→tests/. Model names and abbreviations removed from all file names. 19 file moves, 18 import path updates, 4 systemd unit updates.'
+  - '[2026-06-06][Session 29] PROPOSEREFLECTOR_MODEL rename fix: E1 replace_all collision replaced R_MODEL within PROPOSER_MODEL → PROPOSEREFLECTOR_MODEL. 15 locations manually corrected.'
+  - '[2026-06-06][Session 29] observer.py sys.path bug: pointed to scripts/lib/ instead of scripts/ — from lib.db import psql would fail. Changed OBS_SCRIPTS → PROJECT_ROOT.'
+  - '[2026-06-06][Session 29] run_pipeline_bg.sh 2x missing $: VERIFY_LOG variable used without $ prefix in tee/>> — both commands silently wrote to file named "VERIFY_LOG". Also updated test_verify_optimization.py path to tests/.'
+  - '[2026-06-06][Session 28] devforge-qwen → devforge-pod-a service rename. "qwen" is a model brand name — naming rule violation. Changed to role-based name (Pod A).'
+  - '[2026-06-06][Session 28] Phase B-D+E integrated plan created. ~/.claude/plans/clever-sauteeing-candle.md'
+  - '[2026-06-06][Session 28] ANTHROPIC_PROXY_BAR_LIMIT 435200→870400. Aligned 128K legacy bar limit with 256K context.'
+  - '[2026-06-06][Session 27] cli.py status --json implemented — 12 sections live query. "Code is SSOT" principle.'
+  - '[2026-06-06][Session 27] timer-registry.yaml → _archive/. Fully replaced by systemd list-timers + cli.py status --json.'
+
+known_issues:
+  - 'git commit pending — refactor/ssot-migration branch, 47 files changed, push pending'
+  - '5-phase experiment not run — P1'
+  - 'Night pipeline simple cycle test not run — P1'
+  - 'code-structure.yaml sync not done — P1 (127 file Status/Path to reflect)'
+  - '7B Q8_0 ARM 4-core decode 2.85 t/s (3B+7B concurrent Config B)'
+  - '27B Q4_K_M(16GB) on 22GB RAM — OOM risk. recover_and_restart() 3-level escalation'
+  - '@~/ tilde expansion bug (GitHub #8765) — using absolute paths as workaround'
+  - '18 .py files in scripts/_archive/ — deprecated-by-location, no Status header needed'
+  - '11 divider-comment files(P2), 3 wildcard imports(P2), 3 import-time secrets(P3) — fine list'
+  - 'stale __pycache__/.pyc 16 files cleaned (scripts/__pycache__)'
+
 completed_log:
-- '[Session 28] devforge-qwen → devforge-pod-a rename 완료. 16개 파일 + quadlet + systemd unit + docs 전면 수정. 서비스 재시작 및 health check
-  완료.'
-- '[Session 28] Phase B-D+E 통합 계획 수립 및 승인. ~/.claude/plans/clever-sauteeing-candle.md'
-- '[Session 27] cli.py status --json 구현. 12개 섹션 라이브 쿼리. lint_rules.py + cli.py lint.'
-- '[Session 27] 문서 감사. 58개 모호함 발견. timer-registry.yaml → _archive.'
-- '[Session 26] Context window 256K 확장. systemd bug fix.'
-- '[Session 24-25] 서버 전체 규칙 14개 카테고리 전수 감사 완료 + compaction window 복구.'
-- '[Session 23] utcnow 1건 + bare except 7건 수정 + Status/Path 헤더 142개 파일 추가.'
-- '[Session 22] 파일 Status/Path 헤더 규칙 제정 + 위험 재분류.'
-- '[Session 21] CLAUDE.md SSoT 통합. 3개 레거시 파일 포인터화.'
-- '[Session 20] split("|") 변환 6개 파일. psql_json pipe-safety 입증.'
-- '[Session 19] 실험 레지스트리 Step 2-4 구현. bench_llm.py, CLI experiment, exp-latest alias.'
-- '[Session 15-18] ARM LLM 최적화 Phase 0-5 + extract/classify 파싱 버그 수정 + 실험 레지스트리 계획'
-- '[Session 15-18] ARM LLM 최적화 Phase 0-5 + extract/classify 파싱 버그 수정 + 실험 레지스트리 계획'
-- '[Session 19] 실험 레지스트리 Step 2-4 구현. bench_llm.py, CLI experiment, exp-latest alias.'
-- '[Session 20] split("|") 변환 6개 파일. psql_json pipe-safety 입증.'
-- '[Session 21] CLAUDE.md SSoT 통합. 3개 레거시 파일 포인터화.'
-- '[Session 22] 파일 Status/Path 헤더 규칙 제정 + 위험 재분류.'
-- '[Session 23] utcnow 1건 + bare except 7건 수정 + Status/Path 헤더 142개 파일 추가.'
-- '[Session 24-25] 서버 전체 규칙 14개 카테고리 전수 감사 완료 + compaction window 복구.'
-- '[Session 26] Context window 256K 확장. systemd bug fix.'
-- '[Session 27] 문서 감사. 58개 모호함 발견. timer-registry.yaml → _archive.'
-- '[Session 27] cli.py status --json 구현. 12개 섹션 라이브 쿼리. lint_rules.py + cli.py lint.'
-- '[Session 28] Phase B-D+E 통합 계획 수립 및 승인. ~/.claude/plans/clever-sauteeing-candle.md'
-- '[Session 28] devforge-qwen → devforge-pod-a rename 완료. 16개 파일 + quadlet + systemd unit + docs 전면 수정. 서비스 재시작 및 health check
-  완료.'
-- '[Session 28] devforge-qwen → devforge-pod-a rename 완료. 16개 파일 + quadlet + systemd unit + docs 전면 수정. 서비스 재시작 및 health check
-  완료.'
-- '[Session 28] Phase B-D+E 통합 계획 수립 및 승인. ~/.claude/plans/clever-sauteeing-candle.md'
-- '[Session 27] cli.py status --json 구현. 12개 섹션 라이브 쿼리. lint_rules.py + cli.py lint.'
-- '[Session 27] 문서 감사. 58개 모호함 발견. timer-registry.yaml → _archive.'
-- '[Session 26] Context window 256K 확장. systemd bug fix.'
-- '[Session 24-25] 서버 전체 규칙 14개 카테고리 전수 감사 완료 + compaction window 복구.'
-- '[Session 23] utcnow 1건 + bare except 7건 수정 + Status/Path 헤더 142개 파일 추가.'
-- '[Session 22] 파일 Status/Path 헤더 규칙 제정 + 위험 재분류.'
-- '[Session 21] CLAUDE.md SSoT 통합. 3개 레거시 파일 포인터화.'
-- '[Session 20] split("|") 변환 6개 파일. psql_json pipe-safety 입증.'
-- '[Session 19] 실험 레지스트리 Step 2-4 구현. bench_llm.py, CLI experiment, exp-latest alias.'
-- '[Session 15-18] ARM LLM 최적화 Phase 0-5 + extract/classify 파싱 버그 수정 + 실험 레지스트리 계획'
-- '[Session 15-18] ARM LLM 최적화 Phase 0-5 + extract/classify 파싱 버그 수정 + 실험 레지스트리 계획'
-- '[Session 19] 실험 레지스트리 Step 2-4 구현. bench_llm.py, CLI experiment, exp-latest alias.'
-- '[Session 20] split("|") 변환 6개 파일. psql_json pipe-safety 입증.'
-- '[Session 21] CLAUDE.md SSoT 통합. 3개 레거시 파일 포인터화.'
-- '[Session 22] 파일 Status/Path 헤더 규칙 제정 + 위험 재분류.'
-- '[Session 23] utcnow 1건 + bare except 7건 수정 + Status/Path 헤더 142개 파일 추가.'
-- '[Session 24-25] 서버 전체 규칙 14개 카테고리 전수 감사 완료 + compaction window 복구.'
-- '[Session 26] Context window 256K 확장. systemd bug fix.'
-- '[Session 27] 문서 감사. 58개 모호함 발견. timer-registry.yaml → _archive.'
-- '[Session 27] cli.py status --json 구현. 12개 섹션 라이브 쿼리. lint_rules.py + cli.py lint.'
-- '[Session 28] Phase B-D+E 통합 계획 수립 및 승인. ~/.claude/plans/clever-sauteeing-candle.md'
-- '[Session 28] devforge-qwen → devforge-pod-a rename 완료. 16개 파일 + quadlet + systemd unit + docs 전면 수정. 서비스 재시작 및 health check
-  완료.'
+  - '[Session 29] Phase E5-E8 complete: 8 pipeline→pipelines/, 3 proxy→proxies/, 3 test→tests/, observer/azure_spot/worklog_generator→lib/ — 19 file moves, 18 import path updates, 4 systemd updates'
+  - '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL in resume_pipeline.py — old naming fully eliminated'
+  - '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service description, stale .pyc 16 files'
+  - '[Session 29] Verification: full compile 127 .py OK, verify_refactoring.py 77/77 OK, CLI status/task/worklog/experiment OK, old naming 0 hits'
+  - '[Session 28] devforge-qwen → devforge-pod-a rename complete. 16 files + quadlet + systemd unit + docs updated. Service restart + health check OK.'
+  - '[Session 28] Phase B-D+E integrated plan created and approved. ~/.claude/plans/clever-sauteeing-candle.md'
+  - '[Session 27] cli.py status --json implemented. 12 sections live query. lint_rules.py + cli.py lint.'
+  - '[Session 27] Documentation audit. 58 ambiguities found. timer-registry.yaml → _archive.'
+  - '[Session 26] Context window 256K expansion. systemd bug fix.'
+  - '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
+  - '[Session 23] utcnow 1 case + bare except 7 cases fixed + Status/Path headers added to 142 files.'
+  - '[Session 22] File Status/Path header rule established + risk reclassification.'
+  - '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
+  - '[Session 20] split("|") conversion 6 files. psql_json pipe-safety proven.'
+  - '[Session 19] Experiment registry Step 2-4. bench_llm.py, CLI experiment, exp-latest alias.'
+  - '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
