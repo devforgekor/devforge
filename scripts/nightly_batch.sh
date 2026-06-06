@@ -18,7 +18,7 @@
 # Phase 4: review pipeline       mid    — R1(:8083) + Qwen7B(:8080) + Selene(:8081) P→R→J
 # Phase 5: verify (27B)          heavy  — production final gate, Pod B 27B(:8081)
 # Phase 5b: test_verify (32B)    heavy  — experimental parallel verify, Pod B 32B(:8081)
-# Phase 6: restore day                  — Pod A(3B:8082 operator 겸) + Pod B(30B:8080) back to day
+# Phase 6: restore day                  — Pod A(3B:8082 operator 겸) + Pod B(7B:8080) back to day
 
 set -o pipefail
 
@@ -213,10 +213,10 @@ if ! switch_mode_both "day" "day"; then
     echo "[$(LOG_TS)] FATAL: switch_mode day failed" >&2
 else
     start_llm_services "day-restore"
-    # Pod B 30B on :8080
-    if ! wait_for_model 8080 "30B (Pod B)" 300; then
+    # Pod B 7B on :8080
+    if ! wait_for_model 8080 "7B (Pod B)" 300; then
         day_restored=false
-        echo "[$(LOG_TS)] FATAL: 30B :8080 not responding after restore" >&2
+        echo "[$(LOG_TS)] FATAL: 7B :8080 not responding after restore" >&2
     fi
     # Pod A 3B(:8082) operator+refuter
     echo "[$(LOG_TS)] Restarting Pod A (3B operator+refuter)..."

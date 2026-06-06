@@ -61,12 +61,12 @@ summary = {}
 if os.path.exists(state_path):
     with open(state_path) as f:
         state = json.load(f)
-    v30 = state.get("30b_verify", {})
+    day_verify_data = state.get("day_verify", {})
     prj = state.get("prj", [])
     summary = {
         "round": 1,
         "with_rubric": False,
-        "30b": {"verdict": v30.get("final_verdict", "?"), "confidence": v30.get("confidence", 0)},
+        "day_verify": {"verdict": day_verify_data.get("final_verdict", "?"), "confidence": day_verify_data.get("confidence", 0)},
         "prj": [{
             "rotation": r.get("rotation"),
             "P": f"{r.get('p_model','?')}({r.get('P_score','?')})",
@@ -77,7 +77,7 @@ if os.path.exists(state_path):
         "total_approved": sum(1 for r in prj if r.get("decision") == "APPROVED")
     }
 
-log(f"Summary: 30B={summary.get('30b',{}).get('verdict','?')}, PRJ={summary.get('total_approved',0)}/3 approved")
+log(f"Summary: day_verify={summary.get('day_verify',{}).get('verdict','?')}, PRJ={summary.get('total_approved',0)}/3 approved")
 
 # Upload to Azure Blob
 uploaded = False
@@ -115,7 +115,7 @@ except Exception as e:
 url = f"https://{STORAGE_ACCOUNT}.blob.core.windows.net/{CONTAINER}/{blob_path}/"
 msg = (
     f"*P-R-J 실험 완료*\n"
-    f"> 30B: {summary.get('30b',{}).get('verdict','?')} (conf={summary.get('30b',{}).get('confidence','?')})\n"
+    f"> day_verify: {summary.get('day_verify',{}).get('verdict','?')} (conf={summary.get('day_verify',{}).get('confidence','?')})\n"
     f"> P-R-J: {summary.get('total_approved',0)}/3 approved\n"
     f"{'Azure Blob: ' + url if uploaded else f'로컬: `{EXPER_DIR}/` (' + str(len(result_files)) + '개 파일)'}"
 )

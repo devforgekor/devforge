@@ -8,10 +8,10 @@ DB UNIQUE (turn_id, fact_index, extract_model) prevents duplicate storage.
 
 Flow:
   Phase 1: SELECT unprocessed (created_at > checkpoint, limit 50)
-  Phase 2: 3B extractive extraction (user/thinking/text)
+  Phase 2: day_extract extraction (user/thinking/text)
   Phase 3: Python diff verify (faithfulness check)
-  Phase 4: Failure handling - retry 3B or fallback to 7B with marking
-  Phase 5: 7B MCP fields (tldr, intent, entities, tags)
+  Phase 4: Failure handling - retry day_extract or fallback to day_mcp with marking
+  Phase 5: day_mcp MCP fields (tldr, intent, entities, tags)
   Phase 6: Store to review_facts + enqueue + advance checkpoint
 
 Usage:
@@ -37,12 +37,13 @@ from lib.llm_client import call_llm
 from lib.queue_writer import enqueue_review
 
 # ── Constants ──────────────────────────────────────────────────────────────
-TIMEOUT_3B = 180
-TIMEOUT_30B = 300
-MAX_TOKENS_3B = 2048
-MAX_TOKENS_30B = 2048
-TEMP_3B = 0.1
-TEMP_30B = 0.1
+# Timeout/token/temp for extraction (day_extract) vs MCP fields generation (day_mcp)
+TIMEOUT_EXTRACT = 180
+TIMEOUT_MCP = 300
+MAX_TOKENS_EXTRACT = 2048
+MAX_TOKENS_MCP = 2048
+TEMP_EXTRACT = 0.1
+TEMP_MCP = 0.1
 BATCH_LIMIT = 100
 
 # ── System prompts ─────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ Rules:
 - Extract at most 5 facts per fact_type
 - If nothing extractable, return {"extractions": []}"""
 
-SYSTEM_MCP_30B = """\
+SYSTEM_MCP_7B = """\
 You are a conversation analyst preparing structured metadata for an MCP
 (Model Context Protocol) system. Given the original conversation turn and
 the extracted facts, produce structured MCP fields.
@@ -130,8 +131,8 @@ Rules:
 - tags: 2-5 keywords for discovery and routing
 - If a field has no relevant data, use an empty array []"""
 
-SYSTEM_FALLBACK_30B = """\
-You are a fact extraction specialist handling a difficult turn. The 3B model
+SYSTEM_FALLBACK_7B = """\
+You are a fact extraction specialist handling a difficult turn. The initial extractor
 failed twice to extract faithful facts from this turn — previous extractions
 contained hallucinated content not present in the source. Be EXTRA cautious:
 
@@ -143,11 +144,11 @@ contained hallucinated content not present in the source. Be EXTRA cautious:
 Rate your OWN fallback extraction on:
 - Caution (0-10): Are extractions conservative — omitted when unsure?
 - Faithfulness (0-10): Is every extraction verifiable in source?
-- Usefulness (0-10): Does this provide value above 3B failures?
+- Usefulness (0-10): Does this provide value above initial extraction failures?
 
 Output STRICT JSON:
 {
-  "fallback_note": "Why 3B may have struggled (1 sentence)",
+  "fallback_note": "Why the initial extraction may have struggled (1 sentence)",
   "extractions": [
     {
       "fact_type": "user|thinking|text",
@@ -237,7 +238,7 @@ def _extract_3b(user_turn: str, thinking: str, text: str,
                 attempt: int = 1,
                 prev_unfaithful: Optional[List[str]] = None
                 ) -> Optional[Dict[str, Any]]:
-    """Run 3B extractive extraction. Returns {extractions, usage, timings, elapsed_ms}."""
+    """Run day_extract extraction. Returns {extractions, usage, timings, elapsed_ms}."""
     parts = [
         "=== user_turn ===",
         user_turn or "(empty)",
@@ -261,12 +262,12 @@ def _extract_3b(user_turn: str, thinking: str, text: str,
     meta = call_llm(
         [{"role": "system", "content": SYSTEM_EXTRACT_3B},
          {"role": "user", "content": "\n".join(parts)}],
-        model="Qwen3B",
-        max_tokens=MAX_TOKENS_3B, temperature=TEMP_3B, timeout=TIMEOUT_3B,
+        model="day_extract",
+        max_tokens=MAX_TOKENS_EXTRACT, temperature=TEMP_EXTRACT, timeout=TIMEOUT_EXTRACT,
         json_mode=True, return_meta=True,
     )
     raw = meta["content"]
-    parsed = _parse_json(raw, "3B extract")
+    parsed = _parse_json(raw, "day_extract")
     if parsed is None:
         return None
     ex = parsed.get("extractions", [])
@@ -298,12 +299,12 @@ def _verify_extractions(
     return results
 
 
-# ── Phase 5: 30B MCP fields generation ────────────────────────────────────
+# ── Phase 5: day_mcp MCP fields generation (default: day_mcp, --mcp-model) ─────
 def _generate_mcp_fields(user_turn: str, thinking: str, text: str,
                          model: str,
                          extractions: Optional[List[Dict]] = None
                          ) -> Optional[Dict[str, Any]]:
-    """Generate MCP metadata fields (tldr, intent, entities, tags) via 30B.
+    """Generate MCP metadata fields (tldr, intent, entities, tags) via *model* (default: day_mcp).
 
     Returns dict with MCP fields + usage/timings metadata.
     """
@@ -318,34 +319,33 @@ def _generate_mcp_fields(user_turn: str, thinking: str, text: str,
         for ex in extractions:
             parts.append(f"  [{ex.get('fact_type','?')}] {ex.get('evidence','')[:300]}")
     meta = call_llm(
-        [{"role": "system", "content": SYSTEM_MCP_30B},
+        [{"role": "system", "content": SYSTEM_MCP_7B},
          {"role": "user", "content": "\n".join(parts)}],
         model=model,
-        max_tokens=MAX_TOKENS_30B, temperature=TEMP_30B, timeout=TIMEOUT_30B,
+        max_tokens=MAX_TOKENS_MCP, temperature=TEMP_MCP, timeout=TIMEOUT_MCP,
         json_mode=True, return_meta=True,
     )
-    result = _parse_json(meta["content"], "30B MCP fields")
+    result = _parse_json(meta["content"], "MCP fields")
     if result:
         result["_meta"] = {"usage": meta["usage"], "timings": meta["timings"],
                            "elapsed_ms": meta["elapsed_ms"], "model": model}
     return result
 
 
-# ── Phase 4: Fallback extraction (after 3B double-failure) ────────────
+# ── Phase 4: Fallback extraction (after day_extract double-failure) ────────────
 def _fallback_extract(user_turn: str, thinking: str, text: str,
-                      model: str = "Qwen7B") -> Optional[Dict[str, Any]]:
-    """Fallback extraction after 3B double-failure. Uses *model* (default Qwen7B)."""
+                      model: str = "day_mcp") -> Optional[Dict[str, Any]]:
+    """Fallback extraction after 3B double-failure. Uses *model* (default day_mcp)."""
     parts = [
         "=== user_turn ===", user_turn or "(empty)",
         "", "=== thinking ===", thinking or "(empty)",
         "", "=== text ===", text or "(empty)",
     ]
-    timeout_val = TIMEOUT_30B if model == "Qwen30B" else TIMEOUT_3B
     meta = call_llm(
-        [{"role": "system", "content": SYSTEM_FALLBACK_30B},
+        [{"role": "system", "content": SYSTEM_FALLBACK_7B},
          {"role": "user", "content": "\n".join(parts)}],
         model=model,
-        max_tokens=MAX_TOKENS_30B, temperature=TEMP_30B, timeout=timeout_val,
+        max_tokens=MAX_TOKENS_MCP, temperature=TEMP_MCP, timeout=TIMEOUT_MCP,
         json_mode=True, return_meta=True,
     )
     raw = meta["content"]
@@ -487,13 +487,13 @@ def extract_pipeline(
     turn_id: Optional[str] = None,
     limit: int = BATCH_LIMIT,
     dry_run: bool = False,
-    mcp_model: str = "Qwen7B",
+    mcp_model: str = "day_mcp",
 ) -> Dict[str, Any]:
-    """Run 3B extractive → Python verify → 30B MCP fields per turn."""
+    """Run day_extract extractive → Python verify → day_mcp MCP fields per turn."""
     t_start = time.monotonic()
 
     print(f"\n{'=' * 60}")
-    print("Extract Pipeline — 3B extractive → Python verify → 30B MCP fields")
+    print(f"Extract Pipeline — day_extract → Python verify → {mcp_model} MCP fields")
     if dry_run:
         print("  [DRY RUN] No writes to DB")
     print(f"{'=' * 60}")
@@ -539,19 +539,19 @@ def extract_pipeline(
               f"user={len(ut)}ch think={len(th)}ch text={len(tx)}ch")
 
         try:
-            # ── Phase 2–4: 3B extraction with retry/fallback ──────────
+            # ── Phase 2–4: day_extract extraction with retry/fallback ──────────
             extractions: Optional[List[Dict[str, Any]]] = None
             mark = ""
-            used_model = "Qwen3B"
+            used_model = "day_extract"
 
             for attempt in (1, 2):
-                print(f"  [extract] 3B attempt {attempt}...")
+                print(f"  [extract] day_extract attempt {attempt}...")
                 prev_unfaithful = _prev_bad.get(str(attempt - 1)) if attempt > 1 else None
                 ex_result = _extract_3b(ut, th, tx, attempt=attempt,
                                         prev_unfaithful=prev_unfaithful)
                 if ex_result is None:
                     print(f"  [extract]   Parse failure")
-                    mark = "3B 1차 실패" if attempt == 1 else "3B 2회실패 → 30B 전달"
+                    mark = "추출 1차 실패" if attempt == 1 else "추출 2회실패 → fallback"
                     continue
 
                 raw_ex = ex_result["extractions"]
@@ -571,14 +571,14 @@ def extract_pipeline(
 
                 # Unfaithful extractions this attempt
                 if attempt == 1:
-                    mark = "3B 1차 실패"
+                    mark = "추출 1차 실패"
                     print(f"  [extract]   → {mark}")
                 else:
-                    mark = "3B 2회실패 → 30B 전달"
+                    mark = "추출 2회실패 → fallback"
                     print(f"  [extract]   → {mark}")
 
-            # After both 3B attempts: if still failing, try 30B fallback
-            if extractions is None and mark == "3B 2회실패 → 30B 전달":
+            # After both extraction attempts: if still failing, try mcp_model fallback
+            if extractions is None:
                 used_model = mcp_model  # falls back to same model defined by --mcp-model
                 print(f"  [extract] {used_model} fallback extraction...")
                 fallback = _fallback_extract(ut, th, tx, model=used_model)
@@ -588,21 +588,21 @@ def extract_pipeline(
                     faithful = [v for v in f_ver if v["faithful"]]
                     if faithful:
                         extractions = faithful
-                        print(f"  [extract]   30B: {len(faithful)} faithful facts")
+                        print(f"  [extract]   {used_model}: {len(faithful)} faithful facts")
                     else:
-                        print(f"  [extract]   30B fallback also unfaithful")
+                        print(f"  [extract]   {used_model} fallback also unfaithful")
                 else:
-                    print(f"  [extract]   30B fallback failed or empty")
+                    print(f"  [extract]   {used_model} fallback also empty")
 
             if extractions is None:
                 print(f"  [extract]   No faithful extractions — marking failure")
                 if not dry_run:
-                    _insert_mark(tid, mark or "3B 2회실패", used_model,
-                                 is_final=(mark == "3B 2회실패 → 30B 전달"))
+                    _insert_mark(tid, mark or "추출 2회실패", used_model,
+                                 is_final=True)
                 failed += 1
                 continue
 
-            # ── Phase 5: 30B MCP fields generation ──────────────────────────
+            # ── Phase 5: MCP fields generation ──────────────────────────
             print(f"  [extract] {mcp_model} MCP fields...")
             mcp_result = _generate_mcp_fields(ut, th, tx,
                                               model=mcp_model,
@@ -694,7 +694,7 @@ def extract_pipeline(
                     "mark": mark,
                     "mcp": mcp_result,
                 },
-                model="qwen3-30b-a3b-local",
+                model=mcp_model,
                 turn_ids=[tid],
                 tags=["extract", "fact_extraction"],
                 queue_status="pending",
@@ -706,7 +706,7 @@ def extract_pipeline(
         except Exception as e:
             print(f"  [extract]   ERROR: {e}")
             if not dry_run:
-                _insert_mark(tid, f"ERROR: {e}"[:200], "Qwen3B", is_final=False)
+                _insert_mark(tid, f"ERROR: {e}"[:200], "day_extract", is_final=False)
             failed += 1
 
     elapsed = round(time.monotonic() - t_start, 1)
@@ -725,13 +725,13 @@ def extract_pipeline(
 def main() -> None:
     import argparse
     parser = argparse.ArgumentParser(
-        description="Extract Pipeline — 3B → Python → 30B")
+        description=f"Extract Pipeline — day_extract → Python → day_mcp MCP (default)")
     parser.add_argument("--turn-id", help="Process a specific turn UUID")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--mcp-model", default="Qwen7B",
-                        help="Model for MCP fields generation (default: Qwen7B)")
+    parser.add_argument("--mcp-model", default="day_mcp",
+                        help=f"Model for MCP fields generation (default: day_mcp)")
     args = parser.parse_args()
 
     result = extract_pipeline(

@@ -203,7 +203,7 @@ def build_verify_prompt(item: Dict) -> str:
             f"Final diff (first 1000 chars): {body.get('final_diff', '')[:1000]}"
         )
     elif item_type == "extract_result":
-        # From extract_pipeline.py: 3B → Python verify → 30B MCP fields.
+        # From extract_pipeline.py: 3B → Python verify → 7B MCP fields.
         # Body keys: turn_id, fact_count, extract_model, mark, mcp.
         mcp = body.get("mcp", {}) or {}
         verified = mcp.get("verified", {}) or {}
@@ -337,7 +337,7 @@ def run_verify() -> int:
             messages = [{"role": "system", "content": ANALYSIS_SYSTEM}]
         else:
             messages = [{"role": "system", "content": VERIFY_SYSTEM}]
-            feedback = get_feedback_for_model("Qwen27B", max_gold=1, max_edge=1)
+            feedback = get_feedback_for_model("night_verify", max_gold=1, max_edge=1)
             if feedback:
                 messages.extend(feedback)
                 print(f"    feedback injected: {len(feedback)//2} example(s)")

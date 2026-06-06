@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-P-R-J 고정 역할 실험: P=30B, R=Qwen14B, J=Selene Q8
+P-R-J 고정 역할 실험: P=night_proposer, R=night_reflector, J=night_judge
 
-P-R-J = 30B + Qwen2.5-Coder-14B + Codestral-22B (고정 역할)
-P(30B) -> R(Qwen14B) -> J(Codestral-22B) 1회 패스
+P-R-J = night_proposer + night_reflector + night_judge (고정 역할)
+night_proposer -> night_reflector -> night_judge 1회 패스
 
-파이프라인: Python 검증 -> 30B verify -> P-R-J 1회 -> 핸드오프 저장
+파이프라인: Python 검증 -> day_verify -> P-R-J 1회 -> 핸드오프 저장
 
 메모리 관리: phase 전환마다 podman stop로 모든 컨테이너 완전 제거 -> 필요한 것만 시작
-Pod B에서 순차 swap (30B -> Qwen14B -> Codestral-22B)
+Pod B에서 순차 swap (night_proposer -> night_reflector -> night_judge)
 
 사용법:
   python3 prj_cycle.py
@@ -33,7 +33,7 @@ SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 EXPER_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "experiment")
 os.makedirs(EXPER_DIR, exist_ok=True)
 sys.path.insert(0, SCRIPTS_DIR)
-from lib.llm_client import call_llm
+from lib.llm_client import call_llm, resolve_model
 from lib.db import psql, psql_ok, esc_sql
 
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
@@ -218,9 +218,9 @@ def start_pod_a(mode, port):
 
 
 def start_day_both():
-    """Day 모드 = Pod A 3B Q8_0(:8082) 먼저 시작 -> Pod B 7B Q8_0(:8080) 순차 시작.
-    3B(3.1GB) + 7B(7.6GB) = ~11GB — 순차 로딩으로 RAM 경합 방지."""
-    log("  DAY MODE: Pod A 3B -> Pod B 7B (순차)")
+    """Day 모드 = Pod A (day_r:8082) 먼저 시작 -> Pod B (day용:8080) 순차 시작.
+    day_r(3.1GB) + day_p/day_j(7.6GB) = ~11GB — 순차 로딩으로 RAM 경합 방지."""
+    log("  DAY MODE: Pod A (day_r) -> Pod B (day_p/day_j/day_mcp, 순차)")
     with open(MODE_FILE_B, "w") as f:
         f.write("MODE=day")
     with open(MODE_FILE_A, "w") as f:
@@ -230,35 +230,28 @@ def start_day_both():
     subprocess.run(["systemctl", "--user", "start", "container-devforge-qwen.service"],
                    capture_output=True, timeout=60)
     ok_a = wait_health(8082)
-    if ok_a: log(f"  :8082 ready (Pod A 3B)")
-    else:    log(f"  :8082 TIMEOUT (Pod A 3B)")
+    if ok_a: log(f"  :8082 ready (Pod A day_r)")
+    else:    log(f"  :8082 TIMEOUT (Pod A day_r)")
 
-    # Pod B 7B는 Pod A가 안정화된 후 시작
+    # Pod B는 Pod A가 안정화된 후 시작
     subprocess.run(["systemctl", "--user", "start", "container-devforge-swap.service"],
                    capture_output=True, timeout=60)
     ok_b = wait_health(8080)
-    if ok_b: log(f"  :8080 ready (7B)")
-    else:    log(f"  :8080 TIMEOUT (7B)")
+    if ok_b: log(f"  :8080 ready (Pod B day)")
+    else:    log(f"  :8080 TIMEOUT (Pod B day)")
     return ok_a and ok_b
 
 
-def ensure_model(model_name):
+def ensure_model(physical_name):
     """단일 모델만 띄움. 이전 모든 컨테이너는 kill_all로 제거."""
     if DRY_RUN:
-        log(f"  [DRY] ensure_model({model_name}) → OK (mock)")
+        log(f"  [DRY] ensure_model({physical_name}) → OK (mock)")
         return True
-    if model_name == "Qwen30B":
-        return start_pod_b("review-p", 8080)
-    if model_name == "Qwen14B":
-        return start_pod_b("review-r", 8080)
-    if model_name == "Qwen7B":
-        return start_pod_b("test-7b", 8080)
-    if model_name == "Codestral":
-        return start_pod_b("review-j", 8080)
-    if model_name == "Qwen27B":
-        return start_pod_b("verify", 8081)
-    log(f"  Unknown model: {model_name}")
-    return False
+    meta = MODEL_METADATA.get(physical_name)
+    if not meta:
+        log(f"  Unknown model: {physical_name}")
+        return False
+    return start_pod_b(meta["mode"], meta["port"])
 
 
 # ── Pipeline State Blackboard ──────────────────────────────────────────
@@ -292,7 +285,7 @@ class PipelineState:
             sf = f.get("source_file", "unknown")
             src_files[sf] = src_files.get(sf, 0) + 1
 
-        # ── 3B Extract test results (from consolidated input) ──
+        # ── Extract test results (from consolidated input) ──
         ext_input = input_data.get("extract", {})
         extract_models = ext_input.get("models", [])
 
@@ -308,7 +301,7 @@ class PipelineState:
                       "source_files": src_files,
                       "findings": findings},
             "python_verify": {},
-            "30b_verify": {},
+            "day_verify": {},
             "rubric_evaluation": {},
             "prj": [],
             "handoffs": [],
@@ -331,7 +324,7 @@ class PipelineState:
 
     def build_context(self, phase, extra=None):
         """LLM 프롬프트용 컨텍스트 생성.
-        phase 컨트롤스 inclusion: 'prj_p'는 30B 결과 포함, '30b_verify'는 python_verify만."""
+        phase controls inclusion: 'prj_p'는 day_verify 결과 포함, 'day_verify'는 python_verify만."""
         parts = []
         inp = self.data["input"]
         findings = inp.get("findings", [])
@@ -340,11 +333,11 @@ class PipelineState:
         rl = f"Round {self.round_num}" + (" (with rubric)" if self.with_rubric else "")
         parts.append(f"=== PIPELINE CONTEXT: {rl} ===\n")
 
-        # ── 3B Extract summary ──
+        # ── day_extract summary ──
         ext = self.data.get("extract", {})
         extract_models = ext.get("models", [])
         if extract_models:
-            parts.append(f"[3B EXTRACT] {len(extract_models)} models x 15 turns")
+            parts.append(f"[EXTRACT] {len(extract_models)} models x 15 turns")
             for m in extract_models:
                 fth = f"{m.get('faithfulness_rate',0)*100:.0f}%"
                 sec = m.get('elapsed_seconds', 0)
@@ -368,20 +361,20 @@ class PipelineState:
                 parts.append(f"  - {iss['check']}: {iss.get('detail','')[:100]}")
             parts.append("")
 
-        # 30B verify (skip for python_verify and 30b_verify phases)
-        v30 = self.data.get("30b_verify")
-        if v30 and v30.get("final_verdict") and phase not in ("python_verify", "30b_verify"):
-            parts.append(f"[30B VERIFY] {v30['final_verdict']} (confidence={v30.get('confidence','?')})")
-            for item in v30.get("verification_items", [])[:5]:
+        # day_verify (skip for python_verify and "day_verify" phases)
+        day_verify_data = self.data.get("day_verify")
+        if day_verify_data and day_verify_data.get("final_verdict") and phase not in ("python_verify", "day_verify"):
+            parts.append(f"[VERIFY] {day_verify_data['final_verdict']} (confidence={day_verify_data.get('confidence','?')})")
+            for item in day_verify_data.get("verification_items", [])[:5]:
                 parts.append(f"  [{item.get('result','?')}] {item.get('check','')}")
-            rsn = v30.get("reasoning", "")
+            rsn = day_verify_data.get("reasoning", "")
             if rsn:
                 parts.append(f"  Reasoning: {rsn[:200]}")
             parts.append("")
 
         # P-R-J results (skip for early phases and prj phases themselves)
         prj = self.data.get("prj", [])
-        if prj and phase not in ("python_verify", "30b_verify", "prj_p", "prj_r", "prj_j"):
+        if prj and phase not in ("python_verify", "day_verify", "prj_p", "prj_r", "prj_j"):
             parts.append(f"[P-R-J] {len(prj)} rotations:")
             for r in prj:
                 parts.append(f"  {r.get('rotation','?')}: P={r.get('p_model','?')}({r.get('P_score','?')}) R={r.get('r_model','?')}({r.get('R_score','?')}) J={r.get('j_model','?')} → score={r.get('consensus','?')} {r.get('decision','?')}")
@@ -402,11 +395,11 @@ class PipelineState:
                 if len(f_list) > 5:
                     parts.append(f"  ... +{len(f_list)-5} more")
 
-            # 30B verification items → Proposer가 중복 회피 (only for P)
-            if phase == "prj_p" and v30:
-                items = v30.get("verification_items", [])
+            # day_verify results → Proposer 중복 회피 (only for P)
+            if phase == "prj_p" and day_verify_data:
+                items = day_verify_data.get("verification_items", [])
                 if items:
-                    parts.append(f"\n[30B ALREADY REVIEWED — do not re-review these]")
+                    parts.append(f"\n[VERIFIED — do not re-review these items]")
                     for item in items[:8]:
                         parts.append(f"  [{item.get('result','?')}] {item.get('check','')}: {item.get('detail','')[:100]}")
 
@@ -699,16 +692,16 @@ Return JSON:
   }
 }"""
 
-SYS_V27 = """You are a final verifier. Review all findings and P-R-J results.
+SYS_VERIFY = """You are a final verifier. Review all findings and P-R-J results.
 
 You will receive THREE handoff documents:
-1. [LLM-R] — R(14B) handoff (comprehensive summary after full P-R-J cycle)
+1. [LLM-R] — R(night_reflector) handoff (comprehensive summary after full P-R-J cycle)
 2. [Python] — deterministic handoff
 3. [Python consolidated] — full rotation summary
 
 Compare LLM-R vs Python. After your final verdict,
 write detailed, actionable feedback per model+role:
-e.g., P=Qwen30B, R=Qwen14B, J=Selene — separate feedback for each.
+e.g., P=night_proposer, R=night_reflector, J=night_judge — separate feedback for each.
 
 === EVALUATION RUBRIC (self-assessment) ===
 Rate your OWN verification on these criteria:
@@ -733,9 +726,9 @@ Return JSON:
     "feedback_quality_justification": "..."
   },
   "feedback": {
-    "P_Qwen30B": {"model":"Qwen30B","role":"proposer","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
-    "R_Qwen14B": {"model":"Qwen14B","role":"reflector","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
-    "J_Selene": {"model":"Selene","role":"judge","score":0,"strengths":[],"weaknesses":[],"improvements":[]}
+    "P": {"model":"night_proposer","role":"proposer","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
+    "R": {"model":"night_reflector","role":"reflector","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
+    "J": {"model":"night_judge","role":"judge","score":0,"strengths":[],"weaknesses":[],"improvements":[]}
   },
   "handoff_comparison": {
     "better_handoff": "llm_r|python|equal",
@@ -754,7 +747,7 @@ You will receive THREE handoff documents:
 
 Compare LLM-J vs Python. After your final verdict,
 write detailed, actionable feedback per model+role:
-e.g., P=Qwen30B, R=Qwen14B, J=Selene — separate feedback for each.
+e.g., P=night_proposer, R=night_reflector, J=night_judge — separate feedback for each.
 
 Return JSON:
 {
@@ -766,9 +759,9 @@ Return JSON:
   "verification_items": [{"check":"...","result":"pass|fail|partial","detail":"..."}],
   "disagreement_with_27b": [{"issue":"...","27b_verdict":"...","my_verdict":"...","detail":"..."}],
   "feedback": {
-    "P_Qwen30B": {"model":"Qwen30B","role":"proposer","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
-    "R_Qwen14B": {"model":"Qwen14B","role":"reflector","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
-    "J_Selene": {"model":"Selene","role":"judge","score":0,"strengths":[],"weaknesses":[],"improvements":[]}
+    "P": {"model":"night_proposer","role":"proposer","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
+    "R": {"model":"night_reflector","role":"reflector","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
+    "J": {"model":"night_judge","role":"judge","score":0,"strengths":[],"weaknesses":[],"improvements":[]}
   },
   "handoff_comparison": {
     "better_handoff": "llm_j|python|equal",
@@ -827,7 +820,7 @@ Schema:
 
 
 def rubric_evaluate_findings(findings, tag):
-    """Phase 2: Evaluate each finding against rubric criteria using 7B."""
+    """Phase 2: Evaluate each finding against rubric criteria (day_verify)."""
     log("\n--- Phase 2: Rubric Evaluation (finding-level) ---")
     if not findings:
         log("  No findings to evaluate — skipping rubric evaluation")
@@ -843,7 +836,7 @@ def rubric_evaluate_findings(findings, tag):
         finding_lines.append(f"  [{sev}/{cat}] {fid}: {desc}")
 
     user_text = "Evaluate these findings against the rubric:\n\n" + "\n".join(finding_lines[:20])
-    resp = call_one("Qwen7B", SYS_RUBRIC_FINDING, user_text, f"rubric_{tag}", max_tok=4096)
+    resp = call_one("day_verify", SYS_RUBRIC_FINDING, user_text, f"rubric_{tag}", max_tok=4096)
     rubrics = (resp or {}).get("result", {}).get("rubric_evaluations", [])
 
     # Build a lookup for quick access
@@ -995,9 +988,9 @@ MOCK_RESULT = {
         "reasoning": "Mock reasoning for dry-run test",
         "verification_items": [{"check":"All findings verified","result":"pass","detail":"Mock verification"}],
         "feedback": {
-            "P_Qwen30B": {"model":"Qwen30B","role":"proposer","score":80,"strengths":["Good coverage"],"weaknesses":["Needs more detail"],"improvements":["Add more context"]},
-            "R_Qwen14B": {"model":"Qwen14B","role":"reflector","score":75,"strengths":["Accurate"],"weaknesses":["Brief reasoning"],"improvements":["Elaborate on rejections"]},
-            "J_Selene": {"model":"Selene","role":"judge","score":85,"strengths":["Fair"],"weaknesses":["Could be more detailed"],"improvements":["Add more rationale"]},
+            "P": {"model":"night_proposer","role":"proposer","score":80,"strengths":["Good coverage"],"weaknesses":["Needs more detail"],"improvements":["Add more context"]},
+            "R": {"model":"night_reflector","role":"reflector","score":75,"strengths":["Accurate"],"weaknesses":["Brief reasoning"],"improvements":["Elaborate on rejections"]},
+            "J": {"model":"night_judge","role":"judge","score":85,"strengths":["Fair"],"weaknesses":["Could be more detailed"],"improvements":["Add more rationale"]},
         },
     },
     "usage": {"prompt_tokens": 500, "completion_tokens": 200},
@@ -1005,9 +998,9 @@ MOCK_RESULT = {
     "elapsed_ms": 1500,
 }
 
-P_MODEL = "Qwen30B"   # review-p mode (Pod B :8080)
-R_MODEL = "Qwen14B"   # review-r mode (Pod B :8080)
-J_MODEL = "Codestral" # review-j mode (Pod B :8080)
+P_MODEL = "night_proposer"
+R_MODEL = "night_reflector"
+J_MODEL = "night_judge"
 
 MODEL_METADATA = {
     "Qwen3B":  {"file": "Qwen2.5-Coder-3B-Instruct.Q8_0.gguf",  "size": "3.1GB", "port": 8082, "mode": "day"},
@@ -1027,17 +1020,18 @@ def model_info(key):
 
 def call_one(model_name, sys_prompt, user_text, tag_label, max_tok=2048):
     """kill_all -> start only this model -> LLM call."""
+    physical = resolve_model(model_name)
     if DRY_RUN:
         log(f"  [DRY] call_one({model_name}) → mock response")
         return MOCK_RESULT
-    ok = ensure_model(model_name)
+    ok = ensure_model(physical)
     if not ok:
         abort("컨테이너 시작 실패", model_name,
               f"{model_name} 컨테이너가 300s 내에 준비되지 않음")
     return llm_call(
         [{"role": "system", "content": sys_prompt},
          {"role": "user", "content": user_text}],
-        model_name, max_tokens=max_tok, label=tag_label)
+        physical, max_tokens=max_tok, label=tag_label)
 
 
 # ── Python handoff compiler (deterministic, no hallucination) ────────────
@@ -1088,11 +1082,11 @@ def compile_handoff(prj_results, round_num, with_rubric):
 # ── Round runner ──────────────────────────────────────────────────────
 
 def _run_prj(state, tag, rubric_append):
-    """P-R-J 1회 패스. kill_all → P(30B) → R(Qwen14B) → J(Selene) → state 저장."""
-    log("\n--- Phase 3: P-R-J (P=30B,R=Qwen14B,J=Selene) ---")
+    """P-R-J 1회 패스. kill_all → P → R → J → state 저장."""
+    log("\n--- Phase 3: P-R-J (P) ---")
     handoff_fragment = {}
 
-    # P — gets findings by severity + 30B context
+    # P — gets findings by severity + P context
     p_max = 4096
     p_r = call_one(P_MODEL, SYS_P + rubric_append,
                    state.build_context("prj_p"),
@@ -1157,11 +1151,11 @@ def _run_prj(state, tag, rubric_append):
 SYS_R_HANDOFF = """You are a senior reviewer (R) writing the final handoff document after a complete P-R-J review cycle.
 
 The full cycle is complete:
-- **P (30B)**: Proposed findings with severity/category
-- **You (R, 14B)**: Reviewed each finding — accepted or rejected
-- **J (Selene)**: Final scoring and consolidated decision
+- **P (night_proposer)**: Proposed findings with severity/category
+- **You (R, night_reflector)**: Reviewed each finding — accepted or rejected
+- **J (night_judge)**: Final scoring and consolidated decision
 
-Your job: synthesize ALL of the above into a comprehensive handoff for the **final verifier (27B)**.
+Your job: synthesize ALL of the above into a comprehensive handoff for the **final verifier (night_verify)**.
 
 Grounding rules:
 - ALL finding IDs must come from the actual data below. Do NOT fabricate.
@@ -1175,7 +1169,7 @@ Return ONLY valid JSON — no markdown, no commentary.
 Schema:
 {
   "handoff": {
-    "source": "R(Qwen14B)_handoff",
+    "source": "R_handoff",
     "executive_summary": "1-2 sentence overview of the full P-R-J cycle including key decisions",
     "approved": [
       {"id": "F001", "severity": "critical|high|medium|low", "category": "bug|security|...",
@@ -1267,9 +1261,9 @@ def run_round(round_num, with_rubric, resume_state_path=None):
             state_data = json.load(f)
         data = load_input()
         state = PipelineState(round_num, with_rubric, data, existing_data=state_data)
-        v7_res = state_data.get("30b_verify", {})
+        day_verify_result = state_data.get("day_verify", {})
         py_res = state_data.get("python_verify", {})
-        log("RESUME: 기존 state 로드, Python/30B 검증 건너뜀")
+        log("RESUME: 기존 state 로드, Python/day_verify 검증 건너뜀")
     else:
         data = load_input()
         state = PipelineState(round_num, with_rubric, data)
@@ -1279,18 +1273,18 @@ def run_round(round_num, with_rubric, resume_state_path=None):
         state.add_phase("python_verify", py_res)
         slack_send(f"[P-R-J] *Round {round_num}* Python verify: {py_res['issues_found']} issues ({py_res['total_findings']} findings)")
 
-        # Phase 1: 7B verify (lightweight pre-filter)
-        log("\n--- Phase 1: 7B Verify ---")
-        v7 = call_one("Qwen7B", SYS_V27 + rubric_append,
-                       state.build_context("30b_verify"),
-                       f"7B_{tag}")
-        v7_res = (v7 or {}).get("result", {})
-        save(f"7b_{tag}", tag, v7)
-        v7v = v7_res.get('final_verdict', '?')
-        c7v = v7_res.get('confidence', '?')
-        log(f"  7B verdict={v7v} confidence={c7v}")
-        state.add_phase("30b_verify", v7_res)
-        slack_send(f"[P-R-J] *Round {round_num}* 7B verify: *{v7v}* (confidence={c7v})")
+        # Phase 1: day_verify (lightweight pre-filter)
+        log("\n--- Phase 1: day_verify ---")
+        day_verify_resp = call_one("day_verify", SYS_VERIFY + rubric_append,
+                       state.build_context("day_verify"),
+                       f"day_verify_{tag}")
+        day_verify_result = (day_verify_resp or {}).get("result", {})
+        save(f"day_verify_{tag}", tag, day_verify_resp)
+        day_verify_verdict = day_verify_result.get('final_verdict', '?')
+        day_verify_confidence = day_verify_result.get('confidence', '?')
+        log(f"  day_verify verdict={day_verify_verdict} confidence={day_verify_confidence}")
+        state.add_phase("day_verify", day_verify_result)
+        slack_send(f"[P-R-J] *Round {round_num}* day_verify: *{day_verify_verdict}* (confidence={day_verify_confidence})")
 
         # Phase 2: Rubric evaluation — disabled
         rubric_results = []
@@ -1299,10 +1293,10 @@ def run_round(round_num, with_rubric, resume_state_path=None):
     # Phase 3: P-R-J 1 pass (single fixed rotation)
     prj_result, handoff_fragment, p_findings, r_verdicts = _run_prj(state, tag, rubric_append)
 
-    # ── Phase 3.5: R(14B) writes the final handoff ──
+    # ── Phase 3.5: R(night_reflector) writes the final handoff ──
     # R has full context: P findings, its own verdicts, and J's final decision.
-    # R produces a comprehensive structured handoff for the 27B verifier.
-    log("\n--- Phase 3.5: R(14B) writes final handoff ---")
+    # R produces a comprehensive structured handoff for the night_verify verifier.
+    log("\n--- Phase 3.5: R(night_reflector) writes final handoff ---")
 
     r_ctx_parts = [
         f"=== P-R-J CYCLE COMPLETE ===",
@@ -1367,16 +1361,16 @@ def run_round(round_num, with_rubric, resume_state_path=None):
     slack_send(f"[P-R-J] *Round {round_num}* P-R-J 완료. "
                f"결과: {prj_result.get('decision','?')} (consensus={prj_result.get('consensus','?')})")
 
-    # ── STOP: PRJ complete. Now run 27B verify ──
+    # ── STOP: PRJ complete. Now run night_verify ──
     summary = {
         "round": round_num, "with_rubric": with_rubric,
         "python_verify": {"issues_found": py_res["issues_found"], "total": py_res["total_findings"]},
-        "30b": {"verdict": v7_res.get("final_verdict","?"), "confidence": v7_res.get("confidence",0)},
+        "day_verify": {"verdict": day_verify_result.get("final_verdict","?"), "confidence": day_verify_result.get("confidence",0)},
         "prj": [prj_result],
     }
 
     # ─────────────────────────────────────────────────────────────────
-    # Phase 4: 27B verify (production final gate)
+    # Phase 4: night_verify (production final gate)
     # ─────────────────────────────────────────────────────────────────
     # ── Trim handoffs for prepill defense ──────────────────────
     # Extract JSON portion from markdown-wrapped handoff texts
@@ -1406,25 +1400,25 @@ def run_round(round_num, with_rubric, resume_state_path=None):
         "(llm_r or python) was more useful for verification overall and why."
     )
 
-    log("\n--- Phase 4: 27B Verify ---")
-    v27_ctx = state.build_context("final_verify") + "\n\n" + verifier_input
-    v27 = call_one("Qwen27B", SYS_V27 + rubric_append,
-                   v27_ctx, f"27B_{tag}")
-    v27_res = (v27 or {}).get("result", {})
-    save(f"v27b_{tag}", tag, v27)
-    state.add_phase("27b_verify", v27_res)
-    v27v = v27_res.get('final_verdict', '?')
-    c27 = v27_res.get('confidence', '?')
-    hc27 = v27_res.get('handoff_comparison', {})
-    fb27 = v27_res.get('feedback', {})
-    log(f"  27B verdict={v27v} confidence={c27}")
-    log(f"  27B handoff preference: {hc27.get('better_handoff', '?')}")
-    for role_key, role_fb in fb27.items():
+    log("\n--- Phase 4: night_verify ---")
+    night_verify_context = state.build_context("final_verify") + "\n\n" + verifier_input
+    night_verify_resp = call_one("night_verify", SYS_VERIFY + rubric_append,
+                   night_verify_context, f"night_verify_{tag}")
+    night_verify_result = (night_verify_resp or {}).get("result", {})
+    save(f"night_verify_{tag}", tag, night_verify_resp)
+    state.add_phase("night_verify", night_verify_result)
+    night_verify_verdict = night_verify_result.get('final_verdict', '?')
+    night_verify_confidence = night_verify_result.get('confidence', '?')
+    handoff_comparison = night_verify_result.get('handoff_comparison', {})
+    night_verify_feedback = night_verify_result.get('feedback', {})
+    log(f"  night_verify verdict={night_verify_verdict} confidence={night_verify_confidence}")
+    log(f"  night_verify handoff preference: {handoff_comparison.get('better_handoff', '?')}")
+    for role_key, role_fb in night_verify_feedback.items():
         imp = role_fb.get("improvements", [])
         if imp:
             log(f"  feedback {role_key}: {imp[0][:80]}")
-    slack_send(f"[P-R-J] *Round {round_num}* 27B verifier: *{v27v}* "
-               f"(conf={c27}) handoff={hc27.get('better_handoff','?')}")
+    slack_send(f"[P-R-J] *Round {round_num}* night_verify: *{night_verify_verdict}* "
+               f"(conf={night_verify_confidence}) handoff={handoff_comparison.get('better_handoff','?')}")
 
     # ── Phase 5: Feedback loop — disabled ──
     fb_count = 0  # feedback disabled
@@ -1476,11 +1470,11 @@ def run_round(round_num, with_rubric, resume_state_path=None):
         fb_pyc_text = json.dumps(fb_py_single, ensure_ascii=False, indent=2)
         log(f"  1 LLM-R + 1 Python handoffs (post-feedback) saved")
 
-        # Phase 5c: 27B verify (post-feedback)
-        log("\n--- Phase 5c: 27B Verify (post-feedback) ---")
+        # Phase 5c: night_verify (post-feedback)
+        log("\n--- Phase 5c: night_verify (post-feedback) ---")
         fb_llm_h, fb_llm_j = _extract_json_part(fb_llm_text)
         fb_py_h, fb_py_j = _extract_json_part(fb_py_text)
-        fb_v27_ctx = state.build_context("final_verify") + "\n\n" + (
+        feedback_nv_context = state.build_context("final_verify") + "\n\n" + (
             "Below are 3 handoff documents:\n"
             "- 1 LLM-R\n- 1 Python\n- 1 Python consolidated\n\n"
             + f"\n\n---\n\n{fb_llm_h}{_trim_handoff(fb_llm_j, 'llm_r_fb')}"
@@ -1491,18 +1485,18 @@ def run_round(round_num, with_rubric, resume_state_path=None):
             "In your 'handoff_comparison' field, state which source "
             "(llm_r or python) was more useful for verification overall and why."
         )
-        fb_v27 = call_one("Qwen27B", SYS_V27 + rubric_append, fb_v27_ctx, f"27B_{fb_tag}")
-        fb_v27_res = (fb_v27 or {}).get("result", {})
-        save(f"v27b_{fb_tag}", fb_tag, fb_v27)
-        fb_v27v = fb_v27_res.get('final_verdict', '?')
-        fb_c27 = fb_v27_res.get('confidence', '?')
-        log(f"  27B (feedback round) verdict={fb_v27v} confidence={fb_c27}")
-        slack_send(f"[P-R-J] *Round {round_num}* 27B (feedback): *{fb_v27v}* (conf={fb_c27})")
+        feedback_nv_resp = call_one("night_verify", SYS_VERIFY + rubric_append, feedback_nv_context, f"night_verify_{fb_tag}")
+        feedback_nv_result = (feedback_nv_resp or {}).get("result", {})
+        save(f"feedback_nv_{fb_tag}", fb_tag, feedback_nv_resp)
+        feedback_nv_verdict = feedback_nv_result.get('final_verdict', '?')
+        feedback_nv_confidence = feedback_nv_result.get('confidence', '?')
+        log(f"  night_verify (feedback round) verdict={feedback_nv_verdict} confidence={feedback_nv_confidence}")
+        slack_send(f"[P-R-J] *Round {round_num}* night_verify (feedback): *{feedback_nv_verdict}* (conf={feedback_nv_confidence})")
 
         summary["feedback_loop"] = {
             "saved_count": fb_count,
             "fb_prj": [fb_prj_result],
-            "fb_27b": {"verdict": fb_v27_res.get("final_verdict","?"), "confidence": fb_v27_res.get("confidence",0)},
+            "feedback_night_verify": {"verdict": feedback_nv_result.get("final_verdict","?"), "confidence": feedback_nv_result.get("confidence",0)},
         }
         log("\n--- Phase 5 Complete: Feedback loop executed ---")
     else:
@@ -1511,17 +1505,17 @@ def run_round(round_num, with_rubric, resume_state_path=None):
     # Pull Phase 2 rubric results from state if available
     rubric_evals = state.data.get("rubric_evaluation", {}).get("evaluations", []) if not resume_state_path else []
 
-    summary["27b"] = {"verdict": v27_res.get("final_verdict","?"), "confidence": v27_res.get("confidence",0),
-                      "feedback": fb27, "handoff_comparison": hc27,
-                      "rubric_evaluation": v27_res.get("rubric_evaluation", {}),
+    summary["night_verify"] = {"verdict": night_verify_result.get("final_verdict","?"), "confidence": night_verify_result.get("confidence",0),
+                      "feedback": night_verify_feedback, "handoff_comparison": handoff_comparison,
+                      "rubric_evaluation": night_verify_result.get("rubric_evaluation", {}),
                       "phase2_rubric": {"evaluations": rubric_evals,
                                         "count": len(rubric_evals)}}
     save(f"summary_{tag}", tag, summary)
     return summary
 
 
-def save_feedback_to_db(fb27, tag):
-    """Save 27B's per-model feedback to activity_log for feedback loop injection.
+def save_feedback_to_db(night_verify_feedback, tag):
+    """Save night_verify's per-model feedback to activity_log for feedback loop injection.
 
     Each role's feedback is saved as an activity_log entry with:
     - weaknesses + improvements → findings (edge_case patterns for _extract_findings)
@@ -1532,11 +1526,11 @@ def save_feedback_to_db(fb27, tag):
     if DRY_RUN:
         log("  [DRY] save_feedback_to_db() → simulated 1 entry")
         return 1  # trigger feedback loop for full dry-run coverage
-    if not fb27:
+    if not night_verify_feedback:
         return 0
 
     count = 0
-    for role_key, role_fb in fb27.items():
+    for role_key, role_fb in night_verify_feedback.items():
         if not isinstance(role_fb, dict):
             continue
         model = role_fb.get("model", "")
@@ -1557,12 +1551,12 @@ def save_feedback_to_db(fb27, tag):
                 "fix": str(fix)[:300],
             })
         verification_items = [
-            {"check": str(s)[:300], "result": "pass", "detail": "Strength confirmed in 27B review"}
+            {"check": str(s)[:300], "result": "pass", "detail": "Strength confirmed in night_verify review"}
             for s in strengths
         ]
 
-        title = f"27B feedback: {model} ({role})"
-        summary = f"27B review feedback for {model} ({role}): score={score}/100, {len(strengths)} strengths, {len(weaknesses)} weaknesses"
+        title = f"night_verify feedback: {model} ({role})"
+        summary = f"night_verify review feedback for {model} ({role}): score={score}/100, {len(strengths)} strengths, {len(weaknesses)} weaknesses"
 
         body = {
             "findings": findings,
@@ -1702,7 +1696,7 @@ def _read_pending_items(limit=5):
 
 
 def _build_p_context(turn, facts, body, day_review=None):
-    """Build P(30B) prompt context from turn + facts + MCP metadata + optional day_review."""
+    """Build P context from turn + facts + MCP metadata + optional day_review."""
     parts = [
         "=== TURN ===",
         f"User: {turn.get('user_turn', '')[:2000]}",
@@ -1741,7 +1735,7 @@ def _build_p_context(turn, facts, body, day_review=None):
         parts.extend([
             "",
             "=== DAY PRE-REVIEW REFERENCE ===",
-            f"  [note: day review by 7B+3B, may contain hallucinations]",
+            f"  [note: day review by day_p+day_r, may contain hallucinations]",
             f"  P_score={jr.get('P_score','?')} R_score={jr.get('R_score','?')}",
             f"  decision={jr.get('decision','?')}",
             f"  approved={jr.get('approved',[])}",
@@ -1765,8 +1759,8 @@ def _build_p_context(turn, facts, body, day_review=None):
 
 
 def _batch_p(items, rubric_append):
-    """P(30B) batch: load once, review all items."""
-    log(f"\n--- P(30B) Batch Review ({len(items)} items) ---")
+    """P batch: load once, review all items."""
+    log(f"\n--- P Batch Review ({len(items)} items) ---")
     if DRY_RUN:
         log("  [DRY] mock P batch")
         MOCK = [{"id": "M001", "severity": "medium", "category": "quality",
@@ -1800,8 +1794,8 @@ def _batch_p(items, rubric_append):
 
 
 def _batch_r(items, p_results, rubric_append):
-    """R(14B) batch: load once, reflect on all P findings."""
-    log(f"\n--- R(14B) Batch Reflection ({len(items)} items) ---")
+    """R(night_reflector) batch: load once, reflect on all P findings."""
+    log(f"\n--- R(night_reflector) Batch Reflection ({len(items)} items) ---")
     if DRY_RUN:
         log("  [DRY] mock R batch")
         MOCK = [{"id": "M001", "verdict": "accept", "reason": "Dry-run R verdict"}]
@@ -1829,8 +1823,8 @@ def _batch_r(items, p_results, rubric_append):
 
 
 def _batch_j(items, p_results, r_results, rubric_append):
-    """J(Codestral) batch: load once, score all P-R pairs."""
-    log(f"\n--- J(Codestral) Batch Scoring ({len(items)} items) ---")
+    """J(night_judge) batch: load once, score all P-R pairs."""
+    log(f"\n--- J(night_judge) Batch Scoring ({len(items)} items) ---")
     if DRY_RUN:
         log("  [DRY] mock J batch")
         MOCK = {"P_score": 25, "R_score": 22, "decision": "APPROVED",
@@ -1906,16 +1900,16 @@ def run_queue_mode(limit=5):
 
 # ── Main ──────────────────────────────────────────────────────────────
 
-def run_extract(with_rubric, mcp_model="Qwen7B"):
-    """Phase -1: 3B extract → Python verify → 7B MCP.
+def run_extract(with_rubric, mcp_model="day_mcp"):
+    """Phase -1: day_extract → Python verify → day_mcp MCP.
 
-    Pod A day (3B Q8_0 :8082) for extract + Pod B day (7B Q8_0 :8080) for MCP."""
-    log("\n--- Phase -1: 3B Extract + MCP ---")
+    Pod A (day_extract:8082) for extract + Pod B (day_mcp/day_p/day_j:8080) for MCP."""
+    log("\n--- Phase -1: day_extract + MCP ---")
     if DRY_RUN:
         log("  [DRY] Extract phase skipped")
         return
 
-    log("  Pod A day(3B:8082) + Pod B day(7B:8080) for MCP...")
+    log("  Pod A(day_extract:8082) + Pod B(day_mcp:8080)...")
     with open(MODE_FILE_B, "w") as f:
         f.write("MODE=day")
     with open(MODE_FILE_A, "w") as f:
@@ -1931,7 +1925,7 @@ def run_extract(with_rubric, mcp_model="Qwen7B"):
         log(f"  Day mode containers not ready: A={ok_a} B={ok_b}")
         slack_send(f":warning: Extract phase — day mode containers not ready")
         return
-    log(f"  :8082 ready (3B) + :8080 ready (3B/7B)")
+    log(f"  :8082 ready (day_extract) + :8080 ready (day)")
 
     from extract_pipeline import extract_pipeline
     result = extract_pipeline(
@@ -1955,26 +1949,26 @@ def main():
 
     if RESUME_PRJ:
         log("RESUME PRJ MODE")
-        log("기존 state 로드, Python 검증/30B 건너뛰고 P-R-J 1회 패스부터 재개\n")
+        log("기존 state 로드, Python/day_verify 건너뛰고 P-R-J 1회 패스부터 재개\n")
         resume_path = os.path.join(EXPER_DIR, "pipeline_state_r1_norubric.json")
         if not os.path.exists(resume_path):
             log(f"ERROR: resume state not found: {resume_path}")
             sys.exit(1)
-        slack_send(":repeat: *P-R-J 재개* — 30B verify 결과 유지, P-R-J 1회 패스부터 재시작")
+        slack_send(":repeat: *P-R-J 재개* — day_verify 결과 유지, P-R-J 1회 패스부터 재시작")
         t_all = time.monotonic()
         r1 = run_round(1, with_rubric=False, resume_state_path=resume_path)
     else:
         log("P-R-J 고정 역할 실험 시작")
-        log("파이프라인: 3B 추출 → Python 검증 → 7B 검증 → Rubric 평가 → P-R-J(P=30B,R=14B,J=Selene) → 27B 검증 → 피드백 루프(재검증)")
+        log("파이프라인: 추출 → Python 검증 → day_verify → Rubric 평가 → P-R-J(night_proposer,night_reflector,night_judge) → night_verify → 피드백 루프(재검증)")
         log("메모리 관리: phase 전환마다 podman stop -> 필요한 컨테이너만 시작 (Pod B 순차 swap)")
-        log("P-R-J: 30B(P) + Qwen2.5-14B(R) + SeleneMini Q8(J) + 7B Q8 verify + 27B Q4 verify\n")
+        log("P-R-J: night_proposer + night_reflector + night_judge + day_verify + night_verify\n")
         slack_send(
             ":hammer: *P-R-J 고정 역할 실험 시작*\n"
-            "3B추출 → Python검증 → 7B → P-R-J → 27B → 피드백루프 → 재검증"
+            "추출 → Python검증 → day_verify → P-R-J → night_verify → 피드백루프 → 재검증"
         )
         t_all = time.monotonic()
 
-        # Phase -1: 3B extract
+        # Phase -1: day_extract
         if "--skip-extract" not in sys.argv:
             run_extract(with_rubric=False)
         else:
@@ -1995,23 +1989,23 @@ def main():
             f" J={r.get('j_model','?')} → consensus={r.get('consensus','?')} {r.get('decision','?')}")
 
     # Rubric evaluation summary
-    rubric_meta = r1.get('27b', {}).get('phase2_rubric', {})
+    rubric_meta = r1.get('night_verify', {}).get('phase2_rubric', {})
     rubric_evals_list = rubric_meta.get('evaluations', [])
     if rubric_evals_list:
         scores = [r.get('weighted_score', 0) for r in rubric_evals_list if r.get('weighted_score') is not None]
         if scores:
             low_n = sum(1 for s in scores if s < 5.0)
             log(f"  Rubric: avg={sum(scores)/len(scores):.2f} low(<5.0)={low_n}/{len(scores)}")
-    v27b = r1.get('27b', {})
-    if v27b:
-        log(f"  27B verify: {v27b.get('verdict','?')} (confidence={v27b.get('confidence','?')})")
+    night_verify_result = r1.get('night_verify', {})
+    if night_verify_result:
+        log(f"  night_verify: {night_verify_result.get('verdict','?')} (confidence={night_verify_result.get('confidence','?')})")
 
     slack_send(
         f"[P-R-J] *Round 1 완료* (control)\n"
         f"Python verify: {r1.get('python_verify',{}).get('issues_found',0)} issues\n"
-        f"30B: {r1.get('30b',{}).get('verdict','?')} ({r1.get('30b',{}).get('confidence','?')})\n"
+        f"day_verify: {r1.get('day_verify',{}).get('verdict','?')} ({r1.get('day_verify',{}).get('confidence','?')})\n"
         f"P-R-J: {r1_prj[0].get('decision','?') if r1_prj else 'N/A'}\n"
-        + (f"27B: {v27b.get('verdict','?')} (conf={v27b.get('confidence','?')})\n" if v27b else "")
+        + (f"night_verify: {night_verify_result.get('verdict','?')} (conf={night_verify_result.get('confidence','?')})\n" if night_verify_result else "")
         + f"실행시간: {elapsed_total:.0f}분"
     )
 

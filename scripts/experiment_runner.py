@@ -350,11 +350,11 @@ def extract_metrics(stdout, phase, elapsed):
                 metrics["python_issues"] = int(m.group(1))
                 metrics["python_findings"] = int(m.group(2))
 
-        if "7B verdict=" in line:
+        if "day_verify verdict=" in line:
             m = re.search(r'verdict=(\S+)\s+confidence=(\S+)', line)
             if m:
-                metrics["v7b_verdict"] = m.group(1)
-                metrics["v7b_confidence"] = m.group(2)
+                metrics["day_verify_verdict"] = m.group(1)
+                metrics["day_verify_confidence"] = m.group(2)
 
         if "avg weighted_score=" in line:
             m = re.search(r'avg weighted_score=([\d.]+)', line)
@@ -375,16 +375,16 @@ def extract_metrics(stdout, phase, elapsed):
             if m2 and m2.group(1):
                 metrics["consensus"] = m2.group(1)
 
-        if "27B verdict=" in line:
+        if "night_verify verdict=" in line:
             m = re.search(r'verdict=(\S+)\s+confidence=(\S+)', line)
             if m:
-                metrics["v27b_verdict"] = m.group(1)
-                metrics["v27b_confidence"] = m.group(2)
-        if "27B (feedback)" in line:
+                metrics["night_verify_verdict"] = m.group(1)
+                metrics["night_verify_confidence"] = m.group(2)
+        if "night_verify (feedback)" in line:
             m = re.search(r'verdict=(\S+)\s+confidence=(\S+)', line)
             if m:
-                metrics["v27b_feedback_verdict"] = m.group(1)
-                metrics["v27b_feedback_confidence"] = m.group(2)
+                metrics["feedback_nv_verdict"] = m.group(1)
+                metrics["feedback_nv_confidence"] = m.group(2)
 
         if "feedback loop executed" in line.lower():
             metrics["feedback_executed"] = True
@@ -417,18 +417,18 @@ def send_phase_report(phase, metrics_path):
     lines = [f"*Phase {phase}* ({elapsed_min}분)"]
     if "python_issues" in m:
         lines.append(f"▸ Python verify: {m['python_issues']} issues / {m['python_findings']} findings")
-    if "v7b_verdict" in m:
-        lines.append(f"▸ 7B verify: *{m['v7b_verdict']}* (conf={m['v7b_confidence']})")
+    if "day_verify_verdict" in m:
+        lines.append(f"▸ day_verify: *{m['day_verify_verdict']}* (conf={m['day_verify_confidence']})")
     if "rubric_evaluated_count" in m:
         lines.append(f"▸ Rubric: {m['rubric_evaluated_count']} findings evaluated, avg={m.get('rubric_avg_score','?')}")
     if "P_score" in m:
         lines.append(f"▸ P-R-J: P={m['P_score']} R={m['R_score']} → *{m['decision']}*")
-    if "v27b_verdict" in m:
-        lines.append(f"▸ 27B: *{m['v27b_verdict']}* (conf={m['v27b_confidence']})")
+    if "night_verify_verdict" in m:
+        lines.append(f"▸ night_verify: *{m['night_verify_verdict']}* (conf={m['night_verify_confidence']})")
     if m.get("feedback_executed"):
-        fb_v = m.get("v27b_feedback_verdict", "?")
-        fb_c = m.get("v27b_feedback_confidence", "?")
-        lines.append(f"▸ Feedback loop: 27B re-verify *{fb_v}* (conf={fb_c})")
+        fb_v = m.get("feedback_nv_verdict", "?")
+        fb_c = m.get("feedback_nv_confidence", "?")
+        lines.append(f"▸ Feedback loop: night_verify re-verify *{fb_v}* (conf={fb_c})")
     if m.get("success"):
         lines.append(f":white_check_mark: Phase {phase} 성공")
     else:
@@ -532,8 +532,8 @@ def generate_comparison_report():
 
     for label, key in [
         ("소요시간(min)", None), ("P score", "P_score"), ("R score", "R_score"),
-        ("결정", "decision"), ("7B conf", "v7b_confidence"),
-        ("27B verdict", "v27b_verdict"), ("27B conf", "v27b_confidence"),
+        ("결정", "decision"), ("day_verify conf", "day_verify_confidence"),
+        ("night_verify verdict", "night_verify_verdict"), ("night_verify conf", "night_verify_confidence"),
         ("루브릭 평가", "rubric_evaluated_count"), ("피드백 실행", "feedback_executed"),
     ]:
         vals = []

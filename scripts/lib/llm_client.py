@@ -14,7 +14,7 @@ Usage::
         {"role": "user",   "content": "Build a CLI tool for …"},
     ]
     reply = call_llm(messages, model="Qwen3B")
-    data  = call_llm_json(messages, model="Qwen30B")
+    data  = call_llm_json(messages, model="Qwen7B")
 """
 
 import json
@@ -24,15 +24,46 @@ import urllib.request
 from typing import Any, Dict, List, Optional
 
 # ── Model registry ─────────────────────────────────────────────────────────
+# Physical models → port/temp/timeout.
+# Role aliases → `_model` key points to physical key.
+# Pipeline code only references role keys; change the `_model` value here
+# to swap models without touching any pipeline code.
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
+    # Physical models
     "Qwen3B":  {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 180},
     "Qwen30B": {"port": 8080, "temp": 0.22, "max_tokens": 2048, "timeout": 600},
     "Qwen7B":  {"port": 8080, "temp": 0.10, "max_tokens": 400,  "timeout": 480},
     "Qwen14B": {"port": 8080, "temp": 0.10, "max_tokens": 2048, "timeout": 600},
     "Qwen27B": {"port": 8081, "temp": 0.10, "max_tokens": 4096, "timeout": 1200},
     "Codestral":{"port": 8080, "temp": 0.10, "max_tokens": 4096, "timeout": 7200},
+
+    # Role aliases — pipeline code uses these; MODEL_REGISTRY is the single
+    # place to change when a model/port changes.
+    # Day pipeline — extract (:00/:30)
+    "day_extract": {"_model": "Qwen3B"},
+    "day_mcp":     {"_model": "Qwen7B"},
+
+    # Day pipeline — verify & rubric
+    "day_verify":  {"_model": "Qwen7B"},
+
+    # Day pipeline — classify (:15/:45) day pre-review
+    "day_p":       {"_model": "Qwen7B"},
+    "day_r":       {"_model": "Qwen3B"},
+    "day_j":       {"_model": "Qwen7B"},
+
+    # Night pipeline — prj_cycle batch review
+    "night_proposer":  {"_model": "Qwen30B"},
+    "night_reflector": {"_model": "Qwen14B"},
+    "night_judge":     {"_model": "Codestral"},
+    "night_verify":    {"_model": "Qwen27B"},
 }
+
+
+def resolve_model(name: str) -> str:
+    """Resolve role alias to physical model name. Pass-through if physical key."""
+    cfg = MODEL_REGISTRY.get(name)
+    return cfg["_model"] if cfg and "_model" in cfg else name
 
 # How long to cache feedback lookups (seconds)
 FEEDBACK_TTL = 300
@@ -56,7 +87,9 @@ def _get_feedback(model: str) -> List[Dict[str, str]]:
     from lib.feedback import get_feedback_for_model
 
     _feedback_cache = {}
-    for m in MODEL_REGISTRY:
+    for m, cfg in MODEL_REGISTRY.items():
+        if "_model" in cfg:
+            continue  # skip role aliases
         _feedback_cache[m] = get_feedback_for_model(m, max_gold=2, max_edge=2)
     _feedback_ts = now
     return _feedback_cache.get(model, [])
@@ -94,7 +127,7 @@ def call_llm(
 
     Args:
         messages:    Chat messages (system + user + …).
-        model:       Key in ``MODEL_REGISTRY`` (e.g. ``"Qwen30B"``).
+        model:       Key in ``MODEL_REGISTRY`` — physical ("Qwen7B") or role alias ("day_verify").
         max_tokens:  Override the registry default.
         temperature: Override the registry default.
         timeout:     HTTP timeout in seconds (override).
@@ -109,9 +142,13 @@ def call_llm(
     Raises:
         RuntimeError: On HTTP failure or empty response.
     """
+    # Resolve role alias → physical model
     cfg = MODEL_REGISTRY.get(model)
     if not cfg:
         raise ValueError(f"Unknown model: {model}. Known: {list(MODEL_REGISTRY)}")
+    if "_model" in cfg:
+        model = cfg["_model"]
+        cfg = MODEL_REGISTRY[model]
 
     messages = _inject_feedback(messages, model)
 

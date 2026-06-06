@@ -1,61 +1,64 @@
 last_checkpoint:
-  time: '2026-06-06T00:15:00.000000+00:00'
+  time: '2026-06-06T00:30:00.000000+00:00'
   summary: >
-    5-phase 2x2 factorial experiment 설계 완료.
-    Phase 0 (S=✗,R=OFF,F=OFF) → Phase 1 (S=✓,R=OFF,F=OFF) →
-    Phase 2 (S=✓,R=ON,F=OFF) → Phase 3 (S=✓,R=OFF,F=ON) →
-    Phase 4 (S=✓,R=ON,F=ON). 스냅샷 5개 + original 1개 준비 완료.
-    Phase 0 1차 실행 중 캔슬 (진행: rubric 평가 중, 7B ~2.3t/s).
-    transform_prj.py 완전 리팩터 (독립 플래그 조합).
-    클린 오리지널 복원 완료. 아직 실험 실행 안 함.
-    새 요청: 느려지는 원인 분석+최적화, 저녁에 실행 예정.
-  total_files: 2
+    GitHub 초기 커밋 + 푸시 완료 (devforgekor/devforge).
+    Statusline 컬러 임계값 설정 (60%미만 흰색, 60% 녹색, 70% 노란색, 80% 빨강).
+    Session 12 — 설계 리팩터 및 GitHub 저장소 초기화.
+  total_files: 5
   recent_files:
-  - experiment_runner.py (5-phase 지원, 2x2 비교 + marginal effect 분석)
-  - transform_prj.py (독립 플래그 리팩터, \n 버그 수정)
-  task: '5-phase 실험 설계 완료. 실행 전 최적화 대기. 저녁(KST 20:00+) 실행 예정.'
+  - handover.yaml, tasks.yaml
+  - experiment_runner.py (5-phase + 2x2 marginal analysis)
+  - transform_prj.py (independent flags --structural/--rubric/--feedback)
+  - claude-statusline.py (color thresholds)
+  task: '설정 완료, 모든 변경사항 GitHub 푸시됨. 5-phase 실험 실행 대기.'
 current_context:
-  in_progress: '설계 완료 — 실행 전'
-  day_mode: 'Pod A=3B Q8_0 :8082, Pod B=7B Q8_0 :8080'
-  experiment_snapshots:
-  - 'phase_original/ — 순수 오리지널 (structural=ON, rubric=ON, feedback=ON), 백업용'
-  - 'phase0/ — 기준선 (structural=OFF, rubric=OFF, feedback=OFF)'
-  - 'phase1/ — 구조개선 (structural=ON, rubric=OFF, feedback=OFF)'
-  - 'phase2/ — 구조+루브릭 (structural=ON, rubric=ON, feedback=OFF)'
-  - 'phase3/ — 구조+피드백 (structural=ON, rubric=OFF, feedback=ON)'
-  - 'phase4/ — 풀스택 (structural=ON, rubric=ON, feedback=ON)'
-  compaction_log:
-  - '2026-06-05: Session 11 — 5-phase 2x2 factorial experiment 설계'
-  - '2026-06-05: Phase 0 1차 실행 중단 (rubric OFF여야 하는데 ON으로 실행 중이었음)'
-  - '2026-06-05: 설계 오류 발견 — 기준선에 rubric ON이면 올바른 비교 불가'
-  - '2026-06-05: transform_prj.py 리팩터: --structural / --rubric-off/on / --feedback-off/on'
-  - '2026-06-05: 5-phase로 확장 (Phase 3=구조+피드백, Phase 4=구조+루브릭+피드백)'
-  - '2026-06-05: \n vs 실제 개행문자 불일치 버그 수정, 클린 오리지널 복원'
+  in_progress: '설계 완료, GitHub 푸시 완료'
+  day_mode: 'Pod B=7B Q8_0 :8080 가동 중 (~13GB avail)'
+  recent_commits:
+  - '89ac783 Initial commit: full DevForge pipeline and experiment framework'
+  - '리모트: git@github.com:devforgekor/devforge.git (secrets.env 저장 완료)'
+  changed_files:
+  - '.gitignore — pycache, 백업, 실험 데이터 제외'
+  - 'handover.yaml — 세션 상태 업데이트'
+  - 'docs/tasks.yaml — 6개 태스크 정리'
+  - 'scripts/experiment_runner.py — 5-phase 2x2 factorial + marginal effect 분석'
+  - 'scripts/transform_prj.py — 독립 플래그 리팩터'
+  - 'scripts/prj_cycle.py — _reclaim_memory() 포함 전체 파이프라인'
+  - 'scripts/15m_cycle.sh, nightly_batch.sh — 배치 스크립트'
+  - 'scripts/lib/* — DB, LLM 클라이언트, 파서, MCP 컨슈머'
+  - 'containers/* — Quadlet 컨테이너 설정'
+  - 'docs/* — 아키텍처, 설계 문서, 도메인 용어집'
+  - '_archive/* — 이전 세션/설계 백업'
+  - 'scripts/_archive/phase{0,1,2,3,4}_original/* — 실험 스냅샷'
+  - 'claude-statusline.py — 컨텍스트바 색상 임계값'
+compaction_log:
+  - '2026-06-05: Session 12 — GitHub 저장소 초기화 및 푸시'
+  - '2026-06-05: Statusline 색상 설정 (60%미만 흰색/60% 녹색/70% 노랑/80% 빨강)'
+  - '2026-06-05: transform_prj.py 독립 플래그 리팩터, 5개 phase 스냅샷 준비'
+  - '2026-06-05: experiment_runner.py 5-phase + 2x2 marginal effect 분석 완료'
+  - '2026-06-05: Phase 0 1차 실행 중단 (루브릭 OFF 없는 설계 오류 수정 후 재설계)'
 next_steps:
-  - '[P0] 5-phase 실험 전체 실행: nohup python3 experiment_runner.py > /tmp/experiment_run.log 2>&1 &'
-  - '[P1] 속도 최적화 분석 — 7B Q8_0 ~2.3t/s ARM bottleneck, MCP 4B 교체 검토'
-  - '[P1] Prompt 비대화 원인 분석 — SYS_P/R/J/V27 RUBRIC + scale + evidence 누적'
+  - '[P0] 5-phase 실험 전체 실행: nohup python3 experiment_runner.py > /tmp/experiment_run.log 2>&1 & — 저녁 KST 20:00+ 예정'
+  - '[P1] 속도 최적화 분석 — 7B Q8_0 ~2.3t/s, MCP 4B 교체 검토, SYS prompt 비대화 분석'
   - '[P1] J(Selene) 대체 모델 결정 — feedback loop 차단'
-  - '[P2] extract MCP 파싱 문제 — parse_failed 개선'
+  - '[P2] extract MCP parse_failed 개선'
 decisions:
-  - '[2026-06-05] 5-phase 2x2 factorial 최종 설계: 0(기준선) / 1(구조) / 2(구조+R) / 3(구조+F) / 4(구조+R+F)'
-  - '[2026-06-05] 변환 플래그 독립화: --structural, --rubric-off/on, --feedback-off/on 자유 조합'
-  - '[2026-06-05] 실험 스냅샷 재현성: phase_original/에서 항상 빌드 (contamination 방지)'
-  - '[2026-06-05] Phase 0 기준선: structural=OFF, rubric=OFF, feedback=OFF (순수 baseline)'
-  - '[2026-06-05] 비교 분석: P1→P2=rubric효과(F=OFF), P1→P3=feedback효과(R=OFF), P2→P4=feedback(with R), P3→P4=rubric(with F)'
+  - '[2026-06-05] 5-phase 2x2 factorial 최종 설계: 0(기준선:S✗R✗F✗) → 1(구조:S✓R✗F✗) → 2(구조+R:S✓R✓F✗) → 3(구조+F:S✓R✗F✓) → 4(풀스택:S✓R✓F✓)'
+  - '[2026-06-05] 변환 플래그 독립화: --structural / --rubric-off/on / --feedback-off/on'
+  - '[2026-06-05] GitHub 리모트: git@github.com:devforgekor/devforge.git (secrets.env 저장)'
+  - '[2026-06-05] Statusline: 60%미만 흰색, 60% 녹색, 70% 노랑, 80% 빨강'
 known_issues:
-  - '7B Q8_0 ARM 4코어 ~2.3 t/s 생성 속도 — 48 findings rubric 평가 30-40분 소요'
-  - '27B Q4_K_M(16GB) on 22GB RAM — OOM 리스크 존재. 3단계 recover_and_restart() 구현 완료'
-  - 'extract MCP parse_failed 다수 — 7B Q8_0 JSON 포맷 정확도 문제'
+  - '7B Q8_0 ARM 4코어 ~2.3 t/s — 48 findings rubric 평가 30-40분'
+  - '27B Q4_K_M(16GB) on 22GB RAM — OOM 리스크. recover_and_restart() 3단계 에스컬레이션'
   - 'J(Selene) JSON 출력 불량 — feedback loop 차단'
-  - '실험 미실행 상태 (설계만 완료) — 저녁 KST 20:00+ 실행 예정'
-  - '13GB free — 컨테이너 가동 중 (7B Q8_0 ~15GB)'
-  - 'prj_cycle.py 현재 phase0 (rubric/feedback OFF) 상태 — 실험 전 phase0에서 실행'
-  - 'consolidated_input_compact.json (48 findings, old data) 사용 — fresh extract 아님'
+  - '실험 미실행 (설계만 완료) — 저녁 KST 20:00+ 예정'
+  - 'Pod B(7B)만 가동, 13GB available — 실험 전 phase0 snapshot으로 복원 완료'
 completed_log:
-  - '[2026-06-05] 5-phase 2x2 factorial experiment 설계 완료'
-  - '[2026-06-05] transform_prj.py 독립 플래그 리팩터 (--structural, --rubric, --feedback)'
-  - '[2026-06-05] transform_prj \n 개행문자 버그 수정 (\\n\\n → 실제 newline)'
-  - '[2026-06-05] experiment_runner.py 5-phase 지원, 2x2 marginal effect 분석 추가'
+  - '[2026-06-05] GitHub devforgekor/devforge 초기 푸시 완료 (force push)'
+  - '[2026-06-05] .gitignore 설정 (pycache, 백업, 실험 데이터 제외)'
+  - '[2026-06-05] Statusline 색상 임계값 설정'
+  - '[2026-06-05] secrets.env에 GITHUB_REMOTE 저장'
+  - '[2026-06-05] transform_prj.py 독립 플래그 리팩터 완료'
+  - '[2026-06-05] experiment_runner.py 5-phase + 2x2 marginal effect 분석 완료'
   - '[2026-06-05] 모든 스냅샷 clean original에서 재빌드 완료'
-  - '[2026-06-05] Phase 0 1차 실행 중단 (실험 재설계로 인한 캔슬)'
+  - '[2026-06-05] Phase 0 1차 실행 중단 (설계 오류 수정)'

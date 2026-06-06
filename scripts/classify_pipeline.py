@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Day pre-review: P(7B)→R(3B)→J(7B) for night prepill defense.
+"""Day pre-review: P(day_p)→R(day_r)→J(day_j) for night prepill defense.
 
 Each cycle reads unclassified turns (created_at > classify checkpoint)
 that already have extract facts in review_facts.
 
 Flow:
-  Phase P (7B):  turn + facts → findings (JSON, <300 lines)
-  Phase R (3B):  findings → accept/reject verdicts (JSON, <300 lines)
-  Phase J (7B):  findings + verdicts → score + decision (JSON, <300 lines)
+  Phase P (day_p):  turn + facts → findings (JSON, <300 lines)
+  Phase R (day_r):  findings → accept/reject verdicts (JSON, <300 lines)
+  Phase J (day_j):  findings + verdicts → score + decision (JSON, <300 lines)
   Save:          activity_log type='day_review', queue_status='pre_reviewed'
   Advance:       checkpoint on success, marker on failure
 
-Models: Pod B 7B Q8_0 (:8080) for P+J, Pod A 3B Q8_0 (:8082) for R.
+Models: day_p + day_j on Pod B (:8080), day_r on Pod A (:8082).
 Both already running in day mode — no container management needed.
 
 Usage:
@@ -255,7 +255,7 @@ def _call_json(messages, model, max_tokens=MAX_TOKENS, label=""):
 # ── Phases ────────────────────────────────────────────────────────────
 
 def _phase_p(turn, facts):
-    """P(7B): Generate findings from turn + facts."""
+    """P(day_p): Generate findings from turn + facts."""
     ut = turn.get("user_turn", "") or ""
     th = turn.get("thinking", "") or ""
     tx = turn.get("text", "") or ""
@@ -282,17 +282,17 @@ def _phase_p(turn, facts):
     result = _call_json(
         [{"role": "system", "content": SYS_P},
          {"role": "user", "content": ctx}],
-        model="Qwen7B", label="P_classify"
+        model="day_p", label="P_classify"
     )
     findings = result.get("findings", []) if result else []
-    log(f"  P(7B): {len(findings)} findings")
+    log(f"  P(day_p): {len(findings)} findings")
     return findings
 
 
 def _phase_r(findings):
-    """R(3B): Reflect on P's findings."""
+    """R(day_r): Reflect on P's findings."""
     if not findings:
-        log(f"  R(3B): no findings to review")
+        log(f"  R(day_r): no findings to review")
         return []
 
     ctx = f"Review these findings:\n{json.dumps(findings, ensure_ascii=False, indent=2)[:4000]}"
@@ -305,15 +305,15 @@ def _phase_r(findings):
     result = _call_json(
         [{"role": "system", "content": SYS_R},
          {"role": "user", "content": ctx}],
-        model="Qwen3B", label="R_classify"
+        model="day_r", label="R_classify"
     )
     verdicts = result.get("verdicts", []) if result else []
-    log(f"  R(3B): {len(verdicts)} verdicts")
+    log(f"  R(day_r): {len(verdicts)} verdicts")
     return verdicts
 
 
 def _phase_j(findings, verdicts):
-    """J(7B): Score and decide."""
+    """J(day_j): Score and decide."""
     ctx_parts = [
         f"Findings ({len(findings)}):\n",
         json.dumps(findings, ensure_ascii=False, indent=2)[:2000],
@@ -334,14 +334,14 @@ def _phase_j(findings, verdicts):
     result = _call_json(
         [{"role": "system", "content": SYS_J},
          {"role": "user", "content": "\n".join(ctx_parts)}],
-        model="Qwen7B", label="J_classify"
+        model="day_j", label="J_classify"
     )
     if result and result.get("decision") in ("APPROVED", "REJECT"):
-        log(f"  J(7B): P_score={result.get('P_score','?')} "
+        log(f"  J(day_j): P_score={result.get('P_score','?')} "
             f"R_score={result.get('R_score','?')} "
             f"decision={result.get('decision','?')}")
     else:
-        log(f"  J(7B): no valid result")
+        log(f"  J(day_j): no valid result")
         result = None
     return result
 
@@ -349,11 +349,11 @@ def _phase_j(findings, verdicts):
 # ── Main pipeline ─────────────────────────────────────────────────────
 
 def classify_pipeline(limit=BATCH_LIMIT):
-    """Day pre-review: P(7B)→R(3B)→J(7B) for each unclassified turn."""
+    """Day pre-review: P(day_p)→R(day_r)→J(day_j) for each unclassified turn."""
     t_start = time.monotonic()
 
     print(f"\n{'=' * 60}")
-    print("Day Pre-Review Pipeline — P(7B) → R(3B) → J(7B)")
+    print("Day Pre-Review Pipeline — P(day_p) → R(day_r) → J(day_j)")
     if DRY_RUN:
         print("  [DRY RUN] No writes to DB")
     print(f"{'=' * 60}")
@@ -393,7 +393,7 @@ def classify_pipeline(limit=BATCH_LIMIT):
         facts = _get_turn_facts(tid)
         log(f"  facts: {len(facts)}")
 
-        # Phase P: 7B findings
+        # Phase P: day_p findings
         findings = _phase_p(turn, facts)
 
         # Python dedup before R (evidence-based, zero hallucination)
@@ -408,10 +408,10 @@ def classify_pipeline(limit=BATCH_LIMIT):
             log(f"  dedup: {len(findings)} → {len(deduped)} (removed {len(findings)-len(deduped)})")
         findings = deduped
 
-        # Phase R: 3B verdicts
+        # Phase R: day_r verdicts
         verdicts = _phase_r(findings)
 
-        # Phase J: 7B score
+        # Phase J: day_j score
         j_result = _phase_j(findings, verdicts)
 
         if not j_result:

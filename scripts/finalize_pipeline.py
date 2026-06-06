@@ -15,7 +15,7 @@ prj_result = prj_results[0] if prj_results else {}
 rub_eval = state.get('rubric_evaluation', {}).get('evaluations', [])
 v27 = state.get('27b_verify', {})
 py_v = state.get('python_verify', {})
-v7 = state.get('30b_verify', {})
+v7 = state.get('7b_verify', {})
 
 rubric_scores = [r.get('weighted_score', 0) for r in rub_eval if r.get('weighted_score') is not None]
 rubric_avg = sum(rubric_scores) / len(rubric_scores) if rubric_scores else 0

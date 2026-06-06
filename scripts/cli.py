@@ -221,7 +221,7 @@ MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
 MODE_MAP = {
-    "day":     ("day",      "day"),      # Pod A 3B(:8082) + Pod B 30B(:8080)
+    "day":     ("day",      "day"),      # Pod A 3B(:8082) + Pod B 7B(:8080)
     "review":  ("review-r1", "review-qw"), # Pod A R1-8B(:8083) + Pod B Qwen7B(:8080)
     "verify":  ("verify",    "verify"),   # Pod B 27B(:8081), Pod A 정지 (메모리 확보)
 }
@@ -404,7 +404,7 @@ def cmd_extract(args):
         turn_id=getattr(args, "turn_id", None),
         limit=args.limit,
         dry_run=args.dry_run,
-        mcp_model=getattr(args, "mcp_model", "Qwen30B"),
+        mcp_model=getattr(args, "mcp_model", "day_mcp"),
     )
     print(f"  processed: {result['processed']}")
     print(f"  failed:    {result['failed']}")
@@ -660,8 +660,8 @@ async def main():
     p_extract.add_argument("--turn-id", help="Process a specific turn UUID")
     p_extract.add_argument("--limit", "-n", type=int, default=100, help="Max turns to process")
     p_extract.add_argument("--dry-run", action="store_true", help="Simulate without DB writes")
-    p_extract.add_argument("--mcp-model", default="Qwen30B",
-                           help="Model for MCP fields generation (default: Qwen30B)")
+    p_extract.add_argument("--mcp-model", default="day_mcp",
+                           help="Model for MCP fields generation (default: day_mcp)")
 
     p_mcp = sub.add_parser("mcp-consume", help="Format MCP metadata from review_facts for MCP tools")
     p_mcp.add_argument("--limit", "-n", type=int, default=50)

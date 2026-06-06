@@ -42,7 +42,7 @@ v27_res = {
     "reasoning": "P-R-J cycle complete with high consensus. R handoff comprehensive. 27B model not viable on current hardware (16GB Q4_K_M exceeds 22GB RAM). Synthetic approval based on P-R-J results.",
     "handoff_comparison": {"better_handoff": "llm_r", "reasoning": "LLM-R handoff includes rationale per finding. Python handoff deterministic but less contextual."},
     "feedback": {
-        "P_Qwen30B": {"model": "Qwen30B", "role": "proposer", "score": prj_result.get("P_score", 24),
+        "P_Qwen7B": {"model": "Qwen7B", "role": "proposer", "score": prj_result.get("P_score", 24),
             "strengths": ["Comprehensive finding coverage", "Good severity classification"],
             "weaknesses": ["Some findings could be more specific"],
             "improvements": ["Add more code-level evidence per finding"]},
@@ -147,7 +147,7 @@ summary = {
     "severity": state['input'].get('severity_distribution', {}),
     "phases": {
         "phase0_python_verify": {"issues": 0, "total": len(findings)},
-        "phase1_7b_verify": {"verdict": state.get("30b_verify",{}).get("final_verdict","?"), "confidence": state.get("30b_verify",{}).get("confidence",0)},
+        "phase1_7b_verify": {"verdict": state.get("7b_verify",{}).get("final_verdict","?"), "confidence": state.get("7b_verify",{}).get("confidence",0)},
         "phase2_rubric": {"avg_score": round(rubric_avg,2), "low_count": rubric_low, "total": len(rub_eval)},
         "phase3_prj": {"P_score": prj_result.get("P_score"), "R_score": prj_result.get("R_score"), "consensus": prj_result.get("consensus"), "decision": prj_result.get("decision")},
         "phase4_27b": {"verdict": v27v, "confidence": c27, "synthetic": True},
@@ -160,7 +160,7 @@ print(f'\n{"="*60}')
 print('E2E Pipeline Complete!')
 print(f'{ "="*60}')
 print(f"  Phase 0 (Python):  ✅ PASS ({len(findings)} findings)")
-print(f'  Phase 1 (7B):      ✅ {state.get("30b_verify",{}).get("final_verdict","?")} (conf={state.get("30b_verify",{}).get("confidence",0)})')
+print(f'  Phase 1 (7B):      ✅ {state.get("7b_verify",{}).get("final_verdict","?")} (conf={state.get("7b_verify",{}).get("confidence",0)})')
 print(f'  Phase 2 (Rubric):  ✅ avg={rubric_avg:.2f} low={rubric_low}/{len(rub_eval)}')
 print(f'  Phase 3 (P-R-J):   ✅ P={prj_result.get("P_score")} R={prj_result.get("R_score")} → consensus={prj_result.get("consensus")}')
 print(f'  Phase 4 (27B):     ⚠️ synthetic (hw limit) | verdict={v27v} conf={c27}')

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 15m_cycle.sh — 30-min cycle with two phases
 #   $1 = extract  (:00/:30) → DuckDNS + worklog + extract_pipeline
-#   $1 = classify (:15/:45) → 분류 작업 (TBD)
+#   $1 = classify (:15/:45) → 주간 사전검토 P(7B)→R(3B)→J(7B)
 # Skips during nightly pipeline (MODE=night).
 
 set -o pipefail
