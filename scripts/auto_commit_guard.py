@@ -47,8 +47,8 @@ def main():
 
     # 3. No record found → auto-commit safety net
     _git(["add", "-A"])
-    ts = datetime.now(KST).strftime("%Y-%m-%dT%H:%M")
-    result = _git(["commit", "-m", f"[auto] unlogged session {ts}"])
+    utc_ts = datetime.now(KST).strftime("%Y-%m-%dT%H:%M")
+    result = _git(["commit", "-m", f"[auto] unlogged session {utc_ts}"])
 
     if result:
         # Write warning for next session

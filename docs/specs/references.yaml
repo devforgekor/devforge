@@ -47,7 +47,7 @@ prompt_optimization:
 model_serving:
   - name: "llama.cpp"
     url: "https://github.com/ggml-org/llama.cpp"
-    description: "GGUF. DevForge primary runtime (32B IQ4_XS, 14B Q8_0)."
+    description: "GGUF. DevForge primary runtime (27B Q4_K_M, 30B A3B, 14B Q8_0)."
 
   - name: "Ollama"
     url: "https://github.com/ollama/ollama"

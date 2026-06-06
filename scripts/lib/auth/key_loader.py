@@ -42,7 +42,7 @@ def load_api_keys(provider_prefix: str = "GEMINI") -> list:
         return []
 
     # Import here to avoid circular dependency — decrypt lives in same package
-    from lib.crypto import decrypt_data
+    from lib.auth.api_key_cipher import decrypt_data
 
     keys = []
     for item in keys_str.split(","):

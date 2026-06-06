@@ -90,3 +90,39 @@ def clean(text: str) -> str:
     text = text.replace('\x00', '').replace('\r', '')
     return text.strip()
 
+
+def truncate_at_boundary(text: Optional[str], max_chars: int) -> str:
+    """Truncate text at the last sentence boundary (. ? ! …) within max_chars.
+
+    Falls back to last word boundary (space), then hard truncation.
+    Returns "" for None/empty/whitespace-only/zero-max_chars input.
+    """
+    if not text:
+        return ""
+    if max_chars <= 0:
+        return ""
+
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    if len(stripped) <= max_chars:
+        return stripped
+
+    best = -1
+    for i, ch in enumerate(stripped):
+        if ch not in '.?!…' or i >= max_chars:
+            continue
+        if ch == '…':
+            best = i + 1
+        elif i + 1 == len(stripped) or stripped[i + 1] == ' ':
+            best = i + 1
+
+    if best > 0:
+        return stripped[:best].rstrip()
+
+    last_space = stripped.rfind(' ', 0, max_chars)
+    if last_space > 0:
+        return stripped[:last_space]
+
+    return stripped[:max_chars]
+

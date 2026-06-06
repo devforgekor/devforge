@@ -1,8 +1,11 @@
 #!/bin/bash
 # 15m_cycle.sh — 30-min cycle with two phases
-#   $1 = extract  (:00/:30) → DuckDNS + worklog + pipelines/extract
+#   $1 = extract  (:00/:30) → code-structure sync + DuckDNS + worklog + pipelines/extract
 #   $1 = classify (:15/:45) → 주간 사전검토 P(day_p)→R(day_r)→J(day_j)
 # Skips during nightly pipeline (MODE=night).
+#
+# code-structure sync: hash guard — regenerates code-structure.yaml only when
+# scripts/ directory layout changed (files added/removed/renamed).
 
 set -o pipefail
 
@@ -19,6 +22,13 @@ fi
 
 case "$PHASE" in
     extract)
+        # ── Code-structure sync (hash guard) ──────────────────────────
+        if python3 /opt/projects/server/scripts/gen_architecture.py --check-structure 2>&1; then
+            echo "[$(LOG_TS)] code-structure OK"
+        else
+            echo "[$(LOG_TS)] code-structure FAILED" >&2
+        fi
+
         # ── DuckDNS DDNS update ─────────────────────────────────────────
         if curl -s -o /dev/null -w "%{http_code}" \
             "https://www.duckdns.org/update?domains=devforgekor&token=776d9654-5af7-4814-8a8d-8f6183e5e2f7&ip=&verbose=true" \
@@ -29,10 +39,10 @@ case "$PHASE" in
         fi
 
         # ── Worklog auto-generation ─────────────────────────────────────
-        if python3 /opt/projects/server/scripts/lib/worklog_generator.py 2>&1; then
-            echo "[$(LOG_TS)] lib/worklog_generator OK"
+        if python3 /opt/projects/server/scripts/pipelines/worklog_generator.py 2>&1; then
+            echo "[$(LOG_TS)] pipelines/worklog_generator OK"
         else
-            echo "[$(LOG_TS)] lib/worklog_generator FAILED" >&2
+            echo "[$(LOG_TS)] pipelines/worklog_generator FAILED" >&2
         fi
 
         # ── Fact extraction ────────────────────────────────────────────

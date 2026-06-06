@@ -1,0 +1,12 @@
+{
+  "total_elapsed_s": 1.5,
+  "phases_run": [
+    3
+  ],
+  "results": {
+    "phase3": {
+      "phase": 3,
+      "error": "LLM call failed"
+    }
+  }
+}

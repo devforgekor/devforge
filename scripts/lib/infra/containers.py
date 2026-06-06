@@ -18,15 +18,23 @@ def discover_services() -> list:
     def is_podman_transient_unit(name):
         return bool(re.search(r"healthcheck|conmon|run-[0-9a-f]{8,}", name))
 
-    known_user = {"postgres", "devforge-backup", "devforge-restore-test"}
+    # Auto-discover user services: container pods + devforge-* services with timer
+    timer_names = set()
+    for line in _run_lines(["systemctl", "--user", "list-unit-files", "--no-legend", "--type=timer"]):
+        if line.strip():
+            timer_names.add(line.strip().split()[0].replace(".timer", ""))
+
     for line in _run_lines(["systemctl", "--user", "list-unit-files", "--no-legend", "--type=service"]):
         if not line.strip():
             continue
         name = line.strip().split()[0].replace(".service", "")
         if is_podman_transient_unit(name):
             continue
-        if name.startswith("container-") or name in known_user:
+        if name.startswith("container-"):
             display = name.removeprefix("container-")
+            services.append((name, display, "user"))
+        elif name.startswith("devforge-") and name in timer_names:
+            display = name.removeprefix("devforge-").replace("-", " ")
             services.append((name, display, "user"))
 
     known_system = {"caddy", "netdata"}

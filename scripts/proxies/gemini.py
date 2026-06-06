@@ -21,7 +21,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Optional
 
-from lib.key_rotator import KeyRotator
+from lib.auth.key_rotator import KeyRotator
 from lib.auth.key_loader import load_api_keys, STATE_FILE
 
 LISTEN_HOST = "127.0.0.1"

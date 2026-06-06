@@ -12,7 +12,7 @@ Modes:
   debate      → 30B Draft + 3B Reviewer debate      (Pod A + Pod B:3B)
   review      → 30B Draft + 14B/R1-8B Review        (Pod A + Pod B:review)
   cooperative → Azure spot VMs multi-agent           (remote)
-  verify      → 32B standalone final verification    (Pod B:32B only)
+  verify      → 27B standalone final verification    (Pod B:27B)
   general     → quick Q&A, no specialist needed      (any lightweight)
 
 Usage:
@@ -58,7 +58,7 @@ You decide WHICH workflow to run. You do NOT write, review, or modify code.
 - "debate"     : multi-perspective debate → 30B Draft + 3B Reviewer
 - "review"     : systematic code review → 30B Draft + 14B/R1-8B Reviewer
 - "cooperative": complex multi-agent task → Azure spot VMs (remote)
-- "verify"     : final quality gate check → 32B standalone verification
+- "verify"     : final quality gate check → 27B standalone verification
 - "general"    : quick Q&A, no specialist needed → lightweight model
 
 [DISPATCH RULES]

@@ -73,10 +73,10 @@ bounded_contexts:
         definition: "A Podman Quadlet container running a llama.cpp server with one or more GGUF models."
         related_files: ["blueprint.yaml", "state.yaml"]
       - term: "Pod A (devforge-qwen)"
-        definition: "Qwen3-4B inference Pod. Day mode: 3B operator on :8082. Night mode: varies."
+        definition: "Qwen2.5-Coder-3B operator Pod. Day mode: 3B on :8082. review-r1 mode: R1-8B on :8083."
         related_files: ["blueprint.yaml"]
       - term: "Pod B (devforge-swap)"
-        definition: "Mode-switchable Pod. Day: 30B on :8080. Night: transitions through 7B→14B→27B→32B per phase."
+        definition: "Mode-switchable Pod. Day: 30B on :8080. Night: transitions through 7B→14B→27B per phase."
         related_files: ["blueprint.yaml", "nightly_batch.sh"]
       - term: "Mode"
         definition: "Operational mode controlling which model runs in each Pod: day (normal ops), night (batch pipeline)."
@@ -99,8 +99,8 @@ bounded_contexts:
         definition: "GET /health on llama.cpp server. Returns 200 when model is loaded and ready."
         related_files: ["nightly_batch.sh:wait_for_model"]
       - term: "RateEstimator"
-        definition: "Dynamic timeout calculator: timeout = prompt_tokens/prompt_rate + max_tokens/gen_rate + buffer."
-        related_files: ["lib/llm/rate_estimator.py", "code_mod_pipeline.py"]
+        definition: "RateEstimator dynamic timeout calculator: prompt_tokens/prompt_rate + max_tokens/gen_rate + buffer."
+        related_files: ["lib/llm/rate_estimator.py"]
 
   - id: 4
     name: "Review & Verification Pipeline"
@@ -114,9 +114,6 @@ bounded_contexts:
       - term: "27B Verify (Phase 5)"
         definition: "Production final gate. Qwen 27B decides approved|rejected|escalate on reviewed items."
         related_files: ["review_consumer.py", "nightly_batch.sh"]
-      - term: "32B Test Verify (Phase 5b)"
-        definition: "Experimental parallel verify using 32B. Runs alongside Phase 5."
-        related_files: ["test_review_consumer.py"]
       - term: "DeepSeek Audit (Phase 7)"
         definition: "Cloud API audit. DeepSeek Pro re-verifies 27B reasoning after day mode restored."
         related_files: ["proxy_reviewer.py", "nightly_batch.sh"]
@@ -139,26 +136,11 @@ bounded_contexts:
         related_files: ["review_pipeline_3model.py"]
 
   - id: 5
-    name: "Code Modification Pipeline"
+    name: "Code Modification Pipeline (Removed 2026-06-06)"
     terms:
       - term: "Code Mod Pipeline"
-        definition: "4-stage pipeline for automated code changes: ANALYZE→PLAN→IMPLEMENT→PACKAGE. Uses 32B model."
-        related_files: ["code_mod_pipeline.py"]
-      - term: "Stage 1: ANALYZE"
-        definition: "Identify affected code sections, change type, dependencies."
-        related_files: ["code_mod_pipeline.py"]
-      - term: "Stage 2: PLAN"
-        definition: "Design minimal change approach, estimate impact."
-        related_files: ["code_mod_pipeline.py"]
-      - term: "Stage 3: IMPLEMENT"
-        definition: "Produce unified diff."
-        related_files: ["code_mod_pipeline.py"]
-      - term: "Stage 4: PACKAGE"
-        definition: "JSON package for downstream review."
-        related_files: ["code_mod_pipeline.py"]
-      - term: "Task File"
-        definition: "YAML spec for code modification tasks (code_mod_test_tasks.yaml, 16 tasks T01-T16)."
-        related_files: ["code_mod_test_tasks.yaml"]
+        definition: "4-stage pipeline for automated code changes: ANALYZE→PLAN→IMPLEMENT→PACKAGE. Removed — code_mod.py deleted."
+        related_files: []
 
   - id: 6
     name: "LLM Debate System"
@@ -241,7 +223,7 @@ bounded_contexts:
     name: "Scheduling & Automation"
     terms:
       - term: "Nightly Batch"
-        definition: "KST 03:00 (UTC 18:00) pipeline: Phase 4(review)→5(27B verify)→5b(32B test)→6(restore day)→7(DeepSeek audit)."
+        definition: "KST 03:00 (UTC 18:00) pipeline: Phase 4(review)→5(27B verify)→6(restore day)→7(DeepSeek audit)."
         related_files: ["nightly_batch.sh"]
       - term: "Timer Chain"
         definition: "Sequential execution: nightly→backup→summarizer. Each starts next via systemctl start. Sentinel files prevent duplicates."
@@ -277,9 +259,9 @@ bounded_contexts:
       - term: "Handover"
         definition: "Session-to-session state transfer — decisions, known_issues, current_context, next_steps."
         related_files: ["handover.yaml", "update_handover.py"]
-      - term: "Kanban (tasks.yaml)"
-        definition: "Task tracking: todo → in_progress → done (or blocked). Max 1 in_progress at a time."
-        related_files: ["plans/tasks.yaml"]
+      - term: "Kanban (DB tasks)"
+        definition: "Task tracking: todo → in_progress → done (or blocked). Max 1 in_progress at a time. SSOT in DB."
+        related_files: ["CLAUDE.yaml"]
       - term: "MOTD"
         definition: "Message of the Day — system status on SSH login."
         related_files: ["motd_gen.py"]

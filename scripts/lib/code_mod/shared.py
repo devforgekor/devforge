@@ -64,8 +64,8 @@ def extract_json_from_llm_response(llm_result: tuple) -> dict:
 
 def save_result(data: dict, prefix: str, task_id: int, suffix: str = ""):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    name = f"{prefix}_task{task_id:02d}{suffix}_{ts}.json"
+    utc_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    name = f"{prefix}_task{task_id:02d}{suffix}_{utc_ts}.json"
     with open(OUTPUT_DIR / name, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     return name

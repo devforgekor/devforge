@@ -9,7 +9,7 @@
 - [x] Python CLI (search/save/recent/worklog add/recent/search)
 - [x] GET /stats (7-section dashboard)
 - [x] daily pg_dump + monthly restore test
-- [x] worklog_entries DB + tasks.yaml Kanban task tracker
+- [x] worklog_entries DB + DB tasks Kanban task tracker (cli.py task list)
 - [x] auto_commit_guard.py auto-commit + session_context.py context injection
 - [ ] collect_turns.py 15min auto-collect (Claude Code + Copilot sessions)
 - [x] link_turns.py KST nightly matching + orphan detection
@@ -19,11 +19,11 @@
 
 ## Phase 1.5: LLM Inference Infrastructure (Complete, 2026-05-23)
 
-- [ ] 2-Container architecture — Podman A(Qwen3-4B:8080) + Podman B(mode-switchable:8081-8082)
+- [ ] 2-Container architecture — Podman A(3B:8082) + Podman B(mode-switchable:8081-8082)
 - [x] Mode switching system (normal / batch / code)
-- [x] code_mod_pipeline.py — 32B 4-stage pipeline (ANALYZE→PLAN→IMPL→PACKAGE)
+- [x] code_mod_pipeline.py — Deprecated (removed 2026-06-06)
 - [x] Prompt ablation — code slicing 89% token reduction
-- [x] review_worker.py — 3-LLM debate pipeline (Qwen3-4B + Llama-3B parallel → Phi-4-mini arbitration)
+- [x] review_worker.py — 3-LLM debate pipeline (3B + Llama-3B parallel → Phi-4-mini arbitration)
 - [x] review_facts DB + performance metrics (prompt_tokens, gen_tokens, gen_rate, cache_hit)
 - [x] RateEstimator dynamic timeout
 - [x] Slack notification integration (stage completion DM)
@@ -38,17 +38,13 @@ Phase 2 is structured in 3 tiers. Tier 1 must complete before Tier 2 begins; Tie
 
 - [x] LiteLLM removal decision (was failed, unused) → removed (2026-05-19)
 - [x] devforge-llm removal decision (was failed, replaced by swap) → removed (2026-05-19)
-- [ ] Qwen3-4B (Podman A) re-enable — currently down after 32B code mode
-- [ ] review-worker.timer re-enable — 3-LLM debate pipeline reactivation
-- [ ] swap-batch.timer + swap-normal.timer re-enable — mode auto-switching
 - [x] journald log retention config (MaxRetentionSec=30day)
 - [x] Language pipeline guardrails — `lib/text_quality.py` (script purity validation for Korean output, token budget enforcement 10~500 chars, think-tag artifact detection)
 - [x] update_handover.py context selection — quality-score-based prioritization of high-fidelity turns
-- [ ] T01-T16 32B batch test results → apply verified diffs (currently T11 in progress)
 
 ### Tier 2 — Vector Intelligence (2-4 Weeks)
 
-> Research references: `docs/translation-quality-report.md` (model-radar lessons), `docs/translation-quality-feedback-loop.md` (TEaR + xCOMET + DCSQE feedback architecture). LLM selection for translation tasks deferred pending Qwen/Phi-14B/32B quality comparison test results.
+> Research references: `_archive/translation-quality-report.md` (model-radar lessons), `_archive/translation-quality-feedback-loop.md` (TEaR + xCOMET + DCSQE feedback architecture).
 
 - [x] pgvector extension installed (vector 0.8.2) + turns.embedding vector(768) column
 - [x] HNSW index on turns.embedding (vector_cosine_ops)
@@ -62,7 +58,7 @@ Phase 2 is structured in 3 tiers. Tier 1 must complete before Tier 2 begins; Tie
 - [ ] CLI search --wing/--room filtering
 - [ ] MCP mem_search vector search upgrade (pgvector ANN)
 - [ ] search --augmented — DuckDuckGo + local LLM inference pipeline
-- [ ] Ref: `/opt/projects/server/docs/translation-quality-report.md` (model-radar lessons applied)
+- [ ] Ref: `_archive/translation-quality-report.md` (model-radar lessons applied)
 
 ### Tier 3 — Operations & Visibility (1-3 Months)
 
@@ -81,7 +77,16 @@ Phase 2 is structured in 3 tiers. Tier 1 must complete before Tier 2 begins; Tie
 - [ ] Multi-LLM routing (additional model integration)
 - [ ] User decision rationale tracking — structured decision logging with evidence chain
 - [ ] Back-translation fidelity check — when fast translation API available
-- [ ] T01-T16 32B code modification full re-test (intermittent execution)
+- [x] T01-T16 code modification re-test — cancelled (code_mod.py removed)
+
+## Overall Progress
+
+```
+Phase 1  ████████████████████ 100%
+Phase 1.5 ████████████████████ 100%
+Phase 2  ████████░░░░░░░░░░░░ 40%
+Phase 3  ░░░░░░░░░░░░░░░░░░░░ 0%
+```
 
 
 

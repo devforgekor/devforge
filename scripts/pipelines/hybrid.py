@@ -4,21 +4,21 @@
 """Multi-model code modification pipeline with debate + verification.
 
 Modes:
-  hybrid      DeepSeek API plan -> 32B execution with ASSERT validation
-  local-multi 3-LLM debate -> 14B coding -> Phi-4 verify -> 32B cross-verify
-  web-multi   DeepSeek API plan -> multi-model execution + verification + 32B cross-verify
+  hybrid      DeepSeek API plan -> local execution with ASSERT validation
+  local-multi 3-LLM debate -> 14B coding -> Phi-4 verify
+  web-multi   DeepSeek API plan -> multi-model execution + verification
 
 Architecture:
   Phase 1: Planning (3-LLM debate or DeepSeek API) -> integrated plan + <step> + # ASSERT:
-  Phase 2: Execution (14B or 32B) -> step-by-step with ASSERT validation
+  Phase 2: Execution -> step-by-step with ASSERT validation
   Phase 3: Verification (different model reviews correctness)
-  Phase 4: Cross-verification (32B compares output, measures divergence)
+  Phase 4: Cross-verification
 
 Infrastructure:
   Pod A (devforge-pod-a):  Qwen3-4B @ 8080  (debate analyst)
   Pod B (devforge-swap):  Phi-4 14B @ 8081  (debate critic + verify)
                            Qwen-14B  @ 8082  (debate pragmatist + execute)
-  Mode switch -> code:    Qwen-32B  @ 8081  (cross-verify)
+  Mode switch
 """
 import json
 import os
@@ -31,7 +31,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Optional, Dict, List
 
-from lib.llm.client import call_llm
+from lib.llm.endpoint import call_llm_endpoint
 from lib.code_mod.shared import (
     extract_json_from_llm_response, save_result, read_file, DEEPSEEK_KEY, LLAMA_ENDPOINT,
     TASKS_FILE,
@@ -94,8 +94,8 @@ def detect_models() -> Dict[str, dict]:
             if models:
                 model_id = models[0].get("id", "")
                 # Map model name to endpoint key
-                if "32B" in model_id or "32b" in model_id or "27B" in model_id or "27b" in model_id:
-                    available["qwen-32b"] = {
+                if "27B" in model_id or "27b" in model_id:
+                    available["qwen-27b"] = {
                         "url": f"http://127.0.0.1:{port}/v1/chat/completions",
                         "model": "qwen3.6-27b", "port": port}
                 elif "14b" in model_id.lower() or "phi-4" in model_id.lower():
@@ -358,7 +358,7 @@ def run_debate_plan(models: dict, file_path: str, task_desc: str) -> Optional[di
         print(f"  [Debate] Asking {key} ({role})...", flush=True)
         t0 = time.monotonic()
         user_msg = DEBATE_USER_TEMPLATE.format(file=file_path, task=task_desc, code=code, role=role)
-        status, body = call_llm(
+        status, body = call_llm_endpoint(
             cfg["url"],
             [{"role": "system", "content": role_prompts[role]},
              {"role": "user", "content": user_msg}],
@@ -382,7 +382,7 @@ def run_debate_plan(models: dict, file_path: str, task_desc: str) -> Optional[di
     )
 
     t0 = time.monotonic()
-    status, body = call_llm(
+    status, body = call_llm_endpoint(
         synthesizer_cfg["url"],
         [{"role": "system", "content": DEBATE_SYNTHESIZER_SYSTEM},
          {"role": "user", "content": syn_user}],
@@ -443,7 +443,7 @@ def generate_web_plan(file_path: str, task_desc: str) -> Optional[dict]:
 
     print(f"  [Phase 1] Calling DeepSeek for integrated plan... ({len(code)//3:,} tok est)")
     t0 = time.monotonic()
-    status, body = call_llm(WEB_PLANNER_URL, messages, api_key=DEEPSEEK_KEY,
+    status, body = call_llm_endpoint(WEB_PLANNER_URL, messages, api_key=DEEPSEEK_KEY,
                             model=WEB_PLANNER_MODEL, timeout=120, max_tokens=4096)
     elapsed = time.monotonic() - t0
 
@@ -513,7 +513,7 @@ def classify_error(error_text: str, models: dict = None) -> str:
 
     if classifier_cfg:
         prompt = ERROR_CLASSIFIER_PROMPT.format(error=error_text[:2000])
-        status, body = call_llm(
+        status, body = call_llm_endpoint(
             classifier_cfg["url"],
             [{"role": "user", "content": prompt}],
             model=classifier_cfg["model"], timeout=30, max_tokens=16,
@@ -539,7 +539,7 @@ def request_web_fix(step_id: int, code: str, error: str, context: str) -> Option
     """Request code fix from DeepSeek for a failed step."""
     prompt = WEB_FIX_PROMPT.format(step_id=step_id, code=code, error=error[:1500], context=context)
     print(f"  [WebFix] Requesting web fix for step {step_id}...")
-    status, body = call_llm(
+    status, body = call_llm_endpoint(
         WEB_PLANNER_URL,
         [{"role": "user", "content": prompt}],
         api_key=DEEPSEEK_KEY, model=WEB_PLANNER_MODEL,
@@ -559,7 +559,7 @@ def request_local_fix(step_id: int, code: str, error: str, context: str,
     """Request code fix from a local model for a failed step."""
     prompt = WEB_FIX_PROMPT.format(step_id=step_id, code=code, error=error[:1500], context=context)
     print(f"  [LocalFix] Requesting fix from {executor_cfg.get('model', '?')} for step {step_id}...")
-    status, body = call_llm(
+    status, body = call_llm_endpoint(
         executor_cfg["url"],
         [{"role": "user", "content": prompt}],
         model=executor_cfg["model"], timeout=60, max_tokens=1024,
@@ -668,7 +668,7 @@ def run_verification(task: dict, plan: dict, exec_results: dict,
 
     print(f"  [Phase 3] Verification by {verifier_cfg['model']}...", flush=True)
     t0 = time.monotonic()
-    status, body = call_llm(
+    status, body = call_llm_endpoint(
         verifier_cfg["url"],
         [{"role": "system", "content": VERIFY_SYSTEM},
          {"role": "user", "content": user_msg}],
@@ -686,59 +686,13 @@ def run_verification(task: dict, plan: dict, exec_results: dict,
     }
 
 
-# Phase 4: Cross-verification by 32B
-
-def run_cross_verify(task: dict, plan: dict, exec_results: dict,
-                     verify_result: dict, code: str,
-                     models: dict) -> Optional[dict]:
-    """32B cross-verification: compare multi-model output against 32B's analysis."""
-    cross_cfg = models.get("qwen-32b")
-    if not cross_cfg:
-        print("  [Phase 4] 32B not available — skipping cross-verification")
-        return {"status": "skipped", "reason": "32B model not loaded"}
-
-    implementation = json.dumps({
-        f"step{sid}": r for sid, r in exec_results.items()
-    }, indent=2)
-
-    user_msg = CROSS_VERIFY_USER.format(
-        task=task["description"][:1000],
-        file=task["file"],
-        code=code[:4000],
-        implementation=implementation[:3000],
-        debate_analysis=plan.get("analysis", "")[:1000],
-        verify_report=json.dumps(verify_result.get("body", {}), indent=2)[:1000],
-    )
-
-    print(f"  [Phase 4] Cross-verification by 32B...", flush=True)
-    t0 = time.monotonic()
-    status, body = call_llm(
-        cross_cfg["url"],
-        [{"role": "system", "content": CROSS_VERIFY_SYSTEM},
-         {"role": "user", "content": user_msg}],
-        model=cross_cfg["model"], timeout=600, max_tokens=2048,
-    )
-    elapsed = time.monotonic() - t0
-
-    result = extract_json_from_llm_response((status, body))
-    print(f"  [Phase 4] Cross-verification done in {elapsed:.0f}s, status={status}", flush=True)
-    return {
-        "cross_model": cross_cfg["model"],
-        "body": result.get("body", {}),
-        "raw": result.get("raw_content", "")[:500],
-        "elapsed_s": elapsed,
-    }
-
-
-# Pipeline runners: hybrid (original), local-multi, web-multi
-
 def run_hybrid(task: dict) -> dict:
-    """Original hybrid pipeline: DeepSeek plan + 32B execution with ASSERT."""
+    """Original hybrid pipeline: DeepSeek plan + local execution."""
     started = datetime.now(timezone.utc).isoformat()
     t0 = time.monotonic()
 
     print(f"\n{'='*60}")
-    print(f"Hybrid Pipeline (DeepSeek + 32B): {task['name']}")
+    print(f"Hybrid Pipeline (DeepSeek + Local): {task['name']}")
     print(f"File: {task['file']}")
     print(f"{'='*60}")
 
@@ -746,9 +700,10 @@ def run_hybrid(task: dict) -> dict:
     if not plan:
         return {"error": "Web plan generation failed", "task_id": task["id"]}
 
-    # Detect 32B for execution
+    # Detect available models and use first suitable executor
     models = detect_models()
-    executor_cfg = models.get("qwen-32b", {"url": LLAMA_ENDPOINT, "model": "qwen2.5-coder-32b"})
+    executor_key = next((k for k in models if k != "phi4-14b"), None)
+    executor_cfg = models.get(executor_key, {"url": LLAMA_ENDPOINT, "model": "qwen2.5-coder-7b"})
 
     exec_results = execute_steps(plan["steps"], executor_cfg, models, use_web_fix=True, target_file=task["file"])
 
@@ -780,7 +735,7 @@ def run_hybrid(task: dict) -> dict:
 
 
 def run_local_multi(task: dict) -> dict:
-    """Pure local multi-model pipeline: 3-LLM debate -> 14B exec -> Phi-4 verify -> 32B cross-verify."""
+    """Pure local multi-model pipeline: 3-LLM debate -> 14B exec -> Phi-4 verify."""
     started = datetime.now(timezone.utc).isoformat()
     t0 = time.monotonic()
 
@@ -826,13 +781,9 @@ def run_local_multi(task: dict) -> dict:
 
     verify_result = run_verification(task, plan, exec_results, verifier_cfg, code)
 
-    # Phase 4: Cross-verification by 32B
-    cross_result = run_cross_verify(task, plan, exec_results, verify_result, code, models)
-
     elapsed = time.monotonic() - t0
 
     pkg = verify_result.get("body", {})
-    cross_pkg = cross_result.get("body", {}) if cross_result else {}
 
     return {
         "task_id": task["id"],
@@ -863,7 +814,7 @@ def run_local_multi(task: dict) -> dict:
 
 
 def run_web_multi(task: dict) -> dict:
-    """Web-multi pipeline: DeepSeek plan + local multi-model exec + verify + 32B cross-verify."""
+    """Web-multi pipeline: DeepSeek plan + local multi-model exec + verify."""
     started = datetime.now(timezone.utc).isoformat()
     t0 = time.monotonic()
 
@@ -882,11 +833,10 @@ def run_web_multi(task: dict) -> dict:
     if not plan:
         return {"error": "Web plan generation failed", "task_id": task["id"]}
 
-    # Phase 2: Execution (prefer Qwen-14B if available, else 32B)
+    # Phase 2: Execution (prefer Qwen-14B if available)
     executor_key = "qwen-14b" if "qwen-14b" in models else \
-                   "qwen-32b" if "qwen-32b" in models else \
                    list(models.keys())[0]
-    executor_cfg = models.get(executor_key, {"url": LLAMA_ENDPOINT, "model": "qwen2.5-coder-32b"})
+    executor_cfg = models.get(executor_key, {"url": LLAMA_ENDPOINT, "model": "qwen2.5-coder-7b"})
     print(f"\n  Executor: {executor_key} ({executor_cfg.get('model', '?')})")
 
     exec_results = execute_steps(plan["steps"], executor_cfg, models, use_web_fix=True, target_file=task["file"])
@@ -905,12 +855,8 @@ def run_web_multi(task: dict) -> dict:
         print(f"  Verifier: {verifier_key} ({verifier_cfg['model']})")
         verify_result = run_verification(task, plan, exec_results, verifier_cfg, code)
 
-    # Phase 4: Cross-verification by 32B
-    cross_result = run_cross_verify(task, plan, exec_results, verify_result, code, models)
-
     elapsed = time.monotonic() - t0
 
-    cross_pkg = cross_result.get("body", {}) if cross_result else {}
     verify_pkg = verify_result.get("body", {}) if verify_result else {}
 
     return {
@@ -936,9 +882,8 @@ def run_web_multi(task: dict) -> dict:
             "step_results": {str(k): v for k, v in exec_results.items()},
         },
         "verification": verify_result,
-        "cross_verification": cross_result,
-        "final_confidence": cross_pkg.get("final_confidence") or verify_pkg.get("confidence"),
-        "verdict": cross_pkg.get("verdict") or verify_pkg.get("verdict", "unknown"),
+        "final_confidence": verify_pkg.get("confidence"),
+        "verdict": verify_pkg.get("verdict", "unknown"),
     }
 
 
@@ -952,7 +897,7 @@ def main():
     ap.add_argument("--task", type=int, help="Run single task by ID")
     ap.add_argument("--mode", choices=["hybrid", "local-multi", "web-multi"],
                     default="hybrid",
-                    help="Pipeline mode: hybrid (DeepSeek+32B), local-multi (all local), "
+                    help="Pipeline mode: hybrid (DeepSeek+local), local-multi (all local), "
                          "web-multi (DeepSeek+multi-model)")
     ap.add_argument("--dry-run", action="store_true", help="Generate plan only, don't execute")
     ap.add_argument("--list-models", action="store_true", help="Detect and list available models")

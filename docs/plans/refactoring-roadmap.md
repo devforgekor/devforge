@@ -99,7 +99,7 @@ The ENTIRE production line exists to prepare for MCP mode. Every phase, every sc
 - Read `PLAN.md` (v2.0, 2026-05-18): 4-tier model strategy (Fast→Accurate→External), v1.1→B-Plan worklog reconciliation, timeline through Jun 14
 - Read `agent-architecture.yaml` (v3.0.1, 2026-05-29): Day/Night Bundle architecture, 3-model review pipeline (R1→Qwen7B→Selene), Supervisor-Worker-Observer proposal (Section 6), memory budgets, context budgets, swap sequences
 - Read `server-specs-and-llm-architecture.md`: current mode map (code/debate/batch/normal/discussion), 4-stage pipeline, debate architecture, port assignments
-- Generated `docs/glossary.md`: 10 Bounded Contexts, 70+ domain terms from codebase reverse-engineering
+- Generated `docs/domain-glossary.yaml`: 10 Bounded Contexts, 70+ domain terms from codebase reverse-engineering
 
 **Files to create**:
 
@@ -137,7 +137,7 @@ llm-local-rule.md           (local LLM guardrails — standalone)
 **Goal**: Single source of truth for all AI prompts. Adding a rule = editing one file, not five.
 
 **Context from codebase analysis**:
-- System prompts are currently hardcoded in 5+ files: `review_pipeline_steps.py` (`SYSTEM_REVIEW_STEP1/2/3`), `review_consumer.py` (`VERIFY_SYSTEM`, `ANALYSIS_SYSTEM`), `proxy_reviewer.py` (`DEEPSEEK_SYSTEM_SINGLE/BATCH`), `code_mod_pipeline.py` (inline prompts), `debate_llm.py` (`PROMPTS` dict)
+- System prompts are currently hardcoded in 5+ files: `review_pipeline_steps.py` (`SYSTEM_REVIEW_STEP1/2/3`), `review_consumer.py` (`VERIFY_SYSTEM`, `ANALYSIS_SYSTEM`), `proxy_reviewer.py` (`DEEPSEEK_SYSTEM_SINGLE/BATCH`), `code_mod.py` (removed 2026-06-06), `debate_llm.py` (`PROMPTS` dict)
 - Two separate LLM client modules exist: `lib/llm_client.py` (local llama.cpp, `call_llm()`, `call_llm_json()`, `MODEL_REGISTRY`, feedback auto-inject) and `lib/llm/client.py` (DeepSeek API + local, `call_llm(endpoint)`, system→user conversion, keepalive)
 - These two clients have different call signatures, error handling, and model registries
 
@@ -154,7 +154,7 @@ Scripts updated (remove hardcoded prompts):
   review_pipeline_steps.py   → build_prompt("reviewer", "review")
   review_consumer.py         → build_prompt("verifier", "review")
   proxy_reviewer.py          → build_prompt("auditor", "review")
-  code_mod_pipeline.py       → build_prompt("codegen", "code_mod")
+  code_mod.py (removed)          → build_prompt("codegen", "code_mod")
   debate_llm.py              → build_prompt("debate", "general")
 
 lib/llm_client.py updated:
@@ -229,7 +229,7 @@ TDD CLI subcommand is unnecessary complexity. The production line already produc
 | local-rule.md too long for 4K context windows | 1-2 | Glossary terms injected per-domain (not all 70+ at once); rule preamble kept under 200 tokens |
 | prompt_builder.py breaks existing pipeline | 2 | Each script migrated one at a time; git diff before/after on sample inputs |
 | Observer HUD adds noise without insight | 3 | Start with 3 metrics (active tasks, night results, confidence trend). Expand based on debugging needs. |
-| Nightly pipeline time creep | — | 27B + 32B sequential verify has bounded wall time. Phase 7 (DeepSeek) is optional per item. |
+| Nightly pipeline time creep | — | 27B production verify has bounded wall time. Phase 7 (DeepSeek) is optional per item. |
 
 ---
 
@@ -249,10 +249,10 @@ TDD CLI subcommand is unnecessary complexity. The production line already produc
 
 - `docs/domain-glossary.yaml` — DDD Ubiquitous Language (10 Bounded Contexts, 70+ terms)
 - `_archive/agent-architecture.yaml` v3.0.1 — Complete system specification, model catalog, review pipeline, Supervisor-Worker-Observer proposal (archived)
-- `docs/plans/master-plan.md` v2.0 — Previous unified plan (2026-05-18), model strategy, timeline
+- `docs/_archive/plans/master-plan.md` v2.0 — Previous unified plan (2026-05-18), archived (code is SSOT)
 - `_archive/server-specs-and-llm-architecture.md` — Mode map, 4-stage pipeline, debate architecture, port assignments (archived)
-- `docs/specs/system-design.yaml` — Core architecture decisions, infrastructure layout
-- `docs/phases.md` — Phase tracker (Phase 1 complete, 1.5 complete, 2 active)
+- `docs/_archive/specs/system-design.yaml` — Core architecture decisions, infrastructure layout (archived — code + infra.md are SSOT)
+- `docs/plans/phases.md` — Phase tracker (Phase 1 complete, 1.5 complete, 2 active)
 - `handover.yaml` — Session state, current decisions, known issues
 
 ---

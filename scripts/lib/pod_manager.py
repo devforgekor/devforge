@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — prj_cycle.py
+# Path: imported by — pipelines/prj_cycle.py
 """Container management for P-R-J pipeline — Pod A (devforge-pod-a) and Pod B (devforge-swap)."""
 
 import json
@@ -20,7 +20,7 @@ MODEL_METADATA = {
     "Qwen7B":  {"file": "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf",  "size": "7.6GB", "port": 8080, "mode": "day"},
     "Qwen14B": {"file": "Qwen2.5-Coder-14B-Instruct.Q8_0.gguf", "size": "15.7GB","port": 8080, "mode": "review-r"},
     "Qwen30B": {"file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf","size":"17GB","port":8080, "mode":"review-p"},
-    "Codestral":{"file":"Codestral-22B-v0.1-Q4_K_M.gguf",       "size":"12.4GB","port":8080, "mode":"review-j"},
+    "NextCoder14B":{"file":"NextCoder-14B-Q8_0.gguf",         "size":"15.7GB","port":8080, "mode":"review-j"},
     "Qwen27B": {"file": "Qwen3.6-27B-Q4_K_M.gguf",             "size": "16GB", "port": 8081, "mode": "verify"},
 }
 
@@ -141,19 +141,19 @@ def start_day_both(dry_run=False):
     kill_all(dry_run=dry_run)
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=60)
-    ok_a = wait_health(8082)
-    if ok_a:
+    pod_a_ready = wait_health(8082)
+    if pod_a_ready:
         log(f"  :8082 ready (Pod A day_r)")
     else:
         log(f"  :8082 TIMEOUT (Pod A day_r)")
     subprocess.run(["systemctl", "--user", "start", "container-devforge-swap.service"],
                    capture_output=True, timeout=60)
-    ok_b = wait_health(8080)
-    if ok_b:
+    pod_b_ready = wait_health(8080)
+    if pod_b_ready:
         log(f"  :8080 ready (Pod B day)")
     else:
         log(f"  :8080 TIMEOUT (Pod B day)")
-    return ok_a and ok_b
+    return pod_a_ready and pod_b_ready
 
 
 def ensure_model(physical_name, dry_run=False):

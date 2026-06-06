@@ -22,7 +22,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Optional
 
-from lib.key_rotator import KeyRotator
+from lib.auth.key_rotator import KeyRotator
 from lib.auth.key_loader import load_api_keys, STATE_FILE
 
 from lib.db import psql, psql_ok, PSQL
@@ -234,8 +234,8 @@ def main():
 
         time.sleep(3)
 
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    print(f"[embed] 완료 {ts}: {total_ok}/{len(valid)}개 임베딩")
+    utc_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(f"[embed] 완료 {utc_ts}: {total_ok}/{len(valid)}개 임베딩")
 
 
 if __name__ == "__main__":

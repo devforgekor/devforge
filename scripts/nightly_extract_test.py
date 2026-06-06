@@ -47,7 +47,7 @@ TEST_TURN_IDS = [
     "a6f13194-1356-40ce-b67c-23f3febc3ea0",
 ]
 
-EXTRACT_3B_SYSTEM = """\
+EXTRACT_SYSTEM = """\
 You are a fact extractor for a developer-assistant conversation turn.
 Each turn has three parts: user_turn (the user's message), thinking (the
 model's internal reasoning, may be empty), and text (the model's response).
@@ -168,7 +168,7 @@ def run_test(model_label="Qwen3-4B"):
             "=== thinking ===", d["thinking"] or "(empty)", "",
             "=== text ===", d["text"] or "(empty)",
         ]
-        messages = [{"role": "system", "content": EXTRACT_3B_SYSTEM},
+        messages = [{"role": "system", "content": EXTRACT_SYSTEM},
                      {"role": "user", "content": "\n".join(parts)}]
 
         t0 = time.monotonic()

@@ -3,8 +3,8 @@
 # Path: none — library
 """DeepSeek Pro evaluation of 12-run comparison test results.
 
-Reads pipeline (local32b_task*.json) and debate (debate_sessions/*/final_report.md)
-outputs, scores each with DeepSeek Pro, produces comparison matrix.
+Reads pipeline outputs and debate (debate_sessions/*/final_report.md)
+results, scores each with DeepSeek Pro, produces comparison matrix.
 """
 import json
 import os
@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.llm.client import call_llm
+from lib.llm.endpoint import call_llm_endpoint
 
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 RESULT_DIR = Path("/var/tmp/comparison_tests")
@@ -64,7 +64,7 @@ def load_task_description(task_id: int) -> str:
 def find_pipeline_output(task_id: int, api: bool) -> Optional[dict]:
     """Find the latest pipeline result for a task."""
     suffix = "with_api" if api else "no_api"
-    pattern = f"local32b_task{task_id:02d}_*.json"
+    pattern = f"task{task_id:02d}_*.json"
     files = sorted(PIPELINE_DIR.glob(pattern), reverse=True)
     for f in files:
         data = json.loads(f.read_text())
@@ -139,7 +139,7 @@ def evaluate_output(task_desc: str, output: dict, system: str, task_id: int, api
     if output.get("rationale"):
         output_text += f"RATIONALE:\n{'; '.join(output['rationale'])}\n"
 
-    status, body = call_llm(
+    status, body = call_llm_endpoint(
         "https://api.deepseek.com/v1/chat/completions",
         [{"role": "user", "content": EVAL_PROMPT.format(
             task_description=task_desc,

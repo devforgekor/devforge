@@ -438,7 +438,7 @@ class LocalDebate:
         """Called after synthesis for cleanup (tunnels, spot VMs)."""
 
     def _enqueue_for_review(self, final: dict) -> None:
-        """Enqueue debate result to activity_log for night batch review (14B→32B)."""
+        """Enqueue debate result to activity_log for night batch review (14B→27B)."""
         try:
             from lib.queue_writer import enqueue_review
             enqueue_review(
@@ -541,7 +541,7 @@ class LocalDebate:
             print(f"█ Confidence: {final.get('confidence', '?')}")
             print(f"█ Local: {report_path}")
 
-            # Enqueue for night batch review (14B → 32B)
+            # Enqueue for night batch review (14B → 27B)
             self._enqueue_for_review(final)
 
             try:

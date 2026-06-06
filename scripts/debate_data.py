@@ -44,14 +44,6 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "cache_ram": 0,
         "chat_template_kwargs": {"enable_thinking": False},
     },
-    "qwen-32b": {
-        "filename": "Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf",
-        "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,
-        "max_tokens": 1024, "temperature": 0.1,
-        "system_prompt_support": True,
-        "cache_ram": 2048,
-        "bench_load_s": 480, "bench_toks": 0.5,
-    },
     "qwen-14b": {
         "filename": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
         "port": 8081, "ctx": 4096, "threads": 4, "mlock": 0,

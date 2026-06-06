@@ -746,6 +746,19 @@ def _format_context_bar(tokens: int, max_tokens: int) -> str:
     return f"{bar} {pct:.0f}%"
 
 
+_KNOWN_CACHE_KEYS = {"prompt_cache_hit_tokens", "cache_read_input_tokens",
+                      "prompt_cache_miss_tokens", "cache_creation_input_tokens"}
+
+
+def _has_cache_stats(u: dict) -> bool:
+    """Check if the API response includes any cache statistics fields."""
+    if any(k in u for k in _KNOWN_CACHE_KEYS):
+        return True
+    if "prompt_tokens_details" in u and isinstance(u["prompt_tokens_details"], dict):
+        return True
+    return False
+
+
 def log_usage(body: Optional[bytes], data: Optional[bytes], resp_status: int) -> None:
     """Log token usage from API response for cache monitoring.
 
@@ -778,49 +791,45 @@ def log_usage(body: Optional[bytes], data: Optional[bytes], resp_status: int) ->
                 u.get("completion_tokens", 0),  # DeepSeek native fallback
             )
 
-            # ── cache read (tokens served from cache) ─────────────────────
-            # Lookup priority (per deep-research on DeepSeek V4 Flash):
-            #   1. prompt_cache_hit_tokens     (DeepSeek V4 Flash, top-level)
-            #   2. cache_read_input_tokens     (Anthropic standard)
-            #   3. prompt_tokens_details.cached_tokens (DeepSeek V2/V3 legacy)
-            cache_read = u.get("prompt_cache_hit_tokens", 0)
-            if not cache_read:
-                cache_read = u.get("cache_read_input_tokens", 0)
-            if not cache_read:
-                ptd = u.get("prompt_tokens_details")
-                if isinstance(ptd, dict):
-                    cache_read = ptd.get("cached_tokens", 0)
-
-            # ── cache miss (tokens NOT in cache, freshly processed) ───────
-            cache_miss = u.get("prompt_cache_miss_tokens", 0)
-            if not cache_miss:
-                # Anthropic: cache_creation_input_tokens = tokens *written* to cache,
-                # not the same as miss, but we use it as a rough proxy for display.
-                cache_miss = u.get("cache_creation_input_tokens", 0)
-
             body_kb = len(body) / 1024
-
-            # ── hit rate calculation ──────────────────────────────────────
-            # DeepSeek V4: prompt_tokens (input) is new tokens sent this
-            # round, NOT inclusive of cached tokens. Total useful work by
-            # the server = new input + cached prefix tokens.
-            denom = input_tokens + cache_read
-            if cache_miss > 0:
-                denom = max(denom, cache_read + cache_miss)
-
-            pct = min((cache_read / denom * 100), 100.0) if denom > 0 else 0
-
-            # bar: body bytes vs actual auto-compact trigger (128K tok × 85% × ~4 chars/tok ≈ 435K)
-            body_chars = len(body)  # bytes ≈ chars for ASCII/English
+            body_chars = len(body)
             COMPACT_BODY_LIMIT = int(os.environ.get(
                 "ANTHROPIC_PROXY_BAR_LIMIT", "870400",
             ))
             context_bar = _format_context_bar(body_chars, COMPACT_BODY_LIMIT)
             balance = _fetch_deepseek_balance()
             balance_str = f" ¥{balance}" if balance else ""
-            print(f"[anthropic_proxy] usage: input={input_tokens} cache_read={cache_read} "
-                  f"cache_miss={cache_miss} output={output_tokens} "
-                  f"hit_rate={pct:.0f}% body={body_kb:.0f}KB {context_bar}{balance_str}",
-                  file=sys.stderr)
+
+            if not _has_cache_stats(u):
+                # DeepSeek 응답에 캐시 통계 키 자체가 없음 → hit_rate 계산 불가
+                print(f"[anthropic_proxy] usage: input={input_tokens} "
+                      f"output={output_tokens} "
+                      f"stats=none body={body_kb:.0f}KB {context_bar}{balance_str}",
+                      file=sys.stderr)
+            else:
+                # ── cache read ────────────────────────────────────────────
+                cache_read = u.get("prompt_cache_hit_tokens", 0)
+                if not cache_read:
+                    cache_read = u.get("cache_read_input_tokens", 0)
+                if not cache_read:
+                    ptd = u.get("prompt_tokens_details")
+                    if isinstance(ptd, dict):
+                        cache_read = ptd.get("cached_tokens", 0)
+
+                # ── cache miss ────────────────────────────────────────────
+                cache_miss = u.get("prompt_cache_miss_tokens", 0)
+                if not cache_miss:
+                    cache_miss = u.get("cache_creation_input_tokens", 0)
+
+                # ── hit rate ──────────────────────────────────────────────
+                denom = input_tokens + cache_read
+                if cache_miss > 0:
+                    denom = max(denom, cache_read + cache_miss)
+                pct = min((cache_read / denom * 100), 100.0) if denom > 0 else 0
+
+                print(f"[anthropic_proxy] usage: input={input_tokens} cache_read={cache_read} "
+                      f"cache_miss={cache_miss} output={output_tokens} "
+                      f"hit_rate={pct:.0f}% body={body_kb:.0f}KB {context_bar}{balance_str}",
+                      file=sys.stderr)
         except Exception:
             pass

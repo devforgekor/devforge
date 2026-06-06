@@ -19,7 +19,6 @@ from debate_data import MODELS, PROMPTS, SWITCH_FILE
 _DEBATE_TO_REGISTRY: Dict[str, str] = {
     "qwen3-30b-a3b-local": "Qwen30B",
     "qwen2.5-coder-3b":    "Qwen3B",
-    "qwen-32b":            "Qwen32B",
     "r1-8b":               "R1-8B",
     "qwen2.5-coder-7b":    "Qwen7B",
 }

@@ -78,7 +78,7 @@ def psql_ok(sql: str, timeout: int = 30) -> bool:
 def db_table_exists(table: str) -> bool:
     try:
         r = subprocess.run(
-            PSQL_CHECK + ["-c", f"SELECT 1 FROM pg_tables WHERE tablename='{table}'"],
+            PSQL_CHECK + ["-c", f"SELECT 1 FROM pg_tables WHERE tablename='{esc_sql(table)}'"],
             capture_output=True, text=True, timeout=10,
         )
         return "1" in r.stdout

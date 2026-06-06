@@ -26,8 +26,8 @@ from typing import Optional
 
 import requests
 
-from lib.crypto import decrypt_data
-from lib.key_rotator import KeyRotator
+from lib.auth.api_key_cipher import decrypt_data
+from lib.auth.key_rotator import KeyRotator
 
 
 API_CONFIGS = {

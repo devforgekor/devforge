@@ -10,7 +10,7 @@ Contains constants, system prompts, HTTP helpers, and the 4 step functions:
   Step 4  run_diff          Qwen7B (:8080)  — unified diff for approved findings
 
 Exported symbols consumed by review_pipeline_3model.py:
-  R1_PORT, QWEN7B_PORT, SELENE_PORT, _poll_health,
+  R1_PORT, QWEN7B_PORT, JUDGE_PORT, _poll_health,
   run_deep_review, run_reflection, run_judgment, run_diff
 """
 
@@ -27,7 +27,7 @@ from lib.llm_client import call_llm, call_llm_json
 # ── Constants ──────────────────────────────────────────────────────────────
 R1_PORT = 8083  # Pod A night: R1-8B
 QWEN7B_PORT = 8080  # Pod B: Qwen7B (reflection + diff)
-SELENE_PORT = 8081  # Pod B swap: Selene (Step 3 judge)
+JUDGE_PORT = 8081  # Pod B swap: Scoring Judge (Step 3)
 TIMEOUT_STEP1 = 900  # 15 min
 TIMEOUT_STEP2 = 480  #  8 min
 TIMEOUT_STEP3 = 480  #  8 min (Scoring Judge: rubric + decisions)
@@ -277,9 +277,9 @@ def run_judgment(
 
     Returns enriched verdict with judge metadata for downstream gating.
     """
-    print(f"[step3] Judgment (Scoring Judge) — Selene on :{SELENE_PORT}")
-    if not _poll_health(SELENE_PORT, timeout=30):
-        raise RuntimeError(f"Selene not healthy on :{SELENE_PORT}")
+    print(f"[step3] Judgment (Scoring Judge) — Selene on :{JUDGE_PORT}")
+    if not _poll_health(JUDGE_PORT, timeout=30):
+        raise RuntimeError(f"Selene not healthy on :{JUDGE_PORT}")
 
     # Determine 2:0 fast-path (both agree) vs 1:1 disputed
     refl_accept = {v["id"] for v in reflector_verdicts if v.get("verdict", "").lower() == "accept"}

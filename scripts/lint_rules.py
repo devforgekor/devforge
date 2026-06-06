@@ -28,7 +28,7 @@ MODEL_NAME_OK_FILES = {
 
 # Model size patterns that must not appear in identifiers
 MODEL_SIZE_PATTERN = re.compile(
-    r"\b(3b|4b|7b|14b|27b|30b|32b)\b", re.IGNORECASE
+    r"\b(3b|4b|7b|14b|27b|30b)\b", re.IGNORECASE
 )
 
 # Model brand names that must not appear in identifiers
@@ -216,7 +216,7 @@ def _extract_all_identifiers(content: str) -> List[Tuple[str, int]]:
                 identifiers.add((node.target.id, node.lineno))
 
     # Regex: catch local variables (snake_case identifiers with model sizes)
-    # Match identifiers that contain model size patterns: run_32b_4stage, v27b, etc.
+    # Match identifiers that contain model size patterns: v27b, etc.
     for i, line in enumerate(content.split("\n"), 1):
         stripped = line.strip()
         if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):

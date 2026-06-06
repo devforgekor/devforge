@@ -650,16 +650,16 @@ def extract_pipeline(
                 fi += 1
 
             mcp_meta = mcp_result.get("_meta", {}) if mcp_result else {}
-            mcp_pt = mcp_meta.get("usage", {}).get("prompt_tokens") if mcp_meta else None
-            mcp_gt = mcp_meta.get("usage", {}).get("completion_tokens") if mcp_meta else None
-            mcp_em = mcp_meta.get("elapsed_ms") if mcp_meta else None
+            mcp_prompt_tokens = mcp_meta.get("usage", {}).get("prompt_tokens") if mcp_meta else None
+            mcp_gen_tokens = mcp_meta.get("usage", {}).get("completion_tokens") if mcp_meta else None
+            mcp_elapsed_ms = mcp_meta.get("elapsed_ms") if mcp_meta else None
 
             # Strip _meta from stored MCP (for search/analysis), keep in activity_log
             mcp_for_storage = {k: v for k, v in mcp_result.items() if k != "_meta"} if mcp_result else None
 
             if mcp_result:
                 _insert_fact(tid, fi, "mcp_meta", json.dumps(mcp_for_storage, ensure_ascii=False),
-                             mcp_model, prompt_tokens=mcp_pt, gen_tokens=mcp_gt, elapsed_ms=mcp_em)
+                             mcp_model, prompt_tokens=mcp_prompt_tokens, gen_tokens=mcp_gen_tokens, elapsed_ms=mcp_elapsed_ms)
                 fi += 1
 
             # Write the failure marker if any (only on successful extraction)
@@ -685,9 +685,9 @@ def extract_pipeline(
                     "extract_prompt_tokens": pt,
                     "extract_completion_tokens": gt,
                     "extract_elapsed_ms": em,
-                    "mcp_prompt_tokens": mcp_pt,
-                    "mcp_completion_tokens": mcp_gt,
-                    "mcp_elapsed_ms": mcp_em,
+                    "mcp_prompt_tokens": mcp_prompt_tokens,
+                    "mcp_completion_tokens": mcp_gen_tokens,
+                    "mcp_elapsed_ms": mcp_elapsed_ms,
                     "mark": mark,
                     "mcp": mcp_result,
                 },

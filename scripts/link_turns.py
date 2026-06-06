@@ -20,8 +20,8 @@ LOG_FILE = Path("/opt/projects/server/link_turns.log")
 REVIEW_FILE = Path("/opt/projects/server/data/link_review.yaml")
 
 def _log(msg):
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    line = f"[{ts}] {msg}"
+    utc_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    line = f"[{utc_ts}] {msg}"
     print(line)
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")

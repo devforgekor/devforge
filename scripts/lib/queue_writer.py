@@ -4,7 +4,7 @@
 """queue_writer — enqueue items to activity_log for downstream review pipeline.
 
 Shared by review_worker.py (fact extraction) and local_debate.py (debate results).
-Consumed by review_consumer.py (32B final verify) WHERE queue_status='reviewed'.
+Consumed by review_consumer.py (27B verify) WHERE queue_status='reviewed'.
 """
 
 import json
@@ -27,7 +27,7 @@ def enqueue_review(
 ) -> bool:
     """Insert a review item into activity_log queue.
 
-    queue_status='reviewed' — consumed by 32B verify (nightly final pass).
+    queue_status='reviewed' — consumed by 27B verify (nightly final pass).
     exec_status='DONE' — source pipeline already completed its work.
     summary_status='raw' — not yet summarized (night batch handles this).
     """

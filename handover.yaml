@@ -1,104 +1,52 @@
 last_checkpoint:
-  time: '2026-06-06T09:15:00.000000+00:00'
+  time: '2026-06-06T17:10:00.000000+00:00'
   summary: |
-    Session 29 — Phase E complete (E5-E8 + naming fix + verification)
-    - E5: 8 pipeline files → scripts/pipelines/ (import paths, sys.path, shell scripts updated)
-    - E6: 3 proxy files → scripts/proxies/ (3 systemd unit paths updated)
-    - E7: 3 test files → tests/ (prj_watchdog, run_pipeline_bg paths fixed)
-    - E8: observer.py→lib/ + azure_spot.py→lib/infra/ + worklog_generator→lib/ + .bak cleanup
-    - E1 follow-up: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, resume_pipeline.py naming fix
-    - 5 bugs fixed: observer.py sys.path, run_pipeline_bg.sh missing $, prj_watchdog path, 15m-cycle.service description, stale .pyc 16 files
-    - Verification: full compile OK, verify_refactoring.py 77/77 OK, CLI end-to-end OK, old naming 0 hits
-  total_files: 53 changed (26 renames, 27 modifications + 3 new)
-  recent_files:
-    data: []
-    docs: []
-    config:
-      - ~/.config/systemd/user/anthropic-proxy.service (ExecStart → proxies/anthropic.py)
-      - ~/.config/systemd/user/gemini-proxy.service (ExecStart → proxies/gemini.py)
-      - /etc/systemd/system/anthropic-proxy.service (ExecStart → proxies/anthropic.py)
-      - ~/.config/systemd/user/devforge-15m-cycle.service (description updated)
-    source:
-      - scripts/pipelines/ (8 files: extract, classify, review, hybrid, code_mod, rubric, runner, night)
-      - scripts/proxies/ (3 files: anthropic, gemini, search)
-      - tests/ (3 files: test_verify_optimization, test_operator_comprehensive, verify_refactoring)
-      - scripts/lib/observer.py (moved from scripts/observer.py)
-      - scripts/lib/infra/azure_spot.py (moved from scripts/azure_spot.py)
-      - scripts/lib/worklog_generator.py (moved from scripts/worklog_generator.py)
-      - scripts/prj_cycle.py (PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL)
-      - scripts/resume_pipeline.py (P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL, _run_prj fix)
-      - scripts/15m_cycle.sh (pipeline/worklog_generator paths updated)
-      - scripts/run_baseline.sh, run_baseline_monitor.sh (paths updated)
-      - scripts/run_pipeline_bg.sh (missing $ fixes + test path)
-      - scripts/prj_watchdog.py (test path fixed)
-      - scripts/cli.py, review_pipeline_3model.py, notify_slack.py, watchdog_j_tests.py
-      - scripts/cooperative_debate.py, gemini_pool.py, sync_gemini_rules.py
-      - scripts/lib/tracking/phase_tracker.py, session_context.py, lint_rules.py
-      - scripts/lib/auth/key_loader.py
-    generated:
-      - scripts/lib/cli_worklog.py (E2, prior session)
-      - scripts/lib/cli_experiment.py (E2, prior session)
-      - scripts/lib/pod_manager.py (E1, prior session)
-      - scripts/lib/token_budget.py (E1, prior session)
-      - scripts/lib/proxy_utils.py (E3, prior session)
-  git:
-    branch: refactor/ssot-migration
-    remote: (not pushed)
-    changes: 47 files, +719/-1969
-  task: Phase E code-size refactoring complete. Phase B/C/D completed in prior sessions.
+    Session 36 — Ambiguity cleanup (Task 4-5) + remaining ambiguity audit
 
-current_context:
-  in_progress: 'Phase E 완료 — daemon-reload, 서비스 재시작, git commit 88b4ac8 완료.'
-  day_mode: 'System Mode=day. Pod A=devforge-pod-a(:8082). Pod B=devforge-swap(:8080).'
-  service_rename: 'devforge-qwen → devforge-pod-a complete (prior session)'
-  directory_structure: |
-    scripts/
-    ├── pipelines/     (extract, classify, review, code_mod, hybrid, rubric, runner, night)
-    ├── proxies/       (anthropic, gemini, search)
-    └── lib/
-        ├── infra/     (azure_spot, containers, health_checks, storage, subprocess)
-        ├── tracking/  (phase_tracker)
-        ├── observer.py, worklog_generator.py
-        └── ... (existing lib files)
-    tests/             (test_verify_optimization, test_operator_comprehensive, verify_refactoring)
+    핵심 변경:
+    - Task 4 완료: prj_cycle.py remaining refs 5개 수정 (runner.py, run_pipeline_bg.sh, prj_watchdog.py, pod_manager/token_budget status headers)
+    - Task 5 완료: _archive orphan 6개 + old_backups 제거, api/ empty dir 제거, pipelines/ + proxies/ __init__.py에 docstring 작성
+    - 141 .py files compile OK
+    - 완료 후 아직 남은 모호함 6가지 발견하여 사용자에 제시
+  decisions:
+    - '[2026-06-06][Session 36] Task 4 — 모든 moved pipeline refs 정리 완료. `run_pipeline_bg.sh`, `prj_watchdog.py`, `pipelines/runner.py`, `lib/pod_manager.py`, `lib/token_budget.py` 수정.'
+    - '[2026-06-06][Session 36] Task 5 — _archive 정리: 6개 orphan 파일 + old_backups 삭제. api/ 빈 디렉토리 제거. pipelines/__init__.py + proxies/__init__.py docstring 작성.'
+    - '[2026-06-06][Session 36] review_pipeline_3model.py: Status=deprecated지만 orchestrator.py에서 여전히 사용 중. 상태 불일치 — 사용자가 판단 필요.'
+    - '[2026-06-06][Session 36] debate 5파일(cooperative_debate, cooperative_remote, debate_data, debate_llm, local_debate): root 레벨 클러스터 — lib/debate/ 서브패키지 이동 후보.'
+  known_issues:
+    - '5-phase experiment (P0 task #1) — pending'
+    - '27B Q4_K_M(16GB) on 22GB RAM — OOM risk'
+    - 'Phase 2 Tier 2 (vector) — phases.md에만 기록, DB task 등록 안 됨'
+    - 'lib/code_mod/ (shared.py) — hybrid.py 의존으로 유지'
+    - 'Pod A devforge-pod-a status=failed (normal)'
+    - 'Proxy cache stats none: ~3.7% 요청에서 DeepSeek cache 키 미제공'
+    - '[Session 36 발견] review_pipeline_3model.py: deprecated header != orchestrator.py live caller'
+    - '[Session 36 발견] 14개 test 파일 production 코드와 root에 혼재 — tests/ 이동 필요'
+    - '[Session 36 발견] 3개 orphan: prj_complete_monitor.py, resume_pipeline.py, migrate_references_yaml_to_db.py'
+  current_context:
+    day_mode: System Mode=day. Pod A=devforge-pod-a(:8082, 3B Q8_0). Pod B=devforge-swap(:8080, Codestral-22B)
+    model_state: night_proposer=Qwen30B, night_verify=Qwen27B
+    tmux_hook: client-detached → slack_notify.py (session-end report to Slack DM)
+    file_layout: All backward-compat shims removed, observer/pipeline files properly located. 141 .py files compile OK.
+    remaining_ambiguity: |
+      1. review_pipeline_3model.py — header status mismatch
+      2. 5 debate files — root-level cluster, lib/debate/ candidate
+      3. proxies/ — dead Python package namespace
+      4. 3 orphans (prj_complete_monitor, resume_pipeline, migrate_references)
+      5. 14 test files — mixed with production root
+      6. session_context.py — hook script at root, hooks/ candidate
   coverage:
-    - '127 non-archive .py files: all have Status/Path headers'
-    - 'Phase E verification: full compile OK, verify_refactoring.py 77/77 OK, CLI status OK, old naming 0 hits'
-
-decisions:
-  - '[2026-06-06][Session 29] Phase E complete: pipeline→pipelines/, proxy→proxies/, test→tests/. Model names and abbreviations removed from all file names. 19 file moves, 18 import path updates, 4 systemd unit updates.'
-  - '[2026-06-06][Session 29] PROPOSEREFLECTOR_MODEL rename fix: E1 replace_all collision replaced R_MODEL within PROPOSER_MODEL → PROPOSEREFLECTOR_MODEL. 15 locations manually corrected.'
-  - '[2026-06-06][Session 29] observer.py sys.path bug: pointed to scripts/lib/ instead of scripts/ — from lib.db import psql would fail. Changed OBS_SCRIPTS → PROJECT_ROOT.'
-  - '[2026-06-06][Session 29] run_pipeline_bg.sh 2x missing $: VERIFY_LOG variable used without $ prefix in tee/>> — both commands silently wrote to file named "VERIFY_LOG". Also updated test_verify_optimization.py path to tests/.'
-  - '[2026-06-06][Session 28] devforge-qwen → devforge-pod-a service rename. "qwen" is a model brand name — naming rule violation. Changed to role-based name (Pod A).'
-  - '[2026-06-06][Session 28] Phase B-D+E integrated plan created. ~/.claude/plans/clever-sauteeing-candle.md'
-  - '[2026-06-06][Session 28] ANTHROPIC_PROXY_BAR_LIMIT 435200→870400. Aligned 128K legacy bar limit with 256K context.'
-  - '[2026-06-06][Session 27] cli.py status --json implemented — 12 sections live query. "Code is SSOT" principle.'
-  - '[2026-06-06][Session 27] timer-registry.yaml → _archive/. Fully replaced by systemd list-timers + cli.py status --json.'
-
-known_issues:
-  - '5-phase experiment not run — P0'
-  - 'Night pipeline simple cycle test not run — P1'
-  - 'code-structure.yaml → _archive/ (code headers are SSOT)'
-  - '27B Q4_K_M(16GB) on 22GB RAM — OOM risk. recover_and_restart() 3-level escalation'
-  - '20 .py files in _archive/ — deprecated-by-location, no Status header needed'
-  - '31 files with divider comments (P2, cosmetic only — see # Section # pattern)'
-
-completed_log:
-  - '[Session 30] Phase E follow-up: systemctl daemon-reload, proxy restart, handover cleanup, git commit 88b4ac8.
-  - Session 29 handover current_context updated: daemon-reload/git commit resolved.'
-  - '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL in resume_pipeline.py — old naming fully eliminated'
-  - '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service description, stale .pyc 16 files'
-  - '[Session 29] Verification: full compile 127 .py OK, verify_refactoring.py 77/77 OK, CLI status/task/worklog/experiment OK, old naming 0 hits'
-  - '[Session 28] devforge-qwen → devforge-pod-a rename complete. 16 files + quadlet + systemd unit + docs updated. Service restart + health check OK.'
-  - '[Session 28] Phase B-D+E integrated plan created and approved. ~/.claude/plans/clever-sauteeing-candle.md'
-  - '[Session 27] cli.py status --json implemented. 12 sections live query. lint_rules.py + cli.py lint.'
-  - '[Session 27] Documentation audit. 58 ambiguities found. timer-registry.yaml → _archive.'
-  - '[Session 26] Context window 256K expansion. systemd bug fix.'
-  - '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
-  - '[Session 23] utcnow 1 case + bare except 7 cases fixed + Status/Path headers added to 142 files.'
-  - '[Session 22] File Status/Path header rule established + risk reclassification.'
-  - '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
-  - '[Session 20] split("|") conversion 6 files. psql_json pipe-safety proven.'
-  - '[Session 19] Experiment registry Step 2-4. bench_llm.py, CLI experiment, exp-latest alias.'
-  - '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
+    - 141 .py files compile OK
+    - 0 old shim references remaining
+    - All pipeline scripts in pipelines/
+    - pipelines/__init__.py + proxies/__init__.py have docstrings
+    - Glossary SSOT = domain-glossary.yaml
+    - Slack notify: tmux detach → session-end report with real cost
+  completed_log:
+    - '[Session 36] pipelies/runner.py, run_pipeline_bg.sh, prj_watchdog.py: prj_cycle.py → pipelines/prj_cycle.py 경로 수정'
+    - '[Session 36] lib/pod_manager.py, lib/token_budget.py: status header path 업데이트'
+    - '[Session 36] _archive: 6 orphan 파일 + old_backups 제거, 6개 phase dir만 보존'
+    - '[Session 36] api/ empty dir 제거'
+    - '[Session 36] pipelines/__init__.py, proxies/__init__.py: docstring + status header 작성'
+    - '[Session 36] 전수 compile check: 141 .py files OK'
+    - '[Session 36] 남은 모호함 6가지 발견 및 보고 — 사용자 결정 대기'

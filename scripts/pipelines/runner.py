@@ -84,7 +84,7 @@ def ts():
 
 # ── Source file management ──────────────────────────────────────
 
-KEY_FILES = ["prj_cycle.py", "pipelines/extract.py", "pipelines/classify.py",
+KEY_FILES = ["pipelines/prj_cycle.py", "pipelines/extract.py", "pipelines/classify.py",
              "nightly_batch.sh", "15m_cycle.sh"]
 
 
@@ -120,7 +120,7 @@ PHASE_FLAGS = {
 
 def apply_transform(phase):
     """Apply phase transformation via external transform_prj.py script."""
-    fp = os.path.join(SCRIPTS_DIR, "prj_cycle.py")
+    fp = os.path.join(SCRIPTS_DIR, "pipelines", "prj_cycle.py")
     tscript = os.path.join(SCRIPTS_DIR, "transform_prj.py")
     flags = PHASE_FLAGS.get(phase, [])
 
@@ -310,7 +310,7 @@ def run_pipeline(phase):
     """Run prj_cycle.py with --skip-extract. Returns (success, metrics_path)."""
     metrics_path = os.path.join(EXPER_DIR, f"phase{phase}_metrics.json")
 
-    cmd = [sys.executable, os.path.join(SCRIPTS_DIR, "prj_cycle.py"),
+    cmd = [sys.executable, os.path.join(SCRIPTS_DIR, "pipelines", "prj_cycle.py"),
            "--skip-extract"]
 
     log(f"Running: {' '.join(cmd)}")

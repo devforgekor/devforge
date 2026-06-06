@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from lib.agents import normalize as normalize_agent
+from lib.tracking.agent_names import normalize as normalize_agent
 from lib.db import psql as _sql, esc_sql
 from lib.cli_worklog import cmd_worklog_add, cmd_worklog_recent, cmd_worklog_search
 from lib.cli_experiment import cmd_experiment_list, cmd_experiment_compare, cmd_experiment_active, cmd_experiment_adopt
@@ -335,7 +335,7 @@ def _find_pipeline_output(pipeline: str, session_id: str) -> Optional[str]:
             f"/opt/ai_data/debate_sessions/{session_id}/final_report.md",
         ],
         "code_mod": [
-            f"/var/tmp/code_mod_tests/local32b_task{session_id}_*.json",
+            f"/var/tmp/code_mod_tests/task{session_id}_*.json",
         ],
         "extract": [
             f"/opt/ai_data/extractions/{session_id}/report.json",
@@ -923,6 +923,66 @@ def cmd_status(args):
         print(f"\nUse --json for machine-readable output.")
 
 
+def cmd_glossary_sync(args):
+    """Sync docs/domain-glossary.yaml → DB glossary_terms (idempotent upsert).
+
+    YAML is the single source of truth. This is the ONLY write path to DB.
+    """
+    import yaml
+
+    from lib.db import psql_ok as _ok, esc_sql as _esc
+
+    yaml_path = Path("/opt/projects/server/docs/domain-glossary.yaml")
+    raw = yaml_path.read_text()
+    if raw.startswith("#"):
+        _, _, raw = raw.partition("\n")
+    data = yaml.safe_load(raw)
+    if not data or "bounded_contexts" not in data:
+        print("ERROR: domain-glossary.yaml empty or invalid")
+        return 1
+
+    ctx_count = 0
+    term_count = 0
+    errors = []
+
+    for bc in data["bounded_contexts"]:
+        bc_id = int(bc["id"])
+        bc_name = _esc(bc["name"])
+        sql = (f"INSERT INTO bounded_contexts (id, name) VALUES ({bc_id}, '{bc_name}') "
+               f"ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name")
+        if _ok(sql):
+            ctx_count += 1
+        else:
+            errors.append(f"context {bc['name']}")
+
+        for term_entry in bc.get("terms", []):
+            term = _esc(term_entry["term"])
+            definition = _esc(term_entry["definition"])
+            tables = term_entry.get("tables", [])
+            files = term_entry.get("related_files", [])
+            tables_pg = "'{}'::text[]" if not tables else "ARRAY[" + ", ".join(f"'{_esc(t)}'" for t in tables) + "]"
+            files_pg = "'{}'::text[]" if not files else "ARRAY[" + ", ".join(f"'{_esc(f)}'" for f in files) + "]"
+
+            sql = (f"INSERT INTO glossary_terms (term, definition, bounded_context_id, tables_ref, related_files) "
+                   f"VALUES ('{term}', '{definition}', {bc_id}, {tables_pg}, {files_pg}) "
+                   f"ON CONFLICT (term, bounded_context_id) DO UPDATE SET "
+                   f"definition = EXCLUDED.definition, tables_ref = EXCLUDED.tables_ref, "
+                   f"related_files = EXCLUDED.related_files")
+            if _ok(sql):
+                term_count += 1
+            else:
+                errors.append(term_entry["term"])
+
+    if errors:
+        print(f"⚠️  Synced {ctx_count} contexts, {term_count} terms with {len(errors)} error(s)")
+        for e in errors:
+            print(f"  FAIL: {e}")
+        return 1
+    else:
+        print(f"✅ Synced {ctx_count} contexts, {term_count} terms — DB is up to date")
+        return 0
+
+
 def cmd_lint(args):
     """Check code against enforced rules."""
     from lint_rules import run_all_checks, find_python_files, SCRIPTS_DIR
@@ -1116,6 +1176,10 @@ async def main():
     p_lint.add_argument("--files", nargs="*", help="Specific files to check (default: all scripts/)")
     p_lint.add_argument("--fix", action="store_true", help="Suggest fixes for violations")
 
+    p_glossary = sub.add_parser("glossary", help="Glossary (SSOT: docs/domain-glossary.yaml)")
+    gl_sub = p_glossary.add_subparsers(dest="gl_command")
+    gl_sync = gl_sub.add_parser("sync", help="Sync YAML → DB (idempotent upsert)")
+
     args = parser.parse_args()
 
     if args.command == "search":
@@ -1192,6 +1256,11 @@ async def main():
         cmd_status(args)
     elif args.command == "lint":
         cmd_lint(args)
+    elif args.command == "glossary":
+        if args.gl_command == "sync":
+            raise SystemExit(cmd_glossary_sync(args))
+        else:
+            p_glossary.print_help()
     else:
         parser.print_help()
 

@@ -12,7 +12,8 @@ Date: 2026-06-06 | Status: pending (wait for 5-phase experiment completion)
 
 ## Related: Naming Audit
 
-See [naming-audit.md](naming-audit.md) — comprehensive audit of:
+→ All violations fixed in Session 33. Lint rules in `lint_rules.py` + `cli.py lint` enforce naming conventions automatically. Original audit in `docs/_archive/plans/naming-audit.md`.
+
 - Model names hardcoded in file/function/variable names (13 files, 8 functions, 10+ variables)
 - Single-letter role abbreviations (P/R/J → Proposer/Reflector/Judge)
 - Ambiguous abbreviations (ts, _est_tok, esc_sql, fb_*, mcp_pt/gt/em, etc.)

@@ -46,7 +46,7 @@ user: 176 chars (code_mod 통합 요청)
 assistant: 2490 chars (상세 응답 - 구조, 파일 리스트)
 extract_model: 30B (fallback)
 MCP files: ["de_mod_pipeline.py", "extract_pipeline.py", "runner.py"]
-MCP functions: ["run_32b_4stage", "save_result", "upload_review_bundle", "upload_raw"]
+MCP functions: ["save_result", "upload_review_bundle", "upload_raw"]
 TLDR: "User requested code_mod pipeline integration"
 facts: user 2개 ("code_mod 통합 필요", "CLI upload 기능"), text 0개
 

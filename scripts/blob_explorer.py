@@ -101,8 +101,8 @@ def _generate_sas(blob_name: str) -> str:
 def _upload_blob(filename: str, data: bytes) -> str:
     svc = _blob_service()
     cc = svc.get_container_client(CONTAINER)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    blob_name = f"{UPLOAD_PREFIX}{ts}_{filename}"
+    utc_ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    blob_name = f"{UPLOAD_PREFIX}{utc_ts}_{filename}"
     cc.upload_blob(blob_name, data, overwrite=True)
     return blob_name
 

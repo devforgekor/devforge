@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — prj_cycle.py
+# Path: imported by — pipelines/prj_cycle.py
 """Token budget manager for P-R-J pipeline context allocation."""
 
 
@@ -16,7 +16,7 @@ PHASE_BUDGET = {
 }
 
 
-def _est_tok(text: str) -> int:
+def _estimate_tokens(text: str) -> int:
     return int(len(text) / CHARS_PER_TOKEN)
 
 
@@ -33,7 +33,7 @@ class TokenBudget:
     def add_section(self, label: str, text: str, priority: int = 5) -> bool:
         if self._over:
             return False
-        tok = _est_tok(text)
+        tok = _estimate_tokens(text)
         if self.used + tok > self.soft_limit:
             allowed = max(0, self.limit - self.used - 10)
             if allowed > 80:

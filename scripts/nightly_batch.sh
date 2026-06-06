@@ -17,7 +17,7 @@
 # Phases:
 # Phase 4: P-R-J queue consumer    mid    — night_proposer/night_reflector/night_judge on Pod B(:8080)
 # Phase 5: production verify          heavy  — night_verify final gate on Pod B(:8081)
-# Phase 5b: experimental test_verify  heavy  — parallel verify on Pod B(:8081)
+# Phase 5: final verify  heavy  — 27B on Pod B(:8081)
 # Phase 6: restore day                       — day_r(:8082) + day_p/day_j/day_mcp(:8080)
 
 set -o pipefail
@@ -143,7 +143,7 @@ fi
 review_ok=true
 
 echo "[$(LOG_TS)] === Phase 4: P-R-J Review Pipeline ==="
-if ! python3 "$SCRIPTS_DIR/prj_cycle.py" --queue --limit 5; then
+if ! python3 "$SCRIPTS_DIR/pipelines/prj_cycle.py" --queue --limit 5; then
     review_ok=false
     echo "[$(LOG_TS)] prj_cycle.py --queue FAILED" >&2
 fi
@@ -171,39 +171,14 @@ else
     sleep 5
 
     if switch_mode_pod_b "verify" && wait_for_model 8081 "Qwen3.6-27B" 600; then
-        retry "verify" 2 python3 "$SCRIPTS_DIR/review_consumer.py" || verify_ok=false
+        retry "verify" 2 python3 "$SCRIPTS_DIR/pipelines/review_consumer.py" || verify_ok=false
     else
         echo "[$(LOG_TS)] Failed to start verify mode" >&2
         verify_ok=false
     fi
 fi
 
-# ── Phase 5b: Experimental test_verify (parallel consumer) ──────
-
-test_verify_ok=true
-
-test_queue_count=$(cd "$SCRIPTS_DIR" && python3 -c "
-from lib.db import psql
-r = psql(\"SELECT COUNT(*) FROM activity_log WHERE queue_status IN ('reviewed','done') AND type IN ('review','debate_result','extract_result') AND (body->'test_verify_result' IS NULL OR body->'test_verify_result' = 'null'::jsonb)\")
-import sys
-val = r.strip() if r else '0'
-print(val if val else '0')
-" 2>/dev/null)
-echo "[$(LOG_TS)] Test-verify queue (not yet 32B-reviewed): $test_queue_count items"
-
-if [ "$test_queue_count" = "0" ] || [ -z "$test_queue_count" ]; then
-    echo "[$(LOG_TS)] Test-verify queue empty — skipping 32B test verify"
-else
-    echo "[$(LOG_TS)] === Phase 5b: Experimental test_verify ==="
-    if switch_mode_pod_b "verify_test" && wait_for_model 8081 "32B (experimental)" 900; then
-        retry "test_verify" 1 python3 "$SCRIPTS_DIR/test_review_consumer.py" || test_verify_ok=false
-    else
-        echo "[$(LOG_TS)] Failed to start verify_test mode" >&2
-        test_verify_ok=false
-    fi
-fi
-
-# ── Phase 6: restore day mode ───────────────────────────────
+# ── Phase 5: restore day mode ───────────────────────────────
 
 day_restored=true
 
@@ -235,6 +210,15 @@ if [ "$day_restored" = "false" ]; then
 _set_mode day
 _restored=true
 
+# ── Daily structure sync (chain: state_collector → gen_architecture) ─
+# Primary run after nightly. Falls back to KST 09:00 timer on failure.
+echo "[$(LOG_TS)] == Daily structure sync == "
+if systemctl --user start devforge-daily-structure.service 2>/dev/null; then
+    echo "[$(LOG_TS)] Daily structure sync OK"
+else
+    echo "[$(LOG_TS)] Daily structure sync FAILED — KST 09:00 timer will retry" >&2
+fi
+
 # ── Phase 7: Extract faithfulness test ─────────────────────────
 
 extract_test_ok=true
@@ -252,7 +236,7 @@ fi
 proxy_ok=true
 
 echo "[$(LOG_TS)] === Phase 7: DeepSeek Pro verify audit ==="
-if python3 "$SCRIPTS_DIR/proxy_reviewer.py" --limit 50; then
+if python3 "$SCRIPTS_DIR/pipelines/proxy_reviewer.py" --limit 50; then
     echo "[$(LOG_TS)] DeepSeek Pro review OK"
 else
     proxy_ok=false
@@ -266,7 +250,6 @@ extract_test: $($extract_test_ok && echo ok || echo skipped)
 validation: $($validation_ok && echo ok || echo failed)
 review: $($review_ok && echo ok || echo failed)
 verify: $($verify_ok && echo ok || echo skipped)
-test_verify: $($test_verify_ok && echo ok || echo skipped)
 day: $($day_restored && echo ok || echo failed)
 YAML
 

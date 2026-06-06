@@ -238,11 +238,11 @@ def main():
     if args.experiment_id:
         experiment_id = args.experiment_id
     elif args.label:
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        experiment_id = f"{args.label}_{ts}"
+        utc_ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        experiment_id = f"{args.label}_{utc_ts}"
     else:
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        experiment_id = f"bench_{args.port}_{ts}"
+        utc_ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        experiment_id = f"bench_{args.port}_{utc_ts}"
 
     # Build rationale from label if provided
     rationale = args.rationale

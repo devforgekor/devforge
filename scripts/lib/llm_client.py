@@ -39,7 +39,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "Qwen7B":  {"port": 8080, "temp": 0.10, "max_tokens": 400,  "timeout": 480},
     "Qwen14B": {"port": 8080, "temp": 0.10, "max_tokens": 2048, "timeout": 600},
     "Qwen27B": {"port": 8081, "temp": 0.10, "max_tokens": 4096, "timeout": 1200},
-    "Codestral":{"port": 8080, "temp": 0.10, "max_tokens": 4096, "timeout": 7200},
+    "NextCoder14B":{"port": 8080, "temp": 0.10, "max_tokens": 4096, "timeout": 7200},
 
     # Role aliases — pipeline code uses these; MODEL_REGISTRY is the single
     # place to change when a model/port changes.
@@ -56,9 +56,9 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "day_j":       {"_model": "Qwen7B"},
 
     # Night pipeline — prj_cycle batch review
-    "night_proposer":  {"_model": "Qwen30B"},
+    "night_proposer":  {"_model": "Qwen30B"},  # 30B A3B MoE (port 8080, reflector/judge와 swap)
     "night_reflector": {"_model": "Qwen14B"},
-    "night_judge":     {"_model": "Codestral"},
+    "night_judge":     {"_model": "NextCoder14B"},
     "night_verify":    {"_model": "Qwen27B"},
 }
 
@@ -179,7 +179,7 @@ def call_llm(
     choices = result.get("choices", [])
     if not choices:
         raise RuntimeError(f"LLM ({model}) returned no choices: {result}")
-    content = choices[0]["message"]["content"].strip()
+    content = (choices[0]["message"].get("content") or "").strip()
     usage = result.get("usage", {})
     timings = result.get("timings", {})
 

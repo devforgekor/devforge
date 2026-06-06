@@ -119,7 +119,7 @@ if not choices:
     print(f"No choices in response: {raw}")
     sys.exit(1)
 
-reply_text = choices[0]["message"]["content"].strip()
+reply_text = (choices[0]["message"].get("content") or "").strip()
 usage = raw.get("usage", {})
 print(f"Usage: {json.dumps(usage, indent=2)}")
 print()

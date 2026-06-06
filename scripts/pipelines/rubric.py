@@ -4,7 +4,7 @@
 """
 DevForge Rubric Experiment — Round 1 (no rubric) vs Round 2 (with rubric).
 
-Compares P-R-J-27B-32B pipeline quality with and without explicit evaluation criteria.
+Compares P-R-J-27B pipeline quality with and without explicit evaluation criteria.
 
 Usage:
   # Run full experiment (both rounds):
@@ -104,7 +104,7 @@ Score P and R 0-30 each (sum of 3 sub-scores):
 - 3 < gap ≤ 8: moderate — include disagreement_analysis
 - gap > 8: flag for escalation
 
-### V (Verify 27B/32B) — Final Verdict Criteria
+### V (Verify 27B) — Final Verdict Criteria
 - confidence ≥ 80: approve
 - 60 ≤ confidence < 80: approved_with_conditions (list conditions)
 - confidence < 60: reject or escalate
@@ -165,7 +165,7 @@ Output JSON:
   "summary": "1 sentence",
   "reasoning": "3-5 sentences",
   "verification_items": [{"check":"...","result":"pass|fail|partial","detail":"..."}],
-  "disagreement_with_27b": [{"issue":"...","27b_verdict":"...","32b_verdict":"...","detail":"..."}]
+  "disagreement_with_27b": [{"issue":"...","27b_verdict":"...","detail":"..."}]
 }"""
 
 
@@ -178,7 +178,7 @@ def inject_rubric(system_prompt: str, role: str) -> str:
     elif "judge" in role or "J " in role or "Scoring Judge" in system_prompt:
         section = "### J (Judge) — Scoring Criteria\n" + REVIEW_RUBRIC.split("### J")[1].split("\n### V")[0]
     elif "verify" in role or "V " in role:
-        section = "### V (Verify 27B/32B) — Final Verdict Criteria\n" + REVIEW_RUBRIC.split("### V")[1]
+        section = "### V (Verify 27B) — Final Verdict Criteria\n" + REVIEW_RUBRIC.split("### V")[1]
     else:
         section = REVIEW_RUBRIC
     return system_prompt + "\n\n" + section
@@ -447,42 +447,6 @@ def run_verify_27b(input_data: Dict, prj_results: List[Dict],
     return result
 
 
-def run_verify_32b(input_data: Dict, v27b_result: Dict, prj_results: List[Dict],
-                   with_rubric: bool = False, output_suffix: str = "") -> Dict:
-    """Phase: 32B verify — independent second opinion."""
-    log("\n=== 32B Verify (:8081 verify_test) ===")
-    if not swap_pod_b("verify_test"):
-        return {"error": "Pod B verify_test swap failed"}
-
-    suffix = f"_rubric{output_suffix}" if with_rubric else output_suffix
-    system = SYSTEM_V32 if not with_rubric else inject_rubric(SYSTEM_V32, "verify_32b")
-
-    v27 = v27b_result.get("result", {}) if v27b_result else {}
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content":
-            f"## 27B Verdict\n{json.dumps(v27, ensure_ascii=False)[:2000]}\n\n"
-            f"## Total Findings\n{input_data['total_findings']} findings from {input_data['total_files_merged']} files\n"
-            f"Severity: {input_data.get('severity_breakdown',{})}"},
-    ]
-    log("  [llm] 32B verify...")
-    resp = call_llm_json(messages, "Qwen32B", max_tokens=2048, label=f"32B_verify{suffix}")
-    if not resp:
-        return {"error": "32B call failed"}
-
-    result = {
-        "phase": "verify_32b", "round": suffix or "norubric",
-        "with_rubric": with_rubric,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "usage": resp["usage"], "timings": resp["timings"],
-        "elapsed_ms": resp["elapsed_ms"],
-        "result": resp["result"],
-    }
-    fpath = os.path.join(EXPERIMENT_DIR, f"verify_32b{suffix}.json")
-    with open(fpath, "w") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
-    return result
-
 
 def find_best_combo(round1_prj_results: List[Dict]) -> str:
     """Find the best P-R-J combo from Round 1 based on P/R scores."""
@@ -632,10 +596,6 @@ def run_experiment(rounds: Optional[List[int]] = None):
         r1_v27b = run_verify_27b(input_data, round1_prj_results,
                                   with_rubric=False, output_suffix="_round1")
 
-        log("\n--- 32B Verify ---")
-        r1_v32b = run_verify_32b(input_data, r1_v27b, round1_prj_results,
-                                  with_rubric=False, output_suffix="_round1")
-
     # ── Round 2: With rubric, best combo only ──
     if 2 in rounds:
         log("\n" + "=" * 50)
@@ -655,10 +615,6 @@ def run_experiment(rounds: Optional[List[int]] = None):
 
         log("\n--- 27B Verify (with rubric) ---")
         r2_v27b = run_verify_27b(input_data, round2_prj_results,
-                                  with_rubric=True, output_suffix="_round2")
-
-        log("\n--- 32B Verify (with rubric) ---")
-        r2_v32b = run_verify_32b(input_data, r2_v27b, round2_prj_results,
                                   with_rubric=True, output_suffix="_round2")
 
     # ── Comparison ──
@@ -695,7 +651,6 @@ def main():
         log(f"Running Round 2 with combo {combo['name']}")
         r2_prj = run_prj_combo(combo, input_data, round_num=2, with_rubric=True)
         r2_v27b = run_verify_27b(input_data, [r2_prj], with_rubric=True, output_suffix="_round2")
-        r2_v32b = run_verify_32b(input_data, r2_v27b, [r2_prj], with_rubric=True, output_suffix="_round2")
     elif args.round:
         run_experiment(rounds=[args.round])
     else:

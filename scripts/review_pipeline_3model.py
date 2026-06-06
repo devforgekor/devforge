@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: deprecated — replaced by review_consumer.py
+# Path: orchestrator.py
 """3-Model Review Pipeline — Nightly Code Review (llama.cpp).
 
 Adversarial 3-stage (P→R→J) pipeline with Scoring Judge:
@@ -41,7 +41,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from pipelines.review import (  # noqa: E402
     QWEN7B_PORT,
-    SELENE_PORT,
+    JUDGE_PORT,
     _poll_health,
     run_deep_review,
     run_diff,
@@ -65,7 +65,7 @@ def _swap_pod_b(mode: str, timeout: int = 300) -> bool:
         capture_output=True,
         timeout=30,
     )
-    check_port = SELENE_PORT if mode == "review-se" else QWEN7B_PORT
+    check_port = JUDGE_PORT if mode == "review-se" else QWEN7B_PORT
     return _poll_health(check_port, timeout=timeout)
 
 

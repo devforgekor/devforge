@@ -254,6 +254,7 @@ def main():
 
     # 2. Collect fresh data
     structural = collect_structural()
+
     metrics = collect_metrics()
     try:
         from lib.tracking.dependency_tracker import collect as collect_references

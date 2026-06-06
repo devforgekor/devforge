@@ -1,0 +1,12 @@
+{
+  "total_elapsed_s": 302.9,
+  "phases_run": [
+    3
+  ],
+  "results": {
+    "phase3": {
+      "phase": 3,
+      "error": "Pod B swap failed"
+    }
+  }
+}

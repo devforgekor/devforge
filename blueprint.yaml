@@ -28,11 +28,11 @@ phases:
   status: partial
   completed: '2026-05-28'
   items:
-  - 2-Container architecture — Podman A (Qwen3-4B:8080) + Podman B (mode-switchable:8081-8082)
+  - 2-Container architecture — Podman A (3B:8082) + Podman B (mode-switchable:8081-8082)
   - Mode switch system (normal / batch / code) via current-mode.env
   - code_mod_pipeline.py — 32B 4-stage pipeline (ANALYZE→PLAN→IMPL→PACKAGE)
   - Prompt ablation — code slicing 89% token reduction
-  - review_worker.py — 3-LLM debate (Qwen3-4B + Llama-3B parallel → Phi-4-mini arbitration)
+  - review_worker.py — 3-LLM debate (3B + Llama-3B parallel → Phi-4-mini arbitration)
   - review_facts DB + performance metrics (6 columns)
   - RateEstimator dynamic timeout
   - Slack notification integration (stage completion DM)
@@ -47,21 +47,11 @@ phases:
     timeline: this week
     status: active
     items:
-    - Qwen3-4B (Podman A) re-enable — currently down after 32B code mode
-    - 'review-worker.timer re-enable — 3-LLM debate pipeline (mode-aware: save-only in code mode, full processing in normal
-      mode)'
-    - 'review_worker Phase 0 — orphan resolution: Qwen3-4B + Llama-3B parallel worklog classification, Phi-4-mini arbitration
-      on disagreement. Real-time (hourly) fast linking, nightly batch correction.'
-    - 'swap-batch/normal.timer removed (2026-05-25) — mode switching consolidated into nightly pipeline (KST 00:00 code, 07:30
-      normal). Daytime: normal mode only with review-worker for simple processing. Night: 32B/Phi-4-14B precise fixes.'
-    - 'Mode-aware processing: code mode → save records only (skip LLM processing since only 32B loaded). Mode exit → backfill
-      accumulated turns.'
     - journald log retention config (MaxRetentionSec=30day)
     - Language pipeline guardrails — lib/text_quality.py (script purity, token budget, think-tag detection)
     - update_handover.py quality-score-based context selection — prioritize high-fidelity turns
     - 'Translation quality measurement infrastructure — source_lang column + lib/translation_quality.py (cosine similarity
       based, no new model calls). Ref: docs/translation-quality-feedback-loop.md, docs/translation-quality-report.md'
-    - T01-T16 32B batch test complete → apply verified diffs
   - name: Tier 2 — Vector Intelligence
     timeline: 2-4 weeks
     status: planned
@@ -114,11 +104,11 @@ target:
     doc: docs/azure-qwen-setup.md
     setup_date: '2026-05-25'
   containers:
-  - name: devforge-qwen
-    role: Podman A — Qwen3-4B on :8080 (currently DOWN after 32B code mode)
-    model: Qwen3-4B-Q4_K_M.gguf
-    memory_max: 6G
-    ctx_size: 4096
+  - name: devforge-pod-a
+    role: Podman A — 3B operator on :8082
+    model: Qwen2.5-Coder-3B-Instruct.Q8_0.gguf
+    memory_max: 4G
+    ctx_size: 8192
   - name: devforge-swap
     role: 'Podman B — Mode-switchable on :8081-8082 (currently code mode: 32B)'
     modes:
@@ -128,14 +118,14 @@ target:
     memory_max: 26G
     processing_rules:
       normal_mode:
-        models: Qwen3-4B:8080 + Phi-4-mini:8081 + Llama-3B:8082
+        models: 3B:8082 + Phi-4-mini:8081 + Llama-3B:8082
         review_worker: ON — Full 3-LLM debate (Qwen+Llama parallel extract → Phi-4-mini arbitrate). Includes backfill of any
           turns accumulated during non-normal modes.
       batch_mode:
-        models: Qwen3-4B:8080 + Phi-4 14B:8081 (Llama-3B unavailable)
+        models: 3B:8082 + Phi-4 14B:8081 (Llama-3B unavailable)
         review_worker: OFF — No processing. Turns accumulate for backfill when normal mode resumes.
       code_mode:
-        models: 32B:8081 only (Qwen3-4B STOPPED, Llama-3B STOPPED)
+        models: 32B:8081 only (3B STOPPED, Llama-3B STOPPED)
         review_worker: OFF — No processing. Turns accumulate for backfill when normal mode resumes.
       backfill:
         trigger: Normal mode resumed — review_worker detects unprocessed turns since last normal-mode run.

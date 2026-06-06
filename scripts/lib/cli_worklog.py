@@ -5,7 +5,7 @@
 import json
 
 from lib.db import psql as _sql, esc_sql
-from lib.agents import normalize as normalize_agent
+from lib.tracking.agent_names import normalize as normalize_agent
 
 
 def cmd_worklog_add(args):
