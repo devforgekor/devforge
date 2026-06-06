@@ -223,16 +223,16 @@ def _write_mode(pod, mode):
 
 
 def _start_pod_a(timeout=120):
-    """Start Pod A (3B)."""
-    log("  Starting Pod A (3B:8082)...")
+    """Start Pod A (day_r:8082)."""
+    log("  Starting Pod A (day_r:8082)...")
     subprocess.run(["systemctl", "--user", "start", "container-devforge-qwen.service"],
                    capture_output=True, timeout=60)
     return wait_health(8082, timeout)
 
 
 def _start_pod_b(timeout=120):
-    """Start Pod B (7B)."""
-    log("  Starting Pod B (7B:8080)...")
+    """Start Pod B (day:8080)."""
+    log("  Starting Pod B (day:8080)...")
     subprocess.run(["systemctl", "--user", "start", "container-devforge-swap.service"],
                    capture_output=True, timeout=60)
     return wait_health(8080, timeout)
@@ -257,7 +257,7 @@ def recover_and_restart(attempt=1):
 
     attempt=1: 기본 — stop + sync + 15s + 3B+7B
     attempt=2: 공격 — drop_caches + swap off/on + 3B+7B
-    attempt=3: 최후 — minimal mode (7B only, Pod A 없이)
+    attempt=3: 최후 — minimal mode (day model only, Pod A 없이)
     """
     _stop_all()
     _free_memory(level=min(attempt, 3))
@@ -265,37 +265,37 @@ def recover_and_restart(attempt=1):
     _write_mode("pod-a", "day")
 
     if attempt <= 2:
-        log("  Attempt: 3B + 7B (standard day mode)")
+        log("  Attempt: day_r + day_p/day_j (standard day mode)")
         ok_a = _start_pod_a(120)
-        log(f"  Pod A (3B:8082) = {'OK' if ok_a else 'TIMEOUT'}")
+        log(f"  Pod A (day_r:8082) = {'OK' if ok_a else 'TIMEOUT'}")
 
         if not ok_a and attempt == 2:
             _report_mem("after Pod A failure")
-            # Pod A 실패 → 더 강력한 회수 후 재시도
+            # day_r 실패 → 더 강력한 회수 후 재시도
             _stop_all()
             _free_memory(level=2)
             ok_a = _start_pod_a(120)
-            log(f"  Pod A retry (3B:8082) = {'OK' if ok_a else 'TIMEOUT'}")
+            log(f"  Pod A retry (day_r:8082) = {'OK' if ok_a else 'TIMEOUT'}")
 
         if ok_a:
             ok_b = _start_pod_b(180)
-            log(f"  Pod B (7B:8080) = {'OK' if ok_b else 'TIMEOUT'}")
+            log(f"  Pod B (day:8080) = {'OK' if ok_b else 'TIMEOUT'}")
             if ok_b:
                 return True
 
         # 3B+7B 실패 → minimal mode: 7B only
-        log("  Escalating to minimal mode (7B only)...")
+        log("  Escalating to minimal mode (day model only)...")
 
     # attempt=3 or escalation: minimal mode
     _stop_all()
     _free_memory(level=3)
     _write_mode("pod-b", "day")
 
-    # Pod B만 단독 시작 (3B 없음 — 메모리 3.1GB 절약)
-    log("  Minimal mode: Pod B only (7B:8080)")
+    # Pod B만 단독 시작 (day_r 없음 — 메모리 3.1GB 절약)
+    log("  Minimal mode: Pod B only (day:8080)")
     ok_b = _start_pod_b(300)  # 더 긴 timeout
     if ok_b:
-        log("  Minimal mode OK: 7B running alone")
+        log("  Minimal mode OK: day model running alone")
         return True
 
     log("  FATAL: even minimal mode failed")

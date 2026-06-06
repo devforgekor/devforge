@@ -15,10 +15,10 @@
 #   python3 -c "print(open('/opt/ai_data/scripts/current-system-mode.env').read().strip().split('=')[1])"
 #
 # Phases:
-# Phase 4: review pipeline       mid    — R1(:8083) + Qwen7B(:8080) + Selene(:8081) P→R→J
-# Phase 5: verify (27B)          heavy  — production final gate, Pod B 27B(:8081)
-# Phase 5b: test_verify (32B)    heavy  — experimental parallel verify, Pod B 32B(:8081)
-# Phase 6: restore day                  — Pod A(3B:8082 operator 겸) + Pod B(7B:8080) back to day
+# Phase 4: P-R-J queue consumer    mid    — night_proposer/night_reflector/night_judge on Pod B(:8080)
+# Phase 5: production verify          heavy  — night_verify final gate on Pod B(:8081)
+# Phase 5b: experimental test_verify  heavy  — parallel verify on Pod B(:8081)
+# Phase 6: restore day                       — day_r(:8082) + day_p/day_j/day_mcp(:8080)
 
 set -o pipefail
 
@@ -148,7 +148,7 @@ if ! python3 "$SCRIPTS_DIR/prj_cycle.py" --queue --limit 5; then
     echo "[$(LOG_TS)] prj_cycle.py --queue FAILED" >&2
 fi
 
-# ── Phase 5: 27B production verify ──────────────────────────────
+# ── Phase 5: Production verify (night_verify) ───────────────────
 
 verify_ok=true
 
@@ -164,7 +164,7 @@ echo "[$(LOG_TS)] Verify queue (status='reviewed'): $queue_count items"
 if [ "$queue_count" = "0" ] || [ -z "$queue_count" ]; then
     echo "[$(LOG_TS)] Verify queue empty — skipping 27B verify"
 else
-    echo "[$(LOG_TS)] === Phase 5: 27B production verify ==="
+    echo "[$(LOG_TS)] === Phase 5: Production verify (night_verify) ==="
     stop_llm_services "verify"
     echo "[$(LOG_TS)] Stopping Pod A (memory for 27B)..."
     systemctl --user stop container-devforge-qwen 2>&1 || true
@@ -178,7 +178,7 @@ else
     fi
 fi
 
-# ── Phase 5b: 32B experimental test_verify (parallel consumer) ──
+# ── Phase 5b: Experimental test_verify (parallel consumer) ──────
 
 test_verify_ok=true
 
@@ -194,8 +194,8 @@ echo "[$(LOG_TS)] Test-verify queue (not yet 32B-reviewed): $test_queue_count it
 if [ "$test_queue_count" = "0" ] || [ -z "$test_queue_count" ]; then
     echo "[$(LOG_TS)] Test-verify queue empty — skipping 32B test verify"
 else
-    echo "[$(LOG_TS)] === Phase 5b: 32B experimental test_verify ==="
-    if switch_mode_pod_b "verify_test" && wait_for_model 8081 "Qwen2.5-Coder-32B" 900; then
+    echo "[$(LOG_TS)] === Phase 5b: Experimental test_verify ==="
+    if switch_mode_pod_b "verify_test" && wait_for_model 8081 "32B (experimental)" 900; then
         retry "test_verify" 1 python3 "$SCRIPTS_DIR/test_review_consumer.py" || test_verify_ok=false
     else
         echo "[$(LOG_TS)] Failed to start verify_test mode" >&2
@@ -213,17 +213,17 @@ if ! switch_mode_both "day" "day"; then
     echo "[$(LOG_TS)] FATAL: switch_mode day failed" >&2
 else
     start_llm_services "day-restore"
-    # Pod B 7B on :8080
-    if ! wait_for_model 8080 "7B (Pod B)" 300; then
+    # Pod B day mode on :8080
+    if ! wait_for_model 8080 "day (Pod B)" 300; then
         day_restored=false
-        echo "[$(LOG_TS)] FATAL: 7B :8080 not responding after restore" >&2
+        echo "[$(LOG_TS)] FATAL: day mode (:8080) not responding after restore" >&2
     fi
-    # Pod A 3B(:8082) operator+refuter
-    echo "[$(LOG_TS)] Restarting Pod A (3B operator+refuter)..."
+    # Pod A day_r(:8082)
+    echo "[$(LOG_TS)] Restarting Pod A (day_r:8082)...
     systemctl --user restart container-devforge-qwen 2>&1 || true
     sleep 5
-    if ! wait_for_model 8082 "3B (Pod A)" 60; then
-        echo "[$(LOG_TS)] WARNING: 3B refuter :8082 not responding" >&2
+    if ! wait_for_model 8082 "day_r (Pod A)" 60; then
+        echo "[$(LOG_TS)] WARNING: day_r :8082 not responding" >&2
     fi
 fi
 

@@ -47,7 +47,7 @@ TEMP_MCP = 0.1
 BATCH_LIMIT = 100
 
 # ── System prompts ─────────────────────────────────────────────────────────
-SYSTEM_EXTRACT_3B = """\
+SYSTEM_DAY_EXTRACT = """\
 You are a fact extractor for a developer-assistant conversation turn.
 Each turn has three parts: user_turn (the user's message), thinking (the
 model's internal reasoning, may be empty), and text (the model's response).
@@ -90,7 +90,7 @@ Rules:
 - Extract at most 5 facts per fact_type
 - If nothing extractable, return {"extractions": []}"""
 
-SYSTEM_MCP_7B = """\
+SYSTEM_DAY_MCP = """\
 You are a conversation analyst preparing structured metadata for an MCP
 (Model Context Protocol) system. Given the original conversation turn and
 the extracted facts, produce structured MCP fields.
@@ -131,7 +131,7 @@ Rules:
 - tags: 2-5 keywords for discovery and routing
 - If a field has no relevant data, use an empty array []"""
 
-SYSTEM_FALLBACK_7B = """\
+SYSTEM_FALLBACK = """\
 You are a fact extraction specialist handling a difficult turn. The initial extractor
 failed twice to extract faithful facts from this turn — previous extractions
 contained hallucinated content not present in the source. Be EXTRA cautious:
@@ -233,11 +233,11 @@ def _find_symbol(symbol: str, project_root: str) -> bool:
         return False
 
 
-# ── Phase 2: 3B extraction ────────────────────────────────────────────────
-def _extract_3b(user_turn: str, thinking: str, text: str,
-                attempt: int = 1,
-                prev_unfaithful: Optional[List[str]] = None
-                ) -> Optional[Dict[str, Any]]:
+# ── Phase 2: extraction ────────────────────────────────────────────────
+def _extract_facts(user_turn: str, thinking: str, text: str,
+                   attempt: int = 1,
+                   prev_unfaithful: Optional[List[str]] = None
+                   ) -> Optional[Dict[str, Any]]:
     """Run day_extract extraction. Returns {extractions, usage, timings, elapsed_ms}."""
     parts = [
         "=== user_turn ===",
@@ -260,7 +260,7 @@ def _extract_3b(user_turn: str, thinking: str, text: str,
         parts.append("Note: Retry. Previous attempt had unfaithful extractions.")
 
     meta = call_llm(
-        [{"role": "system", "content": SYSTEM_EXTRACT_3B},
+        [{"role": "system", "content": SYSTEM_DAY_EXTRACT},
          {"role": "user", "content": "\n".join(parts)}],
         model="day_extract",
         max_tokens=MAX_TOKENS_EXTRACT, temperature=TEMP_EXTRACT, timeout=TIMEOUT_EXTRACT,
@@ -319,7 +319,7 @@ def _generate_mcp_fields(user_turn: str, thinking: str, text: str,
         for ex in extractions:
             parts.append(f"  [{ex.get('fact_type','?')}] {ex.get('evidence','')[:300]}")
     meta = call_llm(
-        [{"role": "system", "content": SYSTEM_MCP_7B},
+        [{"role": "system", "content": SYSTEM_DAY_MCP},
          {"role": "user", "content": "\n".join(parts)}],
         model=model,
         max_tokens=MAX_TOKENS_MCP, temperature=TEMP_MCP, timeout=TIMEOUT_MCP,
@@ -342,7 +342,7 @@ def _fallback_extract(user_turn: str, thinking: str, text: str,
         "", "=== text ===", text or "(empty)",
     ]
     meta = call_llm(
-        [{"role": "system", "content": SYSTEM_FALLBACK_7B},
+        [{"role": "system", "content": SYSTEM_FALLBACK},
          {"role": "user", "content": "\n".join(parts)}],
         model=model,
         max_tokens=MAX_TOKENS_MCP, temperature=TEMP_MCP, timeout=TIMEOUT_MCP,
@@ -539,7 +539,7 @@ def extract_pipeline(
               f"user={len(ut)}ch think={len(th)}ch text={len(tx)}ch")
 
         try:
-            # ── Phase 2–4: day_extract extraction with retry/fallback ──────────
+            # ── Phase 2–4: extraction with retry/fallback ──────────
             extractions: Optional[List[Dict[str, Any]]] = None
             mark = ""
             used_model = "day_extract"
@@ -547,7 +547,7 @@ def extract_pipeline(
             for attempt in (1, 2):
                 print(f"  [extract] day_extract attempt {attempt}...")
                 prev_unfaithful = _prev_bad.get(str(attempt - 1)) if attempt > 1 else None
-                ex_result = _extract_3b(ut, th, tx, attempt=attempt,
+                ex_result = _extract_facts(ut, th, tx, attempt=attempt,
                                         prev_unfaithful=prev_unfaithful)
                 if ex_result is None:
                     print(f"  [extract]   Parse failure")

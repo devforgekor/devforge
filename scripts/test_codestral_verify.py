@@ -6,15 +6,12 @@ Usage: python3 test_codestral_verify.py"""
 import json, os, sys, time, subprocess
 sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.llm_client import call_llm, MODEL_REGISTRY
-from prj_cycle import kill_all, wait_health, wait_probe, SYS_V27, RUBRIC, MODE_FILE_B, log as plog
+from prj_cycle import kill_all, wait_health, wait_probe, SYS_VERIFY, RUBRIC, MODE_FILE_B, log as plog
 
 EXPER_DIR = '/opt/projects/server/data/experiment'
 PORT = 8080
 
 MODEL_REGISTRY["Codestral"] = {"port": 8080, "temp": 0.10, "max_tokens": 4096, "timeout": 7200}
-
-RUBRIC_APPEND = f'\n\n{RUBRIC}'
-SYS_V27_PROMPT = SYS_V27 + RUBRIC_APPEND
 
 context = json.dumps({
     "handoff_llm_r": json.load(open(f'{EXPER_DIR}/exp_handoff_llm_r1_norubric_r1_norubric.json')),
@@ -23,7 +20,7 @@ context = json.dumps({
 }, indent=2)
 
 RUBRIC_APPEND = f'\n\n{RUBRIC}'
-SYS_V27_PROMPT = SYS_V27 + RUBRIC_APPEND
+SYS_V27_PROMPT = SYS_VERIFY + RUBRIC_APPEND
 
 def start_model(mode):
     plog(f"  Starting {mode}...")
@@ -47,7 +44,7 @@ def run_verify():
     try:
         timeout_s = 3600
         r = call_llm(
-            [{"role": "system", "content": SYS_V27_PROMPT},
+            [{"role": "system", "content": SYS_VERIFY_PROMPT},
              {"role": "user", "content": context}],
             model="Codestral", max_tokens=3072, temperature=0.1,
             timeout=timeout_s, json_mode=False, return_meta=True)

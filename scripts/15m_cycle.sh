@@ -1,7 +1,7 @@
 #!/bin/bash
 # 15m_cycle.sh — 30-min cycle with two phases
 #   $1 = extract  (:00/:30) → DuckDNS + worklog + extract_pipeline
-#   $1 = classify (:15/:45) → 주간 사전검토 P(7B)→R(3B)→J(7B)
+#   $1 = classify (:15/:45) → 주간 사전검토 P(day_p)→R(day_r)→J(day_j)
 # Skips during nightly pipeline (MODE=night).
 
 set -o pipefail
@@ -44,7 +44,7 @@ case "$PHASE" in
         ;;
 
     classify)
-        # ── Day pre-review (P->R->J) ───────────────────────────────────
+        # ── Day pre-review (P->R->J via day_p/day_r/day_j) ────────────
         if python3 /opt/projects/server/scripts/classify_pipeline.py --limit 5 2>&1; then
             echo "[$(LOG_TS)] classify_pipeline OK"
         else

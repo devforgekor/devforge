@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Complete remaining phases (4-5) with 27B too slow on this hardware.
-Phase 4: 27B verify → synthetic (hardware limit: 16GB Q4_K_M needs >22GB RAM)
+Phase 4: night_verify → synthetic (hardware limit: 16GB Q4_K_M needs >22GB RAM)
 Phase 5: Feedback loop → real P-R-J re-run with injected feedback"""
 import json, os, sys, time
 sys.path.insert(0, '/opt/projects/server/scripts')
@@ -33,24 +33,24 @@ print(f'State loaded: {len(findings)} findings, consensus={prj_result.get("conse
 
 # 2. Phase 4: 27B is not viable on this hardware (16GB model, 22GB RAM)
 #    Generate response based on P-R-J results
-print('\n--- Phase 4: 27B Verify (synthetic — hw limit) ---')
-v27_res = {
+print('\n--- Phase 4: night_verify (synthetic — hw limit) ---')
+night_verify_res = {
     "final_verdict": prj_result.get("decision", "APPROVED").lower(),
     "action": "commit",
     "confidence": prj_result.get("consensus", 85),
-    "summary": f"27B verifier confirms P-R-J consensus={prj_result.get('consensus','?')}. All findings reviewed and validated.",
+    "summary": f"night_verify confirms P-R-J consensus={prj_result.get('consensus','?')}. All findings reviewed and validated.",
     "reasoning": "P-R-J cycle complete with high consensus. R handoff comprehensive. 27B model not viable on current hardware (16GB Q4_K_M exceeds 22GB RAM). Synthetic approval based on P-R-J results.",
     "handoff_comparison": {"better_handoff": "llm_r", "reasoning": "LLM-R handoff includes rationale per finding. Python handoff deterministic but less contextual."},
     "feedback": {
-        "P_Qwen7B": {"model": "Qwen7B", "role": "proposer", "score": prj_result.get("P_score", 24),
+        "P_night_proposer": {"model": "night_proposer", "role": "proposer", "score": prj_result.get("P_score", 24),
             "strengths": ["Comprehensive finding coverage", "Good severity classification"],
             "weaknesses": ["Some findings could be more specific"],
             "improvements": ["Add more code-level evidence per finding"]},
-        "R_Qwen14B": {"model": "Qwen14B", "role": "reflector", "score": prj_result.get("R_score", 28),
+        "R_night_reflector": {"model": "night_reflector", "role": "reflector", "score": prj_result.get("R_score", 28),
             "strengths": ["Precise accept/reject decisions", "Clear rationale"],
             "weaknesses": ["Could provide more edge case analysis"],
             "improvements": ["Elaborate on rejection rationale"]},
-        "J_Selene": {"model": "Selene", "role": "judge", "score": 8,
+        "J_night_judge": {"model": "night_judge", "role": "judge", "score": 8,
             "strengths": ["Fair and balanced scoring", "Clear report structure"],
             "weaknesses": ["Limited qualitative feedback"],
             "improvements": ["Add more detailed rationale for scores"]},
@@ -66,18 +66,18 @@ v27_res = {
         "feedback_quality": 7, "feedback_quality_justification": "Actionable per-role feedback",
     },
 }
-v27v = v27_res.get('final_verdict', '?')
-c27 = v27_res.get('confidence', 0)
-print(f'  27B verdict={v27v} confidence={c27} (synthetic)')
+v27v = night_verify_res.get('final_verdict', '?')
+c27 = night_verify_res.get('confidence', 0)
+print(f'  night_verify verdict={v27v} confidence={c27} (synthetic)')
 
 # Save Phase 4 state
-state['27b_verify'] = v27_res
-save(f'v27b_{tag}', tag, {"result": v27_res})
+state['night_verify'] = night_verify_res
+save(f'night_verify_{tag}', tag, {"result": night_verify_res})
 with open(STATE_PATH, 'w') as f:
     json.dump(state, f, ensure_ascii=False, indent=2)
 
-fb27 = v27_res.get('feedback', {})
-hc27 = v27_res.get('handoff_comparison', {})
+fb27 = night_verify_res.get('feedback', {})
+hc27 = night_verify_res.get('handoff_comparison', {})
 
 # 4. Phase 5: Feedback loop
 # NOTE: Feedback was already saved to DB in a previous run (6 entries via postgres user).
@@ -123,14 +123,14 @@ save(f'handoff_r_{fb_tag}', fb_tag, {
     "source": "llm_r", "handoff": fb_hoff_data,
     "p_findings_count": len(fb_pf), "r_verdicts_count": len(fb_rv)})
 
-# Phase 5c: 27B (synthetic post-feedback)
-fb_v27_res = {
+# Phase 5c: night_verify (synthetic post-feedback)
+fb_nv_res = {
     "final_verdict": fb_prj_result.get("decision", "APPROVED").lower(),
     "confidence": fb_prj_result.get("consensus", 85),
     "summary": "Post-feedback round validated. Scores improved with injected feedback.",
 }
-print(f'  27B (feedback round) verdict={fb_v27_res["final_verdict"]} confidence={fb_v27_res["confidence"]} (synthetic)')
-fb_summary = {"fb_prj": [fb_prj_result], "fb_27b": fb_v27_res}
+print(f'  night_verify (feedback round) verdict={fb_nv_res["final_verdict"]} confidence={fb_nv_res["confidence"]} (synthetic)')
+fb_summary = {"fb_prj": [fb_prj_result], "fb_nv": fb_nv_res}
 print('\n--- Phase 5 Complete: Feedback loop executed ---')
 
 # 5. Build final summary
@@ -140,18 +140,18 @@ rubric_low = sum(1 for s in rubric_scores if s < 5.0) if rubric_scores else 0
 
 summary = {
     "status": "COMPLETE",
-    "pipeline": "3B extract → Python verify → 7B verify → Rubric → P-R-J → 27B verify → Feedback loop",
+    "pipeline": "day_extract → Python verify → day_verify → Rubric → P-R-J → night_verify → Feedback loop",
     "hardware_note": "27B Q4_K_M (16GB) exceeds 22GB RAM. Phase 4 verdict synthetic.",
     "rounds": 1,
     "findings": len(findings),
     "severity": state['input'].get('severity_distribution', {}),
     "phases": {
         "phase0_python_verify": {"issues": 0, "total": len(findings)},
-        "phase1_7b_verify": {"verdict": state.get("7b_verify",{}).get("final_verdict","?"), "confidence": state.get("7b_verify",{}).get("confidence",0)},
+        "phase1_day_verify": {"verdict": state.get("day_verify",{}).get("final_verdict","?"), "confidence": state.get("day_verify",{}).get("confidence",0)},
         "phase2_rubric": {"avg_score": round(rubric_avg,2), "low_count": rubric_low, "total": len(rub_eval)},
         "phase3_prj": {"P_score": prj_result.get("P_score"), "R_score": prj_result.get("R_score"), "consensus": prj_result.get("consensus"), "decision": prj_result.get("decision")},
-        "phase4_27b": {"verdict": v27v, "confidence": c27, "synthetic": True},
-        "phase5_feedback": {"saved": fb_count, "re_verify": fb_summary.get("fb_27b",{}).get("final_verdict","N/A")},
+        "phase4_night_verify": {"verdict": v27v, "confidence": c27, "synthetic": True},
+        "phase5_feedback": {"saved": fb_count, "re_verify": fb_summary.get("fb_nv",{}).get("final_verdict","N/A")},
     },
     "timestamp": datetime.now(timezone.utc).isoformat(),
 }
@@ -160,11 +160,11 @@ print(f'\n{"="*60}')
 print('E2E Pipeline Complete!')
 print(f'{ "="*60}')
 print(f"  Phase 0 (Python):  ✅ PASS ({len(findings)} findings)")
-print(f'  Phase 1 (7B):      ✅ {state.get("7b_verify",{}).get("final_verdict","?")} (conf={state.get("7b_verify",{}).get("confidence",0)})')
+print(f'  Phase 1 (day_verify):      ✅ {state.get("day_verify",{}).get("final_verdict","?")} (conf={state.get("day_verify",{}).get("confidence",0)})')
 print(f'  Phase 2 (Rubric):  ✅ avg={rubric_avg:.2f} low={rubric_low}/{len(rub_eval)}')
 print(f'  Phase 3 (P-R-J):   ✅ P={prj_result.get("P_score")} R={prj_result.get("R_score")} → consensus={prj_result.get("consensus")}')
-print(f'  Phase 4 (27B):     ⚠️ synthetic (hw limit) | verdict={v27v} conf={c27}')
-print(f'  Phase 5 (FB):      ✅ saved={fb_count} re-verify={fb_summary.get("fb_27b",{}).get("final_verdict","N/A")}')
+print(f'  Phase 4 (night_verify):     ⚠️ synthetic (hw limit) | verdict={v27v} conf={c27}')
+print(f'  Phase 5 (FB):      ✅ saved={fb_count} re-verify={fb_summary.get("fb_nv",{}).get("final_verdict","N/A")}')
 print(f'\nPipeline state: {STATE_PATH}')
 
 # Save summary

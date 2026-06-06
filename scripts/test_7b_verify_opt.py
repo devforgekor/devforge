@@ -6,14 +6,14 @@ Usage: python3 test_7b_verify_opt.py"""
 import json, os, sys, time, subprocess
 sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.llm_client import call_llm, MODEL_REGISTRY
-from prj_cycle import kill_all, wait_health, wait_probe, SYS_V27, RUBRIC, MODE_FILE_B, log as plog
+from prj_cycle import kill_all, wait_health, wait_probe, SYS_VERIFY, RUBRIC, MODE_FILE_B, log as plog
 
 EXPER_DIR = '/opt/projects/server/data/experiment'
 PORT = 8080
 
 MODEL_REGISTRY["Qwen7B"] = {"port": 8080, "temp": 0.10, "max_tokens": 3072, "timeout": 1800}
 
-SYS_V27_PROMPT = SYS_V27 + f'\n\n{RUBRIC}'
+SYS_V27_PROMPT = SYS_VERIFY + f'\n\n{RUBRIC}'
 
 # Optimized context: handoff JSON only (~2000 tokens vs 6000)
 context = json.dumps({

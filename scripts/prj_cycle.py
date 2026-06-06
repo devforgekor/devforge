@@ -738,7 +738,7 @@ Return JSON:
   }
 }"""
 
-SYS_V32 = """You are an independent second-opinion verifier.
+SYS_VERIFY_SECONDARY = """You are an independent second-opinion verifier.
 
 You will receive THREE handoff documents:
 1. [LLM-J] — Judge LLM handoff
@@ -1422,86 +1422,6 @@ def run_round(round_num, with_rubric, resume_state_path=None):
 
     # ── Phase 5: Feedback loop — disabled ──
     fb_count = 0  # feedback disabled
-    if False:  # feedback disabled
-        log(f"  Saved {fb_count} feedback entries to activity_log")
-        # Clear feedback cache so next LLM calls pick up new patterns
-        import lib.llm_client
-        lib.llm_client._feedback_cache = {}
-        lib.llm_client._feedback_ts = 0.0
-        log("  _feedback_cache cleared")
-
-        fb_tag = f"{tag}_fb"
-        log("\n--- Phase 5a: P-R-J with injected feedback ---")
-        fb_prj_result, fb_hoff, fb_pf, fb_rv = _run_prj(state, fb_tag, rubric_append)
-
-        # Phase 5b: R handoff with feedback
-        log("\n--- Phase 5b: R handoff (post-feedback) ---")
-        r_ctx_parts = [
-            f"=== P-R-J CYCLE (POST-FEEDBACK) ===",
-            f"P_model={P_MODEL} R_model={R_MODEL} J_model={J_MODEL}\n",
-            f"=== P PROPOSED FINDINGS ({len(fb_pf)}) ===",
-        ]
-        for pf in fb_pf:
-            r_ctx_parts.append(
-                f"  {pf['id']} [{pf.get('severity','?')}/{pf.get('category','?')}]: {pf.get('description','')[:200]}")
-        r_ctx_parts.append(f"\n=== R VERDICTS ({len(fb_rv)}) ===")
-        for rv in fb_rv:
-            r_ctx_parts.append(f"  {rv['id']}: {rv.get('verdict','?')} — {rv.get('reason','')[:150]}")
-        r_ctx_parts.append(f"\n=== J FINAL DECISION ===")
-        r_ctx_parts.append(f"  P_score={fb_prj_result.get('P_score','?')} R_score={fb_prj_result.get('R_score','?')}")
-        r_ctx_parts.append(f"  consensus={fb_prj_result.get('consensus','?')} decision={fb_prj_result.get('decision','?')}")
-        r_ctx_parts.append(f"  approved={fb_prj_result.get('approved',[])}")
-        r_ctx_parts.append(f"  rejected={fb_prj_result.get('rejected',[])}")
-        r_ctx_parts.append(f"  summary: {fb_prj_result.get('report_summary','')}")
-        for ti in (fb_prj_result.get('report_top_issues') or []):
-            r_ctx_parts.append(f"  top issue: {ti}")
-        fb_hoff_resp = call_one(R_MODEL, SYS_R_HANDOFF, "\n".join(r_ctx_parts), f"handoff_R_{fb_tag}")
-        fb_hoff_data = (fb_hoff_resp or {}).get("result", {}).get("handoff", {})
-        save(f"handoff_r_{fb_tag}", fb_tag, {
-            "source": "llm_r_feedback", "handoff": fb_hoff_data,
-            "p_findings_count": len(fb_pf), "r_verdicts_count": len(fb_rv),
-            "model_metadata": {k: MODEL_METADATA.get(k) for k in (P_MODEL, R_MODEL, J_MODEL)}})
-        fb_hoff_header = hoff_header  # reuse from phase 3.5
-        fb_llm_text = fb_hoff_header + f"## Handoff (R={model_info(R_MODEL)}) [LLM-R]\n" + json.dumps(
-            {"source": "llm_r_feedback", "handoff": fb_hoff_data}, ensure_ascii=False, indent=2)
-        fb_py_single = compile_handoff_single(fb_prj_result, round_num, with_rubric)
-        fb_py_single["model_metadata"] = handoff_models
-        fb_py_text = f"## Handoff [Python]\n" + json.dumps(fb_py_single, ensure_ascii=False, indent=2)
-        fb_pyc_text = json.dumps(fb_py_single, ensure_ascii=False, indent=2)
-        log(f"  1 LLM-R + 1 Python handoffs (post-feedback) saved")
-
-        # Phase 5c: night_verify (post-feedback)
-        log("\n--- Phase 5c: night_verify (post-feedback) ---")
-        fb_llm_h, fb_llm_j = _extract_json_part(fb_llm_text)
-        fb_py_h, fb_py_j = _extract_json_part(fb_py_text)
-        feedback_nv_context = state.build_context("final_verify") + "\n\n" + (
-            "Below are 3 handoff documents:\n"
-            "- 1 LLM-R\n- 1 Python\n- 1 Python consolidated\n\n"
-            + f"\n\n---\n\n{fb_llm_h}{_trim_handoff(fb_llm_j, 'llm_r_fb')}"
-            + f"\n\n---\n\n{fb_py_h}{_trim_handoff(fb_py_j, 'python_fb')}"
-            + f"\n\n---\n\n## Consolidated Handoff [Python]\n"
-            + f"{_trim_handoff(fb_pyc_text, 'python_consolidated_fb')}\n\n"
-            "Compare LLM-R vs Python. "
-            "In your 'handoff_comparison' field, state which source "
-            "(llm_r or python) was more useful for verification overall and why."
-        )
-        feedback_nv_resp = call_one("night_verify", SYS_VERIFY + rubric_append, feedback_nv_context, f"night_verify_{fb_tag}")
-        feedback_nv_result = (feedback_nv_resp or {}).get("result", {})
-        save(f"feedback_nv_{fb_tag}", fb_tag, feedback_nv_resp)
-        feedback_nv_verdict = feedback_nv_result.get('final_verdict', '?')
-        feedback_nv_confidence = feedback_nv_result.get('confidence', '?')
-        log(f"  night_verify (feedback round) verdict={feedback_nv_verdict} confidence={feedback_nv_confidence}")
-        slack_send(f"[P-R-J] *Round {round_num}* night_verify (feedback): *{feedback_nv_verdict}* (conf={feedback_nv_confidence})")
-
-        summary["feedback_loop"] = {
-            "saved_count": fb_count,
-            "fb_prj": [fb_prj_result],
-            "feedback_night_verify": {"verdict": feedback_nv_result.get("final_verdict","?"), "confidence": feedback_nv_result.get("confidence",0)},
-        }
-        log("\n--- Phase 5 Complete: Feedback loop executed ---")
-    else:
-        log("  No feedback entries to save — skipping Phase 5 feedback loop")
-
     # Pull Phase 2 rubric results from state if available
     rubric_evals = state.data.get("rubric_evaluation", {}).get("evaluations", []) if not resume_state_path else []
 

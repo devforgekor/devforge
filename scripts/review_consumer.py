@@ -21,6 +21,7 @@ from typing import Dict, List, Optional
 from lib.db import psql, psql_ok, esc_sql
 from lib.feedback import get_feedback_for_model
 from lib.llm.json_parser import parse_llm_json
+from lib.llm_client import resolve_model
 
 REVIEW_HOST = "127.0.0.1"
 REVIEW_PORT = 8081
@@ -337,7 +338,7 @@ def run_verify() -> int:
             messages = [{"role": "system", "content": ANALYSIS_SYSTEM}]
         else:
             messages = [{"role": "system", "content": VERIFY_SYSTEM}]
-            feedback = get_feedback_for_model("night_verify", max_gold=1, max_edge=1)
+            feedback = get_feedback_for_model(resolve_model("night_verify"), max_gold=1, max_edge=1)
             if feedback:
                 messages.extend(feedback)
                 print(f"    feedback injected: {len(feedback)//2} example(s)")
