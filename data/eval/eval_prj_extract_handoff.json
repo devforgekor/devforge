@@ -1,0 +1,161 @@
+{
+  "evaluation_type": "p_r_j_review",
+  "role_sequence": ["proposer_r1_8b", "refuter_qwen7b", "judge_selene"],
+  "timestamp": "2026-06-03T16:00:00+09:00",
+  "pipeline": "extract_data_handoff",
+  "input_data": ["eval_python_verify.json (8 findings)", "eval_30b_verify.json (7 findings)", "activity_log IDs 279-282 (4 extract results)"],
+
+  "proposer": {
+    "role": "R1-8B — Deep data pipeline review",
+    "findings": [
+      {
+        "id": "F01",
+        "severity": "critical",
+        "category": "data_loss",
+        "location": "extract_pipeline.py:220-231 / lib/llm_client.py",
+        "description": "call_llm()이 HTTP 응답에서 usage(tokens) + timings(latency)를 완전히 버림. llama.cpp API는 완전한 usage/timings 데이터를 반환하나 클라이언트가 content만 추출. 4개 extract 결과 모두 prompt_tokens, gen_tokens, elapsed_ms가 NULL.",
+        "evidence": "Pod A latency test: 13 prompt tok → 1090ms prompt, 168ms gen. Pod B: 1176ms prompt, 244ms gen. 모든 데이터가 API 응답에 있으나 call_llm()이 무시."
+      },
+      {
+        "id": "F02",
+        "severity": "critical",
+        "category": "pipeline_architecture",
+        "location": "extract_pipeline.py → queue_writer.py",
+        "description": "Extract_result가 queue_status='reviewed'로 고정되어 P-R-J 3-model review를 완전히 우회. activity_log에 직접 verify queue로 직행. extract 결과에 대한 quality gate가 verify 1단계뿐.",
+        "evidence": "queue_writer.py enqueue_review(queue_status='reviewed') hardcoded. review_consumer.py fetch_queue(queue_status='reviewed')가 extract_result를 직접 consume."
+      },
+      {
+        "id": "F03",
+        "severity": "critical",
+        "category": "data_fidelity",
+        "location": "review_facts.verdict",
+        "description": "review_facts 테이블의 verdict가 'pending'에서 절대 UPDATE되지 않음. 4개 extract 결과 총 8개 fact row 모두 verdict='pending'으로 영원히 미확정. P-R-J pipeline도 review_facts를 UPDATE하지 않고 activity_log.body에만 결과 저장.",
+        "evidence": "SELECT * FROM review_facts WHERE source='extract_pipeline': 모든 row verdict='pending'. DB 스키마는 설계되었으나 UPDATE 로직 없음."
+      },
+      {
+        "id": "F04",
+        "severity": "high",
+        "category": "model_output",
+        "location": "30B MCP intent (turn 279, 282)",
+        "description": "MCP intent 분류 정확도 50% (4/2). Turn 279(인사) → 'report'는 부적절('other'가 정답). Turn 282(IP주소요청) → 'report'는 부적절('request'가 정답). 30B가 assistant response 기준으로 intent를 판단하는 것으로 보임.",
+        "evidence": "Turn 279: user='hi' (2ch), response='Hello!...' → intent='report'. Turn 282: user='이서버IP주소알려줘' → intent='report'. user_turn이 명확히 request이나 response 기반 오분류."
+      },
+      {
+        "id": "F05",
+        "severity": "high",
+        "category": "extraction_quality",
+        "location": "30B fallback (turn 281)",
+        "description": "30B fallback이 'under-extraction over hallucination' 원칙으로 인해 assistant response(text)에서 단 1개의 fact도 추출하지 않음. Turn 281: user=176ch, text=2490ch → 30B가 user fact 2개만 추출. 2490자 분량의 중요한 기술 설명이 전부 누락.",
+        "evidence": "ID 281: extractions = [user fact 'code_mod 통합...', user fact 'CLI upload...']. Text fact: 0개. SYSTEM_FALLBACK_30B 지시문이 과도하게 보수적."
+      },
+      {
+        "id": "F06",
+        "severity": "high",
+        "category": "operational_metrics",
+        "location": "activity_log.body",
+        "description": "Extract_result body가 faithfulness %, retry chain 이력, unfaithful fact 상세, token usage 등 downstream verify에 필수적인 정보를 포함하지 않음. body = {mcp, mark, turn_id, fact_count, extract_model} 5개 필드뿐.",
+        "evidence": "ID 279-282 body 확인. Extract pipeline은 _verify_extractions()에서 개별 fact의 faithful 여부를 계산하지만 이 정보를 activity_log에 전달하지 않음."
+      },
+      {
+        "id": "F07",
+        "severity": "medium",
+        "category": "error_handling",
+        "location": "extract_pipeline.py:149-155 (_check_faithfulness)",
+        "description": "Faithfulness 검증이 단순 substring diff에 의존. 공백 정규화만 수행하고 대소문자, 구두점, 어미 변화를 처리하지 않음. evidence 'Hello'와 source 'Hello!'가 불일치 판정될 가능성.",
+        "evidence": "_check_faithfulness(): ev.lower() in src.lower(). ' '.join(ev.split())만 정규화. 'CLI upload 명령어' vs 'CLI upload 명령어.' (마침표 차이)도 false 반환."
+      }
+    ],
+    "severity_summary": {"critical": 3, "high": 3, "medium": 1, "low": 0}
+  },
+
+  "refuter": {
+    "role": "Qwen7B — Acceptance review",
+    "verdicts": [
+      {"id": "F01", "verdict": "accept", "reason": "llama.cpp API 응답에서 usage/timings를 추출하지 않는 것은 명백한 data loss. HTTP 응답 body에 있는 데이터를 활용하지 않음."},
+      {"id": "F02", "verdict": "accept", "reason": "queue_status='reviewed' hardcode는 설계 의도와 실제 운영 간 불일치. extract_result도 quality review가 필요함."},
+      {"id": "F03", "verdict": "accept", "reason": "DB 스키마는 설계되었으나 UPDATE 부재는 데이터 무결성 문제. 사실상 dead column."},
+      {"id": "F04", "verdict": "accept", "reason": "intent 정확도 50%는 운영 기준 미달. user_turn 기반 분류 로직이 필요함은 명확."},
+      {"id": "F05", "verdict": "accept", "reason": "2490ch 응답에서 text fact 0개는 extract의 핵심 목적을 달성하지 못함. fallback prompt 과도하게 보수적."},
+      {"id": "F06", "verdict": "accept", "reason": "verify(27B/32B)가 extract quality를 평가하려면 faithfulness %, retry 이력이 필수. 현재 body만으로는 불가능."},
+      {"id": "F07", "verdict": "reject", "reason": "Substring diff는 extract pipeline의 1차 방어선으로 충분. 정밀한 NLP 검증은 compute cost 대비 benefit이 낮음. 30B fallback이 semantic 검증을 담당하므로 경계가 명확."}
+    ],
+    "summary": "7건 중 6건 ACCEPT, 1건 REJECT. REJECT(F07): substring diff의 단순함은 설계 의도이며, 30B fallback과 27B verify가 semantic 검증을 담당하므로 현 수준 유지 OK."
+  },
+
+  "judge": {
+    "role": "Selene — Scoring Judge",
+    "rubric_evaluation": {
+      "finder_p": {
+        "correctness": 9,
+        "coverage": 8,
+        "precision": 9
+      },
+      "reflector_r": {
+        "accuracy": 9,
+        "efficiency": 9,
+        "completeness": 8
+      }
+    },
+    "P_score": 26,
+    "R_score": 26,
+    "gap": 0,
+    "decision": "APPROVED",
+    "action": "commit",
+    "winner": "tie",
+    "hallucination_flag": false,
+    "verification_items": [
+      {"check": "F01 timing data loss — confirmed by DB NULL check and API response inspection", "result": "pass", "detail": "llama.cpp: usage + timings available. call_llm() must be fixed."},
+      {"check": "F02 P-R-J bypass — confirmed by queue_writer.py source", "result": "pass", "detail": "queue_status='reviewed' hardcoded in enqueue_review(). Extract_result bypasses P-R-J."},
+      {"check": "F03 review_facts verdict staleness — confirmed by DB query", "result": "pass", "detail": "All 8 extract rows: verdict='pending' forever. No UPDATE logic exists."},
+      {"check": "F05 30B text fact omission — confirmed by evidence content", "result": "pass", "detail": "2490ch response, 0 text facts. SYSTEM_FALLBACK_30B prompt issue."}
+    ],
+    "consensus_score": 92,
+    "disagreement_analysis": "F07만 reject. R의 판단 합리적 — substring diff는 의도된 1차 방어선. 30B fallback + 27B verify가 semantic layer 담당.",
+    "approved": ["F01", "F02", "F03", "F04", "F05", "F06"],
+    "rejected": ["F07"],
+    "jury_opinions": {
+      "security": "F01 (data loss) 가장 심각 — 운영 메트릭 없이 비용/성능 최적화 불가",
+      "performance": "F05 (text fact 누락)이 실제 extract 품질에 가장 큰 영향",
+      "quality": "F06 (body 정보 부족)이 downstream verify의 판단력을 제한"
+    },
+    "machine_summary": {
+      "decision": "APPROVED",
+      "scores": {"P": 26, "R": 26},
+      "gap": 0,
+      "veto_triggered": false,
+      "critical_findings": ["F01: timing data loss", "F02: P-R-J bypass", "F03: verdict never updated"],
+      "next_state": "diff_generation",
+      "verification_focus": "F01(F05(F06 should be addressed before next pipeline run"
+    }
+  },
+
+  "operational_baseline": {
+    "timestamp": "2026-06-03T16:00:00+09:00",
+    "latency_test": {
+      "model_qwen3_4b": {
+        "port": 8082,
+        "prompt_tokens": 13,
+        "completion_tokens": 2,
+        "prompt_ms": 1090.7,
+        "prompt_per_token_ms": 83.9,
+        "predicted_ms": 168.0,
+        "predicted_per_token_ms": 84.0,
+        "tokens_per_second": 11.9,
+        "total_ms": 1258.7
+      },
+      "model_qwen30b_a3b": {
+        "port": 8080,
+        "prompt_tokens": 13,
+        "completion_tokens": 3,
+        "prompt_ms": 1176.9,
+        "prompt_per_token_ms": 90.5,
+        "predicted_ms": 244.7,
+        "predicted_per_token_ms": 81.6,
+        "tokens_per_second": 12.3,
+        "total_ms": 1421.6
+      }
+    },
+    "cache_state": "cached_tokens=0 for both — cold start (fresh container after restart)",
+    "note": "Latency test with single-turn short request. Production extract uses longer prompts (source text + instructions) which increase prompt processing time proportionally."
+  }
+}

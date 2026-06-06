@@ -1,0 +1,1826 @@
+entries:
+- time: '2026-05-11T21:43:45.263438+09:00'
+  type: auto
+  summary: 'structural.containers[45f8cfabb6db-infra].status: Up 34 minutes -> Up 49 minutes; structural.containers[devforge-llm].status:
+    Up 34 minutes (healthy) -> Up 49 minutes (healthy); structural.containers[e21a154320d6-infra].status: Up 34 minutes ->
+    Up 50 minutes; structural.containers[litellm].status: Up 34 minutes -> Up 49 minutes; structural.containers[postgres].status:
+    Up 34 minutes -> Up 50 minutes (+3 more)'
+  changed:
+  - path: structural.containers[45f8cfabb6db-infra].status
+    type: changed
+    before: Up 34 minutes
+    after: Up 49 minutes
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 34 minutes (healthy)
+    after: Up 49 minutes (healthy)
+  - path: structural.containers[e21a154320d6-infra].status
+    type: changed
+    before: Up 34 minutes
+    after: Up 50 minutes
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 34 minutes
+    after: Up 49 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 34 minutes
+    after: Up 50 minutes
+  - path: structural.storage[datavg-lv_projects].mount
+    type: changed
+    before: null
+    after: /opt/projects
+  - path: structural.storage[datavg-lv_projects].mounted
+    type: changed
+    before: false
+    after: true
+  - path: structural.storage[ocivolume-lv_dev].mount
+    type: changed
+    before: /opt/project
+    after: '/opt/project
+
+      /mnt/secure_meta'
+  decisions: []
+- time: '2026-05-11T21:28:35.214340+09:00'
+  type: auto
+  summary: 'structural.containers[45f8cfabb6db-infra].status: Up 19 minutes -> Up 34 minutes; structural.containers[caddy].status:
+    Up 3 hours -> Up 4 hours; structural.containers[devforge-llm].status: Up 19 minutes (healthy) -> Up 34 minutes (healthy);
+    structural.containers[e21a154320d6-infra].status: Up 19 minutes -> Up 34 minutes; structural.containers[litellm].status:
+    Up 19 minutes -> Up 34 minutes (+2 more)'
+  changed:
+  - path: structural.containers[45f8cfabb6db-infra].status
+    type: changed
+    before: Up 19 minutes
+    after: Up 34 minutes
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 19 minutes (healthy)
+    after: Up 34 minutes (healthy)
+  - path: structural.containers[e21a154320d6-infra].status
+    type: changed
+    before: Up 19 minutes
+    after: Up 34 minutes
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 19 minutes
+    after: Up 34 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 19 minutes
+    after: Up 34 minutes
+  - path: structural.storage[datavg-lv_projects]
+    type: added
+    after:
+      device: datavg-lv_projects
+      vg: datavg
+      lv: lv_projects
+      size: 10G
+      mounted: false
+      mount: null
+  decisions: []
+- time: '2026-05-11T21:13:25.189624+09:00'
+  type: auto
+  summary: 'structural.containers[45f8cfabb6db-infra].status: Up 4 minutes -> Up 19 minutes; structural.containers[devforge-llm].status:
+    Up 4 minutes (healthy) -> Up 19 minutes (healthy); structural.containers[e21a154320d6-infra].status: Up 4 minutes -> Up
+    19 minutes; structural.containers[litellm].status: Up 4 minutes -> Up 19 minutes; structural.containers[postgres].status:
+    Up 4 minutes -> Up 19 minutes'
+  changed:
+  - path: structural.containers[45f8cfabb6db-infra].status
+    type: changed
+    before: Up 4 minutes
+    after: Up 19 minutes
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 4 minutes (healthy)
+    after: Up 19 minutes (healthy)
+  - path: structural.containers[e21a154320d6-infra].status
+    type: changed
+    before: Up 4 minutes
+    after: Up 19 minutes
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 4 minutes
+    after: Up 19 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 4 minutes
+    after: Up 19 minutes
+  decisions: []
+- time: '2026-05-11T20:57:55.210235+09:00'
+  type: auto
+  summary: 'structural.containers[45f8cfabb6db-infra]: added; structural.containers[5a45ff034277-infra]: removed; structural.containers[b82f10604696-infra]:
+    removed; structural.containers[devforge-llm]: added; structural.containers[e21a154320d6-infra]: added (+3 more)'
+  changed:
+  - path: structural.containers[45f8cfabb6db-infra]
+    type: added
+    after:
+      name: 45f8cfabb6db-infra
+      status: Up 4 minutes
+      ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[5a45ff034277-infra]
+    type: removed
+    before:
+      name: 5a45ff034277-infra
+      status: Up 3 minutes
+      ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[b82f10604696-infra]
+    type: removed
+    before:
+      name: b82f10604696-infra
+      status: Up 3 minutes
+      ports: ''
+      model: null
+      flags: ''
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 4 minutes (healthy)
+      ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[e21a154320d6-infra]
+    type: added
+    after:
+      name: e21a154320d6-infra
+      status: Up 4 minutes
+      ports: ''
+      model: null
+      flags: ''
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 4 minutes
+      ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 4 minutes
+  - path: structural.services[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: active
+  decisions: []
+- time: '2026-05-11T20:42:35.130900+09:00'
+  type: auto
+  summary: 'structural.containers[5a45ff034277-infra]: added; structural.containers[b82f10604696-infra]: added; structural.containers[postgres]:
+    added; structural.services[devforge-llm]: removed; structural.services[litellm].status: inactive -> failed'
+  changed:
+  - path: structural.containers[5a45ff034277-infra]
+    type: added
+    after:
+      name: 5a45ff034277-infra
+      status: Up 3 minutes
+      ports: 0.0.0.0:4000->4000/tcp, 0.0.0.0:8080->8080/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[b82f10604696-infra]
+    type: added
+    after:
+      name: b82f10604696-infra
+      status: Up 3 minutes
+      ports: ''
+      model: null
+      flags: ''
+  - path: structural.containers[postgres]
+    type: added
+    after:
+      name: postgres
+      status: Up 3 minutes
+      ports: 5432/tcp
+      model: null
+      flags: ''
+  - path: structural.services[devforge-llm]
+    type: removed
+    before:
+      name: devforge-llm
+      status: active
+  - path: structural.services[litellm].status
+    type: changed
+    before: inactive
+    after: failed
+  decisions: []
+- time: '2026-05-11T20:26:41.450877+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 2 hours -> Up 3 hours; structural.containers[devforge-llm]: removed; structural.containers[litellm]:
+    removed; structural.containers[netdata]: removed; structural.containers[postgres]: removed (+3 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  - path: structural.containers[devforge-llm]
+    type: removed
+    before:
+      name: devforge-llm
+      status: Up 2 hours (healthy)
+      ports: ''
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+      flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --port 8080 --host 127.0.0.1 --threads 4 --ctx-size 8192 --mlock
+        --cache-reuse 256 --api-key unused
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 2 hours
+      ports: 4000/tcp
+      model: null
+      flags: --config /app/config.yaml --port 4000 --host 127.0.0.1
+  - path: structural.containers[netdata]
+    type: removed
+    before:
+      name: netdata
+      status: Up 2 hours
+      ports: 19999/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[postgres]
+    type: removed
+    before:
+      name: postgres
+      status: Up 2 hours
+      ports: 5432/tcp
+      model: null
+      flags: ''
+  - path: structural.services[litellm].status
+    type: changed
+    before: active
+    after: inactive
+  - path: structural.services[netdata].status
+    type: changed
+    before: active
+    after: inactive
+  - path: structural.services[postgres].status
+    type: changed
+    before: active
+    after: inactive
+  decisions: []
+- time: '2026-05-11T19:56:05.183698+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[litellm].status:
+    Up About an hour -> Up 2 hours; structural.containers[netdata].status: Up About an hour -> Up 2 hours; structural.containers[postgres].status:
+    Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-11T19:25:39.179418+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up About an hour -> Up 2 hours; structural.containers[devforge-llm].status:
+    Up 50 minutes (healthy) -> Up About an hour (healthy); structural.containers[litellm].status: Up 48 minutes -> Up About
+    an hour; structural.containers[netdata].status: Up 49 minutes -> Up About an hour; structural.containers[postgres].status:
+    Up 49 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 50 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 48 minutes
+    after: Up About an hour
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 49 minutes
+    after: Up About an hour
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 49 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-11T19:10:35.140293+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 34 minutes (healthy) -> Up 50 minutes (healthy); structural.containers[litellm].status:
+    Up 32 minutes -> Up 48 minutes; structural.containers[netdata].status: Up 34 minutes -> Up 49 minutes; structural.containers[postgres].status:
+    Up 34 minutes -> Up 49 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 34 minutes (healthy)
+    after: Up 50 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 32 minutes
+    after: Up 48 minutes
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 34 minutes
+    after: Up 49 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 34 minutes
+    after: Up 49 minutes
+  decisions: []
+- time: '2026-05-11T18:55:10.125346+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 47 minutes -> Up About an hour; structural.containers[devforge-llm].status:
+    Up 19 minutes (healthy) -> Up 34 minutes (healthy); structural.containers[litellm].status: Up 17 minutes -> Up 32 minutes;
+    structural.containers[netdata].status: Up 19 minutes -> Up 34 minutes; structural.containers[postgres].status: Up 19 minutes
+    -> Up 34 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 47 minutes
+    after: Up About an hour
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 19 minutes (healthy)
+    after: Up 34 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 17 minutes
+    after: Up 32 minutes
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 19 minutes
+    after: Up 34 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 19 minutes
+    after: Up 34 minutes
+  decisions: []
+- time: '2026-05-11T18:40:05.219891+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 32 minutes -> Up 47 minutes; structural.containers[devforge-llm].status:
+    Up 4 minutes (healthy) -> Up 19 minutes (healthy); structural.containers[litellm].status: Up 2 minutes -> Up 17 minutes;
+    structural.containers[netdata].status: Up 3 minutes -> Up 19 minutes; structural.containers[postgres].status: Up 3 minutes
+    -> Up 19 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 32 minutes
+    after: Up 47 minutes
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 4 minutes (healthy)
+    after: Up 19 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 2 minutes
+    after: Up 17 minutes
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 19 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 19 minutes
+  decisions: []
+- time: '2026-05-11T18:24:41.180926+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 16 minutes -> Up 32 minutes; structural.containers[devforge-llm]: added;
+    structural.containers[litellm]: added; structural.containers[netdata]: added; structural.containers[postgres]: added (+4
+    more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 16 minutes
+    after: Up 32 minutes
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 4 minutes (healthy)
+      ports: ''
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+      flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --port 8080 --host 127.0.0.1 --threads 4 --ctx-size 8192 --mlock
+        --cache-reuse 256 --api-key unused
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 2 minutes
+      ports: 4000/tcp
+      model: null
+      flags: --config /app/config.yaml --port 4000 --host 127.0.0.1
+  - path: structural.containers[netdata]
+    type: added
+    after:
+      name: netdata
+      status: Up 3 minutes
+      ports: 19999/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[postgres]
+    type: added
+    after:
+      name: postgres
+      status: Up 3 minutes
+      ports: 5432/tcp
+      model: null
+      flags: ''
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: failed
+    after: active
+  - path: structural.services[litellm].status
+    type: changed
+    before: inactive
+    after: active
+  - path: structural.services[netdata].status
+    type: changed
+    before: failed
+    after: active
+  - path: structural.services[postgres].status
+    type: changed
+    before: failed
+    after: active
+  decisions: []
+- time: '2026-05-11T18:09:35.142060+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 58 seconds -> Up 16 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 58 seconds
+    after: Up 16 minutes
+  decisions: []
+- time: '2026-05-11T17:53:35.254594+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 2 hours -> Up 58 seconds; structural.containers[devforge-llm]: removed;
+    structural.containers[litellm]: removed; structural.containers[netdata]: removed; structural.containers[postgres]: removed
+    (+5 more)'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 2 hours
+    after: Up 58 seconds
+  - path: structural.containers[devforge-llm]
+    type: removed
+    before:
+      name: devforge-llm
+      status: Up 4 hours (healthy)
+      ports: ''
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+      flags: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --port 8080 --host 127.0.0.1 --threads 4 --ctx-size 8192 --mlock
+        --cache-reuse 256 --api-key unused
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 4 hours
+      ports: 4000/tcp
+      model: null
+      flags: --config /app/config.yaml --port 4000 --host 127.0.0.1
+  - path: structural.containers[netdata]
+    type: removed
+    before:
+      name: netdata
+      status: Up 2 hours
+      ports: 19999/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[postgres]
+    type: removed
+    before:
+      name: postgres
+      status: Up 2 hours
+      ports: 5432/tcp
+      model: null
+      flags: ''
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: active
+    after: failed
+  - path: structural.services[litellm].status
+    type: changed
+    before: active
+    after: inactive
+  - path: structural.services[netdata].status
+    type: changed
+    before: active
+    after: failed
+  - path: structural.services[postgres].status
+    type: changed
+    before: active
+    after: failed
+  - path: structural.storage[ocivolume-lv_tmp].mount
+    type: changed
+    before: /tmp
+    after: /var/tmp
+  decisions: []
+- time: '2026-05-11T17:45:26.858894+09:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 3 hours -> Up 4 hours'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  decisions: []
+- time: '2026-05-11T17:30:19.769062+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 3 hours (healthy) -> Up 4 hours (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  decisions: []
+- time: '2026-05-11T16:59:50.876231+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up About an hour -> Up 2 hours; structural.containers[netdata].status: Up
+    About an hour -> Up 2 hours; structural.containers[postgres].status: Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-11T16:44:46.838094+09:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-11T16:29:26.785617+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 2 hours (healthy) -> Up 3 hours (healthy); structural.containers[postgres].status:
+    Up 58 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 58 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-11T16:22:07.586269+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 55 minutes -> Up About an hour; structural.containers[netdata].status:
+    Up 52 minutes -> Up About an hour; structural.containers[postgres].status: Up 50 minutes -> Up 58 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 55 minutes
+    after: Up About an hour
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 52 minutes
+    after: Up About an hour
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 50 minutes
+    after: Up 58 minutes
+  decisions: []
+- time: '2026-05-11T16:14:22.821440+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 40 minutes -> Up 55 minutes; structural.containers[netdata].status: Up
+    37 minutes -> Up 52 minutes; structural.containers[postgres].status: Up 35 minutes -> Up 50 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 40 minutes
+    after: Up 55 minutes
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 37 minutes
+    after: Up 52 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 35 minutes
+    after: Up 50 minutes
+  decisions: []
+- time: '2026-05-11T15:59:16.834665+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 24 minutes -> Up 40 minutes; structural.containers[netdata].status: Up
+    22 minutes -> Up 37 minutes; structural.containers[postgres].status: Up 20 minutes -> Up 35 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 24 minutes
+    after: Up 40 minutes
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 22 minutes
+    after: Up 37 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 20 minutes
+    after: Up 35 minutes
+  decisions: []
+- time: '2026-05-11T15:43:53.793962+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 9 minutes -> Up 24 minutes; structural.containers[litellm].status: Up
+    About an hour -> Up 2 hours; structural.containers[netdata].status: Up 7 minutes -> Up 22 minutes; structural.containers[postgres].status:
+    Up 5 minutes -> Up 20 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 9 minutes
+    after: Up 24 minutes
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 7 minutes
+    after: Up 22 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up 5 minutes
+    after: Up 20 minutes
+  decisions: []
+- time: '2026-05-11T15:28:46.803765+09:00'
+  type: auto
+  summary: 'structural.containers[caddy].status: Up 5 minutes -> Up 9 minutes; structural.containers[devforge-llm].status:
+    Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[netdata].status: Up 3 minutes -> Up 7 minutes;
+    structural.containers[postgres].status: Up About a minute -> Up 5 minutes'
+  changed:
+  - path: structural.containers[caddy].status
+    type: changed
+    before: Up 5 minutes
+    after: Up 9 minutes
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[netdata].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 7 minutes
+  - path: structural.containers[postgres].status
+    type: changed
+    before: Up About a minute
+    after: Up 5 minutes
+  decisions: []
+- time: '2026-05-11T15:25:07.987367+09:00'
+  type: auto
+  summary: 'structural.containers[caddy]: added; structural.containers[netdata]: added; structural.containers[postgres]: added;
+    structural.services[caddy]: added; structural.services[postgres]: added (+2 more)'
+  changed:
+  - path: structural.containers[caddy]
+    type: added
+    after:
+      name: caddy
+      status: Up 5 minutes
+      ports: 80/tcp, 443/tcp, 2019/tcp, 443/udp
+      model: null
+      flags: ''
+  - path: structural.containers[netdata]
+    type: added
+    after:
+      name: netdata
+      status: Up 3 minutes
+      ports: 19999/tcp
+      model: null
+      flags: ''
+  - path: structural.containers[postgres]
+    type: added
+    after:
+      name: postgres
+      status: Up About a minute
+      ports: 5432/tcp
+      model: null
+      flags: ''
+  - path: structural.services[caddy]
+    type: added
+    after:
+      name: caddy
+      status: active
+  - path: structural.services[postgres]
+    type: added
+    after:
+      name: postgres
+      status: active
+  - path: structural.services[postgresql]
+    type: removed
+    before:
+      name: postgresql
+      status: active
+  - path: structural.storage[ocivolume-root].mount
+    type: changed
+    before: /
+    after: '/
+
+      /var/lib/containers/storage/overlay'
+  decisions: []
+- time: '2026-05-11T15:13:31.179018+09:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 52 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 52 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-11T14:58:26.643705+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 46 minutes (healthy) -> Up About an hour (healthy); structural.containers[litellm].status:
+    Up 38 minutes -> Up 52 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 38 minutes
+    after: Up 52 minutes
+  decisions: []
+- time: '2026-05-11T14:43:53.230985+09:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 37 minutes -> Up 38 minutes'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 37 minutes
+    after: Up 38 minutes
+  decisions: []
+- time: '2026-05-11T14:43:03.755656+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 45 minutes (healthy) -> Up 46 minutes (healthy); structural.containers[litellm].status:
+    Up 36 minutes -> Up 37 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 45 minutes (healthy)
+    after: Up 46 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 36 minutes
+    after: Up 37 minutes
+  decisions: []
+- time: '2026-05-11T14:42:07.556852+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 40 minutes (healthy) -> Up 45 minutes (healthy); structural.containers[litellm].model:
+    qwen2.5-coder-7b-instruct-q8_0.gguf -> None; structural.containers[litellm].status: Up 32 minutes -> Up 36 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 40 minutes (healthy)
+    after: Up 45 minutes (healthy)
+  - path: structural.containers[litellm].model
+    type: changed
+    before: qwen2.5-coder-7b-instruct-q8_0.gguf
+    after: null
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 32 minutes
+    after: Up 36 minutes
+  decisions: []
+- time: '2026-05-11T14:37:50.837238+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 39 minutes (healthy) -> Up 40 minutes (healthy); structural.containers[litellm].status:
+    Up 30 minutes -> Up 32 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 39 minutes (healthy)
+    after: Up 40 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 30 minutes
+    after: Up 32 minutes
+  decisions: []
+- time: '2026-05-11T14:36:31.268219+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].flags: -m --port --host --threads --ctx-size --mlock --cache-reuse --api-key
+    -> -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --port 8080 --host 127.0.0.1 --threads 4 --ctx-size 8192 --mlock --cache-reuse
+    256 --api-key unused; structural.containers[devforge-llm].status: Up 38 minutes (healthy) -> Up 39 minutes (healthy);
+    structural.containers[litellm].flags: --config --port --host -> --config /app/config.yaml --port 4000 --host 127.0.0.1'
+  changed:
+  - path: structural.containers[devforge-llm].flags
+    type: changed
+    before: -m --port --host --threads --ctx-size --mlock --cache-reuse --api-key
+    after: -m /models/qwen2.5-coder-7b-instruct-q8_0.gguf --port 8080 --host 127.0.0.1 --threads 4 --ctx-size 8192 --mlock
+      --cache-reuse 256 --api-key unused
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 38 minutes (healthy)
+    after: Up 39 minutes (healthy)
+  - path: structural.containers[litellm].flags
+    type: changed
+    before: --config --port --host
+    after: --config /app/config.yaml --port 4000 --host 127.0.0.1
+  decisions: []
+- time: '2026-05-11T14:35:56.294405+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].flags: --cidfile=%t/%n.ctr-id --cgroups=no-conmon --rm --sdnotify=conmon --replace
+    -d --name --ulimit --network --memory=16g -v -m --port --host --threads --ctx-size --mlock --cache-reuse --api-key ->
+    -m --port --host --threads --ctx-size --mlock --cache-reuse --api-key; structural.containers[devforge-llm].status: Up
+    37 minutes (healthy) -> Up 38 minutes (healthy); structural.containers[litellm].flags: --cidfile=%t/%n.ctr-id --cgroups=no-conmon
+    --rm --sdnotify=conmon --replace -d --name --network -v --config --port --host -> --config --port --host; structural.containers[litellm].status:
+    Up 28 minutes -> Up 30 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].flags
+    type: changed
+    before: --cidfile=%t/%n.ctr-id --cgroups=no-conmon --rm --sdnotify=conmon --replace -d --name --ulimit --network --memory=16g
+      -v -m --port --host --threads --ctx-size --mlock --cache-reuse --api-key
+    after: -m --port --host --threads --ctx-size --mlock --cache-reuse --api-key
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 37 minutes (healthy)
+    after: Up 38 minutes (healthy)
+  - path: structural.containers[litellm].flags
+    type: changed
+    before: --cidfile=%t/%n.ctr-id --cgroups=no-conmon --rm --sdnotify=conmon --replace -d --name --network -v --config --port
+      --host
+    after: --config --port --host
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 28 minutes
+    after: Up 30 minutes
+  decisions: []
+- time: '2026-05-11T14:34:36.023910+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].flags: None -> --cidfile=%t/%n.ctr-id --cgroups=no-conmon --rm --sdnotify=conmon
+    --replace -d --name --ulimit --network --memory=16g -v -m --port --host --threads --ctx-size --mlock --cache-reuse --api-key;
+    structural.containers[devforge-llm].status: Up 30 minutes (healthy) -> Up 37 minutes (healthy); structural.containers[litellm].flags:
+    None -> --cidfile=%t/%n.ctr-id --cgroups=no-conmon --rm --sdnotify=conmon --replace -d --name --network -v --config --port
+    --host; structural.containers[litellm].status: Up 22 minutes -> Up 28 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].flags
+    type: changed
+    before: null
+    after: --cidfile=%t/%n.ctr-id --cgroups=no-conmon --rm --sdnotify=conmon --replace -d --name --ulimit --network --memory=16g
+      -v -m --port --host --threads --ctx-size --mlock --cache-reuse --api-key
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 30 minutes (healthy)
+    after: Up 37 minutes (healthy)
+  - path: structural.containers[litellm].flags
+    type: changed
+    before: null
+    after: --cidfile=%t/%n.ctr-id --cgroups=no-conmon --rm --sdnotify=conmon --replace -d --name --network -v --config --port
+      --host
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 22 minutes
+    after: Up 28 minutes
+  decisions: []
+- time: '2026-05-11T14:28:00.194408+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 18 minutes (healthy) -> Up 30 minutes (healthy); structural.containers[litellm].status:
+    Up 9 minutes -> Up 22 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 18 minutes (healthy)
+    after: Up 30 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 9 minutes
+    after: Up 22 minutes
+  decisions: []
+- time: '2026-05-11T14:15:11.947566+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 15 minutes (healthy) -> Up 18 minutes (healthy); structural.containers[litellm].status:
+    Up 7 minutes -> Up 9 minutes; structural.services[netdata]: added'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 15 minutes (healthy)
+    after: Up 18 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 7 minutes
+    after: Up 9 minutes
+  - path: structural.services[netdata]
+    type: added
+    after:
+      name: netdata
+      status: active
+  decisions: []
+- time: '2026-05-11T14:12:56.158336+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 9 minutes (healthy) -> Up 15 minutes (healthy); structural.containers[litellm].status:
+    Up 32 seconds -> Up 7 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 9 minutes (healthy)
+    after: Up 15 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 32 seconds
+    after: Up 7 minutes
+  decisions: []
+- time: '2026-05-11T14:06:21.716710+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 47 seconds (starting) -> Up 9 minutes (healthy); structural.containers[litellm]:
+    added; structural.services[litellm].status: activating -> active'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 47 seconds (starting)
+    after: Up 9 minutes (healthy)
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 32 seconds
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[litellm].status
+    type: changed
+    before: activating
+    after: active
+  decisions: []
+- time: '2026-05-11T13:57:49.347974+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 45 minutes (healthy) -> Up 47 seconds (starting); structural.containers[litellm]:
+    removed; structural.services[litellm].status: active -> activating'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 45 minutes (healthy)
+    after: Up 47 seconds (starting)
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 43 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[litellm].status
+    type: changed
+    before: active
+    after: activating
+  decisions: []
+- time: '2026-05-11T13:55:06.518447+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 44 minutes (healthy) -> Up 45 minutes (healthy); structural.containers[litellm].status:
+    Up 42 minutes -> Up 43 minutes; structural.services[postgresql]: added'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 44 minutes (healthy)
+    after: Up 45 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 42 minutes
+    after: Up 43 minutes
+  - path: structural.services[postgresql]
+    type: added
+    after:
+      name: postgresql
+      status: active
+  decisions: []
+- time: '2026-05-11T13:54:18.544440+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 42 minutes (healthy) -> Up 44 minutes (healthy); structural.containers[litellm].status:
+    Up 41 minutes -> Up 42 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 42 minutes (healthy)
+    after: Up 44 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 41 minutes
+    after: Up 42 minutes
+  decisions: []
+- time: '2026-05-11T13:53:05.464555+09:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 40 minutes -> Up 41 minutes'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 40 minutes
+    after: Up 41 minutes
+  decisions: []
+- time: '2026-05-11T13:52:38.376656+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 41 minutes (healthy) -> Up 42 minutes (healthy); structural.containers[litellm].status:
+    Up 39 minutes -> Up 40 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 41 minutes (healthy)
+    after: Up 42 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 39 minutes
+    after: Up 40 minutes
+  decisions: []
+- time: '2026-05-11T13:51:44.903700+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 40 minutes (healthy) -> Up 41 minutes (healthy); structural.containers[litellm].status:
+    Up 38 minutes -> Up 39 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 40 minutes (healthy)
+    after: Up 41 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 38 minutes
+    after: Up 39 minutes
+  decisions: []
+- time: '2026-05-11T13:50:38.927926+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 33 minutes (healthy) -> Up 40 minutes (healthy); structural.containers[litellm].status:
+    Up 31 minutes -> Up 38 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 33 minutes (healthy)
+    after: Up 40 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 31 minutes
+    after: Up 38 minutes
+  decisions: []
+- time: '2026-05-11T13:43:54.466021+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 30 minutes (healthy) -> Up 33 minutes (healthy); structural.containers[litellm].status:
+    Up 28 minutes -> Up 31 minutes; structural.storage[datavg-lv_db].mount: None -> /mnt/lv_db; structural.storage[datavg-lv_db].mounted:
+    False -> True'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 30 minutes (healthy)
+    after: Up 33 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 28 minutes
+    after: Up 31 minutes
+  - path: structural.storage[datavg-lv_db].mount
+    type: changed
+    before: null
+    after: /mnt/lv_db
+  - path: structural.storage[datavg-lv_db].mounted
+    type: changed
+    before: false
+    after: true
+  decisions: []
+- time: '2026-05-11T13:40:32.821396+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 15 minutes (healthy) -> Up 30 minutes (healthy); structural.containers[litellm].status:
+    Up 13 minutes -> Up 28 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 15 minutes (healthy)
+    after: Up 30 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 13 minutes
+    after: Up 28 minutes
+  decisions: []
+- time: '2026-05-11T13:25:25.823974+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: added; structural.containers[litellm]: added; structural.services[devforge-llm].status:
+    activating -> active; structural.services[litellm].status: inactive -> active'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 15 minutes (healthy)
+      ports: ''
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 13 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: activating
+    after: active
+  - path: structural.services[litellm].status
+    type: changed
+    before: inactive
+    after: active
+  decisions: []
+- time: '2026-05-11T13:10:06.298204+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: removed; structural.containers[litellm]: removed; structural.services[devforge-llm].status:
+    active -> activating; structural.services[litellm].status: active -> inactive; structural.storage[datavg-lv_db].mount:
+    /mnt/lv_db -> None (+1 more)'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: removed
+    before:
+      name: devforge-llm
+      status: Up 5 minutes (healthy)
+      ports: ''
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 3 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: active
+    after: activating
+  - path: structural.services[litellm].status
+    type: changed
+    before: active
+    after: inactive
+  - path: structural.storage[datavg-lv_db].mount
+    type: changed
+    before: /mnt/lv_db
+    after: null
+  - path: structural.storage[datavg-lv_db].mounted
+    type: changed
+    before: true
+    after: false
+  decisions: []
+- time: '2026-05-11T12:56:39.835212+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 4 hours (healthy) -> Up 5 minutes (healthy); structural.containers[litellm].status:
+    Up 4 hours -> Up 3 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 4 hours
+    after: Up 3 minutes
+  decisions: []
+- time: '2026-05-11T12:25:49.895580+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 3 hours (healthy) -> Up 4 hours (healthy); structural.containers[litellm].status:
+    Up 3 hours -> Up 4 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  decisions: []
+- time: '2026-05-11T11:24:49.836654+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 2 hours (healthy) -> Up 3 hours (healthy); structural.containers[litellm].status:
+    Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-11T10:23:49.298140+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[litellm].status:
+    Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-11T09:53:19.271096+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 46 minutes (healthy) -> Up About an hour (healthy); structural.containers[litellm].status:
+    Up 44 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 44 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-11T09:37:55.292298+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 31 minutes (healthy) -> Up 46 minutes (healthy); structural.containers[litellm].status:
+    Up 29 minutes -> Up 44 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 31 minutes (healthy)
+    after: Up 46 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 29 minutes
+    after: Up 44 minutes
+  decisions: []
+- time: '2026-05-11T09:22:49.276263+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 15 minutes (healthy) -> Up 31 minutes (healthy); structural.containers[litellm].status:
+    Up 14 minutes -> Up 29 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 15 minutes (healthy)
+    after: Up 31 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 14 minutes
+    after: Up 29 minutes
+  decisions: []
+- time: '2026-05-11T09:07:26.290393+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 52 seconds (starting) -> Up 15 minutes (healthy); structural.containers[litellm]:
+    added; structural.services[litellm].status: activating -> active'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 52 seconds (starting)
+    after: Up 15 minutes (healthy)
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 14 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[litellm].status
+    type: changed
+    before: activating
+    after: active
+  decisions: []
+- time: '2026-05-11T08:52:20.048266+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 49 minutes (healthy) -> Up 52 seconds (starting); structural.containers[litellm]:
+    removed; structural.services[litellm].status: active -> activating'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 49 minutes (healthy)
+    after: Up 52 seconds (starting)
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 13 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[litellm].status
+    type: changed
+    before: active
+    after: activating
+  decisions: []
+- time: '2026-05-11T08:37:19.315839+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 34 minutes (healthy) -> Up 49 minutes (healthy); structural.containers[litellm]:
+    added; structural.services[litellm].status: failed -> active'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 34 minutes (healthy)
+    after: Up 49 minutes (healthy)
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 13 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[litellm].status
+    type: changed
+    before: failed
+    after: active
+  decisions: []
+- time: '2026-05-11T08:21:54.229232+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 19 minutes (healthy) -> Up 34 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 19 minutes (healthy)
+    after: Up 34 minutes (healthy)
+  decisions: []
+- time: '2026-05-11T08:06:49.279865+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 3 minutes (healthy) -> Up 19 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 3 minutes (healthy)
+    after: Up 19 minutes (healthy)
+  decisions: []
+- time: '2026-05-11T07:51:35.211683+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 8 hours (healthy) -> Up 3 minutes (healthy); structural.containers[litellm]:
+    removed; structural.services[litellm].status: active -> failed'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 8 hours (healthy)
+    after: Up 3 minutes (healthy)
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 8 hours
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[litellm].status
+    type: changed
+    before: active
+    after: failed
+  decisions: []
+- time: '2026-05-11T07:21:29.289190+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 7 hours (healthy) -> Up 8 hours (healthy); structural.containers[litellm].status:
+    Up 7 hours -> Up 8 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 7 hours (healthy)
+    after: Up 8 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 7 hours
+    after: Up 8 hours
+  decisions: []
+- time: '2026-05-11T06:20:49.296584+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 6 hours (healthy) -> Up 7 hours (healthy); structural.containers[litellm].status:
+    Up 6 hours -> Up 7 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 6 hours (healthy)
+    after: Up 7 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 6 hours
+    after: Up 7 hours
+  decisions: []
+- time: '2026-05-11T05:19:59.264728+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 5 hours (healthy) -> Up 6 hours (healthy); structural.containers[litellm].status:
+    Up 5 hours -> Up 6 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 5 hours (healthy)
+    after: Up 6 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 5 hours
+    after: Up 6 hours
+  decisions: []
+- time: '2026-05-11T04:18:49.269741+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 4 hours (healthy) -> Up 5 hours (healthy); structural.containers[litellm].status:
+    Up 4 hours -> Up 5 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 4 hours (healthy)
+    after: Up 5 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 4 hours
+    after: Up 5 hours
+  decisions: []
+- time: '2026-05-11T03:18:09.254400+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 3 hours (healthy) -> Up 4 hours (healthy); structural.containers[litellm].status:
+    Up 3 hours -> Up 4 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 3 hours (healthy)
+    after: Up 4 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 3 hours
+    after: Up 4 hours
+  decisions: []
+- time: '2026-05-11T02:17:15.244024+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 2 hours (healthy) -> Up 3 hours (healthy); structural.containers[litellm].status:
+    Up 2 hours -> Up 3 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 3 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 2 hours
+    after: Up 3 hours
+  decisions: []
+- time: '2026-05-11T01:16:39.245153+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[litellm].status:
+    Up About an hour -> Up 2 hours'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up About an hour
+    after: Up 2 hours
+  decisions: []
+- time: '2026-05-11T00:46:13.487714+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 46 minutes (healthy) -> Up About an hour (healthy); structural.containers[litellm].status:
+    Up 45 minutes -> Up About an hour'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 46 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 45 minutes
+    after: Up About an hour
+  decisions: []
+- time: '2026-05-11T00:30:49.313570+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 31 minutes (healthy) -> Up 46 minutes (healthy); structural.containers[litellm].status:
+    Up 29 minutes -> Up 45 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 31 minutes (healthy)
+    after: Up 46 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 29 minutes
+    after: Up 45 minutes
+  decisions: []
+- time: '2026-05-11T00:15:20.245643+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 16 minutes (healthy) -> Up 31 minutes (healthy); structural.containers[litellm].status:
+    Up 14 minutes -> Up 29 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 16 minutes (healthy)
+    after: Up 31 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 14 minutes
+    after: Up 29 minutes
+  decisions: []
+- time: '2026-05-10T23:59:57.794486+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up About a minute (unhealthy) -> Up 16 minutes (healthy); structural.containers[litellm]:
+    added; structural.services[litellm].status: activating -> active'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About a minute (unhealthy)
+    after: Up 16 minutes (healthy)
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 14 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[litellm].status
+    type: changed
+    before: activating
+    after: active
+  decisions: []
+- time: '2026-05-10T23:44:59.486517+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 35 minutes (healthy) -> Up About a minute (unhealthy); structural.containers[litellm]:
+    removed; structural.services[litellm].status: active -> activating'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 35 minutes (healthy)
+    after: Up About a minute (unhealthy)
+  - path: structural.containers[litellm]
+    type: removed
+    before:
+      name: litellm
+      status: Up 33 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[litellm].status
+    type: changed
+    before: active
+    after: activating
+  decisions: []
+- time: '2026-05-10T23:29:59.236423+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 24 minutes (healthy) -> Up 35 minutes (healthy); structural.containers[litellm].status:
+    Up 22 minutes -> Up 33 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 24 minutes (healthy)
+    after: Up 35 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 22 minutes
+    after: Up 33 minutes
+  decisions: []
+- time: '2026-05-10T23:18:58.385891+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 23 minutes (healthy) -> Up 24 minutes (healthy); structural.containers[litellm].status:
+    Up 21 minutes -> Up 22 minutes; structural.services[litellm].status: not-installed -> active'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 23 minutes (healthy)
+    after: Up 24 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 21 minutes
+    after: Up 22 minutes
+  - path: structural.services[litellm].status
+    type: changed
+    before: not-installed
+    after: active
+  decisions: []
+- time: '2026-05-10T23:17:59.341070+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 20 minutes (healthy) -> Up 23 minutes (healthy); structural.containers[litellm].status:
+    Up 18 minutes -> Up 21 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 20 minutes (healthy)
+    after: Up 23 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 18 minutes
+    after: Up 21 minutes
+  decisions: []
+- time: '2026-05-10T23:14:59.266912+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 5 minutes (healthy) -> Up 20 minutes (healthy); structural.containers[litellm].status:
+    Up 3 minutes -> Up 18 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 5 minutes (healthy)
+    after: Up 20 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 3 minutes
+    after: Up 18 minutes
+  decisions: []
+- time: '2026-05-10T22:59:49.242013+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 2 hours (healthy) -> Up 5 minutes (healthy); structural.containers[litellm].status:
+    Up 8 seconds -> Up 3 minutes'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 2 hours (healthy)
+    after: Up 5 minutes (healthy)
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 8 seconds
+    after: Up 3 minutes
+  decisions: []
+- time: '2026-05-10T22:44:34.003341+09:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 22 minutes -> Up 8 seconds'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 22 minutes
+    after: Up 8 seconds
+  decisions: []
+- time: '2026-05-10T22:29:32.207253+09:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 19 minutes -> Up 22 minutes'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 19 minutes
+    after: Up 22 minutes
+  decisions: []
+- time: '2026-05-10T22:25:55.828015+09:00'
+  type: auto
+  summary: 'structural.containers[litellm].status: Up 7 minutes -> Up 19 minutes'
+  changed:
+  - path: structural.containers[litellm].status
+    type: changed
+    before: Up 7 minutes
+    after: Up 19 minutes
+  decisions: []
+- time: '2026-05-10T22:14:29.209891+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up About an hour (healthy) -> Up 2 hours (healthy); structural.containers[litellm]:
+    added'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up About an hour (healthy)
+    after: Up 2 hours (healthy)
+  - path: structural.containers[litellm]
+    type: added
+    after:
+      name: litellm
+      status: Up 7 minutes
+      ports: 4000/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  decisions: []
+- time: '2026-05-10T21:44:21.238221+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 59 minutes (healthy) -> Up About an hour (healthy); structural.storage[datavg-lv_db].mount:
+    None -> /mnt/lv_db; structural.storage[datavg-lv_db].mounted: False -> True; structural.storage[ocivolume-lv_dev]: added;
+    structural.storage[ocivolume-lv_logs].size: 8G -> 10G (+2 more)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 59 minutes (healthy)
+    after: Up About an hour (healthy)
+  - path: structural.storage[datavg-lv_db].mount
+    type: changed
+    before: null
+    after: /mnt/lv_db
+  - path: structural.storage[datavg-lv_db].mounted
+    type: changed
+    before: false
+    after: true
+  - path: structural.storage[ocivolume-lv_dev]
+    type: added
+    after:
+      device: ocivolume-lv_dev
+      vg: ocivolume
+      lv: lv_dev
+      size: 4.5G
+      mounted: true
+      mount: /opt/project
+  - path: structural.storage[ocivolume-lv_logs].size
+    type: changed
+    before: 8G
+    after: 10G
+  - path: structural.storage[ocivolume-lv_project]
+    type: removed
+    before:
+      device: ocivolume-lv_project
+      vg: ocivolume
+      lv: lv_project
+      size: 10G
+      mounted: true
+      mount: /opt/project
+  - path: structural.storage[ocivolume-lv_tmp].size
+    type: changed
+    before: 5G
+    after: 10G
+  decisions: []
+- time: '2026-05-10T20:32:36.160986+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 44 minutes (healthy) -> Up 59 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 44 minutes (healthy)
+    after: Up 59 minutes (healthy)
+  decisions: []
+- time: '2026-05-10T20:17:29.172928+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 29 minutes (healthy) -> Up 44 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 29 minutes (healthy)
+    after: Up 44 minutes (healthy)
+  decisions: []
+- time: '2026-05-10T20:02:07.153293+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 14 minutes (healthy) -> Up 29 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 14 minutes (healthy)
+    after: Up 29 minutes (healthy)
+  decisions: []
+- time: '2026-05-10T19:46:59.189903+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: added; structural.services[devforge-llm].status: deactivating -> active'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 14 minutes (healthy)
+      ports: ''
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: deactivating
+    after: active
+  decisions: []
+- time: '2026-05-10T19:31:49.415741+09:00'
+  type: auto
+  summary: 'structural.containers[llm-coder]: removed; structural.services[devforge-llm].status: not-installed -> deactivating'
+  changed:
+  - path: structural.containers[llm-coder]
+    type: removed
+    before:
+      name: llm-coder
+      status: Up 15 hours (healthy)
+      ports: 127.0.0.1:8990->8080/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: not-installed
+    after: deactivating
+  decisions: []
+- time: '2026-05-10T18:31:25.730020+09:00'
+  type: auto
+  summary: 'structural.containers[llm-coder].status: Up 14 hours (healthy) -> Up 15 hours (healthy)'
+  changed:
+  - path: structural.containers[llm-coder].status
+    type: changed
+    before: Up 14 hours (healthy)
+    after: Up 15 hours (healthy)
+  decisions: []
+- time: '2026-05-10T17:28:08.554108+09:00'
+  type: auto
+  summary: 'structural.storage[datavg-lv_ai_data].size: 100.00G -> 100G; structural.storage[datavg-lv_db].size: 30.00G ->
+    30G; structural.storage[ocivolume-lv_logs].size: 8.00G -> 8G; structural.storage[ocivolume-lv_project].size: 10.00G ->
+    10G; structural.storage[ocivolume-lv_tmp].size: 5.00G -> 5G (+1 more)'
+  changed:
+  - path: structural.storage[datavg-lv_ai_data].size
+    type: changed
+    before: 100.00G
+    after: 100G
+  - path: structural.storage[datavg-lv_db].size
+    type: changed
+    before: 30.00G
+    after: 30G
+  - path: structural.storage[ocivolume-lv_logs].size
+    type: changed
+    before: 8.00G
+    after: 8G
+  - path: structural.storage[ocivolume-lv_project].size
+    type: changed
+    before: 10.00G
+    after: 10G
+  - path: structural.storage[ocivolume-lv_tmp].size
+    type: changed
+    before: 5.00G
+    after: 5G
+  - path: structural.storage[ocivolume-root].size
+    type: changed
+    before: 20.00G
+    after: 20G
+  decisions: []
+- time: '2026-05-10T17:26:58.387854+09:00'
+  type: bootstrap
+  summary: Server Knowledge System initialized — first structural snapshot
+  changed:
+  - path: structural
+    type: initial
+    note: Full initial state recorded in state.yaml
+  decisions:
+  - gen_server_state.py v4.2 deployed
+  - motd-gen.timer triggers every 15min
+  - CLAUDE.yaml is the machine entry point

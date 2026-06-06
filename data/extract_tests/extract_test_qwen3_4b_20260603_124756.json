@@ -1,0 +1,856 @@
+{
+  "model": "Qwen3-4B",
+  "timestamp": "2026-06-03T12:47:56.301945+00:00",
+  "turns_total": 15,
+  "turns_ok": 15,
+  "turns_error": 0,
+  "total_extractions": 108,
+  "total_faithful": 59,
+  "faithfulness_rate": 0.546,
+  "total_elapsed_seconds": 2736.7,
+  "results": [
+    {
+      "turn_id": "1c9d6db4-12bf-4173-82a4-2e2fecae7514",
+      "label": "T=580 Th=1990 U=63",
+      "status": "ok",
+      "elapsed": 310.8,
+      "tokens_prompt": 1268,
+      "tokens_completion": 333,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user|thinking",
+          "category": "requirement",
+          "evidence_len": 89,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|thinking",
+          "category": "explanation",
+          "evidence_len": 54,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|thinking",
+          "category": "reasoning",
+          "evidence_len": 80,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|thinking",
+          "category": "decision",
+          "evidence_len": 196,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|thinking",
+          "category": "explanation",
+          "evidence_len": 85,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "f94822dd-d363-4ec4-a436-3d9e90a4fdac",
+      "label": "T=808 Th=1794",
+      "status": "ok",
+      "elapsed": 328.4,
+      "tokens_prompt": 1057,
+      "tokens_completion": 844,
+      "total": 12,
+      "faithful": 4,
+      "unfaithful": 8,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "question",
+          "evidence_len": 24,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 29,
+          "faithful": true
+        },
+        {
+          "fact_type": "?",
+          "category": "decision",
+          "evidence_len": 100,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 115,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 87,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 119,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 122,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 116,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 80,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 79,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 75,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 99,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "a0c1130d-361a-42c6-835a-698b7b5861fc",
+      "label": "T=419 Th=1767 U=278",
+      "status": "ok",
+      "elapsed": 247.1,
+      "tokens_prompt": 1254,
+      "tokens_completion": 465,
+      "total": 5,
+      "faithful": 5,
+      "unfaithful": 0,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "requirement",
+          "evidence_len": 278,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 57,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 118,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "reasoning",
+          "evidence_len": 118,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 120,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "192be626-3118-4e0d-a822-bc6bc87514bd",
+      "label": "T=348 Th=1068 U=68",
+      "status": "ok",
+      "elapsed": 252.8,
+      "tokens_prompt": 888,
+      "tokens_completion": 709,
+      "total": 10,
+      "faithful": 9,
+      "unfaithful": 1,
+      "details": [
+        {
+          "fact_type": "user_turn",
+          "category": "requirement",
+          "evidence_len": 68,
+          "faithful": false
+        },
+        {
+          "fact_type": "thinking",
+          "category": "reasoning",
+          "evidence_len": 340,
+          "faithful": true
+        },
+        {
+          "fact_type": "thinking",
+          "category": "decision",
+          "evidence_len": 73,
+          "faithful": true
+        },
+        {
+          "fact_type": "thinking",
+          "category": "explanation",
+          "evidence_len": 191,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 39,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 54,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 57,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 57,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 57,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 67,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "5fb1b5d3-244a-4d66-8838-dbcb85989733",
+      "label": "T=246 Th=383",
+      "status": "ok",
+      "elapsed": 83.3,
+      "tokens_prompt": 464,
+      "tokens_completion": 291,
+      "total": 5,
+      "faithful": 3,
+      "unfaithful": 2,
+      "details": [
+        {
+          "fact_type": "user_turn",
+          "category": "requirement",
+          "evidence_len": 18,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 40,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 125,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "reasoning",
+          "evidence_len": 54,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 33,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "6dcc8b92-665a-4fd3-b4fd-449a29a4f04c",
+      "label": "T=758 Th=872",
+      "status": "ok",
+      "elapsed": 117.2,
+      "tokens_prompt": 842,
+      "tokens_completion": 230,
+      "total": 5,
+      "faithful": 4,
+      "unfaithful": 1,
+      "details": [
+        {
+          "fact_type": "user_turn",
+          "category": "requirement",
+          "evidence_len": 13,
+          "faithful": false
+        },
+        {
+          "fact_type": "thinking",
+          "category": "reasoning",
+          "evidence_len": 118,
+          "faithful": true
+        },
+        {
+          "fact_type": "thinking",
+          "category": "explanation",
+          "evidence_len": 83,
+          "faithful": true
+        },
+        {
+          "fact_type": "thinking",
+          "category": "explanation",
+          "evidence_len": 69,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "finding",
+          "evidence_len": 35,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "78f4bb68-b0e2-4d6a-ae63-77d83ce3c353",
+      "label": "T=322 Th=1798",
+      "status": "ok",
+      "elapsed": 154.5,
+      "tokens_prompt": 1072,
+      "tokens_completion": 248,
+      "total": 5,
+      "faithful": 4,
+      "unfaithful": 1,
+      "details": [
+        {
+          "fact_type": "user_turn",
+          "category": "requirement",
+          "evidence_len": 13,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 29,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 56,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 42,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 51,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "237ad900-146d-4819-8535-800851ba1615",
+      "label": "T=870 Th=242 U=66",
+      "status": "ok",
+      "elapsed": 125.7,
+      "tokens_prompt": 781,
+      "tokens_completion": 298,
+      "total": 5,
+      "faithful": 3,
+      "unfaithful": 2,
+      "details": [
+        {
+          "fact_type": "user_turn",
+          "category": "requirement",
+          "evidence_len": 65,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 39,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 27,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 61,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "reasoning",
+          "evidence_len": 67,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "a0487275-1295-4eb0-8993-af17fef00f3c",
+      "label": "T=616 Th=1545",
+      "status": "ok",
+      "elapsed": 239.3,
+      "tokens_prompt": 877,
+      "tokens_completion": 669,
+      "total": 10,
+      "faithful": 4,
+      "unfaithful": 6,
+      "details": [
+        {
+          "fact_type": "user|thinking|text",
+          "category": "requirement",
+          "evidence_len": 13,
+          "faithful": false
+        },
+        {
+          "fact_type": "thinking",
+          "category": "explanation",
+          "evidence_len": 315,
+          "faithful": false
+        },
+        {
+          "fact_type": "thinking",
+          "category": "explanation",
+          "evidence_len": 116,
+          "faithful": true
+        },
+        {
+          "fact_type": "thinking",
+          "category": "explanation",
+          "evidence_len": 181,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 73,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 29,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 56,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 116,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 104,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 98,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "e290568a-43a7-448b-804a-0d38e1d0ac7b",
+      "label": "T=396 Th=195",
+      "status": "ok",
+      "elapsed": 71.6,
+      "tokens_prompt": 472,
+      "tokens_completion": 234,
+      "total": 5,
+      "faithful": 4,
+      "unfaithful": 1,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "requirement",
+          "evidence_len": 18,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 56,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 52,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 41,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "reasoning",
+          "evidence_len": 65,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "a2044da0-31f4-49fc-bb84-7b206e8b39e1",
+      "label": "T=427 Th=1002",
+      "status": "ok",
+      "elapsed": 137.2,
+      "tokens_prompt": 793,
+      "tokens_completion": 337,
+      "total": 5,
+      "faithful": 2,
+      "unfaithful": 3,
+      "details": [
+        {
+          "fact_type": "user_turn",
+          "category": "requirement",
+          "evidence_len": 40,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 69,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 73,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 35,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 51,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "826f3463-3f12-43d4-97c7-a1807edc9b27",
+      "label": "T=647 Th=861",
+      "status": "ok",
+      "elapsed": 120.8,
+      "tokens_prompt": 799,
+      "tokens_completion": 270,
+      "total": 5,
+      "faithful": 5,
+      "unfaithful": 0,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "question",
+          "evidence_len": 32,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 90,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 36,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 50,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 50,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "fbd6a3af-3a05-45a6-a249-84b6d02c8fbb",
+      "label": "T=1650 Th=141",
+      "status": "ok",
+      "elapsed": 383.8,
+      "tokens_prompt": 919,
+      "tokens_completion": 1119,
+      "total": 21,
+      "faithful": 5,
+      "unfaithful": 16,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "requirement",
+          "evidence_len": 13,
+          "faithful": true
+        },
+        {
+          "fact_type": "thinking",
+          "category": "reasoning",
+          "evidence_len": 141,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 18,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 90,
+          "faithful": false
+        },
+        {
+          "fact_type": "?",
+          "category": "code",
+          "evidence_len": 49,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 39,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 89,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 55,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 63,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 99,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 94,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "config",
+          "evidence_len": 100,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "config",
+          "evidence_len": 74,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "config",
+          "evidence_len": 57,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "config",
+          "evidence_len": 53,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "config",
+          "evidence_len": 55,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "config",
+          "evidence_len": 59,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 117,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 105,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 88,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 56,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "60f1bd2d-8679-4605-8afb-869fcf635de9",
+      "label": "T=353",
+      "status": "ok",
+      "elapsed": 82.3,
+      "tokens_prompt": 390,
+      "tokens_completion": 327,
+      "total": 5,
+      "faithful": 4,
+      "unfaithful": 1,
+      "details": [
+        {
+          "fact_type": "user_turn",
+          "category": "requirement",
+          "evidence_len": 4,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 29,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 310,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 64,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 105,
+          "faithful": true
+        }
+      ]
+    },
+    {
+      "turn_id": "a6f13194-1356-40ce-b67c-23f3febc3ea0",
+      "label": "T=541",
+      "status": "ok",
+      "elapsed": 81.9,
+      "tokens_prompt": 513,
+      "tokens_completion": 259,
+      "total": 5,
+      "faithful": 3,
+      "unfaithful": 2,
+      "details": [
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 59,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "decision",
+          "evidence_len": 57,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 53,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "reasoning",
+          "evidence_len": 33,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 42,
+          "faithful": false
+        }
+      ]
+    }
+  ]
+}

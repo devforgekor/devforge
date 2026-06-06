@@ -1,0 +1,31 @@
+# Auto-generated harness state
+CLAUDE.yaml
+state.yaml
+
+# Auto mode artifacts
+data/auto_logs/
+data/auto_tasks_*.md
+data/auto_status.yaml
+
+# Generated experiment/test outputs
+data/experiment/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Backup files
+*.bak.*
+*.bak
+*.quarantine.*
+*.before_minimal.*
+
+# Temp / generated
+.handover.lock
+.last-structural-hash
+model_sequence_*.log
+smoke_test_*.log
+_bck_
+_backup/
+batch_results/

@@ -1,0 +1,158 @@
+{
+  "pipeline_input_version": "2.0",
+  "description": "10-sample subset for E2E pipeline test",
+  "timestamp": "2026-06-03T16:20:00+09:00",
+  "total_files_merged": 13,
+  "total_findings": 10,
+  "severity_breakdown": {
+    "critical": 6,
+    "high": 9,
+    "medium": 8,
+    "low": 16,
+    "pass": 0,
+    "fail": 5,
+    "partial": 4
+  },
+  "findings": [
+    {
+      "id": "S01",
+      "severity": "critical",
+      "category": "extract_pipeline.py → review_facts",
+      "description": "Operational metrics(timing, tokens)가 review_facts에 전혀 기록되지 않음",
+      "source_file": "eval_python_verify.json",
+      "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+      "fid": "F015"
+    },
+    {
+      "id": "S03",
+      "severity": "critical",
+      "category": "review_facts → activity_log",
+      "description": "review_facts.verdict가 'pending'에서 절대 갱신되지 않음 — downstream pipeline이 review_facts를 UPDATE하지 않음",
+      "source_file": "eval_python_verify.json",
+      "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+      "fid": "F017"
+    },
+    {
+      "id": "F01",
+      "severity": "critical",
+      "category": "data_loss",
+      "description": "call_llm()이 HTTP 응답에서 usage(tokens) + timings(latency)를 완전히 버림. llama.cpp API는 완전한 usage/timings 데이터를 반환하나 클라이언트가 content만 추출. 4개 extract 결과 모두 prompt_tokens, gen_tokens, elapsed_ms가 NULL.",
+      "source_file": "eval_prj_extract_handoff.json",
+      "source_summary": "",
+      "fid": "F008"
+    },
+    {
+      "id": "S04",
+      "severity": "high",
+      "category": "call_llm() — lib/llm_client.py",
+      "description": "LLM 클라이언트가 API 응답에서 token usage/timing을 추출하지 않음",
+      "source_file": "eval_python_verify.json",
+      "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+      "fid": "F018"
+    },
+    {
+      "id": "S05",
+      "severity": "high",
+      "category": "queue_writer.py → activity_log",
+      "description": "enqueue_review()가 queue_status 항상 'reviewed'로 고정 — P-R-J bypass",
+      "source_file": "eval_python_verify.json",
+      "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+      "fid": "F019"
+    },
+    {
+      "id": "M04",
+      "severity": "medium",
+      "category": "MCP entity correctness",
+      "description": "files: ['de_mod_pipeline.py']— 'code_mod_pipeline.py'의 오타. functions: ['run_32b_4stage', 'save_result', 'upload_review_bundle', 'upload_raw'] — 모두 정확히 식별. files 3개 모두 exists=false (경로 문제).",
+      "source_file": "eval_30b_verify.json",
+      "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+      "fid": "F004"
+    },
+    {
+      "id": "M05",
+      "severity": "medium",
+      "category": "extract coverage (short turns)",
+      "description": "User: '1+1 답만 해줘' (9ch), Assistant: '2' (1ch). 추출: text fact '2' 1개. user_turn fact 누락. user_turn '1+1 답만 해줘'도 추출되어야 하나 누락됨.",
+      "source_file": "eval_30b_verify.json",
+      "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+      "fid": "F005"
+    },
+    {
+      "id": "DSG_Downstream impact",
+      "severity": "medium",
+      "category": "disagreement",
+      "description": "Downstream impact: 27B=Pass — 인정 vs 32B=Fail — 추가 검증 필요 → 32B 의견 채택. faithfulness rate 단독 지표 불충분. 실제 MCP entity quality 비교 필요.",
+      "source_file": "eval_verify_feedback.json",
+      "source_summary": "",
+      "fid": "F046"
+    },
+    {
+      "id": "Long-turn mitigation plan",
+      "severity": "partial",
+      "category": "verification",
+      "description": "Issue identified (T>1000 degradation across all models) but mitigation is at observation level — needs concrete implementation plan (retry policy tuning, fallback threshold).",
+      "source_file": "eval_verify_27b.json",
+      "source_summary": "P-R-J pipeline correctly identified 7 findings. Qwen2.5-Coder-3B recommended as extract champion. P_score=26, R_score=27, gap=1 (high confidence). All findings are data-backed and actionable.",
+      "fid": "F026"
+    },
+    {
+      "id": "Cost efficiency consideration",
+      "severity": "fail",
+      "category": "verification",
+      "description": "Qwen3-4B takes 2737s vs Qwen2.5-3B's 1217s for same 15 turns (2.25x slower). This is not reflected in rubric criteria. Extract has strict timeout (180s) and slow extraction blocks pipeline.",
+      "source_file": "eval_verify_32b.json",
+      "source_summary": "P-R-J analysis is sound but has gaps in downstream impact measurement. Champion selection correct. Condition: verify downstream MCP quality with champion model before finalizing.",
+      "fid": "F038"
+    }
+  ],
+  "extract": {
+    "total_models": 4,
+    "description": "Extract test: 4 models x 15 turns, faithfulness/speed benchmark",
+    "models": [
+      {
+        "model": "Gemma3-4B",
+        "turns_total": 15,
+        "turns_ok": 15,
+        "turns_error": 0,
+        "total_extractions": 108,
+        "total_faithful": 46,
+        "faithfulness_rate": 0.426,
+        "elapsed_seconds": 2112.7,
+        "avg_time_per_turn": 140.8
+      },
+      {
+        "model": "LFM2-8B-A1B",
+        "turns_total": 15,
+        "turns_ok": 14,
+        "turns_error": 1,
+        "total_extractions": 74,
+        "total_faithful": 12,
+        "faithfulness_rate": 0.162,
+        "elapsed_seconds": 812.5,
+        "avg_time_per_turn": 54.2
+      },
+      {
+        "model": "Qwen2.5-3B",
+        "turns_total": 15,
+        "turns_ok": 14,
+        "turns_error": 1,
+        "total_extractions": 65,
+        "total_faithful": 54,
+        "faithfulness_rate": 0.831,
+        "elapsed_seconds": 1216.7,
+        "avg_time_per_turn": 81.1
+      },
+      {
+        "model": "Qwen3-4B",
+        "turns_total": 15,
+        "turns_ok": 15,
+        "turns_error": 0,
+        "total_extractions": 108,
+        "total_faithful": 59,
+        "faithfulness_rate": 0.546,
+        "elapsed_seconds": 2736.7,
+        "avg_time_per_turn": 182.4
+      }
+    ]
+  }
+}

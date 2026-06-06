@@ -1,0 +1,55 @@
+done:
+- '2026-06-03: Evaluation-First principle + llm-rule updates. docs YAML conversion (4 files). gen_architecture.py YAML output + tree validation. local-rule redesigned. Refactoring roadmap revised. English-only machine content.'
+- '2026-06-03: Docs restructuring: 29 flat → architecture/plans/specs/shared + _archive 15+. llm-* prefix rename. gen_architecture.py + timer (daily KST 09:00). code-structure.yaml created. CLAUDE.yaml/CLAUDE.md/8 path updates.'
+- '2026-06-03: Auto-compaction fix: CLAUDE_CODE_AUTO_COMPACT_WINDOW=128000 in settings.json + claude-env + tmux. proxy _strict_tool_adjacency_fix resolves newhand 400 bug.',
+- '2026-06-03: Formalize Day/Night system modes + nightly_batch.sh mode switch + handover docs',
+- '2026-06-03: Delete review_worker.py (R1-8B/Qwen7B Pods down, replaced by proxy_reviewer+review_consumer)',
+- '2026-06-03: Restore feedback loop: split proxy_reviewer→body.deepseek_audit + disagreed/partial re-queue + reverify_count + review_consumer audit context + feedback.py few-shot',
+- '2026-06-03: proxy_reviewer.py token-based batching (_build_batches, review_batch, DEEPSEEK_SYSTEM_BATCH)'
+- '[2026-06-03] nightly_batch.sh Phase 7 --limit 10 → 50'
+- '2026-06-03: Pipeline JSON schema audit: deepseek_feedback Dead End confirmed (stored but never consumed)',
+- '2026-06-03: nightly_batch.sh Phase 5 — add systemd timer/service stop/restore logic',
+- '2026-06-03: 27B E2E verify test: curl → review_consumer.py → activity_log queue_status=done'
+- '2026-06-03: Proxy cache optimization: cch removal + hit_rate formula fix + system-first JSON serialization. Hit rate 95%.',
+blocked: []
+in_progress: null
+todo:
+- '2026-06-03: [P0-a] Delete dead code: 6x anthropic_proxy.py.bak/.quarantine/.before_minimal files'
+- '2026-06-03: [P0-b] Move non-script files out of scripts/: CLAUDE_CODE_AB_README.txt, test_review_results.json'
+- '2026-06-03: [P0-c] Populate CLAUDE.yaml software: section from _archive/agent-architecture.yaml'
+- '2026-06-03: [P0-d] Archive master-plan.md → _archive/ (decision exists, not executed)'
+- '2026-06-03: [P0-e] Archive implementation-notes.md → _archive/ (dead doc)'
+- '2026-06-03: [P1] Strip WHAT docstrings from 15+ functions across scripts/*.py'
+- '2026-06-03: [P2] CLI user-facing text Korean translation (cli.py print statements)'
+- '2026-06-03: [P3] Rename scripts/tr to mode-switcher.sh (conflicts with /usr/bin/tr)'
+kanban_labels:
+  blocked: Blocked
+  done: Done
+  in_progress: In Progress
+  todo: To Do
+meta:
+  add_checklist:
+  - Append new task to todo with date and optional tags.
+  done_checklist:
+  - Move in_progress -> done (insert at top of done list).
+  - 'If todo is non-empty: promote todo[0] -> in_progress.'
+  - If a task becomes blocked, move it to blocked and record the blocker.
+  - 'Log to DB: python3 /opt/projects/server/scripts/cli.py worklog add ''<title>'' ''<summary>'' --agent ''<agent>'' --model
+    ''<model>'' --tags ''<tags>'''
+  - 'If decisions were made or issues found: update handover.yaml.'
+  language: English only (machine-readable).
+  location: /opt/projects/server/docs/tasks.yaml
+  must_rules:
+  - 'in_progress: exactly 1 task or null. Never leave a completed task in in_progress.'
+  - 'todo: ordered by priority. Add new tasks to the end.'
+  - 'blocked: keep blocked items separate from todo.'
+  - 'done: keep at most 10 recent items. Older items exist only in worklog DB.'
+  purpose: Shared Kanban task tracker for all AI agents on DevForge server.
+  related_files:
+  - /opt/projects/server/CLAUDE.yaml
+  - /opt/projects/server/handover.yaml
+  - /opt/projects/server/blueprint.yaml
+  - /opt/projects/server/docs/specs/system-design.yaml
+  - /opt/projects/server/docs/plans/phases.md
+  - /opt/projects/server/_archive/README.md
+  todo: []

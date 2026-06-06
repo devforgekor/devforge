@@ -1,0 +1,80 @@
+{
+  "role": "mcp_30b",
+  "model": "Qwen3-Coder-30B-A3B (current)",
+  "input_turn_id": "d5ec4da3-06a5-452b-9247-e8e3ec517a61",
+  "input_extract_model": "Qwen30B (fallback after 3B double failure)",
+  "actual_output": {
+    "tldr": "code_mod_pipeline.py와 CLI upload 명령어 통합 방안 설명",
+    "intent": "explain",
+    "entities": {
+      "files": ["de_mod_pipeline.py", "cli.py", "lib/blob_uploader.py"],
+      "functions": ["run_32b_4stage", "save_result", "upload_review_bundle", "upload_raw"],
+      "technologies": ["Python", "Azure Blob"],
+      "mentioned_users": []
+    },
+    "tags": ["code_mod", "azure_blob", "cli", "pipeline", "integration"]
+  },
+  "entity_verification": {
+    "files": [
+      {"path": "de_mod_pipeline.py", "exists": false},
+      {"path": "cli.py", "exists": false},
+      {"path": "lib/blob_uploader.py", "exists": false}
+    ],
+    "symbols": [
+      {"name": "run_32b_4stage", "found": true},
+      {"name": "save_result", "found": true},
+      {"name": "upload_review_bundle", "found": true},
+      {"name": "upload_raw", "found": true}
+    ]
+  },
+  "rubric_score": {
+    "tldr_accuracy": {
+      "score": 9,
+      "rationale": "TLDR factual, 15단어 이하. turn 내용을 정확히 요약. intent 'explain'도 적절."
+    },
+    "entity_correctness": {
+      "score": 4,
+      "rationale": "3개 파일 경로 전부 존재하지 않음. 'de_mod_pipeline.py'는 오타 의심(code→de). cli.py는 상대경로 누락. lib/blob_uploader.py는 파일 구조 오인. 함수명 4개는 전부 찾았으나 files 오류로 entity_correctness 심각한 저하."
+    },
+    "tag_usefulness": {
+      "score": 8,
+      "rationale": "5개 태그 모두 관련성 높음. 'code_mod', 'azure_blob', 'cli', 'pipeline', 'integration' — 검색/라우팅에 유용. 너무 generic하지 않음."
+    }
+  },
+  "issues": [
+    {
+      "id": "M01",
+      "severity": "high",
+      "description": "File path hallucination: 'de_mod_pipeline.py' is typo (should be 'code_mod_pipeline.py'). Entity verification caught this (exists=false) but the pipeline does not correct the path.",
+      "affected_field": "entities.files[0]"
+    },
+    {
+      "id": "M02",
+      "severity": "high",
+      "description": "File path hallucination: 'lib/blob_uploader.py' doesn't exist in the project. The actual file structure may be different.",
+      "affected_field": "entities.files[2]"
+    },
+    {
+      "id": "M03",
+      "severity": "medium",
+      "description": "Path ambiguity: 'cli.py' without relative path from project root. Entity verification failed to locate it.",
+      "affected_field": "entities.files[1]"
+    },
+    {
+      "id": "M04",
+      "severity": "medium",
+      "description": "All 3 files verified nonexistent (0/3). While downstream can still function, this reduces trust in entity extraction quality.",
+      "affected_field": "entities.files"
+    },
+    {
+      "id": "M05",
+      "severity": "low",
+      "description": "'mentioned_users' is empty array — appropriate if no user names in turn. But this field is almost never populated.",
+      "affected_field": "entities.mentioned_users"
+    }
+  ],
+  "recommendation_feedback": {
+    "file_path_improvement": "entities.files should only include paths verified against project root. If de_mod_pipeline.py → run `find /opt/projects/server -name 'de_mod_pipeline*' 2>/dev/null` to correct or omit.",
+    "fallback_note": "This MCP output came from 30B fallback (3B failed twice). The 30B fallback should produce MORE cautious entities, yet files hallucination persists."
+  }
+}

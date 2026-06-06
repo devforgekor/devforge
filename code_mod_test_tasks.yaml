@@ -1,0 +1,227 @@
+# 9 selected code modification tests for 32B baseline
+# Diverse difficulty: L1 → L16 across 4 target files
+#
+# Metrics per task:
+#   - 32B: diff quality, rationale accuracy, confidence, review_points usefulness
+#   - APIs: same metrics + token usage, latency
+#   - Cross: agreement rate, unique insights per model
+
+tasks:
+  - id: 1
+    stage: L1
+    name: "Add Function (Simple)"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      _post_to_slack() and _post_to_response_url() repeat the same JSON serialization+encoding pattern.
+      Add a _encode_payload(payload: dict) -> bytes helper function that takes a payload dict and converts it to bytes.
+      Modify existing _post_to_response_url() and _post_to_slack() to use this function.
+    expected_category: "helper_extraction"
+    evaluation:
+      - Was the helper function extracted correctly?
+      - Were both call sites modified?
+      - Was existing behavior preserved?
+
+  - id: 2
+    stage: L3
+    name: "Add Error Handling/Validation"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      When verify_slack_signature()'s body parameter is empty bytes (b''), if timestamp verification passes,
+      hmac.compare_digest(expected, '') → True, which could allow an empty signature.
+      Add input validation that explicitly returns False when body is empty, timestamp is 0,
+      or signature does not match the 'v0=' format.
+    expected_category: "validation"
+    evaluation:
+      - Empty body detection
+      - Timestamp 0 defense
+      - Signature format validation
+      - No impact on existing normal cases
+
+  - id: 3
+    stage: L5
+    name: "Intermediate Refactoring (Deduplication)"
+    file: "/opt/projects/server/scripts/auto_commit_guard.py"
+    description: |
+      Multiple functions in auto_commit_guard.py execute git commands via the _git() helper,
+      but each _git() call repeats the same error handling (return "" on failure) and strip().
+      Analyze the _git() call pattern and improve it with a _git_or(default: str = "")
+      pattern that allows specifying a default on failure. Also change the return type to
+      Optional[str] so that cases where _git() result is an empty string can be distinguished
+      from cases where actual git output is an empty string.
+    expected_category: "deduplication"
+    evaluation:
+      - Optional[str] return type correctness
+      - None checks added at call sites
+      - Existing fallback behavior preserved
+
+  - id: 4
+    stage: L7
+    name: "Structural Change (Class Extraction)"
+    file: "/opt/projects/server/api/slack_operator.py"
+    description: |
+      The _interaction_state dict and the _get_state(), _prune_expired(), _state_key() functions
+      form a single logical unit (SessionStore). Extract them into a SessionStore class.
+      The class should have __init__(ttl: int = 1800), get(user_id, channel_id), and _prune() methods.
+      Also update usage in _advance() and slack_interactions().
+      Remove the existing module-level _interaction_state.
+    expected_category: "structural_refactor"
+    evaluation:
+      - SessionStore class design appropriateness
+      - All call sites migrated
+      - TTL expiration behavior preserved
+      - Thread-safety consideration
+
+  - id: 5
+    stage: L8
+    name: "Analysis+Planning Only (No Code Modification)"
+    file: "/opt/projects/server/scripts/auto_commit_guard.py"
+    description: |
+      Analyze the entire auto_commit_guard.py and identify race conditions and safety issues
+      that may occur during concurrent execution. Specifically:
+      1. Is main() safe from race conditions when two sessions call it simultaneously?
+         (git add -A + git commit without locking)
+      2. Is the psql() query on line 31 safe against SQL injection or connection failures?
+      3. Is the timezone handling (datetime.now(KST)) correct across DST transitions?
+      Do not modify code; output only discovered issues and recommended solutions as a markdown report.
+    expected_category: "analysis_only"
+    evaluation:
+      - Race condition identification accuracy
+      - Failure scenario coverage
+      - Solution feasibility
+      - Priority assignment appropriateness
+
+  - id: 6
+    stage: L11
+    name: "Extract ASSERT Parser + Validator"
+    file: "/opt/projects/server/scripts/code_mod_pipeline.py"
+    description: |
+      Port the extract_assert() and ASSERT validation logic from hybrid_pipeline.py's execute_steps()
+      into code_mod_pipeline.py and generalize it as a lib module.
+      Currently, code_mod_pipeline.py's 4-stage pipeline has no ASSERT validation.
+      Extract an AssertValidator class that verifies each stage's output satisfies its contract
+      into lib/assert_check.py, and apply it to code_mod_pipeline.py's Stage 3 (IMPL) results.
+
+      --- Reference: extract_assert() from hybrid_pipeline.py ---
+      def extract_assert(code: str) -> Optional[str]:
+          m = re.search(r'#\s*ASSERT:\s*(.+)', code)
+          return m.group(1).strip() if m else None
+
+      Pattern: generated code includes "# ASSERT: <Python expr>" comments.
+      After exec(code, namespace), eval(cond, namespace) checks the condition.
+      Failed ASSERT → retry. TYPE_ENV → immediate abort, TYPE_CODE → retry up to 2x.
+
+      The AssertValidator class should:
+      - validate(stage_output: str, namespace: dict) -> (bool, Optional[str])
+      - Return (True, None) if all ASSERTs pass, (False, reason) otherwise.
+    expected_category: "feature_addition"
+    evaluation:
+      - AssertValidator class design
+      - Stage 3 IMPL result validation applied
+      - Existing pipeline behavior preserved
+      - TYPE_ENV / TYPE_CODE error classification preserved
+
+  - id: 7
+    stage: L12
+    name: "Generalize Error Classifier"
+    file: "/opt/projects/server/scripts/code_mod_pipeline.py"
+    description: |
+      Port the classify_error() logic from hybrid_pipeline.py into code_mod_pipeline.py.
+      Currently the 32B 4-stage pipeline treats all errors identically on stage failure.
+      classify_error() distinguishes errors into TYPE_ENV (fatal, immediate abort) and TYPE_CODE (retryable).
+      Extract this classification logic into lib/error_classifier.py and integrate it into
+      code_mod_pipeline.py's Stage 2-4 failure handling.
+      TYPE_ENV → immediate abort, TYPE_CODE → up to 2 web fallback retries.
+      Web fallback uses the DeepSeek API.
+
+      --- Reference: ERROR_CLASSIFIER_PROMPT + classify_error() from hybrid_pipeline.py ---
+      ERROR_CLASSIFIER_PROMPT = '''Classify this Python error into exactly one word:
+      TYPE_ENV — environment issue (missing library, permission, file not found)
+      TYPE_CODE — code logic/syntax error, NameError, TypeError, AssertionError
+
+      Error:
+      {error}
+
+      Classification:'''
+
+      def classify_error(error_text: str) -> str:
+          # Heuristic fallback (no model needed on host):
+          env_markers = ["ModuleNotFoundError", "ImportError", "PermissionError",
+                          "FileNotFoundError", "No such file"]
+          for marker in env_markers:
+              if marker in error_text:
+                  return "TYPE_ENV"
+          # Optionally call a fast local model (qwen3-4b) for classification.
+          # If no model available, default to TYPE_CODE (retryable).
+          return "TYPE_CODE"
+
+      lib/error_classifier.py should expose: classify_error(error_text: str) -> str.
+      Import in code_mod_pipeline.py: from lib.error_classifier import classify_error.
+    expected_category: "feature_addition"
+    evaluation:
+      - error_classifier module separation
+      - TYPE_ENV immediate abort
+      - TYPE_CODE retry + web fallback
+      - Graceful failure on retry exhaustion
+
+  - id: 8
+    stage: L14
+    name: "KeyRotator — Exponential Backoff + Jitter"
+    file: "/opt/projects/server/scripts/lib/auth/key_rotator.py"
+    description: |
+      KeyRotator.rate_limited() currently uses a fixed backoff (60s).
+      Parse rate limit response headers (Retry-After) to apply dynamic backoff,
+      and if Retry-After is absent, add exponential backoff with jitter (±25%).
+      base_delay=30s, backoff_multiplier=2.0, max_delay=600s.
+      Keys whose backoff_until has expired should be automatically reactivated.
+    expected_category: "feature_addition"
+    evaluation:
+      - Retry-After header parsing
+      - Exponential backoff calculation accuracy
+      - Jitter applied (±25%)
+      - max_delay not exceeded
+      - Expired key auto-reactivation
+
+  - id: 9
+    stage: L16
+    name: "Add 429 Detection + Auto-Backoff Tests"
+    file: "/opt/projects/server/scripts/lib/auth/key_rotator.py"
+    description: |
+      KeyRotator has logic to automatically detect 429 responses and apply backoff,
+      but there are no unit tests for this. Add pytest-based tests in the lib/ directory:
+      1. Create test_key_rotator.py
+      2. Test cases:
+         - Basic pick()→success() cycle (normal behavior)
+         - After rate_limited(), the key is excluded for backoff duration
+         - pick() returns None when all keys are in backoff state
+         - Reactivation after backoff expiry
+         - Daily quota backoff (retry_seconds >= DAILY_QUOTA_THRESHOLD)
+      3. Use monkeypatch to control time.time() to remove time dependency
+    expected_category: "test_addition"
+    evaluation:
+      - All scenarios covered
+      - monkeypatch usage
+      - pytest --tb=short passes
+      - No impact on existing call sites
+
+# ── API comparison config ──────────────────────────────────────────
+api_targets:
+  - name: "deepseek-v4-pro"
+    endpoint: "https://api.deepseek.com/v1/chat/completions"
+    model: "deepseek-chat"
+    role: "Claude Code primary"
+  - name: "deepseek-v4-flash"
+    endpoint: "https://api.deepseek.com/v1/chat/completions"
+    model: "deepseek-chat"  # same model, different usage pattern
+    role: "Aider primary"
+  - name: "gemini"
+    endpoint: "http://127.0.0.1:9099/v1/chat/completions"
+    model: "auto"  # gemini-proxy auto-routing
+    role: "Gemini free tier"
+
+# ── Qwen32B local config ──────────────────────────────────────────
+local_32b:
+  endpoint: "http://127.0.0.1:8081/v1/chat/completions"
+  model: "qwen2.5-coder-32b"
+  ctx_size: 10240
+  tier: "32B"
+  require_mem_mb: 21500  # IQ4_XS ~16.9GB + cache-ram 6656 + overhead, matches memory_guard.sh

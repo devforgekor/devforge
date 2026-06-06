@@ -1,0 +1,836 @@
+{
+  "generation": 9,
+  "active_fingerprint": "94ee26662e6fd9f5",
+  "generations": {
+    "35294c9084ecc300": {
+      "patterns": [
+        {
+          "issue": "evidence matches the claim",
+          "fix": "The evidence 'adds whitelist-based input sanitization' directly supports the summary 'Adds input validation for API endpoint'.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "14B consensus aligns with evidence",
+          "fix": "The 14B review verdict 'needs_review' is consistent with a test item that may require further context, but the content analysis is correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "security implications",
+          "fix": "Input sanitization is a positive security measure, and the description is accurate.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": null,
+      "prev_rate": null,
+      "created_at": "2026-06-03T03:32:30.571107+00:00"
+    },
+    "7bfd272f120792e2": {
+      "patterns": [
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly describes a greeting and response interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification",
+          "fix": "No specific files, functions, or technologies are present in a generic greeting, so empty lists are correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'greeting' and 'assistant-response' are appropriate for this type of interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "evidence matches the claim",
+          "fix": "The evidence 'adds whitelist-based input sanitization' directly supports the summary 'Adds input validation for API endpoint'.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "14B consensus aligns with evidence",
+          "fix": "The 14B review verdict 'needs_review' is consistent with a test item that may require further context, but the content analysis is correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "security implications",
+          "fix": "Input sanitization is a positive security measure, and the description is accurate.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": "35294c9084ecc300",
+      "prev_rate": null,
+      "created_at": "2026-06-04T18:22:27.148871+00:00"
+    },
+    "39c9874d3486f318": {
+      "patterns": [
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR accurately describes the user's request for a simple arithmetic answer without unnecessary detail.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "Empty entity fields are correct as simple arithmetic does not involve specific code files, symbols, or technologies.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance and utility",
+          "fix": "Tags like 'arithmetic' and 'simple-math' correctly categorize the query for effective routing and discovery.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Consistency with 14B review",
+          "fix": "The analysis aligns with the 14B review's assessment of the item's correctness.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly describes a greeting and response interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification",
+          "fix": "No specific files, functions, or technologies are present in a generic greeting, so empty lists are correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'greeting' and 'assistant-response' are appropriate for this type of interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "evidence matches the claim",
+          "fix": "The evidence 'adds whitelist-based input sanitization' directly supports the summary 'Adds input validation for API endpoint'.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "14B consensus aligns with evidence",
+          "fix": "The 14B review verdict 'needs_review' is consistent with a test item that may require further context, but the content analysis is correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "security implications",
+          "fix": "Input sanitization is a positive security measure, and the description is accurate.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": "7bfd272f120792e2",
+      "prev_rate": null,
+      "created_at": "2026-06-04T18:30:19.887307+00:00"
+    },
+    "098a73641a210942": {
+      "patterns": [
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly summarizes the integration topic in a concise manner.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity file identification accuracy",
+          "fix": "The entity list contains 'de_mod_pipeline.py' which is a typo for 'code_mod_pipeline.py', leading to incorrect file references.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Entity existence check logic",
+          "fix": "Because of the typo in the filename, the system correctly reports the file as missing, but this is a false negative regarding the actual project structure.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'code_mod', 'azure_blob', and 'cli' are relevant and useful for routing.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR accurately describes the user's request for a simple arithmetic answer without unnecessary detail.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "Empty entity fields are correct as simple arithmetic does not involve specific code files, symbols, or technologies.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance and utility",
+          "fix": "Tags like 'arithmetic' and 'simple-math' correctly categorize the query for effective routing and discovery.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Consistency with 14B review",
+          "fix": "The analysis aligns with the 14B review's assessment of the item's correctness.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly describes a greeting and response interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification",
+          "fix": "No specific files, functions, or technologies are present in a generic greeting, so empty lists are correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'greeting' and 'assistant-response' are appropriate for this type of interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "evidence matches the claim",
+          "fix": "The evidence 'adds whitelist-based input sanitization' directly supports the summary 'Adds input validation for API endpoint'.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "14B consensus aligns with evidence",
+          "fix": "The 14B review verdict 'needs_review' is consistent with a test item that may require further context, but the content analysis is correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "security implications",
+          "fix": "Input sanitization is a positive security measure, and the description is accurate.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": "39c9874d3486f318",
+      "prev_rate": null,
+      "created_at": "2026-06-04T18:39:12.891024+00:00"
+    },
+    "2cff365657f88ed4": {
+      "patterns": [
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly and briefly states that the IP request was denied due to cloud-based AI constraints.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists are correctly empty as the interaction did not involve specific code files, functions, or technology names.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'cloud', 'server', 'ip-address', and 'ai' accurately reflect the topic of the conversation.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly summarizes the integration topic in a concise manner.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity file identification accuracy",
+          "fix": "The entity list contains 'de_mod_pipeline.py' which is a typo for 'code_mod_pipeline.py', leading to incorrect file references.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Entity existence check logic",
+          "fix": "Because of the typo in the filename, the system correctly reports the file as missing, but this is a false negative regarding the actual project structure.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'code_mod', 'azure_blob', and 'cli' are relevant and useful for routing.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR accurately describes the user's request for a simple arithmetic answer without unnecessary detail.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "Empty entity fields are correct as simple arithmetic does not involve specific code files, symbols, or technologies.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance and utility",
+          "fix": "Tags like 'arithmetic' and 'simple-math' correctly categorize the query for effective routing and discovery.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Consistency with 14B review",
+          "fix": "The analysis aligns with the 14B review's assessment of the item's correctness.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly describes a greeting and response interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification",
+          "fix": "No specific files, functions, or technologies are present in a generic greeting, so empty lists are correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'greeting' and 'assistant-response' are appropriate for this type of interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "evidence matches the claim",
+          "fix": "The evidence 'adds whitelist-based input sanitization' directly supports the summary 'Adds input validation for API endpoint'.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "14B consensus aligns with evidence",
+          "fix": "The 14B review verdict 'needs_review' is consistent with a test item that may require further context, but the content analysis is correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "security implications",
+          "fix": "Input sanitization is a positive security measure, and the description is accurate.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": "098a73641a210942",
+      "prev_rate": null,
+      "created_at": "2026-06-04T18:48:01.801162+00:00"
+    },
+    "f52dfe7e375483b2": {
+      "patterns": [
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly identifies the user's input as a greeting and the system's response as an offer of assistance.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists for files, functions, and technologies are correctly empty as no technical entities were mentioned in the greeting.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags 'greeting', 'assistance', and 'interaction' are semantically appropriate for routing and categorizing this type of turn.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Intent classification",
+          "fix": "While 'report' is a generic intent, it is acceptable for a non-specific interaction, though 'greeting' might be more precise; however, it does not constitute a critical failure.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly and briefly states that the IP request was denied due to cloud-based AI constraints.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists are correctly empty as the interaction did not involve specific code files, functions, or technology names.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'cloud', 'server', 'ip-address', and 'ai' accurately reflect the topic of the conversation.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly summarizes the integration topic in a concise manner.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity file identification accuracy",
+          "fix": "The entity list contains 'de_mod_pipeline.py' which is a typo for 'code_mod_pipeline.py', leading to incorrect file references.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Entity existence check logic",
+          "fix": "Because of the typo in the filename, the system correctly reports the file as missing, but this is a false negative regarding the actual project structure.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'code_mod', 'azure_blob', and 'cli' are relevant and useful for routing.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR accurately describes the user's request for a simple arithmetic answer without unnecessary detail.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "Empty entity fields are correct as simple arithmetic does not involve specific code files, symbols, or technologies.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance and utility",
+          "fix": "Tags like 'arithmetic' and 'simple-math' correctly categorize the query for effective routing and discovery.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Consistency with 14B review",
+          "fix": "The analysis aligns with the 14B review's assessment of the item's correctness.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly describes a greeting and response interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification",
+          "fix": "No specific files, functions, or technologies are present in a generic greeting, so empty lists are correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'greeting' and 'assistant-response' are appropriate for this type of interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "evidence matches the claim",
+          "fix": "The evidence 'adds whitelist-based input sanitization' directly supports the summary 'Adds input validation for API endpoint'.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "14B consensus aligns with evidence",
+          "fix": "The 14B review verdict 'needs_review' is consistent with a test item that may require further context, but the content analysis is correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "security implications",
+          "fix": "Input sanitization is a positive security measure, and the description is accurate.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": "2cff365657f88ed4",
+      "prev_rate": null,
+      "created_at": "2026-06-04T18:56:37.419178+00:00"
+    },
+    "e5dba97ec993f74f": {
+      "patterns": [
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly identifies the user's input as a greeting and the system's response as an offer of assistance.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists for files, functions, and technologies are correctly empty as no technical entities were mentioned in the greeting.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags 'greeting', 'assistance', and 'interaction' are semantically appropriate for routing and categorizing this type of turn.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Intent classification",
+          "fix": "While 'report' is a generic intent, it is acceptable for a non-specific interaction, though 'greeting' might be more precise; however, it does not constitute a critical failure.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly and briefly states that the IP request was denied due to cloud-based AI constraints.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists are correctly empty as the interaction did not involve specific code files, functions, or technology names.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'cloud', 'server', 'ip-address', and 'ai' accurately reflect the topic of the conversation.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly summarizes the integration topic in a concise manner.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity file identification accuracy",
+          "fix": "The entity list contains 'de_mod_pipeline.py' which is a typo for 'code_mod_pipeline.py', leading to incorrect file references.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Entity existence check logic",
+          "fix": "Because of the typo in the filename, the system correctly reports the file as missing, but this is a false negative regarding the actual project structure.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'code_mod', 'azure_blob', and 'cli' are relevant and useful for routing.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR accurately describes the user's request for a simple arithmetic answer without unnecessary detail.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "Empty entity fields are correct as simple arithmetic does not involve specific code files, symbols, or technologies.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance and utility",
+          "fix": "Tags like 'arithmetic' and 'simple-math' correctly categorize the query for effective routing and discovery.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Consistency with 14B review",
+          "fix": "The analysis aligns with the 14B review's assessment of the item's correctness.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly describes a greeting and response interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification",
+          "fix": "No specific files, functions, or technologies are present in a generic greeting, so empty lists are correct.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'greeting' and 'assistant-response' are appropriate for this type of interaction.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": "f52dfe7e375483b2",
+      "prev_rate": null,
+      "created_at": "2026-06-05T01:15:46.975675+00:00"
+    },
+    "49264157efd30657": {
+      "patterns": [
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly identifies the user's input as a greeting and the system's response as an offer of assistance.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists for files, functions, and technologies are correctly empty as no technical entities were mentioned in the greeting.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags 'greeting', 'assistance', and 'interaction' are semantically appropriate for routing and categorizing this type of turn.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Intent classification",
+          "fix": "While 'report' is a generic intent, it is acceptable for a non-specific interaction, though 'greeting' might be more precise; however, it does not constitute a critical failure.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly and briefly states that the IP request was denied due to cloud-based AI constraints.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists are correctly empty as the interaction did not involve specific code files, functions, or technology names.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'cloud', 'server', 'ip-address', and 'ai' accurately reflect the topic of the conversation.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly summarizes the integration topic in a concise manner.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity file identification accuracy",
+          "fix": "The entity list contains 'de_mod_pipeline.py' which is a typo for 'code_mod_pipeline.py', leading to incorrect file references.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Entity existence check logic",
+          "fix": "Because of the typo in the filename, the system correctly reports the file as missing, but this is a false negative regarding the actual project structure.",
+          "severity": "critical",
+          "category": "verification",
+          "classification": "edge_case"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'code_mod', 'azure_blob', and 'cli' are relevant and useful for routing.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": "e5dba97ec993f74f",
+      "prev_rate": null,
+      "created_at": "2026-06-05T10:26:21.443365+00:00"
+    },
+    "94ee26662e6fd9f5": {
+      "patterns": [
+        {
+          "issue": "TLDR factual accuracy",
+          "fix": "The TLDR correctly identifies the user's input as a greeting and the system's response as an offer of assistance.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists for files, functions, and technologies are correctly empty as no technical entities were mentioned in the greeting.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags 'greeting', 'assistance', and 'interaction' are semantically appropriate for routing and categorizing this type of turn.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Intent classification",
+          "fix": "While 'report' is a generic intent, it is acceptable for a non-specific interaction, though 'greeting' might be more precise; however, it does not constitute a critical failure.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "TLDR factual accuracy and conciseness",
+          "fix": "The TLDR correctly and briefly states that the IP request was denied due to cloud-based AI constraints.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Entity identification accuracy",
+          "fix": "The entity lists are correctly empty as the interaction did not involve specific code files, functions, or technology names.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        },
+        {
+          "issue": "Tag relevance",
+          "fix": "Tags like 'cloud', 'server', 'ip-address', and 'ai' accurately reflect the topic of the conversation.",
+          "severity": "low",
+          "category": "verification",
+          "classification": "gold_standard"
+        }
+      ],
+      "pass_rate": null,
+      "sample_size": 0,
+      "prev_fingerprint": "49264157efd30657",
+      "prev_rate": null,
+      "created_at": "2026-06-05T10:51:38.274560+00:00"
+    }
+  }
+}

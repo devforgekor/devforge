@@ -1,0 +1,110 @@
+{
+  "evaluation_type": "structual_audit",
+  "role": "python_verify",
+  "timestamp": "2026-06-03T15:45:00+09:00",
+  "pipeline": "data_handoff",
+  "scope": "extract → review_facts → activity_log → review_consumer",
+  "summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+  "findings": [
+    {
+      "id": "S01",
+      "severity": "critical",
+      "component": "extract_pipeline.py → review_facts",
+      "description": "Operational metrics(timing, tokens)가 review_facts에 전혀 기록되지 않음",
+      "evidence": "review_facts.prompt_tokens, gen_tokens, elapsed_ms, gen_rate, cache_hit — extract_pipeline에서 INSERT하는 모든 row가 NULL",
+      "root_cause": "call_llm()이 raw text만 반환(timing/token count 미포함). extract_pipeline.py가 review_facts INSERT 시 이 column들을 항상 생략",
+      "impact": "서버 운영 기준(속도, 토큰 사용량)을 추적할 수 없음. 비용 분석, 병목 탐지 불가."
+    },
+    {
+      "id": "S02",
+      "severity": "critical",
+      "component": "activity_log.body (extract_result)",
+      "description": "activity_log body에 faithfulness 점수, retry 이력, unfaithful fact 목록이 없음",
+      "evidence": "ID 279-282 body 확인: {mcp, mark, turn_id, fact_count, extract_model} 5개 필드만 존재. faithfulness %, retry 횟수, 3B 실패 이유 등 downstream verify/review가 필요한 정보가 전혀 없음",
+      "impact": "verify(27B/32B)가 faithfulness 83.1%인지 16.2%인지 알 수 없음. retry chain의 효과를 추적 불가"
+    },
+    {
+      "id": "S03",
+      "severity": "critical",
+      "component": "review_facts → activity_log",
+      "description": "review_facts.verdict가 'pending'에서 절대 갱신되지 않음 — downstream pipeline이 review_facts를 UPDATE하지 않음",
+      "evidence": "extract_pipeline이 INSERT한 모든 review_facts row: verdict='pending'. review_consumer.py는 activity_log.body.verify_result에만 결과 저장. review_facts는 영원히 'pending'",
+      "impact": "review_facts 테이블의 신뢰도 하락. fact별 verify 상태를 신뢰할 수 없음. 'pending'이 실제로는 미처리인지 처리완료인지 구분 불가"
+    },
+    {
+      "id": "S04",
+      "severity": "high",
+      "component": "call_llm() — lib/llm_client.py",
+      "description": "LLM 클라이언트가 API 응답에서 token usage/timing을 추출하지 않음",
+      "evidence": "lib/llm_client.py는 urllib.request로 /v1/chat/completions 호출 후 .choices[0].message.content만 반환. usage(prompt_tokens, completion_tokens), response time 정보를 버림",
+      "impact": "전체 파이프라인에서 운영 메트릭 수집 불가. 비용/성능 최적화를 위한 기본 데이터가 없음"
+    },
+    {
+      "id": "S05",
+      "severity": "high",
+      "component": "queue_writer.py → activity_log",
+      "description": "enqueue_review()가 queue_status 항상 'reviewed'로 고정 — P-R-J bypass",
+      "evidence": "queue_writer.py line 23: enqueue_review(..., queue_status='reviewed') (hardcoded default). extract_result가 바로 27B verify queue('reviewed')로 직행. P-R-J 3-model review 파이프라인을 거치지 않음",
+      "impact": "extract_result는 항상 P-R-J review 없이 27B verify로 바로 감. extract의 quality review가 누락됨"
+    },
+    {
+      "id": "S06",
+      "severity": "high",
+      "component": "review_facts",
+      "description": "fact_index가 일관성 없음 — mcp_meta가 extract_model='Qwen30B'로 별도 row 저장",
+      "evidence": "extract_pipeline.py line 550: _insert_fact(tid, fi, 'mcp_meta', json_data, mcp_model). MCP metadata가 하나의 JSON blob으로 review_facts에 저장되나 구조화되지 않음. downstream에서 query가 어려움",
+      "impact": "MCP 검색/분석이 SQL jsonb query에만 의존. tldr, intent, entities를 개별 fact로 추출할 수 없음"
+    },
+    {
+      "id": "S07",
+      "severity": "medium",
+      "component": "extract_pipeline.py — entity verify",
+      "description": "MCP entity 파일 경로 검증이 절대 경로 변환 없이 직접 join",
+      "evidence": "extract_pipeline.py line 170: os.path.join('/opt/projects/server', filepath). 파일명 앞에 '/'가 있으면 join이 무시됨. ID 281의 'de_mod_pipeline.py' (오타, 정상은 'code_mod_pipeline.py') → exists=false가 나오나 근본 원인(오타)을 알 수 없음",
+      "impact": "파일 존재 여부만 알 수 있고, 왜 없는지는 추적 불가. 오타 vs 리팩토링으로 삭제 vs 경로 변경 구분 불가"
+    },
+    {
+      "id": "S08",
+      "severity": "medium",
+      "component": "review_consumer.py",
+      "description": "27B verify가 timing/token 정보를 전혀 수집하지 않음",
+      "evidence": "review_consumer.py call_verify_model() line 133-161: HTTP 응답에서 content만 추출. usage 정보, latency 버림. body.verify_result에 elapsed_ms/prompt_tokens/gen_tokens가 없음",
+      "impact": "verify 단계의 performance baseline을 잡을 수 없음. 27B vs 32B 속도/비용 비교 불가"
+    }
+  ],
+  "operational_metrics_gap": {
+    "current_state": "모든 LLM 호출에서 token count, latency, generation rate이 전혀 기록되지 않음",
+    "required_fields": [
+      "prompt_tokens", "completion_tokens", "elapsed_ms", "tokens_per_second",
+      "model_name", "temperature", "max_tokens", "retry_count"
+    ],
+    "affected_components": ["extract_pipeline.py", "review_pipeline_steps.py", "review_consumer.py", "local_debate.py"]
+  },
+  "recommendations": [
+    {
+      "priority": "P0",
+      "action": "call_llm()이 HTTP 응답에서 usage + latency를 추출해서 반환하도록 개선",
+      "detail": "모든 caller가 timing data를 review_facts/activity_log에 기록할 수 있게 됨"
+    },
+    {
+      "priority": "P0",
+      "action": "extract_result activity_log body에 faithfulness %, unfaithful fact 목록, retry 이력 추가",
+      "detail": "downstream verify(27B/32B)가 extract quality를 평가할 수 있어야 함"
+    },
+    {
+      "priority": "P1",
+      "action": "P-R-J pipeline이 extract_result도 review할 수 있도록 queue_status 분기",
+      "detail": "extract_result → queue_status='pending' → P-R-J review → queue_status='reviewed' → 27B verify"
+    },
+    {
+      "priority": "P1",
+      "action": "review_facts.verdict를 P-R-J + verify 결과로 UPDATE하는 로직 추가",
+      "detail": "activity_log verify 후 review_facts UPDATE로 fact-level 추적 가능"
+    },
+    {
+      "priority": "P2",
+      "action": "MCP entity verify를 확장 (path 오타 감지 + git log 기반 변경 이력 확인)",
+      "detail": "파일이 없는 이유(오타/삭제/이동)를 diagnostics에 포함"
+    }
+  ]
+}

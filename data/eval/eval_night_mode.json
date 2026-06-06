@@ -1,0 +1,57 @@
+{
+  "evaluation_type": "mode_transition",
+  "role": "night_mode_switch",
+  "timestamp": "2026-06-03T15:55:00+09:00",
+  "current_state": {
+    "system_mode": "day",
+    "pod_a_mode": "day",
+    "pod_b_mode": "day",
+    "pod_a": {"mode_file": "/opt/ai_data/scripts/current-mode-pod-a.env", "model": "Qwen3-4B(:8082)"},
+    "pod_b": {"mode_file": "/opt/ai_data/scripts/current-mode-pod-b.env", "model": "Qwen30B(:8080)"}
+  },
+  "target_state_for_pipeline": {
+    "phase": "P-R-J review",
+    "pod_a_required": "review-r1 → R1-8B(:8083)",
+    "pod_b_required": "review-qw → Qwen7B(:8080) / review-se → Selene(:8081)",
+    "mode_config": {
+      "pod_a": {"file": "current-mode-pod-a.env", "value": "review-r1"},
+      "pod_b_review": {"file": "current-mode-pod-b.env", "value": "review-qw"},
+      "pod_b_judge": {"file": "current-mode-pod-b.env", "value": "review-se"}
+    },
+    "restart_commands": {
+      "pod_a": "systemctl --user restart container-devforge-qwen.service",
+      "pod_b_review": "systemctl --user restart container-devforge-swap.service (review-qw mode)",
+      "pod_b_judge": "systemctl --user restart container-devforge-swap.service (review-se mode)"
+    }
+  },
+  "model_role_mapping": {
+    "day": {
+      "pod_a_8082": "Qwen3-4B — extract 3B / online serving",
+      "pod_b_8080": "Qwen30B — extract fallback + MCP / online serving"
+    },
+    "night_review": {
+      "pod_a_8083": "R1-8B — Proposer (deep review)",
+      "pod_b_8080": "Qwen7B — Refuter (accept/reject) + Diff generation"
+    },
+    "night_judge": {
+      "pod_b_8081": "Selene-8B — Judge (scoring, veto, tie-break)"
+    },
+    "night_verify": {
+      "pod_b_8081": "Qwen3.6-27B — Production final verify"
+    },
+    "night_verify_test": {
+      "pod_b_8081": "Qwen2.5-Coder-32B — Experimental parallel verify"
+    }
+  },
+  "transition_overhead": {
+    "pod_a_restart": "~15-30s (model load: R1-8B 4.8GB)",
+    "pod_b_review_restart": "~15-30s (model load: Qwen7B 4.2GB)",
+    "pod_b_judge_restart": "~15-30s (model load: Selene-8B 4.9GB)",
+    "note": "연속 전환 시 pod_b_8081이 review-se→verify→verify_test로 3회 재시작 필요. 메모리 22GB 제약 내에서 모델 스와핑 발생."
+  },
+  "evaluation_context": {
+    "claude_role": "Since Claude plays all P-R-J roles, night mode switch is documented for reference. Actual review is performed by Claude.",
+    "pipeline_execution": "Claude plays: Proposer( == R1-8B ), Refuter( == Qwen7B ), Judge( == Selene )",
+    "second_loop_detail": "P-R-J 역할 조합 변경 (8B rotation: R1-8B→P, Qwen7B→R, Selene→J)"
+  }
+}

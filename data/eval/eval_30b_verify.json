@@ -1,0 +1,110 @@
+{
+  "evaluation_type": "mcp_extract_verify",
+  "role": "30b_verify",
+  "timestamp": "2026-06-03T15:50:00+09:00",
+  "pipeline": "extract_pipeline",
+  "reviewed_items": [279, 280, 281, 282],
+  "summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+  "findings": [
+    {
+      "id": "M01",
+      "severity": "high",
+      "component": "MCP intent classification",
+      "turn_id": "4fa75004-1e15-427d-913b-057a6967ed04",
+      "activity_log_id": 279,
+      "extracted_value": "report",
+      "expected_value": "other",
+      "evidence": "User: 'hi' (2 chars). Assistant: 'Hello! How can I assist you today?' (34 chars). 단순 인사. 'report' intent는 부적절. 의도가 없으므로 'other'가 적합.",
+      "root_cause": "30B MCP가 단순 인사/무의미 턴을 'report'로 over-classify. short-turn threshold나 'other' fallback 로직 부재"
+    },
+    {
+      "id": "M02",
+      "severity": "high",
+      "component": "MCP intent classification",
+      "turn_id": "d668e495-97cc-4d6c-af68-8d0da61d0978",
+      "activity_log_id": 282,
+      "extracted_value": "report",
+      "expected_value": "request",
+      "evidence": "User: '이 서버의 IP 주소를 알려줘' (16 chars). 명시적 요청문. Assistant가 거절했지만 user intent는 분명한 'request'. 'report'는 부적절.",
+      "root_cause": "30B MCP가 response 기준으로 intent 판단 (거절 → report). user_turn 기반으로 intent를 결정해야 함"
+    },
+    {
+      "id": "M03",
+      "severity": "high",
+      "component": "extract completeness",
+      "turn_id": "d5ec4da3-06a5-452b-9247-e8e3ec517a61",
+      "activity_log_id": 281,
+      "evidence": "Turn: user=176ch, text=2490ch. 추출된 fact: user 2개(text 0개). 2490자 분량의 상세한 설명(text)에서 단 1개의 fact도 추출되지 않음. 3B 2회실패 → 30B fallback도 user fact만 추출.",
+      "root_cause": "30B fallback이 extra caution mode에서 user_turn만 추출하고 text(assistant 응답)를 전부 누락. SYSTEM_FALLBACK_30B가 'under-extraction over hallucination'을 너무 보수적으로 해석"
+    },
+    {
+      "id": "M04",
+      "severity": "medium",
+      "component": "MCP entity correctness",
+      "turn_id": "d5ec4da3-06a5-452b-9247-e8e3ec517a61",
+      "activity_log_id": 281,
+      "evidence": "files: ['de_mod_pipeline.py']— 'code_mod_pipeline.py'의 오타. functions: ['run_32b_4stage', 'save_result', 'upload_review_bundle', 'upload_raw'] — 모두 정확히 식별. files 3개 모두 exists=false (경로 문제).",
+      "root_cause": "30B가 파일명을 정확히 기억하지 못하고 축약/변형. file path 검증이 단순 존재 여부만 확인하고 오타 감지 불가"
+    },
+    {
+      "id": "M05",
+      "severity": "medium",
+      "component": "extract coverage (short turns)",
+      "turn_id": "81f898a0-37af-41c6-9ab2-c0378eaff3ff",
+      "activity_log_id": 280,
+      "evidence": "User: '1+1 답만 해줘' (9ch), Assistant: '2' (1ch). 추출: text fact '2' 1개. user_turn fact 누락. user_turn '1+1 답만 해줘'도 추출되어야 하나 누락됨.",
+      "root_cause": "3B가 text fact만 추출하고 user_turn fact는 건너뜀. user_turn이 짧아서 중요도를 낮게 평가했을 가능성"
+    },
+    {
+      "id": "M06",
+      "severity": "low",
+      "component": "MCP tags",
+      "turn_id": "4fa75004-1e15-427d-913b-057a6967ed04",
+      "activity_log_id": 279,
+      "evidence": "tags: ['greeting', 'welcome', 'assistant-response']. 'welcome'은 부적절 — assistant가 'welcome'이라고 말한 적 없음. 단순 인사 응답.",
+      "root_cause": "30B가 추론으로 tag를 생성. 'welcome'은 환영 맥락에서만 사용되어야 하나 일반 인사에도 할당"
+    },
+    {
+      "id": "M07",
+      "severity": "low",
+      "component": "extract model discrepancy",
+      "evidence": "4개 extract 중 2개가 '3B 2회실패 → 30B 전달'. 279(인사, 2ch+34ch)는 3B 성공. 280(1+1, 9ch+1ch)는 3B 성공. 281(code_mod, 176ch+2490ch)는 3B 실패→30B. 282(IP주소, 16ch+52ch)는 3B 실패→30B.",
+      "root_cause": "짧은 턴에서도 50%가 3B 실패. 16ch+52ch의 간단한 턴(282)에서 3B가 2회 실패한 것은 비정상. 3B의 hallucination 검증 로직이 과민할 가능성"
+    }
+  ],
+  "mcp_field_accuracy": {
+    "total_reviewed": 4,
+    "tldr_accuracy": "4/4 correct (100%) — TLDR은 모두 정확",
+    "intent_accuracy": "2/4 correct (50%) — 279(report→other), 282(report→request) misclassified",
+    "entity_files_accuracy": "1/4 have files (281: 3 files, 1 typo, 3/3 not found on disk)",
+    "entity_functions_accuracy": "1/4 have functions (281: 4 functions, 4/4 found in codebase — 100%)",
+    "tag_relevance": "3/4 appropriate, 1/4 has inaccurate tag (279: 'welcome' inappropriate)"
+  },
+  "retry_chain_analysis": {
+    "3B_success_rate": "2/4 (50%)",
+    "30B_fallback_rate": "2/4 (50%)",
+    "fallback_completeness": "Fallback 성공했으나 text fact 누락 (281: 0 text facts from 2490ch response)"
+  },
+  "recommendations": [
+    {
+      "priority": "P0",
+      "action": "30B MCP intent를 assistant response가 아닌 user_turn 기준으로 결정",
+      "detail": "user_turn이 request/question이면 intent도 request/question. response가 거절이어도 user intent는 변하지 않음"
+    },
+    {
+      "priority": "P1",
+      "action": "30B fallback이 user_turn + text 모두 추출하도록 SYSTEM_FALLBACK_30B 수정",
+      "detail": "현재 'under-extraction over hallucination'이 text(assistant 응답) 추출을 전부 차단. 최소 1-2개 text fact는 추출하도록 완화"
+    },
+    {
+      "priority": "P1",
+      "action": "3B 실패 원인 분석 (특히 turn 282: 16ch+52ch에서 2회 실패)",
+      "detail": "3B의 faithfulness check가 substring diff 한계로 인해 과도하게 실패判定할 가능성. evidence 정규화 로직 검토 필요"
+    },
+    {
+      "priority": "P2",
+      "action": "MCP entity file path에 typo detection 추가",
+      "detail": "파일명이 실제 파일과 levenshtein distance 2 이내면 'possible typo' flag 추가"
+    }
+  ]
+}

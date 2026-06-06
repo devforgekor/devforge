@@ -1,0 +1,84 @@
+{
+  "evaluation_type": "post_hoc",
+  "timestamp": "2026-06-03T15:10:00+09:00",
+  "pipeline": "extract_3b",
+  "phase": "post_hoc_evaluation",
+  "summary": {
+    "test": "Extract 3B Faithfulness — 15 fixed turns, 4 models",
+    "total_turns": 15,
+    "models_tested": 4,
+    "overall_assessment": "Qwen2.5-Coder-3B가 extract 3B 역할에 가장 적합. 83.1% faithfulness로 운영 기준 충족. Qwen3-4B는 coverage는 높지만 hallucination 45.4%로 리스크. LFM2는 16.2%로 부적합."
+  },
+  "model_rankings": {
+    "1st": {
+      "model": "Qwen2.5-Coder-3B",
+      "weighted_score": 7.85,
+      "strengths": [
+        "83.1% faithfulness — 가장 신뢰성 높음",
+        "Schema compliance 14/14 (100%) — compound type 없음",
+        "중복 최소화 — 4.6/turn으로 정보 밀도 높음",
+        "빠른 속도 — 1217s/15턴 (81s/turn)",
+        "Retry chain에서 3B 1차 시도 성공률 높음 → 30B fallback 호출 최소화"
+      ],
+      "weaknesses": [
+        "4.6 facts/turn으로 coverage 제한적",
+        "짧은 턴(246자)에서도 2-3개만 추출",
+        "JSON parse error 1회 (6.7%) — retry 필요"
+      ]
+    },
+    "2nd": {
+      "model": "Qwen3-4B",
+      "weighted_score": 6.05,
+      "strengths": [
+        "7.2 facts/turn — 가장 높은 coverage (Qwen2.5-3B 대비 56%↑)",
+        "JSON parse error 0회 — 출력 형식 안정적",
+        "15/15 턴 전부 정상 응답"
+      ],
+      "weaknesses": [
+        "45.4% hallucination — 절반 가까이가 허위 사실",
+        "장문 턴(T=1650)에서 24%로 급락",
+        "Schema violation 26.7% — compound fact_type",
+        "속도 느림 — 2737s/15턴 (182s/turn, Qwen2.5-3B의 2.25배)"
+      ]
+    },
+    "3rd": {
+      "model": "Gemma 3 4B",
+      "weighted_score": 4.90,
+      "strengths": [
+        "7.2 facts/turn — coverage 좋음",
+        "일부 턴(5fb1b5d3, 78f4bb68)에서 100% faithfulness"
+      ],
+      "weaknesses": [
+        "4/15 턴 catastrophic failure (0%)",
+        "42.6% faithfulness — 운영 기준 미달",
+        "복합 fact_type + 비표준 category 사용",
+        "장문 처리 능력 부족"
+      ]
+    },
+    "4th": {
+      "model": "LFM2-8B-A1B",
+      "weighted_score": 2.00,
+      "weaknesses": [
+        "16.2% faithfulness — extract 부적합",
+        "85.7% 턴에서 compound fact_type (schema 붕괴)",
+        "0% 턴 12/14 — 거의 전멸",
+        "출력 패턴이 단조로움 (모든 턴에서 5개씩 동일 형식)"
+      ],
+      "usage_recommendation": "Extract 3B 역할에 부적합. 단, hallucination recovery chain(3B→30B fallback)의 테스트/검증 용도로 사용 가능. 낮은 품질 출력이 fallback을 정확히 trigger하는지 검증하는 negative test case로 활용."
+    }
+  },
+  "operational_recommendations": {
+    "extract_3b_champion": "Qwen2.5-Coder-3B",
+    "reasoning": "83.1% faithfulness, 100% schema compliance, 81s/turn 속도. 운영 안정성 최우선.",
+    "nightly_monitoring": {
+      "threshold": "faithfulness ≥75% on nightly_extract_test.py",
+      "alert_on_drop": "≥5% 하락 시 Slack alert",
+      "regression_test": "nightly_extract_test.py --model-label Qwen2.5-Coder-3B"
+    },
+    "long_turn_strategy": {
+      "problem": "T>1000에서 모든 모델 성능 저하",
+      "current_defense": "3B retry(2회) → 30B fallback chain",
+      "recommendation": "T>1000 턴은 3B 1차 시도 후, faithfulness <50%면 즉시 30B fallback (retry 생략)"
+    }
+  }
+}

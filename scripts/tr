@@ -1,0 +1,171 @@
+#!/bin/bash
+# tr — DevForge mode switcher (v4.1)
+#   tr day      → Pod A(3B) + Pod B(30B) — day bundle
+#   tr auto   → autonomous fix loop (make→verify→fix×3)
+#   tr coop   → cooperative: local draft → Azure spot VM debate
+#   tr review    → Pod A(R1) + Pod B(Qwen7B+Selene swap) — night pipeline
+#   tr review-se → Pod B Selene only (Step 3 judge)
+#   tr verify    → Pod A stopped + Pod B(32B) — final gate
+#
+# Mode persistence via separate files per pod.
+
+set -e
+
+MODE_FILE_A="/opt/ai_data/scripts/current-mode-pod-a.env"
+MODE_FILE_B="/opt/ai_data/scripts/current-mode-pod-b.env"
+SCRIPTS_DIR="/opt/projects/server/scripts"
+
+log() { echo "[tr] $*"; }
+
+_current_mode() {
+    local a=$(grep -oP 'MODE=\K.*' "$MODE_FILE_A" 2>/dev/null || echo "?")
+    local b=$(grep -oP 'MODE=\K.*' "$MODE_FILE_B" 2>/dev/null || echo "?")
+    echo "Pod A:${a} Pod B:${b}"
+}
+
+_get_avail_mb() {
+    awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo
+}
+
+_write_mode() { printf '%s' "MODE=$1" > "${2}.tmp" && mv "${2}.tmp" "$2"; }
+
+_wait_pod_b() {
+    local timeout="${1:-300}"
+    local port="${2:-8081}"
+    log "waiting for Pod B :${port} (max ${timeout}s)..."
+    for i in $(seq 1 "$timeout"); do
+        if curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${port}/health" 2>/dev/null | grep -q 200; then
+            log "Pod B ready (${i}s)"
+            return 0
+        fi
+        sleep 2
+    done
+    log "WARNING: Pod B :${port} not ready after ${timeout}s"
+    return 1
+}
+
+_ensure_pod_a() {
+    log "ensuring Pod A is running..."
+    systemctl --user start container-devforge-qwen.service 2>/dev/null || true
+    sleep 3
+}
+
+_stop_pod_a() {
+    log "stopping Pod A (free memory for 32B)..."
+    systemctl --user stop container-devforge-qwen.service 2>/dev/null || true
+    sleep 5
+}
+
+_restart_pod_b() {
+    log "restarting container-devforge-swap..."
+    systemctl --user restart container-devforge-swap.service
+}
+
+# ── Mode commands ──────────────────────────────────────────────
+
+cmd_day() {
+    _write_mode "day" "$MODE_FILE_A"
+    _write_mode "day" "$MODE_FILE_B"
+    _restart_pod_b
+    _wait_pod_b 300 "8080"
+    _ensure_pod_a
+    log "day mode ready"
+    log "  Pod A :8082 → 3B(refuter)"
+    log "  Pod B :8080 → 30B (Proposer + Judge + DRAG + Synthesis)"
+}
+
+cmd_review() {
+    _write_mode "review-r1" "$MODE_FILE_A"
+    _write_mode "review-qw" "$MODE_FILE_B"
+    _restart_pod_b
+    _wait_pod_b 300 "8080"
+    _ensure_pod_a
+    log "review mode ready"
+    log "  Pod A :8083 → R1-8B (Step 1: deep review)"
+    log "  Pod B :8080 → Qwen7B (reflection + diff) + Selene swap (Step 3 :8081)"
+}
+
+cmd_cooperative() {
+    log "cooperative: local draft → Azure spot VM debate"
+    log "  Pod A :8082 → 3B refuter"
+    log "  Pod B :8080 → 30B local draft"
+    log "  Azure SPOT VM: Proposer + Refuter + Judge 4-round debate"
+    log "  Result → nightly review pipeline (review→verify)"
+}
+
+cmd_review_se() {
+    # Night Step 3 swap: Selene Mini 8B on Pod B :8081 (judge)
+    _write_mode "review-se" "$MODE_FILE_B"
+    _restart_pod_b
+    _wait_pod_b 300 "8081"
+    log "review-se mode ready"
+    log "  Pod B :8081 → Selene Mini 8B (Step 3: judge)"
+}
+
+cmd_verify() {
+    local avail
+    avail=$(_get_avail_mb)
+
+    if [ "$avail" -lt 19000 ]; then
+        log "available=${avail}MB < 19000MB — falling back to review"
+        cmd_review
+        return
+    fi
+
+    _stop_pod_a
+    _write_mode "verify" "$MODE_FILE_B"
+    _restart_pod_b
+    _wait_pod_b 900 "8081"
+    log "verify mode ready"
+    log "  Pod A: STOPPED"
+    log "  Pod B :8081 → 32B (final gate, ctx=16384)"
+}
+
+cmd_auto() {
+    log "auto mode: autonomous fix loop (make→verify→fix×3)"
+    bash "$SCRIPTS_DIR/auto_mode.sh" || log "auto mode completed with errors"
+    log "restoring day mode..."
+    cmd_day
+}
+
+# ── Main ─────────────────────────────────────────────────────
+
+case "${1:-}" in
+    day|d)
+        cmd_day
+        ;;
+    cooperative|coop|c)
+        cmd_cooperative
+        ;;
+    review|r)
+        cmd_review
+        ;;
+    review-se|se)
+        cmd_review_se
+        ;;
+    verify|v)
+        cmd_verify
+        ;;
+    auto|a)
+        cmd_auto
+        ;;
+    status|s|"")
+        cur=$(_current_mode)
+        avail=$(_get_avail_mb)
+        echo "Current mode: $cur"
+        echo "Available memory: ${avail}MB"
+        echo ""
+        echo "Usage: tr <day|auto|coop|review|review-se|verify|status>"
+        echo "  day       — Pod A(3B) + Pod B(30B) — day bundle"
+        echo "  auto      — autonomous fix loop (make→verify→fix×3)"
+        echo "  coop      — cooperative: local draft → Azure spot VM debate"
+        echo "  review    — Pod A(R1) + Pod B(Qwen7B+Selene swap) — night pipeline"
+        echo "  review-se — Pod B Selene swap only (Step 3 judge)"
+        echo "  verify    — Pod A stopped + Pod B(32B) — final gate"
+        ;;
+    *)
+        echo "Usage: tr <day|auto|coop|review|verify|status>"
+        echo "Unknown: $1"
+        exit 1
+        ;;
+esac

@@ -1,0 +1,80 @@
+{
+  "report_type": "verify_feedback",
+  "timestamp": "2026-06-03T15:30:00+09:00",
+  "production_verify_27b_issues": {
+    "source": "activity_log 실제 데이터",
+    "total_verified_items": 3,
+    "deepseek_api_agreement": "0/3 (0%) — 모든 건에서 DeepSeek API audit이 27B 결정에 disagreed",
+    "issue_analysis": [
+      {
+        "id": "V01",
+        "severity": "critical",
+        "activity_log_id": 278,
+        "27b_verdict": "approved (confidence 0.95)",
+        "deepseek_audit": "disagreed",
+        "problem": "27B이 meta-test item을 실제 code change로 오인. verification_items도 전부 부적절하게 적용됨. 0.95 confidence는 전혀 정당화되지 않음.",
+        "root_cause": "27B가 item type 'review'의 실제 성격(meta-test)을 이해하지 못하고 피상적 텍스트 매칭에 의존"
+      },
+      {
+        "id": "V02",
+        "severity": "critical",
+        "activity_log_id": 214,
+        "27b_verdict": "escalate (confidence 0.0)",
+        "deepseek_audit": "disagreed",
+        "problem": "27B이 reasoning 없이 escalate 결정. any supporting reasoning 없이 verdict만 출력. verification audit 불가능.",
+        "root_cause": "27B 추론 실패 — 추론 내용 없이 fallback verdict(escalate)만 반환"
+      },
+      {
+        "id": "V03",
+        "severity": "high",
+        "activity_log_id": 197,
+        "27b_verdict": "rejected (confidence 0.95)",
+        "deepseek_audit": "disagreed",
+        "problem": "27B이 reasoning 없이 rejected + 0.95 confidence. 추론 없는 high confidence는 가장 위험한 패턴.",
+        "root_cause": "27B가 reasoning을 생성하지 않고 confidence만 높게 설정. output 형식은 맞췄으나 내용 부실"
+      }
+    ],
+    "failure_rate": "67% (2/3 missing reasoning), 100% (3/3 DeepSeek disagreed)",
+    "recommendation": "27B verify 모델에 reasoning 필수 검증 로직 추가. reasoning이 없거나 50자 미만이면 confidence <50으로 강제 조정."
+  },
+  "verify_model_comparison_27b_vs_32b": {
+    "shared_agreements": [
+      "Extract champion Qwen2.5-Coder-3B는 올바른 선택",
+      "LFM2-8B-A1B는 extract 3B 역할에 부적합 (16.2% faithfulness)",
+      "Schema violation (compound fact_type)은 심각한 이슈",
+      "P-R-J pipeline이 정상 작동 (7 findings → 7 ACCEPT → gap=1)"
+    ],
+    "disagreements": [
+      {
+        "topic": "Downstream impact",
+        "27b": "Pass — 인정",
+        "32b": "Fail — 추가 검증 필요",
+        "resolution": "32B 의견 채택. faithfulness rate 단독 지표 불충분. 실제 MCP entity quality 비교 필요."
+      },
+      {
+        "topic": "Cost efficiency in rubric",
+        "27b": "체크하지 않음",
+        "32b": "누락 — 추가 필요",
+        "resolution": "32B 의견 채택. rubric에 speed/cost criterion 추가 (0-10, weight 0.15)."
+      },
+      {
+        "topic": "Evaluation confidence",
+        "27b": "88/100",
+        "32b": "75/100",
+        "resolution": "32B의 보수적 점수가 더 현실적. downstream 검증 후 confidence 상향."
+      }
+    ]
+  },
+  "rubric_update_recommendation": {
+    "action": "extract_3b rubric에 cost_efficiency criterion 추가",
+    "updated_rubric": {
+      "criteria": [
+        {"id": "faithfulness", "weight": 0.30, "description": "Evidence가 source에 정확히 존재하는 비율"},
+        {"id": "coverage", "weight": 0.25, "description": "중요한 factual statement capture 정도"},
+        {"id": "schema_compliance", "weight": 0.15, "description": "출력 JSON이 정의된 스키마를 정확히 따르는 정도"},
+        {"id": "conciseness", "weight": 0.15, "description": "불필요한 중복/noise 없이 효율적으로 추출"},
+        {"id": "cost_efficiency", "weight": 0.15, "description": "속도 대비 faithfulness efficiency (facts당 시간, total pipeline block time)"}
+      ]
+    }
+  }
+}

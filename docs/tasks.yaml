@@ -1,54 +1,59 @@
-blocked: []
-done:
-- 'Proxy: streaming, debug toggles, input validation (2026-05-30): Added streaming passthrough, idle timeout and chunk tunables (ANTHROPIC_PROXY_STREAM_CHUNK/TIMEOUT), DEBUG dumps (ANTHROPIC_PROXY_DEBUG), input JSON validation and model remapping; verified E2E with Claude CLI.'
-- 'devforge-api dead code removed (2026-05-29): Full cleanup — container-devforge-api quadlet deleted, api/ directory removed, collect_turns.py deleted, Caddy /devforge/* route removed, container image removed (210MB freed). Rationale: turn_watcher.py handles all session ingestion directly via PostgreSQL (same parsers, same checkpoint, real-time 3s polling). The API /ingest endpoint was a redundant HTTP middleman. MCP SSE /stats /slack endpoints had zero active callers. nightly_batch.sh Phase 2 removed, phases renumbered. Telegram bot, health_checks, phase_tracker updated to remove devforge-api references.'
-- 'review_pipeline_3model.py split (2026-05-29): 566L monolith → review_pipeline_steps.py (321L) + review_pipeline_3model.py (271L). Steps file contains constants, system prompts, HTTP helpers, and all 4 step implementations. Main file imports from steps and provides orchestrator + CLI. Both under 400 SLOC. 49/49 validation tests pass, CLI --help intact, cross-module imports verified.'
-- 'P1 fixes (2026-05-29): (1) Proxy hit_rate calculation fixed — cache_read/input_tokens → cache_read/(input_tokens+cache_read) capped at 100%. (2) _sanitize_messages() wired into _forward() — system-role messages now moved to top-level system field (defense-in-depth). (3) 3-model pipeline code logic validated — 49/49 checks passed (constants, prompts, strip_think_blocks, _parse_json_output, fast-path voting). Full LLM E2E test deferred to nightly run.'
-- 'Claude DeepSeek system-role fix (2026-05-29): Added local Anthropic reverse proxy on 127.0.0.1:44777 to rewrite system-role messages into the top-level system field before forwarding to api.deepseek.com/anthropic. Updated ~/.bashrc.d/claude-env to point Claude Code at the proxy. Verified end-to-end with claude --print.'
-- 'Final resident architecture deployed (2026-05-28): Pod A(:8080) Qwen3-Coder-30B-A3B Q3_K_M + Pod B(:8082) Qwen2.5-Coder-3B Q4_K_M. 8 files modified: dual-server-entrypoint.sh(v3.3 debate→3B), qwen-entrypoint.sh(new Pod A), container-devforge-qwen.container(new), container-devforge-swap.container(SERVER2_THREADS=2), worklog_generator.py(PHI→Review rename + metrics), debate_data.py(phi→qwen3b), ~/.aider.local.yml(new). Both endpoints healthy, combined RSS ~18GB on 22GB system.'
-- 'debate v6.0 2-model simplification (2026-05-28): Qwen3-4B removed, DeepSeek + Phi-mini-MoE only. 9 files changed, bidirectional verification 15/15 passed, runtime :8080 UP :8082 UP :8081 DOWN confirmed.'
-- 'debate.py refactored into 6 modules (2026-05-27): 1286-line monolith split into debate_data.py(255L), debate_llm.py(356L), local_debate.py(448L), cooperative_remote.py(109L), cooperative_debate.py(158L), debate.py(71L). Unidirectional dependency: data→llm→local/remote→cooperative→cli. Bidirectional verification: MODELS 10/10 identical, REMOTE_HOSTS 2/2 identical, all call_llm/call_llm_json/switch_model/hooks match original behavior. 2 bugs fixed during verification: SWITCH_FILE Path→str, VM leak on provision failure. Dry-run both modes pass, live test pending.'
-- 'Spot VM orchestration implemented (2026-05-26): scripts/azure_spot.py (SpotVMManager + SpotOrchestrator), debate.py v4.5 cooperative+spot mode. Golden images: Qwen (img-qwen3-30b-a3b-spot v1.0.0, Account 1) + Nemotron (img-nemotron3-nano-30b-spot v0.0.1, Account 2). Blocked by: Spot quota (LowPriorityCores 3 limit in centralindia, 2 in use) + SP lacks gallery read permissions in Account 2. Pending: add Reader role to SP → delete existing VMs → E2E --spot test.'
-- 'Azure Nemotron-3-Nano-30B-A3B MoE setup + debate v4.0 integration (2026-05-26): azurenemo VM (70.153.138.59) configured with llama.cpp + IQ4_XS GGUF (19GB). Port 400, systemd auto-start. debate.py MODELS + REMOTE_HOSTS updated — model_id=nemotron3-nano-30b, SSH tunnel :8083->azurenemo:400. chat_template_kwargs={enable_thinking:false} required. Bug found+fixed: apt autoremove removed libgomp1 causing exit 127; runtime libs now apt-mark protected. Docs: docs/azure-nemotron-setup.md. E2E integration verified (health + chat completions through tunnel).'
-- 'Orphan turn cleanup (2026-05-26): 57 orphan claude-code turns linked to worklog #200. 10 empty/duplicate worklogs (#179-#188) removed, 4 agentless worklogs fixed. 2026-05-25 turn_coverage: 182/182 (100%).'
-- 'T01 6656+mlock test completed (2026-05-24): cache-ram=6656 + mlock + feedback fix + token fix + warmup retry. Stage 1: 1227s (53% faster). Pipeline optimizations validated and committed.'
-- 'Recovery Ladder unification (2026-05-24): shared lib/llm/json_parser.py (json.loads → json_repair) replacing 56 lines across 3 pipeline files. debate.py _parse_json 33→3 lines, review_worker.py _parse_llm_json 23→3 lines, code_mod_pipeline.py thin wrapper + feedback uses json_repair. Bidirectional verification: 16/16 passed.'
-- 'Token estimation fix (2026-05-24): //3 → int(len/3.5) across code_mod_pipeline.py (6 locations). Verified against actual 32B prompt_tokens: 4634 actual vs 5365 estimated — error 15%→1.5%.'
-- 'Warmup retry + head+tail truncation (2026-05-24): warmup_32b() 600s timeout + 30s retry for mlock delay. debate.py history_summary 1798+5+1197=3000 head+tail instead of front-only [:3000].'
-- 'Prompt bloat fix (2026-05-24): _read_previous_feedback() was injecting raw Stage 4 body (≤2000 chars) into Stage 1 ANALYZE prompt → +552 tokens/+428s per run. Fix: removed feedback from Stage 1, moved to Stage 2 PLAN with JSON field extraction (analysis/rationale/review_points) capped at 600 chars.'
-- 'debate.py v2.0 + cross-file bug fixes (2026-05-24): Dual-pod debate orchestrator with mode-specific model assignment. 8 bugs fixed: _check_early_exit double-call, disagreement_points wrong value, _write_switch_file missing cache_ram, Podman A restart on mode switch, POD_A_START unused→now used for post-debate restore, SWITCH_WRITER dead code removed, v1.0→v2.0 footer, debate-supervisor.sh "debate"→"discussion" mode check.'
-- 'cache-ram=6656 (optimal) applied (2026-05-24): code mode default changed from 7168 to 6656 in dual-server-entrypoint.sh. MLOCK confirmed active via quadlet Environment=MLOCK=1.'
-- 'Telegram bot deployed (2026-05-24): telegram_bot.py created — polls getUpdates every 5s, Qwen3-4B interprets Korean messages, supports 6 JSON actions (reply/ssh/status/mode_switch/log/none) + fast-path commands (/start/help/status/mode/log). Systemd user service telegram-bot.service daemon mode.'
-- '8 code review fixes applied (2026-05-24): code_mod_pipeline.py + client.py — NameError fix, partial result save on exception, DB insert failure warn, retry cache-hit rate skip, _slice_code parse warn, Stage 4 diff_text extraction, resume validation, pre-check fail skip.'
-in_progress: null
-kanban_labels:
-  blocked: Blocked
-  done: Done
-  in_progress: In Progress
-  todo: To Do
-meta:
-  add_checklist:
-  - Append new task to todo with date and optional tags.
-  done_checklist:
-  - Move in_progress -> done (insert at top of done list).
-  - 'If todo is non-empty: promote todo[0] -> in_progress.'
-  - If a task becomes blocked, move it to blocked and record the blocker.
-  - 'Log to DB: python3 /opt/projects/server/scripts/cli.py worklog add ''<title>''
-    ''<summary>'' --agent ''<agent>'' --model ''<model>'' --tags ''<tags>'''
-  - 'If decisions were made or issues found: update handover.yaml.'
-  language: English only (machine-readable).
-  location: /opt/projects/server/docs/tasks.yaml
-  must_rules:
-  - 'in_progress: exactly 1 task or null. Never leave a completed task in in_progress.'
-  - 'todo: ordered by priority. Add new tasks to the end.'
-  - 'blocked: keep blocked items separate from todo.'
-  - 'done: keep at most 10 recent items. Older items exist only in worklog DB.'
-  purpose: Shared Kanban task tracker for all AI agents on DevForge server.
-  related_files:
-  - /opt/projects/server/CLAUDE.yaml
-  - /opt/projects/server/handover.yaml
-  - /opt/projects/server/blueprint.yaml
-  - /opt/projects/server/docs/design.md
-  - /opt/projects/server/docs/phases.md
-  - /opt/projects/server/_archive/README.md
-todo: []
+tasks:
+- id: 5phase-experiment
+  status: pending
+  priority: P0
+  title: 2x2+baseline 5-Phase 실험 실행
+  description: >
+    Phase 0 (기준선:S✗R✗F✗) → 1 (구조:R✗F✗) → 2 (구조+R:F✗) → 3 (구조+F:R✗) → 4 (구조+R+F).
+    실험 스냅샷 5개 준비 완료. P-R-J 모델 교체도 고려.
+    대상: 최종 LLM 선택까지 확정 후 실행 예정.
+    사용법: cd scripts && nohup python3 experiment_runner.py > /tmp/experiment_run.log 2>&1 &
+  notes:
+    - "느려지는 원인 (7B ~2.3 t/s, 27B OOM 리스크) 분석 및 최적화 후 실행"
+    - "저녁 시간대 (KST 20:00+) 실행 예정"
+    - "MCP 모델 7B Q8_0 ~31s. Qwen3-4B(2.7GB) 변경 시 extract 속도 개선 가능"
+
+- id: prompt-optimization
+  status: pending
+  priority: P1
+  title: LLM system prompt 비대화 원인 분석 및 최적화
+  description: >
+    SYS_P/R/J/V27 등 system prompt가 RUBRIC(600자) + scale + evidence
+    설명으로 누적되어 비대해짐. 각 system prompt의 실제 토큰 수 측정 및
+    최적화 불필요한 중복/장황한 설명 제거.
+
+- id: mcp-model-optimization
+  status: pending
+  priority: P1
+  title: MCP extract 모델 최적화 (속도/파싱)
+  description: >
+    7B Q8_0 MCP ~31s. Qwen3-4B(2.7GB, Q8_0 ~4.3GB)로 교체 시
+    로드 시간 단축 및 parse_failed 개선 가능.
+    extract 응답 JSON 포맷 정확도 문제 있음 (parse_failed 다수).
+
+- id: j-model-replacement
+  status: pending
+  priority: P1
+  title: P-R-J J(Selene) 대체 모델 선택
+  description: >
+    Selene JSON 출력 불량 (feedback loop 차단).
+    후보: 7B Q8_0, 14B Q8_0, Qwen3-Coder-30B Q3_K_M(P와 공유).
+    P-R-J 모델 조합 최종 결정 후 스냅샷 재구성 필요.
+
+- id: memory-reclaim-recovery
+  status: completed
+  priority: P0
+  title: 메모리 회수 + 자율 복구 로직 구현
+  description: >
+    kill_all() 후 _reclaim_memory() 추가 (sync+15s 대기).
+    recover_and_restart(attempt): 3단계 에스컬레이션 (mild→aggressive→minimal).
+    실험러너 및 prj_cycle.py에 적용 완료.
+
+- id: transform-refactor
+  status: completed
+  priority: P1
+  title: transform_prj.py 독립 플래그 리팩터
+  description: >
+    기존 --phase N 방식 → --structural / --rubric-off/on / --feedback-off/on
+    조합 가능으로 변경. Phase 0-4 스냅샷 준비 완료.
+    버그: \n vs 실제 개행문자 불일치 수정.

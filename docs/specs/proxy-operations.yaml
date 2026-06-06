@@ -1,0 +1,102 @@
+# ═══════════════════════════════════════════════════════════════
+# DevForge Proxy Runbook — Anthropic ↔ DeepSeek Compatibility Proxy
+# ═══════════════════════════════════════════════════════════════
+# 🔴 LLM: Reference this when debugging proxy issues or adjusting
+#     environment variables. The proxy lives at 127.0.0.1:44777.
+# ═══════════════════════════════════════════════════════════════
+
+metadata:
+  updated: "2026-06-03"
+  service: anthropic-deepseek-proxy.service
+  listen: "127.0.0.1:44777"
+  upstream_default: "https://api.deepseek.com/anthropic"
+
+quick_actions:
+  restart:
+    cmd: |
+      systemctl --user daemon-reload
+      systemctl --user restart anthropic-deepseek-proxy.service
+  stop:
+    cmd: "systemctl --user stop anthropic-deepseek-proxy.service"
+  start:
+    cmd: "systemctl --user start anthropic-deepseek-proxy.service"
+
+env_vars:
+  - var: "ANTHROPIC_PROXY_UPSTREAM"
+    default: "https://api.deepseek.com/anthropic"
+    description: "Upstream base URL. Example: http://127.0.0.1:8080"
+  - var: "ANTHROPIC_PROXY_LISTEN"
+    default: "127.0.0.1:44777"
+    description: "Listen address"
+  - var: "ANTHROPIC_PROXY_DEBUG"
+    default: ""
+    description: "Set=1 to write request/headers dumps to /tmp/anthropic_debug_<ts>_*.json. Short-term debugging only."
+  - var: "ANTHROPIC_PROXY_STREAM_CHUNK"
+    default: "4096"
+    description: "Chunk size (bytes) for streaming reads"
+  - var: "ANTHROPIC_PROXY_STREAM_TIMEOUT"
+    default: "60"
+    description: "Idle timeout (seconds)"
+  - var: "ANTHROPIC_PROXY_CONTEXT_WINDOW"
+    default: "1000000"
+    description: "DeepSeek model context window in tokens (1M)"
+  - var: "ANTHROPIC_PROXY_CHARS_PER_TOKEN"
+    default: "4"
+    description: "Approximate chars-per-token for body-size truncation"
+  - var: "ANTHROPIC_PROXY_CHAR_BUDGET"
+    default: "CONTEXT_WINDOW × CHARS_PER_TOKEN"
+    description: "Override char budget for truncation"
+  - var: "ANTHROPIC_PROXY_INSURANCE_TRIGGER"
+    default: "612000"
+    description: "Body char limit before insurance truncation drops oldest messages (680K × 90%)"
+  - var: "ANTHROPIC_PROXY_BAR_LIMIT"
+    default: "435200"
+    description: "Body char limit for context bar 100% mark (128K tok × 85% × 4)"
+  - var: "ANTHROPIC_PROXY_SORT_KEYS"
+    default: "1"
+    description: "Enable=1 JSON key sorting for cache prefix stability"
+  - var: "ANTHROPIC_PROXY_COMPACT_JSON"
+    default: "1"
+    description: "Enable=1 compact JSON serialization"
+
+logs:
+  journal: "journalctl --user -u anthropic-deepseek-proxy.service -n 400 --no-pager"
+  debug_dumps: "/tmp/anthropic_debug_*.json (only when DEBUG=1)"
+  e2e_artifacts:
+    - "/tmp/full_e2e_results.tar.gz"
+    - "/tmp/debug_dump_archive.tar.gz"
+
+behavior:
+  path_normalization:
+    - "Supports /anthropic/v1/*, /v1/*, legacy /messages endpoint"
+    - "Collapses duplicate /anthropic/anthropic prefixes"
+  model_remap:
+    description: "MODEL_MAP maps incoming model aliases (e.g. claude-sonnet-4-6) to DeepSeek model names (e.g. deepseek-v4-flash)"
+  cache_optimization:
+    - "Strips cache_control from message content blocks"
+    - "Strips billing headers (cch hashes)"
+    - "Sorts JSON keys (compact)"
+    - "Fixed User-Agent header"
+    - "System-first JSON serialization"
+  usage_log_format: "input={N} cache_read={H} cache_miss={M} output={O} hit_rate={H/(H+M)}% body={KB}KB {bar} {balance}"
+  input_validation: "JSON parsing errors return structured 400 responses"
+  streaming: "Forwards Transfer-Encoding: chunked. Tunable chunk size and idle timeout."
+  large_prompts: "Upstream model enforces context/token limits — may reject with 400. Trim prompts or increase upstream config."
+
+debugging_checklist:
+  - step: 1
+    action: "Reproduce request with curl (use --data-binary @file)"
+    cmd: "curl -i -X POST 'http://127.0.0.1:44777/anthropic/v1/chat/completions' -H 'Content-Type: application/json' --data-binary @payload.json"
+  - step: 2
+    action: "If 400 (Malformed JSON), set ANTHROPIC_PROXY_DEBUG=1 and re-run"
+    debug_files: ["/tmp/anthropic_debug_<ts>_forward.json", "/tmp/anthropic_debug_<ts>_headers.json"]
+  - step: 3
+    action: "Check journal — search for 'remapped model', 'moved system-role', 'stripped cache_control'"
+  - step: 4
+    action: "For streaming issues, confirm Transfer-Encoding: chunked. Increase ANTHROPIC_PROXY_STREAM_TIMEOUT to 30s."
+
+maintenance:
+  - "Keep runbook and tasks.yaml updated when making proxy changes"
+  - "After debugging, unset ANTHROPIC_PROXY_DEBUG and remove debug dumps from /tmp"
+
+contact: "DevForge on-call: ops-team@example.com"

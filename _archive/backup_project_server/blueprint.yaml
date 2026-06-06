@@ -1,0 +1,82 @@
+# DevForge Blueprint — Target Architecture & Roadmap v1.0
+# AI-maintained: updated as phases progress, items complete, or architecture decisions change.
+# Human reads for context; AI writes to keep current.
+# Phase status: planned → active → complete
+# Last updated: 2026-05-10 (AI session)
+
+phases:
+  - phase: 1
+    name: "Foundation"
+    status: "complete"
+    completed: "2026-05-09"
+    items:
+      - "Server knowledge system: CLAUDE.yaml → state.yaml → changelog.yaml"
+      - "MOTD dashboard via motd-gen.timer (15min)"
+      - "Tmux session manager (~/.bashrc.d/tmux-session)"
+      - "Mosh connectivity (mconnect wrapper + OCI security list UDP 60000-61000)"
+      - "Session handover: update_handover.py + handover-gen.timer (10min) + SessionEnd hook"
+
+  - phase: 2
+    name: "LLM Infrastructure v2"
+    status: "planned"
+    items:
+      - "devforge-llm systemd user service"
+      - "Migrate llm-coder from podman run to systemd unit"
+      - "llama-server flags: --threads 4 --ctx-size 16384 --mlock --cache-reuse 256 --host 127.0.0.1 --port 8080"
+      - "Host networking (no pasta port-forward)"
+      - "LiteLLM container: API gateway for model routing"
+      - "PostgreSQL on lv_db: mount /dev/datavg/lv_db to target path"
+
+  - phase: 3
+    name: "Application Hosting"
+    status: "planned"
+    items:
+      - "FastAPI application deployment pipeline"
+      - "nginx or Caddy reverse proxy"
+      - "systemd unit for seedling (if migrating from external deploy)"
+
+target:
+  services:
+    - name: "llama-server"
+      type: "systemd user"
+      image: "docker.io/amperecomputingai/llama.cpp:latest"
+      model: "qwen2.5-coder-7b-instruct-q8_0.gguf"
+      flags:
+        threads: 4
+        ctx_size: 16384
+        mlock: true
+        cache_reuse: 256
+        host: "127.0.0.1"
+        port: 8080
+      networking: "host"
+
+    - name: "litellm"
+      type: "systemd user / podman"
+      purpose: "API gateway — unified OpenAI-compatible endpoint with model routing"
+      endpoint: "127.0.0.1:4000"
+
+    - name: "postgresql"
+      type: "systemd system"
+      data_dir: "/dev/datavg/lv_db"
+      mount: "TBD (e.g., /var/lib/pgsql/data)"
+      purpose: "Application databases for seedling, litellm metadata"
+
+  network:
+    internal_api: "127.0.0.1:8080 (llama-server)"
+    gateway_api: "127.0.0.1:4000 (LiteLLM)"
+    application: "TBD (FastAPI on UNIX socket or localhost port)"
+
+  storage:
+    lv_db:
+      device: "/dev/datavg/lv_db"
+      size: "30G"
+      status: "unmounted"
+      target: "PostgreSQL data directory"
+
+backlog:
+  - "Seedling project: git init and commit existing files"
+  - "OCI security list audit (SSH, mosh UDP, HTTP/HTTPS)"
+  - "SELinux policy for container networking (if host networking used)"
+  - "SSL certificate (Let's Encrypt via Caddy)"
+  - "Monitoring stack (Prometheus + Grafana or minimal alternative)"
+  - "Backup strategy for /opt/project and PostgreSQL"

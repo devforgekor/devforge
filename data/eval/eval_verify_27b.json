@@ -1,0 +1,46 @@
+{
+  "role": "verify_27b_production",
+  "model": "Qwen3.6-27B",
+  "input": "P-R-J pipeline evaluation of Extract 3B faithfulness test (4 models, 15 turns)",
+  "timestamp": "2026-06-03T15:20:00+09:00",
+  "verification_result": {
+    "final_verdict": "approved",
+    "action": "commit",
+    "confidence": 88,
+    "summary": "P-R-J pipeline correctly identified 7 findings. Qwen2.5-Coder-3B recommended as extract champion. P_score=26, R_score=27, gap=1 (high confidence). All findings are data-backed and actionable."
+  },
+  "reasoning": "The Proposer(P) analyzed 4 models' faithfulness test results across 15 fixed turns and found 7 issues: schema violations (F01), LFM2 unsuitability (F02), long-turn degradation (F03), coverage/faithfulness tradeoff (F04), Gemma catastrophic failures (F05), JSON parse errors (F06), and non-standard category usage (F07). The Refuter(R) correctly ACCEPTED all 7 findings with specific reasoning. The Judge(J) scored P=26/30 and R=27/30 with gap=1, indicating strong consensus. The finding quality is high — each includes measurable metrics (%, counts) and specific turn references. The recommendation (Qwen2.5-Coder-3B with 83.1% faithfulness) is supported by the data. No hallucination detected. This is production-ready.",
+  "verification_items": [
+    {
+      "check": "P-R-J pipeline correctly processed extract evaluation data",
+      "result": "pass",
+      "detail": "P identified 7 genuine issues, R accepted all 7, J scored with gap=1. Fast-path consensus."
+    },
+    {
+      "check": "Data accuracy — extract metrics match source JSON",
+      "result": "pass",
+      "detail": "Cross-checked against extract_test_*.json files. Qwen2.5-3B: 54/65 (83.1%), Qwen3-4B: 59/108 (54.6%), Gemma: 46/108 (42.6%), LFM2: 12/74 (16.2%). All verified."
+    },
+    {
+      "check": "Recommendation completeness — champion selected with rationale",
+      "result": "pass",
+      "detail": "Qwen2.5-Coder-3B recommended with 83.1% faithfulness, 100% schema compliance, 81s/turn speed. Weaknesses (coverage 4.6/turn) also documented."
+    },
+    {
+      "check": "Long-turn mitigation plan",
+      "result": "partial",
+      "detail": "Issue identified (T>1000 degradation across all models) but mitigation is at observation level — needs concrete implementation plan (retry policy tuning, fallback threshold)."
+    },
+    {
+      "check": "Feedback loop completeness",
+      "result": "pass",
+      "detail": "LFM2 recommended for negative test (fallback chain validation). Rubric + post-hoc both provided. Model scores weighted with 4 criteria."
+    }
+  ],
+  "feedback": {
+    "proposer_improvement": "Coverage dimension (8/10) can be improved by adding downstream impact analysis — how each model's faithfulness rate affects MCP 30B quality and overall pipeline cost.",
+    "refuter_improvement": "R could provide more specific improvement suggestions for ACCEPTED findings, not just validation. E.g., F04 'how to test downstream impact' was mentioned but not expanded.",
+    "judge_improvement": "Future evaluations should include at least one DISPUTED finding to test judge's tie-breaking ability. All 7 findings were 2:0 fast-path which doesn't stress the judge role.",
+    "potential_hallucination_risk": "None detected in this evaluation. All findings are data-backed with specific metrics."
+  }
+}

@@ -1,0 +1,13 @@
+FROM docker.io/library/python:3.13-slim
+
+RUN pip install --no-cache-dir 'litellm[proxy]' && \
+    rm -rf /root/.cache/pip
+
+RUN mkdir -p /app
+WORKDIR /app
+
+EXPOSE 4000
+STOPSIGNAL SIGTERM
+
+ENTRYPOINT ["litellm"]
+CMD ["--config", "/app/config.yaml", "--port", "4000"]

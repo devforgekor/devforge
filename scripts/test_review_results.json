@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-05-18T01:25:07.165679+00:00",
+  "turns_used": 3,
+  "results": {
+    "B": {
+      "combo": "B",
+      "model1": "qwen2.5-coder-14b (Alibaba)",
+      "model2": "gemma-2-27b (Google)",
+      "total_facts": 17,
+      "valid": 0,
+      "hallucinated": 0,
+      "valid_rate": 0.0,
+      "extraction_rate": 100.0
+    }
+  }
+}

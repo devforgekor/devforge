@@ -1,0 +1,62 @@
+[
+  {
+    "id": "05b136d0-a67e-42f2-ab4b-f5019d21cbed",
+    "len": 44,
+    "agent": "copilot",
+    "snippet": "이서버에는 제미니만 있지 않은데, 현재 claude, github 등이 있는데?"
+  },
+  {
+    "id": "c2c84efd-15d8-481f-aff7-38dd08c9fd33",
+    "len": 94,
+    "agent": "copilot",
+    "snippet": "작업내역 확인. 표시안되 하단에. 코파일럿 종료, 세션 종료 이후 들어옴"
+  },
+  {
+    "id": "303d84ec-62f0-4241-a61e-493d3e8cf591",
+    "len": 37,
+    "agent": "copilot",
+    "snippet": "처음으로 돌아갔네. motd 아니라고 했지. motd+task 내용"
+  },
+  {
+    "id": "958ec4a1-0f98-4909-a360-99aa031667f2",
+    "len": 55,
+    "agent": "claude-code",
+    "snippet": "qwen도 가벼운거 말고 조금 더 무거운거 써도 되. 딥시크와 같은 계열이라서 다른 계열로 돌리려고"
+  },
+  {
+    "id": "f1bc41ec-ba0d-49a2-8469-f29ec58be566",
+    "len": 76,
+    "agent": "copilot",
+    "snippet": "기록해놔. 그래야 주기적으로 업데이트 보면서 서버에 적용하지."
+  },
+  {
+    "id": "42c773c9-2d1b-4c0b-9c87-43dbd09f49b3",
+    "len": 64,
+    "agent": "copilot",
+    "snippet": "우선 api 프롬프트에서 해당 내용을 삭제하고, 네 의견을 반영한다면? 작업이 15분 작업에서 깃을 포함하면? 검토"
+  },
+  {
+    "id": "c6c2e3f0-35bf-4423-aa2c-7b6d98aeee18",
+    "len": 31,
+    "agent": "copilot",
+    "snippet": "야간 배치작업이 제대로 되지 않는 것같아. 원인 분석해줘"
+  },
+  {
+    "id": "4324c78d-2cb3-44eb-910b-120406698b88",
+    "len": 31,
+    "agent": "copilot",
+    "snippet": "다시 시스템 전체 로직 확인하고 한 번 더 양방향 검\\증"
+  },
+  {
+    "id": "774c5016-e31a-4483-a238-92242966415e",
+    "len": 75,
+    "agent": "copilot",
+    "snippet": "이젠 안보여. 너는 지금 motd+task를 한 내용이 무엇인지 모르는 건가? db와 wokrlog 다시 정확히 숙지해. 전체 내용으로"
+  },
+  {
+    "id": "ea2cb32d-161e-4ec7-9c47-931d95db5bf5",
+    "len": 39,
+    "agent": "claude-code",
+    "snippet": "uuid를 yyyymmdd_HHSSMM_MMS 이렇게 하면 너무 긴가?"
+  }
+]

@@ -1,0 +1,52 @@
+{
+  "project": "devforge-server",
+  "updated": "2026-05-14T07:19:22.482942+00:00",
+  "docs": {
+    "design": "docs/design.md",
+    "phases": "docs/phases.md",
+    "entries_db": "devforge_app.worklog_entries"
+  },
+  "entries": [
+    {
+      "date": "2026-05-14",
+      "title": "DevForge Phase 1 완료 + 코드 리뷰 3건 리팩토링",
+      "summary": "7섹션 /stats 엔드포인트, API latency middleware, 4개 meta 필드. 리뷰: search.py cid 로직 간소화, mcp_server.py model 중복 제거, stats.py pg_database_size 중복 쿼리 통합. 71/71 테스트 통과.",
+      "files": [
+        "/opt/workspace/devforge/app/stats.py",
+        "/opt/workspace/devforge/app/search.py",
+        "/opt/workspace/devforge/app/mcp_server.py"
+      ],
+      "tags": [
+        "Phase1",
+        "통계",
+        "리팩토링"
+      ]
+    },
+    {
+      "date": "2026-05-14",
+      "title": "서버 보안 강화 — 5건 수정",
+      "summary": "시스템 감사: 깨진 심볼릭 링크, 평문 비밀번호, Caddy latest 태그, 포트 바인딩 (127.0.0.1), 고아 override.conf 제거.",
+      "files": [
+        "/etc/systemd/system/caddy.service",
+        "/home/opc/.config/containers/systemd/pod-ai-pod.pod"
+      ],
+      "tags": [
+        "보안",
+        "하드닝"
+      ]
+    },
+    {
+      "date": "2026-05-14",
+      "title": "CLI worklog 통합",
+      "summary": "cli.py에 worklog add/push 명령 추가. subprocess+psql로 의존성 제로 구현, 3개 초과 시 자동 DB 이전.",
+      "files": [
+        "/opt/workspace/devforge/cli.py",
+        "/opt/projects/server/scripts/rotate_worklog.py"
+      ],
+      "tags": [
+        "CLI",
+        "worklog"
+      ]
+    }
+  ]
+}

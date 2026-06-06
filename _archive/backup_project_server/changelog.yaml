@@ -1,0 +1,111 @@
+entries:
+- time: '2026-05-10T20:32:36.160986+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 44 minutes (healthy) -> Up 59 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 44 minutes (healthy)
+    after: Up 59 minutes (healthy)
+  decisions: []
+- time: '2026-05-10T20:17:29.172928+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 29 minutes (healthy) -> Up 44 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 29 minutes (healthy)
+    after: Up 44 minutes (healthy)
+  decisions: []
+- time: '2026-05-10T20:02:07.153293+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm].status: Up 14 minutes (healthy) -> Up 29 minutes (healthy)'
+  changed:
+  - path: structural.containers[devforge-llm].status
+    type: changed
+    before: Up 14 minutes (healthy)
+    after: Up 29 minutes (healthy)
+  decisions: []
+- time: '2026-05-10T19:46:59.189903+09:00'
+  type: auto
+  summary: 'structural.containers[devforge-llm]: added; structural.services[devforge-llm].status: deactivating -> active'
+  changed:
+  - path: structural.containers[devforge-llm]
+    type: added
+    after:
+      name: devforge-llm
+      status: Up 14 minutes (healthy)
+      ports: ''
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: deactivating
+    after: active
+  decisions: []
+- time: '2026-05-10T19:31:49.415741+09:00'
+  type: auto
+  summary: 'structural.containers[llm-coder]: removed; structural.services[devforge-llm].status: not-installed -> deactivating'
+  changed:
+  - path: structural.containers[llm-coder]
+    type: removed
+    before:
+      name: llm-coder
+      status: Up 15 hours (healthy)
+      ports: 127.0.0.1:8990->8080/tcp
+      model: qwen2.5-coder-7b-instruct-q8_0.gguf
+  - path: structural.services[devforge-llm].status
+    type: changed
+    before: not-installed
+    after: deactivating
+  decisions: []
+- time: '2026-05-10T18:31:25.730020+09:00'
+  type: auto
+  summary: 'structural.containers[llm-coder].status: Up 14 hours (healthy) -> Up 15 hours (healthy)'
+  changed:
+  - path: structural.containers[llm-coder].status
+    type: changed
+    before: Up 14 hours (healthy)
+    after: Up 15 hours (healthy)
+  decisions: []
+- time: '2026-05-10T17:28:08.554108+09:00'
+  type: auto
+  summary: 'structural.storage[datavg-lv_ai_data].size: 100.00G -> 100G; structural.storage[datavg-lv_db].size: 30.00G ->
+    30G; structural.storage[ocivolume-lv_logs].size: 8.00G -> 8G; structural.storage[ocivolume-lv_project].size: 10.00G ->
+    10G; structural.storage[ocivolume-lv_tmp].size: 5.00G -> 5G (+1 more)'
+  changed:
+  - path: structural.storage[datavg-lv_ai_data].size
+    type: changed
+    before: 100.00G
+    after: 100G
+  - path: structural.storage[datavg-lv_db].size
+    type: changed
+    before: 30.00G
+    after: 30G
+  - path: structural.storage[ocivolume-lv_logs].size
+    type: changed
+    before: 8.00G
+    after: 8G
+  - path: structural.storage[ocivolume-lv_project].size
+    type: changed
+    before: 10.00G
+    after: 10G
+  - path: structural.storage[ocivolume-lv_tmp].size
+    type: changed
+    before: 5.00G
+    after: 5G
+  - path: structural.storage[ocivolume-root].size
+    type: changed
+    before: 20.00G
+    after: 20G
+  decisions: []
+- time: '2026-05-10T17:26:58.387854+09:00'
+  type: bootstrap
+  summary: Server Knowledge System initialized — first structural snapshot
+  changed:
+  - path: structural
+    type: initial
+    note: Full initial state recorded in state.yaml
+  decisions:
+  - gen_server_state.py v4.2 deployed
+  - motd-gen.timer triggers every 15min
+  - CLAUDE.yaml is the machine entry point

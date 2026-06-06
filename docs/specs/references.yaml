@@ -1,0 +1,87 @@
+# ═══════════════════════════════════════════════════════════════
+# DevForge References — External Projects & Dependencies
+# ═══════════════════════════════════════════════════════════════
+# 🔴 LLM: Reference for external tools/libraries used or tracked.
+#     For infrastructure dependencies (system packages), see
+#     _archive/reference-watchlist.md.
+# ═══════════════════════════════════════════════════════════════
+
+metadata:
+  updated: "2026-06-03"
+  category: "External references for prompt optimization, model serving, evaluation, and DevForge stack dependencies"
+
+prompt_optimization:
+  - name: "DSPy"
+    url: "https://github.com/stanfordnlp/dspy"
+    description: "Stanford NLP. MIPROv2 Bayesian instruction search, GEPA/COPRO. 22k+ stars."
+
+  - name: "LLMLingua"
+    url: "https://github.com/microsoft/LLMLingua"
+    description: "Microsoft. Token-level compression via BERT distillation, 20x. 3.7k stars."
+
+  - name: "PromptBench"
+    url: "https://github.com/microsoft/promptbench"
+    description: "Microsoft. Prompt sensitivity analysis, 7 adversarial levels × 22 datasets."
+
+  - name: "GEPA"
+    url: "https://github.com/gepa-ai/gepa"
+    description: "Reflective evolutionary prompt optimization. Shopify, Databricks, Dropbox."
+
+  - name: "Token Budget Negotiator"
+    url: "https://github.com/dakshjain-1616/token-budget-negotiator"
+    description: "Greedy section ablation + LLM judge. MCP server available."
+
+  - name: "Pruner"
+    url: "https://github.com/heikki-laitala/pruner"
+    description: "tree-sitter code indexing, 15-62% cost reduction. No LLM needed."
+
+  - name: "Promptomatix"
+    url: "https://github.com/SalesforceAIResearch/promptomatix"
+    description: "Salesforce. Cost-aware optimization, 40-50% length reduction."
+
+  - name: "hone"
+    url: "https://github.com/twaldin/hone"
+    description: "CLI optimizer, Haiku 4.5: 55%→92% solve rate."
+
+model_serving:
+  - name: "llama.cpp"
+    url: "https://github.com/ggml-org/llama.cpp"
+    description: "GGUF. DevForge primary runtime (32B IQ4_XS, 14B Q8_0)."
+
+  - name: "Ollama"
+    url: "https://github.com/ollama/ollama"
+    description: "llama.cpp wrapper with REST API (DevForge v2.x phase)."
+
+evaluation:
+  - name: "SWE-bench"
+    url: "https://github.com/princeton-nlp/SWE-bench"
+    description: "Princeton. Real GitHub issue resolution benchmark."
+
+  - name: "HumanEval"
+    url: "https://github.com/openai/human-eval"
+    description: "OpenAI. Code generation (164 problems, pass@k)."
+
+  - name: "LM Eval Harness"
+    url: "https://github.com/EleutherAI/lm-evaluation-harness"
+    description: "EleutherAI. 200+ tasks."
+
+devforge_stack:
+  - name: "Podman"
+    url: "https://github.com/containers/podman"
+    description: "Rootless containers."
+
+  - name: "Quadlet"
+    url: "https://github.com/containers/podlet"
+    description: "systemd-generator for Podman."
+
+  - name: "Caddy"
+    url: "https://github.com/caddyserver/caddy"
+    description: "Auto-HTTPS proxy."
+
+  - name: "asyncpg"
+    url: "https://github.com/MagicStack/asyncpg"
+    description: "PostgreSQL async driver."
+
+  - name: "Tenacity"
+    url: "https://github.com/jd/tenacity"
+    description: "Retry library."

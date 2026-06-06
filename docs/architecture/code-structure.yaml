@@ -1,0 +1,498 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# DevForge Code Structure — Single Source of Truth for File Layout
+# ═══════════════════════════════════════════════════════════════════════════
+# 🔴 CRITICAL: LLM MUST read this before creating, moving, or modifying any file.
+# 🔴 If unsure where a change belongs, check here first. Ask user if still unclear.
+# 🔴 Do NOT create new files under `scripts/` without user approval.
+#
+# Rule priority: code-structure.yaml > llm-common-rule.md > agent's judgment
+# If this file says a module has `no_subprocess: true`, do NOT add subprocess calls there.
+# ═══════════════════════════════════════════════════════════════════════════
+
+metadata:
+  updated: "2026-06-03"
+  rule: "LLM MUST read this file before any file creation or structural modification"
+
+# ── Root Modules ──────────────────────────────────────────────────────────
+
+modules:
+  - path: scripts/
+    purpose: "🚀 Executable entry points, pipelines, services, and tests"
+    constraints:
+      entry_points_only: true
+      delegate_logic_to_lib: true
+      allowed_pattern: "^[a-z][a-z0-9_]*\\.(py|sh)$"
+      import_restrictions: ["May import from scripts.lib only", "May NOT import from other scripts/ root modules"]
+    allow_new_files: false
+    files:
+      cli.py:
+        purpose: "🎯 Main CLI — all user-facing commands (activity, worklog, mode, discussion, drag, toolmad)"
+        max_lines: 800
+        no_subprocess: false
+      orchestrator.py:
+        purpose: "🧩 Task orchestrator — routes pipeline/debate/review by task type"
+        max_lines: 500
+      anthropic_proxy.py:
+        purpose: "🔄 Anthropic API proxy → DeepSeek — cch stripping, cache tracking, tool_use_id fix"
+        max_lines: 1400
+        is_long_term: true  # complex proxy requires higher limit
+
+  - path: scripts/lib/
+    purpose: "📚 Shared libraries — NO entry points, NO side effects at import time"
+    constraints:
+      max_lines: 400
+      no_direct_subprocess: false
+      no_direct_db: false
+      allowed_pattern: "^[a-z][a-z0-9_]*\\.py$"
+      import_restrictions:
+        - "May import from lib/ subpackages only (auth, code_mod, infra, llm, output, parsers, search, state, tracking)"
+        - "May NOT import from scripts/ root modules"
+        - "Prefer stdlib. Only allowed external deps: pyyaml, tenacity"
+    files:
+      db.py:
+        purpose: "🐘 PostgreSQL query helpers — psql(), psql_ok(), esc_sql(), db_table_exists()"
+        max_lines: 150
+        constraint: "MUST use podman exec psql. NEVER psql -h localhost."
+      agents.py:
+        purpose: "🏷️ Agent name normalization — single source of truth"
+        max_lines: 30
+      feedback.py:
+        purpose: "🔄 Few-shot feedback loop — extracts fix patterns from activity_log for LLM injection"
+        max_lines: 550
+        is_long_term: true
+      blob_uploader.py:
+        purpose: "☁️ Azure Blob upload — review bundles, pipeline outputs"
+        max_lines: 150
+      bot_processor.py:
+        purpose: "🤖 Shared bot processor — Telegram & Slack intent classification"
+        max_lines: 200
+      crypto.py:
+        purpose: "🔐 Encryption utilities"
+        max_lines: 100
+      llm_client.py:
+        purpose: "🏗️ Unified LLM entry point — wraps both local (llama.cpp) and remote (DeepSeek) calls"
+        max_lines: 150
+        import_restrictions:
+          - "May call lib/llm/client.py (remote) and lib/llm/llm_client.py (local)"
+      mcp_consumer.py:
+        purpose: "🔌 MCP metadata consumer — reads review_facts for MCP tool integration"
+        max_lines: 150
+      parser_aider.py:
+        purpose: "⏮️ Backward-compat shim → lib.parsers.aider (3 lines)"
+        max_lines: 5
+      queue_writer.py:
+        purpose: "📤 Enqueue items to activity_log for downstream review pipeline"
+        max_lines: 80
+      scoring.py:
+        purpose: "📊 Veto/gap/early-exit logic — single source of truth for consensus scoring"
+        max_lines: 120
+      phase_tracker.py:
+        purpose: "📐 Phase completion detection from live system state"
+        max_lines: 100
+      test_sandbox.py:
+        purpose: "🧪 Podman read-only tmpfs sandbox for safe code execution"
+        max_lines: 150
+      text_quality.py:
+        purpose: "🔤 Korean text quality guardrails — think-tag detection, token budget check"
+        max_lines: 100
+      worklog.py:
+        purpose: "📓 Git commit → worklog sync"
+        max_lines: 80
+
+  - path: scripts/lib/auth/
+    purpose: "🔑 API key management — rotation, loading, encryption"
+    constraints:
+      max_lines_per_file: 260
+      no_direct_db: true
+    files:
+      key_loader.py:
+        purpose: "Load encrypted or plaintext keys from secrets.env"
+        max_lines: 80
+      key_rotator.py:
+        purpose: "Key rotation logic"
+        max_lines: 260
+      api_key_cipher.py:
+        purpose: "Encrypt/decrypt API keys"
+        max_lines: 60
+
+  - path: scripts/lib/code_mod/
+    purpose: "🛠️ Code modification pipeline — shared utilities for diff generation"
+    constraints:
+      max_lines_per_file: 80
+    files:
+      shared.py:
+        purpose: "Shared code_mod utilities — diff helpers, context extraction"
+        max_lines: 80
+
+  - path: scripts/lib/infra/
+    purpose: "🏗️ Infrastructure utilities — containers, health, storage, subprocess"
+    constraints:
+      max_lines_per_file: 100
+      no_direct_db: true
+    files:
+      containers.py:
+        purpose: "Container and service discovery for state_collector"
+        max_lines: 100
+      health_checks.py:
+        purpose: "System health checks — systemd, podman, filesystem"
+        max_lines: 70
+      storage.py:
+        purpose: "Zram cycle tracking"
+        max_lines: 70
+      subprocess.py:
+        purpose: "Subprocess helpers — run commands and collect output"
+        max_lines: 20
+
+  - path: scripts/lib/llm/
+    purpose: "🤖 LLM integration — unified client and rate estimators"
+    constraints:
+      max_lines_per_file: 120
+    files:
+      client.py:
+        purpose: "Remote LLM client — OpenAI-compatible API calls (DeepSeek)"
+        max_lines: 120
+        import_restrictions: ["MUST NOT import from lib/llm/llm_client.py"]
+      json_parser.py:
+        purpose: "Recovery ladder: stdlib json → json_repair for LLM output"
+        max_lines: 50
+      rate_estimator.py:
+        purpose: "Token-count and timing-based rate estimators"
+        max_lines: 120
+    aliases:
+      llm_client.py: "scripts/lib/llm_client.py (root lib, wraps both local + remote)"
+
+  - path: scripts/lib/output/
+    purpose: "📝 Output generators — CLAUDE.yaml, MOTD, validation"
+    constraints:
+      max_lines_per_file: 160
+    files:
+      claude_yaml.py:
+        purpose: "CLAUDE.yaml auto-update — sync storage/services/network from live data"
+        max_lines: 120
+      memory_line.py:
+        purpose: "Memory overview line for CLAUDE.yaml"
+        max_lines: 40
+      motd.py:
+        purpose: "MOTD generation — formatted system overview"
+        max_lines: 160
+      validation.py:
+        purpose: "Validate CLAUDE.yaml + blueprint.yaml claims vs live data"
+        max_lines: 120
+      yaml_io.py:
+        purpose: "YAML load/save helpers"
+        max_lines: 20
+
+  - path: scripts/lib/parsers/
+    purpose: "📖 Log parsers — normalize AI tool transcripts to turns schema"
+    constraints:
+      max_lines_per_file: 140
+    files:
+      aider.py:
+        purpose: "Parse Aider chat history (.aider.chat.history.md) → turns"
+        max_lines: 140
+      claude.py:
+        purpose: "Parse Claude Code session JSONL → turns"
+        max_lines: 100
+      copilot.py:
+        purpose: "Parse Copilot events.jsonl → turns"
+        max_lines: 100
+      gemini.py:
+        purpose: "Parse Gemini CLI session JSONL → turns"
+        max_lines: 100
+
+  - path: scripts/lib/search/
+    purpose: "🔍 Search manager — turn/worklog search"
+    constraints:
+      max_lines_per_file: 280
+    files:
+      manager.py:
+        purpose: "Search orchestration — query routing, result ranking"
+        max_lines: 280
+
+  - path: scripts/lib/state/
+    purpose: "💾 State management — changelog, diff, state I/O"
+    constraints:
+      max_lines_per_file: 100
+    files:
+      changelog.py:
+        purpose: "Changelog — load, save, append, archive"
+        max_lines: 100
+      diff.py:
+        purpose: "Structural hashing for state change detection"
+        max_lines: 50
+      state_io.py:
+        purpose: "State file I/O — save and load state.yaml"
+        max_lines: 30
+
+  - path: scripts/lib/tracking/
+    purpose: "📡 Agent tracking — names, dependency tracking, phase tracking"
+    constraints:
+      max_lines_per_file: 150
+    files:
+      agent_names.py:
+        purpose: "🏷️ Agent name normalization — single source of truth"
+        max_lines: 30
+      dependency_tracker.py:
+        purpose: "Reference tracking — external project watch + internal code observation"
+        max_lines: 150
+      phase_tracker.py:
+        purpose: "📐 Phase auto-tracker — detects completed items from live state"
+        max_lines: 440  # complex state machine
+        is_long_term: true
+
+  # ── Pipeline scripts ──────────────────────────────────────────────────
+
+  - path: scripts/
+    group: "pipelines"
+    purpose: "🔧 Pipeline scripts — review, code mod, extract"
+    files:
+      code_mod_pipeline.py:
+        purpose: "4-stage code modification (ANALYZE→PLAN→IMPLEMENT→PACKAGE) on 32B"
+        max_lines: 1300
+        is_long_term: true
+      review_pipeline_steps.py:
+        purpose: "Step 1-3 review pipeline (review→reflect→judge)"
+        max_lines: 480
+      review_pipeline_3model.py:
+        purpose: "Nightly 3-model review (R1→Qwen7B→Selene)"
+        max_lines: 360
+      proxy_reviewer.py:
+        purpose: "DeepSeek batch review — token-based batching, audit"
+        max_lines: 400
+      review_consumer.py:
+        purpose: "Review queue consumer — processes review results from queue"
+        max_lines: 400
+      hybrid_pipeline.py:
+        purpose: "Hybrid local + API pipeline"
+        max_lines: 1020
+        is_long_term: true
+      extract_pipeline.py:
+        purpose: "Fact extraction pipeline"
+        max_lines: 630
+
+  # ── Debate scripts ────────────────────────────────────────────────────
+
+  - path: scripts/
+    group: "debate"
+    purpose: "🗣️ Multi-agent LLM debate — local DART + remote cooperative"
+    files:
+      cooperative_debate.py:
+        purpose: "Proposer/Refuter debate on Azure spot VMs + local Judge/Synthesis"
+        max_lines: 240
+      cooperative_remote.py:
+        purpose: "SSH tunnel and remote model activation for cooperative debate"
+        max_lines: 120
+      debate_data.py:
+        purpose: "Model catalog, remote hosts, prompt templates — pure data, no logic"
+        max_lines: 340
+      debate_llm.py:
+        purpose: "LLM calling, JSON parsing, model switching — shared debate infra"
+        max_lines: 380
+      deepseek_web.py:
+        purpose: "DART — web search trigger when debate cannot reach consensus"
+        max_lines: 340
+      local_debate.py:
+        purpose: "Local debate using Pod A + Pod B models"
+        max_lines: 700
+
+  # ── Service scripts ───────────────────────────────────────────────────
+
+  - path: scripts/
+    group: "services"
+    purpose: "⚙️ Background services — turn watcher, worklog, state, notifications"
+    files:
+      turn_watcher.py:
+        purpose: "👁️ Turn collection — polls agent JSONL every 3s → turns table"
+        max_lines: 320
+      worklog_generator.py:
+        purpose: "📓 Auto-generate worklog entries from conversation turns"
+        max_lines: 410
+      activity_summarizer.py:
+        purpose: "📊 Daily LLM summarization of activity_log events"
+        max_lines: 270
+      session_context.py:
+        purpose: "Session context builder for LLM handover"
+        max_lines: 170
+      embed_turns.py:
+        purpose: "Generate embeddings for turns table"
+        max_lines: 240
+      sync_gemini_rules.py:
+        purpose: "Sync infrastructure.md + llm-common-rule.md → GEMINI.md"
+        max_lines: 80
+      gemini_proxy.py:
+        purpose: "Gemini API proxy — rule injection for Cline/Gemini CLI"
+        max_lines: 460
+      gemini_pool.py:
+        purpose: "Gemini model pool manager"
+        max_lines: 250
+      telegram_bot.py:
+        purpose: "Telegram notification bot — offset tracking in /var/tmp"
+        max_lines: 130
+      telegram_send.py:
+        purpose: "Send Telegram messages"
+        max_lines: 170
+      slack_notify.py:
+        purpose: "Slack notification"
+        max_lines: 220
+      webhook_server.py:
+        purpose: "Webhook endpoint for external integrations"
+        max_lines: 170
+      search_proxy.py:
+        purpose: "Search proxy service"
+        max_lines: 450
+      blob_explorer.py:
+        purpose: "Azure Blob explorer"
+        max_lines: 410
+      auto_commit_guard.py:
+        purpose: "🛡️ Git auto-commit safety net — prevents accidental commits to protected branches"
+        max_lines: 70
+      azure_spot.py:
+        purpose: "Azure Spot VM lifecycle management"
+        max_lines: 630
+      gen_architecture.py:
+        purpose: "Auto-generate infrastructure.md + software.yaml from CLAUDE.yaml (timer KST 09:00)"
+        max_lines: 200
+      link_turns.py:
+        purpose: "Nightly turn ↔ worklog_entries linking via content analysis"
+        max_lines: 160
+      motd_gen.py:
+        purpose: "MOTD generation — system status banner on SSH login"
+        max_lines: 100
+      observer.py:
+        purpose: "Observer Agent — interactive CLI agent for DevForge pipelines"
+        max_lines: 300
+      patch_elf_note.py:
+        purpose: "Re-apply NOTE phdr patch to Copilot CLI ELF binary (UEK kernel compat)"
+        max_lines: 80
+      update_handover.py:
+        purpose: "Session context capture → handover.yaml (periodic + session-end)"
+        max_lines: 70
+
+  # ── Shell scripts ─────────────────────────────────────────────────────
+
+  - path: scripts/
+    group: "shell"
+    purpose: "🐚 Shell automation — nightly batch, mode switching, 15min cycle"
+    format: shell
+    constraints:
+      allowed_pattern: "^[a-z][a-z0-9_]*\\.sh$"
+    files:
+      nightly_batch.sh:
+        purpose: "🌙 Nightly pipeline orchestrator — Phase 1-7, mode switching, day restore"
+        max_lines: 300
+      15m_cycle.sh:
+        purpose: "⏲️ 15-minute cycle — state collection, health checks"
+        max_lines: 100
+      auto_mode.sh:
+        purpose: "Auto-detect and switch Pod modes based on load/activity"
+        max_lines: 100
+      claude_code_runner.sh:
+        purpose: "Claude Code session launcher in tmux"
+        max_lines: 100
+      claude_code_wrapper.sh:
+        purpose: "Claude Code wrapper with env setup"
+        max_lines: 80
+      gemini_session_start.sh:
+        purpose: "Gemini CLI session starter"
+        max_lines: 40
+      run_baseline.sh:
+        purpose: "Baseline test runner"
+        max_lines: 80
+
+  # ── Test scripts ──────────────────────────────────────────────────────
+
+  - path: scripts/
+    group: "tests"
+    purpose: "🧪 Test and verification scripts"
+    files:
+      test_27b_optimization.py:
+        purpose: "27B nightly optimization verification"
+        max_lines: 770
+      test_dart_round.py:
+        purpose: "DART round-trip test"
+        max_lines: 230
+      test_extraction_faithfulness.py:
+        purpose: "Extraction faithfulness test"
+        max_lines: 300
+      test_operator.py:
+        purpose: "Operator test suite"
+        max_lines: 440
+      test_qwen3_4b_comprehensive.py:
+        purpose: "Qwen3-4B comprehensive test"
+        max_lines: 280
+      test_review_consumer.py:
+        purpose: "Review consumer end-to-end test"
+        max_lines: 220
+      verify_refactoring.py:
+        purpose: "Bidirectional refactoring verification — init re-exports, shims, line count drift"
+        max_lines: 420
+      eval_comparison.py:
+        purpose: "DeepSeek Pro evaluation — scores 12-run comparison test results"
+        max_lines: 300
+      nightly_extract_test.py:
+        purpose: "Nightly extraction faithfulness test on fixed 15-turn set"
+        max_lines: 200
+
+# ── Data Flows ───────────────────────────────────────────────────────
+
+data_flows:
+  - name: "🔄 User → CLI → Pipeline → DB"
+    path: "cli.py → orchestrator.py → code_mod_pipeline.py → diff → activity_log"
+    description: "Code modification pipeline triggered by user CLI"
+
+  - name: "🔄 User → CLI → Debate → Report"
+    path: "cli.py → orchestrator.py → cooperative_debate.py/local_debate.py → report → activity_log"
+    description: "Multi-agent debate triggered by user CLI"
+
+  - name: "🔄 Turn Collection Pipeline"
+    path: "turn_watcher.py (3s poll) → parsers/*.py → turns table → worklog_generator.py → worklog_entries"
+    description: "Automated turn collection and worklog generation"
+
+  - name: "🌙 Nightly Pipeline (KST 03:00)"
+    path: "nightly_batch.sh → Phase 3(review_pipeline_3model) → Phase 5(27B verify) → Phase 7(proxy_reviewer → DeepSeek audit)"
+    description: "Nightly review pipeline with 3-model review, verification, and DeepSeek audit"
+
+  - name: "⏲️ System State (15min)"
+    path: "state_collector/main.py → state.yaml → changelog (if changed) → CLAUDE.yaml → MOTD"
+    description: "Periodic system state collection and change tracking"
+
+  - name: "📝 Session Context (10min + hook)"
+    path: "update_handover.py → handover.yaml"
+    description: "Periodic and session-end context capture for LLM handover"
+
+# ── Key Scripts Index ───────────────────────────────────────────────
+
+entry_points:
+  - script: "scripts/cli.py"
+    command: "python3 scripts/cli.py {activity|worklog|mode|discussion|drag|toolmad}"
+    description: "🎯 Main user-facing CLI"
+
+  - script: "scripts/gen_architecture.py"
+    trigger: "devforge-gen-architecture.timer (daily KST 09:00)"
+    description: "🏗️ Auto-generate infrastructure.md + software.yaml from CLAUDE.yaml"
+
+  - script: "scripts/state_collector/main.py"
+    trigger: "server-state-collector.timer (15min)"
+    description: "💾 Poll system state → state.yaml → changelog"
+
+  - script: "scripts/update_handover.py"
+    trigger: "handover-gen.timer (10min) + SessionEnd hook"
+    description: "📝 Capture session context → handover.yaml"
+
+  - script: "scripts/anthropic_proxy.py"
+    trigger: "devforge-proxy.service (always on)"
+    description: "🔄 DeepSeek ↔ Anthropic API proxy — always running"
+
+  - script: "scripts/turn_watcher.py"
+    trigger: "devforge-collect.timer"
+    description: "👁️ Poll agent JSONL → turns table"
+
+  - script: "scripts/nightly_batch.sh"
+    trigger: "devforge-nightly.timer (UTC 18:00 = KST 03:00)"
+    description: "🌙 Nightly pipeline orchestrator"
+
+# ── Experimental / known deprecated ─────────────────────────────────
+
+deprecated:
+  - file: "scripts/slack_notify.py"
+    reason: "Replaced by telegram_bot.py. Retained for reference."

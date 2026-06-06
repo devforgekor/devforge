@@ -1,0 +1,91 @@
+{
+  "evaluation_type": "production_verify",
+  "role": "verify_27b_production",
+  "model": "Qwen3.6-27B (Claude plays role)",
+  "timestamp": "2026-06-03T16:05:00+09:00",
+  "pipeline": "extract_data_handoff_verify",
+  "input": "P-R-J review of extract pipeline data handoff (7 findings, P=26, R=26, gap=0)",
+
+  "verification_result": {
+    "final_verdict": "approved_with_conditions",
+    "action": "commit",
+    "confidence": 82,
+    "summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream verification pipeline is implemented. Condition: F01 + F06 must be resolved before next extract pipeline deployment."
+  },
+
+  "reasoning": "The P-R-J evaluation correctly identified 7 structural issues in the extract pipeline's data handoff. Verdicts are sound: 6 ACCEPT, 1 REJECT(F07 — substring diff adequacy). The reject decision on F07 is reasonable — the simple substring check + 30B fallback chain + 27B verify is a multi-layer defense that makes F07 low priority. However, the evaluation's critical gap is that it doesn't assess the actual operational impact of these issues — how many token budgets are lost to the timing data gap? How many facts are lost per night to the text fact omission? These impact metrics should be added. Additionally, I note that the 30B verify evaluation (eval_30b_verify.json) identified M03/M05 about extract completeness that the P-R-J didn't fully incorporate — F05 should have been split into two separate findings (fallback text omission + short turn user fact omission).",
+
+  "verification_items": [
+    {
+      "check": "F01 — call_llm() timing data loss: llama.cpp API provides complete data",
+      "result": "pass",
+      "detail": "Confirmed by live API test: llama.cpp returns usage(prompt_tokens, completion_tokens) + timings(prompt_ms, predicted_ms, tokens/s). call_llm() must be enhanced to pass these through."
+    },
+    {
+      "check": "F02 — queue_status='reviewed' hardcode: bypasses P-R-J",
+      "result": "pass",
+      "detail": "Confirmed via queue_writer.py source: enqueue_review(queue_status='reviewed') is default. Extract_result goes directly to 27B verify — no intermediate quality gate."
+    },
+    {
+      "check": "F03 — review_facts.verdict never updated: severity assessment",
+      "result": "partial",
+      "detail": "Verdict staleness is real but low-impact currently because the P-R-J → review_facts UPDATE path doesn't exist yet. When P-R-J pipeline processes extract_results, this will become critical. Priority should be P1, not critical."
+    },
+    {
+      "check": "F04 — MCP intent 50% accuracy: user_turn vs response confusion",
+      "result": "pass",
+      "detail": "Two specific misclassifications identified with turn IDs. root_cause analysis (response-based classification) is correct. Fix: user_turn should determine intent, not response."
+    },
+    {
+      "check": "F05 — 30B fallback text fact omission: 2490ch response, 0 text facts",
+      "result": "pass",
+      "detail": "Critical quality issue. The 30B is the safety net — if even the safety net drops all text facts, long responses are never extracted. SYSTEM_FALLBACK_30B needs prompt engineering."
+    },
+    {
+      "check": "F05 completeness — short turn user fact omission also exists",
+      "result": "partial",
+      "detail": "P-R-J didn't separate long-response omission (M03) from short-turn omission (M05). F05 should be two findings: (a) 30B fallback text omission, (b) 3B user_turn omission on short turns."
+    },
+    {
+      "check": "F06 — activity_log body insufficient: missing faithfulness, retry data",
+      "result": "pass",
+      "detail": "5-field body is insufficient for downstream verify. Faithfulness %, retry count, unfaithful fact list must be added."
+    },
+    {
+      "check": "F07 — Rejected: substring diff adequacy as 1st-line defense",
+      "result": "pass",
+      "detail": "Agree with rejection. Multi-layer defense (substring → 30B fallback → 27B verify) makes substring-only concern acceptable."
+    }
+  ],
+
+  "disagreement_with_prj": [
+    {
+      "finding": "F03 severity",
+      "prj_label": "critical",
+      "verify_label": "high",
+      "rationale": "While verdict never updates, there is no downstream consumer that depends on verdict being accurate yet. The pipeline stores results in activity_log.body (verified). review_facts.verdict is used by debate pipeline but not by extract pipeline. Downgrade to high."
+    },
+    {
+      "finding": "F05 scope",
+      "prj_label": "single finding (30B text omission)",
+      "verify_label": "should be split into F05a (30B text omission) + F05b (3B user omission)",
+      "rationale": "Two different root causes: one is 30B fallback prompt issue, other is 3B extraction priority logic. Different fixes needed."
+    }
+  ],
+
+  "operational_impact_assessment": {
+    "current_extract_records_analyzed": 4,
+    "total_unprocessed_turns": 4681,
+    "projected_nightly_impact": {
+      "data_loss_from_timing_gap": "~4681 extract runs without any latency/token metrics — no cost tracking possible",
+      "text_fact_loss_per_night": "If 50% of long turns (>500ch) hit 30B fallback and 30B drops text facts, potentially hundreds of text facts lost nightly",
+      "intent_misclassification": "50% misclassification rate means ~2340 turns have wrong MCP intent tags — affects search/discoverability"
+    }
+  },
+
+  "feedback": {
+    "proposer_improvement": "F05 should be decomposed. Two different root causes (30B prompt, 3B logic) need separate findings with separate fix recommendations.",
+    "refuter_improvement": "Good decision on F07. Consider flagging downstream impact analysis gaps (as I did here) even for accepted findings.",
+    "judge_improvement": "P and R scores (26/26) are consistent. Consider operational impact scoring — a P_score that weights findings by actual production impact would be more useful."
+  }
+}

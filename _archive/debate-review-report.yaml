@@ -1,0 +1,326 @@
+# =============================================================================
+# DevForge Multi-Agent LLM Debate System — Consolidated Review Report v1.0
+# =============================================================================
+# Three-model blind review of debate-system-spec.yaml v1.0
+# Reviewers: Qwen3-4B, DeepCoder-14B-Preview, Phi-4 14B
+# Date: 2026-05-24
+# =============================================================================
+
+meta:
+  spec_version: "1.0"
+  reviewers: ["Qwen3-4B", "DeepCoder-14B-Preview", "Phi-4 14B"]
+  review_method: "Independent blind review → consolidated synthesis"
+  overall_verdict: "APPROVED — Production-ready with minor amendments"
+
+# =============================================================================
+# 1. CONSENSUS: UNANIMOUS AGREEMENT
+# =============================================================================
+consensus:
+  - topic: "Sequential single-model execution"
+    verdict: "Correct design decision for 22GB RAM"
+    reviewers: [3/3]
+    action: "Keep as-is"
+
+  - topic: "Keep DeepCoder-14B (not downgrade to 6.7B)"
+    verdict: "Refutation quality is critical; 6.7B cannot critique 14B proposals"
+    reviewers: [3/3]
+    action: "Keep DeepCoder-14B-Preview. 7GB RSS with single-model execution is comfortable."
+
+  - topic: "Make Round 0 (DRAG) optional"
+    verdict: "Closed-domain tasks (bug fixes, code review) don't need web search"
+    reviewers: [3/3]
+    action: "Add --skip-drag CLI flag. Add 0.5-round routing: Phi-4-mini asks 'Does this need external search? Y/N'"
+
+  - topic: "Fixed 5 rounds + early exit is correct"
+    verdict: "Dynamic round count adds complexity with marginal benefit"
+    reviewers: [3/3]
+    action: "Keep as-is. Early-exit conditions already handle convergence."
+
+  - topic: "MLOCK=1 for Phi-4-14B judge"
+    verdict: "Single-model execution means no contention. 12GB RSS is safe within 22GB."
+    reviewers: [3/3]
+    action: "Use mlock=1 for Phi-4-14B in debate mode. Stability > 3GB savings."
+
+  - topic: "Persist summaries to PostgreSQL (not raw shared_context)"
+    verdict: "Raw context grows unbounded. Store decision_summary + final_code in DB for future RAG."
+    reviewers: [3/3]
+    action: "Add DB-backed knowledge base. Search local DB before external API."
+
+# =============================================================================
+# 2. SPECIFIC FINDINGS (non-consensus or additive)
+# =============================================================================
+findings:
+  - id: "F1"
+    source: "DeepCoder-14B + Qwen3-4B"
+    severity: "medium"
+    topic: "Qwen-32B ctx=10240 may be insufficient for full debate history"
+    detail: >
+      Full 5-round history + shared_context + prompt template could exceed 10k tokens.
+      IQ4_XS 17GB + KV cache for ctx=16384 ≈ 21GB RSS — at 22GB limit.
+    recommendation:
+      - "Option A: Add summary step — Phi-4-14B generates history_summary before Round 5"
+      - "Option B: Use Qwen2.5-Coder-14B for synthesis (ctx=8192, RSS ~10GB, safer)"
+      - "Option C: Keep ctx=10240 but aggressively truncate older rounds (keep last 2 + Round 0)"
+    decided: "Option A (Phi summary) is safest and preserves debate quality. Implement first."
+
+  - id: "F2"
+    source: "DeepCoder-14B"
+    severity: "low"
+    topic: "DART trigger: 3 consecutive borderline scores exhaust search quota"
+    detail: >
+      If consensus stays at 68-69% for 3 rounds, all 3 search slots consumed
+      on near-identical queries.
+    recommendation: "Add dedup filter: compare suggested_search_query against prior queries. Skip if cosine similarity > 0.8 or exact keyword overlap."
+
+  - id: "F3"
+    source: "DeepCoder-14B"
+    severity: "low"
+    topic: "DeepCoder max_tokens=64000 is impractical"
+    detail: >
+      n_predict=64000 on ARM CPU could take minutes per inference.
+      The <think> chain may not need the full 64k.
+    recommendation: "Start with max_tokens=8192. Monitor for truncated <think> chains. Increase to 16384 only if needed."
+
+  - id: "F4"
+    source: "DeepCoder-14B"
+    severity: "low"
+    topic: "Winner mapping table not documented"
+    detail: >
+      Judge returns 'alpha'/'beta' but orchestrator must track which model
+      was alpha and which was beta in each round (blind swap).
+    recommendation: "Add winner_map to state.yaml per round: {alpha: 'qwen25-coder-14b', beta: 'deepcoder-14b'}. Log BEFORE shuffle."
+
+  - id: "F5"
+    source: "Phi-4 14B"
+    severity: "low"
+    topic: "PostgreSQL role unclear in current spec"
+    detail: >
+      Spec lists PostgreSQL but state management uses JSONL files.
+    recommendation: "Use PostgreSQL for: (a) search result cache, (b) session metadata, (c) knowledge base (decision_summary + final_code). JSONL remains for round-level recovery."
+
+  - id: "F6"
+    source: "Qwen3-4B"
+    severity: "note"
+    topic: "Page cache accelerates model reload"
+    detail: >
+      After first model load, the GGUF file is in Linux page cache.
+      Subsequent loads of the same model are 5-10s instead of 45-90s.
+      This means Round 1→4 judge loads (Phi-4-14B reused 4×) are much faster.
+    recommendation: "No code change needed. Document this as expected behavior. First load: ~90s. Repeat loads: ~10s."
+
+  - id: "F7"
+    source: "Phi-4 14B"
+    severity: "note"
+    topic: "Search result caching"
+    detail: "Identical search queries across sessions waste API calls."
+    recommendation: "Add in-memory dict cache: {query_hash: {results, timestamp, ttl: 3600}}. Simple, no DB dependency."
+
+  - id: "F8"
+    source: "Phi-4 14B"
+    severity: "note"
+    topic: "Consensus trend visualization"
+    detail: "ASCII graph output helps users understand debate convergence."
+    recommendation: "Print simple bar chart after each round: Round 1: ████████ 72% → Round 2: █████████ 85% → ..."
+
+# =============================================================================
+# 3. REVISED TIMING ESTIMATES (with page cache)
+# =============================================================================
+timing:
+  first_load_vs_cache:
+    cold_start_seconds:
+      qwen25_coder_14b: 45
+      deepcoder_14b: 50
+      phi4_14b: 90
+      qwen_32b: 180
+    cached_repeat_seconds:
+      qwen25_coder_14b: 10
+      deepcoder_14b: 10
+      phi4_14b: 15
+      qwen_32b: 40
+
+  # Models used per round:
+  # R0: qwen25 → deepcoder → phi4 (3 cold loads)
+  # R1: qwen25 (cached) → deepcoder (cached) → phi4 (cached) [3 quick loads]
+  # R2-R3: same pattern (all cached)
+  # R4: qwen25 (cached) → deepcoder (cached) → phi4 (cached)
+  # R5: qwen32b (cold, one-time)
+
+  session_duration:
+    best_case_early_exit:
+      rounds: "R0 + R1 + R2 (exit) + R5"
+      load_time_min: 5     # 3 cold + 3 cached + 3 cached + 1 cold
+      inference_time_min: 2
+      total_min: 7
+    typical:
+      rounds: "R0 + R1-4 + R5"
+      load_time_min: 7     # 3 cold + 12 cached + 1 cold
+      inference_time_min: 4
+      total_min: 14
+    worst_case_with_searches:
+      rounds: "R0 + R1-4 + R5 + 3 searches"
+      load_time_min: 7
+      inference_time_min: 7  # longer due to search results in context
+      total_min: 22
+
+  note: >
+    Page cache dramatically reduces repeat model loads.
+    Phi-4-14B (judge rounds 1-4) loads 4× but only first time is 90s.
+    Qwen-32B (Round 5) loads once — worth the 180s for final synthesis quality.
+
+# =============================================================================
+# 4. IMPLEMENTATION ROADMAP (AMENDED)
+# =============================================================================
+phases:
+  - phase: 1
+    name: "Model Acquisition"
+    tasks:
+      - "[DONE] Download DeepCoder-14B-Preview Q4_K_M from HuggingFace"
+      - "[TODO] Verify DeepCoder prompt format with minimal test (no system prompt, JSON output)"
+      - "[TODO] Benchmark per-model cold-start and cached load times"
+
+  - phase: 2
+    name: "Entrypoint Update"
+    tasks:
+      - "[TODO] Add 'debate' mode to dual-server-entrypoint.sh (env-var-driven single model)"
+      - "[TODO] Test mode switching: normal ↔ debate ↔ code"
+      - "[TODO] Verify MLOCK=1 for Phi-4-14B in debate mode"
+
+  - phase: 3
+    name: "Orchestrator Implementation (scripts/debate.py)"
+    tasks:
+      - "[TODO] Create DebateSession class"
+      - "[TODO] Implement model switching + health polling"
+      - "[TODO] Implement JSON parsing with regex fallback (not Pydantic — keep stdlib)"
+      - "[TODO] Implement Round 0 DRAG (with --skip-drag support)"
+      - "[TODO] Implement Rounds 1-4 DART (proposer → refuter → judge → search check)"
+      - "[TODO] Implement DART dedup filter (F2)"
+      - "[TODO] Implement winner mapping table (F4)"
+      - "[TODO] Implement Round 5 Final Synthesis (with Phi-generated history summary from F1)"
+      - "[TODO] Implement early-exit logic"
+      - "[TODO] Implement retry + error handling"
+
+  - phase: 4
+    name: "CLI & State Management"
+    tasks:
+      - "Wire cli.py discussion {drag|toolmad} → debate.py"
+      - "Add --skip-drag flag"
+      - "Implement JSONL append-only state persistence"
+      - "Implement session resume on crash"
+      - "Implement final_report.md generation"
+      - "Add search result cache (F7)"
+      - "Add consensus trend ASCII visualization (F8)"
+
+  - phase: 5
+    name: "Knowledge Base Integration"
+    tasks:
+      - "Add PostgreSQL-backed session metadata storage"
+      - "Implement local DB search before external API (Q5)"
+      - "Add decision_summary + final_code auto-save to DB"
+      - "Add TTL-based cache invalidation (30 days)"
+
+  - phase: 6
+    name: "Testing & Calibration"
+    tasks:
+      - "End-to-end dry run with mock search"
+      - "Live test with real search API"
+      - "Measure per-round timing"
+      - "Calibrate consensus thresholds (start with 90%, not 95%)"
+      - "Monitor <think> chain truncation for DeepCoder"
+
+# =============================================================================
+# 5. RESOLVED DESIGN DECISIONS
+# =============================================================================
+decisions:
+  - id: "D1"
+    question: "DeepCoder-14B vs 6.7B?"
+    answer: "DeepCoder-14B-Preview Q4_K_M. 3/3 reviewers agree."
+    rationale: "Refutation quality ≥ proposer quality is non-negotiable for debate efficacy."
+
+  - id: "D2"
+    question: "Make DRAG optional?"
+    answer: "Yes. Add --skip-drag CLI flag + auto-detection heuristics."
+    implementation: "Skip if: (a) file paths present, (b) error messages present, (c) --skip-drag flag set."
+
+  - id: "D3"
+    question: "5 rounds vs dynamic?"
+    answer: "Fixed max=5 + early exit. No change from spec."
+
+  - id: "D4"
+    question: "Phi-4-14B MLOCK?"
+    answer: "mlock=1. 3/3 reviewers agree."
+    rationale: "Sequential execution = no RAM contention. 12GB RSS is safe."
+
+  - id: "D5"
+    question: "Persist shared_context?"
+    answer: "No. Persist decision_summary + final_code to PostgreSQL instead."
+    rationale: "Raw context grows unbounded. Summarized knowledge is more useful for future sessions."
+
+  - id: "D6"
+    question: "32B context overflow risk?"
+    answer: "Add Phi-4-14B history summary step before Round 5."
+    implementation: "Phi-4-14B receives full history → outputs 500-word summary → Qwen-32B receives summary + last 2 rounds only."
+
+  - id: "D7"
+    question: "DeepCoder max_tokens?"
+    answer: "Start with 8192. Increase only if <think> truncation observed."
+
+  - id: "D8"
+    question: "JSON parsing strategy?"
+    answer: "stdlib json.loads() with regex fallback. No external parser library."
+    rationale: "Keep stdlib-only policy. Regex recovery handles 90% of malformed JSON cases."
+
+# =============================================================================
+# 6. RISK REGISTER
+# =============================================================================
+risks:
+  - risk: "Model switch timeout during container restart"
+    likelihood: "low"
+    impact: "medium (round skipped, session continues)"
+    mitigation: "180s timeout + 2 retries. If still fails, skip round and log."
+
+  - risk: "DeepCoder JSON malformation due to <think> chain bleed"
+    likelihood: "medium"
+    impact: "low (regex recovery, re-prompt once)"
+    mitigation: "Extract JSON from last complete object in response. Re-prompt with STRICT JSON ONLY if parse fails."
+
+  - risk: "Search API rate limit during DART triggers"
+    likelihood: "low"
+    impact: "medium (missing context, debate continues)"
+    mitigation: "Dedup filter. Max 3 searches/session. Fallback: continue without search."
+
+  - risk: "22GB RAM ceiling with Qwen-32B + full context"
+    likelihood: "low"
+    impact: "high (OOM kill, session lost)"
+    mitigation: "History summary step reduces context size for 32B. JSONL state enables resume."
+
+# =============================================================================
+# 7. SUMMARY
+# =============================================================================
+summary:
+  verdict: >
+    All three independent reviewers APPROVE the specification for implementation.
+    The sequential single-model architecture is the key insight enabling
+    multi-agent debate on 22GB ARM. No fundamental design flaws found.
+
+  amendments_required:
+    - "Add --skip-drag CLI flag"
+    - "Add Phi-4 history summary before Round 5 (32B context overflow prevention)"
+    - "Add DART search query dedup filter"
+    - "Add winner mapping table (alpha/beta → actual model)"
+    - "Use mlock=1 for Phi-4-14B in debate mode"
+    - "Start DeepCoder with max_tokens=8192 (not 64000)"
+    - "Add PostgreSQL-backed knowledge base for decision summaries"
+
+  amendments_nice_to_have:
+    - "Search result caching (in-memory dict)"
+    - "ASCII consensus trend visualization"
+    - "Page cache awareness documentation"
+
+  estimated_implementation_time:
+    phase_1_2: "1 session (models + entrypoint)"
+    phase_3: "2 sessions (orchestrator core)"
+    phase_4_5: "1 session (CLI + state + DB)"
+    phase_6: "1 session (testing + calibration)"
+    total: "5 sessions"
+
+  ready_for_phase_1: true

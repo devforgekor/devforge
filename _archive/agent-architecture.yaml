@@ -1,0 +1,1316 @@
+# ============================================================================
+# DevForge Agent Architecture — Complete System Specification
+# ============================================================================
+# purpose      : Single-document machine-readable reference for all agents.
+# covers       : hardware, runtime config, model catalog, 3-model review
+#                pipeline, Day/Night bundle architecture, system prompts,
+#                context budget, scripts inventory, implementation plan,
+#                design rationale, validation log, open questions, risks.
+# author       : DevForge / Claude Code
+# created      : 2026-05-29
+# version      : 3.0.1
+# predecessors : v1.0 (initial), v2.1 (I01-I08 corrections applied), v3.0 (Day/Night Bundle)
+# revision_log :
+#   v3.0.1 (2026-05-29) :
+#     - DeepSeek-V2-Lite removed entirely. DRAG → 30B (Pod B day).
+#       Cooperative synthesis → nightly review pipeline (R1+Qwen7B+Selene). 9.7GB disk freed.
+#     - worklog_generator model: deepseek-v2-lite → qwen3-30b-a3b.
+#   v3.0 (2026-05-29) :
+#     - Full Day/Night Bundle restructure: Pod A lightweight (operator+3B day, R1 night),
+#       Pod B 30B day, Qwen7B+Selene night. Rationale: Pod A 30B + Pod B R1 = 12.44+7.5
+#       = 19.94GB cgroup → 2GB headroom too tight for KV spikes. Separate bundles eliminate
+#       this risk completely.
+#     - 3-Model Review Pipeline Pod assignments changed: R1→Pod A, Qwen7B→Pod B resident,
+#       Selene→Pod B swap-in/out. Step 4 diff writer = Qwen7B (replacing 30B). Rationale:
+#       diff writing is a constrained task (unified diff from approved findings only), not
+#       creative code generation. 7B handles this with lower resource cost.
+#     - Fix loop max_iterations: 5→3 (cooperative + local unified).
+#       Rationale: ARM 4-core, 3 iterations balances quality vs time creep.
+#     - 14B fully removed from review pipeline. Qwen-14B retained for legacy review mode
+#       (debate result review) but NOT in 3-model pipeline.
+#     - DeepSeek-V2-Lite: cooperative debate synthesis only. Removed from all review roles.
+#     - Observer: patch --dry-run added as mandatory Phase 1 check.
+#     - Port map restructured: :8080 Pod A (day:operator/night:R1), :8081 Pod B mode-switch,
+#       :8082 Pod A (day:3B/night:unused).
+#     - Memory budgets recalculated with podman stats 2026-05-29 cgroup measurements.
+#     - Systemd v252 StartLimitIntervalSec incompatibility documented.
+# ============================================================================
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 1: HARDWARE & INFRASTRUCTURE
+# ════════════════════════════════════════════════════════════════════════════
+
+hardware:
+  host: OCI Ampere ARM (Oracle Linux 9.7)
+  cpu:
+    architecture: aarch64 (ARM Neoverse-N1)
+    cores: 4
+    bogomips_per_core: 50.00
+
+  memory:
+    physical_ram_gb: 24
+    os_footprint_gb: 2
+    available_ram_gb: 22          # physical(24) - os(2); all budget calculations use this
+    zram_gb: 4
+    zram_compression: zstd
+    zram_effective_ratio: "5.15:1 for general data; ~1:1 for quantized model weights (weights are already compressed)"
+    disk_swap_gb: 4
+    disk_swap_priority: 10        # low priority; zRAM preferred; last resort only
+
+    # Measured 2026-05-29 (podman stats + free -h, 30B on Pod A :8080):
+    measured:
+      host_used_rss_gb: 9.1       # free -h "used" column (anonymous + unevictable)
+      host_buff_cache_gb: 13      # free -h "buff/cache" column
+      host_available_gb: 13       # free -h "available" = reclaimable + free
+      pod_a_30b_cgroup_gb: 12.44  # podman stats (RSS + page cache for mmap'd model)
+      pod_a_30b_rss_estimated_gb: 9  # derived: cgroup(12.44) - page_cache(~3.44)
+      swap_used_gb: 0.38
+
+    # Key insight: llama.cpp mmap()s GGUF files. File size ≠ RSS.
+    # Q3_K_M quantized 14GB file → ~9GB RSS (hot pages for active experts)
+    # + ~3.4GB page cache (cold expert weights, evictable under memory pressure).
+    # This is why 30B fits on a 22GB system with 13GB available for other models.
+
+  storage:
+    - device: ocivolume-root
+      size_gb: 20
+      mount: /
+      used_gb: 15
+    - device: datavg-lv_ai_data
+      size_gb: 100
+      mount: /opt/ai_data
+      used_gb: 72
+      contents: "model GGUF files (72GB), debate sessions, worklog"
+    - device: datavg-lv_db
+      size_gb: 30
+      mount: /mnt/lv_db
+      used_gb: 0.4
+      contents: PostgreSQL 16 data
+    - device: datavg-lv_projects
+      size_gb: 10
+      mount: /opt/projects
+      used_gb: 0.7
+      contents: application code, scripts, docs
+    - device: ocivolume-lv_tmp
+      size_gb: 10
+      mount: /var/tmp
+      used_gb: 3.7
+      contents: pipeline outputs, temp files
+
+container_runtime:
+  engine: Podman rootless (user opc)
+  orchestration: Quadlet systemd units
+  network: devforge-net (bridge, 10.89.0.0/24)
+  systemd_version: v252  # known bug: HealthCmd causes ECONNREFUSED
+                         # known bug: StartLimitIntervalSec not recognised in [Service]
+                         # known bug: unit file regeneration during service run
+                         #   → "Current command vanished" → Restart=on-failure may not trigger
+
+  # ── Port Map (Day / Night) ──
+  #  :8080  Pod A (day: operator 1.7B / night: R1-0528-8B)
+  #  :8081  Pod B mode-switch (day: unused / night: Qwen7B → Selene swap → Qwen7B)
+  #  :8082  Pod A (day: Qwen3B / night: unused)
+
+  containers:
+
+    # ─── Pod A: Day/Night Bundle ───
+    container-devforge-qwen:
+      unit: container-devforge-qwen.service
+      role: "Pod A — Day/Night bundle (lightweight day, R1 night)"
+      image: ghcr.io/ggml-org/llama.cpp:server
+      ports: ["127.0.0.1:8080:8080", "127.0.0.1:8082:8082"]
+      entrypoint: qwen-entrypoint.sh  # dual-server pattern (same as Pod B)
+      env:
+        SERVER_TIMEOUT: 28800
+        CACHE_REUSE: 256
+        BATCH_SIZE: 2048
+        UBATCH_SIZE: 512
+        CACHE_RAM: 1024
+        CACHE_TYPE_K: q8_0
+        CACHE_TYPE_V: q8_0
+        FLASH_ATTN: "on"
+        LD_LIBRARY_PATH: /app
+      service:
+        MemoryMax: 22G
+        Restart: on-failure
+        RestartSec: 15
+        TimeoutStopSec: 60
+      modes:
+        debate:
+          description: "Day bundle — operator + 3B Refuter"
+          servers:
+            - port: 8080
+              model: Qwen3-1.7B-Q4_K_M.gguf (1.1GB)
+              ctx: 4096
+              threads: 2
+              role: operator (dispatch classifier)
+            - port: 8082
+              model: Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf (1.8GB)
+              ctx: 4096
+              threads: 2
+              role: debate refuter + aider subprocess
+          combined_cgroup_gb: ~4
+          combined_rss_gb: ~2.6
+        r1-8b:
+          description: "Night bundle — R1 reviewer for 3-model pipeline"
+          servers:
+            - port: 8080
+              model: DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf (4.9GB)
+              ctx: 8192
+              threads: 4
+              role: "Step 1 deep reviewer (think mode)"
+          cgroup_gb: ~7.5
+          note: "operator and 3B are NOT loaded in this mode"
+
+    # ─── Pod B: Day/Night Bundle ───
+    container-devforge-swap:
+      unit: container-devforge-swap.service
+      role: "Pod B — Day/Night bundle (30B day, Qwen7B+Selene night)"
+      image: ghcr.io/ggml-org/llama.cpp:server
+      ports: ["127.0.0.1:8081:8081"]
+      entrypoint: dual-server-entrypoint.sh
+      env:
+        SERVER_TIMEOUT: 28800
+        BATCH_SIZE: 1024
+        SERVER1_THREADS: 4
+        SERVER1_THREADS_BATCH: 4
+        SERVER2_CTX: 4096
+        SERVER2_THREADS: 2
+        SERVER2_THREADS_BATCH: 2
+        CACHE_REUSE: 256
+        SERVER1_CTX: 10240
+        CACHE_RAM: 6656
+        MLOCK: 0
+        LD_LIBRARY_PATH: /app
+      service:
+        MemoryMax: 22G
+        Restart: on-failure
+        RestartSec: 60
+        TimeoutStopSec: 90
+      modes:
+        debate:
+          description: "Day bundle — 30B code generator + debate Proposer/Judge"
+          servers:
+            - port: 8080
+              model: Qwen3-Coder-30B-A3B-Instruct-Q3_K_M.gguf (14GB file)
+              ctx: 8192
+              threads: 4
+              role: primary code generator + debate Proposer+Judge+DRAG
+          cgroup_gb: 12.44  # podman stats measured
+          rss_gb: ~9        # derived: cgroup - page_cache
+        qwen7b:
+          description: "Night bundle — Qwen7B reflector + diff writer for 3-model pipeline"
+          servers:
+            - port: 8081
+              model: Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf (4.7GB)
+              ctx: 8192
+              threads: 4
+              role: "Step 2 reflector + Step 4 diff writer"
+          cgroup_gb: ~7
+          note: "Selene is NOT co-resident; swapped in/out via swap_llm_mode.sh for Step 3"
+        verify:
+          description: "32B final verification (Pod A must be stopped)"
+          prerequisite:
+            action: "systemctl --user stop container-devforge-qwen"
+            reason: "18.5GB cgroup + Pod A 4GB = 22.5GB > available_ram(22)"
+            restore_after: "systemctl --user start container-devforge-qwen"
+          servers:
+            - port: 8081
+              model: Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf (17GB)
+              ctx: 16384
+              threads: 4
+          cgroup_gb: ~18.5
+
+  other_services:
+    - devforge-api (standalone, :8000, MCP SSE)
+    - devforge-turn-watcher (real-time session → PostgreSQL)
+    - netdata (system monitoring, :19999)
+    - anthropic-deepseek-proxy (127.0.0.1:44777, system-role rewrite)
+    - caddy (host network, :80/:443, reverse proxy + auto-HTTPS)
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 2: MODEL CATALOG
+# ════════════════════════════════════════════════════════════════════════════
+
+models:
+  local:
+
+    # ── Day Bundle Models ──
+
+    qwen3-30b-a3b:
+      file: Qwen3-Coder-30B-A3B-Instruct-Q3_K_M.gguf
+      file_size_gb: 14
+      rss_observed_gb: 9
+      cgroup_measured_gb: 12.44
+      type: "MoE (30B total, ~3B active per token)"
+      quant: Q3_K_M
+      role: >
+        Pod B Day — primary code generator, debate Proposer+Judge+DRAG,
+        Step 4 diff writer (legacy, being replaced by qwen7b in 3-model pipeline)
+      speed_tok_s: 10.5
+      ctx: 8192
+      threads: 4
+
+    qwen3-1.7b:
+      file: Qwen3-1.7B-Q4_K_M.gguf
+      file_size_gb: 1.1
+      type: dense
+      quant: Q4_K_M
+      role: "Pod A Day — operator (dispatch classifier)"
+      ctx: 4096
+      threads: 2
+      speed_tok_s: 25.0
+      note: "resident during daytime; killed during nightly review/verify"
+
+    qwen2.5-coder-3b:
+      file: Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf
+      file_size_gb: 1.8
+      type: dense
+      quant: Q4_K_M
+      role: "Pod A Day — debate refuter + aider subprocess for surgical fixes"
+      ctx: 4096
+      threads: 2
+      speed_tok_s: 18.0
+
+    # ── Night Bundle Models (3-Model Review Pipeline) ──
+
+    r1-0528-8b:
+      file: DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf
+      file_size_gb: 4.9
+      type: dense
+      base: Qwen3-8B
+      training: "R1 reinforcement-learning distillation (May 2025 release)"
+      quant: Q4_K_M
+      role: "Pod A Night — Step 1 deep reviewer (bug / vuln / edge-case discovery)"
+      think_mode: true
+      think_strip_before_downstream: true
+      ctx: 8192
+      threads: 4
+      speed_tok_s: 12.0
+      cgroup_estimated_gb: 7.5    # weights(4.9) + KV_8K(~1.5) + runtime(~1.1)
+      benchmark:
+        livecode_bench_8b_distilled: 60.5  # this model (8B R1 distilled)
+        aime_2024_full_671b: 86.0          # NOT this model; full DeepSeek-R1-0528 (671B)
+        aime_2024_8b_distilled: "not independently benchmarked; expected ~45-55"
+      review_pipeline_role:
+        step: 1
+        task: reviewer
+        input: [original_code, task_description]
+        output_format: "numbered bug report: {finding_id, severity, location, description, category}"
+        constraint: "NO code modification; NO style suggestions; findings only; max_tokens: 800"
+        known_bias: "thorough but occasionally flags false positives on intentional patterns"
+
+    qwen2.5-coder-7b:
+      file: Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+      file_size_gb: 4.7
+      type: dense
+      quant: Q4_K_M
+      role: "Pod B Night — Step 2 reflector + Step 4 diff writer"
+      ctx: 8192
+      threads: 4
+      speed_tok_s: 14.0
+      cgroup_estimated_gb: 7.0    # weights(4.7) + KV_8K(~1.5) + runtime(~0.8)
+      known_bias:
+        style_override: true
+        description: >
+          Trained on code-generation benchmarks; reflexively rewrites code in its own style.
+          Mitigated by diff-format cage (output restricted to ACCEPT/REJECT verdicts +
+          unified diff; full rewrites blocked by max_tokens constraint).
+        role_fit: >
+          Bias is a FEATURE in the Reflector role: Qwen's "I know better" tendency
+          is channelled into defending original design intent and challenging R1's
+          findings when they conflict with standard coding patterns.
+      review_pipeline_role:
+        step_2_reflector:
+          input: [original_code, r1_bug_report_think_stripped]
+          output_format: "per finding: {finding_id, verdict: ACCEPT|REJECT, reason(≤50 words), improvement_note(optional)}"
+          constraint: "NO full code rewrite; diff format ONLY for code suggestions; ONE round; max_tokens: 400"
+        step_4_diff_writer:
+          input: [original_code, approved_findings]
+          output_format: "unified diff (--- original / +++ modified / @@ hunks)"
+          constraint: "unified diff ONLY; touch ONLY approved lines; NO style changes; NO refactoring; max_tokens: 600"
+          note: >
+            Diff writing is a constrained format-translation task, not creative generation.
+            Qwen 7B handles this well. If diff fails to apply (patch --dry-run), fallback to
+            32B verify mode available.
+
+    selene-mini-8b:
+      file: selene-1-mini-llama-3.1-8b-q4_k_m.gguf
+      file_size_gb: 4.6
+      type: dense
+      base: Llama-3.1-8B
+      specialization: "LLM-as-Judge (trained on human preference and evaluation data)"
+      quant: Q4_K_M
+      role: "Pod B Night — Step 3 impartial judge (swap-in/out, NOT resident)"
+      ctx: 8192
+      threads: 4
+      speed_tok_s: 13.0
+      cgroup_estimated_gb: 7.0    # weights(4.6) + KV_8K(~1.5) + runtime(~0.9)
+      review_pipeline_role:
+        step: 3
+        task: judge
+        input: [original_code, r1_bug_report_think_stripped, qwen_verdicts]
+        voting_logic:
+          unanimous_2_0:
+            condition: "R1 ACCEPT + Qwen ACCEPT → all agree to fix"
+            action: "ratify ACCEPT"
+          unanimous_0_2:
+            condition: "R1 REJECT + Qwen REJECT → all agree benign"
+            action: "ratify REJECT"
+          split_1_1:
+            condition: "R1 ACCEPT + Qwen REJECT (or vice versa)"
+            action: "Selene evaluates technical merit and casts DECIDING VOTE → 2:1 result"
+            extra_round:
+              description: "Selene may request R1+Qwen re-examine split findings with additional context"
+              max_extra_rounds: 1
+        output_format: "per finding: {finding_id, decision: APPROVED|REJECTED, confidence: 0.0-1.0}; summary: {final_verdict: FIX|PASS, approved_count, rejected_count}"
+        constraint: "NO code modification; structured verdict only; evaluate technical merit only; ignore style"
+
+    # ── Legacy / Auxiliary Models ──
+
+    qwen-32b:
+      file: Qwen2.5-Coder-32B-Instruct-IQ4_XS.gguf
+      file_size_gb: 17
+      type: dense
+      quant: IQ4_XS
+      role: "nightly verify mode — final gate for borderline items"
+      ctx: 16384
+      threads: 4
+      speed_tok_s: 0.5
+      cgroup_estimated_gb: 18.5   # weights(17) + KV_16K(~1.5)
+      prerequisite: "Pod A MUST be stopped before load"
+
+    qwen-14b:
+      file: Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf
+      file_size_gb: 8.4
+      type: dense
+      quant: Q4_K_M
+      role: "legacy review mode — debate result review (being phased out of code review pipeline)"
+      ctx: 4096
+      threads: 4
+      speed_tok_s: 3.0
+      note: "NO longer used in 3-model review pipeline. Retained for cooperative debate result review."
+
+    # deepseek-v2-lite: REMOVED v3.0.1 — cooperative synthesis moved to nightly review pipeline.
+    # 30B (Pod B day) handles DRAG analysis. R1+Qwen7B (night bundle) handles cooperative synthesis.
+    # 9.7GB disk freed.
+
+    smallthinker-21b:
+      file: SmallThinker-21B-A3B-Instruct.Q3_K.gguf
+      file_size_gb: 9.8
+      type: "MoE (21B total, ~3B active)"
+      quant: Q3_K
+      role: "experimental; not in active rotation"
+
+    # ── Operator Candidates (dispatch classifier) ──
+
+  operator_candidates:
+    qwen3-1.7b:
+      file: Qwen3-1.7B-Q4_K_M.gguf
+      file_size_gb: 1.1
+      type: dense
+      role: "Pod A Day resident — dispatch classifier"
+      note: "deployed as daytime operator; test_operator.py 50-case validation pending"
+
+    llama-3.2-3b:
+      file: Llama-3.2-3B-Instruct-Q4_K_M.gguf
+      file_size_gb: 2.0
+      type: dense
+      role: "alternative dispatch classifier (architectural diversity from Qwen lineup)"
+      note: "downloaded; side-by-side comparison with qwen3-1.7b pending"
+
+  # ── Azure Spot VMs (Cooperative Debate) ──
+
+  azure_spot:
+    qwen3-30b-a3b-azure:
+      vm_size: Standard_FX2ms_v2
+      location: centralindia
+      subscription: account1
+      role: "cooperative debate Proposer"
+      port: 8084
+    nemotron3-nano-30b:
+      vm_size: Standard_FX2ms_v2
+      location: indonesiacentral
+      subscription: account2
+      role: "cooperative debate Refuter"
+      port: 8083
+    gemma-4-26b:
+      vm_size: Standard_E2as_v4
+      location: centralindia
+      subscription: account3
+      role: "cooperative debate Judge + Summary"
+      port: 8085
+
+  prompt_caching:
+    mechanism: "llama.cpp --cache-reuse 256"
+    scope: "within-model, same-session only (cross-model cache sharing not supported)"
+    benefit: "30-50% eval speed improvement on repeated calls to same model with identical system prompt"
+    note: "KV cache is resident per llama-server process. Container restart = cache flush. This is a known cost of Pod B mode switching."
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 3: 3-MODEL CODE REVIEW PIPELINE (NIGHTLY)
+# ════════════════════════════════════════════════════════════════════════════
+
+review_pipeline_3model:
+  purpose: >
+    Systematic nightly peer-review of all code accumulated during the day.
+    Three independent specialist models on a 2-pod architecture:
+    Pod A runs R1 (deep reviewer). Pod B runs Qwen7B (reflector + diff writer)
+    with Selene Mini swapped in for Step 3 (judge).
+    R1 finds problems. Qwen defends or accepts. Selene decides. Qwen patches.
+  file: scripts/review_pipeline_3model.py
+  version: "1.0"
+
+  # ── Day/Night Bundle Transition ──
+
+  bundle_transition:
+    description: >
+      Day bundle (Pod A: operator+3B, Pod B: 30B) is a single logical unit.
+      Night review bundle (Pod A: R1, Pod B: Qwen7B+Selene swap) replaces it entirely.
+      Both pods restart simultaneously via systemctl.
+    night_entry:
+      - "systemctl --user stop container-devforge-qwen container-devforge-swap"
+      - "echo MODE=r1-8b > /opt/ai_data/scripts/current-mode.env  # Pod A entrypoint reads this"
+      - "echo MODE=qwen7b > /opt/ai_data/scripts/current-mode.env  # Pod B entrypoint reads this"
+      - "systemctl --user start container-devforge-qwen container-devforge-swap"
+      - "wait for health: curl -s http://localhost:8080/health && curl -s http://localhost:8081/health"
+    night_exit:
+      - "systemctl --user stop container-devforge-qwen container-devforge-swap"
+      - "echo MODE=debate > /opt/ai_data/scripts/current-mode.env"
+      - "systemctl --user start container-devforge-swap  # Pod B: 30B first (takes longer)"
+      - "sleep 30"
+      - "systemctl --user start container-devforge-qwen   # Pod A: operator+3B"
+      - "health check both endpoints"
+    pod_a_down_during_night: true   # Pod A always restarts for night bundle
+    pod_b_down_during_night: true   # Pod B always restarts for night bundle
+    total_downtime_estimate_s: 90   # stop(60) + start(30)
+
+  # ── Memory Budget (cgroup-based, podman stats verified) ──
+
+  memory_budget:
+    basis: "available_ram_gb: 22 (physical 24GB - OS 2GB)"
+    pod_a_30b_cgroup_measured_gb: 12.44  # Day only, NOT used in review
+    steps:
+      step_1_reviewer:
+        pod: A
+        model: r1-0528-8b
+        pod_a_cgroup_gb: 7.5
+        pod_b_cgroup_gb: 7.0     # Qwen7B resident throughout
+        total_gb: 14.5
+        headroom_gb: 7.5
+      step_2_reflector:
+        pod: B
+        model: qwen2.5-coder-7b
+        pod_a_cgroup_gb: 7.5     # R1 still resident
+        pod_b_cgroup_gb: 7.0
+        total_gb: 14.5
+        headroom_gb: 7.5
+      step_3_judge:
+        pod: B (swap)
+        model: selene-mini-8b
+        pre_action: "swap_llm_mode.sh selene  # unload Qwen7B, load Selene on :8081"
+        pod_a_cgroup_gb: 7.5     # R1 still resident
+        pod_b_cgroup_gb: 7.0     # Selene
+        total_gb: 14.5
+        headroom_gb: 7.5
+      step_4_diff_writer:
+        pod: B (swap back)
+        model: qwen2.5-coder-7b
+        pre_action: "swap_llm_mode.sh qwen-7b  # unload Selene, reload Qwen7B on :8081"
+        post_action: "systemctl --user stop container-devforge-qwen  # R1 no longer needed"
+        pod_a_cgroup_gb: 0.0     # R1 unloaded (Pod A can be stopped or kept for diff)
+        pod_b_cgroup_gb: 7.0
+        total_gb: 7.0
+        headroom_gb: 15.0
+        note: >
+          Pod A R1 can be unloaded after Step 3 (judgment complete).
+          Qwen7B writes diffs independently. If Pod A is stopped, total = 7GB only.
+    peak_utilization: "Step 1-3: 14.5/22GB (66%) — very comfortable, >7GB headroom at all times"
+
+  # ── Context Budget (per model call, independent) ──
+
+  context_budget:
+    window_tokens: 8192           # all review models use ctx=8192
+    components:
+      system_prompt_tokens: 200
+      code_input_tokens: 800      # typical; up to 1500 for larger files
+      task_description_tokens: 100
+      r1_bug_report_think_stripped_tokens: 500  # after stripping <think> (~1500 raw → ~500)
+      qwen_verdicts_tokens: 300
+    path_unanimous:
+      probability: "65-75%"
+      per_step_max_tokens:
+        step_1: 1100              # system(200) + code(800) + task(100)
+        step_2: 1600              # + bug_report(500)
+        step_3: 1900              # + verdicts(300)
+        step_4: 1050              # system(200) + code(800) + findings_summary(50)
+      window_utilisation_pct: 23  # 1900/8192 — very comfortable
+    path_split_1_1:
+      probability: "25-35%"
+      extra_round_context_tokens: 1600  # round1 outputs summarised
+      per_step_max_tokens:
+        step_1_round2: 2700
+        step_2_round2: 3000
+        step_3_deciding: 3400
+      window_utilisation_pct: 41  # 3400/8192 — comfortable
+      think_strip_savings_tokens: 1200
+    note: "All paths well within 8K window; ctx=8192 confirmed sufficient"
+
+  # ── Pipeline Steps ──
+
+  pipeline_steps:
+    step_1_deep_review:
+      model: r1-0528-8b
+      pod: A (:8080, resident for duration of review)
+      think_mode: true
+      think_strip_before_downstream: true
+      input:
+        - original_code: str
+        - task_description: str
+      output:
+        format: "structured bug report (JSON)"
+        schema:
+          findings:
+            - finding_id: int
+              severity: "CRITICAL | HIGH | MEDIUM | LOW"
+              location: "line_number or function_name"
+              description: str
+              category: "bug | security | edge_case | logic_error"
+        max_tokens: 800
+      hard_constraints:
+        - "NO code modification"
+        - "NO style suggestions"
+        - "findings only — if no bugs found: return empty findings list"
+
+    step_2_reflection:
+      model: qwen2.5-coder-7b
+      pod: B (:8081, resident throughout)
+      input:
+        - original_code: str
+        - task_description: str
+        - bug_report: "step_1 output (think-stripped)"
+      output:
+        format: "per-finding verdict (JSON)"
+        schema:
+          verdicts:
+            - finding_id: int
+              verdict: "ACCEPT | REJECT"
+              reason: str               # max 50 words
+              improvement_note: str     # optional
+        max_tokens: 400
+      hard_constraints:
+        - "NO full code rewrite"
+        - "code suggestions in unified diff format ONLY"
+        - "ONE round of reflection"
+        - "respond to each finding_id from step_1"
+      role_note: >
+        Qwen's style-override bias is intentionally exploited.
+        When R1 flags something that conflicts with standard coding patterns,
+        Qwen will REJECT it and explain why — functioning as design-intent defender.
+
+    step_3_judgment:
+      model: selene-mini-8b
+      pod: B (:8081, swapped in for this step only)
+      pre_action: "swap_llm_mode.sh selene  # unload Qwen7B, load Selene Mini"
+      post_action: "swap_llm_mode.sh qwen-7b  # unload Selene, reload Qwen7B for Step 4"
+      input:
+        - original_code: str
+        - bug_report: "step_1 output (think-stripped)"
+        - verdicts: "step_2 output"
+      voting_logic:
+        unanimous:
+          condition: "R1 and Qwen agree on all findings"
+          action: "ratify unanimous decision immediately"
+          extra_round: false
+        split_1_1:
+          condition: "R1 and Qwen disagree on one or more findings"
+          action: "Selene casts deciding vote per split finding"
+          max_extra_rounds: 1
+      output:
+        schema:
+          approved_findings:
+            - finding_id: int
+              decision: "APPROVED | REJECTED"
+              confidence: float     # 0.0 - 1.0
+          summary:
+            final_verdict: "FIX | PASS"
+            approved_count: int
+            rejected_count: int
+        max_tokens: 400
+      hard_constraints:
+        - "NO code modification"
+        - "structured output only"
+        - "evaluate technical merit only; ignore style"
+
+    step_4_diff_writer:
+      model: qwen2.5-coder-7b
+      pod: B (:8081, swapped back from Selene)
+      pre_action: "completed by step_3 post_action (swap_llm_mode.sh qwen-7b)"
+      post_action: "systemctl --user stop container-devforge-qwen  (R1 no longer needed)"
+      input:
+        - original_code: str
+        - approved_findings: "step_3 approved_findings list"
+      output:
+        format: unified_diff
+        schema: "standard unified diff (--- original / +++ modified / @@ hunks)"
+        max_tokens: 600
+      hard_constraints:
+        - "unified diff format ONLY"
+        - "touch ONLY lines referenced in approved_findings"
+        - "NO style changes"
+        - "NO refactoring beyond approved scope"
+        - "if approved_findings is empty: output empty string"
+      fallback:
+        condition: "diff fails patch --dry-run"
+        action: "swap_llm_mode.sh verify → 32B re-generates diff → swap back to qwen-7b"
+
+  # ── System Prompts ──
+
+  system_prompts:
+    reviewer: |
+      You are a code security and correctness auditor. Your ONLY job is to find
+      bugs, security vulnerabilities, and unhandled edge cases in the code provided.
+
+      RULES:
+      1. Output a numbered list of findings ONLY.
+      2. Each finding must include: finding_id, severity (CRITICAL/HIGH/MEDIUM/LOW),
+         location (line number or function name), description, category.
+      3. Do NOT rewrite or modify any code.
+      4. Do NOT suggest style improvements.
+      5. Do NOT explain what the code does correctly.
+      6. If you find no issues, output: {"findings": []}
+      7. Be specific: vague findings are useless.
+
+    reflector: |
+      You are a senior code reviewer defending the original developer's intent.
+      You will receive a bug report from an automated scanner.
+
+      RULES:
+      1. For each finding_id in the bug report, output exactly one verdict: ACCEPT or REJECT.
+      2. ACCEPT means: the finding is valid and should be fixed.
+      3. REJECT means: the finding is wrong, a false positive, or conflicts with the
+         original design intent. Explain WHY in 50 words or fewer.
+      4. You MAY add an improvement_note if you see a better approach (optional).
+      5. Do NOT rewrite the full code.
+      6. Any code suggestion must be in unified diff format ONLY.
+      7. Keep responses concise. max_tokens budget is strict.
+
+    judge: |
+      You are an impartial technical judge. You will receive:
+      - The original code
+      - A bug report (from Reviewer)
+      - A set of verdicts (from Reflector: ACCEPT or REJECT per finding)
+
+      RULES:
+      1. For each finding where Reviewer and Reflector AGREE: ratify their decision.
+      2. For each finding where they DISAGREE (one ACCEPT, one REJECT):
+         evaluate the technical merit of both arguments and cast the deciding vote.
+      3. Base decisions on: correctness, security, runtime behavior only.
+      4. Ignore: style preferences, formatting, naming conventions.
+      5. Output a structured decision per finding_id.
+      6. Do NOT modify any code.
+      7. Do NOT add new findings not present in the original bug report.
+
+    diff_writer: |
+      You are a precise code patch writer. You will receive the original code and
+      a list of approved findings that MUST be fixed.
+
+      RULES:
+      1. Output ONLY a valid unified diff (--- original, +++ modified, @@ hunks).
+      2. Fix ONLY the lines referenced in the approved findings list.
+      3. Do NOT change any code outside the approved scope.
+      4. Do NOT change variable names, formatting, or style.
+      5. Do NOT add comments unless the fix requires one for clarity.
+      6. If the approved findings list is empty, output an empty string.
+      7. The diff must apply cleanly with: patch -p1 < output.diff
+
+  model_swap_sequence:
+    description: "Review pipeline swap sequence (Pod B :8081 only; Pod A R1 stays resident Steps 1-3)"
+    sequence:
+      - step: 1
+        pod_b_model: qwen-7b (resident)
+        pod_a_model: r1-8b (loaded at night entry, unloaded after Step 3)
+      - step: 2
+        pod_b_model: qwen-7b (no swap needed)
+      - step: 3
+        pod_b_model: swap qwen-7b → selene-mini-8b → qwen-7b
+        pod_a_model: r1-8b (still resident)
+      - step: 4
+        pod_b_model: qwen-7b (post-swap from Step 3)
+        pod_a_model: "stop container-devforge-qwen (R1 no longer needed)"
+    total_swaps: 2               # Qwen→Selene + Selene→Qwen
+    swap_latency_estimate_s: 30  # 2 swaps × 15s each
+    gguf_io_gb: 9.3              # Selene(4.6) × 2 reads + Qwen(4.7) × 0 reloads (resident)
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 4: SCRIPTS & TOOLS INVENTORY
+# ════════════════════════════════════════════════════════════════════════════
+
+scripts:
+  code_generation:
+    code_mod_pipeline:
+      file: scripts/code_mod_pipeline.py
+      lines: ~1400
+      role: "4-stage code modification pipeline (ANALYZE → PLAN → IMPL → PACKAGE)"
+      model: qwen3-30b-a3b (Pod B :8080, day)
+      features:
+        - "BM25 pre-slice for oversized files (>7500 tokens)"
+        - "Feedback injection from previous failed attempts"
+        - "Self-calibrating rate estimator for timeout calculation"
+        - "KV cache reuse across stages"
+        - "Slack notifications per stage"
+      input: { task_id: int, task_description: str, file_path: str, feedback: "str (optional)" }
+      output: { diff: str, confidence: float, review_url: str, stages: dict }
+      issues:
+        - "Stage 1 token estimator uses full code (not sliced) → overestimates timeout"
+        - "Stage 2+ BM25 max_tokens fixed at 5000 (was 7000; reduced for analysis JSON overhead)"
+
+  debate_system:
+    debate:
+      file: scripts/debate.py
+      lines: 85
+      role: "CLI entry point for multi-agent debate"
+      modes: { debate, review, cooperative }
+
+    local_debate:
+      file: scripts/local_debate.py
+      lines: ~800
+      classes:
+        LocalDebate: { rounds: 4, flow: "DRAG → DART×4 → Synthesis", models: [qwen3-30b-a3b, qwen2.5-coder-3b] }
+        LocalDebateReview: { rounds: 1, flow: "DRAG → Review → Synthesis", models: [qwen3-30b-a3b, qwen-14b] }
+
+    cooperative_debate:
+      file: scripts/cooperative_debate.py
+      lines: 225
+      role: "Azure spot VM multi-agent debate"
+      fix_loop_max_iterations: 3  # unified with local: was 5, reduced for ARM 4-core nightly time budget
+      model_assignment:
+        drag_model: qwen3-30b-a3b (Pod B :8080, day)  # was: deepseek-v2-lite — removed v3.0.1
+        proposer: qwen3-30b-a3b (azure, :8084)
+        refuter: nemotron3-nano-30b (azure, :8083)
+        judge: gemma-4-26b (azure, :8085)
+        synthesizer: "nightly review pipeline (R1+Qwen7B+Selene)  # was: deepseek-v2-lite — removed v3.0.1"
+
+  review_system:
+    review_worker:
+      file: scripts/review_worker.py
+      lines: ~650
+      role: "4-phase incremental fact review (legacy — being replaced by 3-model pipeline)"
+      note: "Retained for fact extraction; code review function superseded by review_pipeline_3model.py"
+
+    review_consumer:
+      file: scripts/review_consumer.py
+      lines: ~200
+      role: "32B final verification (legacy — replaced by observer Phase 1 deterministic + Phase 2 LLM)"
+      note: "Retained as fallback for borderline confidence items"
+
+  worklog_system:
+    turn_watcher: { file: scripts/turn_watcher.py, lines: ~330, service: devforge-turn-watcher.service }
+    worklog_generator: { file: scripts/worklog_generator.py, lines: ~500, model: qwen3-30b-a3b (Pod B :8080, day) }  # was: deepseek-v2-lite
+    link_turns: { file: scripts/link_turns.py, lines: ~270, trigger: "nightly Phase 1" }
+    collect_turns: { file: scripts/collect_turns.py, lines: ~200, trigger: "nightly Phase 2" }
+
+  infrastructure:
+    tr:
+      file: scripts/tr
+      lines: ~200
+      role: "DevForge mode switcher CLI"
+      commands:
+        debate: "Pod A operator+3B :8080/:8082 + Pod B 30B :8080"
+        review: "Pod A 30B :8080 + Pod B 14B :8081  (legacy, for cooperative result review)"
+        cooperative: "review mode + Azure spot VM debate"
+        verify: "Pod A stopped, Pod B 32B :8081"
+        auto: "run auto_mode.sh then restore debate"
+      pending_additions: [r1-8b, qwen-7b, selene]
+
+    swap_llm_mode:
+      file: scripts/swap_llm_mode.sh
+      lines: ~150
+      role: "low-level mode switcher (called by tr and nightly_batch)"
+      modes: [debate, review, verify]
+      pending_additions: [r1-8b, qwen-7b, selene]
+
+    nightly_batch:
+      file: scripts/nightly_batch.sh
+      lines: ~240
+      role: "nightly pipeline orchestrator (KST 03:00 / UTC 18:00)"
+      phases:
+        - "Phase 1: link_turns (link commits to turns)"
+        - "Phase 2: collect_turns (catch missed sessions)"
+        - "Phase 3: state_collector (MOTD + state.yaml)"
+        - "Phase 4: auto_mode (user tasks via Claude Code)"
+        - "Phase 4.5: worklog_generator (reconcile worklog entries)"
+        - "Phase 5: Day→Night bundle transition (stop both pods, start review bundle)"
+        - "Phase 5.1: review_pipeline_3model.py (R1→Qwen→Selene→Qwen diff)"
+        - "Phase 5.2: agent_observer.py (deterministic gate + patch --dry-run)"
+        - "Phase 5.3: fix loop (max 3 iterations, minor→aider, structural→pipeline re-run)"
+        - "Phase 6: verify mode (32B final gate for borderline items, Pod A stopped)"
+        - "Phase 7: Night→Day bundle transition (restore debate mode)"
+        - "Phase 8: embed_turns (Gemini API)"
+      day_night_transition_added: true  # NEW in v3.0: Phase 5 bundle stop/start
+      operator_handling: "killed with Pod A restart (bundle transition), no manual kill needed"
+
+    auto_mode:
+      file: scripts/auto_mode.sh
+      lines: 270
+      role: "unattended task execution via Claude Code"
+
+  azure:
+    azure_spot: { file: scripts/azure_spot.py, lines: 760 }
+    cooperative_remote: { file: scripts/cooperative_remote.py, lines: 108 }
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 5: CURRENT WORKFLOW (AS-IS, Day/Night Bundle)
+# ════════════════════════════════════════════════════════════════════════════
+
+current_workflow:
+  daytime:
+    description: "Interactive coding sessions (Claude Code, Aider, Copilot)"
+    bundle:
+      pod_a:
+        port_8080: "operator 1.7B (dispatch classifier, ~1.5GB cgroup)"
+        port_8082: "Qwen 3B (debate refuter + aider, ~2.5GB cgroup)"
+        combined_cgroup: ~4GB
+      pod_b:
+        port_8080: "Qwen3-Coder-30B-A3B (code gen, debate Proposer+Judge+DRAG, ~12.44GB cgroup)"
+        combined_cgroup: ~12.44GB
+      total_cgroup: ~16.5GB / 22GB (5.5GB headroom)
+    data_capture:
+      - "turn_watcher: real-time JSONL → PostgreSQL activity_log"
+      - "git commits: auto-committed by auto_commit_guard"
+      - "worklog: auto-generated from agent sessions"
+    mode_switching:
+      tool: "tr"
+      persistence: "/opt/ai_data/scripts/current-mode.env"
+      note: "current-mode.env is read by BOTH entrypoints. Modes apply per-pod."
+
+  nightly:
+    description: "Batch pipeline (KST 03:00, via systemd timer devforge-nightly)"
+    bundle_transition:
+      entry:
+        - "systemctl stop container-devforge-qwen container-devforge-swap"
+        - "Set modes: Pod A→r1-8b, Pod B→qwen7b"
+        - "systemctl start container-devforge-qwen container-devforge-swap"
+        - "Health check both before proceeding"
+      exit:
+        - "systemctl stop container-devforge-qwen container-devforge-swap"
+        - "Set modes: Pod A→debate, Pod B→debate"
+        - "systemctl start container-devforge-swap (30B takes longer)"
+        - "sleep 30; systemctl start container-devforge-qwen (operator+3B quick)"
+        - "Health check both before ending nightly"
+    flow:
+      - "Phase 1-4: link_turns → collect_turns → state snapshot → auto_mode (light, no model change)"
+      - "Phase 5: Bundle transition + 3-model review pipeline"
+      - "Phase 6: 32B verify (Pod A stopped)"
+      - "Phase 7: Bundle transition back → debate mode restored"
+      - "Phase 8: embed_turns"
+    status: "/opt/projects/server/data/nightly_status.yaml"
+
+  cooperative_flow:
+    description: "Azure spot VM multi-agent debate (on-demand, daytime)"
+    trigger: "python3 scripts/debate.py --mode cooperative --reuse-vms -q '...'"
+    note: "Uses daytime bundle (Pod B 30B for DRAG+Synthesis)"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 6: PROPOSED ARCHITECTURE (SUPERVISOR-WORKER-OBSERVER)
+# ════════════════════════════════════════════════════════════════════════════
+
+proposed_architecture:
+  overview:
+    principle: "Lightweight dispatch by day (operator), thorough agent loop by night"
+    code_changes: "~650 new lines across 4 files, ~94 lines added to 5 existing files"
+
+  daytime_dispatch:
+    operator:
+      file: scripts/agent_operator.py (NEW, ~100 lines)
+      model: Qwen3-1.7B (Pod A :8080, resident)
+      function: "classify task → local | cooperative | general"
+      modes:
+        local: { description: "Simple code gen, small fixes, Q&A", workers: [code_mod_pipeline, aider, debate] }
+        cooperative: { description: "Complex architecture, high-quality needed", workers: [cooperative_debate (Azure)] }
+        general: { description: "Quick Q&A", workers: [any lightweight model] }
+
+  nightly_agent_loop:
+    trigger: "nightly_batch.sh Phase 5"
+
+    phase_0_collect:
+      file: scripts/agent_collector.py (NEW, ~100 lines)
+      sources: [pipeline outputs, cooperative results, extractor facts, aider edits, git diffs]
+      output: unified_review_queue
+
+    phase_1_review:
+      description: "3-Model Review Pipeline"
+      file: scripts/review_pipeline_3model.py (NEW, ~400 lines)
+      reference: "Section 3: review_pipeline_3model for full specification"
+
+    phase_2_verify:
+      file: scripts/agent_observer.py (NEW, ~150 lines)
+      checks:
+        phase1_deterministic:
+          - "ast.parse() — Python syntax validation"
+          - "patch --dry-run — diff applies cleanly to original code (NEW in v3.0)"
+          - "diff header validity — ---/+++ must exist"
+          - "empty output guard — diff not blank"
+          - "confidence >= 0.80"
+        phase2_llm:
+          trigger: "confidence 0.65-0.80 (borderline only)"
+          model: "32B verify mode (:8081, Pod A stopped)  # was: 14B — I08 corrected in v2.1"
+          fallback: "confidence-only rule if 32B unavailable"
+
+    phase_3_fix_loop:
+      file: scripts/agent_loop.py (NEW, ~300 lines)
+      max_iterations: 3           # unified: cooperative + local both use 3
+      abort_conditions:
+        - "2 consecutive failures → ABORT with best result"
+        - "3 total iterations → ABORT"
+      pass_condition: "observer Phase 1 all pass + confidence >= 0.80"
+      fix_strategies:
+        minor_issues: "aider subprocess (3B, Pod A :8082) — surgical fixes"
+        structural_issues: "pipeline re-run with enriched error feedback (30B, Pod B :8080)"
+
+    phase_4_final:
+      actions:
+        - "PASSED → git commit + worklog DB update"
+        - "ABORTED → human_review_queue (Slack notification)"
+        - "worklog_metrics.jsonl update"
+
+  memory_budget:
+    daytime_bundle:
+      pod_a_cgroup: 4.0           # operator(1.5) + 3B(2.5)
+      pod_b_cgroup: 12.44         # 30B measured
+      total: 16.44
+      headroom: 5.56
+    nightly_review:
+      pod_a_cgroup: 7.5           # R1-0528-8B
+      pod_b_cgroup: 7.0           # Qwen7B (or Selene during swap)
+      total: 14.5
+      headroom: 7.5
+    nightly_verify:
+      pod_a_cgroup: 0.0           # stopped
+      pod_b_cgroup: 18.5          # 32B
+      total: 18.5
+      headroom: 3.5
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 7: IMPLEMENTATION PLAN
+# ════════════════════════════════════════════════════════════════════════════
+
+implementation:
+  new_files:
+    - file: scripts/review_pipeline_3model.py
+      lines: ~400
+      functions:
+        - strip_think_blocks(text) → str
+        - run_deep_review(code, task) → bug_report       # Pod A :8080 (R1)
+        - run_reflection(code, bug_report) → verdicts    # Pod B :8081 (Qwen7B)
+        - run_judgment(code, bug_report, verdicts) → approved  # Pod B :8081 (Selene swap)
+        - run_diff(code, approved) → unified_diff        # Pod B :8081 (Qwen7B)
+        - run_full_review(code, task) → {diff, confidence, report}
+      test: "python3 scripts/review_pipeline_3model.py --smoke"
+
+    - file: scripts/agent_collector.py
+      lines: ~100
+      functions: [collect_today_work, _scan_pipeline_outputs, _scan_cooperative_results, _scan_git_diffs, _scan_extracted_facts]
+
+    - file: scripts/agent_observer.py
+      lines: ~150
+      functions: [observe, _check_syntax, _check_diff_applies, _check_diff_headers, _check_empty, _llm_quality_gate]
+      new_in_v3: "patch --dry-run check added as mandatory Phase 1 gate"
+
+    - file: scripts/agent_operator.py
+      lines: ~100
+      functions: [dispatch_mode, _classify]
+      reuses: test_operator.py SYSTEM_PROMPT
+
+    - file: scripts/agent_loop.py
+      lines: ~300
+      max_iterations: 3
+      state_machine: "COLLECT → REVIEW → VERIFY → (FIX → VERIFY)×3 → PASS | ABORT"
+
+  modified_files:
+    - file: qwen-entrypoint.sh
+      change: "Add dual-server support + r1-8b mode"
+      lines: ~30
+    - file: dual-server-entrypoint.sh
+      change: "Add qwen7b mode; remove 14B from review path; add 30B to debate mode"
+      lines: ~25
+    - file: container-devforge-qwen.container
+      change: "Add PublishPort=127.0.0.1:8082:8082"
+      lines: ~1
+    - file: nightly_batch.sh
+      change: "Phase 5-7: Day/Night bundle transition + 3-model pipeline + observer + fix loop"
+      lines: ~40
+    - file: swap_llm_mode.sh
+      change: "Add r1-8b, qwen-7b, selene modes"
+      lines: ~15
+    - file: tr
+      change: "Add r1-8b, qwen-7b, selene aliases"
+      lines: ~10
+
+  deployment_order:
+    - "0. Models already downloaded: R1-0528-8B(4.9GB), Qwen2.5-Coder-7B(4.7GB), Selene Mini(4.6GB), Qwen3-1.7B(1.1GB)"
+    - "1. swap_llm_mode.sh + tr: add r1-8b, qwen-7b, selene modes"
+    - "2. qwen-entrypoint.sh: add r1-8b mode (dual-server pattern)"
+    - "3. dual-server-entrypoint.sh: add qwen7b mode"
+    - "4. container-devforge-qwen.container: add :8082 port"
+    - "5. review_pipeline_3model.py: smoke test each step individually"
+    - "6. agent_collector.py: dry-run"
+    - "7. agent_observer.py: unit test with known-good/known-bad diffs"
+    - "8. agent_loop.py: integrate all"
+    - "9. nightly_batch.sh: Phase 5-7 replacement"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 8: DESIGN RATIONALE
+# ════════════════════════════════════════════════════════════════════════════
+
+design_rationale:
+
+  why_day_night_bundle:
+    reason: >
+      Pod A(30B, 12.44GB cgroup) + Pod B(R1 8B, 7.5GB cgroup) = 19.94GB — only 2GB headroom.
+      KV cache spikes, thread memory, or buff/cache fluctuation could trigger OOM.
+      Day/Night bundle eliminates this risk: Pod A runs R1 (7.5GB) while Pod B runs Qwen7B (7GB)
+      = 14.5GB total, 7.5GB headroom. Both pods restart as a unit — symmetric, clean.
+    tradeoff: "Both pods restart for review transition (~90s). Daytime debate availability lost during nightly."
+
+  why_qwen7b_diff_writer_not_30b:
+    reason: >
+      Step 4 diff writing is a constrained format-translation task: convert
+      approved_findings list → unified diff. No creative code generation needed.
+      Qwen7B handles this at lower resource cost. 30B remains on Pod B :8080
+      for daytime code generation where its power is actually needed.
+    fallback: "If diff fails patch --dry-run, swap to 32B verify mode for re-generation."
+
+  why_selene_swap_not_resident:
+    reason: >
+      Selene is used once per pipeline run (Step 3 judgment). Keeping it resident
+      alongside Qwen7B on Pod B would mean two 7GB models simultaneously
+      = 14GB on one pod — too tight for 22GB system. Swap-in/out adds 30s overhead
+      but keeps headroom safe.
+
+  why_r1_as_reviewer:
+    reason: >
+      R1-0528-8B uses reinforcement-learning chain-of-thought distillation.
+      <think> mode produces explicit reasoning traces — thorough and adversarial.
+      Unlike generation-trained models, R1 is optimised to FIND problems, not
+      produce clean output. Ideal for Step 1's maximum bug recall goal.
+    tradeoff: "Higher false positive rate; mitigated by Reflector (Qwen) and Judge (Selene)."
+
+  why_qwen_as_reflector_not_reviewer:
+    reason: >
+      Qwen's style-override bias is a FEATURE when channelled as design-intent defender.
+      It reflexively REJECTs findings that conflict with standard coding patterns.
+    mitigation: "max_tokens: 400 + diff-format cage prevents full rewrites."
+
+  why_selene_as_judge:
+    reason: "Atla Selene-Mini-8B is trained on LLM-as-Judge tasks with human preference data. Objective function = evaluation accuracy, not code generation."
+    limitation: "Selene should NOT write code; it is a judge, not a fixer."
+
+  why_fix_loop_3_not_5:
+    reason: "ARM 4-core, each iteration = Qwen7B diff + observer check + possible aider fix. 5 iterations risks morning deadline (KST 09:00). 3 iterations with 2-consecutive-failure abort is more practical."
+    unified: "Cooperative debate and local fix loop both use 3 — reduces cognitive overhead."
+
+  why_not_crewai:
+    - "Python 3.9 incompatibility"
+    - "~300MB additional dependencies"
+    - "Existing code already implements CrewAI's pattern"
+
+  why_not_langchain:
+    - "AgentExecutor loop heavier than our state machine"
+    - "Output parsers less robust than existing recovery ladder"
+
+  why_custom_thin_layer:
+    - "Existing code is already 80% of an agent system"
+    - "~650 lines new code vs ~3000+ for framework adaptation"
+    - "Full control over model selection, memory management, prompt injection"
+
+  key_decisions:
+    deterministic_first:
+      decision: "Observer Phase 1 (ast.parse + patch --dry-run + diff headers + empty guard) runs before any LLM quality gate"
+      reason: "90% of issues caught at zero LLM cost"
+    patch_dry_run_mandatory:
+      decision: "patch --dry-run added as mandatory Phase 1 check (NEW in v3.0)"
+      reason: "LLM-generated diffs can be syntactically valid but inapplicable due to wrong line numbers or context mismatch. Git apply --check / patch --dry-run is the only reliable gate."
+    diff_format_cage:
+      decision: "Restrict Qwen7B output to unified diff format only"
+      reason: "Prevents style rewriting; makes patch application deterministic"
+    bundle_transition:
+      decision: "Both pods restart together for Day/Night transition"
+      reason: "Symmetric, clean, both pods go through same lifecycle. No partial-state edge cases."
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 9: VERIFICATION & TESTING
+# ════════════════════════════════════════════════════════════════════════════
+
+verification:
+  unit_tests:
+    review_pipeline:
+      - "strip_think_blocks(): <think>...</think> removed; other text preserved"
+      - "run_deep_review(): valid code → bug_report with finding_id, severity, location"
+      - "run_reflection(): bug_report → ACCEPT/REJECT per finding"
+      - "run_judgment(): 2:0 → ratify; 1:1 → deciding vote"
+      - "run_diff(): approved findings → valid unified diff"
+    observer:
+      - "SyntaxError diff → pass=False, category=syntax"
+      - "Valid diff + confidence=0.85 → pass=True"
+      - "patch --dry-run failure → pass=False, category=patch_apply_failed (NEW v3.0)"
+      - "Empty diff → pass=False, category=empty_output"
+    collector:
+      - "collect_today_work() returns non-empty list after a day with activity"
+    operator:
+      - "8-question smoke test accuracy >= 85%"
+    loop:
+      - "All pass: COLLECT → REVIEW → VERIFY → PASS"
+      - "1 fix: COLLECT → REVIEW → VERIFY → FIX → VERIFY → PASS"
+      - "3 consecutive failures → ABORT with best_result"
+      - "3 total iterations → ABORT"
+
+  integration_tests:
+    - "E2E dry-run: all phases execute without LLM (mock results)"
+    - "E2E live: 1 real task through full loop → PASS in 1 iteration"
+    - "Memory: free -h before/after each phase"
+    - "Bundle transition: health check both pods before/after"
+    - "Slack: ABORT items generate human_review_queue alert"
+
+  regression_tests:
+    - "code_mod_pipeline.py: T01-T09 tasks produce correct output"
+    - "debate.py: existing debate/review/cooperative modes still work"
+    - "nightly_batch.sh: Phase 1-4, 8 unchanged"
+    - "tr: mode switching works (debate ↔ r1-8b ↔ qwen-7b ↔ selene ↔ verify)"
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 10: OPEN QUESTIONS & RISKS
+# ════════════════════════════════════════════════════════════════════════════
+
+open_questions:
+  - id: Q01
+    question: "Qwen3-1.7B vs Llama-3.2-3B for operator — which one?"
+    status: "models downloaded; test_operator.py ready; evaluation pending"
+
+  - id: Q02
+    question: "Should operator run during cooperative debate (daytime)?"
+    status: "Yes — Pod A operator+3B unaffected by cooperative debate (uses Azure VMs + Pod B 30B)"
+    note: "Operator is always available during daytime bundle."
+
+  - id: Q03
+    question: "Qwen7B diff writer quality — verified yet?"
+    status: "NOT VERIFIED — smoke test with sample code required before production deployment"
+    fallback: "If Qwen7B diff quality insufficient, use 32B verify mode for diff generation"
+
+  - id: Q04
+    question: "Bundle transition failure recovery?"
+    status: "If Pod A fails to start r1-8b mode → abort nightly review, keep debate mode"
+    note: "nightly_batch.sh must check health after each pod start; fail fast on timeout"
+
+risks:
+  - id: R01
+    risk: "Bundle transition failure (Pod A or Pod B fails to start in night mode)"
+    mitigation: "Health check after each start; abort and restore debate mode on failure"
+    severity: medium
+
+  - id: R02
+    risk: "Qwen7B diff fails patch --dry-run"
+    mitigation: "Observer catches it; fallback to 32B verify mode for diff re-generation"
+    severity: low
+
+  - id: R03
+    risk: "Agent loop feedback poisoning"
+    description: "Accumulated error feedback might mislead subsequent attempts"
+    mitigation: "Observer Phase 1 deterministic checks act as ground-truth anchor"
+    severity: medium
+
+  - id: R04
+    risk: "Nightly pipeline time creep"
+    description: "Fix loop extends beyond morning deadline (KST 09:00)"
+    mitigation: "max_iterations:3, 2-consecutive-failure abort. Worst case ~1.5h for full pipeline"
+    severity: medium
+
+  - id: R05
+    risk: "Systemd v252 bundle restart race"
+    description: "Unit file regeneration during service run → 'Current command vanished' → no auto-restart"
+    mitigation: "nightly_batch.sh must verify pod health explicitly; retry with direct podman commands if systemd fails"
+    severity: medium
+
+  - id: R06
+    risk: "KV cache amnesia across pod restarts"
+    description: "Day→Night bundle transition flushes all KV caches. Prompt re-evaluation cost is real."
+    mitigation: "Context budget already accounts for per-step full prompt evaluation. Step latencies include full eval time."
+    severity: low
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECTION 11: VALIDATION LOG
+# ════════════════════════════════════════════════════════════════════════════
+
+validation_log:
+  version_history:
+    - version: v1.0
+      date: 2026-05-29
+      description: "Initial architecture document for external LLM review"
+    - version: v2.1
+      date: 2026-05-29
+      description: "I01-I08 corrections applied from peer review"
+      corrections:
+        I01: "Duplicate SECTION 9 fixed"
+        I02: "Memory budget OS double-counting fixed; pod_a 7.5→9GB"
+        I03: "physical_ram_gb(24) split from available_ram_gb(22)"
+        I04: "AIME 86.0 labelled as full 671B, not 8B distill"
+        I05: "Qwen7B + Selene ctx: 4096→8192"
+        I06: "max_memory_per_model_gb:6.5 documented"
+        I07: "32B verify prerequisite block added"
+        I08: "Observer phase2_llm model: 14B→selene-mini-8b"
+    - version: v3.0
+      date: 2026-05-29
+      description: "Day/Night Bundle restructure + architecture peer review resolution"
+      decisions:
+        D01:
+          title: "Day/Night Bundle Architecture"
+          rationale: >
+            Pod A 30B(12.44GB cgroup) + Pod B R1(7.5GB) = 19.94GB — only 2GB headroom.
+            Separated into Day bundle (Pod A: operator+3B, Pod B: 30B) and Night bundle
+            (Pod A: R1, Pod B: Qwen7B+Selene swap). Pod A lightweight in both modes.
+            Night peak: Pod A(7.5) + Pod B(7.0) = 14.5GB — 7.5GB headroom.
+          files_affected: [qwen-entrypoint.sh, dual-server-entrypoint.sh, container-devforge-qwen.container,
+                           nightly_batch.sh, swap_llm_mode.sh, tr]
+        D02:
+          title: "3-Model Pipeline Pod Assignment Changed"
+          rationale: >
+            Step 1(R1)→Pod A, Step 2(Qwen7B)→Pod B, Step 3(Selene)→Pod B swap,
+            Step 4(Qwen7B)→Pod B. Diff writer from 30B→Qwen7B: constrained task,
+            not creative generation. 7B sufficient.
+        D03:
+          title: "Fix Loop 5→3 Unified"
+          rationale: "ARM 4-core nightly time budget. Cooperative + local both 3 iterations."
+        D04:
+          title: "14B Removed from Review Pipeline"
+          rationale: "Replaced by Qwen7B as resident reflector+diff writer. 14B retained for legacy review only."
+        D05:
+          title: "Observer patch --dry-run Added"
+          rationale: "Mandatory Phase 1 gate. LLM diffs can be syntactically valid but inapplicable."
+        D06:
+          title: "DeepSeek-V2-Lite Removed Entirely (v3.0.1)"
+          rationale: >
+            Cooperative debate synthesis moved to nightly review pipeline (R1+Qwen7B+Selene).
+            DRAG analysis moved to 30B (Pod B day). DeepSeek-V2-Lite no longer needed for
+            any role. 9.7GB disk reclaimed.
+      peer_review_resolution:
+        critique_1_pod_a_memory:
+          verdict: REJECT
+          reason: "Reviewer confused file size(14GB) with mmap RSS(~9GB). cgroup measured 12.44GB."
+        critique_2_14b_remnants:
+          verdict: REJECT
+          reason: "AS-IS/TO-BE confusion. 14B exists today and works. Being phased out per plan."
+        critique_3_fix_loop_inconsistency:
+          verdict: ACCEPTED
+          action: "5→3 unified across cooperative + local (D03)"
+        critique_4_io_thrashing:
+          verdict: PARTIALLY_ACCEPTED
+          reason: "Valid concern but reviewer miscalculated swap count (4→2 actual). Bundle architecture reduces I/O."
+        critique_5_kv_cache_amnesia:
+          verdict: PARTIALLY_ACCEPTED
+          reason: "Valid observation but architecture already accounts via context budget + TimingsBasedRateEstimator."
+        critique_6_patch_dry_run:
+          verdict: ACCEPTED
+          action: "Added as mandatory Phase 1 observer check (D05)"
+        critique_7_cpu_contention:
+          verdict: REJECT
+          reason: "Pipeline is sequential. Pod A and Pod B never generate simultaneously during review."

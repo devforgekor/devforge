@@ -1,0 +1,116 @@
+{
+  "evaluation_type": "experimental_verify",
+  "role": "verify_32b_experimental",
+  "model": "Qwen2.5-Coder-32B-Instruct (Claude plays role)",
+  "timestamp": "2026-06-03T16:10:00+09:00",
+  "pipeline": "extract_data_handoff_verify",
+  "independent_from": ["eval_python_verify.json", "eval_30b_verify.json", "eval_prj_extract_handoff.json", "eval_verify_27b_round1.json"],
+
+  "verification_result": {
+    "final_verdict": "approved_with_conditions",
+    "action": "commit",
+    "confidence": 70,
+    "summary": "Structural findings are correct but the evaluation scope is too narrow. Focused only on existing data flow without testing the complete pipeline (36B → 30B → P-R-J → 27B → 32B). Missing: real extract output quality measurement, actual downstream verify costs, and comparison of different P-R-J model assignments."
+  },
+
+  "reasoning": "The 27B verify correctly identified the 7 structural issues and downgraded F03 severity appropriately. The operational impact assessment adds value. However, this evaluation is analyzing a pipeline that has only processed 4 turns — statistically insignificant. Key gaps: (1) No measurement of 3B retry cost — how many tokens are wasted on 3B double-failure before 30B fallback? (2) No measurement of how often the 30B fallback produces useful vs useless output. (3) No cost model comparison between '3B→30B fallback' and 'direct 30B extract' for long turns. (4) The evaluation doesn't test the P-R-J pipeline on extract results — it only analyzes data structures, not the review pipeline's ability to judge extract quality. Recommend a second round with: (a) larger sample (50+ turns), (b) direct 27B verify call via :8081, (c) cost token accounting for the 3B retry chain.",
+
+  "verification_items": [
+    {
+      "check": "Structural findings completeness (27B: 7 items, 1 rejected)",
+      "result": "pass",
+      "detail": "6/7 genuine issues identified. F07 rejection is sound. However, 2 missing findings (see disagreements)."
+    },
+    {
+      "check": "Data source verification — actual extract data reviewed",
+      "result": "pass",
+      "detail": "4 extract_results from activity_log inspected. Original turn content cross-checked against MCP fields."
+    },
+    {
+      "check": "Cost model and operational impact",
+      "result": "fail",
+      "detail": "No analysis of 3B retry cost (wasted tokens on double-failure). No analysis of whether 3B→30B fallback is cheaper than direct 30B extract."
+    },
+    {
+      "check": "Pipeline integration test coverage",
+      "result": "fail",
+      "detail": "No end-to-end test of extract → activity_log → review_consumer → 27B verify flow. Only structural DB/code inspection."
+    },
+    {
+      "check": "Model role assignment optimization",
+      "result": "fail",
+      "detail": "No comparison of different P-R-J model assignments. The review_pipeline_3model.py uses specific models but the evaluation assumes this assignment is optimal without testing alternatives."
+    }
+  ],
+
+  "disagreement_with_27b": [
+    {
+      "issue": "Cost model analysis",
+      "27b_verdict": "not checked",
+      "32b_verdict": "fail — required",
+      "detail": "The evaluation should include token accounting. Example: 3B double-failure at ~100 tokens/fact + 30B full rewrite = ~300 tokens wasted per fallback. At 4681 unprocessed turns with 50% fallback rate, that's ~702K wasted tokens."
+    },
+    {
+      "issue": "End-to-end integration test",
+      "27b_verdict": "not checked",
+      "32b_verdict": "fail — required",
+      "detail": "The pipeline has only processed 4 turns. To establish a valid baseline, we need to process at least 50+ turns end-to-end and measure: total processing time, total tokens, per-turn breakdown, 3B success rate, 30B fallback rate."
+    },
+    {
+      "issue": "P-R-J model assignment",
+      "27b_verdict": "not applicable",
+      "32b_verdict": "should be tested",
+      "detail": "Current assignment: P=R1-8B(:8083), R=Qwen7B(:8080), J=Selene(:8081). Alternative: P=Qwen3-4B(:8082), R=Qwen30B(:8080), J=Qwen7B(:8080). Or: all roles via single model with different prompts. These should be compared."
+    },
+    {
+      "issue": "Confidence calibration",
+      "27b_confidence": 82,
+      "32b_confidence": 70,
+      "detail": "32B is more conservative due to lack of empirical data. With only 4 processed turns, confidence cannot exceed 70."
+    }
+  ],
+
+  "cost_projection": {
+    "assumptions": {
+      "unprocessed_turns": 4681,
+      "3B_success_rate": "50% (from 4-turn sample)",
+      "30B_fallback_rate": "50%",
+      "3B_tokens_per_turn": "~200 prompt + ~100 gen",
+      "30B_tokens_per_turn": "~200 prompt + ~150 gen",
+      "3B_cost": "free (local llama.cpp)",
+      "30B_cost": "free (local llama.cpp)"
+    },
+    "token_usage_projection": {
+      "3B_2attempt_success": "2341 turns × (400+200) = 1.4M tokens (including retry waste)",
+      "3B_fail_then_30B": "2340 turns × (400+350) = 1.75M tokens",
+      "total_extract_tokens": "~3.15M tokens for 4681 turns",
+      "total_extract_time_3B": "2341 × 84ms/tok × 600tok ≈ 30 min",
+      "total_extract_time_30B": "2340 × 82ms/tok × 550tok ≈ 28 min",
+      "total_extract_time": "~58 min for full backlog"
+    },
+    "bottleneck": "30B fallback takes ~28 min for 2340 turns. 3B processes faster per turn but wastes tokens on retries."
+  },
+
+  "recommendations": [
+    {
+      "priority": "P0",
+      "action": "Run end-to-end pipeline on 50+ turns to collect actual metrics (not projections)",
+      "detail": "Call extract_pipeline.py --limit 50, measure: total_time, per-turn latency, 3B vs 30B tokens, fallback rate, faithfulness %."
+    },
+    {
+      "priority": "P1",
+      "action": "Add token accounting to extract_pipeline.py",
+      "detail": "Track prompt_tokens, completion_tokens per LLM call. Store in review_facts + activity_log body."
+    },
+    {
+      "priority": "P1",
+      "action": "Test alternative 3B→30B strategy for long turns",
+      "detail": "For T>500ch turns, skip 3B retry and go direct to 30B. Compare success rate and total tokens against current 3B double-attempt approach."
+    },
+    {
+      "priority": "P2",
+      "action": "Compare P-R-J model assignments",
+      "detail": "Run review_pipeline_3model.py with different assignments on same extract data. Measure: total tokens, review quality, time."
+    }
+  ]
+}

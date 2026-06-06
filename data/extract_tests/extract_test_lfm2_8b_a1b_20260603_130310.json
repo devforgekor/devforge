@@ -1,0 +1,645 @@
+{
+  "model": "LFM2-8B-A1B",
+  "timestamp": "2026-06-03T13:03:10.119427+00:00",
+  "turns_total": 15,
+  "turns_ok": 14,
+  "turns_error": 1,
+  "total_extractions": 74,
+  "total_faithful": 12,
+  "faithfulness_rate": 0.162,
+  "total_elapsed_seconds": 812.5,
+  "results": [
+    {
+      "turn_id": "1c9d6db4-12bf-4173-82a4-2e2fecae7514",
+      "label": "T=580 Th=1990 U=63",
+      "status": "ok",
+      "elapsed": 71.3,
+      "tokens_prompt": 1264,
+      "tokens_completion": 282,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user|requirement|decision",
+          "category": "decision",
+          "evidence_len": 59,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement|decision",
+          "category": "decision",
+          "evidence_len": 23,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement|decision",
+          "category": "requirement",
+          "evidence_len": 54,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement|decision",
+          "category": "requirement",
+          "evidence_len": 56,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement|decision",
+          "category": "requirement",
+          "evidence_len": 76,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "f94822dd-d363-4ec4-a436-3d9e90a4fdac",
+      "label": "T=808 Th=1794",
+      "status": "ok",
+      "elapsed": 67.7,
+      "tokens_prompt": 1171,
+      "tokens_completion": 291,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "requirement",
+          "category": "documentation reduction",
+          "evidence_len": 109,
+          "faithful": false
+        },
+        {
+          "fact_type": "requirement",
+          "category": "documentation reduction",
+          "evidence_len": 86,
+          "faithful": false
+        },
+        {
+          "fact_type": "requirement",
+          "category": "documentation reduction",
+          "evidence_len": 101,
+          "faithful": false
+        },
+        {
+          "fact_type": "explanation",
+          "category": "system design insight",
+          "evidence_len": 138,
+          "faithful": false
+        },
+        {
+          "fact_type": "decision",
+          "category": "documentation maintenance",
+          "evidence_len": 110,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "a0c1130d-361a-42c6-835a-698b7b5861fc",
+      "label": "T=419 Th=1767 U=278",
+      "status": "ok",
+      "elapsed": 68.0,
+      "tokens_prompt": 1200,
+      "tokens_completion": 278,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "subscription_id",
+          "evidence_len": 44,
+          "faithful": false
+        },
+        {
+          "fact_type": "user",
+          "category": "resource_group",
+          "evidence_len": 47,
+          "faithful": false
+        },
+        {
+          "fact_type": "user",
+          "category": "app_details",
+          "evidence_len": 75,
+          "faithful": false
+        },
+        {
+          "fact_type": "user",
+          "category": "credentials_source",
+          "evidence_len": 41,
+          "faithful": false
+        },
+        {
+          "fact_type": "user",
+          "category": "role_assignment",
+          "evidence_len": 65,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "192be626-3118-4e0d-a822-bc6bc87514bd",
+      "label": "T=348 Th=1068 U=68",
+      "status": "ok",
+      "elapsed": 56.6,
+      "tokens_prompt": 848,
+      "tokens_completion": 336,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user|requirement|explanation",
+          "category": "requirement",
+          "evidence_len": 37,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement|explanation",
+          "category": "requirement",
+          "evidence_len": 36,
+          "faithful": false
+        },
+        {
+          "fact_type": "system|schedule|timing",
+          "category": "explanation",
+          "evidence_len": 53,
+          "faithful": false
+        },
+        {
+          "fact_type": "system|batch_windows|review_schedule",
+          "category": "explanation",
+          "evidence_len": 57,
+          "faithful": false
+        },
+        {
+          "fact_type": "system|batch_windows|review_schedule",
+          "category": "explanation",
+          "evidence_len": 57,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "5fb1b5d3-244a-4d66-8838-dbcb85989733",
+      "label": "T=246 Th=383",
+      "status": "ok",
+      "elapsed": 40.5,
+      "tokens_prompt": 505,
+      "tokens_completion": 316,
+      "total": 5,
+      "faithful": 4,
+      "unfaithful": 1,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "requirement",
+          "evidence_len": 18,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 40,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "process",
+          "evidence_len": 124,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "cost_efficiency",
+          "evidence_len": 54,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "technical_constraint",
+          "evidence_len": 30,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "6dcc8b92-665a-4fd3-b4fd-449a29a4f04c",
+      "label": "T=758 Th=872",
+      "status": "ok",
+      "elapsed": 71.4,
+      "tokens_prompt": 885,
+      "tokens_completion": 515,
+      "total": 9,
+      "faithful": 2,
+      "unfaithful": 7,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "requirement",
+          "evidence_len": 13,
+          "faithful": true
+        },
+        {
+          "fact_type": "thinking",
+          "category": "explanation",
+          "evidence_len": 53,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "reasoning",
+          "evidence_len": 122,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "observation",
+          "evidence_len": 39,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "observation",
+          "evidence_len": 45,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "observation",
+          "evidence_len": 44,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "observation",
+          "evidence_len": 18,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "observation",
+          "evidence_len": 33,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "recommendation",
+          "evidence_len": 102,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "78f4bb68-b0e2-4d6a-ae63-77d83ce3c353",
+      "label": "T=322 Th=1798",
+      "status": "ok",
+      "elapsed": 64.7,
+      "tokens_prompt": 1118,
+      "tokens_completion": 282,
+      "total": 5,
+      "faithful": 1,
+      "unfaithful": 4,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "requirement",
+          "evidence_len": 13,
+          "faithful": true
+        },
+        {
+          "fact_type": "requirement",
+          "category": "requirement",
+          "evidence_len": 24,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 90,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 89,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 92,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "237ad900-146d-4819-8535-800851ba1615",
+      "label": "T=870 Th=242 U=66",
+      "status": "ok",
+      "elapsed": 60.8,
+      "tokens_prompt": 819,
+      "tokens_completion": 410,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user|requirement",
+          "category": "requirement",
+          "evidence_len": 65,
+          "faithful": false
+        },
+        {
+          "fact_type": "text|explanation",
+          "category": "explanation",
+          "evidence_len": 114,
+          "faithful": false
+        },
+        {
+          "fact_type": "text|tracking_status",
+          "category": "tracking_status",
+          "evidence_len": 67,
+          "faithful": false
+        },
+        {
+          "fact_type": "text|action",
+          "category": "action",
+          "evidence_len": 84,
+          "faithful": false
+        },
+        {
+          "fact_type": "text|update_rule",
+          "category": "update_rule",
+          "evidence_len": 124,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "a0487275-1295-4eb0-8993-af17fef00f3c",
+      "label": "T=616 Th=1545",
+      "status": "error",
+      "error": "json_parse"
+    },
+    {
+      "turn_id": "e290568a-43a7-448b-804a-0d38e1d0ac7b",
+      "label": "T=396 Th=195",
+      "status": "ok",
+      "elapsed": 42.0,
+      "tokens_prompt": 533,
+      "tokens_completion": 317,
+      "total": 5,
+      "faithful": 3,
+      "unfaithful": 2,
+      "details": [
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 56,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 69,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "error_risk",
+          "evidence_len": 33,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "tooling_limitation",
+          "evidence_len": 61,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "best_practice",
+          "evidence_len": 35,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "a2044da0-31f4-49fc-bb84-7b206e8b39e1",
+      "label": "T=427 Th=1002",
+      "status": "ok",
+      "elapsed": 66.1,
+      "tokens_prompt": 840,
+      "tokens_completion": 481,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "requirement",
+          "evidence_len": 69,
+          "faithful": false
+        },
+        {
+          "fact_type": "thinking",
+          "category": "reasoning",
+          "evidence_len": 181,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 117,
+          "faithful": false
+        },
+        {
+          "fact_type": "thinking",
+          "category": "explanation",
+          "evidence_len": 68,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "reasoning",
+          "evidence_len": 131,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "826f3463-3f12-43d4-97c7-a1807edc9b27",
+      "label": "T=647 Th=861",
+      "status": "ok",
+      "elapsed": 56.3,
+      "tokens_prompt": 866,
+      "tokens_completion": 331,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user|requirement",
+          "category": "requirement",
+          "evidence_len": 87,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|explanation",
+          "category": "explanation",
+          "evidence_len": 42,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|code",
+          "category": "code",
+          "evidence_len": 45,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|code",
+          "category": "code",
+          "evidence_len": 107,
+          "faithful": false
+        },
+        {
+          "fact_type": "system|status",
+          "category": "system",
+          "evidence_len": 42,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "fbd6a3af-3a05-45a6-a249-84b6d02c8fbb",
+      "label": "T=1650 Th=141",
+      "status": "ok",
+      "elapsed": 63.0,
+      "tokens_prompt": 996,
+      "tokens_completion": 343,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user|requirement",
+          "category": "implementation_status",
+          "evidence_len": 134,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement",
+          "category": "implementation_status",
+          "evidence_len": 76,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement",
+          "category": "implementation_status",
+          "evidence_len": 109,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement",
+          "category": "implementation_status",
+          "evidence_len": 72,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|requirement",
+          "category": "implementation_status",
+          "evidence_len": 57,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "60f1bd2d-8679-4605-8afb-869fcf635de9",
+      "label": "T=353",
+      "status": "ok",
+      "elapsed": 42.9,
+      "tokens_prompt": 435,
+      "tokens_completion": 401,
+      "total": 5,
+      "faithful": 2,
+      "unfaithful": 3,
+      "details": [
+        {
+          "fact_type": "user",
+          "category": "requirement",
+          "evidence_len": 29,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "code",
+          "evidence_len": 310,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "requirement",
+          "evidence_len": 29,
+          "faithful": true
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 37,
+          "faithful": false
+        },
+        {
+          "fact_type": "text",
+          "category": "explanation",
+          "evidence_len": 132,
+          "faithful": false
+        }
+      ]
+    },
+    {
+      "turn_id": "a6f13194-1356-40ce-b67c-23f3febc3ea0",
+      "label": "T=541",
+      "status": "ok",
+      "elapsed": 41.2,
+      "tokens_prompt": 552,
+      "tokens_completion": 307,
+      "total": 5,
+      "faithful": 0,
+      "unfaithful": 5,
+      "details": [
+        {
+          "fact_type": "user|requirement",
+          "category": "requirement",
+          "evidence_len": 35,
+          "faithful": false
+        },
+        {
+          "fact_type": "user|action",
+          "category": "decision",
+          "evidence_len": 32,
+          "faithful": false
+        },
+        {
+          "fact_type": "system|status",
+          "category": "requirement",
+          "evidence_len": 118,
+          "faithful": false
+        },
+        {
+          "fact_type": "system|status",
+          "category": "system",
+          "evidence_len": 83,
+          "faithful": false
+        },
+        {
+          "fact_type": "system|status",
+          "category": "system",
+          "evidence_len": 34,
+          "faithful": false
+        }
+      ]
+    }
+  ]
+}

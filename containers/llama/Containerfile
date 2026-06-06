@@ -1,0 +1,35 @@
+FROM docker.io/library/ubuntu:24.04 AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake git ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch b9222 https://github.com/ggml-org/llama.cpp /src
+
+WORKDIR /src
+RUN cmake -B build \
+    -DGGML_BLAS=OFF \
+    -DGGML_CUDA=OFF \
+    -DGGML_VULKAN=OFF \
+    -DGGML_METAL=OFF \
+    -DGGML_OPENCL=OFF \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF
+
+RUN cmake --build build --config Release -j4 --target llama-server
+
+FROM docker.io/library/ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libstdc++6 libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/build/bin/llama-server /usr/local/bin/
+
+RUN mkdir -p /models /cache && chmod 777 /cache
+
+EXPOSE 8080
+STOPSIGNAL SIGTERM
+
+ENTRYPOINT ["/usr/local/bin/llama-server"]
+CMD ["-m", "/models/current.gguf", "--host", "0.0.0.0", "--port", "8080", "--threads", "4", "--threads-batch", "4", "--ctx-size", "2048", "--flash-attn", "on", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0", "--cache-reuse", "256", "--slot-save-path", "/cache/", "--cache-ram", "2048", "--batch-size", "2048", "--ubatch-size", "512"]

@@ -1,0 +1,289 @@
+[2026-05-14T14:30:26Z] worklog 1 (): linked 1 turns
+[2026-05-14T14:30:26Z] worklog 2 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 3 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 4 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 5 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 6 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 7 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 12 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 13 (): no turns found in window
+[2026-05-14T14:30:27Z] worklog 14 (): no turns found in window
+[2026-05-14T14:30:28Z] worklog 15 (): no turns found in window
+[2026-05-14T14:30:28Z] worklog 21 (): no turns found in window
+[2026-05-14T14:30:28Z] Done: 1 turns linked across 12 worklog entries
+[2026-05-14T14:40:56Z] worklog 2 (): no turns found in window
+[2026-05-14T14:40:56Z] worklog 1 (): no turns found in window
+[2026-05-14T14:40:56Z] worklog 3 (): no turns found in window
+[2026-05-14T14:40:56Z] worklog 4 (): no turns found in window
+[2026-05-14T14:40:56Z] worklog 5 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 6 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 7 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 12 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 13 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 14 (): no turns found in window
+[2026-05-14T14:40:57Z] worklog 15 (): no turns found in window
+[2026-05-14T14:40:58Z] worklog 21 (): no turns found in window
+[2026-05-14T14:40:58Z] Done: 0 turns linked across 12 worklog entries
+[2026-05-14T14:45:33Z] worklog 2 (): no turns found in window
+[2026-05-14T14:45:33Z] worklog 1 (): no turns found in window
+[2026-05-14T14:45:33Z] worklog 3 (): no turns found in window
+[2026-05-14T14:45:33Z] worklog 4 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 5 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 6 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 7 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 12 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 13 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 14 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 15 (): no turns found in window
+[2026-05-14T14:45:34Z] worklog 21 (): no turns found in window
+[2026-05-14T14:45:34Z] Done: 0 turns linked across 12 worklog entries
+[2026-05-14T15:00:56Z] No worklog entries for 2026-05-15
+[2026-05-14T15:05:57Z] No worklog entries for 2026-05-15
+[2026-05-14T15:16:02Z] No worklog entries for 2026-05-15
+[2026-05-14T15:19:30Z] === link_turns 2026-05-15 ===
+[2026-05-14T15:19:30Z] No worklog entries for 2026-05-15
+[2026-05-14T15:19:31Z] Review: orphan_turns.claude: 12; empty_worklog: 0; turn_coverage: 0/12
+[2026-05-14T15:35:47Z] === link_turns 2026-05-15 ===
+[2026-05-14T15:35:47Z] worklog 26 (claude): linked 12 turns
+[2026-05-14T15:35:48Z] worklog 27 (claude): linked 4 turns
+[2026-05-14T15:35:48Z] Matched: 16 turns across 2 worklog entries
+[2026-05-14T15:35:49Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 16/16
+[2026-05-14T15:45:23Z] === link_turns 2026-05-15 ===
+[2026-05-14T15:45:24Z] Matched: 0 turns across 2 worklog entries
+[2026-05-14T15:45:24Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 16/16
+[2026-05-14T15:49:12Z] === link_turns 2026-05-15 ===
+[2026-05-14T15:49:13Z] worklog 29 (claude-code): linked 6 turns
+[2026-05-14T15:49:13Z] Matched: 6 turns across 3 worklog entries
+[2026-05-14T15:49:13Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 22/22
+[2026-05-14T21:55:17Z] === link_turns 2026-05-15 ===
+[2026-05-14T21:55:17Z] Matched: 0 turns across 4 worklog entries
+[2026-05-14T21:55:18Z] Review: orphan_turns.claude-code: 16; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; turn_coverage: 22/38
+[2026-05-14T22:17:59Z] === link_turns 2026-05-15 ===
+[2026-05-14T22:18:00Z] Matched: 0 turns across 4 worklog entries
+[2026-05-14T22:18:00Z] Review: orphan_turns.claude-code: 18; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; turn_coverage: 22/40
+[2026-05-14T22:20:15Z] === link_turns 2026-05-15 ===
+[2026-05-14T22:20:16Z] worklog 31 (claude-code): linked 18 turns
+[2026-05-14T22:20:16Z] Matched: 18 turns across 5 worklog entries
+[2026-05-14T22:20:16Z] Review: orphan_turns: 0; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; turn_coverage: 40/40
+[2026-05-15T18:00:28Z] === link_turns 2026-05-16 ===
+[2026-05-15T18:00:29Z] No worklog entries for 2026-05-16
+[2026-05-15T18:00:29Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 0/0
+[2026-05-15T22:49:15Z] === link_turns 2026-05-15 ===
+[2026-05-15T22:49:17Z] Matched: 0 turns across 7 worklog entries
+[2026-05-15T22:49:18Z] Review: orphan_turns.claude-code: 202; orphan_turns.copilot: 32; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; empty_worklog: #32 Move Copilot rule sync into common-lib; empty_worklog: #33 Remove server Copilot sync; turn_coverage: 40/274; turns_without_worklog_agent: copilot; worklog_without_turns_agent: copilot-cli
+[2026-05-15T22:50:51Z] === link_turns 2026-05-15 ===
+[2026-05-15T22:50:52Z] worklog 32 (copilot): linked 26 turns
+[2026-05-15T22:50:52Z] Matched: 26 turns across 7 worklog entries
+[2026-05-15T22:50:53Z] Review: orphan_turns.claude-code: 202; orphan_turns.copilot: 6; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; empty_worklog: #33 Remove server Copilot sync; turn_coverage: 66/274
+[2026-05-15T23:02:44Z] === link_turns 2026-05-15 ===
+[2026-05-15T23:02:45Z] Matched: 0 turns across 9 worklog entries
+[2026-05-15T23:02:46Z] Review: orphan_turns: 0; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; empty_worklog: #33 Remove server Copilot sync; turn_coverage: 274/274
+[2026-05-15T23:14:25Z] === link_turns 2026-05-15 ===
+[2026-05-15T23:14:26Z] worklog 35 (copilot): linked 3 turns
+[2026-05-15T23:14:26Z] Matched: 3 turns across 9 worklog entries
+[2026-05-15T23:14:27Z] Review: orphan_turns: 0; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; turn_coverage: 274/274
+[2026-05-15T23:15:43Z] === link_turns 2026-05-15 ===
+[2026-05-15T23:15:45Z] Matched: 0 turns across 9 worklog entries
+[2026-05-15T23:15:46Z] Review: orphan_turns: 0; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; turn_coverage: 274/274
+[2026-05-15T23:24:51Z] === link_turns 2026-05-15 ===
+[2026-05-15T23:24:53Z] Matched: 0 turns across 10 worklog entries
+[2026-05-15T23:24:54Z] Review: orphan_turns: 0; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; empty_worklog: #37 May 15 Gemini CLI 운영; turn_coverage: 274/274; worklog_without_turns_agent: gemini
+[2026-05-15T23:25:49Z] === link_turns 2026-05-15 ===
+[2026-05-15T23:25:51Z] Matched: 0 turns across 10 worklog entries
+[2026-05-15T23:25:52Z] Review: orphan_turns.gemini: 23; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; empty_worklog: #37 May 15 Gemini CLI 운영; turn_coverage: 274/297
+[2026-05-15T23:26:48Z] === link_turns 2026-05-15 ===
+[2026-05-15T23:26:50Z] Matched: 0 turns across 10 worklog entries
+[2026-05-15T23:26:50Z] Review: orphan_turns: 0; empty_worklog: #30 Phase 1 안정화 완료 — orphan 백필 + AGENT_MAP SSOT; turn_coverage: 297/297
+[2026-05-16T18:00:28Z] === link_turns 2026-05-16 ===
+[2026-05-16T18:00:30Z] Matched: 0 turns across 10 worklog entries
+[2026-05-16T18:00:32Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 183/183
+[2026-05-17T18:00:31Z] === link_turns 2026-05-17 ===
+[2026-05-17T18:00:32Z] worklog 58 (claude-code): linked 547 turns
+[2026-05-17T18:00:32Z] Matched: 547 turns across 12 worklog entries
+[2026-05-17T18:00:33Z] Review: orphan_turns.claude-code: 52; orphan_turns.copilot: 37; empty_worklog: 0; turn_coverage: 690/779
+[2026-05-18T18:01:50Z] === link_turns 2026-05-18 ===
+[2026-05-18T18:01:52Z] worklog 66 (copilot): linked 4 turns
+[2026-05-18T18:01:52Z] Matched: 4 turns across 12 worklog entries
+[2026-05-18T18:01:53Z] Review: orphan_turns.copilot: 97; empty_worklog: #67 Review pipeline deployed; empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01; turn_coverage: 271/368; worklog_without_turns_agent: devforge
+[2026-05-18T22:14:24Z] === link_turns 2026-05-18 ===
+[2026-05-18T22:14:25Z] Matched: 0 turns across 12 worklog entries
+[2026-05-18T22:14:26Z] Review: orphan_turns.copilot: 97; empty_worklog: #67 Review pipeline deployed; empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01; turn_coverage: 271/368; worklog_without_turns_agent: devforge
+[2026-05-18T22:16:25Z] === link_turns 2026-05-18 ===
+[2026-05-18T22:16:27Z] Matched: 0 turns across 12 worklog entries
+[2026-05-18T22:16:27Z] Review: orphan_turns: 0; empty_worklog: #67 Review pipeline deployed; empty_worklog: #74 [auto] unlogged session 2026-05-18T03:01; turn_coverage: 368/368; worklog_without_turns_agent: devforge
+[2026-05-18T23:08:16Z] === link_turns 2026-05-18 ===
+[2026-05-18T23:08:16Z] worklog 67: skipped (no agent)
+[2026-05-18T23:08:17Z] Matched: 0 turns across 12 worklog entries
+[2026-05-18T23:08:18Z] Review: orphan_turns: 0; empty_worklog: #67 Review pipeline deployed; agentless_worklog: #67 Review pipeline deployed; commit_only_worklog: #74; turn_coverage: 368/368; worklog_without_turns_agent: devforge
+[2026-05-19T18:01:19Z] === link_turns 2026-05-19 ===
+[2026-05-19T18:01:22Z] worklog 136 (claude-code): linked 191 turns
+[2026-05-19T18:01:22Z] worklog 126 (aider): linked 19 turns
+[2026-05-19T18:01:22Z] Matched: 210 turns across 13 worklog entries
+[2026-05-19T18:01:24Z] Review: orphan_turns: 0; empty_worklog: 0; commit_only_worklog: #89, #91, #92, #100; turn_coverage: 660/660; worklog_without_turns_agent: devforge
+[2026-05-20T18:01:50Z] === link_turns 2026-05-20 ===
+[2026-05-20T18:01:51Z] worklog 138 (claude-code): linked 101 turns
+[2026-05-20T18:01:51Z] worklog 139 (claude-code): linked 5 turns
+[2026-05-20T18:01:51Z] worklog 140 (claude-code): linked 13 turns
+[2026-05-20T18:01:52Z] worklog 141 (claude-code): linked 230 turns
+[2026-05-20T18:01:52Z] worklog 142: skipped (no agent)
+[2026-05-20T18:01:52Z] Matched: 349 turns across 6 worklog entries
+[2026-05-20T18:01:52Z] Review: orphan_turns.aider: 12; empty_worklog: #142 KeyRotator RPM 가드 하드 차단 + search_proxy HTML 필터; agentless_worklog: #142 KeyRotator RPM 가드 하드 차단 + search_proxy HTML 필터; commit_only_worklog: #137; turn_coverage: 349/361; turns_without_worklog_agent: aider; worklog_without_turns_agent: devforge
+[2026-05-21T18:01:07Z] === link_turns 2026-05-21 ===
+[2026-05-21T18:01:08Z] worklog 143 (claude-code): linked 29 turns
+[2026-05-21T18:01:08Z] worklog 144 (claude-code): linked 159 turns
+[2026-05-21T18:01:08Z] worklog 145: skipped (no agent)
+[2026-05-21T18:01:08Z] worklog 146: skipped (no agent)
+[2026-05-21T18:01:08Z] worklog 155: skipped (no agent)
+[2026-05-21T18:01:08Z] Matched: 188 turns across 6 worklog entries
+[2026-05-21T18:01:10Z] Review: orphan_turns: 0; empty_worklog: #145 동적 스와핑 아키텍처 v2.1 완결 및 32B 재테스트 진행; empty_worklog: #146 32B 동적 timeout 전환 및 전체 재테스트 시작; empty_worklog: #155 DevForge v3.0 동적 스와핑 인프라 구현 완료; agentless_worklog: #145 동적 스와핑 아키텍처 v2.1 완결 및 32B 재테스트 진행; agentless_worklog: #146 32B 동적 timeout 전환 및 전체 재테스트 시작; agentless_worklog: #155 DevForge v3.0 동적 스와핑 인프라 구현 완료; commit_only_worklog: #147; turn_coverage: 188/188; worklog_without_turns_agent: devforge
+[2026-05-23T12:58:37Z] === link_turns 2026-05-22 ===
+[2026-05-23T12:58:37Z] worklog 162: skipped (no agent)
+[2026-05-23T12:58:37Z] worklog 163: skipped (no agent)
+[2026-05-23T12:58:37Z] worklog 168 (claude-code): linked 194 turns
+[2026-05-23T12:58:37Z] Matched: 194 turns across 5 worklog entries
+[2026-05-23T12:58:39Z] Review: orphan_turns.claude-code: 51; empty_worklog: #162 DevForge v3.0 완결 — timings 통합, systemd, swap 스케줄링; empty_worklog: #163 양방향 코드 리뷰 + 버그 수정 + 잔여 작업 계획; agentless_worklog: #162 DevForge v3.0 완결 — timings 통합, systemd, swap 스케줄링; agentless_worklog: #163 양방향 코드 리뷰 + 버그 수정 + 잔여 작업 계획; commit_only_worklog: #165; turn_coverage: 194/245; worklog_without_turns_agent: aider, devforge
+[2026-05-23T13:12:21Z] === Processing 2026-05-21 ===
+[2026-05-23T13:12:22Z] Matched: 0 turns across 6 worklog entries
+[2026-05-23T13:12:23Z] Review: orphan_turns: 0; empty_worklog: #145 동적 스와핑 아키텍처 v2.1 완결 및 32B 재테스트 진행; empty_worklog: #146 32B 동적 timeout 전환 및 전체 재테스트 시작; empty_worklog: #155 DevForge v3.0 동적 스와핑 인프라 구현 완료; commit_only_worklog: #147; turn_coverage: 188/188; worklog_without_turns_agent: devforge
+[2026-05-23T13:12:23Z] === Processing 2026-05-22 ===
+[2026-05-23T13:12:23Z] worklog 162 (claude-code): linked 7 turns
+[2026-05-23T13:12:24Z] worklog 163 (claude-code): linked 16 turns
+[2026-05-23T13:12:24Z] worklog 165 (claude-code): linked 9 turns
+[2026-05-23T13:12:24Z] worklog 168 (claude-code): linked 19 turns
+[2026-05-23T13:12:24Z] Matched: 51 turns across 5 worklog entries
+[2026-05-23T13:12:25Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 245/245; worklog_without_turns_agent: aider
+[2026-05-23T13:12:25Z] === Processing 2026-05-23 ===
+[2026-05-23T13:12:26Z] No worklog entries for 2026-05-23
+[2026-05-23T13:12:27Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 0/0
+[2026-05-23T13:13:05Z] === Processing 2026-05-23 (start=2026-05-23 00:00:00+09, end=2026-05-24 00:00:00+09) ===
+[2026-05-23T13:13:06Z] worklog 169 (claude-code): linked 333 turns
+[2026-05-23T13:13:06Z] worklog 170 (claude-code): linked 55 turns
+[2026-05-23T13:13:06Z] worklog 172 (claude-code): linked 129 turns
+[2026-05-23T13:13:06Z] Matched: 517 turns across 3 worklog entries
+[2026-05-23T13:13:07Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 517/517
+[2026-05-23T13:13:26Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 517/517
+[2026-05-24T02:01:09Z] === link_turns 2026-05-23 ===
+[2026-05-24T02:01:10Z] worklog 172 (claude-code): linked 30 turns
+[2026-05-24T02:01:10Z] Matched: 30 turns across 3 worklog entries
+[2026-05-24T02:01:12Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 547/547
+[2026-05-24T18:01:56Z] === link_turns 2026-05-24 ===
+[2026-05-24T18:01:56Z] worklog 176 (claude-code): linked 211 turns
+[2026-05-24T18:01:57Z] worklog 177 (claude-code): linked 29 turns
+[2026-05-24T18:01:57Z] Matched: 240 turns across 2 worklog entries
+[2026-05-24T18:01:57Z] Review: orphan_turns.claude-code: 128; empty_worklog: 0; turn_coverage: 240/368
+[2026-05-25T00:16:14Z] === link_turns 2026-05-24 ===
+[2026-05-25T00:16:15Z] Matched: 0 turns across 2 worklog entries
+[2026-05-25T00:16:17Z] Review: orphan_turns.claude-code: 128; empty_worklog: 0; turn_coverage: 240/368
+[2026-05-25T09:33:52Z] === link_turns 2026-05-24 ===
+[2026-05-25T09:33:52Z] Matched: 0 turns across 2 worklog entries
+[2026-05-25T09:33:53Z] Review: orphan_turns.claude-code: 128; empty_worklog: 0; turn_coverage: 240/368
+[2026-05-25T09:33:57Z] === link_turns 2026-05-24 ===
+[2026-05-25T09:33:58Z] Matched: 0 turns across 2 worklog entries
+[2026-05-25T09:33:59Z] Review: orphan_turns.claude-code: 128; empty_worklog: 0; turn_coverage: 240/368
+[2026-05-25T09:34:22Z] worklog 178: skipped (no agent)
+[2026-05-25T09:34:22Z] worklog 179: skipped (no agent)
+[2026-05-25T09:34:22Z] worklog 180: skipped (no agent)
+[2026-05-25T09:34:22Z] worklog 181: skipped (no agent)
+[2026-05-25T09:34:22Z] Matched: 0 turns across 4 worklog entries
+[2026-05-25T09:34:23Z] Review: orphan_turns.claude-code: 182; empty_worklog: #178 T11 Pipeline 모니터링 및 최적화 논의; empty_worklog: #179 MoE 모델 후보군 조사 및 Debate 아키텍처 재설계; empty_worklog: #180 Normal 모드 MoE 확정 및 debate 로직 버그 수정 + OOM 발생; empty_worklog: #181 OOM 분석 및 MoE debate 테스트 준비; agentless_worklog: #178 T11 Pipeline 모니터링 및 최적화 논의; agentless_worklog: #179 MoE 모델 후보군 조사 및 Debate 아키텍처 재설계; agentless_worklog: #180 Normal 모드 MoE 확정 및 debate 로직 버그 수정 + OOM 발생; agentless_worklog: #181 OOM 분석 및 MoE debate 테스트 준비; turn_coverage: 0/182
+[2026-05-25T09:34:40Z] worklog 178 (claude-code): linked 125 turns
+[2026-05-25T09:34:40Z] Matched: 125 turns across 4 worklog entries
+[2026-05-25T09:34:41Z] Review: orphan_turns.claude-code: 57; empty_worklog: #179 MoE 모델 후보군 조사 및 Debate 아키텍처 재설계; empty_worklog: #180 Normal 모드 MoE 확정 및 debate 로직 버그 수정 + OOM 발생; empty_worklog: #181 OOM 분석 및 MoE debate 테스트 준비; turn_coverage: 125/182
+[2026-05-25T18:01:45Z] === link_turns 2026-05-25 ===
+[2026-05-25T18:01:46Z] worklog 185: skipped (no agent)
+[2026-05-25T18:01:46Z] worklog 186: skipped (no agent)
+[2026-05-25T18:01:46Z] Matched: 0 turns across 9 worklog entries
+[2026-05-25T18:01:47Z] Review: orphan_turns.claude-code: 57; empty_worklog: #179 MoE 모델 후보군 조사 및 Debate 아키텍처 재설계; empty_worklog: #180 Normal 모드 MoE 확정 및 debate 로직 버그 수정 + OOM 발생; empty_worklog: #181 OOM 분석 및 MoE debate 테스트 준비; empty_worklog: #182 OOM 방지 자동화: memory guard + page cache eviction; empty_worklog: #183 batch 모드 제거 및 debate 정리; empty_worklog: #184 debate.py v3.0 메모리 관리 강화 및 MoE 검증 준비; empty_worklog: #185 debate Pod B 단일화 및 순차 실행 전환; empty_worklog: #186 debate bench_load_s 보정 및 PID 버그 수정; agentless_worklog: #185 debate Pod B 단일화 및 순차 실행 전환; agentless_worklog: #186 debate bench_load_s 보정 및 PID 버그 수정; turn_coverage: 125/182
+[2026-05-26T01:53:15Z] Matched: 0 turns across 10 worklog entries
+[2026-05-26T01:53:16Z] Review: orphan_turns: 0; empty_worklog: #179 MoE 모델 후보군 조사 및 Debate 아키텍처 재설계; empty_worklog: #180 Normal 모드 MoE 확정 및 debate 로직 버그 수정 + OOM 발생; empty_worklog: #181 OOM 분석 및 MoE debate 테스트 준비; empty_worklog: #182 OOM 방지 자동화: memory guard + page cache eviction; empty_worklog: #183 batch 모드 제거 및 debate 정리; empty_worklog: #184 debate.py v3.0 메모리 관리 강화 및 MoE 검증 준비; empty_worklog: #185 debate Pod B 단일화 및 순차 실행 전환; empty_worklog: #186 debate bench_load_s 보정 및 PID 버그 수정; turn_coverage: 182/182
+[2026-05-26T01:57:52Z] Matched: 0 turns across 2 worklog entries
+[2026-05-26T01:57:53Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 182/182
+[2026-05-26T01:58:12Z] Matched: 0 turns across 2 worklog entries
+[2026-05-26T01:58:13Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 182/182
+[2026-05-26T18:00:07Z] === link_turns 2026-05-26 ===
+[2026-05-26T18:00:10Z] Matched: 0 turns across 23 worklog entries
+[2026-05-26T18:00:11Z] Review: orphan_turns: 0; empty_worklog: #199 OOM recovery and session resume (2026-05-26); empty_worklog: #220 feat: Azure Nemotron-3-Nano-30B-A3B MoE spot VM setup; empty_worklog: #221 feat: Nemotron-3-Nano-30B-A3B integrated to debate v4.0; empty_worklog: #241 fix: Nemotron VM recreated — Ubuntu 22.04 Minimal, IP 48.193.42.76; commit_only_worklog: #192, #193, #194, #195, #189, #190, #191, #196, #197, #198, #201, #202, #203, #204, #205, #206, #207, #208, #209; turn_coverage: 0/0
+[2026-05-27T15:54:49Z] === link_turns 2026-05-27 ===
+[2026-05-27T15:54:51Z] worklog 267: skipped (no agent)
+[2026-05-27T15:54:52Z] worklog 273: skipped (no agent)
+[2026-05-27T15:54:52Z] worklog 274: skipped (no agent)
+[2026-05-27T15:54:52Z] worklog 275: skipped (no agent)
+[2026-05-27T15:54:52Z] worklog 276: skipped (no agent)
+[2026-05-27T15:54:52Z] worklog 277: skipped (no agent)
+[2026-05-27T15:54:52Z] worklog 278: skipped (no agent)
+[2026-05-27T15:54:52Z] Matched: 0 turns across 23 worklog entries
+[2026-05-27T15:54:52Z] Review: orphan_turns: 0; empty_worklog: #253 debate: Verifier 역할 정의 — 인터넷 검색 불필요, 내부 일관성 검증만 수행; empty_worklog: #254 debate: Fact-Check Report 설계 — DRAG+Verifier 통합 리포트; empty_worklog: #255 debate: 5-round tiebreaker 설계 — 2:2 동점 시 Round 5; empty_worklog: #256 debate: Async pipeline 구상 — DRAG 완료가 spot VM 트리거; empty_worklog: #257 debate: E2E cooperative smoke test PASSED (20260526T154843Z); empty_worklog: #258 debate: Judge 병목 분석 — GLM-4.7-Flash 550s/평결이 전체 29%; empty_worklog: #259 debate: Judge preload 최적화 논의 — DRAG 완료 직후 Judge 로딩; empty_worklog: #260 debate: 3-VM 구조 논의 — 토론 전체 Azure로 이전; empty_worklog: #267 DeepSeek v4-pro 최적화 검증 및 thinking 활성화; empty_worklog: #268 debate: 3-VM cooperative 구조 설계 — Judge Gemma 4 26B Azure 이전 결정; empty_worklog: #269 debate: 3번째 Azure 계정 등록 — Judge VM용 구독/SP/리소스 구성; empty_worklog: #270 debate: Judge VM RBAC 권한 부여 — Network/VM/Gallery 역할 할당; empty_worklog: #271 Gemma Golden Image 빌드 준비 및 다른 세션 컨텍스트 동기화; empty_worklog: #272 debate: 3-model resident 아키텍처로 전환 — switch_file 폐기, 상시 health poll; empty_worklog: #273 azure_spot.py: Account 3/Gemma 통합 + SSH 키 통일; empty_worklog: #274 Qwen/Nemotron spot VM 재생성 및 SSH 터널 검증; empty_worklog: #275 Gemma golden image 생성 (img-gemma-4-26b-spot v1.0.0); empty_worklog: #276 SSH 키 통일: ~/.ssh/azurellm.pem 단일 키로 전환; empty_worklog: #277 Gemma golden image 빌드: E4as_v4(4vCPU,32GB)로 재구성; empty_worklog: #278 Gemma spot VM 정상 동작 확인; agentless_worklog: #267 DeepSeek v4-pro 최적화 검증 및 thinking 활성화; agentless_worklog: #273 azure_spot.py: Account 3/Gemma 통합 + SSH 키 통일; agentless_worklog: #274 Qwen/Nemotron spot VM 재생성 및 SSH 터널 검증; agentless_worklog: #275 Gemma golden image 생성 (img-gemma-4-26b-spot v1.0.0); agentless_worklog: #276 SSH 키 통일: ~/.ssh/azurellm.pem 단일 키로 전환; agentless_worklog: #277 Gemma golden image 빌드: E4as_v4(4vCPU,32GB)로 재구성; agentless_worklog: #278 Gemma spot VM 정상 동작 확인; commit_only_worklog: #242, #243, #261; turn_coverage: 0/0
+[2026-05-28T02:45:01Z] === link_turns 2026-05-27 ===
+[2026-05-28T02:45:03Z] worklog 267: skipped (no agent)
+[2026-05-28T02:45:04Z] worklog 273: skipped (no agent)
+[2026-05-28T02:45:04Z] worklog 274: skipped (no agent)
+[2026-05-28T02:45:04Z] worklog 275: skipped (no agent)
+[2026-05-28T02:45:04Z] worklog 276: skipped (no agent)
+[2026-05-28T02:45:04Z] worklog 277: skipped (no agent)
+[2026-05-28T02:45:04Z] worklog 278: skipped (no agent)
+[2026-05-28T02:45:04Z] Matched: 0 turns across 23 worklog entries
+[2026-05-28T02:45:05Z] Review: orphan_turns: 0; empty_worklog: #253 debate: Verifier 역할 정의 — 인터넷 검색 불필요, 내부 일관성 검증만 수행; empty_worklog: #254 debate: Fact-Check Report 설계 — DRAG+Verifier 통합 리포트; empty_worklog: #255 debate: 5-round tiebreaker 설계 — 2:2 동점 시 Round 5; empty_worklog: #256 debate: Async pipeline 구상 — DRAG 완료가 spot VM 트리거; empty_worklog: #257 debate: E2E cooperative smoke test PASSED (20260526T154843Z); empty_worklog: #258 debate: Judge 병목 분석 — GLM-4.7-Flash 550s/평결이 전체 29%; empty_worklog: #259 debate: Judge preload 최적화 논의 — DRAG 완료 직후 Judge 로딩; empty_worklog: #260 debate: 3-VM 구조 논의 — 토론 전체 Azure로 이전; empty_worklog: #267 DeepSeek v4-pro 최적화 검증 및 thinking 활성화; empty_worklog: #268 debate: 3-VM cooperative 구조 설계 — Judge Gemma 4 26B Azure 이전 결정; empty_worklog: #269 debate: 3번째 Azure 계정 등록 — Judge VM용 구독/SP/리소스 구성; empty_worklog: #270 debate: Judge VM RBAC 권한 부여 — Network/VM/Gallery 역할 할당; empty_worklog: #271 Gemma Golden Image 빌드 준비 및 다른 세션 컨텍스트 동기화; empty_worklog: #272 debate: 3-model resident 아키텍처로 전환 — switch_file 폐기, 상시 health poll; empty_worklog: #273 azure_spot.py: Account 3/Gemma 통합 + SSH 키 통일; empty_worklog: #274 Qwen/Nemotron spot VM 재생성 및 SSH 터널 검증; empty_worklog: #275 Gemma golden image 생성 (img-gemma-4-26b-spot v1.0.0); empty_worklog: #276 SSH 키 통일: ~/.ssh/azurellm.pem 단일 키로 전환; empty_worklog: #277 Gemma golden image 빌드: E4as_v4(4vCPU,32GB)로 재구성; empty_worklog: #278 Gemma spot VM 정상 동작 확인; agentless_worklog: #267 DeepSeek v4-pro 최적화 검증 및 thinking 활성화; agentless_worklog: #273 azure_spot.py: Account 3/Gemma 통합 + SSH 키 통일; agentless_worklog: #274 Qwen/Nemotron spot VM 재생성 및 SSH 터널 검증; agentless_worklog: #275 Gemma golden image 생성 (img-gemma-4-26b-spot v1.0.0); agentless_worklog: #276 SSH 키 통일: ~/.ssh/azurellm.pem 단일 키로 전환; agentless_worklog: #277 Gemma golden image 빌드: E4as_v4(4vCPU,32GB)로 재구성; agentless_worklog: #278 Gemma spot VM 정상 동작 확인; commit_only_worklog: #242, #243, #261; turn_coverage: 0/0
+[2026-05-28T18:00:39Z] === link_turns 2026-05-28 ===
+[2026-05-28T18:00:39Z] worklog 279: skipped (no agent)
+[2026-05-28T18:00:40Z] worklog 283 (claude-code): linked 7 turns
+[2026-05-28T18:00:40Z] worklog 284: skipped (no agent)
+[2026-05-28T18:00:40Z] worklog 285: skipped (no agent)
+[2026-05-28T18:00:40Z] worklog 286: skipped (no agent)
+[2026-05-28T18:00:40Z] worklog 287: skipped (no agent)
+[2026-05-28T18:00:40Z] worklog 288: skipped (no agent)
+[2026-05-28T18:00:40Z] worklog 289: skipped (no agent)
+[2026-05-28T18:00:40Z] worklog 290: skipped (no agent)
+[2026-05-28T18:00:40Z] worklog 291: skipped (no agent)
+[2026-05-28T18:00:41Z] worklog 307: skipped (no agent)
+[2026-05-28T18:00:41Z] worklog 308 (claude-code): linked 477 turns
+[2026-05-28T18:00:41Z] worklog 310 (claude-code): linked 4 turns
+[2026-05-28T18:00:42Z] worklog 311 (claude-code): linked 1 turns
+[2026-05-28T18:00:42Z] worklog 313 (claude-code): linked 3 turns
+[2026-05-28T18:00:43Z] worklog 319 (claude-code): linked 1 turns
+[2026-05-28T18:00:43Z] worklog 321 (claude-code): linked 1 turns
+[2026-05-28T18:00:43Z] worklog 322 (claude-code): linked 2 turns
+[2026-05-28T18:00:44Z] worklog 330 (claude-code): linked 1 turns
+[2026-05-28T18:00:44Z] worklog 334 (claude-code): linked 1 turns
+[2026-05-28T18:00:44Z] worklog 335 (claude-code): linked 2 turns
+[2026-05-28T18:00:45Z] worklog 339 (claude-code): linked 1 turns
+[2026-05-28T18:00:45Z] worklog 340 (claude-code): linked 3 turns
+[2026-05-28T18:00:46Z] worklog 350 (claude-code): linked 1 turns
+[2026-05-28T18:00:47Z] worklog 351 (claude-code): linked 1 turns
+[2026-05-28T18:00:47Z] worklog 364 (claude-code): linked 4 turns
+[2026-05-28T18:00:48Z] worklog 377 (claude-code): linked 9 turns
+[2026-05-28T18:00:48Z] worklog 387 (claude-code): linked 7 turns
+[2026-05-28T18:00:48Z] worklog 393 (claude-code): linked 19 turns
+[2026-05-28T18:00:48Z] worklog 394 (claude-code): linked 31 turns
+[2026-05-28T18:00:48Z] Matched: 576 turns across 67 worklog entries
+[2026-05-28T18:00:49Z] Review: orphan_turns: 0; empty_worklog: #353 14B 논쟁 실패 시 처리 개선; empty_worklog: #342 통합 모드 개선; empty_worklog: #357 ; empty_worklog: #343 모드명 통일; empty_worklog: #356 Dart Reviewer 추가; empty_worklog: #346 시스템 재시작 지연 수정; empty_worklog: #312 SSH 접속시 MOTD 확인 시간 단축; empty_worklog: #345 수정 `auto_mode.sh` 스크립트; empty_worklog: #347 수정된 스크립트 확인; empty_worklog: #317 autoCompactEnabled 설정 추가; empty_worklog: #344 통합 모드 및 명령어 개선; empty_worklog: #348 모델 모드 변경; empty_worklog: #318 autoCompactEnabled 설정 변경; empty_worklog: #324 모니터 이벤트 처리; empty_worklog: #325 파이프라인 진행 모니터링; empty_worklog: #327 스테이지 1 완료 모니터링; empty_worklog: #352 review_worker.py 간소화 및 14B 논쟁 추가; empty_worklog: #349 현재 시스템 타이머 검토 및 통합; empty_worklog: #279 3개 spot VM 전체 상태 확인 및 추론 테스트 완료; empty_worklog: #284 cooperative debate --reuse-vms 지원 + Nemotron 포트 수정; empty_worklog: #285 fix: review pipeline bug fixes + bidirectional verification; empty_worklog: #286 cooperative debate --reuse-vms 준비 완료, 실행 전 상태 검증; empty_worklog: #287 feat: auto mode — overnight unattended task execution; empty_worklog: #288 feat: auto mode — overnight unattended task execution system; empty_worklog: #289 feat: tr — DevForge mode switcher with auto-restore; empty_worklog: #290 fix: review pipeline bugs + bidirectional verification; empty_worklog: #291 auto_tasks.md: T01 cooperative debate test added as priority #1; empty_worklog: #316 14B 실패 시 가짜 review 생성; empty_worklog: #307 refactor: timer architecture restructure — eliminate interval polling, consolidate to nightly batch; empty_worklog: #320 실시간성 개선을 위한 전략 수립; empty_worklog: #328 파일 읽기 시도; empty_worklog: #329 대체 파일 읽기 시도; empty_worklog: #336 현재 서버에서 사용 중인 AI 모델 확인; empty_worklog: #337 테스트 진행상황 확인; empty_worklog: #338 Round 1 진행상황 확인; agentless_worklog: #279 3개 spot VM 전체 상태 확인 및 추론 테스트 완료; agentless_worklog: #284 cooperative debate --reuse-vms 지원 + Nemotron 포트 수정; agentless_worklog: #285 fix: review pipeline bug fixes + bidirectional verification; agentless_worklog: #286 cooperative debate --reuse-vms 준비 완료, 실행 전 상태 검증; agentless_worklog: #287 feat: auto mode — overnight unattended task execution; agentless_worklog: #288 feat: auto mode — overnight unattended task execution system; agentless_worklog: #289 feat: tr — DevForge mode switcher with auto-restore; agentless_worklog: #290 fix: review pipeline bugs + bidirectional verification; agentless_worklog: #291 auto_tasks.md: T01 cooperative debate test added as priority #1; agentless_worklog: #307 refactor: timer architecture restructure — eliminate interval polling, consolidate to nightly batch; commit_only_worklog: #292, #293, #294, #295, #296, #297, #298, #299, #300, #302, #304, #305; turn_coverage: 591/591; worklog_without_turns_agent: devforge
+[2026-05-29T18:01:35Z] === link_turns 2026-05-29 ===
+[2026-05-29T18:01:36Z] worklog 401 (claude-code): linked 43 turns
+[2026-05-29T18:01:36Z] worklog 403 (claude-code): linked 1 turns
+[2026-05-29T18:01:37Z] worklog 405 (claude-code): linked 2 turns
+[2026-05-29T18:01:37Z] worklog 406 (claude-code): linked 3 turns
+[2026-05-29T18:01:37Z] worklog 408 (claude-code): linked 12 turns
+[2026-05-29T18:01:37Z] worklog 410 (copilot): linked 4 turns
+[2026-05-29T18:01:38Z] worklog 411 (claude-code): linked 15 turns
+[2026-05-29T18:01:38Z] worklog 417: skipped (no agent)
+[2026-05-29T18:01:39Z] worklog 419 (claude-code): linked 89 turns
+[2026-05-29T18:01:39Z] worklog 421 (copilot): linked 1 turns
+[2026-05-29T18:01:39Z] Matched: 170 turns across 22 worklog entries
+[2026-05-29T18:01:40Z] Review: orphan_turns.aider: 9; empty_worklog: #417 Day/Night Bundle v4.0 완료; empty_worklog: #420 devforge-api dead code removal + P1 fixes; agentless_worklog: #417 Day/Night Bundle v4.0 완료; turn_coverage: 223/232; turns_without_worklog_agent: aider; worklog_without_turns_agent: claude code
+[2026-05-30T18:00:18Z] === link_turns 2026-05-30 ===
+[2026-05-30T18:00:18Z] worklog 423 (copilot): linked 28 turns
+[2026-05-30T18:00:18Z] worklog 424 (copilot): linked 1 turns
+[2026-05-30T18:00:19Z] worklog 426 (copilot): linked 14 turns
+[2026-05-30T18:00:19Z] worklog 427 (copilot): linked 4 turns
+[2026-05-30T18:00:19Z] worklog 428 (copilot): linked 5 turns
+[2026-05-30T18:00:19Z] worklog 429 (copilot): linked 11 turns
+[2026-05-30T18:00:20Z] worklog 430 (copilot): linked 31 turns
+[2026-05-30T18:00:20Z] Matched: 94 turns across 8 worklog entries
+[2026-05-30T18:00:21Z] Review: orphan_turns.claude-code: 38; orphan_turns.copilot: 6; empty_worklog: 0; turn_coverage: 112/156; turns_without_worklog_agent: claude-code
+[2026-05-31T18:00:58Z] === link_turns 2026-05-31 ===
+[2026-05-31T18:00:59Z] worklog 431 (copilot): linked 68 turns
+[2026-05-31T18:00:59Z] worklog 432 (copilot): linked 54 turns
+[2026-05-31T18:00:59Z] Matched: 122 turns across 2 worklog entries
+[2026-05-31T18:01:00Z] Review: orphan_turns.copilot: 24; orphan_turns.claude-code: 2; orphan_turns.aider: 1; empty_worklog: 0; turn_coverage: 124/151; turns_without_worklog_agent: claude-code, aider
+[2026-06-01T18:01:11Z] === link_turns 2026-06-01 ===
+[2026-06-01T18:01:11Z] No worklog entries for 2026-06-01
+[2026-06-01T18:01:12Z] Review: orphan_turns: 0; empty_worklog: 0; turn_coverage: 0/0

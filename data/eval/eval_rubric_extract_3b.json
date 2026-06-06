@@ -1,0 +1,267 @@
+{
+  "evaluation_type": "role_rubric",
+  "timestamp": "2026-06-03T15:00:00+09:00",
+  "pipeline": "extract_3b_faithfulness",
+  "roles_evaluated": ["extract_3b", "proposer_r1_8b", "refuter_qwen7b", "judge_selene"],
+  "rubric": {
+    "extract_3b": {
+      "criteria": [
+        {
+          "id": "faithfulness",
+          "name": "Faithfulness",
+          "description": "Evidence가 source text에 정확히 존재하는 비율",
+          "scale": "integer 0-10",
+          "weight": 0.35,
+          "scoring_baseline": {
+            "10": "≥95% faithful (거의 완벽)",
+            "8": "≥80% faithful (운영 기준 충족)",
+            "6": "≥60% faithful (주의 필요)",
+            "4": "≥40% faithful (교체 고려)",
+            "2": "≥20% faithful (부적합)",
+            "0": "<20% faithful (사용 불가)"
+          }
+        },
+        {
+          "id": "coverage",
+          "name": "Coverage",
+          "description": "중요한 factual statement를 놓치지 않고 capture하는 정도",
+          "scale": "integer 0-10",
+          "weight": 0.25,
+          "scoring_baseline": {
+            "10": "≥90% 중요 사실 추출, 인간 수준",
+            "8": "≥70% 중요 사실 추출",
+            "6": "≥50% 중요 사실 추출",
+            "4": "≥30% 중요 사실 추출 (많은 누락)",
+            "2": "≥10% 중요 사실 추출",
+            "0": "거의 추출 실패"
+          }
+        },
+        {
+          "id": "schema_compliance",
+          "name": "Schema Compliance",
+          "description": "출력 JSON이 정의된 스키마를 정확히 따르는 정도",
+          "scale": "integer 0-10",
+          "weight": 0.20,
+          "scoring_baseline": {
+            "10": "100% 스키마 준수",
+            "8": "≥90% 턴에서 완벽 준수",
+            "6": "≥80% 턴에서 완벽 준수",
+            "4": "≥60% 턴에서 완벽 준수",
+            "2": "≥40% 턴에서 완벽 준수",
+            "0": "<40% (대부분 위반)"
+          }
+        },
+        {
+          "id": "conciseness",
+          "name": "Conciseness",
+          "description": "불필요한 중복/noise 없이 효율적으로 추출",
+          "scale": "integer 0-10",
+          "weight": 0.20,
+          "scoring_baseline": {
+            "10": "턴당 3-5개, 중복 없음, 정보 밀도 높음",
+            "8": "턴당 4-7개, 약간의 중복",
+            "6": "턴당 5-9개, 일부 중복",
+            "4": "턴당 7-12개, 상당한 중복",
+            "2": "턴당 10+개, 대부분 중복/noise",
+            "0": "턴당 15+개, 거의 noise"
+          }
+        }
+      ]
+    },
+    "proposer": {
+      "criteria": [
+        {
+          "id": "correctness",
+          "name": "Finding Correctness",
+          "description": "발견한 finding이 실제 결함/문제인 정도",
+          "scale": "integer 0-10",
+          "weight": 0.40,
+          "scoring_baseline": {
+            "10": "모든 finding이 실제 문제, 오류 0%",
+            "8": "≥80% finding이 실제 문제",
+            "6": "≥60% finding이 실제 문제",
+            "4": "≥40% finding이 실제 문제",
+            "2": "≥20% finding이 실제 문제",
+            "0": "대부분 false positive"
+          }
+        },
+        {
+          "id": "coverage",
+          "name": "Issue Coverage",
+          "description": "리뷰 대상의 중요한 이슈를 얼마나 포괄했는가",
+          "scale": "integer 0-10",
+          "weight": 0.30,
+          "scoring_baseline": {
+            "10": "Critical/high 이슈 100% 포착",
+            "8": "Critical 이슈 전부 + high 대부분",
+            "6": "Critical 이슈 대부분",
+            "4": "Critical 일부 누락",
+            "2": "다수의 critical 이슈 누락",
+            "0": "중요 이슈 거의 포착 실패"
+          }
+        },
+        {
+          "id": "precision",
+          "name": "Precision",
+          "description": "발견한 finding 중 실제 가치 있는 비율 (신호 대 잡음비)",
+          "scale": "integer 0-10",
+          "weight": 0.30,
+          "scoring_baseline": {
+            "10": "모든 finding actionable, 0% noise",
+            "8": "약간의 low-priority finding 포함",
+            "6": "일부 noise 포함 (10-20%)",
+            "4": "상당한 noise 포함 (20-40%)",
+            "2": "대부분 noise (40-60%)",
+            "0": "거의 전부 noise"
+          }
+        }
+      ]
+    },
+    "refuter": {
+      "criteria": [
+        {
+          "id": "accuracy",
+          "name": "Verdict Accuracy",
+          "description": "수용/거절 판단의 정확도",
+          "scale": "integer 0-10",
+          "weight": 0.40,
+          "scoring_baseline": {
+            "10": "Verdict 100% 정확",
+            "8": "≥80% 정확",
+            "6": "≥60% 정확",
+            "4": "≥40% 정확",
+            "2": "≥20% 정확",
+            "0": "대부분 오판"
+          }
+        },
+        {
+          "id": "efficiency",
+          "name": "Efficiency",
+          "description": "불필요한 반론/지연 없이 효율적 검증",
+          "scale": "integer 0-10",
+          "weight": 0.30,
+          "scoring_baseline": {
+            "10": "P의 finding을 정확히 이해하고 간결하게 판단",
+            "8": "대부분 간결, 일부 finding에만 추가 논의",
+            "6": "일부 finding에서 불필요한 반론",
+            "4": "자주 불필요한 반론",
+            "2": "대부분 finding에서 비효율적 반론",
+            "0": "모든 finding을 잘못 이해하고 반론"
+          }
+        },
+        {
+          "id": "completeness",
+          "name": "Completeness",
+          "description": "P가 제기한 모든 finding을 빠짐없이 검토",
+          "scale": "integer 0-10",
+          "weight": 0.30,
+          "scoring_baseline": {
+            "10": "모든 finding 검토 완료, 누락 0",
+            "8": "1-2개 finding 생략",
+            "6": "3-4개 finding 생략",
+            "4": "5-6개 finding 생략",
+            "2": "절반 이상 생략",
+            "0": "거의 검토하지 않음"
+          }
+        }
+      ]
+    },
+    "judge": {
+      "criteria": [
+        {
+          "id": "scoring_fairness",
+          "name": "Scoring Fairness",
+          "description": "P와 R에 대한 점수가 공정하고 근거가 있는가",
+          "scale": "integer 0-10",
+          "weight": 0.35,
+          "scoring_baseline": {
+            "10": "모든 score에 상세 rationale, 명확한 기준",
+            "8": "대부분 score에 rationale 있음",
+            "6": "일부 score에 rationale 부족",
+            "4": "상당수 score에 rationale 부족",
+            "2": "Score가 자의적",
+            "0": "Score가 근거 없음"
+          }
+        },
+        {
+          "id": "decision_accuracy",
+          "name": "Decision Accuracy",
+          "description": "최종 APPROVED/REJECT 결정의 적절성",
+          "scale": "integer 0-10",
+          "weight": 0.35,
+          "scoring_baseline": {
+            "10": "결정이 명확하고 데이터에 기반",
+            "8": "적절한 결정, 약간의 개선 여지",
+            "6": "결정이 대부분 적절",
+            "4": "결정이 다소 의문",
+            "2": "결정이 부적절",
+            "0": "결정이 전혀 부적절"
+          }
+        },
+        {
+          "id": "hallucination_detection",
+          "name": "Hallucination Detection",
+          "description": "P나 R의 hallucination이나 오류를 탐지했는가",
+          "scale": "integer 0-10",
+          "weight": 0.30,
+          "scoring_baseline": {
+            "10": "모든 hallucination/오류 탐지",
+            "8": "대부분 탐지",
+            "6": "일부 탐지",
+            "4": "소수만 탐지",
+            "2": "거의 탐지 못함",
+            "0": "하나도 탐지 못함"
+          }
+        }
+      ]
+    }
+  },
+  "model_scores": {
+    "extract_3b": {
+      "Qwen2.5-Coder-3B": {
+        "faithfulness": 8,
+        "faithfulness_rationale": "83.1% faithful. 운영 기준 80% 충족. 15턴 중 10턴에서 faithfulness 80% 이상. 가장 conservative하지만 가장 reliable.",
+        "coverage": 6,
+        "coverage_rationale": "4.6 facts/turn. 가장 보수적. 짧은 턴(246-396자)에서도 2-5개만 추출. 중요한 사실을 놓칠 위험.",
+        "schema_compliance": 9,
+        "schema_compliance_rationale": "14/14 OK 턴에서 단일 fact_type 사용. compound type 0회. 단 1회 JSON parse error.",
+        "conciseness": 9,
+        "conciseness_rationale": "4.6/turn. 중복 최소화. 각 evidence가 unique information. 83.1% faithful에서 noise 16.9%로 최저.",
+        "weighted_total": 7.85
+      },
+      "Qwen3-4B": {
+        "faithfulness": 5,
+        "faithfulness_rationale": "54.6% faithful. 45.4%가 hallucination. 장문 턴(T=1650)에서 5/21(24%)로 급락. 운영 기준 미달.",
+        "coverage": 8,
+        "coverage_rationale": "7.2 facts/turn. Qwen2.5-3B보다 56% 더 많은 사실 추출. 단 hallucination도 포함되어 있어 real coverage는 낮을 수 있음.",
+        "schema_compliance": 6,
+        "schema_compliance_rationale": "15턴 중 4턴(26.7%)에서 'user|thinking' compound fact_type 사용. turn 2에서 '?' fact_type (invalid). 개선 필요.",
+        "conciseness": 6,
+        "conciseness_rationale": "7.2/turn. 장문 턴에서 21개까지 과추출. fbd6a3af(T=1650)에서 21개 중 16개 hallucination = noise 76%.",
+        "weighted_total": 6.05
+      },
+      "Gemma 3 4B": {
+        "faithfulness": 4,
+        "faithfulness_rationale": "42.6% faithful. 4/15 턴에서 0% catastrophic failure. hallucination 57.4%.",
+        "coverage": 7,
+        "coverage_rationale": "7.2 facts/turn. Qwen3-4B와 동일한 coverage 양. 단 faithfulness 12%p 낮아 real coverage는 더 낮음.",
+        "schema_compliance": 4,
+        "schema_compliance_rationale": "복합 fact_type 빈번. 'user|thinking|text' 원본 텍스트 라벨 사용. 허용값 이외의 category 사용.",
+        "conciseness": 5,
+        "conciseness_rationale": "7.2/turn이지만 hallucination 비율이 높아 정보 밀도 낮음. fbd6a3af에서 0/19 = 100% noise.",
+        "weighted_total": 4.90
+      },
+      "LFM2-8B-A1B": {
+        "faithfulness": 2,
+        "faithfulness_rationale": "16.2% faithful. 83.8% hallucination. extract 역할에 부적합. 0% 턴 12/14.",
+        "coverage": 2,
+        "coverage_rationale": "5.3 facts/turn이지만 83.8%가 hallucination. real coverage는 0.8 facts/turn 수준.",
+        "schema_compliance": 1,
+        "schema_compliance_rationale": "85.7% 턴에서 compound fact_type 사용. 'requirement' (not user|thinking|text) 같은 허용되지 않은 단일값도 사용. 1회 JSON parse error.",
+        "conciseness": 3,
+        "conciseness_rationale": "5.3/turn이지만 효과적 정보는 0.9/turn. 15개 중 11개 턴에서 5개씩 동일 패턴으로 추출 (중복 의심).",
+        "weighted_total": 2.00
+      }
+    }
+  }
+}

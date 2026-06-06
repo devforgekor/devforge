@@ -1,0 +1,66 @@
+{
+  "role": "verify_32b_experimental",
+  "model": "Qwen2.5-Coder-32B-Instruct (IQ4_XS)",
+  "input": "Same P-R-J pipeline evaluation as 27B (independent assessment)",
+  "timestamp": "2026-06-03T15:25:00+09:00",
+  "verification_result": {
+    "final_verdict": "approved_with_conditions",
+    "action": "commit",
+    "confidence": 75,
+    "summary": "P-R-J analysis is sound but has gaps in downstream impact measurement. Champion selection correct. Condition: verify downstream MCP quality with champion model before finalizing."
+  },
+  "reasoning": "The 27B analysis correctly identifies the 7 findings and champion recommendation. However, the evaluation is incomplete in one critical aspect: faithfulness rate alone doesn't determine pipeline success. Qwen2.5-Coder-3B's 83.1% faithfulness with 4.6 facts/turn may produce insufficient input for MCP 30B, causing the 30B to hallucinate more entities (as seen in activity_log #281 where 30B generated 0/3 real files). Conversely, Qwen3-4B's 54.6% faithfulness but 7.2 facts/turn might produce MORE useful signal despite higher noise. This tradeoff needs empirical verification — run extract_pipeline.py --mcp-model Qwen30B with both Qwen2.5-3B and Qwen3-4B extracts and compare MCP quality. Additionally, the P-R-J evaluation was fast-path (2:0) for all findings. A real-world evaluation must include disputed findings to validate the judge's tie-breaking. The rubric is well-structured but lacks a 'cost_efficiency' criterion — Qwen3-4B takes 2.25x longer than Qwen2.5-3B, which impacts nightly batch runtime budget.",
+  "verification_items": [
+    {
+      "check": "P-R-J methodology completeness",
+      "result": "partial",
+      "detail": "All 7 findings 2:0 fast-path. Judge's tie-breaking not tested. Need at least one disputed finding scenario."
+    },
+    {
+      "check": "Downstream impact analysis",
+      "result": "fail",
+      "detail": "No MCP quality comparison between champion models. Faithfulness alone is insufficient metric — MCP output quality with each extract source needs testing."
+    },
+    {
+      "check": "Cost efficiency consideration",
+      "result": "fail",
+      "detail": "Qwen3-4B takes 2737s vs Qwen2.5-3B's 1217s for same 15 turns (2.25x slower). This is not reflected in rubric criteria. Extract has strict timeout (180s) and slow extraction blocks pipeline."
+    },
+    {
+      "check": "Rubric quality",
+      "result": "pass",
+      "detail": "4-criteria extract rubric (faithfulness 0.35, coverage 0.25, schema 0.20, conciseness 0.20) is well-balanced. Scoring baselines (0-10 integer) are clearly defined."
+    },
+    {
+      "check": "Negative test utilization",
+      "result": "pass",
+      "detail": "LFM2-8B-A1B (16.2%) correctly identified as negative test for fallback chain validation. This is good operational thinking."
+    }
+  ],
+  "disagreement_with_27b": [
+    {
+      "issue": "Downstream impact not measured",
+      "27b_verdict": "passed",
+      "32b_verdict": "fail",
+      "detail": "27B passed this check assuming faithfulness is sufficient metric. 32B considers this insufficient — MCP entity quality with different extract sources must be empirically compared."
+    },
+    {
+      "issue": "Cost efficiency not in rubric",
+      "27b_verdict": "not checked",
+      "32b_verdict": "fail",
+      "detail": "27B didn't flag missing cost criterion. 32B flags it as a gap — speed affects nightly batch scheduling and timeout configuration."
+    },
+    {
+      "issue": "Confidence calibration",
+      "27b_confidence": 88,
+      "32b_confidence": 75,
+      "detail": "32B is more conservative (75 vs 88) due to the downstream and cost gaps identified."
+    }
+  ],
+  "feedback": {
+    "to_27b": "Your verification is correct on substance but overconfident. The downstream impact gap is real and should be addressed before final recommendation.",
+    "to_proposer": "Add cost_efficiency to rubric. Extract model speed impacts entire pipeline throughput. Qwen3-4B 2.25x slower than Qwen2.5-3B is operationally significant.",
+    "to_refuter": "For F04 (coverage vs faithfulness), request empirical downstream test, not just 'additional evaluation needed'.",
+    "to_judge": "Include at least one disputed finding in future evaluations. All 2:0 fast-path doesn't test judge's critical reasoning."
+  }
+}

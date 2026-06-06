@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Session guard — auto-commit unlogged changes so nothing is lost."""
+import subprocess
+import sys
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+from lib.db import psql
+
+SERVER = Path("/opt/projects/server")
+KST = timezone(timedelta(hours=9))
+
+def _git(args):
+    try:
+        r = subprocess.run(["git"] + args, capture_output=True, text=True, timeout=15, cwd=str(SERVER))
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def main():
+    # 1. Any file changes?
+    diff = _git(["diff", "--stat", "HEAD"])
+    untracked = _git(["ls-files", "--others", "--exclude-standard"])
+    if not diff and not untracked:
+        return 0  # Clean — nothing to guard
+
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+
+    # Check worklog DB for today's entries
+    wl_count = psql(f"SELECT COUNT(*) FROM worklog_entries WHERE created_at::date = '{today}'")
+    has_worklog = wl_count and wl_count != "0"
+
+    # Check tasks.yaml mtime
+    tasks_file = SERVER / "docs" / "tasks.yaml"
+    has_tasks = tasks_file.exists() and datetime.fromtimestamp(tasks_file.stat().st_mtime, tz=KST).strftime("%Y-%m-%d") == today
+
+    # Check handover.yaml mtime
+    handover_file = SERVER / "handover.yaml"
+    has_handover = handover_file.exists() and datetime.fromtimestamp(handover_file.stat().st_mtime, tz=KST).strftime("%Y-%m-%d") == today
+
+    if has_worklog or has_tasks or has_handover:
+        return 0  # Session was logged — AI followed the rules
+
+    # 3. No record found → auto-commit safety net
+    _git(["add", "-A"])
+    ts = datetime.now(KST).strftime("%Y-%m-%dT%H:%M")
+    result = _git(["commit", "-m", f"[auto] unlogged session {ts}"])
+
+    if result:
+        # Write warning for next session
+        report_file = SERVER / "data" / "consistency_report.yaml"
+        import yaml
+        report = {}
+        if report_file.exists():
+            report = yaml.safe_load(report_file.read_text()) or {}
+        warns = report.get("warnings", [])
+        warns.append(f"[{today}] unlogged session auto-committed: {result.split(chr(10))[0]}")
+        report["warnings"] = warns[-10:]  # Keep last 10
+        report["timestamp"] = datetime.now(KST).isoformat()
+        report_file.write_text(yaml.dump(report, default_flow_style=False, allow_unicode=True, sort_keys=False))
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

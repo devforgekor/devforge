@@ -1,0 +1,225 @@
+{
+  "evaluation_type": "consolidated_baseline",
+  "phase": "round1_complete",
+  "timestamp": "2026-06-03T16:15:00+09:00",
+  "pipeline": "extract_data_handoff_full_audit",
+  "total_documents": 7,
+  "total_findings": 8,
+  "round1_duration": "~30 min (all roles simulated by Claude)",
+
+  "executive_summary": {
+    "korean": "Extract pipeline 데이터 핸드오프 구조 진단 완료. 8개 critical/high 발견. 가장 심각한 문제는 call_llm()이 timing/token 데이터를 버리는 점(S01)과 extract_result가 P-R-J review를 우회하는 점(S02). 30B MCP intent 정확도 50%로 운영 기준 미달. 27B verify는 적절한 판단이나 confidence 82는 4턴 샘플 기준 과대. Round 2에서 50턴 이상 실제 파이프라인 실행 필요.",
+    "critical_findings": [
+      "call_llm() drops llama.cpp timing/token data (S01)",
+      "Extract_result bypasses P-R-J (S02)",
+      "review_facts.verdict never updated (S03)"
+    ],
+    "high_findings": [
+      "30B MCP intent 50% accuracy (M01-M02, F04)",
+      "30B fallback drops text facts entirely (M03, F05)",
+      "activity_log body insufficient for downstream (S06, F06)"
+    ]
+  },
+
+  "data_handoff_specification": {
+    "description": "extract → review → verify 단계별로 넘겨야 할 데이터 구조 정의",
+    "spec_version": "1.0",
+
+    "extract_to_review_facts": {
+      "required_fields": [
+        {"field": "turn_id", "type": "uuid", "source": "extract_pipeline"},
+        {"field": "fact_index", "type": "integer", "source": "extract_pipeline"},
+        {"field": "fact_type", "type": "text", "enum": ["user", "thinking", "text", "mcp_meta", "marker"]},
+        {"field": "evidence", "type": "text", "note": "추출된 fact 원문"},
+        {"field": "extract_model", "type": "text", "note": "Qwen3B | Qwen30B"},
+        {"field": "verdict", "type": "text", "note": "pending | valid | invalid | verified | rejected — downstream에서 UPDATE"},
+        {"field": "prompt_tokens", "type": "integer", "note": "LLM call 당시 prompt_tokens — 현재 NULL"},
+        {"field": "gen_tokens", "type": "integer", "note": "LLM call 당시 completion_tokens — 현재 NULL"},
+        {"field": "elapsed_ms", "type": "real", "note": "LLM call latency — 현재 NULL"}
+      ],
+      "missing_from_current": ["prompt_tokens", "gen_tokens", "elapsed_ms", "gen_rate"]
+    },
+
+    "activity_log_extract_result_body": {
+      "current": {
+        "mcp": "MCP metadata (tldr, intent, entities, tags, verified)",
+        "mark": "retry/fallback marking ('3B 1차 실패', '3B 2회실패 → 30B 전달')",
+        "turn_id": "UUID",
+        "fact_count": "integer",
+        "extract_model": "Qwen3B | Qwen30B"
+      },
+      "required_additions": {
+        "faithfulness_pct": "number (0-100) — total faithfulness percentage for this turn",
+        "faithful_count": "integer — how many facts passed substring check",
+        "unfaithful_count": "integer — how many facts failed",
+        "unfaithful_details": "array of {evidence, fact_type, category} — what was hallucinated",
+        "retry_count": "integer — 0=first try, 1=one retry, 2=double failure",
+        "3b_attempts": "array of {attempt, faithful_count, unfaithful_count} — per-attempt stats",
+        "source_text_length": "object {user, thinking, text} — char counts for context",
+        "extract_duration_ms": "integer — total pipeline time for this turn",
+        "prompt_tokens": "integer",
+        "completion_tokens": "integer"
+      }
+    },
+
+    "review_to_verify": {
+      "current": "P-R-J는 queue_status='pending' 항목만 처리. extract_result는 'reviewed'로 bypass됨.",
+      "required": {
+        "queue_status_flow": [
+          "extract_result → queue_status='pending' (waiting for P-R-J review)",
+          "P-R-J reviews → queue_status='reviewed' (ready for 27B verify)",
+          "27B verify → queue_status='done' (final state)"
+        ],
+        "body_fields_for_verify": [
+          "P-R-J verdict: {approved_findings, rejected_findings, P_score, R_score, gap}",
+          "P-R-J metadata: {proposer_model, refuter_model, judge_model, total_tokens}",
+          "Original extract_result body (enriched with faithfulness data)"
+        ]
+      }
+    },
+
+    "feedback_format": {
+      "recommended_structure": {
+        "evaluation_type": "feedback_report",
+        "role": "verify_27b | verify_32b | python_verify | ...",
+        "findings": [
+          {
+            "id": "F01",
+            "severity": "critical | high | medium | low",
+            "component": "affected file or module",
+            "description": "clear description of the issue",
+            "root_cause": "why it happens",
+            "impact": "what it affects operationally"
+          }
+        ],
+        "recommendations": [
+          {"priority": "P0 | P1 | P2", "action": "what to do", "detail": "implementation guidance"}
+        ],
+        "rubric_evaluation": {
+          "criteria": [
+            {"name": "faithfulness", "score": "0-10", "weight": 0.35},
+            {"name": "coverage", "score": "0-10", "weight": 0.25},
+            {"name": "schema_compliance", "score": "0-10", "weight": 0.20},
+            {"name": "conciseness", "score": "0-10", "weight": 0.20},
+            {"name": "cost_efficiency", "score": "0-10", "weight": 0.15}
+          ]
+        }
+      }
+    }
+  },
+
+  "rubric_v2": {
+    "description": "Updated rubric based on Round 1 findings. Added cost_efficiency and operational_impact criteria.",
+    "version": "2.0",
+    "changes_from_v1": "Added cost_efficiency (weight 0.15), added operational_impact (verify-specific). Redistributed weights.",
+    "criteria": [
+      {
+        "id": "faithfulness",
+        "name": "Faithfulness",
+        "description": "Evidence가 source text에 정확히 존재하는 비율 (substring diff 기준)",
+        "weight": 0.25,
+        "scale": "integer 0-10",
+        "baseline": {"10": "≥95%", "8": "≥80% (운영 기준)", "6": "≥60%", "4": "≥40%", "2": "≥20%", "0": "<20%"}
+      },
+      {
+        "id": "coverage",
+        "name": "Coverage",
+        "description": "user_turn + text 사실을 균형 있게 추출. user/text 비율 확인",
+        "weight": 0.20,
+        "scale": "integer 0-10",
+        "note": "Round 1 finding: 30B fallback이 text fact 0개 추출 → coverage penalize"
+      },
+      {
+        "id": "schema_compliance",
+        "name": "Schema Compliance",
+        "description": "출력 JSON schema 정확히 준수 (fact_type enum, evidence 존재)",
+        "weight": 0.15,
+        "scale": "integer 0-10"
+      },
+      {
+        "id": "conciseness",
+        "name": "Conciseness",
+        "description": "불필요한 중복/noise 없이 효율적으로 추출",
+        "weight": 0.15,
+        "scale": "integer 0-10"
+      },
+      {
+        "id": "cost_efficiency",
+        "name": "Cost Efficiency",
+        "description": "속도 대비 faithfulness efficiency. 3B retry waste 포함",
+        "weight": 0.15,
+        "scale": "integer 0-10",
+        "note": "NEW: 3B double-failure + 30B fallback token waste 계산"
+      },
+      {
+        "id": "operational_impact",
+        "name": "Operational Impact",
+        "description": "Downstream pipeline에 미치는 영향 (verify 정확도, MCP 품질)",
+        "weight": 0.10,
+        "scale": "integer 0-10",
+        "note": "NEW: 27B/32B verify에서 사용 — extract 품질이 verify 결과에 미치는 영향"
+      }
+    ],
+    "weight_total": 1.0
+  },
+
+  "operational_baseline": {
+    "latency_summary": [
+      {"model": "Qwen3-4B (8082)", "prompt_ms_per_tok": 83.9, "predict_ms_per_tok": 84.0, "tokens_per_second": 11.9},
+      {"model": "Qwen30B-A3B (8080)", "prompt_ms_per_tok": 90.5, "predict_ms_per_tok": 81.6, "tokens_per_second": 12.3}
+    ],
+    "extract_pipeline_stats": {
+      "turns_processed_ever": 4,
+      "3B_success_rate": "2/4 (50%)",
+      "30B_fallback_rate": "2/4 (50%)",
+      "avg_facts_per_turn_3B_success": 1.5,
+      "avg_facts_per_turn_30B_fallback": 2.5,
+      "avg_facts_per_turn_note": "30B fallback produces more facts but drops text facts entirely"
+    },
+    "verify_queue_summary": {
+      "items_in_queue": 0,
+      "items_history": "4 extract_results processed (all reviewed→done)",
+      "extract_result_queue_status": "bypasses P-R-J (queue_status='reviewed' hardcode)"
+    }
+  },
+
+  "round2_plan": {
+    "objective": "Run actual pipeline with optimal configuration, compare against Round 1 structural analysis",
+    "configuration_changes": [
+      "Fix queue_writer.py to use queue_status='pending' for extract_result → enables P-R-J review",
+      "Add call_llm() timing/token capture",
+      "Run on 50 turns (not 4) for statistically valid metrics",
+      "Add 3B→30B skip-retry for T>500ch turns (test hypothesis)"
+    ],
+    "model_assignments_for_round2": {
+      "proposer": "R1-8B (Pod A :8083, night mode)",
+      "refuter": "Qwen7B (Pod B :8080, night review-qw mode)",
+      "judge": "Selene (Pod B :8081, night review-se mode)",
+      "verify_27b": "Qwen3.6-27B (Pod B :8081, verify mode)",
+      "verify_32b": "Qwen2.5-Coder-32B (Pod B :8081, verify_test mode)"
+    },
+    "metrics_to_collect": [
+      "Total processing time per turn (3B + 30B + MCP)",
+      "Token usage per model per turn",
+      "3B retry success rate (1st vs 2nd attempt)",
+      "Faithfulness % distribution across turns",
+      "30B fallback quality (facts extracted, text fact %)",
+      "P-R-J review time per finding",
+      "27B vs 32B decision agreement rate"
+    ],
+    "target_sample_size": 50,
+    "estimated_total_time": "~60 min (50 turns × ~72s avg per turn)"
+  },
+
+  "file_manifest": {
+    "round1_documents": [
+      {"file": "eval_python_verify.json", "findings": 8, "role": "python_verify"},
+      {"file": "eval_30b_verify.json", "findings": 7, "role": "30b_verify"},
+      {"file": "eval_night_mode.json", "findings": 0, "role": "mode_transition_plan"},
+      {"file": "eval_prj_extract_handoff.json", "findings": 7, "role": "p_r_j"},
+      {"file": "eval_verify_27b_round1.json", "findings": 7, "role": "verify_27b"},
+      {"file": "eval_verify_32b_round1.json", "findings": 4, "role": "verify_32b"},
+      {"file": "eval_feedback_baseline.json", "findings": "aggregated", "role": "consolidated_report"}
+    ]
+  }
+}
