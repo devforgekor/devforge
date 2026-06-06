@@ -1,3 +1,18 @@
+## code-structure.yaml
+
+- **보관 사유**: 파일별 Status/Path 헤더(127개 .py)가 SSOT로 정착. `grep "^# Status:"` + 디렉토리 트리로 완전 대체 가능. Phase E (pipelines/, proxies/, tests/) 경로 변경으로 stale 상태.
+- **대체 위치**: 각 `.py` 파일의 `# Status:` / `# Path:` 헤더. 디렉토리 트리는 `ls scripts/` / `ls scripts/pipelines/` 등.
+- **삭제 조건**: 즉시 삭제 가능 (Code is SSOT 원칙 정착됨)
+- **주의**: `code-structure.yaml`에는 "CRITICAL: LLM MUST read this"라고 되어 있으나, 실제 코드 헤더가 더 정확함.
+
+## software.yaml
+
+- **보관 사유**: CLAUDE.yaml `software:` 키가 비어있어 auto-gen된 stub에 불과. 모델/모드/파이프라인 정보는 `cli.py status --json`과 DB experiment_registry가 SSOT.
+- **대체 위치**: `cli.py status --json` (models, active_config), DB `experiment_registry` 테이블
+- **삭제 조건**: 즉시 삭제 가능
+
+---
+
 ## timer-registry.yaml
 
 - **보관 사유**: `cli.py status --json` (timers 섹션) + `systemctl --user list-timers` 로 완전 대체. systemd가 SSOT이므로 수동 YAML 문서화가 불필요해짐. Session 26 — Phase A 완료 (2026-06-06).

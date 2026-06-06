@@ -79,7 +79,7 @@ decisions:
 known_issues:
   - '5-phase experiment not run — P0'
   - 'Night pipeline simple cycle test not run — P1'
-  - 'code-structure.yaml sync not done — P1 (127 file Status/Path to reflect)'
+  - 'code-structure.yaml → _archive/ (code headers are SSOT)'
   - '7B Q8_0 ARM 4-core decode 2.85 t/s (3B+7B concurrent Config B)'
   - '27B Q4_K_M(16GB) on 22GB RAM — OOM risk. recover_and_restart() 3-level escalation'
   - '@~/ tilde expansion bug (GitHub #8765) — using absolute paths as workaround'
