@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: none — Red phase test for truncate_at_boundary()
+# Path: tests/test_text_quality.py — pytest
 """Tests for text_quality.truncate_at_boundary() — sentence-aware Korean truncation."""
 
 import sys

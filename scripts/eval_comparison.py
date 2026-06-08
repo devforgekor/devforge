@@ -213,8 +213,8 @@ def main():
                 all_results.append(result)
 
     # Write results
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    out_path = OUTPUT_DIR / f"evaluation_{ts}.json"
+    file_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    out_path = OUTPUT_DIR / f"evaluation_{file_ts}.json"
     with open(out_path, "w") as f:
         json.dump(all_results, f, indent=2, ensure_ascii=False)
     print(f"\nResults: {out_path}")

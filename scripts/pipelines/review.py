@@ -3,64 +3,44 @@
 # Path: imported by review_pipeline_3model.py
 """Step implementations for the 3-Model Review Pipeline.
 
-Contains constants, system prompts, HTTP helpers, and the 4 step functions:
-  Step 1  run_deep_review   R1-8B (:8083) — bug/security/edge-case discovery
-  Step 2  run_reflection    Qwen7B (:8080) — ACCEPT/REJECT per finding
-  Step 3  run_judgment      Selene (:8081)  — Scoring Judge (P/R scores, gap, veto)
-  Step 4  run_diff          Qwen7B (:8080)  — unified diff for approved findings
+Contains constants, system prompts, HTTP helpers, and the 3 step functions:
+  Step 1  run_reflection    Pod B (:8080) — ACCEPT/REJECT per finding
+  Step 2  run_judgment      Pod B (:8081)  — Scoring Judge (P/R scores, gap, veto)
+  Step 3  run_diff          Pod B (:8080)  — unified diff for approved findings
 
 Exported symbols consumed by review_pipeline_3model.py:
-  R1_PORT, QWEN7B_PORT, JUDGE_PORT, _poll_health,
-  run_deep_review, run_reflection, run_judgment, run_diff
+  REFLECTOR_PORT, JUDGE_PORT, _poll_health,
+  run_reflection, run_judgment, run_diff
 """
 
 import json
+import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List
 
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, SCRIPTS_DIR)
+
 from lib import scoring as _sc
 from lib.llm_client import call_llm, call_llm_json
 
 # ── Constants ──────────────────────────────────────────────────────────────
-R1_PORT = 8083  # Pod A night: R1-8B
-QWEN7B_PORT = 8080  # Pod B: Qwen7B (reflection + diff)
-JUDGE_PORT = 8081  # Pod B swap: Scoring Judge (Step 3)
-TIMEOUT_STEP1 = 900  # 15 min
-TIMEOUT_STEP2 = 480  #  8 min
-TIMEOUT_STEP3 = 480  #  8 min (Scoring Judge: rubric + decisions)
-TIMEOUT_STEP4 = 600  # 10 min
-MAX_TOKENS_STEP1 = 2048
-MAX_TOKENS_STEP2 = 400
-MAX_TOKENS_STEP3 = 1024  # Scoring Judge: rubric + scores + decisions + machine_summary
-MAX_TOKENS_STEP4 = 2048
+REFLECTOR_PORT = 8080  # Pod B: reflection + diff
+JUDGE_PORT = 8081  # Pod B swap: Scoring Judge (Step 1)
+TIMEOUT_STEP1 = 480  #  8 min (Reflector)
+TIMEOUT_STEP2 = 480  #  8 min (Scoring Judge: rubric + decisions)
+TIMEOUT_STEP3 = 600  # 10 min
+MAX_TOKENS_STEP1 = 400
+MAX_TOKENS_STEP2 = 1024  # Scoring Judge: rubric + scores + decisions + machine_summary
+MAX_TOKENS_STEP3 = 2048
 
 THINK_STRIP_RE = re.compile(r"<think[^>]*>.*?</think>", re.DOTALL)
 
 # ── Step 1 System Prompt ───────────────────────────────────────────────────
-SYSTEM_REVIEW_STEP1 = """\
-You are a code review specialist. Your job is to find bugs, security issues,
-and edge cases in the provided code diff or file.  Do NOT suggest fixes.
-Focus only on: correctness, security, performance, error handling.
-
-Output a JSON object with this exact structure:
-{
-  "findings": [
-    {
-      "id": "F01",
-      "severity": "critical|high|medium|low",
-      "location": "function_name or file:line",
-      "category": "bug|security|performance|error_handling|edge_case",
-      "description": "What is wrong and why it matters (1-3 sentences)"
-    }
-  ]
-}
-If there are no findings, return {"findings": []}.
-Never include code modifications or suggested fixes."""
-
-# ── Step 2 System Prompt ───────────────────────────────────────────────────
 SYSTEM_REVIEW_STEP2 = """\
 You are a code review reflector. You will receive a bug report (list of
 findings) and the original code. For each finding, decide:
@@ -77,7 +57,7 @@ Output a JSON object:
 }
 Do NOT suggest fixes. Do NOT rewrite code. Respond ONLY with the JSON."""
 
-# ── Step 3 System Prompt (Scoring Judge) ───────────────────────────────
+# ── Step 2 System Prompt (Scoring Judge) ───────────────────────────────
 SYSTEM_REVIEW_STEP3 = """\
 You are a 3-person jury panel evaluating a code review:
 - Juror 1: Security expert — did the finder catch real vulnerabilities?
@@ -150,7 +130,7 @@ Output STRICT JSON (no markdown, no explanation outside JSON):
   ]
 }"""
 
-# ── Step 4 System Prompt ───────────────────────────────────────────────────
+# ── Step 3 System Prompt ───────────────────────────────────────────────────
 SYSTEM_REVIEW_STEP4 = """\
 You are a diff writer. You receive original code and a list of approved
 findings. Generate ONLY a unified diff that fixes the approved issues.
@@ -214,40 +194,12 @@ def strip_think_blocks(text: str) -> str:
     return THINK_STRIP_RE.sub("", text).strip()
 
 
-# ── Scoring Judge (delegates to lib/scoring.py) ──────────────────
-# Shared single source of truth for veto / gap / early-exit / runtime_metrics.
-# Used by both cooperative debate and Dawn review pipeline.
-def run_deep_review(code: str, task_label: str = "") -> Dict[str, Any]:
-    """Step 1: R1-8B on :8083 performs deep bug/security review."""
-    print(f"[step1] Deep Review — R1-8B on :{R1_PORT}")
-    if not _poll_health(R1_PORT, timeout=30):
-        raise RuntimeError(f"R1-8B not healthy on :{R1_PORT}")
-
-    user_prompt = (
-        f"Review this code for bugs, security issues, and edge cases.\n"
-        f"Task: {task_label}\n\n```\n{code}\n```"
-    )
-    raw = call_llm_json(
-        [{"role": "system", "content": SYSTEM_REVIEW_STEP1},
-         {"role": "user", "content": user_prompt}],
-        model="R1-8B",
-        max_tokens=MAX_TOKENS_STEP1,
-        timeout=TIMEOUT_STEP1,
-    )
-    cleaned = strip_think_blocks(raw)
-    result = _parse_json_output(cleaned, "Step 1 (R1-8B)")
-    findings = result.get("findings", [])
-    print(f"[step1] Found {len(findings)} issues")
-    for f in findings:
-        print(f"  {f.get('id', '?')} [{f.get('severity', '?')}] {f.get('description', '')[:80]}")
-    return result
-
 
 def run_reflection(code: str, findings: List[Dict]) -> Dict[str, Any]:
-    """Step 2: Qwen7B on :8080 reflects on findings (ACCEPT/REJECT)."""
-    print(f"[step2] Reflection — Qwen7B on :{QWEN7B_PORT}")
-    if not _poll_health(QWEN7B_PORT, timeout=30):
-        raise RuntimeError(f"Qwen7B not healthy on :{QWEN7B_PORT}")
+    """Step 1: Reflector on :8080 reviews findings (ACCEPT/REJECT)."""
+    print(f"[step1] Reflection on :{REFLECTOR_PORT}")
+    if not _poll_health(REFLECTOR_PORT, timeout=30):
+        raise RuntimeError(f"reviewer not healthy on :{REFLECTOR_PORT}")
 
     findings_json = json.dumps({"findings": findings}, ensure_ascii=False, indent=2)
     user_prompt = (
@@ -258,28 +210,28 @@ def run_reflection(code: str, findings: List[Dict]) -> Dict[str, Any]:
     raw = call_llm_json(
         [{"role": "system", "content": SYSTEM_REVIEW_STEP2},
          {"role": "user", "content": user_prompt}],
-        model="Qwen7B",
+        model="reviewer",
         max_tokens=MAX_TOKENS_STEP2,
         timeout=TIMEOUT_STEP2,
     )
-    result = _parse_json_output(raw, "Step 2 (Qwen7B)")
+    result = _parse_json_output(raw, "Step 1 (reflector)")
     verdicts = result.get("verdicts", [])
     accepted = sum(1 for v in verdicts if v.get("verdict", "").lower() == "accept")
     rejected = len(verdicts) - accepted
-    print(f"[step2] Verdicts: {accepted} accept, {rejected} reject")
+    print(f"[step1] Verdicts: {accepted} accept, {rejected} reject")
     return result
 
 
 def run_judgment(
     code: str, findings: List[Dict], reviewer_accepted: List[str], reflector_verdicts: List[Dict]
 ) -> Dict[str, Any]:
-    """Step 3: Selene on :8081 — Scoring Judge (P_score/R_score/gap/veto).
+    """Step 1: Scoring Judge on :8081 — P_score/R_score/gap/veto.
 
     Returns enriched verdict with judge metadata for downstream gating.
     """
-    print(f"[step3] Judgment (Scoring Judge) — Selene on :{JUDGE_PORT}")
+    print(f"[step2] Judgment (Scoring Judge) on :{JUDGE_PORT}")
     if not _poll_health(JUDGE_PORT, timeout=30):
-        raise RuntimeError(f"Selene not healthy on :{JUDGE_PORT}")
+        raise RuntimeError(f"Scoring Judge not healthy on :{JUDGE_PORT}")
 
     # Determine 2:0 fast-path (both agree) vs 1:1 disputed
     refl_accept = {v["id"] for v in reflector_verdicts if v.get("verdict", "").lower() == "accept"}
@@ -292,7 +244,7 @@ def run_judgment(
         print(f"[step3] All {len(fast_path)} findings: 2:0 fast-path ratified")
         return _build_fastpath_verdict(findings, fast_path, reflector_verdicts)
 
-    print(f"[step3] {len(fast_path)} fast-path, {len(disputed)} disputed → Selene scoring judge")
+    print(f"[step3] {len(fast_path)} fast-path, {len(disputed)} disputed → Scoring Judge")
     disputed_findings = [f for f in findings if f["id"] in disputed]
     user_prompt = (
         f"Code:\n```\n{code}\n```\n\n"
@@ -305,11 +257,11 @@ def run_judgment(
     raw = call_llm_json(
         [{"role": "system", "content": SYSTEM_REVIEW_STEP3},
          {"role": "user", "content": user_prompt}],
-        model="Selene",
+        model="judge",
         max_tokens=MAX_TOKENS_STEP3,
         timeout=TIMEOUT_STEP3,
     )
-    result = _parse_json_output(raw, "Step 3 (Selene)")
+    result = _parse_json_output(raw, "Step 3 (Scoring Judge)")
 
     # Merge fast-path into judge result
     for fid in fast_path:
@@ -435,14 +387,14 @@ def _build_fastpath_verdict(
 
 
 def run_diff(code: str, approved_findings: List[Dict]) -> str:
-    """Step 4: Qwen7B on :8080 generates unified diff for approved findings."""
+    """Step 2: Reflector on :8080 generates unified diff for approved findings."""
     if not approved_findings:
-        print("[step4] No approved findings — skipping diff generation")
+        print("[step3] No approved findings — skipping diff generation")
         return ""
 
-    print(f"[step4] Diff Generation — Qwen7B on :{QWEN7B_PORT} ({len(approved_findings)} findings)")
-    if not _poll_health(QWEN7B_PORT, timeout=30):
-        raise RuntimeError(f"Qwen7B not healthy on :{QWEN7B_PORT}")
+    print(f"[step4] Diff Generation on :{REFLECTOR_PORT} ({len(approved_findings)} findings)")
+    if not _poll_health(REFLECTOR_PORT, timeout=30):
+        raise RuntimeError(f"reviewer not healthy on :{REFLECTOR_PORT}")
 
     user_prompt = (
         f"Generate a unified diff to fix these approved findings:\n\n"
@@ -454,7 +406,7 @@ def run_diff(code: str, approved_findings: List[Dict]) -> str:
     diff_text = call_llm(
         [{"role": "system", "content": SYSTEM_REVIEW_STEP4},
          {"role": "user", "content": user_prompt}],
-        model="Qwen7B",
+        model="reviewer",
         max_tokens=MAX_TOKENS_STEP4,
         timeout=TIMEOUT_STEP4,
     )

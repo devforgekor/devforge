@@ -27,9 +27,10 @@ PSQL = ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
 PROMPT_MEDIUM = "Write a detailed explanation of how attention mechanisms work in transformer architectures, including multi-head attention, self-attention, and cross-attention."
 
 
-def esc_sql(s: str) -> str:
+def escape_sql_string(s: str) -> str:
     """Escape string for safe SQL literal interpolation."""
     return s.replace("\x00", "").replace("\\", "\\\\").replace("'", "''").replace("\n", " ").replace("\r", " ")
+esc_sql = escape_sql_string  # alias
 
 
 def psql(sql: str) -> str:
@@ -110,20 +111,16 @@ def auto_discover_config(port: int) -> dict:
     # Determine which pod based on port
     if port == 8082:
         config["component"] = "pod-a"
-        config["mode"] = "day_r"
+        config["mode"] = "day_reviewer"
         config["container"] = "devforge-pod-a"
     elif port == 8080:
         config["component"] = "pod-b"
         config["mode"] = "day_mcp"
-        config["container"] = "devforge-swap"
+        config["container"] = "devforge-pod-b"
     elif port == 8081:
         config["component"] = "pod-b"
         config["mode"] = "night_verify"
-        config["container"] = "devforge-swap"
-    elif port == 8083:
-        config["component"] = "pod-a"
-        config["mode"] = "review_r1"
-        config["container"] = "devforge-pod-a"
+        config["container"] = "devforge-pod-b"
 
     # Try to get model info from health endpoint
     try:

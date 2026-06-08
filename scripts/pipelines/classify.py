@@ -30,6 +30,7 @@ import time
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
+from lib.infra.preflight import preflight_checks
 from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.llm_client import call_llm
 from lib.llm.json_parser import save_dlq, parse_llm_json
@@ -51,7 +52,7 @@ def log(msg):
 # ── System prompts ───────────────────────────────────────────────────
 # Hallucination control: extract evidence only, JSON forced, <300 lines.
 
-SYS_P = """You are a code review assistant. Examine the turn and extracted facts below.
+PROPOSER_SYSTEM_PROMPT = """You are a code review assistant. Examine the turn and extracted facts below.
 Generate findings about potential issues, bugs, or improvements.
 
 CRITICAL RULES:
@@ -74,7 +75,7 @@ Return JSON:
   ]
 }"""
 
-SYS_R = """You are a verdict reviewer. For each finding proposed by the reviewer,
+REFLECTOR_SYSTEM_PROMPT = """You are a verdict reviewer. For each finding proposed by the reviewer,
 decide ACCEPT or REJECT based ONLY on whether the evidence supports the finding.
 
 CRITICAL RULES:
@@ -93,7 +94,7 @@ Return JSON:
   ]
 }"""
 
-SYS_J = """You are a scoring judge. Review the findings and verdicts.
+JUDGE_SYSTEM_PROMPT = """You are a scoring judge. Review the findings and verdicts.
 Assign a simple score and make a decision.
 
 CRITICAL RULES:
@@ -263,9 +264,9 @@ def _phase_p(turn, facts):
                   "description": "Dry-run finding", "evidence": "mock evidence"}]
 
     result = _call_json(
-        [{"role": "system", "content": SYS_P},
+        [{"role": "system", "content": PROPOSER_SYSTEM_PROMPT},
          {"role": "user", "content": ctx}],
-        model="day_p", label="P_classify"
+        model="day_proposer", label="P_classify"
     )
     findings = result.get("findings", []) if result else []
     log(f"  P(day_p): {len(findings)} findings")
@@ -286,9 +287,9 @@ def _phase_r(findings):
                   "reason": "dry-run accept"} for f in findings[:3]]
 
     result = _call_json(
-        [{"role": "system", "content": SYS_R},
+        [{"role": "system", "content": REFLECTOR_SYSTEM_PROMPT},
          {"role": "user", "content": ctx}],
-        model="day_r", label="R_classify"
+        model="day_reviewer", label="R_classify"
     )
     verdicts = result.get("verdicts", []) if result else []
     log(f"  R(day_r): {len(verdicts)} verdicts")
@@ -315,9 +316,9 @@ def _phase_j(findings, verdicts):
         }
 
     result = _call_json(
-        [{"role": "system", "content": SYS_J},
+        [{"role": "system", "content": JUDGE_SYSTEM_PROMPT},
          {"role": "user", "content": "\n".join(ctx_parts)}],
-        model="day_j", label="J_classify"
+        model="day_judge", label="J_classify"
     )
     if result and result.get("decision") in ("APPROVED", "REJECT"):
         log(f"  J(day_j): P_score={result.get('P_score','?')} "
@@ -448,6 +449,7 @@ def classify_pipeline(limit=BATCH_LIMIT):
 
 
 def main():
+    preflight_checks("classify.py")
     limit = BATCH_LIMIT
     for i, a in enumerate(sys.argv):
         if a == "--limit" and i + 1 < len(sys.argv):

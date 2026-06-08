@@ -39,7 +39,8 @@ def fetch_unprocessed_mcp(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
     """Fetch review_facts rows where fact_type='mcp_meta' and verdict='pending'."""
     sql = (
         "SELECT rf.id, rf.turn_id, rf.evidence, rf.extract_model, "
-        "  rf.created_at, t.seq, t.conversation_id "
+        "  rf.created_at, rf.fact_confidence AS faithfulness_score, "
+        "  t.seq, t.conversation_id "
         "FROM review_facts rf "
         "LEFT JOIN turns t ON t.id = rf.turn_id "
         "WHERE rf.fact_type = 'mcp_meta' "
@@ -65,6 +66,7 @@ def fetch_unprocessed_mcp(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
             "created_at": row.get("created_at", ""),
             "seq": int(row["seq"]) if row.get("seq") else 0,
             "conversation_id": row.get("conversation_id", ""),
+            "faithfulness_score": row.get("faithfulness_score"),
         })
     return items
 

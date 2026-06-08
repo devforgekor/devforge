@@ -32,11 +32,15 @@ Flag mapping:
   Phase 4: --structural                         (rubric + feedback default ON)
 """
 
-import json, os, re, shutil, subprocess, sys, time, urllib.request
+import json, os, re, shutil, signal, subprocess, sys, time, urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, SCRIPTS_DIR)
+
+from lib.infra.preflight import preflight_checks
+from lib.experiment_state import ExperimentState, update_state
 EXPER_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "experiment")
 ARCHIVE_DIR = os.path.join(SCRIPTS_DIR, "_archive")
 os.makedirs(EXPER_DIR, exist_ok=True)
@@ -78,7 +82,7 @@ def slack_send(text):
         log(f"Slack send failed: {e}")
 
 
-def ts():
+def utc_timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -90,11 +94,12 @@ KEY_FILES = ["pipelines/prj_cycle.py", "pipelines/extract.py", "pipelines/classi
 
 def save_snapshot(phase):
     d = os.path.join(ARCHIVE_DIR, f"phase{phase}")
-    os.makedirs(d, exist_ok=True)
     for fname in KEY_FILES:
         src = os.path.join(SCRIPTS_DIR, fname)
         if os.path.exists(src):
-            shutil.copy2(src, os.path.join(d, fname))
+            dst = os.path.join(d, fname)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
     log(f"Snapshot saved: _archive/phase{phase}/")
 
 
@@ -149,7 +154,7 @@ def apply_transform(phase):
 
 def _stop_all():
     """Stop both LLM containers."""
-    for svc in ["container-devforge-swap.service", "container-devforge-pod-a.service"]:
+    for svc in ["container-devforge-pod-b.service", "container-devforge-pod-a.service"]:
         subprocess.run(["systemctl", "--user", "stop", svc], capture_output=True, timeout=30)
         subprocess.run(["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10)
 
@@ -217,6 +222,14 @@ def _get_available_mb():
 
 def _write_mode(pod, mode):
     """Write mode file atomically."""
+    if pod == "pod-b":
+        # Pod B needs full model config (MODEL_FILE, CTX_SIZE, etc.) for entrypoint.
+        # Delegate to pod_manager's _write_mode_env which derives from MODEL_METADATA SSOT.
+        from lib.pod_manager import _write_mode_env
+        port = 8081 if mode == "verify" else 8080
+        _write_mode_env(mode, port)
+        return
+    # Pod A: only has day mode with fixed 7B reviewer — just MODE is sufficient.
     path = f"/opt/ai_data/scripts/current-mode-{pod}.env"
     tmp = f"{path}.tmp"
     with open(tmp, "w") as f:
@@ -235,7 +248,7 @@ def _start_pod_a(timeout=120):
 def _start_pod_b(timeout=120):
     """Start Pod B (day:8080)."""
     log("  Starting Pod B (day:8080)...")
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-swap.service"],
+    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
                    capture_output=True, timeout=60)
     return wait_health(8080, timeout)
 
@@ -268,21 +281,21 @@ def recover_and_restart(attempt=1):
 
     if attempt <= 2:
         log("  Attempt: day_r + day_p/day_j (standard day mode)")
-        ok_a = _start_pod_a(120)
-        log(f"  Pod A (day_r:8082) = {'OK' if ok_a else 'TIMEOUT'}")
+        pod_a_ready = _start_pod_a(120)
+        log(f"  Pod A (day_r:8082) = {'OK' if pod_a_ready else 'TIMEOUT'}")
 
-        if not ok_a and attempt == 2:
+        if not pod_a_ready and attempt == 2:
             _report_mem("after Pod A failure")
             # day_r 실패 → 더 강력한 회수 후 재시도
             _stop_all()
             _free_memory(level=2)
-            ok_a = _start_pod_a(120)
-            log(f"  Pod A retry (day_r:8082) = {'OK' if ok_a else 'TIMEOUT'}")
+            pod_a_ready = _start_pod_a(120)
+            log(f"  Pod A retry (day_r:8082) = {'OK' if pod_a_ready else 'TIMEOUT'}")
 
-        if ok_a:
-            ok_b = _start_pod_b(180)
-            log(f"  Pod B (day:8080) = {'OK' if ok_b else 'TIMEOUT'}")
-            if ok_b:
+        if pod_a_ready:
+            pod_b_ready = _start_pod_b(180)
+            log(f"  Pod B (day:8080) = {'OK' if pod_b_ready else 'TIMEOUT'}")
+            if pod_b_ready:
                 return True
 
         # 3B+7B 실패 → minimal mode: 7B only
@@ -295,8 +308,8 @@ def recover_and_restart(attempt=1):
 
     # Pod B만 단독 시작 (day_r 없음 — 메모리 3.1GB 절약)
     log("  Minimal mode: Pod B only (day:8080)")
-    ok_b = _start_pod_b(300)  # 더 긴 timeout
-    if ok_b:
+    pod_b_ready = _start_pod_b(300)  # 더 긴 timeout
+    if pod_b_ready:
         log("  Minimal mode OK: day model running alone")
         return True
 
@@ -307,30 +320,51 @@ def recover_and_restart(attempt=1):
 # ── Pipeline execution ──────────────────────────────────────────
 
 def run_pipeline(phase):
-    """Run prj_cycle.py with --skip-extract. Returns (success, metrics_path)."""
+    """Run prj_cycle.py with extract included. Returns (success, metrics_path)."""
     metrics_path = os.path.join(EXPER_DIR, f"phase{phase}_metrics.json")
 
-    cmd = [sys.executable, os.path.join(SCRIPTS_DIR, "pipelines", "prj_cycle.py"),
-           "--skip-extract"]
+    cmd = [sys.executable, os.path.join(SCRIPTS_DIR, "pipelines", "prj_cycle.py")]
 
     log(f"Running: {' '.join(cmd)}")
     t0 = time.monotonic()
 
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=28800)
-    elapsed = time.monotonic() - t0
+    # Use Popen to enable SIGKILL fallback on hang.
+    # Write stdout/stderr directly to file to prevent pipe buffer deadlock.
+    output_path = os.path.join(EXPER_DIR, f"phase{phase}_output.log")
+    with open(output_path, "w") as out_f:
+        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        proc = subprocess.Popen(cmd, stdout=out_f, stderr=subprocess.STDOUT, text=True, env=env)
+        TIMEOUT = 28800
+        poll_interval = 60
+        killed = False
+        for _ in range(TIMEOUT // poll_interval):
+            try:
+                proc.wait(timeout=poll_interval)
+                break
+            except subprocess.TimeoutExpired:
+                # Check if still alive — if in I/O wait, SIGTERM may not work
+                if proc.poll() is not None:
+                    break
+                continue
+        else:
+            # Full timeout expired — force kill
+            log(f"  TIMEOUT ({TIMEOUT}s) — sending SIGKILL to {proc.pid}")
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            proc.wait(timeout=10)
+            killed = True
 
-    log_path = os.path.join(EXPER_DIR, f"phase{phase}_output.log")
-    with open(log_path, "w") as f:
-        f.write(proc.stdout or "")
-        if proc.stderr:
-            f.write("\n\n=== STDERR ===\n")
-            f.write(proc.stderr)
+    elapsed = time.monotonic() - t0
+    # Read back output for metrics extraction
+    with open(output_path) as f:
+        stdout = f.read()
 
     success = proc.returncode == 0
-    metrics = extract_metrics(proc.stdout, phase, elapsed)
+    metrics = extract_metrics(stdout, phase, elapsed)
     metrics["returncode"] = proc.returncode
     metrics["elapsed_seconds"] = round(elapsed, 1)
     metrics["success"] = success
+    if killed:
+        metrics["killed"] = True
 
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
@@ -341,7 +375,7 @@ def run_pipeline(phase):
 
 def extract_metrics(stdout, phase, elapsed):
     metrics = {
-        "phase": phase, "timestamp": ts(),
+        "phase": phase, "timestamp": utc_timestamp(),
         "elapsed_seconds": round(elapsed, 1),
     }
 
@@ -457,16 +491,29 @@ def prepare_all_phases():
     log("All phase snapshots ready")
 
 
+def _restart_services():
+    """Restart watchdog + 15m cycle stopped by run_experiment()."""
+    known_services = {
+        "devforge-watchdog.service",
+        "devforge-15m-cycle.service",
+        "devforge-15m-cycle.timer",
+    }
+    for unit in sorted(known_services):
+        subprocess.run(["systemctl", "--user", "start", unit], capture_output=True, timeout=30)
+    log("  Watchdog + 15m cycle restarted")
+
+
 # ── Experiment orchestrator ─────────────────────────────────────
 
 def run_experiment(phases):
     """Run requested phases sequentially."""
-    slack_send(f":rocket: *실험 시작* (Phase {phases[0]}→{phases[-1]})\n{ts()} UTC\n각 phase마다 cache reset")
+    slack_send(f":rocket: *실험 시작* (Phase {phases[0]}→{phases[-1]})\n{utc_timestamp()} UTC\n각 phase마다 cache reset")
 
     for phase in phases:
         log(f"\n{'='*60}")
         log(f"PHASE {phase}")
         log(f"{'='*60}")
+        update_state(current_phase=phase, step=f"phase_{phase}_start")
 
         success = False
         for attempt in range(1, 4):
@@ -504,15 +551,17 @@ def run_experiment(phases):
 
         if not success:
             slack_send(f":no_entry: *Phase {phase}* — 3회 모두 실패. 실험 중단.")
+            _restart_services()
             return False
 
     generate_comparison_report()
+    _restart_services()
     return True
 
 
 def generate_comparison_report():
     """Build and send 2x2 factorial comparison across 5 phases."""
-    report = {"timestamp": ts(), "phases": {}}
+    report = {"timestamp": utc_timestamp(), "phases": {}}
     for phase in range(5):
         mp = os.path.join(EXPER_DIR, f"phase{phase}_metrics.json")
         if os.path.exists(mp):
@@ -583,6 +632,7 @@ def generate_comparison_report():
 
 
 def main():
+    preflight_checks("runner.py")
     phases = [0, 1, 2, 3, 4]
     dry_run = "--dry-run" in sys.argv
 
@@ -603,29 +653,33 @@ def main():
     # Step 1: build all snapshots
     prepare_all_phases()
 
-    # Step 2: verify input
+    # Step 2: check for optional consolidated input (extract reads from DB)
     input_fp = os.path.join(SCRIPTS_DIR, "..", "pipeline_input", "consolidated_input_compact.json")
-    if not os.path.exists(input_fp):
-        slack_send(":no_entry: input file not found")
-        sys.exit(1)
-    with open(input_fp) as f:
-        findings_count = len(json.load(f).get("findings", []))
-    log(f"Input: {input_fp} ({findings_count} findings)")
-
-    # Step 3: run
-    success = run_experiment(phases)
-
-    # Step 4: restore original
-    restore_snapshot(0)
-
-    if success:
-        slack_send(":tada: *실험 완료!*")
+    if os.path.exists(input_fp):
+        with open(input_fp) as f:
+            findings_count = len(json.load(f).get("findings", []))
+        log(f"Consolidated input: {input_fp} ({findings_count} findings)")
     else:
-        slack_send(":x: *실험 실패*")
+        log("No consolidated input file — extract will read from DB")
 
-    for phase in phases:
-        log(f"  Phase {phase}: {os.path.join(EXPER_DIR, f'phase{phase}_metrics.json')}")
-        log(f"  Log: {os.path.join(EXPER_DIR, f'phase{phase}_output.log')}")
+    # Step 3: run with experiment state tracking
+    try:
+        with ExperimentState(phase=phases[0], phases=phases, step="preparing"):
+            success = run_experiment(phases)
+
+        # Step 4: restore original
+        restore_snapshot(0)
+
+        if success:
+            slack_send(":tada: *실험 완료!*")
+        else:
+            slack_send(":x: *실험 실패*")
+
+        for phase in phases:
+            log(f"  Phase {phase}: {os.path.join(EXPER_DIR, f'phase{phase}_metrics.json')}")
+            log(f"  Log: {os.path.join(EXPER_DIR, f'phase{phase}_output.log')}")
+    finally:
+        _restart_services()
 
 
 if __name__ == "__main__":

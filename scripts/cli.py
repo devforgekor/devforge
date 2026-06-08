@@ -123,7 +123,6 @@ MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
 MODE_MAP = {
     "day":     ("day",      "day"),      # Pod A 3B(:8082) + Pod B 7B(:8080)
-    "review":  ("review-r1", "review-qw"), # Pod A R1-8B(:8083) + Pod B Qwen7B(:8080)
     "verify":  ("verify",    "verify"),   # Pod B 27B(:8081), Pod A 정지 (메모리 확보)
 }
 
@@ -142,13 +141,13 @@ def _switch_mode(mode: str) -> bool:
     print(f"Switched to {mode} (Pod A: {mode_a}, Pod B: {mode_b})")
 
     # Restart Pod B
-    print("Restarting container-devforge-swap (Pod B)...")
+    print("Restarting container-devforge-pod-b (Pod B)...")
     r = subprocess.run(
-        ["systemctl", "--user", "restart", "container-devforge-swap"],
+        ["systemctl", "--user", "restart", "container-devforge-pod-b"],
         capture_output=True, text=True, timeout=120,
     )
     if r.returncode != 0:
-        print(f"Error restarting container-devforge-swap: {r.stderr}")
+        print(f"Error restarting container-devforge-pod-b: {r.stderr}")
         return False
 
     # Handle Pod A
@@ -229,7 +228,7 @@ def cmd_discussion(args):
         print(f"  Dry-run: enabled")
 
     # Import and run
-    from local_debate import LocalDebateReview
+    from lib.debate.local_debate import LocalDebateReview
     session = LocalDebateReview(
         question=question,
         method=method,
@@ -244,10 +243,10 @@ def cmd_discussion(args):
 
 
 def _container_in_review_mode() -> bool:
-    """Check if devforge-swap container is running in review mode (llama-server on :8081)."""
+    """Check if devforge-pod-b container is running in review mode (llama-server on :8081)."""
     try:
         r = subprocess.run(
-            ["podman", "exec", "devforge-swap", "pgrep", "-f", "llama-server.*8081"],
+            ["podman", "exec", "devforge-pod-b", "pgrep", "-f", "llama-server.*8081"],
             capture_output=True, text=True, timeout=5,
         )
         return r.returncode == 0
@@ -795,7 +794,7 @@ def _get_alerts(containers, resources):
     """Derive alerts from thresholds."""
     alerts = []
     # container down
-    expected = ["postgres", "devforge-pod-a", "devforge-swap"]
+    expected = ["postgres", "devforge-pod-a", "devforge-pod-b"]
     for name in expected:
         if name not in containers:
             alerts.append(f"Container {name} is DOWN")
@@ -981,6 +980,81 @@ def cmd_glossary_sync(args):
     else:
         print(f"✅ Synced {ctx_count} contexts, {term_count} terms — DB is up to date")
         return 0
+
+
+# ═══════════════════════════════════════════════════════════════════
+# File Management commands
+# ═══════════════════════════════════════════════════════════════════
+
+def cmd_file_find(args):
+    """Search files by keyword (description, filename, tags)."""
+    from lib.file_registry import search_files
+    results = search_files(args.query, limit=args.limit)
+    if not results:
+        print("No files found.")
+        return
+    for r in results:
+        tags = " ".join(f"#{t}" for t in r.get("tags", []) or [])
+        desc = (r.get("description") or "")[:80]
+        print(f"  [{r['id'][:8]}] {r['filename']} ({r.get('size', 0)} bytes)")
+        if desc:
+            print(f"       {desc}")
+        print(f"       source={r['source']}  created={r['created_at'][:19]}  {tags}")
+        print()
+
+
+def cmd_file_list(args):
+    """List recent files, optionally filtered by source."""
+    from lib.file_registry import list_files
+    results = list_files(source=args.source, limit=args.limit)
+    if not results:
+        print("No files found.")
+        return
+    print(f"{'ID':<12} {'Filename':<30} {'Source':<20} {'Size':<10} {'Created'}")
+    print("-" * 90)
+    for r in results:
+        fid = r["id"][:12]
+        fname = r["filename"][:29]
+        src = r["source"][:19]
+        sz = str(r.get("size", 0))
+        utc_timestamp = r["created_at"][:19]
+        print(f"{fid:<12} {fname:<30} {src:<20} {sz:<10} {utc_timestamp}")
+
+
+def cmd_file_get(args):
+    """Show full details of a single file by UUID."""
+    from lib.file_registry import get_file
+    rec = get_file(args.id)
+    if not rec:
+        print(f"File not found: {args.id}")
+        return
+    for k, v in rec.items():
+        print(f"  {k}: {v}")
+
+
+def cmd_file_push(args):
+    """Register a local file into file_registry DB."""
+    from lib.file_registry import register_file
+    tags = args.tags.split(",") if args.tags else None
+    fid = register_file(
+        src_path=args.path,
+        source=args.source or "agent_generate",
+        description=args.description,
+        tags=tags,
+    )
+    if fid:
+        print(f"Registered: {fid}")
+    else:
+        print("Failed to register file (possibly already exists / not found).")
+
+
+def cmd_file_delete(args):
+    """Delete file record from registry, optionally remove local file."""
+    from lib.file_registry import delete_file
+    if delete_file(args.id, remove_local=args.remove_local):
+        print(f"Deleted: {args.id}")
+    else:
+        print(f"Failed to delete: {args.id}")
 
 
 def cmd_lint(args):
@@ -1180,6 +1254,32 @@ async def main():
     gl_sub = p_glossary.add_subparsers(dest="gl_command")
     gl_sync = gl_sub.add_parser("sync", help="Sync YAML → DB (idempotent upsert)")
 
+    # File management
+    p_file = sub.add_parser("file", help="File management (file_registry)")
+    file_sub = p_file.add_subparsers(dest="file_command")
+
+    file_find = file_sub.add_parser("find", help="Search files by keyword")
+    file_find.add_argument("query", help="Search keyword (description, filename, tags)")
+    file_find.add_argument("--limit", "-n", type=int, default=20)
+
+    file_list = file_sub.add_parser("list", help="List recent files")
+    file_list.add_argument("--source", "-s", help="Filter by source (telegram_upload, pipeline_output, agent_generate)")
+    file_list.add_argument("--limit", "-n", type=int, default=20)
+
+    file_get = file_sub.add_parser("get", help="Show file details by UUID")
+    file_get.add_argument("id", help="File UUID")
+
+    file_push = file_sub.add_parser("push", help="Register a local file")
+    file_push.add_argument("path", help="Path to file on disk")
+    file_push.add_argument("--source", "-s", default="agent_generate",
+                          choices=["telegram_upload", "pipeline_output", "agent_generate"])
+    file_push.add_argument("--description", "-d", help="File description")
+    file_push.add_argument("--tags", help="Comma-separated tags")
+
+    file_del = file_sub.add_parser("delete", help="Delete file from registry")
+    file_del.add_argument("id", help="File UUID")
+    file_del.add_argument("--remove-local", action="store_true", help="Also delete local file")
+
     args = parser.parse_args()
 
     if args.command == "search":
@@ -1261,6 +1361,19 @@ async def main():
             raise SystemExit(cmd_glossary_sync(args))
         else:
             p_glossary.print_help()
+    elif args.command == "file":
+        if args.file_command == "find":
+            cmd_file_find(args)
+        elif args.file_command == "list":
+            cmd_file_list(args)
+        elif args.file_command == "get":
+            cmd_file_get(args)
+        elif args.file_command == "push":
+            cmd_file_push(args)
+        elif args.file_command == "delete":
+            cmd_file_delete(args)
+        else:
+            p_file.print_help()
     else:
         parser.print_help()
 

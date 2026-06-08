@@ -52,7 +52,7 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
         "worklog_entries": lambda: db_table_exists("worklog_entries"),
         "tasks_db": lambda: db_table_exists("tasks"),
         "auto_commit_guard": lambda: file_exists("/opt/projects/server/scripts/auto_commit_guard.py"),
-        "session_context": lambda: file_exists("/opt/projects/server/scripts/session_context.py"),
+        "session_context": lambda: file_exists("/opt/projects/server/scripts/hooks/session_context.py"),
         "collect_turns": lambda: svc_active("devforge-turn-watcher"),
         "link_turns": lambda: file_exists("/opt/projects/server/scripts/link_turns.py"),
         "activity_log": lambda: db_table_exists("activity_log"),
@@ -60,12 +60,12 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
 
     # Phase 1.5: LLM Inference Infrastructure
     "1.5": {
-        "2-Container": lambda: container_running("devforge-swap"),
+        "2-Container": lambda: container_running("devforge-pod-b"),
         "Podman A": lambda: file_exists(
             "/home/opc/.config/containers/systemd/container-devforge-pod-a.container"
         ),
         "Podman B": lambda: file_exists(
-            "/home/opc/.config/containers/systemd/container-devforge-swap.container"
+            "/home/opc/.config/containers/systemd/container-devforge-pod-b.container"
         ),
         "Mode switching": lambda: file_exists("/opt/ai_data/scripts/current-mode-pod-b.env"),
         "code_mod_pipeline": lambda: file_exists("/opt/projects/server/scripts/pipelines/code_mod.py"),

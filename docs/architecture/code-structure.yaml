@@ -10,14 +10,14 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-07'
+  updated: '2026-06-08'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
   files:
     15m_cycle.sh:
       status: unknown
-      purpose: "15m_cycle.sh \u2014 30-min cycle with two phases"
+      purpose: "15m_cycle.sh \u2014 extract cycle (:00/:30)"
     activity_summarizer.py:
       status: production
       purpose: "activity_summarizer.py \u2014 Daily LLM summarization of activity_log\
@@ -47,21 +47,6 @@ modules:
       status: production
       purpose: "DevForge CLI \u2014 AI \uB300\uD654 \uAC80\uC0C9 \uBC0F \uC800\uC7A5\
         \ \uB3C4\uAD6C."
-    cooperative_debate.py:
-      status: experimental
-      purpose: "CooperativeDebate \u2014 Proposer/Refuter on Azure spot VMs, Judge/Synthesis\
-        \ local."
-    cooperative_remote.py:
-      status: experimental
-      purpose: SSH tunnel management and remote model activation for cooperative debate
-        mode.
-    debate_data.py:
-      status: experimental
-      purpose: "Model catalogue, remote hosts, prompt templates \u2014 pure data,\
-        \ no logic."
-    debate_llm.py:
-      status: experimental
-      purpose: "LLM calling, JSON parsing, model switching \u2014 shared infrastructure."
     deepseek_web.py:
       status: experimental
       purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
@@ -95,13 +80,6 @@ modules:
       status: production
       purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
         \ documents."
-    local_debate.py:
-      status: experimental
-      purpose: "LocalDebate \u2014 multi-agent debate using local Pod A + Pod B."
-    migrate_references_yaml_to_db.py:
-      status: production
-      purpose: "One-shot: migrate docs/specs/references.yaml \u2192 static_references\
-        \ table."
     motd_gen.py:
       status: production
       purpose: "motd_gen.py \u2014 lightweight MOTD for SSH login. Reads state.yaml\
@@ -123,96 +101,29 @@ modules:
     patch_elf_note.py:
       status: experimental
       purpose: Re-apply NOTE phdr patch to Copilot CLI ELF binary.
-    prj_complete_monitor.py:
-      status: experimental
-      purpose: "prj_complete_monitor.py \u2014 PID 595297 \uC644\uB8CC \uB300\uAE30\
-        \ \u2192 \uACB0\uACFC \uC815\uB9AC \u2192 Azure Blob \uC5C5\uB85C\uB4DC"
-    prj_watchdog.py:
-      status: production
-      purpose: "P-R-J pipeline watchdog \u2014 \uC790\uB3D9 \uC624\uB958 \uAC10\uC9C0\
-        , \uC218\uC815, \uC7AC\uC2DC\uB3C4."
-    resume_pipeline.py:
-      status: experimental
-      purpose: Complete remaining phases (4-5) with 27B too slow on this hardware.
     review_pipeline_3model.py:
       status: production
-      purpose: "3-Model Review Pipeline \u2014 Nightly Code Review (llama.cpp)."
+      purpose: "3-Model Review Pipeline \u2014 Code Review Pipeline."
     run_baseline_monitor.sh:
       status: unknown
       purpose: DevForge Baseline Monitor v1.0
     run_pipeline_bg.sh:
       status: unknown
-      purpose: "prj_cycle.py \u2192 test_verify_optimization.py \uC21C\uCC28 \uC2E4\
+      purpose: "prj_cycle.py \u2192 bench_verify_optimization.py \uC21C\uCC28 \uC2E4\
         \uD589"
-    session_context.py:
-      status: production
-      purpose: "SessionStart hook \u2014 inject DevForge work context into Claude."
     slack_notify.py:
       status: production
       purpose: "slack_notify.py \u2014 Session-end report \u2192 Slack DM."
     sync_gemini_rules.py:
       status: experimental
       purpose: Sync shared rules into Gemini CLI instruction file.
-    telegram_bot.py:
-      status: production
-      purpose: telegram_bot.py --- DevForge Telegram bot for remote operations.
     telegram_send.py:
       status: experimental
       purpose: telegram_send.py --- Send files or text to your Telegram chat.
-    test_dart_round.py:
-      status: experimental
-      purpose: "Single DART round live test \u2014 Proposer \u2192 Refuter \u2192\
-        \ Judge."
-    test_extract_quantized.py:
-      status: experimental
-      purpose: "3B Q8_0 vs Q4_K_M \u2014 extract faithfulness \uBE44\uAD50 \uD14C\uC2A4\
-        \uD2B8"
-    test_extraction_faithfulness.py:
-      status: experimental
-      purpose: 'Extraction faithfulness test: Qwen3-4B vs Qwen2.5-Coder-3B baseline.'
-    test_handoff_quality.py:
-      status: experimental
-      purpose: "test_handoff_quality.py v2 \u2014 P/R/J \uD578\uB4DC\uC624\uD504 \uBB38\
-        \uC11C \uD488\uC9C8 \uBE44\uAD50 (\uACBD\uB7C9)."
-    test_operator.py:
-      status: experimental
-      purpose: "Operator model evaluation \u2014 mode dispatch for multi-LLM pipeline."
-    test_proposer_quantization.py:
-      status: experimental
-      purpose: 30B Q4_K_S vs Q3_K_M P role comparison test.
-    test_q4_quantization.py:
-      status: experimental
-      purpose: 30B Q3_K_M vs Q4_K_M Proposer comparison.
     test_r_role_dsv2.sh:
       status: unknown
       purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
         \uC640 \uBE44\uAD50)"
-    test_reflector_comparison.py:
-      status: experimental
-      purpose: "14B Q4_K_M vs Q8_0 \u2014 R \uC5ED\uD560 \uBE44\uAD50 \uD14C\uC2A4\
-        \uD2B8"
-    test_small_verify.py:
-      status: experimental
-      purpose: "Qwen2.5-Coder-3B 30B verify \uC5ED\uD560 \uD14C\uC2A4\uD2B8 \u2014\
-        \ \uB3D9\uC77C \uD504\uB86C\uD504\uD2B8\uB85C 3B vs 30B \uBE44\uAD50."
-    test_verify_mcp.py:
-      status: experimental
-      purpose: "DSV2 Lite vs 30B \u2014 MCP extract verify \uBE44\uAD50"
-    test_verify_optimized_params.py:
-      status: experimental
-      purpose: "27B Q4_K_M verify \u2014 optimized handoff-only prompt (~2000 tok)."
-    test_verify_pipeline.py:
-      status: experimental
-      purpose: "test_verify_pipeline.py \u2014 27B verify \uD14C\uC2A4\uD2B8 (\uAE30\
-        \uC874 P-R-J handoff \uB370\uC774\uD130 \uC0AC\uC6A9)"
-    test_verify_proposer.py:
-      status: experimental
-      purpose: "7B Q8_0 \u2192 30B verify \uB3D9\uC77C input\uC73C\uB85C \uBE44\uAD50\
-        \ \uD14C\uC2A4\uD2B8"
-    test_verify_reflector.py:
-      status: experimental
-      purpose: "14B Q8_0 \u2192 30B verify \uB3D9\uC77C input\uC73C\uB85C \uBE44\uAD50\
-        \ \uD14C\uC2A4\uD2B8"
     transform_prj.py:
       status: experimental
       purpose: Transform prj_cycle.py for experiment phases.
@@ -222,9 +133,9 @@ modules:
     update_handover.py:
       status: production
       purpose: "update_handover.py \u2014 Quality-scored session context capture."
-    webhook_server.py:
+    watchdog.py:
       status: production
-      purpose: webhook_server.py --- Slack Events API receiver for DevForge bot.
+      purpose: "DevForge Watchdog \u2014 entry point."
 - path: scripts/lib/
   purpose: Lib
   files:
@@ -235,9 +146,6 @@ modules:
       status: production
       purpose: "Azure Blob uploader \u2014 single shared utility for all pipeline\
         \ outputs."
-    bot_processor.py:
-      status: production
-      purpose: bot_processor.py
     cli_experiment.py:
       status: production
       purpose: "CLI experiment management \u2014 list, compare, active, adopt commands."
@@ -247,10 +155,17 @@ modules:
     db.py:
       status: production
       purpose: Shared PostgreSQL helpers for DevForge scripts.
+    experiment_state.py:
+      status: production
+      purpose: "Experiment state file \u2014 \uC2E4\uD5D8 \uC911 watchdog\uACFC pipeline\
+        \ \uAC04 \uC0C1\uD0DC \uACF5\uC720."
     feedback.py:
       status: production
       purpose: "Feedback provider \u2014 extracts recent fix patterns from activity_log\
         \ and returns"
+    file_registry.py:
+      status: production
+      purpose: "file_registry.py \u2014 DevForge File Management System."
     llm_client.py:
       status: production
       purpose: "Unified LLM client \u2014 single entry point for all pipeline scripts."
@@ -261,7 +176,7 @@ modules:
     pod_manager.py:
       status: production
       purpose: "Container management for P-R-J pipeline \u2014 Pod A (devforge-pod-a)\
-        \ and Pod B (devforge-swap)."
+        \ and Pod B (devforge-pod-b)."
     proxy_utils.py:
       status: production
       purpose: Utility functions extracted from anthropic_proxy.
@@ -276,9 +191,6 @@ modules:
       status: experimental
       purpose: "Test execution sandbox \u2014 Podman read-only tmpfs for safe code\
         \ execution."
-    text_quality.py:
-      status: production
-      purpose: "Phase 2 Tier 1 \u2014 Outbound Korean text quality guardrails."
     token_budget.py:
       status: production
       purpose: Token budget manager for P-R-J pipeline context allocation.
@@ -315,6 +227,30 @@ modules:
       purpose: Shared utilities for code modification pipelines.
   constraints:
     max_lines_per_file: 80
+- path: scripts/lib/debate/
+  purpose: Debate
+  files:
+    __init__.py:
+      status: experimental
+      purpose: "Multi-agent debate package \u2014 LocalDebate + CooperativeDebate."
+    cooperative_debate.py:
+      status: experimental
+      purpose: "CooperativeDebate \u2014 Proposer/Refuter on Azure spot VMs, Judge/Synthesis\
+        \ local."
+    cooperative_remote.py:
+      status: experimental
+      purpose: SSH tunnel management and remote model activation for cooperative debate
+        mode.
+    debate_data.py:
+      status: experimental
+      purpose: "Model catalogue, remote hosts, prompt templates \u2014 pure data,\
+        \ no logic."
+    debate_llm.py:
+      status: experimental
+      purpose: "LLM calling, JSON parsing, model switching \u2014 shared infrastructure."
+    local_debate.py:
+      status: experimental
+      purpose: "LocalDebate \u2014 multi-agent debate using local Pod A + Pod B."
 - path: scripts/lib/infra/
   purpose: Infra
   files:
@@ -331,6 +267,9 @@ modules:
     health_checks.py:
       status: production
       purpose: "System state checks \u2014 systemd, podman, filesystem."
+    preflight.py:
+      status: production
+      purpose: Shared preflight checks for DevForge pipelines.
     storage.py:
       status: production
       purpose: Zram cycle tracking.
@@ -449,6 +388,66 @@ modules:
         \ state."
   constraints:
     max_lines_per_file: 150
+- path: scripts/lib/watchdog/
+  purpose: Watchdog
+  files:
+    __init__.py:
+      status: production
+      purpose: "DevForge Watchdog \u2014 \uD1B5\uD569 \uC11C\uBC84 \uBAA8\uB2C8\uD130\
+        \uB9C1/\uC790\uB3D9\uBCF5\uAD6C \uB370\uBAAC."
+    checker.py:
+      status: production
+      purpose: "Health check runners \u2014 LLM 3-tier probe, timer, service, resource."
+    config.py:
+      status: production
+      purpose: "Watchdog \uC124\uC815 \u2014 \uCCB4\uD06C \uB300\uC0C1, \uAC04\uACA9\
+        , \uC784\uACC4\uAC12."
+    fixloop.py:
+      status: experimental
+      purpose: "Auto-fix loop \u2014 error \uAC10\uC9C0 \u2192 LLM \uC218\uC815 \uC694\
+        \uCCAD \u2192 \uC784\uC2DC podman \uAC80\uC99D \u2192 \uC801\uC6A9."
+    notifier.py:
+      status: production
+      purpose: "Slack + Telegram \uC54C\uB9BC \u2014 30\uBD84 heartbeat \uD45C + state\
+        \ change alert."
+    recovery.py:
+      status: production
+      purpose: "Graduated recovery \u2014 CrashLoopBackOff \uD328\uD134, OOM \uC804\
+        \uC6A9 \uBCF5\uAD6C."
+    state.py:
+      status: production
+      purpose: "Component state machine \u2014 HEALTHY\u2194DEGRADED\u2194UNHEALTHY\u2194\
+        DOWN."
+- path: scripts/__old/
+  purpose: '  Old'
+  files:
+    prj_watchdog.py:
+      status: production
+      purpose: "P-R-J pipeline watchdog \u2014 \uC790\uB3D9 \uC624\uB958 \uAC10\uC9C0\
+        , \uC218\uC815, \uC7AC\uC2DC\uB3C4."
+    watchdog_pipeline.py:
+      status: experimental
+      purpose: "Pipeline watchdog \u2014 polls log, checks health, sends Slack on\
+        \ each phase/result."
+    watchdog_pipeline.sh:
+      status: unknown
+      purpose: "Watchdog for 5-phase pipeline \u2014 polls log, sends Slack on phase\
+        \ changes."
+- path: scripts/hooks/
+  purpose: Hooks
+  files:
+    session_context.py:
+      status: production
+      purpose: "SessionStart hook \u2014 inject DevForge work context into Claude."
+- path: scripts/notice/
+  purpose: Notice
+  files:
+    slack.py:
+      status: production
+      purpose: slack.py --- Slack Events API receiver for DevForge bot.
+    telegram_bot.py:
+      status: production
+      purpose: telegram_bot.py --- DevForge Telegram bot for remote operations.
 - path: scripts/pipelines/
   purpose: Pipelines
   files:
@@ -459,6 +458,10 @@ modules:
       status: production
       purpose: "Day pre-review: P(day_p)\u2192R(day_r)\u2192J(day_j) for night prepill\
         \ defense."
+    day_cycle.py:
+      status: experimental
+      purpose: "Day-time chain: extract \u2192 py verify \u2192 7B verify \u2192 global\
+        \ context."
     extract.py:
       status: production
       purpose: Extract Pipeline - checkpoint-based perpetual fact extraction.
@@ -466,8 +469,11 @@ modules:
       status: experimental
       purpose: Multi-model code modification pipeline with debate + verification.
     night.py:
-      status: production
-      purpose: "DevForge Night Pipeline v2.0 \u2014 3-phase review pipeline."
+      status: experimental
+      purpose: "DevForge Night Pipeline v3.0 \u2014 Full 6-stage pipeline."
+    phase2_standalone.py:
+      status: deprecated
+      purpose: Phase 2 standalone runner with reliable logging.
     prj_cycle.py:
       status: production
       purpose: "P-R-J \uACE0\uC815 \uC5ED\uD560 \uC2E4\uD5D8: P=night_proposer, R=night_reflector,\
@@ -512,8 +518,9 @@ modules:
   purpose: State Collector
   files:
     __init__.py:
-      status: unknown
-      purpose: __init__.py
+      status: production
+      purpose: "state_collector \u2014 server knowledge engine: state gathering and\
+        \ architecture doc generation."
     main.py:
       status: production
       purpose: "state_collector \u2014 DevForge Server Knowledge Engine v4.4"

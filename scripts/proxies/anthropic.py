@@ -467,8 +467,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     sha = hashlib.sha256(body).hexdigest()
                     headers['X-Proxy-Body-SHA256'] = sha
                     if os.environ.get('ANTHROPIC_PROXY_DEBUG','0') == '1':
-                        ts = int(time.time() * 1000)
-                        dump_base = f"/tmp/anthropic_debug_{ts}"
+                        request_ms = int(time.time() * 1000)
+                        dump_base = f"/tmp/anthropic_debug_{request_ms}"
                         with open(dump_base + '_forward.json','wb') as fwd:
                             fwd.write(body)
                         with open(dump_base + '_sha256.txt','w', encoding='utf-8') as sf:
@@ -537,8 +537,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
             # inspect the exact payload that triggered the rejection.
             if resp.status >= 400 and body:
                 try:
-                    ts = int(time.time() * 1000)
-                    dump_path = f"/tmp/anthropic_4xx_{ts}.json"
+                    request_ms = int(time.time() * 1000)
+                    dump_path = f"/tmp/anthropic_4xx_{request_ms}.json"
                     with open(dump_path, "wb") as _df:
                         _df.write(body)
                     # keep only the last 5 dumps

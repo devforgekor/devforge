@@ -20,10 +20,16 @@ LIB_DIR = SCRIPTS_DIR / "lib"
 
 # Files where model names in identifiers are legitimate (infrastructure config, model registry)
 MODEL_NAME_OK_FILES = {
-    "scripts/debate_data.py",     # MODEL_REGISTRY — model names are data, not identifiers
+    "scripts/lib/debate/debate_data.py",     # MODEL_REGISTRY — model names are data, not identifiers
     "scripts/lib/infra/azure_spot.py",      # Azure Spot VM config — model names are infrastructure refs
-    "scripts/lib/llm_client.py",  # LLM client — model names are API params
-    "scripts/lint_rules.py",      # Linter — contains regex patterns with model names as example patterns
+    "scripts/lib/llm_client.py",            # LLM client — model names are API params
+    "scripts/lint_rules.py",                # Linter — contains regex patterns with model names as example patterns
+    "scripts/lib/tracking/agent_names.py",  # AGENT_MAP — agent names are data/mapping values
+    "scripts/lib/tracking/phase_tracker.py", # phase labels as dict keys — data, not identifiers
+    "scripts/observer.py",                  # service name strings for journalctl — data, not identifiers
+    "scripts/lib/debate/cooperative_debate.py",  # model name dict keys for spot VM routing — data
+    "scripts/pipelines/hybrid.py",          # model name dict keys for model selection — data
+    "scripts/pipelines/night.py",           # system prompt var (renamed), remaining refs are data
 }
 
 # Model size patterns that must not appear in identifiers
@@ -36,7 +42,12 @@ MODEL_BRAND_PATTERN = re.compile(
     r"\b(qwen|codestral|selene|nemotron|phi[_-]?4|llama[_-]?3)\b", re.IGNORECASE
 )
 
-# Banned single-letter role abbreviations (standalone identifiers only)
+# Files where banned abbreviation aliases are tolerated (backward compat aliases)
+ABBREVIATION_OK_FILES = {
+    "scripts/lib/db.py",          # esc_sql alias for backward compat; new callers use escape_sql_string
+    "scripts/bench_llm.py",       # esc_sql alias for backward compat
+    "scripts/pipelines/phase2_standalone.py",  # deprecated, pending removal — do not modify
+}
 BANNED_SINGLE_LETTER = {"P", "R", "J"}
 
 # Banned function/variable names (from naming audit)
@@ -68,10 +79,23 @@ BANNED_NAMES = {
     "day_p": "day_proposer",
     "day_j": "day_judge",
     "prj_p": "phase_proposer",
+    "prj_r": "phase_reflector",
     "prj_j": "phase_judge",
     "p_r": "proposer_result",
     "r_r": "reflector_result",
     "j_r": "judge_result",
+    "SYS_P": "PROPOSER_SYSTEM_PROMPT",
+    "SYS_R": "REFLECTOR_SYSTEM_PROMPT",
+    "SYS_J": "JUDGE_SYSTEM_PROMPT",
+    "SYS_V": "VERIFIER_SYSTEM_PROMPT",
+    "SYS_V27": "VERIFIER_SYSTEM_PROMPT",
+    "SYS_V32": "SECONDARY_VERIFIER_SYSTEM_PROMPT",
+    "SYS_DAY_P": "DAY_PROPOSER_SYSTEM_PROMPT",
+    "SYS_DAY_R": "DAY_REFLECTOR_SYSTEM_PROMPT",
+    "SYS_DAY_J": "DAY_JUDGE_SYSTEM_PROMPT",
+    "SYS_NIGHT_P": "NIGHT_PROPOSER_SYSTEM_PROMPT",
+    "SYS_NIGHT_R": "NIGHT_REFLECTOR_SYSTEM_PROMPT",
+    "SYS_NIGHT_J": "NIGHT_JUDGE_SYSTEM_PROMPT",
 }
 
 
@@ -270,13 +294,15 @@ def check_identifier_naming(filepath: Path) -> List[Dict]:
 
     identifiers = _extract_all_identifiers(content)
 
+    skip_abbreviation_check = relpath in ABBREVIATION_OK_FILES
+
     for name, lineno in identifiers:
         # Check model size/brand in identifier parts (skip for config files)
         if not skip_model_check:
             violations.extend(_check_name_parts(name, filepath, lineno, relpath))
 
-        # Check banned abbreviations (full name match)
-        if name in BANNED_NAMES:
+        # Check banned abbreviations (full name match, skip for backward-compat files)
+        if not skip_abbreviation_check and name in BANNED_NAMES:
             violations.append({
                 "rule": "no-abbreviation",
                 "severity": "P2",

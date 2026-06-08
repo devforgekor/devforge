@@ -68,24 +68,24 @@ def match_turns_to_worklog_entries(kst_start, kst_end, today_kst):
             continue
 
         # Find previous same-agent worklog
-        prev_ts = None
+        prev_entry_ts = None
         for j in range(i - 1, -1, -1):
             if entries[j]["agent"] == agent:
-                prev_ts = entries[j]["ts"]
+                prev_entry_ts = entries[j]["ts"]
                 break
 
-        ts = entry["ts"]
+        entry_ts = entry["ts"]
         is_last = (agent_last_idx.get(agent) == i)
 
-        if prev_ts:
+        if prev_entry_ts:
             window_sql = (
-                f"AND t.created_at > '{prev_ts}' "
-                f"AND t.created_at <= '{ts}'"
+                f"AND t.created_at > '{prev_entry_ts}' "
+                f"AND t.created_at <= '{entry_ts}'"
             )
         else:
             window_sql = (
                 f"AND t.created_at > GREATEST("
-                f"  '{ts}'::timestamptz - INTERVAL '12 hours',"
+                f"  '{entry_ts}'::timestamptz - INTERVAL '12 hours',"
                 f"  '{kst_start}'::timestamptz"
                 f") AND t.created_at <= '{ts}'"
             )

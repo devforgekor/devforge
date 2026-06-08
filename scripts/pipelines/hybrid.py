@@ -16,7 +16,7 @@ Architecture:
 
 Infrastructure:
   Pod A (devforge-pod-a):  Qwen3-4B @ 8080  (debate analyst)
-  Pod B (devforge-swap):  Phi-4 14B @ 8081  (debate critic + verify)
+  Pod B (devforge-pod-b):  Phi-4 14B @ 8081  (debate critic + verify)
                            Qwen-14B  @ 8082  (debate pragmatist + execute)
   Mode switch
 """
@@ -31,6 +31,10 @@ from pathlib import Path
 from types import ModuleType
 from typing import Optional, Dict, List
 
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, SCRIPTS_DIR)
+
+from lib.infra.preflight import preflight_checks
 from lib.llm.endpoint import call_llm_endpoint
 from lib.code_mod.shared import (
     extract_json_from_llm_response, save_result, read_file, DEEPSEEK_KEY, LLAMA_ENDPOINT,
@@ -890,6 +894,7 @@ def run_web_multi(task: dict) -> dict:
 # Main
 
 def main():
+    preflight_checks("hybrid.py")
     import argparse
     import yaml
 

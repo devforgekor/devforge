@@ -8,11 +8,18 @@ CHARS_PER_TOKEN = 2.5
 
 PHASE_BUDGET = {
     "day_verify": 1500,
-    "prj_p": 2000,
-    "prj_r": 1200,
-    "prj_j": 1200,
+    "prj_proposer": 2000,
+    "prj_reflector": 1200,
+    "prj_judge": 1200,
     "handoff": 1500,
     "final_verify": 2000,
+    # night.py v3.0 phases
+    "night_initial_verify": 1500,    # Phase 2: initial verification — findings summary
+    "rubric": 2000,              # Rubric evaluation — score context
+    "night_proposer": 3000,             # Phase 4 P: proposer (budget increased for richer context)
+    "night_reflector": 1200,             # Phase 4 R: per-finding refuter
+    "night_judge": 1500,             # Phase 4 J: judge
+    "night_final_verify": 2000,           # Phase 5: final verify
 }
 
 

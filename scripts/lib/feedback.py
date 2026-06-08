@@ -518,7 +518,7 @@ def get_feedback_for_model(
     this — it gets whatever generation passes the quality gate.
 
     Args:
-        model:     Key in MODEL_REGISTRY (e.g. "Qwen7B", "Qwen3B").
+        model:     Key in MODEL_REGISTRY (e.g. "reviewer", "extractor").
         max_gold:  Max gold-standard examples to include.
         max_edge:  Max edge-case examples to include.
 

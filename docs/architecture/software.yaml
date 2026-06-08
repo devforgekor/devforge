@@ -1,22 +1,26 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-06-07 00:15 KST
+# auto-generated from live data at 2026-06-08 09:00 KST
 ---
 metadata:
-  updated: 2026-06-07 00:15 KST
+  updated: 2026-06-08 09:00 KST
   source: live (collect_structural + mode file)
 models:
-- name: Codestral-22B-v0.1-Q4_K_M.gguf
-  container: devforge-swap
-  status: Up 4 hours
+- name: Qwen2.5-Coder-7B-Instruct.Q8_0.gguf
+  container: devforge-pod-b
+  status: Up About an hour (healthy)
   ports: 127.0.0.1:8080-8081->8080-8081/tcp
+- name: Qwen2.5-Coder-3B-Instruct.Q8_0.gguf
+  container: devforge-pod-a
+  status: Up About an hour (healthy)
+  ports: 127.0.0.1:8082->8082/tcp
 modes:
   current: day
   available:
     day: Pod A(3B:8082) + Pod B(Codestral-22B:8080)
     night: Nightly review pipeline (verify + debate)
 pipelines:
-  15m cycle: inactive
+  15m cycle: activating
   backup: inactive
-  classify: activating
-  daily structure: inactive
-  nightly: inactive
+  classify: failed
+  daily structure: activating
+  nightly: failed

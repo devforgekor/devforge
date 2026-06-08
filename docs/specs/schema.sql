@@ -207,3 +207,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_commit_unique
 CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_stage_unique
     ON activity_log(run_id, type, parent_id)
     WHERE run_id IS NOT NULL AND type = 'stage' AND exec_status = 'DONE';
+
+-- ============================================================
+-- 11. File Registry (added 2026-06-07)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS file_registry (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    filename        TEXT NOT NULL,
+    path            TEXT NOT NULL,              -- /opt/ai_data/uploads/YYYY-MM-DD/UUID.ext
+    size            BIGINT,
+    hash            TEXT,                       -- SHA256 (중복 방지)
+    mime_type       TEXT,
+    source          TEXT NOT NULL,              -- telegram_upload | pipeline_output | agent_generate
+    description     TEXT,                       -- LLM-generated summary (for search)
+    tags            TEXT[] DEFAULT '{}',
+    turn_id         UUID,                       -- associated turn (optional FK to turns)
+    blob_url        TEXT,                       -- Azure Blob SAS URL
+    sender          TEXT,                       -- Telegram user ID etc.
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_file_registry_tags ON file_registry USING GIN (tags);
+CREATE INDEX IF NOT EXISTS idx_file_registry_source ON file_registry (source);
+CREATE INDEX IF NOT EXISTS idx_file_registry_desc_trgm ON file_registry USING GIN (description gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_file_registry_filename_trgm ON file_registry USING GIN (filename gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_file_registry_created ON file_registry (created_at DESC);

@@ -9,7 +9,7 @@ Architecture:
   3. Return structured result
 
 Tools (wrapped pipelines):
-  - run_p_r_j_pipeline: P→R→J pipeline (R1-8B deep review → Qwen7B reflection → Selene judgment)
+  - run_p_r_j_pipeline: P→R→J pipeline (proposal → reflection → scoring judgment)
   - run_debate:          30B proposer vs 3B refuter (DART)
   - run_code_review:     3-model code review pipeline
   - execute_code:        Podman-isolated Python sandbox
@@ -89,10 +89,10 @@ class OrchestratorTool:
 
 
 class RunPRJTool(OrchestratorTool):
-    """P→R→J pipeline: R1-8B deep review → Qwen7B reflection → Selene judgment."""
+    """P→R→J pipeline: proposal → reflection → scoring judgment."""
 
     name = "run_p_r_j_pipeline"
-    description = "3-model code review pipeline using R1-8B + Qwen7B + Selene"
+    description = "3-model code review pipeline (proposer + reflector + judge)"
     parameters = {
         "type": "object",
         "properties": {
@@ -143,7 +143,7 @@ class RunDebateTool(OrchestratorTool):
     }
 
     def execute(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        from local_debate import LocalDebate  # type: ignore
+        from lib.debate.local_debate import LocalDebate  # type: ignore
 
         question = args.get("question", "")
         if not question:
@@ -265,7 +265,7 @@ def _classify(user_input: str, verbose: bool = True) -> str:
     prompt = CLASSIFY_PROMPT.format(input=user_input[:500])
     messages = [{"role": "user", "content": prompt}]
     try:
-        response = call_llm(messages, model="Qwen3B", max_tokens=MAX_TOKENS_CLASSIFY, timeout=TIMEOUT_CLASSIFY)
+        response = call_llm(messages, model="extractor", max_tokens=MAX_TOKENS_CLASSIFY, timeout=TIMEOUT_CLASSIFY)
     except RuntimeError:
         return "direct_answer"  # safe fallback
     category = response.strip().lower().split("\n")[0].strip()
@@ -316,7 +316,7 @@ def orchestrator_run(
             {"role": "user", "content": user_input},
         ]
         try:
-            response = call_llm(messages, model="Qwen3B", max_tokens=MAX_TOKENS_DIRECT, timeout=TIMEOUT_DIRECT)
+            response = call_llm(messages, model="extractor", max_tokens=MAX_TOKENS_DIRECT, timeout=TIMEOUT_DIRECT)
         except RuntimeError as e:
             return {"status": "error", "output": str(e)}
         return {"status": "ok", "output": response, "tool": None}
@@ -344,7 +344,7 @@ def orchestrator_run(
                 {"role": "user", "content": user_input},
             ]
             try:
-                extracted = call_llm(messages, model="Qwen3B", max_tokens=MAX_TOKENS_EXTRACT)
+                extracted = call_llm(messages, model="extractor", max_tokens=MAX_TOKENS_EXTRACT)
             except RuntimeError as e:
                 return {"status": "error", "output": f"Code extraction failed: {e}"}
             cleaned = _strip_code_fences(extracted)

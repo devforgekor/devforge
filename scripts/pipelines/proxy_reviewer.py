@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from lib.infra.preflight import preflight_checks
 from lib.db import psql, psql_ok, esc_sql
 from lib.llm.json_parser import parse_llm_json
 from lib.llm.endpoint import call_llm_endpoint
@@ -383,6 +384,7 @@ def run_proxy_review(dry_run: bool = False, limit: int = BATCH_LIMIT) -> int:
 
 
 def main():
+    preflight_checks("proxy_reviewer.py")
     import argparse
     ap = argparse.ArgumentParser(description="DeepSeek Pro verification audit")
     ap.add_argument("--limit", type=int, default=BATCH_LIMIT, help="Max items per run")

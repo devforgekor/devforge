@@ -21,6 +21,7 @@ from typing import Dict, List, Optional
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from lib.infra.preflight import preflight_checks
 from lib.db import psql_json, psql, psql_ok, esc_sql
 from lib.feedback import get_feedback_for_model
 from lib.llm.json_parser import parse_llm_json
@@ -365,6 +366,7 @@ def run_verify() -> int:
 
 
 def main():
+    preflight_checks("review_consumer.py")
     import argparse
     ap = argparse.ArgumentParser(description="27B production final verify")
     ap.add_argument("--limit", type=int, default=50,

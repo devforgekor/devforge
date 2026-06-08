@@ -9,8 +9,11 @@ night_proposer -> night_reflector -> night_judge 1회 패스
 
 파이프라인: Python 검증 -> day_verify -> P-R-J 1회 -> 핸드오프 저장
 
-메모리 관리: phase 전환마다 podman stop로 모든 컨테이너 완전 제거 -> 필요한 것만 시작
-Pod B에서 순차 swap (night_proposer -> night_reflector -> night_judge)
+컨테이너 전략:
+- Extract: Pod B(3B extractor:8080) extract 전담, Pod A(7B reviewer:8082)는 유지
+  → start_pod_a_only("day",8082)로 extract 직전 7B reviewer 재시작 (verify 준비)
+- Day_verify: Pod A(7B reviewer:8082) verify/MCP/global context 전담
+- P-R-J: Pod A(7B reviewer) stop (RAM 확보), Pod B(30B/14B/14B) 순차 swap
 
 사용법:
   python3 prj_cycle.py
@@ -20,9 +23,14 @@ import json, os, subprocess, sys, time, urllib.request, hashlib, uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, SCRIPTS_DIR)
+
+from lib.infra.preflight import preflight_checks
 from lib.llm.json_parser import save_dlq, validate_schema
 from lib.pod_manager import (
-    kill_all, start_pod_b, start_pod_a, start_day_both, ensure_model,
+    kill_all, start_pod_b, start_pod_a, start_pod_a_only, stop_pod_a,
+    start_day_both, ensure_model, NIGHT_MODELS,
     MODEL_METADATA, model_info, MODE_FILE_B, MODE_FILE_A, TIMEOUT,
     wait_health, wait_probe,
 )
@@ -90,6 +98,7 @@ HANDOFF_SCHEMA = {
 }
 from lib.llm_client import call_llm, resolve_model
 from lib.db import psql, psql_ok, esc_sql, psql_json
+from sentence_transformers import SentenceTransformer
 
 PASS = "[PASS]"
 FAIL = "[FAIL]"
@@ -267,7 +276,7 @@ class PipelineState:
         _maybe_append(line, priority=9)
 
         # ── 3. day_extract summary (priority 5) ──
-        if phase != "day_verify":
+        if phase not in ("day_verify", "prj_proposer"):
             ext = self.data.get("extract", {})
             ext_models = ext.get("models", [])
             if ext_models:
@@ -282,7 +291,7 @@ class PipelineState:
 
         # ── 4. Python verify (priority 7) ──
         pv = self.data.get("python_verify")
-        if pv and pv.get("total_findings") and phase not in ("python_verify",):
+        if pv and pv.get("total_findings") and phase not in ("python_verify", "prj_proposer"):
             status = "PASS" if pv.get("issues_found", 0) == 0 else f"{pv['issues_found']} ISSUES"
             py_text = f"[PYTHON VERIFY] {status}"
             for iss in pv.get("issues", [])[:3]:
@@ -290,7 +299,7 @@ class PipelineState:
             _maybe_append(py_text, priority=7)
 
         # ── 5. day_verify results (skip for day_verify phase itself; priority 6) ──
-        if day_verify_data and day_verify_data.get("final_verdict") and phase not in ("python_verify", "day_verify"):
+        if day_verify_data and day_verify_data.get("final_verdict") and phase not in ("python_verify", "day_verify", "prj_proposer"):
             v_text = f"[VERIFY] {day_verify_data['final_verdict']} (confidence={day_verify_data.get('confidence','?')})"
             for item in day_verify_data.get("verification_items", [])[:5]:
                 v_text += f"\n  [{item.get('result','?')}] {item.get('check','')}"
@@ -326,7 +335,7 @@ class PipelineState:
                     _maybe_append(brief, priority=sp - 1)  # one priority level lower
 
             # day_verify verified items (only for P; priority 5)
-            if phase == "prj_p" and day_verify_data:
+            if phase == "prj_proposer" and day_verify_data:
                 items = day_verify_data.get("verification_items", [])
                 if items:
                     vi_text = f"\n[VERIFIED — do not re-review these items]"
@@ -339,7 +348,7 @@ class PipelineState:
         # ── 8. Rubric evaluation (for P, J, final_verify; priority 4) ──
         rub = self.data.get("rubric_evaluation", {})
         rub_evals = rub.get("evaluations", [])
-        if rub_evals and phase in ("prj_p", "prj_j", "final_verify"):
+        if rub_evals and phase in ("prj_proposer", "prj_judge", "final_verify"):
             rub_text = "\n[RUBRIC EVALUATION — finding-level scores]"
             low_scorers = [r for r in rub_evals if r.get("weighted_score", 10) < 5.0]
             for r in rub_evals:
@@ -355,7 +364,7 @@ class PipelineState:
             _maybe_append(rub_text, priority=4)
 
         # ── 9. Judge rotation context (only for prj_j; priority 8) ──
-        if phase == "prj_j":
+        if phase == "prj_judge":
             ri = (extra or {}).get("rotation_index", 0)
             j_text = f"[JUDGE ROTATION {ri+1}/3]"
             if ri > 0 and len(prj) > 0:
@@ -446,21 +455,6 @@ def llm_call(messages, model, max_tokens=2048, label=""):
 
 	_raw = ""  # raw response for self-correction fallback
 	try:
-		# R1-8B: json_mode 유지, reasoning 소진시 2x 토큰 재시도
-		if model == "R1-8B":
-			try:
-				result, r, _ = _try(True)
-			except json.JSONDecodeError:
-				log(f"  R1-8B empty content (reasoning consumed all {max_tokens} tokens). Retrying with {max_tokens*2} tokens...")
-				_saved_max = max_tokens
-				max_tokens = max_tokens * 2
-				result, r, _ = _try(True)
-				max_tokens = _saved_max
-			_log_schema_warnings(result, label, "R1-8B")
-			return {
-				"result": result, "usage": r.get("usage", {}),
-				"timings": r.get("timings", {}), "elapsed_ms": r.get("elapsed_ms", 0),
-			}
 
 		# Codestral/비Qwen: json_mode 지원 안 함 → 바로 non-json_mode 호출
 		result, r, raw_content = _try(False)
@@ -524,6 +518,28 @@ def _log_schema_warnings(data: dict, label: str, model: str) -> None:
 		save_dlq(json.dumps(data, ensure_ascii=False), stage=label + "_schema",
 		         model=model, error="; ".join(errs[:3]), attempt=1)
 
+def _dedup_findings(findings, threshold=0.92):
+    """Deduplicate findings by cosine similarity of description+file embeddings.
+
+    P findings 중복 제거 — Reflector가 동일한 finding을 반복 검토하지 않도록 필터링.
+    all-MiniLM-L6-v2 임베딩 사용 (extract.py와 동일), 384-dim.
+    """
+    if len(findings) < 2:
+        return findings
+    try:
+        embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        texts = [f"{f.get('description','')} {f.get('file','')}" for f in findings]
+        embs = embedder.encode(texts, normalize_embeddings=True)
+        keep = []
+        for i in range(len(findings)):
+            if all(sum(embs[i] * embs[j]) < threshold for j in keep):
+                keep.append(i)
+        return [findings[i] for i in keep]
+    except Exception as e:
+        log(f"  Dedup failed (proceeding without): {e}")
+        return findings
+
+
 def abort(phase, label, detail):
     """실패 시 파이프라인 중단, Slack 알림 전송, exit."""
     log(f"\n{'='*60}")
@@ -547,7 +563,10 @@ def save(phase, tag, data):
 
 # ── System prompts ─────────────────────────────────────────────────────
 
-SYS_P = """You are a code review specialist. Analyze the evaluation findings below. Identify bugs, security issues, data loss risks, and edge cases.
+PROPOSER_SYSTEM_PROMPT = """You are a code review specialist. Analyze the evaluation findings below. Identify bugs, security issues, data loss risks, and edge cases.
+
+CRITICAL — Every finding MUST include "file" field (filename or area). Evidence grounding is required:
+each issue must cite a specific file so the Reflector can verify it against real code.
 
 When all P, R, J agree quickly, pay EXTRA attention — the most critical bugs are often missed by consensus.
 
@@ -561,7 +580,7 @@ Rate your OWN findings on these criteria:
 Return JSON:
 {
   "findings": [
-    {"id": "F001", "severity": "critical|high|medium|low", "category": "bug|security|data_loss|performance|quality", "description": "1-3 sentence explanation", "file": "filename or area"}
+    {"id": "F001", "severity": "critical|high|medium|low", "category": "bug|security|data_loss|performance|quality", "description": "1-3 sentence explanation", "file": "filename or area - REQUIRED", "line_range": "optional, e.g. 42-56"}
   ],
   "rubric_evaluation": {
     "correctness": 0-10,
@@ -575,7 +594,9 @@ Return JSON:
   }
 }"""
 
-SYS_R = """You are a review reflector. For each finding submitted by the Proposer, decide ACCEPT or REJECT. Be precise — if the finding is valid, ACCEPT it. If it is not a real issue or duplicates another, REJECT it.
+REFLECTOR_SYSTEM_PROMPT = """You are a review reflector. For each finding submitted by the Proposer, decide ACCEPT or REJECT. Be precise — if the finding is valid, ACCEPT it. If it is not a real issue or duplicates another, REJECT it.
+
+Do not silently discard filtered findings. Store rejected findings alongside the reasoning for why they were excluded — the verifier needs to know what was rejected and why.
 
 === EVALUATION RUBRIC (self-assessment) ===
 Rate your OWN verdicts on these criteria:
@@ -589,6 +610,9 @@ Return JSON:
     {"id": "F001", "verdict": "accept", "reason": "concise justification"},
     {"id": "F002", "verdict": "reject", "reason": "concise justification"}
   ],
+  "rejected_findings": [
+    {"id": "F002", "severity": "high", "description": "one-line summary of the rejected finding", "rejection_reason": "why this was rejected, e.g. false positive, duplicate, low impact"}
+  ],
   "rubric_evaluation": {
     "accuracy": 0-10,
     "accuracy_justification": "why this score",
@@ -599,7 +623,7 @@ Return JSON:
   }
 }"""
 
-SYS_J = """You are a Scoring Judge evaluating both the Proposer (P) and Reflector (R).
+JUDGE_SYSTEM_PROMPT = """You are a Scoring Judge evaluating both the Proposer (P) and Reflector (R).
 
 P_score = Correctness(0-10) + Coverage(0-10) + Precision(0-10) -> 0-30
 R_score = Accuracy(0-10) + Efficiency(0-10) + Completeness(0-10) -> 0-30
@@ -618,6 +642,9 @@ IMPORTANT — handoff rules:
 - "unresolved_count" = len(rejected) — findings rejected by R are unresolved.
 - "critical_remaining" = IDs of rejected findings that had severity "critical" or "high".
 - "key_accepted"/"key_rejected" = first 5 of each, already in the arrays above.
+- "findings_confidence" — score each finding 0-100 so the verifier can prioritize.
+  High confidence (90+): well-supported, likely correct.
+  Low confidence (<60): weak evidence, needs special verifier attention.
 
 Return ONLY valid JSON — no markdown, no commentary.
 
@@ -632,6 +659,9 @@ Return JSON:
   "approved": ["F001"],
   "rejected": [],
   "decisions": [{"id": "F001", "decision": "approved|rejected", "reason": "..."}],
+  "findings_confidence": [
+    {"id": "F001", "confidence": 85, "note": "brief rationale for this confidence score"}
+  ],
   "rubric_evaluation": {
     "fairness": 0-10,
     "fairness_justification": "...",
@@ -656,7 +686,7 @@ Return JSON:
   }
 }"""
 
-SYS_VERIFY = """You are a final verifier. Review all findings and P-R-J results.
+VERIFIER_SYSTEM_PROMPT = """You are a final verifier. Review all findings and P-R-J results.
 
 You will receive THREE handoff documents:
 1. [LLM-R] — R(night_reflector) handoff (comprehensive summary after full P-R-J cycle)
@@ -702,7 +732,7 @@ Return JSON:
   }
 }"""
 
-SYS_VERIFY_SECONDARY = """You are an independent second-opinion verifier.
+SECONDARY_VERIFIER_SYSTEM_PROMPT = """You are an independent second-opinion verifier.
 
 You will receive THREE handoff documents:
 1. [LLM-J] — Judge LLM handoff
@@ -721,7 +751,7 @@ Return JSON:
   "summary": "1 sentence",
   "reasoning": "3-5 sentences",
   "verification_items": [{"check":"...","result":"pass|fail|partial","detail":"..."}],
-  "disagreement_with_27b": [{"issue":"...","27b_verdict":"...","my_verdict":"...","detail":"..."}],
+  "disagreement_with_primary": [{"issue":"...","primary_verdict":"...","my_verdict":"...","detail":"..."}],
   "feedback": {
     "P": {"model":"night_proposer","role":"proposer","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
     "R": {"model":"night_reflector","role":"reflector","score":0,"strengths":[],"weaknesses":[],"improvements":[]},
@@ -759,7 +789,7 @@ consensus_score = 100 - (gap * 10)"""
 
 # ── Phase 2: Rubric Evaluation (finding-level scores) ────────────────
 
-SYS_RUBRIC_FINDING = """You are a rubric evaluation specialist. Assess each finding below against the standard criteria.
+RUBRIC_SYSTEM_PROMPT = """You are a rubric evaluation specialist. Assess each finding below against the standard criteria.
 
 ## Criteria (weighted)
 - Correctness (0.35): Is this a real, verifiable issue?
@@ -800,7 +830,7 @@ def rubric_evaluate_findings(findings, tag):
         finding_lines.append(f"  [{sev}/{cat}] {fid}: {desc}")
 
     user_text = "Evaluate these findings against the rubric:\n\n" + "\n".join(finding_lines[:20])
-    resp = call_one("day_verify", SYS_RUBRIC_FINDING, user_text, f"rubric_{tag}", max_tok=4096)
+    resp = call_one("day_verify", RUBRIC_SYSTEM_PROMPT, user_text, f"rubric_{tag}", max_tok=4096)
     rubrics = (resp or {}).get("result", {}).get("rubric_evaluations", [])
 
     # Build a lookup for quick access
@@ -970,12 +1000,15 @@ JUDGE_MODEL = "night_judge"
 # ── Model call with single-model-at-a-time guarantee ──────────────────
 
 def call_one(model_name, sys_prompt, user_text, tag_label, max_tok=2048):
-    """kill_all -> start only this model -> LLM call."""
+    """ensure_model -> LLM call. Day models skip restart if already healthy."""
     physical = resolve_model(model_name)
     if DRY_RUN:
         log(f"  [DRY] call_one({model_name}) → mock response")
         return MOCK_RESULT
-    ok = ensure_model(physical)
+    # Day models (reviewer/extractor) skip restart — Pod B stays running
+    # Night models (proposer/reflector/judge/verifier) always restart for mode swap
+    skip_if_healthy = physical not in NIGHT_MODELS
+    ok = ensure_model(physical, skip_if_healthy=skip_if_healthy)
     if not ok:
         abort("컨테이너 시작 실패", model_name,
               f"{model_name} 컨테이너가 300s 내에 준비되지 않음")
@@ -1007,6 +1040,7 @@ def compile_handoff_single(r, round_num, with_rubric):
         "approved_ids": sorted(r.get("approved", [])),
         "rejected_ids": sorted(r.get("rejected", [])),
         "report_summary": r.get("report_summary", ""),
+        "r_rejected_findings": r.get("r_rejected_findings", []),
         "schema_version": 1,
     }
     handoff["checksum"] = hashlib.sha256(
@@ -1043,30 +1077,40 @@ def compile_handoff(prj_results, round_num, with_rubric):
 # ── Round runner ──────────────────────────────────────────────────────
 
 def run_propose_review_judge(state, tag, rubric_append):
-    """P-R-J 1회 패스. kill_all → P → R → J → state 저장."""
+    """P-R-J 1회 패스. Pod A stop → P → R → J → state 저장."""
+    # Pod A(7B reviewer) stop — Pod B가 30B/14B로 전환되기 전 RAM 확보
+    stop_pod_a()
+
     log("\n--- Phase 3: P-R-J (P) ---")
     handoff_fragment = {}
 
     # P — gets findings by severity + P context
     p_max = 4096
-    proposer_output = call_one(PROPOSER_MODEL, SYS_P + rubric_append,
-                   state.build_context("prj_p"),
+    proposer_output = call_one(PROPOSER_MODEL, PROPOSER_SYSTEM_PROMPT + rubric_append,
+                   state.build_context("prj_proposer"),
                    f"P_{tag}", max_tok=p_max)
     save(f"p_{tag}", tag, proposer_output)
     p_findings = (proposer_output or {}).get("result", {}).get("findings", [])
+    prev_count = len(p_findings)
+    p_findings = _dedup_findings(p_findings)
+    if len(p_findings) < prev_count:
+        log(f"  Dedup: {prev_count} → {len(p_findings)} findings ({prev_count - len(p_findings)} removed)")
 
     # R
     r_max = 2048
-    reflector_output = call_one(REFLECTOR_MODEL, SYS_R + rubric_append,
+    reflector_output = call_one(REFLECTOR_MODEL, REFLECTOR_SYSTEM_PROMPT + rubric_append,
                    f"Proposer findings:\n{json.dumps(p_findings, ensure_ascii=False, indent=2)[:4000]}",
                    f"R_{tag}", max_tok=r_max)
     save(f"r_{tag}", tag, reflector_output)
     r_verdicts = (reflector_output or {}).get("result", {}).get("verdicts", [])
+    r_rejected = (reflector_output or {}).get("result", {}).get("rejected_findings", [])
+    if r_rejected and len(r_rejected) > 0:
+        log(f"  R rejected {len(r_rejected)} findings — stored in audit trail")
 
     # J
     j_max = 2048
-    judge_output = call_one(JUDGE_MODEL, SYS_J + rubric_append,
-                   state.build_context("prj_j", {"rotation_index": 0})
+    judge_output = call_one(JUDGE_MODEL, JUDGE_SYSTEM_PROMPT + rubric_append,
+                   state.build_context("prj_judge", {"rotation_index": 0})
                    + f"\n\n### P findings:\n"
                    + json.dumps(p_findings, ensure_ascii=False, indent=2)[:2000]
                    + f"\n\n### R verdicts:\n"
@@ -1088,6 +1132,7 @@ def run_propose_review_judge(state, tag, rubric_append):
         "rejected": judge_result.get("rejected", []),
         "p_count": len(p_findings),
         "r_count": len(r_verdicts),
+        "r_rejected_findings": r_rejected,
         "p_elapsed_ms": (proposer_output or {}).get("elapsed_ms", 0),
         "r_elapsed_ms": (reflector_output or {}).get("elapsed_ms", 0),
         "j_elapsed_ms": (judge_output or {}).get("elapsed_ms", 0),
@@ -1109,7 +1154,7 @@ def run_propose_review_judge(state, tag, rubric_append):
 
 # ── R handoff writer ───────────────────────────────────────────────
 
-SYS_R_HANDOFF = """You are a senior reviewer (R) writing the final handoff document after a complete P-R-J review cycle.
+HANDOFF_SYSTEM_PROMPT = """You are a senior reviewer (R) writing the final handoff document after a complete P-R-J review cycle.
 
 The full cycle is complete:
 - **P (night_proposer)**: Proposed findings with severity/category
@@ -1236,7 +1281,7 @@ def run_round(round_num, with_rubric, resume_state_path=None):
 
         # Phase 1: day_verify (lightweight pre-filter)
         log("\n--- Phase 1: day_verify ---")
-        day_verify_resp = call_one("day_verify", SYS_VERIFY + rubric_append,
+        day_verify_resp = call_one("day_verify", VERIFIER_SYSTEM_PROMPT + rubric_append,
                        state.build_context("day_verify"),
                        f"day_verify_{tag}")
         day_verify_result = (day_verify_resp or {}).get("result", {})
@@ -1280,7 +1325,7 @@ def run_round(round_num, with_rubric, resume_state_path=None):
         r_ctx_parts.append(f"  top issue: {ti}")
     r_handoff_ctx = "\n".join(r_ctx_parts)
 
-    r_hoff_resp = call_one(REFLECTOR_MODEL, SYS_R_HANDOFF, r_handoff_ctx, f"handoff_R_{tag}")
+    r_hoff_resp = call_one(REFLECTOR_MODEL, HANDOFF_SYSTEM_PROMPT, r_handoff_ctx, f"handoff_R_{tag}")
     r_hoff_data = (r_hoff_resp or {}).get("result", {}).get("handoff", {})
     save(f"handoff_r_{tag}", tag, {
         "source": "llm_r", "handoff": r_hoff_data,
@@ -1363,7 +1408,7 @@ def run_round(round_num, with_rubric, resume_state_path=None):
 
     log("\n--- Phase 4: night_verify ---")
     night_verify_context = state.build_context("final_verify") + "\n\n" + verifier_input
-    night_verify_resp = call_one("night_verify", SYS_VERIFY + rubric_append,
+    night_verify_resp = call_one("night_verify", VERIFIER_SYSTEM_PROMPT + rubric_append,
                    night_verify_context, f"night_verify_{tag}")
     night_verify_result = (night_verify_resp or {}).get("result", {})
     save(f"night_verify_{tag}", tag, night_verify_resp)
@@ -1442,7 +1487,7 @@ def save_feedback_to_db(night_verify_feedback, tag):
         body = {
             "findings": findings,
             "verification_items": verification_items,
-            "source": "27b_feedback",
+            "source": "verify_feedback",
             "feedback_role": role,
             "feedback_model": model,
             "score": score,
@@ -1456,7 +1501,7 @@ def save_feedback_to_db(night_verify_feedback, tag):
             "INSERT INTO activity_log "
             "(type, source, title, summary, body, model, summary_status, queue_status, exec_status) "
             "VALUES ("
-            f"'verify_result', '27b_feedback', '{title_esc}', "
+            f"'verify_result', 'verify_feedback', '{title_esc}', "
             f"'{summary_esc}', '{body_json}', 'deepseek-v4-flash', "
             "'raw', 'reviewed', 'DONE'"
             ")"
@@ -1646,7 +1691,7 @@ def _batch_p(items, rubric_append):
         log(f"  [{idx+1}/{len(items)}] {turn_id[:8]}: {len(facts)} facts")
         ctx = _build_p_context(turn, facts, item["body"], day_review=item.get("day_review"))
         resp = llm_call(
-            [{"role": "system", "content": SYS_P + rubric_append},
+            [{"role": "system", "content": PROPOSER_SYSTEM_PROMPT + rubric_append},
              {"role": "user", "content": ctx}],
             model=PROPOSER_MODEL, max_tokens=4096, label=f"P_queue_{idx}")
         findings = resp.get("result", {}).get("findings", [])
@@ -1675,7 +1720,7 @@ def _batch_r(items, p_results, rubric_append):
             continue
         ctx = f"Proposer findings:\n{json.dumps(p_findings, ensure_ascii=False, indent=2)[:4000]}"
         resp = llm_call(
-            [{"role": "system", "content": SYS_R + rubric_append},
+            [{"role": "system", "content": REFLECTOR_SYSTEM_PROMPT + rubric_append},
              {"role": "user", "content": ctx}],
             model=REFLECTOR_MODEL, max_tokens=2048, label=f"R_queue_{idx}")
         verdicts = resp.get("result", {}).get("verdicts", [])
@@ -1707,7 +1752,7 @@ def _batch_j(items, p_results, r_results, rubric_append):
             json.dumps(r_verdicts, ensure_ascii=False, indent=2)[:2000],
         ]
         resp = llm_call(
-            [{"role": "system", "content": SYS_J + rubric_append},
+            [{"role": "system", "content": JUDGE_SYSTEM_PROMPT + rubric_append},
              {"role": "user", "content": "\n".join(ctx_parts)}],
             model=JUDGE_MODEL, max_tokens=2048, label=f"J_queue_{idx}")
         jr = resp.get("result", {})
@@ -1763,43 +1808,53 @@ def run_queue_mode(limit=5):
 # ── Main ──────────────────────────────────────────────────────────────
 
 def run_extract(with_rubric, mcp_model="day_mcp"):
-    """Phase -1: day_extract → Python verify → day_mcp MCP.
+    """Phase -1: extract → Python verify.
 
-    Pod A (day_extract:8082) for extract + Pod B (day_mcp/day_p/day_j:8080) for MCP."""
-    log("\n--- Phase -1: day_extract + MCP ---")
+    Pod A(7B reviewer:8082) 재시작 → day_verify/MCP 준비.
+    Pod B(3B extractor:8080)는 running 상태 유지 (extract LLM call).
+    skip_mcp=True면 MCP 생략 (extract 결과만 반환)."""
+    log("\n--- Phase -1: extract (Pod A 7B reviewer 준비, Pod B 3B extractor running) ---")
     if DRY_RUN:
         log("  [DRY] Extract phase skipped")
         return
 
-    log("  Pod A(day_extract:8082) + Pod B(day_mcp:8080)...")
-    with open(MODE_FILE_B, "w") as f:
-        f.write("MODE=day")
-    with open(MODE_FILE_A, "w") as f:
-        f.write("MODE=day")
-    kill_all()
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
-                   capture_output=True, timeout=60)
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-swap.service"],
-                   capture_output=True, timeout=60)
-    pod_a_ready = wait_health(8082)
-    pod_b_ready = wait_health(8080)
-    if not (pod_a_ready and pod_b_ready):
-        log(f"  Day mode containers not ready: A={pod_a_ready} B={pod_b_ready}")
-        slack_send(f":warning: Extract phase — day mode containers not ready")
+    log("  Pod A(7B reviewer:8082) 시작 → verify/MCP 준비, Pod B(3B extractor:8080) 유지...")
+    ok = start_pod_a_only("day", 8082)
+    if not ok:
+        log("  Pod A not ready for extract")
+        slack_send(":warning: Extract phase — Pod A not ready")
         return
-    log(f"  :8082 ready (day_extract) + :8080 ready (day)")
+    log("  :8082 ready (reviewer, verify/MCP 준비)")
+
+    # Pod B(3B extractor:8080)가 running 상태인지 확인
+    log("  Checking Pod B(3B extractor:8080) health...")
+    try:
+        req = urllib.request.Request("http://127.0.0.1:8080/health")
+        with urllib.request.urlopen(req, timeout=5) as r:
+            if r.status != 200:
+                raise Exception(f"health status {r.status}")
+    except Exception as e:
+        log(f"  Pod B:8080 not healthy ({e}) — starting Pod B day mode...")
+        from lib.pod_manager import start_pod_b
+        ok2 = start_pod_b("day", 8080)
+        if not ok2:
+            log("  Pod B not ready — extract impossible")
+            slack_send(":warning: Extract phase — Pod B(extractor) not ready")
+            return
+        log("  :8080 ready (extractor)")
 
     from pipelines.extract import extract_pipeline
     result = extract_pipeline(
         turn_id=None,
-        limit=50,
         dry_run=False,
         mcp_model=mcp_model,
+        skip_mcp=True,
     )
     log(f"  Extract result: {result['processed']} processed, "
         f"{result['failed']} failed, {result['facts']} facts")
 
 def main():
+    preflight_checks("prj_cycle.py")
     if "--queue" in sys.argv:
         limit = 5
         for i, a in enumerate(sys.argv):

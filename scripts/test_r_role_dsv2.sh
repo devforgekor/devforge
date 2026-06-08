@@ -36,13 +36,13 @@ log "Qwen14B R results: $(echo "$R_Q14" | python3 -c 'import json,sys; d=json.lo
 
 # Kill all containers
 log "Podman stop all..."
-systemctl --user stop devforge-swap 2>/dev/null || true
+systemctl --user stop container-devforge-pod-b 2>/dev/null || true
 sleep 3
 
 # Start DSV2 Lite on Pod B
 log "Loading DSV2 Lite Q8.0..."
 echo "MODE=review-dsv2" > "$MODE_FILE_B"
-systemctl --user start devforge-swap 2>/dev/null || true
+systemctl --user start container-devforge-pod-b 2>/dev/null || true
 
 # Wait for health
 RETRIES=120

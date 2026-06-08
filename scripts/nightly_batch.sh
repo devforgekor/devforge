@@ -71,12 +71,12 @@ switch_mode_both() {
     echo "[$(LOG_TS)] Switching Pod A → $mode_a, Pod B → $mode_b..."
     printf '%s' "MODE=$mode_a" > "${MODE_FILE_A}.tmp" && mv "${MODE_FILE_A}.tmp" "$MODE_FILE_A"
     printf '%s' "MODE=$mode_b" > "${MODE_FILE_B}.tmp" && mv "${MODE_FILE_B}.tmp" "$MODE_FILE_B"
-    systemctl --user stop container-devforge-swap 2>&1 || true
+    systemctl --user stop container-devforge-pod-b 2>&1 || true
     sleep 3  # wait for pasta to release ports 8080-8081
-    if systemctl --user start container-devforge-swap 2>&1; then
+    if systemctl --user start container-devforge-pod-b 2>&1; then
         return 0
     else
-        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-swap (port race)" >&2
+        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-pod-b (port race)" >&2
         return 1
     fi
 }
@@ -85,12 +85,12 @@ switch_mode_pod_b() {
     local mode="$1"
     echo "[$(LOG_TS)] Switching Pod B to $mode..."
     printf '%s' "MODE=$mode" > "${MODE_FILE_B}.tmp" && mv "${MODE_FILE_B}.tmp" "$MODE_FILE_B"
-    systemctl --user stop container-devforge-swap 2>&1 || true
+    systemctl --user stop container-devforge-pod-b 2>&1 || true
     sleep 3  # wait for pasta to release ports 8080-8081
-    if systemctl --user start container-devforge-swap 2>&1; then
+    if systemctl --user start container-devforge-pod-b 2>&1; then
         return 0
     else
-        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-swap (port race)" >&2
+        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-pod-b (port race)" >&2
         return 1
     fi
 }
@@ -98,7 +98,7 @@ switch_mode_pod_b() {
 stop_llm_services() {
     local label="$1"
     echo "[$(LOG_TS)] [$label] Stopping LLM services and timers..."
-    for svc in activity-summarizer telegram-bot webhook-server; do
+    for svc in activity-summarizer telegram-bot slack; do
         systemctl --user stop "$svc" 2>&1 || true
     done
     for tmr in activity-summarizer.timer devforge-15m-cycle.timer; do
@@ -113,7 +113,7 @@ start_llm_services() {
     for tmr in activity-summarizer.timer devforge-15m-cycle.timer; do
         systemctl --user start "$tmr" 2>&1 || true
     done
-    for svc in activity-summarizer telegram-bot webhook-server; do
+    for svc in activity-summarizer telegram-bot slack; do
         systemctl --user start "$svc" 2>&1 || true
     done
     echo "[$(LOG_TS)] [$label] LLM services restored"
@@ -194,7 +194,7 @@ else
         echo "[$(LOG_TS)] FATAL: day mode (:8080) not responding after restore" >&2
     fi
     # Pod A day_r(:8082)
-    echo "[$(LOG_TS)] Restarting Pod A (day_r:8082)...
+    echo "[$(LOG_TS)] Restarting Pod A (day_r:8082)..."
     systemctl --user restart container-devforge-pod-a 2>&1 || true
     sleep 5
     if ! wait_for_model 8082 "day_r (Pod A)" 60; then

@@ -27,6 +27,7 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 import subprocess as sp
 import time
 from typing import Any, Dict, List, Optional
@@ -34,6 +35,7 @@ from typing import Any, Dict, List, Optional
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
+from lib.infra.preflight import preflight_checks
 from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.llm_client import call_llm
 from lib.llm.json_parser import save_dlq, parse_llm_json
@@ -43,11 +45,11 @@ from lib.queue_writer import enqueue_review
 # Timeout/token/temp for extraction (day_extract) vs MCP fields generation (day_mcp)
 TIMEOUT_EXTRACT = 180
 TIMEOUT_MCP = 300
-MAX_TOKENS_EXTRACT = 2048
-MAX_TOKENS_MCP = 2048
+MAX_TOKENS_EXTRACT = 512
+MAX_TOKENS_MCP = 512
 TEMP_EXTRACT = 0.1
 TEMP_MCP = 0.1
-BATCH_LIMIT = 100
+BATCH_LIMIT = 10
 
 # ── System prompts ─────────────────────────────────────────────────────────
 SYSTEM_DAY_EXTRACT = """\
@@ -58,13 +60,6 @@ model's internal reasoning, may be empty), and text (the model's response).
 Extract key factual statements that are EXPLICITLY present in the text.
 Do NOT infer, summarize, or add information not present in the source.
 
-=== EVALUATION RUBRIC (self-assessment) ===
-Rate your OWN extractions on:
-- Faithfulness (0-10): Is every extraction directly traceable to the source?
-- Precision (0-10): Are extractions factual statements, not interpretations?
-- Recall (0-10): Are all key facts captured (up to 5 per type)?
-- Conciseness (0-10): Is evidence brief and to the point?
-
 Output STRICT JSON:
 {
   "extractions": [
@@ -73,17 +68,7 @@ Output STRICT JSON:
       "evidence": "Exact quote or close paraphrase from the source",
       "category": "requirement|decision|explanation|code|reasoning|other"
     }
-  ],
-  "rubric_evaluation": {
-    "faithfulness": "0-10",
-    "faithfulness_justification": "...",
-    "precision": "0-10",
-    "precision_justification": "...",
-    "recall": "0-10",
-    "recall_justification": "...",
-    "conciseness": "0-10",
-    "conciseness_justification": "..."
-  }
+  ]
 }
 
 Rules:
@@ -98,12 +83,6 @@ You are a conversation analyst preparing structured metadata for an MCP
 (Model Context Protocol) system. Given the original conversation turn and
 the extracted facts, produce structured MCP fields.
 
-=== EVALUATION RUBRIC (self-assessment) ===
-Rate your OWN MCP output on:
-- Accuracy (0-10): Are fields directly derivable from turn content?
-- Completeness (0-10): Are all relevant entities captured without hallucination?
-- Conciseness (0-10): Is tldr brief and tags minimal but useful?
-
 Output STRICT JSON:
 {
   "tldr": "One-line summary (max 15 words) — what this turn is about",
@@ -114,15 +93,7 @@ Output STRICT JSON:
     "functions": ["function_name"],
     "mentioned_users": []
   },
-  "tags": ["tag1", "tag2"],
-  "rubric_evaluation": {
-    "accuracy": "0-10",
-    "accuracy_justification": "...",
-    "completeness": "0-10",
-    "completeness_justification": "...",
-    "conciseness": "0-10",
-    "conciseness_justification": "..."
-  }
+  "tags": ["tag1", "tag2"]
 }
 
 Rules:
@@ -133,6 +104,24 @@ Rules:
 - entities.functions: function/class/method names mentioned
 - tags: 2-5 keywords for discovery and routing
 - If a field has no relevant data, use an empty array []"""
+
+SYSTEM_DESCRIBE_FILE = """\
+You are a file description agent for a developer server. Given a filename,
+MIME type, and file content (or first 2 KB for text files), produce a one-line
+description and keyword tags for search/discovery.
+
+Output STRICT JSON:
+{
+  "description": "One-line summary of what this file contains (max 15 words)",
+  "tags": ["tag1", "tag2", "tag3"]
+}
+
+Rules:
+- description must be factual and based only on filename, type, and content
+- tags: 2-5 relevant keywords for search (include file type, source, purpose)
+- For binary/non-text files, describe based on filename and mime_type alone
+- For text files, use the content sample to determine the topic
+- If content is empty or unreadable, describe by filename and extension only"""
 
 SYSTEM_FALLBACK = """\
 You are a fact extraction specialist handling a difficult turn. The initial extractor
@@ -483,12 +472,16 @@ def extract_pipeline(
     limit: int = BATCH_LIMIT,
     dry_run: bool = False,
     mcp_model: str = "day_mcp",
+    skip_mcp: bool = False,
 ) -> Dict[str, Any]:
     """Run day_extract extractive → Python verify → day_mcp MCP fields per turn."""
     t_start = time.monotonic()
 
     print(f"\n{'=' * 60}")
-    print(f"Extract Pipeline — day_extract → Python verify → {mcp_model} MCP fields")
+    if skip_mcp:
+        print(f"Extract Pipeline — day_extract → Python verify (MCP skipped)")
+    else:
+        print(f"Extract Pipeline — day_extract → Python verify → {mcp_model} MCP fields")
     if dry_run:
         print("  [DRY RUN] No writes to DB")
     print(f"{'=' * 60}")
@@ -599,33 +592,36 @@ def extract_pipeline(
                 failed += 1
                 continue
 
-            # ── Phase 5: MCP fields generation ──────────────────────────
-            print(f"  [extract] {mcp_model} MCP fields...")
-            mcp_result = _generate_mcp_fields(ut, th, tx,
-                                              model=mcp_model,
-                                              extractions=extractions)
-            mcp_tldr = mcp_result.get("tldr", "") if mcp_result else ""
-            mcp_intent = mcp_result.get("intent", "other") if mcp_result else "other"
-            mcp_entities = mcp_result.get("entities", {}) if mcp_result else {}
-            mcp_tags = mcp_result.get("tags", []) if mcp_result else []
-            if mcp_tldr:
-                print(f"  [extract]   tldr: {mcp_tldr}")
-            if mcp_intent:
-                print(f"  [extract]   intent: {mcp_intent}")
-            if mcp_entities:
-                print(f"  [extract]   entities: files={len(mcp_entities.get('files',[]))}, "
-                      f"funcs={len(mcp_entities.get('functions',[]))}")
+            # ── Phase 5: MCP fields generation (skip_mcp=True → no 7B call) ─
+            mcp_result = None
+            mcp_tldr = ""
+            if not skip_mcp:
+                print(f"  [extract] {mcp_model} MCP fields...")
+                mcp_result = _generate_mcp_fields(ut, th, tx,
+                                                  model=mcp_model,
+                                                  extractions=extractions)
+                mcp_tldr = mcp_result.get("tldr", "") if mcp_result else ""
+                mcp_intent = mcp_result.get("intent", "other") if mcp_result else "other"
+                mcp_entities = mcp_result.get("entities", {}) if mcp_result else {}
+                mcp_tags = mcp_result.get("tags", []) if mcp_result else []
+                if mcp_tldr:
+                    print(f"  [extract]   tldr: {mcp_tldr}")
+                if mcp_intent:
+                    print(f"  [extract]   intent: {mcp_intent}")
+                if mcp_entities:
+                    print(f"  [extract]   entities: files={len(mcp_entities.get('files',[]))}, "
+                          f"funcs={len(mcp_entities.get('functions',[]))}")
 
-            # ── Entity verification ──────────────────────────────────────
-            if mcp_result and mcp_result.get("entities"):
-                verified = _verify_entities(mcp_result)
-                mcp_result["verified"] = verified
-                n_files = len(verified.get("files", []))
-                n_syms = len(verified.get("symbols", []))
-                n_missing_files = sum(1 for f in verified.get("files", []) if not f["exists"])
-                n_missing_syms = sum(1 for s in verified.get("symbols", []) if not s["found"])
-                print(f"  [extract]   verified: {n_files} files ({n_missing_files} missing), "
-                      f"{n_syms} symbols ({n_missing_syms} missing)")
+                # ── Entity verification ──────────────────────────────────
+                if mcp_result and mcp_result.get("entities"):
+                    verified = _verify_entities(mcp_result)
+                    mcp_result["verified"] = verified
+                    n_files = len(verified.get("files", []))
+                    n_syms = len(verified.get("symbols", []))
+                    n_missing_files = sum(1 for f in verified.get("files", []) if not f["exists"])
+                    n_missing_syms = sum(1 for s in verified.get("symbols", []) if not s["found"])
+                    print(f"  [extract]   verified: {n_files} files ({n_missing_files} missing), "
+                          f"{n_syms} symbols ({n_missing_syms} missing)")
 
             # ── Phase 6: Store ───────────────────────────────────────
             if dry_run:
@@ -718,8 +714,97 @@ def extract_pipeline(
             "facts": total_facts, "elapsed_s": elapsed, "ok": failed == 0}
 
 
+# ── File description phase ──────────────────────────────────────────────────
+_TEXT_EXTENSIONS = {".txt", ".md", ".py", ".json", ".yaml", ".yml", ".csv",
+                    ".log", ".html", ".css", ".js", ".sh", ".toml", ".xml",
+                    ".cfg", ".ini", ".conf", ".env", ".rst", ".tex"}
+
+
+def _sample_content(path: str, max_bytes: int = 2048) -> str:
+    """Read first max_bytes of a text file. Returns empty string for binary files or errors."""
+    ext = Path(path).suffix.lower()
+    if ext not in _TEXT_EXTENSIONS:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read(max_bytes)
+    except Exception:
+        return ""
+
+
+def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any]:
+    """Scan file_registry for undescribed files, generate descriptions + tags via LLM.
+
+    Uses day_extract model for lightweight description generation.
+    """
+    from lib.file_registry import scan_undescribed, update_metadata
+
+    files = scan_undescribed()
+    if isinstance(files, list) and len(files) > limit:
+        files = files[:limit]
+
+    if not files:
+        print("[describe-files] No undescribed files found")
+        return {"processed": 0, "failed": 0, "ok": True}
+
+    print(f"[describe-files] Describing {len(files)} file(s)")
+    processed = 0
+    failed = 0
+
+    for f in files:
+        fname = f.get("filename", "?")
+        mime = f.get("mime_type", "?")
+        fsize = f.get("size", 0)
+        fsrc = f.get("source", "?")
+        content = _sample_content(f.get("path", ""))
+        print(f"  [{processed + 1}/{len(files)}] {fname} ({mime}, {fsize}b)")
+
+        parts = [
+            f"filename: {fname}",
+            f"mime_type: {mime}",
+            f"size: {fsize} bytes",
+            f"source: {fsrc}",
+        ]
+        if content:
+            parts.append("")
+            parts.append("=== content (first 2KB) ===")
+            parts.append(content)
+
+        meta = call_llm(
+            [{"role": "system", "content": SYSTEM_DESCRIBE_FILE},
+             {"role": "user", "content": "\n".join(parts)}],
+            model="day_extract",
+            max_tokens=256, temperature=0.1, timeout=60,
+            json_mode=True, return_meta=True,
+        )
+        raw = meta["content"]
+        parsed = _parse_json(raw, "describe_file")
+        if not parsed:
+            print(f"    Parse failure, skipping")
+            failed += 1
+            continue
+
+        desc = parsed.get("description", "")
+        tags = parsed.get("tags", [])
+        if not desc:
+            print(f"    Empty description from LLM")
+            failed += 1
+            continue
+
+        print(f"    → {desc}")
+        if tags:
+            print(f"    tags: {', '.join(tags)}")
+        if not dry_run:
+            update_metadata(f["id"], description=desc, tags=tags)
+        processed += 1
+
+    print(f"[describe-files] Done: {processed} described, {failed} failed")
+    return {"processed": processed, "failed": failed, "ok": failed == 0}
+
+
 # ── CLI ────────────────────────────────────────────────────────────────────
 def main() -> None:
+    preflight_checks("extract.py")
     import argparse
     parser = argparse.ArgumentParser(
         description=f"Extract Pipeline — day_extract → Python → day_mcp MCP (default)")
@@ -729,14 +814,19 @@ def main() -> None:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--mcp-model", default="day_mcp",
                         help=f"Model for MCP fields generation (default: day_mcp)")
+    parser.add_argument("--describe-files", action="store_true",
+                        help="Scan file_registry for undescribed files and generate descriptions")
     args = parser.parse_args()
 
-    result = extract_pipeline(
-        turn_id=args.turn_id,
-        limit=args.limit,
-        dry_run=args.dry_run,
-        mcp_model=args.mcp_model,
-    )
+    if args.describe_files:
+        result = describe_file_batch(dry_run=args.dry_run, limit=args.limit)
+    else:
+        result = extract_pipeline(
+            turn_id=args.turn_id,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            mcp_model=args.mcp_model,
+        )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     sys.exit(0 if result["ok"] else 1)

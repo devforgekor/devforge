@@ -16,8 +16,8 @@ Usage::
         {"role": "system", "content": "You are a code generator."},
         {"role": "user",   "content": "Build a CLI tool for …"},
     ]
-    reply = call_llm(messages, model="Qwen3B")
-    data  = call_llm_json(messages, model="Qwen7B")
+    reply = call_llm(messages, model="reviewer")
+    data  = call_llm_json(messages, model="reviewer")
 """
 
 import json
@@ -33,33 +33,32 @@ from typing import Any, Dict, List, Optional
 # to swap models without touching any pipeline code.
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
-    # Physical models
-    "Qwen3B":  {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 180},
-    "Qwen30B": {"port": 8080, "temp": 0.22, "max_tokens": 2048, "timeout": 600},
-    "Qwen7B":  {"port": 8080, "temp": 0.10, "max_tokens": 400,  "timeout": 480},
-    "Qwen14B": {"port": 8080, "temp": 0.10, "max_tokens": 2048, "timeout": 600},
-    "Qwen27B": {"port": 8081, "temp": 0.10, "max_tokens": 4096, "timeout": 1200},
-    "NextCoder14B":{"port": 8080, "temp": 0.10, "max_tokens": 4096, "timeout": 7200},
-
+    # Physical endpoints (role-based — each describes the LLM's primary job)
+    "extractor":    {"port": 8080, "temp": 0.12, "max_tokens": 2048, "timeout": 180},
+    "proposer":     {"port": 8080, "temp": 0.22, "max_tokens": 2048, "timeout": 600},
+    "reviewer":     {"port": 8082, "temp": 0.10, "max_tokens": 400,  "timeout": 480},
+    "reflector":    {"port": 8080, "temp": 0.10, "max_tokens": 2048, "timeout": 600},
+    "verifier":     {"port": 8081, "temp": 0.10, "max_tokens": 4096, "timeout": 1200},
+    "judge":        {"port": 8080, "temp": 0.10, "max_tokens": 4096, "timeout": 7200},
     # Role aliases — pipeline code uses these; MODEL_REGISTRY is the single
     # place to change when a model/port changes.
     # Day pipeline — extract (:00/:30)
-    "day_extract": {"_model": "Qwen3B"},
-    "day_mcp":     {"_model": "Qwen7B"},
+    "day_extract": {"_model": "extractor"},
+    "day_mcp":     {"_model": "reviewer"},
 
     # Day pipeline — verify & rubric
-    "day_verify":  {"_model": "Qwen7B"},
+    "day_verify":  {"_model": "reviewer"},
 
     # Day pipeline — classify (:15/:45) day pre-review
-    "day_p":       {"_model": "Qwen7B"},
-    "day_r":       {"_model": "Qwen3B"},
-    "day_j":       {"_model": "Qwen7B"},
+    "day_proposer":       {"_model": "reviewer"},
+    "day_reviewer":       {"_model": "extractor"},
+    "day_judge":       {"_model": "reviewer"},
 
     # Night pipeline — prj_cycle batch review
-    "night_proposer":  {"_model": "Qwen30B"},  # 30B A3B MoE (port 8080, reflector/judge와 swap)
-    "night_reflector": {"_model": "Qwen14B"},
-    "night_judge":     {"_model": "NextCoder14B"},
-    "night_verify":    {"_model": "Qwen27B"},
+    "night_proposer":  {"_model": "proposer"},
+    "night_reflector": {"_model": "reflector"},
+    "night_judge":     {"_model": "judge"},
+    "night_verify":    {"_model": "verifier"},
 }
 
 
@@ -118,7 +117,7 @@ def _inject_feedback(messages: List[Dict], model: str) -> List[Dict]:
 
 def call_llm(
     messages: List[Dict[str, str]],
-    model: str = "Qwen3B",
+    model: str = "reviewer",
     *,
     max_tokens: Optional[int] = None,
     temperature: Optional[float] = None,
@@ -130,7 +129,7 @@ def call_llm(
 
     Args:
         messages:    Chat messages (system + user + …).
-        model:       Key in ``MODEL_REGISTRY`` — physical ("Qwen7B") or role alias ("day_verify").
+        model:       Key in ``MODEL_REGISTRY`` — physical ("reviewer") or role alias ("day_verify").
         max_tokens:  Override the registry default.
         temperature: Override the registry default.
         timeout:     HTTP timeout in seconds (override).
@@ -169,8 +168,10 @@ def call_llm(
     url = f"http://127.0.0.1:{port}/v1/chat/completions"
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    # Cap HTTP timeout at 1800s (30 min) — prevents infinite hang when server is down
+    _http_timeout = min(timeout or cfg["timeout"], 1800)
     try:
-        with urllib.request.urlopen(req, timeout=timeout or cfg["timeout"]) as resp:
+        with urllib.request.urlopen(req, timeout=_http_timeout) as resp:
             result = json.loads(resp.read().decode("utf-8"))
     except urllib.error.URLError as e:
         raise RuntimeError(f"LLM call to :{port} ({model}) failed: {e}")
@@ -197,7 +198,7 @@ def call_llm(
 
 def call_llm_json(
     messages: List[Dict[str, str]],
-    model: str = "Qwen3B",
+    model: str = "reviewer",
     **kwargs: Any,
 ) -> str:
     """Convenience wrapper — same as ``call_llm(…, json_mode=True)``."""

@@ -5,7 +5,7 @@
 #   tr coop   → cooperative: local draft → Azure spot VM debate
 #   tr review    → Pod A(R1) + Pod B(Qwen7B+Selene swap) — night pipeline
 #   tr review-se → Pod B Selene only (Step 3 judge)
-#   tr verify    → Pod A stopped + Pod B(32B) — final gate
+#   tr verify    → Pod A stopped + Pod B(27B verifier) — final gate
 #
 # Mode persistence via separate files per pod.
 
@@ -46,19 +46,19 @@ _wait_pod_b() {
 
 _ensure_pod_a() {
     log "ensuring Pod A is running..."
-    systemctl --user start container-devforge-qwen.service 2>/dev/null || true
+    systemctl --user start container-devforge-pod-a.service 2>/dev/null || true
     sleep 3
 }
 
 _stop_pod_a() {
     log "stopping Pod A (free memory for 32B)..."
-    systemctl --user stop container-devforge-qwen.service 2>/dev/null || true
+    systemctl --user stop container-devforge-pod-a.service 2>/dev/null || true
     sleep 5
 }
 
 _restart_pod_b() {
-    log "restarting container-devforge-swap..."
-    systemctl --user restart container-devforge-swap.service
+    log "restarting container-devforge-pod-b..."
+    systemctl --user restart container-devforge-pod-b.service
 }
 
 # ── Mode commands ──────────────────────────────────────────────

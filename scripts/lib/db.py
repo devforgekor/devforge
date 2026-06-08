@@ -97,9 +97,10 @@ def db_row_exists(sql: str) -> bool:
         return False
 
 
-def esc_sql(s: str) -> str:
+def escape_sql_string(s: str) -> str:
     """Escape string for safe SQL literal interpolation."""
     return s.replace("\x00", "").replace("\\", "\\\\").replace("'", "''").replace("\n", " ").replace("\r", " ")
+esc_sql = escape_sql_string  # alias for backward compatibility; new callers should use escape_sql_string
 
 
 def get_token_stats() -> Optional[dict]:

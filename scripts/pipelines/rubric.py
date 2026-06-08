@@ -23,11 +23,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EVAL_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "eval")
-EXPERIMENT_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "experiment")
-os.makedirs(EXPERIMENT_DIR, exist_ok=True)
-
 sys.path.insert(0, SCRIPTS_DIR)
+
+from lib.infra.preflight import preflight_checks
 from lib.db import psql_ok
 from lib.llm_client import call_llm
 
@@ -37,43 +35,19 @@ TIMEOUT_LLM = 600
 TIMEOUT_SWAP = 300
 
 # ── P-R-J Model Combos ──────────────────────────────────────────────────
-COMBO_A = {
-    "name": "A (R1-8B + Qwen7B + Selene)",
-    "proposer_model": "R1-8B",
-    "proposer_port": 8083,
-    "refuter_model": "Qwen7B",
-    "refuter_mode": "review-qw",
-    "refuter_port": 8080,
-    "judge_model": "Selene",
-    "judge_mode": "review-se",
-    "judge_port": 8081,
-}
-
 COMBO_B = {
-    "name": "B (Qwen30B + Qwen7B + Selene)",
-    "proposer_model": "Qwen30B",
+    "name": "B (proposer + reflector + judge)",
+    "proposer_model": "proposer",
     "proposer_port": 8080,
-    "refuter_model": "Qwen7B",
-    "refuter_mode": "review-qw",
+    "refuter_model": "reviewer",
+    "refuter_mode": "review-r",
     "refuter_port": 8080,
-    "judge_model": "Selene",
-    "judge_mode": "review-se",
+    "judge_model": "judge",
+    "judge_mode": "review-j",
     "judge_port": 8081,
 }
 
-COMBO_C = {
-    "name": "C (R1-8B + Qwen30B + Qwen7B)",
-    "proposer_model": "R1-8B",
-    "proposer_port": 8083,
-    "refuter_model": "Qwen30B",
-    "refuter_mode": "day",
-    "refuter_port": 8080,
-    "judge_model": "Qwen7B",
-    "judge_mode": "review-qw",
-    "judge_port": 8080,
-}
-
-ALL_COMBOS = [COMBO_A, COMBO_B, COMBO_C]
+ALL_COMBOS = [COMBO_B]
 
 # ── Rubric V3 (used in Round 2) ────────────────────────────────────────
 
@@ -144,7 +118,7 @@ Output JSON:
   "verification_items": [{"check":"...","result":"pass|fail|partial","detail":"..."}]
 }"""
 
-SYSTEM_V = """You are a final verification specialist. Review all findings.
+VERIFY_SYSTEM_PROMPT = """You are a final verification specialist. Review all findings.
 Output JSON:
 {
   "final_verdict": "approved|approved_with_conditions|rejected",
@@ -156,7 +130,7 @@ Output JSON:
   "feedback": {"proposer_improvement":"...","refuter_improvement":"...","judge_improvement":"..."}
 }"""
 
-SYSTEM_V32 = """You are an independent verification specialist. Second opinion on all findings.
+SECONDARY_VERIFY_SYSTEM_PROMPT = """You are an independent verification specialist. Second opinion on all findings.
 Output JSON:
 {
   "final_verdict": "approved|approved_with_conditions|rejected",
@@ -165,7 +139,7 @@ Output JSON:
   "summary": "1 sentence",
   "reasoning": "3-5 sentences",
   "verification_items": [{"check":"...","result":"pass|fail|partial","detail":"..."}],
-  "disagreement_with_27b": [{"issue":"...","27b_verdict":"...","detail":"..."}]
+  "disagreement_with_primary": [{"issue":"...","primary_verdict":"...","detail":"..."}]
 }"""
 
 
@@ -187,8 +161,8 @@ def inject_rubric(system_prompt: str, role: str) -> str:
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 def log(msg):
-    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+    log_ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    print(f"[{log_ts}] {msg}", flush=True)
 
 
 def load_input() -> Dict:
@@ -204,11 +178,11 @@ def swap_pod_b(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
     log(f"  [swap] Pod B → {mode}")
     with open(MODE_FILE_B, "w") as f:
         f.write(f"MODE={mode}")
-    r = subprocess.run(["systemctl", "--user", "restart", "container-devforge-swap.service"],
+    r = subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
                        capture_output=True, timeout=60)
     if r.returncode != 0:
         return False
-    port = 8080 if mode == "review-qw" else 8081
+    port = 8080 if mode == "review-r" else 8081
     t0 = time.monotonic()
     while time.monotonic() - t0 < timeout:
         try:
@@ -249,13 +223,13 @@ def find_experiment_file(pattern):
 
 # ── Phase runners ────────────────────────────────────────────────────────
 
-def run_30b_verify(input_data: Dict, with_rubric: bool = False, output_suffix: str = "") -> Dict:
+def run_primary_verify(input_data: Dict, with_rubric: bool = False, output_suffix: str = "") -> Dict:
     """Phase 0: 30B (day mode :8080) verifies all 48 findings."""
     log("\n=== 30B Verify (day mode :8080) ===")
     suffix = f"_rubric{output_suffix}" if with_rubric else output_suffix
 
     findings_text = json.dumps(input_data["findings"], ensure_ascii=False)[:4000]
-    system = SYSTEM_V if not with_rubric else inject_rubric(SYSTEM_V, "verify_30b")
+    system = VERIFY_SYSTEM_PROMPT if not with_rubric else inject_rubric(VERIFY_SYSTEM_PROMPT, "verify_primary")
 
     messages = [
         {"role": "system", "content": system},
@@ -267,20 +241,20 @@ def run_30b_verify(input_data: Dict, with_rubric: bool = False, output_suffix: s
     ]
     label = f"30B_verify{suffix}"
     log(f"  [llm] Calling 30B...")
-    response = call_llm_json(messages, "Qwen30B", max_tokens=2048, label=label)
+    response = call_llm_json(messages, "proposer", max_tokens=2048, label=label)
     if not response:
         return {"error": "30B call failed"}
 
     result = {
-        "phase": "30b_verify", "round": suffix or "norubric",
-        "model": "Qwen30B-A3B", "port": 8080,
+        "phase": "primary_verify", "round": suffix or "norubric",
+        "model": "proposer", "port": 8080,
         "with_rubric": with_rubric,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "usage": response["usage"], "timings": response["timings"],
         "elapsed_ms": response["elapsed_ms"],
         "result": response["result"],
     }
-    fpath = os.path.join(EXPERIMENT_DIR, f"30b_verify{suffix}.json")
+    fpath = os.path.join(EXPERIMENT_DIR, f"primary_verify{suffix}.json")
     with open(fpath, "w") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     log(f"  [save] {fpath}")
@@ -295,28 +269,6 @@ def run_prj_combo(combo: Dict, input_data: Dict, round_num: int,
 
     log(f"\n=== P-R-J {combo['name']} ===")
     findings_text = json.dumps(input_data["findings"], ensure_ascii=False)[:4000]
-
-    # ── Step 1: Proposer (day mode) ──
-    # If proposer is R1-8B (8083), need Pod A night mode
-    if combo["proposer_model"] == "R1-8B":
-        log("  [swap] Pod A → review-r1 (for R1-8B :8083)")
-        with open("/opt/ai_data/scripts/current-mode-pod-a.env", "w") as f:
-            f.write("MODE=review-r1")
-        subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-a.service"],
-                       capture_output=True, timeout=60)
-        time.sleep(30)  # wait for model load
-        # Check health
-        t0 = time.monotonic()
-        while time.monotonic() - t0 < 120:
-            try:
-                req = urllib.request.Request("http://127.0.0.1:8083/health")
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    if resp.status == 200:
-                        log("  [swap] Pod A ready :8083")
-                        break
-            except Exception:
-                pass
-            time.sleep(5)
 
     log(f"  [llm] Proposer ({combo['proposer_model']})...")
     p_system = SYSTEM_P if not with_rubric else inject_rubric(SYSTEM_P, "proposer")
@@ -399,7 +351,7 @@ def run_prj_combo(combo: Dict, input_data: Dict, round_num: int,
     return result
 
 
-def run_verify_27b(input_data: Dict, prj_results: List[Dict],
+def run_final_verify(input_data: Dict, prj_results: List[Dict],
                    with_rubric: bool = False, output_suffix: str = "") -> Dict:
     """Phase: 27B verify — reviews all P-R-J results."""
     log("\n=== 27B Verify (:8081 verified) ===")
@@ -419,7 +371,7 @@ def run_verify_27b(input_data: Dict, prj_results: List[Dict],
                 "consensus": j.get("consensus_score", 0),
             })
 
-    system = SYSTEM_V if not with_rubric else inject_rubric(SYSTEM_V, "verify_27b")
+    system = VERIFY_SYSTEM_PROMPT if not with_rubric else inject_rubric(VERIFY_SYSTEM_PROMPT, "verify_final")
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content":
@@ -428,12 +380,12 @@ def run_verify_27b(input_data: Dict, prj_results: List[Dict],
             f"From {input_data['total_files_merged']} evaluation files."},
     ]
     log("  [llm] 27B verify...")
-    resp = call_llm_json(messages, "Qwen27B", max_tokens=2048, label=f"27B_verify{suffix}")
+    resp = call_llm_json(messages, "verifier", max_tokens=2048, label=f"final_verify{suffix}")
     if not resp:
         return {"error": "27B call failed"}
 
     result = {
-        "phase": "verify_27b", "round": suffix or "norubric",
+        "phase": "verify_final", "round": suffix or "norubric",
         "with_rubric": with_rubric,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "usage": resp["usage"], "timings": resp["timings"],
@@ -441,7 +393,7 @@ def run_verify_27b(input_data: Dict, prj_results: List[Dict],
         "result": resp["result"],
         "prj_summaries": summaries,
     }
-    fpath = os.path.join(EXPERIMENT_DIR, f"verify_27b{suffix}.json")
+    fpath = os.path.join(EXPERIMENT_DIR, f"verify_final{suffix}.json")
     with open(fpath, "w") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     return result
@@ -473,8 +425,8 @@ def compare_rounds() -> Dict:
     log("\n=== Comparison: Round 1 (no rubric) vs Round 2 (with rubric) ===")
 
     # Load 27B results from both rounds
-    v27_nr = find_experiment_file("verify_27b_norubric*.json")
-    v27_r = find_experiment_file("verify_27b_rubric_round2*.json")
+    final_verify_nr = find_experiment_file("verify_final_norubric*.json")
+    final_verify_r = find_experiment_file("verify_final_rubric_round2*.json")
 
     # Load combo summaries
     combos_nr = sorted(glob.glob(os.path.join(EXPERIMENT_DIR, "combo_*_round1_norubric_summary.json")))
@@ -511,8 +463,8 @@ def compare_rounds() -> Dict:
     r_scores = load_scores(combos_r)
 
     comparison = {
-        "round1_norubric": {"combos": nr_scores, "v27b": load_verify(v27_nr)},
-        "round2_withrubric": {"combos": r_scores, "v27b": load_verify(v27_r)},
+        "round1_norubric": {"combos": nr_scores, "final_verify": load_verify(final_verify_nr)},
+        "round2_withrubric": {"combos": r_scores, "final_verify": load_verify(final_verify_r)},
         "differences": {},
     }
 
@@ -584,7 +536,7 @@ def run_experiment(rounds: Optional[List[int]] = None):
         log("=" * 50)
 
         log("\n--- 30B Verify ---")
-        r1_30b = run_30b_verify(input_data, with_rubric=False, output_suffix="_round1_norubric")
+        r1_primary = run_primary_verify(input_data, with_rubric=False, output_suffix="_round1_norubric")
 
         log("\n--- P-R-J: 3 combos ---")
         for i, combo in enumerate(ALL_COMBOS):
@@ -593,7 +545,7 @@ def run_experiment(rounds: Optional[List[int]] = None):
             round1_prj_results.append(result)
 
         log("\n--- 27B Verify ---")
-        r1_v27b = run_verify_27b(input_data, round1_prj_results,
+        r1_final_verify = run_final_verify(input_data, round1_prj_results,
                                   with_rubric=False, output_suffix="_round1")
 
     # ── Round 2: With rubric, best combo only ──
@@ -607,14 +559,14 @@ def run_experiment(rounds: Optional[List[int]] = None):
         log(f"Best combo: {best_combo['name']}")
 
         log("\n--- 30B Verify (with rubric) ---")
-        r2_30b = run_30b_verify(input_data, with_rubric=True, output_suffix="_round2")
+        r2_primary = run_primary_verify(input_data, with_rubric=True, output_suffix="_round2")
 
         log(f"\n--- P-R-J: {best_combo['name']} (with rubric) ---")
         r2_prj = run_prj_combo(best_combo, input_data, round_num=2, with_rubric=True)
         round2_prj_results.append(r2_prj)
 
         log("\n--- 27B Verify (with rubric) ---")
-        r2_v27b = run_verify_27b(input_data, round2_prj_results,
+        r2_final_verify = run_final_verify(input_data, round2_prj_results,
                                   with_rubric=True, output_suffix="_round2")
 
     # ── Comparison ──
@@ -636,6 +588,7 @@ def run_experiment(rounds: Optional[List[int]] = None):
 
 
 def main():
+    preflight_checks("rubric.py")
     ap = argparse.ArgumentParser()
     ap.add_argument("--round", type=int, choices=[1, 2])
     ap.add_argument("--best-combo", choices=["A", "B", "C"])
@@ -650,7 +603,7 @@ def main():
         input_data = load_input()
         log(f"Running Round 2 with combo {combo['name']}")
         r2_prj = run_prj_combo(combo, input_data, round_num=2, with_rubric=True)
-        r2_v27b = run_verify_27b(input_data, [r2_prj], with_rubric=True, output_suffix="_round2")
+        r2_final_verify = run_final_verify(input_data, [r2_prj], with_rubric=True, output_suffix="_round2")
     elif args.round:
         run_experiment(rounds=[args.round])
     else:

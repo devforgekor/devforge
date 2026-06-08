@@ -22,6 +22,7 @@ from typing import Dict, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from lib.infra.preflight import preflight_checks
 from lib.db import esc_sql, psql, psql_json, psql_ok
 from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import call_llm, call_llm_json
@@ -167,7 +168,7 @@ def review_flagged(flagged_entries: List[Dict], turns: List[Dict]) -> tuple:
         {"role": "system", "content": REVIEW_SYSTEM},
         {"role": "user", "content": f"Source turn text:\n{source_text[:2000]}\n\nFlagged entries:\n{entries_json}"},
     ]
-    raw = call_llm(messages, model="Qwen30B", max_tokens=512)
+    raw = call_llm(messages, model="proposer", max_tokens=512)
     result = parse_llm_json(raw) if raw else None
     if not result:
         return [], "escalate", 0
@@ -307,7 +308,7 @@ def run(date_str: str = None) -> int:
             print(f"  {agent}[{batch_num}]: 3B drafting from {len(batch_turns)} turns...")
             draft = None
             for attempt in range(MAX_RETRIES + 1):
-                raw = call_llm_json(messages, model="Qwen3B", max_tokens=256)
+                raw = call_llm_json(messages, model="extractor", max_tokens=256)
                 draft = parse_llm_json(raw) if raw else None
                 if draft:
                     break
@@ -383,6 +384,7 @@ def run(date_str: str = None) -> int:
 
 
 def main():
+    preflight_checks("worklog_generator.py")
     import argparse
     ap = argparse.ArgumentParser(description="LLM auto-worklog: Qwen2.5-Coder-3B draft + Qwen3-Coder-30B-A3B review")
     ap.add_argument("--date", type=str, help="Date to process (YYYY-MM-DD, default: today KST)")

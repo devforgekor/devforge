@@ -1,52 +1,112 @@
 last_checkpoint:
-  time: '2026-06-06T17:10:00.000000+00:00'
-  summary: |
-    Session 36 — Ambiguity cleanup (Task 4-5) + remaining ambiguity audit
+  time: '2026-06-08T11:35:00+00:00'
+  summary: >
+    Session 40: 세션 재개 — 5-phase experiment 계속 실행 중 확인.
+    Phase 0: runner PID 1656981, prj_cycle PID 1662190 (2분 경과, 48 findings 처리).
+    watchdog inactive (이전 세션 수동 중단, runner try/finally가 실험 종료 시 재시작 예정).
+    모든 prj_cycle 개선 사항(cosine dedup, context quarantine, file/line grounding,
+    J confidence, Reflector audit trail) snapshot에 반영 완료.
+    코드 변경 없음 — 모니터링만 수행.
+    Task #1 → in_progress, Task #16 → completed (DB 일관성 수정).
+  total_files: 0
+  recent_files:
+    data:
+    - /opt/projects/server/data/eval/pipeline_complete_20260607T145448Z.json (Phases 1,2, 36 verification_items)
+    - /opt/projects/server/data/eval/eval_verify_*.json (5개 historical verify files)
+    docs: []
+    config: []
+    source:
+    - /opt/projects/server/scripts/pipelines/night.py
+    - /opt/projects/server/scripts/review_pipeline_3model.py
+    - /opt/projects/server/scripts/orchestrator.py
+    - /opt/projects/server/scripts/lib/token_budget.py
+    - /opt/ai_data/scripts/qwen-entrypoint.sh
+    generated: []
+  git: {}
+  task: Chunking/Prefix testing — Phase 2 only runs (15m_cycle). Night mode (Phases 4,5,6) never executed yet. Category grouping ready for --group-category flag.
 
-    핵심 변경:
-    - Task 4 완료: prj_cycle.py remaining refs 5개 수정 (runner.py, run_pipeline_bg.sh, prj_watchdog.py, pod_manager/token_budget status headers)
-    - Task 5 완료: _archive orphan 6개 + old_backups 제거, api/ empty dir 제거, pipelines/ + proxies/ __init__.py에 docstring 작성
-    - 141 .py files compile OK
-    - 완료 후 아직 남은 모호함 6가지 발견하여 사용자에 제시
-  decisions:
-    - '[2026-06-06][Session 36] Task 4 — 모든 moved pipeline refs 정리 완료. `run_pipeline_bg.sh`, `prj_watchdog.py`, `pipelines/runner.py`, `lib/pod_manager.py`, `lib/token_budget.py` 수정.'
-    - '[2026-06-06][Session 36] Task 5 — _archive 정리: 6개 orphan 파일 + old_backups 삭제. api/ 빈 디렉토리 제거. pipelines/__init__.py + proxies/__init__.py docstring 작성.'
-    - '[2026-06-06][Session 36] review_pipeline_3model.py: Status=deprecated지만 orchestrator.py에서 여전히 사용 중. 상태 불일치 — 사용자가 판단 필요.'
-    - '[2026-06-06][Session 36] debate 5파일(cooperative_debate, cooperative_remote, debate_data, debate_llm, local_debate): root 레벨 클러스터 — lib/debate/ 서브패키지 이동 후보.'
-  known_issues:
-    - '5-phase experiment (P0 task #1) — pending'
-    - '27B Q4_K_M(16GB) on 22GB RAM — OOM risk'
-    - 'Phase 2 Tier 2 (vector) — phases.md에만 기록, DB task 등록 안 됨'
-    - 'lib/code_mod/ (shared.py) — hybrid.py 의존으로 유지'
-    - 'Pod A devforge-pod-a status=failed (normal)'
-    - 'Proxy cache stats none: ~3.7% 요청에서 DeepSeek cache 키 미제공'
-    - '[Session 36 발견] review_pipeline_3model.py: deprecated header != orchestrator.py live caller'
-    - '[Session 36 발견] 14개 test 파일 production 코드와 root에 혼재 — tests/ 이동 필요'
-    - '[Session 36 발견] 3개 orphan: prj_complete_monitor.py, resume_pipeline.py, migrate_references_yaml_to_db.py'
-  current_context:
-    day_mode: System Mode=day. Pod A=devforge-pod-a(:8082, 3B Q8_0). Pod B=devforge-swap(:8080, Codestral-22B)
-    model_state: night_proposer=Qwen30B, night_verify=Qwen27B
-    tmux_hook: client-detached → slack_notify.py (session-end report to Slack DM)
-    file_layout: All backward-compat shims removed, observer/pipeline files properly located. 141 .py files compile OK.
-    remaining_ambiguity: |
-      1. review_pipeline_3model.py — header status mismatch
-      2. 5 debate files — root-level cluster, lib/debate/ candidate
-      3. proxies/ — dead Python package namespace
-      4. 3 orphans (prj_complete_monitor, resume_pipeline, migrate_references)
-      5. 14 test files — mixed with production root
-      6. session_context.py — hook script at root, hooks/ candidate
-  coverage:
-    - 141 .py files compile OK
-    - 0 old shim references remaining
-    - All pipeline scripts in pipelines/
-    - pipelines/__init__.py + proxies/__init__.py have docstrings
-    - Glossary SSOT = domain-glossary.yaml
-    - Slack notify: tmux detach → session-end report with real cost
-  completed_log:
-    - '[Session 36] pipelies/runner.py, run_pipeline_bg.sh, prj_watchdog.py: prj_cycle.py → pipelines/prj_cycle.py 경로 수정'
-    - '[Session 36] lib/pod_manager.py, lib/token_budget.py: status header path 업데이트'
-    - '[Session 36] _archive: 6 orphan 파일 + old_backups 제거, 6개 phase dir만 보존'
-    - '[Session 36] api/ empty dir 제거'
-    - '[Session 36] pipelines/__init__.py, proxies/__init__.py: docstring + status header 작성'
-    - '[Session 36] 전수 compile check: 141 .py files OK'
-    - '[Session 36] 남은 모호함 6가지 발견 및 보고 — 사용자 결정 대기'
+decisions:
+- '[Session 35] deep_review 제거 완료: review_pipeline_3model.py→_run_proposal()(Pod B:8080),
+   orchestrator.py 참조 정리. qwen-entrypoint.sh 헤더 review-deep 제거.'
+- '[Session 35] Global context 개선(연구 검증 기반): cat_summary에 카테고리별 result 분포(fail/partial/pass) 추가.
+   TokenBudget night_proposer 2500→3000. --rubric 모드에서만 이전 verify 이력(verdict/action/confidence/summary) 제공.'
+- '[Session 35] Category grouping 재구현: phase_4 P chunking을 all_findings[idx] 인덱스 매칭에서
+   verification_items 직접 chunking으로 변경. --group-category 시 category로 그룹핑,
+   미지정 시 chunk_size=6으로 청킹. verification_items가 없으면 all_findings fallback.'
+- '[Session 37] ExperimentState 모듈 생성 완료 — watchdog과 pipeline 간 .experiment_state.json 공유.
+- '[Session 37] Watchdog monitor-only mode 구현:
+  main_loop()에서 experiment_active 체크 → fix loops skip + recovery skip.
+  recover_oom()/recover_container(): experiment active 시 SKIP.
+  heartbeat: experiment_active=true 표시 (''** EXPERIMENT MODE **'').'
+- '[Session 37] 실험 중 experiment_state.json 누락 현상 발견.
+  runner.py PID 2147895가 with ExperimentState() 블록 내부에서 실행 중인데도 파일 없음.
+  _write_atomic() 정상 동작 확인됨 (직접 테스트 시 생성/유지 성공).
+  watchdog은 stop 상태이므로 외부 삭제 가능성 낮음. 현재 영향 없으나 재현 시도 필요.'
+- '[Session 40] 세션 재개 — 실험 정상 진행 확인. 5-phase experiment Phase 0 실행 중
+  (runner PID 1656981, prj_cycle PID 1662190, 48 findings). 코드 변경 없음.'
+- '[Session 37] runner.py run_experiment()에 15m cycle 정지 추가:
+  watchdog.service 외에 devforge-15m-cycle.service + timer도 stop.
+  00:00 UTC에 15m cycle이 발동하여 day_cycle.py 실행, 실험용 prj_cycle과 LLM 리소스 경합 발생.
+  향후 실험 시 15m cycle이 Runner에 의해 자동 정지됨.'
+- '[Session 36] 9시간 스턱 원인 규명 및 4가지 해결책 적용:
+   원인=watchdog mode review-p → memory_guard 차단 → connect() 무한대기(TCP backlog).
+   해결: (1) 실험 시작 전 systemctl stop watchdog (2) preflight_checks mode 파일
+   sanity check (3) runner Popen+poll+SIGKILL fallback (4) llm_client HTTP timeout
+   1800s cap (urllib.urlopen timeout → socket SO_RCVTIMEO).'
+- '[Session 36] Day correction loop — Phase 1 day_verify 실패 시 7B self-correct:
+   day_verify(reviewer:8080, Pod B) → fail → [correction by reviewer → day_verify 재검증]×2회.
+   Night는 correction loop 없음 — 각 LLM(self-correct)이 기존 retry로 처리.'
+- '[Session 36] container-devforge-swap → container-devforge-pod-b 전면 rename:
+   runner.py, pod_manager.py, cli.py, nightly_batch.sh, auto_mode.sh, prj_cycle.py.
+   모든 파일에서 swap→pod-b 교체, 포트/B 모델명 반영.'
+- '[Session 36] MODEL_REGISTRY 역할 기반 추상화: Qwen3B→operator(:8082),
+   Qwen7B→reviewer(:8080), Qwen30B→proposer(:8080), Qwen14B→reflector(:8080),
+   NextCoder14B→judge(:8080), Qwen27B→verifier(:8081). Pipeline 코드는 role key만 참조.'
+- '[Session 36] ensure_model() 1회 재시도 + runner 3-level escalation:
+   (1) mild=stop+sync+15s+3B+7B (2) aggressive=drop_caches+swap off/on+3B+7B
+   (3) minimal=7B only(Pod A 없이). 각 level 실패 시 자동 escalate.'
+- '[Session 36] preflight_checks에 mode 파일 sanity check 추가:
+   Pod B가 review-p/review-r/review-j/verify/verify_test 모드일 때
+   runner.py/prj_cycle.py 실행 시 day mode로 reset + systemd reset-failed.'
+
+known_issues:
+- '[P2][Session 37] experiment_state.json 누락 원인 미확인.
+  runner.py가 with ExperimentState() 블록 내부에서 wait() 중인데도 state file 없음.
+  코드 검증 결과 _write_atomic() 정상 동작 확인. 직접 테스트 시 파일 생성/유지 성공.
+  영향: watchdog inactive이므로 현재 문제 없음. Phase 0 완료 후 재현 시도.'
+- '[P1][Session 35] Postgres 컨테이너 미실행 — cli.py DB 기능(activity, tasks, experiments) 사용 불가.
+   podman ps에 postgres 없음. DB 조회 필요한 기능 일시 중단.'
+- '[P2][Session 34] systemd unit description 갱신 필요: Quadlet .container 파일 설명은 수정했으나
+   systemctl --user daemon-reload 실행 안 함 → systemd에 이전 설명(day/review-r1, debate/review-qw)이 남아있음.'
+- '[P1][Session 33] 7B Verify 간헐적 빈 출력(elapsed_ms=0, chunks_done=0) — 운영 이슈로 확인. 코드 버그 아님.'
+- '[P2][Session 35] category 그룹핑(--group-category) 실제 LLM 테스트 미수행 — phase_4_night_prj가
+   실제로 실행된 적 없음. Phase 2까지만 15m_cycle에서 실행 중.'
+- '[P2][Session 36] prj_cycle standalone watchdog stop 검증 필요 — runner.py는 실험 시작 전
+   watchdog을 stop하지만, prj_cycle이 단독 실행(runner 없이)될 때는 watchdog 방어 안 됨.
+   runner.py의 watchdog stop 로직을 감지하는 bypass detection 필요.'
+- '[P2][Session 36] SIGTERM(-15) OOM 근본 원인 미조사 — 9시간 hang은 해결되었으나
+   process OOM kill(signal 15)로 인한 불완전 종료 사례는 조사되지 않음.
+   메모리 부족 시 systemd OOM killer 또는 container OOM이 SIGTERM을 보냄.'
+- '[P2][Session 36] Memory reclaim timing tuning — runner.py _free_memory() level 1은 15s 대기.
+   ARM Neoverse-N1 메모리 회수 시간을 고려할 때 30-60s window가 적절할 수 있음.
+   현재 15s는 회수 불충분 가능성 있음.'
+- '[P2][Session 36] Watchdog 개선 논의 deferred — mode 파일 race condition 근본 해결
+   (lock 파일 기반 mode 전환, 실험 중 watchdog 동작 보강)은 핸드오버에 기록 후
+   추후 논의. ''안 할 수는 없는데, 문제점을 개선해야지.'' (사용자 진술)'
+
+current_context:
+  next_action: 5-phase experiment Phase 0 모니터링 — 2분 경과, 48 findings prj_cycle 처리 중. Pod A(7B:8082)+Pod B(3B:8080) 정상 구동. watchdog inactive, 실험 종료 시 runner가 자동 재시작.
+  pending_tasks:
+  - 5-phase experiment Phase 0 모니터링 (runner PID 1656981, prj_cycle PID 1662190)
+  - Phase 0 완료 시 Phase 1-4 자동 실행 확인
+  - 모든 Phase 완료 후 comparison report + Slack 알림 확인
+  - deferred items 검토 (watchdog 개선, SIGTERM OOM 조사, memory timing, prj_cycle bypass)
+  blocker:
+  - '[Session 38] Prompt centralization (prompt_builder.py) — BLOCKED by 5-phase experiment 완료.
+    doc: refactoring-roadmap.md Phase 2. extract.py의 SYSTEM_ 5개 prompt 이관이 핵심.
+    condition: 5-phase experiment 성공 종료 후에만 가능. file 구조가 안정화되어야 prompt_builder
+    인터페이스 정의 가능.'
+  - '[Session 38] prj_cycle.py 분할 (pod_manager.py + token_budget.py 추출) — BLOCKED by
+    5-phase experiment 완료. doc: code-size-refactoring.md Phase 1.
+    condition: 실험 중인 prj_cycle.py가 배포 안정화되어야 분할 가능. 실패 시 수정 대응 필요.'
+  known_issues_count: 9
