@@ -159,3 +159,20 @@ def get_token_stats() -> Optional[dict]:
                 pass
     return None
 
+
+def get_checkpoint(phase: str) -> str:
+    """Return max_created_at from pipeline_checkpoint for given phase."""
+    row = psql(f"SELECT max_created_at::text FROM pipeline_checkpoint WHERE phase = '{phase}'")
+    return row or '-infinity'''
+
+
+def advance_checkpoint(phase: str, created_at_str: str):
+    """Advance checkpoint to created_at if newer. SSOT: turns.created_at."""
+    cs = esc_sql(created_at_str)
+    psql_ok(
+        f"UPDATE pipeline_checkpoint "
+        f"SET max_created_at = '{cs}'::timestamptz, "
+        f"    updated_at = NOW() "
+        f"WHERE phase = '{phase}' "
+        f"  AND max_created_at < '{cs}'::timestamptz"
+    )

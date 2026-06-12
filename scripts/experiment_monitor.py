@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Experiment monitor — 백그라운드 실행, 주기적으로 Slack으로 상태 보고.
-Usage:
-  nohup python3 scripts/experiment_monitor.py > /dev/null 2>&1 &
-"""
+# Status: experimental
+# Path: none — manual background experiment status reporter to Slack
+"Experiment monitor — background Slack status reporter for long experiments."
 
 import json, os, signal, subprocess, sys, time, urllib.request
 from datetime import datetime, timezone, timedelta
 
 SERVER_DIR = "/opt/projects/server"
 EXPER_DIR = os.path.join(SERVER_DIR, "data", "experiment")
-RUNNER_PID_FILE = os.path.join(EXPER_DIR, "runner.pid")
-RUNNER_LOG = os.path.join(EXPER_DIR, "runner_5phase.log")
+RUNNER_PID_FILE = os.path.join(EXPER_DIR, "exp_runner.pid")
+RUNNER_LOG = os.path.join(EXPER_DIR, "exp_5phase.log")
 
 # Slack
 SLACK_TOKEN = ""
@@ -83,7 +82,7 @@ def get_memory():
 
 def check_phase0_progress():
     """Check if there are any intermediate output files indicating progress."""
-    # In Phase 0, prj_cycle creates eval files at various stages
+    # In Phase 0, exp_runner/prj_cycle creates eval files at various stages
     recent = []
     try:
         out = subprocess.check_output(
@@ -124,7 +123,7 @@ def build_status():
     completed_phases = sorted(phases.keys())
     current_phase = completed_phases[-1] + 1 if completed_phases else 0
 
-    # Check prj_cycle
+    # Check prj_cycle (exp_runner internal)
     prj_alive = False
     prj_elapsed = "?"
     try:
@@ -135,11 +134,11 @@ def build_status():
                 prj_elapsed = line.split(None, 2)[1]
     except: pass
 
-    # Check night.py (Phase 4,5,6)
+    # Check night_pipeline (Phase 3-4)
     night_alive = False
     try:
         out = subprocess.check_output(["ps", "-eo", "args"], timeout=5, text=True)
-        night_alive = "night.py" in out
+        night_alive = "night_pipeline.py" in out
     except: pass
 
     pod_a_cpu, pod_b_cpu = get_llm_cpu()
@@ -168,7 +167,7 @@ def build_status():
            f"• prj_cycle: {'ALIVE' if prj_alive else 'DEAD'} ({prj_elapsed})\n"
            f"• night.py: {'ALIVE' if night_alive else 'N/A'}\n"
            f"• {phase_summary}\n"
-           f"• Pod A(3B): {pod_a_cpu}% CPU | Pod B(7B): {pod_b_cpu}% CPU\n"
+           f"• Pod A(reserved): {pod_a_cpu}% CPU | Pod B: {pod_b_cpu}% CPU\n"
            f"• Memory: {mem} | Swap: {swap}\n"
            f"• Containers: {containers}\n"
            f"• 최근 eval 파일: {recent_str}")

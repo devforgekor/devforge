@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: 15m_cycle.sh
+# Path: 1h_cycle.sh
 """Day pre-review: P(day_p)→R(day_r)→J(day_j) for night prepill defense.
 
 Each cycle reads unclassified turns (created_at > classify checkpoint)
@@ -13,8 +13,8 @@ Flow:
   Save:          activity_log type='day_review', queue_status='pre_reviewed'
   Advance:       checkpoint on success, marker on failure
 
-Models: day_p + day_j on Pod B (:8080), day_r on Pod A (:8082).
-Both already running in day mode — no container management needed.
+Models: day_p + day_r + day_j on Pod B (:8083) via reviewer model alias.
+Pod B must be in review-j mode before calling this.
 
 Usage:
   python3 scripts/pipelines/classify.py                 # process from checkpoint
@@ -31,7 +31,7 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.infra.preflight import preflight_checks
-from lib.db import psql, psql_ok, esc_sql, psql_json
+from lib.db import psql, psql_ok, esc_sql, psql_json, get_checkpoint, advance_checkpoint
 from lib.llm_client import call_llm
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.queue_writer import enqueue_review
@@ -124,20 +124,6 @@ Return JSON:
 
 # ── DB helpers ─────────────────────────────────────────────────────────
 
-def _get_checkpoint():
-    """Return max_created_at from pipeline_checkpoint for classify phase."""
-    return psql("SELECT max_created_at::text FROM pipeline_checkpoint WHERE phase = 'classify'") or '-infinity'
-
-
-def _advance_checkpoint(created_at_str):
-    """Advance checkpoint to created_at if newer."""
-    psql_ok(
-        f"UPDATE pipeline_checkpoint "
-        f"SET max_created_at = '{esc_sql(created_at_str)}'::timestamptz, "
-        f"    updated_at = NOW() "
-        f"WHERE phase = 'classify' "
-        f"  AND max_created_at < '{esc_sql(created_at_str)}'::timestamptz"
-    )
 
 
 def _get_turn_facts(turn_id):
@@ -190,7 +176,7 @@ def _already_has_facts(turn_id):
 
 def _get_unclassified_turns(limit=BATCH_LIMIT):
     """Return turns that have extract facts but no day_review yet."""
-    checkpoint = _get_checkpoint()
+    checkpoint = get_checkpoint("classify")
     sql = (
         "SELECT t.id, t.user_turn, t.thinking, t.text, "
         "  t.source_message_id, t.created_at, "
@@ -244,19 +230,32 @@ def _phase_p(turn, facts):
     th = turn.get("thinking", "") or ""
     tx = turn.get("text", "") or ""
 
-    fact_lines = [f"[{f['fact_type']}] {f['evidence'][:200]}" for f in facts]
+    # Separate MCP meta facts from text facts
+    mcp_facts = [f for f in facts if f['fact_type'] == 'mcp_meta']
+    text_facts = [f for f in facts if f['fact_type'] != 'mcp_meta']
+
+    fact_lines = [f"[{f['fact_type']}] {f['evidence'][:200]}" for f in text_facts]
     facts_text = "\n".join(fact_lines) if fact_lines else "(no facts)"
 
-    ctx = (
-        "=== USER TURN ===\n"
-        f"{ut[:2000]}\n\n"
-        "=== THINKING ===\n"
-        f"{th[:2000]}\n\n"
-        "=== RESPONSE ===\n"
-        f"{tx[:2000]}\n\n"
-        "=== EXTRACTED FACTS ===\n"
-        f"{facts_text}"
-    )
+    ctx_parts = [
+        "=== USER TURN ===",
+        f"{ut[:2000]}",
+        "",
+        "=== THINKING ===",
+        f"{th[:2000]}",
+        "",
+        "=== RESPONSE ===",
+        f"{tx[:2000]}",
+        "",
+        "=== EXTRACTED FACTS ===",
+        f"{facts_text}",
+    ]
+
+    if mcp_facts:
+        mcp_lines = [f['evidence'][:500] for f in mcp_facts]
+        ctx_parts.extend(["", "=== MCP CONTEXT ===", "\n".join(mcp_lines)])
+
+    ctx = "\n".join(ctx_parts)
 
     if DRY_RUN:
         log(f"  [DRY] P findings: mock")
@@ -361,7 +360,7 @@ def classify_pipeline(limit=BATCH_LIMIT):
         log("No eligible turns (all missing extract or already classified)")
         # Advance checkpoint past these turns anyway
         last_ts = turns[-1]["created_at"]
-        _advance_checkpoint(last_ts)
+        advance_checkpoint("classify", last_ts)
         return {"processed": 0, "failed": 0, "ok": True}
 
     log(f"Eligible turns: {len(eligible)}")
@@ -425,7 +424,7 @@ def classify_pipeline(limit=BATCH_LIMIT):
             continue
 
         enqueue_review(
-            entry_type="day_review",
+            entry_type="day_review",  # → activity_log (DB) type='day_review', queue_status='pre_reviewed'
             source="classify_pipeline.py",
             title=f"Day review: {tid[:8]} ({len(findings)} findings)",
             summary=f"P-R-J day review: P_score={j_result.get('P_score','?')} "
@@ -434,7 +433,7 @@ def classify_pipeline(limit=BATCH_LIMIT):
             queue_status="pre_reviewed",
         )
 
-        _advance_checkpoint(turn["created_at"])
+        advance_checkpoint("classify", turn["created_at"])  # → pipeline_checkpoint (DB)
         log(f"  Saved day_review, checkpoint advanced")
         processed += 1
 

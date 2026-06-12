@@ -4,12 +4,12 @@
 """Step implementations for the 3-Model Review Pipeline.
 
 Contains constants, system prompts, HTTP helpers, and the 3 step functions:
-  Step 1  run_reflection    Pod B (:8080) — ACCEPT/REJECT per finding
-  Step 2  run_judgment      Pod B (:8081)  — Scoring Judge (P/R scores, gap, veto)
-  Step 3  run_diff          Pod B (:8080)  — unified diff for approved findings
+  Step 1  run_reflection    Pod B (:8083) — ACCEPT/REJECT per finding
+  Step 2  run_judgment      Pod B (:8083) — Scoring Judge (P/R scores, gap, veto)
+  Step 3  run_diff          Pod B (:8083) — unified diff for approved findings
 
 Exported symbols consumed by review_pipeline_3model.py:
-  REFLECTOR_PORT, JUDGE_PORT, _poll_health,
+  REVIEWER_PORT, JUDGE_PORT, _poll_health,
   run_reflection, run_judgment, run_diff
 """
 
@@ -27,10 +27,11 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from lib import scoring as _sc
 from lib.llm_client import call_llm, call_llm_json
+from lib.llm.json_parser import parse_llm_json
 
 # ── Constants ──────────────────────────────────────────────────────────────
-REFLECTOR_PORT = 8080  # Pod B: reflection + diff
-JUDGE_PORT = 8081  # Pod B swap: Scoring Judge (Step 1)
+REVIEWER_PORT = 8083  # Pod B: reviewer model (review-j)
+JUDGE_PORT = 8083  # Pod B: Scoring Judge (review-j)
 TIMEOUT_STEP1 = 480  #  8 min (Reflector)
 TIMEOUT_STEP2 = 480  #  8 min (Scoring Judge: rubric + decisions)
 TIMEOUT_STEP3 = 600  # 10 min
@@ -163,31 +164,6 @@ def _poll_health(port: int, timeout: int = 240) -> bool:
     return False
 
 
-def _parse_json_output(raw: str, label: str = "LLM") -> Dict[str, Any]:
-    """Extract JSON from LLM output, handling markdown fences and think blocks."""
-    cleaned = THINK_STRIP_RE.sub("", raw).strip()
-    # Try to extract from ```json ... ``` fence
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL)
-    if m:
-        cleaned = m.group(1)
-    # Fallback: find first { ... } block
-    if not cleaned.startswith("{"):
-        m = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        if m:
-            cleaned = m.group(0)
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
-    # Last resort: json_repair if available
-    try:
-        from lib.llm.json_parser import json_repair
-
-        return json_repair(cleaned)
-    except Exception:
-        raise RuntimeError(f"Failed to parse {label} JSON output: {raw[:500]}")
-
-
 # ── Utilities ──────────────────────────────────────────────────────────────
 def strip_think_blocks(text: str) -> str:
     """Remove <think>...</think> blocks from R1 output."""
@@ -196,10 +172,10 @@ def strip_think_blocks(text: str) -> str:
 
 
 def run_reflection(code: str, findings: List[Dict]) -> Dict[str, Any]:
-    """Step 1: Reflector on :8080 reviews findings (ACCEPT/REJECT)."""
-    print(f"[step1] Reflection on :{REFLECTOR_PORT}")
-    if not _poll_health(REFLECTOR_PORT, timeout=30):
-        raise RuntimeError(f"reviewer not healthy on :{REFLECTOR_PORT}")
+    """Step 1: Reflector on :8083 reviews findings (ACCEPT/REJECT)."""
+    print(f"[step1] Reflection on :{REVIEWER_PORT}")
+    if not _poll_health(REVIEWER_PORT, timeout=30):
+        raise RuntimeError(f"reviewer not healthy on :{REVIEWER_PORT}")
 
     findings_json = json.dumps({"findings": findings}, ensure_ascii=False, indent=2)
     user_prompt = (
@@ -214,7 +190,7 @@ def run_reflection(code: str, findings: List[Dict]) -> Dict[str, Any]:
         max_tokens=MAX_TOKENS_STEP2,
         timeout=TIMEOUT_STEP2,
     )
-    result = _parse_json_output(raw, "Step 1 (reflector)")
+    result = parse_llm_json(THINK_STRIP_RE.sub("", raw).strip())
     verdicts = result.get("verdicts", [])
     accepted = sum(1 for v in verdicts if v.get("verdict", "").lower() == "accept")
     rejected = len(verdicts) - accepted
@@ -225,7 +201,7 @@ def run_reflection(code: str, findings: List[Dict]) -> Dict[str, Any]:
 def run_judgment(
     code: str, findings: List[Dict], reviewer_accepted: List[str], reflector_verdicts: List[Dict]
 ) -> Dict[str, Any]:
-    """Step 1: Scoring Judge on :8081 — P_score/R_score/gap/veto.
+    """Step 2: Scoring Judge on :8083 — P_score/R_score/gap/veto.
 
     Returns enriched verdict with judge metadata for downstream gating.
     """
@@ -261,7 +237,7 @@ def run_judgment(
         max_tokens=MAX_TOKENS_STEP3,
         timeout=TIMEOUT_STEP3,
     )
-    result = _parse_json_output(raw, "Step 3 (Scoring Judge)")
+    result = parse_llm_json(THINK_STRIP_RE.sub("", raw).strip())
 
     # Merge fast-path into judge result
     for fid in fast_path:
@@ -387,14 +363,14 @@ def _build_fastpath_verdict(
 
 
 def run_diff(code: str, approved_findings: List[Dict]) -> str:
-    """Step 2: Reflector on :8080 generates unified diff for approved findings."""
+    """Step 3: Diff on :8083 generates unified diff for approved findings."""
     if not approved_findings:
         print("[step3] No approved findings — skipping diff generation")
         return ""
 
-    print(f"[step4] Diff Generation on :{REFLECTOR_PORT} ({len(approved_findings)} findings)")
-    if not _poll_health(REFLECTOR_PORT, timeout=30):
-        raise RuntimeError(f"reviewer not healthy on :{REFLECTOR_PORT}")
+    print(f"[step4] Diff Generation on :{REVIEWER_PORT} ({len(approved_findings)} findings)")
+    if not _poll_health(REVIEWER_PORT, timeout=30):
+        raise RuntimeError(f"reviewer not healthy on :{REVIEWER_PORT}")
 
     user_prompt = (
         f"Generate a unified diff to fix these approved findings:\n\n"

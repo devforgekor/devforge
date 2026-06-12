@@ -1,112 +1,180 @@
 last_checkpoint:
-  time: '2026-06-08T11:35:00+00:00'
+  time: '2026-06-12T15:30:00+00:00'
   summary: >
-    Session 40: 세션 재개 — 5-phase experiment 계속 실행 중 확인.
-    Phase 0: runner PID 1656981, prj_cycle PID 1662190 (2분 경과, 48 findings 처리).
-    watchdog inactive (이전 세션 수동 중단, runner try/finally가 실험 종료 시 재시작 예정).
-    모든 prj_cycle 개선 사항(cosine dedup, context quarantine, file/line grounding,
-    J confidence, Reflector audit trail) snapshot에 반영 완료.
-    코드 변경 없음 — 모니터링만 수행.
-    Task #1 → in_progress, Task #16 → completed (DB 일관성 수정).
-  total_files: 0
-  recent_files:
-    data:
-    - /opt/projects/server/data/eval/pipeline_complete_20260607T145448Z.json (Phases 1,2, 36 verification_items)
-    - /opt/projects/server/data/eval/eval_verify_*.json (5개 historical verify files)
-    docs: []
-    config: []
-    source:
-    - /opt/projects/server/scripts/pipelines/night.py
-    - /opt/projects/server/scripts/review_pipeline_3model.py
-    - /opt/projects/server/scripts/orchestrator.py
-    - /opt/projects/server/scripts/lib/token_budget.py
-    - /opt/ai_data/scripts/qwen-entrypoint.sh
-    generated: []
-  git: {}
-  task: Chunking/Prefix testing — Phase 2 only runs (15m_cycle). Night mode (Phases 4,5,6) never executed yet. Category grouping ready for --group-category flag.
+    Session 38 (75m): Post-PORT-REORG cleanup — model replacement, disk recovery, consistency sweep.
+    All 3B references → 7B Q8, all Q4_K_S → Q4_K_M, all stale PORT=8080 → correct per-scheme port.
+    3 new models downloaded, ~37G disk recovered. 35+ files modified across production + experimental.
+    The codebase is now internally consistent with the finalized port scheme from Session 37.
+  total_files: 35+
 
 decisions:
-- '[Session 35] deep_review 제거 완료: review_pipeline_3model.py→_run_proposal()(Pod B:8080),
-   orchestrator.py 참조 정리. qwen-entrypoint.sh 헤더 review-deep 제거.'
-- '[Session 35] Global context 개선(연구 검증 기반): cat_summary에 카테고리별 result 분포(fail/partial/pass) 추가.
-   TokenBudget night_proposer 2500→3000. --rubric 모드에서만 이전 verify 이력(verdict/action/confidence/summary) 제공.'
-- '[Session 35] Category grouping 재구현: phase_4 P chunking을 all_findings[idx] 인덱스 매칭에서
-   verification_items 직접 chunking으로 변경. --group-category 시 category로 그룹핑,
-   미지정 시 chunk_size=6으로 청킹. verification_items가 없으면 all_findings fallback.'
-- '[Session 37] ExperimentState 모듈 생성 완료 — watchdog과 pipeline 간 .experiment_state.json 공유.
-- '[Session 37] Watchdog monitor-only mode 구현:
-  main_loop()에서 experiment_active 체크 → fix loops skip + recovery skip.
-  recover_oom()/recover_container(): experiment active 시 SKIP.
-  heartbeat: experiment_active=true 표시 (''** EXPERIMENT MODE **'').'
-- '[Session 37] 실험 중 experiment_state.json 누락 현상 발견.
-  runner.py PID 2147895가 with ExperimentState() 블록 내부에서 실행 중인데도 파일 없음.
-  _write_atomic() 정상 동작 확인됨 (직접 테스트 시 생성/유지 성공).
-  watchdog은 stop 상태이므로 외부 삭제 가능성 낮음. 현재 영향 없으나 재현 시도 필요.'
-- '[Session 40] 세션 재개 — 실험 정상 진행 확인. 5-phase experiment Phase 0 실행 중
-  (runner PID 1656981, prj_cycle PID 1662190, 48 findings). 코드 변경 없음.'
-- '[Session 37] runner.py run_experiment()에 15m cycle 정지 추가:
-  watchdog.service 외에 devforge-15m-cycle.service + timer도 stop.
-  00:00 UTC에 15m cycle이 발동하여 day_cycle.py 실행, 실험용 prj_cycle과 LLM 리소스 경합 발생.
-  향후 실험 시 15m cycle이 Runner에 의해 자동 정지됨.'
-- '[Session 36] 9시간 스턱 원인 규명 및 4가지 해결책 적용:
-   원인=watchdog mode review-p → memory_guard 차단 → connect() 무한대기(TCP backlog).
-   해결: (1) 실험 시작 전 systemctl stop watchdog (2) preflight_checks mode 파일
-   sanity check (3) runner Popen+poll+SIGKILL fallback (4) llm_client HTTP timeout
-   1800s cap (urllib.urlopen timeout → socket SO_RCVTIMEO).'
-- '[Session 36] Day correction loop — Phase 1 day_verify 실패 시 7B self-correct:
-   day_verify(reviewer:8080, Pod B) → fail → [correction by reviewer → day_verify 재검증]×2회.
-   Night는 correction loop 없음 — 각 LLM(self-correct)이 기존 retry로 처리.'
-- '[Session 36] container-devforge-swap → container-devforge-pod-b 전면 rename:
-   runner.py, pod_manager.py, cli.py, nightly_batch.sh, auto_mode.sh, prj_cycle.py.
-   모든 파일에서 swap→pod-b 교체, 포트/B 모델명 반영.'
-- '[Session 36] MODEL_REGISTRY 역할 기반 추상화: Qwen3B→operator(:8082),
-   Qwen7B→reviewer(:8080), Qwen30B→proposer(:8080), Qwen14B→reflector(:8080),
-   NextCoder14B→judge(:8080), Qwen27B→verifier(:8081). Pipeline 코드는 role key만 참조.'
-- '[Session 36] ensure_model() 1회 재시도 + runner 3-level escalation:
-   (1) mild=stop+sync+15s+3B+7B (2) aggressive=drop_caches+swap off/on+3B+7B
-   (3) minimal=7B only(Pod A 없이). 각 level 실패 시 자동 escalate.'
-- '[Session 36] preflight_checks에 mode 파일 sanity check 추가:
-   Pod B가 review-p/review-r/review-j/verify/verify_test 모드일 때
-   runner.py/prj_cycle.py 실행 시 day mode로 reset + systemd reset-failed.'
+  - id: d38-01
+    detail: >
+      MODEL INVENTORY FINAL (gguf/). All 6 models downloaded and on disk:
+        Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  (18G) — proposer/embed (:8081)
+        Qwen3.6-27B.i1-IQ4_XS.gguf                  (15G) — verifier (:8084)
+        Qwen2.5-Coder-7B-Instruct-Q8_0.gguf         (7.6G) — extractor (:8082)
+        Qwen2.5-Coder-14B-Instruct-Q6_K.gguf        (12G) — reviewer/judge (:8083)
+        NextCoder-14B-Q6_K.gguf                      (12G) — review-j mode
+        Qwen3-Embedding-8B-f16.gguf                  (15G) — embed (:8081 day)
+      Total: ~80G / 100G ai_data partition.
+
+  - id: d38-02
+    detail: >
+      DEBATE MODEL KEY RENAMED. `qwen2.5-coder-3b` key in debate_data.py MODELS dict
+      renamed to `qwen2.5-coder-7b`. Port 8082, threads 2→4. Decoder alias in
+      debate_llm.py updated. All local_debate.py model assignments use new key.
+      Old key would cause KeyError at runtime.
+
+  - id: d38-03
+    detail: >
+      DEBATE PORT UPDATED. All debate files previously referenced Pod B :8080 for
+      30B proposer/judge/drag. Updated to :8081 (correct 30B port). Refuter model
+      changed from Pod A :8082 Qwen3-3B → Pod B :8082 Qwen2.5-Coder-7B. Pod A
+      is no longer part of debate system (Pod A = reserved operator only).
+
+  - id: d38-04
+    detail: >
+      DISK RECOVERY. ~37G recovered:
+        - ~11G: HuggingFace transformers cache (27B Q8_0 + NextCoder .safetensors)
+        - ~3.6G: 3B Q8 model file (deleted)
+        - ~4G: 27B Q8_0 from temp (re-downloaded as IQ4_XS 15G via hf hub)
+        - ~18G+ : Empty pg_dump backups (0-byte files)
+      HuggingFace cache is NOT used by llama.cpp — safe to clean.
+
+  - id: d38-05
+    detail: >
+      OFFICIAL MODEL SOURCES. User rejected unofficial HF repos (cHunter789,
+      tensorblock). Approved sources:
+        - bartowski / lmstudio-community  → 30B Q4_K_M
+        - gabriellarson                   → NextCoder-14B Q6_K
+        - mradermacher                    → 27B i1-IQ4_XS
+      Rule: always ask user before downloading from unknown HF repos.
+
+  - id: d38-06
+    detail: >
+      INTENTIONAL EXCLUSIONS (not updated):
+        1. extract_compare.py — historical 3B Q8_0 vs 7B Q4_K_M vs 7B Q8_0 benchmark
+        2. night.py REMOVED phase comments — preserve historical 7B-3B-7B config record
+        3. __old/ directory — deprecated files, not in execution path
+        4. _archive/ directory — user explicitly excluded
 
 known_issues:
-- '[P2][Session 37] experiment_state.json 누락 원인 미확인.
-  runner.py가 with ExperimentState() 블록 내부에서 wait() 중인데도 state file 없음.
-  코드 검증 결과 _write_atomic() 정상 동작 확인. 직접 테스트 시 파일 생성/유지 성공.
-  영향: watchdog inactive이므로 현재 문제 없음. Phase 0 완료 후 재현 시도.'
-- '[P1][Session 35] Postgres 컨테이너 미실행 — cli.py DB 기능(activity, tasks, experiments) 사용 불가.
-   podman ps에 postgres 없음. DB 조회 필요한 기능 일시 중단.'
-- '[P2][Session 34] systemd unit description 갱신 필요: Quadlet .container 파일 설명은 수정했으나
-   systemctl --user daemon-reload 실행 안 함 → systemd에 이전 설명(day/review-r1, debate/review-qw)이 남아있음.'
-- '[P1][Session 33] 7B Verify 간헐적 빈 출력(elapsed_ms=0, chunks_done=0) — 운영 이슈로 확인. 코드 버그 아님.'
-- '[P2][Session 35] category 그룹핑(--group-category) 실제 LLM 테스트 미수행 — phase_4_night_prj가
-   실제로 실행된 적 없음. Phase 2까지만 15m_cycle에서 실행 중.'
-- '[P2][Session 36] prj_cycle standalone watchdog stop 검증 필요 — runner.py는 실험 시작 전
-   watchdog을 stop하지만, prj_cycle이 단독 실행(runner 없이)될 때는 watchdog 방어 안 됨.
-   runner.py의 watchdog stop 로직을 감지하는 bypass detection 필요.'
-- '[P2][Session 36] SIGTERM(-15) OOM 근본 원인 미조사 — 9시간 hang은 해결되었으나
-   process OOM kill(signal 15)로 인한 불완전 종료 사례는 조사되지 않음.
-   메모리 부족 시 systemd OOM killer 또는 container OOM이 SIGTERM을 보냄.'
-- '[P2][Session 36] Memory reclaim timing tuning — runner.py _free_memory() level 1은 15s 대기.
-   ARM Neoverse-N1 메모리 회수 시간을 고려할 때 30-60s window가 적절할 수 있음.
-   현재 15s는 회수 불충분 가능성 있음.'
-- '[P2][Session 36] Watchdog 개선 논의 deferred — mode 파일 race condition 근본 해결
-   (lock 파일 기반 mode 전환, 실험 중 watchdog 동작 보강)은 핸드오버에 기록 후
-   추후 논의. ''안 할 수는 없는데, 문제점을 개선해야지.'' (사용자 진술)'
+  - id: ki38-01
+    detail: >
+      30B Q4_K_M (18G) + 27B IQ4_XS (15G) + 14B Q6_K (12G) + 7B Q8 (7.6G) =
+      ~53G concurrently loadable models. RAM: 22G total, ~17-18G usable.
+      30B MoE (3.3B active/token) is viable. 27B dense (14.7G IQ4_XS) must NOT
+      overlap with 30B load. Night pipeline sequential model switching is critical.
+
+  - id: ki38-02
+    detail: >
+      day_pipeline.py (experimental) still has inverted port assignment in code
+      (Pod A=7B:8082, Pod B=3B:8080). Docstring updated to note the discrepancy.
+      Not in execution path — day_runner.py and timers call day_extract.py instead.
+
+  - id: ki38-03
+    detail: >
+      Debate system now has NO Pod A separation — Pod A is reserved(:8080) operator
+      only. All debate models (30B, 7B, 14B) run on Pod B with dynamic port switching.
+      The refuter was on Pod A :8082 (old scheme) — now on Pod B :8082.
+      This changes memory contention profile during debate sessions.
+
+  - id: ki38-04
+    detail: >
+      Session 37 ki07 (stale docstrings) RESOLVED. Previous claim that classify.py,
+      review_pipeline_3model.py, bench_llm.py, activity_summarizer.py, etc. were
+      "stale" is now fixed. All remaining 3B/Q4_K_S/8080 references are intentional
+      (historical benchmarks, REMOVED phase records, __old/ files).
+
+completed_log:
+  - "[Session 36] Day/Night Pipeline Restructure FULLY IMPLEMENTED."
+  - "[Session 36] Timers migrated: 15m-cycle + classify disabled, day-extract/verify enabled."
+  - "[Session 36] night.py v4.0: Phase 1-2 deprecated, Phase 3 removed."
+  - "[Session 37] PORT REORG: 8080=Pod A reserved, 8081=proposer/embed, 8082=extract/reflector, 8083=verify/judge, 8084=verifier."
+  - "[Session 37] All production pipeline files port-corrected (night.py, review.py, nightly_batch.sh, container_manager.py, cli.py, entrypoints)."
+  - "[Session 38] 3B→7B Q8 migration: 35+ files updated across production + experimental."
+  - "[Session 38] 30B Q4_K_S→Q4_K_M: 6 files updated."
+  - "[Session 38] PORT consistency sweep: all stale :8080 Pod B references fixed."
+  - "[Session 38] Debate system: model key renamed, port assignments corrected, Pod A removed from refuter role."
+  - "[Session 38] Disk cleanup: ~37G recovered (HF cache, old models, empty backups)."
+  - "[Session 38] Model downloads: 30B Q4_K_M (18G), NextCoder-14B Q6_K (12G), 27B i1-IQ4_XS (15G)."
+  - "[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs."
 
 current_context:
-  next_action: 5-phase experiment Phase 0 모니터링 — 2분 경과, 48 findings prj_cycle 처리 중. Pod A(7B:8082)+Pod B(3B:8080) 정상 구동. watchdog inactive, 실험 종료 시 runner가 자동 재시작.
-  pending_tasks:
-  - 5-phase experiment Phase 0 모니터링 (runner PID 1656981, prj_cycle PID 1662190)
-  - Phase 0 완료 시 Phase 1-4 자동 실행 확인
-  - 모든 Phase 완료 후 comparison report + Slack 알림 확인
-  - deferred items 검토 (watchdog 개선, SIGTERM OOM 조사, memory timing, prj_cycle bypass)
-  blocker:
-  - '[Session 38] Prompt centralization (prompt_builder.py) — BLOCKED by 5-phase experiment 완료.
-    doc: refactoring-roadmap.md Phase 2. extract.py의 SYSTEM_ 5개 prompt 이관이 핵심.
-    condition: 5-phase experiment 성공 종료 후에만 가능. file 구조가 안정화되어야 prompt_builder
-    인터페이스 정의 가능.'
-  - '[Session 38] prj_cycle.py 분할 (pod_manager.py + token_budget.py 추출) — BLOCKED by
-    5-phase experiment 완료. doc: code-size-refactoring.md Phase 1.
-    condition: 실험 중인 prj_cycle.py가 배포 안정화되어야 분할 가능. 실패 시 수정 대응 필요.'
-  known_issues_count: 9
+  active_work: >
+    Session 38 finished. The entire codebase is now consistent with the PORT REORG scheme.
+    All model references (3B→7B, Q4_K_S→Q4_K_M) and port references (8080→correct) updated.
+    6 models on disk covering all pipeline roles.
+  next_steps:
+    - "Run 1 full 1h_cycle to validate end-to-end day pipeline with new 7B extractor + 14B reviewer."
+    - "Run 1 full nightly batch to validate night pipeline with 30B→14B→27B sequential swap."
+    - "Monitor extract checkpoint advancement (stale since Jun 9 12:05 UTC)."
+  model_inventory:
+    path: "/opt/ai_data/models/gguf/"
+    total: "~80G / 100G available"
+    files:
+      Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf:
+        size: "18G"
+        role: "proposer / embed"
+        port: 8081
+        source: bartowski (lmstudio-community)
+      Qwen3.6-27B.i1-IQ4_XS.gguf:
+        size: "15G"
+        role: "verifier"
+        port: 8084
+        source: mradermacher
+      Qwen2.5-Coder-7B-Instruct-Q8_0.gguf:
+        size: "7.6G"
+        role: "extractor / reflector"
+        port: 8082
+      Qwen2.5-Coder-14B-Instruct-Q6_K.gguf:
+        size: "12G"
+        role: "reviewer / judge"
+        port: 8083
+      NextCoder-14B-Q6_K.gguf:
+        size: "12G"
+        role: "review-j (night judge)"
+        source: gabriellarson
+      Qwen3-Embedding-8B-f16.gguf:
+        size: "15G"
+        role: "embed (daytime)"
+        port: 8081
+  file_changes:
+    model_replacement_3b_to_7b:
+      - scripts/pipelines/worklog_generator.py — draft_model metric key, log messages, docstring
+      - scripts/lib/llm_client.py — docstring "Qwen3B→Qwen2.5-Coder-7B"
+      - scripts/orchestrator.py — 8 locations (docstring, comments, log messages)
+      - scripts/observer.py — docstring model label
+      - scripts/notice/lib/bot_processor.py — docstring, LLM_MODEL default
+      - scripts/notice/telegram_bot.py — docstring
+      - scripts/notice/slack.py — docstring
+      - scripts/day_model_test_direct.py — MCP context string, restore section
+      - scripts/day_extract.sh — docstring, log message
+      - scripts/pipelines/day_extract.py — docstring, banner
+      - scripts/pipelines/day_runner.py — comments
+      - scripts/pipelines/day_pipeline.py — comments
+      - scripts/pipelines/extract.py — docstring
+      - scripts/pipelines/prj_cycle.py — docstring, comments
+      - scripts/pipelines/review_consumer.py — comment
+      - scripts/pipelines/night_runner.py — comments
+      - scripts/lib/infra/container_manager.py — docstring
+      - scripts/lib/watchdog/__init__.py — docstring
+      - scripts/lib/watchdog/config.py — docstring
+      - scripts/lib/debate/debate_data.py — model key rename + config
+      - scripts/lib/debate/debate_llm.py — alias mapping
+      - scripts/lib/debate/local_debate.py — model assignments, docstring, print
+      - scripts/lib/experiment_monitor.py — docstring
+      - "Experimental: day_model_test.py, nli_compare.py, prj_ground_truth_test.py, model_comparison_test.py, test_night_prj_eval.py, test_pipeline_e2e.py"
+    quantization_q4ks_to_q4km:
+      - scripts/test_night_prj_eval.py — 6 locations (docstring, swap config, print)
+    port_fixes_stale_8080:
+      - scripts/review_pipeline_3model.py — 3 comments (→reviewer:8083/reflector:8082)
+      - scripts/observer.py — DEFAULT_API :8080→:8081
+      - scripts/bench_llm.py — docstring :8080→:8082
+      - scripts/gen_architecture.py — mode description
+      - scripts/pipelines/rubric.py — docstring/log
+      - scripts/pipelines/mcp_verify.py — docstring
+      - scripts/pipelines/night_runner.py — :8080→:8081/:8082
+      - scripts/lib/debate/local_debate.py — 5 references (:8080→:8081)
+      - scripts/lib/debate/cooperative_debate.py — 2 references

@@ -1,11 +1,13 @@
 # Status: production
 # Path: imported by — watchdog.py
-"""Slack + Telegram 알림 — 30분 heartbeat 표 + state change alert.
+"""Slack 알림 — 30분 heartbeat (Block Kit in-place) + state change alert (colored).
 
-출처: Slack API 문서, 모니터링 도구 사례
-- Slack은 mrkdwn에서 테이블 미지원 → 코드 블록 사용
-- 이모지 금지, 로그 경로 금지, 텍스트 전용
+Block Kit 형식 (mrkdwn 테이블 → header/section/fields/context):
+- Heartbeat: chat.update로 같은 메시지 갱신 (채널 낭비 감소)
+- Alert: attachment color로 심각도 표시 (good/warning/danger)
 - Alert dedup: 5분/컴포넌트
+
+Telegram: 파일 전송 전용 (watchdog 알림 금지)
 """
 
 import json
@@ -38,22 +40,159 @@ def kst_now() -> str:
 
 # ── Slack ──────────────────────────────────────────────────────────
 
-def _slack_send(text: str) -> bool:
+def _slack_channel() -> str:
+    return _SECRETS.get("SLACK_CHANNEL", SLACK_CHANNEL)
+
+
+def _slack_api(method: str, payload: dict, timeout: int = 10) -> dict:
+    """Call Slack Web API with urllib (no external deps)."""
     token = _SECRETS.get("SLACK_BOT_TOKEN", "")
     if not token:
-        return False
-    channel = _SECRETS.get("SLACK_CHANNEL", SLACK_CHANNEL)
-    payload = json.dumps({"channel": channel, "text": text, "mrkdwn": True}).encode()
+        return {"ok": False}
+    payload.setdefault("channel", _slack_channel())
+    data = json.dumps(payload).encode()
     req = urllib.request.Request(
-        "https://slack.com/api/chat.postMessage", data=payload,
+        f"https://slack.com/api/{method}", data=data,
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read())
-            return result.get("ok", False)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())
     except Exception:
-        return False
+        return {"ok": False}
+
+
+# ── Heartbeat (Block Kit, in-place update via chat.update) ─────────
+
+_HEARTBEAT_TS_FILE = Path("/var/tmp/watchdog_slack_heartbeat_ts.txt")
+
+
+def _build_heartbeat_blocks(state: dict) -> tuple[list, str]:
+    """Build Block Kit blocks + fallback text for heartbeat."""
+    now_kst = kst_now()
+    mode = state.get("mode", "?").upper()
+    fallback = f"DevForge Watchdog — {now_kst} KST  [{mode}]"
+
+    blocks = [{
+        "type": "header",
+        "text": {"type": "plain_text", "text": f"DevForge Watchdog — {now_kst} KST  [{mode}]"},
+    }]
+
+    if state.get("experiment_active"):
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "*EXPERIMENT MODE* — monitor-only, no recovery"},
+        })
+
+    # Containers
+    containers = state.get("containers", [])
+    if containers:
+        blocks.append({"type": "divider"})
+        for c in containers:
+            icon = "OK" if c.get("ok") else "DOWN"
+            blocks.append({
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*{c['name']}*\nport :{c['port']}  mode {c.get('mode','?')}"},
+                    {"type": "mrkdwn", "text": f"*Status*\n{icon}\n{c.get('uptime','')}"},
+                ],
+            })
+
+    # Memory / Swap
+    mem = state.get("memory", {})
+    if mem:
+        blocks.append({"type": "divider"})
+        blocks.append({
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Memory*\n{mem.get('used_gb','?')}G / {mem.get('total_gb','?')}G  {mem.get('pct','?')}%"},
+                {"type": "mrkdwn", "text": f"*Swap*\n{mem.get('swap_used_gb','?')}G / {mem.get('swap_total_gb','?')}G  {mem.get('swap_pct','?')}%"},
+            ],
+        })
+
+    # Services
+    services = state.get("services", [])
+    if services:
+        blocks.append({"type": "divider"})
+        for i in range(0, len(services), 2):
+            chunk = services[i:i+2]
+            blocks.append({
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*{s['name']}*\n{'OK' if s.get('ok') else 'DOWN'}"}
+                    for s in chunk
+                ],
+            })
+
+    # Timers
+    timers = state.get("timers", [])
+    if timers:
+        blocks.append({"type": "divider"})
+        for i in range(0, len(timers), 2):
+            chunk = timers[i:i+2]
+            blocks.append({
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*{t['name']}*\n{'OK' if t.get('ok') else 'DELAY'}  {t.get('detail','')[:20]}"}
+                    for t in chunk
+                ],
+            })
+
+    # LLM Probes
+    probes = state.get("probes", [])
+    if probes:
+        blocks.append({"type": "divider"})
+        for p in probes:
+            t1 = "OK" if p.get("t1_ok") else "FAIL"
+            blocks.append({
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*LLM :{p['port']}*"},
+                    {"type": "mrkdwn", "text": f"T1={t1}  {p.get('t2_detail','')[:30]}"},
+                ],
+            })
+
+    # Metrics + cache + events (context line)
+    ctx_parts = []
+    metrics = state.get("metrics", {})
+    if metrics:
+        for port, m in metrics.items():
+            gen = f"{m['gen_tps']:.1f}t/s" if m.get('gen_tps', 0) > 0 and m['gen_tps'] < float('inf') else "-"
+            ctx_parts.append(f":{port} pr={m['prompt_tps']:.1f} gen={gen}")
+    slots = state.get("slots", {})
+    if slots:
+        for port, slot_list in slots.items():
+            caches = " ".join(f"s{s['id']}={s['cache_pct']}%" for s in slot_list)
+            ctx_parts.append(f":{port} [{caches}]")
+    events = state.get("events_30m", [])
+    ctx_parts.append(f"events: {len(events)}")
+
+    if ctx_parts:
+        blocks.append({
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": " | ".join(ctx_parts)}],
+        })
+
+    return blocks, fallback
+
+
+def _post_or_update_heartbeat(blocks: list, fallback: str):
+    """Post new heartbeat or update existing one in-place."""
+    ts_file = _HEARTBEAT_TS_FILE
+    if ts_file.exists():
+        message_ts = ts_file.read_text().strip()
+        result = _slack_api("chat.update", {"ts": message_ts, "text": fallback, "blocks": blocks})
+        if result.get("ok"):
+            return
+    result = _slack_api("chat.postMessage", {"text": fallback, "blocks": blocks})
+    if result.get("ok") and result.get("ts"):
+        ts_file.write_text(str(result["ts"]))
+
+
+def heartbeat(state_summary: dict) -> None:
+    """30분 heartbeat — Block Kit, in-place update."""
+    blocks, fallback = _build_heartbeat_blocks(state_summary)
+    _post_or_update_heartbeat(blocks, fallback)
 
 
 # ── Telegram ───────────────────────────────────────────────────────
@@ -77,103 +216,45 @@ def _telegram_send(text: str) -> bool:
         return False
 
 
-def _notify_all(text: str):
-    """Send to both Slack and Telegram."""
-    _slack_send(text)
-    _telegram_send(text)
+# ── Alert / Recovery (colored attachments) ─────────────────────────
 
 
-# ── Heartbeat ──────────────────────────────────────────────────────
+def _alert_color(state: str) -> str:
+    ls = state.lower()
+    if "down" in ls or "crit" in ls or "fail" in ls:
+        return "danger"
+    if "delay" in ls or "warn" in ls or "latency" in ls:
+        return "warning"
+    return "good"
 
-def heartbeat(state_summary: dict) -> None:
-    """30분 heartbeat — 코드 블록 표 (이모지 X, 경로 X, 텍스트 전용)"""
-    now_kst = kst_now()
-    mode = state_summary.get("mode", "?").upper()
-
-    lines = [f"DevForge Watchdog - {now_kst} KST  [{mode}]", ""]
-    if state_summary.get("experiment_active"):
-        lines.append("** EXPERIMENT MODE ** (monitor-only, no recovery)")
-        lines.append("")
-
-    lines.append("Container     Port  Mode  Status    Uptime")
-    for c in state_summary.get("containers", []):
-        lines.append(
-            f"{c['name']:<12} :{c['port']:<3} {c.get('mode','?'):<6} "
-            f"{'RUNNING' if c.get('ok') else 'DOWN':<8} {c.get('uptime','?')}"
-        )
-
-    lines.append("")
-    lines.append("Service            Status")
-    for s in state_summary.get("services", []):
-        lines.append(f"{s['name']:<18} {s['detail']:<8}")
-
-    mem = state_summary.get("memory", {})
-    if mem:
-        lines.append("")
-        lines.append("Memory  {:>4}G / {:>4}G  {:>3}%".format(
-            mem.get("used_gb", "?"), mem.get("total_gb", "?"), mem.get("pct", "?")))
-        lines.append("Swap    {:>4}G / {:>4}G  {:>3}%".format(
-            mem.get("swap_used_gb", "?"), mem.get("swap_total_gb", "?"), mem.get("swap_pct", "?")))
-
-    timers = state_summary.get("timers", [])
-    if timers:
-        lines.append("")
-        for t in timers:
-            status = "OK" if t.get("ok") else "DELAY"
-            lines.append(f"Timer {t['name']:<22} {status:>6}  {t.get('detail','')}")
-
-    probes = state_summary.get("probes", [])
-    if probes:
-        lines.append("")
-        for p in probes:
-            t1 = "OK" if p.get("t1_ok") else "FAIL"
-            t2 = p.get("t2_detail", "?")
-            lines.append(f"LLM :{p['port']:<4} T1={t1:<4} T2={t2}")
-
-    metrics = state_summary.get("metrics", {})
-    if metrics:
-        lines.append("")
-        for port, m in metrics.items():
-            gen = f"{m['gen_tps']:.1f}t/s" if m['gen_tps'] > 0 and m['gen_tps'] < float('inf') else "-"
-            lines.append(f"Metrics :{port:<4} proc={m['processing']} def={m['deferred']} "
-                         f"prompt={m['prompt_tps']:.1f} gen={gen} "
-                         f"max_ctx={m['max_ctx']}")
-
-    slots = state_summary.get("slots", {})
-    if slots:
-        lines.append("")
-        for port, slot_list in slots.items():
-            cache_info = []
-            for s in slot_list:
-                label = f"slot{s['id']}" if s['is_processing'] else f"  {s['id']}"
-                cache_info.append(f"{label}={s['cache_pct']}%")
-            if cache_info:
-                lines.append(f"Cache :{port:<4} " + " ".join(cache_info))
-
-    events = state_summary.get("events_30m", [])
-    lines.append("")
-    if events:
-        lines.append(f"Events 30m: {len(events)}")
-        for e in events[:5]:
-            lines.append(f"  + {e.get('component','?')} {e.get('type','?')} {e.get('detail','')[:60]}")
-    else:
-        lines.append("Events 30m: 0")
-
-    text = "```\n" + "\n".join(lines) + "\n```"
-    _notify_all(text)
-
-
-# ── Alert / Recovery ──────────────────────────────────────────────
 
 def send_alert(component: str, state: str, detail: str) -> None:
-    """State change alert (이모지 없음, 텍스트 전용)."""
+    """State change alert with colored attachment."""
     now_kst = kst_now()
-    text = f"[{now_kst}] {component} -> {state}\n{detail[:200]}"
-    _notify_all(text)
+    _slack_api("chat.postMessage", {
+        "text": f"[{now_kst}] {component} -> {state}",
+        "attachments": [{
+            "color": _alert_color(state),
+            "blocks": [
+                {"type": "header", "text": {"type": "plain_text", "text": f"{component}  ->  {state}"}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": detail[:200]}},
+                {"type": "context", "elements": [{"type": "mrkdwn", "text": f"{now_kst} KST"}]},
+            ],
+        }],
+    })
 
 
 def send_recovery(component: str, detail: str) -> None:
-    """Recovery notice."""
+    """Recovery notice with green attachment."""
     now_kst = kst_now()
-    text = f"[{now_kst}] {component} recovered ({detail})"
-    _notify_all(text)
+    _slack_api("chat.postMessage", {
+        "text": f"[{now_kst}] {component} recovered ({detail})",
+        "attachments": [{
+            "color": "good",
+            "blocks": [
+                {"type": "header", "text": {"type": "plain_text", "text": f"{component}  recovered"}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": detail[:200]}},
+                {"type": "context", "elements": [{"type": "mrkdwn", "text": f"{now_kst} KST"}]},
+            ],
+        }],
+    })

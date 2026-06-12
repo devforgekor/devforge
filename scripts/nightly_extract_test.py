@@ -23,6 +23,7 @@ import time
 import subprocess as sp
 import re
 from datetime import datetime, timezone
+from lib.llm.json_parser import parse_llm_json
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "extract_tests")
@@ -119,19 +120,7 @@ def call_llm(messages, timeout=600):
         return None, {"error": str(e)}
 
 
-def extract_json(raw):
-    cleaned = re.sub(r"<think[^>]*>.*?</think>", "", raw, flags=re.DOTALL).strip()
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL)
-    if m:
-        cleaned = m.group(1)
-    if not cleaned.startswith("{"):
-        m = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        if m:
-            cleaned = m.group(0)
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        return None
+
 
 
 def check_faithful(evidence, source):
@@ -181,7 +170,7 @@ def run_test(model_label="Qwen3-4B"):
             errors += 1
             continue
 
-        parsed = extract_json(raw)
+        parsed = parse_llm_json(re.sub(r"<think[^>]*>.*?</think>", "", raw, flags=re.DOTALL).strip())
         if parsed is None:
             print(f"  ERROR: JSON parse fail\n")
             results.append({"turn_id": tid, "label": label, "status": "error", "error": "json_parse"})
