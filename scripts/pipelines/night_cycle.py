@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: called by — night_runner.py (subprocess), night_cycle.sh (future)
+# Path: called by — night_runner.py (subprocess), night_cycle.sh
 """Night Pipeline: DB handoff 로드 → P-R-J(30B/14B) → night_verify → DB 저장.
 
 Pod B swap sequence: 30B(proposer) → 14B(reflector) → 14B(judge) → 27B(verifier).

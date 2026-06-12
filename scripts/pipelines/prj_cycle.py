@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: night_cycle.sh / 15m_cycle.sh
+# Path: night_cycle.sh / day_cycle.sh
 """
 P-R-J 고정 역할 실험: P=night_proposer, R=night_reflector, J=night_judge
 
