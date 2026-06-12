@@ -385,7 +385,7 @@ def step_verify():
 def step_night_review():
     """Run night.py --review against extracted facts. Score P-R-J quality."""
     print(f"\n{'=' * 70}")
-    print("  Step 3: Night Review (Pod B 30B→14B→N14B)")
+    print("  Step 3: Night Debate (Pod B 30B→14B→N14B)")
     print(f"{'=' * 70}")
 
     import lib.db

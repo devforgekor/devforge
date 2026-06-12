@@ -717,7 +717,7 @@ def run_propose_review_judge(state, tag, rubric_append):
     # Pod A(7B reviewer) stop — Pod B가 30B/14B/N14B로 전환되기 전 RAM 확보
     stop_pod_a()
 
-    log("\n--- Phase 3: P-R-J (P) ---")
+    log("\n--- Night Debate — Proposer (P) ---")
     handoff_fragment = {}
 
     # P — gets findings by severity + P context
@@ -941,7 +941,7 @@ def run_round(round_num, with_rubric, resume_state_path=None):
     log("\n--- Phase 3.5: R(night_reflector) writes final handoff ---")
 
     r_ctx_parts = [
-        f"=== P-R-J CYCLE COMPLETE ===",
+        f"=== NIGHT DEBATE COMPLETE ===",
         f"P_model={PROPOSER_MODEL} R_model={REFLECTOR_MODEL} J_model={JUDGE_MODEL}\n",
         f"=== P PROPOSED FINDINGS ({len(p_findings)}) ===",
     ]

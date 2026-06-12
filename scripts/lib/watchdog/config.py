@@ -10,7 +10,7 @@ MODE=day (관찰형):
   Fix loop: operator(Pod A)가 수정 담당
 
 MODE=night (능동형):
-  Phase 4: P-R-J (P:8081 → R:8082 → J:8083, sequential on Pod B)
+  Phase 4: Night Debate (P:8081 → R:8082 → J:8083, sequential on Pod B)
   Phase 5: 27B verify (:8084)
   Fix loop: watchdog이 임시 podman 검증 후 feedback 문서 생성
 """

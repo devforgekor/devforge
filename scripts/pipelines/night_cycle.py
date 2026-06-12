@@ -61,7 +61,7 @@ def run_propose_review_judge(state, tag, rubric_append):
     """P-R-J 1회 패스. Pod A stop → P → R → J → state 저장."""
     stop_pod_a()
 
-    log_phase_header("Phase 3: P-R-J (P)")
+    log_phase_header("Night Debate — Proposer (P)")
     handoff_fragment = {}
 
     # P → data/pipeline_run/exp_p_{tag}.json
@@ -124,7 +124,7 @@ def run_propose_review_judge(state, tag, rubric_append):
     ps = prj_result['P_score']
     rs = prj_result['R_score']
     cs = prj_result['consensus']
-    slack_msg = (f"[Night Pipeline] P-R-J *Round {state.round_num}*\n"
+    slack_msg = (f"[Night Debate] P-R-J *Round {state.round_num}*\n"
                  f"P={PROPOSER_MODEL}→{ps} | R={REFLECTOR_MODEL}→{rs} | J={JUDGE_MODEL}→consensus={cs}\n")
     if j_report.get("summary"):
         slack_msg += f"> {j_report['summary'][:120]}"
@@ -317,7 +317,7 @@ def main():
     log_phase_header("Phase 3.5: R handoff writer")
 
     r_ctx_parts = [
-        f"=== P-R-J CYCLE COMPLETE ===",
+        f"=== NIGHT DEBATE COMPLETE ===",
         f"P_model={PROPOSER_MODEL} R_model={REFLECTOR_MODEL} J_model={JUDGE_MODEL}\n",
         f"=== P PROPOSED FINDINGS ({len(p_findings)}) ===",
     ]
@@ -370,7 +370,7 @@ def main():
                                  "consolidated": py_single})
 
     log(f"  P-R-J 완료: {prj_result.get('decision','?')} (consensus={prj_result.get('consensus','?')})")
-    slack_send(f"[Night Pipeline] P-R-J 완료: {prj_result.get('decision','?')} (consensus={prj_result.get('consensus','?')})")
+    slack_send(f"[Night Debate] P-R-J 완료: {prj_result.get('decision','?')} (consensus={prj_result.get('consensus','?')})")
 
     # Phase 4: night_verify (27B) → data/pipeline_run/exp_night_verify_{tag}.json
     log_phase_header("Phase 4: night_verify")
@@ -446,7 +446,7 @@ def main():
         "INSERT INTO activity_log "
         "(type, source, title, summary, body, run_id, exec_status) "
         "VALUES ("
-        f"'night_review', 'night_cycle', 'Night Review: {tag}', "
+        f"'night_review', 'night_cycle', 'Night Debate: {tag}', "
         f"night_verify={night_verify_verdict} confidence={night_verify_confidence}', "
         f"'{body_json}'::jsonb, '{run_id}', 'DONE'"
         ")"

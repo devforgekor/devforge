@@ -10,7 +10,7 @@
 #
 # Pipeline Steps:
 #   Server Validation     — state_collector --validate (snapshot before switching)
-#   Night Review (P-R-J)  — 30B(:8081) → 14B(:8082) → N14B(:8083)
+#   Night Debate (P-R-J)  — 30B(:8081) → 14B(:8082) → N14B(:8083)
 #   Night Verify          — 27B(:8084) final gate via review_consumer.py
 #   Day Mode Restore      — Pod B extractor(:8082) + Pod A reserved(:8080)
 #   Extract Test          — nightly_extract_test.py (faithfulness check)
@@ -145,7 +145,7 @@ else
     echo "[$(LOG_TS)] Server validation had issues (non-fatal)" >&2
 fi
 
-# ── Phase 4: P-R-J Review Pipeline (queue consumer) ──────────────
+# ── Night Debate (P-R-J) ── (queue consumer) ──────────────
 # night_cycle.py --queue handles its own container management
 # (kill_all → sequential P→R→J model loading on Pod B).
 # Reads pending extract_results from activity_log.
@@ -153,7 +153,7 @@ fi
 
 review_ok=true
 
-echo "[$(LOG_TS)] === Phase 4: P-R-J Review Pipeline ==="
+echo "[$(LOG_TS)] === Night Debate (P-R-J) ==="
 if ! python3 "$SCRIPTS_DIR/pipelines/night_cycle.py" --queue --limit 5; then
     review_ok=false
     echo "[$(LOG_TS)] night_cycle.py --queue FAILED" >&2

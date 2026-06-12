@@ -5,7 +5,7 @@
 
 Refactored from v3.0: Phase 1-2 moved to day_verify.py (DB source),
 Phase 3 (Day PRJ) removed. Remaining phases:
-  Phase 4  Night P-R-J    P:8081 → R:8082 → J:8083 (model swap per role)
+  Phase 4  Night Debate    P:8081 → R:8082 → J:8083 (model swap per role)
   Phase 5  27B Verify      Pod B verify mode — 27B(:8084) final gate
   Phase 6  Feedback        Consolidated report
   Phase 7  Restore Day     Pod B extractor(:8082) + Pod A reserved(:8080)
@@ -936,7 +936,7 @@ def _night_phase_j() -> Dict:
 def phase_4_night_prj(all_data: Dict, rubric_data: Optional[List] = None,
                       verification_items: Optional[List] = None,
                       group_by_category: bool = False) -> Dict:
-    log("\n=== Phase 4: Night P-R-J ===")
+    log("\n=== Night Debate (P-R-J) ===")
     log("  [sequence] review-p(proposer) -> review-r(reflector) -> review-j(judge)")
     if rubric_data:
         log(f"  [rubric] {len(rubric_data)} evaluations fed into P context")
@@ -1130,7 +1130,7 @@ def run_pipeline(phases: Optional[List[int]] = None,
     cat_str = f" cat-group={'on' if group_by_category else 'off'}"
     log("=" * 60)
     log(f"DevForge Night Pipeline v4.0 — Review → Verify{rubric_str}{fb_str}{cat_str}")
-    log("night_review (P→R→J) → night_verify (27B verify → feedback → restore)")
+    log("Night Debate (P→R→J) → night_verify (27B verify → feedback → restore)")
     log("=" * 60)
     if phases is None:
         phases = [4, 5, 6, 7]
