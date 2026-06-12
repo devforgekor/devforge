@@ -8,6 +8,7 @@
 #   Day Extract       — day_cycle.py (7B Q8 :8082) — extract → MCP enrich → py verify
 #   Day Verify        — day_verify.py (14B :8083) — remaining budget
 #
+# Secrets: DUCKDNS_TOKEN in ~/.config/devforge/secrets.env
 # New turns 0 → Embed skip → Extract skip → 55 min all verify
 # Server philosophy: Slow but complete.
 
@@ -66,24 +67,24 @@ if [ -f "/opt/ai_data/scripts/current-system-mode.env" ] && \
     exit 0
 fi
 
-# ── Phase 0: System (Fast, ~30s) ────────────────────────────────────
-LOG "=== Phase 0/3: code-structure ==="
+# ── System Sync ────────────────────────────────────
+LOG "=== System: code-structure ==="
 if python3 "$SCRIPT_DIR/gen_architecture.py" --check-structure 2>&1; then
     LOG "  code-structure OK"
 else
     LOG "  code-structure FAILED" >&2
 fi
 
-LOG "=== Phase 0/3: duckdns ==="
+LOG "=== System: duckdns ==="
 if curl -s -o /dev/null -w "%{http_code}" \
-    "https://www.duckdns.org/update?domains=devforgekor&token=776d9654-5af7-4814-8a8d-8f6183e5e2f7&ip=&verbose=true" \
+    "https://www.duckdns.org/update?domains=devforgekor&token=${DUCKDNS_TOKEN:-MISSING}&ip=&verbose=true" \
     2>/dev/null | grep -q 200; then
     LOG "  duckdns OK"
 else
     LOG "  duckdns FAILED" >&2
 fi
 
-LOG "=== Phase 0/3: worklog ==="
+LOG "=== System: worklog ==="
 if timeout 240 python3 "$PIPELINE_DIR/worklog_generator.py" 2>&1; then
     LOG "  worklog OK"
 else
@@ -93,16 +94,16 @@ fi
 
 ELAPSED=$(( $(date +%s) - START_TS ))
 BUDGET=$(BUDGET)
-LOG "Phase 0 done in ${ELAPSED}s — remaining budget=${BUDGET}s"
+LOG "System sync done in ${ELAPSED}s — remaining budget=${BUDGET}s"
 [ $BUDGET -le 120 ] && LOG "Budget exhausted" && exit 0
 
-# ── Phase 1: Embed (f16 batch, pre-check) ───────────────────────────
+# ── Day Embedding (f16 batch) ───────────────────────────
 NEED_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*)::int FROM turns WHERE embedding_f16 IS NULL" 2>/dev/null || echo "0")
 NEED_EMBED=${NEED_EMBED:-0}
 
 if [ "$NEED_EMBED" -gt 0 ]; then
-    LOG "=== Phase 1/3: Embed (f16 — ${NEED_EMBED} unembedded turns) ==="
+    LOG "=== Day Embedding: f16 (${NEED_EMBED} unembedded turns) ==="
     ensure_pod_b "embed" "embed" true 1200
     timeout -k 10 "$BUDGET" python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
     RC=$?
@@ -112,11 +113,11 @@ if [ "$NEED_EMBED" -gt 0 ]; then
     LOG "Budget=${BUDGET}s"
     [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 else
-    LOG "=== Phase 1/3: Embed (skip — 0 unembedded turns) ==="
+    LOG "=== Day Embedding: skip (0 unembedded turns) ==="
 fi
 
-# ── Phase 2: Extract Chain (day mode) ───────────────────────────────
-LOG "=== Phase 2/3: Extract (7B Q8 — extract → MCP → py verify) ==="
+# ── Day Extract (7B Q8) ───────────────────────────────
+LOG "=== Day Extract: 7B Q8 (extract → MCP → py verify) ==="
 ensure_pod_b "day" "extractor" false 600
 BUDGET=$(BUDGET)
 timeout -k 10 "$BUDGET" python3 "$PIPELINE_DIR/day_cycle.py" 2>&1
@@ -127,8 +128,8 @@ BUDGET=$(BUDGET)
 LOG "Budget=${BUDGET}s"
 [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 
-# ── Phase 3: Verify (잔여 예산 전부) ───────────────────────────────
-LOG "=== Verify (14B — review-j mode :8083) ==="
+# ── Day Verify (14B) ───────────────────────────────
+LOG "=== Day Verify: 14B (review-j mode :8083) ==="
 ensure_pod_b "review-j" "judge" false 600
 BUDGET=$(BUDGET)
 timeout -k 10 "$BUDGET" python3 "$PIPELINE_DIR/day_verify.py" 2>&1

@@ -215,7 +215,7 @@ fi
 
 if [ "$day_restored" = "false" ]; then
     echo "[$(LOG_TS)] CRITICAL: day restoration failed — daytime NL queries will be blocked" >&2
-	fi
+fi
 
 # ── Day mode restored ─────────────────────────────────────
 _set_mode day
@@ -223,7 +223,7 @@ _restored=true
 
 # ── Daily structure sync (chain: state_collector → gen_architecture) ─
 # Primary run after nightly. Falls back to KST 09:00 timer on failure.
-echo "[$(LOG_TS)] == Daily structure sync == "
+echo "[$(LOG_TS)] == Daily structure sync =="
 if systemctl --user start devforge-daily-structure.service 2>/dev/null; then
     echo "[$(LOG_TS)] Daily structure sync OK"
 else
