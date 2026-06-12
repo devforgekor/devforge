@@ -5,9 +5,9 @@
 # System Mode Transition:
 #   devforge-nightly.timer fires at UTC 18:00 (KST 03:00)
 #   ──> MODE=night  (at script start, /opt/ai_data/scripts/current-system-mode.env)
-#   ──> Phase 1..6 pipeline runs
+#   ──> Phase 1,4,5,6,7,8 pipeline runs (Phases 2-3 deprecated)
 #   ──> Phase 6 restores day mode, MODE=day
-#   ──> Phase 7 DeepSeek API audit runs in day mode
+#   ──> Phase 8 DeepSeek API audit runs in day mode
 #   On crash: EXIT trap restores MODE=day as safety net
 #
 # Agent mode check:
@@ -15,10 +15,11 @@
 #   python3 -c "print(open('/opt/ai_data/scripts/current-system-mode.env').read().strip().split('=')[1])"
 #
 # Phases:
-# Phase 4: P-R-J queue consumer    mid    — night_proposer/night_reflector/night_judge on Pod B(:8080)
-# Phase 5: production verify          heavy  — night_verify final gate on Pod B(:8081)
-# Phase 5: final verify  heavy  — 27B on Pod B(:8081)
-# Phase 6: restore day                       — day_r(:8082) + day_p/day_j/day_mcp(:8080)
+# Phase 4: P-R-J queue consumer    mid   — P(:8081) → R(:8082) → J(:8083) on Pod B
+# Phase 5: production verify          heavy — 27B(:8084) final gate on Pod B
+# Phase 6: restore day                       — Pod B extractor(:8082) + Pod A reserved(:8080)
+# Phase 7: Extract faithfulness test  light — Qwen3-4B extract faithfulness
+# Phase 8: DeepSeek Pro verify audit   light — proxy_reviewer.py
 
 set -o pipefail
 
@@ -69,10 +70,18 @@ switch_mode_both() {
     local mode_a="$1"
     local mode_b="$2"
     echo "[$(LOG_TS)] Switching Pod A → $mode_a, Pod B → $mode_b..."
+    # Pod A: MODE=reserved only (hardcodes model in its entrypoint)
     printf '%s' "MODE=$mode_a" > "${MODE_FILE_A}.tmp" && mv "${MODE_FILE_A}.tmp" "$MODE_FILE_A"
-    printf '%s' "MODE=$mode_b" > "${MODE_FILE_B}.tmp" && mv "${MODE_FILE_B}.tmp" "$MODE_FILE_B"
+    # Pod B: full env via pod_manager (MODEL_FILE, PORT, CTX_SIZE, etc.)
+    python3 -c "
+import sys; sys.path.insert(0, '$SCRIPTS_DIR')
+from lib.pod_manager import _write_mode_env
+_write_mode_env('$mode_b', 8082)
+" 2>&1 || {
+        echo "[$(LOG_TS)] WARNING: _write_mode_env failed — Pod B may not start"
+    }
     systemctl --user stop container-devforge-pod-b 2>&1 || true
-    sleep 3  # wait for pasta to release ports 8080-8081
+    sleep 3  # wait for pasta to release ports 8081-8084
     if systemctl --user start container-devforge-pod-b 2>&1; then
         return 0
     else
@@ -83,10 +92,17 @@ switch_mode_both() {
 
 switch_mode_pod_b() {
     local mode="$1"
-    echo "[$(LOG_TS)] Switching Pod B to $mode..."
-    printf '%s' "MODE=$mode" > "${MODE_FILE_B}.tmp" && mv "${MODE_FILE_B}.tmp" "$MODE_FILE_B"
+    local port="${2:-8082}"
+    echo "[$(LOG_TS)] Switching Pod B to $mode (:$port)..."
+    python3 -c "
+import sys; sys.path.insert(0, '$SCRIPTS_DIR')
+from lib.pod_manager import _write_mode_env
+_write_mode_env('$mode', $port)
+" 2>&1 || {
+        echo "[$(LOG_TS)] WARNING: _write_mode_env failed — Pod B may not start"
+    }
     systemctl --user stop container-devforge-pod-b 2>&1 || true
-    sleep 3  # wait for pasta to release ports 8080-8081
+    sleep 3  # wait for pasta to release ports 8081-8084
     if systemctl --user start container-devforge-pod-b 2>&1; then
         return 0
     else
@@ -101,7 +117,7 @@ stop_llm_services() {
     for svc in activity-summarizer telegram-bot slack; do
         systemctl --user stop "$svc" 2>&1 || true
     done
-    for tmr in activity-summarizer.timer devforge-15m-cycle.timer; do
+    for tmr in activity-summarizer.timer devforge-1h-cycle.timer; do
         systemctl --user stop "$tmr" 2>&1 || true
     done
     echo "[$(LOG_TS)] [$label] All non-critical LLM services stopped"
@@ -110,7 +126,7 @@ stop_llm_services() {
 start_llm_services() {
     local label="$1"
     echo "[$(LOG_TS)] [$label] Restarting LLM services and timers..."
-    for tmr in activity-summarizer.timer devforge-15m-cycle.timer; do
+    for tmr in activity-summarizer.timer devforge-1h-cycle.timer; do
         systemctl --user start "$tmr" 2>&1 || true
     done
     for svc in activity-summarizer telegram-bot slack; do
@@ -135,17 +151,17 @@ else
 fi
 
 # ── Phase 4: P-R-J Review Pipeline (queue consumer) ──────────────
-# prj_cycle.py --queue handles its own container management
-# (kill_all → sequential P→R→J model loading on Pod B :8080).
+# night_pipeline.py --queue handles its own container management
+# (kill_all → sequential P→R→J model loading on Pod B).
 # Reads pending extract_results from activity_log.
 # On success: queue_status → 'reviewed' (consumed by Phase 5 review_consumer.py).
 
 review_ok=true
 
 echo "[$(LOG_TS)] === Phase 4: P-R-J Review Pipeline ==="
-if ! python3 "$SCRIPTS_DIR/pipelines/prj_cycle.py" --queue --limit 5; then
+if ! python3 "$SCRIPTS_DIR/pipelines/night_pipeline.py" --queue --limit 5; then
     review_ok=false
-    echo "[$(LOG_TS)] prj_cycle.py --queue FAILED" >&2
+    echo "[$(LOG_TS)] night_pipeline.py --queue FAILED" >&2
 fi
 
 # ── Phase 5: Production verify (night_verify) ───────────────────
@@ -170,7 +186,7 @@ else
     systemctl --user stop container-devforge-pod-a 2>&1 || true
     sleep 5
 
-    if switch_mode_pod_b "verify" && wait_for_model 8081 "Qwen3.6-27B" 600; then
+    if switch_mode_pod_b "verify" 8084 && wait_for_model 8084 "Qwen3.6-27B" 600; then
         retry "verify" 2 python3 "$SCRIPTS_DIR/pipelines/review_consumer.py" || verify_ok=false
     else
         echo "[$(LOG_TS)] Failed to start verify mode" >&2
@@ -178,27 +194,27 @@ else
     fi
 fi
 
-# ── Phase 5: restore day mode ───────────────────────────────
+# ── Phase 6: restore day mode ───────────────────────────────
 
 day_restored=true
 
 echo "[$(LOG_TS)] === Night → Day transition ==="
-if ! switch_mode_both "day" "day"; then
+if ! switch_mode_both "reserved" "day"; then
     day_restored=false
     echo "[$(LOG_TS)] FATAL: switch_mode day failed" >&2
 else
     start_llm_services "day-restore"
-    # Pod B day mode on :8080
-    if ! wait_for_model 8080 "day (Pod B)" 300; then
+    # Pod B extractor mode on :8082
+    if ! wait_for_model 8082 "Pod B extractor (day)" 300; then
         day_restored=false
-        echo "[$(LOG_TS)] FATAL: day mode (:8080) not responding after restore" >&2
+        echo "[$(LOG_TS)] FATAL: extractor (:8082) not responding after restore" >&2
     fi
-    # Pod A day_r(:8082)
-    echo "[$(LOG_TS)] Restarting Pod A (day_r:8082)..."
+    # Pod A reserved(:8080)
+    echo "[$(LOG_TS)] Restarting Pod A (reserved:8080)..."
     systemctl --user restart container-devforge-pod-a 2>&1 || true
     sleep 5
-    if ! wait_for_model 8082 "day_r (Pod A)" 60; then
-        echo "[$(LOG_TS)] WARNING: day_r :8082 not responding" >&2
+    if ! wait_for_model 8080 "Pod A (reserved)" 60; then
+        echo "[$(LOG_TS)] WARNING: Pod A :8080 not responding" >&2
     fi
 fi
 
@@ -235,7 +251,7 @@ fi
 
 proxy_ok=true
 
-echo "[$(LOG_TS)] === Phase 7: DeepSeek Pro verify audit ==="
+echo "[$(LOG_TS)] === Phase 8: DeepSeek Pro verify audit ==="
 if python3 "$SCRIPTS_DIR/pipelines/proxy_reviewer.py" --limit 50; then
     echo "[$(LOG_TS)] DeepSeek Pro review OK"
 else
