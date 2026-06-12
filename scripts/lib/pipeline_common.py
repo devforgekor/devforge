@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — pipelines/prj_cycle.py, day_pipeline.py, night_pipeline.py
+# Path: imported by — pipelines/prj_cycle.py, day_pipeline.py, night_cycle.py
 """Shared pipeline utilities — PipelineState, llm_call, call_one, schema, prompts."""
 
 import hashlib, json, os, subprocess, sys, time, uuid, urllib.request

@@ -8,7 +8,7 @@ Usage: python3 test_verify_optimized_params.py"""
 import json, os, sys, time, subprocess
 sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.llm_client import call_llm, MODEL_REGISTRY
-from prj_cycle import kill_all, wait_health, wait_probe, VERIFIER_SYSTEM_PROMPT as PRJ_VERIFY, RUBRIC, MODE_FILE_A, MODE_FILE_B, log as plog
+from pipelines.prj_cycle import kill_all, wait_health, wait_probe, VERIFIER_SYSTEM_PROMPT as PRJ_VERIFY, RUBRIC, MODE_FILE_A, MODE_FILE_B, log as plog
 
 EXPER_DIR = '/opt/projects/server/data/experiment'
 PORT = 8081

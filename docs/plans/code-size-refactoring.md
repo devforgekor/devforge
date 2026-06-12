@@ -37,7 +37,7 @@ scripts/  (137 .py files, flat)
 ├── rubric_experiment.py     706
 ├── local_debate.py          699
 ├── experiment_runner.py     632
-├── night_pipeline.py        626
+├── night_cycle.py        626
 ├── azure_spot.py            626
 ├── observer.py              574
 ├── feedback.py              554
@@ -124,7 +124,7 @@ from lib.llm.token_budget import TokenBudget, PipelineState
 
 **Caller impact**:
 - `experiment_runner.py` imports `from prj_cycle import kill_all, start_day_both, ...` → update import to `from lib.infra.pod_manager import ...`
-- `night_pipeline.py` imports `from prj_cycle import start_pod_b, ...` → update import
+- `night_cycle.py` imports `from prj_cycle import start_pod_b, ...` → update import
 
 ---
 
@@ -187,7 +187,7 @@ from lib.cli_experiment import (
 )
 ```
 
-**Caller impact**: None. `cli.py` called by `nightly_batch.sh`, `.bashrc` aliases, systemd timer scripts via `python3 scripts/cli.py <subcommand>`. CLI interface unchanged.
+**Caller impact**: None. `cli.py` called by `night_cycle.sh`, `.bashrc` aliases, systemd timer scripts via `python3 scripts/cli.py <subcommand>`. CLI interface unchanged.
 
 ---
 
@@ -206,7 +206,7 @@ Goal: "these are pipelines" becomes visible from directory structure. Current fl
 | `scripts/code_mod_pipeline.py` | `scripts/pipelines/code_mod.py` | 1,286 | Code modification pipeline |
 | `scripts/rubric_experiment.py` | `scripts/pipelines/rubric.py` | 706 | Rubric-based experiment |
 | `scripts/experiment_runner.py` | `scripts/pipelines/runner.py` | 632 | 5-phase experiment runner |
-| `scripts/night_pipeline.py` | `scripts/pipelines/night.py` | 626 | Nightly batch pipeline |
+| `scripts/night_cycle.py` | `scripts/pipelines/night.py` | 626 | Nightly batch pipeline |
 
 ### Import path update registry
 
@@ -217,9 +217,9 @@ Callers that import from these pipelines:
 | `prj_cycle.py` | `import extract_pipeline` | `from scripts.pipelines import extract` |
 | `prj_cycle.py` | `import classify_pipeline` | `from scripts.pipelines import classify` |
 | `orchestrator.py` | `from review_pipeline_steps import ...` | `from scripts.pipelines.review import ...` |
-| `nightly_batch.sh` | `python3 scripts/experiment_runner.py` | `python3 scripts/pipelines/runner.py` |
-| `nightly_batch.sh` | `python3 scripts/night_pipeline.py` | `python3 scripts/pipelines/night.py` |
-| systemd timers | `ExecStart=.../night_pipeline.py` | Update timer unit files |
+| `night_cycle.sh` | `python3 scripts/experiment_runner.py` | `python3 scripts/pipelines/runner.py` |
+| `night_cycle.sh` | `python3 scripts/night_cycle.py` | `python3 scripts/pipelines/night.py` |
+| systemd timers | `ExecStart=.../night_cycle.py` | Update timer unit files |
 
 ### Backward-compat shim
 

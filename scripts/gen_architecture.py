@@ -205,7 +205,7 @@ def _build_software(structural: dict, claude: dict) -> str:
     modes = {
         "current": current_mode,
         "available": {
-            "day": "Pod A(3B:8082) + Pod B(Codestral-22B:8080)",
+            "day": "Pod A(reserved:8080) + Pod B(extract 7B:8082 | verify 14B:8083)",
             "night": "Nightly review pipeline (verify + debate)",
         },
     }

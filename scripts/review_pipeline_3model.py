@@ -5,10 +5,10 @@
 
 Adversarial 3-stage (P→R→J) pipeline with Scoring Judge:
 
-  Step 1  Proposal        Pod B :8080   Bug/security/edge-case discovery (reviewer 7B)
-  Step 2  Reflection      Pod B :8080   ACCEPT/REJECT per finding
-  Step 3  Judgment        Pod B :8081   Scoring Judge — P_score/R_score/gap/veto
-  Step 4  Diff Gen        Pod B :8080   Unified diff (gap≤10 → auto; gap>10 → skip)
+  Step 1  Proposal        Pod B :8083   Bug/security/edge-case discovery (reviewer 14B)
+  Step 2  Reflection      Pod B :8083   ACCEPT/REJECT per finding
+  Step 3  Judgment        Pod B :8083   Scoring Judge — P_score/R_score/gap/veto
+  Step 4  Diff Gen        Pod B :8083   Unified diff (gap≤10 → auto; gap>10 → skip)
 
 Judge gating:
   gap ≤ 5  → diff_generation (high confidence consensus)
@@ -17,10 +17,10 @@ Judge gating:
   P_score==0 | R_score==0 | decision=="REJECT" → veto → skip diff
 
 Model assignment (P→R→J pipeline):
-  Step 1 (Proposal)       Pod B :8080
-  Step 2 (Reflection)     Pod B :8080
-  Step 3 (Judgment)       Pod B :8081 (swap)
-  Step 4 (Diff Gen)       Pod B :8080
+  Step 1 (Proposal)       Pod B :8083
+  Step 2 (Reflection)     Pod B :8083
+  Step 3 (Judgment)       Pod B :8083 (swap)
+  Step 4 (Diff Gen)       Pod B :8083
 
 Usage:
   python3 review_pipeline_3model.py --task-id T01       # single task
@@ -41,7 +41,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.llm_client import call_llm_json  # noqa: E402
 from pipelines.review import (  # noqa: E402
-    REFLECTOR_PORT,
+    REVIEWER_PORT,
     JUDGE_PORT,
     _poll_health,
     run_diff,
@@ -72,10 +72,10 @@ Do NOT include extra text or markdown."""
 
 
 def _run_proposal(code: str, label: str) -> Dict[str, Any]:
-    """Step 1: Reviewer on :8080 generates findings."""
-    print(f"[step1] Proposal on :{REFLECTOR_PORT}")
-    if not _poll_health(REFLECTOR_PORT, timeout=30):
-        raise RuntimeError(f"reviewer not healthy on :{REFLECTOR_PORT}")
+    """Step 1: Reviewer on :8083 generates findings."""
+    print(f"[step1] Proposal on :{REVIEWER_PORT}")
+    if not _poll_health(REVIEWER_PORT, timeout=30):
+        raise RuntimeError(f"reviewer not healthy on :{REVIEWER_PORT}")
     raw = call_llm_json(
         [{"role": "system", "content": SYSTEM_PROPOSAL},
          {"role": "user", "content": f"Review this code:\n```\n{code}\n```"}],
@@ -104,7 +104,7 @@ def _swap_pod_b(mode: str, timeout: int = 300) -> bool:
         capture_output=True,
         timeout=30,
     )
-    check_port = JUDGE_PORT if mode == "review-j" else REFLECTOR_PORT
+    check_port = JUDGE_PORT if mode == "review-j" else REVIEWER_PORT
     return _poll_health(check_port, timeout=timeout)
 
 
@@ -118,7 +118,7 @@ def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, 
     print(f"Review Pipeline: {task_label}")
     print(f"{'=' * 60}")
 
-    # Step 1: Proposal (Pod B :8080)
+    # Step 1: Proposal (reviewer :8083)
     step1 = _run_proposal(code, task_label)
     findings = step1.get("findings", [])
     if not findings:
@@ -134,13 +134,13 @@ def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, 
     # All Proposer findings forwarded to reflector for review
     reviewer_accepted = [f["id"] for f in findings]
 
-    # Step 2: Reflection (Pod B :8080)
+    # Step 2: Reflection (reflector :8082)
     if swap_fn:
         swap_fn("review-r")
     step2 = run_reflection(code, findings)
     reflector_verdicts = step2.get("verdicts", [])
 
-    # Step 3: Judgment (Scoring Judge on Pod B :8081)
+    # Step 3: Judgment (judge :8083)
     if swap_fn:
         swap_fn("review-j")
     step3 = run_judgment(code, findings, reviewer_accepted, reflector_verdicts)
@@ -238,7 +238,7 @@ def _run_orchestrated() -> Dict[str, Any]:
 
         label = f"Task {task_id}"
 
-        # Step 1: Proposal (Pod B :8080)
+        # Step 1: Proposal (reviewer :8083)
         step1 = _run_proposal(code, label)
         findings = step1.get("findings", [])
         if not findings:
@@ -247,11 +247,11 @@ def _run_orchestrated() -> Dict[str, Any]:
 
         reviewer_accepted = [f["id"] for f in findings]
 
-        # Step 2: Reflection (Pod B :8080)
+        # Step 2: Reflection (reflector :8082)
         step2 = run_reflection(code, findings)
         reflector_verdicts = step2.get("verdicts", [])
 
-        # Step 3: Swap to Scoring Judge on Pod B :8081
+        # Step 3: Judge (judge :8083) — Pod B swap to review-j mode
         if not _swap_pod_b("review-j"):
             raise RuntimeError("Failed to load Scoring Judge on Pod B")
         step3 = run_judgment(code, findings, reviewer_accepted, reflector_verdicts)
@@ -366,7 +366,7 @@ def main() -> None:
         if not code:
             parser.error("--code or --code-file required for full pipeline")
 
-        # In full-pipeline mode, mode switching is handled by nightly_batch.sh.
+        # In full-pipeline mode, mode switching is handled by night_cycle.sh.
         # The model-swap callback writes MODE= to the Pod B mode file and
         # restarts the container.
         def _noop_swap(_step: str) -> None:

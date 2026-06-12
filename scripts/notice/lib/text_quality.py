@@ -110,7 +110,7 @@ def truncate_at_boundary(text: Optional[str], max_chars: int) -> str:
 
     best = -1
     for i, ch in enumerate(stripped):
-        if ch not in '.?!...' or i >= max_chars:
+        if ch not in '.?!...…' or i >= max_chars:
             continue
         if ch == '...':
             best = i + 1

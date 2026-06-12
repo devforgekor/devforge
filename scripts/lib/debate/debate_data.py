@@ -13,7 +13,7 @@ SESSIONS_DIR = Path("/opt/ai_data/debate_sessions")
 MODELS: Dict[str, Dict[str, Any]] = {
     "qwen3-30b-a3b": {
         "filename": "Qwen3-30B-A3B-Q4_K_M.gguf",
-        "host": "azureqwen", "port": 400, "local_port": 8084,
+        "host": "azureqwen", "port": 400, "local_port": 8086,
         "model_name": "qwen",
         "ctx": 4096, "threads": 2, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
@@ -24,7 +24,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
     },
     "nemotron3-nano-30b": {
         "filename": "Nemotron-3-Nano-30B-A3B-IQ4_XS.gguf",
-        "host": "azurenemo", "port": 400, "local_port": 8083,
+        "host": "azurenemo", "port": 400, "local_port": 8085,
         "model_name": "nemotron",
         "ctx": 4096, "threads": 2, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.6, "top_p": 0.95,
@@ -35,7 +35,7 @@ MODELS: Dict[str, Dict[str, Any]] = {
     },
     "gemma-4-26b": {
         "filename": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
-        "host": "azuregemma", "port": 8080, "local_port": 8085,
+        "host": "azuregemma", "port": 8080, "local_port": 8087,
         "model_name": "gemma",
         "ctx": 4096, "threads": 2, "mlock": 0,
         "max_tokens": 2048, "temperature": 0.1, "top_p": 0.9,
@@ -53,16 +53,16 @@ MODELS: Dict[str, Dict[str, Any]] = {
         "bench_load_s": 240, "bench_toks": 3.0,
     },
     "qwen3-30b-a3b-local": {
-        "filename": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf",
+        "filename": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
         "port": 8080, "ctx": 4096, "threads": 4, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
         "cache_ram": 1024,
         "bench_load_s": 70, "bench_toks": 10.5,
     },
-    "qwen2.5-coder-3b": {
-        "filename": "Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
-        "port": 8082, "ctx": 4096, "threads": 2, "mlock": 0,
+    "qwen2.5-coder-7b": {
+        "filename": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
+        "port": 8082, "ctx": 4096, "threads": 4, "mlock": 0,
         "max_tokens": 1024, "temperature": 0.1,
         "system_prompt_support": True,
         "cache_ram": 512,

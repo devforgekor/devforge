@@ -18,8 +18,7 @@ from .debate_data import MODELS, PROMPTS, SWITCH_FILE
 # Map debate_data model_id → MODEL_REGISTRY key (for unified config access)
 _DEBATE_TO_REGISTRY: Dict[str, str] = {
     "qwen3-30b-a3b-local": "proposer",
-    "qwen2.5-coder-3b":    "extractor",
-    "qwen2.5-coder-7b":    "reviewer",
+    "qwen2.5-coder-7b":    "extractor",
 }
 
 
@@ -322,7 +321,7 @@ def write_report(state_dir: Path, session_id: str, question: str, method: str,
 # ── Local model switching ───────────────────────────────────────────────────
 
 def switch_local_model(model_id: str, dry_run: bool = False) -> bool:
-    """Switch model on local Pod A (:8080) or Pod B (:8081) via supervisor.
+    """Switch model on local Pod B via supervisor (:8081/:8082/:8083).
 
     Pod A is always-on — just verify health.
     Pod B uses switch-file protocol — write model-switch.json, wait for supervisor.

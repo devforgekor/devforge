@@ -1,0 +1,69 @@
+## EXTRACT PHASE RUBRIC — Real-Conversation Edition (25 pts)
+This rubric targets error patterns observed across 8,219 turns (1,055 extract_pipeline facts).
+Apply these checks BEFORE writing any extraction.
+
+### Criterion E1: Operational vs Factual Gate (8 pts)
+**Problem**: 60%+ of extracted facts are operational statements ("I will check X", "Done", "Let me verify Y") that carry no persistent knowledge.
+
+**PASS rule**: Classify the claim as one of:
+- **OPERATIONAL**: About what the assistant/user is about to do, just did, or is in the process of doing. "I will restart the container", "Let me check the log", "Done", "Good point", "Thanks". → **DO NOT EXTRACT**. These are transient.
+- **FACTUAL**: About the project/system's state, architecture, configuration, behavior, decisions, requirements. "PostgreSQL uses pg_trgm for text search", "Pod B runs 3B Q8 on port 8080", "Disk at 92%, cleanup needed". → **EXTRACT**.
+
+**Self-check**: If removing this fact from the database would cause zero information loss in 1 hour, it's OPERATIONAL → skip it.
+**Counter-check**: Operational is NOT the same as "not a bug". A resolved bug (operationally "done") still carries factual value about the system state.
+
+**Score**: 8 pts = all extractions are factual (zero operational noise). -1 per operational extraction.
+
+### Criterion E2: Exact-Quote Evidence (5 pts)
+**Problem**: Evidence uses summarized/truncated text that fails embedding cosine match (42 embed + 37 substr failures). Korean text especially affected because all-MiniLM-L6-v2 is English-optimized.
+
+**PASS rule**: The `evidence` field MUST contain one of:
+- An EXACT sentence or sentence fragment from the source (matching a complete clause/phrase)
+- A minimal paraphrase that preserves ALL content words from the original
+- For multi-claim sentences: split into separate extractions, each quoting its specific clause
+
+**Korean rule**: Korean evidence MUST be a verbatim fragment. Paraphrasing Korean causes >40% cosine drop. If paraphrasing in Korean, keep >70% token overlap with source.
+
+**Self-check**: Highlight every content word in your evidence. Can each one be found in the source? If any cannot, delete or quote it properly.
+
+**Score**: 5 pts = every evidence has >80% token overlap with source section. -1 per poorly evidenced fact.
+
+### Criterion E3: Code & Structured Data Handling (4 pts)
+**Problem**: Markdown formatting (**, `` ` ``, ---) in evidence inflates token counts and degrades embedding quality. Marker/literal extractions suffer most.
+
+**PASS rule**:
+- Strip leading markdown formatting from evidence: `**/path/file**` → `/path/file`
+- Code words in backticks keep their content: `` `config.py` `` → config.py (no backticks)
+- Code blocks (``` ... ```) should extract the KEY line, not the entire block
+- Configuration values: `DB_POOL_SIZE=5` → keep as-is (literal value)
+
+**Score**: 4 pts = all evidence properly cleaned of markup. -1 per markdown-contaminated evidence.
+
+### Criterion E4: Dedup & Temporal Scoping (4 pts)
+**Problem**: Same facts extracted repeatedly across turns, especially in continued sessions. "13G 확보" extracted 5+ times from different turns.
+
+**PASS rule**:
+- Extract a fact ONLY if it is NEW in this specific turn — not a repetition of a previously stated fact
+- Evidence of newness: the fact is stated as a discovery, a change, or a confirmation with new detail
+- Evidence of repetition: the same statement paraphrased from earlier context — skip it
+- Temporal context: "모델 교체했습니다" (past tense, event) vs "모델을 교체할게요" (future, plan)
+
+**Score**: 4 pts = zero redundant extractions across the conversation context. -1 per redundant fact.
+
+### Criterion E5: Evidence Anchoring (4 pts)
+**Problem**: Evidence that refers to "this", "that", "the issue", "the fix" without specifying WHAT — these are unverifiable without reading the full turn.
+
+**PASS rule**: Every evidence string must be SELF-CONTAINED — understandable without referring back to the user_turn/thinking/text.
+
+- BAD: "This is the main cause of the issue" ← what issue?
+- GOOD: "Missing connection pooling in auth_routes.py login() causes 3s response — this is the main cause"
+
+**Score**: 4 pts = all evidence self-contained. -1 per dangling reference.
+
+---
+SUMMARY:
+1. (8pt) Is it OPERATIONAL or FACTUAL? → skip operational
+2. (5pt) Is evidence a near-verbatim quote? → paraphrase less
+3. (4pt) Is evidence free of markdown? → strip formatting
+4. (4pt) Is this fact NEW, not repeated? → dedup
+5. (4pt) Is evidence self-contained? → resolve references

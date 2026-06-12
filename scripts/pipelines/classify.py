@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: 1h_cycle.sh
+# Path: day_cycle.sh
 """Day pre-review: P(day_p)→R(day_r)→J(day_j) for night prepill defense.
 
 Each cycle reads unclassified turns (created_at > classify checkpoint)

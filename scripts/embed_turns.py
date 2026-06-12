@@ -9,7 +9,7 @@ Pipeline:
   3. Call gemini-embedding-001 batchEmbedContents (768-dim)
   4. Store vectors in pgvector column
 
-Uses KeyRotator for API key rotation. Runs nightly via nightly_batch.sh.
+Uses KeyRotator for API key rotation. Runs nightly via night_cycle.sh.
 """
 
 import json

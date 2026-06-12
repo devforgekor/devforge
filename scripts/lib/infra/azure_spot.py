@@ -30,6 +30,7 @@ SUBSCRIPTIONS: Dict[str, str] = {
     "account1": "a942e898-e1ee-47f4-b9b3-d9475672ff4e",  # Qwen gallery
     "account2": "e71711e2-5df5-4259-bd0d-4bd58fd1ca67",  # Nemotron VM (SP)
     "account3": "d0a7db48-d9a5-4e71-8425-90e90f541520",  # Gemma Judge VM
+    # account4 — subscription ID needed (SP objectID: d287ba64-a306-4fb2-b7f7-0a10e4f365eb)
 }
 
 # SSH key pairs (public keys extracted from PEM files)

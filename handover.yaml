@@ -92,7 +92,7 @@ completed_log:
   - "[Session 36] Timers migrated: 15m-cycle + classify disabled, day-extract/verify enabled."
   - "[Session 36] night.py v4.0: Phase 1-2 deprecated, Phase 3 removed."
   - "[Session 37] PORT REORG: 8080=Pod A reserved, 8081=proposer/embed, 8082=extract/reflector, 8083=verify/judge, 8084=verifier."
-  - "[Session 37] All production pipeline files port-corrected (night.py, review.py, nightly_batch.sh, container_manager.py, cli.py, entrypoints)."
+  - "[Session 37] All production pipeline files port-corrected (night.py, review.py, night_cycle.sh, container_manager.py, cli.py, entrypoints)."
   - "[Session 38] 3B→7B Q8 migration: 35+ files updated across production + experimental."
   - "[Session 38] 30B Q4_K_S→Q4_K_M: 6 files updated."
   - "[Session 38] PORT consistency sweep: all stale :8080 Pod B references fixed."
@@ -107,7 +107,7 @@ current_context:
     All model references (3B→7B, Q4_K_S→Q4_K_M) and port references (8080→correct) updated.
     6 models on disk covering all pipeline roles.
   next_steps:
-    - "Run 1 full 1h_cycle to validate end-to-end day pipeline with new 7B extractor + 14B reviewer."
+    - "Run 1 full day_cycle to validate end-to-end day pipeline with new 7B extractor + 14B reviewer."
     - "Run 1 full nightly batch to validate night pipeline with 30B→14B→27B sequential swap."
     - "Monitor extract checkpoint advancement (stale since Jun 9 12:05 UTC)."
   model_inventory:

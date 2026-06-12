@@ -3,7 +3,7 @@
 """DevForge Watchdog — 통합 서버 모니터링/자동복구 데몬.
 
 MODE=day (관찰형, 60s 주기):
-  - T1+T2 LLM probe (3B :8082, 7B :8080)
+  - T1+T2 LLM probe (7B :8082, 14B :8083)
   - :00/:30 chain 타이머 감시
   - :15/:45 classify 타이머 감시
   - 시스템 리소스 (swap, memory, disk)
@@ -36,7 +36,11 @@ from .recovery import (
     graduated_recover, recover_service, kill_stale_process,
 )
 from .state import WatchdogState
-from lib.experiment_state import is_experiment_active, read_state as read_experiment_state, update_state as update_exp_state
+from lib.experiment_state import (
+    cleanup_stale, is_experiment_active, is_experiment_stale,
+    read_state as read_experiment_state,
+    update_state as update_exp_state,
+)
 
 
 # ── Globals ─────────────────────────────────────────────────────────
@@ -98,8 +102,14 @@ def _run_services(results: dict, dry_run: bool):
         results["services"].append(svc)
 
 
-def _run_timers(results: dict, dry_run: bool):
-    """타이머 지연 체크 + 지연시 kick."""
+def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
+    """타이머 지연 체크 + 지연시 kick.
+
+    Mode-aware: night-only timers are NOT kicked during day mode and vice versa.
+    """
+    night_timers = {"devforge-night-cycle.timer"}
+    day_timers = {"devforge-day-cycle.timer", "devforge-classify.timer"}
+
     for timer in check_all_timers():
         tracker = _state.get(f"timer:{timer['name']}")
         if timer["ok"]:
@@ -109,14 +119,19 @@ def _run_timers(results: dict, dry_run: bool):
                 send_alert(f"timer:{timer['name']}", "DELAY", timer["detail"])
                 _state.add_event(f"timer:{timer['name']}", "delay", timer["detail"])
 
-            # Timer kick: systemctl start the associated service
+            # Timer kick: skip if not relevant to current mode
             if not dry_run and tracker.consecutive_fail >= 2:
-                svc_name = timer["name"].replace(".timer", ".service")
-                log(f"  kicking {svc_name} (timer delayed {timer['detail']})")
-                subprocess.run(
-                    ["systemctl", "--user", "start", svc_name],
-                    capture_output=True, timeout=10,
-                )
+                if mode == "day" and timer["name"] in night_timers:
+                    pass  # night timer, skip during day
+                elif mode == "night" and timer["name"] in day_timers:
+                    pass  # day timer, skip during night
+                else:
+                    svc_name = timer["name"].replace(".timer", ".service")
+                    log(f"  kicking {svc_name} (timer delayed {timer['detail']})")
+                    subprocess.run(
+                        ["systemctl", "--user", "start", svc_name],
+                        capture_output=True, timeout=10,
+                    )
         results["timers"].append(timer)
 
 
@@ -148,10 +163,10 @@ def _run_alert_only(dry_run: bool, results: dict):
         results.setdefault("services", []).append({"name": name, "ok": ok, "detail": detail})
 
 
-def _run_common_checks(results: dict, dry_run: bool):
+def _run_common_checks(results: dict, dry_run: bool, mode: str = "day"):
     """모드 공통 체크 — 서비스, 타이머, 메모리, alert-only."""
     _run_services(results, dry_run)
-    _run_timers(results, dry_run)
+    _run_timers(results, dry_run, mode)
     _run_memory_check(results)
     _run_alert_only(dry_run, results)
 
@@ -187,7 +202,7 @@ def run_day_checks(dry_run: bool = False) -> dict:
     pipe_name, _ = check_pipeline("day_cycle.py")
     results["pipeline_running"] = pipe_name
 
-    _run_common_checks(results, dry_run)
+    _run_common_checks(results, dry_run, "day")
     return results
 
 
@@ -210,7 +225,7 @@ def run_night_checks(dry_run: bool = False) -> dict:
         results["probes"].append(probe)
 
     for phase_name, pattern in [
-        ("prj_cycle", "prj_cycle.py"),
+        ("night_cycle", "night_cycle.py"),
         ("night_verify", "review_consumer.py"),
         ("verify_feedback", "night.py --phases 5"),
     ]:
@@ -225,7 +240,7 @@ def run_night_checks(dry_run: bool = False) -> dict:
                 _state.add_event(f"pipeline:{phase_name}", "stopped", "")
         results["pipeline_running"] = results["pipeline_running"] or running
 
-    _run_common_checks(results, dry_run)
+    _run_common_checks(results, dry_run, "night")
     return results
 
 
@@ -322,7 +337,7 @@ def day_fix_loop():
 
 def night_fix_loop():
     """Night mode: 27B fix loop for pipeline failures."""
-    for pipe in ("prj_cycle", "night_verify", "verify_feedback"):
+    for pipe in ("night_cycle", "night_verify", "verify_feedback"):
         _fix_loop_common(pipe, llm_port=8081)
 
 
@@ -352,6 +367,12 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
         experiment_active = is_experiment_active()
         if experiment_active:
             log("  Experiment detected — monitor-only mode (no recovery/fix loops)")
+
+        # Stale experiment cleanup — PID died but state file remains
+        if is_experiment_stale():
+            log("  Stale experiment state detected — cleaning up")
+            _state.add_event("experiment", "stale_cleanup", "")
+            cleanup_stale()
 
         results = {}
         try:

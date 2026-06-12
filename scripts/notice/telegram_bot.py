@@ -4,7 +4,7 @@
 """telegram_bot.py --- DevForge Telegram bot for remote operations.
 
 Polls Telegram getUpdates, interprets Korean messages via bot_processor
-(Qwen2.5-Coder-3B), executes commands, returns results.
+(Qwen2.5-Coder-7B), executes commands, returns results.
 
 Also handles file send/receive:
   - User sends file → downloaded to uploads/ + registered in file_registry DB

@@ -4,7 +4,7 @@
 """DevForge LLM Benchmark — decode tps 측정 및 실험 레지스트리 등록.
 
 Usage:
-  python3 bench_llm.py                          # localhost:8080 측정 (3 runs)
+  python3 bench_llm.py                          # localhost:8082 측정 (3 runs)
   python3 bench_llm.py --port 8082              # 포트 지정
   python3 bench_llm.py --runs 5                 # 5회 측정
   python3 bench_llm.py --label "my-test" --register --verdict optimal --rationale "..."

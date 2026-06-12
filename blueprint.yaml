@@ -131,7 +131,7 @@ target:
         trigger: Normal mode resumed — review_worker detects unprocessed turns since last normal-mode run.
         method: 'Single pass: process all accumulated turns with standard 3-LLM debate pipeline. No chunking needed — not
           real-time data.'
-        timer_restore: swap_mode.sh exit code/batch → restart review-worker.timer + devforge-nightly.timer
+        timer_restore: swap_mode.sh exit code/batch → restart review-worker.timer + devforge-night-cycle.timer
   - name: devforge-api
     role: Application server :8000
     type: systemd user / Quadlet container

@@ -10,7 +10,7 @@ Usage: python3 test_proposer_quantization.py"""
 import json, os, sys, time, subprocess
 sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.llm_client import call_llm, MODEL_REGISTRY
-from prj_cycle import kill_all, wait_health, wait_probe, PROPOSER_SYSTEM_PROMPT, RUBRIC, MODE_FILE_B, log as plog
+from pipelines.prj_cycle import kill_all, wait_health, wait_probe, PROPOSER_SYSTEM_PROMPT, RUBRIC, MODE_FILE_B, log as plog
 
 EXPER_DIR = '/opt/projects/server/data/experiment'
 PORT = 8080

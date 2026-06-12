@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: 1h_cycle.sh — Phase 2 (via day_cycle.py)
+# Path: day_cycle.sh — Phase 2 (via day_cycle.py)
 """Extract Pipeline - checkpoint-based perpetual fact extraction.
 
 SSOT: turns.created_at. Checkpoint in pipeline_checkpoint(phase=extract).

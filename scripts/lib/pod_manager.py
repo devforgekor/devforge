@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — pipelines/prj_cycle.py
-"""Container management for P-R-J pipeline — Pod A (devforge-pod-a) and Pod B (devforge-pod-b)."""
+# Path: imported by — pipelines/prj_cycle.py, night_cycle.py, night_runner.py, day_runner.py, day_cycle.sh
+"""Container management for DevForge — Pod A (devforge-pod-a :8080) and Pod B (devforge-pod-b :8081-8089).
+
+Port map:
+  8080  Pod A  — Reserved for operator (future)
+  8081  Pod B  — embed(f16 day) / proposer(30B night)
+  8082  Pod B  — extract(7B day) / reflector(14B night)
+  8083  Pod B  — verify(14B day) / judge(14B night)
+  8084  Pod B  — verifier(27B)
+  8085+ Pod B  — Future / Azure SSH tunnels
+"""
 
 from __future__ import annotations
 import json
@@ -19,37 +28,47 @@ MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
 TIMEOUT = 7200
 
 MODEL_METADATA = {
-    # Pod A: only reviewer.
-    "reviewer":   {"file": "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf",  "size": "7.6GB", "port": 8082, "mode": "day"},
-    # Pod B models — each entry has launch params for entrypoint env file.
-    # To change a model: edit the entry below — no entrypoint changes needed.
-    "extractor":  {
-        "file": "Qwen2.5-Coder-3B-Instruct.Q8_0.gguf",
-        "size": "3.1GB", "port": 8080, "mode": "day",
-        "model_name": "extractor", "ctx": 8192, "cache_ram": 512, "evict_room": 4000,
-    },
-    "reflector":  {
-        "file": "Qwen2.5-Coder-14B-Instruct.Q8_0.gguf",
-        "size": "15.7GB","port": 8080, "mode": "review-r",
-        "model_name": "reflector", "ctx": 8192, "cache_ram": 1024,
-        "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "fatal",
+    # Pod A — reserved for operator (future use)
+    "reviewer":   {"file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",  "size": "7.6GB", "port": 8080, "mode": "reserved"},
+    # Pod B models — port assigned per mode (not from env file):
+    #   8081: embed(f16 day) / proposer(30B night)
+    #   8082: extract(7B day) / reflector(14B night)
+    #   8083: verify(14B day) / judge(14B night)
+    #   8084: verifier(27B)
+    "embed":      {
+        "file": "Qwen3-Embedding-8B-f16.gguf",
+        "size": "16.3GB", "port": 8081, "mode": "embed",
+        "model_name": "embed", "ctx": 512,
+        "threads": 4, "threads_batch": 4,
     },
     "proposer":   {
-        "file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf",
-        "size": "17GB", "port": 8080, "mode": "review-p",
+        "file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+        "size": "17GB", "port": 8081, "mode": "review-p",
         "model_name": "proposer", "ctx": 8192, "cache_ram": 1024, "mlock": 0,
         "evict_room": 18000, "memory_check": 18000, "memory_check_mode": "fatal",
         "report_memory": "1", "cache_type_k": "q8_0", "cache_type_v": "q8_0", "flash_attn": "1",
     },
+    "extractor":  {
+        "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
+        "size": "7.6GB", "port": 8082, "mode": "day",
+        "model_name": "extractor", "ctx": 8192, "cache_ram": 1024, "evict_room": 8000,
+        "threads": 4, "threads_batch": 4,
+    },
+    "reflector":  {
+        "file": "qwen2.5-coder-14b-instruct-q6_k.gguf",
+        "size": "12.1GB","port": 8082, "mode": "review-r",
+        "model_name": "reflector", "ctx": 8192, "cache_ram": 512,
+        "evict_room": 13000, "memory_check": 13000, "memory_check_mode": "fatal",
+    },
     "judge":      {
-        "file": "NextCoder-14B-Q8_0.gguf",
-        "size": "15GB", "port": 8080, "mode": "review-j",
-        "model_name": "judge", "ctx": 6144, "cache_ram": 1024, "mlock": 0,
-        "evict_room": 16000, "memory_check": 2000, "memory_check_mode": "warn", "report_memory": "1",
+        "file": "qwen2.5-coder-14b-instruct-q6_k.gguf",
+        "size": "12.1GB", "port": 8083, "mode": "review-j",
+        "model_name": "judge", "ctx": 6144, "cache_ram": 512, "mlock": 0,
+        "evict_room": 13000, "memory_check": 5000, "memory_check_mode": "warn", "report_memory": "1",
     },
     "verifier":   {
         "file": "Qwen3.6-27B.i1-IQ4_XS.gguf",
-        "size": "13.7GB", "port": 8081, "mode": "verify",
+        "size": "13.7GB", "port": 8084, "mode": "verify",
         "model_name": "verifier-iq4xs", "ctx": 6144, "cache_ram": 1024, "mlock": 0,
         "evict_room": 10000, "memory_check": 8000, "memory_check_mode": "warn",
         "report_memory": "1", "cache_type_k": "q8_0", "cache_type_v": "q8_0", "flash_attn": "1",
@@ -117,19 +136,9 @@ def _reclaim_memory():
 
 def _container_service_name(port):
     """Map port to systemd service name."""
-    return {
-        8080: "container-devforge-pod-b",
-        8081: "container-devforge-pod-b",
-        8082: "container-devforge-pod-a",
-    }.get(port, "container-devforge-pod-b")
-
-
-# Expected model substrings per port (from /v1/models)
-_EXPECTED_MODELS = {
-    8080: "3B",      # extractor (day) / P-R-J / verifier (night)
-    8081: "27B",     # verifier
-    8082: "7B",      # reviewer (Pod A)
-}
+    if port == 8080:
+        return "container-devforge-pod-a"
+    return "container-devforge-pod-b"
 
 
 def _check_container_health(port, label):
@@ -139,7 +148,6 @@ def _check_container_health(port, label):
       - systemd NRestarts (> 0 = crashloop detected)
       - podman container uptime (restarted recently -> warn)
       - entrypoint file existence on host
-      - /v1/models: verify expected model is loaded (e.g. 7B on :8082)
       - /slots: detect stuck processing (slot busy > 30s without being stuck)
 
     Returns tuple (healthy: bool, warnings: list[str]).
@@ -159,8 +167,6 @@ def _check_container_health(port, label):
         pass
 
     # 2. podman container status (uptime / restart count)
-    # container name != service name: systemd adds "container-" prefix to unit,
-    # but ContainerName in .container file is the actual podman name
     podman_name = "devforge-pod-a" if "pod-a" in svc else "devforge-pod-b"
     try:
         r = subprocess.run(
@@ -179,46 +185,18 @@ def _check_container_health(port, label):
     # 3. entrypoint file existence (preflight)
     entrypoint_map = {
         "container-devforge-pod-a": "/opt/ai_data/scripts/reviewer-entrypoint.sh",
-        "container-devforge-pod-b": "/opt/ai_data/scripts/dual-server-entrypoint.sh",
+        "container-devforge-pod-b": "/opt/ai_data/scripts/pod-b-entrypoint.sh",
     }
     ep_path = entrypoint_map.get(svc)
     if ep_path and not os.path.exists(ep_path):
         warnings.append(f"entrypoint missing: {ep_path}")
-
-    # 4. /v1/models: verify expected model is loaded
-    expected_hint = _EXPECTED_MODELS.get(port)
-    if expected_hint:
-        try:
-            req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/models")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read())
-                models = data.get("models", [])
-                if models:
-                    model_name = models[0].get("name", "") or models[0].get("model", "")
-                    if expected_hint not in model_name:
-                        warnings.append(
-                            f"model mismatch on :{port}: got '{model_name}', "
-                            f"expected containing '{expected_hint}'")
-        except Exception:
-            pass
-
-    # 5. /slots: detect stuck processing
-    try:
-        req = urllib.request.Request(f"http://127.0.0.1:{port}/slots")
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            slots = json.loads(resp.read())
-            for slot in slots:
-                if slot.get("processing", False) and slot.get("n_ctx", 0) == 0:
-                    pass  # idle slot, ignore
-    except Exception:
-        pass
 
     for w in warnings:
         log(f"  [container-warn] {w}")
     return len(warnings) == 0, warnings
 
 
-# Models requiring night-mode isolation (heavy, background timer conflict → OOM risk)
+# Models requiring night-mode isolation (heavy, background timer conflict -> OOM risk)
 NIGHT_MODELS = frozenset({"proposer", "reflector", "judge", "verifier"})
 
 
@@ -248,13 +226,12 @@ def kill_all(night=False, dry_run=False):
         subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
                        capture_output=True, timeout=10)
         # Night: stop background services that could trigger OOM with heavy models
-        # systemd Restart=on-failure would restart containers; reset-failed prevents it
-        for svc in ("devforge-15m-cycle.service", "devforge-15m-cycle.timer",
-                     "devforge-watchdog.service", "devforge-nightly.service",
-                     "devforge-nightly.timer"):
+        for svc in ("devforge-day-cycle.service", "devforge-day-cycle.timer",
+                     "devforge-watchdog.service", "devforge-night-cycle.service",
+                     "devforge-night-cycle.timer"):
             subprocess.run(["systemctl", "--user", "stop", svc], capture_output=True, timeout=30)
             subprocess.run(["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10)
-        _kill_stray_pasta(("8080", "8081"))
+        _kill_stray_pasta(("8081", "8082", "8083", "8084"))
     else:
         log("  systemctl stop containers...")
         subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
@@ -265,7 +242,7 @@ def kill_all(night=False, dry_run=False):
                        capture_output=True, timeout=10)
         subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
                        capture_output=True, timeout=10)
-        _kill_stray_pasta(("8080", "8081", "8082"))
+        _kill_stray_pasta(("8080", "8081", "8082", "8083", "8084"))
     _reclaim_memory()
 
 
@@ -324,7 +301,7 @@ def _write_mode_env(mode: str, port: int) -> None:
 
 
 def start_pod_a_only(mode, port, dry_run=False):
-    """Start Pod A only, Pod B untouched. For day-mode fast switching (extract ↔ verify)."""
+    """Start Pod A only, Pod B untouched. For operator mode."""
     log(f"  POD A -> {mode} (:{port}) — Pod B kept running")
     with open(MODE_FILE_A, "w") as f:
         f.write(f"MODE={mode}")
@@ -332,7 +309,7 @@ def start_pod_a_only(mode, port, dry_run=False):
                    capture_output=True, timeout=30)
     subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=10)
-    _kill_stray_pasta(("8082",))
+    _kill_stray_pasta(("8080",))
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=60)
     ok = wait_health(port)
@@ -346,32 +323,29 @@ def start_pod_a_only(mode, port, dry_run=False):
 
 
 def stop_pod_a(dry_run=False):
-    """Stop Pod A only, Pod B untouched. No reclaim (Pod B still needs RAM)."""
+    """Stop Pod A only, Pod B untouched."""
     log("  Pod A stop (Pod B running)...")
     subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=30)
     subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=10)
-    _kill_stray_pasta(("8082",))
+    _kill_stray_pasta(("8080",))
 
 
-def start_pod_b(mode, port, night=False, dry_run=False):
+def start_pod_b(mode, port, night=False, dry_run=False, skip_probe=False):
     log(f"  POD B -> {mode} (:{port})")
     _write_mode_env(mode, port)
     kill_all(night=night, dry_run=dry_run)
-    # Stray pasta from failed restart cycle must be killed BEFORE starting,
-    # otherwise systemctl start will fail immediately (port conflict)
-    ports_to_clean = ("8080", "8081") if night else (str(port),)
+    ports_to_clean = ("8081", "8082", "8083", "8084") if night else (str(port),)
     _kill_stray_pasta(ports_to_clean)
-    # Night models (30B/14B) need more time: systemd Restart=on-failure may
-    # restart once (OOM during repack), adding ~60s to total load time
     health_timeout = 1200 if night else 600
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
                    capture_output=True, timeout=60)
     ok = wait_health(port, timeout=health_timeout)
     if ok:
         log(f"  :{port} health OK")
-        ok = wait_probe(port, mode, timeout=600)
+        if not skip_probe:
+            ok = wait_probe(port, mode, timeout=600)
     if ok:
         log(f"  :{port} ready")
         _check_container_health(port, mode)
@@ -397,39 +371,20 @@ def start_pod_a(mode, port, dry_run=False):
 
 
 def start_day_both(dry_run=False):
-    log("  DAY MODE: Pod A (7B reviewer :8082) -> Pod B (3B extractor :8080)")
-    with open(MODE_FILE_A, "w") as f:
-        f.write("MODE=day")
-    _write_mode_env("day", 8080)  # Pod B
-    kill_all(dry_run=dry_run)
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
-                   capture_output=True, timeout=60)
-    pod_a_ready = wait_health(8082)
-    if pod_a_ready:
-        log(f"  :8082 ready (Pod A day_r)")
-    else:
-        log(f"  :8082 TIMEOUT (Pod A day_r)")
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
-                   capture_output=True, timeout=60)
-    pod_b_ready = wait_health(8080)
-    if pod_b_ready:
-        log(f"  :8080 ready (Pod B day)")
-    else:
-        log(f"  :8080 TIMEOUT (Pod B day)")
-    return pod_a_ready and pod_b_ready
+    """DEPRECATED — Pod A is reserved operator, no longer runs day reviewer."""
+    log("  start_day_both: DEPRECATED — Pod A is reserved operator port")
+    return True
 
 
 def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
     if dry_run:
-        log(f"  [DRY] ensure_model({physical_name}) → OK (mock)")
+        log(f"  [DRY] ensure_model({physical_name}) -> OK (mock)")
         return True
     meta = MODEL_METADATA.get(physical_name)
     if not meta:
         log(f"  Unknown model: {physical_name}")
         return False
-    # Route to correct pod by port: extractor=Pod B, reviewer=Pod A
     night = physical_name in NIGHT_MODELS
-    # If already healthy and skip requested, reuse running pod
     if skip_if_healthy:
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{meta['port']}/health")
@@ -440,6 +395,16 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
                     return True
         except Exception:
             pass
-    if meta["port"] == 8082:
+    if meta["port"] == 8080:
+        ok = start_pod_a(meta["mode"], meta["port"], dry_run=dry_run)
+    else:
+        ok = start_pod_b(meta["mode"], meta["port"], night=night, dry_run=dry_run)
+    if ok:
+        return True
+    log(f"  ensure_model({physical_name}) failed — retrying after GC + 10s")
+    import gc
+    gc.collect()
+    time.sleep(10)
+    if meta["port"] == 8080:
         return start_pod_a(meta["mode"], meta["port"], dry_run=dry_run)
     return start_pod_b(meta["mode"], meta["port"], night=night, dry_run=dry_run)

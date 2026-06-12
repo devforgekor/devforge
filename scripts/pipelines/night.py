@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: none — pipeline redesign v3.0
-"""DevForge Night Pipeline v3.0 — Full 6-stage pipeline.
+# Path: none — night_review.py / night_verify.py callers
+"""DevForge Night Pipeline v4.0 — Review → Verify.
 
-Architecture:
-  Phase 0  Boot            Pod A 3B(:8082) + Pod B 7B(:8080) day mode
-  Phase 1  Python Verify   No LLM — structural audit
-  Phase 2  7B Verify       Pod B reviewer(:8080) — single-pass day_verify
-  Phase 3  7B-3B-7B DayPRJ Pod B 7B:P + Pod A 3B:R + Pod B 7B:J — per-turn debate
-  Phase 4  Night P-R-J     proposer -> reflector -> judge (model swap per role)
-  Phase 5  27B Verify      Pod B verify mode — 27B IQ4_XS(:8081) final gate
+Refactored from v3.0: Phase 1-2 moved to day_verify.py (DB source),
+Phase 3 (Day PRJ) removed. Remaining phases:
+  Phase 4  Night P-R-J    P:8081 → R:8082 → J:8083 (model swap per role)
+  Phase 5  27B Verify      Pod B verify mode — 27B(:8084) final gate
   Phase 6  Feedback        Consolidated report
-  Phase 7  Restore Day     Pod B day + Pod A 3B(:8082)
+  Phase 7  Restore Day     Pod B extractor(:8082) + Pod A reserved(:8080)
+
+Phase 4 reads input from day_verify's pipeline_verify_*.json output.
+Usage: python3 night.py --review   # Phase 4 only (30B P → 14B R → 14B J)
+       python3 night.py --verify   # Phase 5-6-7 (27B verify + feedback + restore)
+       python3 night.py --all      # Full night pipeline (v3.0 backward compat)
 """
 
 import json
@@ -33,9 +35,18 @@ from lib.db import psql_ok
 from lib.llm_client import call_llm
 from lib.token_budget import TokenBudget
 
-REFLECTOR_PORT = 8080
-VERIFY_PORT = 8081
-POD_A_PORT = 8082
+REFLECTOR_PORT = 8082
+VERIFY_PORT = 8084
+POD_A_PORT = 8080
+
+# Port per mode (Pod B fixed ports)
+MODE_TO_PORT = {
+    "day": 8082,
+    "review-p": 8081,
+    "review-r": 8082,
+    "review-j": 8083,
+    "verify": 8084,
+}
 
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 
@@ -151,6 +162,27 @@ Each finding must be:
 - Actionable: clear what should change
 - In priority order: critical before minor
 
+Example:
+Input: audit shows hardcoded credentials in config files, N+1 queries, and missing CSRF tokens
+Output:
+{
+  "findings": [
+    {
+      "id": "F01", "type": "security", "severity": "critical",
+      "description": "Hardcoded API keys and credentials in source code",
+      "rationale": "Exposes credentials to anyone with codebase access",
+      "proposed_action": "Move to secure environment variables"
+    },
+    {
+      "id": "F02", "type": "bug", "severity": "major",
+      "description": "N+1 select problem in user association queries",
+      "rationale": "Multiple DB round trips degrade performance under load",
+      "proposed_action": "Implement eager loading or batch queries"
+    }
+  ],
+  "summary": "2 findings: 1 critical security, 1 major performance"
+}
+
 Output STRICT JSON:
 {
   "findings": [
@@ -170,6 +202,17 @@ SYSTEM_REFUTER = """You are a review reflector. Given a set of findings, decide 
 - ACCEPT: the finding is real and correctly identified
 - REJECT: the finding is false, irrelevant, or already handled
 
+Example:
+Input: {"id": "F01", "type": "security", "severity": "critical", "description": "Hardcoded API keys in source code", "rationale": "Exposes credentials", "proposed_action": "Move to env vars"}
+Output: {"verdicts": [{"id": "F01", "verdict": "accept", "reason": "Hardcoded credentials are a real security vulnerability with clear evidence"}]}
+
+Input: {"id": "F03", "type": "bug", "severity": "critical", "description": "review_facts.verdict remains 'pending' and is never updated", "rationale": "Prevents downstream processing", "proposed_action": "Add UPDATE logic to verdict field"}
+Output: {"verdicts": [{"id": "F03", "verdict": "reject", "reason": "Verdict 'pending' is by design — downstream pipeline updates it after completion, not a bug"}]}
+
+Input (finding overstates evidence): Context memory 12/22GB used, swap 508MB/8GB, load 2.55, disk 92%
+       Finding: {"id": "F01", "type": "performance", "severity": "critical", "description": "Memory usage critically high, OOM imminent", "evidence_quote": "Memory: 22GB total, 12GB used"}
+Output: {"verdicts": [{"id": "F01", "verdict": "reject", "reason": "12/22GB is 55% usage with ample swap and healthy load — not OOM-critical. Finding overstates evidence. Disk at 92% is the real issue."}]}
+
 Output STRICT JSON:
 {
   "verdicts": [
@@ -178,7 +221,11 @@ Output STRICT JSON:
   ]
 }"""
 
-SYSTEM_JUDGE = """You evaluate a code review pipeline. Score Finder (P) on correctness(0-10), coverage(0-10), precision(0-10). Score Reflector (R) on accuracy(0-10), efficiency(0-10), completeness(0-10). P_score = correctness+coverage+precision, R_score = accuracy+efficiency+completeness. Output JSON with P_score, R_score, rubric_evaluation, decision(APPROVED/REJECT), consensus_score(0-100)."""
+SYSTEM_JUDGE = """You evaluate a code review pipeline. Score Finder (P) on correctness(0-10), coverage(0-10), precision(0-10). Score Reflector (R) on accuracy(0-10), efficiency(0-10), completeness(0-10). P_score = correctness+coverage+precision, R_score = accuracy+efficiency+completeness.
+
+Example: 10 findings, 8 accepted, 2 rejected → P_score=27(correctness=9+coverage=8+precision=10), R_score=27(accuracy=9+efficiency=8+completeness=10), decision=APPROVED, consensus_score=84
+
+Output JSON with P_score, R_score, rubric_evaluation, decision(APPROVED/REJECT), consensus_score(0-100)."""
 
 SYSTEM_VERIFY = """You are a final verification specialist. Review ALL findings across all evaluation
 documents. Decide for each finding:
@@ -333,7 +380,7 @@ def _build_findings_context(items: List[Dict], phase: str, header: str = "Findin
                             extra: Optional[List] = None,
                             sev_key=lambda x: x.get("severity", x.get("result", "medium")).lower()
                             ) -> str:
-    """TokenBudget-constrained context. Critical first, low last, overflow truncated."""
+    """TokenBudget-constrained context. Extras first (KV cache prefix), then findings by severity."""
     budget = TokenBudget(phase)
     parts = []
 
@@ -345,6 +392,11 @@ def _build_findings_context(items: List[Dict], phase: str, header: str = "Findin
 
     _add(f"## {header} ({len(items)} total)\n", priority=10)
 
+    # Shared context first — same prefix across all chunk calls → KV cache hit
+    if extra:
+        for label, text, priority in extra:
+            _add(f"\n[{label}]\n{text}", priority=priority)
+
     for sev_name, pri in (("critical", 9), ("high", 7), ("medium", 5), ("low", 3)):
         subset = [it for it in items if sev_key(it) == sev_name]
         if not subset:
@@ -354,10 +406,6 @@ def _build_findings_context(items: List[Dict], phase: str, header: str = "Findin
             txt += f"\n  {it.get('id', '?')}: {json.dumps(it, ensure_ascii=False)[:200]}"
         if not _add(txt, priority=pri):
             _add(f"\n[{sev_name.upper()}] ({len(subset)} total — omitted, budget)", priority=pri - 1)
-
-    if extra:
-        for label, text, priority in extra:
-            _add(f"\n[{label}]\n{text}", priority=priority)
 
     return "\n".join(parts)
 
@@ -483,7 +531,8 @@ def _ensure_pod_a(desired: bool) -> None:
 
 
 def swap_pod_b(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
-    log(f"  [swap] Pod B -> {mode}")
+    port = MODE_TO_PORT.get(mode, 8082)
+    log(f"  [swap] Pod B -> {mode} (:{port})")
     will_be_large = mode in LARGE_MODES
     if will_be_large:
         _ensure_pod_a(False)
@@ -498,7 +547,6 @@ def swap_pod_b(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
         with open(MODE_FILE_B) as f:
             current = f.read().strip().split("=")[-1]
         if current == mode:
-            port = 8081 if mode == "verify" else 8080
             url = f"http://127.0.0.1:{port}/health"
             try:
                 import urllib.request
@@ -511,14 +559,19 @@ def swap_pod_b(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
             log(f"  [swap] already in {mode} mode but health check failed, restarting")
     except Exception:
         pass
-    with open(MODE_FILE_B, "w") as f:
-        f.write(f"MODE={mode}")
+    # Write full env via pod_manager (SSOT = MODEL_METADATA with ctx/threads/cache)
+    try:
+        from lib.pod_manager import _write_mode_env as _wenv
+        _wenv(mode, port)
+    except Exception as e:
+        log(f"  [swap] pod_manager env write failed ({e}), MODE-only fallback")
+        with open(MODE_FILE_B, "w") as f:
+            f.write(f"MODE={mode}")
     r = subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
                        capture_output=True, timeout=60)
     if r.returncode != 0:
         log(f"  [swap] restart failed: {r.stderr.decode()[:200]}")
         return False
-    port = 8081 if mode == "verify" else 8080
     url = f"http://127.0.0.1:{port}/health"
     t0 = time.monotonic()
     while time.monotonic() - t0 < timeout:
@@ -603,7 +656,7 @@ def _load_latest_phase(phase_label: str, role: str) -> Dict:
 # ── Phase 0: Boot ─────────────────────────────────────────────────────────
 
 def phase_0_boot() -> Dict:
-    log("\n=== Phase 0: Boot (Pod A 3B + Pod B 7B day mode) ===")
+    log("\n=== Phase 0: Boot (Pod A reserved:8080 + Pod B extractor:8082) ===")
     import urllib.request
 
     try:
@@ -611,9 +664,9 @@ def phase_0_boot() -> Dict:
             if resp.status == 200:
                 log(f"  [pod-a] already healthy on :{POD_A_PORT}")
     except Exception:
-        log("  [pod-a] starting 3B day mode...")
+        log("  [pod-a] starting reserved mode...")
         with open("/opt/ai_data/scripts/current-mode-pod-a.env", "w") as f:
-            f.write("MODE=day")
+            f.write("MODE=reserved")
         r = subprocess.run(["systemctl", "--user", "start", POD_A_SERVICE],
                            capture_output=True, timeout=60)
         if r.returncode != 0:
@@ -638,30 +691,54 @@ def phase_0_boot() -> Dict:
 # ── Phase 1: Python Verify ────────────────────────────────────────────────
 
 def phase_1_python_verify(all_data: Dict) -> Dict:
-    log("\n=== Phase 1: Python Verify ===")
+    """DEPRECATED: Phase 1 moved to day_verify.py (DB source)."""
+    log("\n=== Phase 1: Python Verify (DEPRECATED — day_verify.py handles this) ===")
+    log("  [skip] Phase 1 no longer called from night pipeline")
     result = {
         "phase": 1, "role": "python_verify",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "files_loaded": all_data["meta"]["total_files"],
-        "total_findings": all_data["meta"]["total_findings"],
-        "findings": [],
+        "status": "deprecated",
     }
-    for fname, entry in all_data["files"].items():
-        result["findings"].append({
-            "file": fname, "role": entry["role"],
-            "finding_count": len(entry["findings"]),
-            "has_verdict": bool(entry["verdict"]),
-        })
-        if entry.get("confidence"):
-            result["findings"][-1]["confidence"] = entry["confidence"]
-    save_output("01_python_verify", result)
     return result
 
 
 # ── Phase 2: 7B Verify ────────────────────────────────────────────────────
 
 def phase_2_sevenb_verify(all_data: Dict) -> Dict:
-    log("\n=== Phase 2: Initial Verify (reviewer :8080) ===")
+    """DEPRECATED: Phase 2 moved to day_verify.py (DB source).
+
+    Kept for backward compat with night --all / --phases 2.
+    Loads day_verify's output from pipeline_verify_*.json if available.
+    """
+    log("\n=== Phase 2: 7B Verify (DEPRECATED — day_verify.py handles this) ===")
+
+    # Try loading from day_verify output first
+    candidates = sorted([
+        f for f in os.listdir(EVAL_DIR)
+        if f.startswith("pipeline_verify_") and f.endswith(".json")
+    ])
+    if candidates:
+        latest = candidates[-1]
+        fpath = os.path.join(EVAL_DIR, latest)
+        log(f"  [load] {fpath} (day_verify output)")
+        with open(fpath) as f:
+            day_verify_data = json.load(f)
+        verify_result = day_verify_data.get("result", {})
+        return {
+            "phase": 2, "role": "seven_b_verify",
+            "model": "reviewer (via day_verify)", "port": REFLECTOR_PORT,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "usage": day_verify_data.get("usage", {}),
+            "elapsed_ms": day_verify_data.get("elapsed_ms", 0),
+            "chunks": day_verify_data.get("chunks", 0),
+            "chunks_done": day_verify_data.get("chunks_done", 0),
+            "result": verify_result,
+            "category_summary": day_verify_data.get("category_summary", ""),
+            "source": "day_verify",
+        }
+
+    # Fallback: old eval_*.json path
+    log("  [fallback] No day_verify output found — using old eval_*.json path")
     findings = all_data.get("all_findings", [])
     log(f"  [input] {len(findings)} findings")
 
@@ -719,118 +796,9 @@ def phase_2_sevenb_verify(all_data: Dict) -> Dict:
     return result
 
 
-# ── Phase 3: 7B-3B-7B Day PRJ ─────────────────────────────────────────────
-
-def _day_p_item(item: Dict, cat_summary: str = "") -> List[Dict]:
-    """P(7B :8080): analyze a single verification item from Phase 2."""
-    check_text = str(item.get("check", item.get("description", "")))[:500]
-    result_val = item.get("result", item.get("severity", "?"))
-    detail = str(item.get("detail", item.get("evidence", "")))[:500]
-    item_cat = item.get("category", "other")
-    ctx = (f"=== VERIFICATION ITEM ===\nCheck: {check_text}\n"
-           f"Result: {result_val}\nDetail: {detail}\n"
-           f"Category: {item_cat}")
-    if cat_summary:
-        ctx = f"{cat_summary}\n\n{ctx}"
-    r = call_model(
-        [{"role": "system", "content": DAY_PROPOSER_SYSTEM_PROMPT},
-         {"role": "user", "content": ctx}],
-        "reviewer", max_tokens=2048, label="P_day")
-    findings = r.get("result", {}).get("findings", []) if r else []
-    return findings
-
-
-def _day_r_verdicts(findings: List[Dict]) -> List[Dict]:
-    """R(3B :8082): accept/reject findings from P."""
-    if not findings:
-        return []
-    ctx = _build_findings_context(findings, "prj_reflector", header="Findings for Review")
-    r = call_model(
-        [{"role": "system", "content": DAY_REFLECTOR_SYSTEM_PROMPT},
-         {"role": "user", "content": ctx}],
-        "extractor", max_tokens=2048, label="R_day")
-    return r.get("result", {}).get("verdicts", []) if r else []
-
-
-def _day_j_score(findings: List[Dict], verdicts: List[Dict]) -> Optional[Dict]:
-    """J(7B :8080): score and decide."""
-    f_ctx = _build_findings_context(findings, "prj_judge", header="Findings")
-    v_ctx = _build_findings_context(verdicts, "prj_judge", header="Verdicts",
-                                    sev_key=lambda x: "high" if x.get("verdict") == "reject" else "medium")
-    ctx = f"Findings ({len(findings)}):\n{f_ctx}\n\nVerdicts ({len(verdicts)}):\n{v_ctx}"
-    r = call_model(
-        [{"role": "system", "content": DAY_JUDGE_SYSTEM_PROMPT},
-         {"role": "user", "content": ctx}],
-        "reviewer", max_tokens=2048, label="J_day")
-    result = r.get("result") if r else None
-    if result and result.get("decision") in ("APPROVED", "REJECT"):
-        return result
-    return None
-
-
-def phase_3_day_prj(sevenb_result: Dict, cat_summary: str = "") -> Dict:
-    """Phase 3: 7B-3B-7B day cooperative debate on Phase 2 verification items.
-
-    For each verification item from Phase 2 (7B verify):
-      P(7B :8080): generate sub-findings / analysis
-      R(3B :8082): accept or reject each sub-finding
-      J(7B :8080): score the debate and emit a decision
-    """
-    log("\n=== Phase 3: 7B-3B-7B Day PRJ (on Phase 2 results) ===")
-
-    # Extract verification items from Phase 2 output
-    items = sevenb_result.get("result", {}).get("verification_items", [])
-    if not items:
-        # Fallback: use the top-level verification_items
-        items = sevenb_result.get("result", {}).get("findings", [])
-    if not items:
-        items = sevenb_result.get("result", {}).get("findings", [])
-    if not items:
-        log("  [skip] no verification items from Phase 2")
-        return {"phase": 3, "role": "day_prj", "status": "skipped",
-                "reason": "no items from Phase 2"}
-
-    log(f"  [items] {len(items)} items from Phase 2 7B verify")
-    all_day_findings = []
-    processed = 0
-    failed = 0
-
-    for idx, item in enumerate(items[:10]):
-        cid = str(item.get("check", item.get("id", f"item{idx}")))[:20]
-        log(f"\n  [{idx + 1}/{min(len(items), 10)}] item {cid}")
-
-        findings = _day_p_item(item, cat_summary)
-        if not findings:
-            log("    P(7B): no findings, skip R/J")
-            continue
-        all_day_findings.extend(findings)
-
-        verdicts = _day_r_verdicts(findings)
-        j_result = _day_j_score(findings, verdicts)
-        if j_result:
-            for aid in j_result.get("approved", []):
-                for f in findings:
-                    if f["id"] == aid:
-                        f["day_prj_verdict"] = "approved"
-            for rid in j_result.get("rejected", []):
-                for f in findings:
-                    if f["id"] == rid:
-                        f["day_prj_verdict"] = "rejected"
-            processed += 1
-        else:
-            failed += 1
-
-    log(f"\n  [done] {processed} processed, {failed} failed, {len(all_day_findings)} findings")
-    result = {
-        "phase": 3, "role": "day_prj_7b3b7b",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "items_from_phase2": len(items),
-        "processed": processed, "failed": failed,
-        "total_findings": len(all_day_findings),
-        "findings": all_day_findings[:200],
-    }
-    save_output("03_day_prj", result)
-    return result
+# ── Phase 3: Day PRJ — REMOVED (was 7B-3B-7B day cooperative debate)
+# day_verify.py handles all day-time verification. Phase 3 is superseded.
+# def phase_3_day_prj(...) removed in v4.0. See git history for original.
 
 
 # ── Phase 4: Night P-R-J ──────────────────────────────────────────────────
@@ -857,7 +825,7 @@ def _night_phase_p(all_data: Dict, rubric_data: Optional[List] = None,
         header_fmt = lambda ci: f"Category: {list(cat_chunks.keys())[ci]}"
     else:
         cfg = MODEL_CFG.get("proposer", {})
-        chunk_size = cfg.get("chunk_size", 10)
+        chunk_size = cfg.get("chunk_size", 6)
         chunks = [source[i:i+chunk_size] for i in range(0, len(source), chunk_size)]
         log(f"  [input] -> {len(chunks)} chunk(s) of {chunk_size}")
         header_fmt = lambda ci: "Findings"
@@ -914,7 +882,7 @@ def _night_phase_p(all_data: Dict, rubric_data: Optional[List] = None,
     return {"proposals": deduped, "usage": total_usage,
             "elapsed_ms": total_elapsed,
             "status": "ok", "chunks": len(chunks), "chunks_done": len(chunks),
-            "model": "Qwen3-Coder-30B-A3B-Q4_K_S"}
+            "model": "Qwen3-Coder-30B-A3B-Q4_K_M"}
 
 
 def _night_phase_r() -> Dict:
@@ -989,7 +957,7 @@ def phase_4_night_prj(all_data: Dict, rubric_data: Optional[List] = None,
     result = {
         "phase": 4, "role": "night_prj",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "p": {"model": "Qwen3-Coder-30B-A3B-Q4_K_S", "proposals": len(p_result.get("proposals", [])),
+        "p": {"model": "Qwen3-Coder-30B-A3B-Q4_K_M", "proposals": len(p_result.get("proposals", [])),
               "usage": p_result.get("usage", {}), "elapsed_ms": p_result.get("elapsed_ms", 0)},
         "r": {"model": "Qwen2.5-Coder-14B-Instruct", "verdicts": len(r_result.get("verdicts", [])),
               "usage": r_result.get("usage", {}), "elapsed_ms": r_result.get("elapsed_ms", 0)},
@@ -1005,7 +973,7 @@ def phase_4_night_prj(all_data: Dict, rubric_data: Optional[List] = None,
 # ── Phase 5: 27B Verify ───────────────────────────────────────────────────
 
 def phase_5_verify(all_data: Dict, use_feedback: bool = False) -> Dict:
-    log("\n=== Phase 5: 27B IQ4_XS Verify (:8081) ===")
+    log("\n=== Phase 5: 27B Verify (:8084) ===")
     if use_feedback:
         log("  [feedback] using FEEDBACK_VERIFIER_SYSTEM_PROMPT (per-model feedback enabled)")
     if not swap_pod_b("verify"):
@@ -1161,19 +1129,18 @@ def run_pipeline(phases: Optional[List[int]] = None,
     fb_str = f" feedback={'on' if use_feedback else 'off'}"
     cat_str = f" cat-group={'on' if group_by_category else 'off'}"
     log("=" * 60)
-    log(f"DevForge Night Pipeline v3.0 — Full 6-stage pipeline{rubric_str}{fb_str}{cat_str}")
-    log("extract -> py verify -> 7B verify -> day prj -> night prj -> verify")
+    log(f"DevForge Night Pipeline v4.0 — Review → Verify{rubric_str}{fb_str}{cat_str}")
+    log("night_review (P→R→J) → night_verify (27B verify → feedback → restore)")
     log("=" * 60)
     if phases is None:
-        phases = [0, 1, 2, 3, 4, 5, 6, 7]
+        phases = [4, 5, 6, 7]
     # Build port set for preflight
     need_ports = set()
-    if 0 in phases or 2 in phases or 3 in phases or 7 in phases:
-        need_ports.add(8080)
-    if 0 in phases or 3 in phases or 7 in phases:
-        need_ports.add(POD_A_PORT)
-    if 4 in phases or 5 in phases:
-        need_ports.add(8080)
+    if 0 in phases or 7 in phases:
+        need_ports.add(POD_A_PORT)  # 8080
+        need_ports.add(8082)  # Pod B day/extractor
+    if 4 in phases:
+        need_ports.update({8081, 8082, 8083})  # P, R, J
     if 5 in phases:
         need_ports.add(VERIFY_PORT)
     preflight_checks("night.py", required_ports=need_ports)
@@ -1212,28 +1179,43 @@ def run_pipeline(phases: Optional[List[int]] = None,
         if cat_summary:
             log(f"  [global-cat] {cat_summary}")
     else:
-        # Phase 2 not in this run — restore cat_summary from saved Phase 2 output
-        saved_phase2 = _load_latest_phase("02_sevenb_verify", "seven_b_verify")
-        if saved_phase2:
-            cat_summary = saved_phase2.get("category_summary", "")
+        # Phase 2 not in this run — restore cat_summary from day_verify or saved Phase 2 output
+        saved = _load_latest_phase("02_sevenb_verify", "seven_b_verify")
+        if not saved:
+            # Try day_verify output
+            candidates = sorted([f for f in os.listdir(EVAL_DIR)
+                                 if f.startswith("pipeline_verify_") and f.endswith(".json")])
+            if candidates:
+                with open(os.path.join(EVAL_DIR, candidates[-1])) as f:
+                    day_v = json.load(f)
+                saved = {"category_summary": day_v.get("category_summary", ""),
+                         "result": day_v.get("result", {})}
+        if saved:
+            cat_summary = saved.get("category_summary", "")
         if not cat_summary:
-            verify_items = (saved_phase2.get("result") or {}).get("verification_items") or []
-            cat_summary = _build_category_summary(verify_items, all_data["meta"]["total_findings"])
+            verify_items = (saved.get("result") or {}).get("verification_items") or []
+            cat_summary = _build_category_summary(verify_items, len(verify_items))
         if cat_summary:
-            log(f"  [global-cat] {cat_summary} (restored from Phase 2 output)")
+            log(f"  [global-cat] {cat_summary} (restored from day_verify output)")
 
-    if 3 in phases:
-        phase2 = results.get("phase2", {})
-        if "error" in phase2 or not phase2.get("result"):
-            phase2 = _load_latest_phase("02_sevenb_verify", "seven_b_verify")
-        results["phase3"] = phase_3_day_prj(phase2, cat_summary)
+    # Phase 3 removed — was 7B-3B-7B Day PRJ
     if 4 in phases:
-        phase2 = results.get("phase2", {})
-        if "error" in phase2 or not phase2.get("result"):
-            phase2 = _load_latest_phase("02_sevenb_verify", "seven_b_verify")
-        verify_items = (phase2.get("result") or {}).get("verification_items") or []
+        # Load verification_items from day_verify output (pipeline_verify_*.json)
+        phase2_source = results.get("phase2", {})
+        if "error" in phase2_source or not phase2_source.get("result"):
+            candidates = sorted([f for f in os.listdir(EVAL_DIR)
+                                 if f.startswith("pipeline_verify_") and f.endswith(".json")])
+            if candidates:
+                with open(os.path.join(EVAL_DIR, candidates[-1])) as f:
+                    day_v = json.load(f)
+                verify_items = (day_v.get("result") or {}).get("verification_items") or []
+            else:
+                saved = _load_latest_phase("02_sevenb_verify", "seven_b_verify")
+                verify_items = (saved.get("result") or {}).get("verification_items") or []
+        else:
+            verify_items = (phase2_source.get("result") or {}).get("verification_items") or []
         if group_by_category and not verify_items:
-            log("  [warn] Phase 2 verification_items empty, falling back to plain chunking")
+            log("  [warn] Day verify verification_items empty, falling back to plain chunking")
         results["phase4"] = phase_4_night_prj(all_data, rubric_data if use_rubric else None,
                                                 verify_items or None, group_by_category)
     if 5 in phases:
@@ -1253,38 +1235,42 @@ def run_pipeline(phases: Optional[List[int]] = None,
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser(description="DevForge Night Pipeline v3.0")
-    ap.add_argument("--all", action="store_true", help="Run full pipeline")
-    ap.add_argument("--phases", type=int, choices=[0, 1, 2, 3, 4, 5, 6, 7], nargs="+", help="Phase(s) to run (e.g. --phases 2 4)")
+    ap = argparse.ArgumentParser(description="DevForge Night Pipeline v4.0")
+    ap.add_argument("--all", action="store_true", help="Run full night pipeline (Phase 4→7, backward compat)")
+    ap.add_argument("--review", action="store_true", help="Run night_review (Phase 4: 30B P→14B R→14B J)")
+    ap.add_argument("--verify", action="store_true", help="Run night_verify (Phase 5-7: 27B verify → feedback → restore)")
+    ap.add_argument("--phases", type=int, choices=[0, 1, 2, 3, 4, 5, 6, 7], nargs="+", help="Phase(s) to run (legacy)")
     ap.add_argument("--rubric", action="store_true", help="Enable rubric evaluation after Phase 2")
     ap.add_argument("--feedback", action="store_true", help="Enable per-model feedback in Phase 5")
-    ap.add_argument("--group-category", action="store_true", help="Group Phase 2 items by category for 30B chunking")
+    ap.add_argument("--group-category", action="store_true", help="Group verification items by category for 30B chunking")
     ap.add_argument("--dry-run", action="store_true", help="Preflight + data load only, no LLM calls")
     args = ap.parse_args()
-    if args.dry_run:
-        phases = args.phases or [0, 1, 2, 3, 4, 5, 6, 7]
+
+    if args.review:
+        run_pipeline(phases=[4], use_rubric=args.rubric,
+                     group_by_category=args.group_category)
+    elif args.verify:
+        run_pipeline(phases=[5, 6, 7], use_feedback=args.feedback)
+    elif args.dry_run:
+        phases = args.phases or [4, 5, 6, 7]
         need_ports = set()
-        if any(p in phases for p in [0, 2, 3, 7]):
-            need_ports.add(8080)
-        if any(p in phases for p in [0, 3, 7]):
-            need_ports.add(POD_A_PORT)
         if 4 in phases:
-            need_ports.add(8080)
+            need_ports.update({8081, 8082, 8083})
         if 5 in phases:
-            need_ports.add(8080)
             need_ports.add(VERIFY_PORT)
         preflight_checks("night.py", required_ports=need_ports)
         all_data = load_eval_data()
         log(f"  [dry-run] Loaded {all_data['meta']['total_files']} files, {all_data['meta']['total_findings']} findings")
         log("  [dry-run] Dry run complete — no LLM calls made")
         return
-    if args.phases:
-        run_pipeline(phases=args.phases, use_rubric=args.rubric, use_feedback=args.feedback,
-                     group_by_category=args.group_category)
     else:
-        run_pipeline(use_rubric=args.rubric, use_feedback=args.feedback,
-                     group_by_category=args.group_category)
-    sys.exit(0)
+        phases = args.phases or ([4, 5, 6, 7] if args.all else None)
+        if phases:
+            run_pipeline(phases=phases, use_rubric=args.rubric,
+                         use_feedback=args.feedback,
+                         group_by_category=args.group_category)
+        else:
+            ap.print_help()
 
 
 if __name__ == "__main__":

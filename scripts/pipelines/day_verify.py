@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: 1h_cycle.sh — Phase 3 (verify checkpoint-based)
+# Path: day_cycle.sh — Phase 3 (verify checkpoint-based)
 """Day Verify Pipeline — 14B verify + category on Pod B only.
 
 Called at :30 by systemd timer. Reads extraction facts and MCP metadata

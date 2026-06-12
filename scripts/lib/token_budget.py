@@ -20,6 +20,9 @@ PHASE_BUDGET = {
     "night_reflector": 1200,             # Phase 4 R: per-finding refuter
     "night_judge": 1500,             # Phase 4 J: judge
     "night_final_verify": 2000,           # Phase 5: final verify
+    # MCP pipelines
+    "mcp_enrich": 4000,
+    "mcp_verify": 2500,
 }
 
 

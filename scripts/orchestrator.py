@@ -4,13 +4,13 @@
 """DevForge Orchestrator — LLM-based smart router to specialized pipelines.
 
 Architecture:
-  1. Classify user intent using 3B model (lightweight, fast)
+  1. Classify user intent using 7B extractor (lightweight, fast)
   2. Route to the appropriate pipeline or answer directly
   3. Return structured result
 
 Tools (wrapped pipelines):
   - run_p_r_j_pipeline: P→R→J pipeline (proposal → reflection → scoring judgment)
-  - run_debate:          30B proposer vs 3B refuter (DART)
+  - run_debate:          30B proposer vs 14B refuter (DART)
   - run_code_review:     3-model code review pipeline
   - execute_code:        Podman-isolated Python sandbox
 
@@ -127,10 +127,10 @@ class RunPRJTool(OrchestratorTool):
 
 
 class RunDebateTool(OrchestratorTool):
-    """DART debate: 30B proposer vs 3B refuter with judge."""
+    """DART debate: 30B proposer vs 14B refuter with judge."""
 
     name = "run_debate"
-    description = "Multi-agent DART debate (30B vs 3B) for adversarial problem-solving"
+    description = "Multi-agent DART debate (30B vs 14B) for adversarial problem-solving"
     parameters = {
         "type": "object",
         "properties": {
@@ -246,7 +246,7 @@ _BUILTIN_TOOLS: Dict[str, OrchestratorTool] = {
 
 
 def _classify(user_input: str, verbose: bool = True) -> str:
-    """Use the 3B model to classify a user request into a routing category.
+    """Use the 7B extractor to classify a user request into a routing category.
 
     The classifier uses a short, constrained prompt (``CLASSIFY_PROMPT``) with
     ``max_tokens=32`` so the model returns a single category word.  Non-matching
@@ -289,8 +289,8 @@ def orchestrator_run(
     """Route a user request to the appropriate pipeline or answer directly.
 
     Two-phase dispatch:
-      1. Classify the request using the 3B model (fast, few-shot).
-      2. Route to the matching tool or answer directly via the 3B model.
+      1. Classify the request using the 7B extractor (fast, few-shot).
+      2. Route to the matching tool or answer directly via the 7B extractor.
 
     Args:
         user_input: The user's request string.
@@ -310,7 +310,7 @@ def orchestrator_run(
     # ── Direct answer (no tool) ──────────────────────────────────────────
     if category == "direct_answer":
         if verbose:
-            print("  [Orch] Answering directly with 3B...", file=sys.stderr)
+            print("  [Orch] Answering directly with 7B extractor...", file=sys.stderr)
         messages = [
             {"role": "system", "content": DIRECT_SYSTEM_PROMPT},
             {"role": "user", "content": user_input},

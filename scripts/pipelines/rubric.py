@@ -88,7 +88,7 @@ Score P and R 0-30 each (sum of 3 sub-scores):
 - **model_appropriateness**: is this model right for this task?"""
 
 # ── System prompts without rubric ──────────────────────────────────────
-# (These are the same as in night_pipeline.py)
+# (These are the same as in night_cycle.py)
 
 SYSTEM_P = """You are a code review specialist. Find bugs, security issues, and edge cases.
 Output JSON:
@@ -224,8 +224,8 @@ def find_experiment_file(pattern):
 # ── Phase runners ────────────────────────────────────────────────────────
 
 def run_primary_verify(input_data: Dict, with_rubric: bool = False, output_suffix: str = "") -> Dict:
-    """Phase 0: 30B (day mode :8080) verifies all 48 findings."""
-    log("\n=== 30B Verify (day mode :8080) ===")
+    """Phase 0: 30B (:8081) verifies all 48 findings."""
+    log("\n=== 30B Verify (:8081) ===")
     suffix = f"_rubric{output_suffix}" if with_rubric else output_suffix
 
     findings_text = json.dumps(input_data["findings"], ensure_ascii=False)[:4000]

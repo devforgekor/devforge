@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: nightly_batch.sh
+# Path: night_cycle.sh
 """review_consumer.py — 27B production final verify.
 
 Reads activity_log WHERE queue_status='reviewed' (after extract+14B debate / debate pipeline).
 Qwen3.6-27B makes final approve/reject/escalate decisions and stores result as body.verify_result.
 
-This is the PRODUCTION verify gate. Runs nightly via nightly_batch.sh Phase 4.
+This is the PRODUCTION verify gate. Runs nightly via night_cycle.sh Phase 4.
 
 Usage:
   python3 review_consumer.py [--limit N]       # 27B production final verify
@@ -28,7 +28,7 @@ from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import resolve_model
 
 REVIEW_HOST = "127.0.0.1"
-REVIEW_PORT = 8081
+REVIEW_PORT = 8084
 REVIEW_TIMEOUT = 600
 QUEUE_LIMIT = 50
 MAX_REVERIFY = 2  # max times an item goes through re-verification
@@ -128,7 +128,7 @@ def fetch_queue() -> List[Dict]:
 
 
 def call_verify_model(messages: List[Dict], max_tokens: int = 768) -> Optional[Dict]:
-    """Call Qwen3.6-27B on :8081. Returns parsed JSON or None.
+    """Call Qwen3.6-27B on :8084. Returns parsed JSON or None.
 
     Falls back to reasoning_content if content is empty (reasoning bleed guard).
     """
@@ -200,7 +200,7 @@ def build_verify_prompt(item: Dict) -> str:
             f"Final diff (first 1000 chars): {body.get('final_diff', '')[:1000]}"
         )
     elif item_type == "extract_result":
-        # From extract_pipeline.py: 3B → Python verify → 7B MCP fields.
+        # From extract_pipeline.py: extract → Python verify → MCP enrich.
         # Body keys: turn_id, fact_count, extract_model, mark, mcp.
         mcp = body.get("mcp", {}) or {}
         verified = mcp.get("verified", {}) or {}

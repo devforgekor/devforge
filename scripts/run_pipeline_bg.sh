@@ -14,7 +14,7 @@ RC1=$?
 echo "[$(date -u +%H:%M:%S)] prj_cycle.py exit code: $RC1" | tee -a "$PRJ_LOG"
 
 echo "[$(date -u +%H:%M:%S)] Starting bench_verify_optimization.py..." | tee -a "$VERIFY_LOG"
-python3 ../tests/bench_verify_optimization.py >> "$VERIFY_LOG" 2>&1
+python3 ../tests/_archive/old_tests/bench_verify_optimization.py >> "$VERIFY_LOG" 2>&1
 RC2=$?
 echo "[$(date -u +%H:%M:%S)] bench_verify_optimization.py exit code: $RC2" | tee -a "$VERIFY_LOG"
 

@@ -27,7 +27,24 @@ _get_avail_mb() {
     awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo
 }
 
-_write_mode() { printf '%s' "MODE=$1" > "${2}.tmp" && mv "${2}.tmp" "$2"; }
+_write_mode() {
+    local mode="$1"
+    local file="$2"
+    if [ "$file" = "$MODE_FILE_B" ]; then
+        # Pod B: full env via pod_manager (MODEL_FILE, PORT, CTX_SIZE, etc.)
+        if ! python3 -c "
+import sys; sys.path.insert(0, '$SCRIPTS_DIR')
+from lib.pod_manager import _write_mode_env
+port = {'verify': 8081}.get('$mode', 8080)
+_write_mode_env('$mode', port)
+" 2>/dev/null; then
+            printf '%s' "MODE=$mode" > "${file}.tmp" && mv "${file}.tmp" "$file"
+        fi
+    else
+        # Pod A: MODE only (hardcodes model in its entrypoint)
+        printf '%s' "MODE=$mode" > "${file}.tmp" && mv "${file}.tmp" "$file"
+    fi
+}
 
 _wait_pod_b() {
     local timeout="${1:-300}"

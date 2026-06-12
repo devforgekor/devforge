@@ -15,16 +15,9 @@ modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
   files:
-    model_comparison_test.py:
-      status: experimental
-      purpose: "14B Q4_K_M 3\uC885 \uBE44\uAD50: \uC2E4\uC81C \uD30C\uC774\uD504\uB77C\
-        \uC778 extract/verify \uD328\uD134\uC73C\uB85C \uD3C9\uAC00."
-    test_progress_watcher.py:
+    day_cycle.sh:
       status: unknown
-      purpose: "14B Test Progress Watcher \u2014 reads test log, sends Slack updates."
-    1h_cycle.sh:
-      status: unknown
-      purpose: "1h_cycle.sh \u2014 hourly cycle (:00)"
+      purpose: "day_cycle.sh \u2014 hourly cycle (:00)"
     activity_summarizer.py:
       status: production
       purpose: "activity_summarizer.py \u2014 Daily LLM summarization of activity_log\
@@ -54,17 +47,16 @@ modules:
       status: production
       purpose: "DevForge CLI \u2014 AI \uB300\uD654 \uAC80\uC0C9 \uBC0F \uC800\uC7A5\
         \ \uB3C4\uAD6C."
+    day_extract.sh:
+      status: unknown
+      purpose: "day_extract.sh \u2014 Day extract cycle (:00)"
     day_model_test.py:
       status: experimental
       purpose: "14B Q8_0 \uB2E8\uC77C extract + MiniCheck hallucination \uAC80\uC99D\
         ."
     day_model_test_direct.py:
-      status: unknown
-      purpose: "14B Q8_0 single extract test \u2014 manual container start, no health\
-        \ check race."
-    day_extract.sh:
-      status: unknown
-      purpose: "day_extract.sh \u2014 Day extract cycle (:00)"
+      status: experimental
+      purpose: day_model_test_direct.py
     day_verify.sh:
       status: unknown
       purpose: "day_verify.sh \u2014 Day verify cycle (:30)"
@@ -90,10 +82,8 @@ modules:
       status: experimental
       purpose: DeepSeek Pro evaluation of 12-run comparison test results.
     experiment_monitor.py:
-      status: unknown
-      purpose: "Experiment monitor \u2014 \uBC31\uADF8\uB77C\uC6B4\uB4DC \uC2E4\uD589\
-        , \uC8FC\uAE30\uC801\uC73C\uB85C Slack\uC73C\uB85C \uC0C1\uD0DC \uBCF4\uACE0\
-        ."
+      status: experimental
+      purpose: experiment_monitor.py
     extract_compare.py:
       status: experimental
       purpose: "\uB3D9\uC77C 5\uAC1C turn\uC73C\uB85C \uCD94\uCD9C \uC815\uD655\uB3C4\
@@ -122,13 +112,17 @@ modules:
       status: production
       purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
         \ documents."
+    model_comparison_test.py:
+      status: experimental
+      purpose: "14B Q4_K_M 3\uC885 \uBE44\uAD50: \uC2E4\uC81C \uD30C\uC774\uD504\uB77C\
+        \uC778 extract/verify \uD328\uD134\uC73C\uB85C \uD3C9\uAC00."
     motd_gen.py:
       status: production
       purpose: "motd_gen.py \u2014 lightweight MOTD for SSH login. Reads state.yaml\
         \ + live metrics."
-    nightly_batch.sh:
+    night_cycle.sh:
       status: unknown
-      purpose: "nightly_batch.sh \u2014 DevForge nightly pipeline (KST 03:00 / UTC\
+      purpose: "night_cycle.sh \u2014 DevForge nightly pipeline (KST 03:00 / UTC\
         \ 18:00)"
     nightly_extract_test.py:
       status: production
@@ -182,6 +176,9 @@ modules:
       status: experimental
       purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
         \ \u2192 night_review."
+    test_progress_watcher.py:
+      status: experimental
+      purpose: test_progress_watcher.py
     test_r_role_dsv2.sh:
       status: unknown
       purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
@@ -214,6 +211,9 @@ modules:
     cli_worklog.py:
       status: production
       purpose: "CLI worklog management \u2014 add, recent, search commands."
+    common.py:
+      status: production
+      purpose: "Shared utilities \u2014 log, timestamp, and other common helpers."
     db.py:
       status: production
       purpose: Shared PostgreSQL helpers for DevForge scripts.
@@ -580,7 +580,7 @@ modules:
     night.py:
       status: experimental
       purpose: "DevForge Night Pipeline v4.0 \u2014 Review \u2192 Verify."
-    night_pipeline.py:
+    night_cycle.py:
       status: experimental
       purpose: "Night Pipeline: DB handoff \uB85C\uB4DC \u2192 P-R-J(30B/14B) \u2192\
         \ night_verify \u2192 DB \uC800\uC7A5."
@@ -591,7 +591,7 @@ modules:
     night_runner.py:
       status: experimental
       purpose: "Night Runner: Pod A stop \u2192 Pod B swap (30B\u219214B\u219214B\u2192\
-        27B) \u2192 night_pipeline subprocess \u2192 Pod B day \uBCF5\uC6D0."
+        27B) \u2192 night_cycle subprocess \u2192 Pod B day \uBCF5\uC6D0."
     night_verify.py:
       status: experimental
       purpose: "Night Verify Pipeline \u2014 27B verify \u2192 feedback \u2192 restore\

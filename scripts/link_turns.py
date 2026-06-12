@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: nightly_batch.sh
+# Path: night_cycle.sh
 """link_turns.py — nightly: match turns to worklog entries + deep review.
 
 Phase 1 — matching: each worklog entry claims turns with matching agent
 via per-agent independent time windows (last entry covers to midnight KST).
 Phase 2 — review: detect orphan turns, empty worklogs, and mismatches.
 
-Runs at 03:00 KST via nightly_batch.sh.
+Runs at 03:00 KST via night_cycle.sh.
 """
 import subprocess
 import sys

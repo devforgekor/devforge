@@ -122,8 +122,8 @@ MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
 MODE_MAP = {
-    "day":     ("day",      "day"),      # Pod A 3B(:8082) + Pod B 7B(:8080)
-    "verify":  ("verify",    "verify"),   # Pod B 27B(:8081), Pod A 정지 (메모리 확보)
+    "day":     ("reserved", "day"),      # Pod A reserved(:8080) + Pod B extractor(:8082)
+    "verify":  ("reserved", "verify"),   # Pod B verifier(:8084), Pod A stopped
 }
 
 def _switch_mode(mode: str) -> bool:
@@ -170,7 +170,7 @@ def _switch_mode(mode: str) -> bool:
     print("Waiting for models to load...")
     for _ in range(120):
         try:
-            req = urllib.request.Request("http://127.0.0.1:8081/health")
+            req = urllib.request.Request("http://127.0.0.1:8084/health")
             with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read())
@@ -191,7 +191,7 @@ def cmd_discussion(args):
         content = open(SYSTEM_MODE_FILE).read().strip()
         if "MODE=night" in content:
             print("ERROR: nightly pipeline active (MODE=night) — discussion blocked")
-            print("  Pod A+B are managed by nightly_batch.sh. Retry after KST 07:00.")
+            print("  Pod A+B are managed by night_cycle.sh. Retry after KST 07:00.")
             return
     except FileNotFoundError:
         pass
@@ -382,7 +382,7 @@ def _write_auto_tasks(tasks):
         AUTO_HEADER,
         "",
         AUTO_COMMENT,
-        " Tasks execute via nightly_batch.sh (03:00 KST / 18:00 UTC).",
+        " Tasks execute via night_cycle.sh (03:00 KST / 18:00 UTC).",
         " CLI: python3 cli.py auto add \"title\" \"description\"",
         " Each ## section = a separate Claude Code invocation.",
         " Full permissions granted. Results logged to auto_logs/.",
@@ -533,7 +533,7 @@ def _get_models():
     """Query llama.cpp /v1/models on both pods."""
     import urllib.request
     models = {}
-    for label, port in [("pod-a", 8082), ("pod-b", 8080)]:
+    for label, port in [("pod-a", 8080), ("pod-b", 8082)]:
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/models", method="GET")
             with urllib.request.urlopen(req, timeout=5) as resp:

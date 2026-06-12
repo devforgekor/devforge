@@ -77,10 +77,10 @@ bounded_contexts:
         related_files: ["blueprint.yaml"]
       - term: "Pod B (devforge-swap)"
         definition: "Mode-switchable Pod. Day: 30B on :8080. Night: transitions through 7B→14B→27B per phase."
-        related_files: ["blueprint.yaml", "nightly_batch.sh"]
+        related_files: ["blueprint.yaml", "night_cycle.sh"]
       - term: "Mode"
         definition: "Operational mode controlling which model runs in each Pod: day (normal ops), night (batch pipeline)."
-        related_files: ["auto_mode.sh", "nightly_batch.sh"]
+        related_files: ["auto_mode.sh", "night_cycle.sh"]
       - term: "Mode File"
         definition: "Per-Pod mode indicator. Sets which GGUF model llama.cpp loads."
         related_files: ["blueprint.yaml"]
@@ -97,7 +97,7 @@ bounded_contexts:
         related_files: ["debate_data.py", "anthropic_proxy.py"]
       - term: "Health Endpoint"
         definition: "GET /health on llama.cpp server. Returns 200 when model is loaded and ready."
-        related_files: ["nightly_batch.sh:wait_for_model"]
+        related_files: ["night_cycle.sh:wait_for_model"]
       - term: "RateEstimator"
         definition: "RateEstimator dynamic timeout calculator: prompt_tokens/prompt_rate + max_tokens/gen_rate + buffer."
         related_files: ["lib/llm/rate_estimator.py"]
@@ -107,16 +107,16 @@ bounded_contexts:
     terms:
       - term: "Review Pipeline"
         definition: "Multi-stage code review: (1) worklog extraction, (2) 3-model debate, (3) 27B final verify, (4) DeepSeek audit."
-        related_files: ["nightly_batch.sh", "review_pipeline_3model.py"]
+        related_files: ["night_cycle.sh", "review_pipeline_3model.py"]
       - term: "3-Model Review (Phase 4)"
         definition: "Adversarial review: Step1 Deep Review (R1-8B) → Step2 Reflection (Qwen7B) → Step3 Scoring Judge (Selene)."
         related_files: ["review_pipeline_3model.py"]
       - term: "27B Verify (Phase 5)"
         definition: "Production final gate. Qwen 27B decides approved|rejected|escalate on reviewed items."
-        related_files: ["review_consumer.py", "nightly_batch.sh"]
+        related_files: ["review_consumer.py", "night_cycle.sh"]
       - term: "DeepSeek Audit (Phase 7)"
         definition: "Cloud API audit. DeepSeek Pro re-verifies 27B reasoning after day mode restored."
-        related_files: ["proxy_reviewer.py", "nightly_batch.sh"]
+        related_files: ["proxy_reviewer.py", "night_cycle.sh"]
       - term: "Feedback Loop"
         definition: "Disagreed/partial audit results re-queued for re-verification (max 2 cycles)."
         related_files: ["proxy_reviewer.py", "lib/feedback.py"]
@@ -214,7 +214,7 @@ bounded_contexts:
         related_files: ["dump_postgres.sh"]
       - term: "Sentinel File"
         definition: "/var/tmp/devforge-<service>-YYYYMMDD.done — prevents duplicate execution of nightly chained services."
-        related_files: ["nightly_batch.sh", "activity_summarizer.py"]
+        related_files: ["night_cycle.sh", "activity_summarizer.py"]
       - term: "LVM"
         definition: "Logical Volume Manager: root(20G), lv_db(30G), lv_ai_data(100G), lv_projects(10G), lv_meta(4.5G), lv_workspace(6G), lv_tmp(10G), lv_logs(10G)."
         related_files: ["state.yaml"]
@@ -224,7 +224,7 @@ bounded_contexts:
     terms:
       - term: "Nightly Batch"
         definition: "KST 03:00 (UTC 18:00) pipeline: Phase 4(review)→5(27B verify)→6(restore day)→7(DeepSeek audit)."
-        related_files: ["nightly_batch.sh"]
+        related_files: ["night_cycle.sh"]
       - term: "Timer Chain"
         definition: "Sequential execution: nightly→backup→summarizer. Each starts next via systemctl start. Sentinel files prevent duplicates."
       - term: "Safety Timer"

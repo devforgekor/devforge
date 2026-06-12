@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: 15m_cycle.sh
-"""worklog_generator.py — 3-stage speculative pipeline: 3B draft → Python verify → 30B review.
+# Path: day_cycle.sh
+"""worklog_generator.py — 3-stage speculative pipeline: 7B draft → Python verify → 30B review.
 
-1. Qwen2.5-Coder-3B (:8082) extracts worklog entries from turns (fast, bulk)
+1. Qwen2.5-Coder-7B (:8082) extracts worklog entries from turns (fast, bulk)
 2. Python verify_evidence() — deterministic substring check, zero hallucination
-3. Qwen3-Coder-30B-A3B (:8080) reviews only flagged entries (evidence mismatch)
+3. Qwen3-Coder-30B-A3B (:8081) reviews only flagged entries (evidence mismatch)
    → auto if evidence semantically matches, flagged if hallucination confirmed
 
 Speculative decoding pattern: cheap model drafts, expensive model verifies.
@@ -249,7 +249,7 @@ def _log_metrics(agent: str, batch_num: int, entries: List[Dict],
         "date": date_str,
         "agent": agent,
         "batch": batch_num,
-        "draft_model": "qwen2.5-coder-3b",
+        "draft_model": "qwen2.5-coder-7b",
         "review_model": "qwen3-30b-a3b",
         "turns_in": turn_count,
         "entries_out": len(entries),
@@ -273,7 +273,7 @@ def run(date_str: str = None) -> int:
         return 0
 
     if not check_endpoint(8082):
-        print("  worklog_generator: 3B :8082 not available — skipping")
+        print("  worklog_generator: 7B :8082 not available — skipping")
         return 0
 
     date_str = date_str or _today_kst()
@@ -305,7 +305,7 @@ def run(date_str: str = None) -> int:
                 {"role": "user", "content": prompt},
             ]
 
-            print(f"  {agent}[{batch_num}]: 3B drafting from {len(batch_turns)} turns...")
+            print(f"  {agent}[{batch_num}]: 7B drafting from {len(batch_turns)} turns...")
             draft = None
             for attempt in range(MAX_RETRIES + 1):
                 raw = call_llm_json(messages, model="extractor", max_tokens=256)
@@ -313,9 +313,9 @@ def run(date_str: str = None) -> int:
                 if draft:
                     break
                 if attempt < MAX_RETRIES:
-                    print(f"    3B failed (attempt {attempt+1}) — retrying...")
+                    print(f"    7B failed (attempt {attempt+1}) — retrying...")
             if not draft:
-                print(f"    3B failed after {MAX_RETRIES+1} attempts — will retry next cycle")
+                print(f"    7B failed after {MAX_RETRIES+1} attempts — will retry next cycle")
                 break
 
             entries = draft.get("entries", [])
@@ -358,7 +358,7 @@ def run(date_str: str = None) -> int:
                     flagged_indices.append(i)
 
             # Stage 3: Qwen3-Coder-30B-A3B reviews only flagged entries
-            if flagged_indices and check_endpoint(8080):
+            if flagged_indices and check_endpoint(8081):
                 flagged_entries = [entries[i] for i in flagged_indices]
                 print(f"    30B reviewing {len(flagged_entries)} flagged entries...")
                 reviews, review_action, review_consensus = review_flagged(flagged_entries, batch_turns)
@@ -386,7 +386,7 @@ def run(date_str: str = None) -> int:
 def main():
     preflight_checks("worklog_generator.py")
     import argparse
-    ap = argparse.ArgumentParser(description="LLM auto-worklog: Qwen2.5-Coder-3B draft + Qwen3-Coder-30B-A3B review")
+    ap = argparse.ArgumentParser(description="LLM auto-worklog: Qwen2.5-Coder-7B draft + Qwen3-Coder-30B-A3B review")
     ap.add_argument("--date", type=str, help="Date to process (YYYY-MM-DD, default: today KST)")
     ap.add_argument("--force", action="store_true",
                     help="Re-extract even if turns already logged")

@@ -4,12 +4,12 @@
 """LocalDebate — multi-agent debate using local Pod A + Pod B.
 
 debate mode (v6.0, 2-person):
-  Pod B (:8080): Qwen3-30B — Proposer + Judge + DRAG + Summary + Synthesis
-  Pod A (:8082): Qwen3-3B — Refuter
+  Pod B (:8081): Qwen3-30B — Proposer + Judge + DRAG + Summary + Synthesis
+  Pod A (:8082): Qwen2.5-Coder-7B — Refuter
 
 review mode (v1.0, 2-person):
-  Pod B (:8080): Qwen3-30B — Proposer + DRAG + Synthesis
-  Pod B (:8081): Reviewer (Refuter + Judge combined)
+  Pod B (:8081): Qwen3-30B — Proposer + DRAG + Synthesis
+  Pod B (:8082): Reviewer (Refuter + Judge combined)
 
 SLOC exception (~640 lines, limit 400):
   Two debate classes (LocalDebate + LocalDebateReview) share the same file.
@@ -67,12 +67,12 @@ class LocalDebate:
         self._tunnels_open: set = set()
 
         # Resident model assignments — fixed ports, always-on
-        self.drag_model = "qwen3-30b-a3b-local"        # Pod B :8080
-        self.proposer_model = "qwen3-30b-a3b-local"     # Pod B :8080
-        self.refuter_model = "qwen2.5-coder-3b"          # Pod A :8082
-        self.judge_model = "qwen3-30b-a3b-local"        # Pod B :8080
-        self.summary_model = "qwen3-30b-a3b-local"      # Pod B :8080
-        self.synthesizer_model = "qwen3-30b-a3b-local"  # Pod B :8080
+        self.drag_model = "qwen3-30b-a3b-local"        # Pod B :8081
+        self.proposer_model = "qwen3-30b-a3b-local"     # Pod B :8081
+        self.refuter_model = "qwen2.5-coder-7b"          # Pod B :8082
+        self.judge_model = "qwen3-30b-a3b-local"        # Pod B :8081
+        self.summary_model = "qwen3-30b-a3b-local"      # Pod B :8081
+        self.synthesizer_model = "qwen3-30b-a3b-local"  # Pod B :8081
 
     # ── Persistence ────────────────────────────────────────────────────
 
@@ -233,7 +233,7 @@ class LocalDebate:
         last_disagreement = "N/A (first round)"
         consecutive_failures = 0
 
-        for rnd in range(1, 5):
+        for rnd in range(1, 4):
             self.current_round = rnd
 
             reason = self._check_early_exit()
@@ -396,7 +396,7 @@ class LocalDebate:
         # Post-summary hook (CooperativeDebate closes Judge/Gemma tunnel here)
         self._post_summary_hook()
 
-        # Step 2: Final synthesis (Qwen3-30B, already resident on Pod B :8080)
+            # Step 2: Final synthesis (Qwen3-30B, already resident on Pod B :8081)
         if not self.switch_model(self.synthesizer_model):
             print("  [ERROR] Synthesizer health check failed")
             return None
@@ -478,8 +478,8 @@ class LocalDebate:
         print(f"█ DevForge Multi-Agent LLM Debate v6.0 ({self.mode}, resident)")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print("█ Pod B (:8080): Qwen3-30B — Proposer + Judge + DRAG + Synthesis")
-        print("█ Pod A (:8082): Qwen3-3B — Refuter")
+        print("█ Pod B (:8081): Qwen3-30B — Proposer + Judge + DRAG + Synthesis")
+        print("█ Pod B (:8082): Qwen2.5-Coder-7B — Refuter")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
 
@@ -499,11 +499,11 @@ class LocalDebate:
             subprocess.run(
                 ["systemctl", "--user", "start", "container-devforge-pod-b.service"],
                 capture_output=True)
-            print("  [pod] Pod B start requested (Qwen3-30B :8080)")
+            print("  [pod] Pod B start requested (Qwen3-30B :8081)")
             # Brief wait for container init, then health check
             time.sleep(5)
-            if not _poll_health(port=8080, timeout=30):
-                print("  [WARN] Pod B :8080 health check failed — continuing anyway")
+            if not _poll_health(port=8081, timeout=30):
+                print("  [WARN] Pod B :8081 health check failed — continuing anyway")
 
         # Round 0: DRAG
         self.current_round = 0
@@ -585,9 +585,9 @@ class LocalDebateReview(LocalDebate):
                          dry_run=dry_run)
         self.mode = "review"
 
-        # 2-person model assignments — Pod A :8080 + Pod B :8081
-        self.proposer_model = "qwen3-30b-a3b-local"   # Pod B :8080 — Proposer + DRAG + Synthesis
-        self.reviewer_model = "qwen2.5-coder-7b"            # Pod B :8081 — Reviewer (Refuter + Judge)
+        # 2-person model assignments — Pod B :8081 + :8082
+        self.proposer_model = "qwen3-30b-a3b-local"   # Pod B :8081 — Proposer + DRAG + Synthesis
+        self.reviewer_model = "qwen2.5-coder-7b"            # Pod B :8082 — Reviewer (Refuter + Judge)
 
         # Synthesis/Summary still on Pod A
         self.drag_model = "qwen3-30b-a3b-local"
@@ -599,7 +599,7 @@ class LocalDebateReview(LocalDebate):
         print(f"█ DevForge 2-Person Debate v1.0 ({self.mode})")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print("█ Pod B (:8080): Qwen3-30B — Proposer + DRAG + Synthesis")
+        print("█ Pod B (:8081): Qwen3-30B — Proposer + DRAG + Synthesis")
         print("█ Pod B (:8081): Reviewer (Refuter + Judge combined)")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
@@ -611,7 +611,7 @@ class LocalDebateReview(LocalDebate):
         last_disagreement = "N/A (first round)"
         consecutive_failures = 0
 
-        for rnd in range(1, 5):
+        for rnd in range(1, 4):
             self.current_round = rnd
 
             reason = self._check_early_exit()
@@ -631,7 +631,7 @@ class LocalDebateReview(LocalDebate):
             })
             drag_ctx = self.drag_context or json.dumps({"note": "DRAG skipped, no pre-debate context"})
 
-            # A — Proposer (Pod A :8080)
+            # A — Proposer (Pod B :8081)
             if not self.switch_model(self.proposer_model):
                 consecutive_failures += 1
                 if consecutive_failures >= 2:

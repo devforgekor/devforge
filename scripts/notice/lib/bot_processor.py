@@ -3,12 +3,12 @@
 # Path: imported by — notice/telegram_bot.py, notice/slack.py
 """scripts/notice/lib/bot_processor.py -- Shared bot message processor for Telegram & Slack.
 
-Uses Qwen2.5-Coder-3B (:8082) for intent classification and conversation.
+Uses Qwen2.5-Coder-7B (:8082) for intent classification and conversation.
 No DeepSeek / Claude Code tokens consumed.
 
 Flow:
   process(text) -> response_text
-    1. classify_intent(text) -> Intent  (3B LLM, cheap)
+    1. classify_intent(text) -> Intent  (7B LLM, cheap)
     2. dispatch action based on intent
     3. return response string
 
@@ -31,7 +31,7 @@ class Intent(Enum):
 
 
 LLM_ENDPOINT = os.environ.get("BOT_LLM_ENDPOINT", "http://127.0.0.1:8082/v1/chat/completions")
-LLM_MODEL = os.environ.get("BOT_LLM_MODEL", "qwen2.5-coder-3b")
+LLM_MODEL = os.environ.get("BOT_LLM_MODEL", "qwen2.5-coder-7b")
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", "/opt/projects/server"))
 
 

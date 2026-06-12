@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: 1h_cycle.sh — Phase 1 (embed batch)
+# Path: day_cycle.sh — Phase 1 (embed batch)
 """Embed Batch Pipeline — f16 embedding via Pod B llama-server.
 
 Checkpoint-based: SELECT turns WHERE created_at > checkpoint AND embedding_f16 IS NULL.

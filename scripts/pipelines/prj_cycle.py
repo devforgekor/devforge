@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: nightly_batch.sh / 15m_cycle.sh
+# Path: night_cycle.sh / 15m_cycle.sh
 """
 P-R-J 고정 역할 실험: P=night_proposer, R=night_reflector, J=night_judge
 
@@ -103,7 +103,7 @@ from lib.pipeline_common import (
     save, strip_code_fence, _extract_json, timestamp,
     abort, llm_call, slack_send, PipelineState,
 )
-from pipelines.night_pipeline import save_feedback_to_db
+from pipelines.night_cycle import save_feedback_to_db
 from lib.common import log
 from sentence_transformers import SentenceTransformer
 

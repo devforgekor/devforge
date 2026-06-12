@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: nightly_batch.sh:255
+# Path: night_cycle.sh:255
 """proxy_reviewer.py — DeepSeek Pro verification of 27B verify reasoning.
 
 Reads activity_log items WHERE queue_status='done' AND verify_result exists but
 has not been reviewed by DeepSeek Pro. Sends reasoning + verification_items to
 api.deepseek.com for independent audit, stores feedback, and marks reviewed.
 
-Designed as a batch process (nightly_batch Phase 7), not real-time loop.
+Designed as a batch process (night_cycle Phase 7), not real-time loop.
 
 Usage:
   python3 proxy_reviewer.py [--limit N]       # verify up to N items

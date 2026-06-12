@@ -4,7 +4,7 @@
 """Unified LLM client — single entry point for all pipeline scripts.
 
 All DevForge LLM calls go through this module.  It handles:
-  - Model registry  (Qwen3B → port 8082, …)
+  - Model registry  (Qwen2.5-Coder-7B → port 8082, …)
   - Feedback auto-injection  (recent patterns from activity_log)
   - Standard HTTP transport  (llama.cpp /v1/chat/completions)
 
@@ -21,6 +21,7 @@ Usage::
 """
 
 import json
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -34,25 +35,25 @@ from typing import Any, Dict, List, Optional
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # Physical endpoints (role-based — each describes the LLM's primary job)
-    "extractor":    {"port": 8080, "temp": 0.12, "max_tokens": 2048, "timeout": 180},
-    "proposer":     {"port": 8080, "temp": 0.22, "max_tokens": 2048, "timeout": 600},
-    "reviewer":     {"port": 8082, "temp": 0.10, "max_tokens": 400,  "timeout": 480},
-    "reflector":    {"port": 8080, "temp": 0.10, "max_tokens": 2048, "timeout": 600},
-    "verifier":     {"port": 8081, "temp": 0.10, "max_tokens": 4096, "timeout": 1200},
-    "judge":        {"port": 8080, "temp": 0.10, "max_tokens": 4096, "timeout": 7200},
+    "extractor":    {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300},  # Pod B 7B Q8
+    "proposer":     {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},  # Pod B 30B
+    "reviewer":     {"port": 8083, "temp": 0.10, "max_tokens": 400,  "timeout": 480},  # Pod B 14B
+    "reflector":    {"port": 8082, "temp": 0.10, "max_tokens": 2048, "timeout": 600},  # Pod B 14B
+    "verifier":     {"port": 8084, "temp": 0.10, "max_tokens": 4096, "timeout": 1200}, # Pod B 27B
+    "judge":        {"port": 8083, "temp": 0.10, "max_tokens": 4096, "timeout": 7200}, # Pod B 14B
     # Role aliases — pipeline code uses these; MODEL_REGISTRY is the single
     # place to change when a model/port changes.
     # Day pipeline — extract (:00/:30)
     "day_extract": {"_model": "extractor"},
-    "day_mcp":     {"_model": "reviewer"},
+    "day_mcp":     {"_model": "extractor"},  # extract → MCP, verify fixes
 
     # Day pipeline — verify & rubric
     "day_verify":  {"_model": "reviewer"},
 
-    # Day pipeline — classify (:15/:45) day pre-review
+    # Day pipeline — classify (:15/:45) day pre-review — models TBD (Pod B swap)
     "day_proposer":       {"_model": "reviewer"},
-    "day_reviewer":       {"_model": "extractor"},
-    "day_judge":       {"_model": "reviewer"},
+    "day_reviewer":       {"_model": "reviewer"},
+    "day_judge":          {"_model": "reviewer"},
 
     # Night pipeline — prj_cycle batch review
     "night_proposer":  {"_model": "proposer"},
@@ -170,11 +171,14 @@ def call_llm(
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     # Cap HTTP timeout at 1800s (30 min) — prevents infinite hang when server is down
     _http_timeout = min(timeout or cfg["timeout"], 1800)
+    print(f"  [call_llm] {model}:{port} timeout={_http_timeout}s max_tokens={body['max_tokens']}", flush=True)
     try:
         with urllib.request.urlopen(req, timeout=_http_timeout) as resp:
             result = json.loads(resp.read().decode("utf-8"))
     except urllib.error.URLError as e:
         raise RuntimeError(f"LLM call to :{port} ({model}) failed: {e}")
+    except socket.timeout as e:
+        raise RuntimeError(f"LLM call to :{port} ({model}) timed out after {_http_timeout}s")
     elapsed_ms = (time.monotonic() - t_start) * 1000
 
     choices = result.get("choices", [])

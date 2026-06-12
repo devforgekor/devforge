@@ -11,6 +11,7 @@
 import os
 import signal
 import subprocess
+import sys
 import time
 from typing import Callable, Optional
 
@@ -110,11 +111,21 @@ def recover_oom() -> bool:
         )
         time.sleep(10)  # 메모리 reclaim
 
-        # Day mode restore
-        with open(MODE_FILE_B, "w") as f:
-            f.write("MODE=day")
+        # Day mode restore — Pod A: MODE=day only (hardcodes model), Pod B: full env
         with open(MODE_FILE_A, "w") as f:
             f.write("MODE=day")
+        try:
+            subprocess.run(
+                [sys.executable, "-c",
+                 "import sys; sys.path.insert(0, '/opt/projects/server/scripts'); "
+                 "from lib.pod_manager import _write_mode_env; "
+                 "_write_mode_env('day', 8082)"],
+                capture_output=True, timeout=15,
+            )
+        except Exception:
+            log("  _write_mode_env failed, falling back to MODE=day for Pod B")
+            with open(MODE_FILE_B, "w") as f:
+                f.write("MODE=day")
         subprocess.run(
             ["systemctl", "--user", "start", "container-devforge-pod-a.service"],
             capture_output=True, timeout=60,

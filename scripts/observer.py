@@ -6,7 +6,7 @@
 Routes natural language commands to DevForge pipelines, monitors execution,
 and reports errors with root-cause analysis.
 
-Model: Qwen3-Coder-30B-A3B (http://127.0.0.1:8080)
+Model: Qwen3-Coder-30B-A3B (http://127.0.0.1:8081)
 
 Usage:
     obs                          # Interactive REPL
@@ -33,8 +33,8 @@ from typing import Any, Dict, List, Optional
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
-DEFAULT_MODEL = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf"
-DEFAULT_API = "http://127.0.0.1:8080"
+DEFAULT_MODEL = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
+DEFAULT_API = "http://127.0.0.1:8081"
 MODEL = os.environ.get("OBS_MODEL", DEFAULT_MODEL)
 API_URL = os.environ.get("OBS_API", DEFAULT_API)
 

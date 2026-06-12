@@ -134,11 +134,11 @@ def build_status():
                 prj_elapsed = line.split(None, 2)[1]
     except: pass
 
-    # Check night_pipeline (Phase 3-4)
+    # Check night_cycle (Phase 3-4)
     night_alive = False
     try:
         out = subprocess.check_output(["ps", "-eo", "args"], timeout=5, text=True)
-        night_alive = "night_pipeline.py" in out
+        night_alive = "night_cycle.py" in out
     except: pass
 
     pod_a_cpu, pod_b_cpu = get_llm_cpu()

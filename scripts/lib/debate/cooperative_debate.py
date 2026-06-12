@@ -31,13 +31,13 @@ class CooperativeDebate(LocalDebate):
         self.reuse_vms = reuse_vms
 
         # Cooperative model assignments
-        # Pod B (:8080): Qwen3-30B — DRAG + Synthesis
+        # Pod B (:8081): Qwen3-30B — DRAG + Synthesis
         self.drag_model = "qwen3-30b-a3b-local"
         self.synthesizer_model = "qwen3-30b-a3b-local"
         # Azure spot VMs (provisioned on demand, terminated on consensus)
-        self.proposer_model = "qwen3-30b-a3b"          # azureqwen :8084
-        self.refuter_model = "nemotron3-nano-30b"      # azurenemo :8083
-        # Azure Judge VM (persistent, :8085) — Judge + Summary
+        self.proposer_model = "qwen3-30b-a3b"          # azureqwen :8086
+        self.refuter_model = "nemotron3-nano-30b"      # azurenemo :8085
+        # Azure Judge VM (persistent, :8087) — Judge + Summary
         self.judge_model = "gemma-4-26b"
         self.summary_model = "gemma-4-26b"
 
@@ -101,8 +101,8 @@ class CooperativeDebate(LocalDebate):
             "nemotron": os.path.expanduser("~/.ssh/vm-azure-nvidia-nemotron3-nano-30B-key.pem"),
         }
         tunnel_map = {
-            "qwen": ("qwen3-30b-a3b-local", 8084, "azureqwen"),
-            "nemotron": ("nemotron3-nano-30b", 8083, "azurenemo"),
+            "qwen": ("qwen3-30b-a3b-local", 8086, "azureqwen"),
+            "nemotron": ("nemotron3-nano-30b", 8085, "azurenemo"),
         }
 
         for label, (model_key, local_port, host_name) in tunnel_map.items():
@@ -222,7 +222,7 @@ class CooperativeDebate(LocalDebate):
         print(f"█ DevForge Multi-Agent LLM Debate v4.6 ({self.mode})")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print("█ Spot VMs → P:Qwen3-30B(:8084) R:Nemotron(:8083) | J+S:Gemma4-26B(:8085) | DRAG+Synth: Qwen3-30B(:8080)")
+        print("█ Spot VMs → P:Qwen3-30B(:8086) R:Nemotron(:8085) | J+S:Gemma4-26B(:8087) | DRAG+Synth: Qwen3-30B(:8081)")
         print(f"█ Question: {self.question[:80]}...")
         print(f"{'█'*60}")
 

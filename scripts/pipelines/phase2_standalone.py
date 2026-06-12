@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: deprecated
-# Path: none — replaced by day_cycle.py (15m_cycle.sh heavy phase), remove after 2026-07
+# Path: none — replaced by day_cycle.py (day_cycle.sh heavy phase), remove after 2026-07
 """Phase 2 standalone runner with reliable logging."""
 import sys, os, json, time
 sys.path.insert(0, "/opt/projects/server/scripts")

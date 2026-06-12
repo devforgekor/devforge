@@ -4,7 +4,7 @@
 """slack.py --- Slack Events API receiver for DevForge bot.
 
 Receives Slack Events via Caddy (TLS termination), processes messages
-through bot_processor (Qwen2.5-Coder-3B), and sends responses via Slack API.
+through bot_processor (Qwen2.5-Coder-7B), and sends responses via Slack API.
 
 Caddy config needed (in /etc/caddy/Caddyfile):
   handle /webhooks/slack/* {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — runner.py, prj_cycle.py, preflight.py, watchdog
+# Path: imported by — exp_runner.py, prj_cycle.py, preflight.py, watchdog
 """Experiment state file — 실험 중 watchdog과 pipeline 간 상태 공유.
 
 실험 시작 시 .experiment_state.json 생성, 종료 시 정리.
@@ -87,6 +87,18 @@ def update_state(**kwargs):
     _write_atomic(state)
 
 
+def mark_phase_complete(phase_name: str) -> None:
+    """Append phase_name to completed_phases in experiment state. No-op if no experiment."""
+    state = read_state()
+    if not state:
+        return
+    completed = state.get("completed_phases", [])
+    if not isinstance(completed, list):
+        completed = []
+    if phase_name not in completed:
+        update_state(completed_phases=completed + [phase_name])
+
+
 def _write_atomic(state: dict):
     """Atomic write via temp file + rename."""
     tmp = STATE_FILE + ".tmp"
@@ -102,14 +114,14 @@ class ExperimentState:
     """Context manager for experiment lifecycle.
 
     Usage:
-        with ExperimentState(phase=0, ports={"pod_a": 8082, "pod_b": 8080}):
+        with ExperimentState(phase=0, ports={"pod_a": 8080, "pod_b": 8082}):
             ...  # state file exists during this block
 
     On __enter__: writes .experiment_state.json
     On __exit__:  removes .experiment_state.json
     """
 
-    DEFAULT_PORTS = {"pod_a": 8082, "pod_b": 8080, "verify": 8081}
+    DEFAULT_PORTS = {"pod_a": 8080, "pod_b": 8082, "verify": 8084}
 
     def __init__(
         self,
