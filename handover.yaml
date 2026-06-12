@@ -1,180 +1,115 @@
 last_checkpoint:
-  time: '2026-06-12T15:30:00+00:00'
-  summary: >
-    Session 38 (75m): Post-PORT-REORG cleanup — model replacement, disk recovery, consistency sweep.
-    All 3B references → 7B Q8, all Q4_K_S → Q4_K_M, all stale PORT=8080 → correct per-scheme port.
-    3 new models downloaded, ~37G disk recovered. 35+ files modified across production + experimental.
-    The codebase is now internally consistent with the finalized port scheme from Session 37.
-  total_files: 35+
-
+  time: '2026-06-12T22:33:03.604922+00:00'
+  summary: no files
+  total_files: 0
+  recent_files:
+    data: []
+    docs: []
+    config: []
+    source: []
+    generated: []
+  git: {}
+  task: null
 decisions:
-  - id: d38-01
-    detail: >
-      MODEL INVENTORY FINAL (gguf/). All 6 models downloaded and on disk:
-        Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  (18G) — proposer/embed (:8081)
-        Qwen3.6-27B.i1-IQ4_XS.gguf                  (15G) — verifier (:8084)
-        Qwen2.5-Coder-7B-Instruct-Q8_0.gguf         (7.6G) — extractor (:8082)
-        Qwen2.5-Coder-14B-Instruct-Q6_K.gguf        (12G) — reviewer/judge (:8083)
-        NextCoder-14B-Q6_K.gguf                      (12G) — review-j mode
-        Qwen3-Embedding-8B-f16.gguf                  (15G) — embed (:8081 day)
-      Total: ~80G / 100G ai_data partition.
-
-  - id: d38-02
-    detail: >
-      DEBATE MODEL KEY RENAMED. `qwen2.5-coder-3b` key in debate_data.py MODELS dict
-      renamed to `qwen2.5-coder-7b`. Port 8082, threads 2→4. Decoder alias in
-      debate_llm.py updated. All local_debate.py model assignments use new key.
-      Old key would cause KeyError at runtime.
-
-  - id: d38-03
-    detail: >
-      DEBATE PORT UPDATED. All debate files previously referenced Pod B :8080 for
-      30B proposer/judge/drag. Updated to :8081 (correct 30B port). Refuter model
-      changed from Pod A :8082 Qwen3-3B → Pod B :8082 Qwen2.5-Coder-7B. Pod A
-      is no longer part of debate system (Pod A = reserved operator only).
-
-  - id: d38-04
-    detail: >
-      DISK RECOVERY. ~37G recovered:
-        - ~11G: HuggingFace transformers cache (27B Q8_0 + NextCoder .safetensors)
-        - ~3.6G: 3B Q8 model file (deleted)
-        - ~4G: 27B Q8_0 from temp (re-downloaded as IQ4_XS 15G via hf hub)
-        - ~18G+ : Empty pg_dump backups (0-byte files)
-      HuggingFace cache is NOT used by llama.cpp — safe to clean.
-
-  - id: d38-05
-    detail: >
-      OFFICIAL MODEL SOURCES. User rejected unofficial HF repos (cHunter789,
-      tensorblock). Approved sources:
-        - bartowski / lmstudio-community  → 30B Q4_K_M
-        - gabriellarson                   → NextCoder-14B Q6_K
-        - mradermacher                    → 27B i1-IQ4_XS
-      Rule: always ask user before downloading from unknown HF repos.
-
-  - id: d38-06
-    detail: >
-      INTENTIONAL EXCLUSIONS (not updated):
-        1. extract_compare.py — historical 3B Q8_0 vs 7B Q4_K_M vs 7B Q8_0 benchmark
-        2. night.py REMOVED phase comments — preserve historical 7B-3B-7B config record
-        3. __old/ directory — deprecated files, not in execution path
-        4. _archive/ directory — user explicitly excluded
-
+- '{''id'': ''d38-01'', ''detail'': ''MODEL INVENTORY FINAL (gguf/). All 6 models downloaded and on disk:\\n  Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  (18G)
+  — proposer/embed (:8081)\\n  Qwen3.6-27B.i1-IQ4_XS.gguf                  (15G) — verifier (:8084)\\n  Qwen2.5-Coder-7B-Instruct-Q8_0.gguf         (7.6G)
+  — extractor (:8082)\\n  Qwen2.5-Coder-14B-Instruct-Q6_K.gguf        (12G) — reviewer/judge (:8083)\\n  NextCoder-14B-Q6_K.gguf                      (12G)
+  — review-j mode\\n  Qwen3-Embedding-8B-f16.gguf                  (15G) — embed (:8081 day)\\nTotal: ~80G / 100G ai_data
+  partition.\\n''}'
+- '{''id'': ''d38-02'', ''detail'': ''DEBATE MODEL KEY RENAMED. `qwen2.5-coder-3b` key in debate_data.py MODELS dict renamed
+  to `qwen2.5-coder-7b`. Port 8082, threads 2→4. Decoder alias in debate_llm.py updated. All local_debate.py model assignments
+  use new key. Old key would cause KeyError at runtime.\\n''}'
+- '{''id'': ''d38-03'', ''detail'': ''DEBATE PORT UPDATED. All debate files previously referenced Pod B :8080 for 30B proposer/judge/drag.
+  Updated to :8081 (correct 30B port). Refuter model changed from Pod A :8082 Qwen3-3B → Pod B :8082 Qwen2.5-Coder-7B. Pod
+  A is no longer part of debate system (Pod A = reserved operator only).\\n''}'
+- '{''id'': ''d38-04'', ''detail'': ''DISK RECOVERY. ~37G recovered:\\n  - ~11G: HuggingFace transformers cache (27B Q8_0
+  + NextCoder .safetensors)\\n  - ~3.6G: 3B Q8 model file (deleted)\\n  - ~4G: 27B Q8_0 from temp (re-downloaded as IQ4_XS
+  15G via hf hub)\\n  - ~18G+ : Empty pg_dump backups (0-byte files)\\nHuggingFace cache is NOT used by llama.cpp — safe to
+  clean.\\n''}'
+- '{''id'': ''d38-05'', ''detail'': ''OFFICIAL MODEL SOURCES. User rejected unofficial HF repos (cHunter789, tensorblock).
+  Approved sources:\\n  - bartowski / lmstudio-community  → 30B Q4_K_M\\n  - gabriellarson                   → NextCoder-14B
+  Q6_K\\n  - mradermacher                    → 27B i1-IQ4_XS\\nRule: always ask user before downloading from unknown HF repos.\\n''}'
+- '{''id'': ''d38-06'', ''detail'': ''INTENTIONAL EXCLUSIONS (not updated):\\n  1. extract_compare.py — historical 3B Q8_0
+  vs 7B Q4_K_M vs 7B Q8_0 benchmark\\n  2. night.py REMOVED phase comments — preserve historical 7B-3B-7B config record\\n  3.
+  __old/ directory — deprecated files, not in execution path\\n  4. _archive/ directory — user explicitly excluded\\n''}'
 known_issues:
-  - id: ki38-01
-    detail: >
-      30B Q4_K_M (18G) + 27B IQ4_XS (15G) + 14B Q6_K (12G) + 7B Q8 (7.6G) =
-      ~53G concurrently loadable models. RAM: 22G total, ~17-18G usable.
-      30B MoE (3.3B active/token) is viable. 27B dense (14.7G IQ4_XS) must NOT
-      overlap with 30B load. Night pipeline sequential model switching is critical.
-
-  - id: ki38-02
-    detail: >
-      day_pipeline.py (experimental) still has inverted port assignment in code
-      (Pod A=7B:8082, Pod B=3B:8080). Docstring updated to note the discrepancy.
-      Not in execution path — day_runner.py and timers call day_extract.py instead.
-
-  - id: ki38-03
-    detail: >
-      Debate system now has NO Pod A separation — Pod A is reserved(:8080) operator
-      only. All debate models (30B, 7B, 14B) run on Pod B with dynamic port switching.
-      The refuter was on Pod A :8082 (old scheme) — now on Pod B :8082.
-      This changes memory contention profile during debate sessions.
-
-  - id: ki38-04
-    detail: >
-      Session 37 ki07 (stale docstrings) RESOLVED. Previous claim that classify.py,
-      review_pipeline_3model.py, bench_llm.py, activity_summarizer.py, etc. were
-      "stale" is now fixed. All remaining 3B/Q4_K_S/8080 references are intentional
-      (historical benchmarks, REMOVED phase records, __old/ files).
-
+- '{''id'': ''ki38-01'', ''detail'': ''30B Q4_K_M (18G) + 27B IQ4_XS (15G) + 14B Q6_K (12G) + 7B Q8 (7.6G) = ~53G concurrently
+  loadable models. RAM: 22G total, ~17-18G usable. 30B MoE (3.3B active/token) is viable. 27B dense (14.7G IQ4_XS) must NOT
+  overlap with 30B load. Night pipeline sequential model switching is critical.\\n''}'
+- '{''id'': ''ki38-02'', ''detail'': ''day_pipeline.py (experimental) still has inverted port assignment in code (Pod A=7B:8082,
+  Pod B=3B:8080). Docstring updated to note the discrepancy. Not in execution path — day_runner.py and timers call day_extract.py
+  instead.\\n''}'
+- '{''id'': ''ki38-03'', ''detail'': ''Debate system now has NO Pod A separation — Pod A is reserved(:8080) operator only.
+  All debate models (30B, 7B, 14B) run on Pod B with dynamic port switching. The refuter was on Pod A :8082 (old scheme) —
+  now on Pod B :8082. This changes memory contention profile during debate sessions.\\n''}'
+- '{''id'': ''ki38-04'', ''detail'': ''Session 37 ki07 (stale docstrings) RESOLVED. Previous claim that classify.py, review_pipeline_3model.py,
+  bench_llm.py, activity_summarizer.py, etc. were "stale" is now fixed. All remaining 3B/Q4_K_S/8080 references are intentional
+  (historical benchmarks, REMOVED phase records, __old/ files).\\n''}'
 completed_log:
-  - "[Session 36] Day/Night Pipeline Restructure FULLY IMPLEMENTED."
-  - "[Session 36] Timers migrated: 15m-cycle + classify disabled, day-extract/verify enabled."
-  - "[Session 36] night.py v4.0: Phase 1-2 deprecated, Phase 3 removed."
-  - "[Session 37] PORT REORG: 8080=Pod A reserved, 8081=proposer/embed, 8082=extract/reflector, 8083=verify/judge, 8084=verifier."
-  - "[Session 37] All production pipeline files port-corrected (night.py, review.py, night_cycle.sh, container_manager.py, cli.py, entrypoints)."
-  - "[Session 38] 3B→7B Q8 migration: 35+ files updated across production + experimental."
-  - "[Session 38] 30B Q4_K_S→Q4_K_M: 6 files updated."
-  - "[Session 38] PORT consistency sweep: all stale :8080 Pod B references fixed."
-  - "[Session 38] Debate system: model key renamed, port assignments corrected, Pod A removed from refuter role."
-  - "[Session 38] Disk cleanup: ~37G recovered (HF cache, old models, empty backups)."
-  - "[Session 38] Model downloads: 30B Q4_K_M (18G), NextCoder-14B Q6_K (12G), 27B i1-IQ4_XS (15G)."
-  - "[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs."
-
-current_context:
-  active_work: >
-    Session 38 finished. The entire codebase is now consistent with the PORT REORG scheme.
-    All model references (3B→7B, Q4_K_S→Q4_K_M) and port references (8080→correct) updated.
-    6 models on disk covering all pipeline roles.
-  next_steps:
-    - "Run 1 full day_cycle to validate end-to-end day pipeline with new 7B extractor + 14B reviewer."
-    - "Run 1 full nightly batch to validate night pipeline with 30B→14B→27B sequential swap."
-    - "Monitor extract checkpoint advancement (stale since Jun 9 12:05 UTC)."
-  model_inventory:
-    path: "/opt/ai_data/models/gguf/"
-    total: "~80G / 100G available"
-    files:
-      Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf:
-        size: "18G"
-        role: "proposer / embed"
-        port: 8081
-        source: bartowski (lmstudio-community)
-      Qwen3.6-27B.i1-IQ4_XS.gguf:
-        size: "15G"
-        role: "verifier"
-        port: 8084
-        source: mradermacher
-      Qwen2.5-Coder-7B-Instruct-Q8_0.gguf:
-        size: "7.6G"
-        role: "extractor / reflector"
-        port: 8082
-      Qwen2.5-Coder-14B-Instruct-Q6_K.gguf:
-        size: "12G"
-        role: "reviewer / judge"
-        port: 8083
-      NextCoder-14B-Q6_K.gguf:
-        size: "12G"
-        role: "review-j (night judge)"
-        source: gabriellarson
-      Qwen3-Embedding-8B-f16.gguf:
-        size: "15G"
-        role: "embed (daytime)"
-        port: 8081
-  file_changes:
-    model_replacement_3b_to_7b:
-      - scripts/pipelines/worklog_generator.py — draft_model metric key, log messages, docstring
-      - scripts/lib/llm_client.py — docstring "Qwen3B→Qwen2.5-Coder-7B"
-      - scripts/orchestrator.py — 8 locations (docstring, comments, log messages)
-      - scripts/observer.py — docstring model label
-      - scripts/notice/lib/bot_processor.py — docstring, LLM_MODEL default
-      - scripts/notice/telegram_bot.py — docstring
-      - scripts/notice/slack.py — docstring
-      - scripts/day_model_test_direct.py — MCP context string, restore section
-      - scripts/day_extract.sh — docstring, log message
-      - scripts/pipelines/day_extract.py — docstring, banner
-      - scripts/pipelines/day_runner.py — comments
-      - scripts/pipelines/day_pipeline.py — comments
-      - scripts/pipelines/extract.py — docstring
-      - scripts/pipelines/prj_cycle.py — docstring, comments
-      - scripts/pipelines/review_consumer.py — comment
-      - scripts/pipelines/night_runner.py — comments
-      - scripts/lib/infra/container_manager.py — docstring
-      - scripts/lib/watchdog/__init__.py — docstring
-      - scripts/lib/watchdog/config.py — docstring
-      - scripts/lib/debate/debate_data.py — model key rename + config
-      - scripts/lib/debate/debate_llm.py — alias mapping
-      - scripts/lib/debate/local_debate.py — model assignments, docstring, print
-      - scripts/lib/experiment_monitor.py — docstring
-      - "Experimental: day_model_test.py, nli_compare.py, prj_ground_truth_test.py, model_comparison_test.py, test_night_prj_eval.py, test_pipeline_e2e.py"
-    quantization_q4ks_to_q4km:
-      - scripts/test_night_prj_eval.py — 6 locations (docstring, swap config, print)
-    port_fixes_stale_8080:
-      - scripts/review_pipeline_3model.py — 3 comments (→reviewer:8083/reflector:8082)
-      - scripts/observer.py — DEFAULT_API :8080→:8081
-      - scripts/bench_llm.py — docstring :8080→:8082
-      - scripts/gen_architecture.py — mode description
-      - scripts/pipelines/rubric.py — docstring/log
-      - scripts/pipelines/mcp_verify.py — docstring
-      - scripts/pipelines/night_runner.py — :8080→:8081/:8082
-      - scripts/lib/debate/local_debate.py — 5 references (:8080→:8081)
-      - scripts/lib/debate/cooperative_debate.py — 2 references
+- '[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs.'
+- '[Session 38] Model downloads: 30B Q4_K_M (18G), NextCoder-14B Q6_K (12G), 27B i1-IQ4_XS (15G).'
+- '[Session 38] Disk cleanup: ~37G recovered (HF cache, old models, empty backups).'
+- '[Session 38] Debate system: model key renamed, port assignments corrected, Pod A removed from refuter role.'
+- '[Session 38] PORT consistency sweep: all stale :8080 Pod B references fixed.'
+- '[Session 38] 30B Q4_K_S→Q4_K_M: 6 files updated.'
+- '[Session 38] 3B→7B Q8 migration: 35+ files updated across production + experimental.'
+- '[Session 37] All production pipeline files port-corrected (night.py, review.py, night_cycle.sh, container_manager.py, cli.py,
+  entrypoints).'
+- '[Session 37] PORT REORG: 8080=Pod A reserved, 8081=proposer/embed, 8082=extract/reflector, 8083=verify/judge, 8084=verifier.'
+- '[Session 36] night.py v4.0: Phase 1-2 deprecated, Phase 3 removed.'
+- '[Session 36] Timers migrated: 15m-cycle + classify disabled, day-extract/verify enabled.'
+- '[Session 36] Day/Night Pipeline Restructure FULLY IMPLEMENTED.'
+- '[Session 35] Handover written. Next: Pod A+timers restart, Claude Pro 10-axis re-baseline, experiment_registry insert,
+  extract_clean fix.'
+- '[Session 35] 3B Q8 confirmed best for this server. 5.2 t/s, -7pt vs best 14B, 4-5x faster. 14B Q4_K_M provides minimal
+  value.'
+- '[Session 35] Final report: docs/reports/14b-5model-10axis-report.md. Slack watcher scripts: 14b_test_watch.py (pod B progress
+  → Slack, 10min interval).'
+- '[Session 35] Rubric effect analysis: Strong on Verify(+4), moderate on Recall/NLI, zero on Precision/Consistency. extract_clean
+  unsolved — requires few-shot or post-processing.'
+- '[Session 35] scripts/14b_comparison_test.py FULL REWRITE: Pro-designed 10-axis specs integrated. (A) rubric-prompt.txt
+  file-loaded at runtime, (B) 10 scoring functions matching checklist.yaml, (C) per-axis + comparison table output.'
+- '[Session 35] 14B 10-Axis Test 2 COMPLETE: 3B=55(C) 7B=55(C) Coder14B=55(C) Qwen2.5-14B=59(C) Qwen3-14B=62(B). Rubric avg
+  +5.2pt. ~3.4h runtime.'
+- '[Session 35] 14B 10-Axis Test 1 COMPLETE: 3B=50(C) 7B=50(C) Coder14B=52(C) Qwen2.5-14B=52(C) Qwen3-14B=47(C). All C-grade.
+  ~2.3h runtime.'
+- '[Session 32] llm-agent-rule.md: Glossary SSOT workflow 규칙 추가.'
+- '[Session 32] CRITICAL CORRECTION: Session 31 handover night_proposer=Qwen27B는 잘못됨. 30B 유지, 32B→27B만 변경된 것.'
+- '[Session 32] 양방향 검증 완료: compile 127/127 OK, .py 32B refs 0, cli.py lint P0=0, DB glossary clean.'
+- '[Session 30] Doc cleanup: Qwen3-4B stale refs removed from 5 files. review-worker.timer + T01-T16 ghosts cleaned.'
+- '[Session 30] pytest infra created: conftest.py, pytest.ini, tests/__init__.py, dev-requirements.txt.'
+- '[Session 30] prompt-templates/ created: 6 templates for local LLM vibe coding workflow.'
+- '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL.'
+- '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service
+  description, stale .pyc 16 files.'
+- '[Session 28] devforge-qwen → devforge-pod-a rename complete. 16 files + quadlet + systemd unit + docs updated.'
+- '[Session 27] cli.py status --json implemented. lint_rules.py + cli.py lint.'
+- '[Session 26] Context window 256K expansion. systemd bug fix.'
+- '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
+- '[Session 23] utcnow 1 case + bare except 7 cases fixed + Status/Path headers added to 142 files.'
+- '[Session 22] File Status/Path header rule established + risk reclassification.'
+- '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
+- '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
+- '[Session 33] DIVERGENCE MAP: (A) Scoring test.py:977-982 5-comp vs checklist.yaml:167 10-axis, (B) Rubric test.py:122-183
+  self-made vs rubric-prompt.txt 84-line, (C) Output flat JSON vs scoring-sheet.yaml nested, (D) Injection correct mechanism
+  but wrong text.'
+- '[Session 33] VERDICT: Both Test 1 and Test 2 must be redone with Pro 10-axis specs. Claude Pro baseline also re-run. Scope:
+  5 models × 6 cases × 2 modes = 60 local LLM calls + 12 Pro calls. Files to rewrite: scripts/14b_comparison_test.py. Specs
+  to follow: docs/specs/14b-comparison-*.'
+- '[Session 33] Test 1 completed with simplified system: 3B=57, Coder14B=55, Qwen2.5-14B=54, Qwen3-14B=54, 7B=52. experiment_registry
+  updated.'
+- '[Session 33] Claude Pro baseline (simplified scoring): Test1=89, Test2=90. Registry entries created.'
+- '[Session 33] Test 2 started (21:43 KST), killed at ~22:00 KST. Partial: 3B 6/6, 7B 1/6. /tmp/14b_comparison_results_rubric.json
+  abandoned.'
+- '[Session 33] Handover written with exact file paths, line numbers, and divergence map. Next session: redo from scratch
+  with Pro 10-axis specs.'
+- '[Session 34] Telegram push 금지: watchdog/notifier.py _notify_all() _telegram_send() 제거. memory 등록 완료.'
+- '[Session 34] Slack Block Kit 고도화: notifier.py heartbeat Block Kit + in-place chat.update + alert/recovery colored attachment
+  (danger/warning/good). 의존성 없음.'
+- '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
+- '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
+- '[Session 22] File Status/Path header rule established + risk reclassification.'
+- '[Session 23] utcnow 1 case + bare except 7 cases fixed + Status/Path headers added to 142 files.'
+- '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
+- '[Session 26] Context window 256K expansion. systemd bug fix.'
+- '[Session 27] cli.py status --json implemented. lint_rules.py + cli.py lint.'
