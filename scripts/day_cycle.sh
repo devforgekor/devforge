@@ -1,12 +1,16 @@
 #!/bin/bash
 # day_cycle.sh — hourly cycle (:00)
-# 순서: 가벼운 것 → 무거운 것
-# Phase 0 (System):  code-structure → duckdns → worklog  (Pod B 불필요)
-# Phase 1 (Embed):   (선택) Pod B f16 → embed_batch.py — 새 턴 있을 때만
-# Phase 2 (Extract): Pod B day → day_cycle.py (extract → MCP → py verify)
-# Phase 3 (Verify):  (잔여 예산 전부) day_verify.py (checkpoint 기반)
-# 새 턴 0건 → Phase 1 skip → Phase 2 skip → 55분 전부 verify
-# 서버 철학: 느리지만 천천히 완성한다.
+# Light → Heavy execution order
+#
+# Pipeline Steps:
+#   System Sync      — code-structure + duckdns + worklog  (no Pod B needed)
+#   Day Embedding    — embed_batch.py (8B f16 :8081) — only when new turns exist
+#   Day Extract       — day_cycle.py (7B Q8 :8082) — extract → MCP enrich → py verify
+#   Day Verify        — day_verify.py (14B :8083) — remaining budget
+#
+# New turns 0 → Embed skip → Extract skip → 55 min all verify
+# Server philosophy: Slow but complete.
+
 set -o pipefail
 
 MAX_CYCLE_SEC=3300

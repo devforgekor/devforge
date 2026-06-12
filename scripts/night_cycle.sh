@@ -4,22 +4,17 @@
 #
 # System Mode Transition:
 #   devforge-night-cycle.timer fires at UTC 18:00 (KST 03:00)
-#   ──> MODE=night  (at script start, /opt/ai_data/scripts/current-system-mode.env)
-#   ──> Phase 1,4,5,6,7,8 pipeline runs (Phases 2-3 deprecated)
-#   ──> Phase 6 restores day mode, MODE=day
-#   ──> Phase 8 DeepSeek API audit runs in day mode
-#   On crash: EXIT trap restores MODE=day as safety net
+#   ──> MODE=night  (at script start)
+#   ──> Day Mode Restore at end sets MODE=day
+#   ──> On crash: EXIT trap restores MODE=day as safety net
 #
-# Agent mode check:
-#   cat /opt/ai_data/scripts/current-system-mode.env           # "MODE=day" or "MODE=night"
-#   python3 -c "print(open('/opt/ai_data/scripts/current-system-mode.env').read().strip().split('=')[1])"
-#
-# Phases:
-# Phase 4: P-R-J queue consumer    mid   — P(:8081) → R(:8082) → J(:8083) on Pod B
-# Phase 5: production verify          heavy — 27B(:8084) final gate on Pod B
-# Phase 6: restore day                       — Pod B extractor(:8082) + Pod A reserved(:8080)
-# Phase 7: Extract faithfulness test  light — Qwen3-4B extract faithfulness
-# Phase 8: DeepSeek Pro verify audit   light — proxy_reviewer.py
+# Pipeline Steps:
+#   Server Validation     — state_collector --validate (snapshot before switching)
+#   Night Review (P-R-J)  — 30B(:8081) → 14B(:8082) → NextCoder 14B(:8083)
+#   Night Verify          — 27B(:8084) final gate via review_consumer.py
+#   Day Mode Restore      — Pod B extractor(:8082) + Pod A reserved(:8080)
+#   Extract Test          — nightly_extract_test.py (faithfulness check)
+#   Proxy Audit           — proxy_reviewer.py (DeepSeek Pro verify audit)
 
 set -o pipefail
 
