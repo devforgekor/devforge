@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: called by — exp_runner.py (future), manual CLI
-"""Night Runner: Pod A stop → Pod B swap (30B→14B→14B→27B) → night_cycle subprocess → Pod B day 복원.
+"""Night Runner: Pod A stop → Pod B swap (30B→14B→N14B→27B) → night_cycle subprocess → Pod B day 복원.
 
 Usage:
   python3 night_runner.py --run-id <run_id> [--tag r1]
@@ -72,7 +72,7 @@ def main():
     # 2. Stop Pod A to free RAM for night models
     _stop_pod_a_for_ram()
 
-    # 3. Pod B swap sequence: 30B(proposer) → 14B(reflector) → 14B(judge) → 27B(verifier)
+    # 3. Pod B swap sequence: 30B(proposer) → 14B(reflector) → N14B(judge) → 27B(verifier)
     log_phase("Pod B swap: proposer (30B:8081)")
     if not _swap_pod_b("review-p", 8081):
         log("FATAL: proposer model swap failed")

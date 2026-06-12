@@ -13,7 +13,7 @@ night_proposer -> night_reflector -> night_judge 1회 패스
 - Extract: Pod B(3B extractor:8080) extract 전담, Pod A(7B reviewer:8082)는 유지
   → start_pod_a_only("day",8082)로 extract 직전 7B reviewer 재시작 (verify 준비)
 - Day_verify: Pod A(7B reviewer:8082) verify/MCP/global context 전담
-- P-R-J: Pod A(7B reviewer) stop (RAM 확보), Pod B(30B/14B/14B) 순차 swap
+- P-R-J: Pod A(7B reviewer) stop (RAM 확보), Pod B(30B/14B/N14B) 순차 swap
 
 사용법:
   python3 prj_cycle.py
@@ -714,7 +714,7 @@ def compile_handoff(prj_results, round_num, with_rubric):
 
 def run_propose_review_judge(state, tag, rubric_append):
     """P-R-J 1회 패스. Pod A stop → P → R → J → state 저장."""
-    # Pod A(7B reviewer) stop — Pod B가 30B/14B로 전환되기 전 RAM 확보
+    # Pod A(7B reviewer) stop — Pod B가 30B/14B/N14B로 전환되기 전 RAM 확보
     stop_pod_a()
 
     log("\n--- Phase 3: P-R-J (P) ---")

@@ -7,7 +7,7 @@ Port map:
   8080  Pod A  — Reserved for operator (future)
   8081  Pod B  — embed(f16 day) / proposer(30B night)
   8082  Pod B  — extract(7B day) / reflector(14B night)
-  8083  Pod B  — verify(14B day) / judge(14B night)
+  8083  Pod B  — verify(14B day) / judge(N14B night)
   8084  Pod B  — verifier(27B)
   8085+ Pod B  — Future / Azure SSH tunnels
 """
@@ -33,7 +33,7 @@ MODEL_METADATA = {
     # Pod B models — port assigned per mode (not from env file):
     #   8081: embed(f16 day) / proposer(30B night)
     #   8082: extract(7B day) / reflector(14B night)
-    #   8083: verify(14B day) / judge(14B night)
+    #   8083: verify(14B day) / judge(N14B night)
     #   8084: verifier(27B)
     "embed":      {
         "file": "Qwen3-Embedding-8B-f16.gguf",

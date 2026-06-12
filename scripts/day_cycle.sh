@@ -128,7 +128,7 @@ LOG "Budget=${BUDGET}s"
 [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 
 # ── Phase 3: Verify (잔여 예산 전부) ───────────────────────────────
-LOG "=== Phase 3/3: Verify (14B — review-j mode :8083) ==="
+LOG "=== Verify (14B — review-j mode :8083) ==="
 ensure_pod_b "review-j" "judge" false 600
 BUDGET=$(BUDGET)
 timeout -k 10 "$BUDGET" python3 "$PIPELINE_DIR/day_verify.py" 2>&1

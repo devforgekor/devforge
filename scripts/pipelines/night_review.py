@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: systemd:devforge-night-cycle.timer — runs at KST 01:00
-"""Night Review Pipeline — 30B Proposer → 14B Refuter → 14B Judge.
+"""Night Review Pipeline — 30B Proposer → 14B Refuter → N14B Judge.
 
 Reads day_verify output (pipeline_verify_*.json) and runs P-R-J chain.
 Alias for: night.py --review

@@ -11,7 +11,7 @@ Phase 3 (Day PRJ) removed. Remaining phases:
   Phase 7  Restore Day     Pod B extractor(:8082) + Pod A reserved(:8080)
 
 Phase 4 reads input from day_verify's pipeline_verify_*.json output.
-Usage: python3 night.py --review   # Phase 4 only (30B P → 14B R → 14B J)
+Usage: python3 night.py --review   # Phase 4 only (30B P → 14B R → N14B J)
        python3 night.py --verify   # Phase 5-6-7 (27B verify + feedback + restore)
        python3 night.py --all      # Full night pipeline (v3.0 backward compat)
 """
@@ -1237,7 +1237,7 @@ def main():
     import argparse
     ap = argparse.ArgumentParser(description="DevForge Night Pipeline v4.0")
     ap.add_argument("--all", action="store_true", help="Run full night pipeline (Phase 4→7, backward compat)")
-    ap.add_argument("--review", action="store_true", help="Run night_review (Phase 4: 30B P→14B R→14B J)")
+    ap.add_argument("--review", action="store_true", help="Run night_review (Phase 4: 30B P→14B R→N14B J)")
     ap.add_argument("--verify", action="store_true", help="Run night_verify (Phase 5-7: 27B verify → feedback → restore)")
     ap.add_argument("--phases", type=int, choices=[0, 1, 2, 3, 4, 5, 6, 7], nargs="+", help="Phase(s) to run (legacy)")
     ap.add_argument("--rubric", action="store_true", help="Enable rubric evaluation after Phase 2")

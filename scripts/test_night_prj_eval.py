@@ -253,7 +253,7 @@ _SWAP_OVERRIDE = {
         "EVICT_ROOM": "13000", "THREADS": "4", "THREADS_BATCH": "4",
     },
     "review-j": {
-        "MODEL_FILE": "N14B Q6_K.gguf",
+        "MODEL_FILE": "NextCoder-14B-Q6_K.gguf",
         "CTX_SIZE": "6144", "CACHE_RAM": "512", "MLOCK": "0",
         "EVICT_ROOM": "13000", "THREADS": "4", "THREADS_BATCH": "4",
     },
