@@ -31,16 +31,16 @@ IP: 10.0.0.75/24   SSH: 22   Netdata: 19999
 [0;32m[SERVICES][0m
   devforge-qwen: [0;37mactive[0m   devforge-swap: [0;37mactive[0m   postgres: [0;37mactive[0m   devforge-backup: [1;33minactive[0m   devforge-restore-test: [1;33minactive[0m   caddy: [0;37mactive[0m   netdata: [0;37mactive[0m
 
-[0;31m[VALIDATION ALERTS — 2026-06-07T18:01:35.495298+00:00][0m
+[0;31m[VALIDATION ALERTS — 2026-06-12T18:00:52.355285+00:00][0m
   [0;31m[MISMATCH][0m CLAUDE.yaml service devforge-pod-a
-          expected: [1;33mfailed[0m  actual: [0;31mactive[0m
-  [0;31m[MISMATCH][0m CLAUDE.yaml service 15m cycle
-          expected: [1;33minactive[0m  actual: [0;31mactivating[0m
+          expected: [1;33mfailed[0m  actual: [0;31minactive[0m
   [0;31m[MISMATCH][0m CLAUDE.yaml service classify
           expected: [1;33minactive[0m  actual: [0;31mfailed[0m
   [0;31m[MISMATCH][0m CLAUDE.yaml service nightly
           expected: [1;33minactive[0m  actual: [0;31mactivating[0m
   [0;31m[MISMATCH][0m CLAUDE.yaml overview.memory
-          expected: [1;33m22Gi + 4G zram (89.8M) + 12G swap (swappiness=10)[0m  actual: [0;31m22Gi + 4G zram (68.7M) + 8G swap (swappiness=10)[0m
+          expected: [1;33m22Gi + 4G zram (89.8M) + 12G swap (swappiness=10)[0m  actual: [0;31m22Gi + 4G zram (48.2M) + 8G swap (swappiness=10)[0m
+  [0;31m[MISMATCH][0m CLAUDE.yaml network.llm_api claims port 8080
+          expected: [1;33mport 8080 listening[0m  actual: [0;31mlistening ports: ['111', '19999', '2019', '22', '4317', '443', '4430', '44777', '80', '8084', '8085', '8125'][0m
 [0;31m  Fix CLAUDE.yaml or blueprint.yaml and re-run --validate[0m
 [0;36m================================================================[0m

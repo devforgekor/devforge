@@ -936,7 +936,7 @@ def _night_phase_j() -> Dict:
 def phase_4_night_prj(all_data: Dict, rubric_data: Optional[List] = None,
                       verification_items: Optional[List] = None,
                       group_by_category: bool = False) -> Dict:
-    log("\n=== Night Debate (P-R-J) ===")
+    log("\n=== Night Debate ===")
     log("  [sequence] review-p(proposer) -> review-r(reflector) -> review-j(judge)")
     if rubric_data:
         log(f"  [rubric] {len(rubric_data)} evaluations fed into P context")

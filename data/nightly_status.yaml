@@ -1,6 +1,6 @@
-timestamp: "2026-06-07T18:36:34Z"
-extract_test: ok
+timestamp: "2026-06-12T18:01:03Z"
+extract_test: skipped
 validation: failed
 review: ok
 verify: ok
-day: ok
+day: failed

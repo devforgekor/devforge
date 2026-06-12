@@ -10,10 +10,10 @@
 #
 # Pipeline Steps:
 #   Server Validation     — state_collector --validate (snapshot before switching)
-#   Night Debate (P-R-J)  — 30B(:8081) → 14B(:8082) → N14B(:8083)
+#   Night Debate          — 30B(:8081) → 14B(:8082) → N14B(:8083)
 #   Night Verify          — 27B(:8084) final gate via review_consumer.py
 #   Day Mode Restore      — Pod B extractor(:8082) + Pod A reserved(:8080)
-#   Extract Test          — nightly_extract_test.py (faithfulness check)
+
 #   Proxy Audit           — proxy_reviewer.py (DeepSeek Pro verify audit)
 
 set -o pipefail
@@ -133,11 +133,11 @@ start_llm_services() {
 # --- Night mode activation ---
 _set_mode night
 
-# ── Phase 1: Server Validation ────────────────────────────
+# ── Server Validation ────────────────────────────
 # Lightweight — runs before any mode switching to snapshot daytime state.
 
 validation_ok=true
-echo "[$(LOG_TS)] === Phase 1: Server Validation ==="
+echo "[$(LOG_TS)] === Server Validation ==="
 if python3 "$SCRIPTS_DIR/state_collector/main.py" --validate; then
     echo "[$(LOG_TS)] Server validation OK"
 else
@@ -145,21 +145,21 @@ else
     echo "[$(LOG_TS)] Server validation had issues (non-fatal)" >&2
 fi
 
-# ── Night Debate (P-R-J) ── (queue consumer) ──────────────
+# ── Night Debate ── (queue consumer) ──────────────
 # night_cycle.py --queue handles its own container management
 # (kill_all → sequential P→R→J model loading on Pod B).
 # Reads pending extract_results from activity_log.
-# On success: queue_status → 'reviewed' (consumed by Phase 5 review_consumer.py).
+# On success: queue_status → 'reviewed' (consumed by Night Verify).
 
 review_ok=true
 
-echo "[$(LOG_TS)] === Night Debate (P-R-J) ==="
+echo "[$(LOG_TS)] === Night Debate ==="
 if ! python3 "$SCRIPTS_DIR/pipelines/night_cycle.py" --queue --limit 5; then
     review_ok=false
     echo "[$(LOG_TS)] night_cycle.py --queue FAILED" >&2
 fi
 
-# ── Phase 5: Production verify (night_verify) ───────────────────
+# ── Night Verify (27B verifier :8084) ───────────────────
 
 verify_ok=true
 
@@ -175,7 +175,7 @@ echo "[$(LOG_TS)] Verify queue (status='reviewed'): $queue_count items"
 if [ "$queue_count" = "0" ] || [ -z "$queue_count" ]; then
     echo "[$(LOG_TS)] Verify queue empty — skipping 27B verify"
 else
-    echo "[$(LOG_TS)] === Phase 5: Production verify (night_verify) ==="
+    echo "[$(LOG_TS)] === Night Verify (27B) ==="
     stop_llm_services "verify"
     echo "[$(LOG_TS)] Stopping Pod A (memory for 27B)..."
     systemctl --user stop container-devforge-pod-a 2>&1 || true
@@ -189,7 +189,7 @@ else
     fi
 fi
 
-# ── Phase 6: restore day mode ───────────────────────────────
+# ── Day Mode Restore ───────────────────────────────
 
 day_restored=true
 
@@ -230,23 +230,11 @@ else
     echo "[$(LOG_TS)] Daily structure sync FAILED — KST 09:00 timer will retry" >&2
 fi
 
-# ── Phase 7: Extract faithfulness test ─────────────────────────
-
-extract_test_ok=true
-
-echo "[$(LOG_TS)] === Phase 7: Extract faithfulness test ==="
-if python3 "$SCRIPTS_DIR/nightly_extract_test.py" --model-label Qwen3-4B; then
-    echo "[$(LOG_TS)] Extract faithfulness test OK"
-else
-    extract_test_ok=false
-    echo "[$(LOG_TS)] Extract faithfulness test had issues (non-fatal)" >&2
-fi
-
-# ── Phase 8: DeepSeek Pro verify audit ──────────────────────
+# ── Proxy Audit (DeepSeek Pro) ──────────────────────
 
 proxy_ok=true
 
-echo "[$(LOG_TS)] === Phase 8: DeepSeek Pro verify audit ==="
+echo "[$(LOG_TS)] === Proxy Audit (DeepSeek Pro) ==="
 if python3 "$SCRIPTS_DIR/pipelines/proxy_reviewer.py" --limit 50; then
     echo "[$(LOG_TS)] DeepSeek Pro review OK"
 else
@@ -257,7 +245,6 @@ fi
 # ── Status summary (consumed by 9 AM Slack hook) ──────────────
 cat > "$STATUS_FILE" <<YAML
 timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-extract_test: $($extract_test_ok && echo ok || echo skipped)
 validation: $($validation_ok && echo ok || echo failed)
 review: $($review_ok && echo ok || echo failed)
 verify: $($verify_ok && echo ok || echo skipped)
