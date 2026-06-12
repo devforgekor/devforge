@@ -22,7 +22,7 @@ from lib.llm_client import call_llm
 # review-r → 14B Q4_K_M (fast binary accept/reject decisions)
 P_MODE = "review-p"
 R_MODE = "review-r"
-J_MODE = "review-j"  # NextCoder-14B-Q6_K
+J_MODE = "review-j"  # N14B Q6_K
 
 # ── Night system prompts (from night.py with few-shot) ─────────────────
 SYSTEM_PROPOSER = """You are a code review proposer. Given a structural audit summary, propose findings for deeper investigation.
@@ -253,7 +253,7 @@ _SWAP_OVERRIDE = {
         "EVICT_ROOM": "13000", "THREADS": "4", "THREADS_BATCH": "4",
     },
     "review-j": {
-        "MODEL_FILE": "NextCoder-14B-Q6_K.gguf",
+        "MODEL_FILE": "N14B Q6_K.gguf",
         "CTX_SIZE": "6144", "CACHE_RAM": "512", "MLOCK": "0",
         "EVICT_ROOM": "13000", "THREADS": "4", "THREADS_BATCH": "4",
     },

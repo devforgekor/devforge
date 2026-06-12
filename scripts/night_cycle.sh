@@ -10,7 +10,7 @@
 #
 # Pipeline Steps:
 #   Server Validation     — state_collector --validate (snapshot before switching)
-#   Night Review (P-R-J)  — 30B(:8081) → 14B(:8082) → NextCoder 14B(:8083)
+#   Night Review (P-R-J)  — 30B(:8081) → 14B(:8082) → N14B(:8083)
 #   Night Verify          — 27B(:8084) final gate via review_consumer.py
 #   Day Mode Restore      — Pod B extractor(:8082) + Pod A reserved(:8080)
 #   Extract Test          — nightly_extract_test.py (faithfulness check)

@@ -11,7 +11,7 @@ MODE=day (관찰형, 60s 주기):
 
 MODE=night (능동형, 60s 주기):
   - T1+T2 LLM probe (현재 night 모델)
-  - Phase 4(30B/14B/NextCoder) 진도 감시
+  - P-R-J(30B→14B→N14B) 진도 감시
   - Phase 5(27B verify) 진도 감시
   - Phase 6(27B feedback) 진도 감시
   - 각 phase 실패 → watchdog fix loop
