@@ -1,16 +1,31 @@
 last_checkpoint:
-  time: '2026-06-12T22:33:03.604922+00:00'
-  summary: no files
-  total_files: 0
+  time: '2026-06-14T12:54:17.117608+00:00'
+  summary: watchdog_silent_alerting
+  total_files: 6
   recent_files:
     data: []
     docs: []
-    config: []
-    source: []
+    config:
+      - scripts/lib/watchdog/config.py
+      - scripts/lib/watchdog/state.py
+    source:
+      - scripts/lib/watchdog/__init__.py
+      - scripts/lib/watchdog/notifier.py
+      - scripts/lib/pod_manager.py
+      - scripts/day_cycle.sh
+      - scripts/cli.py
     generated: []
   git: {}
-  task: null
+  task: watchdog liveness monitoring — silent alerting, dead man switch, heartbeat :15/:45
 decisions:
+- '{''id'': ''d40-01'', ''detail'': ''WATCHDOG SILENT ALERTING. 60s cycle writes liveness + catchdog_events to DB. Slack only on state changes, CRIT thresholds, timer delays, experiment progress. Healthy infrastructure = zero Slack..''}'
+- '{''id'': ''d40-02'', ''detail'': ''DEAD MAN SWITCH via day_cycle.sh. watchdog_liveness DB table updated every 60s. day_cycle Phase -1 checks liveness age > 900s -> Slack danger alert (Block Kit attachment format). Reuses existing hourly schedule..''}'
+- '{''id'': ''d40-03'', ''detail'': ''HEARTBEAT :15/:45 UTC. should_heartbeat() checks minute % 30 == 15. Fires only if degraded_count > 0 OR experiment_active. chat.update in-place prevents channel clutter..''}'
+- '{''id'': ''d40-04'', ''detail'': ''SLACK FORMAT standard. All alerts: header + section + context (KST). _slack_alert() in shell uses sys.argv to avoid interpolation of special characters..''}'
+- '{''id'': ''d40-05'', ''detail'': ''POD B MODE BUG FIXED. _write_mode_env() wrote dict key ("judge") instead of mode field ("review-j"). 113 crash loops. Now uses meta["mode"]. key->mode: extractor->day, judge->review-j, embed->embed..''}'
+- '{''id'': ''d40-06'', ''detail'': ''PSQL_JSON TIMESTAMP FIX. row_to_json returns ISO string, not datetime. 5 .strftime() calls -> AttributeError. Fixed with ISO slicing..''}'
+- '{''id'': ''d40-07'', ''detail'': ''LINT: 6 P2 "ts" violations resolved (cli.py + state.py). 0P0/0P1/0P2 across 190 files..''}'
+- '{''id'': ''d40-08'', ''detail'': ''CLAUDE ROLE: Cannot read Slack. Pattern: Watchdog -> Slack -> user invokes Claude -> DB query. 88% token reduction vs polling..''}'
 - '{''id'': ''d38-01'', ''detail'': ''MODEL INVENTORY FINAL (gguf/). All 6 models downloaded and on disk:\\n  Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  (18G)
   — proposer/embed (:8081)\\n  Qwen3.6-27B.i1-IQ4_XS.gguf                  (15G) — verifier (:8084)\\n  Qwen2.5-Coder-7B-Instruct-Q8_0.gguf         (7.6G)
   — extractor (:8082)\\n  Qwen2.5-Coder-14B-Instruct-Q6_K.gguf        (12G) — reviewer/judge (:8083)\\n  NextCoder-14B-Q6_K.gguf                      (12G)
@@ -42,6 +57,10 @@ decisions:
 - '{''id'': ''d39-04'', ''detail'': ''phases.md Phase 2 Tier 2 updated. Gemini embedding items deprecated/replaced by Qwen 8B
   approach. 12 new items added (text_cleaner, FTS5 index, hybrid code, CLI search, monthly rebuild, day-cycle auto embed).
 known_issues:
+- '{''id'': ''ki40-01'', ''detail'': ''EMBEDDING INCOMPLETE (304/8819 turns, 3.4%). Blocks hybrid search, MCP mem_search, wing/room filter. Day-cycle embed phase runs hourly..''}'
+- '{''id'': ''ki40-02'', ''detail'': ''DAY_CYCLE TIMER active but Pod B currently stopped. Timer fires :00 each hour. Check Pod B mode switching stability before bulk ops..''}'
+- '{''id'': ''ki40-03'', ''detail'': ''WATCHDOG SERVICE INACTIVE. Stopped during embedding. Dead man switch will detect via day_cycle. Reactivate after embedding: systemctl --user start devforge-watchdog..''}'
+- '{''id'': ''ki40-04'', ''detail'': ''EMBEDDING PROTECTION FILE removed (/opt/ai_data/scripts/EMBEDDING_IN_PROGRESS deleted). Stale file blocked Pod B mode switches after embed process died. Re-create if embedding restarted..''}'
 - '{''id'': ''ki38-01'', ''detail'': ''30B Q4_K_M (18G) + 27B IQ4_XS (15G) + 14B Q6_K (12G) + 7B Q8 (7.6G) = ~53G concurrently
   loadable models. RAM: 22G total, ~17-18G usable. 30B MoE (3.3B active/token) is viable. 27B dense (14.7G IQ4_XS) must NOT
   overlap with 30B load. Night pipeline sequential model switching is critical.\\n''}'
@@ -59,6 +78,7 @@ known_issues:
 - '{''id'': ''ki39-02'', ''detail'': ''full_pipeline.sh crashed at chunk 3/7 via SIGTERM (line 61). Not restarted.
   Not safe to restart until embedding completes (Pod B is in embed mode).\\n''}'
 completed_log:
+- '[Session 40] Watchdog silent alerting + dead man switch. Pod B mode mapping bug fixed (113 crash loop). Day-cycle liveness check added. Slack format standardized. 6 P2 lint resolved. Heartbeat :15/:45 with chat.update in-place.'
 - '[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs.'
 - '[Session 38] Model downloads: 30B Q4_K_M (18G), NextCoder-14B Q6_K (12G), 27B i1-IQ4_XS (15G).'
 - '[Session 38] Disk cleanup: ~37G recovered (HF cache, old models, empty backups).'

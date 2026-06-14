@@ -9,6 +9,7 @@ Circuit breaker pattern (pyresilience, pybreaker):
 """
 
 import time
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -141,13 +142,16 @@ class WatchdogState:
     def should_heartbeat(self, interval: int = 1800) -> bool:
         now = time.monotonic()
         if now - self._last_heartbeat_ts >= interval:
-            self._last_heartbeat_ts = now
-            return True
+            utc_now = datetime.now(timezone.utc)
+            if utc_now.minute % 30 == 15:
+                self._last_heartbeat_ts = now
+                return True
         return False
 
-    def add_event(self, component: str, event_type: str, detail: str):
+    def add_event(self, component: str, event_type: str, detail: str,
+                  from_state: str = "", to_state: str = "", fail_count: int = 0):
         self._events.append({
-            "ts": time.monotonic(),
+            "timestamp": time.monotonic(),
             "component": component,
             "type": event_type,
             "detail": detail,
@@ -156,12 +160,43 @@ class WatchdogState:
         if len(self._events) > 1000:
             self._events = self._events[-1000:]
 
+        # Persist to DB (best-effort, non-blocking)
+        try:
+            from lib.db import psql_ok, esc_sql
+            c = esc_sql(component)
+            et = esc_sql(event_type)
+            d = esc_sql(detail)
+            from_st = esc_sql(from_state)
+            to_st = esc_sql(to_state)
+            psql_ok(
+                f"INSERT INTO catchdog_events "
+                f"(component, event_type, from_state, to_state, detail, fail_count) "
+                f"VALUES ('{c}', '{et}', NULLIF('{from_st}', ''), NULLIF('{to_st}', ''), "
+                f"NULLIF('{d}', ''), {fail_count})",
+                timeout=5,
+            )
+        except Exception:
+            pass  # best-effort — DB down shouldn't crash watchdog
+
     def events_since(self, sec: int) -> list[dict]:
         cutoff = time.monotonic() - sec
-        return [e for e in self._events if e["ts"] > cutoff]
+        return [e for e in self._events if e["timestamp"] > cutoff]
 
     def all_summaries(self) -> list[dict]:
         return [t.summary() for t in self._components.values()]
 
     def degraded_count(self) -> int:
         return sum(1 for t in self._components.values() if t.is_degraded())
+
+    def update_liveness(self) -> None:
+        """Update watchdog_main liveness timestamp in DB (dead man's switch)."""
+        try:
+            from lib.db import psql_ok
+            psql_ok(
+                "INSERT INTO watchdog_liveness (component, liveness_ts) "
+                "VALUES ('watchdog_main', now()) "
+                "ON CONFLICT (component) DO UPDATE SET liveness_ts = now()",
+                timeout=5,
+            )
+        except Exception:
+            pass  # best-effort — DB down shouldn't crash watchdog

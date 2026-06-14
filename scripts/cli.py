@@ -1193,6 +1193,174 @@ def cmd_lint(args):
         sys.exit(1)
 
 
+# ── Watch handlers ──────────────────────────────────────────────────────────
+
+def cmd_watch_status(args):
+    """서버 생존 + pulse 큐 + 이벤트 한눈에."""
+    from lib.watchdog.messenger import list_pulses
+    from lib.db import psql_json
+
+    print("=" * 55)
+    print("   WATCH STATUS")
+    print("=" * 55)
+
+    # Pulse summary
+    pending = list_pulses("PENDING", 100)
+    in_progress = list_pulses("IN_PROGRESS", 100)
+    human = list_pulses("HUMAN_REQUIRED", 100)
+    print(f"\n  Pulses: {len(pending)} pending | {len(in_progress)} in-progress | {len(human)} human-required")
+    for p in pending[:5]:
+        fid = p.get("target_file", "")
+        fstr = f" → {fid}" if fid else ""
+        print(f"    [{p['priority']}] {p['instruction'][:60]}{fstr}")
+
+    # Last 5 catchdog events
+    rows = psql_json(
+        "SELECT component, event_type, to_state, detail, created_at "
+        "FROM catchdog_events ORDER BY created_at DESC LIMIT 5"
+    )
+    if rows:
+        print(f"\n  Recent Events:")
+        for r in rows:
+            raw_ts = r.get("created_at")
+            utc_timestamp = raw_ts[11:16] if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
+            print(f"    [{utc_timestamp}] {r['component']}:{r['event_type']}"
+                  f"{' → '+r['to_state'] if r.get('to_state') else ''}")
+
+    # Alerts
+    alerts = psql_json(
+        "SELECT component, event_type, detail, created_at "
+        "FROM catchdog_events WHERE event_type IN ('down','delay','crit','fail','stopped') "
+        "ORDER BY created_at DESC LIMIT 5"
+    )
+    if alerts:
+        print(f"\n  Alerts:")
+        for a in alerts:
+            raw_ts = a.get("created_at")
+            utc_timestamp = raw_ts[5:16].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
+            print(f"    [{utc_timestamp}] {a['component']}: {a['event_type']} — {a.get('detail','?')[:50]}")
+
+    print()
+
+
+def cmd_watch_alerts(args):
+    """PENDING + HUMAN_REQUIRED pulse 목록."""
+    from lib.watchdog.messenger import list_pulses
+    from lib.db import psql_json
+
+    total = 0
+    for status in ("PENDING", "HUMAN_REQUIRED"):
+        pulses = list_pulses(status, 50)
+        total += len(pulses)
+        if pulses:
+            print(f"\n── {status} ({len(pulses)}) ──")
+            for p in pulses:
+                print(f"  {p['pulse_id']}")
+                print(f"    [{p['priority']}] {p['instruction'][:80]}")
+                if p.get("target_file"):
+                    print(f"    target: {p['target_file']}")
+                print(f"    retry: {p.get('retry_count',0)}/{p.get('max_retries',3)}")
+
+    db_alerts = psql_json(
+        "SELECT component, event_type, detail, created_at "
+        "FROM catchdog_events WHERE event_type IN ('down','fail','stopped') "
+        "AND created_at > now() - interval '24 hours' "
+        "ORDER BY created_at DESC LIMIT 10"
+    )
+    if db_alerts:
+        print(f"\n── Server Alerts (24h, {len(db_alerts)}) ──")
+        for a in db_alerts:
+            raw_ts = a.get("created_at")
+            utc_timestamp = raw_ts[5:16].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
+            print(f"  [{utc_timestamp}] {a['component']}: {a['event_type']} — {a.get('detail','?')[:60]}")
+
+    if total == 0 and not db_alerts:
+        print("  No active alerts")
+    print()
+
+
+def cmd_watch_pulses_list(args):
+    """PENDING pulses 목록."""
+    from lib.watchdog.messenger import list_pulses
+    pulses = list_pulses("PENDING", args.limit)
+    if not pulses:
+        print("  No PENDING pulses")
+        return
+    print(f"\n  PENDING pulses ({len(pulses)}):\n")
+    for p in pulses:
+        raw_ts = p.get("created_at")
+        utc_timestamp = raw_ts[5:16].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
+        print(f"  [{utc_timestamp}] {p['pulse_id']}")
+        print(f"    [{p['priority']}] {p['instruction'][:80]}")
+        if p.get("target_file"):
+            print(f"    target: {p['target_file']}")
+        r, m = p.get("retry_count", 0), p.get("max_retries", 3)
+        print(f"    retry: {r}/{m}" if r > 0 else f"    retry: 0/{m}")
+        print()
+
+
+def cmd_watch_pulse_create(args):
+    """새 pulse 생성."""
+    from lib.watchdog.messenger import log_message
+    pid = log_message(
+        source="cli", target="operator", type="manual", content=args.instruction,
+        priority=args.priority, target_file=args.target_file,
+        target_test=args.target_test, category=args.category,
+    )
+    if pid:
+        print(f"  Created: {pid}")
+    else:
+        print(f"  ERROR: Could not create pulse (duplicate or DB error)")
+
+
+def cmd_watch_pulse_resolve(args):
+    """pulse 완료 처리."""
+    from lib.watchdog.messenger import resolve_pulse
+    status = "IGNORED" if args.ignore else "RESOLVED"
+    ok = resolve_pulse(args.pulse_id, status)
+    if ok:
+        print(f"  {status}: {args.pulse_id}")
+    else:
+        print(f"  ERROR: Could not resolve {args.pulse_id}")
+
+
+def cmd_watch_pulse_show(args):
+    """pulse 상세 정보."""
+    from lib.watchdog.messenger import get_pulse
+    p = get_pulse(args.pulse_id)
+    if not p:
+        print(f"  Pulse not found: {args.pulse_id}")
+        return
+    for k, v in p.items():
+        if v:
+            print(f"  {k}: {v}")
+
+
+def cmd_watch_log(args):
+    """catchdog_events 최근 로그."""
+    from lib.db import psql_json, esc_sql
+    comp_filter = f"AND component = '{esc_sql(args.component)}'" if args.component else ""
+    rows = psql_json(
+        f"SELECT component, event_type, from_state, to_state, detail, fail_count, created_at "
+        f"FROM catchdog_events "
+        f"WHERE 1=1 {comp_filter} "
+        f"ORDER BY created_at DESC LIMIT {args.limit}"
+    )
+    if not rows:
+        print("  No events logged")
+        return
+    print(f"\n  Events ({len(rows)}):\n")
+    for r in rows:
+        raw_ts = r.get("created_at")
+        utc_timestamp = raw_ts[5:19].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 19 else "?"
+        fmt = f"  [{utc_timestamp}] {r['component']}:{r['event_type']}"
+        if r.get("to_state"):
+            fmt += f" → {r['to_state']}"
+        if r.get("detail"):
+            fmt += f" — {r['detail'][:80]}"
+        print(fmt)
+
+
 async def main():
     parser = argparse.ArgumentParser(description="DevForge CLI")
     sub = parser.add_subparsers(dest="command")
@@ -1391,6 +1559,32 @@ async def main():
     file_del.add_argument("id", help="File UUID")
     file_del.add_argument("--remove-local", action="store_true", help="Also delete local file")
 
+    # ── Watch (Watchdog + Watchman 통합) ────────────────────────────────────
+    p_watch = sub.add_parser("watch", help="서버 감시 — 상태, 알람, pulse 큐, 이벤트 로그")
+    watch_sub = p_watch.add_subparsers(dest="watch_command")
+
+    p_ws = watch_sub.add_parser("status", help="서버 생존 + pulse 큐 + 이벤트 한눈에")
+    p_wa = watch_sub.add_parser("alerts", help="현재 PENDING/HUMAN_REQUIRED pulse 목록")
+    p_wp = watch_sub.add_parser("pulses", help="pulse 큐 관리")
+    wdp_sub = p_wp.add_subparsers(dest="pulse_command")
+    wp_list = wdp_sub.add_parser("list", help="PENDING pulse 목록")
+    wp_list.add_argument("--limit", "-n", type=int, default=20)
+    wp_create = wdp_sub.add_parser("create", help="새 pulse 생성")
+    wp_create.add_argument("instruction", help="작업 지시 내용")
+    wp_create.add_argument("--priority", "-p", default="P1_CONTEXT",
+                           choices=["P0_HOT_FIX", "P1_CONTEXT", "HUMAN_REQUIRED"])
+    wp_create.add_argument("--target-file", "-f", default="", help="대상 파일")
+    wp_create.add_argument("--target-test", "-t", default="", help="대상 테스트")
+    wp_create.add_argument("--category", "-c", default="", help="분류 태그")
+    wp_resolve = wdp_sub.add_parser("resolve", help="pulse 완료 처리")
+    wp_resolve.add_argument("pulse_id", help="pulse ID")
+    wp_resolve.add_argument("--ignore", action="store_true", help="RESOLVED 대신 IGNORED")
+    wp_show = wdp_sub.add_parser("show", help="pulse 상세 정보")
+    wp_show.add_argument("pulse_id", help="pulse ID")
+    p_wlog = watch_sub.add_parser("log", help="catchdog_events 최근 로그")
+    p_wlog.add_argument("--limit", "-n", type=int, default=20)
+    p_wlog.add_argument("--component", "-c", default="", help="특정 컴포넌트 필터")
+
     args = parser.parse_args()
 
     if args.command == "search":
@@ -1490,6 +1684,26 @@ async def main():
             cmd_file_delete(args)
         else:
             p_file.print_help()
+    elif args.command == "watch":
+        if args.watch_command == "pulses":
+            if args.pulse_command == "list":
+                cmd_watch_pulses_list(args)
+            elif args.pulse_command == "create":
+                cmd_watch_pulse_create(args)
+            elif args.pulse_command == "resolve":
+                cmd_watch_pulse_resolve(args)
+            elif args.pulse_command == "show":
+                cmd_watch_pulse_show(args)
+            else:
+                wdp_sub.print_help()
+        elif args.watch_command == "alerts":
+            cmd_watch_alerts(args)
+        elif args.watch_command == "status":
+            cmd_watch_status(args)
+        elif args.watch_command == "log":
+            cmd_watch_log(args)
+        else:
+            p_watch.print_help()
     else:
         parser.print_help()
 

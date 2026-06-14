@@ -4,12 +4,11 @@
 """Day Pipeline: extract → py_verify → activity_log 저장 (classify.py P-R-J 별도).
 
 NOTE: Port assignments follow MODEL_METADATA standards.
-Standard: Pod B(extractor:8082), Pod A(operator:8080)."""
+Standard: Pod B(extractor:8082), Pod A(operator:8080).
 
 Usage:
   python3 day_pipeline.py [--skip-extract] [--tag r1]
 """
-
 import json, os, subprocess, sys
 from datetime import datetime, timezone
 
@@ -17,6 +16,7 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.infra.container_manager import start_pod_a
+from lib.watchdog.messenger import get_undelivered
 from lib.pipeline_common import (
     PipelineState, load_input, log, log_phase_header, save,
 )
@@ -121,6 +121,24 @@ def main():
     # Load input
     data = load_input()
     state = PipelineState(1, False, data)
+
+    # Phase -2: Watchman Pulse (NewHand Injection)
+    log_phase_header("Phase -2: Watchman Pulse")
+    pulses = get_undelivered(target="operator")
+    if pulses:
+        log(f"  Loaded {len(pulses)} pulses from Watchman")
+        # Inject into global or local state for LLM prompts
+        pulse_context = "\n### [WATCHMAN PULSE - NEWHAND]\n"
+        for p in pulses:
+            p_type = p.get("type", "INFO")
+            p_content = p.get("content", "")
+            pulse_context += f"- [{p_type}] {p_content}\n"
+        
+        # Store in state to be used by following LLM calls
+        state.add_phase("watchman_pulse", {"count": len(pulses), "context": pulse_context})
+        log("  Watchman Pulse context prepared for injection")
+    else:
+        log("  No active Watchman pulses found")
     log(f"  Input: {len(data.get('findings', []))} findings")
 
     # Phase -1: Extract → review_facts (DB) + activity_log type='extract_result' (DB)
@@ -129,6 +147,7 @@ def main():
         from pipelines.extract import extract_pipeline
         result = extract_pipeline(
             turn_id=None, dry_run=False, mcp_model="day_mcp", skip_mcp=True,
+            pulse_context=state.get_phase("watchman_pulse", {}).get("context")
         )
         log(f"  Extract result: {result['processed']} processed, "
             f"{result['failed']} failed, {result['facts']} facts")
@@ -151,13 +170,8 @@ def main():
     body_json = json.dumps(day_handoff, ensure_ascii=False).replace("'", "''")
     run_id = f"day_{tag}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     sql = (
-        "INSERT INTO activity_log "
-        "(type, source, title, summary, body, run_id, exec_status) "
-        "VALUES ("
-        f"'day_review', 'day_pipeline', 'Day Review: {tag}', "
-        f"'py_verify={len(verify_result.get(\"issues\",[]))} issues', "
-        f"'{body_json}'::jsonb, '{run_id}', 'DONE'"
-        ")"
+        "INSERT INTO activity_log (type, source, title, summary, body, run_id, exec_status) "
+        f"VALUES ('day_review', 'day_pipeline', '{tag}', 'py_verify={len(verify_result.get('issues',[]))} issues', '{body_json}'::jsonb, '{run_id}', 'DONE')"
     )
     r = subprocess.run(
         ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",

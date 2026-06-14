@@ -396,8 +396,8 @@ def _post_process_extractions(
 
 
 # ── Phase 2: extraction ────────────────────────────────────────────────
-def _extract_facts(user_turn: str, thinking: str, text: str
-                   ) -> Optional[Dict[str, Any]]:
+def _extract_facts(user_turn: str, thinking: str, text: str,
+                   pulse_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Run day_extract extraction. Returns {extractions, usage, timings, elapsed_ms}."""
     parts = [
         "=== user_turn ===",

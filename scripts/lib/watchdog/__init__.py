@@ -363,6 +363,9 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
         mode = read_mode()
         _state.set_mode(mode)
 
+        # Dead man's switch — update liveness timestamp every cycle
+        _state.update_liveness()
+
         # Check if an experiment is running → monitor-only mode (no recovery)
         experiment_active = is_experiment_active()
         if experiment_active:
@@ -395,14 +398,18 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
             import traceback
             traceback.print_exc()
 
-        elapsed_since_start = time.monotonic() - _start_time
-        if elapsed_since_start > 300 and _state.should_heartbeat(HEARTBEAT_INTERVAL):
-            try:
-                summary = build_heartbeat_summary(results)
-                heartbeat(summary)
-                log("heartbeat sent")
-            except Exception as e:
-                log(f"heartbeat error: {e}")
+        if _state.should_heartbeat(HEARTBEAT_INTERVAL):
+            degraded = _state.degraded_count()
+            experiment_active_now = is_experiment_active()
+            if degraded > 0 or experiment_active_now:
+                try:
+                    summary = build_heartbeat_summary(results)
+                    heartbeat(summary)
+                    log(f"heartbeat sent ({degraded} degraded{', experiment' if experiment_active_now else ''})")
+                except Exception as e:
+                    log(f"heartbeat error: {e}")
+            else:
+                log("heartbeat skipped (all healthy)")
 
         if one_shot:
             break

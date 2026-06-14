@@ -21,7 +21,8 @@ from pathlib import Path
 
 # ── 인터벌 ──────────────────────────────────────────────────────────
 CHECK_INTERVAL = 60        # seconds between check cycles
-HEARTBEAT_INTERVAL = 1800  # 30min Slack heartbeat
+HEARTBEAT_INTERVAL = 1800  # 30min Slack heartbeat (aligned to :15 / :45)
+LIVENESS_STALE_SEC = 900   # 15min — watchdog dead man's switch threshold
 LATENCY_CHECK_INTERVAL = 300  # 5min between T3 latency checks
 
 # ── MODE ────────────────────────────────────────────────────────────

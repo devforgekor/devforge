@@ -567,6 +567,10 @@ modules:
       status: experimental
       purpose: "Auto-fix loop \u2014 error \uAC10\uC9C0 \u2192 LLM \uC218\uC815 \uC694\
         \uCCAD \u2192 \uC784\uC2DC podman \uAC80\uC99D \u2192 \uC801\uC6A9."
+    messenger.py:
+      status: experimental
+      purpose: "Watchdog Messenger \u2014 \uC815\uBCF4 \uC911\uAC1C \uC2DC\uC2A4\uD15C\
+        ."
     notifier.py:
       status: production
       purpose: "Slack \uC54C\uB9BC \u2014 30\uBD84 heartbeat (Block Kit in-place)\

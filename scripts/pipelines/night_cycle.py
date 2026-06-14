@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
+from lib.watchdog.messenger import log_message
 from lib.pipeline_common import (
     JUDGE_MODEL, JUDGE_SYSTEM_PROMPT, PROPOSER_MODEL,
     PROPOSER_SYSTEM_PROMPT, REFLECTOR_MODEL, REFLECTOR_SYSTEM_PROMPT,
@@ -249,6 +250,17 @@ def save_feedback_to_db(night_verify_feedback, tag):
         if r.returncode == 0:
             count += 1
             log(f"  Saved feedback for {model} ({role}) to activity_log")
+            # Watchman Integration (NewHand)
+            try:
+                log_message(
+                    source="night_verify",
+                    target="operator",
+                    type="HOT_FIX" if score < 70 else "CONTEXT",
+                    content=f"[{role}] {weaknesses[0] if weaknesses else 'Performance Feedback'}",
+                    detail=json.dumps({"model": model, "role": role, "improvements": improvements, "score": score}, ensure_ascii=False)
+                )
+            except Exception as e:
+                log(f"  [Watchman] Error reporting feedback: {e}")
         else:
             log(f"  Failed to save feedback for {model} ({role}): {r.stderr[:100]}")
 

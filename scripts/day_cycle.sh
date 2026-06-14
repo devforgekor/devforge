@@ -20,6 +20,39 @@ LOG_TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 LOG() { echo "[$(LOG_TS)] $*"; }
 BUDGET() { echo $(( MAX_CYCLE_SEC - ($(date +%s) - START_TS) )); }
 
+# Slack alert helper — same format as notifier.py send_alert()
+_slack_alert() {
+    local title="$1" detail="$2" color="${3:-danger}"
+    local secrets_file="$HOME/.config/devforge/secrets.env"
+    local token=""; local channel=""
+    [ -f "$secrets_file" ] && . "$secrets_file"
+    token="${SLACK_BOT_TOKEN:-}"; channel="${SLACK_CHANNEL:-U0APJGD8CBW}"
+    [ -z "$token" ] && return 1
+    local kst_now
+    kst_now=$(TZ=Asia/Seoul date '+%m/%d %H:%M')
+
+    python3 -c "
+import json, sys
+payload = {
+    'channel': sys.argv[1],
+    'text': f'[{sys.argv[2]}] {sys.argv[3]}',
+    'attachments': [{
+        'color': sys.argv[4],
+        'blocks': [
+            {'type': 'header', 'text': {'type': 'plain_text', 'text': sys.argv[3]}},
+            {'type': 'section', 'text': {'type': 'mrkdwn', 'text': sys.argv[5]}},
+            {'type': 'context', 'elements': [{'type': 'mrkdwn', 'text': f'{sys.argv[2]} KST — day_cycle watchdog check'}]},
+        ],
+    }],
+}
+print(json.dumps(payload))
+" "$channel" "$kst_now" "$title" "$color" "$detail" \
+    | curl -s -X POST "https://slack.com/api/chat.postMessage" \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        -d @- -o /dev/null 2>/dev/null || true
+}
+
 SCRIPT_DIR="/opt/projects/server/scripts"
 PIPELINE_DIR="$SCRIPT_DIR/pipelines"
 MODE_ENV="/opt/ai_data/scripts/current-mode-pod-b.env"
@@ -84,6 +117,21 @@ else
     LOG "  duckdns FAILED" >&2
 fi
 
+
+LOG "=== System: watchdog liveness ==="
+LIVENESS_AGE=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+    "SELECT EXTRACT(EPOCH FROM (now() - liveness_ts))::int FROM watchdog_liveness WHERE component='watchdog_main'" 2>/dev/null || echo "0")
+LIVENESS_AGE=${LIVENESS_AGE:-0}
+if [ "$LIVENESS_AGE" -gt 900 ] 2>/dev/null; then
+    LOG "  WATCHDOG STALE: ${LIVENESS_AGE}s since last liveness update"
+    _slack_alert \
+        "Watchdog Dead Man's Switch" \
+        "watchdog_main last liveness ${LIVENESS_AGE}s ago. Run: systemctl --user status devforge-watchdog" \
+        "danger"
+else
+    LOG "  watchdog OK (${LIVENESS_AGE}s ago)"
+fi
+
 LOG "=== System: worklog ==="
 if timeout 240 python3 "$PIPELINE_DIR/worklog_generator.py" 2>&1; then
     LOG "  worklog OK"
@@ -105,11 +153,11 @@ NEED_EMBED=${NEED_EMBED:-0}
 if [ "$NEED_EMBED" -gt 0 ]; then
     LOG "=== Day Embedding: f16 (${NEED_EMBED} unembedded turns) ==="
     ensure_pod_b "embed" "embed" true 1200
-    timeout -k 10 "$BUDGET" python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
+    python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
-    [ $RC -eq 124 ] && LOG "  Embed timed out" || LOG "  Embed exit=$RC"
+    LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
     LOG "Budget=${BUDGET}s"
     [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 else

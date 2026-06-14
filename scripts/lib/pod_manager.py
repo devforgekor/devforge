@@ -289,15 +289,21 @@ def _write_mode_env(mode: str, port: int) -> None:
     """Write Pod B env file — SSOT is MODEL_METADATA.
 
     Entrypoint reads this file at startup instead of hardcoding model config.
-    Reverse-lookup by (mode, port) which uniquely identifies each Pod B model.
+    Looks up by (mode field or dict key, port) which uniquely identifies each Pod B model.
     """
     meta = None
     for v in MODEL_METADATA.values():
-        if v.get("mode") == mode and v.get("port") == port:
+        if v.get("port") == port and (v.get("mode") == mode or v.get("model_name") == mode):
             meta = v
             break
+    if meta is None:
+        # Fallback: lookup by dict key
+        meta = MODEL_METADATA.get(mode)
+        if meta and meta.get("port") != port:
+            meta = None
 
-    pairs = [("MODE", mode)]
+    entrypoint_mode = meta["mode"] if meta else mode
+    pairs = [("MODE", entrypoint_mode)]
     if meta:
         f = meta.get
         pairs += [
