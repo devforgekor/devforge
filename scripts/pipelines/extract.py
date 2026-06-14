@@ -410,8 +410,12 @@ def _extract_facts(user_turn: str, thinking: str, text: str,
         text or "(empty)",
     ]
 
+    system_prompt = SYSTEM_DAY_EXTRACT
+    if pulse_context:
+        system_prompt = f"{pulse_context}\n\n{system_prompt}"
+
     meta = call_llm(
-        [{"role": "system", "content": SYSTEM_DAY_EXTRACT},
+        [{"role": "system", "content": system_prompt},
          {"role": "user", "content": "\n".join(parts)}],
         model="day_extract",
         max_tokens=MAX_TOKENS_EXTRACT, temperature=TEMP_EXTRACT, timeout=TIMEOUT_EXTRACT,
@@ -493,15 +497,21 @@ def _verify_extractions(
 
 # ── Phase 4: Fallback extraction (after day_extract double-failure) ────────────
 def _fallback_extract(user_turn: str, thinking: str, text: str,
-                      model: str = "day_extract") -> Optional[Dict[str, Any]]:
+                      model: str = "day_extract",
+                      pulse_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Fallback extraction after extractor double-failure. Uses *model* (default day_extract)."""
     parts = [
         "=== user_turn ===", user_turn or "(empty)",
         "", "=== thinking ===", thinking or "(empty)",
         "", "=== text ===", text or "(empty)",
     ]
+
+    system_prompt = SYSTEM_FALLBACK
+    if pulse_context:
+        system_prompt = f"{pulse_context}\n\n{system_prompt}"
+
     meta = call_llm(
-        [{"role": "system", "content": SYSTEM_FALLBACK},
+        [{"role": "system", "content": system_prompt},
          {"role": "user", "content": "\n".join(parts)}],
         model=model,
         max_tokens=MAX_TOKENS_EXTRACT, temperature=TEMP_EXTRACT, timeout=TIMEOUT_EXTRACT,
@@ -639,6 +649,7 @@ def extract_pipeline(
     turn_id: Optional[str] = None,
     limit: int = BATCH_LIMIT,
     dry_run: bool = False,
+    pulse_context: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run day_extract extraction → Python verify → store per turn."""
     t_start = time.monotonic()
@@ -704,7 +715,7 @@ def extract_pipeline(
             # downstream day_verify 14B + night R=14B handle hallucination detection)
             print(f"  [extract] day_extract...", flush=True)
             try:
-                ex_result = _extract_facts(ut, th, tx)
+                ex_result = _extract_facts(ut, th, tx, pulse_context=pulse_context)
             except Exception as ex_exc:
                 print(f"  [extract]   day_extract exception: {ex_exc}", flush=True)
                 mark = "추출 실패"
