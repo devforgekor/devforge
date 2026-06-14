@@ -254,7 +254,7 @@ def kill_all(night=False, dry_run=False):
                            capture_output=True, timeout=10)
         # Night: stop background services that could trigger OOM with heavy models
         for svc in ("devforge-day-cycle.service", "devforge-day-cycle.timer",
-                     "devforge-watchdog.service", "devforge-night-cycle.service",
+           "devforge-night-cycle.service",
                      "devforge-night-cycle.timer"):
             subprocess.run(["systemctl", "--user", "stop", svc], capture_output=True, timeout=30)
             subprocess.run(["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10)
