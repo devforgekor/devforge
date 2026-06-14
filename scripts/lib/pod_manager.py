@@ -140,11 +140,15 @@ def wait_probe(port, model_name, timeout=300):
 
 
 def _reclaim_memory():
-    import os as _os
-    _os.sync()
-    log("  Memory reclaim: synced fs, waiting 15s for kernel reclaim...")
-    time.sleep(15)
-    log("  Memory reclaim: done")
+    """Advanced memory reclamation via container_manager.free_memory."""
+    try:
+        from lib.infra.container_manager import free_memory
+        free_memory(level=2)
+    except ImportError:
+        import os as _os
+        _os.sync()
+        log("  Memory reclaim (fallback): synced fs, waiting 15s...")
+        time.sleep(15)
 
 
 def _container_service_name(port):
@@ -429,6 +433,7 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
     if ok:
         return True
     log(f"  ensure_model({physical_name}) failed — retrying after GC + 10s")
+    _reclaim_memory()
     import gc
     gc.collect()
     time.sleep(10)
