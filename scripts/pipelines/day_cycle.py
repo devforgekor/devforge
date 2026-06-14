@@ -18,6 +18,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 os.chdir(os.path.join(SCRIPTS_DIR, "pipelines"))
 
 from lib.infra.preflight import preflight_checks
+from lib.watchdog.messenger import get_undelivered
 
 
 def log(msg: str) -> None:
@@ -33,13 +34,27 @@ def main() -> None:
 
     preflight_checks("day_cycle.py", required_ports={8082})
 
+    # Load Watchman Pulse for injection
+    pulses = get_undelivered(target="operator")
+    pulse_context = ""
+    if pulses:
+        pulse_context = "\n### [WATCHMAN PULSE - NEWHAND]\n"
+        for p in pulses:
+            p_type = p.get("type", "INFO")
+            p_content = p.get("content", "")
+            pulse_context += f"- [{p_type}] {p_content}\n"
+        log(f"  Loaded {len(pulses)} pulses for injection")
+
     # Phase 1: Extract
     log("\n=== Phase 1: Extract ===")
     t0 = time.monotonic()
     try:
+        cmd = [sys.executable, "-u", "extract.py", "--limit", "50"]
+        if pulse_context:
+            cmd.extend(["--pulse-context", pulse_context])
+        
         r = subprocess.run(
-            [sys.executable, "-u", "extract.py", "--limit", "50"],
-            capture_output=True, text=True, timeout=300,
+            cmd, capture_output=True, text=True, timeout=300,
         )
         log(f"  [elapsed] {time.monotonic() - t0:.0f}s")
         if r.returncode == 0:
@@ -61,8 +76,6 @@ def main() -> None:
             capture_output=True, text=True, timeout=300,
         )
         log(f"  [elapsed] {time.monotonic() - t0:.0f}s")
-        for line in r.stdout.split("\n"):
-            log(f"  {line}")
         if r.returncode == 0:
             log("  [ok] exit=0")
         else:

@@ -919,6 +919,7 @@ def main() -> None:
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--pulse-context", help="Inject Watchman Pulse context")
     parser.add_argument("--describe-files", action="store_true",
                         help="Scan file_registry for undescribed files and generate descriptions")
     args = parser.parse_args()
@@ -930,6 +931,7 @@ def main() -> None:
             turn_id=args.turn_id,
             limit=args.limit,
             dry_run=args.dry_run,
+            pulse_context=args.pulse_context,
         )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
