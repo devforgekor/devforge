@@ -3,8 +3,8 @@
 # Path: called by — day_runner.py (subprocess), night_cycle.sh (future)
 """Day Pipeline: extract → py_verify → activity_log 저장 (classify.py P-R-J 별도).
 
-TODO: Port assignments are inverted from current scheme (this is experimental).
-Current scheme: Pod B(7B:8082) extract, Pod A(reserved:8080) operator."""
+NOTE: Port assignments follow MODEL_METADATA standards.
+Standard: Pod B(extractor:8082), Pod A(operator:8080)."""
 
 Usage:
   python3 day_pipeline.py [--skip-extract] [--tag r1]

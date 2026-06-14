@@ -78,8 +78,13 @@ def write_mode(pod, mode):
     """Write mode file atomically."""
     if pod == "pod-b":
         from lib.pod_manager import _write_mode_env
-        mode_port = {"day": 8082, "embed": 8081, "verify": 8084}
-        port = mode_port.get(mode, 8082)
+        from lib.pod_manager import MODEL_METADATA
+        # Find port from MODEL_METADATA by matching mode
+        port = 8082
+        for m in MODEL_METADATA.values():
+            if m.get("mode") == mode:
+                port = m.get("port", 8082)
+                break
         _write_mode_env(mode, port)
         return
     path = f"/opt/ai_data/scripts/current-mode-{pod}.env"
