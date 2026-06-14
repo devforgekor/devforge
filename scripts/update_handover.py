@@ -31,7 +31,6 @@ TZ = timezone(timedelta(hours=9))
 CHECKPOINT_WINDOW_HOURS = 1
 
 
-# ── File categorization ───────────────────────────────────────────────
 # Priority order: source > config > docs > data > generated
 # "generated" files are pure noise for LLM context — kept separately
 

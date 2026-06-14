@@ -10,14 +10,11 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-13'
+  updated: '2026-06-14'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
   files:
-    day_cycle.sh:
-      status: unknown
-      purpose: "day_cycle.sh \u2014 hourly cycle (:00)"
     activity_summarizer.py:
       status: production
       purpose: "activity_summarizer.py \u2014 Daily LLM summarization of activity_log\
@@ -47,9 +44,9 @@ modules:
       status: production
       purpose: "DevForge CLI \u2014 AI \uB300\uD654 \uAC80\uC0C9 \uBC0F \uC800\uC7A5\
         \ \uB3C4\uAD6C."
-    day_extract.sh:
+    day_cycle.sh:
       status: unknown
-      purpose: "day_extract.sh \u2014 Day extract cycle (:00)"
+      purpose: "day_cycle.sh \u2014 hourly cycle (:00)"
     day_model_test.py:
       status: experimental
       purpose: "14B Q8_0 \uB2E8\uC77C extract + MiniCheck hallucination \uAC80\uC99D\
@@ -57,9 +54,6 @@ modules:
     day_model_test_direct.py:
       status: experimental
       purpose: day_model_test_direct.py
-    day_verify.sh:
-      status: unknown
-      purpose: "day_verify.sh \u2014 Day verify cycle (:30)"
     day_verify_compare.py:
       status: experimental
       purpose: "Pod A(7B reviewer) \uBAA8\uB378 \uBE44\uAD50: 5\uAC1C \uC5ED\uD560\
@@ -75,9 +69,6 @@ modules:
       status: experimental
       purpose: "Embedding Model Benchmark \u2014 compare faithfulness accuracy, speed,\
         \ memory."
-    embed_turns.py:
-      status: production
-      purpose: "embed_turns.py \u2014 batch embed unembedded turns via Gemini gemini-embedding-001."
     eval_comparison.py:
       status: experimental
       purpose: DeepSeek Pro evaluation of 12-run comparison test results.
@@ -92,6 +83,10 @@ modules:
       status: experimental
       purpose: Finalize E2E 10-sample pipeline. Skip failed feedback loop; summarize
         existing phases.
+    full_pipeline.sh:
+      status: unknown
+      purpose: "DevForge Full Background Pipeline \u2014 Verify Compare \u2192 Night\
+        \ Debate \u2192 PRJ Test"
     gemini_pool.py:
       status: production
       purpose: "gemini_pool.py \u2014 Async Gemini API key pool with SQLite-backed\
@@ -122,11 +117,7 @@ modules:
         \ + live metrics."
     night_cycle.sh:
       status: unknown
-      purpose: "night_cycle.sh \u2014 DevForge nightly pipeline (KST 03:00 / UTC\
-        \ 18:00)"
-    nightly_extract_test.py:
-      status: production
-      purpose: Nightly extraction faithfulness test.
+      purpose: "night_cycle.sh \u2014 DevForge nightly pipeline (KST 03:00 / UTC 18:00)"
     nli_compare.py:
       status: experimental
       purpose: "MiniCheck(flan-t5-large, 770M) vs Qwen2.5-Coder-7B NLI \uBE44\uAD50\
@@ -159,6 +150,9 @@ modules:
       status: unknown
       purpose: "prj_cycle.py \u2192 bench_verify_optimization.py \uC21C\uCC28 \uC2E4\
         \uD589"
+    run_verify_compare.sh:
+      status: unknown
+      purpose: "Background verify runner: Qwen Q8 \u2192 NextCoder Q8"
     slack_notify.py:
       status: production
       purpose: "slack_notify.py \u2014 Session-end report \u2192 Slack DM."
@@ -173,7 +167,7 @@ modules:
       purpose: "Ground truth \uAE30\uBC18 night P-R-J \uD3C9\uAC00. P=30B(P), R=14B(R),\
         \ J=N14B Q6."
     test_pipeline_e2e.py:
-      status: experimental
+      status: deprecated
       purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
         \ \u2192 night_review."
     test_progress_watcher.py:
@@ -317,6 +311,33 @@ modules:
     local_debate.py:
       status: experimental
       purpose: "LocalDebate \u2014 multi-agent debate using local Pod A + Pod B."
+- path: scripts/lib/extract/
+  purpose: Extract
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: core.py
+    utils.py:
+      status: production
+      purpose: utils.py
+- path: scripts/lib/hybrid/
+  purpose: Hybrid
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    debate.py:
+      status: production
+      purpose: debate.py
+    executor.py:
+      status: production
+      purpose: executor.py
+    utils.py:
+      status: production
+      purpose: Detect available models via port check or env.
 - path: scripts/lib/infra/
   purpose: Infra
   files:
@@ -366,6 +387,18 @@ modules:
       purpose: "Rate estimators for LLM inference \u2014 token-count-based and timings-based."
   constraints:
     max_lines_per_file: 120
+- path: scripts/lib/mcp/
+  purpose: Mcp
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: core.py
+    utils.py:
+      status: production
+      purpose: utils.py
 - path: scripts/lib/output/
   purpose: Output
   files:
@@ -412,6 +445,30 @@ modules:
       purpose: "parser_gemini.py \u2014 extract turns from Gemini CLI session JSONL."
   constraints:
     max_lines_per_file: 140
+- path: scripts/lib/prj/
+  purpose: Prj
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: core.py
+    utils.py:
+      status: production
+      purpose: utils.py
+- path: scripts/lib/rubric/
+  purpose: Rubric
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: Call LLM, return parsed JSON with metadata.
+    utils.py:
+      status: production
+      purpose: utils.py
 - path: scripts/lib/runner/
   purpose: Runner
   files:
@@ -470,6 +527,18 @@ modules:
         \ state."
   constraints:
     max_lines_per_file: 150
+- path: scripts/lib/verify/
+  purpose: Verify
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: Combine turn text and extractions into a findings list for the LLM.
+    utils.py:
+      status: production
+      purpose: utils.py
 - path: scripts/lib/watchdog/
   purpose: Watchdog
   files:
@@ -500,6 +569,18 @@ modules:
       status: production
       purpose: "Component state machine \u2014 HEALTHY\u2194DEGRADED\u2194UNHEALTHY\u2194\
         DOWN."
+- path: scripts/lib/worklog/
+  purpose: Worklog
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: core.py
+    utils.py:
+      status: production
+      purpose: utils.py
 - path: scripts/__old/
   purpose: '  Old'
   files:
@@ -536,13 +617,18 @@ modules:
     __init__.py:
       status: production
       purpose: DevForge pipeline step implementations.
-    classify.py:
+    daily_verification_pipeline.py:
       status: production
-      purpose: "Day pre-review: P(day_p)\u2192R(day_r)\u2192J(day_j) for night prepill\
-        \ defense."
+      purpose: daily_verification_pipeline.py
+    data_extraction_pipeline.py:
+      status: production
+      purpose: data_extraction_pipeline.py
     day_cycle.py:
       status: experimental
       purpose: 'Day-time chain: extract -> MCP enrich (Pod B :8082, checkpoint-based).'
+    day_cycle_pipeline.py:
+      status: experimental
+      purpose: Day cycle pipeline test harness.
     day_extract.py:
       status: experimental
       purpose: "Day Extract Pipeline \u2014 extract \u2192 MCP enrich on Pod B (7B:8082)."
@@ -560,6 +646,9 @@ modules:
     embed_batch.py:
       status: experimental
       purpose: "Embed Batch Pipeline \u2014 f16 embedding via Pod B llama-server."
+    evaluation_experiment_pipeline.py:
+      status: production
+      purpose: evaluation_experiment_pipeline.py
     exp_runner.py:
       status: experimental
       purpose: "5-Phase (2x2+baseline) Experiment Runner \u2014 \uBC31\uADF8\uB77C\
@@ -570,6 +659,16 @@ modules:
     hybrid.py:
       status: experimental
       purpose: Multi-model code modification pipeline with debate + verification.
+    hybrid_execution_pipeline.py:
+      status: production
+      purpose: hybrid_execution_pipeline.py
+    knowledge_enrichment_pipeline.py:
+      status: production
+      purpose: knowledge_enrichment_pipeline.py
+    mcp_cosine.py:
+      status: experimental
+      purpose: "MCP Cosine Verification \u2014 8B embedding based entity/tldr cosine\
+        \ check."
     mcp_enrich.py:
       status: experimental
       purpose: "MCP Enrichment Pipeline \u2014 post-extraction metadata enrichment."
@@ -577,32 +676,19 @@ modules:
       status: experimental
       purpose: "MCP Verify Pipeline \u2014 score MCP metadata quality using a judge\
         \ model."
-    night.py:
-      status: experimental
-      purpose: "DevForge Night Pipeline v4.0 \u2014 Review \u2192 Verify."
     night_cycle.py:
       status: experimental
-      purpose: "Night Pipeline: DB handoff \uB85C\uB4DC \u2192 P-R-J(30B/14B) \u2192\
-        \ night_verify \u2192 DB \uC800\uC7A5."
-    night_review.py:
+      purpose: "Night Pipeline: DB handoff \uB85C\uB4DC \u2192 P-R-J(30B\u219214B\u2192\
+        N14B) \u2192 night_verify \u2192 DB \uC800\uC7A5."
+    night_cycle_pipeline.py:
       status: experimental
-      purpose: "Night Review Pipeline \u2014 30B Proposer \u2192 14B Refuter \u2192\
-        \ 14B Judge."
-    night_runner.py:
-      status: experimental
-      purpose: "Night Runner: Pod A stop \u2192 Pod B swap (30B\u219214B\u219214B\u2192\
-        27B) \u2192 night_cycle subprocess \u2192 Pod B day \uBCF5\uC6D0."
-    night_verify.py:
-      status: experimental
-      purpose: "Night Verify Pipeline \u2014 27B verify \u2192 feedback \u2192 restore\
-        \ day."
-    phase2_standalone.py:
-      status: deprecated
-      purpose: Phase 2 standalone runner with reliable logging.
+      purpose: 'Night Cycle V2: Driver for P-R-J pipeline with dry-run support.'
+    night_debate_pipeline.py:
+      status: production
+      purpose: night_debate_pipeline.py
     prj_cycle.py:
       status: production
-      purpose: "P-R-J \uACE0\uC815 \uC5ED\uD560 \uC2E4\uD5D8: P=night_proposer, R=night_reflector,\
-        \ J=night_judge"
+      purpose: prj_cycle.py
     proxy_reviewer.py:
       status: production
       purpose: "proxy_reviewer.py \u2014 DeepSeek Pro verification of 27B verify reasoning."
@@ -616,10 +702,9 @@ modules:
       status: experimental
       purpose: "DevForge Rubric Experiment \u2014 Round 1 (no rubric) vs Round 2 (with\
         \ rubric)."
-    runner.py:
-      status: deprecated
-      purpose: "DEPRECATED \u2014 replaced by exp_runner.py. Kept as compat shim for\
-        \ old experiment scripts."
+    worklog_generation_pipeline.py:
+      status: production
+      purpose: worklog_generation_pipeline.py
     worklog_generator.py:
       status: production
       purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: 7B draft\

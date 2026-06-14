@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Status: experimental
-# Path: none — manual test harness: pipeline_test.py
+# Status: deprecated
+# Path: none — night.py archived, replaced by night_cycle.py
 """Pipeline E2E test harness — test DB → extract → verify → night_review.
 Creates devforge_test DB, inserts 10 samples, runs each pipeline step,
 scores quality at each stage to identify improvement points.

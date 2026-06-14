@@ -1,0 +1,36 @@
+{
+  "source": "llm_r",
+  "round": 1,
+  "r_model": "night_reflector",
+  "handoff": {
+    "source": "dry_run_mock",
+    "executive_summary": "Dry-run test handoff",
+    "approved": [
+      {
+        "id": "F001",
+        "severity": "critical",
+        "category": "bug",
+        "finding": "dry-run",
+        "approval_rationale": "test"
+      }
+    ],
+    "rejected": [
+      {
+        "id": "F002",
+        "severity": "high",
+        "category": "security",
+        "finding": "dry-run",
+        "rejection_rationale": "test"
+      }
+    ],
+    "critical_remaining": [],
+    "unresolved_count": 0,
+    "verifier_priority": [
+      "Check F001"
+    ],
+    "quality_red_flags": [],
+    "p_score": 25,
+    "r_score": 22,
+    "j_consensus": 85
+  }
+}

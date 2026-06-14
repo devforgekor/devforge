@@ -1,0 +1,258 @@
+{
+  "proposals": [
+    {
+      "id": "M01",
+      "type": "bug",
+      "severity": "high",
+      "description": "MCP intent classification incorrectly classifies 'report' intent",
+      "rationale": "This suggests a critical flaw in the intent classification system that could lead to incorrect routing or processing of user requests",
+      "proposed_action": "Investigate the intent classification logic in the MCP component and fix the classification rule for 'report' intent",
+      "_chunk": 0
+    },
+    {
+      "id": "M02",
+      "type": "bug",
+      "severity": "high",
+      "description": "MCP intent classification shows inconsistent classification results for same intent",
+      "rationale": "Inconsistent intent classification can cause unpredictable behavior in the system and affect user experience",
+      "proposed_action": "Analyze the intent classification algorithm and ensure consistent results for identical or similar inputs",
+      "_chunk": 0
+    },
+    {
+      "id": "M03",
+      "type": "bug",
+      "severity": "high",
+      "description": "Extract completeness issue with fact extraction from user input",
+      "rationale": "Incomplete fact extraction can lead to missing critical information processing and reduced system accuracy",
+      "proposed_action": "Review the fact extraction logic and ensure all relevant information is captured from user inputs",
+      "_chunk": 0
+    },
+    {
+      "id": "M04",
+      "type": "bug",
+      "severity": "medium",
+      "description": "MCP entity correctness validation fails for specific files",
+      "rationale": "Entity correctness issues can lead to data integrity problems and incorrect processing of entities",
+      "proposed_action": "Examine the entity validation logic in 'de_mod_pipeline.py' and fix validation rules for entity correctness",
+      "_chunk": 0
+    },
+    {
+      "id": "M05",
+      "type": "bug",
+      "severity": "medium",
+      "description": "Extract coverage issue with short user turns",
+      "rationale": "Poor coverage for short turns indicates potential gaps in the extraction system that could miss important user inputs",
+      "proposed_action": "Analyze the extraction logic for short turns and improve coverage to capture all relevant information",
+      "_chunk": 0
+    },
+    {
+      "id": "M06",
+      "type": "maintainability",
+      "severity": "low",
+      "description": "MCP tags show inconsistent tag assignment",
+      "rationale": "Inconsistent tagging can make system behavior unpredictable and harder to maintain",
+      "proposed_action": "Review the tag assignment logic and ensure consistent tagging across similar interactions",
+      "_chunk": 0
+    },
+    {
+      "id": "S01",
+      "type": "performance",
+      "severity": "critical",
+      "description": "Operational metrics (timing, tokens) are not recorded in review_facts",
+      "rationale": "Missing timing and token usage data prevents performance monitoring and optimization of the extraction pipeline",
+      "proposed_action": "Modify extract_pipeline.py to capture and store timing and token usage metrics in review_facts during the review_facts processing step",
+      "_chunk": 1
+    },
+    {
+      "id": "S02",
+      "type": "maintainability",
+      "severity": "critical",
+      "description": "Activity log body lacks faithfulness scores, retry history, and unfaithful fact lists",
+      "rationale": "Incomplete activity log data makes debugging and monitoring of extraction failures impossible",
+      "proposed_action": "Update activity_log.body construction in extract_pipeline.py to include faithfulness scores, retry counts, and lists of unfaithful facts",
+      "_chunk": 1
+    },
+    {
+      "id": "S03",
+      "type": "bug",
+      "severity": "critical",
+      "description": "review_facts.verdict remains 'pending' and is never updated in downstream pipeline",
+      "rationale": "This prevents proper state tracking and downstream processing of extraction results",
+      "proposed_action": "Implement UPDATE logic in downstream pipeline components to properly update review_facts.verdict from 'pending' to appropriate status",
+      "_chunk": 1
+    },
+    {
+      "id": "S04",
+      "type": "performance",
+      "severity": "high",
+      "description": "LLM client does not extract token usage and timing from API responses",
+      "rationale": "Missing token usage data prevents cost tracking and performance analysis of LLM calls",
+      "proposed_action": "Modify lib/llm_client.py to parse and extract token usage and timing information from /v1/completions API responses",
+      "_chunk": 1
+    },
+    {
+      "id": "F01",
+      "type": "bug",
+      "severity": "critical",
+      "description": "enqueue_review() 함수将 queue_status 始终设置为 'reviewed'，绕过 P-R-J 流程",
+      "rationale": "这会导致所有审查都跳过必要的处理步骤，使系统无法正确跟踪审查状态和流程",
+      "proposed_action": "修改 queue_writer.py 中的 enqueue_review() 函数，根据实际审查状态动态设置 queue_status，而不是始终设置为 'reviewed'",
+      "_chunk": 2
+    },
+    {
+      "id": "F02",
+      "type": "bug",
+      "severity": "critical",
+      "description": "fact_index 不一致，导致 mcp_meta 为 extract_model='Qwen30B' 的记录被单独存储",
+      "rationale": "这种不一致性可能导致数据不一致和查询错误，影响系统整体数据完整性",
+      "proposed_action": "检查 extract_pipeline.py 中的 _insert_fact() 函数，确保 fact_index 生成逻辑一致，避免为不同模型创建重复或不一致的记录",
+      "_chunk": 2
+    },
+    {
+      "id": "F03",
+      "type": "security",
+      "severity": "major",
+      "description": "MCP 实体文件路径验证未使用绝对路径转换，存在路径遍历风险",
+      "rationale": "直接使用 os.path.join() 可能导致路径遍历攻击，允许访问系统中不受限制的文件",
+      "proposed_action": "在 extract_pipeline.py 的路径处理逻辑中，使用 os.path.abspath() 确保路径解析为绝对路径后再进行操作",
+      "_chunk": 2
+    },
+    {
+      "id": "F04",
+      "type": "performance",
+      "severity": "major",
+      "description": "27B verify 模型未收集 timing/token 信息，影响性能监控和分析",
+      "rationale": "缺少关键的性能指标会阻碍对模型性能的监控和优化，影响系统整体效率",
+      "proposed_action": "修改 review_consumer.py 中的 call_verify_model() 函数，添加对 timing 和 token 使用情况的收集和记录",
+      "_chunk": 2
+    },
+    {
+      "id": "F05",
+      "type": "maintainability",
+      "severity": "minor",
+      "description": "代码中存在硬编码的模型名称 'Qwen30B'，不利于维护和扩展",
+      "rationale": "硬编码值会增加维护成本，当需要更改模型名称时需要修改多处代码",
+      "proposed_action": "将 'Qwen30B' 等硬编码值提取到配置文件或常量中，便于统一管理和修改",
+      "_chunk": 2
+    },
+    {
+      "id": "F06",
+      "type": "maintainability",
+      "severity": "minor",
+      "description": "缺少对 queue_status 变量的输入验证和边界检查",
+      "rationale": "缺乏输入验证可能导致系统处理异常状态或无效数据，影响系统稳定性",
+      "proposed_action": "在 queue_writer.py 中添加对 queue_status 参数的验证逻辑，确保其值在预定义范围内",
+      "_chunk": 2
+    },
+    {
+      "id": "F01",
+      "type": "security",
+      "severity": "critical",
+      "description": "Hardcoded API keys in configuration file",
+      "rationale": "Exposing API keys in source code creates severe security vulnerabilities allowing unauthorized access to production systems",
+      "proposed_action": "Move API keys to environment variables or secure configuration management system",
+      "_chunk": 3
+    },
+    {
+      "id": "F02",
+      "type": "bug",
+      "severity": "critical",
+      "description": "Unvalidated user input in authentication flow",
+      "rationale": "Missing input validation creates injection vulnerabilities that could allow malicious users to bypass authentication",
+      "proposed_action": "Implement comprehensive input validation and sanitization for all authentication parameters",
+      "_chunk": 3
+    },
+    {
+      "id": "F03",
+      "type": "performance",
+      "severity": "major",
+      "description": "Inefficient database query with N+1 problem",
+      "rationale": "Multiple database queries executed in a loop cause significant performance degradation under load",
+      "proposed_action": "Use eager loading or batch queries to reduce database round trips",
+      "_chunk": 3
+    },
+    {
+      "id": "F04",
+      "type": "security",
+      "severity": "major",
+      "description": "Missing CSRF protection in form submissions",
+      "rationale": "Lack of CSRF tokens makes application vulnerable to cross-site request forgery attacks",
+      "proposed_action": "Implement CSRF tokens for all state-changing form submissions",
+      "_chunk": 3
+    },
+    {
+      "id": "F05",
+      "type": "maintainability",
+      "severity": "minor",
+      "description": "Duplicated error handling logic across multiple controllers",
+      "rationale": "Code duplication increases maintenance burden and creates inconsistency in error responses",
+      "proposed_action": "Extract common error handling into reusable middleware or service layer",
+      "_chunk": 3
+    },
+    {
+      "id": "F06",
+      "type": "style",
+      "severity": "minor",
+      "description": "Inconsistent naming conventions in JavaScript files",
+      "rationale": "Inconsistent naming makes code harder to read and maintain across development team",
+      "proposed_action": "Enforce consistent naming conventions using ESLint or similar tooling",
+      "_chunk": 3
+    },
+    {
+      "id": "F02",
+      "type": "security",
+      "severity": "critical",
+      "description": "SQL injection vulnerability in user input handling",
+      "rationale": "Direct concatenation of user input into SQL queries allows malicious users to execute arbitrary database commands",
+      "proposed_action": "Implement parameterized queries or prepared statements for all database interactions",
+      "_chunk": 4
+    },
+    {
+      "id": "F03",
+      "type": "performance",
+      "severity": "major",
+      "description": "Inefficient database queries with N+1 problem",
+      "rationale": "Multiple database round trips for related data causes significant performance degradation under load",
+      "proposed_action": "Use eager loading or batch queries to fetch related data in single database operations",
+      "_chunk": 4
+    },
+    {
+      "id": "F04",
+      "type": "maintainability",
+      "severity": "major",
+      "description": "Missing error handling in critical business logic",
+      "rationale": "Uncaught exceptions in core processes can cause application crashes and data inconsistencies",
+      "proposed_action": "Add comprehensive try-catch blocks and proper error logging for all critical business operations",
+      "_chunk": 4
+    },
+    {
+      "id": "F05",
+      "type": "security",
+      "severity": "major",
+      "description": "Insecure password storage without hashing",
+      "rationale": "Storing passwords in plain text or with weak hashing algorithms makes user accounts vulnerable to breach",
+      "proposed_action": "Implement proper password hashing with salt using industry-standard algorithms like bcrypt or Argon2",
+      "_chunk": 4
+    },
+    {
+      "id": "F06",
+      "type": "style",
+      "severity": "minor",
+      "description": "Inconsistent naming conventions across modules",
+      "rationale": "Inconsistent naming makes code harder to read and maintain, increases cognitive load for developers",
+      "proposed_action": "Establish and enforce consistent naming conventions (camelCase, snake_case, etc.) across all codebase",
+      "_chunk": 4
+    }
+  ],
+  "usage": {
+    "completion_tokens": 2834,
+    "prompt_tokens": 2351,
+    "total_tokens": 5185,
+    "prompt_tokens_details": 0
+  },
+  "elapsed_ms": 728519.1943989776,
+  "status": "ok",
+  "chunks": 7,
+  "chunks_done": 7,
+  "model": "Qwen3-Coder-30B-A3B-Q4_K_S"
+}

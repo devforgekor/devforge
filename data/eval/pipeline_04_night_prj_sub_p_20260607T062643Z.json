@@ -1,0 +1,132 @@
+{
+  "proposals": [
+    {
+      "id": "F01",
+      "type": "data_loss",
+      "severity": "critical",
+      "description": "Incomplete fact extraction in turn d5ec4da3-06a5-452b-9247-e8e3ec517a61 with only 2490ch extracted from 176ch user input",
+      "rationale": "This indicates a severe data loss issue where only a fraction of user input is being processed, potentially causing critical information to be missed in downstream analysis",
+      "proposed_action": "Investigate the extract completeness logic in de_mod_pipeline.py to ensure full user input is captured and processed",
+      "_chunk": 0
+    },
+    {
+      "id": "F02",
+      "type": "quality",
+      "severity": "critical",
+      "description": "MCP intent classification failing to properly classify 'report' intent in multiple turns with incorrect extracted values",
+      "rationale": "The intent classification system is producing inconsistent results that could lead to incorrect routing or processing of user requests",
+      "proposed_action": "Review the MCP intent classification logic to ensure proper handling of 'report' intent classification and correct value extraction",
+      "_chunk": 0
+    },
+    {
+      "id": "F03",
+      "type": "quality",
+      "severity": "major",
+      "description": "Entity correctness issues in turn d5ec4da3-06a5-452b-9247-e8e3ec517a61 with code extraction from de_mod_pipeline.py",
+      "rationale": "The entity extraction is not properly identifying or classifying entities, which could lead to incorrect data processing and analysis",
+      "proposed_action": "Examine the entity extraction logic in de_mod_pipeline.py to improve entity correctness and ensure proper identification of relevant entities",
+      "_chunk": 0
+    },
+    {
+      "id": "F04",
+      "type": "quality",
+      "severity": "major",
+      "description": "Incomplete extract coverage for short turns with minimal user input like '1+1 답만 해줘'",
+      "rationale": "Short turns with minimal input are not being adequately covered, which could indicate issues with the extraction system's ability to handle concise queries",
+      "proposed_action": "Analyze the extract coverage logic for short turns to ensure all user input is properly captured and processed",
+      "_chunk": 0
+    },
+    {
+      "id": "F05",
+      "type": "quality",
+      "severity": "minor",
+      "description": "Inconsistent MCP tag assignment with greeting and welcome tags in turn 4fa75004-1e15-427d-913b-057a6967ed04",
+      "rationale": "The tag assignment appears to be overly broad or inconsistent, potentially affecting downstream processing or analytics",
+      "proposed_action": "Review the MCP tag extraction logic to ensure proper and consistent tag assignment based on actual conversation context",
+      "_chunk": 0
+    },
+    {
+      "id": "S01",
+      "type": "data_loss",
+      "severity": "critical",
+      "description": "Operational metrics (timing, tokens) are not recorded in review_facts",
+      "rationale": "Missing operational metrics prevents performance monitoring and optimization of the extraction pipeline",
+      "proposed_action": "Update review_facts function in extract_pipeline.py to capture and log timing and token usage from LLM responses",
+      "_chunk": 1
+    },
+    {
+      "id": "S02",
+      "type": "data_loss",
+      "severity": "critical",
+      "description": "Activity log body lacks faithfulness scores, retry history, and unfaithful fact lists",
+      "rationale": "Incomplete activity log prevents proper tracking of extraction quality and troubleshooting of failures",
+      "proposed_action": "Modify activity_log construction to include faithfulness scores, retry counts, and lists of unfaithful facts from review_facts",
+      "_chunk": 1
+    },
+    {
+      "id": "S03",
+      "type": "bug",
+      "severity": "critical",
+      "description": "review_facts.verdict remains 'pending' and is never updated in downstream pipeline",
+      "rationale": "This prevents proper state management and downstream processing of extraction results",
+      "proposed_action": "Implement UPDATE logic in downstream pipeline to set review_facts.verdict to appropriate values (e.g., 'pass', 'fail', 'retry')",
+      "_chunk": 1
+    },
+    {
+      "id": "S04",
+      "type": "performance",
+      "severity": "high",
+      "description": "LLM client does not extract token usage and timing from API responses",
+      "rationale": "Missing token usage data prevents cost monitoring and performance optimization of LLM calls",
+      "proposed_action": "Update lib/llm_client.py to parse and extract token usage and timing information from /v1/completions API responses",
+      "_chunk": 1
+    },
+    {
+      "id": "F01",
+      "type": "bug",
+      "severity": "critical",
+      "description": "enqueue_review() 함수将 queue_status 始终设置为 'reviewed'，绕过 P-R-J 流程",
+      "rationale": "这会导致审核流程被跳过，系统无法正确跟踪审核状态，造成数据不一致和流程违规",
+      "proposed_action": "修改 queue_writer.py 中的 enqueue_review() 函数，根据实际审核状态动态设置 queue_status，而不是始终设置为 'reviewed'",
+      "_chunk": 2
+    },
+    {
+      "id": "F02",
+      "type": "data_loss",
+      "severity": "critical",
+      "description": "fact_index 在 extract_pipeline.py 中不一致，导致 Qwen30B 模型的 mcp_meta 被存储为单独的行",
+      "rationale": "数据索引不一致可能导致模型元数据丢失或错误关联，影响模型管理和数据完整性",
+      "proposed_action": "审查并统一 extract_pipeline.py 中的 fact_index 处理逻辑，确保所有模型（包括 Qwen30B）使用一致的索引机制",
+      "_chunk": 2
+    },
+    {
+      "id": "F03",
+      "type": "security",
+      "severity": "major",
+      "description": "extract_pipeline.py 中的 MCP 实体文件路径验证未使用绝对路径转换，存在路径遍历风险",
+      "rationale": "直接使用 os.path.join() 而不进行路径规范化可能导致目录遍历攻击，允许访问受限文件",
+      "proposed_action": "在 extract_pipeline.py 的路径处理逻辑中添加 os.path.abspath() 或 os.path.realpath() 来规范化路径",
+      "_chunk": 2
+    },
+    {
+      "id": "F04",
+      "type": "quality",
+      "severity": "major",
+      "description": "review_consumer.py 中的 27B verify 函数未收集 timing/token 信息",
+      "rationale": "缺少性能监控数据会影响系统优化和资源分配决策，降低系统可观测性",
+      "proposed_action": "修改 review_consumer.py 中的 call_verify_model() 函数，添加对 timing 和 token 使用情况的收集和记录",
+      "_chunk": 2
+    }
+  ],
+  "usage": {
+    "completion_tokens": 1638,
+    "prompt_tokens": 1972,
+    "total_tokens": 3610,
+    "prompt_tokens_details": 0
+  },
+  "elapsed_ms": 1193357.6838830195,
+  "status": "ok",
+  "chunks": 7,
+  "chunks_done": 7,
+  "model": "Qwen3-Coder-30B-A3B-Q4_K_S"
+}

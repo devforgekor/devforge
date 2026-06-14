@@ -22,11 +22,9 @@ from typing import Optional
 
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
 
-# ── Azure config ────────────────────────────────────────────────────────────
 ACCOUNT_NAME = "stshareddevforgeprodkrc"
 CONTAINER = "devforge"
 
-# ── Secrets (loaded lazily) ─────────────────────────────────────────────────
 _account_key: Optional[str] = None
 
 

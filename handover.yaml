@@ -32,6 +32,15 @@ decisions:
 - '{''id'': ''d38-06'', ''detail'': ''INTENTIONAL EXCLUSIONS (not updated):\\n  1. extract_compare.py — historical 3B Q8_0
   vs 7B Q4_K_M vs 7B Q8_0 benchmark\\n  2. night.py REMOVED phase comments — preserve historical 7B-3B-7B config record\\n  3.
   __old/ directory — deprecated files, not in execution path\\n  4. _archive/ directory — user explicitly excluded\\n''}'
+- '{''id'': ''d39-01'', ''detail'': ''SEARCH PIPELINE 3-LAYER INTEGRATION PLAN finalized. Layer 1 (turn_watcher FTS5 sync)
+  complete. Layer 2 (embed_batch) in progress. Layer 3 (CLI search) code complete.\\n''}'
+- '{''id'': ''d39-02'', ''detail'': ''MONTHLY FTS5 REBUILD added to night_cycle.sh (1st only). Safety net for FTS5 drift
+  recovery. date +%d = "01" check, ~30s runtime, SQLite only, no Pod B dependency.\\n''}'
+- '{''id'': ''d39-03'', ''detail'': ''CLI SEARCH COMMAND implemented. cli.py search bm25 <query> (FTS5 BM25 only, synchronous)
+  and cli.py search hybrid <query> (BM25 + Dense RRF fusion, requires embedding_f16). Strong signal short-circuit: BM25 top-1
+  <= -8.0 & gap > 0.15 -> skip dense. --no-short-circuit flag for forced hybrid.\\n''}'
+- '{''id'': ''d39-04'', ''detail'': ''phases.md Phase 2 Tier 2 updated. Gemini embedding items deprecated/replaced by Qwen 8B
+  approach. 12 new items added (text_cleaner, FTS5 index, hybrid code, CLI search, monthly rebuild, day-cycle auto embed).
 known_issues:
 - '{''id'': ''ki38-01'', ''detail'': ''30B Q4_K_M (18G) + 27B IQ4_XS (15G) + 14B Q6_K (12G) + 7B Q8 (7.6G) = ~53G concurrently
   loadable models. RAM: 22G total, ~17-18G usable. 30B MoE (3.3B active/token) is viable. 27B dense (14.7G IQ4_XS) must NOT
@@ -45,6 +54,10 @@ known_issues:
 - '{''id'': ''ki38-04'', ''detail'': ''Session 37 ki07 (stale docstrings) RESOLVED. Previous claim that classify.py, review_pipeline_3model.py,
   bench_llm.py, activity_summarizer.py, etc. were "stale" is now fixed. All remaining 3B/Q4_K_S/8080 references are intentional
   (historical benchmarks, REMOVED phase records, __old/ files).\\n''}'
+- '{''id'': ''ki39-01'', ''detail'': ''Dense embedding in progress (56/8,694 via Qwen3-Embedding-8B, ~10hrs remaining
+  including slow long-turn head). day-cycle timer disabled during bulk embedding (OOM risk with Pod B switching).\\n''}'
+- '{''id'': ''ki39-02'', ''detail'': ''full_pipeline.sh crashed at chunk 3/7 via SIGTERM (line 61). Not restarted.
+  Not safe to restart until embedding completes (Pod B is in embed mode).\\n''}'
 completed_log:
 - '[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs.'
 - '[Session 38] Model downloads: 30B Q4_K_M (18G), NextCoder-14B Q6_K (12G), 27B i1-IQ4_XS (15G).'

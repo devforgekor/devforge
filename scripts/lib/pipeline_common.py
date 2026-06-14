@@ -26,7 +26,6 @@ os.makedirs(EXPER_DIR, exist_ok=True)
 os.makedirs(PIPELINE_DIR, exist_ok=True)
 os.makedirs(EVENTS_DIR, exist_ok=True)
 
-# ── Schema definitions ────────────────────────────────────────
 
 VERIFY_SCHEMA = {
     "required": ["final_verdict", "confidence", "summary"],
@@ -68,7 +67,6 @@ HANDOFF_SCHEMA = {
     },
 }
 
-# ── Slack notification ──────────────────────────────────────────
 
 _SF = Path.home() / ".config/devforge/secrets.env"
 _SLACK_TOKEN = ""
@@ -101,7 +99,6 @@ def slack_send(text):
         log(f"Slack send failed: {e}")
 
 
-# ── JSON/fence utilities ──────────────────────────────────────
 
 def strip_code_fence(text):
     text = text.strip()
@@ -191,7 +188,6 @@ def load_input(input_override=None):
         return json.load(f)
 
 
-# ── Handoff compilers ──────────────────────────────────────────────
 
 def compile_handoff_single(r, round_num, with_rubric):
     """Python-compiled handoff from P-R-J result data."""
@@ -247,7 +243,6 @@ def compile_handoff(prj_results, round_num, with_rubric):
     return handoff
 
 
-# ── Pipeline State Blackboard ──────────────────────────────────────────
 
 class PipelineState:
     """Blackboard: append-only phase results in 1 JSON file."""
@@ -445,7 +440,6 @@ class PipelineState:
         return "\n".join(parts)
 
 
-# ── LLM call ──────────────────────────────────────────────────────
 
 MOCK_RESULT = {
     "result": {
@@ -557,7 +551,6 @@ def llm_call(messages, model, max_tokens=2048, label=""):
         return None
 
 
-# ── Model call wrapper ──────────────────────────────────
 
 PROPOSER_MODEL = "night_proposer"
 REFLECTOR_MODEL = "night_reflector"
@@ -578,7 +571,6 @@ def call_one(model_name, sys_prompt, user_text, tag_label, max_tok=2048):
         physical, max_tokens=max_tok, label=tag_label)
 
 
-# ── System prompts ─────────────────────────────────────────────────────
 
 PROPOSER_SYSTEM_PROMPT = """You are a code review specialist. Analyze the evaluation findings below. Identify bugs, security issues, data loss risks, and edge cases.
 

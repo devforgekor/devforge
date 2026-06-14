@@ -112,7 +112,7 @@ stop_llm_services() {
     for svc in activity-summarizer telegram-bot slack; do
         systemctl --user stop "$svc" 2>&1 || true
     done
-    for tmr in activity-summarizer.timer devforge-day-cycle.timer; do
+    for tmr in activity-summarizer-safety.timer devforge-day-cycle.timer; do
         systemctl --user stop "$tmr" 2>&1 || true
     done
     echo "[$(LOG_TS)] [$label] All non-critical LLM services stopped"
@@ -121,7 +121,7 @@ stop_llm_services() {
 start_llm_services() {
     local label="$1"
     echo "[$(LOG_TS)] [$label] Restarting LLM services and timers..."
-    for tmr in activity-summarizer.timer devforge-day-cycle.timer; do
+    for tmr in activity-summarizer-safety.timer devforge-day-cycle.timer; do
         systemctl --user start "$tmr" 2>&1 || true
     done
     for svc in activity-summarizer telegram-bot slack; do
@@ -242,6 +242,19 @@ else
     echo "[$(LOG_TS)] DeepSeek Pro review had issues (non-fatal)" >&2
 fi
 
+# ── Monthly FTS5 Rebuild (1st only) ─────────────────
+# FTS5 incremental sync via turn_watcher covers daily updates.
+# Monthly full rebuild is a safety net to recover from any drift.
+if [ "$(date +%d)" = "01" ]; then
+    echo "[$(LOG_TS)] === Monthly FTS5 Rebuild ==="
+    python3 -c "
+import sys; sys.path.insert(0, '$SCRIPTS_DIR')
+from lib.search.local_index import FTS5Index
+r = FTS5Index().rebuild()
+print(f'FTS5 rebuild: {r[\"inserted\"]}/{r[\"total\"]} turns in {r[\"elapsed_s\"]}s')
+" || echo "[$(LOG_TS)] FTS5 rebuild FAILED (non-fatal)" >&2
+fi
+
 # ── Status summary (consumed by 9 AM Slack hook) ──────────────
 cat > "$STATUS_FILE" <<YAML
 timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -254,5 +267,5 @@ YAML
 echo "[$(LOG_TS)] night_cycle complete"
 
 # ── Chain: trigger backup ──────────────────────────────────
-echo "[$(LOG_TS)] triggering devforge-backup.service..."
-systemctl --user start devforge-backup.service
+echo "[$(LOG_TS)] triggering devforge-backup-safety.service..."
+systemctl --user start devforge-backup-safety.service

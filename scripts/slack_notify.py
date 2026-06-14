@@ -64,7 +64,6 @@ def _slack_send(text: str) -> bool:
         return False
 
 
-# ── Proxy usage parsers ────────────────────────────────────────
 
 DEEPSEEK_RE = re.compile(
     r"input=(\d+)\s+cache_read=(\d+)\s+cache_miss=(\d+)\s+output=(\d+)\s+hit_rate=(\d+)%"
@@ -109,7 +108,6 @@ def _proxy_usage(unit: str, since_ts: Optional[int] = None) -> Dict[str, Any]:
     return {"label": unit, "requests": count, **totals, "avg_hit_rate": avg_hit, "stats_none": none_count}
 
 
-# ── Cost calculation ───────────────────────────────────────────
 
 def _compact(n: int) -> str:
     """Format token count: <1M → '123k', ≥1M → '12M', <1000 → '500'."""
@@ -153,7 +151,6 @@ def _balance() -> Optional[str]:
     return None
 
 
-# ── Report builder ─────────────────────────────────────────────
 
 def main() -> int:
     args = _parse_args()

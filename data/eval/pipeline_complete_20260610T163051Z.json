@@ -1,0 +1,16 @@
+{
+  "total_elapsed_s": 603.7,
+  "phases_run": [
+    4
+  ],
+  "results": {
+    "phase4": {
+      "phase": 4,
+      "error": "Night P failed: Pod B review-p swap failed"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

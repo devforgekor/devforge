@@ -1,0 +1,327 @@
+{
+  "total_elapsed_s": 762.7,
+  "phases_run": [
+    1,
+    2
+  ],
+  "results": {
+    "phase1": {
+      "phase": 1,
+      "role": "python_verify",
+      "timestamp": "2026-06-08T13:54:32.531899+00:00",
+      "files_loaded": 13,
+      "total_findings": 39,
+      "findings": [
+        {
+          "file": "eval_30b_verify.json",
+          "role": "30b_verify",
+          "finding_count": 7,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_feedback_baseline.json",
+          "role": "consolidated_baseline",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_mcp_30b.json",
+          "role": "mcp_30b",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_night_mode.json",
+          "role": "night_mode_switch",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_posthoc_extract_3b.json",
+          "role": "post_hoc",
+          "finding_count": 1,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_prj_extract_handoff.json",
+          "role": "p_r_j_review",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_python_verify.json",
+          "role": "python_verify",
+          "finding_count": 8,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_rubric_extract_3b.json",
+          "role": "role_rubric",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_verify_27b.json",
+          "role": "verify_27b_production",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 88
+        },
+        {
+          "file": "eval_verify_27b_round1.json",
+          "role": "verify_27b_production",
+          "finding_count": 8,
+          "has_verdict": true,
+          "confidence": 82
+        },
+        {
+          "file": "eval_verify_32b.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 75
+        },
+        {
+          "file": "eval_verify_32b_round1.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 70
+        },
+        {
+          "file": "eval_verify_feedback.json",
+          "role": "unknown",
+          "finding_count": 0,
+          "has_verdict": false
+        }
+      ]
+    },
+    "phase2": {
+      "phase": 2,
+      "role": "seven_b_verify",
+      "model": "reviewer model-Instruct",
+      "port": 8080,
+      "timestamp": "2026-06-08T14:07:14.295669+00:00",
+      "usage": {
+        "completion_tokens": 2176,
+        "prompt_tokens": 2902,
+        "total_tokens": 5078,
+        "prompt_tokens_details": 0
+      },
+      "elapsed_ms": 760076.4167869784,
+      "chunks": 7,
+      "chunks_done": 7,
+      "result": {
+        "verification_items": [
+          {
+            "check": "Intent classification accuracy",
+            "result": "fail",
+            "detail": "M01 and M02 indicate that the intent classifier is incorrectly identifying 'report' as the expected value. This suggests a fundamental flaw in the intent recognition algorithm.",
+            "category": "bug"
+          },
+          {
+            "check": "Data extraction completeness",
+            "result": "fail",
+            "detail": "M03 indicates that critical facts are being missed or not extracted properly, which could lead to incomplete responses and potentially misleading information.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Entity correctness",
+            "result": "partial",
+            "detail": "M04 suggests an issue with entity correctness in the code. However, without more context, it's difficult to determine if this is a critical error or just a stylistic concern.",
+            "category": "quality"
+          },
+          {
+            "check": "Extract coverage for short turns",
+            "result": "fail",
+            "detail": "M05 indicates that the system fails to extract information from very short turns, which could lead to significant usability issues.",
+            "category": "performance"
+          },
+          {
+            "check": "Tagging accuracy",
+            "result": "pass",
+            "detail": "M06 suggests that tagging is accurate for this particular instance. However, without further context, it's difficult to determine if this is representative of the system as a whole.",
+            "category": "quality"
+          },
+          {
+            "check": "Operational metrics(timing, tokens) are recorded in review_facts",
+            "result": "fail",
+            "detail": "review_facts.promp does not record operational metrics.",
+            "category": "bug"
+          },
+          {
+            "check": "Faithfulness score, retry history, and unfaithful fact list are included in activity_log body",
+            "result": "fail",
+            "detail": "activity_log body lacks faithfulness scores, retry histories, and unfaithful fact lists.",
+            "category": "bug"
+          },
+          {
+            "check": "review_facts.verdict updates from 'pending'",
+            "result": "fail",
+            "detail": "review_facts.verdict does not update from 'pending' — downstream pipeline fails to UPDATE review_facts.",
+            "category": "bug"
+          },
+          {
+            "check": "LLM client extracts token usage/timing from API response",
+            "result": "fail",
+            "detail": "lib/llm_client.py uses urllib.request and does not extract token usage/timing from /v1/calls.",
+            "category": "bug"
+          },
+          {
+            "check": "S05: queue_writer.py → activity_log",
+            "result": "fail",
+            "detail": "enqueue_review() always sets queue_status to 'reviewed', bypassing P-R-J checks. This is a critical security vulnerability.",
+            "category": "security"
+          },
+          {
+            "check": "S06: review_facts",
+            "result": "fail",
+            "detail": "fact_index inconsistency due to separate row storage for mcp_meta with extract_model='Qwen30B'. This could lead to data integrity issues.",
+            "category": "data_loss"
+          },
+          {
+            "check": "S07: extract_pipeline.py — entity verify",
+            "result": "partial",
+            "detail": "MCP entity file path verification uses direct join without absolute path conversion, which may be a security risk.",
+            "category": "security"
+          },
+          {
+            "check": "S08: review_consumer.py",
+            "result": "partial",
+            "detail": "27B verify does not collect timing/token information. This could lead to incomplete verification data.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 1",
+            "result": "pass",
+            "detail": "Correct logic error identified.",
+            "category": "bug"
+          },
+          {
+            "check": "Finding 2",
+            "result": "pass",
+            "detail": "Unsafe pattern detected and explained.",
+            "category": "security"
+          },
+          {
+            "check": "Finding 3",
+            "result": "pass",
+            "detail": "Performance issue noted and potential solution provided.",
+            "category": "performance"
+          },
+          {
+            "check": "Finding 4",
+            "result": "pass",
+            "detail": "Code quality issues addressed with suggestions.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 5",
+            "result": "pass",
+            "detail": "Data loss identified and mitigation strategy proposed.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Finding 1",
+            "result": "pass",
+            "detail": "The logic error in the function has been correctly identified.",
+            "category": "bug"
+          },
+          {
+            "check": "Finding 2",
+            "result": "pass",
+            "detail": "The use of deprecated methods is accurately noted.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 3",
+            "result": "pass",
+            "detail": "The potential SQL injection vulnerability has been correctly flagged.",
+            "category": "security"
+          },
+          {
+            "check": "Finding 4",
+            "result": "pass",
+            "detail": "The performance issue with the loop has been accurately identified.",
+            "category": "performance"
+          },
+          {
+            "check": "Finding 5",
+            "result": "pass",
+            "detail": "The missing documentation for the class has been correctly noted.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 6",
+            "result": "pass",
+            "detail": "The data loss due to improper file handling has been accurately identified.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Finding 1",
+            "result": "pass",
+            "detail": "Correct logic error identified.",
+            "category": "bug"
+          },
+          {
+            "check": "Finding 2",
+            "result": "pass",
+            "detail": "Unsafe pattern detected.",
+            "category": "security"
+          },
+          {
+            "check": "Finding 3",
+            "result": "pass",
+            "detail": "Inefficient code identified.",
+            "category": "performance"
+          },
+          {
+            "check": "Finding 4",
+            "result": "pass",
+            "detail": "Maintainability issue noted.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 5",
+            "result": "pass",
+            "detail": "Data loss potential identified.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Finding 6",
+            "result": "pass",
+            "detail": "Correct documentation error found.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 1: Potential bug in function X",
+            "result": "partial",
+            "detail": "The code logic for function X seems incorrect based on the provided test cases. Further investigation is needed to confirm if this is a true bug or if additional context is required.",
+            "category": "bug"
+          },
+          {
+            "check": "Finding 2: Security vulnerability in input validation",
+            "result": "partial",
+            "detail": "The input validation for function Y appears incomplete, which could lead to security vulnerabilities. A thorough review of the input handling logic is necessary.",
+            "category": "security"
+          },
+          {
+            "check": "Finding 3: Code quality issue in documentation",
+            "result": "partial",
+            "detail": "The documentation for class Z is sparse and unclear, making it difficult for other developers to understand its purpose and usage. Improving the documentation would enhance maintainability.",
+            "category": "quality"
+          }
+        ],
+        "summary": " | High severity issues indicate critical logic errors and incomplete data extraction. | The code has critical issues that need to be addressed before proceeding. | High severity issues indicate critical vulnerabilities and logic errors that need immediate attention. | All findings have been reviewed and are correct. | All findings have been reviewed and are correct. | All findings have been reviewed and are correct. | The code requires further analysis to determine if it meets all requirements ",
+        "reasoning": "\nThe high severity findings (M01, M02, M03) suggest significant problems with intent classification and data completeness. These issues could lead to incorrect system responses and missing information, which are unacceptable for a production system.\nThere are multiple critical issues related to operational metrics, missing information in logs, and failure to update review facts. These issues must be resolved to ensure the system's reliability and correctness.\nThe high severity bugs S05 and S06 suggest significant security risks and potential bypasses, which are unacceptable. The medium severity issues also require addressing to improve code quality and maintainability.\nEach finding has been carefully analyzed, and all identified issues are accurate.\nEach finding has been carefully analyzed, and all identified issues are accurate.\nEach finding has been analyzed, and all identified issues are accurate. No further action is required.\nThere are three findings, but their impact on the overa",
+        "final_verdict": "rejected",
+        "confidence": 90
+      },
+      "category_summary": "Category Distribution: bug=9(fail=5,partial=1,pass=3) [fail=5,partial=1,pass=3]; quality=9(partial=3,pass=6) [partial=3,pass=6]; security=6(fail=1,partial=2,pass=3) [fail=1,partial=2,pass=3]; data_loss=5(fail=2,pass=3) [fail=2,pass=3]; performance=4(fail=1,pass=3) [fail=1,pass=3] (39 total) | Verdict: fail=9, partial=6, pass=18"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

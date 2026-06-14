@@ -23,7 +23,6 @@ from typing import Optional
 
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
 
-# ── Config ────────────────────────────────────────────────────────────────────
 ACCOUNT_NAME = "stshareddevforgeprodkrc"
 CONTAINER = "devforge"
 LISTEN_ADDR = os.environ.get("BLOB_EXPLORER_LISTEN", "127.0.0.1:8085")
@@ -116,7 +115,6 @@ def _size_fmt(size: int) -> str:
         return f"{size / (1024 * 1024):.1f} MB"
 
 
-# ── HTML ──────────────────────────────────────────────────────────────────────
 STYLE = """<style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; max-width: 900px; margin: 0 auto; }
@@ -197,7 +195,6 @@ def _breadcrumb(path: str) -> str:
     return '<div class="breadcrumb">' + " / ".join(html_parts) + "</div>"
 
 
-# ── Pages ─────────────────────────────────────────────────────────────────────
 
 ALLOWED_EXT = {".md", ".txt", ".yaml", ".yml", ".json", ".py", ".sh", ".log",
                ".csv", ".toml", ".cfg", ".ini", ".env", ".sql", ".html", ".css",
@@ -307,7 +304,6 @@ def _page_receive(path: str) -> str:
     return _page("받기", body, "receive", f"SAS links valid for {SAS_HOURS}h · {now}")
 
 
-# ── HTTP Handler ──────────────────────────────────────────────────────────────
 class BlobHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 

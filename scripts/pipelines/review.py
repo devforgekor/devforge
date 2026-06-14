@@ -29,9 +29,8 @@ from lib import scoring as _sc
 from lib.llm_client import call_llm, call_llm_json
 from lib.llm.json_parser import parse_llm_json
 
-# ── Constants ──────────────────────────────────────────────────────────────
-REVIEWER_PORT = 8083  # Pod B: reviewer model (review-j)
-JUDGE_PORT = 8083  # Pod B: Scoring Judge (review-j)
+REVIEWER_PORT = 8083
+JUDGE_PORT = 8083
 TIMEOUT_STEP1 = 480  #  8 min (Reflector)
 TIMEOUT_STEP2 = 480  #  8 min (Scoring Judge: rubric + decisions)
 TIMEOUT_STEP3 = 600  # 10 min
@@ -41,7 +40,6 @@ MAX_TOKENS_STEP3 = 2048
 
 THINK_STRIP_RE = re.compile(r"<think[^>]*>.*?</think>", re.DOTALL)
 
-# ── Step 1 System Prompt ───────────────────────────────────────────────────
 SYSTEM_REVIEW_STEP2 = """\
 You are a code review reflector. You will receive a bug report (list of
 findings) and the original code. For each finding, decide:
@@ -58,7 +56,6 @@ Output a JSON object:
 }
 Do NOT suggest fixes. Do NOT rewrite code. Respond ONLY with the JSON."""
 
-# ── Step 2 System Prompt (Scoring Judge) ───────────────────────────────
 SYSTEM_REVIEW_STEP3 = """\
 You are a 3-person jury panel evaluating a code review:
 - Juror 1: Security expert — did the finder catch real vulnerabilities?
@@ -131,7 +128,6 @@ Output STRICT JSON (no markdown, no explanation outside JSON):
   ]
 }"""
 
-# ── Step 3 System Prompt ───────────────────────────────────────────────────
 SYSTEM_REVIEW_STEP4 = """\
 You are a diff writer. You receive original code and a list of approved
 findings. Generate ONLY a unified diff that fixes the approved issues.
@@ -144,7 +140,6 @@ CRITICAL RULES:
 - If a finding cannot be fixed, skip it silently."""
 
 
-# ── HTTP helpers ───────────────────────────────────────────────────────────
 def _poll_health(port: int, timeout: int = 240) -> bool:
     """Wait for llama.cpp server on :port/health to respond 200."""
     url = f"http://127.0.0.1:{port}/health"
@@ -164,7 +159,6 @@ def _poll_health(port: int, timeout: int = 240) -> bool:
     return False
 
 
-# ── Utilities ──────────────────────────────────────────────────────────────
 def strip_think_blocks(text: str) -> str:
     """Remove <think>...</think> blocks from R1 output."""
     return THINK_STRIP_RE.sub("", text).strip()
@@ -209,13 +203,13 @@ def run_judgment(
     if not _poll_health(JUDGE_PORT, timeout=30):
         raise RuntimeError(f"Scoring Judge not healthy on :{JUDGE_PORT}")
 
-    # Determine 2:0 fast-path (both agree) vs 1:1 disputed
+    # Fast-path for unanimous reviews avoids unnecessary LLM scoring
     refl_accept = {v["id"] for v in reflector_verdicts if v.get("verdict", "").lower() == "accept"}
     fast_path = [fid for fid in reviewer_accepted if fid in refl_accept]
     disputed = [f["id"] for f in findings if f["id"] not in fast_path]
 
     if not disputed:
-        # All findings 2:0 agreed — fast-path ratify
+        # Unanimous agreement — skip the judge, ratify directly
         # J still provides scoring for observability
         print(f"[step3] All {len(fast_path)} findings: 2:0 fast-path ratified")
         return _build_fastpath_verdict(findings, fast_path, reflector_verdicts)
@@ -386,7 +380,7 @@ def run_diff(code: str, approved_findings: List[Dict]) -> str:
         max_tokens=MAX_TOKENS_STEP4,
         timeout=TIMEOUT_STEP4,
     )
-    # Sanitize: strip any markdown fences
+    # LLM occasionally wraps JSON in markdown — strip before parsing
     diff_text = diff_text.strip()
     if diff_text.startswith("```"):
         diff_text = re.sub(r"^```(?:diff)?\s*\n?", "", diff_text)

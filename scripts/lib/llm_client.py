@@ -27,7 +27,6 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-# ── Model registry ─────────────────────────────────────────────────────────
 # Physical models → port/temp/timeout.
 # Role aliases → `_model` key points to physical key.
 # Pipeline code only references role keys; change the `_model` value here
@@ -71,7 +70,6 @@ def resolve_model(name: str) -> str:
 # How long to cache feedback lookups (seconds)
 FEEDBACK_TTL = 300
 
-# ── Feedback helpers (deferred import to avoid circular deps) ──────────────
 
 _feedback_cache: Dict[str, List[Dict[str, str]]] = {}
 _feedback_ts: float = 0.0
@@ -114,7 +112,6 @@ def _inject_feedback(messages: List[Dict], model: str) -> List[Dict]:
     return fb + messages
 
 
-# ── HTTP transport ─────────────────────────────────────────────────────────
 
 def call_llm(
     messages: List[Dict[str, str]],

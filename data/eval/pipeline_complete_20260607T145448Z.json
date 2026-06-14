@@ -1,0 +1,345 @@
+{
+  "total_elapsed_s": 926.1,
+  "phases_run": [
+    1,
+    2
+  ],
+  "results": {
+    "phase1": {
+      "phase": 1,
+      "role": "python_verify",
+      "timestamp": "2026-06-07T14:39:23.612843+00:00",
+      "files_loaded": 13,
+      "total_findings": 39,
+      "findings": [
+        {
+          "file": "eval_30b_verify.json",
+          "role": "30b_verify",
+          "finding_count": 7,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_feedback_baseline.json",
+          "role": "consolidated_baseline",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_mcp_30b.json",
+          "role": "mcp_30b",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_night_mode.json",
+          "role": "night_mode_switch",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_posthoc_extract_3b.json",
+          "role": "post_hoc",
+          "finding_count": 1,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_prj_extract_handoff.json",
+          "role": "p_r_j_review",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_python_verify.json",
+          "role": "python_verify",
+          "finding_count": 8,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_rubric_extract_3b.json",
+          "role": "role_rubric",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_verify_27b.json",
+          "role": "verify_27b_production",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 88
+        },
+        {
+          "file": "eval_verify_27b_round1.json",
+          "role": "verify_27b_production",
+          "finding_count": 8,
+          "has_verdict": true,
+          "confidence": 82
+        },
+        {
+          "file": "eval_verify_32b.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 75
+        },
+        {
+          "file": "eval_verify_32b_round1.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 70
+        },
+        {
+          "file": "eval_verify_feedback.json",
+          "role": "unknown",
+          "finding_count": 0,
+          "has_verdict": false
+        }
+      ]
+    },
+    "phase2": {
+      "phase": 2,
+      "role": "seven_b_verify",
+      "model": "reviewer model-Instruct",
+      "port": 8080,
+      "timestamp": "2026-06-07T14:54:48.655455+00:00",
+      "usage": {
+        "completion_tokens": 2582,
+        "prompt_tokens": 2902,
+        "total_tokens": 5484,
+        "prompt_tokens_details": 0
+      },
+      "elapsed_ms": 922126.2140629697,
+      "chunks": 7,
+      "chunks_done": 7,
+      "result": {
+        "verification_items": [
+          {
+            "check": "M01: Intent classification for 'report'",
+            "result": "fail",
+            "detail": "The extracted value 'report' does not match the expected value 'o'. This indicates a bug in the intent classification logic.",
+            "category": "bug"
+          },
+          {
+            "check": "M02: Intent classification for 'report'",
+            "result": "fail",
+            "detail": "The extracted value 'report' does not match the expected value 'r'. This indicates a bug in the intent classification logic.",
+            "category": "bug"
+          },
+          {
+            "check": "M03: Extract completeness for turn 'd5ec4da3-06a5-452b-9247-e8e3ec517a61'",
+            "result": "fail",
+            "detail": "The extracted fact is incomplete or incorrect, which could lead to data loss.",
+            "category": "data_loss"
+          },
+          {
+            "check": "M04: Entity correctness in 'de_mod_pipeline.py'",
+            "result": "partial",
+            "detail": "The evidence provided is insufficient to determine the correctness of the entity extraction. Further review is needed.",
+            "category": "quality"
+          },
+          {
+            "check": "M05: Extract coverage for short turns",
+            "result": "partial",
+            "detail": "The evidence provided is insufficient to determine the coverage of the extraction for short turns. Further review is needed.",
+            "category": "quality"
+          },
+          {
+            "check": "M06: MCP tags for turn '4fa75004-1e15-427d-913b-057a6967ed04'",
+            "result": "pass",
+            "detail": "The tags are correctly assigned, which is within the expected range.",
+            "category": "quality"
+          },
+          {
+            "check": "Operational metrics(timing, tokens) are recorded in review_facts",
+            "result": "fail",
+            "detail": "The evidence shows that operational metrics are not being recorded in review_facts, which is a critical issue.",
+            "category": "bug"
+          },
+          {
+            "check": "Activity log body contains faithfulness score, retry history, and unfaithful fact list",
+            "result": "fail",
+            "detail": "The evidence indicates that the activity log body is missing essential information such as faithfulness scores, retry history, and unfaithful fact lists, which are critical for tracking and debugging.",
+            "category": "bug"
+          },
+          {
+            "check": "Review facts verdict is updated from 'pending'",
+            "result": "fail",
+            "detail": "The evidence shows that the review facts verdict is not being updated from 'pending', which is a critical issue affecting the downstream pipeline.",
+            "category": "bug"
+          },
+          {
+            "check": "LLM client extracts token usage/timing from API response",
+            "result": "fail",
+            "detail": "The evidence indicates that the LLM client is not extracting token usage and timing from the API response, which is a critical issue affecting the system's performance and resource management.",
+            "category": "bug"
+          },
+          {
+            "check": "Extract model discrepancy",
+            "result": "partial",
+            "detail": "The evidence shows a discrepancy in the extract models, but this is a low-severity issue that can be addressed with further investigation and potential fixes.",
+            "category": "quality"
+          },
+          {
+            "check": "S05: queue_writer.py → activity_log",
+            "result": "fail",
+            "detail": "enqueue_review() function always sets queue_status to 'reviewed', bypassing the review process.",
+            "category": "security"
+          },
+          {
+            "check": "S06: review_facts",
+            "result": "fail",
+            "detail": "fact_index inconsistency due to separate row storage for mcp_meta with extract_model='Qwen30B'.",
+            "category": "data_loss"
+          },
+          {
+            "check": "S07: extract_pipeline.py — entity verify",
+            "result": "partial",
+            "detail": "MCP entity file path verification does not convert to absolute paths, which could lead to security risks.",
+            "category": "security"
+          },
+          {
+            "check": "S08: review_consumer.py",
+            "result": "partial",
+            "detail": "27B verify does not collect timing/token information, which could impact the accuracy of the verification process.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 1",
+            "result": "partial",
+            "detail": "Insufficient information to determine if this is a bug, security issue, performance concern, quality issue, or data loss.",
+            "category": "needs_review"
+          },
+          {
+            "check": "Finding 2",
+            "result": "partial",
+            "detail": "Insufficient information to determine if this is a bug, security issue, performance concern, quality issue, or data loss.",
+            "category": "needs_review"
+          },
+          {
+            "check": "Finding 3",
+            "result": "partial",
+            "detail": "Insufficient information to determine if this is a bug, security issue, performance concern, quality issue, or data loss.",
+            "category": "needs_review"
+          },
+          {
+            "check": "Finding 4",
+            "result": "partial",
+            "detail": "Insufficient information to determine if this is a bug, security issue, performance concern, quality issue, or data loss.",
+            "category": "needs_review"
+          },
+          {
+            "check": "Finding 5",
+            "result": "partial",
+            "detail": "Insufficient information to determine if this is a bug, security issue, performance concern, quality issue, or data loss.",
+            "category": "needs_review"
+          },
+          {
+            "check": "Finding 6",
+            "result": "partial",
+            "detail": "Insufficient information to determine if this is a bug, security issue, performance concern, quality issue, or data loss.",
+            "category": "needs_review"
+          },
+          {
+            "check": "Bug in function X",
+            "result": "partial",
+            "detail": "The function may not handle edge cases correctly.",
+            "category": "bug"
+          },
+          {
+            "check": "Potential SQL injection in query Y",
+            "result": "partial",
+            "detail": "The query uses string concatenation, which could be exploited.",
+            "category": "security"
+          },
+          {
+            "check": "Performance issue in loop Z",
+            "result": "partial",
+            "detail": "The loop iterates over a large dataset without optimization.",
+            "category": "performance"
+          },
+          {
+            "check": "Code quality issue in method A",
+            "result": "partial",
+            "detail": "The method lacks comments and is difficult to understand.",
+            "category": "quality"
+          },
+          {
+            "check": "Data loss in data processing",
+            "result": "partial",
+            "detail": "Some data might be dropped during processing.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Unnecessary resource usage in module B",
+            "result": "partial",
+            "detail": "The module allocates resources that are not used.",
+            "category": "performance"
+          },
+          {
+            "check": "Finding 1",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 2",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 3",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 4",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 5",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 6",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 1",
+            "result": "partial",
+            "detail": "The finding suggests a potential bug in the code that could lead to incorrect behavior under certain conditions. However, the exact impact and severity are unclear without further context.",
+            "category": "bug"
+          },
+          {
+            "check": "Finding 2",
+            "result": "partial",
+            "detail": "The finding indicates a possible security vulnerability that could be exploited by attackers. The risk level is moderate, but the exact impact is not fully understood.",
+            "category": "security"
+          },
+          {
+            "check": "Finding 3",
+            "result": "partial",
+            "detail": "The finding points to a potential performance issue that could affect the system's responsiveness. The impact is unclear without additional data.",
+            "category": "performance"
+          }
+        ],
+        "summary": " | High severity issues indicate critical bugs and potential security vulnerabilities. | Multiple critical issues found in the code, including missing operational metrics, missing log information, and unupdated verdicts. | High severity issues indicate critical vulnerabilities and logic errors that need immediate attention. | Findings require deeper analysis to determine their impact and appropriate action. | The code requires further analysis to ensure all potential issues are addressed. | Find",
+        "reasoning": "\nThe high severity issues (M01, M02, M03) suggest that the intent classification and extract completeness are not functioning as expected, which could lead to incorrect responses and data loss. These issues need to be addressed before proceeding.\nThe critical issues (S01, S02, S03) indicate significant problems with the system's ability to log and track important operational metrics and status updates, which are essential for system reliability and debugging. These issues cannot be ignored as they severely impact the system's functionality and maintainability.\nThe high severity issues (S05 and S06) suggest significant security and logic problems that could lead to bypassing review processes and inconsistent data handling. These issues require urgent resolution to prevent potential data loss and security breaches.\nThe provided findings are not detailed enough to make a definitive decision. Each finding should be reviewed individually to assess its severity and determine the necessary ac",
+        "final_verdict": "needs_review",
+        "confidence": 90
+      },
+      "category_summary": "Category Distribution: bug=8(fail=6,partial=2); quality=6(partial=5,pass=1); needs_review=6(partial=6); bug|security|performance|quality|data_loss=6(partial=6); security=4(fail=1,partial=3); data_loss=3(fail=2,partial=1); performance=3(partial=3) (39 total) | Verdict: fail=9, partial=26, pass=1"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

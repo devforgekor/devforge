@@ -1,0 +1,52 @@
+{
+  "combo": "B (proposer + reflector + judge)",
+  "round": 1,
+  "with_rubric": false,
+  "proposer": {
+    "model": "proposer",
+    "result": {
+      "findings": [],
+      "verdicts": [],
+      "P_score": 25,
+      "R_score": 25,
+      "consensus_score": 90,
+      "decision": "APPROVED"
+    }
+  },
+  "refuter": {
+    "model": "reviewer",
+    "result": {
+      "findings": [],
+      "verdicts": [],
+      "P_score": 25,
+      "R_score": 25,
+      "consensus_score": 90,
+      "decision": "APPROVED"
+    }
+  },
+  "judge": {
+    "model": "judge",
+    "result": {
+      "findings": [],
+      "verdicts": [],
+      "P_score": 25,
+      "R_score": 25,
+      "consensus_score": 90,
+      "decision": "APPROVED"
+    }
+  },
+  "timings": {
+    "total_ms": 300
+  },
+  "tokens": {
+    "proposer": {
+      "total_tokens": 0
+    },
+    "refuter": {
+      "total_tokens": 0
+    },
+    "judge": {
+      "total_tokens": 0
+    }
+  }
+}

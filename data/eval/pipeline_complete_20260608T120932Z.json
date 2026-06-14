@@ -1,0 +1,189 @@
+{
+  "total_elapsed_s": 987.9,
+  "phases_run": [
+    1,
+    2
+  ],
+  "results": {
+    "phase1": {
+      "phase": 1,
+      "role": "python_verify",
+      "timestamp": "2026-06-08T11:53:19.387829+00:00",
+      "files_loaded": 13,
+      "total_findings": 39,
+      "findings": [
+        {
+          "file": "eval_30b_verify.json",
+          "role": "30b_verify",
+          "finding_count": 7,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_feedback_baseline.json",
+          "role": "consolidated_baseline",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_mcp_30b.json",
+          "role": "mcp_30b",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_night_mode.json",
+          "role": "night_mode_switch",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_posthoc_extract_3b.json",
+          "role": "post_hoc",
+          "finding_count": 1,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_prj_extract_handoff.json",
+          "role": "p_r_j_review",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_python_verify.json",
+          "role": "python_verify",
+          "finding_count": 8,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_rubric_extract_3b.json",
+          "role": "role_rubric",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_verify_27b.json",
+          "role": "verify_27b_production",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 88
+        },
+        {
+          "file": "eval_verify_27b_round1.json",
+          "role": "verify_27b_production",
+          "finding_count": 8,
+          "has_verdict": true,
+          "confidence": 82
+        },
+        {
+          "file": "eval_verify_32b.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 75
+        },
+        {
+          "file": "eval_verify_32b_round1.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 70
+        },
+        {
+          "file": "eval_verify_feedback.json",
+          "role": "unknown",
+          "finding_count": 0,
+          "has_verdict": false
+        }
+      ]
+    },
+    "phase2": {
+      "phase": 2,
+      "role": "seven_b_verify",
+      "model": "reviewer model-Instruct",
+      "port": 8080,
+      "timestamp": "2026-06-08T12:09:32.171217+00:00",
+      "usage": {
+        "completion_tokens": 846,
+        "prompt_tokens": 1536,
+        "total_tokens": 2382,
+        "prompt_tokens_details": 0
+      },
+      "elapsed_ms": 613249.5849539846,
+      "chunks": 7,
+      "chunks_done": 2,
+      "result": {
+        "verification_items": [
+          {
+            "check": "Intent classification accuracy",
+            "result": "fail",
+            "detail": "M01 and M02 indicate that the system is incorrectly classifying 'report' as 'o' and 'r'. This suggests a fundamental flaw in the intent recognition algorithm.",
+            "category": "bug"
+          },
+          {
+            "check": "Data extraction completeness",
+            "result": "fail",
+            "detail": "M03 indicates that the extracted fact is incomplete, which could lead to data loss or incorrect processing downstream.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Entity correctness",
+            "result": "partial",
+            "detail": "M04 suggests potential issues with entity recognition in 'de_mod_pipeline.py'. Further investigation is needed to determine if this affects the system's performance.",
+            "category": "performance"
+          },
+          {
+            "check": "Extract coverage for short turns",
+            "result": "fail",
+            "detail": "M05 indicates that the system fails to handle short turns effectively, which could lead to incomplete or incorrect data extraction.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Tag accuracy",
+            "result": "pass",
+            "detail": "M06 suggests that the tags assigned are correct for the given intent. This is a low severity issue and does not affect the core functionality of the system.",
+            "category": "quality"
+          },
+          {
+            "check": "Operational metrics(timing, tokens) are recorded in review_facts",
+            "result": "fail",
+            "detail": "The evidence shows that operational metrics are not being recorded in the review_facts component. This is a critical issue as it affects the monitoring and performance of the system.",
+            "category": "performance"
+          },
+          {
+            "check": "Activity log body contains faithfulness score, retry history, and unfaithful fact list",
+            "result": "fail",
+            "detail": "The evidence indicates that the activity_log body does not contain the required information. This is a critical issue as it affects the logging and traceability of the system.",
+            "category": "quality"
+          },
+          {
+            "check": "review_facts.verdict updates from 'pending'",
+            "result": "fail",
+            "detail": "The evidence shows that review_facts.verdict does not update from 'pending'. This is a critical issue as it affects the downstream pipeline's ability to process and update the review_facts.",
+            "category": "performance"
+          },
+          {
+            "check": "LLM client extracts token usage/timing from API response",
+            "result": "fail",
+            "detail": "The evidence indicates that the LLM client is not extracting token usage/timing from the API response. This is a high issue as it affects the accuracy and reliability of the system.",
+            "category": "performance"
+          },
+          {
+            "check": "Extract model discrepancy",
+            "result": "partial",
+            "detail": "The evidence shows that there are discrepancies in the extract models, with some successes and failures. This is a low issue as it affects the consistency of the results but does not impact critical functionality.",
+            "category": "quality"
+          }
+        ],
+        "summary": " | High severity issues indicate critical logic errors and incomplete data extraction. | The code contains critical issues that need to be addressed before proceeding.",
+        "reasoning": "\nThe high severity findings (M01, M02, M03) suggest significant problems with intent classification and data completeness. These issues are likely to impact the overall functionality of the system and should be addressed before proceeding.\nThere are multiple critical issues (S01, S02, S03) that affect the operational metrics and logging of the system. These issues must be resolved to ensure proper functionality and reliability.",
+        "final_verdict": "rejected",
+        "confidence": 25
+      },
+      "category_summary": "Category Distribution: performance=4(fail=3,partial=1) [fail=3,partial=1]; quality=3(fail=1,partial=1,pass=1) [fail=1,partial=1,pass=1]; data_loss=2(fail=2) [fail=2]; bug=1(fail=1) [fail=1] (39 total) | Verdict: fail=7, partial=2, pass=1"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "verdicts": [
+    {
+      "id": "F01",
+      "verdict": "accept",
+      "reason": "The finding correctly identifies a critical security vulnerability related to hardcoded API keys and credentials in the source code."
+    },
+    {
+      "id": "F02",
+      "verdict": "accept",
+      "reason": "The finding correctly identifies a potential SQL injection vulnerability due to unvalidated user input."
+    },
+    {
+      "id": "F03",
+      "verdict": "accept",
+      "reason": "The N+1 select problem is a well-known issue that causes inefficient database queries and significant performance degradation under load."
+    },
+    {
+      "id": "F04",
+      "verdict": "accept",
+      "reason": "The finding correctly identifies a potential security vulnerability related to data loss due to missing input validation and sanitization."
+    },
+    {
+      "id": "F05",
+      "verdict": "accept",
+      "reason": "The finding highlights a common issue that affects code maintainability and developer understanding, and proposes a practical solution."
+    },
+    {
+      "id": "F06",
+      "verdict": "accept",
+      "reason": "The finding correctly identifies a security vulnerability related to missing CSRF protection in web forms."
+    },
+    {
+      "id": "F04",
+      "verdict": "accept",
+      "reason": "The finding correctly identifies a significant risk related to data loss due to the absence of proper backup and recovery procedures."
+    },
+    {
+      "id": "F05",
+      "verdict": "accept",
+      "reason": "The finding highlights a common issue that affects code maintainability and team collaboration."
+    },
+    {
+      "id": "F06",
+      "verdict": "accept",
+      "reason": "The finding correctly identifies a potential security vulnerability related to missing input sanitization for XSS protection."
+    },
+    {
+      "id": "F01",
+      "verdict": "accept",
+      "reason": "The finding correctly identifies a critical security issue related to hardcoded API keys and credentials in configuration files."
+    }
+  ],
+  "usage": {
+    "completion_tokens": 611,
+    "prompt_tokens": 2205,
+    "total_tokens": 2816,
+    "prompt_tokens_details": 0
+  },
+  "elapsed_ms": 771689.0848519979,
+  "status": "ok"
+}

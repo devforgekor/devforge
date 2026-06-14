@@ -1,0 +1,519 @@
+{
+  "meta": {
+    "round": 1,
+    "with_rubric": false,
+    "created_at": "2026-06-13T00:36:13.473404+00:00"
+  },
+  "extract": {
+    "models": [
+      {
+        "model": "Gemma3-4B",
+        "turns_total": 15,
+        "turns_ok": 15,
+        "turns_error": 0,
+        "total_extractions": 108,
+        "total_faithful": 46,
+        "faithfulness_rate": 0.426,
+        "elapsed_seconds": 2112.7,
+        "avg_time_per_turn": 140.8
+      },
+      {
+        "model": "LFM2-8B-A1B",
+        "turns_total": 15,
+        "turns_ok": 14,
+        "turns_error": 1,
+        "total_extractions": 74,
+        "total_faithful": 12,
+        "faithfulness_rate": 0.162,
+        "elapsed_seconds": 812.5,
+        "avg_time_per_turn": 54.2
+      },
+      {
+        "model": "Qwen2.5-3B",
+        "turns_total": 15,
+        "turns_ok": 14,
+        "turns_error": 1,
+        "total_extractions": 65,
+        "total_faithful": 54,
+        "faithfulness_rate": 0.831,
+        "elapsed_seconds": 1216.7,
+        "avg_time_per_turn": 81.1
+      },
+      {
+        "model": "Qwen3-4B",
+        "turns_total": 15,
+        "turns_ok": 15,
+        "turns_error": 0,
+        "total_extractions": 108,
+        "total_faithful": 59,
+        "faithfulness_rate": 0.546,
+        "elapsed_seconds": 2736.7,
+        "avg_time_per_turn": 182.4
+      }
+    ],
+    "total_models": 4,
+    "description": "Consolidated input for P-R-J-27B-32B pipeline. Uniform schema for all models.",
+    "total_files_merged": 13
+  },
+  "input": {
+    "total_findings": 48,
+    "severity_distribution": {
+      "high": 9,
+      "medium": 8,
+      "low": 16,
+      "critical": 6,
+      "partial": 4,
+      "fail": 5
+    },
+    "source_files": {
+      "eval_30b_verify.json": 7,
+      "eval_prj_extract_handoff.json": 7,
+      "eval_python_verify.json": 8,
+      "eval_verify_27b.json": 5,
+      "eval_verify_27b_round1.json": 8,
+      "eval_verify_32b.json": 5,
+      "eval_verify_32b_round1.json": 5,
+      "eval_verify_feedback.json": 3
+    },
+    "findings": [
+      {
+        "id": "M01",
+        "severity": "high",
+        "category": "MCP intent classification",
+        "description": "User: 'hi' (2 chars). Assistant: 'Hello! How can I assist you today?' (34 chars). 단순 인사. 'report' intent는 부적절. 의도가 없으므로 'other'가 적합.",
+        "source_file": "eval_30b_verify.json",
+        "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+        "fid": "F001"
+      },
+      {
+        "id": "M02",
+        "severity": "high",
+        "category": "MCP intent classification",
+        "description": "User: '이 서버의 IP 주소를 알려줘' (16 chars). 명시적 요청문. Assistant가 거절했지만 user intent는 분명한 'request'. 'report'는 부적절.",
+        "source_file": "eval_30b_verify.json",
+        "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+        "fid": "F002"
+      },
+      {
+        "id": "M03",
+        "severity": "high",
+        "category": "extract completeness",
+        "description": "Turn: user=176ch, text=2490ch. 추출된 fact: user 2개(text 0개). 2490자 분량의 상세한 설명(text)에서 단 1개의 fact도 추출되지 않음. 3B 2회실패 → 30B fallback도 user fact만 추출.",
+        "source_file": "eval_30b_verify.json",
+        "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+        "fid": "F003"
+      },
+      {
+        "id": "M04",
+        "severity": "medium",
+        "category": "MCP entity correctness",
+        "description": "files: ['de_mod_pipeline.py']— 'code_mod_pipeline.py'의 오타. functions: ['run_32b_4stage', 'save_result', 'upload_review_bundle', 'upload_raw'] — 모두 정확히 식별. files 3개 모두 exists=false (경로 문제).",
+        "source_file": "eval_30b_verify.json",
+        "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+        "fid": "F004"
+      },
+      {
+        "id": "M05",
+        "severity": "medium",
+        "category": "extract coverage (short turns)",
+        "description": "User: '1+1 답만 해줘' (9ch), Assistant: '2' (1ch). 추출: text fact '2' 1개. user_turn fact 누락. user_turn '1+1 답만 해줘'도 추출되어야 하나 누락됨.",
+        "source_file": "eval_30b_verify.json",
+        "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+        "fid": "F005"
+      },
+      {
+        "id": "M06",
+        "severity": "low",
+        "category": "MCP tags",
+        "description": "tags: ['greeting', 'welcome', 'assistant-response']. 'welcome'은 부적절 — assistant가 'welcome'이라고 말한 적 없음. 단순 인사 응답.",
+        "source_file": "eval_30b_verify.json",
+        "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+        "fid": "F006"
+      },
+      {
+        "id": "M07",
+        "severity": "low",
+        "category": "extract model discrepancy",
+        "description": "4개 extract 중 2개가 '3B 2회실패 → 30B 전달'. 279(인사, 2ch+34ch)는 3B 성공. 280(1+1, 9ch+1ch)는 3B 성공. 281(code_mod, 176ch+2490ch)는 3B 실패→30B. 282(IP주소, 16ch+52ch)는 3B 실패→30B.",
+        "source_file": "eval_30b_verify.json",
+        "source_summary": "MCP 품질 및 extract completeness 검토. 7개 발견. 3개 high, 2개 medium, 2개 low.",
+        "fid": "F007"
+      },
+      {
+        "id": "F01",
+        "severity": "critical",
+        "category": "data_loss",
+        "description": "call_llm()이 HTTP 응답에서 usage(tokens) + timings(latency)를 완전히 버림. llama.cpp API는 완전한 usage/timings 데이터를 반환하나 클라이언트가 content만 추출. 4개 extract 결과 모두 prompt_tokens, gen_tokens, elapsed_ms가 NULL.",
+        "source_file": "eval_prj_extract_handoff.json",
+        "source_summary": "",
+        "fid": "F008"
+      },
+      {
+        "id": "F02",
+        "severity": "critical",
+        "category": "pipeline_architecture",
+        "description": "Extract_result가 queue_status='reviewed'로 고정되어 P-R-J 3-model review를 완전히 우회. activity_log에 직접 verify queue로 직행. extract 결과에 대한 quality gate가 verify 1단계뿐.",
+        "source_file": "eval_prj_extract_handoff.json",
+        "source_summary": "",
+        "fid": "F009"
+      },
+      {
+        "id": "F03",
+        "severity": "critical",
+        "category": "data_fidelity",
+        "description": "review_facts 테이블의 verdict가 'pending'에서 절대 UPDATE되지 않음. 4개 extract 결과 총 8개 fact row 모두 verdict='pending'으로 영원히 미확정. P-R-J pipeline도 review_facts를 UPDATE하지 않고 activity_log.body에만 결과 저장.",
+        "source_file": "eval_prj_extract_handoff.json",
+        "source_summary": "",
+        "fid": "F010"
+      },
+      {
+        "id": "F04",
+        "severity": "high",
+        "category": "model_output",
+        "description": "MCP intent 분류 정확도 50% (4/2). Turn 279(인사) → 'report'는 부적절('other'가 정답). Turn 282(IP주소요청) → 'report'는 부적절('request'가 정답). 30B가 assistant response 기준으로 intent를 판단하는 것으로 보임.",
+        "source_file": "eval_prj_extract_handoff.json",
+        "source_summary": "",
+        "fid": "F011"
+      },
+      {
+        "id": "F05",
+        "severity": "high",
+        "category": "extraction_quality",
+        "description": "30B fallback이 'under-extraction over hallucination' 원칙으로 인해 assistant response(text)에서 단 1개의 fact도 추출하지 않음. Turn 281: user=176ch, text=2490ch → 30B가 user fact 2개만 추출. 2490자 분량의 중요한 기술 설명이 전부 누락.",
+        "source_file": "eval_prj_extract_handoff.json",
+        "source_summary": "",
+        "fid": "F012"
+      },
+      {
+        "id": "F06",
+        "severity": "high",
+        "category": "operational_metrics",
+        "description": "Extract_result body가 faithfulness %, retry chain 이력, unfaithful fact 상세, token usage 등 downstream verify에 필수적인 정보를 포함하지 않음. body = {mcp, mark, turn_id, fact_count, extract_model} 5개 필드뿐.",
+        "source_file": "eval_prj_extract_handoff.json",
+        "source_summary": "",
+        "fid": "F013"
+      },
+      {
+        "id": "F07",
+        "severity": "medium",
+        "category": "error_handling",
+        "description": "Faithfulness 검증이 단순 substring diff에 의존. 공백 정규화만 수행하고 대소문자, 구두점, 어미 변화를 처리하지 않음. evidence 'Hello'와 source 'Hello!'가 불일치 판정될 가능성.",
+        "source_file": "eval_prj_extract_handoff.json",
+        "source_summary": "",
+        "fid": "F014"
+      },
+      {
+        "id": "S01",
+        "severity": "critical",
+        "category": "extract_pipeline.py → review_facts",
+        "description": "Operational metrics(timing, tokens)가 review_facts에 전혀 기록되지 않음",
+        "source_file": "eval_python_verify.json",
+        "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+        "fid": "F015"
+      },
+      {
+        "id": "S02",
+        "severity": "critical",
+        "category": "activity_log.body (extract_result)",
+        "description": "activity_log body에 faithfulness 점수, retry 이력, unfaithful fact 목록이 없음",
+        "source_file": "eval_python_verify.json",
+        "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+        "fid": "F016"
+      },
+      {
+        "id": "S03",
+        "severity": "critical",
+        "category": "review_facts → activity_log",
+        "description": "review_facts.verdict가 'pending'에서 절대 갱신되지 않음 — downstream pipeline이 review_facts를 UPDATE하지 않음",
+        "source_file": "eval_python_verify.json",
+        "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+        "fid": "F017"
+      },
+      {
+        "id": "S04",
+        "severity": "high",
+        "category": "call_llm() — lib/llm_client.py",
+        "description": "LLM 클라이언트가 API 응답에서 token usage/timing을 추출하지 않음",
+        "source_file": "eval_python_verify.json",
+        "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+        "fid": "F018"
+      },
+      {
+        "id": "S05",
+        "severity": "high",
+        "category": "queue_writer.py → activity_log",
+        "description": "enqueue_review()가 queue_status 항상 'reviewed'로 고정 — P-R-J bypass",
+        "source_file": "eval_python_verify.json",
+        "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+        "fid": "F019"
+      },
+      {
+        "id": "S06",
+        "severity": "high",
+        "category": "review_facts",
+        "description": "fact_index가 일관성 없음 — mcp_meta가 extract_model='Qwen30B'로 별도 row 저장",
+        "source_file": "eval_python_verify.json",
+        "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+        "fid": "F020"
+      },
+      {
+        "id": "S07",
+        "severity": "medium",
+        "category": "extract_pipeline.py — entity verify",
+        "description": "MCP entity 파일 경로 검증이 절대 경로 변환 없이 직접 join",
+        "source_file": "eval_python_verify.json",
+        "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+        "fid": "F021"
+      },
+      {
+        "id": "S08",
+        "severity": "medium",
+        "category": "review_consumer.py",
+        "description": "27B verify가 timing/token 정보를 전혀 수집하지 않음",
+        "source_file": "eval_python_verify.json",
+        "source_summary": "Total data handoff 구조 진단. 8개 발견. 3개 critical, 3개 high, 2개 medium.",
+        "fid": "F022"
+      },
+      {
+        "id": "P-R-J pipeline correctly processed extract evaluation data",
+        "severity": "low",
+        "category": "verification",
+        "description": "P identified 7 genuine issues, R accepted all 7, J scored with gap=1. Fast-path consensus.",
+        "source_file": "eval_verify_27b.json",
+        "source_summary": "P-R-J pipeline correctly identified 7 findings. Qwen2.5-Coder-3B recommended as extract champion. P_score=26, R_score=27, gap=1 (high confidence). All findings are data-backed and actionable.",
+        "fid": "F023"
+      },
+      {
+        "id": "Data accuracy — extract metrics match source JSON",
+        "severity": "low",
+        "category": "verification",
+        "description": "Cross-checked against extract_test_*.json files. Qwen2.5-3B: 54/65 (83.1%), Qwen3-4B: 59/108 (54.6%), Gemma: 46/108 (42.6%), LFM2: 12/74 (16.2%). All verified.",
+        "source_file": "eval_verify_27b.json",
+        "source_summary": "P-R-J pipeline correctly identified 7 findings. Qwen2.5-Coder-3B recommended as extract champion. P_score=26, R_score=27, gap=1 (high confidence). All findings are data-backed and actionable.",
+        "fid": "F024"
+      },
+      {
+        "id": "Recommendation completeness — champion selected with rationale",
+        "severity": "low",
+        "category": "verification",
+        "description": "Qwen2.5-Coder-3B recommended with 83.1% faithfulness, 100% schema compliance, 81s/turn speed. Weaknesses (coverage 4.6/turn) also documented.",
+        "source_file": "eval_verify_27b.json",
+        "source_summary": "P-R-J pipeline correctly identified 7 findings. Qwen2.5-Coder-3B recommended as extract champion. P_score=26, R_score=27, gap=1 (high confidence). All findings are data-backed and actionable.",
+        "fid": "F025"
+      },
+      {
+        "id": "Long-turn mitigation plan",
+        "severity": "partial",
+        "category": "verification",
+        "description": "Issue identified (T>1000 degradation across all models) but mitigation is at observation level — needs concrete implementation plan (retry policy tuning, fallback threshold).",
+        "source_file": "eval_verify_27b.json",
+        "source_summary": "P-R-J pipeline correctly identified 7 findings. Qwen2.5-Coder-3B recommended as extract champion. P_score=26, R_score=27, gap=1 (high confidence). All findings are data-backed and actionable.",
+        "fid": "F026"
+      },
+      {
+        "id": "Feedback loop completeness",
+        "severity": "low",
+        "category": "verification",
+        "description": "LFM2 recommended for negative test (fallback chain validation). Rubric + post-hoc both provided. Model scores weighted with 4 criteria.",
+        "source_file": "eval_verify_27b.json",
+        "source_summary": "P-R-J pipeline correctly identified 7 findings. Qwen2.5-Coder-3B recommended as extract champion. P_score=26, R_score=27, gap=1 (high confidence). All findings are data-backed and actionable.",
+        "fid": "F027"
+      },
+      {
+        "id": "F01 — call_llm() timing data loss: llama.cpp API provides complete data",
+        "severity": "low",
+        "category": "verification",
+        "description": "Confirmed by live API test: llama.cpp returns usage(prompt_tokens, completion_tokens) + timings(prompt_ms, predicted_ms, tokens/s). call_llm() must be enhanced to pass these through.",
+        "source_file": "eval_verify_27b_round1.json",
+        "source_summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream ",
+        "fid": "F028"
+      },
+      {
+        "id": "F02 — queue_status='reviewed' hardcode: bypasses P-R-J",
+        "severity": "low",
+        "category": "verification",
+        "description": "Confirmed via queue_writer.py source: enqueue_review(queue_status='reviewed') is default. Extract_result goes directly to 27B verify — no intermediate quality gate.",
+        "source_file": "eval_verify_27b_round1.json",
+        "source_summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream ",
+        "fid": "F029"
+      },
+      {
+        "id": "F03 — review_facts.verdict never updated: severity assessment",
+        "severity": "partial",
+        "category": "verification",
+        "description": "Verdict staleness is real but low-impact currently because the P-R-J → review_facts UPDATE path doesn't exist yet. When P-R-J pipeline processes extract_results, this will become critical. Priority should be P1, not critical.",
+        "source_file": "eval_verify_27b_round1.json",
+        "source_summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream ",
+        "fid": "F030"
+      },
+      {
+        "id": "F04 — MCP intent 50% accuracy: user_turn vs response confusion",
+        "severity": "low",
+        "category": "verification",
+        "description": "Two specific misclassifications identified with turn IDs. root_cause analysis (response-based classification) is correct. Fix: user_turn should determine intent, not response.",
+        "source_file": "eval_verify_27b_round1.json",
+        "source_summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream ",
+        "fid": "F031"
+      },
+      {
+        "id": "F05 — 30B fallback text fact omission: 2490ch response, 0 text facts",
+        "severity": "low",
+        "category": "verification",
+        "description": "Critical quality issue. The 30B is the safety net — if even the safety net drops all text facts, long responses are never extracted. SYSTEM_FALLBACK_30B needs prompt engineering.",
+        "source_file": "eval_verify_27b_round1.json",
+        "source_summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream ",
+        "fid": "F032"
+      },
+      {
+        "id": "F05 completeness — short turn user fact omission also exists",
+        "severity": "partial",
+        "category": "verification",
+        "description": "P-R-J didn't separate long-response omission (M03) from short-turn omission (M05). F05 should be two findings: (a) 30B fallback text omission, (b) 3B user_turn omission on short turns.",
+        "source_file": "eval_verify_27b_round1.json",
+        "source_summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream ",
+        "fid": "F033"
+      },
+      {
+        "id": "F06 — activity_log body insufficient: missing faithfulness, retry data",
+        "severity": "low",
+        "category": "verification",
+        "description": "5-field body is insufficient for downstream verify. Faithfulness %, retry count, unfaithful fact list must be added.",
+        "source_file": "eval_verify_27b_round1.json",
+        "source_summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream ",
+        "fid": "F034"
+      },
+      {
+        "id": "F07 — Rejected: substring diff adequacy as 1st-line defense",
+        "severity": "low",
+        "category": "verification",
+        "description": "Agree with rejection. Multi-layer defense (substring → 30B fallback → 27B verify) makes substring-only concern acceptable.",
+        "source_file": "eval_verify_27b_round1.json",
+        "source_summary": "P-R-J analysis is sound. 6/7 findings correctly identified. F02(P-R-J bypass) and F04(intent misclassification) are real blockers for data quality. F03(verdict staleness) is cosmetic until downstream ",
+        "fid": "F035"
+      },
+      {
+        "id": "P-R-J methodology completeness",
+        "severity": "partial",
+        "category": "verification",
+        "description": "All 7 findings 2:0 fast-path. Judge's tie-breaking not tested. Need at least one disputed finding scenario.",
+        "source_file": "eval_verify_32b.json",
+        "source_summary": "P-R-J analysis is sound but has gaps in downstream impact measurement. Champion selection correct. Condition: verify downstream MCP quality with champion model before finalizing.",
+        "fid": "F036"
+      },
+      {
+        "id": "Downstream impact analysis",
+        "severity": "fail",
+        "category": "verification",
+        "description": "No MCP quality comparison between champion models. Faithfulness alone is insufficient metric — MCP output quality with each extract source needs testing.",
+        "source_file": "eval_verify_32b.json",
+        "source_summary": "P-R-J analysis is sound but has gaps in downstream impact measurement. Champion selection correct. Condition: verify downstream MCP quality with champion model before finalizing.",
+        "fid": "F037"
+      },
+      {
+        "id": "Cost efficiency consideration",
+        "severity": "fail",
+        "category": "verification",
+        "description": "Qwen3-4B takes 2737s vs Qwen2.5-3B's 1217s for same 15 turns (2.25x slower). This is not reflected in rubric criteria. Extract has strict timeout (180s) and slow extraction blocks pipeline.",
+        "source_file": "eval_verify_32b.json",
+        "source_summary": "P-R-J analysis is sound but has gaps in downstream impact measurement. Champion selection correct. Condition: verify downstream MCP quality with champion model before finalizing.",
+        "fid": "F038"
+      },
+      {
+        "id": "Rubric quality",
+        "severity": "low",
+        "category": "verification",
+        "description": "4-criteria extract rubric (faithfulness 0.35, coverage 0.25, schema 0.20, conciseness 0.20) is well-balanced. Scoring baselines (0-10 integer) are clearly defined.",
+        "source_file": "eval_verify_32b.json",
+        "source_summary": "P-R-J analysis is sound but has gaps in downstream impact measurement. Champion selection correct. Condition: verify downstream MCP quality with champion model before finalizing.",
+        "fid": "F039"
+      },
+      {
+        "id": "Negative test utilization",
+        "severity": "low",
+        "category": "verification",
+        "description": "LFM2-8B-A1B (16.2%) correctly identified as negative test for fallback chain validation. This is good operational thinking.",
+        "source_file": "eval_verify_32b.json",
+        "source_summary": "P-R-J analysis is sound but has gaps in downstream impact measurement. Champion selection correct. Condition: verify downstream MCP quality with champion model before finalizing.",
+        "fid": "F040"
+      },
+      {
+        "id": "Structural findings completeness (27B: 7 items, 1 rejected)",
+        "severity": "low",
+        "category": "verification",
+        "description": "6/7 genuine issues identified. F07 rejection is sound. However, 2 missing findings (see disagreements).",
+        "source_file": "eval_verify_32b_round1.json",
+        "source_summary": "Structural findings are correct but the evaluation scope is too narrow. Focused only on existing data flow without testing the complete pipeline (36B → 30B → P-R-J → 27B → 32B). Missing: real extract ",
+        "fid": "F041"
+      },
+      {
+        "id": "Data source verification — actual extract data reviewed",
+        "severity": "low",
+        "category": "verification",
+        "description": "4 extract_results from activity_log inspected. Original turn content cross-checked against MCP fields.",
+        "source_file": "eval_verify_32b_round1.json",
+        "source_summary": "Structural findings are correct but the evaluation scope is too narrow. Focused only on existing data flow without testing the complete pipeline (36B → 30B → P-R-J → 27B → 32B). Missing: real extract ",
+        "fid": "F042"
+      },
+      {
+        "id": "Cost model and operational impact",
+        "severity": "fail",
+        "category": "verification",
+        "description": "No analysis of 3B retry cost (wasted tokens on double-failure). No analysis of whether 3B→30B fallback is cheaper than direct 30B extract.",
+        "source_file": "eval_verify_32b_round1.json",
+        "source_summary": "Structural findings are correct but the evaluation scope is too narrow. Focused only on existing data flow without testing the complete pipeline (36B → 30B → P-R-J → 27B → 32B). Missing: real extract ",
+        "fid": "F043"
+      },
+      {
+        "id": "Pipeline integration test coverage",
+        "severity": "fail",
+        "category": "verification",
+        "description": "No end-to-end test of extract → activity_log → review_consumer → 27B verify flow. Only structural DB/code inspection.",
+        "source_file": "eval_verify_32b_round1.json",
+        "source_summary": "Structural findings are correct but the evaluation scope is too narrow. Focused only on existing data flow without testing the complete pipeline (36B → 30B → P-R-J → 27B → 32B). Missing: real extract ",
+        "fid": "F044"
+      },
+      {
+        "id": "Model role assignment optimization",
+        "severity": "fail",
+        "category": "verification",
+        "description": "No comparison of different P-R-J model assignments. The review_pipeline_3model.py uses specific models but the evaluation assumes this assignment is optimal without testing alternatives.",
+        "source_file": "eval_verify_32b_round1.json",
+        "source_summary": "Structural findings are correct but the evaluation scope is too narrow. Focused only on existing data flow without testing the complete pipeline (36B → 30B → P-R-J → 27B → 32B). Missing: real extract ",
+        "fid": "F045"
+      },
+      {
+        "id": "DSG_Downstream impact",
+        "severity": "medium",
+        "category": "disagreement",
+        "description": "Downstream impact: 27B=Pass — 인정 vs 32B=Fail — 추가 검증 필요 → 32B 의견 채택. faithfulness rate 단독 지표 불충분. 실제 MCP entity quality 비교 필요.",
+        "source_file": "eval_verify_feedback.json",
+        "source_summary": "",
+        "fid": "F046"
+      },
+      {
+        "id": "DSG_Cost efficiency in r",
+        "severity": "medium",
+        "category": "disagreement",
+        "description": "Cost efficiency in rubric: 27B=체크하지 않음 vs 32B=누락 — 추가 필요 → 32B 의견 채택. rubric에 speed/cost criterion 추가 (0-10, weight 0.15).",
+        "source_file": "eval_verify_feedback.json",
+        "source_summary": "",
+        "fid": "F047"
+      },
+      {
+        "id": "DSG_Evaluation confidenc",
+        "severity": "medium",
+        "category": "disagreement",
+        "description": "Evaluation confidence: 27B=88/100 vs 32B=75/100 → 32B의 보수적 점수가 더 현실적. downstream 검증 후 confidence 상향.",
+        "source_file": "eval_verify_feedback.json",
+        "source_summary": "",
+        "fid": "F048"
+      }
+    ]
+  },
+  "python_verify": {},
+  "day_verify": {},
+  "rubric_evaluation": {},
+  "prj": [],
+  "handoffs": [],
+  "final_verify": {}
+}

@@ -1,0 +1,21 @@
+{
+  "phase": "primary_verify",
+  "round": "_round1_norubric",
+  "model": "proposer",
+  "port": 8080,
+  "with_rubric": false,
+  "timestamp": "2026-06-12T23:40:48.282027+00:00",
+  "usage": {
+    "total_tokens": 0
+  },
+  "timings": {},
+  "elapsed_ms": 100,
+  "result": {
+    "findings": [],
+    "verdicts": [],
+    "P_score": 25,
+    "R_score": 25,
+    "consensus_score": 90,
+    "decision": "APPROVED"
+  }
+}

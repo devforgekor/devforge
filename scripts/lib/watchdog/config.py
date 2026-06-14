@@ -2,16 +2,17 @@
 # Path: imported by — lib/watchdog modules
 """Watchdog 설정 — 체크 대상, 간격, 임계값.
 
-MODE=day (관찰형):
+MODE=day (관찰형, 60s 주기):
   Pod A=reserved (:8080) operator
-  Pod B=7B Q8 (:8082) extractor — daytime extraction
-  :00/:30 → day_cycle.py (extract → py verify → 7B verify → global context)
-  :15/:45 → classify.py (P-7B extractor → R-14B → J-14B)
-  Fix loop: operator(Pod A)가 수정 담당
+  Pod B=day (:8082) 7B Q8 extractor
+  :8083 (14B Q6_K) day verify
+  매시 :00 → day_cycle.sh (system sync → embed(f16) → extract(7B) → verify(14B))
+  Fix loop: Pod A (:8080)가 수정 담당
 
-MODE=night (능동형):
-  Phase 4: Night Debate (P:8081 → R:8082 → J:8083, sequential on Pod B)
-  Phase 5: 27B verify (:8084)
+MODE=night (능동형, 60s 주기):
+  Night Debate (:8081 30B P → :8082 7B R → :8083 N14B J, sequential)
+  Night Verify (:8084 27B) → review_consumer.py
+  Proxy Audit → proxy_reviewer.py (DeepSeek Pro)
   Fix loop: watchdog이 임시 podman 검증 후 feedback 문서 생성
 """
 
@@ -29,13 +30,17 @@ MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 
 # ── 포트 / 라벨 ─────────────────────────────────────────────────────
+# Day mode targets: Pod A reserved + Pod B day chain
 LLM_TARGETS = {
-    "pod-a":  {"port": 8080, "label": "pod-a",  "day_model": "operator"},
-    "pod-b":  {"port": 8082, "label": "pod-b",  "day_model": "extractor"},
-    "verify": {"port": 8084, "label": "verify", "day_model": None},
+    "pod-a":     {"port": 8080, "label": "pod-a",     "day_model": "operator"},
+    "day-extract": {"port": 8082, "label": "day-extract", "day_model": "extractor"},
+    "day-verify": {"port": 8083, "label": "day-verify", "day_model": "judge"},
+    # Night-only model: 27B verifier on :8084
+    "night-verify": {"port": 8084, "label": "night-verify", "day_model": None},
 }
 
-DAY_PORTS = {8080, 8082}
+# Day mode: check these ports for LLM probes
+DAY_PORTS = {8080, 8082, 8083}
 
 # ── 서비스 / 타이머 ─────────────────────────────────────────────────
 SERVICE_TARGETS = [
@@ -50,9 +55,8 @@ ALERT_ONLY_TARGETS = [
 ]
 
 TIMER_TARGETS = {
-    "devforge-day-cycle.timer":  {"expected": "extract/classify", "max_idle": 3600+300},  # 1h cycle + 5분 버퍼
-    "devforge-classify.timer":  {"expected": "classify",        "max_idle": 2700},
-    "devforge-night-cycle.timer":   {"expected": "nightly",         "max_idle": 90000}, # 25h
+    "devforge-day-cycle.timer":    {"expected": "day_cycle",     "max_idle": 3900},     # 1h cycle + 5min buffer
+    "devforge-night-cycle.timer":  {"expected": "night_cycle",   "max_idle": 90000},    # 25h
 }
 
 # ── 컨테이너 exclusion (절대 재시작 금지) ───────────────────────────

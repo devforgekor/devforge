@@ -1,0 +1,207 @@
+{
+  "result": {
+    "findings": [
+      {
+        "id": "F001",
+        "severity": "critical",
+        "category": "bug",
+        "description": "Mock finding for dry-run test",
+        "file": "mock.py"
+      },
+      {
+        "id": "F002",
+        "severity": "high",
+        "category": "security",
+        "description": "Another mock finding",
+        "file": "mock.py"
+      }
+    ],
+    "rubric_evaluations": [
+      {
+        "id": "F001",
+        "correctness": 8,
+        "correctness_justification": "Real issue",
+        "actionability": 7,
+        "actionability_justification": "Clear fix",
+        "evidence": 9,
+        "evidence_justification": "Code evidence present",
+        "novelty": 6,
+        "novelty_justification": "Known pattern",
+        "weighted_score": 7.65
+      },
+      {
+        "id": "F002",
+        "correctness": 5,
+        "correctness_justification": "Unclear",
+        "actionability": 4,
+        "actionability_justification": "No mitigation",
+        "evidence": 6,
+        "evidence_justification": "Partial evidence",
+        "novelty": 3,
+        "novelty_justification": "Well known",
+        "weighted_score": 4.75
+      }
+    ],
+    "verdicts": [
+      {
+        "id": "F001",
+        "verdict": "accept",
+        "reason": "Valid dry-run finding"
+      },
+      {
+        "id": "F002",
+        "verdict": "reject",
+        "reason": "Not reproducible in dry-run"
+      }
+    ],
+    "P_score": 25,
+    "R_score": 22,
+    "P_rubric": {
+      "correctness": 8,
+      "coverage": 9,
+      "precision": 8
+    },
+    "R_rubric": {
+      "accuracy": 7,
+      "efficiency": 8,
+      "completeness": 7
+    },
+    "decision": "APPROVED",
+    "consensus_score": 85,
+    "approved": [
+      "F001"
+    ],
+    "rejected": [
+      "F002"
+    ],
+    "rubric_evaluation": {
+      "fairness": 8,
+      "fairness_justification": "Balanced scoring",
+      "clarity": 7,
+      "clarity_justification": "Clear report",
+      "consistency": 8,
+      "consistency_justification": "Consistent decisions"
+    },
+    "report": {
+      "summary": "Mock dry-run report summary",
+      "top_issues": [
+        "F001: critical bug in mock.py"
+      ],
+      "quality_notes": {
+        "strengths": [
+          "Good coverage"
+        ],
+        "weaknesses": [
+          "Limited data"
+        ]
+      },
+      "recommendation": "Commit after review"
+    },
+    "handoff": {
+      "source": "dry_run_mock",
+      "executive_summary": "Dry-run test handoff",
+      "approved": [
+        {
+          "id": "F001",
+          "severity": "critical",
+          "category": "bug",
+          "finding": "dry-run",
+          "approval_rationale": "test"
+        }
+      ],
+      "rejected": [
+        {
+          "id": "F002",
+          "severity": "high",
+          "category": "security",
+          "finding": "dry-run",
+          "rejection_rationale": "test"
+        }
+      ],
+      "critical_remaining": [],
+      "unresolved_count": 0,
+      "verifier_priority": [
+        "Check F001"
+      ],
+      "quality_red_flags": [],
+      "p_score": 25,
+      "r_score": 22,
+      "j_consensus": 85
+    },
+    "handoff_comparison": {
+      "better_handoff": "equal",
+      "reason": "Both sources agree in dry-run",
+      "llm_r_strengths": [
+        "Rich descriptions"
+      ],
+      "python_strengths": [
+        "Deterministic counts"
+      ]
+    },
+    "final_verdict": "approved_with_conditions",
+    "action": "commit",
+    "confidence": 80,
+    "summary": "Dry-run verification passed with conditions",
+    "reasoning": "Mock reasoning for dry-run test",
+    "verification_items": [
+      {
+        "check": "All findings verified",
+        "result": "pass",
+        "detail": "Mock verification"
+      }
+    ],
+    "feedback": {
+      "P": {
+        "model": "night_proposer",
+        "role": "proposer",
+        "score": 80,
+        "strengths": [
+          "Good coverage"
+        ],
+        "weaknesses": [
+          "Needs more detail"
+        ],
+        "improvements": [
+          "Add more context"
+        ]
+      },
+      "R": {
+        "model": "night_reflector",
+        "role": "reflector",
+        "score": 75,
+        "strengths": [
+          "Accurate"
+        ],
+        "weaknesses": [
+          "Brief reasoning"
+        ],
+        "improvements": [
+          "Elaborate on rejections"
+        ]
+      },
+      "J": {
+        "model": "night_judge",
+        "role": "judge",
+        "score": 85,
+        "strengths": [
+          "Fair"
+        ],
+        "weaknesses": [
+          "Could be more detailed"
+        ],
+        "improvements": [
+          "Add more rationale"
+        ]
+      }
+    }
+  },
+  "usage": {
+    "prompt_tokens": 500,
+    "completion_tokens": 200
+  },
+  "timings": {
+    "prompt_per_second": 10,
+    "predicted_per_second": 5
+  },
+  "elapsed_ms": 1500
+}

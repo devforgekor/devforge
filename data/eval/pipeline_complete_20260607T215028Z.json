@@ -1,0 +1,195 @@
+{
+  "total_elapsed_s": 908.1,
+  "phases_run": [
+    1,
+    2
+  ],
+  "results": {
+    "phase1": {
+      "phase": 1,
+      "role": "python_verify",
+      "timestamp": "2026-06-07T21:35:35.005159+00:00",
+      "files_loaded": 13,
+      "total_findings": 39,
+      "findings": [
+        {
+          "file": "eval_30b_verify.json",
+          "role": "30b_verify",
+          "finding_count": 7,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_feedback_baseline.json",
+          "role": "consolidated_baseline",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_mcp_30b.json",
+          "role": "mcp_30b",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_night_mode.json",
+          "role": "night_mode_switch",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_posthoc_extract_3b.json",
+          "role": "post_hoc",
+          "finding_count": 1,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_prj_extract_handoff.json",
+          "role": "p_r_j_review",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_python_verify.json",
+          "role": "python_verify",
+          "finding_count": 8,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_rubric_extract_3b.json",
+          "role": "role_rubric",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_verify_27b.json",
+          "role": "verify_27b_production",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 88
+        },
+        {
+          "file": "eval_verify_27b_round1.json",
+          "role": "verify_27b_production",
+          "finding_count": 8,
+          "has_verdict": true,
+          "confidence": 82
+        },
+        {
+          "file": "eval_verify_32b.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 75
+        },
+        {
+          "file": "eval_verify_32b_round1.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 70
+        },
+        {
+          "file": "eval_verify_feedback.json",
+          "role": "unknown",
+          "finding_count": 0,
+          "has_verdict": false
+        }
+      ]
+    },
+    "phase2": {
+      "phase": 2,
+      "role": "seven_b_verify",
+      "model": "reviewer model-Instruct",
+      "port": 8080,
+      "timestamp": "2026-06-07T21:50:28.503874+00:00",
+      "usage": {
+        "completion_tokens": 847,
+        "prompt_tokens": 1536,
+        "total_tokens": 2383,
+        "prompt_tokens_details": 0
+      },
+      "elapsed_ms": 661063.3812649976,
+      "chunks": 7,
+      "chunks_done": 2,
+      "result": {
+        "verification_items": [
+          {
+            "check": "M01: Intent classification error",
+            "result": "fail",
+            "detail": "The extracted value 'report' does not match the expected value 'o'. This indicates a critical bug in the intent classification logic.",
+            "category": "bug"
+          },
+          {
+            "check": "M02: Intent classification error",
+            "result": "fail",
+            "detail": "The extracted value 'report' does not match the expected value 'r'. This indicates a critical bug in the intent classification logic.",
+            "category": "bug"
+          },
+          {
+            "check": "M03: Data extraction error",
+            "result": "fail",
+            "detail": "The extracted fact is incomplete or incorrect, which could lead to data loss or incorrect processing.",
+            "category": "data_loss"
+          },
+          {
+            "check": "M04: Entity correctness",
+            "result": "partial",
+            "detail": "The entity correctness issue is noted, but the evidence provided is insufficient to determine the exact nature of the problem. Further investigation is required.",
+            "category": "quality"
+          },
+          {
+            "check": "M05: Extract coverage for short turns",
+            "result": "partial",
+            "detail": "The extract coverage issue for short turns is noted, but the evidence provided is insufficient to determine the exact nature of the problem. Further investigation is required.",
+            "category": "quality"
+          },
+          {
+            "check": "M06: MCP tags",
+            "result": "pass",
+            "detail": "The tags are correctly identified as 'greeting', 'welcome', and 'assistant-response'. This is within acceptable quality standards.",
+            "category": "quality"
+          },
+          {
+            "check": "Operational metrics(timing, tokens) are recorded in review_facts",
+            "result": "fail",
+            "detail": "The operational metrics are not being recorded in review_facts, as evidenced by the critical issue S01.",
+            "category": "bug"
+          },
+          {
+            "check": "Faithfulness score, retry history, and unfaithful fact list are included in activity_log body",
+            "result": "fail",
+            "detail": "The activity_log body does not include the faithfulness score, retry history, and unfaithful fact list, as evidenced by the critical issue S02.",
+            "category": "bug"
+          },
+          {
+            "check": "review_facts.verdict is updated from 'pending'",
+            "result": "fail",
+            "detail": "The review_facts.verdict is not being updated from 'pending', as evidenced by the critical issue S03.",
+            "category": "bug"
+          },
+          {
+            "check": "LLM client extracts token usage/timing from API response",
+            "result": "fail",
+            "detail": "The LLM client is not extracting token usage/timing from the API response, as evidenced by the high issue S04.",
+            "category": "bug"
+          },
+          {
+            "check": "Extract model discrepancy",
+            "result": "partial",
+            "detail": "There is a discrepancy in the extract model results, but it is not critical enough to reject the code at this time.",
+            "category": "quality"
+          }
+        ],
+        "summary": " | High severity issues indicate critical bugs and potential security vulnerabilities. | The code has critical issues that need to be addressed before proceeding.",
+        "reasoning": "\nThe high severity issues (M01, M02, M03) suggest significant problems with intent classification and data extraction, which could lead to incorrect responses and data loss. These issues require immediate attention and resolution.\nThe code has multiple critical issues that affect the operational metrics, activity log, and review facts. These issues need to be resolved to ensure the system's correctness and reliability.",
+        "final_verdict": "rejected",
+        "confidence": 25
+      },
+      "category_summary": "Category Distribution: bug=6(fail=6) [fail=6]; quality=4(partial=3,pass=1) [partial=3,pass=1]; data_loss=1(fail=1) [fail=1] (39 total) | Verdict: fail=7, partial=3, pass=1"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

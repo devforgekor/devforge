@@ -1,0 +1,110 @@
+{
+  "round": 1,
+  "with_rubric": false,
+  "python_verify": {
+    "issues_found": 0,
+    "total": 48
+  },
+  "day_verify": {
+    "verdict": "approved_with_conditions",
+    "confidence": 80
+  },
+  "prj": [
+    {
+      "p_model": "night_proposer",
+      "r_model": "night_reflector",
+      "j_model": "night_judge",
+      "P_score": 25,
+      "R_score": 22,
+      "consensus": 85,
+      "decision": "APPROVED",
+      "approved": [
+        "F001"
+      ],
+      "rejected": [
+        "F002"
+      ],
+      "p_count": 2,
+      "r_count": 2,
+      "r_rejected_findings": [],
+      "p_elapsed_ms": 1500,
+      "r_elapsed_ms": 1500,
+      "j_elapsed_ms": 1500,
+      "report_summary": "Mock dry-run report summary",
+      "report_top_issues": [
+        "F001: critical bug in mock.py"
+      ],
+      "report_recommendation": "Commit after review"
+    }
+  ],
+  "night_verify": {
+    "verdict": "approved_with_conditions",
+    "confidence": 80,
+    "feedback": {
+      "P": {
+        "model": "night_proposer",
+        "role": "proposer",
+        "score": 80,
+        "strengths": [
+          "Good coverage"
+        ],
+        "weaknesses": [
+          "Needs more detail"
+        ],
+        "improvements": [
+          "Add more context"
+        ]
+      },
+      "R": {
+        "model": "night_reflector",
+        "role": "reflector",
+        "score": 75,
+        "strengths": [
+          "Accurate"
+        ],
+        "weaknesses": [
+          "Brief reasoning"
+        ],
+        "improvements": [
+          "Elaborate on rejections"
+        ]
+      },
+      "J": {
+        "model": "night_judge",
+        "role": "judge",
+        "score": 85,
+        "strengths": [
+          "Fair"
+        ],
+        "weaknesses": [
+          "Could be more detailed"
+        ],
+        "improvements": [
+          "Add more rationale"
+        ]
+      }
+    },
+    "handoff_comparison": {
+      "better_handoff": "equal",
+      "reason": "Both sources agree in dry-run",
+      "llm_r_strengths": [
+        "Rich descriptions"
+      ],
+      "python_strengths": [
+        "Deterministic counts"
+      ]
+    },
+    "rubric_evaluation": {
+      "fairness": 8,
+      "fairness_justification": "Balanced scoring",
+      "clarity": 7,
+      "clarity_justification": "Clear report",
+      "consistency": 8,
+      "consistency_justification": "Consistent decisions"
+    },
+    "phase2_rubric": {
+      "evaluations": [],
+      "count": 0
+    }
+  }
+}

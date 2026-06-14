@@ -1,0 +1,195 @@
+{
+  "total_elapsed_s": 1097.3,
+  "phases_run": [
+    1,
+    2
+  ],
+  "results": {
+    "phase1": {
+      "phase": 1,
+      "role": "python_verify",
+      "timestamp": "2026-06-08T22:33:32.774931+00:00",
+      "files_loaded": 12,
+      "total_findings": 32,
+      "findings": [
+        {
+          "file": "eval_feedback_baseline.json",
+          "role": "consolidated_baseline",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_mcp_30b.json",
+          "role": "mcp_30b",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_night_mode.json",
+          "role": "night_mode_switch",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_posthoc_extract_3b.json",
+          "role": "post_hoc",
+          "finding_count": 1,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_prj_extract_handoff.json",
+          "role": "p_r_j_review",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_python_verify.json",
+          "role": "python_verify",
+          "finding_count": 8,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_rubric_extract_3b.json",
+          "role": "role_rubric",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_verify_27b.json",
+          "role": "verify_27b_production",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 88
+        },
+        {
+          "file": "eval_verify_27b_round1.json",
+          "role": "verify_27b_production",
+          "finding_count": 8,
+          "has_verdict": true,
+          "confidence": 82
+        },
+        {
+          "file": "eval_verify_32b.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 75
+        },
+        {
+          "file": "eval_verify_32b_round1.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 70
+        },
+        {
+          "file": "eval_verify_feedback.json",
+          "role": "unknown",
+          "finding_count": 0,
+          "has_verdict": false
+        }
+      ]
+    },
+    "phase2": {
+      "phase": 2,
+      "role": "seven_b_verify",
+      "model": "reviewer model-Instruct",
+      "port": 8080,
+      "timestamp": "2026-06-08T22:51:48.751192+00:00",
+      "usage": {
+        "completion_tokens": 951,
+        "prompt_tokens": 1332,
+        "total_tokens": 2283,
+        "prompt_tokens_details": 0
+      },
+      "elapsed_ms": 1056556.911808002,
+      "chunks": 6,
+      "chunks_done": 3,
+      "result": {
+        "verification_items": [
+          {
+            "check": "S01: Operational metrics(timing, tokens) not recorded in review_facts",
+            "result": "fail",
+            "detail": "The operational metrics are crucial for monitoring and optimizing the system. Their absence indicates a critical flaw that needs to be fixed.",
+            "category": "bug"
+          },
+          {
+            "check": "S02: Missing faithfulness score, retry history, and unfaithful fact list in activity_log body",
+            "result": "fail",
+            "detail": "These missing details are essential for tracking the system's performance and debugging issues. Their absence is a significant security risk.",
+            "category": "security"
+          },
+          {
+            "check": "S03: review_facts.verdict not updated from 'pending'",
+            "result": "fail",
+            "detail": "This issue could lead to downstream pipelines not functioning correctly, which is a critical performance problem.",
+            "category": "performance"
+          },
+          {
+            "check": "S06: Inconsistent fact indexing",
+            "result": "partial",
+            "detail": "The code stores a separate row for mcp_meta when extract_model='Qwen30B', which may lead to inconsistencies. Further investigation is needed to ensure data integrity and consistency.",
+            "category": "bug"
+          },
+          {
+            "check": "S07: Absolute path conversion in file path handling",
+            "result": "partial",
+            "detail": "The code directly joins paths without converting them to absolute paths, which could lead to security vulnerabilities. A review of the file path handling logic is required.",
+            "category": "security"
+          },
+          {
+            "check": "S08: Missing timing/token information collection",
+            "result": "partial",
+            "detail": "The 27B verify function does not collect timing/token information, which could impact performance monitoring and debugging. A review of the verification process is needed to ensure comprehensive data collection.",
+            "category": "performance"
+          },
+          {
+            "check": "Finding 1",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 2",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 3",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 4",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 5",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 6",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          }
+        ],
+        "summary": " | The code has multiple critical issues that need to be addressed before proceeding. | The code has multiple issues that require deeper analysis and review. | Findings require deeper analysis to determine their impact and appropriate action.",
+        "reasoning": "\nThere are three critical issues related to operational metrics, missing information in activity logs, and an issue with the review facts update mechanism. These issues could lead to significant problems in the system's functionality and reliability.\nThere are high severity issues related to inconsistent fact indexing and potential security risks in file path handling. Additionally, there are medium severity issues with missing timing/token information collection. These need thorough investigation to ensure proper implementation and security.\nThe provided findings are not specific enough to make a definitive decision. They need more context and details to assess whether they represent bugs, security vulnerabilities, performance issues, quality concerns, or data loss.",
+        "final_verdict": "needs_review",
+        "confidence": 45
+      },
+      "category_summary": "Category Distribution: bug|security|performance|quality|data_loss=6(partial=6) [partial=6]; bug=2(fail=1,partial=1) [fail=1,partial=1]; security=2(fail=1,partial=1) [fail=1,partial=1]; performance=2(fail=1,partial=1) [fail=1,partial=1] (32 total) | Verdict: fail=3, partial=9"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

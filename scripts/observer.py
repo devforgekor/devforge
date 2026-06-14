@@ -31,7 +31,6 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-# ── Configuration ──────────────────────────────────────────────────────────
 
 DEFAULT_MODEL = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
 DEFAULT_API = "http://127.0.0.1:8081"
@@ -61,7 +60,6 @@ OBS_SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, OBS_SCRIPTS)
 
 
-# ── Tool Definitions ──────────────────────────────────────────────────────
 
 
 TOOL_DEFINITIONS: List[Dict[str, Any]] = [
@@ -155,7 +153,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
 ]
 
 
-# ── Tool Implementations ─────────────────────────────────────────────────
 
 
 def tool_check_status() -> str:
@@ -372,7 +369,6 @@ TOOL_MAP = {
 }
 
 
-# ── LLM Interaction ───────────────────────────────────────────────────────
 
 
 def call_llm(
@@ -415,7 +411,6 @@ def call_llm(
     return choices[0]["message"]
 
 
-# ── Main Loop ─────────────────────────────────────────────────────────────
 
 
 def run_interactive(debug: bool = False) -> None:

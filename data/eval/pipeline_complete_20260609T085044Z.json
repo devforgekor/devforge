@@ -1,0 +1,171 @@
+{
+  "total_elapsed_s": 938.9,
+  "phases_run": [
+    1,
+    2
+  ],
+  "results": {
+    "phase1": {
+      "phase": 1,
+      "role": "python_verify",
+      "timestamp": "2026-06-09T08:35:06.885948+00:00",
+      "files_loaded": 12,
+      "total_findings": 32,
+      "findings": [
+        {
+          "file": "eval_feedback_baseline.json",
+          "role": "consolidated_baseline",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_mcp_30b.json",
+          "role": "mcp_30b",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_night_mode.json",
+          "role": "night_mode_switch",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_posthoc_extract_3b.json",
+          "role": "post_hoc",
+          "finding_count": 1,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_prj_extract_handoff.json",
+          "role": "p_r_j_review",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_python_verify.json",
+          "role": "python_verify",
+          "finding_count": 8,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_rubric_extract_3b.json",
+          "role": "role_rubric",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_verify_27b.json",
+          "role": "verify_27b_production",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 88
+        },
+        {
+          "file": "eval_verify_27b_round1.json",
+          "role": "verify_27b_production",
+          "finding_count": 8,
+          "has_verdict": true,
+          "confidence": 82
+        },
+        {
+          "file": "eval_verify_32b.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 75
+        },
+        {
+          "file": "eval_verify_32b_round1.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 70
+        },
+        {
+          "file": "eval_verify_feedback.json",
+          "role": "unknown",
+          "finding_count": 0,
+          "has_verdict": false
+        }
+      ]
+    },
+    "phase2": {
+      "phase": 2,
+      "role": "seven_b_verify",
+      "model": "reviewer model-Instruct",
+      "port": 8080,
+      "timestamp": "2026-06-09T08:50:44.617972+00:00",
+      "usage": {
+        "completion_tokens": 843,
+        "prompt_tokens": 1339,
+        "total_tokens": 2182,
+        "prompt_tokens_details": 0
+      },
+      "elapsed_ms": 518413.97493198747,
+      "chunks": 6,
+      "chunks_done": 2,
+      "result": {
+        "verification_items": [
+          {
+            "check": "Operational metrics are recorded in review_facts",
+            "result": "fail",
+            "detail": "Metrics such as timing and tokens are not being recorded in review_facts.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Faithfulness score, retry history, unfaithful fact list are included in activity_log body",
+            "result": "fail",
+            "detail": "These crucial pieces of information are missing from the activity_log body.",
+            "category": "data_loss"
+          },
+          {
+            "check": "review_facts.verdict is updated when it should be",
+            "result": "fail",
+            "detail": "The verdict in review_facts never gets updated, which could lead to incorrect behavior downstream.",
+            "category": "bug"
+          },
+          {
+            "check": "LLM client extracts token usage/timing from API responses",
+            "result": "fail",
+            "detail": "The LLM client is not currently extracting this information from the API responses.",
+            "category": "performance"
+          },
+          {
+            "check": "enqueue_review() sets queue_status to 'reviewed' consistently",
+            "result": "fail",
+            "detail": "This could bypass P-R-J and potentially lead to incorrect behavior.",
+            "category": "quality"
+          },
+          {
+            "check": "Investigate the inconsistency in 'fact_index' for mcp_meta with extract_model='Qwen30B'",
+            "result": "partial",
+            "detail": "Check if this inconsistency affects the overall functionality and performance of the system.",
+            "category": "bug"
+          },
+          {
+            "check": "Review the code related to joining MCP entity file paths in 'extract_pipeline.py' to ensure absolute path conversion is applied",
+            "result": "partial",
+            "detail": "Ensure that the potential security risks associated with direct joining are mitigated.",
+            "category": "security"
+          },
+          {
+            "check": "Examine the code related to 27B verify in 'review_consumer.py' to understand why timing/token information is not being collected",
+            "result": "partial",
+            "detail": "Determine if this omission affects the system's functionality or performance.",
+            "category": "performance"
+          }
+        ],
+        "summary": " | Several critical and high severity findings were identified in the code review. | High and medium severity findings require further analysis",
+        "reasoning": "\nThe findings S01, S02, and S03 are classified as 'critical' because they involve operational metrics not being recorded, missing crucial information in activity_log body, and a failure to update the review_facts.verdict when it should be. These issues could lead to significant data loss or incorrect behavior. The findings S04 and S05 are classified as 'high' severity because they involve the LLM client not extracting token usage/timing from API responses and a constant setting of 'reviewed' in enqueue_review() which bypasses P-R-J. These issues could impact performance or data integrity.\nThe high severity finding (S06) suggests inconsistency in the 'fact_index' due to separate row storage for mcp_meta with extract_model='Qwen30B'. The medium severity findings (S07 and S08) involve potential issues: S07 with direct joining of MCP entity file paths without absolute path conversion, and S08 with the lack of timing/token information collection during 27B verify.",
+        "final_verdict": "rejected",
+        "confidence": 30
+      },
+      "category_summary": "Category Distribution: data_loss=2(fail=2) [fail=2]; bug=2(fail=1,partial=1) [fail=1,partial=1]; performance=2(fail=1,partial=1) [fail=1,partial=1]; quality=1(fail=1) [fail=1]; security=1(partial=1) [partial=1] (32 total) | Verdict: fail=5, partial=3"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

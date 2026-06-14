@@ -34,21 +34,12 @@ from lib.common import strip_think
 from lib.llm_client import call_llm
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.token_budget import TokenBudget
-from sentence_transformers import SentenceTransformer
-from minicheck.minicheck import MiniCheck
 
-# ── Constants ──────────────────────────────────────────────────────────────
 TIMEOUT_MCP = 900
 MAX_TOKENS_MCP = 512
 TEMP_MCP = 0.1
 BATCH_LIMIT = 20
 
-# Embedding/NLI thresholds
-COSINE_ENTITY_RELEVANCE = 0.25
-TLDR_COSINE_MIN = 0.30
-MINICHECK_SUPPORT = 0.3
-
-# ── System prompts ─────────────────────────────────────────────────────────
 SYSTEM_DAY_MCP = """\
 You are a conversation analyst preparing structured metadata for an MCP
 (Model Context Protocol) system. Given the original conversation turn and
@@ -121,13 +112,6 @@ _VALID_INTENTS = {"question", "request", "report", "clarification",
 _VALID_CATEGORIES = {"requirement", "decision", "explanation",
                      "code", "reasoning", "other"}
 
-# Lazy model singletons (loaded on first use)
-_EMBEDDER = None
-_NLI_MODEL = None
-
-# ── JSON parser ────────────────────────────────────────────────────────────
-
-
 def _parse_json(raw: str, label: str = "MCP", attempt: int = 1) -> Optional[Dict[str, Any]]:
     """Extract JSON from LLM output using shared parse_llm_json + DLQ."""
     cleaned = strip_think(raw)
@@ -138,7 +122,6 @@ def _parse_json(raw: str, label: str = "MCP", attempt: int = 1) -> Optional[Dict
     return result
 
 
-# ── Markdown cleanup ───────────────────────────────────────────────────────
 def _clean_markdown(text: str) -> str:
     """Strip all markdown formatting from text."""
     if not text:
@@ -154,7 +137,6 @@ def _clean_markdown(text: str) -> str:
     return text
 
 
-# ── Entity verification ────────────────────────────────────────────────────
 def _find_symbol(symbol: str, project_root: str = "/opt/projects/server") -> bool:
     """Search for a Python function/class definition using grep."""
     import subprocess as sp
@@ -189,7 +171,6 @@ def _verify_entities(mcp_data: Optional[Dict],
     return verified
 
 
-# ── MCP post-processing ────────────────────────────────────────────────────
 def _post_process_mcp(mcp: Optional[Dict[str, Any]],
                       user_turn: str = "", text: str = ""
                       ) -> Optional[Dict[str, Any]]:
@@ -230,7 +211,7 @@ def _post_process_mcp(mcp: Optional[Dict[str, Any]],
             s = str(item).strip()
             if not s or s in seen:
                 continue
-            # Structural pre-filter: reject garbage entities
+            # Filter entities that cannot represent valid code symbols
             if len(s) < _MIN_ENTITY_LEN:
                 continue
             if key != "files" and _ENTITY_SPECIAL_CHARS.search(s):
@@ -268,7 +249,6 @@ def _post_process_mcp(mcp: Optional[Dict[str, Any]],
     return mcp
 
 
-# ── Entity filter constants ────────────────────────────────────────────────
 _ENTITY_REJECT_PATTERNS = [
     re.compile(r'https?://\S+'),
     re.compile(r'ftp://\S+'),
@@ -293,110 +273,6 @@ _INTENT_TAG_BLOCKED = {
 }
 
 
-# ── Embedding / NLI helpers (lazy-loaded models, ~400MB + ~3GB on first call) ──
-def _get_embedder():
-    """Lazy singleton for all-MiniLM-L6-v2 (~400MB RAM)."""
-    global _EMBEDDER
-    if _EMBEDDER is None:
-        _EMBEDDER = SentenceTransformer('all-MiniLM-L6-v2')
-    return _EMBEDDER
-
-
-def _get_nli():
-    """Lazy singleton for MiniCheck-Flan-T5-Large (~3GB RAM, ~2s/call)."""
-    global _NLI_MODEL
-    if _NLI_MODEL is None:
-        _NLI_MODEL = MiniCheck(model_name="flan-t5-large", cache_dir="/opt/ai_data/models")
-    return _NLI_MODEL
-
-
-def _entity_cosine_grounding(entities: Dict, turn_texts: List[str]) -> Dict:
-    """Check entity relevance via embedding cosine similarity (all-MiniLM-L6-v2).
-
-    Returns dict keyed by entity category with per-entity cosine scores.
-    ~20ms per batch. Only runs when embedder loads successfully.
-    """
-    try:
-        emb = _get_embedder()
-    except Exception:
-        return {}
-    result = {}
-    for cat in ("technologies", "functions", "files", "mentioned_users"):
-        items = entities.get(cat, []) if isinstance(entities, dict) else []
-        if not items or not isinstance(items, list):
-            result[cat] = []
-            continue
-        if not turn_texts:
-            result[cat] = [{"entity": i, "cosine": 0.0, "relevant": False} for i in items[:5]]
-            continue
-        try:
-            item_vecs = emb.encode(items[:5], normalize_embeddings=True)
-            text_vecs = emb.encode(turn_texts, normalize_embeddings=True)
-            sims = (item_vecs @ text_vecs.T).max(axis=1)
-            result[cat] = [
-                {"entity": items[i], "cosine": round(float(sims[i]), 3),
-                 "relevant": float(sims[i]) >= COSINE_ENTITY_RELEVANCE}
-                for i in range(len(items[:5]))
-            ]
-        except Exception:
-            result[cat] = []
-    return result
-
-
-def _entity_nli_grounding(entities: Dict, turn_text: str) -> Dict:
-    """Check entity hallucination via MiniCheck NLI.
-
-    Returns dict keyed by category with per-entity (supported, prob).
-    Limited to 5 entities total across all categories (~2s each).
-    """
-    try:
-        nli = _get_nli()
-    except Exception:
-        return {}
-    candidates = []
-    for cat in ("technologies", "functions", "files", "mentioned_users"):
-        items = entities.get(cat, []) if isinstance(entities, dict) else []
-        if items and isinstance(items, list):
-            for i in items[:3]:
-                candidates.append((cat, str(i).strip()))
-            if len(candidates) >= 5:
-                break
-    candidates = candidates[:5]
-    if not candidates or not turn_text:
-        return {}
-
-    claims = [c[1] for c in candidates]
-    try:
-        label, prob, _, _ = nli.score(docs=[turn_text] * len(claims), claims=claims)
-        result = {}
-        for (cat, ent), lbl, pr in zip(candidates, label, prob):
-            result.setdefault(cat, []).append({
-                "entity": ent,
-                "supported": bool(lbl == 1 and pr >= MINICHECK_SUPPORT),
-                "prob": round(float(pr), 3),
-            })
-        return result
-    except Exception:
-        return {}
-
-
-def _tldr_cosine_quality(tldr: str, turn_text: str) -> float:
-    """Check if tldr accurately represents turn via cosine similarity."""
-    if not tldr or not turn_text:
-        return 0.0
-    try:
-        emb = _get_embedder()
-    except Exception:
-        return 0.0
-    try:
-        tldr_vec = emb.encode(tldr, normalize_embeddings=True)
-        text_vec = emb.encode(turn_text[:500], normalize_embeddings=True)
-        return round(float(tldr_vec @ text_vec), 3)
-    except Exception:
-        return 0.0
-
-
-# ── MCP generation ─────────────────────────────────────────────────────────
 def _generate_mcp_fields(user_turn: str, thinking: str, text: str,
                          model: str = "day_mcp",
                          extractions: Optional[List[Dict]] = None
@@ -449,10 +325,8 @@ def _generate_mcp_fields(user_turn: str, thinking: str, text: str,
     return result
 
 
-# ── Checkpoint ─────────────────────────────────────────────────────────────
 
 
-# ── Select turns ───────────────────────────────────────────────────────────
 def _get_turns_without_mcp(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
     """Return turns with extraction facts but no mcp_meta, after checkpoint."""
     checkpoint = get_checkpoint("mcp_enrich")
@@ -488,7 +362,6 @@ def _get_turns_without_mcp(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
     } for r in rows]
 
 
-# ── Load extraction facts for a turn ────────────────────────────────────
 def _get_turn_extractions(turn_id: str) -> List[Dict[str, Any]]:
     """Load extracted facts (user/thinking/text) for a turn from review_facts.
 
@@ -512,7 +385,6 @@ def _get_turn_extractions(turn_id: str) -> List[Dict[str, Any]]:
     } for r in rows]
 
 
-# ── DB writer ─────────────────────────────────────────────────────────────
 def _insert_mcp_fact(turn_id: str, fact_index: int,
                      mcp_json_str: str, model: str,
                      prompt_tokens: Optional[int] = None,
@@ -562,7 +434,6 @@ def _insert_mcp_fact(turn_id: str, fact_index: int,
     return psql_ok(sql)
 
 
-# ── Pipeline ───────────────────────────────────────────────────────────────
 def mcp_enrich_pipeline(turn_id: Optional[str] = None,
                         limit: int = BATCH_LIMIT,
                         dry_run: bool = False,
@@ -646,46 +517,8 @@ def mcp_enrich_pipeline(turn_id: Optional[str] = None,
                 print(f"    verified: {n_files} files ({n_missing_files} missing), "
                       f"{n_syms} symbols ({n_missing_syms} missing)", flush=True)
 
-            # Phase 4: Embedding-based quality checks
-            turn_texts = [t for t in (ut, th, tx) if t]
-            tldr_text = mcp_result.get("tldr", "") or ""
-
-            if mcp_result.get("entities") and turn_texts:
-                try:
-                    cosine_grounding = _entity_cosine_grounding(
-                        mcp_result.get("entities", {}), turn_texts[:3])
-                    if cosine_grounding:
-                        mcp_result["cosine_grounding"] = cosine_grounding
-                        low_rel = sum(
-                            1 for cat in cosine_grounding.values()
-                            for e in cat if not e.get("relevant", True))
-                        print(f"    cosine grounding: {low_rel} low-relevance entities",
-                              flush=True)
-                except Exception:
-                    pass
-
-                try:
-                    full_text = "\n".join(turn_texts[:2])[:2000]
-                    nli_grounding = _entity_nli_grounding(
-                        mcp_result.get("entities", {}), full_text)
-                    if nli_grounding:
-                        mcp_result["nli_grounding"] = nli_grounding
-                        unsupported = sum(
-                            1 for cat in nli_grounding.values()
-                            for e in cat if not e.get("supported", True))
-                        print(f"    NLI grounding: {unsupported} unsupported entities",
-                              flush=True)
-                except Exception:
-                    pass
-
-            if tldr_text and turn_texts:
-                try:
-                    tq = _tldr_cosine_quality(tldr_text, turn_texts[0])
-                    mcp_result["tldr_cosine"] = tq
-                    flag = " (LOW)" if tq < TLDR_COSINE_MIN else ""
-                    print(f"    tldr quality: {tq}{flag}", flush=True)
-                except Exception:
-                    pass
+            # Phase 4: Mark cosine verification as pending
+            mcp_result["cosine_status"] = "pending"
 
             # Phase 5: Log MCP fields
             mcp_tldr = mcp_result.get("tldr", "") or ""
@@ -758,7 +591,6 @@ def mcp_enrich_pipeline(turn_id: Optional[str] = None,
             "elapsed_s": elapsed, "ok": failed == 0}
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────
 def main() -> None:
     from lib.infra.preflight import preflight_checks
     preflight_checks("mcp_enrich.py")

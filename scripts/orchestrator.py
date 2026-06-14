@@ -36,7 +36,6 @@ if _SCRIPTS_DIR not in sys.path:
 
 from lib.llm_client import call_llm  # noqa: E402
 
-# ── Constants ──────────────────────────────────────────────────────────────
 TIMEOUT_CLASSIFY = 30  # classification is fast (< 5s)
 TIMEOUT_DIRECT = 120  # direct answer generation
 MAX_TOKENS_CLASSIFY = 32  # classification needs ~1 token
@@ -73,7 +72,6 @@ Extract Python code from the user request.
 Output ONLY the code, no explanation."""
 
 
-# ── Tool abstraction ───────────────────────────────────────────────────────
 
 
 class OrchestratorTool:
@@ -233,7 +231,6 @@ class ExecuteCodeTool(OrchestratorTool):
         }
 
 
-# ── Built-in tool registry ─────────────────────────────────────────────────
 _BUILTIN_TOOLS: Dict[str, OrchestratorTool] = {
     "p_r_j": RunPRJTool(),
     "debate": RunDebateTool(),
@@ -242,7 +239,6 @@ _BUILTIN_TOOLS: Dict[str, OrchestratorTool] = {
 }
 
 
-# ── Classification ─────────────────────────────────────────────────────────
 
 
 def _classify(user_input: str, verbose: bool = True) -> str:
@@ -279,7 +275,6 @@ def _classify(user_input: str, verbose: bool = True) -> str:
     return "direct_answer"
 
 
-# ── Orchestrator ───────────────────────────────────────────────────────────
 
 
 def orchestrator_run(
@@ -438,7 +433,6 @@ def list_tools() -> None:
         print()
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────
 
 
 def main():

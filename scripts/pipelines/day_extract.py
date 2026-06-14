@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: day_extract.sh → systemd:devforge-day-extract.timer (:00)
+# Path: day_cycle.sh → day_cycle.py (Day Extract phase)
 """Day Extract Pipeline — extract → MCP enrich on Pod B (7B:8082).
 
 Called at :00 by systemd timer. Runs extraction then MCP enrichment

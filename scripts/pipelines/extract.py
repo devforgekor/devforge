@@ -695,7 +695,7 @@ def extract_pipeline(
             # ── Phase 2–4: extraction with retry/fallback ──────────
             extractions: Optional[List[Dict[str, Any]]] = None
             mark = ""
-            used_model = "day_extract"
+            used_model = "test_q8"
             ex_usage: Dict[str, Any] = {}
             ex_timings: Dict[str, Any] = {}
             ex_elapsed: float = 0

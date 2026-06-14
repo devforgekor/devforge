@@ -49,7 +49,6 @@ from pipelines.review import (  # noqa: E402
     run_reflection,
 )
 
-# ── Proposal prompt ──────────────────────────────────────────────────────────
 SYSTEM_PROPOSAL = """\
 You are a code review PROPOSER. Analyze the given code and find bugs,
 security vulnerabilities, performance issues, and code quality problems.
@@ -88,7 +87,6 @@ def _run_proposal(code: str, label: str) -> Dict[str, Any]:
     print(f"[step1] {len(findings)} findings generated")
     return result
 
-# ── Pod switching ──────────────────────────────────────────────────────────
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 
 
@@ -108,7 +106,6 @@ def _swap_pod_b(mode: str, timeout: int = 300) -> bool:
     return _poll_health(check_port, timeout=timeout)
 
 
-# ── Orchestrator ───────────────────────────────────────────────────────────
 def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, Any]:
     """Run the complete 4-step P→R→J pipeline. swap_fn(step_name) handles model swaps.
 
@@ -307,7 +304,6 @@ def _run_orchestrated() -> Dict[str, Any]:
     return {"results": results, "total": len(results)}
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────
 def main() -> None:
     parser = argparse.ArgumentParser(description="3-Model Code Review Pipeline")
     parser.add_argument("--code", help="Code to review (or file path)")

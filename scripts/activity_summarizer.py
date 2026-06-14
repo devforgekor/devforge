@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: systemd:activity-summarizer.service
+# Path: systemd:activity-summarizer-safety.timer → activity-summarizer.service
 """activity_summarizer.py — Daily LLM summarization of activity_log events.
 
 Runs via systemd timer at KST 06:00 (21:00 UTC).

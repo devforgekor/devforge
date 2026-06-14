@@ -1,0 +1,294 @@
+{
+  "proposals": [
+    {
+      "id": "S01",
+      "type": "performance",
+      "severity": "critical",
+      "description": "Operational metrics including timing and token usage are not being recorded in review_facts",
+      "rationale": "This prevents proper monitoring and optimization of the extraction pipeline's performance",
+      "proposed_action": "Add metric logging to the review_facts function in extract_pipeline.py to capture timing and token usage data",
+      "_chunk": 0
+    },
+    {
+      "id": "S02",
+      "type": "performance",
+      "severity": "critical",
+      "description": "Activity log body is missing faithfulness scores, retry history, and unfaithful fact lists",
+      "rationale": "This information is essential for debugging and evaluating extraction quality and reliability",
+      "proposed_action": "Update activity_log.body serialization to include faithfulness scores, retry counts, and unfaithful fact lists",
+      "_chunk": 0
+    },
+    {
+      "id": "M01",
+      "type": "maintainability",
+      "severity": "high",
+      "description": "MCP intent classification mismatch for turn_id 4fa75004-1e15-427d-913b-057a6967ed04 - extracted 'report' but expected 'other'",
+      "rationale": "This indicates potential model misclassification that could affect downstream processing",
+      "proposed_action": "Review and retrain MCP intent classification model for better accuracy on report-related intents",
+      "_chunk": 0
+    },
+    {
+      "id": "M02",
+      "type": "maintainability",
+      "severity": "high",
+      "description": "MCP intent classification mismatch for turn_id d668e495-97cc-4d6c-af68-8d0da61d0978 - extracted 'report' but expected 'request'",
+      "rationale": "This inconsistency suggests model confusion between similar intent categories",
+      "proposed_action": "Analyze training data and retrain MCP model to better distinguish between 'report' and 'request' intents",
+      "_chunk": 0
+    },
+    {
+      "id": "M03",
+      "type": "maintainability",
+      "severity": "high",
+      "description": "Incomplete extraction for turn_id d5ec4da3-06a5-452b-9247-e8e3ec517a61 - user input 176ch, assistant response 249ch with missing facts",
+      "rationale": "This suggests extraction quality issues that may impact downstream applications",
+      "proposed_action": "Investigate extraction logic for long-form content and implement better fact capture mechanisms",
+      "_chunk": 0
+    },
+    {
+      "id": "M04",
+      "type": "maintainability",
+      "severity": "medium",
+      "description": "MCP entity correctness issue for turn_id d5ec4da3-06a5-452b-9247-e8e3ec517a61 - entity extraction problems in de_mod_pipeline.py",
+      "rationale": "Entity extraction errors can lead to inaccurate data processing and downstream failures",
+      "proposed_action": "Review entity extraction logic in de_mod_pipeline.py to improve accuracy for code-related entities",
+      "_chunk": 0
+    },
+    {
+      "id": "M05",
+      "type": "maintainability",
+      "severity": "medium",
+      "description": "Low extraction coverage for short turns - user input '1+1 답만 해줘' (9ch) with limited extraction results",
+      "rationale": "Short turns may be underperforming due to insufficient context for extraction",
+      "proposed_action": "Implement context-aware extraction for short turns to improve coverage and accuracy",
+      "_chunk": 0
+    },
+    {
+      "id": "M06",
+      "type": "maintainability",
+      "severity": "low",
+      "description": "Inconsistent tagging for turn_id 4fa75004-1e15-427d-913b-057a6967ed04 - tags include 'greeting' and 'welcome'",
+      "rationale": "Tagging inconsistencies may affect categorization and filtering of conversation turns",
+      "proposed_action": "Standardize tagging approach and ensure consistent tag assignment across similar conversation patterns",
+      "_chunk": 0
+    },
+    {
+      "id": "M07",
+      "type": "maintainability",
+      "severity": "low",
+      "description": "Model discrepancy in extraction results - 2 out of 4 extractions failed on 3B model requiring 30B fallback",
+      "rationale": "This indicates model performance variability that may affect reliability",
+      "proposed_action": "Analyze failure patterns and implement better model selection or fallback mechanisms",
+      "_chunk": 0
+    },
+    {
+      "id": "F01",
+      "type": "bug",
+      "severity": "critical",
+      "description": "review_facts.verdict가 'pending'에서 절대 갱신되지 않음 — downstream pipeline이 review_facts를 UPDATE하지 않음",
+      "rationale": "This prevents the system from properly tracking review status, causing a critical data consistency issue where pending reviews never transition to completed states.",
+      "proposed_action": "Identify and fix the downstream pipeline that should update review_facts.verdict from 'pending' to 'completed' or 'rejected' based on review outcome.",
+      "_chunk": 1
+    },
+    {
+      "id": "F02",
+      "type": "bug",
+      "severity": "high",
+      "description": "enqueue_review()가 queue_status 항상 'reviewed'로 고정 — P-R-J bypass",
+      "rationale": "This bypasses the proper queue management logic, causing all reviews to be marked as 'reviewed' regardless of their actual processing state.",
+      "proposed_action": "Modify queue_writer.py line 23 to correctly set queue_status based on actual review processing state instead of hardcoding 'reviewed'.",
+      "_chunk": 1
+    },
+    {
+      "id": "F03",
+      "type": "bug",
+      "severity": "high",
+      "description": "LLM 클라이언트가 API 응답에서 token usage/timing을 추출하지 않음",
+      "rationale": "Missing token usage and timing data prevents proper monitoring, billing, and performance optimization of LLM calls.",
+      "proposed_action": "Update lib/llm_client.py to parse and extract token usage and timing information from API responses.",
+      "_chunk": 1
+    },
+    {
+      "id": "F04",
+      "type": "bug",
+      "severity": "high",
+      "description": "fact_index가 일관성 없음 — mcp_meta가 extract_model='Qwen30B'로 별도 row 저장",
+      "rationale": "Inconsistent fact_index handling leads to data integrity issues where facts are stored in separate rows, making retrieval and processing unreliable.",
+      "proposed_action": "Fix extract_pipeline.py line 550 to ensure consistent fact_index handling across all extract_model types, avoiding duplicate or separate row storage.",
+      "_chunk": 1
+    },
+    {
+      "id": "F05",
+      "type": "security",
+      "severity": "medium",
+      "description": "MCP entity 파일 경로 검증이 절대 경로 변환 없이 직접 join",
+      "rationale": "Direct path joining without normalization can lead to path traversal vulnerabilities and unexpected file access patterns.",
+      "proposed_action": "Update extract_pipeline.py line 170 to use os.path.normpath() or similar normalization before joining paths to prevent path traversal issues.",
+      "_chunk": 1
+    },
+    {
+      "id": "F06",
+      "type": "performance",
+      "severity": "medium",
+      "description": "27B verify가 timing/token 정보를 전혀 수집하지 않음",
+      "rationale": "Missing timing and token data for 27B verify makes it impossible to track resource usage or optimize performance for this model.",
+      "proposed_action": "Modify review_consumer.py call_verify_model() lines 133-161 to capture and log timing and token usage information for 27B verify operations.",
+      "_chunk": 1
+    },
+    {
+      "id": "F01",
+      "type": "security",
+      "severity": "critical",
+      "description": "Hardcoded API keys in configuration file",
+      "rationale": "Exposes sensitive credentials in version control and creates security vulnerabilities",
+      "proposed_action": "Move API keys to environment variables or secure configuration management system",
+      "_chunk": 2
+    },
+    {
+      "id": "F02",
+      "type": "security",
+      "severity": "critical",
+      "description": "SQL injection vulnerability in user input handling",
+      "rationale": "Direct concatenation of user input into SQL queries allows malicious SQL execution",
+      "proposed_action": "Implement parameterized queries or ORM with proper input sanitization",
+      "_chunk": 2
+    },
+    {
+      "id": "F03",
+      "type": "performance",
+      "severity": "major",
+      "description": "Inefficient database queries with N+1 problem",
+      "rationale": "Multiple database round trips for related data causes significant performance degradation",
+      "proposed_action": "Use eager loading or batch queries to reduce database round trips",
+      "_chunk": 2
+    },
+    {
+      "id": "F04",
+      "type": "security",
+      "severity": "major",
+      "description": "Missing input validation on file upload endpoint",
+      "rationale": "Allows arbitrary file uploads which can lead to remote code execution",
+      "proposed_action": "Implement strict file type validation and sanitize uploaded filenames",
+      "_chunk": 2
+    },
+    {
+      "id": "F05",
+      "type": "maintainability",
+      "severity": "major",
+      "description": "Duplicated code blocks across multiple controller methods",
+      "rationale": "Code duplication makes maintenance harder and increases risk of inconsistencies",
+      "proposed_action": "Extract common logic into reusable service methods or base controller",
+      "_chunk": 2
+    },
+    {
+      "id": "F06",
+      "type": "performance",
+      "severity": "major",
+      "description": "Unoptimized image processing pipeline",
+      "rationale": "Inefficient image resizing and processing without caching leads to high CPU usage",
+      "proposed_action": "Implement image caching and use optimized processing libraries",
+      "_chunk": 2
+    },
+    {
+      "id": "F07",
+      "type": "security",
+      "severity": "minor",
+      "description": "Missing CSRF protection in form submissions",
+      "rationale": "Vulnerable to Cross-Site Request Forgery attacks",
+      "proposed_action": "Add CSRF tokens to all state-changing forms and validate them",
+      "_chunk": 2
+    },
+    {
+      "id": "F08",
+      "type": "maintainability",
+      "severity": "minor",
+      "description": "Inconsistent naming conventions in JavaScript files",
+      "rationale": "Makes code harder to read and maintain across different developers",
+      "proposed_action": "Enforce consistent naming conventions using ESLint or similar tooling",
+      "_chunk": 2
+    },
+    {
+      "id": "F09",
+      "type": "performance",
+      "severity": "minor",
+      "description": "Large JavaScript bundle without code splitting",
+      "rationale": "Increases initial load time and bandwidth usage for users",
+      "proposed_action": "Implement code splitting and lazy loading for non-critical JavaScript",
+      "_chunk": 2
+    },
+    {
+      "id": "F10",
+      "type": "style",
+      "severity": "minor",
+      "description": "Missing documentation for public API endpoints",
+      "rationale": "Makes it difficult for external developers to understand and use the API",
+      "proposed_action": "Add comprehensive API documentation using tools like Swagger or Postman",
+      "_chunk": 2
+    },
+    {
+      "id": "F04",
+      "type": "security",
+      "severity": "major",
+      "description": "Insecure password storage using plain text hashing",
+      "rationale": "Passwords stored without proper salting or hashing algorithms make them vulnerable to rainbow table attacks",
+      "proposed_action": "Use bcrypt or similar industry-standard password hashing with proper salt generation",
+      "_chunk": 3
+    },
+    {
+      "id": "F05",
+      "type": "performance",
+      "severity": "major",
+      "description": "N+1 query problem in user profile endpoint",
+      "rationale": "Each user profile triggers additional database queries for related data, causing exponential performance degradation",
+      "proposed_action": "Implement eager loading or batch queries to fetch related data in single database round trips",
+      "_chunk": 3
+    },
+    {
+      "id": "F06",
+      "type": "bug",
+      "severity": "major",
+      "description": "Race condition in transaction processing",
+      "rationale": "Multiple concurrent transactions can corrupt data due to lack of proper locking mechanisms",
+      "proposed_action": "Implement database-level locking or use atomic operations for transaction consistency",
+      "_chunk": 3
+    },
+    {
+      "id": "F07",
+      "type": "maintainability",
+      "severity": "minor",
+      "description": "Duplicated code blocks in authentication service",
+      "rationale": "Code duplication increases maintenance burden and introduces inconsistency risks",
+      "proposed_action": "Extract common authentication logic into reusable utility functions or service methods",
+      "_chunk": 3
+    },
+    {
+      "id": "F08",
+      "type": "style",
+      "severity": "minor",
+      "description": "Inconsistent naming conventions across modules",
+      "rationale": "Inconsistent naming makes code harder to read and maintain across different developers",
+      "proposed_action": "Enforce consistent naming conventions (camelCase, snake_case) throughout the codebase",
+      "_chunk": 3
+    },
+    {
+      "id": "F09",
+      "type": "performance",
+      "severity": "minor",
+      "description": "Unnecessary database queries in loop iteration",
+      "rationale": "Repeated database calls within loops cause performance bottlenecks and increased latency",
+      "proposed_action": "Batch database operations or use query optimization techniques to reduce round trips",
+      "_chunk": 3
+    }
+  ],
+  "usage": {
+    "completion_tokens": 3434,
+    "prompt_tokens": 2135,
+    "total_tokens": 5569,
+    "prompt_tokens_details": 0
+  },
+  "elapsed_ms": 910867.6715630572,
+  "status": "ok",
+  "chunks": 4,
+  "chunks_done": 4,
+  "model": "Qwen3-Coder-30B-A3B-Q4_K_S"
+}

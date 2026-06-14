@@ -15,7 +15,7 @@ def log(msg):
     print(f"[{t}] {msg}", flush=True)
 
 
-KEY_FILES = ["pipelines/prj_cycle.py", "pipelines/extract.py", "pipelines/classify.py",
+KEY_FILES = ["pipelines/prj_cycle.py", "pipelines/extract.py",
              "night_cycle.sh", "day_cycle.sh"]
 
 

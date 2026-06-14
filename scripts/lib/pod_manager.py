@@ -38,7 +38,7 @@ MODEL_METADATA = {
     "embed":      {
         "file": "Qwen3-Embedding-8B-f16.gguf",
         "size": "16.3GB", "port": 8081, "mode": "embed",
-        "model_name": "embed", "ctx": 512,
+        "model_name": "embed", "ctx": 8192,
         "threads": 4, "threads_batch": 4,
     },
     "proposer":   {
@@ -55,16 +55,16 @@ MODEL_METADATA = {
         "threads": 4, "threads_batch": 4,
     },
     "reflector":  {
-        "file": "qwen2.5-coder-14b-instruct-q6_k.gguf",
-        "size": "12.1GB","port": 8082, "mode": "review-r",
-        "model_name": "reflector", "ctx": 8192, "cache_ram": 512,
-        "evict_room": 13000, "memory_check": 13000, "memory_check_mode": "fatal",
+        "file": "Qwen2.5-Coder-14B-Instruct-Q8_0.gguf",
+        "size": "15.7GB","port": 8082, "mode": "review-r",
+        "model_name": "reflector", "ctx": 8192, "cache_ram": 1024,
+        "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "fatal",
     },
     "judge":      {
-        "file": "qwen2.5-coder-14b-instruct-q6_k.gguf",
-        "size": "12.1GB", "port": 8083, "mode": "review-j",
+        "file": "NextCoder-14B-Q8_0.gguf",
+        "size": "15.0GB", "port": 8083, "mode": "review-j",
         "model_name": "judge", "ctx": 6144, "cache_ram": 512, "mlock": 0,
-        "evict_room": 13000, "memory_check": 5000, "memory_check_mode": "warn", "report_memory": "1",
+        "evict_room": 16000, "memory_check": 5000, "memory_check_mode": "warn", "report_memory": "1",
     },
     "verifier":   {
         "file": "Qwen3.6-27B.i1-IQ4_XS.gguf",
@@ -72,6 +72,18 @@ MODEL_METADATA = {
         "model_name": "verifier-iq4xs", "ctx": 6144, "cache_ram": 1024, "mlock": 0,
         "evict_room": 10000, "memory_check": 8000, "memory_check_mode": "warn",
         "report_memory": "1", "cache_type_k": "q8_0", "cache_type_v": "q8_0", "flash_attn": "1",
+    },
+    "test_14b_q8": {
+        "file": "NextCoder-14B-Q8_0.gguf",
+        "size": "15.7GB", "port": 8083, "mode": "test-q8",
+        "model_name": "test-14b-q8", "ctx": 8192, "cache_ram": 1024,
+        "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "warn",
+    },
+    "test_nextcoder_q8": {
+        "file": "NextCoder-14B-Q8_0.gguf",
+        "size": "15.0GB", "port": 8083, "mode": "test-q8",
+        "model_name": "test-nextcoder-q8", "ctx": 8192, "cache_ram": 1024,
+        "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "warn",
     },
 }
 
@@ -289,6 +301,8 @@ def _write_mode_env(mode: str, port: int) -> None:
             ("cache_type_k", "CACHE_TYPE_K"),
             ("cache_type_v", "CACHE_TYPE_V"),
             ("flash_attn", "FLASH_ATTN"),
+            ("batch_size", "BATCH_SIZE"),
+            ("ubatch_size", "UBATCH_SIZE"),
         ]:
             val = f(key)
             if val is not None and val != "":

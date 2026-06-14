@@ -1,0 +1,16 @@
+{
+  "result": {
+    "findings": [],
+    "verdicts": [],
+    "P_score": 25,
+    "R_score": 25,
+    "consensus_score": 90,
+    "decision": "APPROVED"
+  },
+  "usage": {
+    "total_tokens": 0
+  },
+  "timings": {},
+  "elapsed_ms": 100,
+  "model": "reviewer"
+}

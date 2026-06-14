@@ -1,19 +1,18 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-06-13 03:01 KST
+# auto-generated from live data at 2026-06-14 09:00 KST
 ---
 metadata:
-  updated: 2026-06-13 03:01 KST
+  updated: 2026-06-14 09:00 KST
   source: live (collect_structural + mode file)
 models:
-- note: No running LLM containers detected
+- name: devforge-pod-b
+  container: devforge-pod-b
+  status: Up About an hour (healthy)
+  ports: 127.0.0.1:8081-8084->8081-8084/tcp, 127.0.0.1:8089->8089/tcp
 modes:
   current: day
   available:
     day: Pod A(reserved:8080) + Pod B(extract 7B:8082 | verify 14B:8083)
     night: Nightly review pipeline (verify + debate)
 pipelines:
-  backup: inactive
-  classify: failed
   daily structure: activating
-  day extract: inactive
-  nightly: activating

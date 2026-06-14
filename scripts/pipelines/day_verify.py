@@ -75,7 +75,7 @@ Output STRICT JSON:
 # ── Findings Builder (DB → night.py Phase 2 compatible) ──────────────
 
 def _get_turns_for_verify(limit: int = BATCH_LIMIT) -> List[Dict]:
-    """Return turns that have extraction + MCP but no verify_result yet."""
+    """Turns that completed extraction and MCP enrichment but still need verification."""
     sql = (
         "SELECT t.id, t.user_turn, t.thinking, t.text, "
         "       t.created_at::text "
@@ -99,7 +99,7 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT) -> List[Dict]:
 
 
 def _get_turn_extractions(turn_id: str) -> List[Dict]:
-    """Get extraction facts for a turn."""
+    """Extraction facts are the raw input for verification — every finding must be checked."""
     sql = (
         "SELECT fact_type, evidence::text, fact_action, created_at::text "
         "FROM review_facts "
@@ -111,7 +111,7 @@ def _get_turn_extractions(turn_id: str) -> List[Dict]:
 
 
 def _get_turn_mcp(turn_id: str) -> Optional[Dict]:
-    """Get MCP metadata for a turn."""
+    """MCP metadata provides entity/tag context so verify can cross-check extraction claims."""
     sql = (
         "SELECT evidence::text FROM review_facts "
         f"WHERE turn_id = '{esc_sql(turn_id)}'::uuid "
@@ -248,7 +248,7 @@ def _insert_verify_result(turn_id: str, fact_index: int,
                           gen_tokens: Optional[int] = None,
                           elapsed_ms: Optional[float] = None,
                           source_file: Optional[str] = None) -> bool:
-    """Insert a verify_result fact row into review_facts."""
+    """Persist verification outcome so completed turns are excluded from future batches."""
     cols = ["turn_id", "fact_index", "fact_type", "evidence",
             "extract_model", "verdict", "source", "fact_action"]
     vals = [
@@ -290,7 +290,7 @@ def _insert_verify_result(turn_id: str, fact_index: int,
 def _save_verify_output(data: Dict) -> str:
     """Save verification result to eval/ as pipeline_verify_*.json."""
     file_timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    fname = f"pipeline_verify_{file_ts}.json"
+    fname = f"pipeline_verify_{file_timestamp_str}.json"
     fpath = os.path.join(EVAL_DIR, fname)
     with open(fpath, "w") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -333,7 +333,7 @@ def _build_category_summary(verification_items: List[Dict], total_findings: int)
 def day_verify_pipeline(limit: int = BATCH_LIMIT,
                         dry_run: bool = False,
                         model_label: str = "14b") -> Dict[str, Any]:
-    """Verify extraction + MCP quality using Pod B reviewer model."""
+    """Main entry: load unverified turns, verify each finding against MCP context, persist results."""
     t_start = time.monotonic()
     consecutive_defer = 0
 

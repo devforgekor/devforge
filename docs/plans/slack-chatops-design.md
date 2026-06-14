@@ -298,7 +298,6 @@ SSH 접속 없이 채팅 한 줄로 처리.
 | `/deploy restart watchdog` | watchdog 재시작 | admin |
 | `/deploy restart turn-watcher` | turn-watcher 재시작 | admin |
 | `/deploy kick 15m-cycle` | 15m-cycle 타이머 강제 실행 | admin |
-| `/deploy kick classify` | classify 타이머 강제 실행 | admin |
 | `/deploy list` | 실행 가능한 명령 목록 | all |
 
 ### 데이터 흐름
@@ -342,8 +341,7 @@ DEPLOY_COMMANDS = {
     },
     "kick": {
         "15m-cycle": lambda: _kick_timer("devforge-15m-cycle"),
-        "classify": lambda: _kick_timer("devforge-classify"),
-        "nightly": lambda: _kick_timer("devforge-nightly"),
+        "nightly": lambda: _kick_timer("devforge-night-cycle"),
         "daily-structure": lambda: _kick_timer("devforge-daily-structure"),
     },
     "list": lambda: _list_commands(),

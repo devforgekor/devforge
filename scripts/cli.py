@@ -118,6 +118,102 @@ def cmd_activity_add(args):
         print("  Failed to add entry")
 
 
+def cmd_search_bm25(args):
+    """FTS5 BM25 search via local_index."""
+    from lib.search.local_index import FTS5Index
+    idx = FTS5Index()
+    t0 = time.monotonic()
+    results = idx.bm25_search(args.query, limit=args.limit)
+    elapsed = round(time.monotonic() - t0, 3)
+
+    if args.json:
+        print(json.dumps({"results": results, "meta": {"count": len(results), "elapsed_s": elapsed}},
+                          ensure_ascii=False, indent=2))
+        return
+
+    print(f"BM25 search: {len(results)} results for '{args.query}' ({elapsed}s)\n")
+    for r in results:
+        print(f"  [{r['rank']:.2f}] {r['agent']} {r['created_at'][:19]}")
+        txt = (r.get("text_clean") or "")[:160]
+        if txt:
+            print(f"       {txt}")
+        print()
+
+
+def cmd_search_hybrid(args):
+    """Hybrid BM25 + Dense search via RRF fusion."""
+    from lib.search.hybrid import hybrid_search, bm25_only
+    from lib.text_cleaner import get_cleaner
+
+    # Preprocess query through Kiwi for BM25
+    cl = get_cleaner()
+    query_terms = " ".join(cl.extract_terms(args.query))
+    query_for_embed = args.query
+
+    # --- Phase 1: BM25 ---
+    t0 = time.monotonic()
+    bm25_results = bm25_only(query_terms, limit=50)
+    bm25_time = round(time.monotonic() - t0, 3)
+    bm25_list = bm25_results.get("results", [])
+
+    # Short-circuit: if BM25 top-1 is dominant, skip hybrid
+    short_circuited = False
+    if not args.no_short_circuit and len(bm25_list) >= 2:
+        top1_score = bm25_list[0]["rank"]
+        top2_score = bm25_list[1]["rank"]
+        # FTS5 BM25: lower = better (more negative = higher relevance)
+        if top1_score <= -8.0 and (top2_score - top1_score) > 0.15:
+            short_circuited = True
+
+    if short_circuited:
+        meta = {"mode": "bm25_short_circuit", "bm25_time": bm25_time,
+                "bm25_count": len(bm25_list), "short_circuit": True,
+                "top1_score": top1_score, "gap": round(top2_score - top1_score, 3)}
+        results = [{"turn_id": r["turn_id"], "conversation_id": r["conversation_id"],
+                     "created_at": r["created_at"], "agent": r["agent"],
+                     "seq": r["seq"],
+                     "text_clean": (r.get("text_clean") or "")[:200],
+                     "bm25_rank": i, "dense_rank": None, "rrf_score": 0}
+                    for i, r in enumerate(bm25_list[:args.limit])]
+    else:
+        result = hybrid_search(args.query, limit=args.limit)
+        results = result["results"]
+        meta = result["meta"]
+        meta["mode"] = "hybrid_rrf"
+
+        meta["bm25_time"] = bm25_time
+        meta["short_circuit"] = False
+
+    if args.json:
+        print(json.dumps({"results": results, "meta": meta},
+                          ensure_ascii=False, indent=2))
+        return
+
+    mode_label = "BM25 SHORT-CIRCUIT" if short_circuited else "HYBRID RRF"
+    print(f"{mode_label}: {len(results)} results for '{args.query}'")
+    if short_circuited:
+        print(f"  (top1 score={top1_score:.2f}, gap={meta.get('gap', 0):.2f} — dense skipped)")
+    else:
+        if meta.get("embed_error"):
+            print(f"  [warn] Dense search: {meta['embed_error']}")
+        print(f"  BM25={meta.get('bm25_count', 0)} dense={meta.get('dense_count', 0)} "
+              f"bm25_time={meta.get('bm25_time', 0)}s dense_time={meta.get('dense_time', 0)}s")
+
+    print()
+    for r in results:
+        label = ""
+        if r.get("bm25_rank") is not None and r.get("dense_rank") is not None:
+            label = f" B{r['bm25_rank']} D{r['dense_rank']}"
+        elif r.get("dense_rank") is None:
+            label = f" B{r.get('bm25_rank', '?')}"
+        score_str = f"rrf={r.get('rrf_score', 0):.4f}" if r.get("rrf_score") else ""
+        print(f"  [{r.get('rrf_score', r.get('bm25_score', 0)):.2f}{label}] {r.get('agent', '?')} {r.get('created_at', '')[:19]}")
+        txt = (r.get("text_clean") or "")[:160]
+        if txt:
+            print(f"       {txt}")
+        print()
+
+
 MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
@@ -1242,6 +1338,21 @@ async def main():
     act_add.add_argument("summary", help="Entry summary")
     act_add.add_argument("--tags", help="Comma-separated tags")
 
+    p_search = sub.add_parser("search", help="대화 검색 — BM25 또는 hybrid (RRF fusion)")
+    search_sub = p_search.add_subparsers(dest="search_command")
+
+    p_bm25 = search_sub.add_parser("bm25", help="FTS5 BM25 키워드 검색")
+    p_bm25.add_argument("query", help="검색어 (Kiwi 형태소 분석 추천)")
+    p_bm25.add_argument("--limit", "-n", type=int, default=20, help="Max results")
+    p_bm25.add_argument("--json", action="store_true", help="JSON output")
+
+    p_hybrid = search_sub.add_parser("hybrid", help="BM25 + Dense 하이브리드 (RRF k=60)")
+    p_hybrid.add_argument("query", help="검색어 (자연어)")
+    p_hybrid.add_argument("--limit", "-n", type=int, default=20, help="Max results")
+    p_hybrid.add_argument("--json", action="store_true", help="JSON output")
+    p_hybrid.add_argument("--no-short-circuit", action="store_true",
+                           help="BM25 dominant여도 항상 Dense 실행")
+
     p_status = sub.add_parser("status", help="Live system status — containers, models, timers, tasks, resources")
     p_status.add_argument("--json", "-j", action="store_true", help="Machine-readable JSON output")
 
@@ -1283,7 +1394,12 @@ async def main():
     args = parser.parse_args()
 
     if args.command == "search":
-        await cmd_search(args)
+        if args.search_command == "bm25":
+            cmd_search_bm25(args)
+        elif args.search_command == "hybrid":
+            cmd_search_hybrid(args)
+        else:
+            p_search.print_help()
     elif args.command == "save":
         await cmd_save(args)
     elif args.command == "recent":
@@ -1377,7 +1493,7 @@ async def main():
     else:
         parser.print_help()
 
-    if args.command in ("search", "save", "recent"):
+    if args.command in ("save", "recent"):
         from api.async_pg import close_pool
         await close_pool()
 

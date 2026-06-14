@@ -2,22 +2,21 @@
 # Path: imported by — watchdog.py (entry point only)
 """DevForge Watchdog — 통합 서버 모니터링/자동복구 데몬.
 
-MODE=day (관찰형, 60s 주기):
-  - T1+T2 LLM probe (7B :8082, 14B :8083)
-  - :00/:30 chain 타이머 감시
-  - :15/:45 classify 타이머 감시
+  - T1+T2 LLM probe (:8080 reserved, :8082 7B Q8, :8083 14B Q6_K)
+  - day_cycle.sh 파이프라인 감시 (system sync → embed → extract → verify)
+  - night_cycle 타이머 감시 (day 중 kick 생략)
   - 시스템 리소스 (swap, memory, disk)
-  - Day-PRJ 실패 → 7B fix loop
+  - Day pipeline 실패 → :8082 fix loop
 
 MODE=night (능동형, 60s 주기):
-  - T1+T2 LLM probe (현재 night 모델)
-  - Night Debate(30B→14B→N14B) 진도 감시
-  - Phase 5(27B verify) 진도 감시
-  - Phase 6(27B feedback) 진도 감시
+  - T1+T2 LLM probe (night 전용 :8084 27B + 공통)
+  - Night Debate 진도 감시 (night_cycle.py)
+  - Night Verify 진도 감시 (review_consumer.py)
+  - Proxy Audit 진도 감시 (proxy_reviewer.py)
   - 각 phase 실패 → watchdog fix loop
   - 임시 podman 검증 모드 관리
 
-Slack + Telegram heartbeat: 30분 (이모지X, 코드블록 표)
+Slack heartbeat: 30분 (Block Kit in-place)
 """
 
 import argparse
@@ -108,7 +107,7 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
     Mode-aware: night-only timers are NOT kicked during day mode and vice versa.
     """
     night_timers = {"devforge-night-cycle.timer"}
-    day_timers = {"devforge-day-cycle.timer", "devforge-classify.timer"}
+    day_timers = {"devforge-day-cycle.timer"}
 
     for timer in check_all_timers():
         tracker = _state.get(f"timer:{timer['name']}")
@@ -226,8 +225,8 @@ def run_night_checks(dry_run: bool = False) -> dict:
 
     for phase_name, pattern in [
         ("night_cycle", "night_cycle.py"),
-        ("night_verify", "review_consumer.py"),
-        ("verify_feedback", "night.py --phases 5"),
+        ("review_consumer", "review_consumer.py"),
+        ("proxy_reviewer", "proxy_reviewer.py"),
     ]:
         running, pid = check_pipeline(pattern)
         tracker = _state.get(f"pipeline:{phase_name}")
@@ -330,14 +329,14 @@ def _fix_loop_common(pipe: str, llm_port: int):
 
 
 def day_fix_loop():
-    """Day mode: 7B fix loop for day_cycle.py or classify.py failures."""
-    for pipe in ("day_cycle", "classify"):
-        _fix_loop_common(pipe, llm_port=8080)
+    """Day mode: fix loop for day_cycle.py failures (Pod A :8080)."""
+    for pipe in ("day_cycle",):
+        _fix_loop_common(pipe, llm_port=8082)
 
 
 def night_fix_loop():
-    """Night mode: 27B fix loop for pipeline failures."""
-    for pipe in ("night_cycle", "night_verify", "verify_feedback"):
+    """Night mode: fix loop for night pipeline failures (Pod B :8081)."""
+    for pipe in ("night_cycle", "review_consumer", "proxy_reviewer"):
         _fix_loop_common(pipe, llm_port=8081)
 
 

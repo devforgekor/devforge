@@ -27,7 +27,6 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# ── Public API ─────────────────────────────────────────────────────
 
 
 def read_state() -> Dict[str, Any]:
@@ -107,7 +106,6 @@ def _write_atomic(state: dict):
     os.rename(tmp, STATE_FILE)
 
 
-# ── Context Manager ────────────────────────────────────────────────
 
 
 class ExperimentState:

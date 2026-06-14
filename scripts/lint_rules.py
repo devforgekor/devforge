@@ -46,7 +46,6 @@ MODEL_BRAND_PATTERN = re.compile(
 ABBREVIATION_OK_FILES = {
     "scripts/lib/db.py",          # esc_sql alias for backward compat; new callers use escape_sql_string
     "scripts/bench_llm.py",       # esc_sql alias for backward compat
-    "scripts/pipelines/phase2_standalone.py",  # deprecated, pending removal — do not modify
 }
 BANNED_SINGLE_LETTER = {"P", "R", "J"}
 

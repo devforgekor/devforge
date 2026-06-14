@@ -26,14 +26,14 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql, psql_ok, psql_json, esc_sql
+from lib.db import psql, psql_ok, psql_json, esc_sql, get_checkpoint, advance_checkpoint
 from lib.infra.preflight import preflight_checks
 from lib.common import log
 
 EMBED_URL = "http://127.0.0.1:8081/v1/embeddings"
-EMBED_TIMEOUT = 300   # per request
+EMBED_TIMEOUT = 600   # per request (10min for long texts)
 BATCH_LIMIT = 50
-MAX_CYCLE = 600       # 10min max for embed phase
+MAX_CYCLE = 86400     # 24hr max for full 8.6K turn embed (avg ~7s/tok)
 
 
 
@@ -42,7 +42,7 @@ def get_unembedded_turns(limit: int):
     """Return turns created after checkpoint without f16 embedding, ordered by created_at."""
     ckpt = get_checkpoint("embed_batch")
     rows = psql_json(
-        f"SELECT id, user_turn, text, created_at::text "
+        f"SELECT id, user_turn_clean, text_clean, created_at::text "
         f"FROM turns "
         f"WHERE created_at > '{esc_sql(ckpt)}'::timestamptz "
         f"  AND embedding_f16 IS NULL "
@@ -94,8 +94,9 @@ def main():
     t_start = time.monotonic()
     turns = get_unembedded_turns(limit)
     if not turns:
-        log("  [ok] No new turns to embed")
-        log(f"  checkpoint={get_checkpoint("embed_batch")[:19]}")
+        ckpt_val = get_checkpoint("embed_batch")
+        log(f"  [ok] No new turns to embed")
+        log(f"  checkpoint={ckpt_val[:19] if ckpt_val else 'N/A'}")
         return
 
     log(f"  Found {len(turns)} unembedded turns (limit={limit})")
@@ -108,8 +109,22 @@ def main():
             log(f"  [timeout] cycle limit ({MAX_CYCLE}s) — {i-1} done, checkpoint not advanced past {i-1}")
             break
 
-        # Combine user_turn + text for embedding
-        embed_text = f"{turn['user_turn']} {turn['text']}"
+        # Combine cleaned user_turn + text for embedding
+        embed_text = f"{turn['user_turn_clean']} {turn['text_clean']}".strip()
+
+        # Skip empty turns — embed API rejects empty input with 400
+        if not embed_text:
+            log(f"  [{i}/{len(turns)}] SKIP (empty text) {turn['created_at'][:19]}")
+            n_ok += 1
+            last_created = turn['created_at']
+            continue
+
+        # Truncate to 8192 chars (~2048 tok). Qwen3-Embedding-8B supports 32K tokens,
+        # but 99% of our turns are under 11827 chars. This catches everything reasonable
+        # while still handling outliers gracefully.
+        if len(embed_text) > 8192:
+            embed_text = embed_text[:8192]
+
         if dry_run:
             log(f"  [{i}/{len(turns)}] DRY-RUN: {turn['created_at'][:19]} ({len(embed_text)} chars)")
             n_ok += 1

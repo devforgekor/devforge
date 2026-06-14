@@ -165,7 +165,7 @@ def build_status():
     msg = (f"*[Experiment Monitor]* 진행 보고\n"
            f"• Runner: PID {pid}, {runner_elapsed} 경과\n"
            f"• prj_cycle: {'ALIVE' if prj_alive else 'DEAD'} ({prj_elapsed})\n"
-           f"• night.py: {'ALIVE' if night_alive else 'N/A'}\n"
+           f"• night_cycle.py: {'ALIVE' if night_alive else 'N/A'}\n"
            f"• {phase_summary}\n"
            f"• Pod A(reserved): {pod_a_cpu}% CPU | Pod B: {pod_b_cpu}% CPU\n"
            f"• Memory: {mem} | Swap: {swap}\n"
