@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from lib.watchdog.config import SLACK_SECRETS, SLACK_CHANNEL, ALERT_DEDUP_SEC
+from .messenger import log_message
 
 KST = timezone(timedelta(hours=9))
 
@@ -229,6 +230,7 @@ def _alert_color(state: str) -> str:
 
 
 def send_alert(component: str, state: str, detail: str) -> None:
+    log_message("watchman", "operator", "alert", f"{component} is {state}", detail)
     """State change alert with colored attachment."""
     now_kst = kst_now()
     _slack_api("chat.postMessage", {
@@ -245,6 +247,7 @@ def send_alert(component: str, state: str, detail: str) -> None:
 
 
 def send_recovery(component: str, detail: str) -> None:
+    log_message("watchman", "operator", "recovery", f"{component} recovered", detail)
     """Recovery notice with green attachment."""
     now_kst = kst_now()
     _slack_api("chat.postMessage", {

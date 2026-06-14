@@ -85,8 +85,8 @@ modules:
         existing phases.
     full_pipeline.sh:
       status: unknown
-      purpose: "DevForge Full Background Pipeline \u2014 Verify Compare \u2192 Night\
-        \ Debate \u2192 PRJ Test"
+      purpose: "DevForge Full Background Pipeline \u2014 Qwen Q8 \u2192 NextCoder\
+        \ Q8 verify \u2192 night_debate \u2192 PRJ"
     gemini_pool.py:
       status: production
       purpose: "gemini_pool.py \u2014 Async Gemini API key pool with SQLite-backed\
@@ -251,6 +251,9 @@ modules:
       status: experimental
       purpose: "Test execution sandbox \u2014 Podman read-only tmpfs for safe code\
         \ execution."
+    text_cleaner.py:
+      status: experimental
+      purpose: Korean text cleaner using Kiwi morphological analyzer.
     token_budget.py:
       status: production
       purpose: Token budget manager for P-R-J pipeline context allocation.
@@ -486,7 +489,14 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Web search \u2014 Brave Search API manager."
+      purpose: "Search \u2014 web search (Brave) + local FTS5 + hybrid (BM25 + pgvector)."
+    hybrid.py:
+      status: experimental
+      purpose: "Hybrid search \u2014 Reciprocal Rank Fusion (RRF) of FTS5 BM25 + pgvector\
+        \ ANN."
+    local_index.py:
+      status: experimental
+      purpose: "SQLite FTS5 search index \u2014 Korean-aware BM25 via Kiwi terms."
     manager.py:
       status: production
       purpose: Multi-API web search manager with intent-based routing and key rotation.
@@ -643,9 +653,16 @@ modules:
     day_verify.py:
       status: experimental
       purpose: "Day Verify Pipeline \u2014 14B verify + category on Pod B only."
+    day_verify_q8test.py:
+      status: experimental
+      purpose: "Day Verify Pipeline \u2014 14B verify + category on Pod B only."
     embed_batch.py:
       status: experimental
       purpose: "Embed Batch Pipeline \u2014 f16 embedding via Pod B llama-server."
+    embed_progress_slack.py:
+      status: experimental
+      purpose: "Slack embed progress reporter \u2014 send Qwen 8B embedding status\
+        \ to Slack every 30min."
     evaluation_experiment_pipeline.py:
       status: production
       purpose: evaluation_experiment_pipeline.py

@@ -35,6 +35,7 @@ from .recovery import (
     graduated_recover, recover_service, kill_stale_process,
 )
 from .state import WatchdogState
+from .messenger import log_message, get_undelivered
 from lib.experiment_state import (
     cleanup_stale, is_experiment_active, is_experiment_stale,
     read_state as read_experiment_state,
@@ -374,6 +375,10 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
             cleanup_stale()
 
         results = {}
+        if mode == "day":
+            msgs = get_undelivered("operator")
+            for m in msgs:
+                log(f"[TO_OPERATOR] {m['type']}: {m['content']}")
         try:
             if mode == "night":
                 results = run_night_checks(dry_run=dry_run)

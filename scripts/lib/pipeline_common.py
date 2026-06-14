@@ -6,6 +6,10 @@
 import hashlib, json, os, subprocess, sys, time, uuid, urllib.request
 from datetime import datetime, timezone
 from lib.common import log, timestamp
+try:
+    from lib.watchdog.messenger import log_message
+except ImportError:
+    def log_message(*args, **kwargs): pass
 from pathlib import Path
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
