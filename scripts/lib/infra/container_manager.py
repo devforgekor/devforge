@@ -100,12 +100,12 @@ def start_pod_a(timeout=120):
                    capture_output=True, timeout=60)
     return wait_health(8080, timeout)
 
-def start_pod_b(timeout=120):
-    """Start Pod B (extractor:8082)."""
-    log("  Starting Pod B (extractor:8082)...")
+def start_pod_b(port=8082, timeout=120):
+    """Start Pod B with specified port."""
+    log(f"  Starting Pod B (port:{port})...")
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
                    capture_output=True, timeout=60)
-    return wait_health(8082, timeout)
+    return wait_health(port, timeout)
 
 def recover_and_restart(attempt=1):
     """OOM/failure recovery + day mode restart.
