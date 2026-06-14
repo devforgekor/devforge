@@ -459,7 +459,7 @@ def main():
         "(type, source, title, summary, body, run_id, exec_status) "
         "VALUES ("
         f"'night_review', 'night_cycle', 'Night Debate: {tag}', "
-        f"night_verify={night_verify_verdict} confidence={night_verify_confidence}', "
+        f"'night_verify={night_verify_verdict} confidence={night_verify_confidence}', "
         f"'{body_json}'::jsonb, '{run_id}', 'DONE'"
         ")"
     )
