@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
+EMBEDDING_PROTECT_FILE = '/opt/ai_data/scripts/EMBEDDING_IN_PROGRESS'
 TIMEOUT = 7200
 
 MODEL_METADATA = {
@@ -212,8 +213,16 @@ def _check_container_health(port, label):
 NIGHT_MODELS = frozenset({"proposer", "reflector", "judge", "verifier"})
 
 
+def _is_embedding_protected() -> bool:
+    """Check if embedding backfill is currently protected."""
+    return os.path.exists(EMBEDDING_PROTECT_FILE)
+
+
 def _kill_stray_pasta(ports):
     for port in ports:
+        if str(port) == '8081' and _is_embedding_protected():
+            log("  [PROTECT] skipping stray kill for :8081 (embedding in progress)")
+            continue
         try:
             r = subprocess.run(
                 ["ss", "-tlnp", f"sport = :{port}"],
@@ -232,11 +241,13 @@ def kill_all(night=False, dry_run=False):
         log("  [DRY] kill_all() skipped")
         return
     if night:
-        log("  systemctl stop (night mode — Pod B only)...")
-        subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
-                       capture_output=True, timeout=30)
-        subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
-                       capture_output=True, timeout=10)
+        if _is_embedding_protected():
+            log("  [PROTECT] skipping Pod B stop (night mode) - embedding protected")
+        else:
+            subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
+                           capture_output=True, timeout=30)
+            subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
+                           capture_output=True, timeout=10)
         # Night: stop background services that could trigger OOM with heavy models
         for svc in ("devforge-day-cycle.service", "devforge-day-cycle.timer",
                      "devforge-watchdog.service", "devforge-night-cycle.service",
@@ -245,13 +256,15 @@ def kill_all(night=False, dry_run=False):
             subprocess.run(["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10)
         _kill_stray_pasta(("8081", "8082", "8083", "8084"))
     else:
-        log("  systemctl stop containers...")
-        subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
-                       capture_output=True, timeout=30)
+        if _is_embedding_protected():
+            log("  [PROTECT] Pod B stop bypassed (day mode) - embedding protected")
+        else:
+            subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
+                           capture_output=True, timeout=30)
+            subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
+                           capture_output=True, timeout=10)
         subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
                        capture_output=True, timeout=30)
-        subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
-                       capture_output=True, timeout=10)
         subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
                        capture_output=True, timeout=10)
         _kill_stray_pasta(("8080", "8081", "8082", "8083", "8084"))
@@ -342,7 +355,7 @@ def stop_pod_a(dry_run=False):
     subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=30)
     subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
-                   capture_output=True, timeout=10)
+                   capture_output=True, timeout=30)
     _kill_stray_pasta(("8080",))
 
 
