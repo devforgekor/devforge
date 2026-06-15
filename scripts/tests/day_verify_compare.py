@@ -11,8 +11,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import call_llm
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 
 # ── Models ─────────────────────────────────────────────────────
 MODELS = [
@@ -245,6 +244,8 @@ def print_bar(score):
 
 # ── Main ───────────────────────────────────────────────────────
 
+TEST = test_setup("day_verify_compare", "Pod A(7B reviewer) 5-role x 3-model comprehensive comparison")
+
 print("=" * 70)
 print("  [Pod A 7B] 5개 역할 × 3개 모델 종합 비교")
 print(f"  {len(TASKS)} tasks, {len(MODELS)} models")
@@ -333,3 +334,4 @@ for ti, task in enumerate(TASKS):
 restore_default()
 print(f"\n  Pod A 복원 완료 (Coder Q8_0)")
 print(f"{'='*70}")
+test_complete("verification comparison done")

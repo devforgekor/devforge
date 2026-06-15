@@ -13,8 +13,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.llm.endpoint import call_llm_endpoint
+from lib.test_common import test_setup, test_complete, log
 
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 RESULT_DIR = Path("/var/tmp/comparison_tests")
@@ -173,6 +174,7 @@ def evaluate_output(task_desc: str, output: dict, system: str, task_id: int, api
 
 
 def main():
+    TEST = test_setup("eval_comparison", "DeepSeek Pro evaluation of 12-run comparison test results")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if not DEEPSEEK_KEY:
@@ -251,6 +253,7 @@ def main():
         print(f"  {key:<25} avg={avg:.1f}  ({len(scores)} runs)")
 
     print(f"\nFull results: {out_path}")
+    test_complete("comparison done")
 
 
 if __name__ == "__main__":

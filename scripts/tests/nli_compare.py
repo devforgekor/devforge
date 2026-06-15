@@ -11,8 +11,7 @@ from pipelines.extract import (
     _parse_json, _cosine_faithfulness, SYSTEM_DAY_EXTRACT,
     _check_faithfulness, COSINE_FAITHFUL, COSINE_UNFAITHFUL,
 )
-from lib.llm_client import call_llm
-from lib.db import psql_json
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, psql_json
 from minicheck.minicheck import MiniCheck
 
 TURN_IDS = [
@@ -134,6 +133,7 @@ def print_header(s):
     print(f"{'='*70}")
 
 # ── Main ────────────────────────────────────────────────────────
+TEST = test_setup("nli_compare", "MiniCheck vs 7B LLM NLI comparison test")
 print_header("MiniCheck vs 7B LLM NLI Comparison")
 print(f"  Extractor: Qwen2.5-Coder-7B-Instruct.Q8_0 (Pod B :8082)")
 print(f"  7B NLI:    Qwen2.5-Coder-7B-Instruct.Q8_0 (Pod A :8082, model=day_verify)")
@@ -214,3 +214,4 @@ print(f"    Total: {round(llm_elapsed, 1)}s")
 print()
 print(f"  Speed ratio: 7B is {round((llm_elapsed/mc_elapsed) if mc_elapsed else 0, 1)}x slower than MiniCheck")
 print(f"{'='*70}")
+test_complete("NLI comparison done")

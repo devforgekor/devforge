@@ -6,6 +6,8 @@
 import json, os, signal, subprocess, sys, time, urllib.request
 from datetime import datetime, timezone, timedelta
 
+from lib.test_common import test_setup, test_heartbeat, test_complete, log
+
 SERVER_DIR = "/opt/projects/server"
 EXPER_DIR = os.path.join(SERVER_DIR, "data", "experiment")
 RUNNER_PID_FILE = os.path.join(EXPER_DIR, "exp_runner.pid")
@@ -175,6 +177,7 @@ def build_status():
     return msg
 
 def main():
+    TEST = test_setup("experiment_monitor", "Background Slack status reporter for long experiments")
     # 단독 실행 시: 무한루프 돌며 30분마다 Slack 전송
     interval = 1800  # 30분
     print(f"[Experiment Monitor] 시작됨. {interval//60}분 간격 Slack 보고.", flush=True)
@@ -190,6 +193,7 @@ def main():
             slack_send(msg)
             slack_send("*[Experiment Monitor]* Runner 종료 감지 — 모니터 종료합니다.")
             print("Runner dead, monitor exiting.", flush=True)
+            test_complete("runner_dead")
             return
         slack_send(msg)
         # 모든 Phase 완료 체크
@@ -199,6 +203,7 @@ def main():
             slack_send(msg)
             slack_send("*[Experiment Monitor]* 5개 Phase 모두 완료! 최종 보고서를 확인하세요.")
             print("All 5 phases done, monitor exiting.", flush=True)
+            test_complete("all_phases_complete")
             return
 
 if __name__ == "__main__":

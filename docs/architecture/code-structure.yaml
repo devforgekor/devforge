@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-14'
+  updated: '2026-06-15'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -47,42 +47,9 @@ modules:
     day_cycle.sh:
       status: unknown
       purpose: "day_cycle.sh \u2014 hourly cycle (:00)"
-    day_model_test.py:
-      status: experimental
-      purpose: "14B Q8_0 \uB2E8\uC77C extract + MiniCheck hallucination \uAC80\uC99D\
-        ."
-    day_model_test_direct.py:
-      status: experimental
-      purpose: day_model_test_direct.py
-    day_verify_compare.py:
-      status: experimental
-      purpose: "Pod A(7B reviewer) \uBAA8\uB378 \uBE44\uAD50: 5\uAC1C \uC5ED\uD560\
-        \ \uC804\uCCB4 \uD14C\uC2A4\uD2B8."
-    day_verify_retry.py:
-      status: experimental
-      purpose: "Coder Q8_0\uB9CC classify-P / classify-J / edge cases \uC7AC\uD14C\
-        \uC2A4\uD2B8 (timeout=300s)."
     deepseek_web.py:
       status: experimental
       purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
-    embed_bench.py:
-      status: experimental
-      purpose: "Embedding Model Benchmark \u2014 compare faithfulness accuracy, speed,\
-        \ memory."
-    eval_comparison.py:
-      status: experimental
-      purpose: DeepSeek Pro evaluation of 12-run comparison test results.
-    experiment_monitor.py:
-      status: experimental
-      purpose: experiment_monitor.py
-    extract_compare.py:
-      status: experimental
-      purpose: "\uB3D9\uC77C 5\uAC1C turn\uC73C\uB85C \uCD94\uCD9C \uC815\uD655\uB3C4\
-        /\uC18D\uB3C4 \uBE44\uAD50 + MiniCheck NLI \uAC80\uC99D"
-    finalize_pipeline.py:
-      status: experimental
-      purpose: Finalize E2E 10-sample pipeline. Skip failed feedback loop; summarize
-        existing phases.
     full_pipeline.sh:
       status: unknown
       purpose: "DevForge Full Background Pipeline \u2014 Qwen Q8 \u2192 NextCoder\
@@ -107,10 +74,6 @@ modules:
       status: production
       purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
         \ documents."
-    model_comparison_test.py:
-      status: experimental
-      purpose: "14B Q4_K_M 3\uC885 \uBE44\uAD50: \uC2E4\uC81C \uD30C\uC774\uD504\uB77C\
-        \uC778 extract/verify \uD328\uD134\uC73C\uB85C \uD3C9\uAC00."
     motd_gen.py:
       status: production
       purpose: "motd_gen.py \u2014 lightweight MOTD for SSH login. Reads state.yaml\
@@ -118,10 +81,6 @@ modules:
     night_cycle.sh:
       status: unknown
       purpose: "night_cycle.sh \u2014 DevForge nightly pipeline (KST 03:00 / UTC 18:00)"
-    nli_compare.py:
-      status: experimental
-      purpose: "MiniCheck(flan-t5-large, 770M) vs Qwen2.5-Coder-7B NLI \uBE44\uAD50\
-        ."
     observer.py:
       status: production
       purpose: "DevForge Observer Agent \u2014 interactive CLI agent with tool calling."
@@ -132,14 +91,6 @@ modules:
     patch_elf_note.py:
       status: experimental
       purpose: Re-apply NOTE phdr patch to Copilot CLI ELF binary.
-    prj_ground_truth_test.py:
-      status: experimental
-      purpose: "Ground truth \uAE30\uBC18 P\u2192R\u2192J day \uBD84\uB958 3\uBAA8\
-        \uB378 \uC815\uBC00 \uD3C9\uAC00."
-    prj_model_test.py:
-      status: experimental
-      purpose: "P(Proposer)/R(Refuter)/J(Judge) \uC5ED\uD560\uBCC4 \uCD94\uCC9C \uBAA8\
-        \uB378 \uAC80\uC99D."
     review_pipeline_3model.py:
       status: production
       purpose: "3-Model Review Pipeline \u2014 Code Review Pipeline."
@@ -162,24 +113,14 @@ modules:
     telegram_send.py:
       status: experimental
       purpose: telegram_send.py --- Send files or text to your Telegram chat.
-    test_night_prj_eval.py:
-      status: experimental
-      purpose: "Ground truth \uAE30\uBC18 night P-R-J \uD3C9\uAC00. P=30B(P), R=14B(R),\
-        \ J=N14B Q6."
     test_pipeline_e2e.py:
       status: deprecated
       purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
         \ \u2192 night_review."
-    test_progress_watcher.py:
-      status: experimental
-      purpose: test_progress_watcher.py
     test_r_role_dsv2.sh:
       status: unknown
       purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
         \uC640 \uBE44\uAD50)"
-    transform_prj.py:
-      status: experimental
-      purpose: Transform prj_cycle.py for experiment phases.
     turn_watcher.py:
       status: production
       purpose: "turn_watcher.py \u2014 real-time session transcript \u2192 PostgreSQL."
@@ -568,7 +509,7 @@ modules:
       purpose: "Auto-fix loop \u2014 error \uAC10\uC9C0 \u2192 LLM \uC218\uC815 \uC694\
         \uCCAD \u2192 \uC784\uC2DC podman \uAC80\uC99D \u2192 \uC801\uC6A9."
     messenger.py:
-      status: experimental
+      status: production
       purpose: "Watchdog Messenger \u2014 \uC815\uBCF4 \uC911\uAC1C \uC2DC\uC2A4\uD15C\
         ."
     notifier.py:
@@ -640,9 +581,6 @@ modules:
     day_cycle.py:
       status: experimental
       purpose: 'Day-time chain: extract -> MCP enrich (Pod B :8082, checkpoint-based).'
-    day_cycle_pipeline.py:
-      status: experimental
-      purpose: Day cycle pipeline test harness.
     day_extract.py:
       status: experimental
       purpose: "Day Extract Pipeline \u2014 extract \u2192 MCP enrich on Pod B (7B:8082)."
@@ -657,23 +595,12 @@ modules:
     day_verify.py:
       status: experimental
       purpose: "Day Verify Pipeline \u2014 14B verify + category on Pod B only."
-    day_verify_q8test.py:
-      status: experimental
-      purpose: "Day Verify Pipeline \u2014 14B verify + category on Pod B only."
     embed_batch.py:
       status: experimental
       purpose: "Embed Batch Pipeline \u2014 f16 embedding via Pod B llama-server."
-    embed_progress_slack.py:
-      status: experimental
-      purpose: "Slack embed progress reporter \u2014 send Qwen 8B embedding status\
-        \ to Slack every 30min."
     evaluation_experiment_pipeline.py:
       status: production
       purpose: evaluation_experiment_pipeline.py
-    exp_runner.py:
-      status: experimental
-      purpose: "5-Phase (2x2+baseline) Experiment Runner \u2014 \uBC31\uADF8\uB77C\
-        \uC6B4\uB4DC \uC790\uB3D9 \uC2E4\uD589."
     extract.py:
       status: production
       purpose: Extract Pipeline - checkpoint-based perpetual fact extraction.
@@ -719,10 +646,6 @@ modules:
     review_consumer.py:
       status: production
       purpose: "review_consumer.py \u2014 27B production final verify."
-    rubric.py:
-      status: experimental
-      purpose: "DevForge Rubric Experiment \u2014 Round 1 (no rubric) vs Round 2 (with\
-        \ rubric)."
     worklog_generation_pipeline.py:
       status: production
       purpose: worklog_generation_pipeline.py
@@ -730,6 +653,82 @@ modules:
       status: production
       purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: 7B draft\
         \ \u2192 Python verify \u2192 30B review."
+- path: scripts/tests/
+  purpose: Test Scripts
+  files:
+    __init__.py:
+      status: production
+      purpose: Package marker for scripts/tests/.
+    day_cycle_pipeline.py:
+      status: experimental
+      purpose: Day cycle pipeline test harness (embed \u2192 extract \u2192 MCP enrich \u2192 verify).
+    day_model_test.py:
+      status: experimental
+      purpose: "14B Q8_0 extract + MiniCheck verify speed/accuracy test."
+    day_model_test_direct.py:
+      status: experimental
+      purpose: Manual 14B single-extract test with direct container start.
+    day_verify_compare.py:
+      status: experimental
+      purpose: "day_verify(reviewer) \u2014 3-model comprehensive comparison."
+    day_verify_q8test.py:
+      status: experimental
+      purpose: "Day Verify Q8 test \u2014 14B verify + category on Pod B only."
+    day_verify_retry.py:
+      status: experimental
+      purpose: "Coder Q8_0 verify retry with longer timeout."
+    embed_bench.py:
+      status: experimental
+      purpose: Embedding model benchmark \u2014 faithfulness accuracy, speed, memory.
+    embed_progress_slack.py:
+      status: experimental
+      purpose: "Slack embed progress reporter \u2014 1\uD68C\uC131 Qwen 8B embedding Slack \uBCF4\uACE0."
+
+    embed_runner.py:
+      status: experimental
+      purpose: Full embed runner \u2014 continuous embed_batch.py loop with watchdog progress.
+    embed_runner.sh:
+      status: experimental
+      purpose: Shell entrypoint for embed_runner.py.
+    eval_comparison.py:
+      status: experimental
+      purpose: "DeepSeek Pro evaluation of 12-run comparison test results."
+    experiment_monitor.py:
+      status: experimental
+      purpose: Manual background experiment status reporter to Slack.
+    exp_runner.py:
+      status: experimental
+      purpose: "5-Phase (2x2+baseline) experiment runner \u2014 background auto execution."
+    extract_compare.py:
+      status: experimental
+      purpose: "3-model extract comparison: 3B Q8_0 vs 7B Q4_K_M vs 7B Q8_0."
+    finalize_pipeline.py:
+      status: experimental
+      purpose: Pipeline finalization and cleanup utilities.
+    model_comparison_test.py:
+      status: experimental
+      purpose: "14B Q4_K_M x3 comparison \u2014 Extract + NLI + MCP + Verify 4-phase."
+    nli_compare.py:
+      status: experimental
+      purpose: "MiniCheck vs 7B LLM NLI comparison test."
+    prj_ground_truth_test.py:
+      status: experimental
+      purpose: "P/R/J ground-truth evaluation (Pod B swap, 4 cores dedicated)."
+    prj_model_test.py:
+      status: experimental
+      purpose: "P/R/J 3-model comparison \u2014 Mistral(P) vs Qwen2.5-7B(R) vs Llama 3.1 8B(J)."
+    rubric.py:
+      status: experimental
+      purpose: "Rubric experiment \u2014 Round 1 (no rubric) vs Round 2 (with rubric)."
+    test_night_prj_eval.py:
+      status: experimental
+      purpose: "Night PRJ GT evaluation \u2014 P=30B Q4_K_M \u2192 R=14B Q4_K_M \u2192 N14B Q6_K(J)."
+    test_progress_watcher.py:
+      status: experimental
+      purpose: Manual background watcher for 14B comparison test.
+    transform_prj.py:
+      status: experimental
+      purpose: PRJ data transformation library.
 - path: scripts/proxies/
   purpose: Proxies
   files:

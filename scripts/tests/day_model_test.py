@@ -10,8 +10,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import call_llm
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 from minicheck.minicheck import MiniCheck
 
 NLI = MiniCheck(model_name="flan-t5-large", cache_dir="/opt/ai_data/models")
@@ -260,4 +259,10 @@ def score_test(findings, case_id, hallu_count, source_text):
 
 
 if __name__ == "__main__":
-    run_test()
+    TEST = test_setup("day_model_test", "14B Q8_0 extract + MiniCheck test")
+    try:
+        run_test()
+        test_complete("success")
+    except Exception as e:
+        test_complete(f"error: {e}")
+        raise

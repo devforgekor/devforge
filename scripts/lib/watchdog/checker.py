@@ -17,6 +17,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from lib.infra.health_checks import svc_active
+from lib.db import psql_json
 from lib.watchdog.config import (
     DAY_PORTS, SWAP_WARN_MB, SWAP_CRIT_MB, MEM_WARN_PCT, MEM_CRIT_PCT,
     TIMER_TARGETS, LLM_TARGETS, SERVICE_TARGETS, MODE_FILE,
@@ -239,12 +240,20 @@ def check_pipeline(name: str) -> tuple[bool, int]:
 
 
 def check_heartbeats() -> list[dict]:
-    """Check all registered worker heartbeats.
+    """Check all registered worker + ad-hoc test heartbeats.
+
+    Registered workers: from HEARTBEAT_WORKERS config dict.
+    Ad-hoc test workers: discovered in DB with pulse_id LIKE 'heartbeat_test_%'
+    that are not in HEARTBEAT_WORKERS. Uses default 1800s stale threshold.
 
     Returns list of alert dicts: [{worker, alive, last_beat, age_sec}]
     """
     results = []
+
+    # 1. Registered workers (from HEARTBEAT_WORKERS config)
+    known_workers = set()
     for worker, max_age in HEARTBEAT_WORKERS.items():
+        known_workers.add(worker)
         alive, last_beat = check_heartbeat(worker, max_age_seconds=max_age)
         if not alive:
             age_str = ""
@@ -261,6 +270,41 @@ def check_heartbeats() -> list[dict]:
                 "last_beat": last_beat or "never",
                 "age_sec": age_str,
             })
+
+    # 2. Ad-hoc test heartbeats (discovered in DB)
+    # Test scripts register heartbeat("test_*") at startup.
+    # Watchdog discovers them dynamically without any config entry.
+    try:
+        adhoc = psql_json(
+            "SELECT pulse_id FROM watchman_pulses "
+            "WHERE pulse_id LIKE 'heartbeat_test_%' "
+            "  AND status = 'IN_PROGRESS' "
+            "  AND created_at < now() - interval '1800 seconds'"
+        )
+        for row in adhoc:
+            worker = row["pulse_id"].replace("heartbeat_", "", 1)
+            if worker in known_workers:
+                continue  # already checked above
+            known_workers.add(worker)
+            alive, last_beat = check_heartbeat(worker)
+            if not alive:
+                age_str = ""
+                if last_beat:
+                    try:
+                        last = datetime.fromisoformat(last_beat.replace("Z", "+00:00"))
+                        age = (datetime.now(timezone.utc) - last).total_seconds()
+                        age_str = f"{age:.0f}s"
+                    except Exception:
+                        age_str = "unknown"
+                results.append({
+                    "worker": worker,
+                    "alive": False,
+                    "last_beat": last_beat or "never",
+                    "age_sec": age_str,
+                })
+    except Exception:
+        pass  # best-effort — registered workers still checked
+
     return results
 
 

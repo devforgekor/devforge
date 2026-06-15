@@ -31,6 +31,8 @@ Returns exit code 0 on success, 1 if any replacement failed.
 
 import sys
 
+from lib.test_common import test_setup, test_complete
+
 
 def apply_replacements(src, replacements):
     """Apply (label, old, new) replacements, warning on mismatch."""
@@ -204,6 +206,7 @@ def _feedback_on(src):
 # ── Main ─────────────────────────────────────────────────────────
 
 def main():
+    TEST = test_setup("transform_prj", "Transform prj_cycle.py for experiment phases")
     flags = set(sys.argv[1:])
 
     structural = "--structural" in flags
@@ -239,6 +242,7 @@ def main():
     # else: default — feedback stays ON (original code)
 
     sys.stdout.write(src)
+    test_complete("transform done")
 
 
 if __name__ == "__main__":

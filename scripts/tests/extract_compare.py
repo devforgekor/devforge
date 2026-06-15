@@ -12,8 +12,7 @@ from pipelines.extract import (
     _parse_json, _cosine_faithfulness, SYSTEM_DAY_EXTRACT,
     COSINE_FAITHFUL, COSINE_UNFAITHFUL,
 )
-from lib.llm_client import call_llm
-from lib.db import psql_json
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, psql_json
 
 # NLI model (loaded once)
 from minicheck.minicheck import MiniCheck
@@ -120,6 +119,7 @@ def extract_turn(turn):
     return result
 
 # ── Main ──
+TEST = test_setup("extract_compare", "3-model comparison with MiniCheck NLI verification")
 model_file = os.environ.get('MODEL_FILE', '?')
 print(f"{'='*70}")
 print(f"Model: {model_file}  |  NLI=MiniCheck(flan-t5-large)  |  Pod A NLI=OFF")
@@ -176,3 +176,4 @@ if n > 0:
           f"{all_stats['facts']/n:.1f} facts/turn, "
           f"NLI={all_stats['nli_time']:.0f}s total (on {nli_total} calls)")
 print(f"{'='*70}")
+test_complete("extract comparison done")

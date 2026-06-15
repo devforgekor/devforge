@@ -29,7 +29,7 @@ from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.llm_client import call_llm
 from lib.infra.preflight import preflight_checks
 from lib.token_budget import TokenBudget
-from lib.common import log
+from lib.test_common import test_setup, test_heartbeat, test_complete, log
 
 BATCH_LIMIT = 50
 MAX_BUDGET = 18000       # 25 minutes
@@ -496,6 +496,7 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
 
 
 def main() -> None:
+    TEST = test_setup("day_verify_q8test", "Day verify 14B Q8 test")
     preflight_checks("day_verify.py", required_ports={8083})
     import argparse
     parser = argparse.ArgumentParser(description="Day Verify — 14B verify + category")
@@ -505,6 +506,7 @@ def main() -> None:
     args = parser.parse_args()
 
     day_verify_pipeline(limit=args.limit, dry_run=args.dry_run, model_label=args.model)
+    test_complete("success")
     sys.exit(0)
 
 

@@ -22,10 +22,11 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
+from lib.protection import protected_ports, active_contexts
+
 
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
-EMBEDDING_PROTECT_FILE = '/opt/ai_data/scripts/EMBEDDING_IN_PROGRESS'
 TIMEOUT = 7200
 
 MODEL_METADATA = {
@@ -219,16 +220,11 @@ def _check_container_health(port, label):
 # Models requiring night-mode isolation (heavy, background timer conflict -> OOM risk)
 NIGHT_MODELS = frozenset({"proposer", "reflector", "judge", "verifier"})
 
-
-def _is_embedding_protected() -> bool:
-    """Check if embedding backfill is currently protected."""
-    return os.path.exists(EMBEDDING_PROTECT_FILE)
-
-
 def _kill_stray_pasta(ports):
+    _prot_ports = protected_ports()
     for port in ports:
-        if str(port) == '8081' and _is_embedding_protected():
-            log("  [PROTECT] skipping stray kill for :8081 (embedding in progress)")
+        if int(port) in _prot_ports:
+            log(f"  [PROTECT] skipping stray kill for :{port} (protected)")
             continue
         try:
             r = subprocess.run(
@@ -247,9 +243,11 @@ def kill_all(night=False, dry_run=False):
     if dry_run:
         log("  [DRY] kill_all() skipped")
         return
+    _ctx = active_contexts()
+    _ctx_protected = bool(_ctx)
     if night:
-        if _is_embedding_protected():
-            log("  [PROTECT] skipping Pod B stop (night mode) - embedding protected")
+        if _ctx_protected:
+            log(f"  [PROTECT] skipping Pod B stop — active: {_ctx}")
         else:
             subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
                            capture_output=True, timeout=30)
@@ -263,8 +261,8 @@ def kill_all(night=False, dry_run=False):
             subprocess.run(["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10)
         _kill_stray_pasta(("8081", "8082", "8083", "8084"))
     else:
-        if _is_embedding_protected():
-            log("  [PROTECT] Pod B stop bypassed (day mode) - embedding protected")
+        if _ctx_protected:
+            log(f"  [PROTECT] Pod B stop bypassed — active: {_ctx}")
         else:
             subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
                            capture_output=True, timeout=30)

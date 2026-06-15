@@ -21,6 +21,8 @@ Design (2x2 factorial + baseline):
 import json, os, signal, subprocess, sys, time
 from datetime import datetime, timezone
 
+from lib.test_common import test_setup, test_heartbeat, test_complete, log
+
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
@@ -180,6 +182,7 @@ def run_experiment(phases):
 
 
 def main():
+    TEST = test_setup("exp_runner", "5-Phase (2x2+baseline) Experiment Runner")
     from lib.infra.preflight import preflight_checks
     preflight_checks("exp_runner.py")
     phases = [0, 1, 2, 3, 4]
@@ -223,6 +226,7 @@ def main():
         for phase in phases:
             log(f"  Phase {phase}: {os.path.join(EXPER_DIR, f'phase{phase}_metrics.json')}")
             log(f"  Log: {os.path.join(EXPER_DIR, f'phase{phase}_output.log')}")
+        test_complete("experiment done")
     finally:
         _restart_services()
 

@@ -4,6 +4,8 @@
 "14B Test Progress Watcher — reads test log, sends Slack updates."
 import json, os, re, sys, time, urllib.request
 
+from lib.test_common import test_setup, test_heartbeat
+
 LOG_PATH = "/tmp/14b_test1_10axis.log"
 RESULTS_PATH = "/tmp/14b_comparison_results.json"
 SLACK_TOKEN = None
@@ -133,6 +135,7 @@ def format_message(results):
 
 
 # Main loop
+TEST = test_setup("test_progress_watcher", "Background watcher for 14B comparison test")
 print(f"Watcher started. Monitoring {LOG_PATH}")
 time.sleep(30)  # Let test boot up
 

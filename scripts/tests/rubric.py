@@ -26,8 +26,8 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.infra.preflight import preflight_checks
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm
 from lib.db import psql_ok
-from lib.llm_client import call_llm
 
 # ── Constants ────────────────────────────────────────────────────────────
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
@@ -588,6 +588,7 @@ def run_experiment(rounds: Optional[List[int]] = None):
 
 
 def main():
+    TEST = test_setup("rubric", "Round 1 (no rubric) vs Round 2 (with rubric) comparison")
     preflight_checks("rubric.py")
     ap = argparse.ArgumentParser()
     ap.add_argument("--round", type=int, choices=[1, 2])
@@ -608,6 +609,7 @@ def main():
         run_experiment(rounds=[args.round])
     else:
         run_experiment()
+    test_complete("rubric experiment done")
 
 
 if __name__ == "__main__":

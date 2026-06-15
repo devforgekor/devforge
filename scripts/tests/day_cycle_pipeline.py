@@ -19,6 +19,7 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.infra.preflight import preflight_checks
+from lib.test_common import test_setup, test_heartbeat, test_complete
 
 def log(msg: str) -> None:
     print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -259,6 +260,7 @@ def run_test(limit: int, runs: int) -> None:
 
 
 def main() -> None:
+    TEST = test_setup("day_cycle_pipeline", "Day cycle pipeline test harness")
     parser = argparse.ArgumentParser(description="Day Cycle Pipeline Test")
     parser.add_argument("--test", action="store_true", help="Run in test mode with scoring")
     parser.add_argument("--limit", type=int, default=10, help="Batch limit per phase")
@@ -271,10 +273,12 @@ def main() -> None:
         preflight_checks("day_cycle_pipeline.py", required_ports={8081, 8082, 8083})
         print("  [ok] All ports available")
         print("  Phases: embed(:8081) → extract(:8082) → mcp(:8082) → verify(:8083)")
+        test_complete("dry_run")
         return
 
     if args.test:
         run_test(args.limit, args.runs)
+        test_complete("success")
         return
 
     # Original behavior: extract → MCP enrich
@@ -294,6 +298,8 @@ def main() -> None:
     log(f"  MCP Enrich exit={r['exit']}, {r['elapsed_s']}s")
     for line in r["stdout_tail"]:
         log(f"  {line}")
+
+    test_complete("success")
 
 
 if __name__ == "__main__":

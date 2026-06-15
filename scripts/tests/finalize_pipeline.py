@@ -5,6 +5,10 @@
 import json, os, sys
 sys.path.insert(0, '/opt/projects/server/scripts')
 
+from lib.test_common import test_setup, test_complete
+
+TEST = test_setup("finalize_pipeline", "Finalize E2E 10-sample pipeline summary")
+
 EXPER_DIR = '/opt/projects/server/data/experiment'
 STATE_PATH = f'{EXPER_DIR}/pipeline_state_r1_norubric.json'
 
@@ -72,3 +76,4 @@ print(f"  Phase 5 (Feedback loop):  ❌ J(Selene) returned conversational text i
 print()
 print(f'Pipeline state: pipeline_state_r1_norubric.json')
 print(f'Summary:        exp_summary_final.json')
+test_complete("pipeline finalized")

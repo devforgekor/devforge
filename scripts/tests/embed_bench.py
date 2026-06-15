@@ -16,13 +16,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, SCRIPTS_DIR)
+SCRIPTS_DIR = _SCRIPTS_DIR
 
-from lib.db import psql_json
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, psql_json
 
 # ── Config ───────────────────────────────────────────────────────────────
 BENCH_DATA = "/opt/ai_data/embed_bench_pairs.json"
@@ -272,6 +272,7 @@ def _get_rss_mb() -> float:
 
 # ── Main ─────────────────────────────────────────────────────────────────
 def main():
+    TEST = test_setup("embed_bench", "Embedding model benchmark")
     import argparse
     parser = argparse.ArgumentParser(description="Embedding model benchmark")
     parser.add_argument("--models", nargs="+", default=None,
@@ -367,6 +368,7 @@ def main():
     with open(args.output, "w") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
     print(f"\nReport saved to {args.output}")
+    test_complete("success")
 
 
 if __name__ == "__main__":

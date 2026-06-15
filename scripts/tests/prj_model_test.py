@@ -9,8 +9,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import call_llm
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 
 # ── 3 models, 3 roles ──────────────────────────────────────────
 # Format: {model_file: {role: (system_prompt, user_input, expected_keys)}}
@@ -268,6 +267,8 @@ def print_table(results):
 
 # ── Main ───────────────────────────────────────────────────────
 
+TEST = test_setup("prj_model_test", "P/R/J 3-model comparison: Mistral(P) vs Qwen(R) vs Llama(J)")
+
 print("=" * 70)
 print("  P/R/J 3-Model Comparison")
 print(f"  Timeout per call: {TIMEOUT}s")
@@ -356,3 +357,4 @@ print(f"\n{'─'*70}")
 restore_coder()
 print("  Pod A restored to Coder Q8_0")
 print(f"{'='*70}")
+test_complete("PRJ model comparison done")

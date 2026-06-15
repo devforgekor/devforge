@@ -8,8 +8,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import call_llm
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 
 MODEL = "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf"
 
@@ -142,6 +141,8 @@ def score_task(parsed: dict, task: dict) -> dict:
         return {"score": 100, "detail": f"ALL({len(found)} keys)"}
     return {"score": max(0, 100 - len(missing) * 25), "detail": f"missing={sorted(missing)}"}
 
+TEST = test_setup("day_verify_retry", "Coder Q8_0 retry with longer timeout")
+
 print("=" * 65)
 print("  Coder Q8_0 retry: timeout=300s (480s)")
 print(f"  {len(TASKS)} edge-case tasks")
@@ -173,3 +174,4 @@ for ti, task in enumerate(TASKS):
 restore_default()
 print(f"\n{'='*65}")
 print("  Done")
+test_complete("retry tests done")

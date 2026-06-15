@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: cron — 30-min Slack embed progress report
+# Path: none — 1회성 Slack embed progress report (transferred from pipelines/)
 """Slack embed progress reporter — send Qwen 8B embedding status to Slack every 30min."""
 import sys
 import os
@@ -12,8 +12,8 @@ from lib.pipeline_common import slack_send
 
 # Get progress
 total = psql_json("SELECT COUNT(*) as cnt FROM turns") or [{"cnt": 0}]
-done = psql_json("SELECT COUNT(*) as cnt FROM turns WHERE embedding_f16 IS NOT NULL") or [{"cnt": 0}]
-remaining = psql_json("SELECT COUNT(*) as cnt FROM turns WHERE embedding_f16 IS NULL") or [{"cnt": 0}]
+done = psql_json("SELECT COUNT(*) as cnt FROM turns WHERE embedding IS NOT NULL") or [{"cnt": 0}]
+remaining = psql_json("SELECT COUNT(*) as cnt FROM turns WHERE embedding IS NULL") or [{"cnt": 0}]
 
 t = total[0]["cnt"]
 d = done[0]["cnt"]

@@ -13,8 +13,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import call_llm
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 from sentence_transformers import SentenceTransformer
 from minicheck.minicheck import MiniCheck
 
@@ -896,6 +895,7 @@ def call_reviewer(system, user, timeout=600):
 # ═══════════════════════════════════════════════════════════════
 
 def main():
+    TEST = test_setup("model_comparison", "14B Q4_K_M x3 비교: Extract + NLI + MCP + Verify 4-phase")
     all_results = {}
 
     # Pre-check
@@ -1217,6 +1217,7 @@ def main():
     else:
         log(f"  7B extractor 복원 완료")
     log(f"{'='*60}")
+    test_complete("comparison complete")
 
 
 if __name__ == "__main__":

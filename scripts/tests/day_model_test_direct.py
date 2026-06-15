@@ -8,12 +8,11 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import call_llm
-from lib.common import log
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 
 # Write env file
 ENV = "/opt/ai_data/scripts/current-mode-pod-b.env"
+TEST = test_setup("day_model_test_direct", "14B single-extract test with direct container start")
 with open(ENV, "w") as f:
     f.write("MODE=day\nMODEL_NAME=\"Qwen 2.5 Coder 14B\"\nPORT=8082\n"
             "MODEL_FILE=Qwen2.5-Coder-14B-Instruct.Q8_0.gguf\n"
@@ -143,3 +142,4 @@ with open(ENV, "w") as f:
             "CTX_SIZE=8192\nTHREADS=4\nTHREADS_BATCH=4\nCACHE_RAM=1024\n")
 subprocess.run(["systemctl","--user","start","container-devforge-pod-b"], timeout=120)
 log("7B restored")
+test_complete("14B direct test done")

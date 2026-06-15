@@ -157,15 +157,24 @@ def check_heartbeat(worker_name: str,
 
     Returns:
         (is_alive, last_heartbeat_timestamp_utc)
+
+    RESOLVED/IGNORED pulses (completed tests) count as alive
+    — they are not stale, just finished.
     """
     pulse_id = f"heartbeat_{worker_name}"
     rows = psql_json(
-        f"SELECT created_at::text AS created_at "
+        f"SELECT created_at::text AS created_at, status "
         f"FROM watchman_pulses "
         f"WHERE pulse_id = '{pulse_id}'"
     )
     if not rows:
         return False, None
+
+    # Completed / ignored workers are not stale
+    status = rows[0].get("status", "")
+    if status in ("RESOLVED", "IGNORED"):
+        return True, rows[0].get("created_at")
+
     ts_str = rows[0]["created_at"]
     if ts_str is None:
         return False, None

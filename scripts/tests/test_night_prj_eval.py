@@ -15,7 +15,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 os.chdir(SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm_client import call_llm
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm
 
 # ── Night models (night.py v4.0) ──────────────────────────────────────
 # review-p → 30B Q4_K_M (strong reasoning for finding generation)
@@ -573,6 +573,7 @@ def save_results(scores: list, p_res, r_res, j_res):
 
 # ── Main ──────────────────────────────────────────────────────────────
 def main():
+    TEST = test_setup("test_night_prj_eval", "Night P-R-J Ground Truth Evaluation")
     print("=" * 70)
     print("  Night P-R-J Ground Truth Evaluation")
     print(f"  {len(GT)} scenarios, night.py v4.0 models")
@@ -596,6 +597,7 @@ def main():
     subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
                    capture_output=True, timeout=120)
     print("  Done.")
+    test_complete("night PRJ evaluation done")
 
 
 if __name__ == "__main__":

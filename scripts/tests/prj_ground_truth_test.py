@@ -12,8 +12,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import call_llm
+from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 from minicheck.minicheck import MiniCheck
 
 # ── MiniCheck ───────────────────────────────────────────────────────
@@ -388,6 +387,7 @@ def restore_default():
 
 # ── Main ────────────────────────────────────────────────────────────
 def main():
+    TEST = test_setup("prj_ground_truth", "P/R/J ground-truth evaluation (Pod B swap, 4 cores)")
     print("=" * 70)
     print("  Ground Truth Evaluation — P→R→J Day Classification")
     print(f"  {len(GT)} scenarios, 3 models")
@@ -456,6 +456,7 @@ def main():
         log("Skipped restore (some models missing)")
 
     print(f"{'='*70}")
+    test_complete("PRJ GT evaluation done")
 
 
 if __name__ == "__main__":
