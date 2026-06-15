@@ -26,10 +26,11 @@ import json
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import subprocess as sp
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -644,6 +645,26 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
     return turns
 
 
+# ── Concurrent extraction config ─────────────────────────────────────────────
+# Must match llama-server --parallel (pod-b-entrypoint.sh PARALLEL env var).
+PARALLEL = 3
+
+
+def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[dict, Optional[Dict[str, Any]], Optional[str]]:
+    """Wrapper for parallel LLM call. Returns (turn, ex_result_or_None, error_str_or_None).
+
+    Raises nothing — exceptions are caught and returned as error_str.
+    """
+    ut = turn.get("user_turn") or ""
+    th = turn.get("thinking") or ""
+    tx = turn.get("text") or ""
+    try:
+        ex_result = _extract_facts(ut, th, tx, pulse_context=pulse_context)
+        return (turn, ex_result, None)
+    except Exception as e:
+        return (turn, None, str(e))
+
+
 # ── Main pipeline ──────────────────────────────────────────────────────────
 def extract_pipeline(
     turn_id: Optional[str] = None,
@@ -694,7 +715,33 @@ def extract_pipeline(
     processed = 0
     failed = 0
 
-    for idx, turn in enumerate(turns, 1):
+    # ── Phase 1: Concurrent LLM calls in mini-batches ───────────────────
+    num_batches = (len(turns) + PARALLEL - 1) // PARALLEL
+    turn_results: Dict[str, Tuple] = {}  # turn_id -> (ex_result, error_str)
+
+    for batch_idx in range(0, len(turns), PARALLEL):
+        batch = turns[batch_idx:batch_idx + PARALLEL]
+        bn = batch_idx // PARALLEL + 1
+        print(f"\n[extract] Batch {bn}/{num_batches}: "
+              f"{len(batch)} concurrent LLM call(s)", flush=True)
+        t_batch = time.monotonic()
+
+        with ThreadPoolExecutor(max_workers=len(batch)) as executor:
+            future_to_turn = {
+                executor.submit(_extract_for_turn, t, pulse_context): t
+                for t in batch
+            }
+            for future in as_completed(future_to_turn):
+                turn, ex_result, error = future.result()
+                turn_results[turn["id"]] = (ex_result, error)
+
+        print(f"  [extract]   LLM calls: {time.monotonic() - t_batch:.1f}s",
+              flush=True)
+
+    # ── Phase 2: Sequential verify → store → checkpoint ─────────────────
+    idx = 0
+    for turn in turns:
+        idx += 1
         tid = turn["id"]
         ut = turn["user_turn"] or ""
         th = turn["thinking"] or ""
@@ -703,28 +750,22 @@ def extract_pipeline(
               f"user={len(ut)}ch think={len(th)}ch text={len(tx)}ch")
 
         try:
-            # ── Phase 2–4: extraction with retry/fallback ──────────
-            extractions: Optional[List[Dict[str, Any]]] = None
-            mark = ""
+            ex_result, error = turn_results.get(tid, (None, "missing batch result"))
             used_model = "day_extract"
-            ex_usage: Dict[str, Any] = {}
-            ex_timings: Dict[str, Any] = {}
-            ex_elapsed: float = 0
+            mark = ""
 
-            # Single extraction attempt (no faithfulness-based retry needed —
-            # downstream day_verify 14B + night R=14B handle hallucination detection)
-            print(f"  [extract] day_extract...", flush=True)
-            try:
-                ex_result = _extract_facts(ut, th, tx, pulse_context=pulse_context)
-            except Exception as ex_exc:
-                print(f"  [extract]   day_extract exception: {ex_exc}", flush=True)
+            if error:
+                print(f"  [extract]   day_extract exception: {error}", flush=True)
                 mark = "추출 실패"
-                _insert_mark(tid, mark, used_model, is_final=True)
+                if not dry_run:
+                    _insert_mark(tid, mark, used_model, is_final=True)
                 failed += 1
                 continue
+
             if ex_result is None:
                 print(f"  [extract]   Parse failure")
-                _insert_mark(tid, "추출 parse 실패", used_model, is_final=True)
+                if not dry_run:
+                    _insert_mark(tid, "추출 parse 실패", used_model, is_final=True)
                 failed += 1
                 continue
 

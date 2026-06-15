@@ -185,6 +185,13 @@ def call_llm(
     usage = result.get("usage", {})
     timings = result.get("timings", {})
 
+    # Liveness heartbeat — signals that the LLM responder is processing
+    try:
+        from lib.watchdog.messenger import heartbeat
+        heartbeat(f"llm_{model}", detail=f"ok:{elapsed_ms:.0f}ms")
+    except Exception:
+        pass  # heartbeat is best-effort
+
     if return_meta:
         return {
             "content": content,

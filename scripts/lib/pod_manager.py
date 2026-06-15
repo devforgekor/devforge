@@ -39,8 +39,9 @@ MODEL_METADATA = {
     "embed":      {
         "file": "Qwen3-Embedding-8B-f16.gguf",
         "size": "16.3GB", "port": 8081, "mode": "embed",
-        "model_name": "embed", "ctx": 8192,
+        "model_name": "embed", "ctx": 16384,
         "threads": 4, "threads_batch": 4,
+        "parallel": 1,
     },
     "proposer":   {
         "file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
@@ -54,6 +55,7 @@ MODEL_METADATA = {
         "size": "7.6GB", "port": 8082, "mode": "day",
         "model_name": "extractor", "ctx": 8192, "cache_ram": 1024, "evict_room": 8000,
         "threads": 4, "threads_batch": 4,
+        "parallel": 3, "ubatch_size": 512,
     },
     "reflector":  {
         "file": "Qwen2.5-Coder-14B-Instruct-Q8_0.gguf",
@@ -66,6 +68,7 @@ MODEL_METADATA = {
         "size": "15.0GB", "port": 8083, "mode": "review-j",
         "model_name": "judge", "ctx": 6144, "cache_ram": 512, "mlock": 0,
         "evict_room": 16000, "memory_check": 5000, "memory_check_mode": "warn", "report_memory": "1",
+        "parallel": 3, "ubatch_size": 512,
     },
     "verifier":   {
         "file": "Qwen3.6-27B.i1-IQ4_XS.gguf",
@@ -326,6 +329,7 @@ def _write_mode_env(mode: str, port: int) -> None:
             ("flash_attn", "FLASH_ATTN"),
             ("batch_size", "BATCH_SIZE"),
             ("ubatch_size", "UBATCH_SIZE"),
+            ("parallel", "PARALLEL"),
         ]:
             val = f(key)
             if val is not None and val != "":

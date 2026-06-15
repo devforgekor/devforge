@@ -129,6 +129,54 @@ def escalate_pulse(pulse_id: str, reason: str = "") -> bool:
     )
 
 
+# ── Heartbeat (Dead Man's Switch) ─────────────────────────────────────
+
+
+def heartbeat(worker_name: str, detail: str = "") -> bool:
+    """Worker heartbeat — fixed pulse_id per worker, upserts timestamp.
+
+    Long-running tasks call this periodically so the watchdog can detect hangs.
+    Pulse ID is always ``heartbeat_{worker_name}`` — deterministic, upsert-only.
+    Optional ``detail`` (e.g. elapsed_ms) is appended to the instruction field.
+    """
+    pulse_id = f"heartbeat_{worker_name}"
+    instruction = f"{worker_name} {detail}".strip() if detail else worker_name
+    return psql_ok(
+        f"INSERT INTO watchman_pulses "
+        f"  (pulse_id, priority, category, instruction, status, created_at) "
+        f"VALUES ('{pulse_id}', 'P0_HOT_FIX', 'heartbeat', "
+        f"        '{esc_sql(instruction)}', 'IN_PROGRESS', now()) "
+        f"ON CONFLICT (pulse_id) DO UPDATE "
+        f"SET created_at = now(), status = 'IN_PROGRESS'"
+    )
+
+
+def check_heartbeat(worker_name: str,
+                    max_age_seconds: int = 600) -> tuple[bool, Optional[str]]:
+    """Check if a worker's heartbeat is fresh.
+
+    Returns:
+        (is_alive, last_heartbeat_timestamp_utc)
+    """
+    pulse_id = f"heartbeat_{worker_name}"
+    rows = psql_json(
+        f"SELECT created_at::text AS created_at "
+        f"FROM watchman_pulses "
+        f"WHERE pulse_id = '{pulse_id}'"
+    )
+    if not rows:
+        return False, None
+    ts_str = rows[0]["created_at"]
+    if ts_str is None:
+        return False, None
+    try:
+        last_beat = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+    except Exception:
+        return False, ts_str
+    age = (datetime.now(timezone.utc) - last_beat).total_seconds()
+    return age < max_age_seconds, ts_str
+
+
 def list_pulses(status: str = "PENDING", limit: int = 20) -> list:  # Python 3.9: list[dict] not supported
     """List pulses by status."""
     return psql_json(

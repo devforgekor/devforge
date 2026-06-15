@@ -20,8 +20,9 @@ from lib.infra.health_checks import svc_active
 from lib.watchdog.config import (
     DAY_PORTS, SWAP_WARN_MB, SWAP_CRIT_MB, MEM_WARN_PCT, MEM_CRIT_PCT,
     TIMER_TARGETS, LLM_TARGETS, SERVICE_TARGETS, MODE_FILE,
-    LATENCY_CHECK_INTERVAL,
+    LATENCY_CHECK_INTERVAL, HEARTBEAT_WORKERS,
 )
+from lib.watchdog.messenger import check_heartbeat
 
 
 def log(msg: str) -> None:
@@ -232,6 +233,35 @@ def check_pipeline(name: str) -> tuple[bool, int]:
         return False, 0
     except Exception:
         return False, 0
+
+
+# ── Heartbeat 감시 ─────────────────────────────────────────────────
+
+
+def check_heartbeats() -> list[dict]:
+    """Check all registered worker heartbeats.
+
+    Returns list of alert dicts: [{worker, alive, last_beat, age_sec}]
+    """
+    results = []
+    for worker, max_age in HEARTBEAT_WORKERS.items():
+        alive, last_beat = check_heartbeat(worker, max_age_seconds=max_age)
+        if not alive:
+            age_str = ""
+            if last_beat:
+                try:
+                    last = datetime.fromisoformat(last_beat.replace("Z", "+00:00"))
+                    age = (datetime.now(timezone.utc) - last).total_seconds()
+                    age_str = f"{age:.0f}s"
+                except Exception:
+                    age_str = "unknown"
+            results.append({
+                "worker": worker,
+                "alive": False,
+                "last_beat": last_beat or "never",
+                "age_sec": age_str,
+            })
+    return results
 
 
 # ── Health check ────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -39,6 +40,7 @@ STARVATION_LIMIT = 3
 VERIFY_TIMEOUT = 480    # reviewer model timeout
 VERIFY_MAX_TOKENS = 1024
 VERIFY_TEMP = 0.1
+VERIFY_PARALLEL = 3     # match llama-server --parallel on :8083
 
 # ── System Prompt (copied from night.py Phase 2) ──────────────────────
 
@@ -328,6 +330,44 @@ def _build_category_summary(verification_items: List[Dict], total_findings: int)
     return f"Category Distribution: {'; '.join(cat_parts)} ({total_findings} total) | Verdict: {verdict_str}"
 
 
+# ── Concurrent Chunk Helper ──────────────────────────────────────────────
+
+def _verify_chunk(chunk: List[Dict], ci: int, total: int) -> Dict[str, Any]:
+    """Single chunk LLM call + JSON parse. Thread-safe (no shared state)."""
+    ctx = _findings_to_context(chunk)
+    log(f"  [chunk {ci}/{total}] {len(chunk)} items")
+
+    resp = call_llm(
+        [{"role": "system", "content": VERIFIER_SYSTEM_PROMPT},
+         {"role": "user", "content": ctx}],
+        model="reviewer",
+        max_tokens=VERIFY_MAX_TOKENS, temperature=VERIFY_TEMP,
+        timeout=VERIFY_TIMEOUT, json_mode=True, return_meta=True,
+    )
+    r_content = resp["content"]
+    if isinstance(r_content, str):
+        m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', r_content)
+        if m:
+            r_content = m.group(1)
+        try:
+            r = json.loads(r_content.strip())
+        except json.JSONDecodeError:
+            r = {}
+    else:
+        r = r_content
+
+    return {
+        "ok": True,
+        "items": r.get("verification_items", []),
+        "verdict": r.get("final_verdict"),
+        "summary": r.get("summary", ""),
+        "reasoning": r.get("reasoning", ""),
+        "usage": resp.get("usage", {}),
+        "elapsed_ms": resp.get("elapsed_ms", 0),
+        "chunk_size": len(chunk),
+    }
+
+
 # ── Pipeline ──────────────────────────────────────────────────────────
 
 def day_verify_pipeline(limit: int = BATCH_LIMIT,
@@ -379,54 +419,41 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
 
         log(f"  [input] {len(all_findings)} findings from {len(turns)} turns")
 
-        # Chunked verification (matches night.py Phase 2 pattern)
+        # Concurrent chunk verification (continuous batching on :8083)
         chunks = [all_findings[i:i+CHUNK_SIZE] for i in range(0, len(all_findings), CHUNK_SIZE)]
-        merged = {"verification_items": [], "summary": "", "reasoning": ""}
-        all_usage = {}
+        merged: Dict[str, Any] = {"verification_items": [], "summary": "", "reasoning": ""}
+        all_usage: Dict[str, Any] = {}
         total_elapsed = 0
-        verdicts = []
+        verdicts: List[str] = []
         processed = 0
         failed = 0
 
-        for ci, chunk in enumerate(chunks):
-            ctx = _findings_to_context(chunk)
-            label = f"day_verify chunk {ci+1}/{len(chunks)}"
-            log(f"  [chunk {ci+1}/{len(chunks)}] {len(chunk)} items")
-
-            try:
-                resp = call_llm(
-                    [{"role": "system", "content": VERIFIER_SYSTEM_PROMPT},
-                     {"role": "user", "content": ctx}],
-                    model="reviewer",
-                    max_tokens=VERIFY_MAX_TOKENS, temperature=VERIFY_TEMP,
-                    timeout=VERIFY_TIMEOUT, json_mode=True, return_meta=True,
-                )
-                r_content = resp["content"]
-                if isinstance(r_content, str):
-                    m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', r_content)
-                    if m:
-                        r_content = m.group(1)
-                    try:
-                        r = json.loads(r_content.strip())
-                    except json.JSONDecodeError:
-                        r = {}
-                else:
-                    r = r_content
-
-                merged["verification_items"].extend(r.get("verification_items", []))
-                if r.get("final_verdict"):
-                    verdicts.append(r["final_verdict"])
-                if r.get("summary"):
-                    merged["summary"] = (merged.get("summary", "") + " | " + r["summary"])[:500]
-                if r.get("reasoning"):
-                    merged["reasoning"] = (merged.get("reasoning", "") + "\n" + r["reasoning"])[:1000]
-                total_elapsed += resp.get("elapsed_ms", 0)
-                for k, v in resp.get("usage", {}).items():
+        workers = min(VERIFY_PARALLEL, len(chunks))
+        log(f"  [verify] {len(chunks)} chunks → {workers} concurrent")
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            future_map = {}
+            for ci, chunk in enumerate(chunks):
+                future = executor.submit(_verify_chunk, chunk, ci + 1, len(chunks))
+                future_map[future] = ci
+            for future in as_completed(future_map):
+                ci = future_map[future]
+                try:
+                    result = future.result()
+                except Exception as e:
+                    log(f"    ERROR chunk {ci+1}: {type(e).__name__}: {e}")
+                    failed += len(chunks[ci])
+                    continue
+                merged["verification_items"].extend(result["items"])
+                if result["verdict"]:
+                    verdicts.append(result["verdict"])
+                if result["summary"]:
+                    merged["summary"] = (merged.get("summary", "") + " | " + result["summary"])[:500]
+                if result["reasoning"]:
+                    merged["reasoning"] = (merged.get("reasoning", "") + "\n" + result["reasoning"])[:1000]
+                total_elapsed += result["elapsed_ms"]
+                for k, v in result["usage"].items():
                     all_usage[k] = all_usage.get(k, 0) + (v if isinstance(v, int) else 0)
-                processed += len(chunk)
-            except Exception as e:
-                log(f"    ERROR: {type(e).__name__}: {e}")
-                failed += len(chunk)
+                processed += result["chunk_size"]
 
         # Build final verdict
         if verdicts:

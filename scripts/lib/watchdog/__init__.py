@@ -398,6 +398,13 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
             import traceback
             traceback.print_exc()
 
+        # Heartbeat stale check — detect long-running task hangs
+        stale_beats = check_heartbeats()
+        for sb in stale_beats:
+            log(f"  HEARTBEAT STALE: {sb['worker']} — last beat {sb['age_sec']} ago")
+            _state.add_event("heartbeat", f"stale:{sb['worker']}",
+                             f"age={sb['age_sec']} last={sb['last_beat']}")
+
         if _state.should_heartbeat(HEARTBEAT_INTERVAL):
             degraded = _state.degraded_count()
             experiment_active_now = is_experiment_active()
