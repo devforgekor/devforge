@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: none — standalone MCP verify test
-"""MCP Verify Pipeline — score MCP metadata quality using a judge model.
+# Path: none — standalone enrich verify test
+"""Enrich Verify Pipeline — score enrichment metadata quality using a judge model.
 
-Reads turn + mcp_meta from DB, sends to judge model (Pod B :8083),
-per-field scores 0-100, stores as fact_type='mcp_verify'.
+Reads turn + enrich_meta from DB, sends to judge model (Pod B :8083),
+per-field scores 0-100, stores as fact_type='enrich_verify'.
 
 Usage:
-  python3 scripts/pipelines/mcp_verify.py --limit 10              # batch verify
-  python3 scripts/pipelines/mcp_verify.py --turn-ids id1,id2      # specific turns
-  python3 scripts/pipelines/mcp_verify.py --limit 10 --model 7b   # label output
-  python3 scripts/pipelines/mcp_verify.py --limit 10 --dry-run    # simulate
+  python3 scripts/pipelines/enrich_verify.py --limit 10              # batch verify
+  python3 scripts/pipelines/enrich_verify.py --turn-ids id1,id2      # specific turns
+  python3 scripts/pipelines/enrich_verify.py --limit 10 --model 7b   # label output
+  python3 scripts/pipelines/enrich_verify.py --limit 10 --dry-run    # simulate
 """
 
 import json
@@ -39,10 +39,10 @@ TEMP_VERIFY = 0.1
 BATCH_LIMIT = 10
 
 # Self-calibrating rate estimator for dynamic timeout
-_RATE_EST = TimingsBasedRateEstimator(label="mcp_verify", initial_prompt=10.0, initial_gen=3.0)
+_RATE_EST = TimingsBasedRateEstimator(label="enrich_verify", initial_prompt=10.0, initial_gen=3.0)
 
 # ── System prompt ──────────────────────────────────────────────────────────
-SYSTEM_MCP_VERIFY = """\
+SYSTEM_ENRICH_VERIFY = """\
 You are an MCP metadata quality verifier. Given the original conversation turn
 and the generated MCP metadata, score each field on a 0-100 scale.
 
@@ -73,13 +73,13 @@ Be critical — default is to find issues, not praise."""
 
 
 # ── Build prompt ──────────────────────────────────────────────────────────
-def _build_verify_prompt(turn: Dict[str, str], mcp_data: Dict[str, Any]) -> str:
-    """Build the user prompt for MCP verification using TokenBudget priority allocation.
+def _build_verify_prompt(turn: Dict[str, str], enrich_data: Dict[str, Any]) -> str:
+    """Build the user prompt for enrichment verification using TokenBudget priority allocation.
 
     Priority: user_turn(10) > text(7) > thinking(4).
     Sections exceeding budget are dropped entirely — no partial truncation.
     """
-    budget = TokenBudget("mcp_verify")
+    budget = TokenBudget("enrich_verify")
     parts = ["=== TURN ==="]
 
     user_turn = turn.get('user_turn', '') or ''
@@ -93,12 +93,12 @@ def _build_verify_prompt(turn: Dict[str, str], mcp_data: Dict[str, Any]) -> str:
         parts.append(f"thinking: {thinking}")
 
     parts.append("")
-    parts.append("=== GENERATED MCP METADATA ===")
-    parts.append(f"tldr: {mcp_data.get('tldr', '')}")
-    parts.append(f"intent: {mcp_data.get('intent', '')}")
-    parts.append(f"category: {mcp_data.get('category', '')}")
-    parts.append(f"entities: {json.dumps(mcp_data.get('entities', {}), ensure_ascii=False)}")
-    parts.append(f"tags: {json.dumps(mcp_data.get('tags', []), ensure_ascii=False)}")
+    parts.append("=== GENERATED ENRICHMENT METADATA ===")
+    parts.append(f"tldr: {enrich_data.get('tldr', '')}")
+    parts.append(f"intent: {enrich_data.get('intent', '')}")
+    parts.append(f"category: {enrich_data.get('category', '')}")
+    parts.append(f"entities: {json.dumps(enrich_data.get('entities', {}), ensure_ascii=False)}")
+    parts.append(f"tags: {json.dumps(enrich_data.get('tags', []), ensure_ascii=False)}")
 
     prompt = "\n".join(parts)
     if budget.used > 0:
@@ -127,10 +127,10 @@ def _parse_verify_json(raw: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-# ── Select turns with MCP data ───────────────────────────────────────────
-def _get_turns_with_mcp(limit: int = BATCH_LIMIT,
+# ── Select turns with enrich data ──────────────────────────────────────
+def _get_turns_with_enrich(limit: int = BATCH_LIMIT,
                         turn_ids: Optional[List[str]] = None) -> List[Dict]:
-    """Return turns that have mcp_meta and no mcp_verify yet."""
+    """Return turns that have enrich_meta and no enrich_verify yet."""
     if turn_ids:
         ids_literal = ", ".join(f"'{esc_sql(t)}'::uuid" for t in turn_ids)
         cond = f"t.id IN ({ids_literal})"
@@ -138,15 +138,15 @@ def _get_turns_with_mcp(limit: int = BATCH_LIMIT,
         cond = (
             "NOT EXISTS ("
             "  SELECT 1 FROM review_facts rv "
-            "  WHERE rv.turn_id = t.id AND rv.fact_type = 'mcp_verify'"
+            "  WHERE rv.turn_id = t.id AND rv.fact_type = 'enrich_verify'"
             ")"
         )
     sql = (
         "SELECT t.id, t.user_turn, t.thinking, t.text, "
-        "       rf.evidence::text AS mcp_json, "
+        "       rf.evidence::text AS enrich_json, "
         "       t.created_at::text "
         "FROM turns t "
-        "JOIN review_facts rf ON rf.turn_id = t.id AND rf.fact_type = 'mcp_meta' "
+        "JOIN review_facts rf ON rf.turn_id = t.id AND rf.fact_type = 'enrich_meta' "
         f"WHERE {cond} "
         "ORDER BY t.created_at DESC "
         f"LIMIT {limit}"
@@ -156,11 +156,11 @@ def _get_turns_with_mcp(limit: int = BATCH_LIMIT,
         return []
     result = []
     for r in rows:
-        mcp_raw = r.get("mcp_json", "")
-        mcp_data = None
-        if mcp_raw:
+        enrich_raw = r.get("enrich_json", "")
+        enrich_data = None
+        if enrich_raw:
             try:
-                mcp_data = json.loads(mcp_raw)
+                enrich_data = json.loads(enrich_raw)
             except json.JSONDecodeError:
                 pass
         result.append({
@@ -168,7 +168,7 @@ def _get_turns_with_mcp(limit: int = BATCH_LIMIT,
             "user_turn": r.get("user_turn", ""),
             "thinking": r.get("thinking") or "",
             "text": r.get("text", ""),
-            "mcp": mcp_data,
+            "enrich": enrich_data,
             "created_at": r.get("created_at", ""),
         })
     return result
@@ -181,17 +181,17 @@ def _insert_verify_fact(turn_id: str, fact_index: int,
                         gen_tokens: Optional[int] = None,
                         elapsed_ms: Optional[float] = None,
                         source_file: Optional[str] = None) -> bool:
-    """Insert an mcp_verify fact row."""
+    """Insert an enrich_verify fact row."""
     cols = ["turn_id", "fact_index", "fact_type", "evidence",
             "extract_model", "verdict", "source", "fact_action"]
     vals = [
         f"'{esc_sql(turn_id)}'::uuid",
         str(fact_index),
-        "'mcp_verify'",
+        "'enrich_verify'",
         f"'{esc_sql(verify_json_str[:5000])}'",
         f"'{esc_sql(model_label)}'",
         "'pending'",
-        f"'mcp_verify_{esc_sql(model_label)}'",
+        f"'enrich_verify_{esc_sql(model_label)}'",
         "'verify'",
     ]
     set_clauses = []
@@ -222,46 +222,46 @@ def _insert_verify_fact(turn_id: str, fact_index: int,
 
 
 # ── Pipeline ──────────────────────────────────────────────────────────────
-def mcp_verify_pipeline(turn_ids: Optional[List[str]] = None,
+def enrich_verify_pipeline(turn_ids: Optional[List[str]] = None,
                         limit: int = BATCH_LIMIT,
                         dry_run: bool = False,
                         model_label: str = "7b") -> Dict[str, Any]:
-    """Verify MCP metadata quality using judge model."""
+    """Verify enrichment metadata quality using judge model."""
     t_start = time.monotonic()
     print(f"\n{'=' * 60}")
-    print(f"MCP Verify Pipeline — judge model on Pod B (:8083)")
+    print(f"Enrich Verify Pipeline — judge model on Pod B (:8083)")
     print(f"  Label: {model_label}")
     if dry_run:
         print("  [DRY RUN] No writes to DB")
     print(f"{'=' * 60}")
 
-    turns = _get_turns_with_mcp(limit, turn_ids)
+    turns = _get_turns_with_enrich(limit, turn_ids)
     if not turns:
-        print("[mcp_verify] No turns with MCP data found")
+        print("[enrich_verify] No turns with enrich data found")
         return {"processed": 0, "failed": 0, "ok": True}
 
-    print(f"[mcp_verify] Processing {len(turns)} turn(s)", flush=True)
+    print(f"[enrich_verify] Processing {len(turns)} turn(s)", flush=True)
 
     processed = 0
     failed = 0
     all_scores = []
 
     for ti, turn in enumerate(turns, 1):
-        tid = turn["id"]
-        mcp = turn.get("mcp")
-        if not mcp:
-            print(f"  [{ti}/{len(turns)}] {tid[:8]} — no MCP data, skip", flush=True)
+        turn_id = turn["id"]
+        enrich_data = turn.get("enrich")
+        if not enrich_data:
+            print(f"  [{ti}/{len(turns)}] {turn_id[:8]} — no enrich data, skip", flush=True)
             failed += 1
             continue
 
-        prompt = _build_verify_prompt(turn, mcp)
+        prompt = _build_verify_prompt(turn, enrich_data)
         prompt_tok = len(prompt) // 3  # rough estimate for calc_timeout
         dynamic_timeout = _RATE_EST.calc_timeout(prompt_tok, MAX_TOKENS_VERIFY)
-        print(f"  [{ti}/{len(turns)}] {tid[:8]} — timeout={dynamic_timeout}s", flush=True)
+        print(f"  [{ti}/{len(turns)}] {turn_id[:8]} — timeout={dynamic_timeout}s", flush=True)
 
         try:
             resp = call_llm(
-                [{"role": "system", "content": SYSTEM_MCP_VERIFY},
+                [{"role": "system", "content": SYSTEM_ENRICH_VERIFY},
                  {"role": "user", "content": prompt}],
                 model="reviewer",
                 max_tokens=MAX_TOKENS_VERIFY, temperature=TEMP_VERIFY,
@@ -300,7 +300,7 @@ def mcp_verify_pipeline(turn_ids: Optional[List[str]] = None,
                 print(f"    strengths ({len(strengths)}): {strengths[0][:80]}", flush=True)
 
             all_scores.append({
-                "turn_id": tid,
+                "turn_id": turn_id,
                 "scores": {k: result.get(k, 0) for k in
                            ("tldr_accuracy", "intent_correctness", "category_correctness",
                             "entity_precision", "entity_recall", "tag_relevance",
@@ -316,20 +316,20 @@ def mcp_verify_pipeline(turn_ids: Optional[List[str]] = None,
             # Store
             fi_sql = (
                 f"SELECT COALESCE(MAX(fact_index), -1) + 1 "
-                f"FROM review_facts WHERE turn_id = '{esc_sql(tid)}'::uuid"
+                f"FROM review_facts WHERE turn_id = '{esc_sql(turn_id)}'::uuid"
             )
             fi_str = psql(fi_sql)
             fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
 
             usage = resp.get("usage", {})
             _insert_verify_fact(
-                tid, fi, json.dumps(result, ensure_ascii=False),
+                turn_id, fi, json.dumps(result, ensure_ascii=False),
                 model_label,
                 prompt_tokens=usage.get("prompt_tokens"),
                 gen_tokens=usage.get("completion_tokens"),
                 elapsed_ms=resp.get("elapsed_ms"),
             )
-            print(f"    Stored mcp_verify ({model_label})", flush=True)
+            print(f"    Stored enrich_verify ({model_label})", flush=True)
             processed += 1
 
         except Exception as e:
@@ -362,10 +362,10 @@ def mcp_verify_pipeline(turn_ids: Optional[List[str]] = None,
 
 # ── CLI ───────────────────────────────────────────────────────────────────
 def main() -> None:
-    preflight_checks("mcp_verify.py", required_ports={8083})
+    preflight_checks("enrich_verify.py", required_ports={8083})
     import argparse
     parser = argparse.ArgumentParser(
-        description="MCP Verify — score MCP metadata quality")
+        description="Enrich Verify — score enrichment metadata quality")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
     parser.add_argument("--turn-ids", help="Comma-separated turn UUIDs")
     parser.add_argument("--dry-run", action="store_true")
@@ -377,7 +377,7 @@ def main() -> None:
     turn_ids = [t.strip() for t in args.turn_ids.split(",")
                 ] if args.turn_ids else None
 
-    result = mcp_verify_pipeline(
+    result = enrich_verify_pipeline(
         turn_ids=turn_ids,
         limit=args.limit,
         dry_run=args.dry_run,

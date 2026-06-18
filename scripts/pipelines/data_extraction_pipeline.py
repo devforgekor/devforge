@@ -1,4 +1,5 @@
-# Status: production
+# Status: deprecated
+# Path: replaced by extract.py — migration complete, remove after 2026-07
 #!/usr/bin/env python3
 import sys
 import os

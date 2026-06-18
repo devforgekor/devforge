@@ -31,7 +31,8 @@ from lib.db import psql, psql_json, esc_sql
 from lib.search.local_index import FTS5Index
 
 # Qwen 8B embed API (same endpoint as embed_batch.py)
-EMBED_URL = "http://127.0.0.1:8081/v1/embeddings"
+from lib.llm_client import MODEL_REGISTRY
+EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embedder']['port']}/v1/embeddings"
 EMBED_TIMEOUT = 30
 
 # RRF constant

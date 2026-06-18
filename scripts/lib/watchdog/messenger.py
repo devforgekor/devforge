@@ -3,7 +3,7 @@
 # Path: imported by — watchdog.py, day_pipeline.py, pipelines/*
 """Watchdog Messenger — 정보 중개 시스템.
 
-PostgreSQL-backed: watchman_pulses table replaces file-based queue.
+PostgreSQL-backed: watchdog_pulses table replaces file-based queue.
 Idempotent pulse IDs (date + file_hash) prevent duplicate insertion.
 """
 
@@ -27,7 +27,7 @@ def log_message(source: str, target: str, type: str, content: str, detail: str =
                 priority: str = "P1_CONTEXT", category: str = "",
                 target_file: str = "", target_test: str = "",
                 max_retries: int = 3) -> Optional[str]:
-    """메시지 기록 → watchman_pulses table.
+    """메시지 기록 → watchdog_pulses table.
 
     Returns pulse_id if created, None if duplicate (idempotent).
     Signature backward-compatible with old file-based log_message().
@@ -41,15 +41,15 @@ def log_message(source: str, target: str, type: str, content: str, detail: str =
     tt = esc_sql(target_test)
 
     ok = psql_ok(
-        f"INSERT INTO watchman_pulses (pulse_id, priority, category, target_file, "
+        f"INSERT INTO watchdog_pulses (pulse_id, priority, category, target_file, "
         f"target_test, instruction, max_retries) "
         f"VALUES ('{pulse_id}', '{esc_sql(priority)}', "
         f"NULLIF('{cat}', ''), NULLIF('{tf}', ''), NULLIF('{tt}', ''), "
         f"'{ct}', {max_retries}) "
         f"ON CONFLICT (pulse_id) DO UPDATE SET "
         f"last_failure = NULLIF('{dt}', ''), "
-        f"retry_count = watchman_pulses.retry_count + 1 "
-        f"WHERE watchman_pulses.status = 'PENDING'"
+        f"retry_count = watchdog_pulses.retry_count + 1 "
+        f"WHERE watchdog_pulses.status = 'PENDING'"
     )
     return pulse_id if ok else None
 
@@ -68,7 +68,7 @@ def get_undelivered(target: Optional[str] = None) -> list:  # Python 3.9: list[d
         rows = psql_json(
             f"SELECT pulse_id, priority, category, instruction, target_file, "
             f"target_test, retry_count, max_retries "
-            f"FROM watchman_pulses "
+            f"FROM watchdog_pulses "
             f"WHERE status = 'PENDING' {target_clause} "
             f"ORDER BY "
             f"  CASE priority "
@@ -91,7 +91,7 @@ def get_undelivered(target: Optional[str] = None) -> list:  # Python 3.9: list[d
     # 2. Mark IN_PROGRESS
     id_list = ", ".join(f"'{esc_sql(pid)}'" for pid in pulse_ids)
     psql_ok(
-        f"UPDATE watchman_pulses SET status = 'IN_PROGRESS' "
+        f"UPDATE watchdog_pulses SET status = 'IN_PROGRESS' "
         f"WHERE pulse_id IN ({id_list}) AND status = 'PENDING'"
     )
 
@@ -113,7 +113,7 @@ def get_undelivered(target: Optional[str] = None) -> list:  # Python 3.9: list[d
 def resolve_pulse(pulse_id: str, status: str = "RESOLVED") -> bool:
     """Mark a pulse as RESOLVED or IGNORED."""
     return psql_ok(
-        f"UPDATE watchman_pulses SET status = '{esc_sql(status)}', "
+        f"UPDATE watchdog_pulses SET status = '{esc_sql(status)}', "
         f"resolved_at = now() "
         f"WHERE pulse_id = '{esc_sql(pulse_id)}'"
     )
@@ -123,7 +123,7 @@ def escalate_pulse(pulse_id: str, reason: str = "") -> bool:
     """Escalate pulse to HUMAN_REQUIRED (retry_count >= max_retries)."""
     r = esc_sql(reason)
     return psql_ok(
-        f"UPDATE watchman_pulses "
+        f"UPDATE watchdog_pulses "
         f"SET status = 'HUMAN_REQUIRED', last_failure = NULLIF('{r}', '') "
         f"WHERE pulse_id = '{esc_sql(pulse_id)}'"
     )
@@ -142,12 +142,13 @@ def heartbeat(worker_name: str, detail: str = "") -> bool:
     pulse_id = f"heartbeat_{worker_name}"
     instruction = f"{worker_name} {detail}".strip() if detail else worker_name
     return psql_ok(
-        f"INSERT INTO watchman_pulses "
+        f"INSERT INTO watchdog_pulses "
         f"  (pulse_id, priority, category, instruction, status, created_at) "
         f"VALUES ('{pulse_id}', 'P0_HOT_FIX', 'heartbeat', "
         f"        '{esc_sql(instruction)}', 'IN_PROGRESS', now()) "
         f"ON CONFLICT (pulse_id) DO UPDATE "
-        f"SET created_at = now(), status = 'IN_PROGRESS'"
+        f"SET created_at = now(), status = 'IN_PROGRESS', "
+        f"instruction = EXCLUDED.instruction"
     )
 
 
@@ -164,7 +165,7 @@ def check_heartbeat(worker_name: str,
     pulse_id = f"heartbeat_{worker_name}"
     rows = psql_json(
         f"SELECT created_at::text AS created_at, status "
-        f"FROM watchman_pulses "
+        f"FROM watchdog_pulses "
         f"WHERE pulse_id = '{pulse_id}'"
     )
     if not rows:
@@ -191,7 +192,7 @@ def list_pulses(status: str = "PENDING", limit: int = 20) -> list:  # Python 3.9
     return psql_json(
         f"SELECT pulse_id, priority, category, instruction, target_file, "
         f"retry_count, max_retries, status, created_at "
-        f"FROM watchman_pulses "
+        f"FROM watchdog_pulses "
         f"WHERE status = '{esc_sql(status)}' "
         f"ORDER BY created_at DESC LIMIT {limit}"
     )
@@ -200,6 +201,6 @@ def list_pulses(status: str = "PENDING", limit: int = 20) -> list:  # Python 3.9
 def get_pulse(pulse_id: str) -> Optional[dict]:
     """Get single pulse by ID."""
     rows = psql_json(
-        f"SELECT * FROM watchman_pulses WHERE pulse_id = '{esc_sql(pulse_id)}'"
+        f"SELECT * FROM watchdog_pulses WHERE pulse_id = '{esc_sql(pulse_id)}'"
     )
     return rows[0] if rows else None

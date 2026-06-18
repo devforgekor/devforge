@@ -20,7 +20,7 @@ from lib.infra.health_checks import svc_active
 from lib.db import psql_json
 from lib.watchdog.config import (
     DAY_PORTS, SWAP_WARN_MB, SWAP_CRIT_MB, MEM_WARN_PCT, MEM_CRIT_PCT,
-    TIMER_TARGETS, LLM_TARGETS, SERVICE_TARGETS, MODE_FILE,
+    TIMER_TARGETS, LLM_TARGETS, SERVICE_TARGETS, MODE_FILE, MODE_FILE_B,
     LATENCY_CHECK_INTERVAL, HEARTBEAT_WORKERS,
 )
 from lib.watchdog.messenger import check_heartbeat
@@ -41,6 +41,23 @@ def read_mode() -> str:
     except Exception:
         pass
     return "day"
+
+
+def _current_pod_b_port() -> Optional[int]:
+    """Read Pod B's currently serving port from env file.
+
+    Pod B runs a single llama-server per mode. The port is written to
+    current-mode-pod-b.env by pod_manager.py on each mode switch.
+    Returns None if the env file can't be read.
+    """
+    try:
+        with open(MODE_FILE_B) as f:
+            for line in f:
+                if line.startswith("PORT="):
+                    return int(line.strip().split("=", 1)[1])
+    except Exception:
+        pass
+    return None
 
 
 # ── T1: HTTP Health ─────────────────────────────────────────────────
@@ -276,7 +293,7 @@ def check_heartbeats() -> list[dict]:
     # Watchdog discovers them dynamically without any config entry.
     try:
         adhoc = psql_json(
-            "SELECT pulse_id FROM watchman_pulses "
+            "SELECT pulse_id FROM watchdog_pulses "
             "WHERE pulse_id LIKE 'heartbeat_test_%' "
             "  AND status = 'IN_PROGRESS' "
             "  AND created_at < now() - interval '1800 seconds'"
@@ -311,11 +328,23 @@ def check_heartbeats() -> list[dict]:
 # ── Health check ────────────────────────────────────────────────────
 
 def check_all_llm() -> list[dict]:
-    """Check all LLM endpoints: T1 + T2 probe."""
+    """Check active LLM endpoints: T1 + T2 probe.
+
+    Pod A (:8080) is always probed. For Pod B, only the current
+    serving port is probed (reads from current-mode-pod-b.env).
+    This prevents false alerts on ports that aren't currently serving
+    a model (Pod B is single-server, one port per mode).
+    """
     results = []
+    pod_b_port = _current_pod_b_port()
+
     for key, cfg in LLM_TARGETS.items():
         if cfg["port"] not in DAY_PORTS and read_mode() == "day":
             continue  # Night-only ports, skip during day
+
+        # Pod A :8080 always probed. Pod B ports: only probe the active one.
+        if cfg["port"] != 8080 and pod_b_port is not None and cfg["port"] != pod_b_port:
+            continue  # Not currently serving — skip false alert
 
         t1_ok, t1_detail = check_health(cfg["port"], cfg["label"])
         t2_ok = False

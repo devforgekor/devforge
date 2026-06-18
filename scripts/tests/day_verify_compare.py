@@ -2,7 +2,7 @@
 # Status: experimental
 # Path: none — day_verify(reviewer) 3-model comprehensive comparison
 """Pod A(7B reviewer) 모델 비교: 5개 역할 전체 테스트.
-day_verify / rubric / MCP / classify-proposer / classify-judge
+day_verify / rubric / enrich / classify-proposer / classify-judge
 
 MODEL_FILE override + pod restart → 동일 태스크 → 결과 비교"""
 import json, os, subprocess, sys, time, urllib.request
@@ -11,6 +11,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+from lib.llm_client import MODEL_REGISTRY
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 
 # ── Models ─────────────────────────────────────────────────────
@@ -67,9 +68,9 @@ Return JSON:
         "expected_keys": {"rubric_evaluations"},
         "weight": 1,
     },
-    {   # 3. MCP — 메타데이터 생성 (tldr, intent, entities, tags)
-        "role": "MCP",
-        "system": """You are a conversation analyst preparing structured metadata for MCP.
+    {   # 3. enrich — 메타데이터 생성 (tldr, intent, entities, tags)
+        "role": "enrich",
+        "system": """You are a conversation analyst preparing structured metadata for enrich.
 
 Output STRICT JSON:
 {
@@ -159,8 +160,8 @@ D001 → ACCEPT: evidence clearly shows missing session pooling in auth_routes.p
         "expected_keys": {"P_score", "R_score", "decision", "report"},
         "weight": 1,
     },
-    {   # 6. MCP — 빈 결과 처리 (엣지 케이스)
-        "role": "MCP-edge",
+    {   # 6. enrich — 빈 결과 처리 (엣지 케이스)
+        "role": "enrich-edge",
         "system": "Output STRICT JSON with keys: tldr, intent, entities, tags. If no data, empty arrays.",
         "user": "=== user_turn ===\n네\n=== text ===\n알겠습니다.",
         "expected_keys": {"tldr", "intent", "entities", "tags"},
@@ -191,7 +192,7 @@ def restart_pod_a(model_file: str) -> bool:
                    capture_output=True, timeout=60)
     for i in range(180):
         try:
-            req = urllib.request.Request("http://127.0.0.1:8082/health")
+            req = urllib.request.Request(f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/health")
             resp = urllib.request.urlopen(req, timeout=5)
             if resp.status == 200:
                 log(f"Ready after {i+1}s")
@@ -249,7 +250,7 @@ TEST = test_setup("day_verify_compare", "Pod A(7B reviewer) 5-role x 3-model com
 print("=" * 70)
 print("  [Pod A 7B] 5개 역할 × 3개 모델 종합 비교")
 print(f"  {len(TASKS)} tasks, {len(MODELS)} models")
-print("  Roles: day_verify / rubric / MCP / classify-P / classify-J / edge cases")
+print("  Roles: day_verify / rubric / enrich / classify-P / classify-J / edge cases")
 print("=" * 70)
 
 all_results = {}

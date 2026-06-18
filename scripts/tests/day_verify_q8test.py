@@ -86,7 +86,7 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT) -> List[Dict]:
         ")"
         "AND EXISTS ("
         "  SELECT 1 FROM review_facts rf "
-        "  WHERE rf.turn_id = t.id AND rf.fact_type = 'mcp_meta'"
+        "  WHERE rf.turn_id = t.id AND rf.fact_type = 'enrich_meta'"
         ")"
         "AND NOT EXISTS ("
         "  SELECT 1 FROM review_facts rf "
@@ -110,12 +110,12 @@ def _get_turn_extractions(turn_id: str) -> List[Dict]:
     return psql_json(sql) or []
 
 
-def _get_turn_mcp(turn_id: str) -> Optional[Dict]:
-    """MCP metadata provides entity/tag context so verify can cross-check extraction claims."""
+def _get_turn_enrich(turn_id: str) -> Optional[Dict]:
+    """Enrich metadata provides entity/tag context so verify can cross-check extraction claims."""
     sql = (
         "SELECT evidence::text FROM review_facts "
         f"WHERE turn_id = '{esc_sql(turn_id)}'::uuid "
-        "AND fact_type = 'mcp_meta' "
+        "AND fact_type = 'enrich_meta' "
         "ORDER BY fact_index DESC LIMIT 1"
     )
     rows = psql_json(sql) or []
@@ -133,81 +133,81 @@ def _build_findings_from_turn(turn: Dict) -> List[Dict]:
     Each extraction fact becomes a 'finding' with id, description, evidence.
     MCP fields (tldr, entities, tags) become additional findings for quality check.
     """
-    tid = turn["id"]
+    turn_id = turn["id"]
     findings = []
 
     # Load extractions
-    extractions = _get_turn_extractions(tid)
+    extractions = _get_turn_extractions(turn_id)
     for idx, ex in enumerate(extractions):
         evidence = ex.get("evidence", "")[:500]
         if not evidence or evidence == "null":
             continue
         findings.append({
-            "id": f"EX-{tid[:8]}-{idx}",
+            "id": f"EX-{turn_id[:8]}-{idx}",
             "severity": "medium",
             "category": "quality",
             "description": f"Extracted {ex.get('fact_type','?')} content",
             "evidence": evidence,
             "source": ex.get("fact_action", "extract"),
-            "_turn_id": tid,
+            "_turn_id": turn_id,
         })
 
-    # Load MCP fields for additional context
-    mcp = _get_turn_mcp(tid)
-    if mcp:
-        tldr = mcp.get("tldr", "") or ""
+    # Load enrich fields for additional context
+    enrich_data = _get_turn_enrich(turn_id)
+    if enrich_data:
+        tldr = enrich_data.get("tldr", "") or ""
         if tldr:
             findings.append({
-                "id": f"MCP-{tid[:8]}-tldr",
+                "id": f"ENR-{turn_id[:8]}-tldr",
                 "severity": "medium",
                 "category": "quality",
-                "description": "MCP tldr summary",
+                "description": "Enrich tldr summary",
                 "evidence": tldr[:300],
-                "_turn_id": tid,
+                "_turn_id": turn_id,
             })
-        entities = mcp.get("entities", {}) or {}
-        tags = mcp.get("tags", []) or []
+        entities = enrich_data.get("entities", {}) or {}
+        tags = enrich_data.get("tags", []) or []
         if entities:
             findings.append({
-                "id": f"MCP-{tid[:8]}-ent",
+                "id": f"ENR-{turn_id[:8]}-ent",
                 "severity": "info",
                 "category": "quality",
                 "description": f"MCP entities: "
                                f"{len(entities.get('files',[]))} files, "
                                f"{len(entities.get('functions',[]))} funcs",
                 "evidence": json.dumps(entities, ensure_ascii=False)[:300],
-                "_turn_id": tid,
+                "_turn_id": turn_id,
             })
         if tags:
             findings.append({
-                "id": f"MCP-{tid[:8]}-tags",
+                "id": f"ENR-{turn_id[:8]}-tags",
                 "severity": "info",
                 "category": "quality",
                 "description": f"MCP tags: {', '.join(tags[:5])}",
                 "evidence": json.dumps(tags, ensure_ascii=False)[:300],
-                "_turn_id": tid,
+                "_turn_id": turn_id,
             })
 
     # Add turn context for the reviewer (user + response text for faithfulness check)
     user_turn = (turn.get("user_turn") or "")[:200]
     if user_turn:
         findings.insert(0, {
-            "id": f"CTX-{tid[:8]}-user",
+            "id": f"CTX-{turn_id[:8]}-user",
             "severity": "info",
             "category": "quality",
             "description": f"User turn context",
             "evidence": user_turn[:200],
-            "_turn_id": tid,
+            "_turn_id": turn_id,
         })
     turn_text = (turn.get("text") or "")[:500]
     if turn_text:
         findings.insert(0, {
-            "id": f"CTX-{tid[:8]}-text",
+            "id": f"CTX-{turn_id[:8]}-text",
             "severity": "info",
             "category": "quality",
             "description": "Assistant response context (for faithfulness comparison)",
             "evidence": turn_text[:500],
-            "_turn_id": tid,
+            "_turn_id": turn_id,
         })
 
     return findings
@@ -443,16 +443,16 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
 
         # Store to DB (per-turn verify_result)
         turn_set = set(f["_turn_id"] for f in all_findings)
-        for tid in turn_set:
+        for turn_id in turn_set:
             fi_sql = (
                 f"SELECT COALESCE(MAX(fact_index), -1) + 1 "
-                f"FROM review_facts WHERE turn_id = '{esc_sql(tid)}'::uuid"
+                f"FROM review_facts WHERE turn_id = '{esc_sql(turn_id)}'::uuid"
             )
             fi_str = psql(fi_sql)
             fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
             if not dry_run:
                 _insert_verify_result(
-                    tid, fi,
+                    turn_id, fi,
                     json.dumps(merged, ensure_ascii=False),
                     model_label,
                     category_summary=cat_summary,

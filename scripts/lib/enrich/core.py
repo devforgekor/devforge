@@ -9,7 +9,7 @@ from lib.llm_client import call_llm
 from lib.common import strip_think
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.token_budget import TokenBudget
-from lib.mcp import utils
+from lib.enrich import utils
 
 # Lazy singletons
 _EMBEDDER = None
@@ -27,11 +27,11 @@ def get_nli():
         _NLI_MODEL = MiniCheck(model_name="flan-t5-large", cache_dir="/opt/ai_data/models")
     return _NLI_MODEL
 
-def parse_mcp_json(raw: str, label: str = "MCP", attempt: int = 1) -> Optional[Dict[str, Any]]:
+def parse_enrich_json(raw: str, label: str = "enrich", attempt: int = 1) -> Optional[Dict[str, Any]]:
     cleaned = strip_think(raw)
     result = parse_llm_json(cleaned)
     if result is None:
-        save_dlq(raw, stage=f"mcp_{label}", error="parse_llm_json returned None",
+        save_dlq(raw, stage=f"enrich_{label}", error="parse_llm_json returned None",
                  attempt=attempt)
     return result
 
@@ -107,9 +107,9 @@ def tldr_cosine_quality(tldr: str, turn_text: str) -> float:
     except Exception:
         return 0.0
 
-def generate_mcp_fields(user_turn: str, thinking: str, text: str,
+def generate_enrich_fields(user_turn: str, thinking: str, text: str,
                          system_prompt: str,
-                         model: str = "day_mcp",
+                         model: str = "day_enrich",
                          extractions: Optional[List[Dict]] = None,
                          dry_run: bool = False
                          ) -> Optional[Dict[str, Any]]:
@@ -124,7 +124,7 @@ def generate_mcp_fields(user_turn: str, thinking: str, text: str,
             "_meta": {"usage": {"prompt_tokens": 0, "completion_tokens": 0}, "elapsed_ms": 0.0, "model": model}
         }
 
-    budget = TokenBudget("mcp_enrich")
+    budget = TokenBudget("enrich")
     parts = ["=== user_turn ==="]
     if budget.add_section("user_turn", user_turn or "(empty)", priority=10):
         parts.append(user_turn or "(empty)")
@@ -155,10 +155,10 @@ def generate_mcp_fields(user_turn: str, thinking: str, text: str,
         [{"role": "system", "content": system_prompt},
          {"role": "user", "content": "\n".join(parts)}],
         model=model,
-        max_tokens=utils.MAX_TOKENS_MCP, temperature=utils.TEMP_MCP, timeout=utils.TIMEOUT_MCP,
+        max_tokens=utils.MAX_TOKENS_ENRICH, temperature=utils.TEMP_ENRICH, timeout=utils.TIMEOUT_ENRICH,
         json_mode=True, return_meta=True,
     )
-    result = parse_mcp_json(meta["content"], "MCP fields")
+    result = parse_enrich_json(meta["content"], "enrich fields")
     if result:
         result["_meta"] = {"usage": meta["usage"], "timings": meta["timings"],
                            "elapsed_ms": meta["elapsed_ms"], "model": model}

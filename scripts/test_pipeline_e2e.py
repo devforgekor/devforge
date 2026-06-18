@@ -136,7 +136,7 @@ def setup_test_db(samples: List[dict]) -> List[str]:
            VALUES ('extract', '-infinity'::timestamptz)
            ON CONFLICT (phase) DO NOTHING""",
         """INSERT INTO pipeline_checkpoint (phase, max_created_at)
-           VALUES ('mcp_enrich', '-infinity'::timestamptz)
+           VALUES ('enrich', '-infinity'::timestamptz)
            ON CONFLICT (phase) DO NOTHING""",
         """CREATE TABLE IF NOT EXISTS activity_log (
             id SERIAL PRIMARY KEY,
@@ -278,12 +278,12 @@ def step_extract(turn_ids: List[str]) -> bool:
         elapsed = time.time() - t0
         print(f"  [ok] Extract completed in {elapsed:.0f}s")
 
-        # Run MCP enrichment on 7B extractor :8082 (needed before verify step)
-        from mcp_enrich import mcp_enrich_pipeline
+        # Run enrich enrichment (needed before verify step)
+        from enrich import enrich_pipeline
         t1 = time.time()
-        mcp_result = mcp_enrich_pipeline(limit=15)
-        mcp_elapsed = time.time() - t1
-        print(f"  [ok] MCP enrich completed in {mcp_elapsed:.0f}s")
+        enrich_result = enrich_pipeline(limit=15)
+        enrich_elapsed = time.time() - t1
+        print(f"  [ok] Enrich completed in {enrich_elapsed:.0f}s")
 
         # Score extract quality
         for i, tid in enumerate(turn_ids):
@@ -306,13 +306,13 @@ def step_extract(turn_ids: List[str]) -> bool:
                 detail += f" avg_len={avg_len:.0f}"
             record_score("extract", f"turn_{i+1}", score, 4, detail)
 
-        # Check MCP enrich
-        mcp_facts = psql_json(
-            f"SELECT turn_id FROM review_facts WHERE fact_type = 'mcp_meta'"
+        # Check enrich
+        enrich_facts = psql_json(
+            f"SELECT turn_id FROM review_facts WHERE fact_type = 'enrich_meta'"
         )
-        mcp_count = len(set(f["turn_id"] for f in mcp_facts)) if mcp_facts else 0
-        record_score("extract", "mcp_enrich", mcp_count, len(turn_ids),
-                     f"{mcp_count}/{len(turn_ids)} turns enriched")
+        enrich_count = len(set(f["turn_id"] for f in enrich_facts)) if enrich_facts else 0
+        record_score("extract", "enrich", enrich_count, len(turn_ids),
+                     f"{enrich_count}/{len(turn_ids)} turns enriched")
 
         # Report checkpoint
         cp = psql(f"SELECT MAX(fact_index) FROM review_facts WHERE fact_type='text'")
@@ -409,7 +409,7 @@ def step_night_review():
             facts = psql_json(
                 f"SELECT fact_index, fact_type, evidence "
                 f"FROM review_facts WHERE turn_id = '{tid}'::uuid "
-                f"AND fact_type IN ('text','user','thinking','mcp_meta') "
+                f"AND fact_type IN ('text','user','thinking','enrich_meta') "
                 f"ORDER BY fact_index"
             )
             if not facts:
@@ -417,15 +417,15 @@ def step_night_review():
             for f in facts:
                 fid = f"{str(tid)[:8]}_f{f['fact_index']}"
                 evidence = f["evidence"]
-                if f["fact_type"] == "mcp_meta":
+                if f["fact_type"] == "enrich_meta":
                     try:
-                        mcp = json.loads(evidence)
-                        for k, v in mcp.items():
+                        enrich_data = json.loads(evidence)
+                        for k, v in enrich_data.items():
                             all_findings.append({
                                 "id": f"{fid}_{k}",
                                 "turn_id": str(tid),
-                                "type": "mcp",
-                                f"mcp_{k}": v if isinstance(v, str) else json.dumps(v, ensure_ascii=False),
+                                "type": "enrich",
+                                f"enrich_{k}": v if isinstance(v, str) else json.dumps(v, ensure_ascii=False),
                                 "fact_type": f["fact_type"],
                                 "severity": "medium",
                             })

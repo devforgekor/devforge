@@ -64,10 +64,10 @@ while true; do
         bar=$(python3 -c "print('█'*$filled + '░'*($bar_len-$filled))")
         podman exec postgres psql -U devforge -d devforge_app -c \
             "SELECT 'x'" 2>/dev/null > /dev/null
-        python3 -c "
+        cd /opt/projects/server/scripts && python3 -c "
 from lib.pipeline_common import slack_send
 slack_send('*Embed Progress* — Qwen3-Embedding-8B\n${bar} ${pct}%  (${total_done}/${total} 완료, ${remaining} 남음)')
-" 2>/dev/null || true
+" || echo "[embed-runner] Slack send failed"; cd /opt/projects/server
         last_slack=$now
     fi
 

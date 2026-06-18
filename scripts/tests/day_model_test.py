@@ -10,6 +10,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+from lib.llm_client import MODEL_REGISTRY
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 from minicheck.minicheck import MiniCheck
 
@@ -75,9 +76,9 @@ def build_context(gt):
     for f in gt["facts"]:
         parts.append(f"[fact] {f}")
     if gt["mcp_facts"]:
-        parts.append("\n=== MCP CONTEXT (Global Project Info) ===")
+        parts.append("\n=== ENRICH CONTEXT (Global Project Info) ===")
         for m in gt["mcp_facts"]:
-            parts.append(f"[mcp] {m}")
+            parts.append(f"[enrich] {m}")
     return "\n".join(parts)
 
 
@@ -113,7 +114,7 @@ def restart_pod_b():
     for i in range(600):  # 최대 20분 대기
         try:
             resp = urllib.request.urlopen(
-                urllib.request.Request("http://127.0.0.1:8082/health"), timeout=5)
+                urllib.request.Request(f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/health"), timeout=5)
             if resp.status == 200:
                 print(f"  Ready in {i+1}s", flush=True)
                 time.sleep(3)

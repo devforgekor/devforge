@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from kiwipiepy import Kiwi
 
@@ -46,6 +46,9 @@ LEXICAL_TAGS = frozenset({
     "XR",  # roots
 })
 
+# Tags used for topic/keyword extraction (topic-bearing nouns)
+TOPIC_TAGS = frozenset({"NNP"})
+
 
 class TextCleaner:
     """Korean text cleaner with Kiwi-based tokenization.
@@ -63,15 +66,11 @@ class TextCleaner:
     # Phase 1: Text Cleaning
     # ------------------------------------------------------------------
 
-    def clean(self, text: str) -> str:
-        """Normalize Korean text for BM25 + Embedding.
-
-        Preserves code blocks (``````) and inline code (``) verbatim.
-        """
+    def _clean_non_kiwi(self, text: str) -> Tuple[str, List[str], List[str]]:
+        """Apply non-Kiwi cleaning steps (1-6). Returns (cleaned, code_blocks, inline_codes)."""
         if not text:
-            return ""
+            return "", [], []
 
-        # 1. Preserve code blocks — replace with placeholder during cleaning
         code_blocks: List[str] = []
         inline_codes: List[str] = []
 
@@ -86,30 +85,50 @@ class TextCleaner:
         t = RE_CODE_BLOCK.sub(_save_code, text)
         t = RE_INLINE_CODE.sub(_save_inline, t)
 
-        # 2. Korean emoticon compression BEFORE NFKC
-        # (NFKC converts compatibility jamo ㅋ→ᄏ, so regex must run first)
         t = RE_KOREAN_EMOTICON.sub(lambda m: m.group()[0] * 2, t)
-
-        # 3. Unicode NFKC normalization
         t = unicodedata.normalize("NFKC", t)
-
-        # 4. Emoji removal (narrow ranges only, no Hangul overlap)
         t = RE_EMOJI.sub(" ", t)
-
-        # 5. Repeated hangul syllable compression (아아아아 → 아아)
         t = RE_REPEAT_HANGUL.sub(lambda m: m.group(1) * 2, t)
-
-        # 6. Whitespace normalization
         t = RE_MULTI_SPACE.sub(" ", t)
         t = t.strip()
+        return t, code_blocks, inline_codes
 
-        # 7. Restore code blocks
+    def _apply_kiwi(self, text: str) -> str:
+        """Apply Kiwi typo correction only. Placeholders pass through unchanged."""
+        if not text.strip():
+            return text
+        tokens = self._kiwi.tokenize(text, typos="basic_with_continual_and_lengthening")
+        return self._kiwi.join(tokens)
+
+    def _restore_placeholders(self, text: str, code_blocks: List[str], inline_codes: List[str]) -> str:
         for i, cb in enumerate(code_blocks):
-            t = t.replace(f"\x00BLOCK{i}\x00", cb)
+            text = text.replace(f"\x00BLOCK{i}\x00", cb)
         for i, ic in enumerate(inline_codes):
-            t = t.replace(f"\x00INLINE{i}\x00", ic)
+            text = text.replace(f"\x00INLINE{i}\x00", ic)
+        return text
 
-        return t
+    def clean(self, text: str) -> str:
+        """Normalize Korean text for BM25 + Embedding.
+
+        Preserves code blocks (``````) and inline code (``) verbatim.
+        """
+        t, code_blocks, inline_codes = self._clean_non_kiwi(text)
+        if t:
+            t = self._apply_kiwi(t)
+        return self._restore_placeholders(t, code_blocks, inline_codes)
+
+    def detect_kiwi_changes(self, text: str) -> bool:
+        """True if Kiwi typo correction modified the text (vs NFKC/whitespace-only changes).
+
+        Runs non-Kiwi cleaning, then Kiwi, then compares. Returns True only when
+        Kiwi actually corrected spelling/grammar — ignores NFKC/emoji/whitespace changes.
+        ~5ms per call.
+        """
+        if not text.strip():
+            return False
+        t, _, _ = self._clean_non_kiwi(text)
+        after = self._apply_kiwi(t)
+        return t != after
 
     # ------------------------------------------------------------------
     # Phase 2: Kiwi Tokenization (for BM25)
@@ -138,6 +157,41 @@ class TextCleaner:
         )
         return [t.form for t in tokens if t.tag in LEXICAL_TAGS]
 
+    def extract_nnp(self, text: str) -> List[str]:
+        """Extract proper nouns (NNP) for topic/keyword tagging."""
+        if not text.strip():
+            return []
+        tokens = self._kiwi.tokenize(
+            text,
+            normalize_coda=True,
+            typos="basic_with_continual_and_lengthening",
+            oov_handling="chr_freq",
+        )
+        seen = set()
+        result = []
+        for t in tokens:
+            if t.tag == "NNP" and t.form not in seen:
+                seen.add(t.form)
+                result.append(t.form)
+        return result
+
+    def estimate_tokens(self, text: str) -> int:
+        """Estimate LLM token count for Korean text using Kiwi.
+
+        Kiwi POS tokens approximate LLM subword tokens. Korean averages ~1.2x
+        Kiwi→LLM-token ratio, so we multiply by 1.2 for a safe estimate.
+        Returns 0 for empty text.
+        """
+        if not text.strip():
+            return 0
+        tokens = self._kiwi.tokenize(
+            text,
+            normalize_coda=True,
+            typos="basic_with_continual_and_lengthening",
+            oov_handling="chr_freq",
+        )
+        return max(4, int(len(tokens) * 1.2))
+
     # ------------------------------------------------------------------
     # Batch processing
     # ------------------------------------------------------------------
@@ -148,16 +202,20 @@ class TextCleaner:
         Returns dict suitable for storing in turns.tokens jsonb column.
         """
         if not text:
-            return {"clean": "", "terms": [], "tokens": []}
+            return {"clean": "", "terms": [], "tokens": [], "kiwi_changed": False, "nnp": []}
 
         clean_text = self.clean(text)
         tokens = self.tokenize(clean_text)
         terms = [t["form"] for t in tokens if t["tag"] in LEXICAL_TAGS]
+        nnp = self.extract_nnp(clean_text)
+        kiwi_changed = self.detect_kiwi_changes(text)
 
         return {
             "clean": clean_text,
             "terms": terms,
             "tokens": tokens,
+            "kiwi_changed": kiwi_changed,
+            "nnp": nnp,
         }
 
 
@@ -182,3 +240,15 @@ def tokenize(text: str) -> List[Dict]:
 
 def extract_terms(text: str) -> List[str]:
     return get_cleaner().extract_terms(text)
+
+
+def extract_nnp(text: str) -> List[str]:
+    return get_cleaner().extract_nnp(text)
+
+
+def estimate_tokens(text: str) -> int:
+    return get_cleaner().estimate_tokens(text)
+
+
+def detect_kiwi_changes(text: str) -> bool:
+    return get_cleaner().detect_kiwi_changes(text)

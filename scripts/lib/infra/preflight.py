@@ -44,7 +44,26 @@ def preflight_checks(entry_name: str = "pipeline", required_ports: Optional[Set[
 
     current_pid = os.getpid()
 
-    # 1. Kill stale same-name processes
+    # Gather protected PIDs — don't kill processes with active protection files
+    protected_pids: set = set()
+    protect_dir = "/opt/ai_data/scripts"
+    try:
+        for entry in os.listdir(protect_dir):
+            if entry.startswith(".protect_"):
+                p = os.path.join(protect_dir, entry)
+                with open(p) as pf:
+                    d = json.load(pf)
+                    pid = d.get("pid", 0)
+                    if pid and pid != current_pid:
+                        try:
+                            os.kill(pid, 0)
+                            protected_pids.add(pid)
+                        except OSError:
+                            pass  # stale PID
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    # 1. Kill stale same-name processes (skip protected)
     killed: List[int] = []
     try:
         out = subprocess.check_output(
@@ -67,6 +86,8 @@ def preflight_checks(entry_name: str = "pipeline", required_ports: Optional[Set[
                     continue
             except (OSError, IOError):
                 continue
+            if pid in protected_pids:
+                continue  # don't kill protected processes
             os.kill(pid, signal.SIGTERM)
             killed.append(pid)
     except Exception:

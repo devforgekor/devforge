@@ -8,6 +8,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+from lib.llm_client import MODEL_REGISTRY
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 
 MODEL = "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf"
@@ -71,8 +72,8 @@ Reflector verdicts:
 D001 → ACCEPT: evidence clearly shows missing session pooling in auth_routes.py login()""",
         "expected_keys": {"P_score", "R_score", "decision", "report"},
     },
-    {   # MCP-edge (짧은입력) — 이전에 0.0s 즉시실패
-        "role": "MCP-edge",
+    {   # enrich-edge (짧은입력) — 이전에 0.0s 즉시실패
+        "role": "enrich-edge",
         "system": "Output STRICT JSON with keys: tldr, intent, entities, tags. If no data, empty arrays.",
         "user": "=== user_turn ===\n네\n=== text ===\n알겠습니다.",
         "expected_keys": {"tldr", "intent", "entities", "tags"},
@@ -96,7 +97,7 @@ def restart_pod_a(model_file: str) -> bool:
                    capture_output=True, timeout=60)
     for i in range(180):
         try:
-            req = urllib.request.Request("http://127.0.0.1:8082/health")
+            req = urllib.request.Request(f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/health")
             resp = urllib.request.urlopen(req, timeout=5)
             if resp.status == 200:
                 print(f"  Ready after {i+1}s")

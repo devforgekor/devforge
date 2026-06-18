@@ -9,6 +9,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+from lib.llm_client import MODEL_REGISTRY
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 
 # ── 3 models, 3 roles ──────────────────────────────────────────
@@ -194,10 +195,10 @@ def restart_pod_a(model_file: str) -> bool:
     log(f"Starting with {model_file}...")
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a"],
                    capture_output=True, timeout=60)
-    log("Waiting for :8082 health...")
+    log(f"Waiting for extractor health (MODEL_REGISTRY)...")
     for i in range(300):
         try:
-            req = urllib.request.Request("http://127.0.0.1:8082/health")
+            req = urllib.request.Request(f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/health")
             resp = urllib.request.urlopen(req, timeout=5)
             if resp.status == 200:
                 log(f"Ready after {i+1}s")

@@ -126,8 +126,8 @@ print(f"Model: {model_file}  |  NLI=MiniCheck(flan-t5-large)  |  Pod A NLI=OFF")
 print(f"{'='*70}")
 
 turns = []
-for tid in TURN_IDS:
-    rows = psql_json(f"SELECT t.id, t.user_turn, t.thinking, t.text FROM turns t WHERE t.id='{tid}'::uuid")
+for turn_id in TURN_IDS:
+    rows = psql_json(f"SELECT t.id, t.user_turn, t.thinking, t.text FROM turns t WHERE t.id='{turn_id}'::uuid")
     if rows:
         turns.append(rows[0])
 
@@ -136,11 +136,11 @@ print(f"Loaded {len(turns)}/{len(TURN_IDS)} turns\n")
 all_stats = {"facts": 0, "faithful": 0, "unfaithful": 0, "elapsed": 0, "nli_time": 0, "failed": 0}
 nli_total = 0
 for turn in turns:
-    tid = turn["id"][:8]
+    turn_id = turn["id"][:8]
     ut_len = len(turn.get("user_turn") or "")
     th_len = len(turn.get("thinking") or "")
     tx_len = len(turn.get("text") or "")
-    print(f"[{tid}] user={ut_len}ch think={th_len}ch text={tx_len}ch")
+    print(f"[{turn_id}] user={ut_len}ch think={th_len}ch text={tx_len}ch")
 
     r = extract_turn(turn)
     if r.get("error"):

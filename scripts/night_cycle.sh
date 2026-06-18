@@ -10,13 +10,16 @@
 #
 # Pipeline Steps:
 #   Server Validation     — state_collector --validate (snapshot before switching)
-#   Night Debate          — 30B(:8081) → 14B(:8082) → N14B(:8083)
-#   Night Verify          — 27B(:8084) final gate via review_consumer.py
-#   Day Mode Restore      — Pod B extractor(:8082) + Pod A reserved(:8080)
-
-#   Proxy Audit           — proxy_reviewer.py (DeepSeek Pro verify audit)
+#   Night Debate          — proposer(:8081) → reflector(:8082) → judge(:8083)
+#   Night Verify          — verifier(:8084) final gate via review_consumer.py
+#   Day Mode Restore      — Pod B extractor(:8082) + Pod A reserved(:8080)#   Proxy Audit           — proxy_reviewer.py (DeepSeek Pro verify audit)
 
 set -o pipefail
+
+# ── PID Lock (single-instance guard) ────────────────────
+NIGHT_CYCLE_LOCK="/tmp/devforge-night-cycle.lock"
+exec 200>"$NIGHT_CYCLE_LOCK"
+flock -n 200 || { echo "[$(LOG_TS)] night_cycle already running — exit"; exit 0; }
 
 LOG_TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 STATUS_FILE="/opt/projects/server/data/nightly_status.yaml"
@@ -145,6 +148,21 @@ else
     echo "[$(LOG_TS)] Server validation had issues (non-fatal)" >&2
 fi
 
+# ── Protection Check (test pipelines active?) ────────────────
+ACTIVE_PROTECT=$(python3 -c "
+import sys; sys.path.insert(0, '$SCRIPTS_DIR')
+from lib.protection import active_contexts
+ctx = active_contexts()
+if ctx:
+    print(' '.join(ctx))
+" 2>/dev/null)
+if [ -n "$ACTIVE_PROTECT" ]; then
+    echo "[$(LOG_TS)] Protection active ($ACTIVE_PROTECT) — skip night cycle"
+    _set_mode day
+    _restored=true
+    exit 0
+fi
+
 # ── Night Debate ── (queue consumer) ──────────────
 # night_cycle.py --queue handles its own container management
 # (kill_all → sequential P→R→J model loading on Pod B).
@@ -159,7 +177,7 @@ if ! python3 "$SCRIPTS_DIR/pipelines/night_cycle.py" --queue --limit 5; then
     echo "[$(LOG_TS)] night_cycle.py --queue FAILED" >&2
 fi
 
-# ── Night Verify (27B verifier :8084) ───────────────────
+# ── Night Verify (verifier :8084) ───────────────────
 
 verify_ok=true
 
@@ -173,15 +191,15 @@ print(val if val else '0')
 echo "[$(LOG_TS)] Verify queue (status='reviewed'): $queue_count items"
 
 if [ "$queue_count" = "0" ] || [ -z "$queue_count" ]; then
-    echo "[$(LOG_TS)] Verify queue empty — skipping 27B verify"
+    echo "[$(LOG_TS)] Verify queue empty — skipping verifier verify"
 else
-    echo "[$(LOG_TS)] === Night Verify (27B) ==="
+    echo "[$(LOG_TS)] === Night Verify (verifier) ==="
     stop_llm_services "verify"
-    echo "[$(LOG_TS)] Stopping Pod A (memory for 27B)..."
+    echo "[$(LOG_TS)] Stopping Pod A (memory for verifier)..."
     systemctl --user stop container-devforge-pod-a 2>&1 || true
     sleep 5
 
-    if switch_mode_pod_b "verify" 8084 && wait_for_model 8084 "Qwen3.6-27B" 600; then
+    if switch_mode_pod_b "verify" 8084 && wait_for_model 8084 "verifier" 600; then
         retry "verify" 2 python3 "$SCRIPTS_DIR/pipelines/review_consumer.py" || verify_ok=false
     else
         echo "[$(LOG_TS)] Failed to start verify mode" >&2

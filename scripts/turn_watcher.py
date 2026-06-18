@@ -237,6 +237,7 @@ def insert_turns(conversation_id: str, source: str, model: str,
 def sync_fts5(conversation_id: str, start_seq: int, count: int):
     """Sync newly inserted turns to SQLite FTS5 index.
 
+    Uses text_clean_polished if available, falls back to text_clean.
     Called after successful PostgreSQL INSERT to keep FTS5 in sync.
     Non-fatal on failure — FTS5 can be rebuilt via CLI command.
     """
@@ -244,7 +245,11 @@ def sync_fts5(conversation_id: str, start_seq: int, count: int):
         return
     try:
         rows = psql_json(
-            f"SELECT seq, user_turn_clean, text_clean, thinking_clean, tokens "
+            f"SELECT seq, "
+            f"  COALESCE(user_turn_clean_polished, user_turn_clean) as user_turn_clean, "
+            f"  COALESCE(text_clean_polished, text_clean) as text_clean, "
+            f"  COALESCE(thinking_clean_polished, thinking_clean) as thinking_clean, "
+            f"  tokens "
             f"FROM turns "
             f"WHERE conversation_id='{esc_sql(conversation_id)}' "
             f"  AND seq >= {start_seq} AND seq < {start_seq + count} "

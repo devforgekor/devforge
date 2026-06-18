@@ -35,16 +35,20 @@ from typing import Any, Dict, List, Optional
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # Physical endpoints (role-based — each describes the LLM's primary job)
     "extractor":    {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300},  # Pod B 7B Q8
+    "polish":       {"port": 8082, "temp": 0.0,  "max_tokens": 512,  "timeout": 600},  # Pod B 4B Q8 — polish phase
     "proposer":     {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},  # Pod B 30B
     "reviewer":     {"port": 8083, "temp": 0.10, "max_tokens": 400,  "timeout": 480},  # Pod B 14B
     "reflector":    {"port": 8082, "temp": 0.10, "max_tokens": 2048, "timeout": 600},  # Pod B 14B
     "verifier":     {"port": 8084, "temp": 0.10, "max_tokens": 4096, "timeout": 1200}, # Pod B 27B
     "judge":        {"port": 8083, "temp": 0.10, "max_tokens": 4096, "timeout": 7200}, # Pod B 14B
+    # Non-LLM service endpoints (port-only, for pipeline scripts)
+    "reranker":     {"port": 8080},  # Pod A Qwen3-Reranker-4B-Q4_K_M --reranking
+    "embedder":     {"port": 8081},  # Pod B embed mode (8B f16) — same port as proposer
     # Role aliases — pipeline code uses these; MODEL_REGISTRY is the single
     # place to change when a model/port changes.
     # Day pipeline — extract (:00/:30)
     "day_extract": {"_model": "extractor"},
-    "day_mcp":     {"_model": "extractor"},  # extract → MCP, verify fixes
+    "day_enrich": {"_model": "extractor"},  # day enrich pipeline
 
     # Day pipeline — verify & rubric
     "day_verify":  {"_model": "reviewer"},
@@ -202,6 +206,72 @@ def call_llm(
             "port": port,
         }
     return content
+
+
+def reranker_score(query: str, document: str) -> float:
+    """Score query-document relevance via Pod A reranker (:8080).
+
+    Used by pipeline stages (extract, enrich, polish_batch) for
+    grounding verification — checks that generated content is
+    topically relevant to the source text.
+
+    ⚠ This is a RELEVANCE reranker, NOT an NLI model. It measures
+    topical relatedness, not logical entailment. High scores mean
+    "same topic" not "logically follows." See reranker_nli_verdict()
+    for detailed limitations.
+
+    Returns 0.0–1.0 relevance score.
+    Returns 0.0 on any error (timeout, connection refused, etc.).
+    """
+    reranker_port = MODEL_REGISTRY["reranker"]["port"]
+    # Truncate to avoid llama.cpp physical batch size limit
+    tr = lambda s: s[:2000] if isinstance(s, str) else str(s)[:2000]
+    body = json.dumps({
+        "query": tr(query),
+        "documents": [tr(document)],
+        "top_n": 1,
+    }).encode()
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{reranker_port}/v1/rerank", data=body,
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read().decode())
+        return float(data["results"][0]["relevance_score"])
+    except Exception as e:
+        print(f"  [reranker] score call failed: {e}", flush=True)
+        return 0.0
+
+
+def reranker_nli_verdict(score: float) -> str:
+    """Map reranker relevance score to grounding verdict.
+
+    ⚠ LIMITATION: This reranker (Qwen3-Reranker-4B Q4_K_M via llama.cpp --reranking)
+    performs RELEVANCE scoring, not NLI (Natural Language Inference). It measures
+    "how relevant is the document to the query" — NOT logical entailment.
+
+    What it catches well:
+      - Topic divergence (completely unrelated content) → UNGROUNDED
+      - Wrong entity names (e.g. "MongoDB" vs "PostgreSQL") → UNGROUNDED
+      - Unstated claims not found in source → UNGROUNDED
+
+    What it MISSES (false GROUNDED):
+      - Negation ("좋다" vs "나쁘다" — same topic, so HIGH)
+      - Numerical contradiction ("5100만" vs "1억" — same topic)
+      - Partial hallucination (added content that's topically related)
+      - Content removal (subset of source text)
+
+    Thresholds (aligned with extract.py Phase 3):
+        >= 0.75 → GROUNDED  (confident accept — content is relevant to source)
+        >= 0.40 → AMBIGUOUS (somewhat related — accepted, downstream catches)
+        <  0.40 → UNGROUNDED (confident reject — content unrelated to source)
+    """
+    if score >= 0.75:
+        return "GROUNDED"
+    elif score >= 0.40:
+        return "AMBIGUOUS"
+    return "UNGROUNDED"
 
 
 def call_llm_json(

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# Status: experimental
-# Path: day_cycle.sh — Phase 1 (embed batch)
-"""Embed Batch Pipeline — f16 embedding via Pod B llama-server.
+# Status: production
+# Path: day_cycle.sh
+"""Embed Batch Pipeline — text_clean_polished 기준 embedding 단 1회.
 
 Checkpoint-based: SELECT turns WHERE created_at > checkpoint AND embedding_f16 IS NULL.
-Sends to Pod B /v1/embeddings (f16 mode) in batches, stores result in turns.embedding_f16.
+Sends to Pod B /v1/embeddings in batches, stores result in turns.embedding_f16.
 Failed turns do NOT advance checkpoint — retried next cycle.
 
 Usage:
@@ -27,12 +27,13 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql, psql_ok, psql_json, esc_sql, get_checkpoint, advance_checkpoint
+from lib.db import psql, psql_ok, psql_json, esc_sql
 from lib.infra.preflight import preflight_checks
 from lib.common import log
 from lib.watchdog.messenger import heartbeat
 
-EMBED_URL = "http://127.0.0.1:8081/v1/embeddings"
+from lib.llm_client import MODEL_REGISTRY
+EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embedder']['port']}/v1/embeddings"
 MAX_BATCH_SIZE = 6    # max texts per request (safety cap)
 BATCH_LIMIT = 200     # max turns per run
 BATCH_TIMEOUT = 1800  # per batch request (30min safety — model cold load ~3.5min + processing)
@@ -88,13 +89,15 @@ def embed_batch(texts: list[str], timeout: int = 600) -> Optional[list[Optional[
 
 
 def get_unembedded_turns(limit: int):
-    """Return turns created after checkpoint without f16 embedding, ordered by created_at."""
-    ckpt = get_checkpoint("embed_batch")
+    """Return turns without f16 embedding, ordered by created_at.
+    State-based filter: no checkpoint needed."""
     rows = psql_json(
-        f"SELECT id, user_turn_clean, text_clean, created_at::text "
+        f"SELECT id, user_turn_clean_polished, text_clean_polished, "
+        f"  user_turn_clean, text_clean, created_at::text "
         f"FROM turns "
-        f"WHERE created_at > '{esc_sql(ckpt)}'::timestamptz "
-        f"  AND embedding_f16 IS NULL "
+        f"WHERE embedding_f16 IS NULL "
+        f"  AND text_clean_polished IS NOT NULL "
+        f"  AND (retry_count IS NULL OR retry_count < 3) "
         f"ORDER BY created_at ASC "
         f"LIMIT {limit}"
     )
@@ -102,8 +105,10 @@ def get_unembedded_turns(limit: int):
 
 
 def _prepare_text(turn: dict) -> Optional[str]:
-    """Combine and truncate turn text for embedding. Returns None to skip."""
-    embed_text = f"{turn['user_turn_clean']} {turn['text_clean']}".strip()
+    """Combine and truncate turn text. text_clean_polished 우선, text_clean fallback."""
+    user = turn.get("user_turn_clean_polished") or turn.get("user_turn_clean") or ""
+    text = turn.get("text_clean_polished") or turn.get("text_clean") or ""
+    embed_text = f"{user} {text}".strip()
     if not embed_text:
         return None
     if len(embed_text) > 8192:
@@ -114,8 +119,10 @@ def _prepare_text(turn: dict) -> Optional[str]:
 def store_embedding(turn_id: str, vector: list):
     """UPDATE turns SET embedding_f16 = vector WHERE id = turn_id."""
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
-    sql = f"UPDATE turns SET embedding_f16 = '{esc_sql(vec_str)}'::vector WHERE id = '{esc_sql(turn_id)}'::uuid"
-    psql_ok(sql)
+    psql_ok(
+        f"UPDATE turns SET embedding_f16 = '{esc_sql(vec_str)}'::vector "
+        f"WHERE id = '{esc_sql(turn_id)}'::uuid"
+    )
 
 
 def main():
@@ -127,12 +134,12 @@ def main():
         if a == "--limit" and i + 1 < len(sys.argv):
             limit = int(sys.argv[i + 1])
 
-    with protect("embed_batch", reason="f16 embedding backfill", ports=[8081]):
+    with protect("embed_batch", reason="embedding batch", ports=[8081]):
         # Background liveness heartbeat (daemon thread, stops when main exits)
         threading.Thread(target=_liveness_heartbeat, daemon=True).start()
 
         log("=" * 60)
-        log("Embed Batch — f16 (Qwen3-Embedding-8B, max_batch={})".format(MAX_BATCH_SIZE))
+        log(f"Embed Batch (max_batch={MAX_BATCH_SIZE})")
         log("=" * 60)
 
         preflight_checks("embed_batch.py", required_ports={8081})
@@ -140,9 +147,7 @@ def main():
         t_start = time.monotonic()
         turns = get_unembedded_turns(limit)
         if not turns:
-            ckpt_val = get_checkpoint("embed_batch")
-            log(f"  [ok] No new turns to embed")
-            log(f"  checkpoint={ckpt_val[:19] if ckpt_val else 'N/A'}")
+            log(f"  [ok] No unembedded turns")
             return
 
         # Pre-process: prepare text, identify skips
@@ -159,13 +164,13 @@ def main():
 
         log(f"  Found {len(turns)} turns: {len(emb_turns)} to embed, {skip_count} empty/skip")
 
-        n_ok = 0
-        n_fail = 0
+        ok_count = 0
+        fail_count = 0
 
         # Log skips but do NOT advance checkpoint — only advance after success
         for turn, _ in [(t, p) for s, t, p in prepared if s == "skip"]:
             log(f"  SKIP (empty) {turn['created_at'][:19]}")
-            n_ok += 1
+            ok_count += 1
 
         # Build batches dynamically by estimated token budget
         batches = []
@@ -209,7 +214,7 @@ def main():
             if dry_run:
                 for turn in batch_turns:
                     log(f"  DRY-RUN: {turn['created_at'][:19]}")
-                n_ok += len(batch_turns)
+                ok_count += len(batch_turns)
                 continue
 
             t0 = time.monotonic()
@@ -218,30 +223,30 @@ def main():
 
             if vectors is None:
                 log(f"  batch {bi}/{len(batches)} — ALL FAILED ({elapsed:.1f}s)")
-                n_fail += len(batch_turns)
+                fail_count += len(batch_turns)
                 continue
 
             # Per-turn storage
-            batch_ok = True
             for turn, vec in zip(batch_turns, vectors):
                 if vec is not None:
                     store_embedding(turn['id'], vec)
-                    n_ok += 1
+                    ok_count += 1
                 else:
-                    batch_ok = False
-                    n_fail += 1
+                    fail_count += 1
                     log(f"  [warn] null vector for {turn['created_at'][:19]}")
-
-            # Only advance checkpoint if ALL turns in batch succeeded
-            if batch_ok and not dry_run:
-                advance_checkpoint("embed_batch", batch_turns[-1]['created_at'])
+                    r = psql_json(f"""
+                        UPDATE turns SET retry_count = COALESCE(retry_count, 0) + 1
+                        WHERE id = '{esc_sql(turn['id'])}'::uuid
+                        RETURNING retry_count
+                    """)
+                    if r and r[0].get('retry_count', 0) >= 3:
+                        store_embedding(turn['id'], [0.0] * 4096)
+                        log(f"  [skip] {turn['created_at'][:19]} — 3 failures, sentinel stored")
 
             log(f"  batch {bi}/{len(batches)} ({len(batch)} texts, ~{sum(len(p) for _, p in batch)//2} est tok) {elapsed:.1f}s")
 
         elapsed = time.monotonic() - t_start
-        log(f"Embed batch done: {n_ok} ok, {n_fail} failed, {elapsed:.0f}s")
-        if n_fail > 0:
-            log(f"  {n_fail} failed — checkpoint NOT advanced past last success")
+        log(f"Embed batch done: {ok_count} ok, {fail_count} failed, {elapsed:.0f}s")
 
 
 if __name__ == "__main__":

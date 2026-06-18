@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: day_cycle.sh — Phase 2 (via day_cycle.py)
-"""Extract Pipeline - checkpoint-based perpetual fact extraction.
+# Path: day_cycle.sh — Extract phase (after polish, via day_cycle.py)
+"""Extract Pipeline — state-based fact extraction via NOT EXISTS anti-join.
 
-SSOT: turns.created_at. Checkpoint in pipeline_checkpoint(phase=extract).
-Each cycle: SELECT WHERE created_at > checkpoint → extract → verify → store → advance.
-Failed turns do NOT advance checkpoint — next cycle retries automatically.
+SSOT: turns table. Filters unprocessed turns using NOT EXISTS against review_facts.
+Each cycle: SELECT WHERE NOT EXISTS → extract → verify → store.
+Failed turns are retried on next cycle (no checkpoint to advance past them).
 DB UNIQUE (turn_id, fact_index, extract_model) prevents duplicate storage.
 
 Flow:
-  Phase 1: SELECT unprocessed (created_at > checkpoint, limit 50)
+  Phase 1: SELECT unprocessed (NOT EXISTS review_facts WHERE source=extract_pipeline, limit 50)
   Phase 2: day_extract extraction (user/thinking/text)
-  Phase 3: Python diff verify (faithfulness check)
+  Phase 3: Reranker faithfulness check (via Pod A reranker — MODEL_REGISTRY)
   Phase 4: Handle failures — retry or mark
-  Phase 5: Store to review_facts + enqueue + advance checkpoint
+  Phase 5: Store to review_facts + enqueue
 
 Usage:
-  python3 scripts/pipelines/extract.py                          # process from checkpoint
+  python3 scripts/pipelines/extract.py                          # batch from state
   python3 scripts/pipelines/extract.py --turn-id <uuid>         # single turn (debug)
   python3 scripts/pipelines/extract.py --limit 50               # batch cap
   python3 scripts/pipelines/extract.py --dry-run                # simulate, no writes
@@ -39,26 +39,107 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.infra.preflight import preflight_checks
 from lib.common import strip_think
-from lib.db import psql, psql_ok, esc_sql, psql_json, get_checkpoint, advance_checkpoint
-from lib.llm_client import call_llm
+from lib.db import psql, psql_ok, esc_sql, psql_json
+from lib.llm_client import call_llm, MODEL_REGISTRY, reranker_score, reranker_nli_verdict
 from lib.llm.json_parser import save_dlq, parse_llm_json
-from lib.queue_writer import enqueue_review
-from sentence_transformers import SentenceTransformer
-
-# Embedder cache (lazy load)
-_EMBEDDER: Optional[SentenceTransformer] = None
-
 # ── Constants ──────────────────────────────────────────────────────────────
 # Timeout/token/temp for extraction (day_extract)
 TIMEOUT_EXTRACT = 900
 MAX_TOKENS_EXTRACT = 512
 TEMP_EXTRACT = 0.1
 BATCH_LIMIT = 10
+TIME_BUDGET = 3600  # default: 1 hour budget for batch slicing
+
+# Dynamic timeout: estimate from input character count + generation time
+# 7B Q8 measured: ~9 t/s prompt, ~1.5-2.5 t/s decode
+TIMEOUT_BASE = 60
+TIMEOUT_PER_CHAR = 0.2
+MAX_CHARS_SOLO = 5000
+SOLO_TIMEOUT_FACTOR = 2.5
+GEN_TIME_BUF = 300  # 512 tok / ~2 t/s gen with parallel contention buffer
+
+
+def _calc_timeout(total_chars: int, solo: bool = False) -> int:
+    """Calculate per-request timeout from input size + generation estimate."""
+    est = TIMEOUT_BASE + int(total_chars * TIMEOUT_PER_CHAR) + GEN_TIME_BUF
+    if solo:
+        est = int(est * SOLO_TIMEOUT_FACTOR)
+    return min(est, 1800)
+
+
+def _calc_batch_limit(time_budget: int) -> int:
+    """Estimate how many unprocessed turns fit within time_budget.
+
+    Scans turns by char count, estimates per-turn LLM + store cost,
+    respects parallel=2 concurrency, returns safe limit.
+    """
+    from lib.db import psql_json
+
+    sql = (
+        "SELECT LENGTH(COALESCE(t.user_turn,'')) "
+        "  + LENGTH(COALESCE(t.thinking,'')) "
+        "  + LENGTH(COALESCE(t.text,'')) AS total_chars "
+        "FROM turns t "
+        "WHERE t.text != '' "
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM review_facts rf "
+        "  WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'"
+        ")"
+        "ORDER BY t.created_at ASC"
+    )
+    rows = psql_json(sql)
+    if not rows:
+        return 0
+
+    total_est = 0.0
+    count = 0
+    pair_buffer = []
+
+    for row in rows:
+        chars = row.get("total_chars", 0) or 0
+        solo = chars > MAX_CHARS_SOLO
+        llm_cost = _calc_timeout(chars, solo=solo)
+        store_cost = 30  # sequential store/verify overhead per turn
+
+        pair_buffer.append(llm_cost)
+        if len(pair_buffer) == 2:
+            pair_time = max(pair_buffer) + store_cost * 2
+            # Check if a partial pair fits
+            if total_est + store_cost + pair_buffer[0] > time_budget:
+                break
+            if total_est + pair_time > time_budget:
+                count += 1  # first of pair fits
+                break
+            total_est += pair_time
+            count += 2
+            pair_buffer = []
+
+    # Remaining single
+    if pair_buffer and total_est + pair_buffer[0] + store_cost <= time_budget:
+        count += 1
+
+    return max(count, 1)
 
 # Faithfulness thresholds
-COSINE_FAITHFUL = 0.75     # cos ≥ this → faithful
-COSINE_UNFAITHFUL = 0.40   # cos < this → unfaithful
-COSINE_AMBIGUOUS = (COSINE_UNFAITHFUL, COSINE_FAITHFUL)  # ambiguous range
+
+# ── NLI Self-Verify Prompt (7B Q8) ─────────────────────────────
+_NLI_VERIFY_PROMPT = """You are verifying whether an EVIDENCE sentence is factually supported by a SOURCE sentence.
+
+Follow these steps:
+1. Identify the key factual claim in the evidence.
+2. Check whether that claim is directly stated or clearly implied by the source.
+3. Output exactly one label.
+
+LABELS:
+- ENTAILMENT: The evidence is directly supported by the source.
+- CONTRADICTION: The evidence contradicts the source — they cannot both be true.
+- NEUTRAL: The evidence is related but not directly entailed by the source.
+
+Output EXACTLY one word: ENTAILMENT | CONTRADICTION | NEUTRAL
+No punctuation. No explanation.
+
+SOURCE: {source}
+EVIDENCE: {evidence}"""
 
 # ── System prompts ─────────────────────────────────────────────────────────
 SYSTEM_DAY_EXTRACT = """\
@@ -157,111 +238,19 @@ def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict
     return result
 
 
-# ── Dual embedding models (lazy singleton, batch-optimized) ─────────────
-_BGE_EMBEDDER: Optional[SentenceTransformer] = None
-_KO_EMBEDDER: Optional[SentenceTransformer] = None
+# ── Reranker faithfulness via Pod A (MODEL_REGISTRY) ──────────────────
 
 
-def _get_embedder_bge():
-    """Lazy-load BAAI/bge-m3 (multilingual, 1024d, ~1.1GB FP32)."""
-    global _BGE_EMBEDDER
-    if _BGE_EMBEDDER is None:
-        print("  [embed] Loading BGE-M3 (multilingual 1024d)...", flush=True)
-        t0 = time.monotonic()
-        _BGE_EMBEDDER = SentenceTransformer('BAAI/bge-m3', cache_folder='/opt/ai_data/models')
-        print(f"  [embed] BGE-M3 loaded in {time.monotonic() - t0:.1f}s", flush=True)
-    return _BGE_EMBEDDER
+def _rerank_score(evidence: str, source: str) -> float:
+    """Score evidence-source relevance via shared reranker_score()."""
+    return reranker_score(evidence, source)
 
 
-def _get_embedder_ko():
-    """Lazy-load jhgan/ko-sroberta-multitask (Korean, 768d, ~440MB)."""
-    global _KO_EMBEDDER
-    if _KO_EMBEDDER is None:
-        print("  [embed] Loading ko-sroberta-multitask (Korean 768d)...", flush=True)
-        t0 = time.monotonic()
-        _KO_EMBEDDER = SentenceTransformer('jhgan/ko-sroberta-multitask', cache_folder='/opt/ai_data/models')
-        print(f"  [embed] ko-sroberta loaded in {time.monotonic() - t0:.1f}s", flush=True)
-    return _KO_EMBEDDER
-
-
-# ── Dual-embedding faithfulness ────────────────────────────────────────
-def _batch_cosine(embedder: SentenceTransformer, ev_list: List[str],
-                  src_list: List[str]) -> List[float]:
-    """Batch compute cosine similarity between evidence and source pairs."""
-    if not ev_list or not src_list:
-        return [0.0] * max(len(ev_list), len(src_list))
-    try:
-        ev_emb = embedder.encode(ev_list, normalize_embeddings=True, show_progress_bar=False)
-        src_emb = embedder.encode(src_list, normalize_embeddings=True, show_progress_bar=False)
-        return [float(ev_emb[i] @ src_emb[i]) for i in range(len(ev_list))]
-    except Exception as e:
-        print(f"  [embed] WARN: {type(e).__name__}: {e}", flush=True)
-        return [0.0] * len(ev_list)
-
-
-def _check_faithfulness_scored(evidence: str, source: str) -> dict:
-    """Fallback single-pair faithfulness check (used outside _verify_extractions batch path)."""
-    if not evidence or not source:
-        return {"faithful": False, "score": 0, "method": "empty", "nli_verdict": None}
-    cos = _batch_cosine(_get_embedder_bge(), [evidence], [source])[0]
-    score = round(cos * 100, 1)
-    if cos >= COSINE_FAITHFUL:
-        return {"faithful": True, "score": score, "method": "bge_m3", "nli_verdict": "ENTAILMENT",
-                "_bge_cos": cos}
-    if cos < COSINE_UNFAITHFUL:
-        return {"faithful": False, "score": score, "method": "bge_m3", "nli_verdict": "CONTRADICTION",
-                "_bge_cos": cos}
-    if _check_faithfulness(evidence, source):
-        return {"faithful": True, "score": score, "method": "substr", "nli_verdict": "ENTAILMENT",
-                "_bge_cos": cos}
-    return {"faithful": True, "score": score, "method": "bge_m3_ambig", "nli_verdict": "NEUTRAL",
-            "_bge_cos": cos}
-
-
-def _dual_embedding_verdict(bge_cos: float, ko_cos: float,
-                            evidence: str, source: str) -> dict:
-    """Combine BGE-M3 and ko-sroberta cosine scores for final verdict.
-
-    Decision matrix (both models run in batch at _verify_extractions level):
-        Both >= FAITHFUL  → ENTAILMENT (confident accept)
-        Both < UNFAITHFUL → CONTRADICTION (confident reject)
-        Either >= FAITHFUL → ENTAILMENT (one model is confident)
-        Otherwise → NEUTRAL (ambiguous → substring + accept, 14B catches bad ones)
-    """
-    cos_avg = (bge_cos + ko_cos) / 2
-    score = round(cos_avg * 100, 1)
-
-    bge_ok = bge_cos >= COSINE_FAITHFUL
-    bge_bad = bge_cos < COSINE_UNFAITHFUL
-    ko_ok = ko_cos >= COSINE_FAITHFUL
-    ko_bad = ko_cos < COSINE_UNFAITHFUL
-
-    if bge_ok and ko_ok:
-        return {"faithful": True, "score": score, "method": "dual",
-                "nli_verdict": "ENTAILMENT", "_bge_cos": bge_cos, "_ko_cos": ko_cos}
-    if bge_bad and ko_bad:
-        return {"faithful": False, "score": score, "method": "dual",
-                "nli_verdict": "CONTRADICTION", "_bge_cos": bge_cos, "_ko_cos": ko_cos}
-    if bge_ok or ko_ok:
-        return {"faithful": True, "score": score, "method": "dual_partial",
-                "nli_verdict": "ENTAILMENT", "_bge_cos": bge_cos, "_ko_cos": ko_cos}
-
-    # Both in ambiguous range [0.40, 0.75)
-    if _check_faithfulness(evidence, source):
-        return {"faithful": True, "score": score, "method": "dual_substr",
-                "nli_verdict": "ENTAILMENT", "_bge_cos": bge_cos, "_ko_cos": ko_cos}
-
-    # Genuinely ambiguous → accept but flag for 14B scrutiny
-    return {"faithful": True, "score": score, "method": "dual_ambig",
-            "nli_verdict": "NEUTRAL", "_bge_cos": bge_cos, "_ko_cos": ko_cos}
-
-
-# ── Hallucination check (substring fallback) ────────────────────────────
-
-# Keep _cosine_faithfulness as an alias for backward compat (nli_compare.py, extract_compare.py)
 def _cosine_faithfulness(evidence: str, source: str) -> float:
-    """Backward-compat single-pair cosine via BGE-M3 batch path."""
-    return _batch_cosine(_get_embedder_bge(), [evidence], [source])[0]
+    """Backward-compat: single-pair reranker score."""
+    return _rerank_score(evidence, source)
+
+
 def _check_faithfulness(evidence: str, source: str) -> bool:
     """Return True if evidence is a substring of source (faithful)."""
     if not evidence or not source:
@@ -343,6 +332,7 @@ def _post_process_extractions(
 
     cleaned: List[Dict[str, Any]] = []
     seen_normalized: set = set()
+    seen_exact: set = set()  # within-turn exact dedup
 
     # Load recent evidence for E4 cross-turn dedup
     recent_evidence: set = set()
@@ -381,7 +371,12 @@ def _post_process_extractions(
         if not evidence:
             continue
 
-        # E4: Dedup
+        # Exact dedup (within-turn): same text verbatim → skip
+        if evidence in seen_exact:
+            continue
+        seen_exact.add(evidence)
+
+        # E4: Cross-turn dedup
         norm_key = re.sub(r'[^a-zA-Z0-9가-힣]', '', evidence[:50]).lower()
         if len(norm_key) > 5:
             if norm_key in recent_evidence or norm_key in seen_normalized:
@@ -398,7 +393,8 @@ def _post_process_extractions(
 
 # ── Phase 2: extraction ────────────────────────────────────────────────
 def _extract_facts(user_turn: str, thinking: str, text: str,
-                   pulse_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
+                   pulse_context: Optional[str] = None,
+                   timeout: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """Run day_extract extraction. Returns {extractions, usage, timings, elapsed_ms}."""
     parts = [
         "=== user_turn ===",
@@ -419,7 +415,8 @@ def _extract_facts(user_turn: str, thinking: str, text: str,
         [{"role": "system", "content": system_prompt},
          {"role": "user", "content": "\n".join(parts)}],
         model="day_extract",
-        max_tokens=MAX_TOKENS_EXTRACT, temperature=TEMP_EXTRACT, timeout=TIMEOUT_EXTRACT,
+        max_tokens=MAX_TOKENS_EXTRACT, temperature=TEMP_EXTRACT,
+        timeout=timeout if timeout is not None else TIMEOUT_EXTRACT,
         json_mode=True, return_meta=True,
     )
     raw = meta["content"]
@@ -434,69 +431,135 @@ def _extract_facts(user_turn: str, thinking: str, text: str,
     return result
 
 
-# ── Phase 3: Batch dual-embedding verify ─────────────────────────────────────
+# ── Phase 3: Reranker faithfulness verify ──────────────────────────────
 def _verify_extractions(
     extractions: List[Dict[str, Any]],
     user_turn: str, thinking: str, text: str,
 ) -> List[Dict[str, Any]]:
-    """Dual-embedding faithfulness check: BGE-M3 + ko-sroberta in batch.
+    """Reranker grounding check via Pod A reranker (MODEL_REGISTRY).
 
-    All evidence-source pairs are pre-collected and batch-encoded by both
-    models (1 inference each, not N per fact). The per-pair verdict matrix:
+    Each evidence-source pair is scored by the cross-encoder reranker.
+    The reranker measures TOPICAL RELEVANCE, not logical entailment.
 
-        Both ≥0.75 → ENTAILMENT (confident accept)
-        Both <0.40 → CONTRADICTION (confident reject)
-        Either ≥0.75 → ENTAILMENT (one model confident)
-        Neither ≥0.75, neither <0.40 → substring fallback, else dual_ambig
+    ⚠ LIMITATION:
+      - GROUNDED (≥0.75): content is topically related to source
+      - UNGROUNDED (<0.40): content is on a different topic
+      - AMBIGUOUS (0.40-0.75): somewhat related, substring fallback
+      - Does NOT detect: negation, numerical contradictions, added content
 
     Returns [{fact_type, evidence, category, faithful, faithful_score,
-              faithful_method, nli_verdict}].
+              faithful_method, grounding}].
     """
     source_map = {"user": user_turn, "thinking": thinking, "text": text}
 
-    # Collect evidence-source pairs
-    ev_list: List[str] = []
-    src_list: List[str] = []
-    valid_indices: List[int] = []
-    for i, ex in enumerate(extractions):
+    results = []
+    for ex in extractions:
         evidence = ex.get("evidence", "")
         source = source_map.get(ex.get("fact_type", ""), "")
-        if evidence and source:
-            ev_list.append(evidence)
-            src_list.append(source)
-            valid_indices.append(i)
-
-    # Batch encode with both models — only if there are valid pairs
-    bge_cos: List[float] = [0.0] * len(extractions)
-    ko_cos: List[float] = [0.0] * len(extractions)
-    if valid_indices:
-        bge_cos_vec = _batch_cosine(_get_embedder_bge(), ev_list, src_list)
-        ko_cos_vec = _batch_cosine(_get_embedder_ko(), ev_list, src_list)
-        for pos, idx in enumerate(valid_indices):
-            bge_cos[idx] = bge_cos_vec[pos]
-            ko_cos[idx] = ko_cos_vec[pos]
-
-    # Per-pair verdict
-    results = []
-    for i, ex in enumerate(extractions):
-        verdict = _dual_embedding_verdict(
-            bge_cos[i], ko_cos[i],
-            ex.get("evidence", ""), source_map.get(ex.get("fact_type", ""), ""),
-        )
+        cos = _rerank_score(evidence, source) if evidence and source else 0.0
+        score = round(cos * 100, 1)
+        grounding = reranker_nli_verdict(cos)
+        if grounding == "GROUNDED":
+            verdict = {"faithful": True, "score": score, "method": "reranker",
+                       "grounding": grounding}
+        elif grounding == "UNGROUNDED":
+            verdict = {"faithful": False, "score": score, "method": "reranker",
+                       "grounding": grounding}
+        else:
+            # AMBIGUOUS — substring fallback, else accepted (verify catches)
+            if _check_faithfulness(evidence, source):
+                verdict = {"faithful": True, "score": score, "method": "reranker_substr",
+                           "grounding": "GROUNDED"}
+            else:
+                verdict = {"faithful": True, "score": score, "method": "reranker_ambig",
+                           "grounding": "AMBIGUOUS"}
         results.append({
             "fact_type": ex.get("fact_type", ""),
-            "evidence": ex.get("evidence", ""),
+            "evidence": evidence,
             "category": ex.get("category", "other"),
             "faithful": verdict["faithful"],
             "faithful_score": verdict["score"],
             "faithful_method": verdict["method"],
-            "nli_verdict": verdict["nli_verdict"],
+            "grounding": verdict["grounding"],
         })
     return results
 
 
 
-# ── Phase 4: Fallback extraction (after day_extract double-failure) ────────────
+# ── Phase 4: LLM NLI Self-Verify (7B Q8) ──────────────────────────────
+def _llm_nli_check(evidence: str, source: str) -> str:
+    """Run 7B Q8 NLI self-verify on a single evidence-source pair.
+
+    Returns: "ENTAILMENT", "CONTRADICTION", or "NEUTRAL"
+    Falls back to "NEUTRAL" on any parse/network error.
+
+    Uses structured step prompt (CoVe-style instructions in prompt)
+    and robust first-word extraction for reliable parsing.
+    """
+    if not evidence or not source:
+        return "NEUTRAL"
+
+    prompt = _NLI_VERIFY_PROMPT.format(
+        source=source[:2000], evidence=evidence[:500]
+    )
+    try:
+        meta = call_llm(
+            [{"role": "user", "content": prompt}],
+            model="day_extract",
+            max_tokens=64, temperature=0.0, timeout=30,
+            return_meta=True,
+        )
+        raw = meta["content"].strip().upper()
+        for tok in raw.replace("\n", " ").split():
+            tok = tok.strip(".,!?;:\"'()[]")
+            if tok in ("ENTAILMENT", "CONTRADICTION", "NEUTRAL"):
+                return tok
+        return "NEUTRAL"
+    except Exception:
+        return "NEUTRAL"
+
+
+def _llm_nli_verify(
+    extractions: List[Dict[str, Any]],
+    user_turn: str, thinking: str, text: str,
+) -> List[Dict[str, Any]]:
+    """Phase 4: 7B Q8 LLM NLI verify on post-processed extractions.
+
+    Each evidence-source pair is checked for logical entailment by the
+    7B Q8 extractor model (same model, different task — entailment NLI).
+
+    Complements Phase 3 reranker (topical relevance) by detecting:
+      - Negation flip ("not X" vs "X")
+      - Numerical contradictions ("5" vs "10")
+      - Hallucinated content not present in source
+      - Factual contradictions
+
+    Adds fields: nli_llm (ENTAILMENT|CONTRADICTION|NEUTRAL)
+    CONTRADICTION overrides faithful=False with method='7b_nli'.
+    """
+    source_map = {"user": user_turn, "thinking": thinking, "text": text}
+
+    for ex in extractions:
+        evidence = ex.get("evidence", "")
+        source = source_map.get(ex.get("fact_type", ""), "")
+
+        if not evidence or not source:
+            ex["nli_llm"] = "SKIP"
+            continue
+
+        verdict = _llm_nli_check(evidence, source)
+        ex["nli_llm"] = verdict
+
+        # CONTRADICTION overrides reranker — mark unfaithful
+        if verdict == "CONTRADICTION":
+            ex["faithful"] = False
+            ex["faithful_score"] = 0
+            ex["faithful_method"] = "7b_nli"
+
+    return extractions
+
+
+# ── Phase 5: Fallback extraction (after day_extract double-failure) ────────────
 def _fallback_extract(user_turn: str, thinking: str, text: str,
                       model: str = "day_extract",
                       pulse_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -538,9 +601,10 @@ def _insert_fact(turn_id: str, fact_index: int, fact_type: str,
                  elapsed_ms: Optional[float] = None,
                  faithful_score: Optional[int] = None,
                  faithful_method: Optional[str] = None,
-                 nli_verdict: Optional[str] = None,
+                 grounding: Optional[str] = None,
+                 nli_llm: Optional[str] = None,
                  source_file: Optional[str] = None) -> bool:
-    """Insert a fact row into review_facts with optional faithfulness metadata."""
+    """Insert a fact row into review_facts with optional grounding metadata."""
     cols = ["turn_id", "fact_index", "fact_type", "evidence", "extract_model", "verdict",
             "source", "fact_action", "fact_confidence"]
     vals = [f"'{esc_sql(turn_id)}'::uuid", str(fact_index),
@@ -564,10 +628,14 @@ def _insert_fact(turn_id: str, fact_index: int, fact_type: str,
         cols.append("elapsed_ms")
         vals.append(f"{elapsed_ms:.1f}")
         set_clauses.append(f"elapsed_ms = {elapsed_ms:.1f}")
-    if nli_verdict:
+    if grounding:
         cols.append("nli_verdict")
-        vals.append(f"'{esc_sql(nli_verdict)}'")
-        set_clauses.append(f"nli_verdict = '{esc_sql(nli_verdict)}'")
+        vals.append(f"'{esc_sql(grounding)}'")
+        set_clauses.append(f"nli_verdict = '{esc_sql(grounding)}'")
+    if nli_llm:
+        cols.append("nli_llm")
+        vals.append(f"'{esc_sql(nli_llm)}'")
+        set_clauses.append(f"nli_llm = '{esc_sql(nli_llm)}'")
     if source_file:
         cols.append("source_file")
         vals.append(f"'{esc_sql(source_file)}'")
@@ -611,19 +679,26 @@ def _insert_mark(turn_id: str, mark: str, extract_model: str, is_final: bool = F
 
 # ── Phase 1: Select turns ─────────────────────────────────────────────────
 def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
-    """Return turns created after checkpoint, ordered by creation time.
+    """Return turns without successful extraction, ordered by creation time.
 
-    Checkpoint = last successfully processed turn's created_at.
-    Failed turns do NOT advance checkpoint → retried on next cycle.
+    State-based filter: NOT EXISTS extract_pipeline rows means
+    this turn has never been successfully extracted.
+    Failed turns (source='extract_marker') are automatically retried.
     """
-    checkpoint = get_checkpoint("extract")
     sql = (
-        "SELECT t.id, t.user_turn, t.thinking, t.text, "
+        "SELECT t.id, "
+        "  COALESCE(t.user_turn_clean_polished, t.user_turn_clean, t.user_turn) AS user_turn, "
+        "  COALESCE(t.thinking_clean_polished, t.thinking_clean, t.thinking) AS thinking, "
+        "  COALESCE(t.text_clean_polished, t.text_clean, t.text) AS text, "
         "  t.source_message_id, t.created_at, "
         "  t.conversation_id, t.seq "
         "FROM turns t "
         "WHERE t.text != '' "
-        f"  AND t.created_at > '{esc_sql(checkpoint)}'::timestamptz "
+        "  AND NOT EXISTS ("
+        "    SELECT 1 FROM review_facts rf "
+        "    WHERE rf.turn_id = t.id "
+        "    AND rf.source = 'extract_pipeline'"
+        "  ) "
         "ORDER BY t.created_at ASC "
         f"LIMIT {limit}"
     )
@@ -647,19 +722,19 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
 
 # ── Concurrent extraction config ─────────────────────────────────────────────
 # Must match llama-server --parallel (pod-b-entrypoint.sh PARALLEL env var).
-PARALLEL = 3
+PARALLEL = 2
 
 
 def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[dict, Optional[Dict[str, Any]], Optional[str]]:
-    """Wrapper for parallel LLM call. Returns (turn, ex_result_or_None, error_str_or_None).
-
-    Raises nothing — exceptions are caught and returned as error_str.
-    """
-    ut = turn.get("user_turn") or ""
-    th = turn.get("thinking") or ""
-    tx = turn.get("text") or ""
+    """Wrapper for parallel LLM call. Returns (turn, ex_result_or_None, error_str_or_None)."""
+    user_turn = turn.get("user_turn") or ""
+    thinking = turn.get("thinking") or ""
+    text = turn.get("text") or ""
+    total_chars = len(user_turn) + len(thinking) + len(text)
+    solo = total_chars > MAX_CHARS_SOLO
+    timeout = _calc_timeout(total_chars, solo=solo)
     try:
-        ex_result = _extract_facts(ut, th, tx, pulse_context=pulse_context)
+        ex_result = _extract_facts(user_turn, thinking, text, pulse_context=pulse_context, timeout=timeout)
         return (turn, ex_result, None)
     except Exception as e:
         return (turn, None, str(e))
@@ -671,15 +746,21 @@ def extract_pipeline(
     limit: int = BATCH_LIMIT,
     dry_run: bool = False,
     pulse_context: Optional[str] = None,
+    time_budget: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Run day_extract extraction → Python verify → store per turn."""
+    """Run extraction → reranker verify → store per turn."""
     t_start = time.monotonic()
 
     print(f"\n{'=' * 60}")
-    print(f"Extract Pipeline — day_extract → Python verify → store")
+    print(f"Extract Pipeline — LLM extract → reranker verify → store")
     if dry_run:
         print("  [DRY RUN] No writes to DB")
+    if time_budget:
+        print(f"  Time budget: {time_budget}s")
     print(f"{'=' * 60}")
+
+    # Ensure nli_llm column exists (idempotent migration)
+    psql_ok("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm TEXT")
 
     # ── Phase 1: Select turns ──────────────────────────────────────────
     if turn_id:
@@ -703,6 +784,9 @@ def extract_pipeline(
             "seq": r.get("seq", 0) or 0,
         }]
     else:
+        if time_budget:
+            limit = _calc_batch_limit(time_budget)
+            print(f"  Budget-limited batch: {limit} turns")
         turns = _get_unprocessed_turns(limit)
 
     if not turns:
@@ -742,15 +826,15 @@ def extract_pipeline(
     idx = 0
     for turn in turns:
         idx += 1
-        tid = turn["id"]
-        ut = turn["user_turn"] or ""
-        th = turn["thinking"] or ""
-        tx = turn["text"] or ""
-        print(f"\n[{idx}/{len(turns)}] Turn {tid[:8]}... "
-              f"user={len(ut)}ch think={len(th)}ch text={len(tx)}ch")
+        turn_id_val = turn["id"]
+        user_turn = turn["user_turn"] or ""
+        thinking = turn["thinking"] or ""
+        text = turn["text"] or ""
+        print(f"\n[{idx}/{len(turns)}] Turn {turn_id_val[:8]}... "
+              f"user={len(user_turn)}ch think={len(thinking)}ch text={len(text)}ch")
 
         try:
-            ex_result, error = turn_results.get(tid, (None, "missing batch result"))
+            ex_result, error = turn_results.get(turn_id_val, (None, "missing batch result"))
             used_model = "day_extract"
             mark = ""
 
@@ -758,14 +842,14 @@ def extract_pipeline(
                 print(f"  [extract]   day_extract exception: {error}", flush=True)
                 mark = "추출 실패"
                 if not dry_run:
-                    _insert_mark(tid, mark, used_model, is_final=True)
+                    _insert_mark(turn_id_val, mark, used_model, is_final=True)
                 failed += 1
                 continue
 
             if ex_result is None:
                 print(f"  [extract]   Parse failure")
                 if not dry_run:
-                    _insert_mark(tid, "추출 parse 실패", used_model, is_final=True)
+                    _insert_mark(turn_id_val, "추출 parse 실패", used_model, is_final=True)
                 failed += 1
                 continue
 
@@ -773,14 +857,15 @@ def extract_pipeline(
             ex_usage = ex_result.get("usage", {})
             ex_timings = ex_result.get("timings", {})
             ex_elapsed = ex_result.get("elapsed_ms", 0)
-            verified = _verify_extractions(raw_ex, ut, th, tx)
-            verified = _post_process_extractions(verified, tid, ut, th, tx)  # E1/E3/E4/E5
+            verified = _verify_extractions(raw_ex, user_turn, thinking, text)
+            verified = _post_process_extractions(verified, turn_id_val, user_turn, thinking, text)  # E1/E3/E4/E5
+            verified = _llm_nli_verify(verified, user_turn, thinking, text)  # 7B Q8 NLI self-verify
             extractions = verified
 
             if extractions is None:
                 print(f"  [extract]   No faithful extractions — marking failure")
                 if not dry_run:
-                    _insert_mark(tid, mark or "추출 2회실패", used_model,
+                    _insert_mark(turn_id_val, mark or "추출 2회실패", used_model,
                                  is_final=True)
                 failed += 1
                 continue
@@ -801,52 +886,26 @@ def extract_pipeline(
             for ex in extractions:
                 ft = ex.get("fact_type", "text")
                 evidence = ex.get("evidence", "")
-                _insert_fact(tid, fi, ft, evidence, used_model,
+                _insert_fact(turn_id_val, fi, ft, evidence, used_model,
                              prompt_tokens=pt, gen_tokens=gt, elapsed_ms=em,
                              faithful_score=ex.get("faithful_score"),
                              faithful_method=ex.get("faithful_method"),
-                             nli_verdict=ex.get("nli_verdict"))
+                             grounding=ex.get("grounding"),
+                             nli_llm=ex.get("nli_llm"))
                 fi += 1
 
             # Write the failure marker if any (only on successful extraction)
             if mark:
-                _insert_mark(tid, mark, used_model, is_final=False)
+                _insert_mark(turn_id_val, mark, used_model, is_final=False)
 
             print(f"  [extract]   Stored {fi} facts", flush=True)
             total_facts += fi
             processed += 1
 
-            # Enqueue for downstream P→R→J review → verify (nightly)
-            # → activity_log (DB) type='extract_result', queue_status='reviewed'
-            enqueue_review(
-                entry_type="extract_result",
-                source="extract_pipeline.py",
-                title=f"Extract: {tid[:8]} ({fi} facts)",
-                summary=(
-                    f"{fi} facts ({used_model})" + (f" — {mark}" if mark else "")),
-                body={
-                    "turn_id": tid,
-                    "fact_count": fi,
-                    "faithful_count": len(extractions),
-                    "extract_model": used_model,
-                    "extract_prompt_tokens": pt,
-                    "extract_completion_tokens": gt,
-                    "extract_elapsed_ms": em,
-                    "mark": mark,
-                },
-                model=used_model,
-                turn_ids=[tid],
-                tags=["extract", "fact_extraction"],
-                queue_status="pending",
-            )
-
-            # Advance checkpoint to this turn's created_at
-            advance_checkpoint("extract", turn["created_at"])
-
         except Exception as e:
             print(f"  [extract]   ERROR: {type(e).__name__}: {e}", flush=True)
             if not dry_run:
-                _insert_mark(tid, f"ERROR: {e}"[:200], "day_extract", is_final=False)
+                _insert_mark(turn_id_val, f"ERROR: {e}"[:200], "day_extract", is_final=False)
             failed += 1
 
     elapsed = round(time.monotonic() - t_start, 1)
@@ -859,7 +918,7 @@ def extract_pipeline(
     print(f"{'=' * 60}")
 
     return {"processed": processed, "failed": failed,
-            "facts": total_facts, "elapsed_s": elapsed, "ok": failed == 0}
+            "facts": total_facts, "elapsed_s": elapsed, "ok": processed > 0}
 
 
 # ── File description phase ──────────────────────────────────────────────────
@@ -947,7 +1006,7 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
         processed += 1
 
     print(f"[describe-files] Done: {processed} described, {failed} failed")
-    return {"processed": processed, "failed": failed, "ok": failed == 0}
+    return {"processed": processed, "failed": failed, "ok": processed > 0}
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
@@ -958,9 +1017,11 @@ def main() -> None:
         description=f"Extract Pipeline — day_extract → Python verify → store")
     parser.add_argument("--turn-id", help="Process a specific turn UUID")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
+    parser.add_argument("--time-budget", "-t", type=int, default=None,
+                        help="Max estimated processing seconds for batch (default: no limit)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--pulse-context", help="Inject Watchman Pulse context")
+    parser.add_argument("--pulse-context", help="Inject Watchdog Pulse context")
     parser.add_argument("--describe-files", action="store_true",
                         help="Scan file_registry for undescribed files and generate descriptions")
     args = parser.parse_args()
@@ -973,6 +1034,7 @@ def main() -> None:
             limit=args.limit,
             dry_run=args.dry_run,
             pulse_context=args.pulse_context,
+            time_budget=args.time_budget,
         )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

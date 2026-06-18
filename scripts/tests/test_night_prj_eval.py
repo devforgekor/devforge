@@ -15,6 +15,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 os.chdir(SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+from lib.llm_client import MODEL_REGISTRY
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm
 
 # ── Night models (night.py v4.0) ──────────────────────────────────────
@@ -226,7 +227,7 @@ def _current_mode() -> Optional[str]:
 
 def _health_ok(timeout: int = 600) -> bool:
     """Poll :8081/health until 200 or timeout."""
-    url = "http://127.0.0.1:8081/health"
+    url = f"http://127.0.0.1:{MODEL_REGISTRY['proposer']['port']}/health"
     t0 = time.monotonic()
     while time.monotonic() - t0 < timeout:
         try:

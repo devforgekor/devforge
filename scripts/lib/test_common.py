@@ -20,7 +20,7 @@ import sys
 import time as _time
 from typing import Any, Dict, List, Optional
 
-from lib.protection import register_protect, unregister_protect
+from lib.protection import register_protect, unregister_protect, active_contexts
 from lib.common import log
 from lib.db import psql_json, esc_sql
 from lib.llm.json_parser import parse_llm_json
@@ -56,6 +56,12 @@ def test_setup(name: str, description: str = "") -> dict:
 
     pulse_id = f"test_{name}"
     protect_ctx = f"test_{name}"
+
+    # Duplicate guard — reject if same test context is already active
+    existing = active_contexts()
+    if protect_ctx in existing:
+        log(f"[test:{name}] DUPLICATE DETECTED — same test already running, abort")
+        sys.exit(1)
 
     # Register heartbeat
     _heartbeat(pulse_id, detail="started")

@@ -8,6 +8,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+from lib.llm_client import MODEL_REGISTRY
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 
 # Write env file
@@ -50,7 +51,7 @@ t0 = time.monotonic()
 for i in range(600):
     try:
         r2 = urllib.request.urlopen(
-            urllib.request.Request("http://127.0.0.1:8082/health", method="GET"), timeout=5)
+            urllib.request.Request(f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/health", method="GET"), timeout=5)
         body = r2.read().decode()
         if r2.status == 200:
             log(f"Ready in {i+1}s ({time.monotonic()-t0:.0f}s total)")
@@ -79,8 +80,8 @@ tokens = meta.get("usage",{}).get("completion_tokens", 0)
 tps = round(tokens/elapsed, 2) if elapsed > 0 else 0
 log(f"Warm-up: {elapsed:.1f}s, {tokens}tok, {tps}t/s")
 
-# Test extract with MCP context
-print("\n── Test extract (MCP context) ──", flush=True)
+# Test extract with enrich context
+print("\n── Test extract (enrich context) ──", flush=True)
 user = """=== USER TURN ===
 로그인 API가 3초나 걸리는데 원인이 뭘까?
 
@@ -93,12 +94,12 @@ AsyncSession이지만 연결 풀링이 전혀 안 됨. 이것이 3초 응답의 
 [fact] auth_routes.py login() opens new async session per request — no pooling
 [fact] DB connection pool exhaustion is root cause
 
-=== MCP CONTEXT (Global Project Info) ===
-[mcp] Repository: devforge/server, Branch: main
-[mcp] PostgreSQL 16, pg_trgm enabled
-[mcp] Caddy reverse proxy, blue-green deployment
-[mcp] LLM models: 7B extractor, 14B verify, 30B night proposer
-[mcp] Pod B swap mechanism for model switching"""
+=== ENRICH CONTEXT (Global Project Info) ===
+[enrich] Repository: devforge/server, Branch: main
+[enrich] PostgreSQL 16, pg_trgm enabled
+[enrich] Caddy reverse proxy, blue-green deployment
+[enrich] LLM models: 7B extractor, 14B verify, 30B night proposer
+[enrich] Pod B swap mechanism for model switching"""
 
 system = """You are a code review extractor. Analyze the code review turn and all context.
 Extract ALL potential issues, bugs, security problems, and improvements.

@@ -107,8 +107,8 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
             db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%semantic%'")
             or file_exists("/opt/projects/server/scripts/embed_turns.py")
         ),
-        "MCP mem_search": lambda: (
-            db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%mcp%vector%'")
+        "Enrich mem_search": lambda: (
+            db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%mcp%vector%' OR title ILIKE '%enrich%vector%'")
         ),
         "vector column": lambda: (
             db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%vector%'")

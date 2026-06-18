@@ -13,6 +13,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from lib.llm_client import MODEL_REGISTRY
 from .debate_data import MODELS, PROMPTS, SWITCH_FILE
 
 # Map debate_data model_id → MODEL_REGISTRY key (for unified config access)
@@ -348,19 +349,20 @@ def switch_local_model(model_id: str, dry_run: bool = False) -> bool:
         pass
 
     if same_model:
-        return _poll_health(port=8081, timeout=cfg.get("bench_load_s", 120) + 60)
+        return _poll_health(port=MODEL_REGISTRY['proposer']['port'], timeout=cfg.get("bench_load_s", 120) + 60)
 
     _write_switch_file(model_id)
     time.sleep(5)
     for _ in range(12):
         try:
-            req = urllib.request.Request("http://127.0.0.1:8081/health")
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{MODEL_REGISTRY['proposer']['port']}/health")
             with urllib.request.urlopen(req, timeout=3):
                 pass
             time.sleep(5)
         except Exception:
             break
-    return _poll_health(port=8081, timeout=cfg.get("bench_load_s", 120) + 60)
+    return _poll_health(port=MODEL_REGISTRY['proposer']['port'], timeout=cfg.get("bench_load_s", 120) + 60)
 
 
 # ── Early exit check ────────────────────────────────────────────────────────

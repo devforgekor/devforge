@@ -115,7 +115,7 @@ def auto_discover_config(port: int) -> dict:
         config["container"] = "devforge-pod-a"
     elif port == 8080:
         config["component"] = "pod-b"
-        config["mode"] = "day_mcp"
+        config["mode"] = "day_enrich"
         config["container"] = "devforge-pod-b"
     elif port == 8081:
         config["component"] = "pod-b"

@@ -16,6 +16,7 @@ from typing import Optional
 
 from lib.tracking.agent_names import normalize as normalize_agent
 from lib.db import psql as _sql, esc_sql
+from lib.llm_client import MODEL_REGISTRY
 from lib.cli_worklog import cmd_worklog_add, cmd_worklog_recent, cmd_worklog_search
 from lib.cli_experiment import cmd_experiment_list, cmd_experiment_compare, cmd_experiment_active, cmd_experiment_adopt
 
@@ -266,7 +267,8 @@ def _switch_mode(mode: str) -> bool:
     print("Waiting for models to load...")
     for _ in range(120):
         try:
-            req = urllib.request.Request("http://127.0.0.1:8084/health")
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{MODEL_REGISTRY['verifier']['port']}/health")
             with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read())
@@ -400,7 +402,6 @@ def cmd_extract(args):
         turn_id=getattr(args, "turn_id", None),
         limit=args.limit,
         dry_run=args.dry_run,
-        mcp_model=getattr(args, "mcp_model", "day_mcp"),
     )
     print(f"  processed: {result['processed']}")
     print(f"  failed:    {result['failed']}")
@@ -409,14 +410,14 @@ def cmd_extract(args):
         print(f"  elapsed:   {result['elapsed_s']}s")
 
 
-def cmd_mcp_consume(args):
-    """Read and format MCP metadata from review_facts."""
-    from lib.mcp_consumer import consume_mcp
-    results = consume_mcp(
+def cmd_enrich_consume(args):
+    """Read and format enrichment metadata from review_facts."""
+    from lib.enrich_consumer import consume_enrich
+    results = consume_enrich(
         limit=getattr(args, "limit", 50),
         dry_run=getattr(args, "dry_run", False),
     )
-    print(f"  formatted: {len(results)} MCP items")
+    print(f"  formatted: {len(results)} enrichment items")
     if args.json:
         import json as _json
         for r in results:
@@ -1420,13 +1421,11 @@ async def main():
     p_extract.add_argument("--turn-id", help="Process a specific turn UUID")
     p_extract.add_argument("--limit", "-n", type=int, default=100, help="Max turns to process")
     p_extract.add_argument("--dry-run", action="store_true", help="Simulate without DB writes")
-    p_extract.add_argument("--mcp-model", default="day_mcp",
-                           help="Model for MCP fields generation (default: day_mcp)")
 
-    p_mcp = sub.add_parser("mcp-consume", help="Format MCP metadata from review_facts for MCP tools")
-    p_mcp.add_argument("--limit", "-n", type=int, default=50)
-    p_mcp.add_argument("--dry-run", action="store_true", help="Read only, no verdict update")
-    p_mcp.add_argument("--json", action="store_true", help="JSON output")
+    p_enrich = sub.add_parser("enrich-consume", help="Format enrichment metadata from review_facts for MCP tools")
+    p_enrich.add_argument("--limit", "-n", type=int, default=50)
+    p_enrich.add_argument("--dry-run", action="store_true", help="Read only, no verdict update")
+    p_enrich.add_argument("--json", action="store_true", help="JSON output")
 
     p_upload = sub.add_parser("upload", help="Upload pipeline result to Azure Blob")
     p_upload.add_argument("--pipeline", "-p", required=True,
@@ -1559,7 +1558,7 @@ async def main():
     file_del.add_argument("id", help="File UUID")
     file_del.add_argument("--remove-local", action="store_true", help="Also delete local file")
 
-    # ── Watch (Watchdog + Watchman 통합) ────────────────────────────────────
+    # ── Watch (Watchdog 통합) ────────────────────────────────────
     p_watch = sub.add_parser("watch", help="서버 감시 — 상태, 알람, pulse 큐, 이벤트 로그")
     watch_sub = p_watch.add_subparsers(dest="watch_command")
 
@@ -1649,8 +1648,8 @@ async def main():
         cmd_upload(args)
     elif args.command == "extract":
         cmd_extract(args)
-    elif args.command == "mcp-consume":
-        cmd_mcp_consume(args)
+    elif args.command == "enrich-consume":
+        cmd_enrich_consume(args)
     elif args.command == "auto":
         if args.auto_command == "add":
             cmd_auto_add(args)

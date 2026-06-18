@@ -6,7 +6,7 @@
 Routes natural language commands to DevForge pipelines, monitors execution,
 and reports errors with root-cause analysis.
 
-Model: Qwen3-Coder-30B-A3B (http://127.0.0.1:8081)
+Model: Qwen3-Coder-30B-A3B (MODEL_REGISTRY proposer)
 
 Usage:
     obs                          # Interactive REPL
@@ -32,8 +32,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
+from lib.llm_client import MODEL_REGISTRY
+
 DEFAULT_MODEL = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
-DEFAULT_API = "http://127.0.0.1:8081"
+DEFAULT_API = f"http://127.0.0.1:{MODEL_REGISTRY['proposer']['port']}"
 MODEL = os.environ.get("OBS_MODEL", DEFAULT_MODEL)
 API_URL = os.environ.get("OBS_API", DEFAULT_API)
 

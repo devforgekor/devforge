@@ -1,0 +1,21 @@
+{
+  "phase": "day_verify",
+  "role": "verify_14b",
+  "model": "14b",
+  "port": 8083,
+  "timestamp": "2026-06-15T22:51:02.093174+00:00",
+  "usage": {},
+  "elapsed_ms": 0,
+  "turns": 1,
+  "findings": 10,
+  "chunks": 2,
+  "chunks_done": 0,
+  "result": {
+    "verification_items": [],
+    "summary": "",
+    "reasoning": "",
+    "final_verdict": "unknown",
+    "confidence": 0
+  },
+  "category_summary": ""
+}

@@ -1,4 +1,5 @@
-# Status: production
+# Status: deprecated
+# Path: replaced by mcp_enrich.py — migration complete, remove after 2026-07
 #!/usr/bin/env python3
 import json
 import os
@@ -157,23 +158,23 @@ def mcp_enrich_pipeline(turn_id: Optional[str] = None,
     max_created = None
 
     for ti, turn in enumerate(turns, 1):
-        tid = turn["id"]
-        ut, th, tx = turn.get("user_turn",""), turn.get("thinking",""), turn.get("text","")
+        turn_id = turn["id"]
+        user_turn, thinking, text = turn.get("user_turn",""), turn.get("thinking",""), turn.get("text","")
         created = turn.get("created_at")
 
-        print(f"  [{ti}/{len(turns)}] Processing {tid[:8]}...")
+        print(f"  [{ti}/{len(turns)}] Processing {turn_id[:8]}...")
         
-        extractions = _get_turn_extractions(tid)
-        mcp_result = core.generate_mcp_fields(ut, th, tx, SYSTEM_DAY_MCP, model=model, extractions=extractions, dry_run=dry_run)
+        extractions = _get_turn_extractions(turn_id)
+        mcp_result = core.generate_mcp_fields(user_turn, thinking, text, SYSTEM_DAY_MCP, model=model, extractions=extractions, dry_run=dry_run)
         if not mcp_result:
             continue
 
-        mcp_result = utils.post_process_mcp(mcp_result, ut, tx)
+        mcp_result = utils.post_process_mcp(mcp_result, user_turn, text)
         
         if mcp_result.get("entities"):
             mcp_result["verified"] = utils.verify_entities(mcp_result)
         
-        turn_texts = [t for t in (ut, th, tx) if t]
+        turn_texts = [t for t in (user_turn, thinking, text) if t]
         if mcp_result.get("entities") and turn_texts:
             mcp_result["cosine_grounding"] = core.entity_cosine_grounding(mcp_result["entities"], turn_texts[:3])
             mcp_result["nli_grounding"] = core.entity_nli_grounding(mcp_result["entities"], "\n".join(turn_texts[:2])[:2000])
@@ -185,11 +186,11 @@ def mcp_enrich_pipeline(turn_id: Optional[str] = None,
             processed += 1
             continue
 
-        fi_str = psql(f"SELECT COALESCE(MAX(fact_index), -1) + 1 FROM review_facts WHERE turn_id = '{escape_sql_string(tid)}'::uuid")
+        fi_str = psql(f"SELECT COALESCE(MAX(fact_index), -1) + 1 FROM review_facts WHERE turn_id = '{escape_sql_string(turn_id)}'::uuid")
         fi = int(fi_str) if fi_str else 0
 
         mcp_meta = mcp_result.pop("_meta", {})
-        _insert_mcp_fact(tid, fi, json.dumps(mcp_result, ensure_ascii=False), model,
+        _insert_mcp_fact(turn_id, fi, json.dumps(mcp_result, ensure_ascii=False), model,
                          prompt_tokens=mcp_meta.get("usage",{}).get("prompt_tokens"),
                          gen_tokens=mcp_meta.get("usage",{}).get("completion_tokens"),
                          elapsed_ms=mcp_meta.get("elapsed_ms"))

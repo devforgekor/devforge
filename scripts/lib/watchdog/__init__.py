@@ -30,12 +30,14 @@ from datetime import datetime, timezone
 
 from .checker import *
 from .config import CHECK_INTERVAL, HEARTBEAT_INTERVAL, ALERT_ONLY_TARGETS, TIMER_TARGETS
+from lib.db import psql_json
+from lib.protection import protected_ports
 from .notifier import heartbeat, send_alert, send_recovery
 from .recovery import (
     graduated_recover, recover_service, kill_stale_process,
 )
 from .state import WatchdogState
-from .messenger import log_message, get_undelivered
+from .messenger import log_message, get_undelivered, resolve_pulse
 from lib.experiment_state import (
     cleanup_stale, is_experiment_active, is_experiment_stale,
     read_state as read_experiment_state,
@@ -48,6 +50,7 @@ from lib.experiment_state import (
 _state = WatchdogState()
 _running = True
 _start_time = time.monotonic()
+_test_active = False  # set per-cycle in main_loop
 
 
 def log(msg: str) -> None:
@@ -83,6 +86,8 @@ def sigusr1_handler(signum, frame):
 
 def _run_services(results: dict, dry_run: bool):
     """서비스 상태 체크 + 필요시 graduated recovery."""
+    global _test_active
+
     for svc in check_all_services():
         tracker = _state.get(f"svc:{svc['name']}")
         if svc["ok"]:
@@ -92,13 +97,14 @@ def _run_services(results: dict, dry_run: bool):
                 svc["name"], tracker,
                 lambda n=svc["name"]: recover_service(n),
             )
-            if tracker.is_degraded() and tracker.can_alert():
+            if not _test_active and tracker.is_degraded() and tracker.can_alert():
                 send_alert(f"svc:{svc['name']}", tracker.state.value, svc["detail"])
                 _state.add_event(f"svc:{svc['name']}", "down", svc["detail"])
         else:
             if tracker.record_failure() and tracker.can_alert():
-                send_alert(f"svc:{svc['name']}", tracker.state.value, svc["detail"])
-                _state.add_event(f"svc:{svc['name']}", "down", svc["detail"])
+                if not _test_active:
+                    send_alert(f"svc:{svc['name']}", tracker.state.value, svc["detail"])
+                    _state.add_event(f"svc:{svc['name']}", "down", svc["detail"])
         results["services"].append(svc)
 
 
@@ -115,13 +121,18 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
         if timer["ok"]:
             tracker.record_success()
         else:
-            if tracker.record_failure() and tracker.can_alert():
-                send_alert(f"timer:{timer['name']}", "DELAY", timer["detail"])
-                _state.add_event(f"timer:{timer['name']}", "delay", timer["detail"])
+            # Protection active → test/pipeline deliberately occupying ports → skip alert
+            protected = _test_active
+            if not protected:
+                if tracker.record_failure() and tracker.can_alert():
+                    send_alert(f"timer:{timer['name']}", "DELAY", timer["detail"])
+                    _state.add_event(f"timer:{timer['name']}", "delay", timer["detail"])
 
-            # Timer kick: skip if not relevant to current mode
-            if not dry_run and tracker.consecutive_fail >= 2:
-                if mode == "day" and timer["name"] in night_timers:
+            # Timer kick: skip if protection active, or if not relevant to current mode
+            if not dry_run and tracker.consecutive_fail >= 1:
+                if protected:
+                    log(f"  SKIP kick {timer['name']} — protection active ({_test_active})")
+                elif mode == "day" and timer["name"] in night_timers:
                     pass  # night timer, skip during day
                 elif mode == "night" and timer["name"] in day_timers:
                     pass  # day timer, skip during night
@@ -158,8 +169,9 @@ def _run_alert_only(dry_run: bool, results: dict):
             tracker.record_success()
         else:
             if tracker.record_failure() and tracker.can_alert():
-                send_alert(f"svc:{name}", tracker.state.value, detail)
-                _state.add_event(f"svc:{name}", "down", detail)
+                if not _test_active:
+                    send_alert(f"svc:{name}", tracker.state.value, detail)
+                    _state.add_event(f"svc:{name}", "down", detail)
         results.setdefault("services", []).append({"name": name, "ok": ok, "detail": detail})
 
 
@@ -178,23 +190,36 @@ def run_day_checks(dry_run: bool = False) -> dict:
     results = {"containers": [], "services": [], "timers": [],
                "probes": [], "memory": {}, "pipeline_running": False}
 
+    _protected_ports = protected_ports()
+
     for probe in check_all_llm():
         name = probe["name"]
         tracker = _state.get(f"llm:{name}")
+
+        # Protected port → test/pipeline owns it, skip alert
+        if probe["port"] in _protected_ports:
+            tracker.record_success()
+            probe["t2_ok"] = True
+            probe["t2_detail"] = "skip (port locked by test)"
+            results["probes"].append(probe)
+            continue
+
         ok = probe["t1_ok"] and probe["t2_ok"]
 
         if ok:
             tracker.record_success()
         else:
             if tracker.record_failure() and tracker.can_alert():
-                detail = f"T1={probe['t1_detail']} T2={probe['t2_detail']}"
-                send_alert(f"llm:{name}", tracker.state.value, detail)
-                _state.add_event(f"llm:{name}", "state_change", detail)
+                # Test running → transient failures during mode switch are expected
+                if not _test_active:
+                    detail = f"T1={probe['t1_detail']} T2={probe['t2_detail']}"
+                    send_alert(f"llm:{name}", tracker.state.value, detail)
+                    _state.add_event(f"llm:{name}", "state_change", detail)
 
         lat_ok, lat_detail = check_probe_latency(probe["port"])
         if not lat_ok and lat_detail != "skip":
             _state.add_event(f"llm:{name}", "latency_warn", lat_detail)
-            if tracker.can_alert():
+            if not _test_active and tracker.can_alert():
                 send_alert(f"llm:{name}", "LATENCY", lat_detail)
 
         results["probes"].append(probe)
@@ -203,6 +228,16 @@ def run_day_checks(dry_run: bool = False) -> dict:
     results["pipeline_running"] = pipe_name
 
     _run_common_checks(results, dry_run, "day")
+
+    # Periodic: collect verify feedback for enrich few-shot injection
+    # Throttled internally (10 min between writes, mtime-based)
+    if not dry_run and not _test_active:
+        try:
+            from lib.enrich_feedback import collect_verify_feedback
+            collect_verify_feedback()
+        except Exception:
+            pass  # non-critical; best-effort
+
     return results
 
 
@@ -211,17 +246,29 @@ def run_night_checks(dry_run: bool = False) -> dict:
     results = {"containers": [], "services": [], "timers": [],
                "probes": [], "memory": {}, "pipeline_running": False}
 
+    _protected_ports = protected_ports()
+
     for probe in check_all_llm():
         name = probe["name"]
         tracker = _state.get(f"llm:{name}")
+
+        # Protected port → test/pipeline owns it, skip alert
+        if probe["port"] in _protected_ports:
+            tracker.record_success()
+            probe["t2_ok"] = True
+            probe["t2_detail"] = "skip (port locked by test)"
+            results["probes"].append(probe)
+            continue
+
         ok = probe["t1_ok"] and probe["t2_ok"]
 
         if ok:
             tracker.record_success()
         else:
             if tracker.record_failure() and tracker.can_alert():
-                send_alert(f"llm:{name}", tracker.state.value, f"T1={probe['t1_detail']} T2={probe['t2_detail']}")
-                _state.add_event(f"llm:{name}", "fail", probe["t2_detail"])
+                if not _test_active:
+                    send_alert(f"llm:{name}", tracker.state.value, f"T1={probe['t1_detail']} T2={probe['t2_detail']}")
+                    _state.add_event(f"llm:{name}", "fail", probe["t2_detail"])
         results["probes"].append(probe)
 
     for phase_name, pattern in [
@@ -236,12 +283,30 @@ def run_night_checks(dry_run: bool = False) -> dict:
             tracker.record_success()
         else:
             if tracker.record_failure() and tracker.can_alert():
-                send_alert(f"pipeline:{phase_name}", "STOPPED", f"no process found")
-                _state.add_event(f"pipeline:{phase_name}", "stopped", "")
+                if not _test_active:
+                    send_alert(f"pipeline:{phase_name}", "STOPPED", f"no process found")
+                    _state.add_event(f"pipeline:{phase_name}", "stopped", "")
         results["pipeline_running"] = results["pipeline_running"] or running
 
     _run_common_checks(results, dry_run, "night")
     return results
+
+
+# ── Active Pulse Query ──────────────────────────────────────
+
+def _get_active_pulses() -> list[dict]:
+    """Query IN_PROGRESS heartbeat pulses from watchdog_pulses."""
+    try:
+        rows = psql_json(
+            "SELECT pulse_id, instruction, priority, status, "
+            "EXTRACT(EPOCH FROM (now() - created_at))::int AS age_sec "
+            "FROM watchdog_pulses "
+            "WHERE pulse_id LIKE 'heartbeat_%' AND status = 'IN_PROGRESS' "
+            "ORDER BY created_at DESC"
+        )
+        return rows or []
+    except Exception:
+        return []
 
 
 # ── Heartbeat ──────────────────────────────────────────────────────
@@ -296,6 +361,7 @@ def build_heartbeat_summary(day_results: dict) -> dict:
         "probes": day_results.get("probes", []),
         "metrics": metrics,
         "slots": slots,
+        "active_pulses": _get_active_pulses(),
         "events_30m": _state.events_since(1800),
     }
 
@@ -304,6 +370,10 @@ def build_heartbeat_summary(day_results: dict) -> dict:
 
 def _fix_loop_common(pipe: str, llm_port: int):
     """Run fix loop for a pipeline that failed consecutively."""
+    if _test_active:
+        log(f"  SKIP fix loop for {pipe} — protection active ({_test_active})")
+        return
+
     from .fixloop import run_fix_loop
 
     tracker = _state.get(f"pipeline:{pipe}")
@@ -331,12 +401,18 @@ def _fix_loop_common(pipe: str, llm_port: int):
 
 def day_fix_loop():
     """Day mode: fix loop for day_cycle.py failures (Pod A :8080)."""
+    if _test_active:
+        log(f"  SKIP day fix loop — protection active ({_test_active})")
+        return
     for pipe in ("day_cycle",):
         _fix_loop_common(pipe, llm_port=8082)
 
 
 def night_fix_loop():
     """Night mode: fix loop for night pipeline failures (Pod B :8081)."""
+    if _test_active:
+        log(f"  SKIP night fix loop — protection active ({_test_active})")
+        return
     for pipe in ("night_cycle", "review_consumer", "proxy_reviewer"):
         _fix_loop_common(pipe, llm_port=8081)
 
@@ -344,7 +420,7 @@ def night_fix_loop():
 # ── Main Loop ───────────────────────────────────────────────────────
 
 def main_loop(one_shot: bool = False, dry_run: bool = False):
-    global _running
+    global _running, _test_active
 
     signal.signal(signal.SIGTERM, sigterm_handler)
     signal.signal(signal.SIGINT, sigterm_handler)
@@ -365,6 +441,14 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
 
         # Dead man's switch — update liveness timestamp every cycle
         _state.update_liveness()
+
+        # ONE check per cycle: is a test running?
+        # All sub-functions use the module-level _test_active instead of
+        # calling active_contexts() individually — prevents scattered checks.
+        from lib.protection import active_contexts
+        _test_active = bool(active_contexts())
+        if _test_active:
+            log(f"  Test active ({active_contexts()}) — alerts suppressed, fix loops skipped")
 
         # Check if an experiment is running → monitor-only mode (no recovery)
         experiment_active = is_experiment_active()
@@ -398,25 +482,24 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
             import traceback
             traceback.print_exc()
 
-        # Heartbeat stale check — detect long-running task hangs
+        # Heartbeat stale check — detect + auto-resolve
         stale_beats = check_heartbeats()
         for sb in stale_beats:
             log(f"  HEARTBEAT STALE: {sb['worker']} — last beat {sb['age_sec']} ago")
             _state.add_event("heartbeat", f"stale:{sb['worker']}",
                              f"age={sb['age_sec']} last={sb['last_beat']}")
+            resolve_pulse(f"heartbeat_{sb['worker']}")
+            log(f"  Auto-resolved stale pulse heartbeat_{sb['worker']}")
 
         if _state.should_heartbeat(HEARTBEAT_INTERVAL):
-            degraded = _state.degraded_count()
-            experiment_active_now = is_experiment_active()
-            if degraded > 0 or experiment_active_now:
+            if is_experiment_active() or not _test_active:
                 try:
                     summary = build_heartbeat_summary(results)
                     heartbeat(summary)
-                    log(f"heartbeat sent ({degraded} degraded{', experiment' if experiment_active_now else ''})")
                 except Exception as e:
                     log(f"heartbeat error: {e}")
             else:
-                log("heartbeat skipped (all healthy)")
+                log(f"  heartbeat skipped (test active — _test_active={_test_active})")
 
         if one_shot:
             break

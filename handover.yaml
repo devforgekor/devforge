@@ -1,121 +1,43 @@
 last_checkpoint:
-  time: '2026-06-14T12:54:17.117608+00:00'
-  summary: watchdog_silent_alerting
-  total_files: 6
+  time: '2026-06-15T03:54:36.652388+00:00'
+  summary: no files
+  total_files: 0
   recent_files:
     data: []
     docs: []
-    config:
-      - scripts/lib/watchdog/config.py
-      - scripts/lib/watchdog/state.py
-    source:
-      - scripts/lib/watchdog/__init__.py
-      - scripts/lib/watchdog/notifier.py
-      - scripts/lib/pod_manager.py
-      - scripts/day_cycle.sh
-      - scripts/cli.py
+    config: []
+    source: []
     generated: []
   git: {}
-  task: watchdog liveness monitoring — silent alerting, dead man switch, heartbeat :15/:45
+  task: '--title=oci-arm-grabber 대처: 고아 인스턴스 트래핑 중단 및 레포 정리'
 decisions:
-- '{''id'': ''d40-01'', ''detail'': ''WATCHDOG SILENT ALERTING. 60s cycle writes liveness + catchdog_events to DB. Slack only on state changes, CRIT thresholds, timer delays, experiment progress. Healthy infrastructure = zero Slack..''}'
-- '{''id'': ''d40-02'', ''detail'': ''DEAD MAN SWITCH via day_cycle.sh. watchdog_liveness DB table updated every 60s. day_cycle Phase -1 checks liveness age > 900s -> Slack danger alert (Block Kit attachment format). Reuses existing hourly schedule..''}'
-- '{''id'': ''d40-03'', ''detail'': ''HEARTBEAT :15/:45 UTC. should_heartbeat() checks minute % 30 == 15. Fires only if degraded_count > 0 OR experiment_active. chat.update in-place prevents channel clutter..''}'
-- '{''id'': ''d40-04'', ''detail'': ''SLACK FORMAT standard. All alerts: header + section + context (KST). _slack_alert() in shell uses sys.argv to avoid interpolation of special characters..''}'
-- '{''id'': ''d40-05'', ''detail'': ''POD B MODE BUG FIXED. _write_mode_env() wrote dict key ("judge") instead of mode field ("review-j"). 113 crash loops. Now uses meta["mode"]. key->mode: extractor->day, judge->review-j, embed->embed..''}'
-- '{''id'': ''d40-06'', ''detail'': ''PSQL_JSON TIMESTAMP FIX. row_to_json returns ISO string, not datetime. 5 .strftime() calls -> AttributeError. Fixed with ISO slicing..''}'
-- '{''id'': ''d40-07'', ''detail'': ''LINT: 6 P2 "ts" violations resolved (cli.py + state.py). 0P0/0P1/0P2 across 190 files..''}'
-- '{''id'': ''d40-08'', ''detail'': ''CLAUDE ROLE: Cannot read Slack. Pattern: Watchdog -> Slack -> user invokes Claude -> DB query. 88% token reduction vs polling..''}'
-- '{''id'': ''d38-01'', ''detail'': ''MODEL INVENTORY FINAL (gguf/). All 6 models downloaded and on disk:\\n  Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  (18G)
-  — proposer/embed (:8081)\\n  Qwen3.6-27B.i1-IQ4_XS.gguf                  (15G) — verifier (:8084)\\n  Qwen2.5-Coder-7B-Instruct-Q8_0.gguf         (7.6G)
-  — extractor (:8082)\\n  Qwen2.5-Coder-14B-Instruct-Q6_K.gguf        (12G) — reviewer/judge (:8083)\\n  NextCoder-14B-Q6_K.gguf                      (12G)
-  — review-j mode\\n  Qwen3-Embedding-8B-f16.gguf                  (15G) — embed (:8081 day)\\nTotal: ~80G / 100G ai_data
-  partition.\\n''}'
-- '{''id'': ''d38-02'', ''detail'': ''DEBATE MODEL KEY RENAMED. `qwen2.5-coder-3b` key in debate_data.py MODELS dict renamed
-  to `qwen2.5-coder-7b`. Port 8082, threads 2→4. Decoder alias in debate_llm.py updated. All local_debate.py model assignments
-  use new key. Old key would cause KeyError at runtime.\\n''}'
-- '{''id'': ''d38-03'', ''detail'': ''DEBATE PORT UPDATED. All debate files previously referenced Pod B :8080 for 30B proposer/judge/drag.
-  Updated to :8081 (correct 30B port). Refuter model changed from Pod A :8082 Qwen3-3B → Pod B :8082 Qwen2.5-Coder-7B. Pod
-  A is no longer part of debate system (Pod A = reserved operator only).\\n''}'
-- '{''id'': ''d38-04'', ''detail'': ''DISK RECOVERY. ~37G recovered:\\n  - ~11G: HuggingFace transformers cache (27B Q8_0
-  + NextCoder .safetensors)\\n  - ~3.6G: 3B Q8 model file (deleted)\\n  - ~4G: 27B Q8_0 from temp (re-downloaded as IQ4_XS
-  15G via hf hub)\\n  - ~18G+ : Empty pg_dump backups (0-byte files)\\nHuggingFace cache is NOT used by llama.cpp — safe to
-  clean.\\n''}'
-- '{''id'': ''d38-05'', ''detail'': ''OFFICIAL MODEL SOURCES. User rejected unofficial HF repos (cHunter789, tensorblock).
-  Approved sources:\\n  - bartowski / lmstudio-community  → 30B Q4_K_M\\n  - gabriellarson                   → NextCoder-14B
-  Q6_K\\n  - mradermacher                    → 27B i1-IQ4_XS\\nRule: always ask user before downloading from unknown HF repos.\\n''}'
-- '{''id'': ''d38-06'', ''detail'': ''INTENTIONAL EXCLUSIONS (not updated):\\n  1. extract_compare.py — historical 3B Q8_0
-  vs 7B Q4_K_M vs 7B Q8_0 benchmark\\n  2. night.py REMOVED phase comments — preserve historical 7B-3B-7B config record\\n  3.
-  __old/ directory — deprecated files, not in execution path\\n  4. _archive/ directory — user explicitly excluded\\n''}'
-- '{''id'': ''d39-01'', ''detail'': ''SEARCH PIPELINE 3-LAYER INTEGRATION PLAN finalized. Layer 1 (turn_watcher FTS5 sync)
-  complete. Layer 2 (embed_batch) in progress. Layer 3 (CLI search) code complete.\\n''}'
-- '{''id'': ''d39-02'', ''detail'': ''MONTHLY FTS5 REBUILD added to night_cycle.sh (1st only). Safety net for FTS5 drift
-  recovery. date +%d = "01" check, ~30s runtime, SQLite only, no Pod B dependency.\\n''}'
-- '{''id'': ''d39-03'', ''detail'': ''CLI SEARCH COMMAND implemented. cli.py search bm25 <query> (FTS5 BM25 only, synchronous)
-  and cli.py search hybrid <query> (BM25 + Dense RRF fusion, requires embedding_f16). Strong signal short-circuit: BM25 top-1
-  <= -8.0 & gap > 0.15 -> skip dense. --no-short-circuit flag for forced hybrid.\\n''}'
-- '{''id'': ''d39-04'', ''detail'': ''phases.md Phase 2 Tier 2 updated. Gemini embedding items deprecated/replaced by Qwen 8B
-  approach. 12 new items added (text_cleaner, FTS5 index, hybrid code, CLI search, monthly rebuild, day-cycle auto embed).
+- '{''id'': ''d44-01'', ''detail'': ''EMBED RUNNER SLACK BUG. embed_runner.sh cded to /opt/projects/server before calling
+  python3 -c "from lib.pipeline_common import slack_send", but lib/ lives under scripts/lib/. Result: silent ModuleNotFoundError
+  swallowed by 2>/dev/null || true. Fixed: cd /opt/projects/server/scripts before python3 call, removed 2>/dev/null, fail
+  log on error only.''}'
+- '{''id'': ''d44-02'', ''detail'': ''SLACK CHANNEL DM-ONLY. SLACK_CHANNEL=U0APJGD8CBW resolves to a User ID (U...), not channel
+  ID (C...). slack_send() returns ok=true but message goes only to DM. User confirmed this is the correct value in secrets.env
+  — left unchanged.''}'
 known_issues:
-- '{''id'': ''ki40-01'', ''detail'': ''EMBEDDING INCOMPLETE (304/8819 turns, 3.4%). Blocks hybrid search, MCP mem_search, wing/room filter. Day-cycle embed phase runs hourly..''}'
-- '{''id'': ''ki40-02'', ''detail'': ''DAY_CYCLE TIMER active but Pod B currently stopped. Timer fires :00 each hour. Check Pod B mode switching stability before bulk ops..''}'
-- '{''id'': ''ki40-03'', ''detail'': ''WATCHDOG SERVICE INACTIVE. Stopped during embedding. Dead man switch will detect via day_cycle. Reactivate after embedding: systemctl --user start devforge-watchdog..''}'
-- '{''id'': ''ki40-04'', ''detail'': ''EMBEDDING PROTECTION FILE removed (/opt/ai_data/scripts/EMBEDDING_IN_PROGRESS deleted). Stale file blocked Pod B mode switches after embed process died. Re-create if embedding restarted..''}'
-- '{''id'': ''ki38-01'', ''detail'': ''30B Q4_K_M (18G) + 27B IQ4_XS (15G) + 14B Q6_K (12G) + 7B Q8 (7.6G) = ~53G concurrently
-  loadable models. RAM: 22G total, ~17-18G usable. 30B MoE (3.3B active/token) is viable. 27B dense (14.7G IQ4_XS) must NOT
-  overlap with 30B load. Night pipeline sequential model switching is critical.\\n''}'
-- '{''id'': ''ki38-02'', ''detail'': ''day_pipeline.py (experimental) still has inverted port assignment in code (Pod A=7B:8082,
-  Pod B=3B:8080). Docstring updated to note the discrepancy. Not in execution path — day_runner.py and timers call day_extract.py
-  instead.\\n''}'
-- '{''id'': ''ki38-03'', ''detail'': ''Debate system now has NO Pod A separation — Pod A is reserved(:8080) operator only.
-  All debate models (30B, 7B, 14B) run on Pod B with dynamic port switching. The refuter was on Pod A :8082 (old scheme) —
-  now on Pod B :8082. This changes memory contention profile during debate sessions.\\n''}'
-- '{''id'': ''ki38-04'', ''detail'': ''Session 37 ki07 (stale docstrings) RESOLVED. Previous claim that classify.py, review_pipeline_3model.py,
-  bench_llm.py, activity_summarizer.py, etc. were "stale" is now fixed. All remaining 3B/Q4_K_S/8080 references are intentional
-  (historical benchmarks, REMOVED phase records, __old/ files).\\n''}'
-- '{''id'': ''ki39-01'', ''detail'': ''Dense embedding in progress (56/8,694 via Qwen3-Embedding-8B, ~10hrs remaining
-  including slow long-turn head). day-cycle timer disabled during bulk embedding (OOM risk with Pod B switching).\\n''}'
-- '{''id'': ''ki39-02'', ''detail'': ''full_pipeline.sh crashed at chunk 3/7 via SIGTERM (line 61). Not restarted.
-  Not safe to restart until embedding completes (Pod B is in embed mode).\\n''}'
+- '{''id'': ''ki44-01'', ''detail'': ''EMBEDDING 7,041 REMAINING (20.9%). Qwen3-Embedding-8B-f16 on 4-core ARM Neoverse-N1.
+  1,861/8,902 done. ~71min per 200-turn cycle, ~41h estimated. Bottleneck: single-matrix math, not batching. Solo texts (~5461
+  tok) further slow throughput.''}'
+- '{''id'': ''ki44-02'', ''detail'': ''NO FULL_PIPELINE.LOG. /tmp/full_pipeline.sh not running. devforge-day-cycle.service
+  killed (SIGTERM) at 2026-06-14 15:03 UTC — 55min budget exceeded during Pod B mode switch (embed→extract). Manual embed_runner.sh
+  (PID 2318428, started 02:27 UTC) handling embedding alone.''}'
+- '{''id'': ''ki44-03'', ''detail'': ''TASK 18 (oci-arm-grabber) IN PROGRESS. Orphan instance trapping stopped, repo cleanup
+  pending. Blocking Phase 2 pipeline timer reactivation (task 22).''}'
 completed_log:
-- '[Session 40] Watchdog silent alerting + dead man switch. Pod B mode mapping bug fixed (113 crash loop). Day-cycle liveness check added. Slack format standardized. 6 P2 lint resolved. Heartbeat :15/:45 with chat.update in-place.'
+- '[Session 44] Embed runner Slack bug fix — import 경로 오류(ModuleNotFoundError) 수정, 2>/dev/null 제거. Pipeline 현황 확인: embedding
+  20.9% 정상 진행, swap 293MB 안정적. Q8 thrashing 없음.'
 - '[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs.'
-- '[Session 38] Model downloads: 30B Q4_K_M (18G), NextCoder-14B Q6_K (12G), 27B i1-IQ4_XS (15G).'
-- '[Session 38] Disk cleanup: ~37G recovered (HF cache, old models, empty backups).'
-- '[Session 38] Debate system: model key renamed, port assignments corrected, Pod A removed from refuter role.'
-- '[Session 38] PORT consistency sweep: all stale :8080 Pod B references fixed.'
-- '[Session 38] 30B Q4_K_S→Q4_K_M: 6 files updated.'
-- '[Session 38] 3B→7B Q8 migration: 35+ files updated across production + experimental.'
-- '[Session 37] All production pipeline files port-corrected (night.py, review.py, night_cycle.sh, container_manager.py, cli.py,
-  entrypoints).'
-- '[Session 37] PORT REORG: 8080=Pod A reserved, 8081=proposer/embed, 8082=extract/reflector, 8083=verify/judge, 8084=verifier.'
-- '[Session 36] night.py v4.0: Phase 1-2 deprecated, Phase 3 removed.'
-- '[Session 36] Timers migrated: 15m-cycle + classify disabled, day-extract/verify enabled.'
-- '[Session 36] Day/Night Pipeline Restructure FULLY IMPLEMENTED.'
-- '[Session 35] Handover written. Next: Pod A+timers restart, Claude Pro 10-axis re-baseline, experiment_registry insert,
-  extract_clean fix.'
-- '[Session 35] 3B Q8 confirmed best for this server. 5.2 t/s, -7pt vs best 14B, 4-5x faster. 14B Q4_K_M provides minimal
-  value.'
-- '[Session 35] Final report: docs/reports/14b-5model-10axis-report.md. Slack watcher scripts: 14b_test_watch.py (pod B progress
-  → Slack, 10min interval).'
-- '[Session 35] Rubric effect analysis: Strong on Verify(+4), moderate on Recall/NLI, zero on Precision/Consistency. extract_clean
-  unsolved — requires few-shot or post-processing.'
-- '[Session 35] scripts/14b_comparison_test.py FULL REWRITE: Pro-designed 10-axis specs integrated. (A) rubric-prompt.txt
-  file-loaded at runtime, (B) 10 scoring functions matching checklist.yaml, (C) per-axis + comparison table output.'
-- '[Session 35] 14B 10-Axis Test 2 COMPLETE: 3B=55(C) 7B=55(C) Coder14B=55(C) Qwen2.5-14B=59(C) Qwen3-14B=62(B). Rubric avg
-  +5.2pt. ~3.4h runtime.'
-- '[Session 35] 14B 10-Axis Test 1 COMPLETE: 3B=50(C) 7B=50(C) Coder14B=52(C) Qwen2.5-14B=52(C) Qwen3-14B=47(C). All C-grade.
-  ~2.3h runtime.'
-- '[Session 32] llm-agent-rule.md: Glossary SSOT workflow 규칙 추가.'
-- '[Session 32] CRITICAL CORRECTION: Session 31 handover night_proposer=Qwen27B는 잘못됨. 30B 유지, 32B→27B만 변경된 것.'
-- '[Session 32] 양방향 검증 완료: compile 127/127 OK, .py 32B refs 0, cli.py lint P0=0, DB glossary clean.'
-- '[Session 30] Doc cleanup: Qwen3-4B stale refs removed from 5 files. review-worker.timer + T01-T16 ghosts cleaned.'
-- '[Session 30] pytest infra created: conftest.py, pytest.ini, tests/__init__.py, dev-requirements.txt.'
-- '[Session 30] prompt-templates/ created: 6 templates for local LLM vibe coding workflow.'
-- '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL.'
-- '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service
-  description, stale .pyc 16 files.'
-- '[Session 28] devforge-qwen → devforge-pod-a rename complete. 16 files + quadlet + systemd unit + docs updated.'
+- '[Session 40] Watchdog silent alerting + dead man switch. Pod B mode mapping bug fixed (113 crash loop). Day-cycle liveness
+  check added. Slack format standardized. 6 P2 lint resolved. Heartbeat :15/:45 with chat.update in-place.'
+- '[Session 41] Extract + day_verify concurrent batching. llama.cpp --parallel 3 + --cont-batching. pod-b-entrypoint.sh env-driven.
+  extract.py ThreadPoolExecutor 3-turn batches. day_verify.py ThreadPoolExecutor 3-chunk batches. Debate not parallelizable
+  (sequential P->R->J). 27B excluded (RAM). Lint 0/0/0.'
+- '[Session 42] extract/day_verify concurrent batching (Session 41 코드 git으로 복원 확인).'
+- '[Session 43] Embedding 동적 배치 구현. httpx 전환. PID lock 추가. pod-b-entrypoint embed env-driven.'
 - '[Session 27] cli.py status --json implemented. lint_rules.py + cli.py lint.'
 - '[Session 26] Context window 256K expansion. systemd bug fix.'
 - '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
@@ -123,22 +45,22 @@ completed_log:
 - '[Session 22] File Status/Path header rule established + risk reclassification.'
 - '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
 - '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
-- '[Session 33] DIVERGENCE MAP: (A) Scoring test.py:977-982 5-comp vs checklist.yaml:167 10-axis, (B) Rubric test.py:122-183
-  self-made vs rubric-prompt.txt 84-line, (C) Output flat JSON vs scoring-sheet.yaml nested, (D) Injection correct mechanism
-  but wrong text.'
+- '[Session 34] Slack Block Kit 고도화: notifier.py heartbeat Block Kit + in-place chat.update + alert/recovery colored attachment
+  (danger/warning/good). 의존성 없음.'
+- '[Session 34] Telegram push 금지: watchdog/notifier.py _notify_all() _telegram_send() 제거. memory 등록 완료.'
+- '[Session 33] Handover written with exact file paths, line numbers, and divergence map. Next session: redo from scratch
+  with Pro 10-axis specs.'
+- '[Session 33] Test 2 started (21:43 KST), killed at ~22:00 KST. Partial: 3B 6/6, 7B 1/6. /tmp/14b_comparison_results_rubric.json
+  abandoned.'
+- '[Session 33] Claude Pro baseline (simplified scoring): Test1=89, Test2=90. Registry entries created.'
+- '[Session 33] Test 1 completed with simplified system: 3B=57, Coder14B=55, Qwen2.5-14B=54, Qwen3-14B=54, 7B=52. experiment_registry
+  updated.'
 - '[Session 33] VERDICT: Both Test 1 and Test 2 must be redone with Pro 10-axis specs. Claude Pro baseline also re-run. Scope:
   5 models × 6 cases × 2 modes = 60 local LLM calls + 12 Pro calls. Files to rewrite: scripts/14b_comparison_test.py. Specs
   to follow: docs/specs/14b-comparison-*.'
-- '[Session 33] Test 1 completed with simplified system: 3B=57, Coder14B=55, Qwen2.5-14B=54, Qwen3-14B=54, 7B=52. experiment_registry
-  updated.'
-- '[Session 33] Claude Pro baseline (simplified scoring): Test1=89, Test2=90. Registry entries created.'
-- '[Session 33] Test 2 started (21:43 KST), killed at ~22:00 KST. Partial: 3B 6/6, 7B 1/6. /tmp/14b_comparison_results_rubric.json
-  abandoned.'
-- '[Session 33] Handover written with exact file paths, line numbers, and divergence map. Next session: redo from scratch
-  with Pro 10-axis specs.'
-- '[Session 34] Telegram push 금지: watchdog/notifier.py _notify_all() _telegram_send() 제거. memory 등록 완료.'
-- '[Session 34] Slack Block Kit 고도화: notifier.py heartbeat Block Kit + in-place chat.update + alert/recovery colored attachment
-  (danger/warning/good). 의존성 없음.'
+- '[Session 33] DIVERGENCE MAP: (A) Scoring test.py:977-982 5-comp vs checklist.yaml:167 10-axis, (B) Rubric test.py:122-183
+  self-made vs rubric-prompt.txt 84-line, (C) Output flat JSON vs scoring-sheet.yaml nested, (D) Injection correct mechanism
+  but wrong text.'
 - '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
 - '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
 - '[Session 22] File Status/Path header rule established + risk reclassification.'
@@ -146,3 +68,34 @@ completed_log:
 - '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
 - '[Session 26] Context window 256K expansion. systemd bug fix.'
 - '[Session 27] cli.py status --json implemented. lint_rules.py + cli.py lint.'
+- '[Session 28] devforge-qwen → devforge-pod-a rename complete. 16 files + quadlet + systemd unit + docs updated.'
+- '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service
+  description, stale .pyc 16 files.'
+- '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL.'
+- '[Session 30] prompt-templates/ created: 6 templates for local LLM vibe coding workflow.'
+- '[Session 30] pytest infra created: conftest.py, pytest.ini, tests/__init__.py, dev-requirements.txt.'
+- '[Session 30] Doc cleanup: Qwen3-4B stale refs removed from 5 files. review-worker.timer + T01-T16 ghosts cleaned.'
+- '[Session 32] 양방향 검증 완료: compile 127/127 OK, .py 32B refs 0, cli.py lint P0=0, DB glossary clean.'
+- '[Session 32] CRITICAL CORRECTION: Session 31 handover night_proposer=Qwen27B는 잘못됨. 30B 유지, 32B→27B만 변경된 것.'
+- '[Session 32] llm-agent-rule.md: Glossary SSOT workflow 규칙 추가.'
+- '[Session 35] 14B 10-Axis Test 1 COMPLETE: 3B=50(C) 7B=50(C) Coder14B=52(C) Qwen2.5-14B=52(C) Qwen3-14B=47(C). All C-grade.
+  ~2.3h runtime.'
+- '[Session 35] 14B 10-Axis Test 2 COMPLETE: 3B=55(C) 7B=55(C) Coder14B=55(C) Qwen2.5-14B=59(C) Qwen3-14B=62(B). Rubric avg
+  +5.2pt. ~3.4h runtime.'
+- '[Session 35] scripts/14b_comparison_test.py FULL REWRITE: Pro-designed 10-axis specs integrated. (A) rubric-prompt.txt
+  file-loaded at runtime, (B) 10 scoring functions matching checklist.yaml, (C) per-axis + comparison table output.'
+- '[Session 35] Rubric effect analysis: Strong on Verify(+4), moderate on Recall/NLI, zero on Precision/Consistency. extract_clean
+  unsolved — requires few-shot or post-processing.'
+- '[Session 35] Final report: docs/reports/14b-5model-10axis-report.md. Slack watcher scripts: 14b_test_watch.py (pod B progress
+  → Slack, 10min interval).'
+- '[Session 35] 3B Q8 confirmed best for this server. 5.2 t/s, -7pt vs best 14B, 4-5x faster. 14B Q4_K_M provides minimal
+  value.'
+- '[Session 35] Handover written. Next: Pod A+timers restart, Claude Pro 10-axis re-baseline, experiment_registry insert,
+  extract_clean fix.'
+- '[Session 36] Day/Night Pipeline Restructure FULLY IMPLEMENTED.'
+- '[Session 36] Timers migrated: 15m-cycle + classify disabled, day-extract/verify enabled.'
+- '[Session 36] night.py v4.0: Phase 1-2 deprecated, Phase 3 removed.'
+- '[Session 37] PORT REORG: 8080=Pod A reserved, 8081=proposer/embed, 8082=extract/reflector, 8083=verify/judge, 8084=verifier.'
+- '[Session 37] All production pipeline files port-corrected (night.py, review.py, night_cycle.sh, container_manager.py, cli.py,
+  entrypoints).'
+- '[Session 38] 3B→7B Q8 migration: 35+ files updated across production + experimental.'

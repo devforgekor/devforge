@@ -525,12 +525,12 @@ def _build_p_context(turn, facts, body, day_review=None):
     ]
     for f in facts:
         parts.append(f"  [{f.get('fact_type','?')}] {f.get('evidence','')[:300]}")
-    mcp = body.get("mcp", {})
-    if mcp:
-        parts.extend(["", "=== MCP METADATA ===",
-                      f"  tldr: {mcp.get('tldr', '')}",
-                      f"  intent: {mcp.get('intent', '')}"])
-        ents = mcp.get("entities", {})
+    enrich_data = body.get("enrich") or body.get("mcp", {})
+    if enrich_data:
+        parts.extend(["", "=== ENRICH METADATA ===",
+                      f"  tldr: {enrich_data.get('tldr', '')}",
+                      f"  intent: {enrich_data.get('intent', '')}"])
+        ents = enrich_data.get("entities", {})
         if ents:
             files = ents.get("files", [])[:5]
             funcs = ents.get("functions", [])[:5]
@@ -542,7 +542,7 @@ def _build_p_context(turn, facts, body, day_review=None):
             if funcs:
                 for f in funcs:
                     parts.append(f"    func: {f}")
-        tags = mcp.get("tags", [])
+        tags = enrich_data.get("tags", [])
         if tags:
             parts.append(f"  tags: {tags[:10]}")
 

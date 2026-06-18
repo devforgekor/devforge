@@ -5,7 +5,7 @@
 
 Runs via systemd timer at KST 06:00 (21:00 UTC).
 Reads all raw events (summary_status='raw'), groups by run_id, sends to
-Pod B :8081 for summarization, inserts 'summary' rows,
+Pod B (MODEL_REGISTRY proposer) for summarization, inserts 'summary' rows,
 marks source rows as 'summarized'.
 
 Single file, no new dependencies. ~250 lines.
@@ -18,9 +18,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.db import psql_json, psql, psql_ok, esc_sql
+from lib.llm_client import MODEL_REGISTRY
 
 LLAMA_HOST = "127.0.0.1"
-LLAMA_PORT = 8081
+LLAMA_PORT = MODEL_REGISTRY['proposer']['port']
 FIVE_MIN = "INTERVAL '5 minutes'"
 SUMMARY_TEMP = 0.0
 SUMMARY_MAX_TOKENS = 1024
@@ -82,7 +83,7 @@ No markdown, no explanation — JSON array only."""
 
 
 def call_llm(prompt: str) -> list:
-    """Call llama.cpp at 127.0.0.1:8081. Returns parsed JSON list on success, None on failure."""
+    """Call llama.cpp (MODEL_REGISTRY proposer). Returns parsed JSON list on success, None on failure."""
     import http.client
 
     body = json.dumps({

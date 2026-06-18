@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from lib.db import psql_json
+from lib.db import psql_json, esc_sql
 
 SEARCH_DIR = Path("/opt/ai_data/search")
 SEARCH_DIR.mkdir(parents=True, exist_ok=True)
@@ -40,7 +40,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS turn_search USING fts5(
     user_turn_clean,
     text_clean,
     thinking_clean,
-    content='',
     tokenize='unicode61',
     prefix='2 3'
 );
@@ -113,9 +112,12 @@ class FTS5Index:
         meta_buf: List[tuple] = []
 
         try:
-            # Clear existing data
-            conn.execute("DELETE FROM turn_search")
-            conn.execute("DELETE FROM turn_meta")
+            # Contentless FTS5 in SQLite 3.34 doesn't support DELETE at all.
+            # Drop and recreate to ensure correct schema, then re-index.
+            conn.executescript("DROP TABLE IF EXISTS turn_search")
+            conn.executescript("DROP TABLE IF EXISTS turn_meta")
+            conn.executescript(SCHEMA_SQL)
+            conn.executescript(META_SQL)
 
             for row in rows:
                 tid = row["id"]
@@ -180,10 +182,14 @@ class FTS5Index:
         )
 
     def bm25_search(self, query: str, limit: int = 20) -> List[Dict]:
-        """Full-text search with BM25 ranking.
+        """Full-text search with BM25 ranking and Kiwi query expansion.
+
+        Expands Korean queries via Kiwi morphological analysis:
+          1. Kiwi lexical terms (여행 + 하다) → FTS5 terms column match (precise)
+          2. If <3 results: raw full-text search across all columns (broad recall)
 
         Args:
-            query: FTS5 query phrase (space-separated Kiwi terms recommended).
+            query: Korean search query (raw text, no Kiwi preprocessing needed).
             limit: Max results.
         Returns:
             List of dicts with turn metadata plus ranked text snippets.
@@ -191,24 +197,53 @@ class FTS5Index:
         if not query.strip():
             return []
 
+        from lib.text_cleaner import extract_terms as _expand
+        terms_list = _expand(query)
+
         conn = self._connect()
         try:
-            sql = (
+            base_sql = (
                 "SELECT m.turn_id, m.conversation_id, m.created_at, "
                 "  m.agent, m.seq, m.fts_rowid, "
                 "  s.terms, s.user_turn_clean, s.text_clean, s.thinking_clean, "
                 f"  bm25(turn_search, {BM25_WEIGHTS}) as rank "
                 "FROM turn_search s "
                 "JOIN turn_meta m ON m.fts_rowid = s.rowid "
-                "WHERE s.terms MATCH ? "
                 "ORDER BY rank "
                 "LIMIT ?"
             )
-            rows = conn.execute(sql, (query, limit)).fetchall()
+
             cols = ["turn_id", "conversation_id", "created_at", "agent", "seq",
                     "sqlite_rowid", "terms", "user_turn_clean", "text_clean",
                     "thinking_clean", "rank"]
-            return [dict(zip(cols, r)) for r in rows]
+            results = []
+
+            # Try 1: expanded terms against terms column (most precise)
+            if terms_list:
+                fts5_query = " OR ".join(terms_list)
+                sql = base_sql.replace(
+                    "FROM turn_search s",
+                    "FROM turn_search s WHERE s.terms MATCH ?"
+                )
+                try:
+                    rows = conn.execute(sql, (fts5_query, limit)).fetchall()
+                    results = [dict(zip(cols, r)) for r in rows]
+                except Exception:
+                    results = []
+
+            # Try 2: raw query full-text (broader recall, handles non-lexical searches)
+            if len(results) < 3:
+                sql = base_sql.replace(
+                    "FROM turn_search s",
+                    "FROM turn_search s WHERE turn_search MATCH ?"
+                )
+                try:
+                    rows = conn.execute(sql, (query, limit)).fetchall()
+                    results = [dict(zip(cols, r)) for r in rows]
+                except Exception:
+                    pass
+
+            return results
         finally:
             conn.close()
 
@@ -219,6 +254,86 @@ class FTS5Index:
             return row[0] if row else 0
         finally:
             conn.close()
+
+    def refresh_turns(self, turn_ids: list[str]) -> dict:
+        """Update FTS5 rows for specific turn IDs using text_clean_polished.
+
+        Called after polish_batch to sync polished text to FTS5 index.
+        Skips turns not yet in FTS5 (turn_watcher will insert them later).
+
+        Returns:
+            {updated, skipped, errors}
+        """
+        if not turn_ids:
+            return {"updated": 0, "skipped": 0, "errors": 0}
+
+        # Batch in groups of 100 to avoid overly long SQL
+        updated = skipped = errors = 0
+        for i in range(0, len(turn_ids), 100):
+            batch = turn_ids[i:i + 100]
+            ids_esc = ", ".join(f"'{esc_sql(tid)}'::uuid" for tid in batch)
+            rows = psql_json(
+                f"SELECT t.id, t.seq, t.user_turn_clean_polished, t.text_clean_polished, "
+                f"  t.thinking_clean_polished, t.tokens "
+                f"FROM turns t "
+                f"WHERE t.id IN ({ids_esc})"
+            )
+            if not rows:
+                continue
+
+            conn = self._connect()
+            try:
+                # Build lookup: turn_id → meta rowid
+                id_list_esc = ", ".join(f"'{esc_sql(r['id'])}'" for r in rows)
+                meta_rows = conn.execute(
+                    f"SELECT turn_id, fts_rowid FROM turn_meta "
+                    f"WHERE turn_id IN ({id_list_esc})"
+                ).fetchall()
+                meta_map = {r[0]: r[1] for r in meta_rows}
+
+                for row in rows:
+                    tid = row["id"]
+                    fts_rowid = meta_map.get(tid)
+                    if fts_rowid is None:
+                        skipped += 1
+                        continue
+
+                    user = row.get("user_turn_clean_polished") or ""
+                    text = row.get("text_clean_polished") or ""
+                    think = row.get("thinking_clean_polished") or ""
+
+                    # Re-parse tokens from clean_polished if available
+                    terms_str = ""
+                    tokens_data = row.get("tokens", "")
+                    if isinstance(tokens_data, str) and tokens_data:
+                        try:
+                            td = json.loads(tokens_data)
+                            if isinstance(td, dict):
+                                terms_str = " ".join(td.get("terms", []))
+                        except json.JSONDecodeError:
+                            pass
+
+                    # Contentless FTS5: DELETE + INSERT (UPDATE not supported)
+                    conn.execute(
+                        "DELETE FROM turn_search WHERE rowid = ?",
+                        (fts_rowid,),
+                    )
+                    conn.execute(
+                        "INSERT INTO turn_search "
+                        "(rowid, terms, user_turn_clean, text_clean, thinking_clean) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (fts_rowid, terms_str, user, text, think),
+                    )
+                    updated += 1
+
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                errors += 1
+            finally:
+                conn.close()
+
+        return {"updated": updated, "skipped": skipped, "errors": errors}
 
 
 _index: Optional[FTS5Index] = None

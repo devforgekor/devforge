@@ -142,8 +142,8 @@ print(f"  Thresholds: cos>={COSINE_FAITHFUL}=faithful, cos<{COSINE_UNFAITHFUL}=u
 print()
 
 turns = []
-for tid in TURN_IDS:
-    rows = psql_json(f"SELECT t.id, t.user_turn, t.thinking, t.text FROM turns t WHERE t.id='{tid}'::uuid")
+for turn_id in TURN_IDS:
+    rows = psql_json(f"SELECT t.id, t.user_turn, t.thinking, t.text FROM turns t WHERE t.id='{turn_id}'::uuid")
     if rows:
         turns.append(rows[0])
 print(f"Loaded {len(turns)}/{len(TURN_IDS)} turns\n")
@@ -155,8 +155,8 @@ mc_elapsed, llm_elapsed = 0.0, 0.0
 agree, disagree = 0, 0
 
 for turn in turns:
-    tid = turn["id"][:8]
-    print(f"\n── [{tid}] ──")
+    turn_id = turn["id"][:8]
+    print(f"\n── [{turn_id}] ──")
     r = extract_turn(turn)
     if r.get("error"):
         print(f"  ERROR: {r['error']}")

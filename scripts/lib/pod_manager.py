@@ -22,7 +22,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-from lib.protection import protected_ports, active_contexts
+from lib.protection import protected_ports
 
 
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
@@ -31,18 +31,47 @@ TIMEOUT = 7200
 
 MODEL_METADATA = {
     # Pod A — reserved for operator (future use)
-    "reviewer":   {"file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",  "size": "7.6GB", "port": 8080, "mode": "reserved"},
+    "reranker":   {"file": "Qwen3-Reranker-4B-Q8_0.gguf",  "size": "4.0GB", "port": 8080, "mode": "reranker"},
     # Pod B models — port assigned per mode (not from env file):
     #   8081: embed(f16 day) / proposer(30B night)
-    #   8082: extract(7B day) / reflector(14B night)
-    #   8083: verify(14B day) / judge(N14B night)
+    #   8082: extract(7B day) / polish / reflector(14B night)
+    #   8083: verify(14B day) / verify-enrich / judge(N14B night)
     #   8084: verifier(27B)
     "embed":      {
-        "file": "Qwen3-Embedding-8B-f16.gguf",
-        "size": "16.3GB", "port": 8081, "mode": "embed",
+        "file": "Qwen3-Embedding-8B-Q8_0.gguf",
+        "size": "7.5GB", "port": 8081, "mode": "embed",
         "model_name": "embed", "ctx": 16384,
         "threads": 4, "threads_batch": 4,
         "parallel": 1,
+    },
+    "polish":  {
+        "file": "Qwen3-4B-Instruct-2507-Q8_0.gguf",
+        "size": "4.0GB", "port": 8082, "mode": "polish",
+        "model_name": "polish", "ctx": 8192,
+        "threads": 2, "threads_batch": 2,
+        "parallel": 2, "ubatch_size": 512,
+    },
+    "polish-lite":  {
+        "file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+        "size": "2.4GB", "port": 8082, "mode": "polish",
+        "model_name": "polish-lite", "ctx": 8192,
+        "threads": 2, "threads_batch": 2,
+        "parallel": 2, "ubatch_size": 512,
+    },
+    "polish-enhanced":  {
+        "file": "Qwen3-4B-Instruct-2507-Q6_K.gguf",
+        "size": "3.1GB", "port": 8082, "mode": "polish",
+        "model_name": "polish-enhanced", "ctx": 8192,
+        "threads": 2, "threads_batch": 2,
+        "parallel": 2, "ubatch_size": 512,
+    },
+    "verify-enrich": {
+        "file": "nextcoder-14b-q4_k_m.gguf",
+        "size": "9.0GB", "port": 8083, "mode": "verify-enrich",
+        "model_name": "verify-enrich", "ctx": 4096,
+        "threads": 4, "threads_batch": 4,
+        "cache_ram": 512, "mlock": 0,
+        "parallel": 1, "ubatch_size": 512,
     },
     "proposer":   {
         "file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
@@ -55,21 +84,21 @@ MODEL_METADATA = {
         "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
         "size": "7.6GB", "port": 8082, "mode": "day",
         "model_name": "extractor", "ctx": 8192, "cache_ram": 1024, "evict_room": 8000,
-        "threads": 4, "threads_batch": 4,
-        "parallel": 3, "ubatch_size": 512,
+        "threads": 2, "threads_batch": 2,
+        "parallel": 2, "ubatch_size": 512,
     },
     "reflector":  {
-        "file": "Qwen2.5-Coder-14B-Instruct-Q8_0.gguf",
-        "size": "15.7GB","port": 8082, "mode": "review-r",
+        "file": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
+        "size": "8.2GB", "port": 8082, "mode": "review-r",
         "model_name": "reflector", "ctx": 8192, "cache_ram": 1024,
         "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "fatal",
     },
-    "judge":      {
-        "file": "NextCoder-14B-Q8_0.gguf",
-        "size": "15.0GB", "port": 8083, "mode": "review-j",
+    "judge": {
+        "file": "nextcoder-14b-q4_k_m.gguf",
+        "size": "9.0GB", "port": 8083, "mode": "review-j",
         "model_name": "judge", "ctx": 6144, "cache_ram": 512, "mlock": 0,
         "evict_room": 16000, "memory_check": 5000, "memory_check_mode": "warn", "report_memory": "1",
-        "parallel": 3, "ubatch_size": 512,
+        "parallel": 2, "ubatch_size": 512,
     },
     "verifier":   {
         "file": "Qwen3.6-27B.i1-IQ4_XS.gguf",
@@ -78,16 +107,16 @@ MODEL_METADATA = {
         "evict_room": 10000, "memory_check": 8000, "memory_check_mode": "warn",
         "report_memory": "1", "cache_type_k": "q8_0", "cache_type_v": "q8_0", "flash_attn": "1",
     },
-    "test_14b_q8": {
-        "file": "NextCoder-14B-Q8_0.gguf",
-        "size": "15.7GB", "port": 8083, "mode": "test-q8",
-        "model_name": "test-14b-q8", "ctx": 8192, "cache_ram": 1024,
+    "test-nextcoder": {
+        "file": "nextcoder-14b-q4_k_m.gguf",
+        "size": "9.0GB", "port": 8083, "mode": "test-q4",
+        "model_name": "test-nextcoder", "ctx": 8192, "cache_ram": 512,
         "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "warn",
     },
-    "test_nextcoder_q8": {
-        "file": "NextCoder-14B-Q8_0.gguf",
-        "size": "15.0GB", "port": 8083, "mode": "test-q8",
-        "model_name": "test-nextcoder-q8", "ctx": 8192, "cache_ram": 1024,
+    "test-qwen": {
+        "file": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
+        "size": "8.2GB", "port": 8083, "mode": "test-q4",
+        "model_name": "test-qwen", "ctx": 8192, "cache_ram": 512,
         "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "warn",
     },
 }
@@ -243,17 +272,23 @@ def kill_all(night=False, dry_run=False):
     if dry_run:
         log("  [DRY] kill_all() skipped")
         return
-    _ctx = active_contexts()
-    _ctx_protected = bool(_ctx)
+
+    # Pod A reranker — keep it alive, only Pod B changes
+    _skip_pod_a = False
+    try:
+        with open(MODE_FILE_A) as f:
+            for line in f:
+                if line.strip() == "MODE=reranker":
+                    _skip_pod_a = True
+                    break
+    except OSError:
+        pass
+
     if night:
-        if _ctx_protected:
-            log(f"  [PROTECT] skipping Pod B stop — active: {_ctx}")
-        else:
-            subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
-                           capture_output=True, timeout=30)
-            subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
-                           capture_output=True, timeout=10)
-        # Night: stop background services that could trigger OOM with heavy models
+        subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
+                       capture_output=True, timeout=30)
+        subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
+                       capture_output=True, timeout=10)
         for svc in ("devforge-day-cycle.service", "devforge-day-cycle.timer",
            "devforge-night-cycle.service",
                      "devforge-night-cycle.timer"):
@@ -261,18 +296,19 @@ def kill_all(night=False, dry_run=False):
             subprocess.run(["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10)
         _kill_stray_pasta(("8081", "8082", "8083", "8084"))
     else:
-        if _ctx_protected:
-            log(f"  [PROTECT] Pod B stop bypassed — active: {_ctx}")
-        else:
-            subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
-                           capture_output=True, timeout=30)
-            subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
-                           capture_output=True, timeout=10)
-        subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
+        subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
                        capture_output=True, timeout=30)
-        subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
+        subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
                        capture_output=True, timeout=10)
-        _kill_stray_pasta(("8080", "8081", "8082", "8083", "8084"))
+        if not _skip_pod_a:
+            subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
+                           capture_output=True, timeout=30)
+            subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-a.service"],
+                           capture_output=True, timeout=10)
+        ports_to_clean = ("8081", "8082", "8083", "8084")
+        if not _skip_pod_a:
+            ports_to_clean = ("8080",) + ports_to_clean
+        _kill_stray_pasta(ports_to_clean)
     _reclaim_memory()
 
 
@@ -286,17 +322,20 @@ def _extract_pasta_pid(ss_out: str, port: str) -> int | None:
     return None
 
 
-def _write_mode_env(mode: str, port: int) -> None:
+def _write_mode_env(mode: str, port: int, model_key: str | None = None) -> None:
     """Write Pod B env file — SSOT is MODEL_METADATA.
 
     Entrypoint reads this file at startup instead of hardcoding model config.
     Looks up by (mode field or dict key, port) which uniquely identifies each Pod B model.
     """
     meta = None
-    for v in MODEL_METADATA.values():
-        if v.get("port") == port and (v.get("mode") == mode or v.get("model_name") == mode):
-            meta = v
-            break
+    if model_key:
+        meta = MODEL_METADATA.get(model_key)
+    if meta is None:
+        for v in MODEL_METADATA.values():
+            if v.get("port") == port and (v.get("mode") == mode or v.get("model_name") == mode):
+                meta = v
+                break
     if meta is None:
         # Fallback: lookup by dict key
         meta = MODEL_METADATA.get(mode)
@@ -371,16 +410,23 @@ def stop_pod_a(dry_run=False):
     _kill_stray_pasta(("8080",))
 
 
-def start_pod_b(mode, port, night=False, dry_run=False, skip_probe=False):
+def start_pod_b(mode, port, night=False, dry_run=False, skip_probe=False, model_key=None):
     log(f"  POD B -> {mode} (:{port})")
-    _write_mode_env(mode, port)
+    _write_mode_env(mode, port, model_key=model_key)
     kill_all(night=night, dry_run=dry_run)
-    ports_to_clean = ("8081", "8082", "8083", "8084") if night else (str(port),)
-    _kill_stray_pasta(ports_to_clean)
     health_timeout = 1200 if night else 600
+    # Remove redundant _kill_stray_pasta — kill_all() already handles it,
+    # and an intervening call can race with systemctl start (pasta process
+    # of the new container gets killed, breaking port forwarding).
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
                    capture_output=True, timeout=60)
     ok = wait_health(port, timeout=health_timeout)
+    # Retry logic for pasta port-forwarding flakiness
+    if not ok:
+        log(f"  :{port} health timeout — restarting container (pasta workaround)")
+        subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
+                       capture_output=True, timeout=60)
+        ok = wait_health(port, timeout=min(health_timeout, 300))
     if ok:
         log(f"  :{port} health OK")
         if not skip_probe:
@@ -437,7 +483,7 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
     if meta["port"] == 8080:
         ok = start_pod_a(meta["mode"], meta["port"], dry_run=dry_run)
     else:
-        ok = start_pod_b(meta["mode"], meta["port"], night=night, dry_run=dry_run)
+        ok = start_pod_b(meta["mode"], meta["port"], night=night, dry_run=dry_run, model_key=physical_name)
     if ok:
         return True
     log(f"  ensure_model({physical_name}) failed — retrying after GC + 10s")
@@ -447,4 +493,4 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
     time.sleep(10)
     if meta["port"] == 8080:
         return start_pod_a(meta["mode"], meta["port"], dry_run=dry_run)
-    return start_pod_b(meta["mode"], meta["port"], night=night, dry_run=dry_run)
+    return start_pod_b(meta["mode"], meta["port"], night=night, dry_run=dry_run, model_key=physical_name)

@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-15'
+  updated: '2026-06-18'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -50,10 +50,6 @@ modules:
     deepseek_web.py:
       status: experimental
       purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
-    full_pipeline.sh:
-      status: unknown
-      purpose: "DevForge Full Background Pipeline \u2014 Qwen Q8 \u2192 NextCoder\
-        \ Q8 verify \u2192 night_debate \u2192 PRJ"
     gemini_pool.py:
       status: production
       purpose: "gemini_pool.py \u2014 Async Gemini API key pool with SQLite-backed\
@@ -152,6 +148,14 @@ modules:
     db.py:
       status: production
       purpose: Shared PostgreSQL helpers for DevForge scripts.
+    enrich_consumer.py:
+      status: production
+      purpose: "enrich_consumer \u2014 read enrichment metadata from review_facts\
+        \ and prepare for MCP tools."
+    enrich_feedback.py:
+      status: production
+      purpose: "Enrich Feedback \u2014 collect day_verify.py verify_result for few-shot\
+        \ injection."
     experiment_state.py:
       status: production
       purpose: "Experiment state file \u2014 \uC2E4\uD5D8 \uC911 watchdog\uACFC pipeline\
@@ -166,10 +170,6 @@ modules:
     llm_client.py:
       status: production
       purpose: "Unified LLM client \u2014 single entry point for all pipeline scripts."
-    mcp_consumer.py:
-      status: production
-      purpose: "mcp_consumer \u2014 read MCP metadata from review_facts and prepare\
-        \ for MCP tools."
     pipeline_common.py:
       status: production
       purpose: "Shared pipeline utilities \u2014 PipelineState, llm_call, call_one,\
@@ -178,6 +178,9 @@ modules:
       status: production
       purpose: "Container management for DevForge \u2014 Pod A (devforge-pod-a :8080)\
         \ and Pod B (devforge-pod-b :8081-8089)."
+    protection.py:
+      status: production
+      purpose: "Protection context manager \u2014 file-based dead man's switch."
     proxy_utils.py:
       status: production
       purpose: Utility functions extracted from anthropic_proxy.
@@ -188,6 +191,9 @@ modules:
     scoring.py:
       status: production
       purpose: "Scoring \u2014 shared veto/gap/early-exit logic."
+    test_common.py:
+      status: production
+      purpose: "Shared test utilities \u2014 setup, heartbeat, cleanup, re-exports."
     test_sandbox.py:
       status: experimental
       purpose: "Test execution sandbox \u2014 Podman read-only tmpfs for safe code\
@@ -255,6 +261,18 @@ modules:
     local_debate.py:
       status: experimental
       purpose: "LocalDebate \u2014 multi-agent debate using local Pod A + Pod B."
+- path: scripts/lib/enrich/
+  purpose: Enrich
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: core.py
+    utils.py:
+      status: production
+      purpose: utils.py
 - path: scripts/lib/extract/
   purpose: Extract
   files:
@@ -331,18 +349,6 @@ modules:
       purpose: "Rate estimators for LLM inference \u2014 token-count-based and timings-based."
   constraints:
     max_lines_per_file: 120
-- path: scripts/lib/mcp/
-  purpose: Mcp
-  files:
-    __init__.py:
-      status: unknown
-      purpose: __init__.py
-    core.py:
-      status: production
-      purpose: core.py
-    utils.py:
-      status: production
-      purpose: utils.py
 - path: scripts/lib/output/
   purpose: Output
   files:
@@ -573,14 +579,14 @@ modules:
       status: production
       purpose: DevForge pipeline step implementations.
     daily_verification_pipeline.py:
-      status: production
+      status: deprecated
       purpose: daily_verification_pipeline.py
     data_extraction_pipeline.py:
-      status: production
+      status: deprecated
       purpose: data_extraction_pipeline.py
     day_cycle.py:
       status: experimental
-      purpose: 'Day-time chain: extract -> MCP enrich (Pod B :8082, checkpoint-based).'
+      purpose: 'Day-time chain: extract -> enrich -> verify (Pod B :8082, checkpoint-based).'
     day_extract.py:
       status: experimental
       purpose: "Day Extract Pipeline \u2014 extract \u2192 MCP enrich on Pod B (7B:8082)."
@@ -594,16 +600,34 @@ modules:
         \ subprocess \u2192 \uC885\uB8CC."
     day_verify.py:
       status: experimental
-      purpose: "Day Verify Pipeline \u2014 14B verify + category on Pod B only."
+      purpose: "Day Verify Pipeline \u2014 verify enrichment metadata quality."
     embed_batch.py:
+      status: production
+      purpose: "Embed Batch Pipeline \u2014 text_clean_polished \uAE30\uC900 embedding\
+        \ \uB2E8 1\uD68C."
+    enrich.py:
       status: experimental
-      purpose: "Embed Batch Pipeline \u2014 f16 embedding via Pod B llama-server."
+      purpose: "Enrich Pipeline \u2014 post-extraction metadata enrichment (tldr,\
+        \ intent, entities, tags)."
+    enrich_cosine.py:
+      status: experimental
+      purpose: "Enrich Cosine Verification \u2014 8B embedding based entity/tldr cosine\
+        \ check."
+    enrich_verify.py:
+      status: experimental
+      purpose: "Enrich Verify Pipeline \u2014 score enrichment metadata quality using\
+        \ a judge model."
     evaluation_experiment_pipeline.py:
       status: production
       purpose: evaluation_experiment_pipeline.py
     extract.py:
       status: production
-      purpose: Extract Pipeline - checkpoint-based perpetual fact extraction.
+      purpose: "Extract Pipeline \u2014 state-based fact extraction via NOT EXISTS\
+        \ anti-join."
+    fts5_refresh.py:
+      status: production
+      purpose: "FTS5 Refresh \u2014 text_clean_polished \uAE30\uC900 FTS5 \uC778\uB371\
+        \uC2A4 \uB3D9\uAE30\uD654."
     hybrid.py:
       status: experimental
       purpose: Multi-model code modification pipeline with debate + verification.
@@ -611,19 +635,8 @@ modules:
       status: production
       purpose: hybrid_execution_pipeline.py
     knowledge_enrichment_pipeline.py:
-      status: production
+      status: deprecated
       purpose: knowledge_enrichment_pipeline.py
-    mcp_cosine.py:
-      status: experimental
-      purpose: "MCP Cosine Verification \u2014 8B embedding based entity/tldr cosine\
-        \ check."
-    mcp_enrich.py:
-      status: experimental
-      purpose: "MCP Enrichment Pipeline \u2014 post-extraction metadata enrichment."
-    mcp_verify.py:
-      status: experimental
-      purpose: "MCP Verify Pipeline \u2014 score MCP metadata quality using a judge\
-        \ model."
     night_cycle.py:
       status: experimental
       purpose: "Night Pipeline: DB handoff \uB85C\uB4DC \u2192 P-R-J(30B\u219214B\u2192\
@@ -634,18 +647,28 @@ modules:
     night_debate_pipeline.py:
       status: production
       purpose: night_debate_pipeline.py
+    polish_batch.py:
+      status: experimental
+      purpose: "Polish Batch Pipeline \u2014 3-phase detect-then-correct with Kiwi."
     prj_cycle.py:
       status: production
       purpose: prj_cycle.py
     proxy_reviewer.py:
       status: production
       purpose: "proxy_reviewer.py \u2014 DeepSeek Pro verification of 27B verify reasoning."
+    re_embed_check.py:
+      status: experimental
+      purpose: "Re-embed Check \u2014 detect content_hash changes \u2192 reset embedding_f16=NULL."
     review.py:
       status: production
       purpose: Step implementations for the 3-Model Review Pipeline.
     review_consumer.py:
       status: production
       purpose: "review_consumer.py \u2014 27B production final verify."
+    text_clean.py:
+      status: production
+      purpose: "Text Preprocessing \u2014 text_clean \uC0DD\uC131 (NULL\uC778 \uD134\
+        \uB9CC \uCC98\uB9AC)."
     worklog_generation_pipeline.py:
       status: production
       purpose: worklog_generation_pipeline.py
@@ -653,82 +676,6 @@ modules:
       status: production
       purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: 7B draft\
         \ \u2192 Python verify \u2192 30B review."
-- path: scripts/tests/
-  purpose: Test Scripts
-  files:
-    __init__.py:
-      status: production
-      purpose: Package marker for scripts/tests/.
-    day_cycle_pipeline.py:
-      status: experimental
-      purpose: Day cycle pipeline test harness (embed \u2192 extract \u2192 MCP enrich \u2192 verify).
-    day_model_test.py:
-      status: experimental
-      purpose: "14B Q8_0 extract + MiniCheck verify speed/accuracy test."
-    day_model_test_direct.py:
-      status: experimental
-      purpose: Manual 14B single-extract test with direct container start.
-    day_verify_compare.py:
-      status: experimental
-      purpose: "day_verify(reviewer) \u2014 3-model comprehensive comparison."
-    day_verify_q8test.py:
-      status: experimental
-      purpose: "Day Verify Q8 test \u2014 14B verify + category on Pod B only."
-    day_verify_retry.py:
-      status: experimental
-      purpose: "Coder Q8_0 verify retry with longer timeout."
-    embed_bench.py:
-      status: experimental
-      purpose: Embedding model benchmark \u2014 faithfulness accuracy, speed, memory.
-    embed_progress_slack.py:
-      status: experimental
-      purpose: "Slack embed progress reporter \u2014 1\uD68C\uC131 Qwen 8B embedding Slack \uBCF4\uACE0."
-
-    embed_runner.py:
-      status: experimental
-      purpose: Full embed runner \u2014 continuous embed_batch.py loop with watchdog progress.
-    embed_runner.sh:
-      status: experimental
-      purpose: Shell entrypoint for embed_runner.py.
-    eval_comparison.py:
-      status: experimental
-      purpose: "DeepSeek Pro evaluation of 12-run comparison test results."
-    experiment_monitor.py:
-      status: experimental
-      purpose: Manual background experiment status reporter to Slack.
-    exp_runner.py:
-      status: experimental
-      purpose: "5-Phase (2x2+baseline) experiment runner \u2014 background auto execution."
-    extract_compare.py:
-      status: experimental
-      purpose: "3-model extract comparison: 3B Q8_0 vs 7B Q4_K_M vs 7B Q8_0."
-    finalize_pipeline.py:
-      status: experimental
-      purpose: Pipeline finalization and cleanup utilities.
-    model_comparison_test.py:
-      status: experimental
-      purpose: "14B Q4_K_M x3 comparison \u2014 Extract + NLI + MCP + Verify 4-phase."
-    nli_compare.py:
-      status: experimental
-      purpose: "MiniCheck vs 7B LLM NLI comparison test."
-    prj_ground_truth_test.py:
-      status: experimental
-      purpose: "P/R/J ground-truth evaluation (Pod B swap, 4 cores dedicated)."
-    prj_model_test.py:
-      status: experimental
-      purpose: "P/R/J 3-model comparison \u2014 Mistral(P) vs Qwen2.5-7B(R) vs Llama 3.1 8B(J)."
-    rubric.py:
-      status: experimental
-      purpose: "Rubric experiment \u2014 Round 1 (no rubric) vs Round 2 (with rubric)."
-    test_night_prj_eval.py:
-      status: experimental
-      purpose: "Night PRJ GT evaluation \u2014 P=30B Q4_K_M \u2192 R=14B Q4_K_M \u2192 N14B Q6_K(J)."
-    test_progress_watcher.py:
-      status: experimental
-      purpose: Manual background watcher for 14B comparison test.
-    transform_prj.py:
-      status: experimental
-      purpose: PRJ data transformation library.
 - path: scripts/proxies/
   purpose: Proxies
   files:
@@ -754,3 +701,119 @@ modules:
     main.py:
       status: production
       purpose: "state_collector \u2014 DevForge Server Knowledge Engine v4.4"
+- path: scripts/tests/
+  purpose: Test Scripts
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    day_cycle_pipeline.py:
+      status: experimental
+      purpose: Day cycle pipeline test harness.
+    day_cycle_pipeline_full.py:
+      status: experimental
+      purpose: "Full Day Cycle Pipeline Test \u2014 day_cycle.sh \uB85C\uC9C1 \uC804\
+        \uCCB4 \uAC80\uC99D."
+    day_model_test.py:
+      status: experimental
+      purpose: "14B Q8_0 \uB2E8\uC77C extract + MiniCheck hallucination \uAC80\uC99D\
+        ."
+    day_model_test_direct.py:
+      status: experimental
+      purpose: day_model_test_direct.py
+    day_verify_compare.py:
+      status: experimental
+      purpose: "Pod A(7B reviewer) \uBAA8\uB378 \uBE44\uAD50: 5\uAC1C \uC5ED\uD560\
+        \ \uC804\uCCB4 \uD14C\uC2A4\uD2B8."
+    day_verify_q8test.py:
+      status: experimental
+      purpose: "Day Verify Pipeline \u2014 14B verify + category on Pod B only."
+    day_verify_retry.py:
+      status: experimental
+      purpose: "Coder Q8_0\uB9CC classify-P / classify-J / edge cases \uC7AC\uD14C\
+        \uC2A4\uD2B8 (timeout=300s)."
+    embed_bench.py:
+      status: experimental
+      purpose: "Embedding Model Benchmark \u2014 compare faithfulness accuracy, speed,\
+        \ memory."
+    embed_progress_slack.py:
+      status: experimental
+      purpose: "Slack embed progress reporter \u2014 send Qwen 8B embedding status\
+        \ to Slack every 30min."
+    embed_runner.py:
+      status: experimental
+      purpose: "Full Embed Runner \u2014 continuous embed_batch.py loop with watchdog\
+        \ progress."
+    embed_runner.sh:
+      status: unknown
+      purpose: "DevForge Embed Runner \u2014 continuous embed_batch.py loop"
+    eval_comparison.py:
+      status: experimental
+      purpose: DeepSeek Pro evaluation of 12-run comparison test results.
+    exp_runner.py:
+      status: experimental
+      purpose: "5-Phase (2x2+baseline) Experiment Runner \u2014 \uBC31\uADF8\uB77C\
+        \uC6B4\uB4DC \uC790\uB3D9 \uC2E4\uD589."
+    experiment_monitor.py:
+      status: experimental
+      purpose: experiment_monitor.py
+    extract_compare.py:
+      status: experimental
+      purpose: "\uB3D9\uC77C 5\uAC1C turn\uC73C\uB85C \uCD94\uCD9C \uC815\uD655\uB3C4\
+        /\uC18D\uB3C4 \uBE44\uAD50 + MiniCheck NLI \uAC80\uC99D"
+    extract_enrich_quality_spotcheck.py:
+      status: experimental
+      purpose: extract_enrich_quality_spotcheck.py
+    finalize_pipeline.py:
+      status: experimental
+      purpose: Finalize E2E 10-sample pipeline. Skip failed feedback loop; summarize
+        existing phases.
+    model_comparison_test.py:
+      status: experimental
+      purpose: "14B Q4_K_M 3\uC885 \uBE44\uAD50: \uC2E4\uC81C \uD30C\uC774\uD504\uB77C\
+        \uC778 extract/verify \uD328\uD134\uC73C\uB85C \uD3C9\uAC00."
+    neutral_improve.py:
+      status: experimental
+      purpose: "NEUTRAL NLI Class Improvement \u2014 OLD vs V2 vs V3 (CoT + plausible\
+        \ unstated few-shot)."
+    nli_compare.py:
+      status: experimental
+      purpose: "MiniCheck(flan-t5-large, 770M) vs Qwen2.5-Coder-7B NLI \uBE44\uAD50\
+        ."
+    nli_compare_14b.py:
+      status: experimental
+      purpose: "14B NLI Grounding Comparison \u2014 sequential test of both 14B Q8\
+        \ models."
+    pipeline_preverify_test.py:
+      status: experimental
+      purpose: "Integrated Pipeline Test \u2014 \uC804\uCC98\uB9AC\uBD80\uD130 Embed\uAE4C\
+        \uC9C0 \uC804\uCCB4 \uAC80\uC99D."
+    pipeline_verify_compare.py:
+      status: experimental
+      purpose: "Full Pipeline NEUTRAL Test \u2014 10 real samples with 3 verify prompt\
+        \ variants."
+    prj_ground_truth_test.py:
+      status: experimental
+      purpose: "Ground truth \uAE30\uBC18 P\u2192R\u2192J day \uBD84\uB958 3\uBAA8\
+        \uB378 \uC815\uBC00 \uD3C9\uAC00."
+    prj_model_test.py:
+      status: experimental
+      purpose: "P(Proposer)/R(Refuter)/J(Judge) \uC5ED\uD560\uBCC4 \uCD94\uCC9C \uBAA8\
+        \uB378 \uAC80\uC99D."
+    rubric.py:
+      status: experimental
+      purpose: "DevForge Rubric Experiment \u2014 Round 1 (no rubric) vs Round 2 (with\
+        \ rubric)."
+    test_hardcoded_ports.py:
+      status: experimental
+      purpose: Validate no hardcoded 127.0.0.1:808{0-4} ports remain in modified files.
+    test_night_prj_eval.py:
+      status: experimental
+      purpose: "Ground truth \uAE30\uBC18 night P-R-J \uD3C9\uAC00. P=30B(P), R=14B(R),\
+        \ J=N14B Q6."
+    test_progress_watcher.py:
+      status: experimental
+      purpose: test_progress_watcher.py
+    transform_prj.py:
+      status: experimental
+      purpose: Transform prj_cycle.py for experiment phases.

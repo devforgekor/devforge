@@ -20,6 +20,7 @@ from lib.watchdog.config import (
 )
 from lib.watchdog.state import ComponentTracker
 from lib.experiment_state import is_experiment_active
+from lib.protection import active_contexts
 
 
 def log(msg: str) -> None:
@@ -56,6 +57,9 @@ def recover_container(name: str) -> bool:
     if name in CONTAINER_EXCLUSION:
         log(f"  SKIP: {name} is excluded from restart")
         return False
+    if active_contexts():
+        log(f"  SKIP container restart {name} — protection active ({active_contexts()})")
+        return False
     if is_experiment_active():
         log(f"  SKIP container restart {name} — experiment active")
         return False
@@ -77,6 +81,9 @@ def recover_service(name: str) -> bool:
     if name in CONTAINER_EXCLUSION:
         log(f"  SKIP: {name} is excluded from restart")
         return False
+    if active_contexts():
+        log(f"  SKIP service restart {name} — protection active ({active_contexts()})")
+        return False
     if is_experiment_active():
         log(f"  SKIP service restart {name} — experiment active")
         return False
@@ -92,14 +99,17 @@ def recover_service(name: str) -> bool:
 
 
 def recover_oom() -> bool:
-    """OOM kill_all + day mode restore.
+    """OOM kill_all + restore mode.
 
     일반 backoff 생략, 즉시 kill_all로 메모리 확보 후 재시작.
+    Protection active (test running) 시 Pod B env를 보존하여 테스트 모드 유지.
     """
     if is_experiment_active():
         log("  SKIP OOM recovery — experiment active (runner handles recovery)")
         return False
-    log("  OOM recovery: kill_all + restore day...")
+
+    ctx = active_contexts()
+    log(f"  OOM recovery: kill_all + restore...")
     try:
         subprocess.run(
             ["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
@@ -111,21 +121,28 @@ def recover_oom() -> bool:
         )
         time.sleep(10)  # 메모리 reclaim
 
-        # Day mode restore — Pod A: MODE=day only (hardcodes model), Pod B: full env
+        # Pod A always restores to day mode
         with open(MODE_FILE_A, "w") as f:
             f.write("MODE=day")
-        try:
-            subprocess.run(
-                [sys.executable, "-c",
-                 "import sys; sys.path.insert(0, '/opt/projects/server/scripts'); "
-                 "from lib.pod_manager import _write_mode_env; "
-                 "_write_mode_env('day', 8082)"],
-                capture_output=True, timeout=15,
-            )
-        except Exception:
-            log("  _write_mode_env failed, falling back to MODE=day for Pod B")
-            with open(MODE_FILE_B, "w") as f:
-                f.write("MODE=day")
+
+        if ctx:
+            # Test running — keep Pod B's current mode env intact
+            log(f"  Protection active ({ctx}) — Pod B restored with existing mode env")
+        else:
+            # Normal OOM recovery — restore Pod B to day mode
+            try:
+                subprocess.run(
+                    [sys.executable, "-c",
+                     "import sys; sys.path.insert(0, '/opt/projects/server/scripts'); "
+                     "from lib.pod_manager import _write_mode_env; "
+                     "_write_mode_env('day', 8082)"],
+                    capture_output=True, timeout=15,
+                )
+            except Exception:
+                log("  _write_mode_env failed, falling back to MODE=day for Pod B")
+                with open(MODE_FILE_B, "w") as f:
+                    f.write("MODE=day")
+
         subprocess.run(
             ["systemctl", "--user", "start", "container-devforge-pod-a.service"],
             capture_output=True, timeout=60,

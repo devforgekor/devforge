@@ -122,23 +122,23 @@ def main():
     data = load_input()
     state = PipelineState(1, False, data)
 
-    # Phase -2: Watchman Pulse (NewHand Injection)
-    log_phase_header("Phase -2: Watchman Pulse")
+    # Phase -2: Watchdog Pulse (NewHand Injection)
+    log_phase_header("Phase -2: Watchdog Pulse")
     pulses = get_undelivered(target="operator")
     if pulses:
-        log(f"  Loaded {len(pulses)} pulses from Watchman")
+        log(f"  Loaded {len(pulses)} pulses from Watchdog")
         # Inject into global or local state for LLM prompts
-        pulse_context = "\n### [WATCHMAN PULSE - NEWHAND]\n"
+        pulse_context = "\n### [WATCHDOG PULSE - NEWHAND]\n"
         for p in pulses:
             p_type = p.get("type", "INFO")
             p_content = p.get("content", "")
             pulse_context += f"- [{p_type}] {p_content}\n"
-        
+
         # Store in state to be used by following LLM calls
-        state.add_phase("watchman_pulse", {"count": len(pulses), "context": pulse_context})
-        log("  Watchman Pulse context prepared for injection")
+        state.add_phase("watchdog_pulse", {"count": len(pulses), "context": pulse_context})
+        log("  Watchdog Pulse context prepared for injection")
     else:
-        log("  No active Watchman pulses found")
+        log("  No active Watchdog pulses found")
     log(f"  Input: {len(data.get('findings', []))} findings")
 
     # Phase -1: Extract → review_facts (DB) + activity_log type='extract_result' (DB)
@@ -146,8 +146,8 @@ def main():
         log_phase_header("Phase -1: Extract")
         from pipelines.extract import extract_pipeline
         result = extract_pipeline(
-            turn_id=None, dry_run=False, mcp_model="day_mcp", skip_mcp=True,
-            pulse_context=state.get_phase("watchman_pulse", {}).get("context")
+            turn_id=None, dry_run=False,
+            pulse_context=state.get_phase("watchdog_pulse", {}).get("context")
         )
         log(f"  Extract result: {result['processed']} processed, "
             f"{result['failed']} failed, {result['facts']} facts")

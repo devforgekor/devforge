@@ -43,7 +43,7 @@ def _check_backlog() -> int:
     return int(rows[0]["count"]) if rows else 0
 
 
-def _count_mcp_backlog() -> int:
+def _count_enrich_backlog() -> int:
     """Count extracted turns still needing MCP enrichment."""
     sql = (
         "SELECT count(*) FROM turns t "
@@ -53,7 +53,7 @@ def _count_mcp_backlog() -> int:
         ")"
         "AND NOT EXISTS ("
         "  SELECT 1 FROM review_facts rf "
-        "  WHERE rf.turn_id = t.id AND rf.fact_type = 'mcp_meta'"
+        "  WHERE rf.turn_id = t.id AND rf.fact_type = 'enrich_meta'"
         ")"
     )
     rows = psql_json(sql)
@@ -65,7 +65,7 @@ def main() -> None:
     consecutive_defer = 0
 
     log("=" * 60)
-    log("DevForge Day Extract — Pod B (7B:8082) extract + MCP enrich")
+    log("DevForge Day Extract — Pod B (7B:8082) extract + enrich")
     log("=" * 60)
 
     preflight_checks("day_extract.py")
@@ -98,14 +98,14 @@ def main() -> None:
         if not ex_result.get("ok", True):
             log(f"[warn] Extract partial failure: {ex_result}")
 
-        # Phase 2: MCP enrich
-        mcp_backlog = _count_mcp_backlog()
-        if mcp_backlog > 0 and (time.monotonic() - t_start) < (MAX_BUDGET - BUFFER_MIN):
-            log(f"\n=== Batch: MCP enrich (backlog={mcp_backlog}) ===")
-            from mcp_enrich import mcp_enrich_pipeline
-            mcp_result = mcp_enrich_pipeline(limit=BATCH_LIMIT)
-            if not mcp_result.get("ok", True):
-                log(f"[warn] MCP enrich partial failure: {mcp_result}")
+        # Phase 2: Enrich
+        enrich_backlog = _count_enrich_backlog()
+        if enrich_backlog > 0 and (time.monotonic() - t_start) < (MAX_BUDGET - BUFFER_MIN):
+            log(f"\n=== Batch: enrich (backlog={enrich_backlog}) ===")
+            from enrich import enrich_pipeline
+            enrich_result = enrich_pipeline(limit=BATCH_LIMIT)
+            if not enrich_result.get("ok", True):
+                log(f"[warn] Enrich partial failure: {enrich_result}")
 
     total = round(time.monotonic() - t_start, 1)
     log(f"\n{'=' * 60}")

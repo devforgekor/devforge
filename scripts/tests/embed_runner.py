@@ -3,7 +3,7 @@
 # Path: background — full embed run with watchdog progress
 """Full Embed Runner — continuous embed_batch.py loop with watchdog progress.
 
-Writes progress to catchdog_events table every N batches so Watchman
+Writes progress to catchdog_events table every N batches so Watchdog
 can monitor and report. Runs until all turns are embedded or killed.
 
 Usage:

@@ -69,7 +69,12 @@ _HEARTBEAT_TS_FILE = Path("/var/tmp/watchdog_slack_heartbeat_ts.txt")
 
 
 def _build_heartbeat_blocks(state: dict) -> tuple[list, str]:
-    """Build Block Kit blocks + fallback text for heartbeat."""
+    """Build Block Kit blocks + fallback text for heartbeat.
+
+    Two modes:
+      - Protection active (test/experiment): Only active workers, no full system status.
+      - Normal: Full system status (containers, services, timers, probes).
+    """
     now_kst = kst_now()
     mode = state.get("mode", "?").upper()
     fallback = f"DevForge Watchdog — {now_kst} KST  [{mode}]"
@@ -84,6 +89,34 @@ def _build_heartbeat_blocks(state: dict) -> tuple[list, str]:
             "type": "section",
             "text": {"type": "mrkdwn", "text": "*EXPERIMENT MODE* — monitor-only, no recovery"},
         })
+
+    active_pulses = state.get("active_pulses", [])
+
+    if active_pulses:
+        # ── Test/Protection mode: show workers only ──
+        lines = []
+        for p in active_pulses:
+            name = p.get("pulse_id", "").replace("heartbeat_", "", 1)
+            age_sec = p.get("age_sec", 0)
+            age_str = f"{age_sec // 60}m" if age_sec > 60 else f"{age_sec}s"
+            inst = p.get("instruction", "")[:80]
+            lines.append(f"• *{name}* ({age_str}) — {inst}")
+        if lines:
+            blocks.append({"type": "divider"})
+            blocks.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "\n".join(lines)},
+            })
+        # Events only — no containers/services/probes during test
+        events = state.get("events_30m", [])
+        if events:
+            blocks.append({
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": f"events: {len(events)}"}],
+            })
+        return blocks, fallback
+
+    # ── Normal mode: full system status ──
 
     # Containers
     containers = state.get("containers", [])
@@ -230,7 +263,7 @@ def _alert_color(state: str) -> str:
 
 
 def send_alert(component: str, state: str, detail: str) -> None:
-    log_message("watchman", "operator", "alert", f"{component} is {state}", detail)
+    log_message("watchdog", "operator", "alert", f"{component} is {state}", detail)
     """State change alert with colored attachment."""
     now_kst = kst_now()
     _slack_api("chat.postMessage", {
@@ -247,7 +280,7 @@ def send_alert(component: str, state: str, detail: str) -> None:
 
 
 def send_recovery(component: str, detail: str) -> None:
-    log_message("watchman", "operator", "recovery", f"{component} recovered", detail)
+    log_message("watchdog", "operator", "recovery", f"{component} recovered", detail)
     """Recovery notice with green attachment."""
     now_kst = kst_now()
     _slack_api("chat.postMessage", {

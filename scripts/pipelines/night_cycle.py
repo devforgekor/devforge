@@ -250,7 +250,7 @@ def save_feedback_to_db(night_verify_feedback, tag):
         if r.returncode == 0:
             count += 1
             log(f"  Saved feedback for {model} ({role}) to activity_log")
-            # Watchman Integration (NewHand)
+            # Watchdog Integration (NewHand)
             try:
                 log_message(
                     source="night_verify",
@@ -260,7 +260,7 @@ def save_feedback_to_db(night_verify_feedback, tag):
                     detail=json.dumps({"model": model, "role": role, "improvements": improvements, "score": score}, ensure_ascii=False)
                 )
             except Exception as e:
-                log(f"  [Watchman] Error reporting feedback: {e}")
+                log(f"  [Watchdog] Error reporting feedback: {e}")
         else:
             log(f"  Failed to save feedback for {model} ({role}): {r.stderr[:100]}")
 

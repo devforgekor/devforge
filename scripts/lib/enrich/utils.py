@@ -1,13 +1,14 @@
 # Status: production
 import re
 import os
+import subprocess as sp
 import sys
 from typing import Any, Dict, List, Optional
 
 # Constants from original mcp_enrich.py
-TIMEOUT_MCP = 900
-MAX_TOKENS_MCP = 512
-TEMP_MCP = 0.1
+TIMEOUT_ENRICH = 900
+MAX_TOKENS_ENRICH = 512
+TEMP_ENRICH = 0.1
 BATCH_LIMIT = 20
 
 # Embedding/NLI thresholds
@@ -70,10 +71,10 @@ def find_symbol(symbol: str, project_root: str = "/opt/projects/server") -> bool
     except Exception:
         return False
 
-def verify_entities(mcp_data: Optional[Dict],
+def verify_entities(enrich_data: Optional[Dict],
                      project_root: str = "/opt/projects/server") -> Dict:
     """Verify entities.files exist and entities.functions can be found."""
-    entities = mcp_data.get("entities", {}) if mcp_data else {}
+    entities = enrich_data.get("entities", {}) if enrich_data else {}
     if not isinstance(entities, dict):
         entities = {}
     verified: Dict[str, list] = {"files": [], "symbols": []}
@@ -89,34 +90,34 @@ def verify_entities(mcp_data: Optional[Dict],
 
     return verified
 
-def post_process_mcp(mcp: Optional[Dict[str, Any]],
+def post_process_enrich(enrich_data: Optional[Dict[str, Any]],
                       user_turn: str = "", text: str = ""
                       ) -> Optional[Dict[str, Any]]:
-    """Python post-processing for MCP fields: validate, clean, trim, structural filter."""
-    if not mcp:
-        return mcp
+    """Post-processing for enrichment fields: validate, clean, trim, structural filter."""
+    if not enrich_data:
+        return enrich_data
 
     # tldr
-    tldr = mcp.get("tldr", "")
+    tldr = enrich_data.get("tldr", "")
     if tldr:
         tldr = clean_markdown(tldr)
         words = tldr.split()
         if len(words) > 20:
             tldr = " ".join(words[:20]) + "..."
-    mcp["tldr"] = tldr[:200] if tldr else ""
+    enrich_data["tldr"] = tldr[:200] if tldr else ""
 
     # intent
-    intent = mcp.get("intent", "").lower()
+    intent = enrich_data.get("intent", "").lower()
     if intent not in _VALID_INTENTS:
-        mcp["intent"] = "other"
+        enrich_data["intent"] = "other"
 
     # category
-    category = mcp.get("category", "").lower()
+    category = enrich_data.get("category", "").lower()
     if category not in _VALID_CATEGORIES:
-        mcp["category"] = "other"
+        enrich_data["category"] = "other"
 
     # entities
-    entities = mcp.get("entities", {})
+    entities = enrich_data.get("entities", {})
     if not isinstance(entities, dict):
         entities = {}
     for key in ("files", "technologies", "functions", "mentioned_users"):
@@ -142,10 +143,10 @@ def post_process_mcp(mcp: Optional[Dict[str, Any]],
                 s = s.lstrip("./")
             clean_items.append(s)
         entities[key] = clean_items[:10]
-    mcp["entities"] = entities
+    enrich_data["entities"] = entities
 
     # tags
-    tags = mcp.get("tags", [])
+    tags = enrich_data.get("tags", [])
     if not isinstance(tags, list):
         tags = []
     seen_tags: set = set()
@@ -155,12 +156,12 @@ def post_process_mcp(mcp: Optional[Dict[str, Any]],
         if t and t not in seen_tags:
             seen_tags.add(t)
             clean_tags.append(t)
-    mcp["tags"] = clean_tags[:5]
+    enrich_data["tags"] = clean_tags[:5]
 
     # Tag-intent consistency
-    intent = mcp.get("intent", "other")
+    intent = enrich_data.get("intent", "other")
     blocked = _INTENT_TAG_BLOCKED.get(intent, set())
     if blocked:
-        mcp["tags"] = [t for t in mcp.get("tags", []) if t not in blocked]
+        enrich_data["tags"] = [t for t in enrich_data.get("tags", []) if t not in blocked]
 
-    return mcp
+    return enrich_data

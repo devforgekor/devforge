@@ -56,7 +56,7 @@ def run_pipeline_file(py_file: str, limit: int, extra_args: list = None) -> dict
 
 def score_speed(phases: list) -> tuple:
     """Score speed: each phase under expected threshold = full points."""
-    thresholds = {"embed": 120, "extract": 300, "mcp_enrich": 300, "verify": 600}
+    thresholds = {"embed": 120, "extract": 300, "enrich": 300, "verify": 600}
     total = 0.0
     max_p = len(phases) * 25
     for p in phases:
@@ -79,8 +79,8 @@ def score_stability(results: list) -> int:
     """Score stability: if multiple runs, exit code + elapsed consistency."""
     if len(results) <= 1:
         return 50  # single run = partial
-    n_ok = sum(1 for r in results if r.get("exit") == 0)
-    ok_ratio = n_ok / len(results)
+    ok_count = sum(1 for r in results if r.get("exit") == 0)
+    ok_ratio = ok_count / len(results)
     # Elapsed variance
     elapsed_list = [r.get("elapsed_s", 0) for r in results]
     avg_e = sum(elapsed_list) / len(elapsed_list)
@@ -97,7 +97,7 @@ def print_score_table(run_results: list) -> None:
     print("=" * 70)
 
     # Per-run phase scores
-    all_phase_names = ["embed", "extract", "mcp_enrich", "verify"]
+    all_phase_names = ["embed", "extract", "enrich", "verify"]
     phase_ok = {n: [] for n in all_phase_names}
     phase_elapsed = {n: [] for n in all_phase_names}
 
@@ -232,8 +232,8 @@ def run_test(limit: int, runs: int) -> None:
         # Phase 3: MCP Enrich (stays on :8082 extractor)
         print(f"\n  == Phase 3/4: MCP Enrich (7B Q8 :8082) ==")
         t0 = time.monotonic()
-        r3 = run_pipeline_file(os.path.join(PIPELINE_DIR, "mcp_enrich.py"), limit)
-        phases.append({"name": "mcp_enrich", "ok": r3["ok"], "elapsed_s": r3["elapsed_s"]})
+        r3 = run_pipeline_file(os.path.join(PIPELINE_DIR, "enrich.py"), limit)
+        phases.append({"name": "enrich", "ok": r3["ok"], "elapsed_s": r3["elapsed_s"]})
 
         # Phase 4: Verify
         print(f"\n  == Phase 4/4: Verify (14B Q6_K :8083) ==")
@@ -272,7 +272,7 @@ def main() -> None:
         print("Dry run mode — checking resources only")
         preflight_checks("day_cycle_pipeline.py", required_ports={8081, 8082, 8083})
         print("  [ok] All ports available")
-        print("  Phases: embed(:8081) → extract(:8082) → mcp(:8082) → verify(:8083)")
+        print("  Phases: embed(:8081) → extract(:8082) → enrich(:8082) → verify(:8083)")
         test_complete("dry_run")
         return
 
@@ -294,7 +294,7 @@ def main() -> None:
         log(f"  {line}")
 
     log("=== Phase 2: MCP Enrich ===")
-    r = run_pipeline_file(os.path.join(LOG_DIR, "mcp_enrich.py"), args.limit)
+    r = run_pipeline_file(os.path.join(LOG_DIR, "enrich.py"), args.limit)
     log(f"  MCP Enrich exit={r['exit']}, {r['elapsed_s']}s")
     for line in r["stdout_tail"]:
         log(f"  {line}")

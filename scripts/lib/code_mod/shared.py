@@ -14,7 +14,8 @@ SERVER_DIR = Path("/opt/projects/server")
 TASKS_FILE = SERVER_DIR / "code_mod_test_tasks.yaml"
 OUTPUT_DIR = Path("/var/tmp/code_mod_tests")
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-LLAMA_ENDPOINT = "http://127.0.0.1:8084"  # Qwen3.6-27B (verify mode)
+from lib.llm_client import MODEL_REGISTRY
+LLAMA_ENDPOINT = f"http://127.0.0.1:{MODEL_REGISTRY['verifier']['port']}"
 
 
 def read_file(path: str) -> str:

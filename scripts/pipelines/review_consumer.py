@@ -200,10 +200,10 @@ def build_verify_prompt(item: Dict) -> str:
             f"Final diff (first 1000 chars): {body.get('final_diff', '')[:1000]}"
         )
     elif item_type == "extract_result":
-        # From extract_pipeline.py: extract → Python verify → MCP enrich.
-        # Body keys: turn_id, fact_count, extract_model, mark, mcp.
-        mcp = body.get("mcp", {}) or {}
-        verified = mcp.get("verified", {}) or {}
+        # From extract_pipeline: extract → Python verify → enrich.
+        # Body keys: turn_id, fact_count, extract_model, mark, enrich (old: mcp).
+        enrich_data = body.get("enrich") or body.get("mcp", {}) or {}
+        verified = enrich_data.get("verified", {}) or {}
         verified_files = verified.get("files", [])
         verified_syms = verified.get("symbols", [])
         missing_files = [f["path"] for f in verified_files if not f.get("exists")]
@@ -214,13 +214,13 @@ def build_verify_prompt(item: Dict) -> str:
             f"Extract model: {body.get('extract_model', '?')}\n"
             f"Fact count: {body.get('fact_count', '?')}\n"
             f"Mark: {body.get('mark', '(none)')}\n\n"
-            f"### MCP Fields\n"
-            f"TLDR: {mcp.get('tldr', '')}\n"
-            f"Intent: {mcp.get('intent', '?')}\n"
-            f"Entities files: {mcp.get('entities', {}).get('files', [])}\n"
-            f"Entities functions: {mcp.get('entities', {}).get('functions', [])}\n"
-            f"Entities technologies: {mcp.get('entities', {}).get('technologies', [])}\n"
-            f"Tags: {mcp.get('tags', [])}\n"
+            f"### Enrich Fields\n"
+            f"TLDR: {enrich_data.get('tldr', '')}\n"
+            f"Intent: {enrich_data.get('intent', '?')}\n"
+            f"Entities files: {enrich_data.get('entities', {}).get('files', [])}\n"
+            f"Entities functions: {enrich_data.get('entities', {}).get('functions', [])}\n"
+            f"Entities technologies: {enrich_data.get('entities', {}).get('technologies', [])}\n"
+            f"Tags: {enrich_data.get('tags', [])}\n"
         )
         if missing_files:
             base += f"Missing files (not found on disk): {missing_files}\n"

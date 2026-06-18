@@ -30,7 +30,10 @@ class Intent(Enum):
     CHAT = "chat"
 
 
-LLM_ENDPOINT = os.environ.get("BOT_LLM_ENDPOINT", "http://127.0.0.1:8082/v1/chat/completions")
+from lib.llm_client import MODEL_REGISTRY
+
+LLM_ENDPOINT = os.environ.get("BOT_LLM_ENDPOINT",
+    f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/v1/chat/completions")
 LLM_MODEL = os.environ.get("BOT_LLM_MODEL", "qwen2.5-coder-7b")
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", "/opt/projects/server"))
 

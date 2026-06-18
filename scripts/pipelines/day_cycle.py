@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: day_cycle.sh — Phase 2 (extract chain)
-"""Day-time chain: extract -> MCP enrich (Pod B :8082, checkpoint-based).
+# Path: day_cycle.sh — Phase 2-4 (extract → enrich → verify)
+"""Day-time chain: extract -> enrich -> verify (Pod B :8082, checkpoint-based).
 
-Runs as Phase 2 of day_cycle.sh. extract.py then mcp_enrich.py.
-Pod B (:8082) must be in day mode before calling this.
+Runs as Phase 2-4 of day_cycle.sh. extract.py then enrich.py then day_verify.py.
+Pod B (:8082) must be in day mode during extract/enrich phases.
+Pod A (:8080) must be running for day_verify.py reranker faithfulness checks.
 """
 
 import os
@@ -29,16 +30,16 @@ def log(msg: str) -> None:
 def main() -> None:
     t_start = time.monotonic()
     log("=" * 60)
-    log("DevForge Day Cycle — extract -> MCP enrich")
+    log("DevForge Day Cycle — extract -> enrich -> verify")
     log("=" * 60)
 
-    preflight_checks("day_cycle.py", required_ports={8082})
+    preflight_checks("day_cycle.py", required_ports={8080, 8082})
 
-    # Load Watchman Pulse for injection
+    # Load Watchdog Pulse for injection
     pulses = get_undelivered(target="operator")
     pulse_context = ""
     if pulses:
-        pulse_context = "\n### [WATCHMAN PULSE - NEWHAND]\n"
+        pulse_context = "\n### [WATCHDOG PULSE - NEWHAND]\n"
         for p in pulses:
             p_type = p.get("type", "INFO")
             p_content = p.get("content", "")
@@ -49,12 +50,13 @@ def main() -> None:
     log("\n=== Phase 1: Extract ===")
     t0 = time.monotonic()
     try:
-        cmd = [sys.executable, "-u", "extract.py", "--limit", "50"]
+        cmd = [sys.executable, "-u", "extract.py", "--limit", "50",
+               "--time-budget", "3600"]
         if pulse_context:
             cmd.extend(["--pulse-context", pulse_context])
-        
+
         r = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=300,
+            cmd, capture_output=True, text=True, timeout=3600,
         )
         log(f"  [elapsed] {time.monotonic() - t0:.0f}s")
         if r.returncode == 0:
@@ -65,15 +67,16 @@ def main() -> None:
                 log(f"  [stderr] {r.stderr[:200]}")
     except subprocess.TimeoutExpired:
         log(f"  [elapsed] {time.monotonic() - t0:.0f}s")
-        log("  [warn] extract timed out (300s) — partial results preserved via checkpoint")
+        log("  [warn] extract timed out (3600s) — partial results preserved via checkpoint")
 
-    # Phase 2: MCP Enrich
-    log("\n=== Phase 2: MCP Enrich ===")
+    # Phase 2: Enrich (generates tldr, intent, entities, tags)
+    log("\n=== Phase 2: Enrich ===")
     t0 = time.monotonic()
     try:
         r = subprocess.run(
-            [sys.executable, "-u", "mcp_enrich.py", "--limit", "50"],
-            capture_output=True, text=True, timeout=300,
+            [sys.executable, "-u", "enrich.py", "--limit", "50",
+             "--time-budget", "3600"],
+            capture_output=True, text=True, timeout=3600,
         )
         log(f"  [elapsed] {time.monotonic() - t0:.0f}s")
         if r.returncode == 0:
@@ -84,7 +87,26 @@ def main() -> None:
                 log(f"  [stderr] {r.stderr[:200]}")
     except subprocess.TimeoutExpired:
         log(f"  [elapsed] {time.monotonic() - t0:.0f}s")
-        log("  [warn] MCP enrich timed out (300s) — partial results preserved via checkpoint")
+        log("  [warn] enrich timed out (3600s) — partial results preserved via checkpoint")
+
+    # Phase 3: Verify (reranker on :8080) — entity disk check + faithfulness
+    log("\n=== Phase 3: Verify ===")
+    t0 = time.monotonic()
+    try:
+        r = subprocess.run(
+            [sys.executable, "-u", "day_verify.py", "--limit", "50"],
+            capture_output=True, text=True, timeout=1800,
+        )
+        log(f"  [elapsed] {time.monotonic() - t0:.0f}s")
+        if r.returncode == 0:
+            log("  [ok] exit=0")
+        else:
+            log(f"  [warn] exit={r.returncode}")
+            if r.stderr:
+                log(f"  [stderr] {r.stderr[:200]}")
+    except subprocess.TimeoutExpired:
+        log(f"  [elapsed] {time.monotonic() - t0:.0f}s")
+        log("  [warn] verify timed out (1800s) — partial results preserved")
 
     log(f"\n{'=' * 60}")
     log(f"Day Cycle complete in {time.monotonic() - t_start:.0f}s")

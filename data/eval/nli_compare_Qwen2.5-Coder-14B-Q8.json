@@ -1,0 +1,145 @@
+{
+  "model": "Qwen2.5-Coder-14B-Q8",
+  "model_key": "test_qwen_14b",
+  "timestamp": "2026-06-16T11:30:57.864165+00:00",
+  "accuracy": 84.6,
+  "correct": 11,
+  "total": 13,
+  "by_class": {
+    "CONTRADICTION": {
+      "ok": 5,
+      "total": 5,
+      "acc": 100.0
+    },
+    "ENTAILMENT": {
+      "ok": 5,
+      "total": 5,
+      "acc": 100.0
+    },
+    "NEUTRAL": {
+      "ok": 1,
+      "total": 3,
+      "acc": 33.3
+    }
+  },
+  "avg_elapsed_s": 61.6,
+  "results": [
+    {
+      "description": "same meaning Korean",
+      "source": "한국의 수도는 서울이다",
+      "evidence": "서울은 대한민국의 수도",
+      "expected": "ENTAILMENT",
+      "actual": "ENTAILMENT",
+      "passed": true,
+      "elapsed_s": 89.7
+    },
+    {
+      "description": "same meaning English",
+      "source": "Python is a dynamically typed language",
+      "evidence": "Python uses dynamic typing",
+      "expected": "ENTAILMENT",
+      "actual": "ENTAILMENT",
+      "passed": true,
+      "elapsed_s": 52.2
+    },
+    {
+      "description": "extract faithful",
+      "source": "PostgreSQL 16을 데이터베이스로 사용한다",
+      "evidence": "PostgreSQL 16",
+      "expected": "ENTAILMENT",
+      "actual": "ENTAILMENT",
+      "passed": true,
+      "elapsed_s": 53.7
+    },
+    {
+      "description": "subset extraction",
+      "source": "철수는 학교에 갔다. 영희는 집에 있었다.",
+      "evidence": "철수는 학교에 갔다",
+      "expected": "ENTAILMENT",
+      "actual": "ENTAILMENT",
+      "passed": true,
+      "elapsed_s": 60.8
+    },
+    {
+      "description": "spelling fix",
+      "source": "안녕하세여 저는 개발자입 니다",
+      "evidence": "안녕하세요 저는 개발자입니다",
+      "expected": "ENTAILMENT",
+      "actual": "ENTAILMENT",
+      "passed": true,
+      "elapsed_s": 60.5
+    },
+    {
+      "description": "negation Korean",
+      "source": "오늘 날씨가 좋다",
+      "evidence": "오늘 날씨가 나쁘다",
+      "expected": "CONTRADICTION",
+      "actual": "CONTRADICTION",
+      "passed": true,
+      "elapsed_s": 61.2
+    },
+    {
+      "description": "negation English",
+      "source": "The sky is blue",
+      "evidence": "The sky is green",
+      "expected": "CONTRADICTION",
+      "actual": "CONTRADICTION",
+      "passed": true,
+      "elapsed_s": 58.5
+    },
+    {
+      "description": "factual contradiction",
+      "source": "지구는 둥글다",
+      "evidence": "지구는 평평하다",
+      "expected": "CONTRADICTION",
+      "actual": "CONTRADICTION",
+      "passed": true,
+      "elapsed_s": 62.4
+    },
+    {
+      "description": "wrong number",
+      "source": "한국 인구는 약 5100만 명이다",
+      "evidence": "한국 인구는 1억 명이다",
+      "expected": "CONTRADICTION",
+      "actual": "CONTRADICTION",
+      "passed": true,
+      "elapsed_s": 63.8
+    },
+    {
+      "description": "wrong entity",
+      "source": "시스템은 PostgreSQL을 사용한다",
+      "evidence": "시스템은 MongoDB를 사용한다",
+      "expected": "CONTRADICTION",
+      "actual": "CONTRADICTION",
+      "passed": true,
+      "elapsed_s": 60.7
+    },
+    {
+      "description": "related inference",
+      "source": "시스템은 PostgreSQL 16을 사용한다",
+      "evidence": "PostgreSQL 16은 빠르다",
+      "expected": "NEUTRAL",
+      "actual": "NEUTRAL",
+      "passed": true,
+      "elapsed_s": 60.0
+    },
+    {
+      "description": "different aspect",
+      "source": "비타민C는 면역력에 좋다",
+      "evidence": "비타민C는 피부 미백에 도움된다",
+      "expected": "NEUTRAL",
+      "actual": "CONTRADICTION",
+      "passed": false,
+      "elapsed_s": 56.1
+    },
+    {
+      "description": "plausible unstated",
+      "source": "ARM 서버에서 동작한다",
+      "evidence": "ARM Neoverse-N1 4코어",
+      "expected": "NEUTRAL",
+      "actual": "ENTAILMENT",
+      "passed": false,
+      "elapsed_s": 61.8
+    }
+  ]
+}

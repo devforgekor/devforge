@@ -87,22 +87,7 @@ HEARTBEAT_STALE_SEC = 1800  # 30min without heartbeat → hang 판정
 HEARTBEAT_WORKERS: dict[str, int] = {
     "embed_batch": 1800,            # embed_batch.py batch loop
     "liveness_embed_batch": 1800,   # background liveness thread (embed_batch.py)
-}  # worker_name → max_age_seconds (manual overrides below)
-
-# Auto-generate heartbeat workers from LLM model registry
-# Each llm_{model} heartbeat fires on successful call_llm() completion.
-# Stale threshold = model timeout + 30s buffer (if no call succeeds within that window, suspect hang).
-try:
-    from lib.llm_client import MODEL_REGISTRY as _MODEL_REGISTRY
-    for _key, _cfg in _MODEL_REGISTRY.items():
-        if "_model" not in _cfg:  # physical models only (role aliases resolve via _model)
-            _worker = f"llm_{_key}"
-            _timeout = _cfg.get("timeout", 300)
-            _stale = _timeout + 30
-            if _worker not in HEARTBEAT_WORKERS:
-                HEARTBEAT_WORKERS[_worker] = _stale
-except Exception:
-    pass  # best-effort — embed_batch manual entries still work without llm_client
+}  # worker_name → max_age_seconds. Only register workers that actually call heartbeat().
 
 # ── 임시 podman 검증 ───────────────────────────────────────────────
 SANDBOX_IMAGE = "python:3.12-alpine"

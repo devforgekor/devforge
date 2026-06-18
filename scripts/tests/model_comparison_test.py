@@ -13,6 +13,7 @@ SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+from lib.llm_client import MODEL_REGISTRY
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
 from sentence_transformers import SentenceTransformer
 from minicheck.minicheck import MiniCheck
@@ -838,7 +839,8 @@ def swap_model(model_file, model_name, threads=4, threads_batch=4):
     try:
         for i in range(300):
             try:
-                r = urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8082/health"), timeout=5)
+                r = urllib.request.urlopen(urllib.request.Request(
+                    f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/health"), timeout=5)
                 if r.status == 200:
                     load_s = round(time.monotonic() - t0, 1)
                     log(f"  Ready in {i+1}s ({load_s}s total)")

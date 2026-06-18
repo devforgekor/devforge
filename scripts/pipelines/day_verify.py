@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: day_cycle.sh — Phase 3 (verify checkpoint-based)
-"""Day Verify Pipeline — 14B verify + category on Pod B only.
+# Path: day_cycle.py — Phase 3 (verify chain)
+"""Day Verify Pipeline — verify enrichment metadata quality.
 
-Called at :30 by systemd timer. Reads extraction facts and MCP metadata
-from DB, runs chunked LLM verification (reuses night.py Phase 2 logic),
-stores verify_result in review_facts + pipeline_verify_*.json in eval/.
+Reads enrich_meta from DB and runs three verification phases:
+  Phase 1: Entity disk/symbol verify (files exist? symbols found?)
+  Phase 2: Reranker faithfulness (entity + tldr grounding in source text)
+  Phase 2b: 7B NLI self-verify (second opinion on uncertain entities)
+
+Called by day_cycle.py after extract → enrich completes.
+Stores results as fact_type='verify_result', separate from enrich_meta.
 
 Usage:
-  python3 scripts/pipelines/day_verify.py [--limit 50] [--dry-run]
+  python3 scripts/pipelines/day_verify.py              # batch verify
+  python3 scripts/pipelines/day_verify.py --limit 10   # batch cap
+  python3 scripts/pipelines/day_verify.py --dry-run    # simulate, no writes
 """
 
 import json
 import os
-import re
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -27,512 +31,419 @@ sys.path.insert(0, SCRIPTS_DIR)
 os.chdir(os.path.join(SCRIPTS_DIR, "pipelines"))
 
 from lib.db import psql, psql_ok, esc_sql, psql_json
-from lib.llm_client import call_llm
+from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
+from lib.enrich.utils import verify_entities
 from lib.infra.preflight import preflight_checks
-from lib.token_budget import TokenBudget
-from lib.common import log
 
-BATCH_LIMIT = 50
-MAX_BUDGET = 1500       # 25 minutes
-BUFFER_MIN = 180        # 3 minutes
-CHUNK_SIZE = 6          # match night.py Phase 2 chunk size
-STARVATION_LIMIT = 3
-VERIFY_TIMEOUT = 480    # reviewer model timeout
-VERIFY_MAX_TOKENS = 1024
-VERIFY_TEMP = 0.1
-VERIFY_PARALLEL = 3     # match llama-server --parallel on :8083
-
-# ── System Prompt (copied from night.py Phase 2) ──────────────────────
-
-VERIFIER_SYSTEM_PROMPT = """You are a code review verifier. Examine all findings and decide for each:
-- approved: correct, can proceed
-- rejected: incorrect or not actionable
-- needs_review: requires deeper analysis
-
-Classify each finding into a category:
-- bug: actual logic error or incorrect behavior
-- security: vulnerability or unsafe pattern
-- performance: efficiency or resource issue
-- quality: maintainability, style, or documentation
-- data_loss: missing or dropped information
-- hallucination: extracted content NOT supported by the original conversation turn (made up, exaggerated, or contradictory)
-
-IMPORTANT — Faithfulness check: Each finding has an "evidence" field extracted from the
-conversation. Verify that the evidence actually appears in or is directly supported by the
-turn. If the evidence is fabricated, exaggerated, or contradicts the turn context, mark
-it as "hallucination" category with result "fail".
-
-Output STRICT JSON:
-{
-  "final_verdict": "approved|approved_with_conditions|rejected",
-  "confidence": 0-100,
-  "summary": "1-sentence overall assessment",
-  "reasoning": "2-3 sentence analysis",
-  "verification_items": [
-    {"check": "...", "result": "pass|fail|partial", "detail": "...", "category": "bug|security|performance|quality|data_loss|hallucination"}
-  ]
-}"""
+BATCH_LIMIT = 20
 
 
-# ── Findings Builder (DB → night.py Phase 2 compatible) ──────────────
-
-def _get_turns_for_verify(limit: int = BATCH_LIMIT) -> List[Dict]:
-    """Turns that completed extraction and MCP enrichment but still need verification."""
-    sql = (
-        "SELECT t.id, t.user_turn, t.thinking, t.text, "
-        "       t.created_at::text "
-        "FROM turns t "
-        "WHERE EXISTS ("
-        "  SELECT 1 FROM review_facts rf "
-        "  WHERE rf.turn_id = t.id AND rf.fact_type IN ('text','user','thinking')"
-        ")"
-        "AND EXISTS ("
-        "  SELECT 1 FROM review_facts rf "
-        "  WHERE rf.turn_id = t.id AND rf.fact_type = 'mcp_meta'"
-        ")"
-        "AND NOT EXISTS ("
-        "  SELECT 1 FROM review_facts rf "
-        "  WHERE rf.turn_id = t.id AND rf.fact_type = 'verify_result'"
-        ")"
-        "ORDER BY t.created_at ASC "
-        f"LIMIT {limit}"
-    )
-    return psql_json(sql) or []
+def log(msg: str) -> None:
+    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
 
 
-def _get_turn_extractions(turn_id: str) -> List[Dict]:
-    """Extraction facts are the raw input for verification — every finding must be checked."""
-    sql = (
-        "SELECT fact_type, evidence::text, fact_action, created_at::text "
-        "FROM review_facts "
-        f"WHERE turn_id = '{esc_sql(turn_id)}'::uuid "
-        "AND fact_type IN ('text','user','thinking') "
-        "ORDER BY fact_index ASC"
-    )
-    return psql_json(sql) or []
+# ── Reranker faithfulness: entity grounding in source text ──────────────
+
+def _check_substring(entity: str, source: str) -> bool:
+    """Fast substring check: normalized entity in normalized source."""
+    if not entity or not source:
+        return False
+    return entity.lower().strip() in source.lower()
 
 
-def _get_turn_mcp(turn_id: str) -> Optional[Dict]:
-    """MCP metadata provides entity/tag context so verify can cross-check extraction claims."""
-    sql = (
-        "SELECT evidence::text FROM review_facts "
-        f"WHERE turn_id = '{esc_sql(turn_id)}'::uuid "
-        "AND fact_type = 'mcp_meta' "
-        "ORDER BY fact_index DESC LIMIT 1"
-    )
-    rows = psql_json(sql) or []
-    if not rows:
-        return None
-    try:
-        return json.loads(rows[0]["evidence"])
-    except (json.JSONDecodeError, KeyError):
-        return None
+def _check_faithfulness(enrich_data: Dict, user_turn: str,
+                         thinking: str, text: str) -> Dict:
+    """Verify entity + tldr faithfulness via reranker + 7B NLI.
 
-
-def _build_findings_from_turn(turn: Dict) -> List[Dict]:
-    """Build night.py-compatible findings list from DB extraction + MCP data.
-
-    Each extraction fact becomes a 'finding' with id, description, evidence.
-    MCP fields (tldr, entities, tags) become additional findings for quality check.
+    For each entity type (files, technologies, functions, mentioned_users),
+    checks substring presence first (fast path), then reranker score.
+    Returns faithfulness dict with _source attached for NLI phase.
     """
-    tid = turn["id"]
-    findings = []
+    entities = enrich_data.get("entities", {}) or {}
+    source_text = " ".join(f"{user_turn}\n{thinking}\n{text}".split())[:4000]
 
-    # Load extractions
-    extractions = _get_turn_extractions(tid)
-    for idx, ex in enumerate(extractions):
-        evidence = ex.get("evidence", "")[:500]
-        if not evidence or evidence == "null":
+    faithfulness: Dict[str, list] = {}
+    for key in ("files", "technologies", "functions", "mentioned_users"):
+        items = entities.get(key, [])
+        if not isinstance(items, list):
+            items = []
+        checked = []
+        for item in items:
+            s = str(item).strip()
+            if not s:
+                continue
+            entry: Dict = {"entity": s, "_source": source_text}
+            # Fast path: substring match
+            if _check_substring(s, source_text):
+                entry.update({
+                    "score": 100.0, "grounding": "GROUNDED",
+                    "method": "substr", "grounded": True,
+                })
+                checked.append(entry)
+                continue
+            # Slow path: reranker
+            cos = reranker_score(s, source_text)
+            score = round(cos * 100, 1)
+            nli_v = reranker_nli_verdict(cos)
+            entry.update({
+                "score": score, "grounding": nli_v,
+                "method": "reranker", "grounded": nli_v != "UNGROUNDED",
+            })
+            checked.append(entry)
+        faithfulness[key] = checked
+
+    # tldr faithfulness
+    tldr = (enrich_data.get("tldr", "") or "").strip()
+    if tldr:
+        cos = reranker_score(tldr, source_text)
+        score = round(cos * 100, 1)
+        nli_v = reranker_nli_verdict(cos)
+        faithfulness["tldr"] = {
+            "text": tldr, "_source": source_text,
+            "score": score, "grounding": nli_v,
+            "grounded": nli_v != "UNGROUNDED",
+        }
+
+    return faithfulness
+
+
+# ── Phase 2b: 7B NLI Self-Verify ──────────────────────────────────
+
+_NLI_VERIFY_PROMPT = """You are verifying whether an EVIDENCE sentence is factually supported by a SOURCE sentence.
+
+Follow these steps:
+1. Identify the key factual claim in the evidence.
+2. Check whether that claim is directly stated or clearly implied by the source.
+3. Output exactly one label.
+
+LABELS:
+- ENTAILMENT: The evidence is directly supported by the source.
+- CONTRADICTION: The evidence contradicts the source — they cannot both be true.
+- NEUTRAL: The evidence is not directly supported but does not contradict either.
+
+SOURCE: {source}
+
+EVIDENCE: {evidence}
+
+LABEL:"""
+
+
+def _llm_nli_check(entity: str, source: str) -> str:
+    """Run 7B Q8 NLI self-verify on a single entity-source pair.
+    Returns ENTAILMENT, CONTRADICTION, or NEUTRAL.
+    Falls back to NEUTRAL on any error.
+    """
+    if not entity or not source:
+        return "NEUTRAL"
+    prompt = _NLI_VERIFY_PROMPT.format(
+        source=source[:2000], evidence=entity[:500]
+    )
+    try:
+        meta = call_llm(
+            [{"role": "user", "content": prompt}],
+            model="day_enrich",
+            max_tokens=64, temperature=0.0, timeout=30,
+            return_meta=True,
+        )
+        raw = meta["content"].strip().upper()
+        for tok in raw.replace("\n", " ").split():
+            tok = tok.strip(".,!?;:\"'()[]")
+            if tok in ("ENTAILMENT", "CONTRADICTION", "NEUTRAL"):
+                return tok
+        return "NEUTRAL"
+    except Exception:
+        return "NEUTRAL"
+
+
+def _llm_nli_verify(faithfulness: Dict) -> Dict:
+    """Phase 2b: 7B NLI self-verify on reranker-uncertain entities.
+
+    For entities that the reranker scored as UNGROUNDED/AMBIGUOUS,
+    run 7B Q8 NLI as second opinion. If NLI says ENTAILMENT,
+    override to GROUNDED. If CONTRADICTION, keep UNGROUNDED.
+
+    Mutates faithfulness dict in-place and returns it.
+    """
+    for key in ("files", "technologies", "functions", "mentioned_users"):
+        items = faithfulness.get(key, [])
+        if not isinstance(items, list):
             continue
-        findings.append({
-            "id": f"EX-{tid[:8]}-{idx}",
-            "severity": "medium",
-            "category": "quality",
-            "description": f"Extracted {ex.get('fact_type','?')} content",
-            "evidence": evidence,
-            "source": ex.get("fact_action", "extract"),
-            "_turn_id": tid,
-        })
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            # Only re-check entities that reranker couldn't confidently ground
+            if item.get("grounded", True) or item.get("score", 100) >= 80:
+                continue
+            entity = item.get("entity", "")
+            source = item.get("_source", "")
+            if not source:
+                continue
+            nli = _llm_nli_check(entity, source)
 
-    # Load MCP fields for additional context
-    mcp = _get_turn_mcp(tid)
-    if mcp:
-        tldr = mcp.get("tldr", "") or ""
-        if tldr:
-            findings.append({
-                "id": f"MCP-{tid[:8]}-tldr",
-                "severity": "medium",
-                "category": "quality",
-                "description": "MCP tldr summary",
-                "evidence": tldr[:300],
-                "_turn_id": tid,
-            })
-        entities = mcp.get("entities", {}) or {}
-        tags = mcp.get("tags", []) or []
-        if entities:
-            findings.append({
-                "id": f"MCP-{tid[:8]}-ent",
-                "severity": "info",
-                "category": "quality",
-                "description": f"MCP entities: "
-                               f"{len(entities.get('files',[]))} files, "
-                               f"{len(entities.get('functions',[]))} funcs",
-                "evidence": json.dumps(entities, ensure_ascii=False)[:300],
-                "_turn_id": tid,
-            })
-        if tags:
-            findings.append({
-                "id": f"MCP-{tid[:8]}-tags",
-                "severity": "info",
-                "category": "quality",
-                "description": f"MCP tags: {', '.join(tags[:5])}",
-                "evidence": json.dumps(tags, ensure_ascii=False)[:300],
-                "_turn_id": tid,
-            })
+            # ENTAILMENT from 7B overrides reranker UNGROUNDED
+            if nli == "ENTAILMENT":
+                item["grounded"] = True
+                item["grounding"] = "GROUNDED"
+                item["method"] = "7b_nli_override"
+                item["_nli"] = nli
+            elif nli == "CONTRADICTION":
+                item["grounded"] = False
+                item["grounding"] = "CONTRADICTION"
+                item["method"] = "7b_nli"
+                item["_nli"] = nli
+            else:
+                item["_nli"] = nli
 
-    # Add turn context for the reviewer (user + response text for faithfulness check)
-    user_turn = (turn.get("user_turn") or "")[:200]
-    if user_turn:
-        findings.insert(0, {
-            "id": f"CTX-{tid[:8]}-user",
-            "severity": "info",
-            "category": "quality",
-            "description": f"User turn context",
-            "evidence": user_turn[:200],
-            "_turn_id": tid,
-        })
-    turn_text = (turn.get("text") or "")[:500]
-    if turn_text:
-        findings.insert(0, {
-            "id": f"CTX-{tid[:8]}-text",
-            "severity": "info",
-            "category": "quality",
-            "description": "Assistant response context (for faithfulness comparison)",
-            "evidence": turn_text[:500],
-            "_turn_id": tid,
-        })
+    # Also check tldr
+    tldr = faithfulness.get("tldr", {})
+    if isinstance(tldr, dict) and not tldr.get("grounded", True):
+        entity = tldr.get("text", "")
+        source = tldr.get("_source", "")
+        if source:
+            nli = _llm_nli_check(entity, source)
+            if nli == "ENTAILMENT":
+                tldr["grounded"] = True
+                tldr["grounding"] = "GROUNDED"
+                tldr["method"] = "7b_nli_override"
+                tldr["_nli"] = nli
 
-    return findings
+    return faithfulness
 
 
-def _findings_to_context(findings: List[Dict]) -> str:
-    """TokenBudget-constrained findings context (matches night.py style)."""
-    budget = TokenBudget("day_verify")
-    parts = []
+# ── DB helpers ────────────────────────────────────────────────────────────
 
-    def _add(text: str, priority: int = 5) -> bool:
-        ok = budget.add_section(text.split("\n")[0][:60], text, priority)
-        if ok:
-            parts.append(text)
-        return ok
+def _get_turns_for_verify(limit: int = BATCH_LIMIT,
+                            turn_id: Optional[str] = None) -> List[Dict]:
+    """Turns that completed enrichment but still need verification.
 
-    _add(f"## Findings ({len(findings)} total)\n", priority=10)
+    If turn_id is given, re-verify that specific turn (skips NOT EXISTS filter).
+    """
+    if turn_id:
+        sql = (
+            "SELECT DISTINCT ON (t.id) "
+            "  t.id, t.user_turn, t.thinking, t.text, "
+            "  rf.evidence::text AS enrich_meta, "
+            "  t.created_at::text "
+            "FROM turns t "
+            "JOIN review_facts rf ON rf.turn_id = t.id "
+            f"  AND rf.fact_type = 'enrich_meta' "
+            f"WHERE t.id = '{esc_sql(turn_id)}'::uuid "
+            "ORDER BY t.id, rf.fact_index DESC"
+        )
+    else:
+        sql = (
+            "SELECT DISTINCT ON (t.id) "
+            "  t.id, t.user_turn, t.thinking, t.text, "
+            "  rf.evidence::text AS enrich_meta, "
+            "  t.created_at::text "
+            "FROM turns t "
+            "JOIN review_facts rf ON rf.turn_id = t.id "
+            "  AND rf.fact_type = 'enrich_meta' "
+            "WHERE NOT EXISTS ("
+            "  SELECT 1 FROM review_facts rf2 "
+            "  WHERE rf2.turn_id = t.id "
+            "  AND rf2.fact_type = 'verify_result'"
+            ") "
+            "ORDER BY t.id, rf.fact_index DESC"
+        )
+    rows = psql_json(sql) or []
+    return rows[:limit]
 
-    for sev_name, pri in (("critical", 9), ("high", 7), ("medium", 5), ("low", 3), ("info", 2)):
-        subset = [it for it in findings if it.get("severity", "medium").lower() == sev_name]
-        if not subset:
-            continue
-        txt = f"\n[{sev_name.upper()}] ({len(subset)}):"
-        for it in subset:
-            txt += f"\n  {it.get('id', '?')}: {json.dumps(it, ensure_ascii=False)[:200]}"
-        if not _add(txt, priority=pri):
-            _add(f"\n[{sev_name.upper()}] ({len(subset)} total — omitted, budget)", priority=pri - 1)
-
-    return "\n".join(parts)
-
-
-# ── DB Writer ─────────────────────────────────────────────────────────
 
 def _insert_verify_result(turn_id: str, fact_index: int,
-                          verify_json_str: str, model_label: str,
-                          category_summary: str = "",
-                          prompt_tokens: Optional[int] = None,
-                          gen_tokens: Optional[int] = None,
-                          elapsed_ms: Optional[float] = None,
-                          source_file: Optional[str] = None) -> bool:
-    """Persist verification outcome so completed turns are excluded from future batches."""
-    cols = ["turn_id", "fact_index", "fact_type", "evidence",
-            "extract_model", "verdict", "source", "fact_action"]
-    vals = [
-        f"'{esc_sql(turn_id)}'::uuid",
-        str(fact_index),
-        "'verify_result'",
-        f"'{esc_sql(verify_json_str[:5000])}'",
-        f"'{esc_sql(model_label)}'",
-        "'pending'",
-        f"'day_verify_{esc_sql(model_label)}'",
-        "'verify'",
-    ]
-    set_clauses = []
-
-    if prompt_tokens is not None:
-        cols.extend(["prompt_tokens", "gen_tokens"])
-        vals.extend([str(prompt_tokens), str(gen_tokens)])
-        set_clauses.append(f"prompt_tokens = {prompt_tokens}")
-        set_clauses.append(f"gen_tokens = {gen_tokens}")
-    if elapsed_ms is not None:
-        cols.append("elapsed_ms")
-        vals.append(f"{elapsed_ms:.1f}")
-        set_clauses.append(f"elapsed_ms = {elapsed_ms:.1f}")
-    if source_file:
-        cols.append("source_file")
-        vals.append(f"'{esc_sql(source_file)}'")
-        set_clauses.append(f"source_file = '{esc_sql(source_file)}'")
-
+                           verify_json_str: str) -> bool:
     sql = (
-        f"INSERT INTO review_facts ({', '.join(cols)}) "
-        f"VALUES ({', '.join(vals)}) "
-        f"ON CONFLICT (turn_id, fact_index, extract_model) "
-        f"DO UPDATE SET evidence = EXCLUDED.evidence"
-        + (f", {', '.join(set_clauses)}" if set_clauses else "")
+        "INSERT INTO review_facts "
+        "  (turn_id, fact_index, fact_type, evidence, "
+        "   extract_model, verdict, source, fact_action) "
+        f"VALUES ('{esc_sql(turn_id)}'::uuid, {fact_index}, "
+        f"  'verify_result', "
+        f"  '{esc_sql(verify_json_str[:5000])}', "
+        f"  'enrich-self', 'pending', "
+        f"  'day_verify', 'verify')"
     )
     return psql_ok(sql)
 
 
-def _save_verify_output(data: Dict) -> str:
-    """Save verification result to eval/ as pipeline_verify_*.json."""
-    file_timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    fname = f"pipeline_verify_{file_timestamp_str}.json"
-    fpath = os.path.join(EVAL_DIR, fname)
-    with open(fpath, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    log(f"  [save] {fpath}")
-    return fpath
+def _build_category_summary(verify_data: Dict) -> str:
+    parts = []
 
+    # Entity verify
+    ev = verify_data.get("entity_verify", {})
+    files = ev.get("files", [])
+    syms = ev.get("symbols", [])
+    missing_files = sum(1 for f in files if not f.get("exists"))
+    missing_syms = sum(1 for s in syms if not s.get("found"))
+    parts.append(f"entity: {len(files)} files ({missing_files} missing), "
+                 f"{len(syms)} syms ({missing_syms} missing)")
 
-def _build_category_summary(verification_items: List[Dict], total_findings: int) -> str:
-    """Aggregate categories into a one-line summary (matches night.py)."""
-    if not verification_items:
-        return ""
-    cats: Dict[str, Dict[str, int]] = {}
-    cats_result: Dict[str, Dict[str, int]] = {}
-    verdict_counts: Dict[str, int] = {}
-    for item in verification_items:
-        cat = item.get("category", "other")
-        sev = item.get("severity", item.get("result", "medium"))
-        if cat not in cats:
-            cats[cat] = {}
-        cats[cat][sev] = cats[cat].get(sev, 0) + 1
-        v = item.get("result", "unknown")
-        verdict_counts[v] = verdict_counts.get(v, 0) + 1
-        if cat not in cats_result:
-            cats_result[cat] = {}
-        cats_result[cat][v] = cats_result[cat].get(v, 0) + 1
-
-    cat_parts = []
-    for cat, sevs in sorted(cats.items(), key=lambda x: -sum(x[1].values())):
-        sev_parts = [f"{s}={c}" for s, c in sorted(sevs.items())]
-        total = sum(sevs.values())
-        res_parts = cats_result.get(cat, {})
-        res_str = f" [{','.join(f'{r}={c}' for r,c in sorted(res_parts.items()))}]" if res_parts else ""
-        cat_parts.append(f"{cat}={total}({','.join(sev_parts)}){res_str}")
-    verdict_str = ", ".join(f"{k}={v}" for k, v in sorted(verdict_counts.items()))
-    return f"Category Distribution: {'; '.join(cat_parts)} ({total_findings} total) | Verdict: {verdict_str}"
-
-
-# ── Concurrent Chunk Helper ──────────────────────────────────────────────
-
-def _verify_chunk(chunk: List[Dict], ci: int, total: int) -> Dict[str, Any]:
-    """Single chunk LLM call + JSON parse. Thread-safe (no shared state)."""
-    ctx = _findings_to_context(chunk)
-    log(f"  [chunk {ci}/{total}] {len(chunk)} items")
-
-    resp = call_llm(
-        [{"role": "system", "content": VERIFIER_SYSTEM_PROMPT},
-         {"role": "user", "content": ctx}],
-        model="reviewer",
-        max_tokens=VERIFY_MAX_TOKENS, temperature=VERIFY_TEMP,
-        timeout=VERIFY_TIMEOUT, json_mode=True, return_meta=True,
+    # Faithfulness
+    fh = verify_data.get("faithfulness", {})
+    n_ent = sum(len(v) for v in fh.values() if isinstance(v, list))
+    n_fail = sum(
+        1 for v in fh.values()
+        if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
     )
-    r_content = resp["content"]
-    if isinstance(r_content, str):
-        m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', r_content)
-        if m:
-            r_content = m.group(1)
-        try:
-            r = json.loads(r_content.strip())
-        except json.JSONDecodeError:
-            r = {}
-    else:
-        r = r_content
+    parts.append(f"faithfulness: {n_ent} entities ({n_fail} ungrounded)")
+    tldr = fh.get("tldr", {})
+    if isinstance(tldr, dict):
+        tldr_ok = tldr.get("grounded", True)
+        parts.append(f"tldr={'OK' if tldr_ok else 'LOW'}")
 
-    return {
-        "ok": True,
-        "items": r.get("verification_items", []),
-        "verdict": r.get("final_verdict"),
-        "summary": r.get("summary", ""),
-        "reasoning": r.get("reasoning", ""),
-        "usage": resp.get("usage", {}),
-        "elapsed_ms": resp.get("elapsed_ms", 0),
-        "chunk_size": len(chunk),
-    }
+    return " | ".join(parts)
 
 
-# ── Pipeline ──────────────────────────────────────────────────────────
+# ── Pipeline ──────────────────────────────────────────────────────────────
 
 def day_verify_pipeline(limit: int = BATCH_LIMIT,
-                        dry_run: bool = False,
-                        model_label: str = "14b") -> Dict[str, Any]:
-    """Main entry: load unverified turns, verify each finding against MCP context, persist results."""
+                         dry_run: bool = False,
+                         turn_id: Optional[str] = None) -> Dict[str, Any]:
+    """Verify enrichment metadata: entity disk check + reranker + 7B NLI."""
     t_start = time.monotonic()
-    consecutive_defer = 0
-
-    processed_total = 0
-    failed_total = 0
+    processed = 0
+    failed = 0
 
     log("=" * 60)
-    log(f"DevForge Day Verify — verification on Pod B (:8083)")
-    log(f"  Label: {model_label}")
+    log("Day Verify — enrichment metadata quality check")
     if dry_run:
         log("  [DRY RUN] No writes to DB")
+    if turn_id:
+        log(f"  [re-verify] turn_id={turn_id[:12]}")
     log("=" * 60)
 
-    while True:
-        elapsed = time.monotonic() - t_start
-        remaining = MAX_BUDGET - elapsed
+    turns = _get_turns_for_verify(limit, turn_id=turn_id)
+    if not turns:
+        log("[done] No turns needing verification")
+        return {"ok": True, "processed": 0, "elapsed_s": 0}
 
-        # Load turns needing verification
-        turns = _get_turns_for_verify(limit)
-        if not turns:
-            log(f"[done] No turns needing verification ({elapsed:.0f}s)")
-            break
+    log(f"Processing {len(turns)} turn(s)")
 
-        if remaining < BUFFER_MIN:
-            log(f"[buffer] Remaining {remaining:.0f}s < {BUFFER_MIN}s — deferring {len(turns)} turns")
-            consecutive_defer += 1
-            if consecutive_defer >= STARVATION_LIMIT:
-                log(f"[alert] Verify backlog: {len(turns)} turns, {consecutive_defer}x defer")
-            break
+    for turn in turns:
+        turn_id = turn["id"]
+        turn_short = turn_id[:8]
+        log(f"\n  [{turn_short}]")
 
-        consecutive_defer = 0
-        log(f"\n=== Batch: verify {len(turns)} turns (budget={remaining:.0f}s) ===")
+        try:
+            enrich_meta_str = turn.get("enrich_meta", "")
+            enrich_data = json.loads(enrich_meta_str) if enrich_meta_str else {}
 
-        # Build findings from DB
-        all_findings = []
-        for turn in turns:
-            findings = _build_findings_from_turn(turn)
-            all_findings.extend(findings)
+            if not enrich_data:
+                log(f"    No enrich data — skip")
+                continue
 
-        if not all_findings:
-            log("  [skip] No findings to verify")
-            break
+            verify_result: Dict[str, Any] = {}
 
-        log(f"  [input] {len(all_findings)} findings from {len(turns)} turns")
+            # Phase 1: Entity disk/symbol verify
+            entities = enrich_data.get("entities", {})
+            if entities:
+                ev = verify_entities(enrich_data)
+                verify_result["entity_verify"] = ev
+                n_files = len(ev.get("files", []))
+                n_syms = len(ev.get("symbols", []))
+                n_missing_files = sum(1 for f in ev.get("files", []) if not f["exists"])
+                n_missing_syms = sum(1 for s in ev.get("symbols", []) if not s["found"])
+                log(f"    entity: {n_files} files ({n_missing_files} missing), "
+                    f"{n_syms} symbols ({n_missing_syms} missing)")
 
-        # Concurrent chunk verification (continuous batching on :8083)
-        chunks = [all_findings[i:i+CHUNK_SIZE] for i in range(0, len(all_findings), CHUNK_SIZE)]
-        merged: Dict[str, Any] = {"verification_items": [], "summary": "", "reasoning": ""}
-        all_usage: Dict[str, Any] = {}
-        total_elapsed = 0
-        verdicts: List[str] = []
-        processed = 0
-        failed = 0
+            # Phase 2: Reranker faithfulness
+            user_turn = turn.get("user_turn", "") or ""
+            thinking = turn.get("thinking", "") or ""
+            text = turn.get("text", "") or ""
+            faithfulness = _check_faithfulness(enrich_data, user_turn, thinking, text)
+            verify_result["faithfulness"] = faithfulness
 
-        workers = min(VERIFY_PARALLEL, len(chunks))
-        log(f"  [verify] {len(chunks)} chunks → {workers} concurrent")
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            future_map = {}
-            for ci, chunk in enumerate(chunks):
-                future = executor.submit(_verify_chunk, chunk, ci + 1, len(chunks))
-                future_map[future] = ci
-            for future in as_completed(future_map):
-                ci = future_map[future]
-                try:
-                    result = future.result()
-                except Exception as e:
-                    log(f"    ERROR chunk {ci+1}: {type(e).__name__}: {e}")
-                    failed += len(chunks[ci])
-                    continue
-                merged["verification_items"].extend(result["items"])
-                if result["verdict"]:
-                    verdicts.append(result["verdict"])
-                if result["summary"]:
-                    merged["summary"] = (merged.get("summary", "") + " | " + result["summary"])[:500]
-                if result["reasoning"]:
-                    merged["reasoning"] = (merged.get("reasoning", "") + "\n" + result["reasoning"])[:1000]
-                total_elapsed += result["elapsed_ms"]
-                for k, v in result["usage"].items():
-                    all_usage[k] = all_usage.get(k, 0) + (v if isinstance(v, int) else 0)
-                processed += result["chunk_size"]
-
-        # Build final verdict
-        if verdicts:
-            counts = {}
-            for v in verdicts:
-                counts[v] = counts.get(v, 0) + 1
-            merged["final_verdict"] = max(counts, key=counts.get)
-        else:
-            merged["final_verdict"] = "unknown"
-        merged["confidence"] = int(len(verdicts) / max(len(chunks), 1) * 90)
-
-        # Build category summary
-        cat_summary = _build_category_summary(merged.get("verification_items", []), len(all_findings))
-
-        # Store to DB (per-turn verify_result)
-        turn_set = set(f["_turn_id"] for f in all_findings)
-        for tid in turn_set:
-            fi_sql = (
-                f"SELECT COALESCE(MAX(fact_index), -1) + 1 "
-                f"FROM review_facts WHERE turn_id = '{esc_sql(tid)}'::uuid"
+            # Phase 2b: 7B NLI self-verify on uncertain entities
+            pre_nli_ungrounded = sum(
+                1 for v in faithfulness.values()
+                if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
             )
-            fi_str = psql(fi_sql)
-            fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
-            if not dry_run:
-                _insert_verify_result(
-                    tid, fi,
-                    json.dumps(merged, ensure_ascii=False),
-                    model_label,
-                    category_summary=cat_summary,
-                    prompt_tokens=all_usage.get("prompt_tokens"),
-                    gen_tokens=all_usage.get("completion_tokens"),
-                    elapsed_ms=total_elapsed,
+            if pre_nli_ungrounded > 0:
+                _llm_nli_verify(faithfulness)
+                nli_overrides = pre_nli_ungrounded - sum(
+                    1 for v in faithfulness.values()
+                    if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
                 )
+            else:
+                nli_overrides = 0
 
-        # Save to eval/ (once per batch)
-        result = {
-            "phase": "day_verify", "role": f"verify_{model_label}",
-            "model": model_label, "port": 8083,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "usage": all_usage, "elapsed_ms": total_elapsed,
-            "turns": len(turn_set), "findings": len(all_findings),
-            "chunks": len(chunks), "chunks_done": len(verdicts),
-            "result": merged,
-            "category_summary": cat_summary,
-        }
-        if not dry_run:
-            _save_verify_output(result)
+            # Strip _source before storage (bulky, runtime-only)
+            for key in ("files", "technologies", "functions", "mentioned_users"):
+                items = faithfulness.get(key, [])
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            item.pop("_source", None)
+            tldr = faithfulness.get("tldr", {})
+            if isinstance(tldr, dict):
+                tldr.pop("_source", None)
 
-        processed_total += processed
-        failed_total += failed
+            if faithfulness:
+                n_ent = sum(len(v) for v in faithfulness.values() if isinstance(v, list))
+                n_fail = sum(
+                    1 for v in faithfulness.values()
+                    if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
+                )
+                tldr_ok = faithfulness.get("tldr", {}).get("grounded", True) if isinstance(faithfulness.get("tldr"), dict) else True
+                nli_log = f", {nli_overrides} NLI override" if nli_overrides else ""
+                log(f"    faithfulness: {n_ent} entities ({n_fail} ungrounded), "
+                    f"tldr={'OK' if tldr_ok else 'LOW'}{nli_log}")
 
-        # Check if budget allows another batch
-        log(f"  [batch] processed={processed}, failed={failed}, verdict={merged.get('final_verdict','?')}")
-        if cat_summary:
-            log(f"  [cat] {cat_summary}")
+            if dry_run:
+                log(f"    [DRY] Would store verify_result")
+                processed += 1
+                continue
 
-        if (time.monotonic() - t_start) > (MAX_BUDGET - BUFFER_MIN):
-            log(f"[budget] Exceeded max budget")
-            break
+            # Store to DB
+            fi_str = psql(
+                f"SELECT COALESCE(MAX(fact_index), -1) + 1 "
+                f"FROM review_facts WHERE turn_id = '{esc_sql(turn_id)}'::uuid"
+            )
+            fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
 
-    total = round(time.monotonic() - t_start, 1)
+            verify_json = json.dumps(verify_result, ensure_ascii=False)
+            _insert_verify_result(turn_id, fi, verify_json)
+            log(f"    Stored verify_result (fact_index={fi})")
+
+            cat_summary = _build_category_summary(verify_result)
+            if cat_summary:
+                log(f"    {cat_summary}")
+
+            processed += 1
+
+        except Exception as e:
+            log(f"    ERROR: {type(e).__name__}: {e}")
+            failed += 1
+
+    elapsed = round(time.monotonic() - t_start, 1)
     log(f"\n{'=' * 60}")
-    log(f"Day Verify complete: {processed_total} verified, {failed_total} failed ({total}s)")
+    log(f"Done: {processed} verified, {failed} failed ({elapsed}s)")
     log(f"{'=' * 60}")
 
-    return {"processed": processed_total, "failed": failed_total, "elapsed_s": total}
+    return {"ok": failed == 0, "processed": processed, "failed": failed,
+            "elapsed_s": elapsed}
 
 
 def main() -> None:
-    preflight_checks("day_verify.py", required_ports={8083})
+    preflight_checks("day_verify.py", required_ports={8080})
     import argparse
-    parser = argparse.ArgumentParser(description="Day Verify — 14B verify + category")
+    parser = argparse.ArgumentParser(
+        description="Day Verify — enrichment metadata quality check")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--model", default="14b", help="Model label for output")
+    parser.add_argument("--turn-id", type=str, default=None,
+                        help="Re-verify a specific turn UUID (skips NOT EXISTS filter)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Simulate without DB writes")
     args = parser.parse_args()
 
-    day_verify_pipeline(limit=args.limit, dry_run=args.dry_run, model_label=args.model)
-    sys.exit(0)
+    result = day_verify_pipeline(
+        limit=args.limit,
+        dry_run=args.dry_run,
+        turn_id=args.turn_id,
+    )
+    if args.dry_run:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    sys.exit(0 if result["ok"] else 1)
 
 
 if __name__ == "__main__":

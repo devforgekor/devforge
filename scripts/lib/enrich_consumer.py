@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 # Status: production
 # Path: imported by — production scripts
-"""mcp_consumer — read MCP metadata from review_facts and prepare for MCP tools.
+"""enrich_consumer — read enrichment metadata from review_facts and prepare for MCP tools.
 
-Pre-build for Phase 2 (MCP tool integration). Reads fact_type='mcp_meta' facts,
+Pre-build for Phase 2 (MCP tool integration). Reads fact_type='enrich_meta' facts,
 formats them for MCP tools (mem_save, context injection), and marks as processed.
 
 Flow:
-  1. SELECT unprocessed mcp_meta facts
-  2. Parse MCP fields (tldr, intent, entities, tags, verified)
+  1. SELECT unprocessed enrich_meta facts
+  2. Parse enrichment fields (tldr, intent, entities, tags, verified)
   3. Format as MCP-ready structured data
-  4. Update verdict to 'mcp_processed'
+  4. Update verdict to 'enrich_processed'
 
 Usage:
-  from lib.mcp_consumer import consume_mcp
-  results = consume_mcp(limit=50)
+  from lib.enrich_consumer import consume_enrich
+  results = consume_enrich(limit=50)
 
 CLI:
-  python3 -m lib.mcp_consumer --limit 50 --json
+  python3 -m lib.enrich_consumer --limit 50 --json
 """
 
 import json
@@ -32,18 +32,18 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import psql_json, psql, psql_ok, esc_sql
 
 BATCH_LIMIT = 50
-MCP_FIELDS = ("tldr", "intent", "entities", "tags", "verified")
+ENRICH_FIELDS = ("tldr", "intent", "entities", "tags", "verified")
 
 
-def fetch_unprocessed_mcp(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
-    """Fetch review_facts rows where fact_type='mcp_meta' and verdict='pending'."""
+def fetch_unprocessed_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
+    """Fetch review_facts rows where fact_type='enrich_meta' and verdict='pending'."""
     sql = (
         "SELECT rf.id, rf.turn_id, rf.evidence, rf.extract_model, "
         "  rf.created_at, rf.fact_confidence AS faithfulness_score, "
         "  t.seq, t.conversation_id "
         "FROM review_facts rf "
         "LEFT JOIN turns t ON t.id = rf.turn_id "
-        "WHERE rf.fact_type = 'mcp_meta' "
+        "WHERE rf.fact_type = 'enrich_meta' "
         "  AND rf.verdict = 'pending' "
         "ORDER BY rf.created_at ASC "
         f"LIMIT {limit}"
@@ -71,10 +71,10 @@ def fetch_unprocessed_mcp(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
     return items
 
 
-def format_mcp_output(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert a review_facts mcp_meta row to MCP-ready structured data."""
+def format_enrich_output(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a review_facts enrich_meta row to MCP-ready structured data."""
     ev = item.get("evidence", {})
-    mcp_fields = {k: ev.get(k) for k in MCP_FIELDS if k in ev}
+    enrich_fields = {k: ev.get(k) for k in ENRICH_FIELDS if k in ev}
 
     return {
         "source": "extract_pipeline",
@@ -82,44 +82,44 @@ def format_mcp_output(item: Dict[str, Any]) -> Dict[str, Any]:
         "conversation_id": item["conversation_id"],
         "seq": item["seq"],
         "extract_model": item["extract_model"],
-        "mcp": mcp_fields,
+        "enrich": enrich_fields,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def mark_processed(fact_id: str) -> bool:
-    """Mark a review_fact as processed by MCP consumer."""
+    """Mark a review_fact as processed by enrich consumer."""
     sql = (
-        f"UPDATE review_facts SET verdict = 'mcp_processed' "
+        f"UPDATE review_facts SET verdict = 'enrich_processed' "
         f"WHERE id = {esc_sql(fact_id)}"
     )
     return psql_ok(sql)
 
 
-def consume_mcp(limit: int = BATCH_LIMIT,
+def consume_enrich(limit: int = BATCH_LIMIT,
                 dry_run: bool = False) -> List[Dict[str, Any]]:
-    """Fetch unprocessed MCP facts, format for MCP tools, mark processed.
+    """Fetch unprocessed enrichment facts, format for MCP tools, mark processed.
 
     Returns list of MCP-ready dicts.
     """
-    items = fetch_unprocessed_mcp(limit)
+    items = fetch_unprocessed_enrich(limit)
     if not items:
-        print("[mcp_consumer] No unprocessed MCP facts")
+        print("[enrich_consumer] No unprocessed enrichment facts")
         return []
 
-    print(f"[mcp_consumer] Processing {len(items)} MCP fact(s)")
+    print(f"[enrich_consumer] Processing {len(items)} enrichment fact(s)")
     results = []
     for item in items:
-        mcp_output = format_mcp_output(item)
-        results.append(mcp_output)
+        enrich_output = format_enrich_output(item)
+        results.append(enrich_output)
 
-        tldr = mcp_output["mcp"].get("tldr", "?")
+        tldr = enrich_output["enrich"].get("tldr", "?")
         print(f"  [{item['turn_id'][:8]}] tldr={tldr}")
 
         if not dry_run:
             mark_processed(item["id"])
 
-    print(f"[mcp_consumer] {len(results)} formatted"
+    print(f"[enrich_consumer] {len(results)} formatted"
           f" ({'dry-run' if dry_run else 'processed'})")
     return results
 
@@ -135,7 +135,7 @@ def main():
                         help="Output as JSON lines")
     args = parser.parse_args()
 
-    results = consume_mcp(limit=args.limit, dry_run=args.dry_run)
+    results = consume_enrich(limit=args.limit, dry_run=args.dry_run)
 
     if args.json:
         for r in results:

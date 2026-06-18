@@ -1,4 +1,5 @@
-# Status: production
+# Status: deprecated
+# Path: none — orphaned, migrated to enrich pipeline, no callers
 #!/usr/bin/env python3
 import json
 import os
@@ -17,7 +18,7 @@ def _get_turns_for_verify(limit: int = utils.BATCH_LIMIT) -> List[Dict]:
         "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at::text "
         "FROM turns t "
         "WHERE EXISTS (SELECT 1 FROM review_facts rf WHERE rf.turn_id = t.id AND rf.fact_type IN ('text','user','thinking')) "
-        "AND EXISTS (SELECT 1 FROM review_facts rf WHERE rf.turn_id = t.id AND rf.fact_type = 'mcp_meta') "
+        "AND EXISTS (SELECT 1 FROM review_facts rf WHERE rf.turn_id = t.id AND rf.fact_type = 'enrich_meta') "
         "AND NOT EXISTS (SELECT 1 FROM review_facts rf WHERE rf.turn_id = t.id AND rf.fact_type = 'verify_result') "
         "ORDER BY t.created_at ASC LIMIT " + str(limit)
     )
@@ -48,9 +49,9 @@ def day_verify_pipeline(limit: int = utils.BATCH_LIMIT, dry_run: bool = False, m
         return
 
     for turn in turns:
-        tid = turn["id"]
-        print(f"  Processing {tid[:8]}...")
-        extractions = _get_turn_extractions(tid)
+        turn_id = turn["id"]
+        print(f"  Processing {turn_id[:8]}...")
+        extractions = _get_turn_extractions(turn_id)
         findings = core.build_findings_from_turn(turn, extractions)
         context = core.findings_to_context(findings, turn.get("user_turn"), turn.get("thinking"), turn.get("text"))
         
@@ -61,9 +62,9 @@ def day_verify_pipeline(limit: int = utils.BATCH_LIMIT, dry_run: bool = False, m
         cat_summary = utils.build_category_summary(result.get("verification_items", []), len(findings))
         
         if not dry_run:
-            fi_str = psql(f"SELECT COALESCE(MAX(fact_index), -1) + 1 FROM review_facts WHERE turn_id = '{escape_sql_string(tid)}'::uuid")
+            fi_str = psql(f"SELECT COALESCE(MAX(fact_index), -1) + 1 FROM review_facts WHERE turn_id = '{escape_sql_string(turn_id)}'::uuid")
             fi = int(fi_str) if fi_str else 0
-            _insert_verify_result(tid, fi, json.dumps(result, ensure_ascii=False), model_label, category_summary=cat_summary)
+            _insert_verify_result(turn_id, fi, json.dumps(result, ensure_ascii=False), model_label, category_summary=cat_summary)
             print(f"    Stored verify_result (fact_index={fi})")
         else:
             print(f"    [DRY] Category Summary: {cat_summary}")
