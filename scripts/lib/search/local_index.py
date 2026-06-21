@@ -209,6 +209,7 @@ class FTS5Index:
                 f"  bm25(turn_search, {BM25_WEIGHTS}) as rank "
                 "FROM turn_search s "
                 "JOIN turn_meta m ON m.fts_rowid = s.rowid "
+                "{where}"
                 "ORDER BY rank "
                 "LIMIT ?"
             )
@@ -221,10 +222,7 @@ class FTS5Index:
             # Try 1: expanded terms against terms column (most precise)
             if terms_list:
                 fts5_query = " OR ".join(terms_list)
-                sql = base_sql.replace(
-                    "FROM turn_search s",
-                    "FROM turn_search s WHERE s.terms MATCH ?"
-                )
+                sql = base_sql.format(where="WHERE s.terms MATCH ? ")
                 try:
                     rows = conn.execute(sql, (fts5_query, limit)).fetchall()
                     results = [dict(zip(cols, r)) for r in rows]
@@ -233,10 +231,7 @@ class FTS5Index:
 
             # Try 2: raw query full-text (broader recall, handles non-lexical searches)
             if len(results) < 3:
-                sql = base_sql.replace(
-                    "FROM turn_search s",
-                    "FROM turn_search s WHERE turn_search MATCH ?"
-                )
+                sql = base_sql.format(where="WHERE turn_search MATCH ? ")
                 try:
                     rows = conn.execute(sql, (query, limit)).fetchall()
                     results = [dict(zip(cols, r)) for r in rows]

@@ -37,12 +37,12 @@ def main():
     # 1. Memory report before starting
     report_memory("before")
 
-    # 2. Ensure Pod A (reserved:8080) + Pod B (7B extractor:8082) running
+    # 2. Ensure Pod A (reserved:8080) + Pod B (extract model:8082) running
     log("Starting Pod A (reserved:8080)...")
     pod_a_ok = start_pod_a(120)
     log(f"  Pod A = {'OK' if pod_a_ok else 'TIMEOUT'}")
 
-    log("Starting Pod B (7B extractor:8082)...")
+    log("Starting Pod B (extract model:8082)...")
     pod_b_ok = start_pod_b(120)
     log(f"  Pod B = {'OK' if pod_b_ok else 'TIMEOUT'}")
 

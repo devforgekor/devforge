@@ -33,9 +33,9 @@ MAX_EXAMPLES_BAD = 4     # max UNGROUNDED examples per entity type
 MAX_EXAMPLES_GOOD = 2    # max GROUNDED examples per entity type
 LOOKBACK_HOURS = 72      # query last 72h for verify results
 
-# Score thresholds
-GOOD_SCORE_MIN = 80.0    # min reranker score to be a "good" example
-BAD_SCORE_MAX = 40.0     # max reranker score to be a "bad" (ungrounded) example
+# Score thresholds (actual scores are 0.0-1.0 from LLM verify)
+GOOD_SCORE_MIN = 0.8     # min score to be a "good" (grounded) example
+BAD_SCORE_MAX = 0.4      # max score to be a "bad" (ungrounded) example
 
 # Grounding values that count as failure
 UNGROUNDED_VALUES = {"UNGROUNDED", "AMBIGUOUS"}
@@ -120,7 +120,7 @@ def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
                         "method": method,
                         "lesson": (
                             f"Entity '{entity}' (type: {etype}) was not grounded "
-                            f"in source text (score {score}/100, {grounding}). "
+                            f"in source text (score {score}, {grounding}). "
                             f"Only include entities explicitly mentioned in the conversation."
                         ),
                     })
@@ -134,7 +134,7 @@ def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
                         "method": method,
                         "lesson": (
                             f"Entity '{entity}' (type: {etype}) correctly identified "
-                            f"(score {score}/100, {grounding}). "
+                            f"(score {score}, {grounding}). "
                             f"This entity is directly mentioned in the conversation."
                         ),
                     })
@@ -155,7 +155,7 @@ def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
                         "method": str(tldr.get("method", "")),
                         "lesson": (
                             f"TLDR summary not faithful to source text "
-                            f"(score {tscore}/100, {tgrounding}). "
+                            f"(score {tscore}, {tgrounding}). "
                             f"Keep TLDR factually grounded in the actual conversation."
                         ),
                     })
@@ -169,7 +169,7 @@ def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
                         "method": str(tldr.get("method", "")),
                         "lesson": (
                             f"TLDR summary faithful to source text "
-                            f"(score {tscore}/100, {tgrounding}). Good."
+                            f"(score {tscore}, {tgrounding}). Good."
                         ),
                     })
 
@@ -271,7 +271,7 @@ def format_few_shot(examples: Dict[str, List[Dict]]) -> str:
         for ex in bad:
             parts.append(
                 f"- Entity \"{ex['entity']}\" (type: {ex['entity_type']}) "
-                f"— score {ex['score']}/100, {ex['grounding']}"
+                f"— score {ex['score']}, {ex['grounding']}"
             )
         parts.append("")
 
@@ -286,7 +286,7 @@ def format_few_shot(examples: Dict[str, List[Dict]]) -> str:
         for ex in good:
             parts.append(
                 f"- Entity \"{ex['entity']}\" (type: {ex['entity_type']}) "
-                f"— score {ex['score']}/100, {ex['grounding']}"
+                f"— score {ex['score']}, {ex['grounding']}"
             )
         parts.append("")
 

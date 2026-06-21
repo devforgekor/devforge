@@ -13,8 +13,8 @@ RRF combines ranks: combined rank = 1/(k + bm25_rank) + 1/(k + dense_rank)
 
 Requires:
   - lib/search/local_index.FTS5Index (rebuild first)
-  - turns.embedding_f16 populated with Qwen 8B vectors
-  - pgvector HNSW index on embedding_f16
+  - turns.embedding populated with embed model vectors
+  - pgvector HNSW index on embedding
 
 Usage:
   python3 -c "from lib.search.hybrid import hybrid_search; print(hybrid_search('질문'))"
@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Tuple
 from lib.db import psql, psql_json, esc_sql
 from lib.search.local_index import FTS5Index
 
-# Qwen 8B embed API (same endpoint as embed_batch.py)
+# Embed API (same endpoint as embed_batch.py)
 from lib.llm_client import MODEL_REGISTRY
 EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embedder']['port']}/v1/embeddings"
 EMBED_TIMEOUT = 30
@@ -43,7 +43,7 @@ DENSE_SEARCH_LIMIT = 100
 
 
 def _get_query_vector(query: str) -> Optional[List[float]]:
-    """Get embedding vector for a query string via Qwen 8B embed API."""
+    """Get embedding vector for a query string via embed API."""
     body = json.dumps({"input": query, "model": "default"}).encode()
     try:
         req = urllib.request.Request(
@@ -75,10 +75,10 @@ def _dense_rank(query: str, limit: int = DENSE_SEARCH_LIMIT) -> Tuple[Dict[str, 
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
 
     sql = (
-        f"SELECT id, (embedding_f16 <=> '{esc_sql(vec_str)}'::vector) as dist "
+        f"SELECT id, (embedding <=> '{esc_sql(vec_str)}'::vector) as dist "
         f"FROM turns "
-        f"WHERE embedding_f16 IS NOT NULL "
-        f"ORDER BY embedding_f16 <=> '{esc_sql(vec_str)}'::vector "
+        f"WHERE embedding IS NOT NULL "
+        f"ORDER BY embedding <=> '{esc_sql(vec_str)}'::vector "
         f"LIMIT {limit}"
     )
     rows = psql_json(sql) or []

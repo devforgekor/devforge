@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: day_cycle.py — Phase 3 (verify chain)
+# Path: day_cycle.sh — Phase 3 (verify chain)
 """Day Verify Pipeline — verify enrichment metadata quality.
 
-Reads enrich_meta from DB and runs three verification phases:
+Reads enrich_meta from DB and runs verification phases:
   Phase 1: Entity disk/symbol verify (files exist? symbols found?)
-  Phase 2: Reranker faithfulness (entity + tldr grounding in source text)
-  Phase 2b: 7B NLI self-verify (second opinion on uncertain entities)
+  Phase 2: LLM-based faithfulness (entity + tldr grounding via verify model)
+  Phase 2b: Pod A reranker relevance check on uncertain entities
 
-Called by day_cycle.py after extract → enrich completes.
+Called by day_cycle.sh after extract + enrich completes.
 Stores results as fact_type='verify_result', separate from enrich_meta.
-
-Usage:
-  python3 scripts/pipelines/day_verify.py              # batch verify
-  python3 scripts/pipelines/day_verify.py --limit 10   # batch cap
-  python3 scripts/pipelines/day_verify.py --dry-run    # simulate, no writes
-"""
+Uses role alias "day_verify" (different model family from
+extract/enrich — catches blind spots).
+Reranker (Pod A :8080) provides topical relevance check."""
 
 import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVAL_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "eval")
@@ -35,7 +33,10 @@ from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
 from lib.enrich.utils import verify_entities
 from lib.infra.preflight import preflight_checks
 
-BATCH_LIMIT = 20
+BATCH_LIMIT = 6
+PARALLEL = 2
+
+
 
 
 def log(msg: str) -> None:
@@ -43,125 +44,114 @@ def log(msg: str) -> None:
     print(f"[{ts}] {msg}", flush=True)
 
 
-# ── Reranker faithfulness: entity grounding in source text ──────────────
+_ENTITY_VERIFY_PROMPT = """You are a factual consistency checker. Given a SOURCE text and a list of CLAIMS, determine if each claim is explicitly supported by the source.
 
-def _check_substring(entity: str, source: str) -> bool:
-    """Fast substring check: normalized entity in normalized source."""
-    if not entity or not source:
-        return False
-    return entity.lower().strip() in source.lower()
+SOURCE: {source}
+
+CLAIMS:
+{claims}
+
+For each claim, answer YES if the source explicitly supports it, NO if the source contradicts it, or AMBIGUOUS if the source neither supports nor contradicts it.
+
+Return a JSON object like: {{"claim_0": "YES", "claim_1": "NO", ...}}
+Answer ONLY with the JSON object, no other text."""
 
 
-def _check_faithfulness(enrich_data: Dict, user_turn: str,
-                         thinking: str, text: str) -> Dict:
-    """Verify entity + tldr faithfulness via reranker + 7B NLI.
+def _llm_verify_entities(entities: Dict, source_text: str) -> Dict:
+    """Verify entity grounding via LLM (verify role model)."""
+    if not entities:
+        return {}
 
-    For each entity type (files, technologies, functions, mentioned_users),
-    checks substring presence first (fast path), then reranker score.
-    Returns faithfulness dict with _source attached for NLI phase.
-    """
-    entities = enrich_data.get("entities", {}) or {}
-    source_text = " ".join(f"{user_turn}\n{thinking}\n{text}".split())[:4000]
-
-    faithfulness: Dict[str, list] = {}
+    result: Dict[str, list] = {}
     for key in ("files", "technologies", "functions", "mentioned_users"):
         items = entities.get(key, [])
         if not isinstance(items, list):
             items = []
         checked = []
+        unverified = []
         for item in items:
             s = str(item).strip()
             if not s:
                 continue
-            entry: Dict = {"entity": s, "_source": source_text}
             # Fast path: substring match
-            if _check_substring(s, source_text):
-                entry.update({
-                    "score": 100.0, "grounding": "GROUNDED",
+            if s.lower() in source_text.lower():
+                checked.append({
+                    "entity": s, "score": 1.0, "grounding": "GROUNDED",
                     "method": "substr", "grounded": True,
                 })
-                checked.append(entry)
-                continue
-            # Slow path: reranker
-            cos = reranker_score(s, source_text)
-            score = round(cos * 100, 1)
-            nli_v = reranker_nli_verdict(cos)
-            entry.update({
-                "score": score, "grounding": nli_v,
-                "method": "reranker", "grounded": nli_v != "UNGROUNDED",
-            })
-            checked.append(entry)
-        faithfulness[key] = checked
+            else:
+                unverified.append(s)
 
-    # tldr faithfulness
-    tldr = (enrich_data.get("tldr", "") or "").strip()
-    if tldr:
-        cos = reranker_score(tldr, source_text)
-        score = round(cos * 100, 1)
-        nli_v = reranker_nli_verdict(cos)
-        faithfulness["tldr"] = {
-            "text": tldr, "_source": source_text,
-            "score": score, "grounding": nli_v,
-            "grounded": nli_v != "UNGROUNDED",
-        }
+        # Batch verify remaining via LLM
+        if unverified:
+            claims_str = "\n".join(f"claim_{i}: {c}" for i, c in enumerate(unverified))
+            prompt = _ENTITY_VERIFY_PROMPT.format(source=source_text[:3000], claims=claims_str)
+            try:
+                resp = call_llm(
+                    [{"role": "user", "content": prompt}],
+                    model="day_verify", max_tokens=512, temperature=0.0, timeout=60,
+                )
+                parsed = json.loads(resp)
+                for i, c in enumerate(unverified):
+                    verdict = parsed.get(f"claim_{i}", "AMBIGUOUS")
+                    grounded = verdict == "YES"
+                    checked.append({
+                        "entity": c, "score": 1.0 if grounded else 0.0,
+                        "grounding": "GROUNDED" if grounded else ("UNGROUNDED" if verdict == "NO" else "AMBIGUOUS"),
+                        "method": "llm_verify", "grounded": grounded,
+                        "_llm_verdict": verdict,
+                    })
+            except Exception as e:
+                # LLM parse failure — fallback to AMBIGUOUS
+                for c in unverified:
+                    checked.append({
+                        "entity": c, "score": 0.5, "grounding": "AMBIGUOUS",
+                        "method": "llm_fallback", "grounded": True,
+                    })
 
-    return faithfulness
-
-
-# ── Phase 2b: 7B NLI Self-Verify ──────────────────────────────────
-
-_NLI_VERIFY_PROMPT = """You are verifying whether an EVIDENCE sentence is factually supported by a SOURCE sentence.
-
-Follow these steps:
-1. Identify the key factual claim in the evidence.
-2. Check whether that claim is directly stated or clearly implied by the source.
-3. Output exactly one label.
-
-LABELS:
-- ENTAILMENT: The evidence is directly supported by the source.
-- CONTRADICTION: The evidence contradicts the source — they cannot both be true.
-- NEUTRAL: The evidence is not directly supported but does not contradict either.
-
-SOURCE: {source}
-
-EVIDENCE: {evidence}
-
-LABEL:"""
+        result[key] = checked
+    return result
 
 
-def _llm_nli_check(entity: str, source: str) -> str:
-    """Run 7B Q8 NLI self-verify on a single entity-source pair.
-    Returns ENTAILMENT, CONTRADICTION, or NEUTRAL.
-    Falls back to NEUTRAL on any error.
-    """
-    if not entity or not source:
-        return "NEUTRAL"
-    prompt = _NLI_VERIFY_PROMPT.format(
-        source=source[:2000], evidence=entity[:500]
-    )
+def _llm_verify_tldr(tldr: str, source_text: str) -> Dict:
+    """Verify tldr factual consistency via LLM (verify model on :8082)."""
+    if not tldr or not source_text:
+        return {"text": tldr, "grounded": True, "grounding": "SKIP", "method": "skip"}
+
+    prompt = f"""SOURCE: {source_text[:3000]}
+
+CLAIM: {tldr}
+
+Is the CLAIM factually supported by the SOURCE? Answer YES, NO, or AMBIGUOUS.
+Answer with one word only."""
     try:
-        meta = call_llm(
+        resp = call_llm(
             [{"role": "user", "content": prompt}],
-            model="day_enrich",
-            max_tokens=64, temperature=0.0, timeout=30,
-            return_meta=True,
-        )
-        raw = meta["content"].strip().upper()
-        for tok in raw.replace("\n", " ").split():
-            tok = tok.strip(".,!?;:\"'()[]")
-            if tok in ("ENTAILMENT", "CONTRADICTION", "NEUTRAL"):
-                return tok
-        return "NEUTRAL"
-    except Exception:
-        return "NEUTRAL"
+            model="day_verify", max_tokens=16, temperature=0.0, timeout=30,
+        ).strip().upper()
+        grounded = resp == "YES"
+        verdict = "GROUNDED" if grounded else ("UNGROUNDED" if resp == "NO" else "AMBIGUOUS")
+        return {"text": tldr, "score": 1.0 if grounded else 0.0,
+                "grounding": verdict, "grounded": grounded,
+                "method": "llm_verify", "_llm_verdict": resp}
+    except Exception as e:
+        return {"text": tldr, "score": 0.5, "grounding": "AMBIGUOUS",
+                "grounded": True, "method": "llm_fallback"}
 
 
-def _llm_nli_verify(faithfulness: Dict) -> Dict:
-    """Phase 2b: 7B NLI self-verify on reranker-uncertain entities.
+# ── Phase 2b: Pod A Reranker Faithfulness ──────────────────────────────
 
-    For entities that the reranker scored as UNGROUNDED/AMBIGUOUS,
-    run 7B Q8 NLI as second opinion. If NLI says ENTAILMENT,
-    override to GROUNDED. If CONTRADICTION, keep UNGROUNDED.
+
+def _reranker_verify(faithfulness: Dict, source_text: str) -> Dict:
+    """Phase 2b: Pod A reranker relevance check on uncertain entities.
+
+    For entities/tldr that the LLM couldn't confirm via substring match,
+    run Pod A reranker (:8080) as a topical relevance second opinion.
+
+    Reranker measures TOPICAL RELATEDNESS, NOT logical entailment:
+      - GROUNDED (>=0.75): on-topic → upgrade to AMBIGUOUS
+        (topically relevant but reranker can't confirm factual accuracy)
+      - UNGROUNDED (<0.40): off-topic → confirm ungrounded
 
     Mutates faithfulness dict in-place and returns it.
     """
@@ -172,42 +162,41 @@ def _llm_nli_verify(faithfulness: Dict) -> Dict:
         for item in items:
             if not isinstance(item, dict):
                 continue
-            # Only re-check entities that reranker couldn't confidently ground
-            if item.get("grounded", True) or item.get("score", 100) >= 80:
+            if item.get("grounded", True) or item.get("score", 1.0) >= 0.8:
                 continue
             entity = item.get("entity", "")
-            source = item.get("_source", "")
-            if not source:
+            if not entity:
                 continue
-            nli = _llm_nli_check(entity, source)
-
-            # ENTAILMENT from 7B overrides reranker UNGROUNDED
-            if nli == "ENTAILMENT":
+            score = reranker_score(entity, source_text)
+            grounding = reranker_nli_verdict(score)
+            if grounding == "GROUNDED":
+                # On-topic but can't confirm factual accuracy
                 item["grounded"] = True
-                item["grounding"] = "GROUNDED"
-                item["method"] = "7b_nli_override"
-                item["_nli"] = nli
-            elif nli == "CONTRADICTION":
+                item["grounding"] = "AMBIGUOUS"
+                item["score"] = round(score * 100, 1)
+                item["method"] = "reranker_override"
+                item["_reranker"] = grounding
+            elif grounding == "UNGROUNDED":
                 item["grounded"] = False
-                item["grounding"] = "CONTRADICTION"
-                item["method"] = "7b_nli"
-                item["_nli"] = nli
+                item["grounding"] = "UNGROUNDED"
+                item["score"] = round(score * 100, 1)
+                item["method"] = "reranker"
+                item["_reranker"] = grounding
             else:
-                item["_nli"] = nli
-
+                item["_reranker"] = grounding
     # Also check tldr
     tldr = faithfulness.get("tldr", {})
     if isinstance(tldr, dict) and not tldr.get("grounded", True):
         entity = tldr.get("text", "")
-        source = tldr.get("_source", "")
-        if source:
-            nli = _llm_nli_check(entity, source)
-            if nli == "ENTAILMENT":
+        if entity:
+            score = reranker_score(entity, source_text)
+            grounding = reranker_nli_verdict(score)
+            if grounding == "GROUNDED":
                 tldr["grounded"] = True
-                tldr["grounding"] = "GROUNDED"
-                tldr["method"] = "7b_nli_override"
-                tldr["_nli"] = nli
-
+                tldr["grounding"] = "AMBIGUOUS"
+                tldr["score"] = round(score * 100, 1)
+                tldr["method"] = "reranker_override"
+                tldr["_reranker"] = grounding
     return faithfulness
 
 
@@ -251,17 +240,40 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT,
     return rows[:limit]
 
 
+def _compute_reranker_verdict(faithfulness: Dict) -> Optional[str]:
+    """Aggregate per-entity _reranker values into a single verdict.
+
+    Returns UNGROUNDED if any entity was confirmed ungrounded by reranker,
+    otherwise None (no decisive verdict from reranker alone).
+    """
+    for key in ("files", "technologies", "functions", "mentioned_users"):
+        items = faithfulness.get(key, [])
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict) and item.get("_reranker") == "UNGROUNDED":
+                    return "UNGROUNDED"
+    tldr = faithfulness.get("tldr", {})
+    if isinstance(tldr, dict) and tldr.get("_reranker") == "UNGROUNDED":
+        return "UNGROUNDED"
+    return None
+
+
 def _insert_verify_result(turn_id: str, fact_index: int,
-                           verify_json_str: str) -> bool:
+                           verify_json_str: str,
+                           nli_verdict: Optional[str] = None) -> bool:
+    cols = ["turn_id", "fact_index", "fact_type", "evidence",
+            "extract_model", "verdict", "source", "fact_action"]
+    vals = [f"'{esc_sql(turn_id)}'::uuid", str(fact_index),
+            "'verify_result'",
+            f"'{esc_sql(verify_json_str[:5000])}'",
+            "'enrich-self'", "'pending'",
+            "'day_verify'", "'verify'"]
+    if nli_verdict:
+        cols.append("nli_verdict")
+        vals.append(f"'{esc_sql(nli_verdict)}'")
     sql = (
-        "INSERT INTO review_facts "
-        "  (turn_id, fact_index, fact_type, evidence, "
-        "   extract_model, verdict, source, fact_action) "
-        f"VALUES ('{esc_sql(turn_id)}'::uuid, {fact_index}, "
-        f"  'verify_result', "
-        f"  '{esc_sql(verify_json_str[:5000])}', "
-        f"  'enrich-self', 'pending', "
-        f"  'day_verify', 'verify')"
+        f"INSERT INTO review_facts ({', '.join(cols)}) "
+        f"VALUES ({', '.join(vals)})"
     )
     return psql_ok(sql)
 
@@ -296,10 +308,80 @@ def _build_category_summary(verify_data: Dict) -> str:
 
 # ── Pipeline ──────────────────────────────────────────────────────────────
 
+def _process_turn(turn: Dict) -> Tuple[str, Optional[Dict], Optional[str]]:
+    """Process a single turn in thread pool. Returns (turn_id, verify_result, error).
+
+    verify_result embeds _log_* keys for sequential logging after parallel phase.
+    """
+    try:
+        turn_id = turn["id"]
+        enrich_meta_str = turn.get("enrich_meta", "")
+        enrich_data = json.loads(enrich_meta_str) if enrich_meta_str else {}
+        if not enrich_data:
+            return (turn_id, None, None)
+
+        verify_result: Dict[str, Any] = {}
+
+        # Phase 1: Entity disk/symbol verify
+        entities = enrich_data.get("entities", {})
+        if entities:
+            ev = verify_entities(enrich_data)
+            verify_result["entity_verify"] = ev
+
+        # Phase 2: LLM-based faithfulness via role "day_verify"
+        user_turn = turn.get("user_turn", "") or ""
+        thinking = turn.get("thinking", "") or ""
+        text = turn.get("text", "") or ""
+        source_text = " ".join(f"{user_turn}\n{thinking}\n{text}".split())[:4000]
+        faithfulness = _llm_verify_entities(entities, source_text)
+
+        tldr = (enrich_data.get("tldr", "") or "").strip()
+        if tldr:
+            faithfulness["tldr"] = _llm_verify_tldr(tldr, source_text)
+        verify_result["faithfulness"] = faithfulness
+
+        # Phase 2b: Pod A reranker second opinion on uncertain entities
+        pre_reranker_ungrounded = sum(
+            1 for v in faithfulness.values()
+            if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
+        )
+        if pre_reranker_ungrounded > 0:
+            _reranker_verify(faithfulness, source_text)
+            reranker_overrides = pre_reranker_ungrounded - sum(
+                1 for v in faithfulness.values()
+                if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
+            )
+        else:
+            reranker_overrides = 0
+
+        # Embed log metadata (popped in sequential store loop)
+        if entities:
+            ev = verify_result.get("entity_verify", {})
+            n_files = len(ev.get("files", []))
+            n_syms = len(ev.get("symbols", []))
+            n_missing_files = sum(1 for f in ev.get("files", []) if not f["exists"])
+            n_missing_syms = sum(1 for s in ev.get("symbols", []) if not s["found"])
+            verify_result["_log_entity"] = (n_files, n_missing_files, n_syms, n_missing_syms)
+
+        if faithfulness:
+            n_ent = sum(len(v) for v in faithfulness.values() if isinstance(v, list))
+            n_fail = sum(
+                1 for v in faithfulness.values()
+                if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
+            )
+            tldr_ok = faithfulness.get("tldr", {}).get("grounded", True) if isinstance(faithfulness.get("tldr"), dict) else True
+            verify_result["_log_faith"] = (n_ent, n_fail, tldr_ok, reranker_overrides)
+
+        return (turn_id, verify_result, None)
+
+    except Exception as e:
+        return (turn["id"], None, f"{type(e).__name__}: {e}")
+
+
 def day_verify_pipeline(limit: int = BATCH_LIMIT,
                          dry_run: bool = False,
                          turn_id: Optional[str] = None) -> Dict[str, Any]:
-    """Verify enrichment metadata: entity disk check + reranker + 7B NLI."""
+    """Verify enrichment metadata: entity disk check + reranker + NLI self-verify."""
     t_start = time.monotonic()
     processed = 0
     failed = 0
@@ -317,103 +399,79 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
         log("[done] No turns needing verification")
         return {"ok": True, "processed": 0, "elapsed_s": 0}
 
-    log(f"Processing {len(turns)} turn(s)")
+    log(f"Processing {len(turns)} turn(s) (parallel={PARALLEL})")
 
+    # ── Phase 1+2+2b: Concurrent processing ────────────────────────────
+    turn_results: Dict[str, Tuple[Optional[Dict], Optional[str]]] = {}
+    llm_t0 = time.monotonic()
+
+    with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+        fut_map = {}
+        for turn in turns:
+            fut = pool.submit(_process_turn, turn)
+            fut_map[fut] = turn
+        for fut in as_completed(fut_map):
+            turn = fut_map[fut]
+            turn_id_val, verify_result, error = fut.result()
+            turn_results[turn["id"]] = (verify_result, error)
+
+    log(f"  concurrent phase: {time.monotonic() - llm_t0:.1f}s")
+
+    # ── Sequential store + logging ─────────────────────────────────────
     for turn in turns:
-        turn_id = turn["id"]
-        turn_short = turn_id[:8]
+        turn_id_val = turn["id"]
+        turn_short = turn_id_val[:8]
         log(f"\n  [{turn_short}]")
 
-        try:
-            enrich_meta_str = turn.get("enrich_meta", "")
-            enrich_data = json.loads(enrich_meta_str) if enrich_meta_str else {}
+        verify_result, error = turn_results.get(turn_id_val, (None, "missing batch result"))
 
-            if not enrich_data:
-                log(f"    No enrich data — skip")
-                continue
-
-            verify_result: Dict[str, Any] = {}
-
-            # Phase 1: Entity disk/symbol verify
-            entities = enrich_data.get("entities", {})
-            if entities:
-                ev = verify_entities(enrich_data)
-                verify_result["entity_verify"] = ev
-                n_files = len(ev.get("files", []))
-                n_syms = len(ev.get("symbols", []))
-                n_missing_files = sum(1 for f in ev.get("files", []) if not f["exists"])
-                n_missing_syms = sum(1 for s in ev.get("symbols", []) if not s["found"])
-                log(f"    entity: {n_files} files ({n_missing_files} missing), "
-                    f"{n_syms} symbols ({n_missing_syms} missing)")
-
-            # Phase 2: Reranker faithfulness
-            user_turn = turn.get("user_turn", "") or ""
-            thinking = turn.get("thinking", "") or ""
-            text = turn.get("text", "") or ""
-            faithfulness = _check_faithfulness(enrich_data, user_turn, thinking, text)
-            verify_result["faithfulness"] = faithfulness
-
-            # Phase 2b: 7B NLI self-verify on uncertain entities
-            pre_nli_ungrounded = sum(
-                1 for v in faithfulness.values()
-                if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
-            )
-            if pre_nli_ungrounded > 0:
-                _llm_nli_verify(faithfulness)
-                nli_overrides = pre_nli_ungrounded - sum(
-                    1 for v in faithfulness.values()
-                    if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
-                )
-            else:
-                nli_overrides = 0
-
-            # Strip _source before storage (bulky, runtime-only)
-            for key in ("files", "technologies", "functions", "mentioned_users"):
-                items = faithfulness.get(key, [])
-                if isinstance(items, list):
-                    for item in items:
-                        if isinstance(item, dict):
-                            item.pop("_source", None)
-            tldr = faithfulness.get("tldr", {})
-            if isinstance(tldr, dict):
-                tldr.pop("_source", None)
-
-            if faithfulness:
-                n_ent = sum(len(v) for v in faithfulness.values() if isinstance(v, list))
-                n_fail = sum(
-                    1 for v in faithfulness.values()
-                    if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
-                )
-                tldr_ok = faithfulness.get("tldr", {}).get("grounded", True) if isinstance(faithfulness.get("tldr"), dict) else True
-                nli_log = f", {nli_overrides} NLI override" if nli_overrides else ""
-                log(f"    faithfulness: {n_ent} entities ({n_fail} ungrounded), "
-                    f"tldr={'OK' if tldr_ok else 'LOW'}{nli_log}")
-
-            if dry_run:
-                log(f"    [DRY] Would store verify_result")
-                processed += 1
-                continue
-
-            # Store to DB
-            fi_str = psql(
-                f"SELECT COALESCE(MAX(fact_index), -1) + 1 "
-                f"FROM review_facts WHERE turn_id = '{esc_sql(turn_id)}'::uuid"
-            )
-            fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
-
-            verify_json = json.dumps(verify_result, ensure_ascii=False)
-            _insert_verify_result(turn_id, fi, verify_json)
-            log(f"    Stored verify_result (fact_index={fi})")
-
-            cat_summary = _build_category_summary(verify_result)
-            if cat_summary:
-                log(f"    {cat_summary}")
-
-            processed += 1
-
-        except Exception as e:
-            log(f"    ERROR: {type(e).__name__}: {e}")
+        if error:
+            log(f"    ERROR: {error}")
             failed += 1
+            continue
+
+        if verify_result is None:
+            log(f"    No enrich data — skip")
+            continue
+
+        # Phase 1 log
+        log_entity = verify_result.pop("_log_entity", None)
+        if log_entity:
+            n_files, n_missing_files, n_syms, n_missing_syms = log_entity
+            log(f"    entity: {n_files} files ({n_missing_files} missing), "
+                f"{n_syms} symbols ({n_missing_syms} missing)")
+
+        # Phase 2 log
+        log_faith = verify_result.pop("_log_faith", None)
+        if log_faith:
+            n_ent, n_fail, tldr_ok, reranker_overrides = log_faith
+            r_log = f", {reranker_overrides} reranker override" if reranker_overrides else ""
+            log(f"    faithfulness: {n_ent} entities ({n_fail} ungrounded), "
+                f"tldr={'OK' if tldr_ok else 'LOW'}{r_log}")
+
+        if dry_run:
+            log(f"    [DRY] Would store verify_result")
+            processed += 1
+            continue
+
+        # Store to DB
+        fi_str = psql(
+            f"SELECT COALESCE(MAX(fact_index), -1) + 1 "
+            f"FROM review_facts WHERE turn_id = '{esc_sql(turn_id_val)}'::uuid"
+        )
+        fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
+
+        verify_json = json.dumps(verify_result, ensure_ascii=False)
+        faithfulness = verify_result.get("faithfulness", {})
+        reranker_verdict = _compute_reranker_verdict(faithfulness)
+        _insert_verify_result(turn_id_val, fi, verify_json, reranker_verdict)
+        log(f"    Stored verify_result (fact_index={fi})")
+
+        cat_summary = _build_category_summary(verify_result)
+        if cat_summary:
+            log(f"    {cat_summary}")
+
+        processed += 1
 
     elapsed = round(time.monotonic() - t_start, 1)
     log(f"\n{'=' * 60}")
@@ -425,7 +483,7 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
 
 
 def main() -> None:
-    preflight_checks("day_verify.py", required_ports={8080})
+    preflight_checks("day_verify.py", required_ports={8082})
     import argparse
     parser = argparse.ArgumentParser(
         description="Day Verify — enrichment metadata quality check")

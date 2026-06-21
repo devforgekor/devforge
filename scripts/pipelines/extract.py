@@ -11,9 +11,11 @@ DB UNIQUE (turn_id, fact_index, extract_model) prevents duplicate storage.
 Flow:
   Phase 1: SELECT unprocessed (NOT EXISTS review_facts WHERE source=extract_pipeline, limit 50)
   Phase 2: day_extract extraction (user/thinking/text)
-  Phase 3: Reranker faithfulness check (via Pod A reranker — MODEL_REGISTRY)
-  Phase 4: Handle failures — retry or mark
-  Phase 5: Store to review_facts + enqueue
+  Phase 3: Post-process cleanup (dedup, short filter, markdown)
+  Phase 4: LLM NLI self-verify — ENTAILMENT=grounded, CONTRADICTION=drop, NEUTRAL→reranker
+  Phase 5: Reranker faithfulness check (Pod A :8080) — only NEUTRAL items
+  Phase 6: Handle failures — retry or mark
+  Phase 7: Store to review_facts + enqueue
 
 Usage:
   python3 scripts/pipelines/extract.py                          # batch from state
@@ -47,16 +49,134 @@ from lib.llm.json_parser import save_dlq, parse_llm_json
 TIMEOUT_EXTRACT = 900
 MAX_TOKENS_EXTRACT = 512
 TEMP_EXTRACT = 0.1
-BATCH_LIMIT = 10
+BATCH_LIMIT = 6
 TIME_BUDGET = 3600  # default: 1 hour budget for batch slicing
 
 # Dynamic timeout: estimate from input character count + generation time
-# 7B Q8 measured: ~9 t/s prompt, ~1.5-2.5 t/s decode
+# Measured: ~9 t/s prompt, ~1.5-2.5 t/s decode
 TIMEOUT_BASE = 60
 TIMEOUT_PER_CHAR = 0.2
 MAX_CHARS_SOLO = 5000
 SOLO_TIMEOUT_FACTOR = 2.5
 GEN_TIME_BUF = 300  # 512 tok / ~2 t/s gen with parallel contention buffer
+
+# Large turn chunking: split at sentence boundaries to avoid OOM/timeout
+_MAX_EXTRACT_CHARS = 5000  # Match embed_batch SLOT_CTX
+_CHUNK_OVERLAP_CHARS = 200
+
+
+def _split_sentences(text: str) -> List[str]:
+    """Split text into sentences (Korean + English)."""
+    if not text:
+        return []
+    sents = re.split(r'(?<=[.!?])\s+(?=[A-Z가-힣0-9])|\n\s*\n', text)
+    return [s.strip() for s in sents if s.strip()]
+
+
+def _chunk_text_at_sentences(text: str, max_chars: int,
+                              overlap: int) -> List[str]:
+    """Split text into overlapping sentence-bounded chunks."""
+    if len(text) <= max_chars:
+        return [text]
+    sents = _split_sentences(text)
+    if len(sents) <= 1:
+        return [text[:max_chars]]
+    chunks = []
+    start = 0
+    while start < len(sents):
+        chunk = []
+        length = 0
+        end = start
+        while end < len(sents) and length + len(sents[end]) <= max_chars:
+            chunk.append(sents[end])
+            length += len(sents[end])
+            end += 1
+        if end == start:
+            chunk.append(sents[start][:max_chars])
+            end = start + 1
+        chunks.append(" ".join(chunk))
+        # Overlap: start next chunk a few sentences before end for context continuity
+        # Guard: if overlap consumes all remaining sentences, we're done
+        ov = 0
+        ns = end
+        while ns > start and ov < overlap:
+            ns -= 1
+            ov += len(sents[ns])
+        start = ns if ns > start else len(sents)
+    return chunks
+
+
+def _chunk_turn_text(user_turn: str, thinking: str, text: str,
+                      max_chars: int) -> List[Dict[str, str]]:
+    """Split a large turn into overlapping sentence-bounded chunks."""
+    if len(text) <= max_chars and len(thinking) <= max_chars:
+        return [{"user_turn": user_turn, "thinking": thinking, "text": text}]
+    fld, other_val = ("text", thinking) if len(text) >= len(thinking) else ("thinking", text)
+    chunks = _chunk_text_at_sentences(
+        text if fld == "text" else thinking, max_chars, _CHUNK_OVERLAP_CHARS
+    )
+    return [
+        {"user_turn": user_turn, "thinking": c if fld == "thinking" else other_val,
+         "text": c if fld == "text" else other_val}
+        for c in chunks
+    ]
+
+
+def _merge_chunk_extractions(
+    chunk_results: List[Optional[Dict]]
+) -> Dict:
+    """Merge extractions from chunks, deduplicating by evidence."""
+    all_ex = []
+    seen = set()
+    total_usage = {}
+    for cr in chunk_results:
+        if not cr or not cr.get("extractions"):
+            continue
+        for ex in cr["extractions"]:
+            ev = ex.get("evidence", "").strip()
+            if ev and ev not in seen:
+                seen.add(ev)
+                all_ex.append(ex)
+        usage = cr.get("usage", {}) or {}
+        for k in ("prompt_tokens", "completion_tokens"):
+            v = usage.get(k, 0) or 0
+            total_usage[k] = (total_usage.get(k, 0) or 0) + v
+    return {"extractions": all_ex, "usage": total_usage,
+            "timings": {}, "elapsed_ms": 0}
+
+
+def _process_chunked_turn(user_turn: str, thinking: str, text: str,
+                           pulse_context: Optional[str] = None) -> Dict:
+    """Split large turn into chunks, extract each via ThreadPoolExecutor, merge results."""
+    chunks = _chunk_turn_text(user_turn, thinking, text, _MAX_EXTRACT_CHARS)
+    if not chunks:
+        return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
+
+    results: List[Optional[Dict]] = []
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_map = {}
+        for i, c in enumerate(chunks):
+            cu, ct, cx = c["user_turn"], c["thinking"], c["text"]
+            t = _calc_timeout(len(cu) + len(ct) + len(cx))
+            fut = pool.submit(_extract_facts, cu, ct, cx,
+                              pulse_context=pulse_context, timeout=t)
+            fut_map[fut] = i
+
+        for fut in as_completed(fut_map):
+            try:
+                ex = fut.result()
+                if ex:
+                    results.append(ex)
+            except Exception as e:
+                idx = fut_map[fut]
+                print(f"      [chunk {idx}] failed: {e}", flush=True)
+
+    if not results:
+        return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
+    merged = _merge_chunk_extractions(results)
+    n = len(merged.get("extractions", []))
+    print(f"      [chunked] {len(chunks)} chunks → {n} facts (deduped, parallel=2)", flush=True)
+    return merged
 
 
 def _calc_timeout(total_chars: int, solo: bool = False) -> int:
@@ -67,62 +187,10 @@ def _calc_timeout(total_chars: int, solo: bool = False) -> int:
     return min(est, 1800)
 
 
-def _calc_batch_limit(time_budget: int) -> int:
-    """Estimate how many unprocessed turns fit within time_budget.
-
-    Scans turns by char count, estimates per-turn LLM + store cost,
-    respects parallel=2 concurrency, returns safe limit.
-    """
-    from lib.db import psql_json
-
-    sql = (
-        "SELECT LENGTH(COALESCE(t.user_turn,'')) "
-        "  + LENGTH(COALESCE(t.thinking,'')) "
-        "  + LENGTH(COALESCE(t.text,'')) AS total_chars "
-        "FROM turns t "
-        "WHERE t.text != '' "
-        "AND NOT EXISTS ("
-        "  SELECT 1 FROM review_facts rf "
-        "  WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'"
-        ")"
-        "ORDER BY t.created_at ASC"
-    )
-    rows = psql_json(sql)
-    if not rows:
-        return 0
-
-    total_est = 0.0
-    count = 0
-    pair_buffer = []
-
-    for row in rows:
-        chars = row.get("total_chars", 0) or 0
-        solo = chars > MAX_CHARS_SOLO
-        llm_cost = _calc_timeout(chars, solo=solo)
-        store_cost = 30  # sequential store/verify overhead per turn
-
-        pair_buffer.append(llm_cost)
-        if len(pair_buffer) == 2:
-            pair_time = max(pair_buffer) + store_cost * 2
-            # Check if a partial pair fits
-            if total_est + store_cost + pair_buffer[0] > time_budget:
-                break
-            if total_est + pair_time > time_budget:
-                count += 1  # first of pair fits
-                break
-            total_est += pair_time
-            count += 2
-            pair_buffer = []
-
-    # Remaining single
-    if pair_buffer and total_est + pair_buffer[0] + store_cost <= time_budget:
-        count += 1
-
-    return max(count, 1)
 
 # Faithfulness thresholds
 
-# ── NLI Self-Verify Prompt (7B Q8) ─────────────────────────────
+# ── NLI Self-Verify Prompt ─────────────────────────────
 _NLI_VERIFY_PROMPT = """You are verifying whether an EVIDENCE sentence is factually supported by a SOURCE sentence.
 
 Follow these steps:
@@ -391,7 +459,51 @@ def _post_process_extractions(
     return cleaned
 
 
+
 # ── Phase 2: extraction ────────────────────────────────────────────────
+def _load_entity_context(turn_id: str) -> Optional[str]:
+    """Load entity_scan results for a turn (Phase 0).
+
+    Returns formatted context string for LLM injection, or None.
+    """
+    if not turn_id:
+        return None
+    sql = (
+        "SELECT evidence::text FROM review_facts "
+        f"WHERE turn_id = '{esc_sql(turn_id)}'::uuid "
+        "AND fact_type = 'entity_scan' "
+        "ORDER BY fact_index DESC LIMIT 1"
+    )
+    rows = psql_json(sql)
+    if not rows:
+        return None
+    try:
+        data = json.loads(rows[0].get("evidence", "{}"))
+    except (json.JSONDecodeError, KeyError):
+        return None
+    files = data.get("files", [])
+    functions = data.get("functions", [])
+    if not files and not functions:
+        return None
+
+    parts = [
+        "=== Known Context Entities ==="
+        "The following entities were detected in this turn via pattern matching.",
+        "",
+    ]
+    if files:
+        parts.append("Files referenced: " + ", ".join(sorted(files)))
+    if functions:
+        parts.append("Functions referenced: " + ", ".join(sorted(functions)))
+    parts.append("")
+    parts.append(
+        "Use these as grounding references when extracting facts. "
+        "If an extracted fact references one of these entities, it is more likely "
+        "to be faithful to the source."
+    )
+    return "\n".join(parts)
+
+
 def _extract_facts(user_turn: str, thinking: str, text: str,
                    pulse_context: Optional[str] = None,
                    timeout: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -408,6 +520,7 @@ def _extract_facts(user_turn: str, thinking: str, text: str,
     ]
 
     system_prompt = SYSTEM_DAY_EXTRACT
+    user_prompt = "\n".join(parts)
     if pulse_context:
         system_prompt = f"{pulse_context}\n\n{system_prompt}"
 
@@ -481,14 +594,21 @@ def _verify_extractions(
             "faithful_score": verdict["score"],
             "faithful_method": verdict["method"],
             "grounding": verdict["grounding"],
+            "nli_llm": ex.get("nli_llm", "NEUTRAL"),
         })
     return results
 
 
 
-# ── Phase 4: LLM NLI Self-Verify (7B Q8) ──────────────────────────────
+# ── Phase 4: LLM NLI Self-Verify ──────────────────────────────
+def _calc_nli_timeout(source: str, evidence: str) -> int:
+    """Dynamic timeout for NLI verify (~2500 chars / 9 t/s * 1.5 safety)."""
+    total = len(source[:2000]) + len(evidence[:500]) + 200
+    return min(max(30, int(total * 0.15)), 600)
+
+
 def _llm_nli_check(evidence: str, source: str) -> str:
-    """Run 7B Q8 NLI self-verify on a single evidence-source pair.
+    """Run NLI self-verify on a single evidence-source pair.
 
     Returns: "ENTAILMENT", "CONTRADICTION", or "NEUTRAL"
     Falls back to "NEUTRAL" on any parse/network error.
@@ -506,7 +626,7 @@ def _llm_nli_check(evidence: str, source: str) -> str:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
             model="day_extract",
-            max_tokens=64, temperature=0.0, timeout=30,
+            max_tokens=64, temperature=0.0, timeout=_calc_nli_timeout(source, evidence),
             return_meta=True,
         )
         raw = meta["content"].strip().upper()
@@ -523,19 +643,15 @@ def _llm_nli_verify(
     extractions: List[Dict[str, Any]],
     user_turn: str, thinking: str, text: str,
 ) -> List[Dict[str, Any]]:
-    """Phase 4: 7B Q8 LLM NLI verify on post-processed extractions.
+    """LLM NLI verify — adds nli_llm field (ENTAILMENT|CONTRADICTION|NEUTRAL).
 
-    Each evidence-source pair is checked for logical entailment by the
-    7B Q8 extractor model (same model, different task — entailment NLI).
+    1st pass in NLI→reranker chain. ENTAILMENT→auto grounded, CONTRADICTION→drop,
+    NEUTRAL→reranker (Phase 5). Reranker override and labeling handled at pipeline level.
 
-    Complements Phase 3 reranker (topical relevance) by detecting:
+    Detects via logical entailment (reranker blind spot):
       - Negation flip ("not X" vs "X")
       - Numerical contradictions ("5" vs "10")
       - Hallucinated content not present in source
-      - Factual contradictions
-
-    Adds fields: nli_llm (ENTAILMENT|CONTRADICTION|NEUTRAL)
-    CONTRADICTION overrides faithful=False with method='7b_nli'.
     """
     source_map = {"user": user_turn, "thinking": thinking, "text": text}
 
@@ -549,12 +665,6 @@ def _llm_nli_verify(
 
         verdict = _llm_nli_check(evidence, source)
         ex["nli_llm"] = verdict
-
-        # CONTRADICTION overrides reranker — mark unfaithful
-        if verdict == "CONTRADICTION":
-            ex["faithful"] = False
-            ex["faithful_score"] = 0
-            ex["faithful_method"] = "7b_nli"
 
     return extractions
 
@@ -726,15 +836,37 @@ PARALLEL = 2
 
 
 def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[dict, Optional[Dict[str, Any]], Optional[str]]:
-    """Wrapper for parallel LLM call. Returns (turn, ex_result_or_None, error_str_or_None)."""
+    """Wrapper for parallel LLM call. Auto-chunks large turns at sentence boundaries.
+    Returns (turn, ex_result_or_None, error_str_or_None)."""
     user_turn = turn.get("user_turn") or ""
     thinking = turn.get("thinking") or ""
     text = turn.get("text") or ""
     total_chars = len(user_turn) + len(thinking) + len(text)
+
+    # Phase 0: Inject entity context from entity_scan
+    entity_context = _load_entity_context(turn.get("id", ""))
+    if entity_context:
+        pulse_context = (
+            f"{pulse_context}\n\n{entity_context}"
+            if pulse_context
+            else entity_context
+        )
+
+    # Large turn: chunk at sentence boundaries to avoid OOM/timeout
+    if total_chars > _MAX_EXTRACT_CHARS:
+        try:
+            ex_result = _process_chunked_turn(user_turn, thinking, text, pulse_context)
+            return (turn, ex_result, None)
+        except Exception as e:
+            return (turn, None, str(e))
+
+    # Standard single-call path
     solo = total_chars > MAX_CHARS_SOLO
     timeout = _calc_timeout(total_chars, solo=solo)
     try:
-        ex_result = _extract_facts(user_turn, thinking, text, pulse_context=pulse_context, timeout=timeout)
+        ex_result = _extract_facts(user_turn, thinking, text,
+                                   pulse_context=pulse_context,
+                                   timeout=timeout)
         return (turn, ex_result, None)
     except Exception as e:
         return (turn, None, str(e))
@@ -746,7 +878,6 @@ def extract_pipeline(
     limit: int = BATCH_LIMIT,
     dry_run: bool = False,
     pulse_context: Optional[str] = None,
-    time_budget: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Run extraction → reranker verify → store per turn."""
     t_start = time.monotonic()
@@ -755,8 +886,6 @@ def extract_pipeline(
     print(f"Extract Pipeline — LLM extract → reranker verify → store")
     if dry_run:
         print("  [DRY RUN] No writes to DB")
-    if time_budget:
-        print(f"  Time budget: {time_budget}s")
     print(f"{'=' * 60}")
 
     # Ensure nli_llm column exists (idempotent migration)
@@ -784,9 +913,6 @@ def extract_pipeline(
             "seq": r.get("seq", 0) or 0,
         }]
     else:
-        if time_budget:
-            limit = _calc_batch_limit(time_budget)
-            print(f"  Budget-limited batch: {limit} turns")
         turns = _get_unprocessed_turns(limit)
 
     if not turns:
@@ -799,28 +925,27 @@ def extract_pipeline(
     processed = 0
     failed = 0
 
-    # ── Phase 1: Concurrent LLM calls in mini-batches ───────────────────
-    num_batches = (len(turns) + PARALLEL - 1) // PARALLEL
+    # ── Phase 1: Concurrent LLM calls (parallel=PARALLEL) ────────────
+    print(f"[extract] Submitting {len(turns)} turns to LLM (parallel={PARALLEL})...",
+          flush=True)
     turn_results: Dict[str, Tuple] = {}  # turn_id -> (ex_result, error_str)
+    llm_t0 = time.monotonic()
 
-    for batch_idx in range(0, len(turns), PARALLEL):
-        batch = turns[batch_idx:batch_idx + PARALLEL]
-        bn = batch_idx // PARALLEL + 1
-        print(f"\n[extract] Batch {bn}/{num_batches}: "
-              f"{len(batch)} concurrent LLM call(s)", flush=True)
-        t_batch = time.monotonic()
+    with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+        fut_map = {}
+        for ti, t in enumerate(turns, 1):
+            fut = pool.submit(_extract_for_turn, t, pulse_context)
+            fut_map[fut] = (ti, t)
+        for fut in as_completed(fut_map):
+            ti, t = fut_map[fut]
+            turn, ex_result, error = fut.result()
+            if error:
+                print(f"  [{ti}/{len(turns)}] {t['id'][:8]} — LLM call failed: {error}",
+                      flush=True)
+            turn_results[t["id"]] = (ex_result, error)
 
-        with ThreadPoolExecutor(max_workers=len(batch)) as executor:
-            future_to_turn = {
-                executor.submit(_extract_for_turn, t, pulse_context): t
-                for t in batch
-            }
-            for future in as_completed(future_to_turn):
-                turn, ex_result, error = future.result()
-                turn_results[turn["id"]] = (ex_result, error)
-
-        print(f"  [extract]   LLM calls: {time.monotonic() - t_batch:.1f}s",
-              flush=True)
+    print(f"  [extract]   LLM calls: {time.monotonic() - llm_t0:.1f}s",
+          flush=True)
 
     # ── Phase 2: Sequential verify → store → checkpoint ─────────────────
     idx = 0
@@ -857,10 +982,27 @@ def extract_pipeline(
             ex_usage = ex_result.get("usage", {})
             ex_timings = ex_result.get("timings", {})
             ex_elapsed = ex_result.get("elapsed_ms", 0)
-            verified = _verify_extractions(raw_ex, user_turn, thinking, text)
-            verified = _post_process_extractions(verified, turn_id_val, user_turn, thinking, text)  # E1/E3/E4/E5
-            verified = _llm_nli_verify(verified, user_turn, thinking, text)  # 7B Q8 NLI self-verify
-            extractions = verified
+            # Phase 0: Cheap cleanup first (dedup, short filter, markdown cleanup)
+            verified = _post_process_extractions(raw_ex, turn_id_val, user_turn, thinking, text)
+            # Phase 1: LLM NLI — ENTAILMENT→grounded, CONTRADICTION→drop, NEUTRAL→reranker
+            verified = _llm_nli_verify(verified, user_turn, thinking, text)
+            # Phase 2: ENTAILMENT auto-grounded, CONTRADICTION auto-dropped
+            entail = []
+            neutral = []
+            for v in verified:
+                nli = v.get("nli_llm", "NEUTRAL")
+                if nli == "ENTAILMENT":
+                    v.update({"faithful": True, "faithful_score": 100,
+                              "faithful_method": "nli", "grounding": "GROUNDED"})
+                    entail.append(v)
+                elif nli == "CONTRADICTION":
+                    v.update({"faithful": False, "faithful_score": 0,
+                              "faithful_method": "nli", "grounding": "UNGROUNDED"})
+                else:
+                    neutral.append(v)
+            # Phase 3: Reranker only NEUTRAL items
+            rerankered = _verify_extractions(neutral, user_turn, thinking, text) if neutral else []
+            extractions = entail + rerankered
 
             if extractions is None:
                 print(f"  [extract]   No faithful extractions — marking failure")
@@ -1017,8 +1159,6 @@ def main() -> None:
         description=f"Extract Pipeline — day_extract → Python verify → store")
     parser.add_argument("--turn-id", help="Process a specific turn UUID")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
-    parser.add_argument("--time-budget", "-t", type=int, default=None,
-                        help="Max estimated processing seconds for batch (default: no limit)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--pulse-context", help="Inject Watchdog Pulse context")
@@ -1034,7 +1174,6 @@ def main() -> None:
             limit=args.limit,
             dry_run=args.dry_run,
             pulse_context=args.pulse_context,
-            time_budget=args.time_budget,
         )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

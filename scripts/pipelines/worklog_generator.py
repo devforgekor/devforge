@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # Status: production
 # Path: day_cycle.sh
-"""worklog_generator.py — 3-stage speculative pipeline: 7B draft → Python verify → 30B review.
+"""worklog_generator.py — 3-stage speculative pipeline: draft model → Python verify → review model.
 
-1. Qwen2.5-Coder-7B (:8082) extracts worklog entries from turns (fast, bulk)
+1. Draft model (:8082) extracts worklog entries from turns (fast, bulk)
 2. Python verify_evidence() — deterministic substring check, zero hallucination
-3. Qwen3-Coder-30B-A3B (:8081) reviews only flagged entries (evidence mismatch)
+3. Review model (:8081) reviews only flagged entries (evidence mismatch)
    → auto if evidence semantically matches, flagged if hallucination confirmed
 
 Speculative decoding pattern: cheap model drafts, expensive model verifies.
@@ -154,7 +154,7 @@ Return STRICT JSON:
 
 
 def review_flagged(flagged_entries: List[Dict], turns: List[Dict]) -> tuple:
-    """Qwen3-Coder-30B-A3B reviews only entries that failed Python evidence check.
+    """Review model reviews only entries that failed Python evidence check.
     Returns (reviews: List[Dict], action: str, consensus_score: int)."""
     source_text = "\n".join(
         f"[{t['created_at']}] {t['user_turn'][:500]}\n{t['text'][:500]}"
@@ -273,7 +273,7 @@ def run(date_str: str = None) -> int:
         return 0
 
     if not check_endpoint(8082):
-        print("  worklog_generator: 7B :8082 not available — skipping")
+        print("  worklog_generator: draft model :8082 not available — skipping")
         return 0
 
     date_str = date_str or _today_kst()
@@ -305,7 +305,7 @@ def run(date_str: str = None) -> int:
                 {"role": "user", "content": prompt},
             ]
 
-            print(f"  {agent}[{batch_num}]: 7B drafting from {len(batch_turns)} turns...")
+            print(f"  {agent}[{batch_num}]: draft model drafting from {len(batch_turns)} turns...")
             draft = None
             for attempt in range(MAX_RETRIES + 1):
                 raw = call_llm_json(messages, model="extractor", max_tokens=256)
@@ -313,9 +313,9 @@ def run(date_str: str = None) -> int:
                 if draft:
                     break
                 if attempt < MAX_RETRIES:
-                    print(f"    7B failed (attempt {attempt+1}) — retrying...")
+                    print(f"    draft model failed (attempt {attempt+1}) — retrying...")
             if not draft:
-                print(f"    7B failed after {MAX_RETRIES+1} attempts — will retry next cycle")
+                print(f"    draft model failed after {MAX_RETRIES+1} attempts — will retry next cycle")
                 break
 
             entries = draft.get("entries", [])
@@ -357,20 +357,20 @@ def run(date_str: str = None) -> int:
                     e["_reason"] = reason
                     flagged_indices.append(i)
 
-            # Stage 3: Qwen3-Coder-30B-A3B reviews only flagged entries
+            # Stage 3: Review model reviews only flagged entries
             if flagged_indices and check_endpoint(8081):
                 flagged_entries = [entries[i] for i in flagged_indices]
-                print(f"    30B reviewing {len(flagged_entries)} flagged entries...")
+                print(f"    review model reviewing {len(flagged_entries)} flagged entries...")
                 reviews, review_action, review_consensus = review_flagged(flagged_entries, batch_turns)
                 review_map = {r.get("index", -1): r for r in reviews}
                 for idx_in_flagged, global_idx in enumerate(flagged_indices):
                     review = review_map.get(idx_in_flagged, {})
                     if review.get("verdict") == "approved":
                         entries[global_idx]["_status"] = "auto"
-                        entries[global_idx]["_reason"] = f"30B: {review.get('reason', 'semantic match')}"
+                        entries[global_idx]["_reason"] = f"review: {review.get('reason', 'semantic match')}"
                 approved = sum(1 for r in reviews if r.get("verdict") == "approved")
                 confirmed = len(flagged_indices) - approved
-                print(f"    30B verdict: action={review_action} consensus={review_consensus} "
+                print(f"    review verdict: action={review_action} consensus={review_consensus} "
                       f"{approved} approved, {confirmed} flagged confirmed")
 
             n = insert_worklog_entries(entries, batch_turn_ids, agent, date_str)
@@ -386,7 +386,7 @@ def run(date_str: str = None) -> int:
 def main():
     preflight_checks("worklog_generator.py")
     import argparse
-    ap = argparse.ArgumentParser(description="LLM auto-worklog: Qwen2.5-Coder-7B draft + Qwen3-Coder-30B-A3B review")
+    ap = argparse.ArgumentParser(description="LLM auto-worklog: draft model + review model")
     ap.add_argument("--date", type=str, help="Date to process (YYYY-MM-DD, default: today KST)")
     ap.add_argument("--force", action="store_true",
                     help="Re-extract even if turns already logged")

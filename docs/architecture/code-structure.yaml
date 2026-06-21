@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-18'
+  updated: '2026-06-21'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -170,6 +170,9 @@ modules:
     llm_client.py:
       status: production
       purpose: "Unified LLM client \u2014 single entry point for all pipeline scripts."
+    nli_server.py:
+      status: production
+      purpose: "NLI Cross-Encoder Server \u2014 DeBERTa-v3-large for factual consistency."
     pipeline_common.py:
       status: production
       purpose: "Shared pipeline utilities \u2014 PipelineState, llm_call, call_one,\
@@ -586,10 +589,12 @@ modules:
       purpose: data_extraction_pipeline.py
     day_cycle.py:
       status: experimental
-      purpose: 'Day-time chain: extract -> enrich -> verify (Pod B :8082, checkpoint-based).'
+      purpose: "Day-time chain: sequential phase execution for entity_scan \u2192\
+        \ extract \u2192 enrich \u2192 verify."
     day_extract.py:
       status: experimental
-      purpose: "Day Extract Pipeline \u2014 extract \u2192 MCP enrich on Pod B (7B:8082)."
+      purpose: "Day Extract Pipeline \u2014 extract \u2192 MCP enrich on Pod B (extractor\
+        \ role :8082)."
     day_pipeline.py:
       status: experimental
       purpose: "Day Pipeline: extract \u2192 py_verify \u2192 activity_log \uC800\uC7A5\
@@ -607,16 +612,20 @@ modules:
         \ \uB2E8 1\uD68C."
     enrich.py:
       status: experimental
-      purpose: "Enrich Pipeline \u2014 post-extraction metadata enrichment (tldr,\
+      purpose: "Enrich Pipeline \u2014 post-extract MCP metadata enrichment (tldr,\
         \ intent, entities, tags)."
     enrich_cosine.py:
       status: experimental
-      purpose: "Enrich Cosine Verification \u2014 8B embedding based entity/tldr cosine\
+      purpose: "Enrich Cosine Verification \u2014 embed model based entity/tldr cosine\
         \ check."
     enrich_verify.py:
       status: experimental
       purpose: "Enrich Verify Pipeline \u2014 score enrichment metadata quality using\
         \ a judge model."
+    entity_scan.py:
+      status: experimental
+      purpose: "Entity Scan \u2014 Phase 0: deterministic entity extraction via regex\
+        \ + DB lookup."
     evaluation_experiment_pipeline.py:
       status: production
       purpose: evaluation_experiment_pipeline.py
@@ -674,8 +683,8 @@ modules:
       purpose: worklog_generation_pipeline.py
     worklog_generator.py:
       status: production
-      purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: 7B draft\
-        \ \u2192 Python verify \u2192 30B review."
+      purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: draft model\
+        \ \u2192 Python verify \u2192 review model."
 - path: scripts/proxies/
   purpose: Proxies
   files:
@@ -804,6 +813,20 @@ modules:
       status: experimental
       purpose: "DevForge Rubric Experiment \u2014 Round 1 (no rubric) vs Round 2 (with\
         \ rubric)."
+    run_extract_13.py:
+      status: unknown
+      purpose: Run extract on our 13 test turns.
+    test_13t_enrich_prompt.py:
+      status: experimental
+      purpose: "13-turn full cycle test: polish \u2192 extract \u2192 enrich \u2192\
+        \ day_verify."
+    test_3t_full_pipeline.py:
+      status: unknown
+      purpose: "3-turn full pipeline test: polish \u2192 extract \u2192 enrich \u2192\
+        \ verify (long turns)."
+    test_extract_strategies.py:
+      status: experimental
+      purpose: Extract strategy comparison for long Korean developer turns on bb9c6363.
     test_hardcoded_ports.py:
       status: experimental
       purpose: Validate no hardcoded 127.0.0.1:808{0-4} ports remain in modified files.
@@ -814,6 +837,9 @@ modules:
     test_progress_watcher.py:
       status: experimental
       purpose: test_progress_watcher.py
+    test_verify_methods.py:
+      status: experimental
+      purpose: "TLDR Verification Method Comparison \u2014 NLI vs Reranker vs Embedding."
     transform_prj.py:
       status: experimental
       purpose: Transform prj_cycle.py for experiment phases.

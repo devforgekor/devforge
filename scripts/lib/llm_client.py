@@ -4,7 +4,7 @@
 """Unified LLM client — single entry point for all pipeline scripts.
 
 All DevForge LLM calls go through this module.  It handles:
-  - Model registry  (Qwen2.5-Coder-7B → port 8082, …)
+  - Model registry with role-based model resolution
   - Feedback auto-injection  (recent patterns from activity_log)
   - Standard HTTP transport  (llama.cpp /v1/chat/completions)
 
@@ -34,16 +34,17 @@ from typing import Any, Dict, List, Optional
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # Physical endpoints (role-based — each describes the LLM's primary job)
-    "extractor":    {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300},  # Pod B 7B Q8
-    "polish":       {"port": 8082, "temp": 0.0,  "max_tokens": 512,  "timeout": 600},  # Pod B 4B Q8 — polish phase
-    "proposer":     {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},  # Pod B 30B
-    "reviewer":     {"port": 8083, "temp": 0.10, "max_tokens": 400,  "timeout": 480},  # Pod B 14B
-    "reflector":    {"port": 8082, "temp": 0.10, "max_tokens": 2048, "timeout": 600},  # Pod B 14B
-    "verifier":     {"port": 8084, "temp": 0.10, "max_tokens": 4096, "timeout": 1200}, # Pod B 27B
-    "judge":        {"port": 8083, "temp": 0.10, "max_tokens": 4096, "timeout": 7200}, # Pod B 14B
+    "extractor":    {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300},  # Pod B extractor
+    "polish":       {"port": 8082, "temp": 0.0,  "max_tokens": 512,  "timeout": 600},  # Pod B polish phase
+    "proposer":     {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},  # Pod B proposer
+    "reviewer":     {"port": 8083, "temp": 0.10, "max_tokens": 400,  "timeout": 480},  # Pod B (legacy)
+    "day-verify":{"port": 8082, "temp": 0.0,  "max_tokens": 512,  "timeout": 120},  # Pod B verify
+    "reflector":    {"port": 8082, "temp": 0.10, "max_tokens": 2048, "timeout": 600},  # Pod B reflector
+    "verifier":     {"port": 8084, "temp": 0.10, "max_tokens": 4096, "timeout": 1200}, # Pod B verifier
+    "judge":        {"port": 8083, "temp": 0.10, "max_tokens": 4096, "timeout": 7200}, # Pod B judge
     # Non-LLM service endpoints (port-only, for pipeline scripts)
-    "reranker":     {"port": 8080},  # Pod A Qwen3-Reranker-4B-Q4_K_M --reranking
-    "embedder":     {"port": 8081},  # Pod B embed mode (8B f16) — same port as proposer
+    "reranker":     {"port": 8080},  # Pod A reranker
+    "embedder":     {"port": 8081},  # Pod B embed mode
     # Role aliases — pipeline code uses these; MODEL_REGISTRY is the single
     # place to change when a model/port changes.
     # Day pipeline — extract (:00/:30)
@@ -51,7 +52,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "day_enrich": {"_model": "extractor"},  # day enrich pipeline
 
     # Day pipeline — verify & rubric
-    "day_verify":  {"_model": "reviewer"},
+    "day_verify":  {"_model": "day-verify"},
 
     # Day pipeline — classify (:15/:45) day pre-review — models TBD (Pod B swap)
     "day_proposer":       {"_model": "reviewer"},
@@ -247,7 +248,7 @@ def reranker_score(query: str, document: str) -> float:
 def reranker_nli_verdict(score: float) -> str:
     """Map reranker relevance score to grounding verdict.
 
-    ⚠ LIMITATION: This reranker (Qwen3-Reranker-4B Q4_K_M via llama.cpp --reranking)
+    ⚠ LIMITATION: This reranker (Pod A reranker via llama.cpp --reranking)
     performs RELEVANCE scoring, not NLI (Natural Language Inference). It measures
     "how relevant is the document to the query" — NOT logical entailment.
 
@@ -272,6 +273,31 @@ def reranker_nli_verdict(score: float) -> str:
     elif score >= 0.40:
         return "AMBIGUOUS"
     return "UNGROUNDED"
+
+
+def _call_nli_server(source: str, evidence: str, strict: bool = False,
+                     nli_port: int = 8085, timeout: int = 30) -> str:
+    """Call DeBERTa-v3 NLI cross-encoder on port 8085.
+
+    Returns ENTAILMENT, CONTRADICTION, or NEUTRAL.
+    Falls back to NEUTRAL on any error.
+    """
+    body = json.dumps({
+        "source": source[:4000],
+        "evidence": evidence[:1000],
+        "strict": strict,
+    }).encode()
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{nli_port}/nli", data=body,
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode())
+        return data.get("label_3class", "NEUTRAL")
+    except Exception as e:
+        print(f"  [nli] call failed: {e}", flush=True)
+        return "NEUTRAL"
 
 
 def call_llm_json(

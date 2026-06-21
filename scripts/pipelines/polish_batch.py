@@ -15,9 +15,11 @@ Phase 3 — LLM Verify: diff-based verify on user_turn only (128 tok).
   text/thinking auto-pass (Kiwi is deterministic, no hallucination risk).
 
 Usage:
-  python3 scripts/pipelines/polish_batch.py              # batch from NULL-checkpoint
-  python3 scripts/pipelines/polish_batch.py --limit 20   # batch cap
-  python3 scripts/pipelines/polish_batch.py --dry-run    # simulate, no writes
+  python3 scripts/pipelines/polish_batch.py                       # batch from NULL-checkpoint
+  python3 scripts/pipelines/polish_batch.py --limit 20            # batch cap
+  python3 scripts/pipelines/polish_batch.py --turn-id <uuid>      # single turn (debug)
+  python3 scripts/pipelines/polish_batch.py --no-llm              # Kiwi-only, no LLM calls
+  python3 scripts/pipelines/polish_batch.py --dry-run             # simulate, no writes
 """
 
 import os
@@ -37,8 +39,8 @@ from lib.protection import protect
 from lib.text_cleaner import get_cleaner
 from lib.watchdog.messenger import heartbeat
 
-BATCH_LIMIT = 50
-SUBBATCH_SIZE = 10
+BATCH_LIMIT = 6
+SUBBATCH_SIZE = 3
 PARALLEL = 2
 MAX_TOKENS_USER = 512
 MAX_TOKENS_FIELD = 256
@@ -130,7 +132,7 @@ LABEL:"""
 
 
 def _nli_check(corrected: str, original: str) -> str:
-    """Run 7B Q8 NLI self-verify: does corrected mean the same as original?
+    """Run NLI self-verify: does corrected mean the same as original?
     Returns ENTAILMENT, CONTRADICTION, or NEUTRAL.
     """
     if not corrected or not original:
@@ -228,7 +230,7 @@ def _polish_user_turn(text: str, timeout: int = 600) -> Optional[str]:
         if isinstance(parsed, dict):
             return str(parsed.get("corrected", "") or "")
     except Exception as e:
-        print(f"  [error] polish user_turn failed: {e}", flush=True)
+        print(f"  [polish] polish user_turn failed: {e}", flush=True)
     return None
 
 
@@ -245,7 +247,7 @@ def _polish_field(text: str, field: str, timeout: int = 300) -> Optional[str]:
         if isinstance(parsed, dict):
             return str(parsed.get("corrected", "") or "")
     except Exception as e:
-        print(f"  [error] polish {field} failed: {e}", flush=True)
+        print(f"  [polish] polish {field} failed: {e}", flush=True)
     return None
 
 
@@ -273,11 +275,13 @@ def _verify_diffs(diff_text: str) -> bool:
     if not diff_text.strip():
         return True
     prompt = VERIFY_DIFF_PROMPT.format(changes=diff_text)
+    # Long turns can produce large diffs; polish model needs extra decode time
+    timeout = max(120, min(600, len(diff_text) * 0.5))
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
             model="polish", max_tokens=512, temperature=TEMP,
-            timeout=120, json_mode=True, return_meta=True,
+            timeout=int(timeout), json_mode=True, return_meta=True,
         )
         parsed = parse_llm_json(_extract_json(meta["content"]))
         if isinstance(parsed, dict):
@@ -287,7 +291,7 @@ def _verify_diffs(diff_text: str) -> bool:
                 print(f"    [verify] FAIL — {reason}", flush=True)
             return ok
     except Exception as e:
-        print(f"  [error] verify diffs failed: {e}", flush=True)
+        print(f"  [polish] verify diffs failed: {e}", flush=True)
     return False
 
 
@@ -295,7 +299,7 @@ def _verify_diffs(diff_text: str) -> bool:
 # Main Processing — 3-phase per sub-batch
 # ═══════════════════════════════════════════════
 
-def _process_sub_batch(sub_batch: list, dry_run: bool) -> Tuple[int, int]:
+def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> Tuple[int, int]:
     """Process one sub-batch.
 
     Phase 1 — Kiwi detection (instant, no LLM): raw vs clean comparison for text/thinking.
@@ -320,40 +324,43 @@ def _process_sub_batch(sub_batch: list, dry_run: bool) -> Tuple[int, int]:
     k_think = sum(1 for f in kiwi_flag.values() if f.get("thinking"))
     print(f"    [kiwi] text={k_text}/{len(kiwi_flag)}, thinking={k_think}/{len(kiwi_flag)} flagged", flush=True)
 
-    # ── Phase 2: LLM correction (parallel) ──
+    # ── Phase 2: LLM correction (parallel) — skip if --no-llm ──
     corrected: Dict[str, Dict[str, Any]] = {}
 
-    with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-        fmap = {}
-        for row in sub_batch:
-            tid = row["id"]
-            ut = row.get("user_turn_clean", "") or ""
-            tx = row.get("text_clean", "") or ""
-            th = row.get("thinking_clean", "") or ""
-            kf = kiwi_flag.get(tid, {"text": False, "thinking": False})
+    if no_llm:
+        print(f"    [no-llm] storing originals as polished — Kiwi-only mode", flush=True)
+    else:
+        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+            fmap = {}
+            for row in sub_batch:
+                tid = row["id"]
+                ut = row.get("user_turn_clean", "") or ""
+                tx = row.get("text_clean", "") or ""
+                th = row.get("thinking_clean", "") or ""
+                kf = kiwi_flag.get(tid, {"text": False, "thinking": False})
 
-            # Always polish user_turn — calculate dynamic timeout
-            ut_timeout = _calc_timeout(len(ut), MAX_TOKENS_USER)
-            ut_solo = len(ut) > MAX_CHARS_SOLO
-            if ut_solo:
-                ut_timeout = _calc_timeout(len(ut), MAX_TOKENS_USER, solo=True)
-            fmap[pool.submit(_polish_user_turn, ut, ut_timeout)] = (tid, "user_turn")
+                # Always polish user_turn — calculate dynamic timeout
+                ut_timeout = _calc_timeout(len(ut), MAX_TOKENS_USER)
+                ut_solo = len(ut) > MAX_CHARS_SOLO
+                if ut_solo:
+                    ut_timeout = _calc_timeout(len(ut), MAX_TOKENS_USER, solo=True)
+                fmap[pool.submit(_polish_user_turn, ut, ut_timeout)] = (tid, "user_turn")
 
-            # text/thinking only if Kiwi flagged errors
-            if kf.get("text") and tx.strip():
-                tx_timeout = _calc_timeout(len(tx), MAX_TOKENS_FIELD)
-                if len(tx) > MAX_CHARS_SOLO:
-                    tx_timeout = _calc_timeout(len(tx), MAX_TOKENS_FIELD, solo=True)
-                fmap[pool.submit(_polish_field, tx, "text", tx_timeout)] = (tid, "text")
-            if kf.get("thinking") and th.strip():
-                th_timeout = _calc_timeout(len(th), MAX_TOKENS_FIELD)
-                if len(th) > MAX_CHARS_SOLO:
-                    th_timeout = _calc_timeout(len(th), MAX_TOKENS_FIELD, solo=True)
-                fmap[pool.submit(_polish_field, th, "thinking", th_timeout)] = (tid, "thinking")
+                # text/thinking only if Kiwi flagged errors
+                if kf.get("text") and tx.strip():
+                    tx_timeout = _calc_timeout(len(tx), MAX_TOKENS_FIELD)
+                    if len(tx) > MAX_CHARS_SOLO:
+                        tx_timeout = _calc_timeout(len(tx), MAX_TOKENS_FIELD, solo=True)
+                    fmap[pool.submit(_polish_field, tx, "text", tx_timeout)] = (tid, "text")
+                if kf.get("thinking") and th.strip():
+                    th_timeout = _calc_timeout(len(th), MAX_TOKENS_FIELD)
+                    if len(th) > MAX_CHARS_SOLO:
+                        th_timeout = _calc_timeout(len(th), MAX_TOKENS_FIELD, solo=True)
+                    fmap[pool.submit(_polish_field, th, "thinking", th_timeout)] = (tid, "thinking")
 
-        for f in as_completed(fmap):
-            tid, field = fmap[f]
-            corrected.setdefault(tid, {})[field] = f.result()
+            for f in as_completed(fmap):
+                tid, field = fmap[f]
+                corrected.setdefault(tid, {})[field] = f.result()
 
     # ── Phase 3: Verify (user_turn only) + reranker + DB ──
     sub_ok = sub_fail = 0
@@ -405,7 +412,7 @@ def _process_sub_batch(sub_batch: list, dry_run: bool) -> Tuple[int, int]:
                 print(f"    SENTINEL {tid[:8]} — 3 verify failures, stored original as-is", flush=True)
             continue
 
-        # ── Reranker + 7B NLI grounding for user_turn only ──
+        # ── Reranker + NLI grounding for user_turn only ──
         if orig_ut and final_ut and orig_ut != final_ut:
             cos = reranker_score(final_ut[:2000], orig_ut[:2000])
             nli_v = reranker_nli_verdict(cos)
@@ -416,7 +423,7 @@ def _process_sub_batch(sub_batch: list, dry_run: bool) -> Tuple[int, int]:
                 print(f"    [rerank] {tid[:8]} - user_turn ambiguous (score={score}, {nli_v})", flush=True)
             else:
                 print(f"    [rerank] {tid[:8]} - user_turn grounded (score={score}, {nli_v})", flush=True)
-            # 7B NLI second opinion for uncertain reranker results
+            # NLI second opinion for uncertain reranker results
             if nli_v != "GROUNDED":
                 nli = _nli_check(final_ut[:500], orig_ut[:500])
                 if nli == "ENTAILMENT":
@@ -473,32 +480,51 @@ def _process_sub_batch(sub_batch: list, dry_run: bool) -> Tuple[int, int]:
 
 def main():
     dry_run = "--dry-run" in sys.argv
+    no_llm = "--no-llm" in sys.argv
     limit = BATCH_LIMIT
+    turn_ids = []
     for i, a in enumerate(sys.argv):
         if a == "--limit" and i + 1 < len(sys.argv):
             limit = int(sys.argv[i + 1])
+        if a == "--turn-id" and i + 1 < len(sys.argv):
+            turn_ids.append(sys.argv[i + 1])
 
     # Ensure Pod B is in polish mode (port auto-resolved from MODEL_METADATA)
-    from lib.pod_manager import ensure_model, model_info
-    print(f"  Checking Pod B: {model_info('polish')}", flush=True)
-    ensure_model("polish", skip_if_healthy=True)
+    if not no_llm:
+        from lib.pod_manager import ensure_model, model_info
+        print(f"  Checking Pod B: {model_info('polish')}", flush=True)
+        ensure_model("polish", skip_if_healthy=True)
 
-    with protect("polish_batch", reason="text polish phase", ports=[8082]):
-        heartbeat("polish_batch")
+    with protect("polish_batch", reason="text polish phase", ports=[8082] if not no_llm else []):
+        if not no_llm:
+            heartbeat("polish_batch")
         print("=" * 60, flush=True)
-        print("Polish Batch v3 — Kiwi + 2-pass LLM", flush=True)
+        if no_llm:
+            print("Polish Batch v4 — Kiwi-only (no LLM)", flush=True)
+        else:
+            print("Polish Batch v3 — Kiwi + 2-pass LLM", flush=True)
         print("=" * 60, flush=True)
 
         t_start = time.monotonic()
 
-        rows = psql_json(
-            f"SELECT id, user_turn, text, thinking, "
-            f"  user_turn_clean, text_clean, thinking_clean "
-            f"FROM turns "
-            f"WHERE text_clean IS NOT NULL AND text_clean_polished IS NULL "
-            f"ORDER BY created_at ASC "
-            f"LIMIT {limit}"
-        )
+        if turn_ids:
+            ids_list = ", ".join(f"'{esc_sql(t)}'::uuid" for t in set(turn_ids))
+            rows = psql_json(
+                f"SELECT id, user_turn, text, thinking, "
+                f"  user_turn_clean, text_clean, thinking_clean "
+                f"FROM turns "
+                f"WHERE id IN ({ids_list}) AND text_clean IS NOT NULL "
+                f"ORDER BY created_at ASC"
+            )
+        else:
+            rows = psql_json(
+                f"SELECT id, user_turn, text, thinking, "
+                f"  user_turn_clean, text_clean, thinking_clean "
+                f"FROM turns "
+                f"WHERE text_clean IS NOT NULL AND text_clean_polished IS NULL "
+                f"ORDER BY created_at ASC "
+                f"LIMIT {limit}"
+            )
         if not rows:
             print("  [ok] No turns to polish", flush=True)
             return
@@ -514,7 +540,7 @@ def main():
             sub_batch = rows[sb_idx:sb_idx + SUBBATCH_SIZE]
             sb_num = sb_idx // SUBBATCH_SIZE + 1
             print(f"\n  ── Sub-batch {sb_num}/{sub_total} ({len(sub_batch)} turns) ──", flush=True)
-            sub_ok, sub_fail = _process_sub_batch(sub_batch, dry_run)
+            sub_ok, sub_fail = _process_sub_batch(sub_batch, dry_run, no_llm=no_llm)
             ok_count += sub_ok
             fail_count += sub_fail
             elapsed = time.monotonic() - t_start
@@ -522,6 +548,8 @@ def main():
 
         elapsed = time.monotonic() - t_start
         print(f"Polish batch done: {ok_count} ok, {fail_count} failed, {elapsed:.0f}s", flush=True)
+        if fail_count:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

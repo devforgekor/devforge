@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: day_cycle.sh — re-embed phase (after verify, before 2차 embedding)
-"""Re-embed Check — detect content_hash changes → reset embedding_f16=NULL.
+"""Re-embed Check — detect content_hash changes → reset embedding=NULL.
 
 After polish/MCP/verify stages, embedding text may have changed (e.g.
 text_clean_polished was created or updated). This script compares stored
 content_hash with current hash of COALESCE(text_clean_polished, text_clean).
-If different, the embedding is stale → reset embedding_f16=NULL so the
+If different, the embedding is stale → reset embedding=NULL so the
 next embed_batch cycle picks it up for re-embedding.
 
 Usage:
@@ -53,7 +53,7 @@ def main():
         f"  content_hash "
         f"FROM turns "
         f"WHERE content_hash IS NOT NULL "
-        f"  AND embedding_f16 IS NOT NULL "
+        f"  AND embedding IS NOT NULL "
         f"LIMIT {limit}"
     )
     if not rows:
@@ -77,10 +77,10 @@ def main():
 
         # Hash changed — embedding is stale
         if dry_run:
-            print(f"  DRY-RUN: {turn_id[:8]} hash changed → would reset embedding_f16=NULL", flush=True)
+            print(f"  DRY-RUN: {turn_id[:8]} hash changed → would reset embedding=NULL", flush=True)
         else:
             psql_ok(
-                f"UPDATE turns SET embedding_f16 = NULL "
+                f"UPDATE turns SET embedding = NULL "
                 f"WHERE id = '{esc_sql(turn_id)}'::uuid",
                 timeout=15,
             )

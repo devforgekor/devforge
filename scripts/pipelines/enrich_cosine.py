@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: day_cycle.sh — embed phase (after embed_batch.py)
-"""Enrich Cosine Verification — 8B embedding based entity/tldr cosine check.
+"""Enrich Cosine Verification — embed model based entity/tldr cosine check.
 
 Runs during embed phase (:8081) after embed_batch.py.
 Finds enrich_meta rows with cosine_status=pending|deferred, embeds entity/tldr
-text via 8B model, compares with turns.embedding_f16.
+text via embed model, compares with turns.embedding.
 
 State machine: pending → done|deferred → done|failed (max 3 retries).
-Deferred rows with embedding_f16 NULL retry next cycle via day_cycle.sh guard.
+Deferred rows with embedding NULL retry next cycle via day_cycle.sh guard.
 
 Usage:
   python3 scripts/pipelines/enrich_cosine.py              # batch from pending|deferred
@@ -41,7 +41,7 @@ EMBED_TIMEOUT = 120   # per entity/tldr request
 BATCH_LIMIT = 20
 MAX_CYCLE = 300        # 5min max
 
-# Cosine thresholds — 8B 4096d embedding space
+# Cosine thresholds — embed model 4096d embedding space
 COSINE_ENTITY_RELEVANCE = 0.25
 TLDR_COSINE_MIN = 0.30
 
@@ -69,7 +69,7 @@ def _cosine(a: List[float], b: List[float]) -> float:
 
 
 def _embed_text(text: str) -> Optional[List[float]]:
-    """Request 4096-dim vector from 8B embedding model; returns None on failure."""
+    """Request 4096-dim vector from embed model; returns None on failure."""
     clean = text.strip()
     if not clean:
         return None
@@ -86,15 +86,15 @@ def _embed_text(text: str) -> Optional[List[float]]:
             log(f"  [warn] unexpected embed dim {len(vec)} (expected 4096)")
         return vec
     except Exception as e:
-        log(f"  [error] 8B embed failed: {e}")
+        log(f"  [error] embed failed: {e}")
         return None
 
 
 def _get_pending_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
-    """Review_facts rows with cosine_status=pending or deferred, with turns.embedding_f16."""
+    """Review_facts rows with cosine_status=pending or deferred, with turns.embedding."""
     sql = (
         "SELECT rf.turn_id, rf.evidence, rf.fact_index, rf.extract_model, "
-        "  rf.created_at::text, t.embedding_f16::text AS f16_vec "
+        "  rf.created_at::text, t.embedding::text AS f16_vec "
         "FROM review_facts rf "
         "JOIN turns t ON t.id = rf.turn_id "
         "WHERE rf.fact_type = 'enrich_meta' "
@@ -120,7 +120,7 @@ def _get_pending_by_turn(turn_id: str) -> Optional[Dict[str, Any]]:
     """Single turn lookup for --turn-id mode (pending or deferred)."""
     sql = (
         f"SELECT rf.turn_id, rf.evidence, rf.fact_index, rf.extract_model, "
-        f"  rf.created_at::text, t.embedding_f16::text AS f16_vec "
+        f"  rf.created_at::text, t.embedding::text AS f16_vec "
         f"FROM review_facts rf "
         f"JOIN turns t ON t.id = rf.turn_id "
         f"WHERE rf.turn_id = '{esc_sql(turn_id)}'::uuid "
@@ -143,7 +143,7 @@ def _get_pending_by_turn(turn_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _verify_entity_cosine(entities: Dict, turn_vec: List[float]) -> Dict:
-    """Embed each entity text via 8B, compare with turn embedding_f16.
+    """Embed each entity text via embed model, compare with turn embedding.
 
     Returns dict keyed by entity category with per-entity cosine scores.
     """
@@ -176,7 +176,7 @@ def _verify_entity_cosine(entities: Dict, turn_vec: List[float]) -> Dict:
 
 
 def _verify_tldr_cosine(tldr: str, turn_vec: List[float]) -> float:
-    """Embed tldr via 8B, compare with turn embedding_f16."""
+    """Embed tldr via embed model, compare with turn embedding."""
     if not tldr or not tldr.strip():
         return 0.0
     tldr_vec = _embed_text(tldr.strip())
@@ -200,10 +200,10 @@ def _update_enrich_meta(turn_id: str, enrich_json_str: str,
 def enrich_cosine_pipeline(turn_id: Optional[str] = None,
                         limit: int = BATCH_LIMIT,
                         dry_run: bool = False) -> Dict[str, Any]:
-    """Verify pending enrich cosine via 8B embedding against turns.embedding_f16."""
+    """Verify pending enrich cosine via embed model against turns.embedding."""
     t_start = time.monotonic()
     log("=" * 60)
-    log("Enrich Cosine Verify — 8B embedding vs turns.embedding_f16")
+    log("Enrich Cosine Verify — embed model vs turns.embedding")
     if dry_run:
         log("  [DRY RUN] No writes to DB")
     log("=" * 60)
@@ -254,11 +254,11 @@ def enrich_cosine_pipeline(turn_id: Optional[str] = None,
             if skip_count >= MAX_RETRY:
                 enrich_data["cosine_status"] = "failed"
                 enrich_data["error_code"] = "MAX_RETRY_EXCEEDED"
-                log(f"    → failed (embedding_f16 NULL ×{skip_count})")
+                log(f"    → failed (embedding NULL ×{skip_count})")
                 failed += 1
             else:
                 enrich_data["cosine_status"] = "deferred"
-                log(f"    → deferred (embedding_f16 NULL ×{skip_count})")
+                log(f"    → deferred (embedding NULL ×{skip_count})")
                 deferred += 1
             updated_json = json.dumps(enrich_data, ensure_ascii=False)
             if not dry_run:
@@ -329,7 +329,7 @@ def main() -> None:
     preflight_checks("enrich_cosine.py", required_ports={8081})
     import argparse
     parser = argparse.ArgumentParser(
-        description="Enrich Cosine Verify — 8B embedding vs turns.embedding_f16")
+        description="Enrich Cosine Verify — embed model vs turns.embedding")
     parser.add_argument("--turn-id", help="Process a specific turn UUID")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
     parser.add_argument("--dry-run", action="store_true")

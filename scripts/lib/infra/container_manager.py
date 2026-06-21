@@ -110,8 +110,8 @@ def start_pod_b(port=8082, timeout=120):
 def recover_and_restart(attempt=1):
     """OOM/failure recovery + day mode restart.
 
-    attempt=1: default — stop + sync + 15s + extract(7B)+verify(14B)
-    attempt=2: aggressive — drop_caches + swap off/on + extract(7B)+verify(14B)
+    attempt=1: default — stop + sync + 15s + extract+verify
+    attempt=2: aggressive — drop_caches + swap off/on + extract+verify
     attempt=3: last resort — minimal mode (extract only, no verify/review)
     """
     stop_all()

@@ -5,10 +5,10 @@
 
 Port map:
   8080  Pod A  — Reserved for operator (future)
-  8081  Pod B  — embed(f16 day) / proposer(30B night)
-  8082  Pod B  — extract(7B day) / reflector(14B night)
-  8083  Pod B  — verify(14B day) / judge(N14B night)
-  8084  Pod B  — verifier(27B)
+  8081  Pod B  — embed(f16 day) / proposer(night)
+  8082  Pod B  — extract(day) / reflector(night)
+  8083  Pod B  — judge(night)
+  8084  Pod B  — verifier(night)
   8085+ Pod B  — Future / Azure SSH tunnels
 """
 
@@ -30,13 +30,11 @@ MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
 TIMEOUT = 7200
 
 MODEL_METADATA = {
-    # Pod A — reserved for operator (future use)
-    "reranker":   {"file": "Qwen3-Reranker-4B-Q8_0.gguf",  "size": "4.0GB", "port": 8080, "mode": "reranker"},
     # Pod B models — port assigned per mode (not from env file):
-    #   8081: embed(f16 day) / proposer(30B night)
-    #   8082: extract(7B day) / polish / reflector(14B night)
-    #   8083: verify(14B day) / verify-enrich / judge(N14B night)
-    #   8084: verifier(27B)
+    #   8081: embed(f16 day) / proposer(night)
+    #   8082: extract(day/day dual) / polish / reflector(night)
+    #   8083: judge(night)
+    #   8084: verifier(night)
     "embed":      {
         "file": "Qwen3-Embedding-8B-Q8_0.gguf",
         "size": "7.5GB", "port": 8081, "mode": "embed",
@@ -45,10 +43,10 @@ MODEL_METADATA = {
         "parallel": 1,
     },
     "polish":  {
-        "file": "Qwen3-4B-Instruct-2507-Q8_0.gguf",
-        "size": "4.0GB", "port": 8082, "mode": "polish",
+        "file": "Qwen3-4B-Instruct-2507-Q5_K_S-4.74bpw.gguf",
+        "size": "2.3GB", "port": 8082, "mode": "polish",
         "model_name": "polish", "ctx": 8192,
-        "threads": 2, "threads_batch": 2,
+        "threads": 4, "threads_batch": 4,
         "parallel": 2, "ubatch_size": 512,
     },
     "polish-lite":  {
@@ -87,6 +85,13 @@ MODEL_METADATA = {
         "threads": 2, "threads_batch": 2,
         "parallel": 2, "ubatch_size": 512,
     },
+    "day":  {
+        "file": "Qwen3-8B-Q8_0.gguf",
+        "size": "8.2GB", "port": 8082, "mode": "day",
+        "model_name": "day", "ctx": 8192, "cache_ram": 1024, "evict_room": 8000,
+        "threads": 2, "threads_batch": 2,
+        "parallel": 2, "ubatch_size": 512,
+    },
     "reflector":  {
         "file": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
         "size": "8.2GB", "port": 8082, "mode": "review-r",
@@ -119,6 +124,30 @@ MODEL_METADATA = {
         "model_name": "test-qwen", "ctx": 8192, "cache_ram": 512,
         "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "warn",
     },
+    # Swap-based sequential day mode: 8082 reused for both models
+    #   day-extractor → swap → day-verifier (sequential, not simultaneous)
+    "day-extractor": {
+        "file": "Qwen3-8B-Q8_0.gguf",
+        "size": "8.2GB", "port": 8082, "mode": "day",
+        "model_name": "day-extractor", "ctx": 8192,
+        "threads": 4, "threads_batch": 4,
+        "parallel": 2, "ubatch_size": 512,
+    },
+    "day-verifier": {
+        "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
+        "size": "7.6GB", "port": 8082, "mode": "day",
+        "model_name": "day-verifier", "ctx": 4096,
+        "threads": 4, "threads_batch": 4,
+        "parallel": 2, "ubatch_size": 512,
+    },
+}
+
+# Day phase → physical model key (role-based, no hardcoded names in callers)
+# extract + enrich share the same model, verify uses a different model (different model family)
+DAY_PHASE_MODELS = {
+    "day_extract": "day-extractor",
+    "day_enrich": "day-extractor",
+    "day_verify": "day-verifier",
 }
 
 
@@ -494,3 +523,72 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
     if meta["port"] == 8080:
         return start_pod_a(meta["mode"], meta["port"], dry_run=dry_run)
     return start_pod_b(meta["mode"], meta["port"], night=night, dry_run=dry_run, model_key=physical_name)
+
+
+def _write_dual_env() -> None:
+    """Write env file for swap-based day mode (day-extractor on :8082 + day-verifier on :8082)."""
+    m1 = MODEL_METADATA["day-extractor"]
+    m2 = MODEL_METADATA["day-verifier"]
+    lines = ["MODE=dual-day"]
+    for prefix, meta in [("1", m1), ("2", m2)]:
+        f = meta.get
+        pairs = [
+            (f"MODEL_NAME_{prefix}", f("model_name", "?")),
+            (f"MODEL_FILE_{prefix}", meta["file"]),
+            (f"PORT_{prefix}", str(meta["port"])),
+            (f"CTX_SIZE_{prefix}", str(f("ctx", 8192))),
+            (f"THREADS_{prefix}", str(f("threads", 4))),
+            (f"THREADS_BATCH_{prefix}", str(f("threads_batch", 4))),
+        ]
+        for key, env_key in [
+            ("cache_ram", "CACHE_RAM"), ("mlock", "MLOCK"),
+            ("batch_size", "BATCH_SIZE"), ("ubatch_size", "UBATCH_SIZE"),
+            ("parallel", "PARALLEL"),
+        ]:
+            val = f(key)
+            if val is not None and val != "":
+                pairs.append((f"{env_key}_{prefix}", str(val)))
+
+        for k, v in pairs:
+            lines.append(f"{k}={v}")
+
+    # Also add individual env keys for backward compat with older health checks
+    lines += [f"MODEL_NAME={m1.get('model_name','?')}", f"MODEL_FILE={m1['file']}",
+              f"PORT={m1['port']}", f"CTX_SIZE={m1.get('ctx',8192)}"]
+    with open(MODE_FILE_B, "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+    log(f"  wrote dual-day env (:{m1['port']} + :{m2['port']})")
+
+
+def ensure_dual_day(dry_run: bool = False) -> bool:
+    """Start Pod B in dual-day mode: day-extractor on 8082 + day-verifier on 8082."""
+    log("  POD B -> dual-day (day-extractor :8082 + day-verifier :8083)")
+    _write_dual_env()
+    # Kill Pod B only (Pod A reranker stays alive on :8080)
+    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
+                   capture_output=True, timeout=30)
+    subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
+                   capture_output=True, timeout=10)
+    _kill_stray_pasta(("8081", "8082", "8083", "8084"))
+    _reclaim_memory()
+    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
+                   capture_output=True, timeout=60)
+
+    # Wait for BOTH servers to be healthy
+    ok1 = wait_health(8082, timeout=600)
+    ok2 = wait_health(8083, timeout=600)
+    if not ok1 or not ok2:
+        log(f"  dual-day health: 8082={'OK' if ok1 else 'TIMEOUT'} 8083={'OK' if ok2 else 'TIMEOUT'}")
+        log("  restarting container...")
+        subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
+                       capture_output=True, timeout=60)
+        ok1 = wait_health(8082, timeout=300)
+        ok2 = wait_health(8083, timeout=300)
+    if ok1 and ok2:
+        log(f"  both servers healthy: :8082 + :8083")
+        # probe both
+        wait_probe(8082, "day-extractor", timeout=120)
+        wait_probe(8083, "day-verifier", timeout=120)
+        return True
+    log(f"  dual-day start failed: 8082={'OK' if ok1 else 'FAIL'} 8083={'OK' if ok2 else 'FAIL'}")
+    return False

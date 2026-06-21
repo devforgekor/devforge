@@ -4,14 +4,13 @@
 
 MODE=day (관찰형, 60s 주기):
   Pod A=reserved (:8080) operator
-  Pod B=day (:8082) 7B Q8 extractor
-  :8083 (14B Q6_K) day verify
-  매시 :00 → day_cycle.sh (system sync → embed(f16) → extract(7B) → verify(14B))
+  Pod B=day (:8082) extractor (day verify via model swap on :8082)
+  매시 :00 → day_cycle.sh (system sync → embed(f16) → extract → verify)
   Fix loop: Pod A (:8080)가 수정 담당
 
 MODE=night (능동형, 60s 주기):
-  Night Debate (:8081 30B P → :8082 7B R → :8083 N14B J, sequential)
-  Night Verify (:8084 27B) → review_consumer.py
+  Night Debate (:8081 P → :8082 R → :8083 J, sequential)
+  Night Verify (:8084 V) → review_consumer.py
   Proxy Audit → proxy_reviewer.py (DeepSeek Pro)
   Fix loop: watchdog이 임시 podman 검증 후 feedback 문서 생성
 """
@@ -35,8 +34,8 @@ MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 LLM_TARGETS = {
     "pod-a":     {"port": 8080, "label": "pod-a",     "day_model": "operator"},
     "day-extract": {"port": 8082, "label": "day-extract", "day_model": "extractor"},
-    "day-verify": {"port": 8083, "label": "day-verify", "day_model": "judge"},
-    # Night-only model: 27B verifier on :8084
+    "day-verify": {"port": 8082, "label": "day-verify", "day_model": "judge"},
+    # Night-only model: verifier on :8084
     "night-verify": {"port": 8084, "label": "night-verify", "day_model": None},
 }
 

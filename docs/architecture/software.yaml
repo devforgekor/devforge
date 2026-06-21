@@ -1,13 +1,13 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-06-14 09:00 KST
+# auto-generated from live data at 2026-06-21 09:46 KST
 ---
 metadata:
-  updated: 2026-06-14 09:00 KST
+  updated: 2026-06-21 09:46 KST
   source: live (collect_structural + mode file)
 models:
 - name: devforge-pod-b
   container: devforge-pod-b
-  status: Up About an hour (healthy)
+  status: Up Less than a second (starting)
   ports: 127.0.0.1:8081-8084->8081-8084/tcp, 127.0.0.1:8089->8089/tcp
 modes:
   current: day

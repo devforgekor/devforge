@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: day_cycle.py — runs after extract.py
-"""Enrich Pipeline — post-extraction metadata enrichment (tldr, intent, entities, tags).
+# Path: day_cycle.py — MCP metadata enrichment (runs after extract)
+"""Enrich Pipeline — post-extract MCP metadata enrichment (tldr, intent, entities, tags).
 
-Runs independently after extract pipeline finishes fact extraction.
-Finds turns that have extraction facts but no enrichment metadata yet, then
-generates enrichment fields (tldr, intent, entities, tags) for each turn.
-Verify step is handled separately by day_verify.py (Phase 3 in day_cycle.py).
+Runs AFTER extract pipeline in day_cycle.py to generate enrichment metadata
+(tldr, intent, entities, tags) from already-extracted facts. This feeds the
+embedding layer and verify stage.
+
+Entity verification chain:
+  1st: Substring match against source text (fast deterministic)
+  2nd: Reranker relevance check (Pod A :8080) — GROUNDED/AMBIGUOUS→keep, UNGROUNDED→drop
 
 State-based: NOT EXISTS enrich_meta is the sole filter. Checkpoint not needed.
 
@@ -22,6 +25,7 @@ import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -32,67 +36,45 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.common import strip_think
 from lib.enrich_feedback import load_enrich_feedback, format_few_shot
-from lib.llm_client import call_llm
+from lib.llm_client import call_llm, _call_nli_server, reranker_score, reranker_nli_verdict
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.token_budget import TokenBudget
 
-TIMEOUT_ENRICH = 900
+TIMEOUT_ENRICH = 900  # default, overridden by _calc_timeout per-turn
 MAX_TOKENS_ENRICH = 512
 TEMP_ENRICH = 0.1
-BATCH_LIMIT = 20
-TIME_BUDGET = 3600  # default: 1 hour budget for batch slicing
+BATCH_LIMIT = 6
+PARALLEL = 2  # concurrent LLM calls via ThreadPoolExecutor
+
+# Dynamic timeout constants (extractor model on :8082)
+TIMEOUT_BASE = 60
+TIMEOUT_PER_CHAR = 0.15  # ~3 tok/s prefill for Korean chars
+TIMEOUT_PER_TOK = 1.0    # ~1 tok/s decode
+QUEUE_MARGIN = 2.0       # account for slot queuing with parallel=2
+TIMEOUT_MAX = 3600       # absolute ceiling
 
 
-def _calc_batch_limit(time_budget: int) -> int:
-    """Estimate how many turns fit within time_budget for sequential enrich.
-
-    Per-turn estimate: prompt decode + LLM gen + reranker overhead.
-    """
-    from lib.db import psql_json
-
-    sql = (
-        "SELECT LENGTH(COALESCE(t.user_turn,'')) "
-        "  + LENGTH(COALESCE(t.text,'')) AS total_chars "
-        "FROM turns t "
-        "WHERE EXISTS ("
-        "  SELECT 1 FROM review_facts rf "
-        "  WHERE rf.turn_id = t.id "
-        "  AND rf.fact_type IN ('user','thinking','text')"
-        ")"
-        "AND NOT EXISTS ("
-        "  SELECT 1 FROM review_facts rf2 "
-        "  WHERE rf2.turn_id = t.id AND rf2.fact_type = 'enrich_meta'"
-        ")"
-        "ORDER BY t.created_at ASC"
-    )
-    rows = psql_json(sql)
-    if not rows:
-        return 0
-
-    total_est = 0.0
-    count = 0
-    for row in rows:
-        chars = row.get("total_chars", 0) or 0
-        est = min(60 + int(chars * 0.3) + 120, TIMEOUT_ENRICH)
-        if total_est + est > time_budget:
-            break
-        total_est += est
-        count += 1
-
-    return max(count, 1)
 
 SYSTEM_DAY_ENRICH = """\
 You are a conversation analyst preparing structured metadata for an MCP
 (Model Context Protocol) system. Given the original conversation turn and
 the extracted facts, produce structured MCP fields.
 
-CRITICAL: Only include entities that are EXPLICITLY named in the conversation.
-Do NOT infer or assume technologies, files, or functions that the user did
-not mention. When unsure, use an empty array [].
+CRITICAL — Entity Extraction Rule:
+An entity is ONLY valid if its exact text appears VERBATIM in user_turn or text.
+Do NOT infer, assume, or deduce entities from context, topic, or general knowledge.
+If you cannot find the EXACT string in the source, use an empty array [].
+
+Examples of REJECTED entities (common mistakes):
+  - "Python" → REJECT unless the user literally said "Python"
+  - "FastAPI" → REJECT unless the user literally said "FastAPI"
+  - "asyncio" → REJECT unless the user literally said "asyncio"
+  - "Docker" → REJECT unless the user literally said "Docker"
+These are NOT acceptable even if the conversation is clearly about them.
 
 Output STRICT JSON:
 {
-  "tldr": "One-line summary (max 15 words) — what this turn is about",
+  "tldr": "source language로 한 줄 요약 (max 15 words)",
   "intent": "question|request|report|clarification|code_change|debug|design|other",
   "category": "requirement|decision|explanation|code|reasoning|other",
   "entities": {
@@ -104,15 +86,15 @@ Output STRICT JSON:
   "tags": []
 }
 
-Rules:
+RULES (strict — follow exactly):
+- tldr: 반드시 source text의 언어로 작성 (한국어 → 한국어 tldr, 영어 → 영어 tldr)
 - tldr must be factual and directly derivable from the turn content
 - intent must be one of the enumerated values
 - category: classify the turn's primary nature — requirement (new ask), decision (choice made), explanation (how/why), code (implementation), reasoning (analysis), other
-- entities.files: only include file paths EXPLICITLY named in the turn
-- entities.technologies: only technologies EXPLICITLY named; do NOT assume common tools like Python, FastAPI unless the user said them
+- entities: VERBATIM MATCH REQUIRED in user_turn or text
+- entities.technologies: only technologies EXPLICITLY named
 - entities.functions: function/class/method names EXPLICITLY mentioned
 - tags: 2-5 keywords for discovery and routing
-- Use the extracted facts section to inform category and entity accuracy
 - If a field has no relevant data, use an empty array []"""
 
 SYSTEM_ENRICH_VERIFY = """\
@@ -297,9 +279,82 @@ _INTENT_TAG_BLOCKED = {
 }
 
 
+# ── Entity grounding check (verbatim in source) ─────────────────────────
+
+
+def _normalize(text: str) -> str:
+    """Collapse whitespace, lowercase."""
+    return " ".join(text.split()).lower()
+
+
+def _check_entity_in_source(entity: str, source: str) -> bool:
+    """Return True if entity appears verbatim (case-insensitive) in source."""
+    if not entity or not source:
+        return False
+    return _normalize(entity) in _normalize(source)
+
+
+def _verify_entities(entities: dict, user_turn: str, text: str) -> dict:
+    """Check each entity: substring 1st → reranker for failures. Drop UNGROUNDED.
+
+    Matches extract.py's NLI→reranker pattern: fast deterministic check first,
+    then reranker (topical relevance) for uncertain cases via Pod A :8080.
+    Falls back to substring-only if reranker unavailable.
+    """
+    source = f"{user_turn} {text}"
+    rejected = {}
+    verified = {}
+    for key in ("files", "technologies", "functions", "mentioned_users"):
+        items = entities.get(key, [])
+        kept = []
+        bad = []
+        for item in items:
+            if _check_entity_in_source(item, source):
+                kept.append(item)
+            else:
+                try:
+                    cos = reranker_score(item, source)
+                    grounding = reranker_nli_verdict(cos)
+                    if grounding == "UNGROUNDED":
+                        bad.append(item)
+                    else:
+                        kept.append(item)
+                except Exception:
+                    # Reranker unavailable → accept entity (substring-only fallback)
+                    kept.append(item)
+        verified[key] = kept
+        rejected[key] = bad
+    return {"entities": verified, "rejected": rejected,
+            "all_grounded": all(len(v) == 0 for v in rejected.values())}
+
+
+def _verify_tldr(tldr: str, user_turn: str, text: str) -> dict:
+    """Run NLI on tldr against source text. Returns verdict dict."""
+    if not tldr or not (user_turn or text):
+        return {"verdict": "SKIP", "label": "NEUTRAL", "score": 0.0}
+    source = f"{user_turn}\n{text}"
+    label = _call_nli_server(source, tldr, strict=False, nli_port=8085, timeout=30)
+    return {"verdict": label, "label": label, "score": 0.0}
+
+
+def _calc_timeout(total_chars: int) -> int:
+    """Dynamic timeout for enrich LLM call based on input size.
+
+    Extractor model on 4-core ARM: prefill ~3 tok/s, decode ~1 tok/s.
+    Korean chars ≈ 1 tok/char, so TIMEOUT_PER_CHAR=0.15 is ~6.7 chars/s.
+    QUEUE_MARGIN accounts for parallel=2 slot queuing.
+    """
+    prompt_s = int(total_chars * TIMEOUT_PER_CHAR)
+    decode_s = int(MAX_TOKENS_ENRICH * TIMEOUT_PER_TOK)
+    est = TIMEOUT_BASE + prompt_s + decode_s
+    est = int(est * QUEUE_MARGIN)
+    return min(est, TIMEOUT_MAX)
+
+
 def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
                          model: str = "day_enrich",
-                         extractions: Optional[List[Dict]] = None
+                         extractions: Optional[List[Dict]] = None,
+                         timeout: Optional[int] = None,
                          ) -> Optional[Dict[str, Any]]:
     """Generate enrichment metadata fields (tldr, intent, entities, tags) via *model*.
 
@@ -343,11 +398,12 @@ def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
         if feedback_text:
             system_content = SYSTEM_DAY_ENRICH + "\n\n" + feedback_text
 
+    t = timeout if timeout is not None else TIMEOUT_ENRICH
     meta = call_llm(
         [{"role": "system", "content": system_content},
          {"role": "user", "content": "\n".join(parts)}],
         model=model,
-        max_tokens=MAX_TOKENS_ENRICH, temperature=TEMP_ENRICH, timeout=TIMEOUT_ENRICH,
+        max_tokens=MAX_TOKENS_ENRICH, temperature=TEMP_ENRICH, timeout=t,
         json_mode=True, return_meta=True,
     )
     result = _parse_json(meta["content"], "enrich fields")
@@ -360,20 +416,13 @@ def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
 
 
 def _get_turns_without_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
-    """Return turns with extraction facts but no enrich_meta.
-    State-based: NOT EXISTS is the sole filter.
+    """Return turns without enrich_meta, ordered by creation time.
+    State-based: NOT EXISTS enrich_meta is the sole filter.
     """
     sql = (
         "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at "
         "FROM turns t "
-        # Has extraction facts (not enrich_meta itself)
-        "WHERE EXISTS ("
-        "  SELECT 1 FROM review_facts rf "
-        "  WHERE rf.turn_id = t.id "
-        "  AND rf.fact_type IN ('user','thinking','text')"
-        ")"
-        # Doesn't already have enrich_meta
-        "AND NOT EXISTS ("
+        "WHERE NOT EXISTS ("
         "  SELECT 1 FROM review_facts rf2 "
         "  WHERE rf2.turn_id = t.id AND rf2.fact_type = 'enrich_meta'"
         ")"
@@ -467,16 +516,13 @@ def _insert_enrich_fact(turn_id: str, fact_index: int,
 def enrich_pipeline(turn_id: Optional[str] = None,
                         limit: int = BATCH_LIMIT,
                         dry_run: bool = False,
-                        model: str = "day_enrich",
-                        time_budget: Optional[int] = None) -> Dict[str, Any]:
+                        model: str = "day_enrich") -> Dict[str, Any]:
     """Generate enrichment metadata for turns with extraction facts."""
     t_start = time.monotonic()
     print(f"\n{'=' * 60}")
     print(f"Enrich Pipeline — {model} enrich fields for extracted turns")
     if dry_run:
         print("  [DRY RUN] No writes to DB")
-    if time_budget:
-        print(f"  Time budget: {time_budget}s")
     print(f"{'=' * 60}")
 
     # Select turns
@@ -497,9 +543,6 @@ def enrich_pipeline(turn_id: Optional[str] = None,
             "created_at": r.get("created_at", ""),
         }]
     else:
-        if time_budget:
-            limit = _calc_batch_limit(time_budget)
-            print(f"  Budget-limited batch: {limit} turns")
         turns = _get_turns_without_enrich(limit)
 
     if not turns:
@@ -510,92 +553,115 @@ def enrich_pipeline(turn_id: Optional[str] = None,
 
     processed = 0
     failed = 0
+    n = len(turns)
 
+    # ── Phase 0: Pre-load extractions for all turns (fast, no LLM) ──
+    turn_data = []
     for ti, turn in enumerate(turns, 1):
         turn_id = turn["id"]
         user_turn = turn.get("user_turn", "") or ""
         thinking = turn.get("thinking", "") or ""
         text = turn.get("text", "") or ""
+        extractions = _get_turn_extractions(turn_id)
+        turn_data.append((turn_id, user_turn, thinking, text, extractions))
 
-        print(f"  [{ti}/{len(turns)}] {turn_id[:8]}", flush=True)
+    if not turn_data:
+        print("[enrich] No turns with extraction context found")
+        return {"processed": 0, "failed": 0, "elapsed_s": 0, "ok": True}
 
+    # ── Helper: process one completed LLM result (post-process → verify → store) ──
+    def _store_result(ti, tid, ut, tx, enrich_result, dr):
         try:
-            # Phase 0: Load extraction facts for enrichment context
-            extractions = _get_turn_extractions(turn_id)
-            if extractions:
-                print(f"    extractions: {len(extractions)} facts loaded", flush=True)
-            else:
-                print(f"    extractions: none found", flush=True)
-
-            # Phase 1: Generate enrichment fields with extraction context
-            print(f"    Enrich generation ({model})...", flush=True)
-            enrich_result = _generate_enrich_fields(
-                user_turn, thinking, text, model=model,
-                extractions=extractions,
-            )
             if not enrich_result:
-                print(f"    Enrich generation returned None — skipping", flush=True)
-                failed += 1
-                continue
+                print(f"  [{ti}/{n}] {tid[:8]} — LLM returned None, skipping", flush=True)
+                return False
 
-            # Phase 2: Python post-processing
-            enrich_result = _post_process_enrich(enrich_result, user_turn, text)
+            # Phase 2: Post-processing
+            enrich_result = _post_process_enrich(enrich_result, ut, tx)
 
-            # Phase 3: Log enrichment fields
+            # Phase 3: Entity grounding
+            entities_data = enrich_result.get("entities", {}) or {}
+            verified_entities = _verify_entities(entities_data, ut, tx)
+            enrich_result["entities"] = verified_entities["entities"]
+            if any(verified_entities["rejected"].values()):
+                print(f"  [{ti}/{n}] {tid[:8]} — rejected entities: "
+                      + "; ".join(f"{k}: {v}" for k, vals in
+                                  verified_entities["rejected"].items() if (v := vals)),
+                      flush=True)
+
+            # Phase 3b: TLDR NLI
             enrich_tldr = enrich_result.get("tldr", "") or ""
-            enrich_intent = enrich_result.get("intent", "other") or "other"
-            enrich_category = enrich_result.get("category", "other") or "other"
-            enrich_entities = enrich_result.get("entities", {}) or {}
-            enrich_tags = enrich_result.get("tags", []) or []
-            if enrich_tldr:
-                print(f"    tldr: {enrich_tldr}", flush=True)
-            if enrich_intent:
-                print(f"    intent: {enrich_intent}", flush=True)
-            if enrich_category:
-                print(f"    category: {enrich_category}", flush=True)
-            if enrich_entities:
-                print(f"    entities: files={len(enrich_entities.get('files',[]))}, "
-                      f"funcs={len(enrich_entities.get('functions',[]))}", flush=True)
-            if enrich_tags:
-                print(f"    tags: {enrich_tags}", flush=True)
+            tldr_verify = _verify_tldr(enrich_tldr, ut, tx)
+            enrich_result["nli_verdict"] = tldr_verify["verdict"]
+            if tldr_verify["verdict"] == "CONTRADICTION":
+                print(f"  [{ti}/{n}] {tid[:8]} — ⚠ tldr CONTRADICTION", flush=True)
 
-            # Phase 4: Store
-            if dry_run:
-                print(f"    [DRY] Would store enrichment fields for {turn_id[:8]}", flush=True)
-                processed += 1
-                continue
+            # Log
+            print(f"  [{ti}/{n}] {tid[:8]} — tldr={enrich_result.get('tldr','')[:60]} "
+                  f"intent={enrich_result.get('intent','?')} "
+                  f"entities={len(enrich_result.get('entities',{}).get('files',[]))}f/"
+                  f"{len(enrich_result.get('entities',{}).get('functions',[]))}fn",
+                  flush=True)
 
-            # Find the next fact_index for this turn
-            fi_sql = (
-                f"SELECT COALESCE(MAX(fact_index), -1) + 1 "
-                f"FROM review_facts WHERE turn_id = '{esc_sql(turn_id)}'::uuid"
-            )
+            if dr:
+                print(f"    [DRY] Would store", flush=True)
+                return True
+
+            # Store to DB
+            fi_sql = (f"SELECT COALESCE(MAX(fact_index), -1) + 1 FROM review_facts "
+                      f"WHERE turn_id = '{esc_sql(tid)}'::uuid")
             fi_str = psql(fi_sql)
             fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
 
-            # Strip _meta from stored result
-            enrich_meta = enrich_result.get("_meta", {})
-            enrich_prompt_tokens = enrich_meta.get("usage", {}).get("prompt_tokens") if enrich_meta else None
-            enrich_gen_tokens = enrich_meta.get("usage", {}).get("completion_tokens") if enrich_meta else None
-            enrich_elapsed_ms = enrich_meta.get("elapsed_ms") if enrich_meta else None
-
-            enrich_for_storage = {k: v for k, v in enrich_result.items() if k != "_meta"}
-
-            _insert_enrich_fact(turn_id, fi, json.dumps(enrich_for_storage, ensure_ascii=False),
-                             model,
-                             prompt_tokens=enrich_prompt_tokens,
-                             gen_tokens=enrich_gen_tokens,
-                             elapsed_ms=enrich_elapsed_ms)
-            print(f"    Stored enrich_meta (fact_index={fi})", flush=True)
-            processed += 1
-
+            meta = enrich_result.get("_meta", {})
+            usage = meta.get("usage", {}) if meta else {}
+            _insert_enrich_fact(
+                tid, fi,
+                json.dumps({k: v for k, v in enrich_result.items() if k != "_meta"},
+                          ensure_ascii=False),
+                model,
+                prompt_tokens=usage.get("prompt_tokens"),
+                gen_tokens=usage.get("completion_tokens"),
+                elapsed_ms=meta.get("elapsed_ms") if meta else None,
+            )
+            return True
         except Exception as e:
-            print(f"    ERROR: {type(e).__name__}: {e}", flush=True)
-            failed += 1
+            print(f"  [{ti}/{n}] {tid[:8]} — ERROR: {type(e).__name__}: {e}", flush=True)
+            return False
 
+    # ── Phase 1: Concurrent LLM generation ──
+    print(f"[enrich] Submitting {len(turn_data)} turns to LLM (parallel={PARALLEL})...",
+          flush=True)
+    llm_t0 = time.monotonic()
+
+    with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+        fut_map = {}
+        for ti, (tid, ut, th, tx, exts) in enumerate(turn_data, 1):
+            total_chars = len(ut) + len(th) + len(tx)
+            call_timeout = _calc_timeout(total_chars)
+            fut = pool.submit(_generate_enrich_fields, ut, th, tx,
+                            model=model, extractions=exts, timeout=call_timeout)
+            fut_map[fut] = (ti, tid, ut, tx)
+
+        for fut in as_completed(fut_map):
+            ti, tid, ut, tx = fut_map[fut]
+            try:
+                result = fut.result()
+                ok = _store_result(ti, tid, ut, tx, result, dry_run)
+                if ok:
+                    processed += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                print(f"  [{ti}/{n}] {tid[:8]} — LLM call failed: {type(e).__name__}: {e}",
+                      flush=True)
+                failed += 1
+
+    llm_elapsed = round(time.monotonic() - llm_t0, 1)
     elapsed = round(time.monotonic() - t_start, 1)
     print(f"\n{'=' * 60}", flush=True)
-    print(f"Done: {processed} enriched, {failed} failed ({elapsed}s)", flush=True)
+    print(f"Done: {processed} enriched, {failed} failed "
+          f"(LLM: {llm_elapsed}s, total: {elapsed}s)", flush=True)
     if dry_run:
         print("  [DRY RUN] No data was written", flush=True)
     print(f"{'=' * 60}", flush=True)
@@ -612,8 +678,6 @@ def main() -> None:
         description="Enrich Pipeline — generate enrichment fields for extracted turns")
     parser.add_argument("--turn-id", help="Process a specific turn UUID")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
-    parser.add_argument("--time-budget", "-t", type=int, default=None,
-                        help="Max estimated processing seconds for batch (default: no limit)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--model", default="day_enrich",
@@ -625,7 +689,6 @@ def main() -> None:
         limit=args.limit,
         dry_run=args.dry_run,
         model=args.model,
-        time_budget=args.time_budget,
     )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

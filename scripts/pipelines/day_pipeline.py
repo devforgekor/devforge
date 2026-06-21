@@ -112,10 +112,10 @@ def main():
     log(f"Tag: {tag}")
     log("=" * 60)
 
-    # Ensure Pod A (reserved:8080) + Pod B (7B extractor:8082)
+    # Ensure Pod A (reserved:8080) + Pod B (extract model:8082)
     log("Ensuring Pod A (reserved:8080)...")
     start_pod_a(120)
-    log("Ensuring Pod B (7B extractor:8082)...")
+    log("Ensuring Pod B (extract model:8082)...")
     start_pod_b(120)
 
     # Load input

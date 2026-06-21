@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: day_cycle.sh → day_cycle.py (Day Extract phase)
-"""Day Extract Pipeline — extract → MCP enrich on Pod B (7B:8082).
+"""Day Extract Pipeline — extract → MCP enrich on Pod B (extractor role :8082).
 
 Called at :00 by systemd timer. Runs extraction then MCP enrichment
-on the Pod B Qwen2.5-Coder-7B extractor (8082). DB only — no eval/ output.
+on the Pod B extractor model (8082). DB only — no eval/ output.
 Checkpoint-based resume: next cycle picks up from last checkpoint.
 
 Usage:
@@ -65,7 +65,7 @@ def main() -> None:
     consecutive_defer = 0
 
     log("=" * 60)
-    log("DevForge Day Extract — Pod B (7B:8082) extract + enrich")
+    log("DevForge Day Extract — Pod B (extract model:8082) extract + enrich")
     log("=" * 60)
 
     preflight_checks("day_extract.py")

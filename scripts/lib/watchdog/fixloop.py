@@ -11,7 +11,7 @@
 흐름:
   1. subprocess 실행 → stderr/stdout 캡처
   2. exit code 분석 → fix 필요 판단
-  3. 7B(or 27B) LLM에 수정 요청 (error log + context)
+  3. LLM에 수정 요청 (error log + context)
   4. 생성된 패치를 임시 podman에서 실행 검증
   5. 성공 → 적용, 실패 → 재시도 (최대 3회, backoff)
 """
@@ -156,7 +156,7 @@ def run_fix_loop(
     Args:
         error_log: stderr from failed pipeline
         context: code context or script name that failed
-        llm_port: which LLM to use for fix (7B=8080 day, 27B=8081 night)
+        llm_port: which LLM to use for fix (day=8080, night=8081)
         max_attempts: max retry count (default 3)
 
     Returns:

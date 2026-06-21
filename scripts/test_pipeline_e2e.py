@@ -174,7 +174,7 @@ def setup_test_db(samples: List[dict]) -> List[str]:
             created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
             agent TEXT,
             source_message_id TEXT,
-            embedding vector(768),
+            embedding vector(4096),
             UNIQUE(conversation_id, seq),
             UNIQUE(agent, source_message_id)
         )""",
@@ -201,7 +201,7 @@ def setup_test_db(samples: List[dict]) -> List[str]:
             fact_action TEXT,
             fact_confidence INTEGER,
             nli_verdict TEXT,
-            embedding vector(384),
+            embedding vector(4096),
             source_file TEXT,
             UNIQUE(turn_id, fact_index, extract_model)
         )""",

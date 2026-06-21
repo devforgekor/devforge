@@ -2,14 +2,14 @@
 # Path: imported by — watchdog.py (entry point only)
 """DevForge Watchdog — 통합 서버 모니터링/자동복구 데몬.
 
-  - T1+T2 LLM probe (:8080 reserved, :8082 7B Q8, :8083 14B Q6_K)
+  - T1+T2 LLM probe (:8080 reserved, :8082, :8083)
   - day_cycle.sh 파이프라인 감시 (system sync → embed → extract → verify)
   - night_cycle 타이머 감시 (day 중 kick 생략)
   - 시스템 리소스 (swap, memory, disk)
   - Day pipeline 실패 → :8082 fix loop
 
 MODE=night (능동형, 60s 주기):
-  - T1+T2 LLM probe (night 전용 :8084 27B + 공통)
+  - T1+T2 LLM probe (night 전용 :8084 verifier + 공통)
   - Night Debate 진도 감시 (night_cycle.py)
   - Night Verify 진도 감시 (review_consumer.py)
   - Proxy Audit 진도 감시 (proxy_reviewer.py)

@@ -1,18 +1,22 @@
 #!/bin/bash
 # day_cycle.sh — hourly cycle (:00)
 # Light → Heavy execution order
-#
+# Overall flow: watch=0 entry → text_clean → polish → fts5 → embed → entity_scan
+#   → Pod B extract → enrich → swap → verify (cycle complete)
+# Each phase is independent with its own budget check.
 # Pipeline Steps:
 #   System Sync       — code-structure + duckdns + worklog  (no Pod B needed)
-#   Text Preprocess   — text_clean.py : text_clean 생성 (NFKC/공백/이모지 전처리)
-#   Day Polish        — polish_batch.py (:8082, 4B Q8) — text_clean → text_clean_polished (Self-Verify 포함)
-#   FTS5 Refresh      — local_index refresh (text_clean_polished로 갱신)
-#   Day Embedding     — embed_batch.py (:8081, 8B Q8) — text_clean_polished 기준, 1회
-#   Day Extract       — day_cycle.py (:8082, 7B Q8) — extract → enrich → verify
+#   Text Preprocess   — text_clean.py : text_clean (NFKC/공백/이모지 전처리)
+#   Pod A Reranker    — ensure reranker :8080 is healthy
+#   Day Polish        — polish_batch.py (Kiwi-only, --no-llm)
+#   FTS5 Refresh      — local_index refresh (text_clean_polished)
+#   Day Embedding     — embed_batch.py (:8081) — text_clean_polished
+#   Day Entity Scan   — entity_scan.py (deterministic, regex+DB, no LLM)
+#   Day Pipeline (Pod B, swap sequential)  — extract model :8082 extract+enrich → swap → verify model :8082 verify
+#     → Entity Scan → Extract (with entity context) → Enrich → model swap → Verify
 #
 # Secrets: DUCKDNS_TOKEN in ~/.config/devforge/secrets.env
-# New turns 0 → Text Preprocess skip → Polish skip → FTS5 skip → Embed skip → Extract skip → 55m idle
-# Server philosophy: Slow but complete.
+# Server philosophy: Slow but complete. Pod A reranker always on :8080.
 
 set -o pipefail
 
@@ -69,15 +73,65 @@ LOG "day_cycle start"
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
+# Resolve day cycle phase role to physical model key (SSOT: pod_manager.DAY_PHASE_MODELS)
+_day_phase_model() {
+    python3 -c "
+import sys; sys.path.insert(0, '/opt/projects/server/scripts')
+from lib.pod_manager import DAY_PHASE_MODELS
+print(DAY_PHASE_MODELS['$1'])
+"
+}
+
+ensure_dual_day() {
+    local skip_probe="${1:-false}"
+    local timeout="${2:-600}"
+
+    # Check if both servers are already healthy
+    local ok_8082=false; local ok_8083=false
+    curl -sf "http://127.0.0.1:8082/health" >/dev/null 2>&1 && ok_8082=true
+    curl -sf "http://127.0.0.1:8083/health" >/dev/null 2>&1 && ok_8083=true
+    if $ok_8082 && $ok_8083; then
+        LOG "  Pod B already dual-day (:8082 + :8083) — skip restart"
+        return 0
+    fi
+
+    # Check protection before restart
+    if python3 -c "
+import sys; sys.path.insert(0, '$SCRIPT_DIR')
+from lib.protection import active_contexts
+ctx = active_contexts()
+tests = [c for c in ctx if c.startswith('test_')]
+if tests:
+    print(f'  [protect] test active: {tests[0]} — skip Pod B restart')
+    sys.exit(0)
+sys.exit(1)
+" 2>&1; then
+        LOG "  Pod B restart skipped (test protection active)"
+        return 0
+    fi
+
+    LOG "  Starting Pod B in swap-day mode (day-extractor :8082 → day-verifier :8082)..."
+    local probe_opt=""; [ "$skip_probe" = true ] && probe_opt=", skip_probe=True"
+    if ! timeout "$timeout" python3 -c "
+import sys; sys.path.insert(0, '$SCRIPT_DIR')
+from lib.pod_manager import ensure_dual_day
+sys.exit(0 if ensure_dual_day() else 1)
+" 2>&1; then
+        LOG "  [warn] dual-day start failed — continuing anyway"
+        return 1
+    fi
+    return 0
+}
+
 ensure_pod_b() {
     local target_mode="$1" model_key="$2" skip_probe="${3:-false}"
     local timeout="${4:-600}"
 
     # Port map (Pod B fixed ports)
-    local port="8082"  # default: extractor/reflector
+    local port="8082"
     case "$model_key" in
         embed)      port=8081 ;;
-        polish|extractor|day|review-r) port=8082 ;;
+        polish|extractor|day|review-r|day-extractor|day-verifier) port=8082 ;;
         verify-enrich|judge|review-j|test-qwen|test-nextcoder) port=8083 ;;
         verifier|verify) port=8084 ;;
     esac
@@ -89,7 +143,7 @@ ensure_pod_b() {
         return 0
     fi
 
-    # Check protection before restart — skip if any test is running
+    # Check protection before restart
     if python3 -c "
 import sys; sys.path.insert(0, '$SCRIPT_DIR')
 from lib.protection import active_contexts
@@ -115,39 +169,6 @@ sys.exit(0 if start_pod_b('$model_key', $port$probe_opt) else 1)
         return 1
     fi
     return 0
-}
-
-ensure_pod_a() {
-    local target_mode="$1"
-    local port="${2:-8080}"
-
-    local current_mode=""
-    [ -f "$MODE_ENV_A" ] && current_mode=$(grep '^MODE=' "$MODE_ENV_A" | cut -d= -f2)
-    local running=false
-    curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1 && running=true
-
-    if [ "$current_mode" = "$target_mode" ] && $running; then
-        LOG "  Pod A already $target_mode (:${port}) — skip restart"
-        return 0
-    fi
-
-    LOG "  Starting Pod A → $target_mode (:${port})..."
-    echo "MODE=$target_mode" > "$MODE_ENV_A"
-    systemctl --user stop container-devforge-pod-a 2>/dev/null || true
-    sleep 2
-    systemctl --user start container-devforge-pod-a
-
-    local waited=0
-    while [ $waited -lt 120 ]; do
-        if curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
-            LOG "  Pod A healthy (:${port}) after ${waited}s"
-            return 0
-        fi
-        sleep 2
-        waited=$((waited + 2))
-    done
-    LOG "  [warn] Pod A health check timeout (:${port}) — continuing anyway"
-    return 1
 }
 
 # ── Night window guard ───────────────────────────────────────────────
@@ -215,7 +236,22 @@ if [ -n "$ACTIVE_PROTECT" ]; then
     exit 0
 fi
 
-# ── Text Preprocess (text_clean) ────────────────────────
+# ── Pod A Reranker (Pod A reranker, :8080) — ensure always running ────────
+LOG "=== Pod A: Reranker check ==="
+if curl -sf "http://127.0.0.1:8080/health" >/dev/null 2>&1; then
+    LOG "  Pod A reranker (:8080) healthy"
+else
+    LOG "  Pod A reranker NOT healthy — restarting"
+    python3 -c "
+import sys; sys.path.insert(0, '"$SCRIPT_DIR"')
+from lib.pod_manager import start_pod_a
+sys.exit(0 if start_pod_a('reranker', 8080) else 1)
+" 2>&1
+fi
+ELAPSED=$(( $(date +%s) - START_TS ))
+LOG "Pod A check done in ${ELAPSED}s"
+
+# ── Text Preprocess (text_clean) — first step after watch=0 write ─
 NEED_CLEAN=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*)::int FROM turns WHERE text_clean IS NULL OR text_clean = ''" 2>/dev/null || echo "0")
 NEED_CLEAN=${NEED_CLEAN:-0}
@@ -233,30 +269,27 @@ else
     LOG "=== Text Preprocess: skip (0 turns need text_clean) ==="
 fi
 
-# ── Day Polish ───────────────────────────────
+# ── Day Polish (token-based batch limit) ──────────
 NEED_POLISH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*)::int FROM turns WHERE text_clean IS NOT NULL AND text_clean_polished IS NULL" 2>/dev/null || echo "0")
 NEED_POLISH=${NEED_POLISH:-0}
 
 if [ "$NEED_POLISH" -gt 0 ]; then
-    LOG "=== Day Polish (4B Q8 :8082 — ${NEED_POLISH} turns) ==="
-    ensure_pod_b "polish" "polish" false 600
-    python3 "$PIPELINE_DIR/polish_batch.py" 2>&1
+    LOG "=== Day Polish (Kiwi-only — ${NEED_POLISH} turns pending) ==="
+    python3 "$PIPELINE_DIR/polish_batch.py" --no-llm 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
-    BUDGET=$(BUDGET)
     LOG "  Polish exit=$RC, elapsed=${ELAPSED}s"
-    LOG "Budget=${BUDGET}s"
-    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+    [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
 else
     LOG "=== Day Polish: skip (0 turns to polish) ==="
 fi
 
-# ── FTS5 Refresh (text_clean_polished 기준) ─────────
+# ── FTS5 Refresh ... (text_clean_polished 기준) ─────────
 LOG "=== FTS5 Refresh ==="
 python3 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
 
-# ── Day Embedding (f16 batch) — before extract ──────────
+# ── Day Embedding (token-based batch limit) ─────
 NEED_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*)::int FROM turns WHERE embedding_f16 IS NULL" 2>/dev/null || echo "0")
 NEED_EMBED=${NEED_EMBED:-0}
@@ -267,24 +300,48 @@ if [ "$NEED_EMBED" -gt 0 ]; then
     python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
-    BUDGET=$(BUDGET)
     LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
-    LOG "Budget=${BUDGET}s"
-    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+    [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
 else
     LOG "=== Day Embedding: skip (0 unembedded turns) ==="
 fi
 
-# ── Day Extract (7B Q8 :8082) ─────────────────
-LOG "=== Day Extract (7B Q8 :8082 — extract → MCP) ==="
-ensure_pod_a "reranker"
-ensure_pod_b "day" "extractor" false 600
+# ── Entity Scan (no LLM, no Pod B) ──
+LOG "=== Entity Scan ==="
+python3 "$PIPELINE_DIR/entity_scan.py" 2>&1
+RC=$?
+ELAPSED=$(( $(date +%s) - START_TS ))
 BUDGET=$(BUDGET)
-timeout -k 10 "$BUDGET" python3 "$PIPELINE_DIR/day_cycle.py" 2>&1
+LOG "  Entity scan exit=$RC, elapsed=${ELAPSED}s"
+LOG "Budget=${BUDGET}s"
+[ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+
+# ── Day Pipeline: Extract → Enrich → swap → Verify ─
+LOG "=== Day Extract + Enrich (:8082) ==="
+ensure_pod_b "day-extract" "$(_day_phase_model day_extract)" true 1200
+python3 "$PIPELINE_DIR/extract.py" 2>&1
 RC=$?
 ELAPSED=$(( $(date +%s) - START_TS ))
 BUDGET=$(BUDGET)
 [ $RC -eq 124 ] && LOG "  Extract timed out" || LOG "  Extract exit=$RC"
+LOG "Budget=${BUDGET}s"
+
+python3 "$PIPELINE_DIR/enrich.py" 2>&1
+RC=$?
+ELAPSED=$(( $(date +%s) - START_TS ))
+BUDGET=$(BUDGET)
+[ $RC -eq 124 ] && LOG "  Enrich timed out" || LOG "  Enrich exit=$RC"
+LOG "Budget=${BUDGET}s"
+[ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+
+# Swap model: stop day-extractor, start day-verifier on :8082
+LOG "=== Day Verify (:8082) — model swap ==="
+ensure_pod_b "day-verify" "$(_day_phase_model day_verify)" true 1200
+python3 "$PIPELINE_DIR/day_verify.py" 2>&1
+RC=$?
+ELAPSED=$(( $(date +%s) - START_TS ))
+BUDGET=$(BUDGET)
+[ $RC -eq 124 ] && LOG "  Verify timed out" || LOG "  Verify exit=$RC"
 LOG "Budget=${BUDGET}s"
 [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 
