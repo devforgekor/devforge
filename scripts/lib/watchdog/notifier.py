@@ -90,29 +90,68 @@ def _build_heartbeat_blocks(state: dict) -> tuple[list, str]:
             "text": {"type": "mrkdwn", "text": "*EXPERIMENT MODE* — monitor-only, no recovery"},
         })
 
+    test_progress = state.get("test_progress")
     active_pulses = state.get("active_pulses", [])
 
-    if active_pulses:
-        # ── Test/Protection mode: show workers only ──
-        lines = []
-        for p in active_pulses:
-            name = p.get("pulse_id", "").replace("heartbeat_", "", 1)
-            age_sec = p.get("age_sec", 0)
-            age_str = f"{age_sec // 60}m" if age_sec > 60 else f"{age_sec}s"
-            inst = p.get("instruction", "")[:80]
-            lines.append(f"• *{name}* ({age_str}) — {inst}")
-        if lines:
-            blocks.append({"type": "divider"})
-            blocks.append({
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": "\n".join(lines)},
-            })
-        # Events only — no containers/services/probes during test
+    if test_progress:
+        # ── Test/Protection mode: show test progress + DB state ──
+        ctx = test_progress.get("contexts", [])
+        db = test_progress.get("db", {})
+        pulses = test_progress.get("pulses", [])
+
+        # Current phase: from test heartbeat pulse instruction
+        current_phase = ""
+        for p in pulses:
+            pid = p.get("pulse_id", "")
+            inst = p.get("instruction", "")
+            if pid.startswith("heartbeat_test_") and inst:
+                # Extract the last detail part after test name
+                parts = inst.split(None, 1)
+                if len(parts) > 1:
+                    current_phase = parts[1]
+                break
+
+        test_name = ctx[0] if ctx else "?"
+        test_age = ""
+        for p in pulses:
+            if p.get("pulse_id", "").startswith("heartbeat_test_"):
+                age_sec = p.get("age_sec", 0)
+                test_age = f"{age_sec // 60}m" if age_sec > 60 else f"{age_sec}s"
+                break
+
+        blocks.append({"type": "divider"})
+        lines = [f"🔬 *{test_name}* ({test_age})"]
+        if current_phase:
+            lines.append(f"  phase: _currently processing_ — *{current_phase}*")
+        lines.append(f"  embeddings (30m): *{db.get('embeddings_30m', '?')}*")
+        facts = db.get("facts_30m", {})
+        if facts:
+            fact_line = "  facts: " + " | ".join(f"*{k}*: {v}" for k, v in sorted(facts.items()))
+            lines.append(fact_line)
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n".join(lines)},
+        })
+
+        # Event summary
         events = state.get("events_30m", [])
         if events:
+            ev_lines = []
+            for e in events[-5:]:
+                ev_lines.append(f"  · {e.get('name','?')} — {e.get('detail','')[:60]}")
             blocks.append({
                 "type": "context",
-                "elements": [{"type": "mrkdwn", "text": f"events: {len(events)}"}],
+                "elements": [{"type": "mrkdwn", "text": "\n".join(ev_lines[-3:])}],
+            })
+
+        # Resource summary during test
+        mem = state.get("memory", {})
+        if mem:
+            blocks.append({
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text":
+                    f"mem {mem.get('pct','?')}%  swap {mem.get('swap_pct','?')}%  "
+                    f"load {mem.get('load_1m','?')}"}],
             })
         return blocks, fallback
 

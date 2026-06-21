@@ -44,25 +44,75 @@ from lib.common import strip_think
 from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.llm_client import call_llm, MODEL_REGISTRY, reranker_score, reranker_nli_verdict
 from lib.llm.json_parser import save_dlq, parse_llm_json
+from lib.watchdog.messenger import heartbeat
+from lib.pod_manager import ensure_model as _ensure_model_pod
+import threading as _threading
+
+_8082_RECOVERY_LOCK = _threading.Lock()
+
+# ── 8082 Auto-Recovery ──────────────────────────────────────────
+
+_CONNECTION_ERROR_SUBSTRINGS = (
+    "Remote end closed", "Connection reset", "Connection refused",
+    "Broken pipe", "RemoteDisconnected",
+)
+
+
+def _is_8082_connection_error(e: Exception) -> bool:
+    """Check if an exception is a 8082 connection error (not a timeout/parsing issue)."""
+    err = str(e)
+    if "8082" not in err and "extractor" not in err:
+        return False
+    return any(s in err for s in _CONNECTION_ERROR_SUBSTRINGS)
+
+
+def _recover_8082() -> None:
+    """Reload day-extractor on 8082 (thread-safe, only one recovery at a time)."""
+    if not _8082_RECOVERY_LOCK.acquire(blocking=False):
+        print("  [recovery] Another recovery in progress, waiting...", flush=True)
+        _8082_RECOVERY_LOCK.acquire(blocking=True)
+        print("  [recovery] Recovery finished by other thread", flush=True)
+        return
+    try:
+        print("  [recovery] Reloading 8082...", flush=True)
+        _ensure_model_pod('day-extractor', skip_if_healthy=False)
+        print("  [recovery] 8082 ready", flush=True)
+    except Exception as recover_err:
+        print(f"  [recovery] 8082 reload failed: {recover_err}", flush=True)
+    finally:
+        _8082_RECOVERY_LOCK.release()
+
+
+def _call_with_8082_retry(fn, *args, **kwargs):
+    """Call fn, retry once with 8082 reload on connection error."""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        if _is_8082_connection_error(e):
+            print(f"  [recovery] 8082 error: {type(e).__name__}", flush=True)
+            _recover_8082()
+            # Retry once
+            return fn(*args, **kwargs)
+        raise
 # ── Constants ──────────────────────────────────────────────────────────────
 # Timeout/token/temp for extraction (day_extract)
 TIMEOUT_EXTRACT = 900
 MAX_TOKENS_EXTRACT = 512
 TEMP_EXTRACT = 0.1
-BATCH_LIMIT = 6
+BATCH_LIMIT = 10
 TIME_BUDGET = 3600  # default: 1 hour budget for batch slicing
 
 # Dynamic timeout: estimate from input character count + generation time
-# Measured: ~9 t/s prompt, ~1.5-2.5 t/s decode
+# Measured: ~6 t/s prompt, ~1.4 t/s decode (solo), ~0.7 t/s per stream (parallel=2)
 TIMEOUT_BASE = 60
 TIMEOUT_PER_CHAR = 0.2
 MAX_CHARS_SOLO = 5000
 SOLO_TIMEOUT_FACTOR = 2.5
-GEN_TIME_BUF = 300  # 512 tok / ~2 t/s gen with parallel contention buffer
+GEN_TIME_BUF = 750  # 512 tok / ~0.7 t/s gen with parallel=2 contention on 4-core ARM
 
-# Large turn chunking: split at sentence boundaries to avoid OOM/timeout
-_MAX_EXTRACT_CHARS = 5000  # Match embed_batch SLOT_CTX
-_CHUNK_OVERLAP_CHARS = 200
+# Large turn chunking: text-only, sentence boundaries, 0 overlap
+_MAX_EXTRACT_CHARS = 3000  # text-only chunking threshold (~2.5k tokens context cliff)
+_TEXT_CHUNK_SIZE = 2000    # sentence-bounded chunk size per LLM call
 
 
 def _split_sentences(text: str) -> List[str]:
@@ -73,9 +123,8 @@ def _split_sentences(text: str) -> List[str]:
     return [s.strip() for s in sents if s.strip()]
 
 
-def _chunk_text_at_sentences(text: str, max_chars: int,
-                              overlap: int) -> List[str]:
-    """Split text into overlapping sentence-bounded chunks."""
+def _chunk_text_only(text: str, max_chars: int = _TEXT_CHUNK_SIZE) -> List[str]:
+    """Split text into sentence-bounded chunks, 0 overlap."""
     if len(text) <= max_chars:
         return [text]
     sents = _split_sentences(text)
@@ -95,31 +144,8 @@ def _chunk_text_at_sentences(text: str, max_chars: int,
             chunk.append(sents[start][:max_chars])
             end = start + 1
         chunks.append(" ".join(chunk))
-        # Overlap: start next chunk a few sentences before end for context continuity
-        # Guard: if overlap consumes all remaining sentences, we're done
-        ov = 0
-        ns = end
-        while ns > start and ov < overlap:
-            ns -= 1
-            ov += len(sents[ns])
-        start = ns if ns > start else len(sents)
+        start = end  # No overlap
     return chunks
-
-
-def _chunk_turn_text(user_turn: str, thinking: str, text: str,
-                      max_chars: int) -> List[Dict[str, str]]:
-    """Split a large turn into overlapping sentence-bounded chunks."""
-    if len(text) <= max_chars and len(thinking) <= max_chars:
-        return [{"user_turn": user_turn, "thinking": thinking, "text": text}]
-    fld, other_val = ("text", thinking) if len(text) >= len(thinking) else ("thinking", text)
-    chunks = _chunk_text_at_sentences(
-        text if fld == "text" else thinking, max_chars, _CHUNK_OVERLAP_CHARS
-    )
-    return [
-        {"user_turn": user_turn, "thinking": c if fld == "thinking" else other_val,
-         "text": c if fld == "text" else other_val}
-        for c in chunks
-    ]
 
 
 def _merge_chunk_extractions(
@@ -145,37 +171,37 @@ def _merge_chunk_extractions(
             "timings": {}, "elapsed_ms": 0}
 
 
-def _process_chunked_turn(user_turn: str, thinking: str, text: str,
-                           pulse_context: Optional[str] = None) -> Dict:
-    """Split large turn into chunks, extract each via ThreadPoolExecutor, merge results."""
-    chunks = _chunk_turn_text(user_turn, thinking, text, _MAX_EXTRACT_CHARS)
-    if not chunks:
+def _extract_section(section_type: str, source_text: str,
+                     pulse_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Extract facts from a single section with conditional chunking.
+
+    Single call unless text > _MAX_EXTRACT_CHARS (3000).
+    When chunked: sequential sentence-bounded chunks, 0 overlap, no Metal contention.
+    """
+    if not source_text:
         return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
 
-    results: List[Optional[Dict]] = []
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        fut_map = {}
-        for i, c in enumerate(chunks):
-            cu, ct, cx = c["user_turn"], c["thinking"], c["text"]
-            t = _calc_timeout(len(cu) + len(ct) + len(cx))
-            fut = pool.submit(_extract_facts, cu, ct, cx,
-                              pulse_context=pulse_context, timeout=t)
-            fut_map[fut] = i
+    if len(source_text) <= _MAX_EXTRACT_CHARS:
+        return _extract_single(section_type, source_text, pulse_context=pulse_context)
 
-        for fut in as_completed(fut_map):
-            try:
-                ex = fut.result()
-                if ex:
-                    results.append(ex)
-            except Exception as e:
-                idx = fut_map[fut]
-                print(f"      [chunk {idx}] failed: {e}", flush=True)
+    # Chunked path: sequential to avoid slot contention on 4-core ARM
+    chunks = _chunk_text_only(source_text)
+    results: List[Optional[Dict]] = []
+    t0 = time.monotonic()
+    for i, c in enumerate(chunks):
+        print(f"      [{section_type} chunk {i+1}/{len(chunks)}] ({len(c)} chars)", flush=True)
+        timeout = _calc_timeout(len(c))
+        res = _extract_single(section_type, c, pulse_context=pulse_context, timeout=timeout)
+        if res:
+            results.append(res)
 
     if not results:
-        return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
+        return None
     merged = _merge_chunk_extractions(results)
     n = len(merged.get("extractions", []))
-    print(f"      [chunked] {len(chunks)} chunks → {n} facts (deduped, parallel=2)", flush=True)
+    elapsed = int((time.monotonic() - t0) * 1000)
+    merged["elapsed_ms"] = elapsed
+    print(f"      [{section_type} chunked] {len(chunks)} sequential chunks → {n} facts", flush=True)
     return merged
 
 
@@ -209,20 +235,17 @@ No punctuation. No explanation.
 SOURCE: {source}
 EVIDENCE: {evidence}"""
 
-# ── System prompts ─────────────────────────────────────────────────────────
-SYSTEM_DAY_EXTRACT = """\
-You are a fact extractor for a developer-assistant conversation turn.
-Each turn has three parts: user_turn (the user's message), thinking (the
-model's internal reasoning, may be empty), and text (the model's response).
+# ── Section-specific System prompts ──────────────────────────────────────────
+_SYSTEM_USER_EXTRACT = """\
+You are a fact extractor for a developer conversation. Given a USER MESSAGE,
+extract key factual statements that are EXPLICITLY present in the message.
 
-Extract key factual statements that are EXPLICITLY present in the text.
 Do NOT infer, summarize, or add information not present in the source.
 
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "fact_type": "user|thinking|text",
       "evidence": "Exact quote or close paraphrase from the source",
       "category": "requirement|decision|explanation|code|reasoning|other"
     }
@@ -230,10 +253,50 @@ Output STRICT JSON:
 }
 
 Rules:
-- fact_type must match which source field the evidence came from
 - evidence must be directly traceable to the source text
-- Skip thinking if it is empty or contains only formatting
-- Extract at most 5 facts per fact_type
+- Extract at least 1 fact if there is meaningful content
+- If nothing extractable, return {"extractions": []}"""
+
+_SYSTEM_THINKING_EXTRACT = """\
+You are a fact extractor for a developer conversation. Given the ASSISTANT'S
+INTERNAL REASONING (thinking), extract key factual statements.
+
+Do NOT infer, summarize, or add information not present in the source.
+
+Output STRICT JSON:
+{
+  "extractions": [
+    {
+      "evidence": "Exact quote or close paraphrase from the source",
+      "category": "requirement|decision|explanation|code|reasoning|other"
+    }
+  ]
+}
+
+Rules:
+- evidence must be directly traceable to the source text
+- Extract at least 1 fact if there is meaningful content
+- If thinking is empty or contains only formatting, return {"extractions": []}"""
+
+_SYSTEM_TEXT_EXTRACT = """\
+You are a fact extractor for a developer conversation. Given the ASSISTANT'S
+RESPONSE (text), extract key factual statements that are EXPLICITLY present.
+
+Do NOT infer, summarize, or add information not present in the source.
+
+Output STRICT JSON:
+{
+  "extractions": [
+    {
+      "evidence": "Exact quote or close paraphrase from the source",
+      "category": "requirement|decision|explanation|code|reasoning|other"
+    }
+  ]
+}
+
+Rules:
+- evidence must be directly traceable to the source text
+- Extract at least 1 fact if there is meaningful content
 - If nothing extractable, return {"extractions": []}"""
 
 SYSTEM_DESCRIBE_FILE = """\
@@ -307,6 +370,9 @@ def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict
 
 
 # ── Reranker faithfulness via Pod A (MODEL_REGISTRY) ──────────────────
+
+# Backward compat aliases for test files
+SYSTEM_DAY_EXTRACT = _SYSTEM_TEXT_EXTRACT
 
 
 def _rerank_score(evidence: str, source: str) -> float:
@@ -504,44 +570,49 @@ def _load_entity_context(turn_id: str) -> Optional[str]:
     return "\n".join(parts)
 
 
-def _extract_facts(user_turn: str, thinking: str, text: str,
-                   pulse_context: Optional[str] = None,
-                   timeout: Optional[int] = None) -> Optional[Dict[str, Any]]:
-    """Run day_extract extraction. Returns {extractions, usage, timings, elapsed_ms}."""
-    parts = [
-        "=== user_turn ===",
-        user_turn or "(empty)",
-        "",
-        "=== thinking ===",
-        thinking or "(empty)",
-        "",
-        "=== text ===",
-        text or "(empty)",
-    ]
+def _extract_single(section_type: str, source_text: str,
+                    pulse_context: Optional[str] = None,
+                    timeout: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """Extract facts from a single section (user/thinking/text).
 
-    system_prompt = SYSTEM_DAY_EXTRACT
-    user_prompt = "\n".join(parts)
+    Returns {extractions, usage, timings, elapsed_ms} or None on parse failure.
+    Each extraction gets fact_type pre-set to section_type.
+    """
+    if not source_text:
+        return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
+
+    prompt_map = {
+        "user": _SYSTEM_USER_EXTRACT,
+        "thinking": _SYSTEM_THINKING_EXTRACT,
+        "text": _SYSTEM_TEXT_EXTRACT,
+    }
+    system_prompt = prompt_map.get(section_type, _SYSTEM_TEXT_EXTRACT)
     if pulse_context:
         system_prompt = f"{pulse_context}\n\n{system_prompt}"
 
-    meta = call_llm(
+    if timeout is None:
+        timeout = _calc_timeout(len(source_text))
+
+    meta = _call_with_8082_retry(
+        call_llm,
         [{"role": "system", "content": system_prompt},
-         {"role": "user", "content": "\n".join(parts)}],
+         {"role": "user", "content": source_text}],
         model="day_extract",
         max_tokens=MAX_TOKENS_EXTRACT, temperature=TEMP_EXTRACT,
-        timeout=timeout if timeout is not None else TIMEOUT_EXTRACT,
-        json_mode=True, return_meta=True,
+        timeout=timeout, json_mode=True, return_meta=True,
     )
     raw = meta["content"]
-    parsed = _parse_json(raw, "day_extract", attempt=1)
+    parsed = _parse_json(raw, f"day_extract_{section_type}")
     if parsed is None:
         return None
     ex = parsed.get("extractions", [])
-    result = {"extractions": ex, "usage": meta["usage"], "timings": meta["timings"],
-              "elapsed_ms": meta["elapsed_ms"]} if isinstance(ex, list) else None
-    if result and "rubric_evaluation" in parsed:
-        result["rubric_evaluation"] = parsed["rubric_evaluation"]
-    return result
+    if not isinstance(ex, list):
+        return None
+    # Tag each extraction with its source section
+    for e in ex:
+        e["fact_type"] = section_type
+    return {"extractions": ex, "usage": meta["usage"], "timings": meta["timings"],
+            "elapsed_ms": meta["elapsed_ms"]}
 
 
 # ── Phase 3: Reranker faithfulness verify ──────────────────────────────
@@ -809,7 +880,7 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "    WHERE rf.turn_id = t.id "
         "    AND rf.source = 'extract_pipeline'"
         "  ) "
-        "ORDER BY t.created_at ASC "
+        "ORDER BY t.created_at DESC "
         f"LIMIT {limit}"
     )
     rows = psql_json(sql)
@@ -836,40 +907,79 @@ PARALLEL = 2
 
 
 def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[dict, Optional[Dict[str, Any]], Optional[str]]:
-    """Wrapper for parallel LLM call. Auto-chunks large turns at sentence boundaries.
-    Returns (turn, ex_result_or_None, error_str_or_None)."""
+    """Section-based extraction: user → thinking → text (text may chunk if >3000 chars).
+
+    Each section is extracted independently with its own prompt.
+    Text section uses sequential chunking when >3000 chars (no Metal contention).
+    Returns (turn, merged_result_or_None, error_str_or_None).
+    """
     user_turn = turn.get("user_turn") or ""
     thinking = turn.get("thinking") or ""
     text = turn.get("text") or ""
-    total_chars = len(user_turn) + len(thinking) + len(text)
 
-    # Phase 0: Inject entity context from entity_scan
+    # Inject entity context for text extraction (files/functions from entity_scan)
     entity_context = _load_entity_context(turn.get("id", ""))
-    if entity_context:
-        pulse_context = (
-            f"{pulse_context}\n\n{entity_context}"
-            if pulse_context
-            else entity_context
-        )
 
-    # Large turn: chunk at sentence boundaries to avoid OOM/timeout
-    if total_chars > _MAX_EXTRACT_CHARS:
+    all_extractions: List[Dict] = []
+    total_usage: Dict[str, int] = {}
+    total_elapsed_ms = 0.0
+
+    # 1. User section — single call (>3000 chars → auto-chunked)
+    if user_turn:
         try:
-            ex_result = _process_chunked_turn(user_turn, thinking, text, pulse_context)
-            return (turn, ex_result, None)
+            t0 = time.monotonic()
+            res = _extract_section("user", user_turn, pulse_context=None)
+            if res and res.get("extractions"):
+                all_extractions.extend(res["extractions"])
+                _merge_usage(total_usage, res.get("usage", {}))
+                total_elapsed_ms += time.monotonic() - t0
+                print(f"      [user] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
         except Exception as e:
-            return (turn, None, str(e))
+            print(f"      [user section] failed: {e}", flush=True)
+    time.sleep(3)  # cooldown between sections to reduce 8082 crash rate
 
-    # Standard single-call path
-    solo = total_chars > MAX_CHARS_SOLO
-    timeout = _calc_timeout(total_chars, solo=solo)
-    try:
-        ex_result = _extract_facts(user_turn, thinking, text,
-                                   pulse_context=pulse_context,
-                                   timeout=timeout)
-        return (turn, ex_result, None)
-    except Exception as e:
-        return (turn, None, str(e))
+    # 2. Thinking section — single call (>3000 chars → auto-chunked)
+    if thinking and len(thinking.strip()) > 5:
+        try:
+            t0 = time.monotonic()
+            res = _extract_section("thinking", thinking, pulse_context=None)
+            if res and res.get("extractions"):
+                all_extractions.extend(res["extractions"])
+                _merge_usage(total_usage, res.get("usage", {}))
+                total_elapsed_ms += time.monotonic() - t0
+                print(f"      [thinking] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
+        except Exception as e:
+            print(f"      [thinking section] failed: {e}", flush=True)
+    time.sleep(3)  # cooldown between sections
+
+
+    # 3. Text section — single or chunked (same _extract_section logic)
+    if text:
+        try:
+            t0 = time.monotonic()
+            res = _extract_section("text", text, pulse_context=entity_context)
+            if res and res.get("extractions"):
+                all_extractions.extend(res["extractions"])
+                _merge_usage(total_usage, res.get("usage", {}))
+                total_elapsed_ms += time.monotonic() - t0
+                print(f"      [text] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
+        except Exception as e:
+            print(f"      [text section] failed: {e}", flush=True)
+
+    if not all_extractions:
+        return (turn, None, "all sections returned empty")
+
+    return (turn, {"extractions": all_extractions, "usage": total_usage,
+                    "timings": {}, "elapsed_ms": total_elapsed_ms}, None)
+
+
+def _merge_usage(target: Dict[str, int], usage: Dict) -> None:
+    """Merge usage dict (prompt_tokens, completion_tokens) into target."""
+    if not usage:
+        return
+    for k in ("prompt_tokens", "completion_tokens"):
+        v = usage.get(k, 0) or 0
+        target[k] = (target.get(k, 0) or 0) + v
 
 
 # ── Main pipeline ──────────────────────────────────────────────────────────
@@ -881,6 +991,7 @@ def extract_pipeline(
 ) -> Dict[str, Any]:
     """Run extraction → reranker verify → store per turn."""
     t_start = time.monotonic()
+    heartbeat("day_extract", "pipeline_start")
 
     print(f"\n{'=' * 60}")
     print(f"Extract Pipeline — LLM extract → reranker verify → store")
@@ -1041,6 +1152,7 @@ def extract_pipeline(
                 _insert_mark(turn_id_val, mark, used_model, is_final=False)
 
             print(f"  [extract]   Stored {fi} facts", flush=True)
+            heartbeat("day_extract", f"turn {turn_id_val[:8]} stored {fi} facts")
             total_facts += fi
             processed += 1
 
@@ -1164,7 +1276,14 @@ def main() -> None:
     parser.add_argument("--pulse-context", help="Inject Watchdog Pulse context")
     parser.add_argument("--describe-files", action="store_true",
                         help="Scan file_registry for undescribed files and generate descriptions")
+    parser.add_argument("--parallel", type=int, default=None,
+                        help="Override parallel workers (default: PARALLEL constant)")
     args = parser.parse_args()
+
+    if args.parallel is not None:
+        global PARALLEL
+        PARALLEL = args.parallel
+        print(f"  [extract] PARALLEL overridden to {PARALLEL}", flush=True)
 
     if args.describe_files:
         result = describe_file_batch(dry_run=args.dry_run, limit=args.limit)

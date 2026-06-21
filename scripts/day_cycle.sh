@@ -200,11 +200,11 @@ LOG "=== System: watchdog liveness ==="
 LIVENESS_AGE=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
     "SELECT EXTRACT(EPOCH FROM (now() - liveness_ts))::int FROM watchdog_liveness WHERE component='watchdog_main'" 2>/dev/null || echo "0")
 LIVENESS_AGE=${LIVENESS_AGE:-0}
-if [ "$LIVENESS_AGE" -gt 900 ] 2>/dev/null; then
-    LOG "  WATCHDOG STALE: ${LIVENESS_AGE}s since last liveness update"
+if [ "$LIVENESS_AGE" -gt 3900 ] 2>/dev/null; then
+    LOG "  WATCHDOG STALE: ${LIVENESS_AGE}s — no liveness for >1 cycle"
     _slack_alert \
         "Watchdog Dead Man's Switch" \
-        "watchdog_main last liveness ${LIVENESS_AGE}s ago. Run: systemctl --user status devforge-watchdog" \
+        "watchdog_main last liveness ${LIVENESS_AGE}s ago (threshold: 1 cycle=3900s). Run: systemctl --user status devforge-watchdog" \
         "danger"
 else
     LOG "  watchdog OK (${LIVENESS_AGE}s ago)"
@@ -297,7 +297,7 @@ NEED_EMBED=${NEED_EMBED:-0}
 if [ "$NEED_EMBED" -gt 0 ]; then
     LOG "=== Day Embedding (${NEED_EMBED} unembedded turns) ==="
     ensure_pod_b "embed" "embed" true 1200
-    python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
+    python3 "$PIPELINE_DIR/embed_batch.py" --limit 10 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
@@ -308,7 +308,7 @@ fi
 
 # ── Entity Scan (no LLM, no Pod B) ──
 LOG "=== Entity Scan ==="
-python3 "$PIPELINE_DIR/entity_scan.py" 2>&1
+python3 "$PIPELINE_DIR/entity_scan.py" --limit 10 2>&1
 RC=$?
 ELAPSED=$(( $(date +%s) - START_TS ))
 BUDGET=$(BUDGET)
@@ -319,14 +319,14 @@ LOG "Budget=${BUDGET}s"
 # ── Day Pipeline: Extract → Enrich → swap → Verify ─
 LOG "=== Day Extract + Enrich (:8082) ==="
 ensure_pod_b "day-extract" "$(_day_phase_model day_extract)" true 1200
-python3 "$PIPELINE_DIR/extract.py" 2>&1
+python3 "$PIPELINE_DIR/extract.py" --limit 10 2>&1
 RC=$?
 ELAPSED=$(( $(date +%s) - START_TS ))
 BUDGET=$(BUDGET)
 [ $RC -eq 124 ] && LOG "  Extract timed out" || LOG "  Extract exit=$RC"
 LOG "Budget=${BUDGET}s"
 
-python3 "$PIPELINE_DIR/enrich.py" 2>&1
+python3 "$PIPELINE_DIR/enrich.py" --limit 10 2>&1
 RC=$?
 ELAPSED=$(( $(date +%s) - START_TS ))
 BUDGET=$(BUDGET)
@@ -337,7 +337,7 @@ LOG "Budget=${BUDGET}s"
 # Swap model: stop day-extractor, start day-verifier on :8082
 LOG "=== Day Verify (:8082) — model swap ==="
 ensure_pod_b "day-verify" "$(_day_phase_model day_verify)" true 1200
-python3 "$PIPELINE_DIR/day_verify.py" 2>&1
+python3 "$PIPELINE_DIR/day_verify.py" --limit 10 2>&1
 RC=$?
 ELAPSED=$(( $(date +%s) - START_TS ))
 BUDGET=$(BUDGET)

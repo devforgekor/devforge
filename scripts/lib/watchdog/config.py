@@ -86,6 +86,10 @@ HEARTBEAT_STALE_SEC = 1800  # 30min without heartbeat → hang 판정
 HEARTBEAT_WORKERS: dict[str, int] = {
     "embed_batch": 1800,            # embed_batch.py batch loop
     "liveness_embed_batch": 1800,   # background liveness thread (embed_batch.py)
+    "entity_scan": 1800,            # entity_scan.py — Phase 0: deterministic entity scan loop
+    "day_extract": 1800,            # extract.py — Phase 1: LLM extraction pipeline
+    "day_enrich": 1800,             # enrich.py — Phase 2: LLM enrichment pipeline
+    "day_verify": 1800,             # day_verify.py — Phase 3: verification pipeline
 }  # worker_name → max_age_seconds. Only register workers that actually call heartbeat().
 
 # ── 임시 podman 검증 ───────────────────────────────────────────────

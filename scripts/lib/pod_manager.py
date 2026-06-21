@@ -21,6 +21,7 @@ import subprocess
 import time
 import urllib.request
 from datetime import datetime, timezone
+from typing import Optional
 
 from lib.protection import protected_ports
 
@@ -132,6 +133,7 @@ MODEL_METADATA = {
         "model_name": "day-extractor", "ctx": 8192,
         "threads": 4, "threads_batch": 4,
         "parallel": 2, "ubatch_size": 512,
+        "cache_type_k": "q8_0", "cache_type_v": "q8_0",
     },
     "day-verifier": {
         "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
@@ -139,6 +141,7 @@ MODEL_METADATA = {
         "model_name": "day-verifier", "ctx": 4096,
         "threads": 4, "threads_batch": 4,
         "parallel": 2, "ubatch_size": 512,
+        "cache_type_k": "q8_0", "cache_type_v": "q8_0",
     },
 }
 
@@ -273,6 +276,43 @@ def _check_container_health(port, label):
     for w in warnings:
         log(f"  [container-warn] {w}")
     return len(warnings) == 0, warnings
+
+
+# ── Model Fingerprint ──────────────────────────────────────────────
+# Verify the correct model is running on a port, not just that port is alive.
+
+
+def _get_model_fingerprint(port):
+    """Return the GGUF filename running on *port*, or None if unavailable."""
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/models")
+        with urllib.request.urlopen(req, timeout=3) as r:
+            data = json.loads(r.read())
+            models = data.get("models", [])
+            if models:
+                path = models[0].get("model", "") or models[0].get("name", "")
+                if path:
+                    return os.path.basename(path)
+    except Exception:
+        pass
+    return None
+
+
+def _check_model_identity(port, model_key):
+    """Check if the model running on *port* matches the expected model for *model_key*.
+
+    Returns True if match, False if wrong model, True if can't verify (fails open).
+    """
+    expected_file = MODEL_METADATA.get(model_key, {}).get("file")
+    if not expected_file:
+        return True  # can't verify, allow
+    actual_file = _get_model_fingerprint(port)
+    if not actual_file:
+        return True  # can't reach /v1/models, allow (fails open)
+    ok = actual_file == expected_file
+    if not ok:
+        log(f"  [model-id] :{port} has {actual_file}, expected {expected_file}")
+    return ok
 
 
 # Models requiring night-mode isolation (heavy, background timer conflict -> OOM risk)
@@ -504,9 +544,12 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
             req = urllib.request.Request(f"http://127.0.0.1:{meta['port']}/health")
             with urllib.request.urlopen(req, timeout=3) as r:
                 if r.status == 200:
-                    log(f"  :{meta['port']} already healthy — skip restart")
-                    _check_container_health(meta['port'], physical_name)
-                    return True
+                    if _check_model_identity(meta['port'], physical_name):
+                        log(f"  :{meta['port']} already healthy and correct model — skip restart")
+                        _check_container_health(meta['port'], physical_name)
+                        return True
+                    else:
+                        log(f"  :{meta['port']} healthy but wrong model — restart needed")
         except Exception:
             pass
     if meta["port"] == 8080:
@@ -544,6 +587,9 @@ def _write_dual_env() -> None:
             ("cache_ram", "CACHE_RAM"), ("mlock", "MLOCK"),
             ("batch_size", "BATCH_SIZE"), ("ubatch_size", "UBATCH_SIZE"),
             ("parallel", "PARALLEL"),
+            ("cache_type_k", "CACHE_TYPE_K"),
+            ("cache_type_v", "CACHE_TYPE_V"),
+            ("flash_attn", "FLASH_ATTN"),
         ]:
             val = f(key)
             if val is not None and val != "":

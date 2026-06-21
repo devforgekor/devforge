@@ -114,7 +114,7 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
     Mode-aware: night-only timers are NOT kicked during day mode and vice versa.
     """
     night_timers = {"devforge-night-cycle.timer"}
-    day_timers = {"devforge-day-cycle.timer"}
+    day_timers = set()  # Async pipeline — watchdog manages cycle timing directly
 
     for timer in check_all_timers():
         tracker = _state.get(f"timer:{timer['name']}")
@@ -224,7 +224,7 @@ def run_day_checks(dry_run: bool = False) -> dict:
 
         results["probes"].append(probe)
 
-    pipe_name, _ = check_pipeline("day_cycle.py")
+    pipe_name, _ = check_pipeline("day_cycle.sh")
     results["pipeline_running"] = pipe_name
 
     _run_common_checks(results, dry_run, "day")
@@ -235,8 +235,8 @@ def run_day_checks(dry_run: bool = False) -> dict:
         try:
             from lib.enrich_feedback import collect_verify_feedback
             collect_verify_feedback()
-        except Exception:
-            pass  # non-critical; best-effort
+        except Exception as e:
+            log(f"collect_verify_feedback error: {e}")
 
     return results
 
@@ -307,6 +307,30 @@ def _get_active_pulses() -> list[dict]:
         return rows or []
     except Exception:
         return []
+def _get_test_db_progress() -> dict:
+    """Query DB for recent pipeline activity (last 30min)."""
+    try:
+        emb = psql_json(
+            "SELECT count(*) AS cnt FROM embeddings "
+            "WHERE created_at > now() - interval '30 minutes'"
+        ) or [{"cnt": 0}]
+        facts = psql_json(
+            "SELECT fact_type, count(*) AS cnt FROM review_facts "
+            "WHERE created_at > now() - interval '30 minutes' "
+            "GROUP BY fact_type ORDER BY fact_type"
+        ) or []
+        marks = psql_json(
+            "SELECT count(*) AS cnt FROM review_facts "
+            "WHERE fact_type = 'marker' "
+            "AND created_at > now() - interval '30 minutes'"
+        ) or [{"cnt": 0}]
+        return {
+            "embeddings_30m": emb[0]["cnt"] if emb else 0,
+            "facts_30m": {r["fact_type"]: r["cnt"] for r in facts},
+            "markers_30m": marks[0]["cnt"] if marks else 0,
+        }
+    except Exception:
+        return {}
 
 
 # ── Heartbeat ──────────────────────────────────────────────────────
@@ -351,9 +375,24 @@ def build_heartbeat_summary(day_results: dict) -> dict:
         except Exception:
             pass
 
+    # Detect test/protection active → collect progress from DB
+    from lib.protection import active_contexts
+    protect_ctx = active_contexts()
+    test_progress = None
+    if protect_ctx:
+        try:
+            test_progress = {
+                "contexts": protect_ctx,
+                "db": _get_test_db_progress(),
+                "pulses": _get_active_pulses(),
+            }
+        except Exception:
+            pass
+
     return {
         "mode": mode,
         "experiment_active": experiment_active,
+        "test_progress": test_progress,
         "containers": containers,
         "services": services,
         "timers": timers,
@@ -400,7 +439,7 @@ def _fix_loop_common(pipe: str, llm_port: int):
 
 
 def day_fix_loop():
-    """Day mode: fix loop for day_cycle.py failures (Pod A :8080)."""
+    """Day mode: fix loop for day_cycle.sh failures (Pod A :8080)."""
     if _test_active:
         log(f"  SKIP day fix loop — protection active ({_test_active})")
         return
@@ -492,14 +531,11 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
             log(f"  Auto-resolved stale pulse heartbeat_{sb['worker']}")
 
         if _state.should_heartbeat(HEARTBEAT_INTERVAL):
-            if is_experiment_active() or not _test_active:
-                try:
-                    summary = build_heartbeat_summary(results)
-                    heartbeat(summary)
-                except Exception as e:
-                    log(f"heartbeat error: {e}")
-            else:
-                log(f"  heartbeat skipped (test active — _test_active={_test_active})")
+            try:
+                summary = build_heartbeat_summary(results)
+                heartbeat(summary)
+            except Exception as e:
+                log(f"heartbeat error: {e}")
 
         if one_shot:
             break

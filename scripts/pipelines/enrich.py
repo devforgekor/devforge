@@ -36,14 +36,15 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.common import strip_think
 from lib.enrich_feedback import load_enrich_feedback, format_few_shot
-from lib.llm_client import call_llm, _call_nli_server, reranker_score, reranker_nli_verdict
+from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, reranker_nli_verdict
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.token_budget import TokenBudget
+from lib.watchdog.messenger import heartbeat
 
 TIMEOUT_ENRICH = 900  # default, overridden by _calc_timeout per-turn
 MAX_TOKENS_ENRICH = 512
 TEMP_ENRICH = 0.1
-BATCH_LIMIT = 6
+BATCH_LIMIT = 10
 PARALLEL = 2  # concurrent LLM calls via ThreadPoolExecutor
 
 # Dynamic timeout constants (extractor model on :8082)
@@ -328,13 +329,50 @@ def _verify_entities(entities: dict, user_turn: str, text: str) -> dict:
             "all_grounded": all(len(v) == 0 for v in rejected.values())}
 
 
+# ── TLDR NLI Self-Verify (LLM-based, same pattern as extract.py) ──
+_NLI_TLDR_PROMPT = """You are verifying whether a TLDR summary is factually supported by the SOURCE conversation turn.
+
+Follow these steps:
+1. Read the source turn carefully.
+2. Check if the TLDR summary is supported by the source.
+
+LABELS:
+- ENTAILMENT: The TLDR is factually supported by the source.
+- CONTRADICTION: The TLDR contradicts the source — they cannot both be true.
+- NEUTRAL: The TLDR is related but not directly verifiable from the source.
+
+Output EXACTLY one word: ENTAILMENT | CONTRADICTION | NEUTRAL
+No punctuation. No explanation.
+
+SOURCE: {source}
+TLDR: {tldr}"""
+
+
 def _verify_tldr(tldr: str, user_turn: str, text: str) -> dict:
-    """Run NLI on tldr against source text. Returns verdict dict."""
+    """Run LLM NLI on tldr against source text. Returns verdict dict.
+
+    Replaces the DeBERTa-v3 NLI server (port 8085 was never deployed).
+    Uses the loaded extractor model on :8082 instead.
+    """
     if not tldr or not (user_turn or text):
         return {"verdict": "SKIP", "label": "NEUTRAL", "score": 0.0}
     source = f"{user_turn}\n{text}"
-    label = _call_nli_server(source, tldr, strict=False, nli_port=8085, timeout=30)
-    return {"verdict": label, "label": label, "score": 0.0}
+    prompt = _NLI_TLDR_PROMPT.format(source=source[:2000], tldr=tldr[:500])
+    try:
+        meta = call_llm_with_retry(
+            [{"role": "user", "content": prompt}],
+            model="day_enrich",
+            max_tokens=16, temperature=0.0, timeout=60,
+            return_meta=True,
+        )
+        raw = meta["content"].strip().upper()
+        for tok in raw.replace("\n", " ").split():
+            tok = tok.strip(".,!?;:\"'()[]")
+            if tok in ("ENTAILMENT", "CONTRADICTION", "NEUTRAL"):
+                return {"verdict": tok, "label": tok, "score": 0.0}
+    except Exception:
+        pass
+    return {"verdict": "NEUTRAL", "label": "NEUTRAL", "score": 0.0}
 
 
 def _calc_timeout(total_chars: int) -> int:
@@ -399,7 +437,7 @@ def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
             system_content = SYSTEM_DAY_ENRICH + "\n\n" + feedback_text
 
     t = timeout if timeout is not None else TIMEOUT_ENRICH
-    meta = call_llm(
+    meta = call_llm_with_retry(
         [{"role": "system", "content": system_content},
          {"role": "user", "content": "\n".join(parts)}],
         model=model,
@@ -426,7 +464,7 @@ def _get_turns_without_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "  SELECT 1 FROM review_facts rf2 "
         "  WHERE rf2.turn_id = t.id AND rf2.fact_type = 'enrich_meta'"
         ")"
-        "ORDER BY t.created_at ASC "
+        "ORDER BY t.created_at DESC "
         f"LIMIT {limit}"
     )
     rows = psql_json(sql)
@@ -519,6 +557,7 @@ def enrich_pipeline(turn_id: Optional[str] = None,
                         model: str = "day_enrich") -> Dict[str, Any]:
     """Generate enrichment metadata for turns with extraction facts."""
     t_start = time.monotonic()
+    heartbeat("day_enrich", "pipeline_start")
     print(f"\n{'=' * 60}")
     print(f"Enrich Pipeline — {model} enrich fields for extracted turns")
     if dry_run:
@@ -650,6 +689,7 @@ def enrich_pipeline(turn_id: Optional[str] = None,
                 ok = _store_result(ti, tid, ut, tx, result, dry_run)
                 if ok:
                     processed += 1
+                    heartbeat("day_enrich", f"turn {tid[:8]} done")
                 else:
                     failed += 1
             except Exception as e:

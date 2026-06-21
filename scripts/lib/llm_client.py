@@ -22,6 +22,7 @@ Usage::
 
 import json
 import socket
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -307,4 +308,54 @@ def call_llm_json(
 ) -> str:
     """Convenience wrapper — same as ``call_llm(…, json_mode=True)``."""
     return call_llm(messages, model, json_mode=True, **kwargs)
+
+
+# ── 8082 Auto-Recovery ──────────────────────────────────────────────
+# Used by extract.py, enrich.py, day_verify.py to recover from 8082 crashes.
+# Import call_llm_with_retry from this module instead of duplicating logic.
+
+_8082_RECOVERY_LOCK = threading.Lock()
+
+_CONNECTION_ERROR_SUBSTRINGS = (
+    "Remote end closed", "Connection reset", "Connection refused",
+    "Broken pipe", "RemoteDisconnected",
+)
+
+
+def is_8082_connection_error(e: Exception) -> bool:
+    """Check if an exception is a 8082 connection error."""
+    err = str(e)
+    if "8082" not in err and "extractor" not in err:
+        return False
+    return any(s in err for s in _CONNECTION_ERROR_SUBSTRINGS)
+
+
+def recover_8082() -> None:
+    """Reload day-extractor on 8082 (thread-safe, only one recovery at a time)."""
+    if not _8082_RECOVERY_LOCK.acquire(blocking=False):
+        print("  [recovery] Another recovery in progress, waiting...", flush=True)
+        _8082_RECOVERY_LOCK.acquire(blocking=True)
+        print("  [recovery] Recovery finished by other thread", flush=True)
+        return
+    try:
+        print("  [recovery] Reloading 8082...", flush=True)
+        from lib.pod_manager import ensure_model
+        ensure_model('day-extractor', skip_if_healthy=False)
+        print("  [recovery] 8082 ready", flush=True)
+    except Exception as recover_err:
+        print(f"  [recovery] 8082 reload failed: {recover_err}", flush=True)
+    finally:
+        _8082_RECOVERY_LOCK.release()
+
+
+def call_llm_with_retry(*args, **kwargs):
+    """Call call_llm, retry once with 8082 reload on connection error."""
+    try:
+        return call_llm(*args, **kwargs)
+    except Exception as e:
+        if is_8082_connection_error(e):
+            print(f"  [recovery] 8082 error: {type(e).__name__}", flush=True)
+            recover_8082()
+            return call_llm(*args, **kwargs)
+        raise
 

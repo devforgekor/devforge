@@ -35,8 +35,9 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.infra.preflight import preflight_checks
+from lib.watchdog.messenger import heartbeat
 
-BATCH_LIMIT = 50  # faster than LLM phases, can process more per cycle
+BATCH_LIMIT = 10
 
 _EXTENSIONS = (
     r"\.(?:py|sh|yaml|yml|json|md|txt|env|toml"
@@ -155,10 +156,10 @@ def _scan_turn(turn: dict) -> Dict[str, Any]:
     conv_ents = _get_conversation_entities(conv_id, turn_id) if conv_id else {}
 
     all_files = list(dict.fromkeys(
-        regex_files + registry_files + conv_ents.get("files", [])
+        regex_files + registry_files
     ))
     all_functions = list(dict.fromkeys(
-        regex_funcs + conv_ents.get("functions", [])
+        regex_funcs
     ))
 
     return {
@@ -183,7 +184,7 @@ def _get_turns_for_scan(limit: int = BATCH_LIMIT) -> List[Dict]:
         "  SELECT 1 FROM review_facts rf "
         "  WHERE rf.turn_id = t.id AND rf.fact_type = 'entity_scan'"
         ")"
-        "ORDER BY t.created_at ASC "
+        "ORDER BY t.created_at DESC "
         f"LIMIT {limit}"
     )
     rows = psql_json(sql) or []
@@ -266,6 +267,7 @@ def entity_scan_pipeline(
         ok = _insert_scan(turn["id"], result)
         if ok:
             processed += 1
+            heartbeat("entity_scan", f"turn {turn['id'][:8]} — {nf} files, {nfn} funcs")
             total_files += nf
             total_funcs += nfn
         else:

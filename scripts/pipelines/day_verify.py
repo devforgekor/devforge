@@ -29,11 +29,12 @@ sys.path.insert(0, SCRIPTS_DIR)
 os.chdir(os.path.join(SCRIPTS_DIR, "pipelines"))
 
 from lib.db import psql, psql_ok, esc_sql, psql_json
-from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
+from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, reranker_nli_verdict
 from lib.enrich.utils import verify_entities
 from lib.infra.preflight import preflight_checks
+from lib.watchdog.messenger import heartbeat
 
-BATCH_LIMIT = 6
+BATCH_LIMIT = 10
 PARALLEL = 2
 
 
@@ -87,7 +88,7 @@ def _llm_verify_entities(entities: Dict, source_text: str) -> Dict:
             claims_str = "\n".join(f"claim_{i}: {c}" for i, c in enumerate(unverified))
             prompt = _ENTITY_VERIFY_PROMPT.format(source=source_text[:3000], claims=claims_str)
             try:
-                resp = call_llm(
+                resp = call_llm_with_retry(
                     [{"role": "user", "content": prompt}],
                     model="day_verify", max_tokens=512, temperature=0.0, timeout=60,
                 )
@@ -125,7 +126,7 @@ CLAIM: {tldr}
 Is the CLAIM factually supported by the SOURCE? Answer YES, NO, or AMBIGUOUS.
 Answer with one word only."""
     try:
-        resp = call_llm(
+        resp = call_llm_with_retry(
             [{"role": "user", "content": prompt}],
             model="day_verify", max_tokens=16, temperature=0.0, timeout=30,
         ).strip().upper()
@@ -386,6 +387,8 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
     processed = 0
     failed = 0
 
+    heartbeat("day_verify", "pipeline_start")
+
     log("=" * 60)
     log("Day Verify — enrichment metadata quality check")
     if dry_run:
@@ -472,6 +475,7 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
             log(f"    {cat_summary}")
 
         processed += 1
+        heartbeat("day_verify", f"turn {turn_id_val[:8]} verified")
 
     elapsed = round(time.monotonic() - t_start, 1)
     log(f"\n{'=' * 60}")

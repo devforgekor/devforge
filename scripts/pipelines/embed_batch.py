@@ -34,8 +34,8 @@ from lib.watchdog.messenger import heartbeat
 
 from lib.llm_client import MODEL_REGISTRY
 EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embedder']['port']}/v1/embeddings"
-MAX_BATCH_SIZE = 6    # max texts per request (safety cap)
-BATCH_LIMIT = 6     # max turns per run (matches pipeline slice)
+MAX_BATCH_SIZE = 10   # max texts per request (safety cap)
+BATCH_LIMIT = 10     # max turns per run (matches pipeline slice)
 BATCH_TIMEOUT = 1800  # per batch request (30min safety — model cold load ~3.5min + processing)
 MAX_CYCLE = 86400     # 24hr max for full 8.6K turn embed
 SLOT_CTX = 5000       # token budget per slot (--ctx-size 12288 / --parallel 2 * 0.8 margin)
@@ -92,14 +92,14 @@ def get_unembedded_turns(limit: int):
     """Return turns without embedding record in embeddings table."""
     rows = psql_json(
         f"SELECT t.id, t.user_turn_clean_polished, t.text_clean_polished, "
-        f"  t.user_turn_clean, t.text_clean, t.created_at::text "
+        f"  t.user_turn, t.text, t.created_at::text "
         f"FROM turns t "
         f"LEFT JOIN embeddings e ON e.source_type = 'turn' AND e.source_id = t.id "
         f"  AND e.model_name = 'qwen3-embedding-8b-v1' "
         f"WHERE e.id IS NULL "
         f"  AND t.text_clean_polished IS NOT NULL "
         f"  AND (t.retry_count IS NULL OR t.retry_count < 3) "
-        f"ORDER BY t.created_at ASC "
+        f"ORDER BY t.created_at DESC "
         f"LIMIT {limit}"
     )
     return rows or []
@@ -114,7 +114,7 @@ def get_unembedded_facts(limit: int):
         f"  AND e.model_name = 'qwen3-embedding-8b-v1' "
         f"WHERE e.id IS NULL "
         f"  AND rf.evidence IS NOT NULL "
-        f"ORDER BY rf.created_at ASC "
+        f"ORDER BY rf.created_at DESC "
         f"LIMIT {limit}"
     )
     return rows or []
