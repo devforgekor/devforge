@@ -22,9 +22,9 @@ while true; do
 
     # Check remaining
     remaining=$(podman exec postgres psql -U devforge -d devforge_app -tAc \
-        "SELECT COUNT(*) FROM turns WHERE embedding_f16 IS NULL" 2>/dev/null || echo "0")
+        "SELECT COUNT(*) FROM turns t LEFT JOIN embeddings e ON e.source_type='turn' AND e.source_id=t.id AND e.model_name='qwen3-embedding-8b-v1' WHERE e.id IS NULL" 2>/dev/null || echo "0")
     total_done=$(podman exec postgres psql -U devforge -d devforge_app -tAc \
-        "SELECT COUNT(*) FROM turns WHERE embedding_f16 IS NOT NULL" 2>/dev/null || echo "0")
+        "SELECT COUNT(*) FROM turns t JOIN embeddings e ON e.source_type='turn' AND e.source_id=t.id AND e.model_name='qwen3-embedding-8b-v1'" 2>/dev/null || echo "0")
     total=$(podman exec postgres psql -U devforge -d devforge_app -tAc \
         "SELECT COUNT(*) FROM turns" 2>/dev/null || echo "0")
 

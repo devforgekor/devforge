@@ -156,14 +156,16 @@ async def _tool_fact_search(query: str, limit: int = 10,
 
     sql = f"""
         SELECT rf.id, rf.turn_id, rf.fact_type, rf.evidence,
-               rf.embedding <=> '{esc_sql(vec_str)}'::vector AS distance,
+               e.embedding <=> '{esc_sql(vec_str)}'::vector AS distance,
                t.text_clean, t.created_at::text AS turn_created
         FROM review_facts rf
+        JOIN embeddings e ON e.source_type = 'review_fact' AND e.source_id = rf.id
+          AND e.model_name = 'qwen3-embedding-8b-v1'
         LEFT JOIN turns t ON t.id = rf.turn_id
-        WHERE rf.embedding IS NOT NULL
+        WHERE e.embedding IS NOT NULL
           AND rf.evidence IS NOT NULL
           {type_filter}
-        ORDER BY rf.embedding <=> '{esc_sql(vec_str)}'::vector
+        ORDER BY e.embedding <=> '{esc_sql(vec_str)}'::vector
         LIMIT {limit}
     """
 

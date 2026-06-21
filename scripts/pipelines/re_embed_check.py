@@ -48,12 +48,13 @@ def main():
     t_start = time.monotonic()
 
     rows = psql_json(
-        f"SELECT id, user_turn_clean, text_clean, "
-        f"  user_turn_clean_polished, text_clean_polished, "
-        f"  content_hash "
-        f"FROM turns "
-        f"WHERE content_hash IS NOT NULL "
-        f"  AND embedding IS NOT NULL "
+        f"SELECT t.id, t.user_turn_clean, t.text_clean, "
+        f"  t.user_turn_clean_polished, t.text_clean_polished, "
+        f"  t.content_hash "
+        f"FROM turns t "
+        f"JOIN embeddings e ON e.source_type = 'turn' AND e.source_id = t.id "
+        f"  AND e.model_name = 'qwen3-embedding-8b-v1' "
+        f"WHERE t.content_hash IS NOT NULL "
         f"LIMIT {limit}"
     )
     if not rows:
@@ -77,11 +78,12 @@ def main():
 
         # Hash changed — embedding is stale
         if dry_run:
-            print(f"  DRY-RUN: {turn_id[:8]} hash changed → would reset embedding=NULL", flush=True)
+            print(f"  DRY-RUN: {turn_id[:8]} hash changed → would delete embedding", flush=True)
         else:
             psql_ok(
-                f"UPDATE turns SET embedding = NULL "
-                f"WHERE id = '{esc_sql(turn_id)}'::uuid",
+                f"DELETE FROM embeddings "
+                f"WHERE source_type = 'turn' AND source_id = '{esc_sql(turn_id)}'::uuid "
+                f"  AND model_name = 'qwen3-embedding-8b-v1'",
                 timeout=15,
             )
         n_reset += 1

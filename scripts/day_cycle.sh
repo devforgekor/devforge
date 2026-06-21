@@ -291,11 +291,11 @@ python3 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
 
 # ── Day Embedding (token-based batch limit) ─────
 NEED_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT COUNT(*)::int FROM turns WHERE embedding_f16 IS NULL" 2>/dev/null || echo "0")
+  "SELECT COUNT(*)::int FROM turns t LEFT JOIN embeddings e ON e.source_type='turn' AND e.source_id=t.id AND e.model_name='qwen3-embedding-8b-v1' WHERE e.id IS NULL" 2>/dev/null || echo "0")
 NEED_EMBED=${NEED_EMBED:-0}
 
 if [ "$NEED_EMBED" -gt 0 ]; then
-    LOG "=== Day Embedding: f16 (${NEED_EMBED} unembedded turns) ==="
+    LOG "=== Day Embedding (${NEED_EMBED} unembedded turns) ==="
     ensure_pod_b "embed" "embed" true 1200
     python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
     RC=$?

@@ -12,8 +12,8 @@ from lib.pipeline_common import slack_send
 
 # Get progress
 total = psql_json("SELECT COUNT(*) as cnt FROM turns") or [{"cnt": 0}]
-done = psql_json("SELECT COUNT(*) as cnt FROM turns WHERE embedding IS NOT NULL") or [{"cnt": 0}]
-remaining = psql_json("SELECT COUNT(*) as cnt FROM turns WHERE embedding IS NULL") or [{"cnt": 0}]
+done = psql_json("SELECT COUNT(*) as cnt FROM turns t JOIN embeddings e ON e.source_type='turn' AND e.source_id=t.id AND e.model_name='qwen3-embedding-8b-v1' WHERE e.embedding IS NOT NULL") or [{"cnt": 0}]
+remaining = psql_json("SELECT COUNT(*) as cnt FROM turns t LEFT JOIN embeddings e ON e.source_type='turn' AND e.source_id=t.id AND e.model_name='qwen3-embedding-8b-v1' WHERE e.id IS NULL") or [{"cnt": 0}]
 
 t = total[0]["cnt"]
 d = done[0]["cnt"]

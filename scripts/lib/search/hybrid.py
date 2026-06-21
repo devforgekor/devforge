@@ -13,7 +13,7 @@ RRF combines ranks: combined rank = 1/(k + bm25_rank) + 1/(k + dense_rank)
 
 Requires:
   - lib/search/local_index.FTS5Index (rebuild first)
-  - turns.embedding populated with embed model vectors
+  - turns.embedding populated via embeddings table with embed model vectors
   - pgvector HNSW index on embedding
 
 Usage:
@@ -75,10 +75,11 @@ def _dense_rank(query: str, limit: int = DENSE_SEARCH_LIMIT) -> Tuple[Dict[str, 
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
 
     sql = (
-        f"SELECT id, (embedding <=> '{esc_sql(vec_str)}'::vector) as dist "
-        f"FROM turns "
-        f"WHERE embedding IS NOT NULL "
-        f"ORDER BY embedding <=> '{esc_sql(vec_str)}'::vector "
+        f"SELECT t.id, (e.embedding <=> '{esc_sql(vec_str)}'::vector) as dist "
+        f"FROM turns t "
+        f"JOIN embeddings e ON e.source_type = 'turn' AND e.source_id = t.id "
+        f"  AND e.model_name = 'qwen3-embedding-8b-v1' "
+        f"ORDER BY e.embedding <=> '{esc_sql(vec_str)}'::vector "
         f"LIMIT {limit}"
     )
     rows = psql_json(sql) or []

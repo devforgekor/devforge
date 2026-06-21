@@ -5,7 +5,7 @@
 
 Runs during embed phase (:8081) after embed_batch.py.
 Finds enrich_meta rows with cosine_status=pending|deferred, embeds entity/tldr
-text via embed model, compares with turns.embedding.
+text via embed model, compares with embeddings table.
 
 State machine: pending → done|deferred → done|failed (max 3 retries).
 Deferred rows with embedding NULL retry next cycle via day_cycle.sh guard.
@@ -91,12 +91,13 @@ def _embed_text(text: str) -> Optional[List[float]]:
 
 
 def _get_pending_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
-    """Review_facts rows with cosine_status=pending or deferred, with turns.embedding."""
+    """Review_facts rows with cosine_status=pending or deferred, with turn embedding."""
     sql = (
         "SELECT rf.turn_id, rf.evidence, rf.fact_index, rf.extract_model, "
-        "  rf.created_at::text, t.embedding::text AS f16_vec "
+        "  rf.created_at::text, e.embedding::text AS vec "
         "FROM review_facts rf "
-        "JOIN turns t ON t.id = rf.turn_id "
+        "JOIN embeddings e ON e.source_type = 'turn' AND e.source_id = rf.turn_id "
+        "  AND e.model_name = 'qwen3-embedding-8b-v1' "
         "WHERE rf.fact_type = 'enrich_meta' "
         "  AND (rf.evidence LIKE '%\"cosine_status\":\"pending\"%' "
         "    OR rf.evidence LIKE '%\"cosine_status\":\"deferred\"%') "
@@ -112,7 +113,7 @@ def _get_pending_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "fact_index": r.get("fact_index", 0),
         "extract_model": r.get("extract_model", ""),
         "created_at": r.get("created_at", ""),
-        "f16_vec": r.get("f16_vec", ""),
+        "vec": r.get("vec", ""),
     } for r in rows]
 
 
@@ -120,9 +121,10 @@ def _get_pending_by_turn(turn_id: str) -> Optional[Dict[str, Any]]:
     """Single turn lookup for --turn-id mode (pending or deferred)."""
     sql = (
         f"SELECT rf.turn_id, rf.evidence, rf.fact_index, rf.extract_model, "
-        f"  rf.created_at::text, t.embedding::text AS f16_vec "
+        f"  rf.created_at::text, e.embedding::text AS vec "
         f"FROM review_facts rf "
-        f"JOIN turns t ON t.id = rf.turn_id "
+        f"JOIN embeddings e ON e.source_type = 'turn' AND e.source_id = rf.turn_id "
+        f"  AND e.model_name = 'qwen3-embedding-8b-v1' "
         f"WHERE rf.turn_id = '{esc_sql(turn_id)}'::uuid "
         f"  AND rf.fact_type = 'enrich_meta' "
         f"  AND (rf.evidence LIKE '%\"cosine_status\":\"pending\"%' "
@@ -138,7 +140,7 @@ def _get_pending_by_turn(turn_id: str) -> Optional[Dict[str, Any]]:
         "fact_index": r.get("fact_index", 0),
         "extract_model": r.get("extract_model", ""),
         "created_at": r.get("created_at", ""),
-        "f16_vec": r.get("f16_vec", ""),
+        "vec": r.get("vec", ""),
     }
 
 
@@ -200,10 +202,10 @@ def _update_enrich_meta(turn_id: str, enrich_json_str: str,
 def enrich_cosine_pipeline(turn_id: Optional[str] = None,
                         limit: int = BATCH_LIMIT,
                         dry_run: bool = False) -> Dict[str, Any]:
-    """Verify pending enrich cosine via embed model against turns.embedding."""
+    """Verify pending enrich cosine via embed model against embeddings table."""
     t_start = time.monotonic()
     log("=" * 60)
-    log("Enrich Cosine Verify — embed model vs turns.embedding")
+    log("Enrich Cosine Verify — embed model vs embeddings")
     if dry_run:
         log("  [DRY RUN] No writes to DB")
     log("=" * 60)
@@ -233,7 +235,7 @@ def enrich_cosine_pipeline(turn_id: Optional[str] = None,
             break
         turn_id = row["turn_id"]
         evidence_raw = row.get("evidence", "") or ""
-        f16_raw = row.get("f16_vec", "") or ""
+        f16_raw = row.get("vec", "") or ""
         created = row.get("created_at", "")[:19]
 
         log(f"  [{ri}/{len(rows)}] {turn_id[:8]} {created}")
@@ -329,7 +331,7 @@ def main() -> None:
     preflight_checks("enrich_cosine.py", required_ports={8081})
     import argparse
     parser = argparse.ArgumentParser(
-        description="Enrich Cosine Verify — embed model vs turns.embedding")
+        description="Enrich Cosine Verify — embed model vs embeddings")
     parser.add_argument("--turn-id", help="Process a specific turn UUID")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
     parser.add_argument("--dry-run", action="store_true")

@@ -66,7 +66,10 @@ def main():
 
         # Check remaining
         remaining_rows = psql_json(
-            "SELECT COUNT(*) as cnt FROM turns WHERE embedding IS NULL"
+            "SELECT COUNT(*) as cnt FROM turns t "
+            "LEFT JOIN embeddings e ON e.source_type='turn' AND e.source_id=t.id "
+            "  AND e.model_name='qwen3-embedding-8b-v1' "
+            "WHERE e.id IS NULL"
         )
         remaining = int(remaining_rows[0]["cnt"]) if remaining_rows else 0
 
@@ -105,7 +108,10 @@ def main():
 
         # Count progress
         done_rows = psql_json(
-            "SELECT COUNT(*) as cnt FROM turns WHERE embedding IS NOT NULL"
+            "SELECT COUNT(*) as cnt FROM turns t "
+            "JOIN embeddings e ON e.source_type='turn' AND e.source_id=t.id "
+            "  AND e.model_name='qwen3-embedding-8b-v1' "
+            "WHERE e.embedding IS NOT NULL"
         )
         done = int(done_rows[0]["cnt"]) if done_rows else 0
         cycle_progress = done - total_processed

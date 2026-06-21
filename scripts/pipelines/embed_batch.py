@@ -3,9 +3,8 @@
 # Path: day_cycle.sh
 """Embed Batch Pipeline — text_clean_polished 기준 embedding 단 1회.
 
-Checkpoint-based: SELECT turns WHERE created_at > checkpoint AND embedding IS NULL.
-Sends to Pod B /v1/embeddings in batches, stores result in turns.embedding.
-Failed turns do NOT advance checkpoint — retried next cycle.
+State-based: LEFT JOIN embeddings WHERE NULL → embed → INSERT INTO embeddings.
+Failed turns do NOT advance — retried next cycle via retry_count.
 
 Usage:
   python3 scripts/pipelines/embed_batch.py              # batch from checkpoint
@@ -90,49 +89,62 @@ def embed_batch(texts: list[str], timeout: int = 600) -> Optional[list[Optional[
 
 
 def get_unembedded_turns(limit: int):
-    """Return turns without embedding, ordered by created_at.
-    State-based filter: no checkpoint needed."""
+    """Return turns without embedding record in embeddings table."""
     rows = psql_json(
-        f"SELECT id, user_turn_clean_polished, text_clean_polished, "
-        f"  user_turn_clean, text_clean, created_at::text "
-        f"FROM turns "
-        f"WHERE embedding IS NULL "
-        f"  AND text_clean_polished IS NOT NULL "
-        f"  AND (retry_count IS NULL OR retry_count < 3) "
-        f"ORDER BY created_at ASC "
+        f"SELECT t.id, t.user_turn_clean_polished, t.text_clean_polished, "
+        f"  t.user_turn_clean, t.text_clean, t.created_at::text "
+        f"FROM turns t "
+        f"LEFT JOIN embeddings e ON e.source_type = 'turn' AND e.source_id = t.id "
+        f"  AND e.model_name = 'qwen3-embedding-8b-v1' "
+        f"WHERE e.id IS NULL "
+        f"  AND t.text_clean_polished IS NOT NULL "
+        f"  AND (t.retry_count IS NULL OR t.retry_count < 3) "
+        f"ORDER BY t.created_at ASC "
         f"LIMIT {limit}"
     )
     return rows or []
 
 
 def get_unembedded_facts(limit: int):
-    """Return review_facts rows without embedding."""
+    """Return review_facts rows without embedding record."""
     rows = psql_json(
-        f"SELECT id, turn_id, fact_type, evidence, created_at::text "
-        f"FROM review_facts "
-        f"WHERE embedding IS NULL "
-        f"  AND evidence IS NOT NULL "
-        f"ORDER BY created_at ASC "
+        f"SELECT rf.id, rf.turn_id, rf.fact_type, rf.evidence, rf.created_at::text "
+        f"FROM review_facts rf "
+        f"LEFT JOIN embeddings e ON e.source_type = 'review_fact' AND e.source_id = rf.id "
+        f"  AND e.model_name = 'qwen3-embedding-8b-v1' "
+        f"WHERE e.id IS NULL "
+        f"  AND rf.evidence IS NOT NULL "
+        f"ORDER BY rf.created_at ASC "
         f"LIMIT {limit}"
     )
     return rows or []
 
 
-def store_embedding(turn_id: str, vector: list):
-    """UPDATE turns SET embedding = vector WHERE id = turn_id."""
+def store_embedding(turn_id: str, vector: list, embed_text: str):
+    """INSERT INTO embeddings for a turn. UPSERT on conflict."""
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
+    safe_text = embed_text[:8000].replace("'", "''")
     psql_ok(
-        f"UPDATE turns SET embedding = '{esc_sql(vec_str)}'::vector "
-        f"WHERE id = '{esc_sql(turn_id)}'::uuid"
+        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name) "
+        f"VALUES ('turn', '{esc_sql(turn_id)}'::uuid, '{safe_text}', "
+        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1') "
+        f"ON CONFLICT (source_type, source_id, model_name) DO UPDATE SET "
+        f"  embedding = EXCLUDED.embedding, embed_text = EXCLUDED.embed_text, "
+        f"  created_at = now()"
     )
 
 
-def store_fact_embedding(fact_id: str, vector: list):
-    """UPDATE review_facts SET embedding = vector WHERE id = fact_id."""
+def store_fact_embedding(fact_id: str, vector: list, embed_text: str):
+    """INSERT INTO embeddings for a review_fact."""
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
+    safe_text = embed_text[:8000].replace("'", "''")
     psql_ok(
-        f"UPDATE review_facts SET embedding = '{esc_sql(vec_str)}'::vector "
-        f"WHERE id = '{esc_sql(fact_id)}'::uuid"
+        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name) "
+        f"VALUES ('review_fact', '{esc_sql(fact_id)}'::uuid, '{safe_text}', "
+        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1') "
+        f"ON CONFLICT (source_type, source_id, model_name) DO UPDATE SET "
+        f"  embedding = EXCLUDED.embedding, embed_text = EXCLUDED.embed_text, "
+        f"  created_at = now()"
     )
 
 
@@ -242,12 +254,12 @@ def main():
                 fail_count += len(batch_rows)
                 continue
 
-            for row, vec in zip(batch_rows, vectors):
+            for (row, text), vec in zip(batch, vectors):
                 if vec is not None:
                     if facts_mode:
-                        store_fact_embedding(row['id'], vec)
+                        store_fact_embedding(row['id'], vec, text)
                     else:
-                        store_embedding(row['id'], vec)
+                        store_embedding(row['id'], vec, text)
                     ok_count += 1
                 else:
                     fail_count += 1
@@ -259,7 +271,7 @@ def main():
                             RETURNING retry_count
                         """)
                         if r and r[0].get('retry_count', 0) >= 3:
-                            store_embedding(row['id'], [0.0] * 4096)
+                            store_embedding(row['id'], [0.0] * 4096, text or "(sentinel)")
                             log(f"  [skip] {row.get('created_at','')[:19]} — 3 failures, sentinel stored")
 
             log(f"  batch {bi}/{len(batches)} ({len(batch)} texts, ~{sum(len(p) for _, p in batch)//2} est tok) {elapsed:.1f}s")
