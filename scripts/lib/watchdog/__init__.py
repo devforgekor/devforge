@@ -222,15 +222,6 @@ def run_day_checks(dry_run: bool = False) -> dict:
 
     _run_common_checks(results, dry_run, "day")
 
-    # Periodic: collect verify feedback for enrich few-shot injection
-    # Throttled internally (10 min between writes, mtime-based)
-    if not dry_run and not _test_active:
-        try:
-            from lib.enrich_feedback import collect_verify_feedback
-            collect_verify_feedback()
-        except Exception as e:
-            log(f"collect_verify_feedback error: {e}")
-
     return results
 
 

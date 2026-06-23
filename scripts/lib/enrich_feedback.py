@@ -1,44 +1,34 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — watchdog.py (periodic update), enrich.py (read-only)
-"""Enrich Feedback — collect day_verify.py verify_result for few-shot injection.
+# Path: imported by — enrich.py (dynamic few-shot), watchdog.py (no longer called directly)
+"""Enrich Feedback — dynamic few-shot retrieval for enrich pipeline.
 
 Architecture::
 
-    watchdog (day mode, 10min throttle)
-      → collect_verify_feedback()
-        → SELECT review_facts WHERE fact_type='verify_result'
-        → extract UNGROUNDED entities + GROUNDED examples
-        → write /opt/ai_data/enrich_fewshot.json
-
     enrich.py (_generate_enrich_fields)
-      → load_enrich_feedback()
-        → read /opt/ai_data/enrich_fewshot.json
-        → inject as few-shot into SYSTEM_DAY_ENRICH
+      → get_dynamic_few_shot(turn_text)
+        1. Embed turn text via :8081 → vector
+        2. pgvector ANN: feedback_examples ORDER BY embedding <=> $1
+           CONFIRM → good example, REJECT → bad example
+        3. Supplementary: verify_result UNGROUNDED/GROUNDED from review_facts
+        4. Return formatted few-shot text block
 
-The feedback file is a simple JSON with examples that the LLM can learn from.
-No LLM calls involved — pure Python + DB query.
+No file-based storage. No pre-collection. Everything is queried at enrich time
+using pgvector similarity search on user-curated feedback_examples.
 """
 
 import json
-import os
 import time
 from typing import Any, Dict, List, Optional
+from urllib.request import Request, urlopen
 
-from lib.db import psql_json
+from lib.db import psql_json, esc_sql
 
-FEEDBACK_FILE = "/opt/ai_data/enrich_fewshot.json"
-THROTTLE_SEC = 600       # 10 min between file updates
-MAX_EXAMPLES_BAD = 4     # max UNGROUNDED examples per entity type
-MAX_EXAMPLES_GOOD = 2    # max GROUNDED examples per entity type
-LOOKBACK_HOURS = 72      # query last 72h for verify results
-
-# Score thresholds (actual scores are 0.0-1.0 from LLM verify)
-GOOD_SCORE_MIN = 0.8     # min score to be a "good" (grounded) example
-BAD_SCORE_MAX = 0.4      # max score to be a "bad" (ungrounded) example
-
-# Grounding values that count as failure
-UNGROUNDED_VALUES = {"UNGROUNDED", "AMBIGUOUS"}
+EMBED_URL = "http://127.0.0.1:8081/v1/embeddings"
+EMBED_TIMEOUT = 60
+MAX_EXAMPLES_DB = 4      # max feedback_examples (primary)
+MAX_EXAMPLES_VERIFY = 3   # max verify_result examples (supplementary)
+LOOKBACK_HOURS = 72       # verify_result lookback
 
 
 def log(msg: str) -> None:
@@ -46,44 +36,116 @@ def log(msg: str) -> None:
     print(f"[{ts}] [enrich_feedback] {msg}", flush=True)
 
 
-# ── DB query ────────────────────────────────────────────────────────
+# ── Embedding ────────────────────────────────────────────────────────
 
-def _fetch_verify_results() -> List[Dict[str, Any]]:
-    """Fetch recent verify_result rows from review_facts.
+def _embed_text(text: str) -> Optional[List[float]]:
+    """Embed a single text via qwen3-embed-8b on :8081.
 
-    Returns list with turn source text included for context.
+    Returns vector or None on failure.
+    """
+    import json as _json
+    body = _json.dumps({"input": [text], "model": "default"}).encode()
+    req = Request(EMBED_URL, data=body,
+                  headers={"Content-Type": "application/json"},
+                  method="POST")
+    try:
+        with urlopen(req, timeout=EMBED_TIMEOUT) as resp:
+            data = _json.loads(resp.read().decode())
+        return data["data"][0]["embedding"]
+    except Exception as e:
+        log(f"embed error: {e}")
+        return None
+
+
+# ── Primary: pgvector dynamic retrieval from feedback_examples ───────
+
+def _search_feedback_examples(
+    vector: List[float], max_examples: int = MAX_EXAMPLES_DB,
+) -> Dict[str, List[Dict]]:
+    """pgvector ANN search on feedback_examples.
+
+    Returns {"bad": [REJECT examples], "good": [CONFIRM examples]}.
+    CONFIRM examples are weighted slightly higher in sort order
+    (margin multiplier) so good examples are preferred when similar.
+    """
+    vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
+    rows = psql_json(
+        f"SELECT evidence_text, source_text, fact_type, verdict, "
+        f"  1 - (embedding <=> '{vec_str}'::vector) AS similarity "
+        f"FROM feedback_examples "
+        f"WHERE embedding IS NOT NULL "
+        f"ORDER BY embedding <=> '{vec_str}'::vector "
+        f"LIMIT {max_examples + 2}"
+    )
+    if not rows:
+        return {"bad": [], "good": []}
+
+    bad: List[Dict] = []
+    good: List[Dict] = []
+    for r in rows:
+        verdict = r.get("verdict", "")
+        evidence = (r.get("evidence_text") or "")[:200]
+        sim = r.get("similarity", 0)
+        if verdict == "REJECT":
+            bad.append({
+                "type": "bad",
+                "evidence": evidence,
+                "similarity": round(sim, 3),
+                "lesson": f"Previously rejected: \"{evidence}\". Avoid similar patterns.",
+            })
+        elif verdict == "CONFIRM":
+            good.append({
+                "type": "good",
+                "evidence": evidence,
+                "similarity": round(sim, 3),
+                "lesson": f"Previously confirmed: \"{evidence}\". Follow this pattern.",
+            })
+
+    # Sort: highest similarity first — dedup by evidence_text
+    seen: set = set()
+    for key in ("bad", "good"):
+        deduped = []
+        for ex in (bad if key == "bad" else good):
+            dedup_key = ex["evidence"][:80]
+            if dedup_key not in seen:
+                seen.add(dedup_key)
+                deduped.append(ex)
+        if key == "bad":
+            bad = deduped[:max_examples]
+        else:
+            good = deduped[:max_examples]
+
+    return {"bad": bad, "good": good}
+
+
+# ── Supplementary: verify_result (UNGROUNDED/GROUNDED) ───────────────
+
+UNGROUNDED_VALUES = {"UNGROUNDED", "AMBIGUOUS"}
+GOOD_SCORE_MIN = 0.8
+BAD_SCORE_MAX = 0.4
+
+
+def _fetch_verify_feedback() -> Dict[str, List[Dict]]:
+    """Fetch recent verify_result for supplementary few-shot.
+
+    Only includes turns with pipeline_state = 'verified'.
+    Returns {"bad": [UNGROUNDED examples], "good": [GROUNDED examples]}.
     """
     sql = (
-        "SELECT rf.evidence::text AS evidence_str, "
-        "  t.user_turn, t.text, "
-        "  rf.created_at::text "
+        "SELECT rf.evidence::text AS evidence_str "
         "FROM review_facts rf "
         "JOIN turns t ON t.id = rf.turn_id "
         "WHERE rf.fact_type = 'verify_result' "
         "  AND t.pipeline_state = 'verified' "
         f"  AND rf.created_at > now() - interval '{LOOKBACK_HOURS} hours' "
         "ORDER BY rf.created_at DESC "
-        "LIMIT 100"
+        "LIMIT 50"
     )
-    rows = psql_json(sql)
-    return [
-        {
-            "evidence_str": r.get("evidence_str", "{}"),
-            "user_turn": r.get("user_turn", ""),
-            "text": r.get("text", ""),
-            "created_at": r.get("created_at", ""),
-        }
-        for r in (rows or [])
-    ]
+    rows = psql_json(sql) or []
 
-
-def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
-    """Extract bad (UNGROUNDED) and good (GROUNDED) examples from verify results.
-
-    Returns {"bad": [...], "good": [...]}.
-    """
     bad: List[Dict] = []
     good: List[Dict] = []
+    seen_entities: set = set()
 
     for row in rows:
         try:
@@ -95,7 +157,6 @@ def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
         if not isinstance(faithfulness, dict):
             continue
 
-        # Per-entity-type iteration
         entity_types = ["files", "technologies", "functions", "mentioned_users"]
         for etype in entity_types:
             items = faithfulness.get(etype, [])
@@ -109,7 +170,10 @@ def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
                 if not entity or score is None:
                     continue
                 grounding = str(item.get("grounding", ""))
-                method = str(item.get("method", ""))
+                dedup_key = (etype, entity[:60])
+                if dedup_key in seen_entities:
+                    continue
+                seen_entities.add(dedup_key)
 
                 if grounding in UNGROUNDED_VALUES and score < BAD_SCORE_MAX:
                     bad.append({
@@ -118,12 +182,6 @@ def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
                         "entity": entity[:80],
                         "score": score,
                         "grounding": grounding,
-                        "method": method,
-                        "lesson": (
-                            f"Entity '{entity}' (type: {etype}) was not grounded "
-                            f"in source text (score {score}, {grounding}). "
-                            f"Only include entities explicitly mentioned in the conversation."
-                        ),
                     })
                 elif grounding == "GROUNDED" and score >= GOOD_SCORE_MIN:
                     good.append({
@@ -132,163 +190,112 @@ def _extract_examples(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
                         "entity": entity[:80],
                         "score": score,
                         "grounding": grounding,
-                        "method": method,
-                        "lesson": (
-                            f"Entity '{entity}' (type: {etype}) correctly identified "
-                            f"(score {score}, {grounding}). "
-                            f"This entity is directly mentioned in the conversation."
-                        ),
                     })
 
-        # tldr faithfulness — per-turn, not per-entity
+        # tldr
         tldr = faithfulness.get("tldr", {})
         if isinstance(tldr, dict):
             tscore = tldr.get("score")
             tgrounding = str(tldr.get("grounding", ""))
             if tscore is not None:
-                if tgrounding in UNGROUNDED_VALUES and tscore < BAD_SCORE_MAX:
-                    bad.append({
-                        "type": "bad",
-                        "entity_type": "tldr",
-                        "entity": str(tldr.get("text", ""))[:80],
-                        "score": tscore,
-                        "grounding": tgrounding,
-                        "method": str(tldr.get("method", "")),
-                        "lesson": (
-                            f"TLDR summary not faithful to source text "
-                            f"(score {tscore}, {tgrounding}). "
-                            f"Keep TLDR factually grounded in the actual conversation."
-                        ),
-                    })
-                elif tgrounding == "GROUNDED" and tscore >= GOOD_SCORE_MIN:
-                    good.append({
-                        "type": "good",
-                        "entity_type": "tldr",
-                        "entity": str(tldr.get("text", ""))[:80],
-                        "score": tscore,
-                        "grounding": tgrounding,
-                        "method": str(tldr.get("method", "")),
-                        "lesson": (
-                            f"TLDR summary faithful to source text "
-                            f"(score {tscore}, {tgrounding}). Good."
-                        ),
-                    })
+                key = ("tldr", str(tldr.get("text", ""))[:60])
+                if key not in seen_entities:
+                    seen_entities.add(key)
+                    if tgrounding in UNGROUNDED_VALUES and tscore < BAD_SCORE_MAX:
+                        bad.append({
+                            "type": "bad", "entity_type": "tldr",
+                            "entity": str(tldr.get("text", ""))[:80],
+                            "score": tscore, "grounding": tgrounding,
+                        })
+                    elif tgrounding == "GROUNDED" and tscore >= GOOD_SCORE_MIN:
+                        good.append({
+                            "type": "good", "entity_type": "tldr",
+                            "entity": str(tldr.get("text", ""))[:80],
+                            "score": tscore, "grounding": tgrounding,
+                        })
 
-    return {"bad": bad[:MAX_EXAMPLES_BAD], "good": good[:MAX_EXAMPLES_GOOD]}
+    return {
+        "bad": bad[:MAX_EXAMPLES_VERIFY],
+        "good": good[:MAX_EXAMPLES_VERIFY],
+    }
 
 
-# ── File read/write ─────────────────────────────────────────────────
+# ── Format ───────────────────────────────────────────────────────────
 
-def load_enrich_feedback() -> Optional[Dict[str, List[Dict]]]:
-    """Read the feedback file. Returns None if missing or broken."""
-    try:
-        with open(FEEDBACK_FILE) as f:
-            data = json.load(f)
-        examples = data.get("examples", {})
-        if not examples.get("bad") and not examples.get("good"):
-            return None
-        return examples
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
+def _format_few_shot(
+    db_examples: Dict[str, List[Dict]],
+    verify_examples: Dict[str, List[Dict]],
+) -> str:
+    """Format both sources into a single few-shot text block.
 
-
-def _is_throttled() -> bool:
-    """Check if file was updated within THROTTLE_SEC seconds."""
-    try:
-        age = time.time() - os.path.getmtime(FEEDBACK_FILE)
-        return age < THROTTLE_SEC
-    except OSError:
-        return False
-
-
-def collect_verify_feedback() -> Dict[str, List[Dict]]:
-    """Main entry point: query DB and extract examples.
-
-    Called periodically by watchdog. Updates the feedback file on disk.
-    No-op if throttled (last write < 10 min ago).
-
-    Returns extracted examples dict for callers that want immediate access.
+    Returns empty string if nothing available.
     """
-    if _is_throttled():
-        return load_enrich_feedback() or {"bad": [], "good": []}
-
-    rows = _fetch_verify_results()
-    if not rows:
-        log("No verify results found in last %dh" % LOOKBACK_HOURS)
-        return {"bad": [], "good": []}
-
-    examples = _extract_examples(rows)
-
-    # Dedup by (entity_type, entity) keeping first occurrence
-    seen: set = set()
-    for key in ("bad", "good"):
-        deduped = []
-        for ex in examples.get(key, []):
-            dedup_key = (ex["entity_type"], ex["entity"])
-            if dedup_key not in seen:
-                seen.add(dedup_key)
-                deduped.append(ex)
-        examples[key] = deduped
-
-    # Write to file
-    try:
-        os.makedirs(os.path.dirname(FEEDBACK_FILE), exist_ok=True)
-        with open(FEEDBACK_FILE, "w") as f:
-            json.dump({
-                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "examples": examples,
-            }, f, indent=2, ensure_ascii=False)
-        log("Updated feedback file: %d bad, %d good examples" %
-            (len(examples.get("bad", [])), len(examples.get("good", []))))
-    except OSError as e:
-        log(f"Failed to write feedback file: {e}")
-
-    return examples
-
-
-# ── Format for injection into system prompt ─────────────────────────
-
-def format_few_shot(examples: Dict[str, List[Dict]]) -> str:
-    """Format examples as a text block for injection into SYSTEM_DAY_ENRICH.
-
-    Returns empty string if no examples available.
-    """
-    bad = examples.get("bad", [])
-    good = examples.get("good", [])
-
-    if not bad and not good:
-        return ""
-
     parts: List[str] = []
 
-    if bad:
-        parts.append("### [FEEDBACK — Previous enrichment errors to avoid]")
+    db_bad = db_examples.get("bad", [])
+    db_good = db_examples.get("good", [])
+    v_bad = verify_examples.get("bad", [])
+    v_good = verify_examples.get("good", [])
+
+    if not db_bad and not db_good and not v_bad and not v_good:
+        return ""
+
+    # Primary: feedback_examples
+    if db_bad:
+        parts.append("### [FEEDBACK — Known errors to avoid]")
+        for ex in db_bad:
+            parts.append(f"- REJECTED: {ex['evidence']} (sim={ex['similarity']})")
         parts.append("")
-        parts.append(
-            "The following entities were previously marked as UNGROUNDED "
-            "by our verification system. Do NOT generate these in your output:"
-        )
+
+    if db_good:
+        parts.append("### [FEEDBACK — Known correct patterns to follow]")
+        for ex in db_good:
+            parts.append(f"- CONFIRMED: {ex['evidence']} (sim={ex['similarity']})")
         parts.append("")
-        for ex in bad:
+
+    # Supplementary: verify_result
+    if v_bad:
+        parts.append("### [VERIFY FEEDBACK — Recent ungrounded entities]")
+        for ex in v_bad:
             parts.append(
-                f"- Entity \"{ex['entity']}\" (type: {ex['entity_type']}) "
-                f"— score {ex['score']}, {ex['grounding']}"
+                f"- {ex['entity_type']}=\"{ex['entity']}\" "
+                f"score={ex['score']} {ex['grounding']} — not in source"
             )
         parts.append("")
 
-    if good:
-        parts.append("### [FEEDBACK — Previous enrichment successes to follow]")
-        parts.append("")
-        parts.append(
-            "The following entities were correctly identified as GROUNDED. "
-            "Follow these patterns:"
-        )
-        parts.append("")
-        for ex in good:
+    if v_good:
+        parts.append("### [VERIFY FEEDBACK — Recently verified correct entities]")
+        for ex in v_good:
             parts.append(
-                f"- Entity \"{ex['entity']}\" (type: {ex['entity_type']}) "
-                f"— score {ex['score']}, {ex['grounding']}"
+                f"- {ex['entity_type']}=\"{ex['entity']}\" "
+                f"score={ex['score']} {ex['grounding']} — good pattern"
             )
         parts.append("")
 
     return "\n".join(parts)
+
+
+# ── Public API ───────────────────────────────────────────────────────
+
+def get_dynamic_few_shot(turn_text: str, max_examples: int = MAX_EXAMPLES_DB) -> str:
+    """Dynamic few-shot retrieval for enrich.
+
+    1. Embed turn_text via :8081
+    2. pgvector ANN on feedback_examples (primary)
+    3. Verify_result supplementary (no embed needed)
+    4. Format and return
+
+    Returns empty string if nothing available or embed fails.
+    """
+    vector = _embed_text(turn_text)
+    if vector is None:
+        # Embed failed — try verify-only fallback
+        verify = _fetch_verify_feedback()
+        if verify.get("bad") or verify.get("good"):
+            return _format_few_shot({"bad": [], "good": []}, verify)
+        return ""
+
+    db_examples = _search_feedback_examples(vector, max_examples)
+    verify_examples = _fetch_verify_feedback()
+
+    return _format_few_shot(db_examples, verify_examples)

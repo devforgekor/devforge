@@ -35,7 +35,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.common import strip_think
-from lib.enrich_feedback import load_enrich_feedback, format_few_shot
+from lib.enrich_feedback import get_dynamic_few_shot
 from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, reranker_nli_verdict
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.token_budget import TokenBudget
@@ -429,13 +429,11 @@ def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
     if budget.used > 0:
         parts.append(f"[context budget: {budget.used}/{budget.limit} tok]")
 
-    # Inject few-shot feedback from verify_result collection
+    # Dynamic few-shot retrieval (pgvector ANN on feedback_examples)
     system_content = SYSTEM_DAY_ENRICH
-    feedback_examples = load_enrich_feedback()
-    if feedback_examples:
-        feedback_text = format_few_shot(feedback_examples)
-        if feedback_text:
-            system_content = SYSTEM_DAY_ENRICH + "\n\n" + feedback_text
+    feedback_text = get_dynamic_few_shot(text or user_turn or "", max_examples=4)
+    if feedback_text:
+        system_content = SYSTEM_DAY_ENRICH + "\n\n" + feedback_text
 
     t = timeout if timeout is not None else TIMEOUT_ENRICH
     meta = call_llm_with_retry(

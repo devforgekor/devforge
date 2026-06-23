@@ -1390,6 +1390,28 @@ def cmd_fact_list(args):
         print(f"{uid:<38} {etype:<12} {nli:<10} {uv:<8} {ev:<60} {str(r.get('created_at',''))[:19]}")
 
 
+def _try_embed_feedback(feedback_id: str, text: str) -> None:
+    """Embed feedback example text via :8081 for pgvector search.
+
+    Silently skips if embed server is unavailable (CLI should not block).
+    """
+    import json as _json
+    from urllib.request import Request, urlopen
+    body = _json.dumps({"input": [text], "model": "default"}).encode()
+    req = Request("http://127.0.0.1:8081/v1/embeddings", data=body,
+                  headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urlopen(req, timeout=30) as resp:
+            data = _json.loads(resp.read().decode())
+        vec = data["data"][0]["embedding"]
+        vec_str = "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
+        from lib.db import psql_ok
+        psql_ok(f"UPDATE feedback_examples SET embedding = '{vec_str}'::vector WHERE id = '{feedback_id}'::uuid")
+        print(f"  (embedded for pgvector similarity search)")
+    except Exception:
+        pass  # embed server unavailable — non-critical
+
+
 def cmd_fact_confirm(args):
     """Set user_verdict=CONFIRM for a fact UUID and store in feedback_examples."""
     from lib.db import psql_ok, psql_json as _pj, esc_sql
@@ -1410,14 +1432,17 @@ def cmd_fact_confirm(args):
     if not psql_ok(f"UPDATE review_facts SET user_verdict='CONFIRM', user_verdict_at=NOW() WHERE id='{fid}'"):
         print(f"  ERROR: failed to confirm fact {args.id}")
         return
-    # Store feedback example
+    # Store feedback example with RETURNING id
     r = fact[0]
     ev = esc_sql(r.get('evidence', ''))
     src = esc_sql(r.get('source_text', ''))
     ft = esc_sql(r.get('fact_type', ''))
-    psql_ok(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
-       VALUES ('{ev}', '{src}', '{ft}', 'CONFIRM')""")
+    fb_id = _pj(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
+       VALUES ('{ev}', '{src}', '{ft}', 'CONFIRM') RETURNING id::text""")
+    fb_uuid = (fb_id[0]["id"] if fb_id else "").strip()
     print(f"  Confirmed: {r['id'][:12]}... — {(r.get('evidence') or '')[:60]}")
+    if fb_uuid:
+        _try_embed_feedback(fb_uuid, r.get('evidence', ''))
     print(f"  Stored as feedback example for few-shot NLI")
 
 
@@ -1444,9 +1469,12 @@ def cmd_fact_reject(args):
     ev = esc_sql(r.get('evidence', ''))
     src = esc_sql(r.get('source_text', ''))
     ft = esc_sql(r.get('fact_type', ''))
-    psql_ok(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
-       VALUES ('{ev}', '{src}', '{ft}', 'REJECT')""")
+    fb_id = _pj(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
+       VALUES ('{ev}', '{src}', '{ft}', 'REJECT') RETURNING id::text""")
+    fb_uuid = (fb_id[0]["id"] if fb_id else "").strip()
     print(f"  Rejected: {r['id'][:12]}... — {(r.get('evidence') or '')[:60]}")
+    if fb_uuid:
+        _try_embed_feedback(fb_uuid, r.get('evidence', ''))
     print(f"  Stored as feedback example for few-shot NLI")
 
 
