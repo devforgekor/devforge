@@ -31,7 +31,7 @@ TIMEOUT = 7200
 MODEL_METADATA = {
     # Pod B models — port assigned per mode (not from env file):
     #   8081: embed(f16 day) / proposer(night)
-    #   8082: extract(day/day dual) / polish / reflector(night)
+    #   8082: extract(day) / enrich(day) / verify(day) / polish / reflector(night)
     #   8083: judge(night)
     #   8084: verifier(night)
     "embed":      {
@@ -589,76 +589,3 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
     return start_pod_b(meta["mode"], meta["port"], night=night, dry_run=dry_run, model_key=physical_name)
 
 
-def _write_dual_env() -> None:
-    """Write env file for swap-based day mode (day-extractor on :8082 + day-verifier on :8082)."""
-    m1 = MODEL_METADATA["day-extractor"]
-    m2 = MODEL_METADATA["day-verifier"]
-    lines = ["MODE=dual-day"]
-    for prefix, meta in [("1", m1), ("2", m2)]:
-        f = meta.get
-        pairs = [
-            (f"MODEL_NAME_{prefix}", f("model_name", "?")),
-            (f"MODEL_FILE_{prefix}", meta["file"]),
-            (f"PORT_{prefix}", str(meta["port"])),
-            (f"CTX_SIZE_{prefix}", str(f("ctx", 8192))),
-            (f"THREADS_{prefix}", str(f("threads", 4))),
-            (f"THREADS_BATCH_{prefix}", str(f("threads_batch", 4))),
-        ]
-        for key, env_key in [
-            ("cache_ram", "CACHE_RAM"), ("mlock", "MLOCK"),
-            ("batch_size", "BATCH_SIZE"), ("ubatch_size", "UBATCH_SIZE"),
-            ("parallel", "PARALLEL"),
-            ("cpus", "CPUS"),
-            ("cache_type_k", "CACHE_TYPE_K"),
-            ("cache_type_v", "CACHE_TYPE_V"),
-            ("flash_attn", "FLASH_ATTN"),
-        ]:
-            val = f(key)
-            if val is not None and val != "":
-                pairs.append((f"{env_key}_{prefix}", str(val)))
-
-        for k, v in pairs:
-            lines.append(f"{k}={v}")
-
-    # Also add individual env keys for backward compat with older health checks
-    lines += [f"MODEL_NAME={m1.get('model_name','?')}", f"MODEL_FILE={m1['file']}",
-              f"PORT={m1['port']}", f"CTX_SIZE={m1.get('ctx',8192)}"]
-    with open(MODE_FILE_B, "w") as fh:
-        fh.write("\n".join(lines) + "\n")
-    log(f"  wrote dual-day env (:{m1['port']} + :{m2['port']})")
-
-
-def ensure_dual_day(dry_run: bool = False) -> bool:
-    """Start Pod B in dual-day mode: day-extractor on 8082 + day-verifier on 8082."""
-    log("  POD B -> dual-day (day-extractor :8082 + day-verifier :8083)")
-    _write_dual_env()
-    # Kill Pod B only (Pod A reranker stays alive on :8080)
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
-                   capture_output=True, timeout=30)
-    subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
-                   capture_output=True, timeout=10)
-    _kill_stray_pasta(("8081", "8082", "8083", "8084"))
-    _reclaim_memory()
-    # Re-write env immediately before systemctl start to close the timing window
-    _write_dual_env()
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
-                   capture_output=True, timeout=60)
-
-    # Wait for BOTH servers to be healthy
-    ok1 = wait_health(8082, timeout=600)
-    ok2 = wait_health(8083, timeout=600)
-    if not ok1 or not ok2:
-        log(f"  dual-day health: 8082={'OK' if ok1 else 'TIMEOUT'} 8083={'OK' if ok2 else 'TIMEOUT'}")
-        log("  restarting container...")
-        subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-                       capture_output=True, timeout=60)
-        ok1 = wait_health(8082, timeout=300)
-        ok2 = wait_health(8083, timeout=300)
-    if ok1 and ok2:
-        log(f"  both servers healthy: :8082 + :8083")
-        # probe both
-        wait_probe(8082, "day-extractor", timeout=120)
-        wait_probe(8083, "day-verifier", timeout=120)
-        return True
-    log(f"  dual-day start failed: 8082={'OK' if ok1 else 'FAIL'} 8083={'OK' if ok2 else 'FAIL'}")
-    return False

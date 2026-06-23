@@ -108,46 +108,6 @@ print(DAY_PHASE_MODELS['$1'])
 "
 }
 
-ensure_dual_day() {
-    local skip_probe="${1:-false}"
-    local timeout="${2:-600}"
-
-    # Check if both servers are already healthy
-    local ok_8082=false; local ok_8083=false
-    curl -sf "http://127.0.0.1:8082/health" >/dev/null 2>&1 && ok_8082=true
-    curl -sf "http://127.0.0.1:8083/health" >/dev/null 2>&1 && ok_8083=true
-    if $ok_8082 && $ok_8083; then
-        LOG "  Pod B already dual-day (:8082 + :8083) — skip restart"
-        return 0
-    fi
-
-    # Check test heartbeat before restart
-    if python3 -c "
-import sys; sys.path.insert(0, '$SCRIPT_DIR')
-from lib.db import psql_json
-rows = psql_json(\"SELECT pulse_id FROM watchdog_pulses WHERE pulse_id LIKE 'heartbeat_test_%' AND status = 'IN_PROGRESS' LIMIT 1\")
-if rows:
-    print(f'  Test active ({rows[0][\"pulse_id\"]}) — skip Pod B restart')
-    sys.exit(0)
-sys.exit(1)
-" 2>&1; then
-        LOG "  Pod B restart skipped (test heartbeat active)"
-        return 0
-    fi
-
-    LOG "  Starting Pod B in swap-day mode (day-extractor :8082 → day-verifier :8082)..."
-    local probe_opt=""; [ "$skip_probe" = true ] && probe_opt=", skip_probe=True"
-    if ! timeout "$timeout" python3 -c "
-import sys; sys.path.insert(0, '$SCRIPT_DIR')
-from lib.pod_manager import ensure_dual_day
-sys.exit(0 if ensure_dual_day() else 1)
-" 2>&1; then
-        LOG "  [warn] dual-day start failed — continuing anyway"
-        return 1
-    fi
-    return 0
-}
-
 ensure_pod_b() {
     local target_mode="$1" model_key="$2" skip_probe="${3:-false}"
     local timeout="${4:-600}"
@@ -417,6 +377,7 @@ NEED_ENRICH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
 if [ "$NEED_ENRICH" -gt 0 ]; then
     _budget_gate "extracted" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
     LOG "=== Day Enrich (:8082, ${NEED_ENRICH} extracted turns) ==="
+    ensure_pod_b "day-enrich" "day-enrich" true 300
     python3 "$PIPELINE_DIR/enrich.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -432,6 +393,7 @@ NEED_VERIFY=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
 if [ "$NEED_VERIFY" -gt 0 ]; then
     _budget_gate "enriched" 25 30 || { LOG "Budget insufficient for verify — deferring"; exit 0; }
     LOG "=== Day Verify (:8082, ${NEED_VERIFY} enriched turns) ==="
+    ensure_pod_b "day-verifier" "day-verifier" true 300
     python3 "$PIPELINE_DIR/day_verify.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
