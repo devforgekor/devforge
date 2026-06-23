@@ -11,6 +11,7 @@ Circuit breaker pattern (pyresilience, pybreaker):
 import time
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Optional
 
 
 class ComponentState(Enum):
@@ -19,6 +20,56 @@ class ComponentState(Enum):
     UNHEALTHY = "UNHEALTHY"  # 3+ failures, circuit open
     DOWN = "DOWN"            # 5+ failures, escalated
 
+
+class TrendTracker:
+    """Ring buffer for metric trend tracking + linear prediction.
+
+    Stores up to max_samples readings {time → value}.
+    predict_eta(threshold) returns minutes until threshold breach, or None.
+    Lightweight — pure Python, zero DB writes.
+    """
+
+    __slots__ = ("_data", "max_samples")
+
+    def __init__(self, max_samples: int = 60):
+        self.max_samples = max_samples
+        self._data: list[tuple[float, float]] = []
+
+    def add(self, value: float):
+        now = time.monotonic()
+        self._data.append((now, value))
+        if len(self._data) > self.max_samples:
+            self._data.pop(0)
+
+    def predict_eta(self, threshold: float) -> Optional[float]:
+        """Minutes until threshold breached. None if descending or insufficient data."""
+        if len(self._data) < 10:
+            return None
+        xs = [t - self._data[0][0] for t, _ in self._data]
+        ys = [v for _, v in self._data]
+        n = len(xs)
+        if n < 2:
+            return None
+        sx = sum(xs); sy = sum(ys)
+        sxx = sum(x * x for x in xs)
+        sxy = sum(x * y for x, y in zip(xs, ys))
+        denom = n * sxx - sx * sx
+        if denom == 0:
+            return None
+        slope = (n * sxy - sx * sy) / denom
+        if slope <= 0:
+            return None
+        latest = ys[-1]
+        if threshold <= latest:
+            return 0.0
+        eta_sec = (threshold - latest) / slope
+        return eta_sec / 60.0  # minutes
+
+    def latest(self) -> Optional[float]:
+        return self._data[-1][1] if self._data else None
+
+    def clear(self):
+        self._data.clear()
 
 class ComponentTracker:
     """Tracks state + failure count for one component.
@@ -126,6 +177,10 @@ class WatchdogState:
         self._mode = "day"
         self._last_heartbeat_ts = 0.0
         self._events: list[dict] = []  # rolling buffer, max 1000
+        # Trend trackers for predictive monitoring
+        self.disk_trend = TrendTracker()
+        self.mem_trend = TrendTracker()
+        self._last_pipeline_state: dict[str, float] = {}  # state → first_observed_ts
 
     def get(self, name: str) -> ComponentTracker:
         if name not in self._components:
@@ -200,3 +255,55 @@ class WatchdogState:
             )
         except Exception:
             pass  # best-effort — DB down shouldn't crash watchdog
+
+    # ── Pipeline state stuck detection ─────────────────────────────────
+
+    def check_pipeline_stuck(self, stale_sec: int = 1800) -> list[dict]:
+        """Detect pipeline_state stagnation. Returns list of stuck states.
+
+        Compares current state counts against previous cycle first-observation.
+        States unchanged for >stale_sec are reported as stuck.
+        """
+        from lib.db import psql_json
+        try:
+            rows = psql_json(
+                "SELECT pipeline_state, count(*)::int AS cnt, "
+                "  EXTRACT(EPOCH FROM (now() - MIN(created_at)))::int AS min_age_sec "
+                "FROM turns "
+                "WHERE pipeline_state NOT IN ('pending', 'verified') "
+                "GROUP BY pipeline_state ORDER BY pipeline_state"
+            )
+        except Exception:
+            return []
+
+        now = time.monotonic()
+        current: dict[str, float] = {}
+        stuck: list[dict] = []
+
+        for r in (rows or []):
+            state = r.get("pipeline_state", "")
+            cnt = r.get("cnt", 0)
+            if cnt == 0:
+                continue
+            current[state] = now
+
+            # Check first observation time
+            first_seen = self._last_pipeline_state.get(state)
+            if first_seen is None:
+                continue  # first cycle seeing this state
+            age = now - first_seen
+            if age > stale_sec and r.get("min_age_sec", 0) > stale_sec:
+                stuck.append({
+                    "state": state,
+                    "cnt": cnt,
+                    "stuck_sec": int(age),
+                    "min_age": r.get("min_age_sec", 0),
+                })
+
+        # Track states that disappeared
+        for prev_state in self._last_pipeline_state:
+            if prev_state not in current:
+                pass  # resolved, no alert needed
+
+        self._last_pipeline_state = current
+        return stuck

@@ -182,6 +182,23 @@ def _build_heartbeat_blocks(state: dict) -> tuple[list, str]:
                 {"type": "mrkdwn", "text": f"*Swap*\n{mem.get('swap_used_gb','?')}G / {mem.get('swap_total_gb','?')}G  {mem.get('swap_pct','?')}%"},
             ],
         })
+    # Disk trend prediction
+    disk = state.get("disk_trend", {})
+    if disk:
+        eta_disk = disk.get("eta_disk_crit")
+        eta_full = disk.get("eta_disk_full")
+        disk_pct = disk.get("root_pct", "?")
+        pred_parts = [f"Disk / : {disk_pct}%"]
+        if eta_full is not None and eta_full < 240:
+            pred_parts.append(f"full ~{int(eta_full)}m")
+        elif eta_disk is not None and eta_disk < 480:
+            pred_parts.append(f"crit ~{int(eta_disk)}m")
+        else:
+            pred_parts.append("stable")
+        blocks.append({
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": " | ".join(pred_parts)}],
+        })
 
     # Services
     services = state.get("services", [])
@@ -239,6 +256,12 @@ def _build_heartbeat_blocks(state: dict) -> tuple[list, str]:
             ctx_parts.append(f":{port} [{caches}]")
     events = state.get("events_30m", [])
     ctx_parts.append(f"events: {len(events)}")
+
+    # Pipeline stuck states
+    pipeline_stuck = state.get("pipeline_stuck", [])
+    if pipeline_stuck:
+        for s in pipeline_stuck:
+            ctx_parts.append(f"⚠ {s['state']}:{s['cnt']}t {s['stuck_sec']//60}m")
 
     if ctx_parts:
         blocks.append({

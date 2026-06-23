@@ -160,7 +160,29 @@ def _run_memory_check(results: dict, dry_run: bool = False):
             _state.add_event("system:memory", "crit", f"{mem_info['pct']}%/{mem_info['swap_pct']}%")
             if not dry_run:
                 recover_oom()
+
+    # Trend recording for predictive monitoring
+    _state.mem_trend.add(mem_info.get("pct", 0))
     results["memory"] = mem_info
+    # Disk trend (cheapest reliable source: df output)
+    try:
+        disk_info = check_disk()
+        root_disk = next((d for d in disk_info if d.get("mount") == "/"), {})
+        _state.disk_trend.add(root_disk.get("pct", 0))
+        results["disk_trend"] = {
+            "root_pct": root_disk.get("pct", 0),
+            "eta_disk_full": _state.disk_trend.predict_eta(97),
+            "eta_disk_crit": _state.disk_trend.predict_eta(92),
+        }
+    except Exception:
+        results["disk_trend"] = {}
+    # Pipeline state stuck detection
+    stuck = _state.check_pipeline_stuck()
+    if stuck:
+        for s in stuck:
+            _state.add_event("pipeline_state", "stuck",
+                             f"{s['state']}: {s['cnt']} turns, {s['stuck_sec']}s")
+    results["pipeline_stuck"] = stuck
 
 
 def _run_alert_only(dry_run: bool, results: dict):
@@ -391,6 +413,8 @@ def build_heartbeat_summary(day_results: dict) -> dict:
         "slots": slots,
         "active_pulses": _get_active_pulses(),
         "events_30m": _state.events_since(1800),
+        "disk_trend": day_results.get("disk_trend", {}),
+        "pipeline_stuck": day_results.get("pipeline_stuck", []),
     }
 
 
