@@ -60,6 +60,7 @@ def _fetch_verify_results() -> List[Dict[str, Any]]:
         "FROM review_facts rf "
         "JOIN turns t ON t.id = rf.turn_id "
         "WHERE rf.fact_type = 'verify_result' "
+        "  AND t.pipeline_state = 'verified' "
         f"  AND rf.created_at > now() - interval '{LOOKBACK_HOURS} hours' "
         "ORDER BY rf.created_at DESC "
         "LIMIT 100"
