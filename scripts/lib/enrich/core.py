@@ -1,4 +1,10 @@
-# Status: production
+# Status: deprecated
+# Path: replaced by enrich.py direct implementation — LLM self-verify, remove after 2026-07
+"""DEPRECATED — MiniCheck + sentence-transformer based NLI.
+
+Replaced by LLM self-verify in pipelines/enrich.py (day_enrich model).
+knowledge_enrichment_pipeline.py (also deprecated) is the only caller.
+"""
 import json
 import time
 import os

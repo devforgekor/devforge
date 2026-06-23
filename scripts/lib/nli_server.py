@@ -1,18 +1,10 @@
 #!/usr/bin/env python3
-# Status: production
-# Path: systemd:devforge-nli.service, day_verify.py — NLI cross-encoder
-"""NLI Cross-Encoder Server — DeBERTa-v3-large for factual consistency.
+# Status: deprecated
+# Path: replaced by LLM self-verify (enrich.py _verify_tldr, day_verify.py _llm_verify_entities, extract.py _llm_nli_check) — DeBERTa-v3 NLI port 8085 never deployed, remove after 2026-07
+"""NLI Cross-Encoder Server — DeBERTa-v3-large (DEPRECATED, never deployed).
 
-Serves cross-encoder/nli-deberta-v3-large (435M params) via FastAPI on port 8085.
-Returns SUPPORTED / NOT_SUPPORTED / NEUTRAL for (source, evidence) pairs.
-
-Designed as a drop-in replacement for LLM-based NLI self-verify:
-- Deterministic output (same input → same output)
-- ~80ms per pair (vs 2-5s for LLM-based NLI)
-- SciHal 2025: outperforms GPT-4o and DeepSeek-R1 on hallucination detection
-
-Used by day_verify.py Phase 2b instead of _llm_nli_check().
-"""
+LLM self-verify in enrich.py / day_verify.py / extract.py replaces this.
+systemd devforge-nli.service is disabled.""
 
 import os
 import sys

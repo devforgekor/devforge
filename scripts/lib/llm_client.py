@@ -279,11 +279,10 @@ def reranker_nli_verdict(score: float) -> str:
 
 def _call_nli_server(source: str, evidence: str, strict: bool = False,
                      nli_port: int = 8085, timeout: int = 30) -> str:
-    """Call DeBERTa-v3 NLI cross-encoder on port 8085.
+    """DEPRECATED — DeBERTa-v3 NLI server on port 8085 (never deployed).
 
-    Returns ENTAILMENT, CONTRADICTION, or NEUTRAL.
-    Falls back to NEUTRAL on any error.
-    """
+    All production NLI uses LLM self-verify via call_llm_with_retry.
+    Retained only for tests/test_verify_methods.py."""
     body = json.dumps({
         "source": source[:4000],
         "evidence": evidence[:1000],
