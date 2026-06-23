@@ -33,9 +33,11 @@ from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, rerank
 from lib.enrich.utils import verify_entities
 from lib.infra.preflight import preflight_checks
 from lib.watchdog.messenger import heartbeat
+from lib.pod_manager import ensure_model
 
 BATCH_LIMIT = 10
 PARALLEL = 2
+SOLO_THRESHOLD = 5000
 
 
 
@@ -214,7 +216,8 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT,
             "SELECT DISTINCT ON (t.id) "
             "  t.id, t.user_turn, t.thinking, t.text, "
             "  rf.evidence::text AS enrich_meta, "
-            "  t.created_at::text "
+            "  t.created_at::text, "
+            "  t.est_chars "
             "FROM turns t "
             "JOIN review_facts rf ON rf.turn_id = t.id "
             f"  AND rf.fact_type = 'enrich_meta' "
@@ -226,7 +229,8 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT,
             "SELECT DISTINCT ON (t.id) "
             "  t.id, t.user_turn, t.thinking, t.text, "
             "  rf.evidence::text AS enrich_meta, "
-            "  t.created_at::text "
+            "  t.created_at::text, "
+            "  t.est_chars "
             "FROM turns t "
             "JOIN review_facts rf ON rf.turn_id = t.id "
             "  AND rf.fact_type = 'enrich_meta' "
@@ -235,9 +239,12 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT,
             "  WHERE rf2.turn_id = t.id "
             "  AND rf2.fact_type = 'verify_result'"
             ") "
+            "  AND t.pipeline_state = 'enriched' "
             "ORDER BY t.id, rf.fact_index DESC"
         )
     rows = psql_json(sql) or []
+    for r in rows:
+        r.setdefault("est_chars", 0)
     return rows[:limit]
 
 
@@ -402,23 +409,33 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
         log("[done] No turns needing verification")
         return {"ok": True, "processed": 0, "elapsed_s": 0}
 
-    log(f"Processing {len(turns)} turn(s) (parallel={PARALLEL})")
+    solo_turns = [t for t in turns if t.get("est_chars", 0) > SOLO_THRESHOLD]
+    pool_turns = [t for t in turns if t.get("est_chars", 0) <= SOLO_THRESHOLD]
+    log(f"Processing {len(turns)} turn(s): {len(solo_turns)} solo (>{SOLO_THRESHOLD} chars), "
+        f"{len(pool_turns)} parallel (max_workers={PARALLEL})")
 
-    # ── Phase 1+2+2b: Concurrent processing ────────────────────────────
+    # ── Phase 1+2+2b: Processing ──────────────────────────────────────
     turn_results: Dict[str, Tuple[Optional[Dict], Optional[str]]] = {}
     llm_t0 = time.monotonic()
 
-    with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-        fut_map = {}
-        for turn in turns:
-            fut = pool.submit(_process_turn, turn)
-            fut_map[fut] = turn
-        for fut in as_completed(fut_map):
-            turn = fut_map[fut]
-            turn_id_val, verify_result, error = fut.result()
-            turn_results[turn["id"]] = (verify_result, error)
+    # Normal turns first: parallel pool (fast path)
+    if pool_turns:
+        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+            fut_map = {}
+            for turn in pool_turns:
+                fut = pool.submit(_process_turn, turn)
+                fut_map[fut] = turn
+            for fut in as_completed(fut_map):
+                turn = fut_map[fut]
+                turn_id_val, verify_result, error = fut.result()
+                turn_results[turn["id"]] = (verify_result, error)
 
-    log(f"  concurrent phase: {time.monotonic() - llm_t0:.1f}s")
+    # Solo turns after: sequential (large turns don't delay pool)
+    for turn in solo_turns:
+        turn_id_val, verify_result, error = _process_turn(turn)
+        turn_results[turn["id"]] = (verify_result, error)
+
+    log(f"  processing phase: {time.monotonic() - llm_t0:.1f}s")
 
     # ── Sequential store + logging ─────────────────────────────────────
     for turn in turns:
@@ -468,6 +485,7 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
         faithfulness = verify_result.get("faithfulness", {})
         reranker_verdict = _compute_reranker_verdict(faithfulness)
         _insert_verify_result(turn_id_val, fi, verify_json, reranker_verdict)
+        psql_ok(f"UPDATE turns SET pipeline_state = 'verified' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
         log(f"    Stored verify_result (fact_index={fi})")
 
         cat_summary = _build_category_summary(verify_result)
@@ -487,6 +505,7 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
 
 
 def main() -> None:
+    ensure_model('day-verifier')  # skip_if_healthy=False: swap from day-enrich to day-verifier
     preflight_checks("day_verify.py", required_ports={8082})
     import argparse
     parser = argparse.ArgumentParser(

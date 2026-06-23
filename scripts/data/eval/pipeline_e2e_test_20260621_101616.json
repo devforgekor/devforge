@@ -1,0 +1,61 @@
+{
+  "embed_batch": {
+    "returncode": 1,
+    "elapsed_s": 345.0,
+    "success": false,
+    "stdout_snippet": "[10:09:55] [protect:embed_batch] ON ports=[8081] — embedding batch\n[10:09:55] ============================================================\n[10:09:55] Embed Batch — Turns (max_batch=10)\n[10:09:55] ============================================================\n[10:09:58]   [preflight] :8081 API OK\n[10:09:58]   [preflight] :8081 health OK\n[10:09:58]   [preflight] total        used        free      shared  buff/cache   available\n[10:09:58]   [preflight] Mem:            22Gi        16Gi       898Mi       131Mi       5.2Gi       5.7Gi\n[10:09:58]   [preflight] Swap:          4.0Gi       579Mi       3.4Gi\n[10:09:58]   [preflight] NAME      TYPE      SIZE   USED PRIO\n[10:09:58]   [preflight] /dev/dm-7 partition   4G 579.2M   -2\n[10:09:59]   Found 10 turns: 10 to embed, 0 empty/skip\n[10:09:59]   Built 4 batches (max 10 texts / ~5000 tok per batch)\n[10:13:49]   batch 1/4 (2 texts, ~2401 est tok) 229.9s\n",
+    "stderr_snippet": ""
+  },
+  "entity_scan": {
+    "returncode": 0,
+    "elapsed_s": 15.8,
+    "success": true,
+    "stdout_snippet": "[10:15:41]   [preflight] total        used        free      shared  buff/cache   available\n[10:15:41]   [preflight] Mem:            22Gi        16Gi       907Mi       169Mi       5.5Gi       5.9Gi\n[10:15:41]   [preflight] Swap:          4.0Gi       540Mi       3.5Gi\n[10:15:41]   [preflight] NAME      TYPE      SIZE   USED PRIO\n[10:15:41]   [preflight] /dev/dm-7 partition   4G 540.5M   -2\n\n============================================================\nEntity Scan — Phase 0: deterministic extraction (no LLM)\n============================================================\n[entity_scan] Scanning 10 turn(s)\n  [1/10] ab0d22b0 — 3 files, 0 funcs (rx_f=3 rx_fn=0 reg=0 ctx_f=0)\n  [2/10] aebe7ffa — 0 files, 0 funcs (rx_f=0 rx_fn=0 reg=0 ctx_f=0)\n  [3/10] a2e7aa51 — 2 files, 0 funcs (rx_f=2 rx_fn=0 reg=0 ctx_f=0)\n  [4/10] 1e6ff5af — 4 files, 0 funcs (rx_f=4 rx_fn=0 reg=0 ctx_f=0)\n  [5/10] 1d239935 — 1 files, 0 funcs (rx_f=1 rx_fn=0 reg=0 ctx_f=0)\n  [6/10] 2cd9e45f — 1 files, 0 funcs (rx_f=1 rx_fn=0 reg=0 ctx_f=0)\n  [7/10] 29392af7 — 0 files, 0 funcs (rx_f=0 rx_fn=0 reg=0 ctx_f=0)\n  [8/10] 418f6bd0 — 1 files, 0 funcs (rx_f=1 rx_fn=0 reg=0 ctx_f=0)\n  [9/10] c2893937 — 3 files, 0 funcs (rx_f=3 rx_fn=0 reg=0 ctx_f=0)\n  [10/10] 4620ab61 — 0 files, 0 funcs (rx_f=0 rx_fn=0 reg=0 ctx_f=0)\n\n============================================================\nDone: 10 scanned, 0 failed — 15 files, 0 funcs (15.5s)\n============================================================\n",
+    "stderr_snippet": ""
+  },
+  "extract": {
+    "returncode": 1,
+    "elapsed_s": 9.6,
+    "success": false,
+    "stdout_snippet": " timeout=963s max_tokens=512\n  [10/10] 4620ab61 — LLM call failed: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [call_llm] extractor:8082 timeout=1282s max_tokens=512\n  [9/10] c2893937 — LLM call failed: [Errno 104] Connection reset by peer\n  [extract]   LLM calls: 5.7s\n\n[1/10] Turn ab0d22b0... user=24ch think=977ch text=887ch\n  [extract]   day_extract exception: [Errno 104] Connection reset by peer\n\n[2/10] Turn aebe7ffa... user=17ch think=1507ch text=590ch\n  [extract]   day_extract exception: [Errno 104] Connection reset by peer\n\n[3/10] Turn a2e7aa51... user=502ch think=2910ch text=405ch\n  [extract]   day_extract exception: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n\n[4/10] Turn 1e6ff5af... user=151ch think=2657ch text=512ch\n  [extract]   day_extract exception: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n\n[5/10] Turn 1d239935... user=16ch think=996ch text=15ch\n  [extract]   day_extract exception: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n\n[6/10] Turn 2cd9e45f... user=502ch think=1566ch text=322ch\n  [extract]   day_extract exception: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n\n[7/10] Turn 29392af7... user=3ch think=762ch text=30ch\n  [extract]   day_extract exception: [Errno 104] Connection reset by peer\n\n[8/10] Turn 418f6bd0... user=23ch think=657ch text=289ch\n  [extract]   day_extract exception: [Errno 104] Connection reset by peer\n\n[9/10] Turn c2893937... user=151ch think=1903ch text=309ch\n  [extract]   day_extract exception: [Errno 104] Connection reset by peer\n\n[10/10] Turn 4620ab61... user=44ch think=602ch text=119ch\n  [extract]   day_extract exception: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n\n============================================================\nDone: 0 processed, 10 failed, 0 facts (9.4s)\n============================================================\n",
+    "stderr_snippet": ""
+  },
+  "enrich": {
+    "returncode": 1,
+    "elapsed_s": 6.8,
+    "success": false,
+    "stdout_snippet": "ting 10 turns to LLM (parallel=2)...\n  [call_llm] extractor:8082 timeout=1780s max_tokens=512\n  [call_llm] extractor:8082 timeout=1800s max_tokens=512\n  [2/10] aebe7ffa — LLM call failed: RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [call_llm] extractor:8082 timeout=1294s max_tokens=512\n  [call_llm] extractor:8082 timeout=1800s max_tokens=512\n  [3/10] a2e7aa51 — LLM call failed: RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [4/10] cf9bcb58 — LLM call failed: RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [call_llm] extractor:8082 timeout=1588s max_tokens=512\n  [5/10] 1e6ff5af — LLM call failed: RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [call_llm] extractor:8082 timeout=1452s max_tokens=512\n  [call_llm] extractor:8082 timeout=1800s max_tokens=512\n  [6/10] 21b50a82 — LLM call failed: RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [7/10] 1d239935 — LLM call failed: RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [8/10] 2cd9e45f — LLM call failed: RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [call_llm] extractor:8082 timeout=1382s max_tokens=512\n  [call_llm] extractor:8082 timeout=1436s max_tokens=512\n  [9/10] 29392af7 — LLM call failed: RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>\n  [10/10] 418f6bd0 — LLM call failed: ConnectionResetError: [Errno 104] Connection reset by peer\n  [call_llm] extractor:8082 timeout=1712s max_tokens=512\n  [1/10] ab0d22b0 — LLM call failed: ConnectionResetError: [Errno 104] Connection reset by peer\n\n============================================================\nDone: 0 enriched, 10 failed (LLM: 3.3s, total: 6.6s)\n============================================================\n",
+    "stderr_snippet": ""
+  },
+  "day_verify": {
+    "returncode": 0,
+    "elapsed_s": 0.7,
+    "success": true,
+    "stdout_snippet": "[10:16:14]   [preflight] :8082 API probe failed ([Errno 104] Connection reset by peer) — may have stale tasks\n[10:16:14]   [preflight] :8082 NOT healthy — will start during boot\n[10:16:14]   [preflight] total        used        free      shared  buff/cache   available\n[10:16:14]   [preflight] Mem:            22Gi        16Gi       817Mi       173Mi       5.5Gi       5.8Gi\n[10:16:14]   [preflight] Swap:          4.0Gi       534Mi       3.5Gi\n[10:16:14]   [preflight] NAME      TYPE      SIZE USED PRIO\n[10:16:14]   [preflight] /dev/dm-7 partition   4G 535M   -2\n[10:16:14] ============================================================\n[10:16:14] Day Verify — enrichment metadata quality check\n[10:16:14] ============================================================\n[10:16:14] [done] No turns needing verification\n",
+    "stderr_snippet": ""
+  },
+  "summary": {
+    "total_elapsed_s": 379.6,
+    "phases_tested": 5,
+    "phases_passed": 2,
+    "phases_failed": 3
+  },
+  "db_state": {
+    "review_facts_by_type": [
+      {
+        "fact_type": "entity_scan",
+        "cnt": 10
+      },
+      {
+        "fact_type": "marker",
+        "cnt": 10
+      }
+    ],
+    "embeddings": {
+      "cnt": 2
+    },
+    "entity_scan_turns": 10,
+    "extract_turns": 0,
+    "verify_turns": 0
+  }
+}

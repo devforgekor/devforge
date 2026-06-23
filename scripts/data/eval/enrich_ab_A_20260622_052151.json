@@ -1,0 +1,51 @@
+{
+  "980601c8-9c81-41fd-95ca-d5f4283a005a": [
+    {
+      "tldr": "Claude Code 와 Watchman 통합 최적화 및 추가 VRAM 모델 필요성 질문",
+      "intent": "question",
+      "category": "reasoning",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "optimization",
+        "vram",
+        "watchman",
+        "llm",
+        "integration"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 2,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 04:54:15.153081+00"
+    }
+  ],
+  "c2893937-7eda-4172-91f7-e73f51ec6666": [
+    {
+      "tldr": "임베딩 진행률 5.5% 확인 및 Slack 보고 완료",
+      "intent": "request",
+      "category": "other",
+      "entities": {
+        "files": [
+          "opt/projects/server/scripts/pipelines/embed_progress_slack.py"
+        ],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "embedding",
+        "slack",
+        "progress",
+        "report"
+      ],
+      "nli_verdict": "NEUTRAL",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 04:59:56.650167+00"
+    }
+  ]
+}

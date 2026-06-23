@@ -1,0 +1,23 @@
+{
+  "turn_sizes": {
+    "user": 211,
+    "thinking": 47,
+    "text": 252
+  },
+  "A": {
+    "by_type": {
+      "user": 5
+    },
+    "total": 5,
+    "elapsed_s": 291.8
+  },
+  "B": {
+    "by_type": {
+      "user": 6,
+      "thinking": 1,
+      "text": 11
+    },
+    "total": 18,
+    "elapsed_s": 730.2
+  }
+}

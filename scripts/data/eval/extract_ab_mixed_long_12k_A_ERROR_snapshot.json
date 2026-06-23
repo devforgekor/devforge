@@ -1,0 +1,11 @@
+{
+  "turn_sizes": {
+    "user": 425,
+    "thinking": 193,
+    "text": 494
+  },
+  "A": {
+    "error": "RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>",
+    "elapsed_s": 0
+  }
+}

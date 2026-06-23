@@ -88,6 +88,19 @@ def preflight_checks(entry_name: str = "pipeline", required_ports: Optional[Set[
                 continue
             if pid in protected_pids:
                 continue  # don't kill protected processes
+            # PPID check: only kill orphaned (PPID=1) — prevents sibling kill
+            # in bash retry loops (new extract.py killing old extract.py)
+            _kill_ok = True
+            try:
+                with open(f"/proc/{pid}/status") as sf:
+                    for sl in sf:
+                        if sl.startswith("PPid:"):
+                            _kill_ok = (int(sl.split()[1]) == 1)
+                            break
+            except (OSError, IOError, ValueError):
+                pass
+            if not _kill_ok:
+                continue
             os.kill(pid, signal.SIGTERM)
             killed.append(pid)
     except Exception:

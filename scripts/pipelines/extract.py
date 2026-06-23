@@ -28,10 +28,12 @@ import json
 import os
 import re
 import sys
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import subprocess as sp
 import time
+import signal
 from typing import Any, Dict, List, Optional, Tuple
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -98,7 +100,7 @@ def _call_with_8082_retry(fn, *args, **kwargs):
 # Timeout/token/temp for extraction (day_extract)
 TIMEOUT_EXTRACT = 900
 MAX_TOKENS_EXTRACT = 512
-TEMP_EXTRACT = 0.1
+TEMP_EXTRACT = 0.0
 BATCH_LIMIT = 10
 TIME_BUDGET = 3600  # default: 1 hour budget for batch slicing
 
@@ -108,7 +110,31 @@ TIMEOUT_BASE = 60
 TIMEOUT_PER_CHAR = 0.2
 MAX_CHARS_SOLO = 5000
 SOLO_TIMEOUT_FACTOR = 2.5
-GEN_TIME_BUF = 750  # 512 tok / ~0.7 t/s gen with parallel=2 contention on 4-core ARM
+GEN_TIME_BUF = 450  # ~512 tok / ~0.7 t/s gen with parallel=2 on 4-core ARM
+_SIGTERM_RECEIVED = _threading.Event()
+
+
+def _sigterm_handler(signum, frame):
+    """Log SIGTERM parent chain, set graceful shutdown flag."""
+    try:
+        pid = os.getpid()
+        chain = []
+        for _ in range(5):
+            try:
+                with open(f"/proc/{pid}/status") as f:
+                    for line in f:
+                        if line.startswith("Name:"):
+                            chain.append(line.split(":", 1)[1].strip())
+                        elif line.startswith("PPid:"):
+                            pid = int(line.split(":", 1)[1].strip())
+                            break
+            except (IOError, ValueError):
+                break
+        print(f"\n  [SIGTERM] from parent chain: {' > '.join(chain)}", flush=True)
+    except Exception:
+        print(f"\n  [SIGTERM] (source chain unavailable)", flush=True)
+    _SIGTERM_RECEIVED.set()
+
 
 # Large turn chunking: text-only, sentence boundaries, 0 overlap
 _MAX_EXTRACT_CHARS = 3000  # text-only chunking threshold (~2.5k tokens context cliff)
@@ -232,6 +258,7 @@ LABELS:
 Output EXACTLY one word: ENTAILMENT | CONTRADICTION | NEUTRAL
 No punctuation. No explanation.
 
+{few_shot}
 SOURCE: {source}
 EVIDENCE: {evidence}"""
 
@@ -242,18 +269,26 @@ extract key factual statements that are EXPLICITLY present in the message.
 
 Do NOT infer, summarize, or add information not present in the source.
 
+CRITICAL — Self-Contained Evidence Rule:
+Each evidence sentence MUST be self-contained. Resolve pronouns ("it", "this", "that")
+and implicit references. If the evidence refers to a specific concept, file, or
+person mentioned in the surrounding context, include that referent explicitly.
+
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "Exact quote or close paraphrase from the source",
-      "category": "requirement|decision|explanation|code|reasoning|other"
+      "evidence": "Self-contained factual statement (resolve pronouns)",
+      "category": "requirement|decision|explanation|code|reasoning|other",
+      "source_context": "Surrounding 1-2 sentences that provide context — helps disambiguate this evidence"
     }
   ]
 }
 
 Rules:
 - evidence must be directly traceable to the source text
+- evidence must be self-contained: "it uses port 8082" → "the LLM server uses port 8082"
+- source_context: include the surrounding sentence(s) that clarify pronouns, references, or conditions
 - Extract at least 1 fact if there is meaningful content
 - If nothing extractable, return {"extractions": []}"""
 
@@ -263,18 +298,26 @@ INTERNAL REASONING (thinking), extract key factual statements.
 
 Do NOT infer, summarize, or add information not present in the source.
 
+CRITICAL — Self-Contained Evidence Rule:
+Each evidence sentence MUST be self-contained. Resolve pronouns ("it", "this", "that")
+and implicit references. If the evidence refers to a specific concept, file, or
+person mentioned in the surrounding context, include that referent explicitly.
+
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "Exact quote or close paraphrase from the source",
-      "category": "requirement|decision|explanation|code|reasoning|other"
+      "evidence": "Self-contained factual statement (resolve pronouns)",
+      "category": "requirement|decision|explanation|code|reasoning|other",
+      "source_context": "Surrounding 1-2 sentences that provide context — helps disambiguate this evidence"
     }
   ]
 }
 
 Rules:
 - evidence must be directly traceable to the source text
+- evidence must be self-contained: "add an index" → "the user requested adding a database index"
+- source_context: include the surrounding sentence(s) that clarify pronouns, references, or conditions
 - Extract at least 1 fact if there is meaningful content
 - If thinking is empty or contains only formatting, return {"extractions": []}"""
 
@@ -284,18 +327,26 @@ RESPONSE (text), extract key factual statements that are EXPLICITLY present.
 
 Do NOT infer, summarize, or add information not present in the source.
 
+CRITICAL — Self-Contained Evidence Rule:
+Each evidence sentence MUST be self-contained. Resolve pronouns ("it", "this", "that")
+and implicit references. If the evidence refers to a specific concept, file, or
+person mentioned in the surrounding context, include that referent explicitly.
+
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "Exact quote or close paraphrase from the source",
-      "category": "requirement|decision|explanation|code|reasoning|other"
+      "evidence": "Self-contained factual statement (resolve pronouns)",
+      "category": "requirement|decision|explanation|code|reasoning|other",
+      "source_context": "Surrounding 1-2 sentences that provide context — helps disambiguate this evidence"
     }
   ]
 }
 
 Rules:
 - evidence must be directly traceable to the source text
+- evidence must be self-contained: "port 8082" → "the Pod B extractor runs on port 8082"
+- source_context: include the surrounding sentence(s) that clarify pronouns, references, or conditions
 - Extract at least 1 fact if there is meaningful content
 - If nothing extractable, return {"extractions": []}"""
 
@@ -373,6 +424,48 @@ def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict
 
 # Backward compat aliases for test files
 SYSTEM_DAY_EXTRACT = _SYSTEM_TEXT_EXTRACT
+
+# ── Incomplete Fact Refinement prompt ────────────────────────────
+_REFINE_FACT_PROMPT = """Given an evidence sentence that may be incomplete, and a source context providing additional detail:
+
+Evidence: {evidence}
+Source: {source_context}
+
+Task: Refine the evidence to be complete and self-contained by incorporating relevant information from the source context. Follow these rules:
+1. Stay strictly faithful to the source context — do NOT add facts not present in the source
+2. Keep it concise (1-3 sentences)
+3. Output ONLY the refined evidence text, nothing else"""
+
+
+def _refine_incomplete_facts(extractions: List[Dict]) -> List[Dict]:
+    """Refine facts with source_context using LLM (day_extract).
+
+    For each extraction with non-trivial source_context, calls LLM
+    to produce a complete, self-contained corrected_evidence.
+    Falls back to simple concat on any error.
+    """
+    pending = [(i, ex) for i, ex in enumerate(extractions)
+               if len(ex.get("source_context", "") or "") > 10]
+    if not pending:
+        return extractions
+
+    for idx, ex in pending:
+        src = ex["source_context"][:500]
+        ev = ex.get("evidence", "")[:300]
+        try:
+            reply = call_llm(
+                [{"role": "user", "content": _REFINE_FACT_PROMPT.format(evidence=ev, source_context=src)}],
+                model="day_extract", max_tokens=256, temperature=0.0, timeout=60,
+            )
+            refined = reply.strip().strip('"\'')
+            if len(refined) > 10 and refined != ex.get("evidence", ""):
+                ex["corrected_evidence"] = refined
+                print(f"      [refine] fact {idx}: LLM refined ({len(refined)}ch)", flush=True)
+                continue
+        except Exception as e:
+            print(f"      [refine] fact {idx}: LLM failed ({e}), concat fallback", flush=True)
+        ex["corrected_evidence"] = f"{ex['evidence']} | {src}"
+    return extractions
 
 
 def _rerank_score(evidence: str, source: str) -> float:
@@ -678,6 +771,110 @@ def _calc_nli_timeout(source: str, evidence: str) -> int:
     return min(max(30, int(total * 0.15)), 600)
 
 
+def _embed_nli_query(text: str) -> Optional[list]:
+    """Embed a single text via embedder on :8081. Returns vector or None on failure."""
+    import json as _json
+    if not text or len(text) < 5:
+        return None
+    body = _json.dumps({"input": [text[:4096]], "model": "default"}).encode()
+    req = urllib.request.Request(
+        "http://127.0.0.1:8081/v1/embeddings", data=body,
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode())
+            return data["data"][0]["embedding"]
+    except Exception:
+        return None
+
+
+def _get_nli_fewshot(evidence: str) -> str:
+    """Query similar CONFIRM/REJECT examples from feedback_examples for few-shot NLI.
+
+    Two-tier retrieval:
+      1. pgvector cosine similarity (requires embedder on :8081 + stored embeddings)
+      2. pg_trgm similarity (fallback)
+    Label-balanced (VAULT-style): fetches top CONFIRM and REJECT examples
+    separately. Returns formatted few-shot string.
+    """
+    from lib.db import psql_json as _pj
+
+    # Clean evidence for matching: extract meaningful segments
+    query = evidence[:300].replace("'", " ").replace('"', " ").strip()
+    if len(query) < 10:
+        return ""
+
+    def _fetch_trgm(verdict: str, limit: int = 2) -> list:
+        cols = "fe.evidence_text, fe.source_text, fe.verdict, fe.fact_type"
+        return _pj(f"""SELECT {cols},
+           similarity(fe.evidence_text, '{esc_sql(query)}') AS sim
+           FROM feedback_examples fe
+           WHERE fe.verdict = '{verdict}'
+           AND similarity(fe.evidence_text, '{esc_sql(query)}') > 0.1
+           ORDER BY sim DESC
+           LIMIT {limit}""", timeout=5)
+
+    confirm = []
+    reject = []
+
+    # Tier 1: pgvector cosine similarity
+    vec = _embed_nli_query(query)
+    if vec:
+        vec_str = "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
+        cols = "fe.evidence_text, fe.source_text, fe.verdict, fe.fact_type, (1 - (e.embedding <=> '{esc_sql(vec_str)}'::vector)) AS sim"
+        confirm = _pj(
+            f"SELECT {cols} FROM feedback_examples fe "
+            f"JOIN embeddings e ON e.source_type='feedback_example' AND e.source_id=fe.id "
+            f"WHERE fe.verdict='CONFIRM' AND e.embedding IS NOT NULL "
+            f"ORDER BY sim DESC LIMIT 2", timeout=5) or []
+        reject = _pj(
+            f"SELECT {cols} FROM feedback_examples fe "
+            f"JOIN embeddings e ON e.source_type='feedback_example' AND e.source_id=fe.id "
+            f"WHERE fe.verdict='REJECT' AND e.embedding IS NOT NULL "
+            f"ORDER BY sim DESC LIMIT 2", timeout=5) or []
+
+    # Tier 2: pg_trgm fallback
+    if not confirm and not reject:
+        confirm = _fetch_trgm("CONFIRM", 2)
+        reject = _fetch_trgm("REJECT", 2)
+
+    examples = confirm + reject
+
+    if not examples:
+        # Fallback: keyword-based if trgm returns nothing
+        terms = [w.lower() for w in re.findall(r'[a-zA-Z가-힣]{4,}', query)]
+        if terms:
+            like_clauses = " OR ".join(f"fe.evidence_text ILIKE '%{esc_sql(t)}%'" for t in terms[:5])
+            confirm = _pj(f"""SELECT fe.evidence_text, fe.source_text, fe.verdict, fe.fact_type
+               FROM feedback_examples fe
+               WHERE fe.verdict='CONFIRM' AND ({like_clauses}) LIMIT 2""", timeout=5) or []
+            reject = _pj(f"""SELECT fe.evidence_text, fe.source_text, fe.verdict, fe.fact_type
+               FROM feedback_examples fe
+               WHERE fe.verdict='REJECT' AND ({like_clauses}) LIMIT 2""", timeout=5) or []
+            examples = confirm + reject
+
+    if not examples:
+        return ""
+
+    parts = []
+    for i, r in enumerate(examples, 1):
+        verdict_label = r['verdict'].upper() if r['verdict'] == 'CONFIRM' else 'REJECT'
+        sim = r.get('sim', 0)
+        sim_str = f" (sim={sim:.2f})" if isinstance(sim, (int, float)) and sim > 0 else ""
+        parts.append(f"[Example {i} - {verdict_label}{sim_str}]")
+        if r.get('fact_type'):
+            parts.append(f"  SOURCE TYPE: {r['fact_type']}")
+        if r.get('source_text'):
+            src = r['source_text'][:400].replace('\n', ' ').replace('\r', '')
+            parts.append(f"  SOURCE: {src}")
+        ev = r['evidence_text'][:250].replace('\n', ' ').replace('\r', '')
+        parts.append(f"  EVIDENCE: {ev}")
+        parts.append(f"  VERDICT: {verdict_label}")
+    return ("Here are examples of similar validations for reference (follow their pattern):\n"
+            + "\n".join(parts) + "\n\n")
+
+
 def _llm_nli_check(evidence: str, source: str) -> str:
     """Run NLI self-verify on a single evidence-source pair.
 
@@ -686,12 +883,14 @@ def _llm_nli_check(evidence: str, source: str) -> str:
 
     Uses structured step prompt (CoVe-style instructions in prompt)
     and robust first-word extraction for reliable parsing.
+    Injects dynamic few-shot examples from user feedback.
     """
     if not evidence or not source:
         return "NEUTRAL"
 
+    few_shot = _get_nli_fewshot(evidence)
     prompt = _NLI_VERIFY_PROMPT.format(
-        source=source[:2000], evidence=evidence[:500]
+        few_shot=few_shot, source=source[:2000], evidence=evidence[:500]
     )
     try:
         meta = call_llm(
@@ -784,7 +983,8 @@ def _insert_fact(turn_id: str, fact_index: int, fact_type: str,
                  faithful_method: Optional[str] = None,
                  grounding: Optional[str] = None,
                  nli_llm: Optional[str] = None,
-                 source_file: Optional[str] = None) -> bool:
+                 source_file: Optional[str] = None,
+                 corrected_evidence: Optional[str] = None) -> bool:
     """Insert a fact row into review_facts with optional grounding metadata."""
     cols = ["turn_id", "fact_index", "fact_type", "evidence", "extract_model", "verdict",
             "source", "fact_action", "fact_confidence"]
@@ -821,6 +1021,10 @@ def _insert_fact(turn_id: str, fact_index: int, fact_type: str,
         cols.append("source_file")
         vals.append(f"'{esc_sql(source_file)}'")
         set_clauses.append(f"source_file = '{esc_sql(source_file)}'")
+    if corrected_evidence:
+        cols.append("corrected_evidence")
+        vals.append(f"'{esc_sql(corrected_evidence[:5000])}'")
+        set_clauses.append(f"corrected_evidence = '{esc_sql(corrected_evidence[:5000])}'")
 
     sql = (
         f"INSERT INTO review_facts ({', '.join(cols)}) "
@@ -872,7 +1076,7 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "  COALESCE(t.thinking_clean_polished, t.thinking_clean, t.thinking) AS thinking, "
         "  COALESCE(t.text_clean_polished, t.text_clean, t.text) AS text, "
         "  t.source_message_id, t.created_at, "
-        "  t.conversation_id, t.seq "
+        "  t.conversation_id, t.seq, t.est_chars "
         "FROM turns t "
         "WHERE t.text != '' "
         "  AND NOT EXISTS ("
@@ -880,6 +1084,7 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "    WHERE rf.turn_id = t.id "
         "    AND rf.source = 'extract_pipeline'"
         "  ) "
+        "  AND t.pipeline_state = 'scanned' "
         "ORDER BY t.created_at DESC "
         f"LIMIT {limit}"
     )
@@ -897,6 +1102,7 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
             "created_at": row.get("created_at", ""),
             "conversation_id": row.get("conversation_id", ""),
             "seq": row.get("seq", 0) or 0,
+            "est_chars": row.get("est_chars", 0) or 0,
         })
     return turns
 
@@ -920,51 +1126,60 @@ def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[
     # Inject entity context for text extraction (files/functions from entity_scan)
     entity_context = _load_entity_context(turn.get("id", ""))
 
+    # ── Robust section extraction with 8082 recovery ─────────────
+    def _robust_extract(section_type, source_text, pulse_context=None, max_attempts=2):
+        """Extract section, retry with 8082 recovery on failure."""
+        for attempt in range(max_attempts):
+            try:
+                return _extract_section(section_type, source_text, pulse_context=pulse_context)
+            except Exception as e:
+                print(f"      [{section_type}] attempt {attempt+1}/{max_attempts} failed: {e}", flush=True)
+                if attempt < max_attempts - 1:
+                    _recover_8082()
+                    time.sleep(6)
+        return None
+
     all_extractions: List[Dict] = []
     total_usage: Dict[str, int] = {}
     total_elapsed_ms = 0.0
 
     # 1. User section — single call (>3000 chars → auto-chunked)
     if user_turn:
-        try:
-            t0 = time.monotonic()
-            res = _extract_section("user", user_turn, pulse_context=None)
-            if res and res.get("extractions"):
-                all_extractions.extend(res["extractions"])
-                _merge_usage(total_usage, res.get("usage", {}))
-                total_elapsed_ms += time.monotonic() - t0
-                print(f"      [user] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
-        except Exception as e:
-            print(f"      [user section] failed: {e}", flush=True)
-    time.sleep(3)  # cooldown between sections to reduce 8082 crash rate
+        t0 = time.monotonic()
+        res = _robust_extract("user", user_turn)
+        if res and res.get("extractions"):
+            all_extractions.extend(res["extractions"])
+            _merge_usage(total_usage, res.get("usage", {}))
+            total_elapsed_ms += time.monotonic() - t0
+            print(f"      [user] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
+        elif res is None:
+            print(f"      [user section] failed after retries", flush=True)
+    time.sleep(6)  # cooldown between sections to reduce 8082 crash rate
 
     # 2. Thinking section — single call (>3000 chars → auto-chunked)
     if thinking and len(thinking.strip()) > 5:
-        try:
-            t0 = time.monotonic()
-            res = _extract_section("thinking", thinking, pulse_context=None)
-            if res and res.get("extractions"):
-                all_extractions.extend(res["extractions"])
-                _merge_usage(total_usage, res.get("usage", {}))
-                total_elapsed_ms += time.monotonic() - t0
-                print(f"      [thinking] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
-        except Exception as e:
-            print(f"      [thinking section] failed: {e}", flush=True)
-    time.sleep(3)  # cooldown between sections
-
+        t0 = time.monotonic()
+        res = _robust_extract("thinking", thinking)
+        if res and res.get("extractions"):
+            all_extractions.extend(res["extractions"])
+            _merge_usage(total_usage, res.get("usage", {}))
+            total_elapsed_ms += time.monotonic() - t0
+            print(f"      [thinking] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
+        elif res is None:
+            print(f"      [thinking section] failed after retries", flush=True)
+    time.sleep(6)  # cooldown between sections
 
     # 3. Text section — single or chunked (same _extract_section logic)
     if text:
-        try:
-            t0 = time.monotonic()
-            res = _extract_section("text", text, pulse_context=entity_context)
-            if res and res.get("extractions"):
-                all_extractions.extend(res["extractions"])
-                _merge_usage(total_usage, res.get("usage", {}))
-                total_elapsed_ms += time.monotonic() - t0
-                print(f"      [text] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
-        except Exception as e:
-            print(f"      [text section] failed: {e}", flush=True)
+        t0 = time.monotonic()
+        res = _robust_extract("text", text, pulse_context=entity_context)
+        if res and res.get("extractions"):
+            all_extractions.extend(res["extractions"])
+            _merge_usage(total_usage, res.get("usage", {}))
+            total_elapsed_ms += time.monotonic() - t0
+            print(f"      [text] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
+        elif res is None:
+            print(f"      [text section] failed after retries", flush=True)
 
     if not all_extractions:
         return (turn, None, "all sections returned empty")
@@ -1037,23 +1252,41 @@ def extract_pipeline(
     failed = 0
 
     # ── Phase 1: Concurrent LLM calls (parallel=PARALLEL) ────────────
-    print(f"[extract] Submitting {len(turns)} turns to LLM (parallel={PARALLEL})...",
+    SOLO_THRESHOLD = 5000
+    solo_turns = [t for t in turns if t.get("est_chars", 0) > SOLO_THRESHOLD]
+    pool_turns = [t for t in turns if t.get("est_chars", 0) <= SOLO_THRESHOLD]
+    print(f"[extract] Submitting {len(turns)} turns to LLM "
+          f"({len(pool_turns)} pool, {len(solo_turns)} solo, parallel={PARALLEL})...",
           flush=True)
     turn_results: Dict[str, Tuple] = {}  # turn_id -> (ex_result, error_str)
     llm_t0 = time.monotonic()
 
-    with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-        fut_map = {}
-        for ti, t in enumerate(turns, 1):
-            fut = pool.submit(_extract_for_turn, t, pulse_context)
-            fut_map[fut] = (ti, t)
-        for fut in as_completed(fut_map):
-            ti, t = fut_map[fut]
-            turn, ex_result, error = fut.result()
-            if error:
-                print(f"  [{ti}/{len(turns)}] {t['id'][:8]} — LLM call failed: {error}",
-                      flush=True)
-            turn_results[t["id"]] = (ex_result, error)
+    # Normal turns first: parallel pool (fast path)
+    if pool_turns:
+        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+            fut_map = {}
+            for ti, t in enumerate(pool_turns, 1):
+                fut = pool.submit(_extract_for_turn, t, pulse_context)
+                fut_map[fut] = (ti, t)
+            for fut in as_completed(fut_map):
+                ti, t = fut_map[fut]
+                turn, ex_result, error = fut.result()
+                if error:
+                    print(f"  [{ti}/{len(turns)}] {t['id'][:8]} — LLM call failed: {error}",
+                          flush=True)
+                turn_results[t["id"]] = (ex_result, error)
+                if ti % 4 == 0:
+                    hb_elapsed = time.monotonic() - t_start
+                    heartbeat("day_extract", f"phase1 {ti}/{len(turns)} turns, {hb_elapsed:.0f}s")
+
+    # Solo turns after: sequential (large turns don't delay pool)
+    for si, t in enumerate(solo_turns, 1):
+        print(f"  [solo] {t['id'][:8]} ({t.get('est_chars', 0)} chars)", flush=True)
+        turn_out, ex_result, error = _extract_for_turn(t, pulse_context)
+        if error:
+            print(f"  [solo {si}/{len(solo_turns)}] {t['id'][:8]} — LLM call failed: {error}",
+                  flush=True)
+        turn_results[t["id"]] = (ex_result, error)
 
     print(f"  [extract]   LLM calls: {time.monotonic() - llm_t0:.1f}s",
           flush=True)
@@ -1079,6 +1312,7 @@ def extract_pipeline(
                 mark = "추출 실패"
                 if not dry_run:
                     _insert_mark(turn_id_val, mark, used_model, is_final=True)
+                    psql_ok(f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
                 failed += 1
                 continue
 
@@ -1086,6 +1320,7 @@ def extract_pipeline(
                 print(f"  [extract]   Parse failure")
                 if not dry_run:
                     _insert_mark(turn_id_val, "추출 parse 실패", used_model, is_final=True)
+                    psql_ok(f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
                 failed += 1
                 continue
 
@@ -1115,11 +1350,15 @@ def extract_pipeline(
             rerankered = _verify_extractions(neutral, user_turn, thinking, text) if neutral else []
             extractions = entail + rerankered
 
+            # Phase 3b: Incomplete Fact Refinement — LLM-based evidence refinement
+            extractions = _refine_incomplete_facts(extractions)
+
             if extractions is None:
                 print(f"  [extract]   No faithful extractions — marking failure")
                 if not dry_run:
                     _insert_mark(turn_id_val, mark or "추출 2회실패", used_model,
                                  is_final=True)
+                    psql_ok(f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
                 failed += 1
                 continue
 
@@ -1144,7 +1383,8 @@ def extract_pipeline(
                              faithful_score=ex.get("faithful_score"),
                              faithful_method=ex.get("faithful_method"),
                              grounding=ex.get("grounding"),
-                             nli_llm=ex.get("nli_llm"))
+                             nli_llm=ex.get("nli_llm"),
+                             corrected_evidence=ex.get("corrected_evidence"))
                 fi += 1
 
             # Write the failure marker if any (only on successful extraction)
@@ -1152,9 +1392,22 @@ def extract_pipeline(
                 _insert_mark(turn_id_val, mark, used_model, is_final=False)
 
             print(f"  [extract]   Stored {fi} facts", flush=True)
+            if not dry_run:
+                psql_ok(f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
             heartbeat("day_extract", f"turn {turn_id_val[:8]} stored {fi} facts")
             total_facts += fi
             processed += 1
+
+            elapsed_ck = time.monotonic() - t_start
+            if idx % 4 == 0:
+                heartbeat("day_extract", f"checkpoint {idx}/{len(turns)} turns, {elapsed_ck:.0f}s")
+            if _SIGTERM_RECEIVED.is_set():
+                print(f"  [extract]   SIGTERM — partial save ({idx} turns)", flush=True)
+                break
+            if idx % 4 == 0 and elapsed_ck > TIME_BUDGET and idx < len(turns):
+                print(f"  [extract]   TIME_BUDGET {elapsed_ck:.0f}s > {TIME_BUDGET}s, "
+                      f"defer {len(turns)-idx} turns", flush=True)
+                break
 
         except Exception as e:
             print(f"  [extract]   ERROR: {type(e).__name__}: {e}", flush=True)
@@ -1265,6 +1518,8 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
 
 # ── CLI ────────────────────────────────────────────────────────────────────
 def main() -> None:
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+    _ensure_model_pod('day-extractor', skip_if_healthy=True)
     preflight_checks("extract.py")
     import argparse
     parser = argparse.ArgumentParser(

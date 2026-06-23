@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-21'
+  updated: '2026-06-23'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -46,7 +46,7 @@ modules:
         \ \uB3C4\uAD6C."
     day_cycle.sh:
       status: unknown
-      purpose: "day_cycle.sh \u2014 hourly cycle (:00)"
+      purpose: "day_cycle.sh \u2014 async pipeline (managed by watchdog)"
     deepseek_web.py:
       status: experimental
       purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
@@ -70,6 +70,9 @@ modules:
       status: production
       purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
         \ documents."
+    mcp_server.py:
+      status: experimental
+      purpose: "MCP Server \u2014 SSE-based tool server (protocol 2024-11-05)."
     motd_gen.py:
       status: production
       purpose: "motd_gen.py \u2014 lightweight MOTD for SSH login. Reads state.yaml\
@@ -106,6 +109,9 @@ modules:
     sync_gemini_rules.py:
       status: experimental
       purpose: Sync shared rules into Gemini CLI instruction file.
+    system_sync.sh:
+      status: unknown
+      purpose: "system_sync.sh \u2014 30min system maintenance (no Pod B, no pipeline)"
     telegram_send.py:
       status: experimental
       purpose: telegram_send.py --- Send files or text to your Telegram chat.
@@ -194,6 +200,10 @@ modules:
     scoring.py:
       status: production
       purpose: "Scoring \u2014 shared veto/gap/early-exit logic."
+    slack_interactive.py:
+      status: experimental
+      purpose: "Slack Interactive Handler \u2014 receives Slack block_actions payload\
+        \ and processes NEUTRAL fact confirm/reject."
     test_common.py:
       status: production
       purpose: "Shared test utilities \u2014 setup, heartbeat, cleanup, re-exports."
@@ -587,14 +597,6 @@ modules:
     data_extraction_pipeline.py:
       status: deprecated
       purpose: data_extraction_pipeline.py
-    day_cycle.py:
-      status: experimental
-      purpose: "Day-time chain: sequential phase execution for entity_scan \u2192\
-        \ extract \u2192 enrich \u2192 verify."
-    day_extract.py:
-      status: experimental
-      purpose: "Day Extract Pipeline \u2014 extract \u2192 MCP enrich on Pod B (extractor\
-        \ role :8082)."
     day_pipeline.py:
       status: experimental
       purpose: "Day Pipeline: extract \u2192 py_verify \u2192 activity_log \uC800\uC7A5\
@@ -614,10 +616,6 @@ modules:
       status: experimental
       purpose: "Enrich Pipeline \u2014 post-extract MCP metadata enrichment (tldr,\
         \ intent, entities, tags)."
-    enrich_cosine.py:
-      status: experimental
-      purpose: "Enrich Cosine Verification \u2014 embed model based entity/tldr cosine\
-        \ check."
     enrich_verify.py:
       status: experimental
       purpose: "Enrich Verify Pipeline \u2014 score enrichment metadata quality using\
@@ -667,7 +665,7 @@ modules:
       purpose: "proxy_reviewer.py \u2014 DeepSeek Pro verification of 27B verify reasoning."
     re_embed_check.py:
       status: experimental
-      purpose: "Re-embed Check \u2014 detect content_hash changes \u2192 reset embedding_f16=NULL."
+      purpose: "Re-embed Check \u2014 detect content_hash changes \u2192 reset embedding=NULL."
     review.py:
       status: production
       purpose: Step implementations for the 3-Model Review Pipeline.
@@ -716,6 +714,43 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
+    compare_e2e_baseline.py:
+      status: unknown
+      purpose: Compare current E2E result (10-turn, GEN_TIME_BUF=750) against baseline
+        (6-turn).
+    compare_extract_ab.py:
+      status: unknown
+      purpose: 'A/B extract comparison: A(control, old prompt) vs B(treatment, section-split
+        + chunking).'
+    compare_extract_ab_resume.py:
+      status: unknown
+      purpose: Resume A/B extract comparison from user_long_2000 onward.
+    compare_extract_ab_resume2.py:
+      status: unknown
+      purpose: "Resume2 \u2014 Auto-recover A/B test from think_long_4k onward."
+    compare_extract_ab_retry_B.py:
+      status: unknown
+      purpose: Retry think_long_4k B (failed due to 8082 crash).
+    compare_extract_affinity.py:
+      status: experimental
+      purpose: 'Compare extract affinity configs: parallel/threads/cpus.'
+    compare_extract_affinity_6t.py:
+      status: experimental
+      purpose: Compare parallel=2 with different thread/cpus configs.
+    compare_extract_affinity_oom.py:
+      status: experimental
+      purpose: Compare parallel=2 affinity configs on 3 previously-failed turns.
+    compare_extract_approaches.py:
+      status: unknown
+      purpose: Compare 3 extract approaches on short/medium/long turns.
+    compare_extract_long_B.py:
+      status: unknown
+      purpose: Re-run long/B-chunked-large only. Previous attempt failed due to stale
+        code.
+    compare_extract_missing.py:
+      status: unknown
+      purpose: 'Run missing extract approach comparisons: medium/C, long/A, long/C,
+        long/B-large-chunk.'
     day_cycle_pipeline.py:
       status: experimental
       purpose: Day cycle pipeline test harness.
@@ -741,6 +776,16 @@ modules:
       status: experimental
       purpose: "Coder Q8_0\uB9CC classify-P / classify-J / edge cases \uC7AC\uD14C\
         \uC2A4\uD2B8 (timeout=300s)."
+    e2e_20turns_full.sh:
+      status: unknown
+      purpose: "E2E Full Pipeline Test \u2014 20 turns, all phases, snapshot per phase\
+        \ + quality eval"
+    e2e_extract_section_split.py:
+      status: unknown
+      purpose: "E2E Pipeline Test \u2014 section-split extract."
+    e2e_extract_section_split.sh:
+      status: unknown
+      purpose: "E2E Pipeline Test \u2014 section-split extract"
     embed_bench.py:
       status: experimental
       purpose: "Embedding Model Benchmark \u2014 compare faithfulness accuracy, speed,\
@@ -756,6 +801,10 @@ modules:
     embed_runner.sh:
       status: unknown
       purpose: "DevForge Embed Runner \u2014 continuous embed_batch.py loop"
+    enrich_ab_compare.py:
+      status: experimental
+      purpose: "Enrich A/B Quality Comparison \u2014 runs same turns through two models\
+        \ and compares."
     eval_comparison.py:
       status: experimental
       purpose: DeepSeek Pro evaluation of 12-run comparison test results.
@@ -766,6 +815,10 @@ modules:
     experiment_monitor.py:
       status: experimental
       purpose: experiment_monitor.py
+    extract_c_config_verify.py:
+      status: experimental
+      purpose: Extract 3 previously-failed OOM turns with Config C, store & verify
+        quality.
     extract_compare.py:
       status: experimental
       purpose: "\uB3D9\uC77C 5\uAC1C turn\uC73C\uB85C \uCD94\uCD9C \uC815\uD655\uB3C4\
@@ -793,10 +846,22 @@ modules:
       status: experimental
       purpose: "14B NLI Grounding Comparison \u2014 sequential test of both 14B Q8\
         \ models."
+    pipeline_e2e_10turns.py:
+      status: unknown
+      purpose: "Pipeline E2E test \u2014 10 newest turns, all 5 phases with Pod B\
+        \ mode switching."
+    pipeline_e2e_test.py:
+      status: experimental
+      purpose: "E2E Pipeline Test \u2014 6-turn full pipeline with timing, metrics,\
+        \ watchdog supervision."
     pipeline_preverify_test.py:
       status: experimental
       purpose: "Integrated Pipeline Test \u2014 \uC804\uCC98\uB9AC\uBD80\uD130 Embed\uAE4C\
         \uC9C0 \uC804\uCCB4 \uAC80\uC99D."
+    pipeline_smoke_test.py:
+      status: experimental
+      purpose: "Full pipeline smoke test: extract \u2192 enrich \u2192 day_verify\
+        \ with --limit 2 --dry-run."
     pipeline_verify_compare.py:
       status: experimental
       purpose: "Full Pipeline NEUTRAL Test \u2014 10 real samples with 3 verify prompt\

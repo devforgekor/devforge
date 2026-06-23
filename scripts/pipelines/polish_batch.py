@@ -22,7 +22,9 @@ Usage:
   python3 scripts/pipelines/polish_batch.py --dry-run             # simulate, no writes
 """
 
+import atexit
 import os
+import signal
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -35,12 +37,11 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import psql_json, psql_ok, esc_sql
 from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
-from lib.protection import protect
 from lib.text_cleaner import get_cleaner
-from lib.watchdog.messenger import heartbeat
+from lib.watchdog.messenger import heartbeat, resolve_pulse
 
-BATCH_LIMIT = 6
-SUBBATCH_SIZE = 3
+BATCH_LIMIT = 10
+SUBBATCH_SIZE = 10
 PARALLEL = 2
 MAX_TOKENS_USER = 512
 MAX_TOKENS_FIELD = 256
@@ -473,6 +474,11 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
             f"WHERE id = '{esc_sql(tid)}'::uuid",
             timeout=30,
         )
+        psql_ok(
+            f"UPDATE turns SET pipeline_state = 'polished' "
+            f"WHERE id = '{esc_sql(tid)}'::uuid",
+            timeout=30,
+        )
         sub_ok += 1
 
     return sub_ok, sub_fail
@@ -495,61 +501,65 @@ def main():
         print(f"  Checking Pod B: {model_info('polish')}", flush=True)
         ensure_model("polish", skip_if_healthy=True)
 
-    with protect("polish_batch", reason="text polish phase", ports=[8082] if not no_llm else []):
-        if not no_llm:
-            heartbeat("polish_batch")
-        print("=" * 60, flush=True)
-        if no_llm:
-            print("Polish Batch v4 — Kiwi-only (no LLM)", flush=True)
-        else:
-            print("Polish Batch v3 — Kiwi + 2-pass LLM", flush=True)
-        print("=" * 60, flush=True)
+    # Register heartbeat pulse + SIGTERM cleanup
+    if not no_llm:
+        heartbeat("polish_batch", detail="text polish phase")
+        _cleanup_polish = lambda: resolve_pulse("heartbeat_polish_batch")
+        signal.signal(signal.SIGTERM, lambda s, f: (_cleanup_polish(), os._exit(1)))
+        atexit.register(_cleanup_polish)
 
-        t_start = time.monotonic()
+    print("=" * 60, flush=True)
+    if no_llm:
+        print("Polish Batch v4 — Kiwi-only (no LLM)", flush=True)
+    else:
+        print("Polish Batch v3 — Kiwi + 2-pass LLM", flush=True)
+    print("=" * 60, flush=True)
 
-        if turn_ids:
-            ids_list = ", ".join(f"'{esc_sql(t)}'::uuid" for t in set(turn_ids))
-            rows = psql_json(
-                f"SELECT id, user_turn, text, thinking, "
-                f"  user_turn_clean, text_clean, thinking_clean "
-                f"FROM turns "
-                f"WHERE id IN ({ids_list}) AND text_clean IS NOT NULL "
-                f"ORDER BY created_at ASC"
-            )
-        else:
-            rows = psql_json(
-                f"SELECT id, user_turn, text, thinking, "
-                f"  user_turn_clean, text_clean, thinking_clean "
-                f"FROM turns "
-                f"WHERE text_clean IS NOT NULL AND text_clean_polished IS NULL "
-                f"ORDER BY created_at ASC "
-                f"LIMIT {limit}"
-            )
-        if not rows:
-            print("  [ok] No turns to polish", flush=True)
-            return
+    t_start = time.monotonic()
 
-        total = len(rows)
-        print(f"  Found {total} turns to polish (sub-batch={SUBBATCH_SIZE})", flush=True)
+    if turn_ids:
+        ids_list = ", ".join(f"'{esc_sql(t)}'::uuid" for t in set(turn_ids))
+        rows = psql_json(
+            f"SELECT id, user_turn, text, thinking, "
+            f"  user_turn_clean, text_clean, thinking_clean "
+            f"FROM turns "
+            f"WHERE id IN ({ids_list}) AND text_clean IS NOT NULL "
+            f"ORDER BY created_at ASC"
+        )
+    else:
+        rows = psql_json(
+            f"SELECT id, user_turn, text, thinking, "
+            f"  user_turn_clean, text_clean, thinking_clean "
+            f"FROM turns "
+            f"WHERE text_clean IS NOT NULL AND text_clean_polished IS NULL AND pipeline_state = 'cleaned' "
+            f"ORDER BY created_at ASC "
+            f"LIMIT {limit}"
+        )
+    if not rows:
+        print("  [ok] No turns to polish", flush=True)
+        return
 
-        ok_count = 0
-        fail_count = 0
-        sub_total = (total + SUBBATCH_SIZE - 1) // SUBBATCH_SIZE
+    total = len(rows)
+    print(f"  Found {total} turns to polish (sub-batch={SUBBATCH_SIZE})", flush=True)
 
-        for sb_idx in range(0, total, SUBBATCH_SIZE):
-            sub_batch = rows[sb_idx:sb_idx + SUBBATCH_SIZE]
-            sb_num = sb_idx // SUBBATCH_SIZE + 1
-            print(f"\n  ── Sub-batch {sb_num}/{sub_total} ({len(sub_batch)} turns) ──", flush=True)
-            sub_ok, sub_fail = _process_sub_batch(sub_batch, dry_run, no_llm=no_llm)
-            ok_count += sub_ok
-            fail_count += sub_fail
-            elapsed = time.monotonic() - t_start
-            print(f"  Sub-batch {sb_num} done: {sub_ok} ok, {sub_fail} fail, {elapsed:.0f}s elapsed", flush=True)
+    ok_count = 0
+    fail_count = 0
+    sub_total = (total + SUBBATCH_SIZE - 1) // SUBBATCH_SIZE
 
+    for sb_idx in range(0, total, SUBBATCH_SIZE):
+        sub_batch = rows[sb_idx:sb_idx + SUBBATCH_SIZE]
+        sb_num = sb_idx // SUBBATCH_SIZE + 1
+        print(f"\n  ── Sub-batch {sb_num}/{sub_total} ({len(sub_batch)} turns) ──", flush=True)
+        sub_ok, sub_fail = _process_sub_batch(sub_batch, dry_run, no_llm=no_llm)
+        ok_count += sub_ok
+        fail_count += sub_fail
         elapsed = time.monotonic() - t_start
-        print(f"Polish batch done: {ok_count} ok, {fail_count} failed, {elapsed:.0f}s", flush=True)
-        if fail_count:
-            sys.exit(1)
+        print(f"  Sub-batch {sb_num} done: {sub_ok} ok, {sub_fail} fail, {elapsed:.0f}s elapsed", flush=True)
+
+    elapsed = time.monotonic() - t_start
+    print(f"Polish batch done: {ok_count} ok, {fail_count} failed, {elapsed:.0f}s", flush=True)
+    if fail_count:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

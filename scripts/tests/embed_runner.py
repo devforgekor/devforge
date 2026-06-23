@@ -20,7 +20,6 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql_ok
-from lib.protection import register_protect, unregister_protect
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, psql_json
 from lib.pipeline_common import slack_send
 SLACK_INTERVAL = 1800       # Slack report every 30min
@@ -44,11 +43,6 @@ def main():
     for i, a in enumerate(sys.argv):
         if a == "--limit" and i + 1 < len(sys.argv):
             limit = int(sys.argv[i + 1])
-
-    # Create protection
-    if not dry_run:
-        register_protect("embed_runner", reason="Full embed runner with watchdog progress")
-        print("[embed-runner] Protection registered via lib.protection")
 
     # Get starting counts
     total = int(psql_json("SELECT COUNT(*) as cnt FROM turns")[0]["cnt"])
@@ -78,8 +72,6 @@ def main():
             print(f"[embed-runner] {done_msg}")
             _write_event(done_msg)
             slack_send(f"✅ Embedding *complete* — {total}/{total} turns")
-            if not dry_run:
-                unregister_protect("embed_runner")
             break
 
         # Run one cycle

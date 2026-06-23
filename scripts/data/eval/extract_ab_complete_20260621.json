@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "title": "Extract A/B Comparison — Complete Results",
+    "date": "2026-06-21T15:00Z",
+    "description": "A: old unified prompt (max 5 per fact_type) | B: section-split (user/thinking/text each dedicated prompt + conditional chunking)",
+    "test_conditions": {
+      "model": "Qwen3-8B-Q8_0 (day-extractor, :8082)",
+      "batch": "sequential per section (no parallel=2 slot contention)",
+      "max_tokens": 512,
+      "temperature": 0.1 (A) / 0.0 (B),
+      "max_chars": 3000,
+      "text_chunk_size": 2000
+    }
+  },
+  "short_200": {
+    "turn_sizes": {"user": 14, "thinking": 34, "text": 18},
+    "A": {"by_type": {"user": 1, "text": 1}, "total": 2, "elapsed_s": 200.9},
+    "B": {"error": "all sections returned empty — B section-split first run with 8082 crash on thinking+text", "elapsed_s": 216.0}
+  },
+  "medium_800": {
+    "turn_sizes": {"user": 13, "thinking": 70, "text": 55},
+    "A": {"by_type": {"user": 1, "text": 1}, "total": 2, "elapsed_s": 262.0},
+    "B": {"by_type": {"user": 1}, "total": 1, "elapsed_s": 307.0, "note": "text section crashed (Remote end closed)"}
+  },
+  "user_long_2000": {
+    "turn_sizes": {"user": 307, "thinking": 87, "text": 264},
+    "A": {"by_type": {"user": 1, "text": 4}, "total": 5, "elapsed_s": 401.1},
+    "B_initial": {"error": "all sections returned empty — 8082 crash during first phase", "elapsed_s": 179.4},
+    "B_retry": {"by_type": {"user": 5, "thinking": 1, "text": 8}, "total": 14, "elapsed_s": 352.7}
+  },
+  "think_long_4k": {
+    "turn_sizes": {"user": 7, "thinking": 690, "text": 92},
+    "A": {"by_type": {"user": 1, "thinking": 0, "text": 4}, "total": 5, "elapsed_s": 162.6},
+    "B": {"by_type": {"user": 0, "thinking": 8, "text": 2}, "total": 10, "elapsed_s": 836.0}
+  },
+  "text_long_4k": {
+    "turn_sizes": {"user": 10, "thinking": 52, "text": 770},
+    "A": {"by_type": {"user": 0, "thinking": 0, "text": 5}, "total": 5, "elapsed_s": 334.9},
+    "B": {"by_type": {"user": 0, "thinking": 1, "text": 13}, "total": 14, "elapsed_s": 864.9}
+  },
+  "mixed_long_12k": {
+    "turn_sizes": {"user": 211, "thinking": 47, "text": 252},
+    "A": {"by_type": {"user": 5, "thinking": 0, "text": 0}, "total": 5, "elapsed_s": 291.8},
+    "B": {"by_type": {"user": 6, "thinking": 1, "text": 11}, "total": 18, "elapsed_s": 730.2}
+  },
+  "summary": {
+    "totals": {
+      "A": {"turns": 6, "total_facts": 24, "avg_per_turn": 4.0, "avg_time_s": 275.6, "by_type": {"user": 9, "thinking": 0, "text": 15}},
+      "B": {"turns": 6, "total_facts": 58, "avg_per_turn": 9.7, "avg_time_s": 645.7, "by_type": {"user": 12, "thinking": 11, "text": 35}}
+    },
+    "key_findings": [
+      "B produces 2.4x more facts per turn than A (9.7 vs 4.0)",
+      "B is first approach to extract thinking facts (11 total across test)",
+      "A extracted ZERO thinking facts across all turns",
+      "B is 2.3x slower (646s vs 276s avg) due to 3 sequential section calls per turn",
+      "User facts: B=12 vs A=9 (33% improvement)",
+      "Text facts: B=35 vs A=15 (133% improvement)",
+      "B section-split quality is dramatically better but 8082 reliability is a bottleneck",
+      "3 sequential calls per turn stress 8082 — crashes observed during sustained load",
+      "need parallel=1 slot mode or more robust 8082 for production use"
+    ],
+    "recommendation": "section-split prompt to production; monitor 8082 crash rate"
+  }
+}

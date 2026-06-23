@@ -1,0 +1,143 @@
+{
+  "meta": {
+    "timestamp": "2026-06-21T19:09:52Z",
+    "batch_limit": 3,
+    "test": "E2E section-split extract pipeline",
+    "watchdog": "active",
+    "model": "Qwen3-8B-Q8_0 (:8082)",
+    "kst": "2026-06-22 04:09:52",
+    "errors_fixed": [
+      "SQL bug: enrich snapshot query used non-existent `result` column → fixed to `nli_verdict`",
+      "day_cycle.sh extract conflict killed (PID 1297556 / 1385915)",
+      "day_cycle timer inactive, service was activating — stopped"
+    ]
+  },
+  "timeline": {
+    "start": "2026-06-21 18:34:03 UTC",
+    "end": "2026-06-21 19:09:52 UTC",
+    "total_elapsed_min": 35.8,
+    "with_recovery_min": 40
+  },
+  "phases": {
+    "embed_batch": {"skipped": true, "reason": "8081 requires separate Pod B mode"},
+    "entity_scan": {"elapsed_s": 4, "status": "ok"},
+    "extract": {
+      "elapsed_s": 1040,
+      "facts": 7,
+      "by_type": {"user": 1, "thinking": 3, "text": 1, "marker": 2},
+      "8082_crashes": 1,
+      "recovery_s": 120,
+      "turns_processed": 3,
+      "status": "ok"
+    },
+    "enrich": {
+      "elapsed_s": 358,
+      "turns_enriched": 2,
+      "turns_failed": 1,
+      "failed_turn": "6680f78a (8005-char user_turn — 8082 crash)",
+      "status": "partial",
+      "note": "re-run after initial SIGTERM; original enrich killed by day_cycle extract conflict on same :8082"
+    },
+    "day_verify": {
+      "elapsed_s": 30.1,
+      "turns_verified": 3,
+      "turns_failed": 0,
+      "faithfulness_100pct": true,
+      "ungrounded_entities": 0,
+      "status": "ok",
+      "note": "re-run; 8082 auto-recovered, all verifications fast (30s total)"
+    }
+  },
+  "snapshots": {
+    "embed_batch": "data/eval/e2e_embed_batch_20260621_183403.json",
+    "entity_scan": "data/eval/e2e_entity_scan_20260621_183403.json",
+    "extract": "data/eval/e2e_extract_20260621_183403.json",
+    "enrich": "data/eval/e2e_enrich_20260621_183403.json",
+    "day_verify": "data/eval/e2e_day_verify_20260621_183403.json"
+  },
+  "db_fact_counts": {
+    "extract_pipeline": 7,
+    "enrich": 2,
+    "day_verify": 6,
+    "entity_scan": 23
+  },
+  "per_turn": [
+    {
+      "seq": 28,
+      "id": "18a34834",
+      "user_chars": 13,
+      "thinking_chars": 702,
+      "text_chars": 205,
+      "extract_facts": 5,
+      "enriched": true,
+      "verified": true,
+      "entities_files": 1,
+      "entities_symbols": 2,
+      "faithfulness_entities": 7,
+      "ungrounded": 0,
+      "tldr_ok": true
+    },
+    {
+      "seq": 27,
+      "id": "6680f78a",
+      "user_chars": 8005,
+      "thinking_chars": 3825,
+      "text_chars": 961,
+      "extract_facts": 1,
+      "enriched": false,
+      "note": "8082 crash during enrich LLM call (large turn)"
+    },
+    {
+      "seq": 223,
+      "id": "74581bfd",
+      "user_chars": 19,
+      "thinking_chars": 95,
+      "text_chars": 13,
+      "extract_facts": 1,
+      "enriched": false,
+      "note": "enrich missed on first run, not picked up by re-run"
+    },
+    {
+      "seq": 224,
+      "id": "06a58e67",
+      "extract_facts": 1,
+      "enriched": true,
+      "verified": true,
+      "entities_files": 1,
+      "entities_symbols": 2,
+      "faithfulness_entities": 7,
+      "ungrounded": 0,
+      "tldr_ok": true
+    },
+    {
+      "seq": 233,
+      "id": "77d2fcac",
+      "extract_facts": 3,
+      "enriched": true,
+      "verified": true,
+      "entities_files": 1,
+      "entities_symbols": 0,
+      "faithfulness_entities": 2,
+      "ungrounded": 0,
+      "tldr_ok": true
+    }
+  ],
+  "issues": [
+    {
+      "severity": "blocker",
+      "description": "day_cycle.sh was running simultaneously (PID 1297556), spawning extract.py --limit 10 to same :8082, causing LLM contention and enrich SIGTERM",
+      "fix": "kill day_cycle processes, ensure timer disabled"
+    },
+    {
+      "severity": "bug",
+      "description": "enrich snapshot SQL used `result` column (doesn't exist in review_facts)",
+      "fix": "changed to `COALESCE(nli_verdict, 'pending') AS verdict`"
+    },
+    {
+      "severity": "instability",
+      "description": "8082 crashes on large turns (8005 chars user_turn). Recovery works but costs ~2 min",
+      "fix": "add chunking for very large user turns in extract.py, or split before LLM call"
+    }
+  ],
+  "verdict": "E2E pipeline 구조 정상: extract(7 facts) → enrich(2/3) → day_verify(3/3, 0 ungrounded). 8082 안정성과 day_cycle 충돌이 주요 병목. section-split extract 품질 유효."
+}

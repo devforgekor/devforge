@@ -22,11 +22,14 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import psql_json, psql_ok, esc_sql
 from lib.text_cleaner import get_cleaner
 
+BATCH_LIMIT = 10
+
 
 def main():
     turns = psql_json(
         "SELECT id, user_turn, text, thinking FROM turns "
-        "WHERE text_clean IS NULL OR text_clean = '' ORDER BY created_at ASC"
+        "WHERE (text_clean IS NULL OR text_clean = '') AND pipeline_state = 'batching' "
+        f"ORDER BY created_at ASC LIMIT {BATCH_LIMIT}"
     )
     if not turns:
         print("  [text_clean] 0 turns need preprocessing")
@@ -52,6 +55,7 @@ def main():
             )
             if psql_ok(sql):
                 ok += 1
+                psql_ok(f"UPDATE turns SET pipeline_state = 'cleaned' WHERE id = '{tid}'")
         except Exception as e:
             print(f"  [text_clean] ERROR {tid[:8]}: {e}", flush=True)
 

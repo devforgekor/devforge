@@ -1,0 +1,68 @@
+{
+  "embed_batch": {
+    "returncode": 0,
+    "elapsed_s": 847.7,
+    "success": true
+  },
+  "entity_scan": {
+    "returncode": 0,
+    "elapsed_s": 8.3,
+    "success": true
+  },
+  "extract": {
+    "returncode": 0,
+    "elapsed_s": 2127.6,
+    "success": true
+  },
+  "enrich": {
+    "returncode": 0,
+    "elapsed_s": 1255.9,
+    "success": true
+  },
+  "day_verify": {
+    "returncode": 0,
+    "elapsed_s": 161.5,
+    "success": true
+  },
+  "summary": {
+    "total_elapsed_s": 4548.4,
+    "phases_passed": 5,
+    "phases_failed": 0
+  },
+  "db_state": {
+    "review_facts_by_type": [
+      {
+        "fact_type": "enrich_meta",
+        "cnt": 10
+      },
+      {
+        "fact_type": "entity_scan",
+        "cnt": 20
+      },
+      {
+        "fact_type": "marker",
+        "cnt": 10
+      },
+      {
+        "fact_type": "text",
+        "cnt": 32
+      },
+      {
+        "fact_type": "thinking",
+        "cnt": 2
+      },
+      {
+        "fact_type": "user",
+        "cnt": 2
+      },
+      {
+        "fact_type": "verify_result",
+        "cnt": 10
+      }
+    ],
+    "embeddings_count": 10,
+    "entity_scan_turns": 20,
+    "extract_turns": 0,
+    "verify_turns": 0
+  }
+}

@@ -1,19 +1,20 @@
 #!/bin/bash
-# day_cycle.sh — hourly cycle (:00)
-# Light → Heavy execution order
-# Overall flow: watch=0 entry → text_clean → polish → fts5 → embed → entity_scan
-#   → Pod B extract → enrich → swap → verify (cycle complete)
-# Each phase is independent with its own budget check.
-# Pipeline Steps:
-#   System Sync       — code-structure + duckdns + worklog  (no Pod B needed)
-#   Text Preprocess   — text_clean.py : text_clean (NFKC/공백/이모지 전처리)
-#   Pod A Reranker    — ensure reranker :8080 is healthy
-#   Day Polish        — polish_batch.py (Kiwi-only, --no-llm)
-#   FTS5 Refresh      — local_index refresh (text_clean_polished)
-#   Day Embedding     — embed_batch.py (:8081) — text_clean_polished
-#   Day Entity Scan   — entity_scan.py (deterministic, regex+DB, no LLM)
-#   Day Pipeline (Pod B, swap sequential)  — extract model :8082 extract+enrich → swap → verify model :8082 verify
-#     → Entity Scan → Extract (with entity context) → Enrich → model swap → Verify
+# day_cycle.sh — async pipeline (pipeline_state-driven)
+# pipeline_state flow: pending → batching → cleaned → polished → embedded → scanned → extracted → enriched → verified
+# Batch reservation at start: 10 pending → batching
+# Each phase queries pipeline_state, each script self-reports completion via UPDATE.
+# Light → Heavy execution order:
+#   System Sync       — code-structure + duckdns + worklog
+#   Pod A Reranker    — ensure reranker :8080 healthy
+#   Text Preprocess   — text_clean.py (batching → cleaned)
+#   Day Polish        — polish_batch.py (cleaned → polished)
+#   FTS5 Refresh      — local_index refresh
+#   Day Embedding     — embed_batch.py (:8081, polished → embedded)
+#   Day Entity Scan   — entity_scan.py (embedded → scanned, deterministic, regex+DB, no LLM)
+#   Day Extract       — extract.py (:8082, scanned → extracted)
+#   Day Enrich        — enrich.py (:8082, extracted → enriched)
+#   Day Verify        — day_verify.py (:8082, enriched → verified)
+# Each phase has its own budget check. Mid-cycle timeout carries forward in pipeline_state.
 #
 # Secrets: DUCKDNS_TOKEN in ~/.config/devforge/secrets.env
 # Server philosophy: Slow but complete. Pod A reranker always on :8080.
@@ -25,6 +26,31 @@ START_TS=$(date +%s)
 LOG_TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 LOG() { echo "[$(LOG_TS)] $*"; }
 BUDGET() { echo $(( MAX_CYCLE_SEC - ($(date +%s) - START_TS) )); }
+
+# ── Budget gate: skip heavy phase if solo turns need more budget ────
+# Pool (light) turns are always fast — only solo heavy turns are gated.
+# Returns 0 (proceed) or 1 (skip).
+_budget_gate() {
+    local state="$1" cps="$2" overhead="$3"
+    local budget_now solo_chars
+    budget_now=$(BUDGET)
+    [ "$budget_now" -lt 120 ] && return 1  # <2min → skip any heavy phase
+
+    solo_chars=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+        "SELECT COALESCE(SUM(est_chars), 0) FROM turns WHERE pipeline_state = '$state' AND est_chars > 5000" 2>/dev/null || echo "0")
+    solo_chars="${solo_chars:-0}"
+
+    [ "$solo_chars" -le 0 ] && return 0  # no solo turns → always proceed
+
+    local est=$(( solo_chars / cps + overhead ))
+    [ "$est" -le 0 ] && est=60
+
+    if [ "$budget_now" -lt "$est" ]; then
+        LOG "  Budget gate: solo ~${est}s needed ≤ ${budget_now}s — deferring"
+        return 1
+    fi
+    return 0
+}
 
 # ── PID Lock (single-instance guard) ────────────────────
 DAY_CYCLE_LOCK="/tmp/devforge-day-cycle.lock"
@@ -95,18 +121,17 @@ ensure_dual_day() {
         return 0
     fi
 
-    # Check protection before restart
+    # Check test heartbeat before restart
     if python3 -c "
 import sys; sys.path.insert(0, '$SCRIPT_DIR')
-from lib.protection import active_contexts
-ctx = active_contexts()
-tests = [c for c in ctx if c.startswith('test_')]
-if tests:
-    print(f'  [protect] test active: {tests[0]} — skip Pod B restart')
+from lib.db import psql_json
+rows = psql_json(\"SELECT pulse_id FROM watchdog_pulses WHERE pulse_id LIKE 'heartbeat_test_%' AND status = 'IN_PROGRESS' LIMIT 1\")
+if rows:
+    print(f'  Test active ({rows[0][\"pulse_id\"]}) — skip Pod B restart')
     sys.exit(0)
 sys.exit(1)
 " 2>&1; then
-        LOG "  Pod B restart skipped (test protection active)"
+        LOG "  Pod B restart skipped (test heartbeat active)"
         return 0
     fi
 
@@ -143,18 +168,17 @@ ensure_pod_b() {
         return 0
     fi
 
-    # Check protection before restart
+    # Check test heartbeat before restart
     if python3 -c "
 import sys; sys.path.insert(0, '$SCRIPT_DIR')
-from lib.protection import active_contexts
-ctx = active_contexts()
-tests = [c for c in ctx if c.startswith('test_')]
-if tests:
-    print(f'  [protect] test active: {tests[0]} — skip Pod B restart')
+from lib.db import psql_json
+rows = psql_json(\"SELECT pulse_id FROM watchdog_pulses WHERE pulse_id LIKE 'heartbeat_test_%' AND status = 'IN_PROGRESS' LIMIT 1\")
+if rows:
+    print(f'  Test active ({rows[0][\"pulse_id\"]}) — skip Pod B restart')
     sys.exit(0)
 sys.exit(1)
 " 2>&1; then
-        LOG "  Pod B restart skipped (test protection active)"
+        LOG "  Pod B restart skipped (test heartbeat active)"
         return 0
     fi
 
@@ -223,17 +247,32 @@ BUDGET=$(BUDGET)
 LOG "System sync done in ${ELAPSED}s — remaining budget=${BUDGET}s"
 [ $BUDGET -le 120 ] && LOG "Budget exhausted" && exit 0
 
-# ── Protection Check (test pipelines active?) ────────────────
-ACTIVE_PROTECT=$(python3 -c "
-import sys; sys.path.insert(0, '$SCRIPT_DIR')
-from lib.protection import active_contexts
-ctx = active_contexts()
-if ctx:
-    print(' '.join(ctx))
-" 2>/dev/null)
-if [ -n "$ACTIVE_PROTECT" ]; then
-    LOG "Protection active ($ACTIVE_PROTECT) — skip Pod B stages"
-    exit 0
+# ── In-flight check ─────────────────────────────────────────────────
+IN_FLIGHT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT count(*)::int FROM turns WHERE pipeline_state NOT IN ('pending', 'verified')" 2>/dev/null || echo "0")
+IN_FLIGHT=${IN_FLIGHT:-0}
+
+if [ "$IN_FLIGHT" -gt 0 ]; then
+    LOG "In-flight turns: ${IN_FLIGHT} — resuming from pipeline_state"
+elif [ "$IN_FLIGHT" -eq 0 ]; then
+    # No in-flight — reserve 10 fresh from pending
+    LOG "=== Batch reservation ==="
+    BATCH_COUNT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c "
+      WITH batch AS (
+        SELECT id FROM turns WHERE pipeline_state = 'pending'
+        ORDER BY created_at ASC LIMIT 10
+      ), upd AS (
+        UPDATE turns SET pipeline_state = 'batching'
+        FROM batch WHERE turns.id = batch.id
+      )
+      SELECT count(*)::text FROM batch
+    " 2>/dev/null || echo "0")
+    if [ "${BATCH_COUNT:-0}" -gt 0 ]; then
+        LOG "Reserved ${BATCH_COUNT} turns (pending -> batching)"
+    else
+        LOG "No pending turns — cycle complete"
+        exit 0
+    fi
 fi
 
 # ── Pod A Reranker (Pod A reranker, :8080) — ensure always running ────────
@@ -241,23 +280,21 @@ LOG "=== Pod A: Reranker check ==="
 if curl -sf "http://127.0.0.1:8080/health" >/dev/null 2>&1; then
     LOG "  Pod A reranker (:8080) healthy"
 else
-    LOG "  Pod A reranker NOT healthy — restarting"
+    LOG "  Pod A reranker NOT healthy - restarting"
     python3 -c "
-import sys; sys.path.insert(0, '"$SCRIPT_DIR"')
+import sys; sys.path.insert(0, '${SCRIPT_DIR}')
 from lib.pod_manager import start_pod_a
 sys.exit(0 if start_pod_a('reranker', 8080) else 1)
 " 2>&1
 fi
-ELAPSED=$(( $(date +%s) - START_TS ))
-LOG "Pod A check done in ${ELAPSED}s"
 
-# ── Text Preprocess (text_clean) — first step after watch=0 write ─
+# ── Text Preprocess (text_clean) ─────────────────────
 NEED_CLEAN=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT COUNT(*)::int FROM turns WHERE text_clean IS NULL OR text_clean = ''" 2>/dev/null || echo "0")
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'batching'" 2>/dev/null || echo "0")
 NEED_CLEAN=${NEED_CLEAN:-0}
 
 if [ "$NEED_CLEAN" -gt 0 ]; then
-    LOG "=== Text Preprocess (${NEED_CLEAN} turns need text_clean) ==="
+    LOG "=== Text Preprocess (${NEED_CLEAN} batching turns) ==="
     python3 "$PIPELINE_DIR/text_clean.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -266,84 +303,143 @@ if [ "$NEED_CLEAN" -gt 0 ]; then
     LOG "Budget=${BUDGET}s"
     [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 else
-    LOG "=== Text Preprocess: skip (0 turns need text_clean) ==="
+    LOG "=== Text Preprocess: skip (0 batching turns) ==="
 fi
 
-# ── Day Polish (token-based batch limit) ──────────
+# ── Day Polish (Kiwi-only, --no-llm) ──────────
 NEED_POLISH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT COUNT(*)::int FROM turns WHERE text_clean IS NOT NULL AND text_clean_polished IS NULL" 2>/dev/null || echo "0")
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'cleaned'" 2>/dev/null || echo "0")
 NEED_POLISH=${NEED_POLISH:-0}
 
 if [ "$NEED_POLISH" -gt 0 ]; then
-    LOG "=== Day Polish (Kiwi-only — ${NEED_POLISH} turns pending) ==="
+    LOG "=== Day Polish (${NEED_POLISH} cleaned turns) ==="
     python3 "$PIPELINE_DIR/polish_batch.py" --no-llm 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     LOG "  Polish exit=$RC, elapsed=${ELAPSED}s"
     [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
 else
-    LOG "=== Day Polish: skip (0 turns to polish) ==="
+    LOG "=== Day Polish: skip (0 cleaned turns) ==="
 fi
 
-# ── FTS5 Refresh ... (text_clean_polished 기준) ─────────
+# ── est_chars Recalculation (post-polish, pre-heavy) ──
+LOG "=== est_chars recalculation ==="
+podman exec postgres psql -U devforge -d devforge_app -c "
+  UPDATE turns SET est_chars =
+    LENGTH(COALESCE(user_turn_clean_polished, user_turn_clean, user_turn, ''))
+    + LENGTH(COALESCE(text_clean_polished, text_clean, text, ''))
+    + LENGTH(COALESCE(thinking_clean_polished, thinking_clean, thinking, ''))
+  WHERE pipeline_state = 'polished'" >/dev/null 2>&1
+
+# ── FTS5 Refresh (text_clean_polished 기준) ─────────
 LOG "=== FTS5 Refresh ==="
 python3 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
 
-# ── Day Embedding (token-based batch limit) ─────
+# ── Day Embedding (:8081) ─────
 NEED_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT COUNT(*)::int FROM turns t LEFT JOIN embeddings e ON e.source_type='turn' AND e.source_id=t.id AND e.model_name='qwen3-embedding-8b-v1' WHERE e.id IS NULL" 2>/dev/null || echo "0")
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'polished'" 2>/dev/null || echo "0")
 NEED_EMBED=${NEED_EMBED:-0}
 
 if [ "$NEED_EMBED" -gt 0 ]; then
-    LOG "=== Day Embedding (${NEED_EMBED} unembedded turns) ==="
+    LOG "=== Day Embedding (${NEED_EMBED} polished turns) ==="
     ensure_pod_b "embed" "embed" true 1200
-    python3 "$PIPELINE_DIR/embed_batch.py" --limit 10 2>&1
+    python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
     [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
 else
-    LOG "=== Day Embedding: skip (0 unembedded turns) ==="
+    LOG "=== Day Embedding: skip (0 polished turns) ==="
 fi
 
 # ── Entity Scan (no LLM, no Pod B) ──
-LOG "=== Entity Scan ==="
-python3 "$PIPELINE_DIR/entity_scan.py" --limit 10 2>&1
-RC=$?
-ELAPSED=$(( $(date +%s) - START_TS ))
-BUDGET=$(BUDGET)
-LOG "  Entity scan exit=$RC, elapsed=${ELAPSED}s"
-LOG "Budget=${BUDGET}s"
-[ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+NEED_SCAN=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'embedded'" 2>/dev/null || echo "0")
+if [ "$NEED_SCAN" -gt 0 ]; then
+    LOG "=== Entity Scan (${NEED_SCAN} embedded turns) ==="
+    python3 "$PIPELINE_DIR/entity_scan.py" 2>&1
+    RC=$?
+    ELAPSED=$(( $(date +%s) - START_TS ))
+    BUDGET=$(BUDGET)
+    LOG "  Entity scan exit=$RC, elapsed=${ELAPSED}s"
+    LOG "Budget=${BUDGET}s"
+    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+fi
 
-# ── Day Pipeline: Extract → Enrich → swap → Verify ─
-LOG "=== Day Extract + Enrich (:8082) ==="
-ensure_pod_b "day-extract" "$(_day_phase_model day_extract)" true 1200
-python3 "$PIPELINE_DIR/extract.py" --limit 10 2>&1
-RC=$?
-ELAPSED=$(( $(date +%s) - START_TS ))
-BUDGET=$(BUDGET)
-[ $RC -eq 124 ] && LOG "  Extract timed out" || LOG "  Extract exit=$RC"
-LOG "Budget=${BUDGET}s"
+# ── Feedback Embedding (feedback_examples for pgvector NLI) ──
+NEED_FEEDBACK_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT COUNT(*) FROM feedback_examples fe LEFT JOIN embeddings e ON e.source_type='feedback_example' AND e.source_id=fe.id AND e.model_name='qwen3-embedding-8b-v1' WHERE e.id IS NULL" 2>/dev/null || echo "0")
+NEED_FEEDBACK_EMBED=${NEED_FEEDBACK_EMBED:-0}
+if [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
+    LOG "=== Feedback Embedding (${NEED_FEEDBACK_EMBED} unembedded feedback examples) ==="
+    ensure_pod_b "embed" "embed" true 600
+    python3 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
+    RC=$?
+    ELAPSED=$(( $(date +%s) - START_TS ))
+    LOG "  Feedback embed exit=$RC, elapsed=${ELAPSED}s"
+    [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
+else
+    LOG "=== Feedback Embedding: skip (0 unembedded feedback examples) ==="
+fi
 
-python3 "$PIPELINE_DIR/enrich.py" --limit 10 2>&1
-RC=$?
-ELAPSED=$(( $(date +%s) - START_TS ))
-BUDGET=$(BUDGET)
-[ $RC -eq 124 ] && LOG "  Enrich timed out" || LOG "  Enrich exit=$RC"
-LOG "Budget=${BUDGET}s"
-[ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+# ── Day Extract (:8082) ──
+NEED_EXTRACT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'scanned'" 2>/dev/null || echo "0")
+if [ "$NEED_EXTRACT" -gt 0 ]; then
+    _budget_gate "scanned" 15 120 || { LOG "Budget insufficient for extract — deferring"; exit 0; }
+    LOG "=== Day Extract (:8082, ${NEED_EXTRACT} scanned turns) ==="
+    ensure_pod_b "day-extract" "$(_day_phase_model day_extract)" true 1200
+    python3 "$PIPELINE_DIR/extract.py" 2>&1
+    RC=$?
+    ELAPSED=$(( $(date +%s) - START_TS ))
+    BUDGET=$(BUDGET)
+    [ $RC -eq 124 ] && LOG "  Extract timed out" || LOG "  Extract exit=$RC"
+    LOG "Budget=${BUDGET}s"
+    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+fi
 
-# Swap model: stop day-extractor, start day-verifier on :8082
-LOG "=== Day Verify (:8082) — model swap ==="
-ensure_pod_b "day-verify" "$(_day_phase_model day_verify)" true 1200
-python3 "$PIPELINE_DIR/day_verify.py" --limit 10 2>&1
-RC=$?
-ELAPSED=$(( $(date +%s) - START_TS ))
-BUDGET=$(BUDGET)
-[ $RC -eq 124 ] && LOG "  Verify timed out" || LOG "  Verify exit=$RC"
-LOG "Budget=${BUDGET}s"
-[ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+# ── NEUTRAL Gate: unresolved facts → stop cycle ─────────
+NEUTRAL_NEW=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT COUNT(*) FROM review_facts WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND created_at > now() - interval '1 hour'" 2>/dev/null || echo "0")
+if [ "${NEUTRAL_NEW:-0}" -gt 0 ]; then
+    LOG "  ${NEUTRAL_NEW} NEUTRAL facts - exiting cycle"
+    python3 "$SCRIPT_DIR/lib/slack_interactive.py" --send-alert 2>&1 || \
+    _slack_alert \
+        "NEUTRAL Facts: ${NEUTRAL_NEW}건 검토 필요" \
+        "${NEUTRAL_NEW}건의 fact가 NEUTRAL 판정. cli.py fact list --pending -> cli.py fact confirm/reject 후 다음 cycle에서 enrich 진행." \
+        "warning"
+    exit 0
+fi
+
+# ── Day Enrich (:8082) ──
+NEED_ENRICH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'extracted'" 2>/dev/null || echo "0")
+if [ "$NEED_ENRICH" -gt 0 ]; then
+    _budget_gate "extracted" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
+    LOG "=== Day Enrich (:8082, ${NEED_ENRICH} extracted turns) ==="
+    python3 "$PIPELINE_DIR/enrich.py" 2>&1
+    RC=$?
+    ELAPSED=$(( $(date +%s) - START_TS ))
+    BUDGET=$(BUDGET)
+    [ $RC -eq 124 ] && LOG "  Enrich timed out" || LOG "  Enrich exit=$RC"
+    LOG "Budget=${BUDGET}s"
+    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+fi
+
+# ── Day Verify (:8082) ──
+NEED_VERIFY=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'enriched'" 2>/dev/null || echo "0")
+if [ "$NEED_VERIFY" -gt 0 ]; then
+    _budget_gate "enriched" 25 30 || { LOG "Budget insufficient for verify — deferring"; exit 0; }
+    LOG "=== Day Verify (:8082, ${NEED_VERIFY} enriched turns) ==="
+    python3 "$PIPELINE_DIR/day_verify.py" 2>&1
+    RC=$?
+    ELAPSED=$(( $(date +%s) - START_TS ))
+    BUDGET=$(BUDGET)
+    [ $RC -eq 124 ] && LOG "  Verify timed out" || LOG "  Verify exit=$RC"
+    LOG "Budget=${BUDGET}s"
+    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+fi
 
 TOTAL=$(( $(date +%s) - START_TS ))
 LOG "day_cycle complete (${TOTAL}s)"

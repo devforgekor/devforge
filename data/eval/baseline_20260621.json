@@ -1,0 +1,96 @@
+{
+  "review_facts": {
+    "enrich_meta": 27,
+    "entity_scan": 52,
+    "marker": 6,
+    "text": 63,
+    "thinking": 6,
+    "user": 9,
+    "verify_result": 24
+  },
+  "embeddings": 46,
+  "fts5_turns": 0,
+  "needs_embed": 6810,
+  "needs_entity_scan": 6803,
+  "needs_extract": 30,
+  "needs_enrich": 14,
+  "needs_verify": 3,
+  "oldest_pending": [
+    {
+      "id": "a490db3b",
+      "len": 48,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "bcd16907",
+      "len": 312,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "696534eb",
+      "len": 24,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "5141408a",
+      "len": 13,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "00d28e98",
+      "len": 593,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "d2fa0370",
+      "len": 586,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "338e5741",
+      "len": 399,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "0f588731",
+      "len": 497,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "5a01c280",
+      "len": 680,
+      "created": "2026-05-14 14:40:54"
+    },
+    {
+      "id": "296598cb",
+      "len": 25,
+      "created": "2026-05-14 14:40:54"
+    }
+  ],
+  "resources": {
+    "memory": {
+      "total": 24060334080,
+      "available": 6698909696,
+      "percent": 72.2,
+      "used": 17361424384,
+      "free": 951484416,
+      "active": 12230324224,
+      "inactive": 9386852352,
+      "buffers": 20480,
+      "cached": 6185144320,
+      "shared": 107728896,
+      "slab": 946319360
+    },
+    "swap": {
+      "total": 4294963200,
+      "used": 521547776,
+      "free": 3773415424,
+      "percent": 12.1,
+      "sin": 125366272,
+      "sout": 564670464
+    }
+  },
+  "timestamp_kst": "2026-06-21 09:17:58 KST",
+  "test_name": "pipeline_e2e_compare_20260621",
+  "batch_limit": 10
+}

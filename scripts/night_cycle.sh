@@ -148,16 +148,16 @@ else
     echo "[$(LOG_TS)] Server validation had issues (non-fatal)" >&2
 fi
 
-# ── Protection Check (test pipelines active?) ────────────────
-ACTIVE_PROTECT=$(python3 -c "
+# ── Test Heartbeat Check (test running?) ──────────────────────────────
+ACTIVE_TEST=$(python3 -c "
 import sys; sys.path.insert(0, '$SCRIPTS_DIR')
-from lib.protection import active_contexts
-ctx = active_contexts()
-if ctx:
-    print(' '.join(ctx))
+from lib.db import psql_json
+rows = psql_json(\"SELECT pulse_id FROM watchdog_pulses WHERE pulse_id LIKE 'heartbeat_test_%' AND status = 'IN_PROGRESS' LIMIT 1\")
+if rows:
+    print(rows[0]['pulse_id'])
 " 2>/dev/null)
-if [ -n "$ACTIVE_PROTECT" ]; then
-    echo "[$(LOG_TS)] Protection active ($ACTIVE_PROTECT) — skip night cycle"
+if [ -n "$ACTIVE_TEST" ]; then
+    echo "[$(LOG_TS)] Test active ($ACTIVE_TEST) — skip night cycle"
     _set_mode day
     _restored=true
     exit 0

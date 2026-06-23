@@ -31,10 +31,9 @@ from datetime import datetime, timezone
 from .checker import *
 from .config import CHECK_INTERVAL, HEARTBEAT_INTERVAL, ALERT_ONLY_TARGETS, TIMER_TARGETS
 from lib.db import psql_json
-from lib.protection import protected_ports
 from .notifier import heartbeat, send_alert, send_recovery
 from .recovery import (
-    graduated_recover, recover_service, kill_stale_process,
+    graduated_recover, recover_service, kill_stale_process, recover_oom,
 )
 from .state import WatchdogState
 from .messenger import log_message, get_undelivered, resolve_pulse
@@ -112,6 +111,8 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
     """타이머 지연 체크 + 지연시 kick.
 
     Mode-aware: night-only timers are NOT kicked during day mode and vice versa.
+    day-cycle timer is intentionally NOT in TIMER_TARGETS — watchdog triggers
+    day_cycle.sh based on DB data (watchdog_pulses), not systemd timer.
     """
     night_timers = {"devforge-night-cycle.timer"}
     day_timers = set()  # Async pipeline — watchdog manages cycle timing directly
@@ -146,8 +147,8 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
         results["timers"].append(timer)
 
 
-def _run_memory_check(results: dict):
-    """메모리/swap 체크 — alert only, no recovery."""
+def _run_memory_check(results: dict, dry_run: bool = False):
+    """메모리/swap 체크 — critical시 OOM recovery."""
     mem_ok, mem_info = check_memory()
     mem_tracker = _state.get("system:memory")
     if mem_ok:
@@ -157,6 +158,8 @@ def _run_memory_check(results: dict):
             send_alert("system:memory", mem_tracker.state.value,
                        f"mem={mem_info['pct']}% swap={mem_info['swap_pct']}%")
             _state.add_event("system:memory", "crit", f"{mem_info['pct']}%/{mem_info['swap_pct']}%")
+            if not dry_run:
+                recover_oom()
     results["memory"] = mem_info
 
 
@@ -179,7 +182,7 @@ def _run_common_checks(results: dict, dry_run: bool, mode: str = "day"):
     """모드 공통 체크 — 서비스, 타이머, 메모리, alert-only."""
     _run_services(results, dry_run)
     _run_timers(results, dry_run, mode)
-    _run_memory_check(results)
+    _run_memory_check(results, dry_run)
     _run_alert_only(dry_run, results)
 
 
@@ -190,19 +193,9 @@ def run_day_checks(dry_run: bool = False) -> dict:
     results = {"containers": [], "services": [], "timers": [],
                "probes": [], "memory": {}, "pipeline_running": False}
 
-    _protected_ports = protected_ports()
-
     for probe in check_all_llm():
         name = probe["name"]
         tracker = _state.get(f"llm:{name}")
-
-        # Protected port → test/pipeline owns it, skip alert
-        if probe["port"] in _protected_ports:
-            tracker.record_success()
-            probe["t2_ok"] = True
-            probe["t2_detail"] = "skip (port locked by test)"
-            results["probes"].append(probe)
-            continue
 
         ok = probe["t1_ok"] and probe["t2_ok"]
 
@@ -246,19 +239,9 @@ def run_night_checks(dry_run: bool = False) -> dict:
     results = {"containers": [], "services": [], "timers": [],
                "probes": [], "memory": {}, "pipeline_running": False}
 
-    _protected_ports = protected_ports()
-
     for probe in check_all_llm():
         name = probe["name"]
         tracker = _state.get(f"llm:{name}")
-
-        # Protected port → test/pipeline owns it, skip alert
-        if probe["port"] in _protected_ports:
-            tracker.record_success()
-            probe["t2_ok"] = True
-            probe["t2_detail"] = "skip (port locked by test)"
-            results["probes"].append(probe)
-            continue
 
         ok = probe["t1_ok"] and probe["t2_ok"]
 
@@ -307,6 +290,23 @@ def _get_active_pulses() -> list[dict]:
         return rows or []
     except Exception:
         return []
+
+
+def _get_active_test_pulses() -> list[dict]:
+    """Query IN_PROGRESS test heartbeat pulses from watchdog_pulses."""
+    try:
+        rows = psql_json(
+            "SELECT pulse_id, instruction, priority, status, "
+            "EXTRACT(EPOCH FROM (now() - created_at))::int AS age_sec "
+            "FROM watchdog_pulses "
+            "WHERE pulse_id LIKE 'heartbeat_test_%' AND status = 'IN_PROGRESS' "
+            "ORDER BY created_at DESC"
+        )
+        return rows or []
+    except Exception:
+        return []
+
+
 def _get_test_db_progress() -> dict:
     """Query DB for recent pipeline activity (last 30min)."""
     try:
@@ -375,16 +375,14 @@ def build_heartbeat_summary(day_results: dict) -> dict:
         except Exception:
             pass
 
-    # Detect test/protection active → collect progress from DB
-    from lib.protection import active_contexts
-    protect_ctx = active_contexts()
+    # Detect test active → collect progress from DB
+    test_pulses = _get_active_test_pulses()
     test_progress = None
-    if protect_ctx:
+    if test_pulses:
         try:
             test_progress = {
-                "contexts": protect_ctx,
+                "pulses": test_pulses,
                 "db": _get_test_db_progress(),
-                "pulses": _get_active_pulses(),
             }
         except Exception:
             pass
@@ -483,11 +481,12 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
 
         # ONE check per cycle: is a test running?
         # All sub-functions use the module-level _test_active instead of
-        # calling active_contexts() individually — prevents scattered checks.
-        from lib.protection import active_contexts
-        _test_active = bool(active_contexts())
+        # querying watchdog_pulses individually.
+        test_pulses = _get_active_test_pulses()
+        _test_active = bool(test_pulses)
         if _test_active:
-            log(f"  Test active ({active_contexts()}) — alerts suppressed, fix loops skipped")
+            pulse_ids = [p["pulse_id"] for p in test_pulses]
+            log(f"  Test active ({pulse_ids}) — alerts suppressed, fix loops skipped")
 
         # Check if an experiment is running → monitor-only mode (no recovery)
         experiment_active = is_experiment_active()

@@ -40,6 +40,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "proposer":     {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},  # Pod B proposer
     "reviewer":     {"port": 8083, "temp": 0.10, "max_tokens": 400,  "timeout": 480},  # Pod B (legacy)
     "day-verify":{"port": 8082, "temp": 0.0,  "max_tokens": 512,  "timeout": 120},  # Pod B verify
+    "day-enrich":{"port": 8082, "temp": 0.1,  "max_tokens": 512,  "timeout": 900},  # Pod B enrich (9B Q8)
     "reflector":    {"port": 8082, "temp": 0.10, "max_tokens": 2048, "timeout": 600},  # Pod B reflector
     "verifier":     {"port": 8084, "temp": 0.10, "max_tokens": 4096, "timeout": 1200}, # Pod B verifier
     "judge":        {"port": 8083, "temp": 0.10, "max_tokens": 4096, "timeout": 7200}, # Pod B judge
@@ -50,7 +51,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # place to change when a model/port changes.
     # Day pipeline — extract (:00/:30)
     "day_extract": {"_model": "extractor"},
-    "day_enrich": {"_model": "extractor"},  # day enrich pipeline
+    "day_enrich": {"_model": "day-enrich"},  # day enrich pipeline (9B Q4)
 
     # Day pipeline — verify & rubric
     "day_verify":  {"_model": "day-verify"},

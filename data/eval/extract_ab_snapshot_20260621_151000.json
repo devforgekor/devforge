@@ -1,0 +1,8 @@
+{"snapshot_time": "2026-06-21T15:10:00+00:00", "test": "extract_ab_partial", "status": "8082_crashed_at_user_long_2000_A", "results": {
+  "short_200": {"A": {"by_type": {"user": 1, "text": 1}, "total": 2, "elapsed_s": 200.9}, "B": {"error": "all sections returned empty - model returned no extractions for very short input"}},
+  "medium_800": {"A": {"by_type": {"user": 1, "text": 1}, "total": 2, "elapsed_s": 262.0}, "B": {"by_type": {"user": 1, "thinking": 0, "text": 0}, "total": 1, "elapsed_s": 307.0, "note": "text section failed due to 8082 Remote end closed"}},
+  "user_long_2000": {"A": "in_progress_when_8082_crashed", "status": "not_completed"},
+  "think_long_4k": "pending",
+  "text_long_4k": "pending",
+  "mixed_long_12k": "pending"
+}}

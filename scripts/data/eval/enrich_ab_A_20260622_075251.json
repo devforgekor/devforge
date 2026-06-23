@@ -1,0 +1,292 @@
+{
+  "1b326503-4950-4dff-a9d9-02148450d818": [
+    {
+      "tldr": "FP16이 ARM 벤치마크에서 Q8_0보다 느렸으며, 관련 최적화 글을 찾고 있습니다.",
+      "intent": "clarification",
+      "category": "reasoning",
+      "entities": {
+        "files": [],
+        "technologies": [
+          "FP16",
+          "ARM",
+          "Q8_0"
+        ],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "fp16",
+        "arm",
+        "benchmark",
+        "optimization"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:11:00.506948+00"
+    }
+  ],
+  "31f71819-8f85-44fe-8a09-50534bf76060": [
+    {
+      "tldr": "Q8_0 verify 테스트를 중단하지 않고 완료까지 재시작합니다.",
+      "intent": "request",
+      "category": "other",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "verify",
+        "q8_0",
+        "restart",
+        "apology"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:49:00.881415+00"
+    }
+  ],
+  "8f66db13-53ce-4535-be40-44a0ae49cc67": [
+    {
+      "tldr": "FP16은 ARMv8.2+에서 네이티브 명령어로 dequant 오버헤드가 없어 Q8_0보다 빠를 수 있음",
+      "intent": "request",
+      "category": "explanation",
+      "entities": {
+        "files": [],
+        "technologies": [
+          "FP16",
+          "Q8_0",
+          "ARMv8.2-a",
+          "Neoverse-N1",
+          "RPi5",
+          "TinyLlama",
+          "Qwen2.5-Coder-7B",
+          "llama-quantize"
+        ],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "fp16",
+        "q8_0",
+        "armv8.2",
+        "neoverse-n1",
+        "llm_inference"
+      ],
+      "nli_verdict": "NEUTRAL",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:34:32.462399+00"
+    }
+  ],
+  "958a2c2f-4fb6-44e3-9ad5-f196f5e9b6da": [
+    {
+      "tldr": "full_pipeline.sh 가 SIGUSR1 로 종료되었으나 Qwen Q8 verify 가 Pod B 에서 실행 중입니다.",
+      "intent": "report",
+      "category": "reasoning",
+      "entities": {
+        "files": [
+          "full_pipeline.sh",
+          "tmp/full_pipeline.log",
+          "day_verify_q8test.py"
+        ],
+        "technologies": [
+          "Qwen",
+          "Qwen Q8",
+          "Pod B"
+        ],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "pipeline",
+        "verification",
+        "status",
+        "qwen",
+        "quantization"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:25:14.639695+00"
+    }
+  ],
+  "980601c8-9c81-41fd-95ca-d5f4283a005a": [
+    {
+      "tldr": "Claude Code 와 Watchman 통합을 더 최적화하고 VRAM 추가 필요 이유를 검색해볼 것.",
+      "intent": "request",
+      "category": "reasoning",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "optimization",
+        "vram",
+        "watchman",
+        "llm",
+        "integration"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 2,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:28:01.710059+00"
+    }
+  ],
+  "988336db-d047-4dab-8252-638021c73318": [
+    {
+      "tldr": "다운로드 완료 후 3턴 extract 테스트를 바로 시작합니다.",
+      "intent": "request",
+      "category": "other",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "download",
+        "extract",
+        "test",
+        "completion"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:20:53.814149+00"
+    }
+  ],
+  "c2893937-7eda-4172-91f7-e73f51ec6666": [
+    {
+      "tldr": "임베딩 진행률 5.5% 확인 및 Slack 보고 완료, 파이프라인 상태 점검",
+      "intent": "report",
+      "category": "reasoning",
+      "entities": {
+        "files": [
+          "opt/projects/server/scripts/pipelines/embed_progress_slack.py",
+          "full_pipeline.sh"
+        ],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "embedding",
+        "slack",
+        "progress",
+        "pipeline",
+        "monitoring"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:52:50.69284+00"
+    }
+  ],
+  "cb0e241f-4397-4dda-8af5-5ba3b6ae534e": [
+    {
+      "tldr": "10개 전체 대신 3-5턴만 테스트하여 속도와 품질을 확인하겠습니다.",
+      "intent": "request",
+      "category": "decision",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "test",
+        "speed",
+        "quality",
+        "download"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:07:25.82868+00"
+    }
+  ],
+  "cfe99924-791b-46b8-844f-ce3a4b3b5a20": [
+    {
+      "tldr": "서버 적용 가능한 해결책: Q4_0 양자화 모델 사용으로 DRAM 병목 해결 및 속도 2배 개선 제안",
+      "intent": "request",
+      "category": "reasoning",
+      "entities": {
+        "files": [
+          "opt/projects/server/scripts/pipelines/day_cycle_pipeline.py",
+          "opt/projects/server/scripts/lib/pod_manager.py",
+          "opt/projects/server/scripts/pipelines/embed_batch.py",
+          "opt/projects/server/scripts/pipelines/mcp_cosine.py",
+          "opt/projects/server/scripts/day_cycle.sh",
+          "opt/projects/server/scripts/day_cycle.py",
+          "opt/projects/server/scripts/pipelines/extract.py",
+          "opt/projects/server/scripts/pipelines/day_verify.py"
+        ],
+        "technologies": [
+          "Neoverse-N1",
+          "ARMv8.2-a",
+          "llama-server",
+          "Q4_0",
+          "Q8_0",
+          "Q4_K",
+          "Q6_K",
+          "Qwen2.5-Coder-7B-Instruct-Q4_0.gguf",
+          "Graviton4",
+          "podman"
+        ],
+        "functions": [
+          "call_llm",
+          "embed",
+          "extract",
+          "mcp_enrich",
+          "verify",
+          "start_pod_b",
+          "_write_mode_env",
+          "_embed_text",
+          "_extract_facts",
+          "get_checkpoint"
+        ],
+        "mentioned_users": []
+      },
+      "tags": [
+        "optimization",
+        "performance",
+        "quantization",
+        "arm",
+        "bottleneck"
+      ],
+      "nli_verdict": "NEUTRAL",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:46:12.62181+00"
+    }
+  ],
+  "f40b05ab-a3b9-42e7-a975-fb94722aedb1": [
+    {
+      "tldr": "전처리 파이프라인 논의 전 모든 작업 중단 요청",
+      "intent": "request",
+      "category": "other",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "preprocessing",
+        "pause",
+        "discussion",
+        "pipeline"
+      ],
+      "nli_verdict": "NEUTRAL",
+      "_fact_index": 1,
+      "_extract_model": "day_enrich",
+      "_db_created": "2026-06-22 07:18:15.049755+00"
+    }
+  ]
+}

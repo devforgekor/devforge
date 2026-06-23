@@ -5,7 +5,7 @@
 MODE=day (관찰형, 60s 주기):
   Pod A=reserved (:8080) operator
   Pod B=day (:8082) extractor (day verify via model swap on :8082)
-  매시 :00 → day_cycle.sh (system sync → embed(f16) → extract → verify)
+  day_cycle.sh — watchdog-managed async pipeline (embed → extract → enrich → verify)
   Fix loop: Pod A (:8080)가 수정 담당
 
 MODE=night (능동형, 60s 주기):
@@ -55,7 +55,6 @@ ALERT_ONLY_TARGETS = [
 ]
 
 TIMER_TARGETS = {
-    "devforge-day-cycle.timer":    {"expected": "day_cycle",     "max_idle": 3900},     # 1h cycle + 5min buffer
     "devforge-night-cycle.timer":  {"expected": "night_cycle",   "max_idle": 90000},    # 25h
 }
 

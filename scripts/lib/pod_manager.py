@@ -23,8 +23,6 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Optional
 
-from lib.protection import protected_ports
-
 
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
@@ -133,6 +131,7 @@ MODEL_METADATA = {
         "model_name": "day-extractor", "ctx": 8192,
         "threads": 4, "threads_batch": 4,
         "parallel": 2, "ubatch_size": 512,
+        "cpus": "0-2",
         "cache_type_k": "q8_0", "cache_type_v": "q8_0",
     },
     "day-verifier": {
@@ -141,15 +140,24 @@ MODEL_METADATA = {
         "model_name": "day-verifier", "ctx": 4096,
         "threads": 4, "threads_batch": 4,
         "parallel": 2, "ubatch_size": 512,
+        "cpus": "0-2",
+        "cache_type_k": "q8_0", "cache_type_v": "q8_0",
+    },
+    "day-enrich": {
+        "file": "Qwen-Qwen3.5-9B-Q8_0.gguf",
+        "size": "8.9GB", "port": 8082, "mode": "day",
+        "model_name": "day-enrich", "ctx": 8192,
+        "threads": 4, "threads_batch": 4,
+        "parallel": 2, "ubatch_size": 512,
+        "cpus": "0-2",
         "cache_type_k": "q8_0", "cache_type_v": "q8_0",
     },
 }
 
 # Day phase → physical model key (role-based, no hardcoded names in callers)
-# extract + enrich share the same model, verify uses a different model (different model family)
 DAY_PHASE_MODELS = {
     "day_extract": "day-extractor",
-    "day_enrich": "day-extractor",
+    "day_enrich": "day-enrich",
     "day_verify": "day-verifier",
 }
 
@@ -301,14 +309,14 @@ def _get_model_fingerprint(port):
 def _check_model_identity(port, model_key):
     """Check if the model running on *port* matches the expected model for *model_key*.
 
-    Returns True if match, False if wrong model, True if can't verify (fails open).
+    Returns True if match, False if wrong model or can't verify (fails closed).
     """
     expected_file = MODEL_METADATA.get(model_key, {}).get("file")
     if not expected_file:
-        return True  # can't verify, allow
+        return True  # can't determine expected, allow
     actual_file = _get_model_fingerprint(port)
     if not actual_file:
-        return True  # can't reach /v1/models, allow (fails open)
+        return False  # fails closed: can't verify → assume wrong → restart
     ok = actual_file == expected_file
     if not ok:
         log(f"  [model-id] :{port} has {actual_file}, expected {expected_file}")
@@ -319,11 +327,7 @@ def _check_model_identity(port, model_key):
 NIGHT_MODELS = frozenset({"proposer", "reflector", "judge", "verifier"})
 
 def _kill_stray_pasta(ports):
-    _prot_ports = protected_ports()
     for port in ports:
-        if int(port) in _prot_ports:
-            log(f"  [PROTECT] skipping stray kill for :{port} (protected)")
-            continue
         try:
             r = subprocess.run(
                 ["ss", "-tlnp", f"sport = :{port}"],
@@ -436,6 +440,7 @@ def _write_mode_env(mode: str, port: int, model_key: str | None = None) -> None:
             ("batch_size", "BATCH_SIZE"),
             ("ubatch_size", "UBATCH_SIZE"),
             ("parallel", "PARALLEL"),
+            ("cpus", "CPUS"),
         ]:
             val = f(key)
             if val is not None and val != "":
@@ -484,9 +489,28 @@ def start_pod_b(mode, port, night=False, dry_run=False, skip_probe=False, model_
     _write_mode_env(mode, port, model_key=model_key)
     kill_all(night=night, dry_run=dry_run)
     health_timeout = 1200 if night else 600
-    # Remove redundant _kill_stray_pasta — kill_all() already handles it,
-    # and an intervening call can race with systemctl start (pasta process
-    # of the new container gets killed, breaking port forwarding).
+    # Re-write env immediately before systemctl start to close the timing window
+    # where another process can overwrite the env file during reclaim sleep
+    _write_mode_env(mode, port, model_key=model_key)
+    ok = _start_and_wait(port, health_timeout, skip_probe, mode)
+    if ok and model_key:
+        # Verify model identity — env file race can result in wrong model
+        if not _check_model_identity(port, model_key):
+            log(f"  :{port} wrong model after start — retrying with env re-write")
+            _write_mode_env(mode, port, model_key=model_key)
+            subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
+                           capture_output=True, timeout=60)
+            ok = _start_and_wait(port, min(health_timeout, 300), skip_probe, mode)
+            if not ok or not _check_model_identity(port, model_key):
+                log(f"  FATAL: :{port} wrong model after retry — continuing anyway")
+    if ok:
+        log(f"  :{port} ready")
+        _check_container_health(port, mode)
+        time.sleep(5)
+    return ok
+
+
+def _start_and_wait(port, health_timeout, skip_probe, mode):
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
                    capture_output=True, timeout=60)
     ok = wait_health(port, timeout=health_timeout)
@@ -496,14 +520,8 @@ def start_pod_b(mode, port, night=False, dry_run=False, skip_probe=False, model_
         subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
                        capture_output=True, timeout=60)
         ok = wait_health(port, timeout=min(health_timeout, 300))
-    if ok:
-        log(f"  :{port} health OK")
-        if not skip_probe:
-            ok = wait_probe(port, mode, timeout=600)
-    if ok:
-        log(f"  :{port} ready")
-        _check_container_health(port, mode)
-        time.sleep(5)
+    if ok and not skip_probe:
+        ok = wait_probe(port, mode, timeout=600)
     return ok
 
 
@@ -512,6 +530,9 @@ def start_pod_a(mode, port, dry_run=False):
     with open(MODE_FILE_A, "w") as f:
         f.write(f"MODE={mode}")
     kill_all(dry_run=dry_run)
+    # Re-write env immediately before systemctl start (same race window fix as Pod B)
+    with open(MODE_FILE_A, "w") as f:
+        f.write(f"MODE={mode}")
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=60)
     ok = wait_health(port)
@@ -587,6 +608,7 @@ def _write_dual_env() -> None:
             ("cache_ram", "CACHE_RAM"), ("mlock", "MLOCK"),
             ("batch_size", "BATCH_SIZE"), ("ubatch_size", "UBATCH_SIZE"),
             ("parallel", "PARALLEL"),
+            ("cpus", "CPUS"),
             ("cache_type_k", "CACHE_TYPE_K"),
             ("cache_type_v", "CACHE_TYPE_V"),
             ("flash_attn", "FLASH_ATTN"),
@@ -617,6 +639,8 @@ def ensure_dual_day(dry_run: bool = False) -> bool:
                    capture_output=True, timeout=10)
     _kill_stray_pasta(("8081", "8082", "8083", "8084"))
     _reclaim_memory()
+    # Re-write env immediately before systemctl start to close the timing window
+    _write_dual_env()
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
                    capture_output=True, timeout=60)
 

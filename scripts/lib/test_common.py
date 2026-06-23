@@ -3,6 +3,12 @@
 # Path: imported by — scripts/tests/*
 """Shared test utilities — setup, heartbeat, cleanup, re-exports.
 
+IMPORTANT: 모든 test script는 반드시 ``test_setup()`` / ``test_complete()``를
+사용해야 합니다 (직접 ``stop_day_cycle()`` / ``start_day_cycle()`` 호출 불가).
+``test_setup()``이 day_cycle timer를 중단하고 ``test_complete()``가 재시작하여
+Pod B 경합을 방지합니다. 이 함수들을 사용하지 않은 test script는 day_cycle과의
+Pod B 충돌로 실패하거나 OOM이 발생할 수 있습니다.
+
 Usage::
 
     from lib.test_common import test_setup, test_heartbeat, test_complete, log
@@ -20,7 +26,6 @@ import sys
 import time as _time
 from typing import Any, Dict, List, Optional
 
-from lib.protection import register_protect, unregister_protect, active_contexts
 from lib.common import log
 from lib.db import psql_json, esc_sql
 from lib.llm.json_parser import parse_llm_json
@@ -33,6 +38,33 @@ if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+# ── Day cycle control ──────────────────────────────────────────────────
+
+_DAY_CYCLE_SVC = "devforge-day-cycle.service"
+_DAY_CYCLE_TIMER = "devforge-day-cycle.timer"
+
+
+def stop_day_cycle():
+    """Stop day-cycle service+timer so they don't compete for Pod B during a test.
+
+    Safe to call even if already stopped. Logs status either way.
+    """
+    for unit in (_DAY_CYCLE_TIMER, _DAY_CYCLE_SVC):
+        r = os.system(f"systemctl --user stop {unit} 2>/dev/null")
+        code = ">>" if r == 0 else "--"
+        log(f"  [{code}] systemctl --user stop {unit}")
+    _time.sleep(1)
+
+
+def start_day_cycle():
+    """Restart day-cycle timer after a test completes.
+
+    Only starts the timer -- the timer activates the service on its schedule.
+    """
+    r = os.system(f"systemctl --user start {_DAY_CYCLE_TIMER} 2>/dev/null")
+    code = ">>" if r == 0 else "--"
+    log(f"  [{code}] systemctl --user start {_DAY_CYCLE_TIMER}")
 
 # Module-level state
 _test_name: str = ""
@@ -55,19 +87,24 @@ def test_setup(name: str, description: str = "") -> dict:
     _test_cleanup_done = False
 
     pulse_id = f"test_{name}"
-    protect_ctx = f"test_{name}"
 
-    # Duplicate guard — reject if same test context is already active
-    existing = active_contexts()
-    if protect_ctx in existing:
-        log(f"[test:{name}] DUPLICATE DETECTED — same test already running, abort")
-        sys.exit(1)
+    # Duplicate guard — check DB for existing IN_PROGRESS test pulse
+    try:
+        existing = psql_json(
+            f"SELECT pulse_id FROM watchdog_pulses "
+            f"WHERE pulse_id = 'heartbeat_{pulse_id}' AND status = 'IN_PROGRESS'"
+        )
+        if existing:
+            log(f"[test:{name}] DUPLICATE DETECTED — same test already running, abort")
+            sys.exit(1)
+    except Exception:
+        pass  # DB unavailable → best-effort check
 
     # Register heartbeat
     _heartbeat(pulse_id, detail="started")
 
-    # Register protection — prevents timer/cycle interference
-    register_protect(protect_ctx, reason=description)
+    # Stop day-cycle — prevents Pod B contention during test
+    stop_day_cycle()
 
     def _cleanup(signum=None, frame=None):
         global _test_cleanup_done
@@ -81,8 +118,10 @@ def test_setup(name: str, description: str = "") -> dict:
         elif signum == signal.SIGINT:
             reason = "SIGINT"
         resolve_pulse(f"heartbeat_{pulse_id}")
-        unregister_protect(protect_ctx)
         log(f"[test:{name}] Cleanup ({reason}, {elapsed:.0f}s)")
+
+        # Restart day-cycle (stopped at setup) — critical on abrupt exit
+        start_day_cycle()
 
     signal.signal(signal.SIGTERM, _cleanup)
     signal.signal(signal.SIGINT, _cleanup)
@@ -114,7 +153,7 @@ def test_heartbeat(detail: str = ""):
 
 
 def test_complete(detail: str = "completed"):
-    """Mark test heartbeat as RESOLVED + log final status + remove protection.
+    """Mark test heartbeat as RESOLVED + log final status.
 
     Watchdog will NOT report this heartbeat as stale since the
     pulse status is RESOLVED (non-running).
@@ -128,5 +167,7 @@ def test_complete(detail: str = "completed"):
     msg = f"{detail} ({elapsed:.0f}s)"
     _heartbeat(f"test_{_test_name}", detail=msg)
     resolve_pulse(f"heartbeat_{_test_name}")
-    unregister_protect(f"test_{_test_name}")
     log(f"[test:{_test_name}] Completed — {msg}")
+
+    # Restart day-cycle (stopped at setup)
+    start_day_cycle()

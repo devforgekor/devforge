@@ -1,0 +1,19 @@
+{
+  "turn_sizes": {
+    "user": 307,
+    "thinking": 146,
+    "text": 331
+  },
+  "A": {
+    "by_type": {
+      "user": 1,
+      "text": 4
+    },
+    "total": 5,
+    "elapsed_s": 401.1
+  },
+  "B": {
+    "error": "all sections returned empty",
+    "elapsed_s": 179.4
+  }
+}

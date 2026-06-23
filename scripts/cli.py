@@ -1362,6 +1362,94 @@ def cmd_watch_log(args):
         print(fmt)
 
 
+# ── Fact management (user feedback on NEUTRAL facts) ──────────────
+
+def cmd_fact_list(args):
+    """List review_facts with optional NEUTRAL pending filter."""
+    from lib.db import psql_json as _pj
+    where = "WHERE 1=1"
+    if getattr(args, "pending", False):
+        where = "WHERE nli_llm = 'NEUTRAL' AND user_verdict IS NULL"
+    limit = getattr(args, "limit", 20)
+    sql = f"""SELECT id, turn_id, fact_index, left(evidence, 120) AS evidence, fact_type,
+       nli_llm, user_verdict, source, created_at
+    FROM review_facts {where}
+    ORDER BY created_at DESC LIMIT {limit}"""
+    rows = _pj(sql)
+    if not rows:
+        print("(no matching facts)")
+        return
+    print(f"{'ID':<38} {'Type':<12} {'NLI':<10} {'User':<8} {'Evidence':<60} {'Created'}")
+    print("-" * 140)
+    for r in rows:
+        uid = str(r['id'])[:36]
+        etype = (r.get('fact_type') or '')[:10]
+        nli = (r.get('nli_llm') or '')[:8]
+        uv = (r.get('user_verdict') or '-')[:6]
+        ev = (r.get('evidence') or '')[:58]
+        print(f"{uid:<38} {etype:<12} {nli:<10} {uv:<8} {ev:<60} {str(r.get('created_at',''))[:19]}")
+
+
+def cmd_fact_confirm(args):
+    """Set user_verdict=CONFIRM for a fact UUID and store in feedback_examples."""
+    from lib.db import psql_ok, psql_json as _pj, esc_sql
+    fid = esc_sql(args.id)
+    # Get fact details + source text
+    fact = _pj(f"""SELECT rf.id, rf.evidence, rf.fact_type,
+       CASE rf.fact_type
+         WHEN 'user' THEN t.user_turn
+         WHEN 'thinking' THEN t.thinking
+         WHEN 'text' THEN t.text
+       END AS source_text
+    FROM review_facts rf
+    JOIN turns t ON t.id = rf.turn_id
+    WHERE rf.id = '{fid}'""")
+    if not fact:
+        print(f"  ERROR: fact {args.id[:12]}... not found")
+        return
+    if not psql_ok(f"UPDATE review_facts SET user_verdict='CONFIRM', user_verdict_at=NOW() WHERE id='{fid}'"):
+        print(f"  ERROR: failed to confirm fact {args.id}")
+        return
+    # Store feedback example
+    r = fact[0]
+    ev = esc_sql(r.get('evidence', ''))
+    src = esc_sql(r.get('source_text', ''))
+    ft = esc_sql(r.get('fact_type', ''))
+    psql_ok(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
+       VALUES ('{ev}', '{src}', '{ft}', 'CONFIRM')""")
+    print(f"  Confirmed: {r['id'][:12]}... — {(r.get('evidence') or '')[:60]}")
+    print(f"  Stored as feedback example for few-shot NLI")
+
+
+def cmd_fact_reject(args):
+    """Set user_verdict=REJECT for a fact UUID and store in feedback_examples."""
+    from lib.db import psql_ok, psql_json as _pj, esc_sql
+    fid = esc_sql(args.id)
+    fact = _pj(f"""SELECT rf.id, rf.evidence, rf.fact_type,
+       CASE rf.fact_type
+         WHEN 'user' THEN t.user_turn
+         WHEN 'thinking' THEN t.thinking
+         WHEN 'text' THEN t.text
+       END AS source_text
+    FROM review_facts rf
+    JOIN turns t ON t.id = rf.turn_id
+    WHERE rf.id = '{fid}'""")
+    if not fact:
+        print(f"  ERROR: fact {args.id[:12]}... not found")
+        return
+    if not psql_ok(f"UPDATE review_facts SET user_verdict='REJECT', user_verdict_at=NOW() WHERE id='{fid}'"):
+        print(f"  ERROR: failed to reject fact {args.id}")
+        return
+    r = fact[0]
+    ev = esc_sql(r.get('evidence', ''))
+    src = esc_sql(r.get('source_text', ''))
+    ft = esc_sql(r.get('fact_type', ''))
+    psql_ok(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
+       VALUES ('{ev}', '{src}', '{ft}', 'REJECT')""")
+    print(f"  Rejected: {r['id'][:12]}... — {(r.get('evidence') or '')[:60]}")
+    print(f"  Stored as feedback example for few-shot NLI")
+
+
 async def main():
     parser = argparse.ArgumentParser(description="DevForge CLI")
     sub = parser.add_subparsers(dest="command")
@@ -1558,6 +1646,20 @@ async def main():
     file_del.add_argument("id", help="File UUID")
     file_del.add_argument("--remove-local", action="store_true", help="Also delete local file")
 
+    # ── Fact (user feedback on NEUTRAL facts) ───────────────────────
+    p_fact = sub.add_parser("fact", help="Manage review_facts — user feedback on NEUTRAL facts")
+    fact_sub = p_fact.add_subparsers(dest="fact_command")
+
+    fact_list = fact_sub.add_parser("list", help="List facts")
+    fact_list.add_argument("--pending", action="store_true", help="Only NEUTRAL facts awaiting user verdict")
+    fact_list.add_argument("--limit", "-n", type=int, default=20, help="Max results (default: 20)")
+
+    fact_confirm = fact_sub.add_parser("confirm", help="Set user_verdict=CONFIRM for a fact")
+    fact_confirm.add_argument("id", help="Fact UUID")
+
+    fact_reject = fact_sub.add_parser("reject", help="Set user_verdict=REJECT for a fact")
+    fact_reject.add_argument("id", help="Fact UUID")
+
     # ── Watch (Watchdog 통합) ────────────────────────────────────
     p_watch = sub.add_parser("watch", help="서버 감시 — 상태, 알람, pulse 큐, 이벤트 로그")
     watch_sub = p_watch.add_subparsers(dest="watch_command")
@@ -1683,6 +1785,15 @@ async def main():
             cmd_file_delete(args)
         else:
             p_file.print_help()
+    elif args.command == "fact":
+        if args.fact_command == "list":
+            cmd_fact_list(args)
+        elif args.fact_command == "confirm":
+            cmd_fact_confirm(args)
+        elif args.fact_command == "reject":
+            cmd_fact_reject(args)
+        else:
+            p_fact.print_help()
     elif args.command == "watch":
         if args.watch_command == "pulses":
             if args.pulse_command == "list":

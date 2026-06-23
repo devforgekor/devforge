@@ -40,6 +40,7 @@ from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, rerank
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.token_budget import TokenBudget
 from lib.watchdog.messenger import heartbeat
+from lib.pod_manager import ensure_model
 
 TIMEOUT_ENRICH = 900  # default, overridden by _calc_timeout per-turn
 MAX_TOKENS_ENRICH = 512
@@ -456,14 +457,22 @@ def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
 def _get_turns_without_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
     """Return turns without enrich_meta, ordered by creation time.
     State-based: NOT EXISTS enrich_meta is the sole filter.
+    Also skips turns with unresolved NEUTRAL facts (no user_verdict yet).
     """
     sql = (
-        "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at "
+        "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at, t.est_chars "
         "FROM turns t "
         "WHERE NOT EXISTS ("
         "  SELECT 1 FROM review_facts rf2 "
         "  WHERE rf2.turn_id = t.id AND rf2.fact_type = 'enrich_meta'"
         ")"
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM review_facts rf3 "
+        "  WHERE rf3.turn_id = t.id "
+        "  AND rf3.nli_llm = 'NEUTRAL'"
+        "  AND rf3.user_verdict IS NULL"
+        ")"
+        "AND t.pipeline_state = 'extracted' "
         "ORDER BY t.created_at DESC "
         f"LIMIT {limit}"
     )
@@ -476,6 +485,7 @@ def _get_turns_without_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "thinking": r.get("thinking") or None,
         "text": r.get("text", ""),
         "created_at": r.get("created_at", ""),
+        "est_chars": r.get("est_chars", 0),
     } for r in rows]
 
 
@@ -567,7 +577,7 @@ def enrich_pipeline(turn_id: Optional[str] = None,
     # Select turns
     if turn_id:
         sql = (
-            "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at "
+            "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at, t.est_chars "
             f"FROM turns t WHERE t.id = '{esc_sql(turn_id)}'::uuid"
         )
         rows = psql_json(sql)
@@ -580,6 +590,7 @@ def enrich_pipeline(turn_id: Optional[str] = None,
             "thinking": r.get("thinking") or None,
             "text": r.get("text", ""),
             "created_at": r.get("created_at", ""),
+            "est_chars": r.get("est_chars", 0),
         }]
     else:
         turns = _get_turns_without_enrich(limit)
@@ -601,8 +612,9 @@ def enrich_pipeline(turn_id: Optional[str] = None,
         user_turn = turn.get("user_turn", "") or ""
         thinking = turn.get("thinking", "") or ""
         text = turn.get("text", "") or ""
+        est_chars = turn.get("est_chars", 0) or 0
         extractions = _get_turn_extractions(turn_id)
-        turn_data.append((turn_id, user_turn, thinking, text, extractions))
+        turn_data.append((turn_id, user_turn, thinking, text, extractions, est_chars))
 
     if not turn_data:
         print("[enrich] No turns with extraction context found")
@@ -663,39 +675,72 @@ def enrich_pipeline(turn_id: Optional[str] = None,
                 gen_tokens=usage.get("completion_tokens"),
                 elapsed_ms=meta.get("elapsed_ms") if meta else None,
             )
+            psql_ok(f"UPDATE turns SET pipeline_state = 'enriched' WHERE id = '{tid}'::uuid")
             return True
         except Exception as e:
             print(f"  [{ti}/{n}] {tid[:8]} — ERROR: {type(e).__name__}: {e}", flush=True)
             return False
 
-    # ── Phase 1: Concurrent LLM generation ──
-    print(f"[enrich] Submitting {len(turn_data)} turns to LLM (parallel={PARALLEL})...",
+    # ── Phase 1: LLM generation (pool first, then solo large turns) ──
+    MAX_CHARS_SOLO = 5000
+    pool_items = []  # (ti, tid, ut, th, tx, exts, est_c)
+    solo_items = []  # same structure
+    print(f"[enrich] Processing {len(turn_data)} turns (solo threshold={MAX_CHARS_SOLO} chars)...",
           flush=True)
     llm_t0 = time.monotonic()
 
-    with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-        fut_map = {}
-        for ti, (tid, ut, th, tx, exts) in enumerate(turn_data, 1):
-            total_chars = len(ut) + len(th) + len(tx)
-            call_timeout = _calc_timeout(total_chars)
-            fut = pool.submit(_generate_enrich_fields, ut, th, tx,
-                            model=model, extractions=exts, timeout=call_timeout)
-            fut_map[fut] = (ti, tid, ut, tx)
+    # Separate solo vs pool
+    for ti, (tid, ut, th, tx, exts, est_c) in enumerate(turn_data, 1):
+        if est_c > MAX_CHARS_SOLO:
+            solo_items.append((ti, tid, ut, th, tx, exts, est_c))
+        else:
+            pool_items.append((ti, tid, ut, th, tx, exts, est_c))
 
-        for fut in as_completed(fut_map):
-            ti, tid, ut, tx = fut_map[fut]
-            try:
-                result = fut.result()
-                ok = _store_result(ti, tid, ut, tx, result, dry_run)
-                if ok:
-                    processed += 1
-                    heartbeat("day_enrich", f"turn {tid[:8]} done")
-                else:
+    # Normal turns via ThreadPool (fast path first)
+    if pool_items:
+        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+            fut_map = {}
+            for ti, tid, ut, th, tx, exts, est_c in pool_items:
+                total_chars = est_c
+                call_timeout = _calc_timeout(total_chars)
+                fut = pool.submit(_generate_enrich_fields, ut, th, tx,
+                                model=model, extractions=exts, timeout=call_timeout)
+                fut_map[fut] = (ti, tid, ut, tx)
+
+            for fut in as_completed(fut_map):
+                ti, tid, ut, tx = fut_map[fut]
+                try:
+                    result = fut.result()
+                    ok = _store_result(ti, tid, ut, tx, result, dry_run)
+                    if ok:
+                        processed += 1
+                        heartbeat("day_enrich", f"turn {tid[:8]} done")
+                    else:
+                        failed += 1
+                except Exception as e:
+                    print(f"  [{ti}/{n}] {tid[:8]} — LLM call failed: {type(e).__name__}: {e}",
+                          flush=True)
                     failed += 1
-            except Exception as e:
-                print(f"  [{ti}/{n}] {tid[:8]} — LLM call failed: {type(e).__name__}: {e}",
-                      flush=True)
+
+    # Solo large turns after (slow path, doesn't delay pool)
+    for ti, tid, ut, th, tx, exts, est_c in solo_items:
+        total_chars = est_c
+        call_timeout = _calc_timeout(total_chars)
+        print(f"  [{ti}/{n}] {tid[:8]} — large turn ({est_c} chars), solo after pool",
+              flush=True)
+        try:
+            result = _generate_enrich_fields(ut, th, tx,
+                                            model=model, extractions=exts, timeout=call_timeout)
+            ok = _store_result(ti, tid, ut, tx, result, dry_run)
+            if ok:
+                processed += 1
+                heartbeat("day_enrich", f"turn {tid[:8]} done")
+            else:
                 failed += 1
+        except Exception as e:
+            print(f"  [{ti}/{n}] {tid[:8]} — solo LLM failed: {type(e).__name__}: {e}",
+                  flush=True)
+            failed += 1
 
     llm_elapsed = round(time.monotonic() - llm_t0, 1)
     elapsed = round(time.monotonic() - t_start, 1)
@@ -711,6 +756,7 @@ def enrich_pipeline(turn_id: Optional[str] = None,
 
 
 def main() -> None:
+    ensure_model('day-enrich')  # skip_if_healthy=False: swap from day-extractor to day-enrich
     from lib.infra.preflight import preflight_checks
     preflight_checks("enrich.py")
     import argparse

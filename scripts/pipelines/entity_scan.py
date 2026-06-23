@@ -184,6 +184,7 @@ def _get_turns_for_scan(limit: int = BATCH_LIMIT) -> List[Dict]:
         "  SELECT 1 FROM review_facts rf "
         "  WHERE rf.turn_id = t.id AND rf.fact_type = 'entity_scan'"
         ")"
+        "AND t.pipeline_state = 'embedded' "
         "ORDER BY t.created_at DESC "
         f"LIMIT {limit}"
     )
@@ -266,6 +267,7 @@ def entity_scan_pipeline(
 
         ok = _insert_scan(turn["id"], result)
         if ok:
+            psql_ok(f"UPDATE turns SET pipeline_state = 'scanned' WHERE id = '{turn['id']}'::uuid")
             processed += 1
             heartbeat("entity_scan", f"turn {turn['id'][:8]} — {nf} files, {nfn} funcs")
             total_files += nf

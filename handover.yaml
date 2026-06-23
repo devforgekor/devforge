@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-06-15T03:54:36.652388+00:00'
+  time: '2026-06-23T00:34:03.264198+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -9,35 +9,22 @@ last_checkpoint:
     source: []
     generated: []
   git: {}
-  task: '--title=oci-arm-grabber 대처: 고아 인스턴스 트래핑 중단 및 레포 정리'
-decisions:
-- '{''id'': ''d44-01'', ''detail'': ''EMBED RUNNER SLACK BUG. embed_runner.sh cded to /opt/projects/server before calling
-  python3 -c "from lib.pipeline_common import slack_send", but lib/ lives under scripts/lib/. Result: silent ModuleNotFoundError
-  swallowed by 2>/dev/null || true. Fixed: cd /opt/projects/server/scripts before python3 call, removed 2>/dev/null, fail
-  log on error only.''}'
-- '{''id'': ''d44-02'', ''detail'': ''SLACK CHANNEL DM-ONLY. SLACK_CHANNEL=U0APJGD8CBW resolves to a User ID (U...), not channel
-  ID (C...). slack_send() returns ok=true but message goes only to DM. User confirmed this is the correct value in secrets.env
-  — left unchanged.''}'
-known_issues:
-- '{''id'': ''ki44-01'', ''detail'': ''EMBEDDING 7,041 REMAINING (20.9%). Qwen3-Embedding-8B-f16 on 4-core ARM Neoverse-N1.
-  1,861/8,902 done. ~71min per 200-turn cycle, ~41h estimated. Bottleneck: single-matrix math, not batching. Solo texts (~5461
-  tok) further slow throughput.''}'
-- '{''id'': ''ki44-02'', ''detail'': ''NO FULL_PIPELINE.LOG. /tmp/full_pipeline.sh not running. devforge-day-cycle.service
-  killed (SIGTERM) at 2026-06-14 15:03 UTC — 55min budget exceeded during Pod B mode switch (embed→extract). Manual embed_runner.sh
-  (PID 2318428, started 02:27 UTC) handling embedding alone.''}'
-- '{''id'': ''ki44-03'', ''detail'': ''TASK 18 (oci-arm-grabber) IN PROGRESS. Orphan instance trapping stopped, repo cleanup
-  pending. Blocking Phase 2 pipeline timer reactivation (task 22).''}'
+  task: null
+decisions: []
+known_issues: []
 completed_log:
-- '[Session 44] Embed runner Slack bug fix — import 경로 오류(ModuleNotFoundError) 수정, 2>/dev/null 제거. Pipeline 현황 확인: embedding
-  20.9% 정상 진행, swap 293MB 안정적. Q8 thrashing 없음.'
-- '[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs.'
-- '[Session 40] Watchdog silent alerting + dead man switch. Pod B mode mapping bug fixed (113 crash loop). Day-cycle liveness
-  check added. Slack format standardized. 6 P2 lint resolved. Heartbeat :15/:45 with chat.update in-place.'
-- '[Session 41] Extract + day_verify concurrent batching. llama.cpp --parallel 3 + --cont-batching. pod-b-entrypoint.sh env-driven.
-  extract.py ThreadPoolExecutor 3-turn batches. day_verify.py ThreadPoolExecutor 3-chunk batches. Debate not parallelizable
-  (sequential P->R->J). 27B excluded (RAM). Lint 0/0/0.'
-- '[Session 42] extract/day_verify concurrent batching (Session 41 코드 git으로 복원 확인).'
-- '[Session 43] Embedding 동적 배치 구현. httpx 전환. PID lock 추가. pod-b-entrypoint embed env-driven.'
+- '[Session 35] 14B 10-Axis Test 1 COMPLETE: 3B=50(C) 7B=50(C) Coder14B=52(C) Qwen2.5-14B=52(C) Qwen3-14B=47(C). All C-grade.
+  ~2.3h runtime.'
+- '[Session 32] llm-agent-rule.md: Glossary SSOT workflow 규칙 추가.'
+- '[Session 32] CRITICAL CORRECTION: Session 31 handover night_proposer=Qwen27B는 잘못됨. 30B 유지, 32B→27B만 변경된 것.'
+- '[Session 32] 양방향 검증 완료: compile 127/127 OK, .py 32B refs 0, cli.py lint P0=0, DB glossary clean.'
+- '[Session 30] Doc cleanup: Qwen3-4B stale refs removed from 5 files. review-worker.timer + T01-T16 ghosts cleaned.'
+- '[Session 30] pytest infra created: conftest.py, pytest.ini, tests/__init__.py, dev-requirements.txt.'
+- '[Session 30] prompt-templates/ created: 6 templates for local LLM vibe coding workflow.'
+- '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL.'
+- '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service
+  description, stale .pyc 16 files.'
+- '[Session 28] devforge-qwen → devforge-pod-a rename complete. 16 files + quadlet + systemd unit + docs updated.'
 - '[Session 27] cli.py status --json implemented. lint_rules.py + cli.py lint.'
 - '[Session 26] Context window 256K expansion. systemd bug fix.'
 - '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
@@ -45,22 +32,22 @@ completed_log:
 - '[Session 22] File Status/Path header rule established + risk reclassification.'
 - '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
 - '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
-- '[Session 34] Slack Block Kit 고도화: notifier.py heartbeat Block Kit + in-place chat.update + alert/recovery colored attachment
-  (danger/warning/good). 의존성 없음.'
-- '[Session 34] Telegram push 금지: watchdog/notifier.py _notify_all() _telegram_send() 제거. memory 등록 완료.'
-- '[Session 33] Handover written with exact file paths, line numbers, and divergence map. Next session: redo from scratch
-  with Pro 10-axis specs.'
-- '[Session 33] Test 2 started (21:43 KST), killed at ~22:00 KST. Partial: 3B 6/6, 7B 1/6. /tmp/14b_comparison_results_rubric.json
-  abandoned.'
-- '[Session 33] Claude Pro baseline (simplified scoring): Test1=89, Test2=90. Registry entries created.'
-- '[Session 33] Test 1 completed with simplified system: 3B=57, Coder14B=55, Qwen2.5-14B=54, Qwen3-14B=54, 7B=52. experiment_registry
-  updated.'
-- '[Session 33] VERDICT: Both Test 1 and Test 2 must be redone with Pro 10-axis specs. Claude Pro baseline also re-run. Scope:
-  5 models × 6 cases × 2 modes = 60 local LLM calls + 12 Pro calls. Files to rewrite: scripts/14b_comparison_test.py. Specs
-  to follow: docs/specs/14b-comparison-*.'
 - '[Session 33] DIVERGENCE MAP: (A) Scoring test.py:977-982 5-comp vs checklist.yaml:167 10-axis, (B) Rubric test.py:122-183
   self-made vs rubric-prompt.txt 84-line, (C) Output flat JSON vs scoring-sheet.yaml nested, (D) Injection correct mechanism
   but wrong text.'
+- '[Session 33] VERDICT: Both Test 1 and Test 2 must be redone with Pro 10-axis specs. Claude Pro baseline also re-run. Scope:
+  5 models × 6 cases × 2 modes = 60 local LLM calls + 12 Pro calls. Files to rewrite: scripts/14b_comparison_test.py. Specs
+  to follow: docs/specs/14b-comparison-*.'
+- '[Session 33] Test 1 completed with simplified system: 3B=57, Coder14B=55, Qwen2.5-14B=54, Qwen3-14B=54, 7B=52. experiment_registry
+  updated.'
+- '[Session 33] Claude Pro baseline (simplified scoring): Test1=89, Test2=90. Registry entries created.'
+- '[Session 33] Test 2 started (21:43 KST), killed at ~22:00 KST. Partial: 3B 6/6, 7B 1/6. /tmp/14b_comparison_results_rubric.json
+  abandoned.'
+- '[Session 33] Handover written with exact file paths, line numbers, and divergence map. Next session: redo from scratch
+  with Pro 10-axis specs.'
+- '[Session 34] Telegram push 금지: watchdog/notifier.py _notify_all() _telegram_send() 제거. memory 등록 완료.'
+- '[Session 34] Slack Block Kit 고도화: notifier.py heartbeat Block Kit + in-place chat.update + alert/recovery colored attachment
+  (danger/warning/good). 의존성 없음.'
 - '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
 - '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
 - '[Session 22] File Status/Path header rule established + risk reclassification.'
@@ -68,34 +55,30 @@ completed_log:
 - '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
 - '[Session 26] Context window 256K expansion. systemd bug fix.'
 - '[Session 27] cli.py status --json implemented. lint_rules.py + cli.py lint.'
-- '[Session 28] devforge-qwen → devforge-pod-a rename complete. 16 files + quadlet + systemd unit + docs updated.'
-- '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service
-  description, stale .pyc 16 files.'
-- '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL.'
-- '[Session 30] prompt-templates/ created: 6 templates for local LLM vibe coding workflow.'
-- '[Session 30] pytest infra created: conftest.py, pytest.ini, tests/__init__.py, dev-requirements.txt.'
-- '[Session 30] Doc cleanup: Qwen3-4B stale refs removed from 5 files. review-worker.timer + T01-T16 ghosts cleaned.'
-- '[Session 32] 양방향 검증 완료: compile 127/127 OK, .py 32B refs 0, cli.py lint P0=0, DB glossary clean.'
-- '[Session 32] CRITICAL CORRECTION: Session 31 handover night_proposer=Qwen27B는 잘못됨. 30B 유지, 32B→27B만 변경된 것.'
-- '[Session 32] llm-agent-rule.md: Glossary SSOT workflow 규칙 추가.'
-- '[Session 35] 14B 10-Axis Test 1 COMPLETE: 3B=50(C) 7B=50(C) Coder14B=52(C) Qwen2.5-14B=52(C) Qwen3-14B=47(C). All C-grade.
-  ~2.3h runtime.'
-- '[Session 35] 14B 10-Axis Test 2 COMPLETE: 3B=55(C) 7B=55(C) Coder14B=55(C) Qwen2.5-14B=59(C) Qwen3-14B=62(B). Rubric avg
-  +5.2pt. ~3.4h runtime.'
-- '[Session 35] scripts/14b_comparison_test.py FULL REWRITE: Pro-designed 10-axis specs integrated. (A) rubric-prompt.txt
-  file-loaded at runtime, (B) 10 scoring functions matching checklist.yaml, (C) per-axis + comparison table output.'
-- '[Session 35] Rubric effect analysis: Strong on Verify(+4), moderate on Recall/NLI, zero on Precision/Consistency. extract_clean
-  unsolved — requires few-shot or post-processing.'
-- '[Session 35] Final report: docs/reports/14b-5model-10axis-report.md. Slack watcher scripts: 14b_test_watch.py (pod B progress
-  → Slack, 10min interval).'
-- '[Session 35] 3B Q8 confirmed best for this server. 5.2 t/s, -7pt vs best 14B, 4-5x faster. 14B Q4_K_M provides minimal
-  value.'
-- '[Session 35] Handover written. Next: Pod A+timers restart, Claude Pro 10-axis re-baseline, experiment_registry insert,
-  extract_clean fix.'
-- '[Session 36] Day/Night Pipeline Restructure FULLY IMPLEMENTED.'
-- '[Session 36] Timers migrated: 15m-cycle + classify disabled, day-extract/verify enabled.'
-- '[Session 36] night.py v4.0: Phase 1-2 deprecated, Phase 3 removed.'
-- '[Session 37] PORT REORG: 8080=Pod A reserved, 8081=proposer/embed, 8082=extract/reflector, 8083=verify/judge, 8084=verifier.'
-- '[Session 37] All production pipeline files port-corrected (night.py, review.py, night_cycle.sh, container_manager.py, cli.py,
-  entrypoints).'
-- '[Session 38] 3B→7B Q8 migration: 35+ files updated across production + experimental.'
+- '[Session 43] Embedding 동적 배치 구현. httpx 전환. PID lock 추가. pod-b-entrypoint embed env-driven.'
+- '[Session 42] extract/day_verify concurrent batching (Session 41 코드 git으로 복원 확인).'
+- '[Session 41] Extract + day_verify concurrent batching. llama.cpp --parallel 3 + --cont-batching. pod-b-entrypoint.sh env-driven.
+  extract.py ThreadPoolExecutor 3-turn batches. day_verify.py ThreadPoolExecutor 3-chunk batches. Debate not parallelizable
+  (sequential P->R->J). 27B excluded (RAM). Lint 0/0/0.'
+- '[Session 40] Watchdog silent alerting + dead man switch. Pod B mode mapping bug fixed (113 crash loop). Day-cycle liveness
+  check added. Slack format standardized. 6 P2 lint resolved. Heartbeat :15/:45 with chat.update in-place.'
+- '[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs.'
+- '[Session 44] Embed runner Slack bug fix — import 경로 오류(ModuleNotFoundError) 수정, 2>/dev/null 제거. Pipeline 현황 확인: embedding
+  20.9% 정상 진행, swap 293MB 안정적. Q8 thrashing 없음.'
+- '[Session 45] extract.py NLI→reranker 순서 교정 + entity_scan.py 신규 + enrich.py entity reranker + day_cycle phase 순서 변경.'
+- '[Session 45] extract.py NLI→reranker 순서 교정: NLI 1차(ENTAILMENT/CONTRADICTION/NEUTRAL) → ENTAILMENT auto grounded, CONTRADICTION
+  drop, NEUTRAL만 reranker. LLM 호출 50% 감소.'
+- '[Session 45] enrich.py entity 검증 reranker 도입: substring 1차 → reranker(:8080) 2차. UNGROUNDED만 drop.'
+- '[Session 45] entity_scan.py 신규 (Phase 0): LLM 없는 deterministic entity 추출 (regex+DB+context).'
+- '[Session 45] extract.py entity context 주입: entity_scan 로드 → system prompt에 === Known Context Entities === 삽입.'
+- '[Session 45] day_cycle.sh + day_cycle.py 에 entity_scan phase 추가. 전체 흐름: text_clean → ... → entity_scan → extract(entity
+  context) → enrich(entity reranker verify) → model swap → day_verify.'
+- '[Session 47] E2E 분석 보고서: docs/reports/pipeline-e2e-20260621.md. 5/5 성공, 2329s, 0 errors. 6→10 turn throughput 분석 (+9%/day).
+  enrich NLI 8085 미배포 발견.'
+- '[Session 47] Enrich NLI 8085 → LLM NLI 전환: enrich.py _verify_tldr() LLM self-verify로 교체. call_llm(model=day_enrich, max_tokens=16,
+  timeout=60). extract.py _llm_nli_check와 동일 패턴.'
+- '[Session 47] Entity scan backlog fix: _scan_turn()에서 conv_ents를 scan 결과에서 제외. backlog 증가 원인 제거.'
+- '[Session 47] BATCH_LIMIT 10 통일: embed/entity_scan/extract/enrich/day_verify 전 phase 10. pipeline test timeout 5400s.'
+- '[Session 47] System sync 분리: system_sync.sh (gen_architecture + duckdns). devforge-system-sync.timer 30분 간격. day_cycle.timer
+  disable. watchdog day_timers = {}.'
+- '[Session 48] Env race fix + recover_oom + day_enrich + zswap'

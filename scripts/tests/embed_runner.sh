@@ -8,10 +8,10 @@ cd /opt/projects/server
 
 echo "[embed-runner] Start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cd /opt/projects/server/scripts
-python3 -c "from lib.protection import register_protect; register_protect('embed_runner_sh', reason='shell-based embed runner', ports=[8081])" 2>/dev/null || true
+python3 -c "from lib.watchdog.messenger import heartbeat; heartbeat('embed_runner_sh', detail='started')" 2>/dev/null || true
 cd /opt/projects/server
 
-trap "echo '[embed-runner] Stopped'; cd /opt/projects/server/scripts && python3 -c \"from lib.protection import unregister_protect; unregister_protect('embed_runner_sh')\" 2>/dev/null; cd /opt/projects/server; exit 0" TERM INT
+trap "echo '[embed-runner] Stopped'; cd /opt/projects/server/scripts && python3 -c \"from lib.watchdog.messenger import resolve_pulse; resolve_pulse('heartbeat_embed_runner_sh')\" 2>/dev/null; cd /opt/projects/server; exit 0" TERM INT
 
 cycle=0
 last_event=0
@@ -32,7 +32,7 @@ while true; do
         echo "[embed-runner] All done! $total/$total embedded"
         podman exec postgres psql -U devforge -d devforge_app -c \
             "INSERT INTO catchdog_events (component, event_type, detail) VALUES ('embed_batch', 'complete', 'All $total turns embedded')" 2>/dev/null || true
-        cd /opt/projects/server/scripts && python3 -c "from lib.protection import unregister_protect; unregister_protect('embed_runner_sh')" 2>/dev/null; cd /opt/projects/server
+        cd /opt/projects/server/scripts && python3 -c "from lib.watchdog.messenger import resolve_pulse; resolve_pulse('heartbeat_embed_runner_sh')" 2>/dev/null; cd /opt/projects/server
         exit 0
     fi
 
