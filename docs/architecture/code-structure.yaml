@@ -10,489 +10,894 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: "2026-06-03"
-  rule: "LLM MUST read this file before any file creation or structural modification"
-
-# ── Root Modules ──────────────────────────────────────────────────────────
-
+  updated: '2026-06-25'
 modules:
-  - path: scripts/
-    purpose: "🚀 Executable entry points, pipelines, services, and tests"
-    constraints:
-      entry_points_only: true
-      delegate_logic_to_lib: true
-      allowed_pattern: "^[a-z][a-z0-9_]*\\.(py|sh)$"
-      import_restrictions: ["May import from scripts.lib only", "May NOT import from other scripts/ root modules"]
-    allow_new_files: false
-    files:
-      cli.py:
-        purpose: "🎯 Main CLI — all user-facing commands (activity, worklog, mode, discussion, drag, toolmad)"
-        max_lines: 800
-        no_subprocess: false
-      orchestrator.py:
-        purpose: "🧩 Task orchestrator — routes pipeline/debate/review by task type"
-        max_lines: 500
-      anthropic_proxy.py:
-        purpose: "🔄 Anthropic API proxy → DeepSeek — cch stripping, cache tracking, tool_use_id fix"
-        max_lines: 1400
-        is_long_term: true  # complex proxy requires higher limit
-
-  - path: scripts/lib/
-    purpose: "📚 Shared libraries — NO entry points, NO side effects at import time"
-    constraints:
-      max_lines: 400
-      no_direct_subprocess: false
-      no_direct_db: false
-      allowed_pattern: "^[a-z][a-z0-9_]*\\.py$"
-      import_restrictions:
-        - "May import from lib/ subpackages only (auth, code_mod, infra, llm, output, parsers, search, state, tracking)"
-        - "May NOT import from scripts/ root modules"
-        - "Prefer stdlib. Only allowed external deps: pyyaml, tenacity"
-    files:
-      db.py:
-        purpose: "🐘 PostgreSQL query helpers — psql(), psql_ok(), esc_sql(), db_table_exists()"
-        max_lines: 150
-        constraint: "MUST use podman exec psql. NEVER psql -h localhost."
-      agents.py:
-        purpose: "🏷️ Agent name normalization — single source of truth"
-        max_lines: 30
-      feedback.py:
-        purpose: "🔄 Few-shot feedback loop — extracts fix patterns from activity_log for LLM injection"
-        max_lines: 550
-        is_long_term: true
-      blob_uploader.py:
-        purpose: "☁️ Azure Blob upload — review bundles, pipeline outputs"
-        max_lines: 150
-      bot_processor.py:
-        purpose: "🤖 Shared bot processor — Telegram & Slack intent classification"
-        max_lines: 200
-      crypto.py:
-        purpose: "🔐 Encryption utilities"
-        max_lines: 100
-      llm_client.py:
-        purpose: "🏗️ Unified LLM entry point — wraps both local (llama.cpp) and remote (DeepSeek) calls"
-        max_lines: 150
-        import_restrictions:
-          - "May call lib/llm/client.py (remote) and lib/llm/llm_client.py (local)"
-      mcp_consumer.py:
-        purpose: "🔌 MCP metadata consumer — reads review_facts for MCP tool integration"
-        max_lines: 150
-      parser_aider.py:
-        purpose: "⏮️ Backward-compat shim → lib.parsers.aider (3 lines)"
-        max_lines: 5
-      queue_writer.py:
-        purpose: "📤 Enqueue items to activity_log for downstream review pipeline"
-        max_lines: 80
-      scoring.py:
-        purpose: "📊 Veto/gap/early-exit logic — single source of truth for consensus scoring"
-        max_lines: 120
-      phase_tracker.py:
-        purpose: "📐 Phase completion detection from live system state"
-        max_lines: 100
-      test_sandbox.py:
-        purpose: "🧪 Podman read-only tmpfs sandbox for safe code execution"
-        max_lines: 150
-      text_quality.py:
-        purpose: "🔤 Korean text quality guardrails — think-tag detection, token budget check"
-        max_lines: 100
-      worklog.py:
-        purpose: "📓 Git commit → worklog sync"
-        max_lines: 80
-
-  - path: scripts/lib/auth/
-    purpose: "🔑 API key management — rotation, loading, encryption"
-    constraints:
-      max_lines_per_file: 260
-      no_direct_db: true
-    files:
-      key_loader.py:
-        purpose: "Load encrypted or plaintext keys from secrets.env"
-        max_lines: 80
-      key_rotator.py:
-        purpose: "Key rotation logic"
-        max_lines: 260
-      api_key_cipher.py:
-        purpose: "Encrypt/decrypt API keys"
-        max_lines: 60
-
-  - path: scripts/lib/code_mod/
-    purpose: "🛠️ Code modification pipeline — shared utilities for diff generation"
-    constraints:
-      max_lines_per_file: 80
-    files:
-      shared.py:
-        purpose: "Shared code_mod utilities — diff helpers, context extraction"
-        max_lines: 80
-
-  - path: scripts/lib/infra/
-    purpose: "🏗️ Infrastructure utilities — containers, health, storage, subprocess"
-    constraints:
-      max_lines_per_file: 100
-      no_direct_db: true
-    files:
-      containers.py:
-        purpose: "Container and service discovery for state_collector"
-        max_lines: 100
-      health_checks.py:
-        purpose: "System health checks — systemd, podman, filesystem"
-        max_lines: 70
-      storage.py:
-        purpose: "Zram cycle tracking"
-        max_lines: 70
-      subprocess.py:
-        purpose: "Subprocess helpers — run commands and collect output"
-        max_lines: 20
-
-  - path: scripts/lib/llm/
-    purpose: "🤖 LLM integration — unified client and rate estimators"
-    constraints:
-      max_lines_per_file: 120
-    files:
-      client.py:
-        purpose: "Remote LLM client — OpenAI-compatible API calls (DeepSeek)"
-        max_lines: 120
-        import_restrictions: ["MUST NOT import from lib/llm/llm_client.py"]
-      json_parser.py:
-        purpose: "Recovery ladder: stdlib json → json_repair for LLM output"
-        max_lines: 50
-      rate_estimator.py:
-        purpose: "Token-count and timing-based rate estimators"
-        max_lines: 120
-    aliases:
-      llm_client.py: "scripts/lib/llm_client.py (root lib, wraps both local + remote)"
-
-  - path: scripts/lib/output/
-    purpose: "📝 Output generators — CLAUDE.yaml, MOTD, validation"
-    constraints:
-      max_lines_per_file: 160
-    files:
-      claude_yaml.py:
-        purpose: "CLAUDE.yaml auto-update — sync storage/services/network from live data"
-        max_lines: 120
-      memory_line.py:
-        purpose: "Memory overview line for CLAUDE.yaml"
-        max_lines: 40
-      motd.py:
-        purpose: "MOTD generation — formatted system overview"
-        max_lines: 160
-      validation.py:
-        purpose: "Validate CLAUDE.yaml + blueprint.yaml claims vs live data"
-        max_lines: 120
-      yaml_io.py:
-        purpose: "YAML load/save helpers"
-        max_lines: 20
-
-  - path: scripts/lib/parsers/
-    purpose: "📖 Log parsers — normalize AI tool transcripts to turns schema"
-    constraints:
-      max_lines_per_file: 140
-    files:
-      aider.py:
-        purpose: "Parse Aider chat history (.aider.chat.history.md) → turns"
-        max_lines: 140
-      claude.py:
-        purpose: "Parse Claude Code session JSONL → turns"
-        max_lines: 100
-      copilot.py:
-        purpose: "Parse Copilot events.jsonl → turns"
-        max_lines: 100
-      gemini.py:
-        purpose: "Parse Gemini CLI session JSONL → turns"
-        max_lines: 100
-
-  - path: scripts/lib/search/
-    purpose: "🔍 Search manager — turn/worklog search"
-    constraints:
-      max_lines_per_file: 280
-    files:
-      manager.py:
-        purpose: "Search orchestration — query routing, result ranking"
-        max_lines: 280
-
-  - path: scripts/lib/state/
-    purpose: "💾 State management — changelog, diff, state I/O"
-    constraints:
-      max_lines_per_file: 100
-    files:
-      changelog.py:
-        purpose: "Changelog — load, save, append, archive"
-        max_lines: 100
-      diff.py:
-        purpose: "Structural hashing for state change detection"
-        max_lines: 50
-      state_io.py:
-        purpose: "State file I/O — save and load state.yaml"
-        max_lines: 30
-
-  - path: scripts/lib/tracking/
-    purpose: "📡 Agent tracking — names, dependency tracking, phase tracking"
-    constraints:
-      max_lines_per_file: 150
-    files:
-      agent_names.py:
-        purpose: "🏷️ Agent name normalization — single source of truth"
-        max_lines: 30
-      dependency_tracker.py:
-        purpose: "Reference tracking — external project watch + internal code observation"
-        max_lines: 150
-      phase_tracker.py:
-        purpose: "📐 Phase auto-tracker — detects completed items from live state"
-        max_lines: 440  # complex state machine
-        is_long_term: true
-
-  # ── Pipeline scripts ──────────────────────────────────────────────────
-
-  - path: scripts/
-    group: "pipelines"
-    purpose: "🔧 Pipeline scripts — review, code mod, extract"
-    files:
-      code_mod_pipeline.py:
-        purpose: "4-stage code modification (ANALYZE→PLAN→IMPLEMENT→PACKAGE) on 32B"
-        max_lines: 1300
-        is_long_term: true
-      review_pipeline_steps.py:
-        purpose: "Step 1-3 review pipeline (review→reflect→judge)"
-        max_lines: 480
-      review_pipeline_3model.py:
-        purpose: "Nightly 3-model review (R1→Qwen7B→Selene)"
-        max_lines: 360
-      proxy_reviewer.py:
-        purpose: "DeepSeek batch review — token-based batching, audit"
-        max_lines: 400
-      review_consumer.py:
-        purpose: "Review queue consumer — processes review results from queue"
-        max_lines: 400
-      hybrid_pipeline.py:
-        purpose: "Hybrid local + API pipeline"
-        max_lines: 1020
-        is_long_term: true
-      extract_pipeline.py:
-        purpose: "Fact extraction pipeline"
-        max_lines: 630
-
-  # ── Debate scripts ────────────────────────────────────────────────────
-
-  - path: scripts/
-    group: "debate"
-    purpose: "🗣️ Multi-agent LLM debate — local DART + remote cooperative"
-    files:
-      cooperative_debate.py:
-        purpose: "Proposer/Refuter debate on Azure spot VMs + local Judge/Synthesis"
-        max_lines: 240
-      cooperative_remote.py:
-        purpose: "SSH tunnel and remote model activation for cooperative debate"
-        max_lines: 120
-      debate_data.py:
-        purpose: "Model catalog, remote hosts, prompt templates — pure data, no logic"
-        max_lines: 340
-      debate_llm.py:
-        purpose: "LLM calling, JSON parsing, model switching — shared debate infra"
-        max_lines: 380
-      deepseek_web.py:
-        purpose: "DART — web search trigger when debate cannot reach consensus"
-        max_lines: 340
-      local_debate.py:
-        purpose: "Local debate using Pod A + Pod B models"
-        max_lines: 700
-
-  # ── Service scripts ───────────────────────────────────────────────────
-
-  - path: scripts/
-    group: "services"
-    purpose: "⚙️ Background services — turn watcher, worklog, state, notifications"
-    files:
-      turn_watcher.py:
-        purpose: "👁️ Turn collection — polls agent JSONL every 3s → turns table"
-        max_lines: 320
-      worklog_generator.py:
-        purpose: "📓 Auto-generate worklog entries from conversation turns"
-        max_lines: 410
-      activity_summarizer.py:
-        purpose: "📊 Daily LLM summarization of activity_log events"
-        max_lines: 270
-      session_context.py:
-        purpose: "Session context builder for LLM handover"
-        max_lines: 170
-      embed_turns.py:
-        purpose: "Generate embeddings for turns table"
-        max_lines: 240
-      sync_gemini_rules.py:
-        purpose: "Sync infrastructure.md + llm-common-rule.md → GEMINI.md"
-        max_lines: 80
-      gemini_proxy.py:
-        purpose: "Gemini API proxy — rule injection for Cline/Gemini CLI"
-        max_lines: 460
-      gemini_pool.py:
-        purpose: "Gemini model pool manager"
-        max_lines: 250
-      telegram_bot.py:
-        purpose: "Telegram notification bot — offset tracking in /var/tmp"
-        max_lines: 130
-      telegram_send.py:
-        purpose: "Send Telegram messages"
-        max_lines: 170
-      slack_notify.py:
-        purpose: "Slack notification"
-        max_lines: 220
-      webhook_server.py:
-        purpose: "Webhook endpoint for external integrations"
-        max_lines: 170
-      search_proxy.py:
-        purpose: "Search proxy service"
-        max_lines: 450
-      blob_explorer.py:
-        purpose: "Azure Blob explorer"
-        max_lines: 410
-      auto_commit_guard.py:
-        purpose: "🛡️ Git auto-commit safety net — prevents accidental commits to protected branches"
-        max_lines: 70
-      azure_spot.py:
-        purpose: "Azure Spot VM lifecycle management"
-        max_lines: 630
-      gen_architecture.py:
-        purpose: "Auto-generate infrastructure.md + software.yaml from CLAUDE.yaml (timer KST 09:00)"
-        max_lines: 200
-      link_turns.py:
-        purpose: "Nightly turn ↔ worklog_entries linking via content analysis"
-        max_lines: 160
-      motd_gen.py:
-        purpose: "MOTD generation — system status banner on SSH login"
-        max_lines: 100
-      observer.py:
-        purpose: "Observer Agent — interactive CLI agent for DevForge pipelines"
-        max_lines: 300
-      patch_elf_note.py:
-        purpose: "Re-apply NOTE phdr patch to Copilot CLI ELF binary (UEK kernel compat)"
-        max_lines: 80
-      update_handover.py:
-        purpose: "Session context capture → handover.yaml (periodic + session-end)"
-        max_lines: 70
-
-  # ── Shell scripts ─────────────────────────────────────────────────────
-
-  - path: scripts/
-    group: "shell"
-    purpose: "🐚 Shell automation — nightly batch, mode switching, 15min cycle"
-    format: shell
-    constraints:
-      allowed_pattern: "^[a-z][a-z0-9_]*\\.sh$"
-    files:
-      nightly_batch.sh:
-        purpose: "🌙 Nightly pipeline orchestrator — Phase 1-7, mode switching, day restore"
-        max_lines: 300
-      15m_cycle.sh:
-        purpose: "⏲️ 15-minute cycle — state collection, health checks"
-        max_lines: 100
-      auto_mode.sh:
-        purpose: "Auto-detect and switch Pod modes based on load/activity"
-        max_lines: 100
-      claude_code_runner.sh:
-        purpose: "Claude Code session launcher in tmux"
-        max_lines: 100
-      claude_code_wrapper.sh:
-        purpose: "Claude Code wrapper with env setup"
-        max_lines: 80
-      gemini_session_start.sh:
-        purpose: "Gemini CLI session starter"
-        max_lines: 40
-      run_baseline.sh:
-        purpose: "Baseline test runner"
-        max_lines: 80
-
-  # ── Test scripts ──────────────────────────────────────────────────────
-
-  - path: scripts/
-    group: "tests"
-    purpose: "🧪 Test and verification scripts"
-    files:
-      test_27b_optimization.py:
-        purpose: "27B nightly optimization verification"
-        max_lines: 770
-      test_dart_round.py:
-        purpose: "DART round-trip test"
-        max_lines: 230
-      test_extraction_faithfulness.py:
-        purpose: "Extraction faithfulness test"
-        max_lines: 300
-      test_operator.py:
-        purpose: "Operator test suite"
-        max_lines: 440
-      test_qwen3_4b_comprehensive.py:
-        purpose: "Qwen3-4B comprehensive test"
-        max_lines: 280
-      test_review_consumer.py:
-        purpose: "Review consumer end-to-end test"
-        max_lines: 220
-      verify_refactoring.py:
-        purpose: "Bidirectional refactoring verification — init re-exports, shims, line count drift"
-        max_lines: 420
-      eval_comparison.py:
-        purpose: "DeepSeek Pro evaluation — scores 12-run comparison test results"
-        max_lines: 300
-      nightly_extract_test.py:
-        purpose: "Nightly extraction faithfulness test on fixed 15-turn set"
-        max_lines: 200
-
-# ── Data Flows ───────────────────────────────────────────────────────
-
-data_flows:
-  - name: "🔄 User → CLI → Pipeline → DB"
-    path: "cli.py → orchestrator.py → code_mod_pipeline.py → diff → activity_log"
-    description: "Code modification pipeline triggered by user CLI"
-
-  - name: "🔄 User → CLI → Debate → Report"
-    path: "cli.py → orchestrator.py → cooperative_debate.py/local_debate.py → report → activity_log"
-    description: "Multi-agent debate triggered by user CLI"
-
-  - name: "🔄 Turn Collection Pipeline"
-    path: "turn_watcher.py (3s poll) → parsers/*.py → turns table → worklog_generator.py → worklog_entries"
-    description: "Automated turn collection and worklog generation"
-
-  - name: "🌙 Nightly Pipeline (KST 03:00)"
-    path: "nightly_batch.sh → Phase 3(review_pipeline_3model) → Phase 5(27B verify) → Phase 7(proxy_reviewer → DeepSeek audit)"
-    description: "Nightly review pipeline with 3-model review, verification, and DeepSeek audit"
-
-  - name: "⏲️ System State (15min)"
-    path: "state_collector/main.py → state.yaml → changelog (if changed) → CLAUDE.yaml → MOTD"
-    description: "Periodic system state collection and change tracking"
-
-  - name: "📝 Session Context (10min + hook)"
-    path: "update_handover.py → handover.yaml"
-    description: "Periodic and session-end context capture for LLM handover"
-
-# ── Key Scripts Index ───────────────────────────────────────────────
-
-entry_points:
-  - script: "scripts/cli.py"
-    command: "python3 scripts/cli.py {activity|worklog|mode|discussion|drag|toolmad}"
-    description: "🎯 Main user-facing CLI"
-
-  - script: "scripts/gen_architecture.py"
-    trigger: "devforge-gen-architecture.timer (daily KST 09:00)"
-    description: "🏗️ Auto-generate infrastructure.md + software.yaml from CLAUDE.yaml"
-
-  - script: "scripts/state_collector/main.py"
-    trigger: "server-state-collector.timer (15min)"
-    description: "💾 Poll system state → state.yaml → changelog"
-
-  - script: "scripts/update_handover.py"
-    trigger: "handover-gen.timer (10min) + SessionEnd hook"
-    description: "📝 Capture session context → handover.yaml"
-
-  - script: "scripts/anthropic_proxy.py"
-    trigger: "devforge-proxy.service (always on)"
-    description: "🔄 DeepSeek ↔ Anthropic API proxy — always running"
-
-  - script: "scripts/turn_watcher.py"
-    trigger: "devforge-collect.timer"
-    description: "👁️ Poll agent JSONL → turns table"
-
-  - script: "scripts/nightly_batch.sh"
-    trigger: "devforge-nightly.timer (UTC 18:00 = KST 03:00)"
-    description: "🌙 Nightly pipeline orchestrator"
-
-# ── Experimental / known deprecated ─────────────────────────────────
-
-deprecated:
-  - file: "scripts/slack_notify.py"
-    reason: "Replaced by telegram_bot.py. Retained for reference."
+- path: scripts/
+  purpose: Executable entry points, pipelines, services, and tests
+  files:
+    activity_summarizer.py:
+      status: production
+      purpose: "activity_summarizer.py \u2014 Daily LLM summarization of activity_log\
+        \ events."
+    auto_commit_guard.py:
+      status: production
+      purpose: "Session guard \u2014 auto-commit unlogged changes so nothing is lost."
+    auto_mode.sh:
+      status: unknown
+      purpose: "auto_mode.sh \u2014 DevForge Auto Mode (overnight unattended task\
+        \ execution)"
+    bench_llm.py:
+      status: production
+      purpose: "DevForge LLM Benchmark \u2014 decode tps \uCE21\uC815 \uBC0F \uC2E4\
+        \uD5D8 \uB808\uC9C0\uC2A4\uD2B8\uB9AC \uB4F1\uB85D."
+    blob_explorer.py:
+      status: production
+      purpose: 'blob_explorer.py --- Azure Blob web interface: send + receive.'
+    claude_code_runner.sh:
+      status: unknown
+      purpose: "Claude Code proxy request runner \u2014 single-mode or A/B multi-variant."
+    claude_code_wrapper.sh:
+      status: unknown
+      purpose: Simple Claude Code wrapper that performs prompt canonicalization and
+        sends to the proxy (DeepSeek-compatible).
+    cli.py:
+      status: production
+      purpose: "DevForge CLI \u2014 AI \uB300\uD654 \uAC80\uC0C9 \uBC0F \uC800\uC7A5\
+        \ \uB3C4\uAD6C."
+    day_cycle.sh:
+      status: unknown
+      purpose: "day_cycle.sh \u2014 async pipeline (pipeline_state-driven)"
+    deepseek_web.py:
+      status: experimental
+      purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
+    gemini_pool.py:
+      status: production
+      purpose: "gemini_pool.py \u2014 Async Gemini API key pool with SQLite-backed\
+        \ persistence."
+    gemini_session_start.sh:
+      status: unknown
+      purpose: Launch Gemini CLI in a persistent tmux session with per-request key
+        rotation.
+    gen_architecture.py:
+      status: experimental
+      purpose: Generate infrastructure.md, software.yaml, code-structure.yaml, and
+        timer-registry.yaml
+    link_turns.py:
+      status: production
+      purpose: "link_turns.py \u2014 nightly: match turns to worklog entries + deep\
+        \ review."
+    lint_rules.py:
+      status: production
+      purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
+        \ documents."
+    mcp_entrypoint.sh:
+      status: unknown
+      purpose: "mcp_entrypoint.sh \u2014 Start FastMCP server on Pod A pod"
+    mcp_server.py:
+      status: experimental
+      purpose: "DevForge MCP Server \u2014 Streamable HTTP (MCP spec 2025-03-26)."
+    mcp_server_sse.py:
+      status: experimental
+      purpose: "MCP Server \u2014 SSE-based tool server (protocol 2024-11-05)."
+    motd_gen.py:
+      status: production
+      purpose: "motd_gen.py \u2014 lightweight MOTD for SSH login. Reads state.yaml\
+        \ + live metrics."
+    night_cycle.sh:
+      status: unknown
+      purpose: "night_cycle.sh \u2014 DevForge nightly pipeline (KST 03:00 / UTC 18:00)"
+    observer.py:
+      status: production
+      purpose: "DevForge Observer Agent \u2014 interactive CLI agent with tool calling."
+    orchestrator.py:
+      status: production
+      purpose: "DevForge Orchestrator \u2014 LLM-based smart router to specialized\
+        \ pipelines."
+    patch_elf_note.py:
+      status: experimental
+      purpose: Re-apply NOTE phdr patch to Copilot CLI ELF binary.
+    review_pipeline_3model.py:
+      status: production
+      purpose: "3-Model Review Pipeline \u2014 Code Review Pipeline."
+    run_baseline_monitor.sh:
+      status: unknown
+      purpose: DevForge Baseline Monitor v1.0
+    run_pipeline_bg.sh:
+      status: unknown
+      purpose: "prj_cycle.py \u2192 bench_verify_optimization.py \uC21C\uCC28 \uC2E4\
+        \uD589"
+    run_verify_compare.sh:
+      status: unknown
+      purpose: "Background verify runner: Qwen Q8 \u2192 NextCoder Q8"
+    slack_notify.py:
+      status: production
+      purpose: "slack_notify.py \u2014 Session-end report \u2192 Slack DM."
+    sync_gemini_rules.py:
+      status: experimental
+      purpose: Sync shared rules into Gemini CLI instruction file.
+    system_sync.sh:
+      status: unknown
+      purpose: "system_sync.sh \u2014 30min system maintenance (no Pod B, no pipeline)"
+    telegram_send.py:
+      status: experimental
+      purpose: telegram_send.py --- Send files or text to your Telegram chat.
+    turn_watcher.py:
+      status: production
+      purpose: "turn_watcher.py \u2014 real-time session transcript \u2192 PostgreSQL."
+    update_handover.py:
+      status: production
+      purpose: "update_handover.py \u2014 Quality-scored session context capture."
+    watchdog.py:
+      status: production
+      purpose: "DevForge Watchdog \u2014 entry point."
+    weekly_enrich_rebuild.sh:
+      status: unknown
+      purpose: "weekly_enrich_rebuild.sh \u2014 Weekly enrich few-shot diversity rebuild"
+- path: scripts/lib/
+  purpose: Lib
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    blob_uploader.py:
+      status: production
+      purpose: "Azure Blob uploader \u2014 single shared utility for all pipeline\
+        \ outputs."
+    cli_experiment.py:
+      status: production
+      purpose: "CLI experiment management \u2014 list, compare, active, adopt commands."
+    cli_worklog.py:
+      status: production
+      purpose: "CLI worklog management \u2014 add, recent, search commands."
+    common.py:
+      status: production
+      purpose: "Shared utilities \u2014 log, timestamp, and other common helpers."
+    db.py:
+      status: production
+      purpose: Shared PostgreSQL helpers for DevForge scripts.
+    enrich_consumer.py:
+      status: production
+      purpose: "enrich_consumer \u2014 read enrichment metadata from review_facts\
+        \ and prepare for MCP tools."
+    enrich_feedback.py:
+      status: production
+      purpose: "Enrich Feedback \u2014 dynamic few-shot retrieval for enrich pipeline."
+    enrich_few_shot.py:
+      status: experimental
+      purpose: "Enrich Few-Shot \u2014 static diversity-first few-shot examples for\
+        \ enrich pipeline."
+    experiment_state.py:
+      status: production
+      purpose: "Experiment state file \u2014 \uC2E4\uD5D8 \uC911 watchdog\uACFC pipeline\
+        \ \uAC04 \uC0C1\uD0DC \uACF5\uC720."
+    feedback.py:
+      status: production
+      purpose: "Feedback provider \u2014 extracts recent fix patterns from activity_log\
+        \ and returns"
+    file_registry.py:
+      status: production
+      purpose: "file_registry.py \u2014 DevForge File Management System."
+    llm_client.py:
+      status: production
+      purpose: "Unified LLM client \u2014 single entry point for all pipeline scripts."
+    nli_server.py:
+      status: deprecated
+      purpose: "NLI Cross-Encoder Server \u2014 DeBERTa-v3-large (DEPRECATED, never\
+        \ deployed)."
+    pipeline_common.py:
+      status: production
+      purpose: "Shared pipeline utilities \u2014 PipelineState, llm_call, call_one,\
+        \ schema, prompts."
+    pod_manager.py:
+      status: production
+      purpose: "Container management for DevForge \u2014 Pod A (devforge-pod-a :8080)\
+        \ and Pod B (devforge-pod-b :8081-8089)."
+    protection.py:
+      status: production
+      purpose: "Protection context manager \u2014 file-based dead man's switch."
+    proxy_utils.py:
+      status: production
+      purpose: Utility functions extracted from anthropic_proxy.
+    queue_writer.py:
+      status: production
+      purpose: "queue_writer \u2014 enqueue items to activity_log for downstream review\
+        \ pipeline."
+    scoring.py:
+      status: production
+      purpose: "Scoring \u2014 shared veto/gap/early-exit logic."
+    slack_interactive.py:
+      status: experimental
+      purpose: "Slack Interactive Handler \u2014 receives Slack block_actions payload\
+        \ and processes NEUTRAL fact confirm/reject."
+    telegram_notifier.py:
+      status: production
+      purpose: Telegram notifier for pipeline alerts.
+    test_common.py:
+      status: production
+      purpose: "Shared test utilities \u2014 setup, heartbeat, cleanup, re-exports."
+    test_sandbox.py:
+      status: experimental
+      purpose: "Test execution sandbox \u2014 Podman read-only tmpfs for safe code\
+        \ execution."
+    text_cleaner.py:
+      status: experimental
+      purpose: Korean text cleaner using Kiwi morphological analyzer.
+    tg_webhook.py:
+      status: experimental
+      purpose: Minimal Telegram webhook for NEUTRAL fact CONFIRM/REJECT buttons.
+    token_budget.py:
+      status: production
+      purpose: Token budget manager for P-R-J pipeline context allocation.
+    worklog.py:
+      status: production
+      purpose: "Git commit \u2192 worklog sync."
+- path: scripts/lib/auth/
+  purpose: Auth
+  files:
+    __init__.py:
+      status: production
+      purpose: "Authentication \u2014 key rotation, loading, and encryption."
+    api_key_cipher.py:
+      status: production
+      purpose: AES-256-GCM encryption for API keys and secrets.
+    key_loader.py:
+      status: production
+      purpose: "Unified API key loader \u2014 loads encrypted or plaintext keys from\
+        \ secrets.env."
+    key_rotator.py:
+      status: production
+      purpose: "Lightweight API Key Rotator \u2014 in-memory, no DB dependency."
+  constraints:
+    max_lines_per_file: 260
+    no_direct_db: true
+- path: scripts/lib/code_mod/
+  purpose: Code Mod
+  files:
+    __init__.py:
+      status: production
+      purpose: "Code modification pipeline \u2014 shared utilities."
+    shared.py:
+      status: production
+      purpose: Shared utilities for code modification pipelines.
+  constraints:
+    max_lines_per_file: 80
+- path: scripts/lib/debate/
+  purpose: Debate
+  files:
+    __init__.py:
+      status: experimental
+      purpose: "Multi-agent debate package \u2014 LocalDebate + CooperativeDebate."
+    cooperative_debate.py:
+      status: experimental
+      purpose: "CooperativeDebate \u2014 Proposer/Refuter on Azure spot VMs, Judge/Synthesis\
+        \ local."
+    cooperative_remote.py:
+      status: experimental
+      purpose: SSH tunnel management and remote model activation for cooperative debate
+        mode.
+    debate_data.py:
+      status: experimental
+      purpose: "Model catalogue, remote hosts, prompt templates \u2014 pure data,\
+        \ no logic."
+    debate_llm.py:
+      status: experimental
+      purpose: "LLM calling, JSON parsing, model switching \u2014 shared infrastructure."
+    local_debate.py:
+      status: experimental
+      purpose: "LocalDebate \u2014 multi-agent debate using local Pod A + Pod B."
+- path: scripts/lib/enrich/
+  purpose: Enrich
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    utils.py:
+      status: production
+      purpose: utils.py
+- path: scripts/lib/extract/
+  purpose: Extract
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: deprecated
+      purpose: core.py
+    utils.py:
+      status: deprecated
+      purpose: utils.py
+- path: scripts/lib/hybrid/
+  purpose: Hybrid
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    debate.py:
+      status: production
+      purpose: debate.py
+    executor.py:
+      status: production
+      purpose: executor.py
+    utils.py:
+      status: production
+      purpose: Detect available models via port check or env.
+- path: scripts/lib/infra/
+  purpose: Infra
+  files:
+    __init__.py:
+      status: production
+      purpose: "Infrastructure \u2014 health checks for systemd, podman, filesystem,\
+        \ container discovery."
+    azure_spot.py:
+      status: experimental
+      purpose: Azure Spot VM lifecycle management for cooperative LLM debate.
+    container_manager.py:
+      status: production
+      purpose: "Container lifecycle management \u2014 stop, start, health, memory\
+        \ reclaim."
+    containers.py:
+      status: production
+      purpose: Container and service discovery for state_collector.
+    health_checks.py:
+      status: production
+      purpose: "System state checks \u2014 systemd, podman, filesystem."
+    preflight.py:
+      status: production
+      purpose: Shared preflight checks for DevForge pipelines.
+    storage.py:
+      status: production
+      purpose: Zram cycle tracking.
+    subprocess.py:
+      status: production
+      purpose: "Subprocess helpers \u2014 run commands and collect output lines."
+  constraints:
+    max_lines_per_file: 100
+    no_direct_db: true
+- path: scripts/lib/llm/
+  purpose: Llm
+  files:
+    __init__.py:
+      status: production
+      purpose: "LLM integration \u2014 unified client and rate estimators."
+    endpoint.py:
+      status: production
+      purpose: Raw HTTP client for any OpenAI-compatible endpoint.
+    json_parser.py:
+      status: production
+      purpose: "Recovery Ladder: stdlib json.loads \u2192 json_repair for LLM output."
+    rate_estimator.py:
+      status: production
+      purpose: "Rate estimators for LLM inference \u2014 token-count-based and timings-based."
+  constraints:
+    max_lines_per_file: 120
+- path: scripts/lib/output/
+  purpose: Output
+  files:
+    __init__.py:
+      status: production
+      purpose: "Output \u2014 YAML I/O, CLAUDE.yaml generation, MOTD, validation."
+    claude_yaml.py:
+      status: production
+      purpose: "CLAUDE.yaml auto-update \u2014 sync storage/services/network from\
+        \ live data."
+    memory_line.py:
+      status: production
+      purpose: "Memory overview line for CLAUDE.yaml \u2014 generated from live system\
+        \ data."
+    motd.py:
+      status: production
+      purpose: "MOTD generation \u2014 formatted system overview for /etc/motd."
+    validation.py:
+      status: production
+      purpose: "Validation \u2014 compare CLAUDE.yaml + blueprint.yaml claims against\
+        \ live data."
+    yaml_io.py:
+      status: production
+      purpose: YAML load/save helpers.
+  constraints:
+    max_lines_per_file: 160
+- path: scripts/lib/parsers/
+  purpose: Parsers
+  files:
+    __init__.py:
+      status: production
+      purpose: "Log parsers \u2014 Claude, Aider, Copilot, Gemini."
+    aider.py:
+      status: production
+      purpose: "parser_aider.py \u2014 extract turns from Aider chat history (.aider.chat.history.md)."
+    claude.py:
+      status: production
+      purpose: "parser_claude.py \u2014 extract turns from Claude Code session JSONL."
+    copilot.py:
+      status: production
+      purpose: "parser_copilot.py \u2014 extract turns from Copilot events.jsonl."
+    gemini.py:
+      status: production
+      purpose: "parser_gemini.py \u2014 extract turns from Gemini CLI session JSONL."
+  constraints:
+    max_lines_per_file: 140
+- path: scripts/lib/prj/
+  purpose: Prj
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: core.py
+    utils.py:
+      status: production
+      purpose: utils.py
+- path: scripts/lib/rubric/
+  purpose: Rubric
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: Call LLM, return parsed JSON with metadata.
+    utils.py:
+      status: production
+      purpose: utils.py
+- path: scripts/lib/runner/
+  purpose: Runner
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    metrics.py:
+      status: production
+      purpose: Metrics extraction from pipeline stdout and Slack reporting.
+    snapshot.py:
+      status: production
+      purpose: Phase snapshot save/restore and code transformation for 5-phase experiments.
+- path: scripts/lib/search/
+  purpose: Search
+  files:
+    __init__.py:
+      status: production
+      purpose: "Search \u2014 web search (Brave) + local FTS5 + hybrid (BM25 + pgvector)."
+    hybrid.py:
+      status: experimental
+      purpose: "Hybrid search \u2014 Reciprocal Rank Fusion (RRF) of FTS5 BM25 + pgvector\
+        \ ANN."
+    local_index.py:
+      status: experimental
+      purpose: "SQLite FTS5 search index \u2014 Korean-aware BM25 via Kiwi terms."
+    manager.py:
+      status: production
+      purpose: Multi-API web search manager with intent-based routing and key rotation.
+  constraints:
+    max_lines_per_file: 280
+- path: scripts/lib/state/
+  purpose: State
+  files:
+    __init__.py:
+      status: production
+      purpose: "State \u2014 changelog management, structural diffing, state I/O."
+    changelog.py:
+      status: production
+      purpose: "Changelog management \u2014 load, save, append, archive."
+    diff.py:
+      status: production
+      purpose: Structural hashing and diff for state change detection.
+    state_io.py:
+      status: production
+      purpose: "State file I/O \u2014 save and load state.yaml."
+  constraints:
+    max_lines_per_file: 100
+- path: scripts/lib/tracking/
+  purpose: Tracking
+  files:
+    __init__.py:
+      status: production
+      purpose: "Tracking \u2014 phase detection, dependency tracking, agent name normalization."
+    agent_names.py:
+      status: production
+      purpose: Single source of truth for agent name normalization.
+    dependency_tracker.py:
+      status: production
+      purpose: "Reference tracking \u2014 external project watch + internal code observation."
+    phase_tracker.py:
+      status: production
+      purpose: "Phase auto-tracker \u2014 detects completed items from live system\
+        \ state."
+  constraints:
+    max_lines_per_file: 150
+- path: scripts/lib/verify/
+  purpose: Verify
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: Combine turn text and extractions into a findings list for the LLM.
+    utils.py:
+      status: production
+      purpose: utils.py
+- path: scripts/lib/watchdog/
+  purpose: Watchdog
+  files:
+    __init__.py:
+      status: production
+      purpose: "DevForge Watchdog \u2014 \uD1B5\uD569 \uC11C\uBC84 \uBAA8\uB2C8\uD130\
+        \uB9C1/\uC790\uB3D9\uBCF5\uAD6C \uB370\uBAAC."
+    checker.py:
+      status: production
+      purpose: "Health check runners \u2014 LLM 3-tier probe, timer, service, resource."
+    config.py:
+      status: production
+      purpose: "Watchdog \uC124\uC815 \u2014 \uCCB4\uD06C \uB300\uC0C1, \uAC04\uACA9\
+        , \uC784\uACC4\uAC12."
+    fixloop.py:
+      status: experimental
+      purpose: "Auto-fix loop \u2014 error \uAC10\uC9C0 \u2192 LLM \uC218\uC815 \uC694\
+        \uCCAD \u2192 \uC784\uC2DC podman \uAC80\uC99D \u2192 \uC801\uC6A9."
+    messenger.py:
+      status: production
+      purpose: "Watchdog Messenger \u2014 \uC815\uBCF4 \uC911\uAC1C \uC2DC\uC2A4\uD15C\
+        ."
+    notifier.py:
+      status: production
+      purpose: "Slack \uC54C\uB9BC \u2014 30\uBD84 heartbeat (Block Kit in-place)\
+        \ + state change alert (colored)."
+    recovery.py:
+      status: production
+      purpose: "Graduated recovery \u2014 CrashLoopBackOff \uD328\uD134, OOM \uC804\
+        \uC6A9 \uBCF5\uAD6C."
+    state.py:
+      status: production
+      purpose: "Component state machine \u2014 HEALTHY\u2194DEGRADED\u2194UNHEALTHY\u2194\
+        DOWN."
+- path: scripts/lib/worklog/
+  purpose: Worklog
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    core.py:
+      status: production
+      purpose: core.py
+    utils.py:
+      status: production
+      purpose: utils.py
+- path: scripts/__old/
+  purpose: '  Old'
+  files:
+    prj_watchdog.py:
+      status: production
+      purpose: "P-R-J pipeline watchdog \u2014 \uC790\uB3D9 \uC624\uB958 \uAC10\uC9C0\
+        , \uC218\uC815, \uC7AC\uC2DC\uB3C4."
+    watchdog_pipeline.py:
+      status: experimental
+      purpose: "Pipeline watchdog \u2014 polls log, checks health, sends Slack on\
+        \ each phase/result."
+    watchdog_pipeline.sh:
+      status: unknown
+      purpose: "Watchdog for 5-phase pipeline \u2014 polls log, sends Slack on phase\
+        \ changes."
+- path: scripts/hooks/
+  purpose: Hooks
+  files:
+    session_context.py:
+      status: production
+      purpose: "SessionStart hook \u2014 inject DevForge work context into Claude."
+- path: scripts/notice/
+  purpose: Notice
+  files:
+    slack.py:
+      status: production
+      purpose: slack.py --- Slack Events API receiver for DevForge bot.
+    telegram_bot.py:
+      status: production
+      purpose: telegram_bot.py --- DevForge Telegram bot for remote operations.
+- path: scripts/pipelines/
+  purpose: Pipelines
+  files:
+    __init__.py:
+      status: production
+      purpose: DevForge pipeline step implementations.
+    day_verify.py:
+      status: experimental
+      purpose: "Day Verify Pipeline \u2014 verify enrichment metadata quality."
+    embed_batch.py:
+      status: production
+      purpose: "Embed Batch Pipeline \u2014 text_clean_polished \uAE30\uC900 embedding\
+        \ \uB2E8 1\uD68C."
+    enrich.py:
+      status: experimental
+      purpose: "Enrich Pipeline \u2014 post-extract MCP metadata enrichment (tldr,\
+        \ intent, entities, tags)."
+    entity_scan.py:
+      status: experimental
+      purpose: "Entity Scan \u2014 Phase 0: deterministic entity extraction via regex\
+        \ + DB lookup."
+    extract.py:
+      status: production
+      purpose: "Extract Pipeline \u2014 state-based fact extraction via NOT EXISTS\
+        \ anti-join."
+    extract_llm.py:
+      status: production
+      purpose: LLM extraction submodule for the Extract Pipeline.
+    extract_verify.py:
+      status: production
+      purpose: Verification submodule for the Extract Pipeline.
+    fts5_refresh.py:
+      status: production
+      purpose: "FTS5 Refresh \u2014 text_clean_polished \uAE30\uC900 FTS5 \uC778\uB371\
+        \uC2A4 \uB3D9\uAE30\uD654."
+    night_cycle.py:
+      status: experimental
+      purpose: "Night Pipeline: DB handoff \uB85C\uB4DC \u2192 P-R-J(30B\u219214B\u2192\
+        N14B) \u2192 night_verify \u2192 DB \uC800\uC7A5."
+    night_cycle_pipeline.py:
+      status: experimental
+      purpose: 'Night Cycle V2: Driver for P-R-J pipeline with dry-run support.'
+    night_debate_pipeline.py:
+      status: production
+      purpose: night_debate_pipeline.py
+    polish_batch.py:
+      status: experimental
+      purpose: "Polish Batch Pipeline \u2014 Kiwi(user) + Hanja substitution(thinking/text)."
+    prj_cycle.py:
+      status: production
+      purpose: prj_cycle.py
+    proxy_reviewer.py:
+      status: production
+      purpose: "proxy_reviewer.py \u2014 DeepSeek Pro verification of 27B verify reasoning."
+    reranker_recover.py:
+      status: production
+      purpose: "Reranker Recovery \u2014 quarantine + retry for RERANKER_ERROR facts."
+    review.py:
+      status: production
+      purpose: Step implementations for the 3-Model Review Pipeline.
+    review_consumer.py:
+      status: production
+      purpose: "review_consumer.py \u2014 27B production final verify."
+    text_clean.py:
+      status: production
+      purpose: "Text Preprocessing \u2014 text_clean \uC0DD\uC131 (NULL\uC778 \uD134\
+        \uB9CC \uCC98\uB9AC)."
+    worklog_generator.py:
+      status: production
+      purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: draft model\
+        \ \u2192 Python verify \u2192 review model."
+- path: scripts/proxies/
+  purpose: Proxies
+  files:
+    __init__.py:
+      status: production
+      purpose: LLM API proxy modules for external model endpoints.
+    anthropic.py:
+      status: production
+      purpose: Anthropic-compatible reverse proxy for DeepSeek.
+    gemini.py:
+      status: production
+      purpose: HTTPS reverse proxy that rotates Gemini API keys per request.
+    search.py:
+      status: production
+      purpose: Unified MCP search proxy with cross-provider key rotation.
+- path: scripts/state_collector/
+  purpose: State Collector
+  files:
+    __init__.py:
+      status: production
+      purpose: "state_collector \u2014 server knowledge engine: state gathering and\
+        \ architecture doc generation."
+    main.py:
+      status: production
+      purpose: "state_collector \u2014 DevForge Server Knowledge Engine v4.4"
+- path: scripts/tests/
+  purpose: Test Scripts
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    compare_e2e_baseline.py:
+      status: unknown
+      purpose: Compare current E2E result (10-turn, GEN_TIME_BUF=750) against baseline
+        (6-turn).
+    compare_extract_ab.py:
+      status: unknown
+      purpose: 'A/B extract comparison: A(control, old prompt) vs B(treatment, section-split
+        + chunking).'
+    compare_extract_ab_resume.py:
+      status: unknown
+      purpose: Resume A/B extract comparison from user_long_2000 onward.
+    compare_extract_ab_resume2.py:
+      status: unknown
+      purpose: "Resume2 \u2014 Auto-recover A/B test from think_long_4k onward."
+    compare_extract_ab_retry_B.py:
+      status: unknown
+      purpose: Retry think_long_4k B (failed due to 8082 crash).
+    compare_extract_affinity.py:
+      status: experimental
+      purpose: 'Compare extract affinity configs: parallel/threads/cpus.'
+    compare_extract_affinity_6t.py:
+      status: experimental
+      purpose: Compare parallel=2 with different thread/cpus configs.
+    compare_extract_affinity_oom.py:
+      status: experimental
+      purpose: Compare parallel=2 affinity configs on 3 previously-failed turns.
+    compare_extract_approaches.py:
+      status: unknown
+      purpose: Compare 3 extract approaches on short/medium/long turns.
+    compare_extract_long_B.py:
+      status: unknown
+      purpose: Re-run long/B-chunked-large only. Previous attempt failed due to stale
+        code.
+    compare_extract_missing.py:
+      status: unknown
+      purpose: 'Run missing extract approach comparisons: medium/C, long/A, long/C,
+        long/B-large-chunk.'
+    day_cycle_pipeline.py:
+      status: experimental
+      purpose: Day cycle pipeline test harness.
+    day_cycle_pipeline_full.py:
+      status: experimental
+      purpose: "Full Day Cycle Pipeline Test \u2014 day_cycle.sh \uB85C\uC9C1 \uC804\
+        \uCCB4 \uAC80\uC99D."
+    day_model_test.py:
+      status: experimental
+      purpose: "14B Q8_0 \uB2E8\uC77C extract + MiniCheck hallucination \uAC80\uC99D\
+        ."
+    day_model_test_direct.py:
+      status: experimental
+      purpose: day_model_test_direct.py
+    day_verify_compare.py:
+      status: experimental
+      purpose: "Pod A(7B reviewer) \uBAA8\uB378 \uBE44\uAD50: 5\uAC1C \uC5ED\uD560\
+        \ \uC804\uCCB4 \uD14C\uC2A4\uD2B8."
+    day_verify_q8test.py:
+      status: experimental
+      purpose: "Day Verify Pipeline \u2014 14B verify + category on Pod B only."
+    day_verify_retry.py:
+      status: experimental
+      purpose: "Coder Q8_0\uB9CC classify-P / classify-J / edge cases \uC7AC\uD14C\
+        \uC2A4\uD2B8 (timeout=300s)."
+    e2e_20turns_full.sh:
+      status: unknown
+      purpose: "E2E Full Pipeline Test \u2014 20 turns, all phases, snapshot per phase\
+        \ + quality eval"
+    e2e_extract_section_split.py:
+      status: unknown
+      purpose: "E2E Pipeline Test \u2014 section-split extract."
+    e2e_extract_section_split.sh:
+      status: unknown
+      purpose: "E2E Pipeline Test \u2014 section-split extract"
+    embed_bench.py:
+      status: experimental
+      purpose: "Embedding Model Benchmark \u2014 compare faithfulness accuracy, speed,\
+        \ memory."
+    embed_progress_slack.py:
+      status: experimental
+      purpose: "Slack embed progress reporter \u2014 send Qwen 8B embedding status\
+        \ to Slack every 30min."
+    embed_runner.py:
+      status: experimental
+      purpose: "Full Embed Runner \u2014 continuous embed_batch.py loop with watchdog\
+        \ progress."
+    embed_runner.sh:
+      status: unknown
+      purpose: "DevForge Embed Runner \u2014 continuous embed_batch.py loop"
+    enrich_ab_compare.py:
+      status: experimental
+      purpose: "Enrich A/B Quality Comparison \u2014 runs same turns through two models\
+        \ and compares."
+    enrich_verify_quality.py:
+      status: experimental
+      purpose: "Enrich Verify \u2014 score enrichment metadata quality manually."
+    eval_comparison.py:
+      status: experimental
+      purpose: DeepSeek Pro evaluation of 12-run comparison test results.
+    exp_runner.py:
+      status: experimental
+      purpose: "5-Phase (2x2+baseline) Experiment Runner \u2014 \uBC31\uADF8\uB77C\
+        \uC6B4\uB4DC \uC790\uB3D9 \uC2E4\uD589."
+    experiment_monitor.py:
+      status: experimental
+      purpose: experiment_monitor.py
+    extract_c_config_verify.py:
+      status: experimental
+      purpose: Extract 3 previously-failed OOM turns with Config C, store & verify
+        quality.
+    extract_compare.py:
+      status: experimental
+      purpose: "\uB3D9\uC77C 5\uAC1C turn\uC73C\uB85C \uCD94\uCD9C \uC815\uD655\uB3C4\
+        /\uC18D\uB3C4 \uBE44\uAD50 + MiniCheck NLI \uAC80\uC99D"
+    extract_enrich_quality_spotcheck.py:
+      status: experimental
+      purpose: extract_enrich_quality_spotcheck.py
+    finalize_pipeline.py:
+      status: experimental
+      purpose: Finalize E2E 10-sample pipeline. Skip failed feedback loop; summarize
+        existing phases.
+    model_comparison_test.py:
+      status: experimental
+      purpose: "14B Q4_K_M 3\uC885 \uBE44\uAD50: \uC2E4\uC81C \uD30C\uC774\uD504\uB77C\
+        \uC778 extract/verify \uD328\uD134\uC73C\uB85C \uD3C9\uAC00."
+    neutral_improve.py:
+      status: experimental
+      purpose: "NEUTRAL NLI Class Improvement \u2014 OLD vs V2 vs V3 (CoT + plausible\
+        \ unstated few-shot)."
+    nli_compare.py:
+      status: experimental
+      purpose: "MiniCheck(flan-t5-large, 770M) vs Qwen2.5-Coder-7B NLI \uBE44\uAD50\
+        ."
+    nli_compare_14b.py:
+      status: experimental
+      purpose: "14B NLI Grounding Comparison \u2014 sequential test of both 14B Q8\
+        \ models."
+    pipeline_e2e_10turns.py:
+      status: unknown
+      purpose: "Pipeline E2E test \u2014 10 newest turns, all 5 phases with Pod B\
+        \ mode switching."
+    pipeline_e2e_test.py:
+      status: experimental
+      purpose: "E2E Pipeline Test \u2014 6-turn full pipeline with timing, metrics,\
+        \ watchdog supervision."
+    pipeline_preverify_test.py:
+      status: experimental
+      purpose: "Integrated Pipeline Test \u2014 \uC804\uCC98\uB9AC\uBD80\uD130 Embed\uAE4C\
+        \uC9C0 \uC804\uCCB4 \uAC80\uC99D."
+    pipeline_smoke_test.py:
+      status: experimental
+      purpose: "Full pipeline smoke test: extract \u2192 enrich \u2192 day_verify\
+        \ with --limit 2 --dry-run."
+    pipeline_verify_compare.py:
+      status: experimental
+      purpose: "Full Pipeline NEUTRAL Test \u2014 10 real samples with 3 verify prompt\
+        \ variants."
+    prj_ground_truth_test.py:
+      status: experimental
+      purpose: "Ground truth \uAE30\uBC18 P\u2192R\u2192J day \uBD84\uB958 3\uBAA8\
+        \uB378 \uC815\uBC00 \uD3C9\uAC00."
+    prj_model_test.py:
+      status: experimental
+      purpose: "P(Proposer)/R(Refuter)/J(Judge) \uC5ED\uD560\uBCC4 \uCD94\uCC9C \uBAA8\
+        \uB378 \uAC80\uC99D."
+    rubric.py:
+      status: experimental
+      purpose: "DevForge Rubric Experiment \u2014 Round 1 (no rubric) vs Round 2 (with\
+        \ rubric)."
+    run_extract_13.py:
+      status: unknown
+      purpose: Run extract on our 13 test turns.
+    test_13t_enrich_prompt.py:
+      status: experimental
+      purpose: "13-turn full cycle test: polish \u2192 extract \u2192 enrich \u2192\
+        \ day_verify."
+    test_3t_full_pipeline.py:
+      status: unknown
+      purpose: "3-turn full pipeline test: polish \u2192 extract \u2192 enrich \u2192\
+        \ verify (long turns)."
+    test_extract_strategies.py:
+      status: experimental
+      purpose: Extract strategy comparison for long Korean developer turns on bb9c6363.
+    test_hardcoded_ports.py:
+      status: experimental
+      purpose: Validate no hardcoded 127.0.0.1:808{0-4} ports remain in modified files.
+    test_night_prj_eval.py:
+      status: experimental
+      purpose: "Ground truth \uAE30\uBC18 night P-R-J \uD3C9\uAC00. P=30B(P), R=14B(R),\
+        \ J=N14B Q6."
+    test_pipeline_e2e.py:
+      status: deprecated
+      purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
+        \ \u2192 night_review."
+    test_progress_watcher.py:
+      status: experimental
+      purpose: test_progress_watcher.py
+    test_r_role_dsv2.sh:
+      status: unknown
+      purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
+        \uC640 \uBE44\uAD50)"
+    test_verify_methods.py:
+      status: experimental
+      purpose: "TLDR Verification Method Comparison \u2014 Reranker vs Embedding (NLI\
+        \ :8085 removed)."
+    transform_prj.py:
+      status: experimental
+      purpose: Transform prj_cycle.py for experiment phases.

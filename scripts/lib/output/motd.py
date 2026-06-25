@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """MOTD generation — formatted system overview for /etc/motd."""
 import re
 from pathlib import Path
@@ -155,3 +158,4 @@ def generate_motd(structural, metrics, motd_file: Path, token_usage_base: int = 
     lines.append(f"{CYAN}{'='*64}{NC}")
 
     motd_file.write_text("\n".join(lines) + "\n")
+

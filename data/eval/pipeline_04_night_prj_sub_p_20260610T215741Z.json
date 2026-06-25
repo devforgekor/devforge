@@ -1,0 +1,105 @@
+{
+  "proposals": [
+    {
+      "id": "F01",
+      "type": "security",
+      "severity": "critical",
+      "description": "Hardcoded API keys and credentials in source code",
+      "rationale": "Exposes sensitive authentication information to anyone with access to the codebase, creating a critical security vulnerability",
+      "proposed_action": "Move all API keys, passwords, and credentials to secure environment variables or configuration management systems",
+      "_chunk": 0
+    },
+    {
+      "id": "F02",
+      "type": "bug",
+      "severity": "critical",
+      "description": "Unvalidated user input leads to potential SQL injection vulnerability",
+      "rationale": "Direct concatenation of user input into SQL queries allows malicious actors to execute arbitrary database commands",
+      "proposed_action": "Implement parameterized queries or prepared statements for all database interactions",
+      "_chunk": 0
+    },
+    {
+      "id": "F03",
+      "type": "performance",
+      "severity": "major",
+      "description": "Inefficient database queries with N+1 select problem",
+      "rationale": "Multiple database round trips for related data cause significant performance degradation under load",
+      "proposed_action": "Implement eager loading or batch queries to reduce database round trips",
+      "_chunk": 0
+    },
+    {
+      "id": "F04",
+      "type": "data_loss",
+      "severity": "major",
+      "description": "Missing data validation and sanitization in user input processing",
+      "rationale": "Lack of input validation can lead to data corruption, loss, or injection attacks that compromise data integrity",
+      "proposed_action": "Add comprehensive input validation, sanitization, and error handling for all user-provided data",
+      "_chunk": 0
+    },
+    {
+      "id": "F05",
+      "type": "quality",
+      "severity": "minor",
+      "description": "Inconsistent naming conventions and code style across modules",
+      "rationale": "Inconsistent code style reduces maintainability and makes it harder for developers to understand the codebase",
+      "proposed_action": "Enforce consistent naming conventions and code style through automated linting and code review processes",
+      "_chunk": 0
+    },
+    {
+      "id": "F06",
+      "type": "security",
+      "severity": "minor",
+      "description": "Missing CSRF protection in web forms",
+      "rationale": "Lack of CSRF tokens makes the application vulnerable to cross-site request forgery attacks",
+      "proposed_action": "Implement CSRF tokens for all state-changing requests and validate them on the server side",
+      "_chunk": 0
+    },
+    {
+      "id": "F04",
+      "type": "data_loss",
+      "severity": "major",
+      "description": "Missing data backup and recovery procedures",
+      "rationale": "Lack of automated backup mechanisms and disaster recovery plans puts critical data at risk of permanent loss during system failures or security incidents",
+      "proposed_action": "Implement automated backup schedules, offsite storage, and comprehensive recovery procedures with regular testing",
+      "_chunk": 1
+    },
+    {
+      "id": "F05",
+      "type": "quality",
+      "severity": "minor",
+      "description": "Inconsistent naming conventions and code formatting",
+      "rationale": "Inconsistent code style reduces maintainability and makes it harder for team members to understand and contribute to the codebase",
+      "proposed_action": "Enforce consistent naming conventions and code formatting through linters and code review standards",
+      "_chunk": 1
+    },
+    {
+      "id": "F06",
+      "type": "security",
+      "severity": "minor",
+      "description": "Missing input sanitization for XSS protection",
+      "rationale": "User-generated content displayed without proper sanitization creates vulnerability to cross-site scripting attacks that could compromise user sessions",
+      "proposed_action": "Implement proper input sanitization and output encoding for all user-generated content before rendering in web interfaces",
+      "_chunk": 1
+    },
+    {
+      "id": "F01",
+      "type": "security",
+      "severity": "critical",
+      "description": "Hardcoded API keys and credentials in configuration files",
+      "rationale": "Storing sensitive credentials in source code creates severe security vulnerabilities and violates security best practices",
+      "proposed_action": "Move all API keys, passwords, and credentials to secure environment variables or a dedicated secrets management system",
+      "_chunk": 2
+    }
+  ],
+  "usage": {
+    "completion_tokens": 1327,
+    "prompt_tokens": 771,
+    "total_tokens": 2098,
+    "prompt_tokens_details": 0
+  },
+  "elapsed_ms": 421650.8034450817,
+  "status": "ok",
+  "chunks": 3,
+  "chunks_done": 3,
+  "model": "Qwen3-Coder-30B-A3B-Q4_K_S"
+}

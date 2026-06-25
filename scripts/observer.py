@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""
-DevForge Observer Agent — interactive CLI agent with tool calling.
+# Status: production
+# Path: manual — interactive CLI
+"""DevForge Observer Agent — interactive CLI agent with tool calling.
 
 Routes natural language commands to DevForge pipelines, monitors execution,
 and reports errors with root-cause analysis.
 
-Model: Qwen3-Coder-30B-A3B (http://127.0.0.1:8080)
+Model: Qwen3-Coder-30B-A3B (MODEL_REGISTRY proposer)
 
 Usage:
     obs                          # Interactive REPL
@@ -30,10 +31,11 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-# ── Configuration ──────────────────────────────────────────────────────────
 
-DEFAULT_MODEL = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf"
-DEFAULT_API = "http://127.0.0.1:8080"
+from lib.llm_client import MODEL_REGISTRY
+
+DEFAULT_MODEL = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
+DEFAULT_API = f"http://127.0.0.1:{MODEL_REGISTRY['proposer']['port']}"
 MODEL = os.environ.get("OBS_MODEL", DEFAULT_MODEL)
 API_URL = os.environ.get("OBS_API", DEFAULT_API)
 
@@ -57,11 +59,9 @@ Guidelines:
 """
 
 OBS_SCRIPTS = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(OBS_SCRIPTS)
 sys.path.insert(0, OBS_SCRIPTS)
 
 
-# ── Tool Definitions ──────────────────────────────────────────────────────
 
 
 TOOL_DEFINITIONS: List[Dict[str, Any]] = [
@@ -155,7 +155,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
 ]
 
 
-# ── Tool Implementations ─────────────────────────────────────────────────
 
 
 def tool_check_status() -> str:
@@ -372,7 +371,6 @@ TOOL_MAP = {
 }
 
 
-# ── LLM Interaction ───────────────────────────────────────────────────────
 
 
 def call_llm(
@@ -415,7 +413,6 @@ def call_llm(
     return choices[0]["message"]
 
 
-# ── Main Loop ─────────────────────────────────────────────────────────────
 
 
 def run_interactive(debug: bool = False) -> None:

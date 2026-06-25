@@ -1,0 +1,11 @@
+{
+  "turn_sizes": {
+    "user": 7,
+    "thinking": 690,
+    "text": 92
+  },
+  "A": {
+    "error": "ConnectionResetError: [Errno 104] Connection reset by peer",
+    "elapsed_s": 0
+  }
+}

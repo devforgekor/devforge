@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Feedback provider — extracts recent fix patterns from activity_log and returns
 them as few-shot message arrays for injection into LLM conversations.
 
@@ -26,7 +29,6 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-# ── Constants ──────────────────────────────────────────────────────────────
 
 FEEDBACK_WINDOW_HOURS = 48
 MAX_CONTENT_LENGTH = 300
@@ -40,7 +42,6 @@ ROLLBACK_THRESHOLD = 0.05       # 5% absolute drop triggers revert
 ROLLBACK_MIN_SAMPLES = 10       # min verification_items to trust a rate
 
 
-# ── Generation state ───────────────────────────────────────────────────────
 
 def _pattern_fingerprint(patterns: List[Dict]) -> str:
     """Deterministic hash of pattern content. Same patterns → same fingerprint."""
@@ -247,7 +248,6 @@ def _enqueue_rollback_analysis(
     return ok
 
 
-# ── DB query ───────────────────────────────────────────────────────────────
 
 def _fetch_review_results(since_hours: int = FEEDBACK_WINDOW_HOURS) -> List[Dict[str, Any]]:
     """Fetch completed review/verify results from activity_log.
@@ -294,7 +294,6 @@ def _fetch_review_results(since_hours: int = FEEDBACK_WINDOW_HOURS) -> List[Dict
     return results
 
 
-# ── Pattern extraction ─────────────────────────────────────────────────────
 
 def _extract_findings(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Extract patterns from review result bodies.
@@ -436,7 +435,6 @@ def _extract_findings(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return patterns
 
 
-# ── Few-shot formatter ─────────────────────────────────────────────────────
 
 def _patterns_to_messages(
     patterns: List[Dict[str, Any]],
@@ -501,7 +499,6 @@ def _patterns_to_messages(
     return messages
 
 
-# ── Public API ─────────────────────────────────────────────────────────────
 
 def get_feedback_for_model(
     model: str,
@@ -515,7 +512,7 @@ def get_feedback_for_model(
     this — it gets whatever generation passes the quality gate.
 
     Args:
-        model:     Key in MODEL_REGISTRY (e.g. "Qwen7B", "Qwen3B").
+        model:     Key in MODEL_REGISTRY (e.g. "reviewer", "extractor").
         max_gold:  Max gold-standard examples to include.
         max_edge:  Max edge-case examples to include.
 
@@ -548,3 +545,4 @@ def get_feedback_for_model(
             patterns = rolled_back
 
     return _patterns_to_messages(patterns, max_gold, max_edge)
+

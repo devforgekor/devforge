@@ -1,0 +1,190 @@
+{
+  "1b326503-4950-4dff-a9d9-02148450d818": [
+    {
+      "tldr": "FP16가 예상보다 빠르게 작동한 이유를 설명합니다.",
+      "intent": "other",
+      "category": "explanation",
+      "entities": {
+        "files": [],
+        "technologies": [
+          "FP16",
+          "ARM"
+        ],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "fp16",
+        "arm",
+        "performance",
+        "optimization"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_verify",
+      "_db_created": "2026-06-22 08:05:10.655915+00"
+    }
+  ],
+  "31f71819-8f85-44fe-8a09-50534bf76060": [
+    {
+      "tldr": "사용자가 중단하지 말고 완료까지 돌렸어야 했다고 말했습니다.",
+      "intent": "request",
+      "category": "explanation",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "중단",
+        "재시작",
+        "q8_0 verify"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_verify",
+      "_db_created": "2026-06-22 08:16:14.950169+00"
+    }
+  ],
+  "8f66db13-53ce-4535-be40-44a0ae49cc67": [
+    {
+      "tldr": "FP16가 ARM에서 Q8",
+      "intent": "other",
+      "category": "other",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_verify",
+      "_db_created": "2026-06-22 08:14:45.024949+00"
+    }
+  ],
+  "958a2c2f-4fb6-44e3-9ad5-f196f5e9b6da": [
+    {
+      "tldr": "full_pipeline.sh died with SIGUSR1, but Qwen Q8 verify is running in Pod B.",
+      "intent": "report",
+      "category": "explanation",
+      "entities": {
+        "files": [
+          "full_pipeline.sh",
+          "day_verify_q8test.py"
+        ],
+        "technologies": [
+          "Pod B"
+        ],
+        "functions": [
+          "day_verify_pipeline"
+        ],
+        "mentioned_users": []
+      },
+      "tags": [
+        "pipeline",
+        "qwen q8",
+        "pod b"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_verify",
+      "_db_created": "2026-06-22 08:09:29.942059+00"
+    }
+  ],
+  "980601c8-9c81-41fd-95ca-d5f4283a005a": [
+    {
+      "tldr": "유저가 Claude와 Watchman의 통합을 최적화하고, VRAM 사용 이유를 이해하려고 합니다.",
+      "intent": "request",
+      "category": "explanation",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "claude",
+        "watchman",
+        "vram",
+        "optimization"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 2,
+      "_extract_model": "day_verify",
+      "_db_created": "2026-06-22 08:11:31.783646+00"
+    }
+  ],
+  "988336db-d047-4dab-8252-638021c73318": [
+    {
+      "tldr": "다운로드 완료! 3턴만 extract 테스트 바로 시작합니다.",
+      "intent": "request",
+      "category": "other",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "download",
+        "extract",
+        "test"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_verify",
+      "_db_created": "2026-06-22 08:06:42.865279+00"
+    }
+  ],
+  "c2893937-7eda-4172-91f7-e73f51ec6666": [
+    {
+      "tldr": "full_pipeline.sh is DEAD, swap usage is low, review_facts progress is 5.5%, and Slack report sent successfully.",
+      "intent": "report",
+      "category": "explanation",
+      "entities": {
+        "files": [
+          "opt/projects/server/scripts/pipelines/embed_progress_slack.py"
+        ],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "full_pipeline.sh",
+        "swap",
+        "review_facts",
+        "slack",
+        "embedding_progress"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_verify",
+      "_db_created": "2026-06-22 08:18:57.470076+00"
+    }
+  ],
+  "cb0e241f-4397-4dda-8af5-5ba3b6ae534e": [
+    {
+      "tldr": "10개에서 3-5개의 테스트를 진행하려고 합니다.",
+      "intent": "request",
+      "category": "requirement",
+      "entities": {
+        "files": [],
+        "technologies": [],
+        "functions": [],
+        "mentioned_users": []
+      },
+      "tags": [
+        "테스트",
+        "다운로드",
+        "q8"
+      ],
+      "nli_verdict": "ENTAILMENT",
+      "_fact_index": 1,
+      "_extract_model": "day_verify",
+      "_db_created": "2026-06-22 08:02:40.697057+00"
+    }
+  ]
+}

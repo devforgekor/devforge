@@ -1,0 +1,3 @@
+# DevForge — Development-only dependencies
+# Install: pip3 install --user -r dev-requirements.txt
+pytest>=8.0,<9.0

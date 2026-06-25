@@ -1,0 +1,105 @@
+{
+  "proposals": [
+    {
+      "id": "F01",
+      "type": "data_loss",
+      "severity": "critical",
+      "description": "Incomplete fact extraction in MCP intent classification causing data loss",
+      "rationale": "The system is failing to extract complete facts from user inputs, as evidenced by 'extracted_value: report' vs 'expected_value: report' where the full context is missing, leading to potential loss of critical information needed for proper intent classification.",
+      "proposed_action": "Implement comprehensive fact extraction logic that captures complete user intent and context, not just partial matches",
+      "_chunk": 0
+    },
+    {
+      "id": "F02",
+      "type": "quality",
+      "severity": "critical",
+      "description": "Inconsistent entity extraction in MCP entity correctness analysis",
+      "rationale": "The entity extraction is producing inconsistent results with missing or incomplete data, as shown by the evidence referencing 'de_mod_pipeline.py' which suggests a core module failure in entity processing.",
+      "proposed_action": "Review and fix the entity extraction logic in 'de_mod_pipeline.py' to ensure consistent and complete entity identification",
+      "_chunk": 0
+    },
+    {
+      "id": "F03",
+      "type": "quality",
+      "severity": "major",
+      "description": "Incomplete extraction coverage for short user turns",
+      "rationale": "Short user inputs like '1+1 답만 해줘' are not being fully covered by extraction logic, indicating a gap in handling concise user queries that could lead to reduced system effectiveness.",
+      "proposed_action": "Enhance extraction coverage logic to handle short-turn scenarios and ensure all user inputs are properly processed regardless of length",
+      "_chunk": 0
+    },
+    {
+      "id": "F04",
+      "type": "quality",
+      "severity": "major",
+      "description": "Missing or incomplete intent classification for greeting tags",
+      "rationale": "The greeting tag extraction appears to be incomplete or missing, which could affect proper conversation flow and user experience when handling initial user interactions.",
+      "proposed_action": "Review the MCP tag extraction logic to ensure all relevant tags including greetings are properly identified and classified",
+      "_chunk": 0
+    },
+    {
+      "id": "F05",
+      "type": "quality",
+      "severity": "minor",
+      "description": "Partial fact extraction in short user turn scenarios",
+      "rationale": "The extraction completeness issue in short turns suggests that the system may miss important details when processing brief user inputs, potentially affecting accuracy.",
+      "proposed_action": "Implement more robust extraction logic that can handle both long and short user inputs with equal effectiveness",
+      "_chunk": 0
+    },
+    {
+      "id": "F06",
+      "type": "quality",
+      "severity": "minor",
+      "description": "Inconsistent intent classification results across similar user inputs",
+      "rationale": "The high severity inconsistencies in intent classification suggest that the system's decision-making process may be unstable or overly sensitive to minor variations in input.",
+      "proposed_action": "Implement more stable intent classification algorithms and add consistency checks to ensure reproducible results across similar inputs",
+      "_chunk": 0
+    },
+    {
+      "id": "S01",
+      "type": "data_loss",
+      "severity": "critical",
+      "description": "Operational metrics (timing, tokens) are not recorded in review_facts",
+      "rationale": "This prevents monitoring and optimization of the extraction pipeline's performance and resource usage",
+      "proposed_action": "Modify review_facts function in extract_pipeline.py to capture and log timing and token usage from LLM responses",
+      "_chunk": 1
+    },
+    {
+      "id": "S02",
+      "type": "data_loss",
+      "severity": "critical",
+      "description": "Activity log body lacks faithfulness scores, retry history, and unfaithful fact lists",
+      "rationale": "This breaks traceability and debugging capabilities for extraction failures and retry mechanisms",
+      "proposed_action": "Update activity_log body construction in extract_pipeline.py to include faithfulness metrics, retry counts, and unfaithful fact details",
+      "_chunk": 1
+    },
+    {
+      "id": "S03",
+      "type": "bug",
+      "severity": "critical",
+      "description": "review_facts.verdict remains 'pending' and is never updated downstream",
+      "rationale": "This prevents proper state management and downstream processing of extraction results",
+      "proposed_action": "Implement UPDATE logic in downstream pipeline components to set review_facts.verdict to appropriate values (e.g., 'pass', 'fail', 'retry')",
+      "_chunk": 1
+    },
+    {
+      "id": "S04",
+      "type": "performance",
+      "severity": "high",
+      "description": "LLM client does not extract token usage and timing from API responses",
+      "rationale": "Missing this data prevents performance monitoring and cost optimization for LLM calls",
+      "proposed_action": "Modify lib/llm_client.py to parse and extract token usage and timing information from /v1/completions API responses",
+      "_chunk": 1
+    }
+  ],
+  "usage": {
+    "completion_tokens": 1130,
+    "prompt_tokens": 1484,
+    "total_tokens": 2614,
+    "prompt_tokens_details": 0
+  },
+  "elapsed_ms": 892719.0800219832,
+  "status": "ok",
+  "chunks": 7,
+  "chunks_done": 7,
+  "model": "Qwen3-Coder-30B-A3B-Q4_K_S"
+}

@@ -1,0 +1,79 @@
+{
+  "proposals": [
+    {
+      "id": "F01",
+      "type": "bug",
+      "severity": "critical",
+      "description": "review_facts.verdict가 'pending'에서 절대 갱신되지 않음",
+      "rationale": "이로 인해 downstream pipeline이 review_facts를 UPDATE하지 않아, 검증 상태가 업데이트되지 않아 전체 파이프라인의 정확성과 추적성이 손상됨",
+      "proposed_action": "extract_pipeline.py에서 review_facts.verdict를 'pending'에서 'verified' 또는 'failed'로 업데이트하는 로직을 추가하거나, downstream pipeline이 해당 필드를 업데이트하도록 수정"
+    },
+    {
+      "id": "F02",
+      "type": "bug",
+      "severity": "critical",
+      "description": "Operational metrics(timing, tokens)가 review_facts에 전혀 기록되지 않음",
+      "rationale": "성능 모니터링 및 최적화를 위한 필수 정보가 누락되어, 파이프라인의 성능 트래킹이 불가능함",
+      "proposed_action": "extract_pipeline.py의 review_facts 함수 내에서 timing 및 token usage 정보를 DB에 기록하도록 수정"
+    },
+    {
+      "id": "F03",
+      "type": "bug",
+      "severity": "critical",
+      "description": "activity_log body에 faithfulness 점수, retry 이력, unfaithful fact 목록이 없음",
+      "rationale": "검증 결과의 전체적인 품질과 재시도 이력을 추적할 수 없어, 문제 진단 및 개선이 어렵고, 운영의 투명성 부족",
+      "proposed_action": "activity_log의 body 필드에 faithfulness 점수, retry 이력, unfaithful fact 목록을 포함하도록 수정"
+    },
+    {
+      "id": "F04",
+      "type": "bug",
+      "severity": "high",
+      "description": "LLM 클라이언트가 API 응답에서 token usage/timing을 추출하지 않음",
+      "rationale": "LLM 호출 시 발생하는 성능 정보가 누락되어, 파이프라인의 자원 사용량 및 성능 분석이 불가능함",
+      "proposed_action": "lib/llm_client.py에서 API 응답에서 token usage 및 timing 정보를 추출하여 기록하도록 수정"
+    },
+    {
+      "id": "F05",
+      "type": "bug",
+      "severity": "high",
+      "description": "enqueue_review()가 queue_status 항상 'reviewed'로 고정",
+      "rationale": "P-R-J 파이프라인의 상태가 올바르게 반영되지 않아, 큐 관리 및 작업 흐름 추적이 불가능함",
+      "proposed_action": "queue_writer.py에서 enqueue_review() 함수 내 queue_status를 실제 상태에 따라 동적으로 설정하도록 수정"
+    },
+    {
+      "id": "F06",
+      "type": "bug",
+      "severity": "high",
+      "description": "fact_index가 일관성 없음 — mcp_meta가 extract_model='Qwen30B'로 별도 row 저장",
+      "rationale": "fact_index의 일관성 부족으로 인해 데이터 정합성 문제가 발생하고, 추출된 사실의 관리가 어려움",
+      "proposed_action": "extract_pipeline.py에서 fact_index를 일관되게 관리하고, extract_model='Qwen30B'일 경우에도 동일한 row에 저장되도록 수정"
+    },
+    {
+      "id": "F07",
+      "type": "bug",
+      "severity": "medium",
+      "description": "MCP entity 파일 경로 검증이 절대 경로 변환 없이 직접 join",
+      "rationale": "경로 조작 위험 및 보안 취약점이 발생할 수 있으며, 파일 접근이 불안정함",
+      "proposed_action": "extract_pipeline.py에서 os.path.join 대신 os.path.abspath를 사용하여 절대 경로로 변환 후 join하도록 수정"
+    },
+    {
+      "id": "F08",
+      "type": "bug",
+      "severity": "medium",
+      "description": "27B verify가 timing/token 정보를 전혀 수집하지 않음",
+      "rationale": "성능 정보 누락으로 인해 검증 모델의 성능 분석 및 최적화가 불가능함",
+      "proposed_action": "review_consumer.py의 call_verify_model 함수에서 timing 및 token 정보를 수집하여 기록하도록 수정"
+    }
+  ],
+  "usage": {
+    "completion_tokens": 1126,
+    "prompt_tokens": 1558,
+    "total_tokens": 2684,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "elapsed_ms": 515468.4059480205,
+  "status": "ok",
+  "model": "Qwen3-Coder-30B-A3B-Q4_K_S"
+}

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: none — library
 """state_collector — DevForge Server Knowledge Engine v4.4
 
 Thin orchestrator: collect → detect changes → update docs → MOTD.
@@ -252,9 +254,10 @@ def main():
 
     # 2. Collect fresh data
     structural = collect_structural()
+
     metrics = collect_metrics()
     try:
-        from lib.refs import collect as collect_references
+        from lib.tracking.dependency_tracker import collect as collect_references
         references = collect_references()
         _psql(
             'CREATE TABLE IF NOT EXISTS "references" ('
@@ -288,7 +291,7 @@ def main():
     # Phase auto-tracking
     phase_data = {}
     try:
-        from lib.phase_tracker import auto_update as auto_update_phases
+        from lib.tracking.phase_tracker import auto_update as auto_update_phases
         phase_data = auto_update_phases()
     except Exception as e:
         print(f"  [phase_tracker] auto-update failed: {e}", file=sys.stderr)

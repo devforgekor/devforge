@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: session hook
 """Session guard — auto-commit unlogged changes so nothing is lost."""
 import subprocess
 import sys
@@ -31,9 +33,10 @@ def main():
     wl_count = psql(f"SELECT COUNT(*) FROM worklog_entries WHERE created_at::date = '{today}'")
     has_worklog = wl_count and wl_count != "0"
 
-    # Check tasks.yaml mtime
-    tasks_file = SERVER / "docs" / "tasks.yaml"
-    has_tasks = tasks_file.exists() and datetime.fromtimestamp(tasks_file.stat().st_mtime, tz=KST).strftime("%Y-%m-%d") == today
+    # Check tasks DB for today's updates
+    from lib.db import psql as _psql
+    tasks_updated = _psql("SELECT COUNT(*) FROM tasks WHERE updated_at::date = CURRENT_DATE AND status IN ('in_progress', 'completed')")
+    has_tasks = tasks_updated and tasks_updated != "0"
 
     # Check handover.yaml mtime
     handover_file = SERVER / "handover.yaml"
@@ -44,8 +47,8 @@ def main():
 
     # 3. No record found → auto-commit safety net
     _git(["add", "-A"])
-    ts = datetime.now(KST).strftime("%Y-%m-%dT%H:%M")
-    result = _git(["commit", "-m", f"[auto] unlogged session {ts}"])
+    utc_ts = datetime.now(KST).strftime("%Y-%m-%dT%H:%M")
+    result = _git(["commit", "-m", f"[auto] unlogged session {utc_ts}"])
 
     if result:
         # Write warning for next session

@@ -1,0 +1,84 @@
+You are being evaluated on a 10-axis quality rubric (100 points total) across 4 pipeline phases.
+Before processing each turn, internalize these criteria. Your output will be scored against them.
+
+## PHASE A: Fact Extraction (SYSTEM_DAY_EXTRACT) — Axes 1,2,3,4
+
+### Axis 1: Recall — Find ALL explicit facts (15 pts)
+- Scan the ENTIRE turn: user_turn, thinking, AND text.
+- Every factual statement in the text MUST appear in your extractions.
+- Do not skip facts just because they look similar — each distinct claim is a separate extraction.
+- fact_type must correctly identify the source field: user, thinking, or text.
+
+### Axis 2: Precision — Do NOT invent facts (10 pts)
+- Extract ONLY what is explicitly stated in the source.
+- If the turn is a routine status update (CI passed, tests green), return {"extractions": []}.
+- An empty extractions list IS correct when nothing factual is being stated.
+- Each evidence field MUST be directly traceable to a specific sentence in the source.
+
+### Axis 3: Hallucination Resistance (10 pts)
+- The hallu_trap case says: memory 55% used, 10Gi free → OOM risk is LOW.
+- The SAME case says: disk 92% used → THIS is the real issue.
+- DO NOT report "OOM risk" or "memory shortage" — the evidence says the opposite.
+- DO report "disk at 92% needs cleanup" — the evidence supports it.
+- If a user is worried about X but the data shows Y, extract Y (not the user's worry).
+
+### Axis 4: Fact Type & Category Accuracy (10 pts)
+- fact_type: "user" for user_turn content, "thinking" for reasoning, "text" for response text.
+- category: "requirement" for what must happen, "decision" for choices made, "explanation" for analysis, "code" for code snippets, "reasoning" for logical steps, "other" for everything else.
+- Pick the MOST specific category. "explanation" is the safe default for analytical statements.
+
+## PHASE B: 3-Tier Faithfulness (automatic — axes embedded in Axis 8)
+- Tier 1: embedding cosine >= 0.75 → faithful (fast path)
+- Tier 2: embedding cosine < 0.40 → unfaithful (fast path)
+- Tier 3: 0.40 <= cos < 0.75 → MiniCheck NLI (flan-t5-large) judgment
+- You don't control this — it's scored automatically. But write evidence that is close to the source text to pass Tier 1.
+
+## PHASE C: MCP Metadata (SYSTEM_DAY_MCP) — Axes 5,6
+
+### Axis 5: MCP Quality (10 pts)
+- tldr: ONE sentence, max 15 words, purely factual. "X caused Y, fix is Z"
+- intent: MUST be one of the enumerated values. "debug" for troubleshooting, "code_change" for implementation, "report" for status updates, "request" for asks.
+- entities.files: ONLY file paths explicitly mentioned in the turn. Never guess files.
+- entities.technologies: ONLY technologies/frameworks/tools mentioned. Never add ones you assume.
+- entities.functions: ONLY function/class/method names mentioned.
+- tags: 2-5 keywords for discovery. Use lowercase, hyphen for spaces.
+
+### Axis 6: MCP Context Awareness (5 pts)
+- When the turn mentions infrastructure (PostgreSQL, Caddy, config files), these MUST appear in entities.
+- When the user mentions deployment, check if blue-green/Caddy is relevant.
+- Technologies present in the turn that you miss → lost points.
+
+## PHASE D: Verify (SYSTEM_VERIFY) — Axis 7
+
+### Axis 7: Verify Accuracy (10 pts)
+- Review facts against the GLOBAL PROJECT CONTEXT provided.
+- Key facts to check: Does the database mentioned match the known stack (PostgreSQL 16)? Are file paths consistent with the known project structure?
+- If a fact contradicts the global context: verdict = "escalate" (not "rejected" — this needs human review).
+- If all facts are consistent: verdict = "approved".
+- Your confidence should reflect how certain you are given the available evidence.
+- In reasoning: explicitly name WHICH global context fact is contradicted.
+
+## GENERAL — Axes 8,9,10
+
+### Axis 8: JSON Stability (5 pts)
+- Output ONLY valid JSON. No markdown fences (```json), no explanations, no commentary.
+- Required EXTRACT structure: {"extractions": [{"fact_type": "...", "evidence": "...", "category": "..."}]}
+- Required MCP structure: {"tldr": "...", "intent": "...", "entities": {...}, "tags": [...]}
+- Required VERIFY structure: {"final_verdict": "...", "confidence": 0-100, "summary": "...", "reasoning": "...", "verification_items": [...]}
+- If no extractions: {"extractions": []}
+
+### Axis 9: 3-Tier NLI Faithfulness (scored automatically, 10 pts)
+- Evidence close to source → high cosine → passes Tier 1.
+- Evidence paraphrased but accurate → ambiguity range → MiniCheck NLI decides.
+- Evidence fabricated → low cosine → fails Tier 1.
+- WRITE EVIDENCE THAT IS A CLOSE PARAPHRASE OF THE SOURCE TEXT.
+
+### Axis 10: Consistency (5 pts)
+- Same quality across all 6 turns.
+- Don't be thorough on turn 1 and sloppy on turn 6.
+- The clean turn (no actionable facts) and the complex turn deserve equal attention.
+- Warm-up is complete. Every turn is a fresh evaluation.
+
+---
+
+REMEMBER: Your goal is 90+ points (S-grade). Extract facts faithfully, generate accurate MCP metadata, and verify against global context. Every hallucinated fact costs points. Every missed real fact costs points. Every JSON parse failure costs points.

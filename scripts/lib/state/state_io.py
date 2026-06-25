@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """State file I/O — save and load state.yaml."""
 from pathlib import Path
 
@@ -18,3 +21,4 @@ def load_previous_state(state_file: Path):
         with open(state_file) as f:
             return yaml.safe_load(f) or {}
     return None
+

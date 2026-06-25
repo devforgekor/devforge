@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """YAML load/save helpers."""
 from pathlib import Path
 
@@ -13,3 +16,4 @@ def load_yaml(path: Path) -> dict:
 
 def save_yaml(path: Path, data) -> None:
     path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False, width=120))
+

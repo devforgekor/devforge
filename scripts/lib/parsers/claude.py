@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """parser_claude.py — extract turns from Claude Code session JSONL."""
 import json
 import time
@@ -91,3 +94,4 @@ def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bo
             turns.pop()
 
     return (turns if turns else None), model, is_active
+

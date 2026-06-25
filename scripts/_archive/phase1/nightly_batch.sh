@@ -15,10 +15,10 @@
 #   python3 -c "print(open('/opt/ai_data/scripts/current-system-mode.env').read().strip().split('=')[1])"
 #
 # Phases:
-# Phase 4: review pipeline       mid    — R1(:8083) + Qwen7B(:8080) + Selene(:8081) P→R→J
-# Phase 5: verify (27B)          heavy  — production final gate, Pod B 27B(:8081)
-# Phase 5b: test_verify (32B)    heavy  — experimental parallel verify, Pod B 32B(:8081)
-# Phase 6: restore day                  — Pod A(3B:8082 operator 겸) + Pod B(30B:8080) back to day
+# Phase 4: P-R-J queue consumer    mid    — night_proposer/night_reflector/night_judge on Pod B(:8080)
+# Phase 5: production verify          heavy  — night_verify final gate on Pod B(:8081)
+# Phase 5: final verify  heavy  — 27B on Pod B(:8081)
+# Phase 6: restore day                       — day_r(:8082) + day_p/day_j/day_mcp(:8080)
 
 set -o pipefail
 
@@ -71,12 +71,12 @@ switch_mode_both() {
     echo "[$(LOG_TS)] Switching Pod A → $mode_a, Pod B → $mode_b..."
     printf '%s' "MODE=$mode_a" > "${MODE_FILE_A}.tmp" && mv "${MODE_FILE_A}.tmp" "$MODE_FILE_A"
     printf '%s' "MODE=$mode_b" > "${MODE_FILE_B}.tmp" && mv "${MODE_FILE_B}.tmp" "$MODE_FILE_B"
-    systemctl --user stop container-devforge-swap 2>&1 || true
+    systemctl --user stop container-devforge-pod-b 2>&1 || true
     sleep 3  # wait for pasta to release ports 8080-8081
-    if systemctl --user start container-devforge-swap 2>&1; then
+    if systemctl --user start container-devforge-pod-b 2>&1; then
         return 0
     else
-        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-swap (port race)" >&2
+        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-pod-b (port race)" >&2
         return 1
     fi
 }
@@ -85,12 +85,12 @@ switch_mode_pod_b() {
     local mode="$1"
     echo "[$(LOG_TS)] Switching Pod B to $mode..."
     printf '%s' "MODE=$mode" > "${MODE_FILE_B}.tmp" && mv "${MODE_FILE_B}.tmp" "$MODE_FILE_B"
-    systemctl --user stop container-devforge-swap 2>&1 || true
+    systemctl --user stop container-devforge-pod-b 2>&1 || true
     sleep 3  # wait for pasta to release ports 8080-8081
-    if systemctl --user start container-devforge-swap 2>&1; then
+    if systemctl --user start container-devforge-pod-b 2>&1; then
         return 0
     else
-        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-swap (port race)" >&2
+        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-pod-b (port race)" >&2
         return 1
     fi
 }
@@ -98,7 +98,7 @@ switch_mode_pod_b() {
 stop_llm_services() {
     local label="$1"
     echo "[$(LOG_TS)] [$label] Stopping LLM services and timers..."
-    for svc in activity-summarizer telegram-bot webhook-server; do
+    for svc in activity-summarizer telegram-bot slack; do
         systemctl --user stop "$svc" 2>&1 || true
     done
     for tmr in activity-summarizer.timer devforge-15m-cycle.timer; do
@@ -113,7 +113,7 @@ start_llm_services() {
     for tmr in activity-summarizer.timer devforge-15m-cycle.timer; do
         systemctl --user start "$tmr" 2>&1 || true
     done
-    for svc in activity-summarizer telegram-bot webhook-server; do
+    for svc in activity-summarizer telegram-bot slack; do
         systemctl --user start "$svc" 2>&1 || true
     done
     echo "[$(LOG_TS)] [$label] LLM services restored"
@@ -143,12 +143,12 @@ fi
 review_ok=true
 
 echo "[$(LOG_TS)] === Phase 4: P-R-J Review Pipeline ==="
-if ! python3 "$SCRIPTS_DIR/prj_cycle.py" --queue --limit 5; then
+if ! python3 "$SCRIPTS_DIR/pipelines/prj_cycle.py" --queue --limit 5; then
     review_ok=false
     echo "[$(LOG_TS)] prj_cycle.py --queue FAILED" >&2
 fi
 
-# ── Phase 5: 27B production verify ──────────────────────────────
+# ── Phase 5: Production verify (night_verify) ───────────────────
 
 verify_ok=true
 
@@ -164,46 +164,21 @@ echo "[$(LOG_TS)] Verify queue (status='reviewed'): $queue_count items"
 if [ "$queue_count" = "0" ] || [ -z "$queue_count" ]; then
     echo "[$(LOG_TS)] Verify queue empty — skipping 27B verify"
 else
-    echo "[$(LOG_TS)] === Phase 5: 27B production verify ==="
+    echo "[$(LOG_TS)] === Phase 5: Production verify (night_verify) ==="
     stop_llm_services "verify"
     echo "[$(LOG_TS)] Stopping Pod A (memory for 27B)..."
-    systemctl --user stop container-devforge-qwen 2>&1 || true
+    systemctl --user stop container-devforge-pod-a 2>&1 || true
     sleep 5
 
     if switch_mode_pod_b "verify" && wait_for_model 8081 "Qwen3.6-27B" 600; then
-        retry "verify" 2 python3 "$SCRIPTS_DIR/review_consumer.py" || verify_ok=false
+        retry "verify" 2 python3 "$SCRIPTS_DIR/pipelines/review_consumer.py" || verify_ok=false
     else
         echo "[$(LOG_TS)] Failed to start verify mode" >&2
         verify_ok=false
     fi
 fi
 
-# ── Phase 5b: 32B experimental test_verify (parallel consumer) ──
-
-test_verify_ok=true
-
-test_queue_count=$(cd "$SCRIPTS_DIR" && python3 -c "
-from lib.db import psql
-r = psql(\"SELECT COUNT(*) FROM activity_log WHERE queue_status IN ('reviewed','done') AND type IN ('review','debate_result','extract_result') AND (body->'test_verify_result' IS NULL OR body->'test_verify_result' = 'null'::jsonb)\")
-import sys
-val = r.strip() if r else '0'
-print(val if val else '0')
-" 2>/dev/null)
-echo "[$(LOG_TS)] Test-verify queue (not yet 32B-reviewed): $test_queue_count items"
-
-if [ "$test_queue_count" = "0" ] || [ -z "$test_queue_count" ]; then
-    echo "[$(LOG_TS)] Test-verify queue empty — skipping 32B test verify"
-else
-    echo "[$(LOG_TS)] === Phase 5b: 32B experimental test_verify ==="
-    if switch_mode_pod_b "verify_test" && wait_for_model 8081 "Qwen2.5-Coder-32B" 900; then
-        retry "test_verify" 1 python3 "$SCRIPTS_DIR/test_review_consumer.py" || test_verify_ok=false
-    else
-        echo "[$(LOG_TS)] Failed to start verify_test mode" >&2
-        test_verify_ok=false
-    fi
-fi
-
-# ── Phase 6: restore day mode ───────────────────────────────
+# ── Phase 5: restore day mode ───────────────────────────────
 
 day_restored=true
 
@@ -213,17 +188,17 @@ if ! switch_mode_both "day" "day"; then
     echo "[$(LOG_TS)] FATAL: switch_mode day failed" >&2
 else
     start_llm_services "day-restore"
-    # Pod B 30B on :8080
-    if ! wait_for_model 8080 "30B (Pod B)" 300; then
+    # Pod B day mode on :8080
+    if ! wait_for_model 8080 "day (Pod B)" 300; then
         day_restored=false
-        echo "[$(LOG_TS)] FATAL: 30B :8080 not responding after restore" >&2
+        echo "[$(LOG_TS)] FATAL: day mode (:8080) not responding after restore" >&2
     fi
-    # Pod A 3B(:8082) operator+refuter
-    echo "[$(LOG_TS)] Restarting Pod A (3B operator+refuter)..."
-    systemctl --user restart container-devforge-qwen 2>&1 || true
+    # Pod A day_r(:8082)
+    echo "[$(LOG_TS)] Restarting Pod A (day_r:8082)..."
+    systemctl --user restart container-devforge-pod-a 2>&1 || true
     sleep 5
-    if ! wait_for_model 8082 "3B (Pod A)" 60; then
-        echo "[$(LOG_TS)] WARNING: 3B refuter :8082 not responding" >&2
+    if ! wait_for_model 8082 "day_r (Pod A)" 60; then
+        echo "[$(LOG_TS)] WARNING: day_r :8082 not responding" >&2
     fi
 fi
 
@@ -234,6 +209,15 @@ if [ "$day_restored" = "false" ]; then
 # ── Day mode restored ─────────────────────────────────────
 _set_mode day
 _restored=true
+
+# ── Daily structure sync (chain: state_collector → gen_architecture) ─
+# Primary run after nightly. Falls back to KST 09:00 timer on failure.
+echo "[$(LOG_TS)] == Daily structure sync == "
+if systemctl --user start devforge-daily-structure.service 2>/dev/null; then
+    echo "[$(LOG_TS)] Daily structure sync OK"
+else
+    echo "[$(LOG_TS)] Daily structure sync FAILED — KST 09:00 timer will retry" >&2
+fi
 
 # ── Phase 7: Extract faithfulness test ─────────────────────────
 
@@ -252,7 +236,7 @@ fi
 proxy_ok=true
 
 echo "[$(LOG_TS)] === Phase 7: DeepSeek Pro verify audit ==="
-if python3 "$SCRIPTS_DIR/proxy_reviewer.py" --limit 50; then
+if python3 "$SCRIPTS_DIR/pipelines/proxy_reviewer.py" --limit 50; then
     echo "[$(LOG_TS)] DeepSeek Pro review OK"
 else
     proxy_ok=false
@@ -266,7 +250,6 @@ extract_test: $($extract_test_ok && echo ok || echo skipped)
 validation: $($validation_ok && echo ok || echo failed)
 review: $($review_ok && echo ok || echo failed)
 verify: $($verify_ok && echo ok || echo skipped)
-test_verify: $($test_verify_ok && echo ok || echo skipped)
 day: $($day_restored && echo ok || echo failed)
 YAML
 

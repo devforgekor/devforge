@@ -9,7 +9,7 @@
 - [x] Python CLI (search/save/recent/worklog add/recent/search)
 - [x] GET /stats (7-section dashboard)
 - [x] daily pg_dump + monthly restore test
-- [x] worklog_entries DB + tasks.yaml Kanban task tracker
+- [x] worklog_entries DB + DB tasks Kanban task tracker (cli.py task list)
 - [x] auto_commit_guard.py auto-commit + session_context.py context injection
 - [ ] collect_turns.py 15min auto-collect (Claude Code + Copilot sessions)
 - [x] link_turns.py KST nightly matching + orphan detection
@@ -19,11 +19,11 @@
 
 ## Phase 1.5: LLM Inference Infrastructure (Complete, 2026-05-23)
 
-- [ ] 2-Container architecture — Podman A(Qwen3-4B:8080) + Podman B(mode-switchable:8081-8082)
+- [ ] 2-Container architecture — Podman A(3B:8082) + Podman B(mode-switchable:8081-8082)
 - [x] Mode switching system (normal / batch / code)
-- [x] code_mod_pipeline.py — 32B 4-stage pipeline (ANALYZE→PLAN→IMPL→PACKAGE)
+- [x] code_mod_pipeline.py — Deprecated (removed 2026-06-06)
 - [x] Prompt ablation — code slicing 89% token reduction
-- [x] review_worker.py — 3-LLM debate pipeline (Qwen3-4B + Llama-3B parallel → Phi-4-mini arbitration)
+- [x] review_worker.py — 3-LLM debate pipeline (3B + Llama-3B parallel → Phi-4-mini arbitration)
 - [x] review_facts DB + performance metrics (prompt_tokens, gen_tokens, gen_rate, cache_hit)
 - [x] RateEstimator dynamic timeout
 - [x] Slack notification integration (stage completion DM)
@@ -32,44 +32,44 @@
 
 ## Phase 2: Intelligence & Quality (Active, 2026-05-24)
 
-Phase 2 is structured in 3 tiers. Tier 1 must complete before Tier 2 begins; Tiers 2 and 3 can overlap.
+Tier 1 must complete before Tier 2 begins; Tiers 2 and 3 can overlap.
 
-### Tier 1 — Stabilization (This Week)
+### Tier 1 — Stabilization (Complete, 2026-05-24)
 
-- [x] LiteLLM removal decision (was failed, unused) → removed (2026-05-19)
-- [x] devforge-llm removal decision (was failed, replaced by swap) → removed (2026-05-19)
-- [ ] Qwen3-4B (Podman A) re-enable — currently down after 32B code mode
-- [ ] review-worker.timer re-enable — 3-LLM debate pipeline reactivation
-- [ ] swap-batch.timer + swap-normal.timer re-enable — mode auto-switching
+- [x] LiteLLM removal decision (was failed, unused) → removed
+- [x] devforge-llm removal decision (was failed, replaced by swap) → removed
 - [x] journald log retention config (MaxRetentionSec=30day)
 - [x] Language pipeline guardrails — `lib/text_quality.py` (script purity validation for Korean output, token budget enforcement 10~500 chars, think-tag artifact detection)
 - [x] update_handover.py context selection — quality-score-based prioritization of high-fidelity turns
-- [ ] T01-T16 32B batch test results → apply verified diffs (currently T11 in progress)
 
-### Tier 2 — Vector Intelligence (2-4 Weeks)
+### Tier 2 — Vector Intelligence (Active, ~70%)
 
-> Research references: `docs/translation-quality-report.md` (model-radar lessons), `docs/translation-quality-feedback-loop.md` (TEaR + xCOMET + DCSQE feedback architecture). LLM selection for translation tasks deferred pending Qwen/Phi-14B/32B quality comparison test results.
+**Korean Search Pipeline (FTS5 BM25 + Dense Embedding + RRF Hybrid)** — Qwen3-Embedding-8B (4096d, local).
 
-- [x] pgvector extension installed (vector 0.8.2) + turns.embedding vector(768) column
-- [x] HNSW index on turns.embedding (vector_cosine_ops)
-- [x] embed_turns.py operational — 1015/4180 turns embedded (Gemini embedding-embedding-001)
-- [ ] embed_turns.py complete remaining 3165 turns
-- [ ] Cross-lingual Wikipedia anchor corpus — ko.wikipedia + en.wikipedia embeddings keyed by shared Q-item (Wikidata ID), pgvector table
-- [ ] Translation quality estimation — cosine_similarity(embed_ko, embed_en) using Wikipedia Q-item anchor as ground truth
-- [ ] embed_turns.py cost optimization — skip trivial turns (< 20 chars), prioritize decisions/observations
-- [ ] MemPalace auto-classification — LLM-based wing/room assignment (follows review_worker parallel extraction pattern)
-- [ ] CLI search --semantic (pgvector ANN + ILIKE hybrid)
+- [x] pgvector extension installed
+- [x] `lib/text_cleaner.py` — Kiwi 기반 한국어 정규화 + 형태소 분석 + 어휘 추출
+- [x] Cleaned text columns (user_turn_clean, text_clean, thinking_clean, tokens jsonb)
+- [x] Turn watcher 자동 clean 처리 (INSERT 시점)
+- [x] SQLite FTS5 search index — contentless model, BM25 weighted (5/2/3/1)
+- [x] FTS5 실시간 증분 동기화 (turn_watcher.sync_fts5)
+- [x] `lib/search/hybrid.py` — RRF k=60 하이브리드 검색 (BM25 + Dense)
+- [x] Strong signal short-circuit — BM25 top-1 ≤ -8.0 & gap ≥ 0.15 → dense 생략
+- [x] `cli.py search bm25 <query>` — FTS5 BM25 키워드 검색
+- [x] `cli.py search hybrid <query>` — BM25 + Dense RRF fusion (코드 완료)
+- [x] 월 1회 FTS5 rebuild (night_cycle.sh, 1st only)
+- [x] Day-cycle 자동 증분 임베딩 (embed_batch.py, day_cycle.sh 내장)
+- [~] Dense embedding via Qwen3-Embedding-8B (4096d, `embedding_f16`) — **실행 중** (74/8,766)
 - [ ] CLI search --wing/--room filtering
-- [ ] MCP mem_search vector search upgrade (pgvector ANN)
-- [ ] search --augmented — DuckDuckGo + local LLM inference pipeline
-- [ ] Ref: `/opt/projects/server/docs/translation-quality-report.md` (model-radar lessons applied)
+- [ ] embed_turns.py Gemini → deprecated (migrated to Qwen 8B)
+- [ ] MCP mem_search hybrid search upgrade (FTS5 + Dense + RRF)
 
-### Tier 3 — Operations & Visibility (1-3 Months)
+### Tier 3 — Advanced Search & Ops
 
-- [x] rss-monitor.service — GitHub RSS periodic polling (all 9 references)
-- [x] 4-month refresh cycle alert → automated (first run 2026-08-15)
-- [ ] Snyk/CISA vulnerability auto-scan (container images)
-- [ ] refresh-log.md auto-recording
+- [ ] Monthly container image update — local LLM version check, minor auto-pull, major Slack report
+- [ ] Snyk/CISA vulnerability auto-scan (container images, 3 only)
+- [ ] MemPalace auto-classification — LLM-based wing/room assignment
+- [ ] Cross-lingual Wikipedia anchor corpus (lower priority)
+- [ ] search --augmented — DuckDuckGo + local LLM inference
 - [ ] Web UI — Conversation search dashboard (FastAPI + simple frontend)
 - [ ] Web UI — Model performance dashboard (review_facts stats visualization)
 - [ ] Web UI — activity_log real-time feed
@@ -81,7 +81,15 @@ Phase 2 is structured in 3 tiers. Tier 1 must complete before Tier 2 begins; Tie
 - [ ] Multi-LLM routing (additional model integration)
 - [ ] User decision rationale tracking — structured decision logging with evidence chain
 - [ ] Back-translation fidelity check — when fast translation API available
-- [ ] T01-T16 32B code modification full re-test (intermittent execution)
+
+## Overall Progress
+
+```
+Phase 1  ████████████████████ 100%
+Phase 1.5 ████████████████████ 100%
+Phase 2  ████████████████░░░░ 70%
+Phase 3  ░░░░░░░░░░░░░░░░░░░░ 0%
+```
 
 
 

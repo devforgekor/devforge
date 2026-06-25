@@ -41,7 +41,7 @@ _ensure_memory() {
     fi
 
     log "  mem: available ${avail_mb}MB < ${min_avail_mb}MB — running cleanup..."
-    systemctl --user restart container-devforge-swap.service 2>/dev/null || true
+    systemctl --user restart container-devforge-pod-b.service 2>/dev/null || true
     sleep 30
 
     local swap_used

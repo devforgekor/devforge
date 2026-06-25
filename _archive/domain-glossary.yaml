@@ -1,0 +1,288 @@
+# Language: English only — machine-readable per llm-common-rule.md §Communication
+# ═══════════════════════════════════════════════════════════════
+# DevForge Domain Glossary — Ubiquitous Language
+# ═══════════════════════════════════════════════════════════════
+# 🔴 LLM MUST reference this when naming variables, functions, tables, columns.
+# 🔴 Update this file when new domain concepts are introduced.
+# ═══════════════════════════════════════════════════════════════
+
+metadata:
+  updated: "2026-06-03"
+  bounded_contexts: 10
+  terms: 70+
+
+bounded_contexts:
+  - id: 1
+    name: "Conversation & Turn Collection"
+    terms:
+      - term: "Conversation"
+        definition: "A single AI session identified by UUID, containing ordered turns."
+        tables: ["conversations"]
+        related_files: ["api/ingest.py", "turn_watcher.py"]
+      - term: "Turn"
+        definition: "One user-AI exchange within a conversation. Has user input, AI thinking, AI response."
+        tables: ["turns"]
+        related_files: ["turn_watcher.py", "schema.sql"]
+      - term: "Source"
+        definition: "Which AI tool produced the turn: claude, copilot, gemini, aider."
+        related_files: ["lib/agents.py", "turn_watcher.py"]
+      - term: "Parser"
+        definition: "Module that reads JSONL transcripts from a specific AI tool and normalizes to the turns schema."
+        related_files: ["lib/parsers/", "turn_watcher.py"]
+      - term: "Collection"
+        definition: "Real-time polling of agent JSONL files → turns table. Runs every 3s via turn_watcher.py."
+        related_files: ["turn_watcher.py"]
+      - term: "seq"
+        definition: "Turn order within a conversation (0-based or 1-based depending on source). UNIQUE per conversation."
+
+  - id: 2
+    name: "Activity & Work Logging"
+    terms:
+      - term: "Activity Log"
+        definition: "Unified event stream capturing all server activities: commits, stages, reviews, deployments."
+        tables: ["activity_log"]
+        related_files: ["activity_summarizer.py", "cli.py", "schema.sql"]
+      - term: "Worklog Entry"
+        definition: "Human-meaningful task record (what was done, by which agent, with which model)."
+        tables: ["worklog_entries"]
+        related_files: ["cli.py", "auto_commit_guard.py", "schema.sql"]
+      - term: "Activity Type"
+        definition: "Classification of an activity_log event: commit, stage, review, summary, feedback."
+        related_files: ["activity_summarizer.py"]
+      - term: "Queue Status"
+        definition: "Processing state in review pipeline: unprocessed → reviewed → verified → done."
+        related_files: ["review_consumer.py", "proxy_reviewer.py", "schema.sql"]
+      - term: "Summary Status"
+        definition: "Whether an activity event has been LLM-summarized: raw → summarized."
+        related_files: ["activity_summarizer.py"]
+      - term: "Exec Status"
+        definition: "Execution outcome: DONE, FAILED, RUNNING."
+        related_files: ["schema.sql:activity_log"]
+      - term: "Run ID"
+        definition: "Groups related activity_log events (e.g., all stages of one pipeline run)."
+      - term: "Trace ID"
+        definition: "Links activity_log events across distributed systems (e.g., proxy request trace)."
+        related_files: ["anthropic_proxy.py"]
+      - term: "Parent ID"
+        definition: "activity_log self-referencing FK: child event → parent event (e.g., stage → commit)."
+
+  - id: 3
+    name: "LLM Inference (Pod Architecture)"
+    terms:
+      - term: "Pod"
+        definition: "A Podman Quadlet container running a llama.cpp server with one or more GGUF models."
+        related_files: ["blueprint.yaml", "state.yaml"]
+      - term: "Pod A (devforge-qwen)"
+        definition: "Qwen3-4B inference Pod. Day mode: 3B operator on :8082. Night mode: varies."
+        related_files: ["blueprint.yaml"]
+      - term: "Pod B (devforge-swap)"
+        definition: "Mode-switchable Pod. Day: 30B on :8080. Night: transitions through 7B→14B→27B→32B per phase."
+        related_files: ["blueprint.yaml", "nightly_batch.sh"]
+      - term: "Mode"
+        definition: "Operational mode controlling which model runs in each Pod: day (normal ops), night (batch pipeline)."
+        related_files: ["auto_mode.sh", "nightly_batch.sh"]
+      - term: "Mode File"
+        definition: "Per-Pod mode indicator. Sets which GGUF model llama.cpp loads."
+        related_files: ["blueprint.yaml"]
+      - term: "Model Registry"
+        definition: "Central model catalog in debate_data.py — filename, port, ctx, threads, quantization, benchmark speed."
+        related_files: ["debate_data.py"]
+      - term: "GGUF"
+        definition: "Quantized model file format (llama.cpp). Models stored in /opt/ai_data/models/."
+      - term: "Quantization"
+        definition: "Model compression level: Q4_K_M (balanced), IQ4_XS (aggressive), Q8_0 (high quality)."
+        related_files: ["debate_data.py"]
+      - term: "Context Window (ctx)"
+        definition: "Maximum token context per model: 4096 (most local) to 1M (DeepSeek V4 Flash)."
+        related_files: ["debate_data.py", "anthropic_proxy.py"]
+      - term: "Health Endpoint"
+        definition: "GET /health on llama.cpp server. Returns 200 when model is loaded and ready."
+        related_files: ["nightly_batch.sh:wait_for_model"]
+      - term: "RateEstimator"
+        definition: "Dynamic timeout calculator: timeout = prompt_tokens/prompt_rate + max_tokens/gen_rate + buffer."
+        related_files: ["lib/llm/rate_estimator.py", "code_mod_pipeline.py"]
+
+  - id: 4
+    name: "Review & Verification Pipeline"
+    terms:
+      - term: "Review Pipeline"
+        definition: "Multi-stage code review: (1) worklog extraction, (2) 3-model debate, (3) 27B final verify, (4) DeepSeek audit."
+        related_files: ["nightly_batch.sh", "review_pipeline_3model.py"]
+      - term: "3-Model Review (Phase 4)"
+        definition: "Adversarial review: Step1 Deep Review (R1-8B) → Step2 Reflection (Qwen7B) → Step3 Scoring Judge (Selene)."
+        related_files: ["review_pipeline_3model.py"]
+      - term: "27B Verify (Phase 5)"
+        definition: "Production final gate. Qwen 27B decides approved|rejected|escalate on reviewed items."
+        related_files: ["review_consumer.py", "nightly_batch.sh"]
+      - term: "32B Test Verify (Phase 5b)"
+        definition: "Experimental parallel verify using 32B. Runs alongside Phase 5."
+        related_files: ["test_review_consumer.py"]
+      - term: "DeepSeek Audit (Phase 7)"
+        definition: "Cloud API audit. DeepSeek Pro re-verifies 27B reasoning after day mode restored."
+        related_files: ["proxy_reviewer.py", "nightly_batch.sh"]
+      - term: "Feedback Loop"
+        definition: "Disagreed/partial audit results re-queued for re-verification (max 2 cycles)."
+        related_files: ["proxy_reviewer.py", "lib/feedback.py"]
+      - term: "few-shot Feedback"
+        definition: "Previous audit corrections injected as few-shot examples into 27B verify prompts."
+        related_files: ["lib/feedback.py"]
+      - term: "Verification Items"
+        definition: "Individual checks within a verification: {check, result: pass|fail, detail}."
+      - term: "Final Verdict"
+        definition: "27B decision: approved (merge), rejected (revert), escalate (human or API review)."
+        related_files: ["review_consumer.py"]
+      - term: "Judge Gating"
+        definition: "Scoring Judge thresholds: gap≤5→auto diff, 5<gap≤10→diff with caution, gap>10→skip and flag."
+        related_files: ["review_pipeline_3model.py"]
+      - term: "P_score / R_score"
+        definition: "Judge scores (0-100): P_score = proposal quality, R_score = review quality. gap = |P_score - R_score|."
+        related_files: ["review_pipeline_3model.py"]
+
+  - id: 5
+    name: "Code Modification Pipeline"
+    terms:
+      - term: "Code Mod Pipeline"
+        definition: "4-stage pipeline for automated code changes: ANALYZE→PLAN→IMPLEMENT→PACKAGE. Uses 32B model."
+        related_files: ["code_mod_pipeline.py"]
+      - term: "Stage 1: ANALYZE"
+        definition: "Identify affected code sections, change type, dependencies."
+        related_files: ["code_mod_pipeline.py"]
+      - term: "Stage 2: PLAN"
+        definition: "Design minimal change approach, estimate impact."
+        related_files: ["code_mod_pipeline.py"]
+      - term: "Stage 3: IMPLEMENT"
+        definition: "Produce unified diff."
+        related_files: ["code_mod_pipeline.py"]
+      - term: "Stage 4: PACKAGE"
+        definition: "JSON package for downstream review."
+        related_files: ["code_mod_pipeline.py"]
+      - term: "Task File"
+        definition: "YAML spec for code modification tasks (code_mod_test_tasks.yaml, 16 tasks T01-T16)."
+        related_files: ["code_mod_test_tasks.yaml"]
+
+  - id: 6
+    name: "LLM Debate System"
+    terms:
+      - term: "Debate"
+        definition: "Multi-agent LLM discussion for code review, planning, or debugging. Local (single-server) or Cooperative (multi-LLM consensus)."
+        related_files: ["local_debate.py", "cooperative_debate.py"]
+      - term: "Proposer"
+        definition: "Debate role: generates initial solution/code."
+        related_files: ["debate_llm.py"]
+      - term: "Refuter/Reviewer"
+        definition: "Debate role: critiques proposer output for bugs, edge cases, style."
+        related_files: ["debate_llm.py"]
+      - term: "Arbitrator/Judge"
+        definition: "Debate role: resolves proposer-refuter disagreements, produces final verdict."
+        related_files: ["debate_llm.py"]
+      - term: "Supervisor"
+        definition: "Controls which model is loaded on :8081 via model-switch.json hot-swap file."
+        related_files: ["debate_llm.py", "debate_data.py"]
+      - term: "DART"
+        definition: "Debate Arbitration Retry Trigger — when dispute unresolved, escalate to web search."
+        related_files: ["deepseek_web.py"]
+      - term: "Switch File"
+        definition: "model-switch.json at /opt/ai_data/debate/switch/ — tells supervisor which model to load."
+        related_files: ["debate_data.py"]
+      - term: "Blind Comparison"
+        definition: "Reviewers see proposals without knowing which model generated them — eliminates style/length bias."
+
+  - id: 7
+    name: "Proxy & API Infrastructure"
+    terms:
+      - term: "Anthropic Proxy"
+        definition: "Reverse proxy at 127.0.0.1:44777 translating Anthropic API → DeepSeek API. Handles model mapping, cch stripping, system-first JSON."
+        related_files: ["anthropic_proxy.py"]
+      - term: "Caddy"
+        definition: "Host-network reverse proxy. Routes /devforge/* → internal APIs, handles TLS."
+        related_files: ["blueprint.yaml"]
+      - term: "Gemini Proxy"
+        definition: "API key rotation proxy for Gemini free tier at :9099."
+        related_files: ["gemini_proxy.py", "gemini_pool.py"]
+      - term: "DeepSeek Endpoint"
+        definition: "api.deepseek.com/anthropic — Anthropic-compatible API for DeepSeek V4 Flash/Pro."
+        related_files: ["anthropic_proxy.py"]
+      - term: "Model Map"
+        definition: "Maps Claude model names → DeepSeek: claude→deepseek-v4-flash, claude-pro→deepseek-v4-pro."
+        related_files: ["anthropic_proxy.py"]
+      - term: "Prefix Caching"
+        definition: "DeepSeek server-side cache. System prompt prefix is cached (95%+ hit rate). Requires cch removal and system-first JSON ordering."
+        related_files: ["anthropic_proxy.py"]
+      - term: "cch Header"
+        definition: "x-anthropic-billing-header: cch=... — per-request hash that breaks prefix caching. Stripped by proxy."
+        related_files: ["anthropic_proxy.py"]
+      - term: "Batching (Review)"
+        definition: "Token-based grouping of review items for DeepSeek audit. Target: 58K-63K tokens per batch (hard cap: 64K)."
+        related_files: ["proxy_reviewer.py"]
+
+  - id: 8
+    name: "Data & Storage"
+    terms:
+      - term: "Database (devforge_app)"
+        definition: "PostgreSQL 16 with pg_trgm search, pgvector ANN, JSONB meta columns. 10 tables."
+        related_files: ["schema.sql", "lib/db.py"]
+      - term: "pgvector"
+        definition: "PostgreSQL extension for vector similarity search. HNSW index on turns.embedding."
+        related_files: ["schema.sql", "blueprint.yaml"]
+      - term: "Embedding"
+        definition: "Gemini-embedding-001 768-dim vectors for semantic search."
+        related_files: ["embed_turns.py", "blueprint.yaml"]
+      - term: "pg_dump"
+        definition: "Daily database backup to /mnt/secure_meta/snapshots/. 7-day retention."
+        related_files: ["dump_postgres.sh"]
+      - term: "Sentinel File"
+        definition: "/var/tmp/devforge-<service>-YYYYMMDD.done — prevents duplicate execution of nightly chained services."
+        related_files: ["nightly_batch.sh", "activity_summarizer.py"]
+      - term: "LVM"
+        definition: "Logical Volume Manager: root(20G), lv_db(30G), lv_ai_data(100G), lv_projects(10G), lv_meta(4.5G), lv_workspace(6G), lv_tmp(10G), lv_logs(10G)."
+        related_files: ["state.yaml"]
+
+  - id: 9
+    name: "Scheduling & Automation"
+    terms:
+      - term: "Nightly Batch"
+        definition: "KST 03:00 (UTC 18:00) pipeline: Phase 4(review)→5(27B verify)→5b(32B test)→6(restore day)→7(DeepSeek audit)."
+        related_files: ["nightly_batch.sh"]
+      - term: "Timer Chain"
+        definition: "Sequential execution: nightly→backup→summarizer. Each starts next via systemctl start. Sentinel files prevent duplicates."
+      - term: "Safety Timer"
+        definition: "Fallback timers: backup-safety(KST 08:00), summarizer-safety(KST 09:00). Persistent=true for post-downtime catch-up."
+      - term: "15-Minute Cycle"
+        definition: "Periodic tasks: collect turns, auto-commit, reference refresh."
+        related_files: ["15m_cycle.sh"]
+      - term: "Auto Commit Guard"
+        definition: "Pre-session-end guard: checks for uncommitted changes + worklog entries → auto-commits."
+        related_files: ["auto_commit_guard.py"]
+      - term: "Session Context"
+        definition: "Injects CLAUDE.md + worklog context into new Claude Code sessions."
+        related_files: ["session_context.py"]
+      - term: "Turn Linking"
+        definition: "Nightly job matching turns ↔ worklog_entries via content analysis."
+        related_files: ["link_turns.py"]
+      - term: "Orphan"
+        definition: "A turn not yet linked to any worklog_entry. Resolved by nightly linking or review_worker classification."
+
+  - id: 10
+    name: "Language Pipeline & Operations"
+    terms:
+      - term: "Language Pipeline"
+        definition: "Fixed translation layer: user speaks Korean → AI reasons in English → output translated back to Korean. Technical terms stay English."
+        related_files: ["llm-common-rule.md"]
+      - term: "Translation Quality"
+        definition: "Cosine similarity measurement of ko↔en turn pairs via Gemini embeddings."
+        related_files: ["blueprint.yaml"]
+      - term: "Script Purity"
+        definition: "Korean output validation: no English artifacts, think-tag detection, token budget 10-500 chars."
+        related_files: ["lib/text_quality.py"]
+      - term: "Handover"
+        definition: "Session-to-session state transfer — decisions, known_issues, current_context, next_steps."
+        related_files: ["handover.yaml", "update_handover.py"]
+      - term: "Kanban (tasks.yaml)"
+        definition: "Task tracking: todo → in_progress → done (or blocked). Max 1 in_progress at a time."
+        related_files: ["plans/tasks.yaml"]
+      - term: "MOTD"
+        definition: "Message of the Day — system status on SSH login."
+        related_files: ["motd_gen.py"]
+      - term: "Newhand Protocol"
+        definition: "Context compaction threshold: 80%+ usage + 2+ compactions → session reset via handover dump."
+        related_files: ["llm-common-rule.md", "handover.yaml"]

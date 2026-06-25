@@ -1,0 +1,148 @@
+{
+  "test_name": "pipeline_e2e",
+  "t_start_kst": "2026-06-21 15:44:04",
+  "limit": 6,
+  "phases": [
+    {
+      "phase": "embed",
+      "ok": true,
+      "returncode": 0,
+      "elapsed_s": 148.3,
+      "stdout": "[06:02:41] [protect:embed_batch] ON ports=[8081] — embedding batch\n[06:02:41] ============================================================\n[06:02:41] Embed Batch — Turns (max_batch=6)\n[06:02:41] ============================================================\n[06:02:42]   [preflight] :8081 API OK\n[06:02:42]   [preflight] :8081 health OK\n[06:02:42]   [preflight] total        used        free      shared  buff/cache   available\n[06:02:42]   [preflight] Mem:            22Gi        16Gi       230Mi       168Mi       5.6Gi       5.4Gi\n[06:02:42]   [preflight] Swap:          8.0Gi       2.7Gi       5.3Gi\n[06:02:42]   [preflight] NAME       TYPE      SIZE   USED PRIO\n[06:02:42]   [preflight] /dev/zram0 partition   4G   2.6G  100\n[06:02:42]   [preflight] /dev/dm-7  partition   4G 110.1M   -2\n[06:02:42]   Found 6 turns: 6 to embed, 0 empty/skip\n[06:02:42]   Built 1 batches (max 6 texts / ~5000 tok per batch)\n[06:05:09]   batch 1/1 (6 texts, ~1587 est tok) 144.2s\n[06:05:09] Embed batch done: 6 ok, 0 failed, 146s\n[06:05:09] [protect:embed_batch] OFF\n",
+      "stderr": "",
+      "t_start_kst": "2026-06-21 15:05:09"
+    },
+    {
+      "phase": "entity_scan",
+      "ok": true,
+      "returncode": 0,
+      "elapsed_s": 6.7,
+      "stdout": "[06:05:09]   [preflight] total        used        free      shared  buff/cache   available\n[06:05:09]   [preflight] Mem:            22Gi        17Gi       317Mi       169Mi       5.1Gi       5.0Gi\n[06:05:09]   [preflight] Swap:          8.0Gi       2.7Gi       5.3Gi\n[06:05:09]   [preflight] NAME       TYPE      SIZE   USED PRIO\n[06:05:09]   [preflight] /dev/zram0 partition   4G   2.6G  100\n[06:05:09]   [preflight] /dev/dm-7  partition   4G 110.1M   -2\n\n============================================================\nEntity Scan — Phase 0: deterministic extraction (no LLM)\n============================================================\n[entity_scan] Scanning 6 turn(s)\n  [1/6] 29392af7 — 0 files, 0 funcs (rx_f=0 rx_fn=0 reg=0 ctx_f=0)\n  [2/6] 418f6bd0 — 1 files, 0 funcs (rx_f=1 rx_fn=0 reg=0 ctx_f=0)\n  [3/6] c2893937 — 3 files, 0 funcs (rx_f=3 rx_fn=0 reg=0 ctx_f=0)\n  [4/6] 4620ab61 — 0 files, 0 funcs (rx_f=0 rx_fn=0 reg=0 ctx_f=0)\n  [5/6] 043acb85 — 3 files, 0 funcs (rx_f=3 rx_fn=0 reg=0 ctx_f=0)\n  [6/6] 7610a440 — 4 files, 0 funcs (rx_f=4 rx_fn=0 reg=0 ctx_f=0)\n\n============================================================\nDone: 6 scanned, 0 failed — 11 files, 0 funcs (6.6s)\n============================================================\n",
+      "stderr": "",
+      "t_start_kst": "2026-06-21 15:05:16"
+    },
+    {
+      "phase": "extract",
+      "ok": true,
+      "returncode": 0,
+      "elapsed_s": 1253.6,
+      "stdout": "[06:07:46]   [preflight] total        used        free      shared  buff/cache   available\n[06:07:46]   [preflight] Mem:            22Gi        16Gi       180Mi       173Mi       6.2Gi       5.9Gi\n[06:07:46]   [preflight] Swap:          8.0Gi       2.7Gi       5.3Gi\n[06:07:46]   [preflight] NAME       TYPE      SIZE   USED PRIO\n[06:07:46]   [preflight] /dev/zram0 partition   4G   2.6G  100\n[06:07:46]   [preflight] /dev/dm-7  partition   4G 110.1M   -2\n\n============================================================\nExtract Pipeline — LLM extract → reranker verify → store\n============================================================\n[extract] Processing 6 turn(s)\n[extract] Submitting 6 turns to LLM (parallel=2)...\n  [call_llm] extractor:8082 timeout=553s max_tokens=512\n  [call_llm] extractor:8082 timeout=519s max_tokens=512\n  [call_llm] extractor:8082 timeout=832s max_tokens=512\n  [call_llm] extractor:8082 timeout=513s max_tokens=512\n  [call_llm] extractor:8082 timeout=1193s max_tokens=512\n  [call_llm] extractor:8082 timeout=1200s max_tokens=512\n  [extract]   LLM calls: 1017.6s\n\n[1/6] Turn 29392af7... user=3ch think=762ch text=30ch\n  [call_llm] extractor:8082 timeout=39s max_tokens=64\n  [extract]   Stored 1 facts\n\n[2/6] Turn 418f6bd0... user=23ch think=657ch text=289ch\n  [call_llm] extractor:8082 timeout=77s max_tokens=64\n  [call_llm] extractor:8082 timeout=81s max_tokens=64\n  [call_llm] extractor:8082 timeout=76s max_tokens=64\n  [call_llm] extractor:8082 timeout=78s max_tokens=64\n  [call_llm] extractor:8082 timeout=77s max_tokens=64\n  [extract]   Stored 5 facts\n\n[3/6] Turn c2893937... user=151ch think=1903ch text=309ch\n  [call_llm] extractor:8082 timeout=75s max_tokens=64\n  [call_llm] extractor:8082 timeout=347s max_tokens=64\n  [call_llm] extractor:8082 timeout=323s max_tokens=64\n  [call_llm] extractor:8082 timeout=333s max_tokens=64\n  [extract]   Stored 4 facts\n\n[4/6] Turn 4620ab61... user=44ch think=602ch text=119ch\n  [call_llm] extractor:8082 timeout=43s max_tokens=64\n  [call_llm] extractor:8082 timeout=53s max_tokens=64\n  [call_llm] extractor:8082 timeout=55s max_tokens=64\n  [call_llm] extractor:8082 timeout=50s max_tokens=64\n  [extract]   Stored 4 facts\n\n[5/6] Turn 043acb85... user=31ch think=3943ch text=193ch\n  [call_llm] extractor:8082 timeout=63s max_tokens=64\n  [call_llm] extractor:8082 timeout=71s max_tokens=64\n  [call_llm] extractor:8082 timeout=69s max_tokens=64\n  [extract]   Stored 3 facts\n\n[6/6] Turn 7610a440... user=151ch think=3964ch text=85ch\n  [call_llm] extractor:8082 timeout=55s max_tokens=64\n  [call_llm] extractor:8082 timeout=378s max_tokens=64\n  [call_llm] extractor:8082 timeout=360s max_tokens=64\n  [extract]   Stored 3 facts\n\n============================================================\nDone: 6 processed, 0 failed, 20 facts (1253.5s)\n============================================================\n",
+      "stderr": "",
+      "t_start_kst": "2026-06-21 15:28:39"
+    },
+    {
+      "phase": "enrich",
+      "ok": true,
+      "returncode": 0,
+      "elapsed_s": 822.5,
+      "stdout": "[06:28:40]   [preflight] total        used        free      shared  buff/cache   available\n[06:28:40]   [preflight] Mem:            22Gi        17Gi       695Mi       173Mi       4.5Gi       4.7Gi\n[06:28:40]   [preflight] Swap:          8.0Gi       2.3Gi       5.7Gi\n[06:28:40]   [preflight] NAME       TYPE      SIZE   USED PRIO\n[06:28:40]   [preflight] /dev/zram0 partition   4G   2.2G  100\n[06:28:40]   [preflight] /dev/dm-7  partition   4G 110.1M   -2\n\n============================================================\nEnrich Pipeline — day_enrich enrich fields for extracted turns\n============================================================\n[enrich] Processing 6 turn(s)\n[enrich] Submitting 6 turns to LLM (parallel=2)...\n  [call_llm] extractor:8082 timeout=1780s max_tokens=512\n  [call_llm] extractor:8082 timeout=1712s max_tokens=512\n  [call_llm] extractor:8082 timeout=1800s max_tokens=512\n  [nli] call failed: HTTP Error 404: Not Found\n  [2/6] aebe7ffa — tldr=4코어 모두 사용 중이지만 메모리 대역폭 병목으로 CPU 사용률 낮음 intent=other entities=0f/0fn\n  [call_llm] extractor:8082 timeout=1294s max_tokens=512\n  [1/6] ab0d22b0 — rejected entities: files: ['CLAUDE.yaml']\n  [nli] call failed: HTTP Error 404: Not Found\n  [1/6] ab0d22b0 — tldr=시스템 재부팅 후 상태 및 이전 세션 작업 내용 요약 intent=report entities=1f/4fn\n  [call_llm] extractor:8082 timeout=1800s max_tokens=512\n  [3/6] a2e7aa51 — rejected entities: technologies: ['Python', 'OCI']\n  [nli] call failed: HTTP Error 404: Not Found\n  [3/6] a2e7aa51 — tldr=full_pipeline.sh is DEAD, swap is normal, review_facts updat intent=report entities=2f/1fn\n  [call_llm] extractor:8082 timeout=1588s max_tokens=512\n  [4/6] cf9bcb58 — rejected entities: technologies: ['SQL']\n  [nli] call failed: HTTP Error 404: Not Found\n  [4/6] cf9bcb58 — tldr=Check pipeline progress and report system status and results intent=request entities=2f/0fn\n  [nli] call failed: HTTP Error 404: Not Found\n  [6/6] 21b50a82 — tldr=Test batch speed with new CTX_SIZE failed due to timeout intent=debug entities=0f/0fn\n  [5/6] 1e6ff5af — rejected entities: technologies: ['httpx', 'llama-server']\n  [nli] call failed: HTTP Error 404: Not Found\n  [5/6] 1e6ff5af — tldr=서버가 226% CPU로 작업 중이며 슬랙 보고 완료 intent=report entities=1f/1fn\n\n============================================================\nDone: 6 enriched, 0 failed (LLM: 820.9s, total: 822.4s)\n============================================================\n",
+      "stderr": "",
+      "t_start_kst": "2026-06-21 15:42:22"
+    },
+    {
+      "phase": "verify",
+      "ok": true,
+      "returncode": 0,
+      "elapsed_s": 98.4,
+      "stdout": "[06:42:24]   [preflight] :8082 API OK\n[06:42:24]   [preflight] :8082 health OK\n[06:42:24]   [preflight] total        used        free      shared  buff/cache   available\n[06:42:24]   [preflight] Mem:            22Gi        18Gi       430Mi       174Mi       3.9Gi       3.8Gi\n[06:42:24]   [preflight] Swap:          8.0Gi       2.0Gi       6.0Gi\n[06:42:24]   [preflight] NAME       TYPE      SIZE USED PRIO\n[06:42:24]   [preflight] /dev/zram0 partition   4G 1.9G  100\n[06:42:24]   [preflight] /dev/dm-7  partition   4G 110M   -2\n[06:42:24] ============================================================\n[06:42:24] Day Verify — enrichment metadata quality check\n[06:42:24] ============================================================\n[06:42:24] Processing 6 turn(s) (parallel=2)\n  [call_llm] day-verify:8082 timeout=30s max_tokens=16\n  [call_llm] day-verify:8082 timeout=30s max_tokens=16\n  [call_llm] day-verify:8082 timeout=30s max_tokens=16\n  [call_llm] day-verify:8082 timeout=30s max_tokens=16\n  [call_llm] day-verify:8082 timeout=30s max_tokens=16\n  [call_llm] day-verify:8082 timeout=30s max_tokens=16\n[06:43:56]   concurrent phase: 92.2s\n[06:43:56] \n  [1e6ff5af]\n[06:43:56]     entity: 1 files (1 missing), 1 symbols (1 missing)\n[06:43:56]     faithfulness: 4 entities (0 ungrounded), tldr=OK\n[06:43:57]     Stored verify_result (fact_index=3)\n[06:43:57]     entity: 1 files (1 missing), 1 syms (1 missing) | faithfulness: 4 entities (0 ungrounded) | tldr=OK\n[06:43:57] \n  [21b50a82]\n[06:43:57]     entity: 0 files (0 missing), 0 symbols (0 missing)\n[06:43:57]     faithfulness: 0 entities (0 ungrounded), tldr=OK\n[06:43:58]     Stored verify_result (fact_index=1)\n[06:43:58]     entity: 0 files (0 missing), 0 syms (0 missing) | faithfulness: 0 entities (0 ungrounded) | tldr=OK\n[06:43:58] \n  [a2e7aa51]\n[06:43:58]     entity: 2 files (2 missing), 1 symbols (1 missing)\n[06:43:58]     faithfulness: 4 entities (0 ungrounded), tldr=OK\n[06:43:58]     Stored verify_result (fact_index=3)\n[06:43:58]     entity: 2 files (2 missing), 1 syms (1 missing) | faithfulness: 4 entities (0 ungrounded) | tldr=OK\n[06:43:59] \n  [ab0d22b0]\n[06:43:59]     entity: 1 files (0 missing), 4 symbols (4 missing)\n[06:43:59]     faithfulness: 11 entities (0 ungrounded), tldr=OK\n[06:43:59]     Stored verify_result (fact_index=3)\n[06:43:59]     entity: 1 files (0 missing), 4 syms (4 missing) | faithfulness: 11 entities (0 ungrounded) | tldr=OK\n[06:43:59] \n  [aebe7ffa]\n[06:43:59]     entity: 0 files (0 missing), 0 symbols (0 missing)\n[06:43:59]     faithfulness: 1 entities (0 ungrounded), tldr=OK\n[06:44:00]     Stored verify_result (fact_index=3)\n[06:44:00]     entity: 0 files (0 missing), 0 syms (0 missing) | faithfulness: 1 entities (0 ungrounded) | tldr=OK\n[06:44:00] \n  [cf9bcb58]\n[06:44:00]     entity: 2 files (2 missing), 0 symbols (0 missing)\n[06:44:00]     faithfulness: 3 entities (0 ungrounded), tldr=OK\n[06:44:01]     Stored verify_result (fact_index=1)\n[06:44:01]     entity: 2 files (2 missing), 0 syms (0 missing) | faithfulness: 3 entities (0 ungrounded) | tldr=OK\n[06:44:01] \n============================================================\n[06:44:01] Done: 6 verified, 0 failed (97.1s)\n[06:44:01] ============================================================\n",
+      "stderr": "",
+      "t_start_kst": "2026-06-21 15:44:01"
+    }
+  ],
+  "total_elapsed_s": 2329.5,
+  "heartbeat_status": {
+    "embed": {
+      "worker": "embed_batch",
+      "exists": true,
+      "status": "RESOLVED",
+      "created_at": "2026-06-21 06:02:43.022075+00",
+      "instruction": "embed_batch"
+    },
+    "entity_scan": {
+      "worker": "entity_scan",
+      "exists": true,
+      "status": "IN_PROGRESS",
+      "created_at": "2026-06-21 06:05:16.469208+00",
+      "instruction": "entity_scan turn 7610a440 — 4 files, 0 funcs"
+    },
+    "day_extract": {
+      "worker": "day_extract",
+      "exists": true,
+      "status": "IN_PROGRESS",
+      "created_at": "2026-06-21 06:28:39.803743+00",
+      "instruction": "day_extract turn 7610a440 stored 3 facts"
+    },
+    "day_enrich": {
+      "worker": "day_enrich",
+      "exists": true,
+      "status": "IN_PROGRESS",
+      "created_at": "2026-06-21 06:42:22.598475+00",
+      "instruction": "day_enrich turn 1e6ff5af done"
+    },
+    "day_verify": {
+      "worker": "day_verify",
+      "exists": true,
+      "status": "IN_PROGRESS",
+      "created_at": "2026-06-21 06:44:01.422447+00",
+      "instruction": "day_verify turn cf9bcb58 verified"
+    }
+  },
+  "db_before": {
+    "has_embed": 12,
+    "large_turns_5k": 15,
+    "needs_embed": 6843,
+    "needs_enrich": 1,
+    "needs_entity_scan": 6843,
+    "needs_extract": 7,
+    "needs_verify": 0,
+    "total_turns_with_text": 6855
+  },
+  "db_after": {
+    "has_embed": 18,
+    "large_turns_5k": 15,
+    "needs_embed": 6837,
+    "needs_enrich": 6,
+    "needs_entity_scan": 6831,
+    "needs_extract": 14,
+    "needs_verify": 0,
+    "total_turns_with_text": 6855
+  },
+  "db_delta": {
+    "total_turns_with_text": 0,
+    "needs_embed": -6,
+    "has_embed": 6,
+    "needs_entity_scan": -12,
+    "needs_extract": 7,
+    "needs_enrich": 5,
+    "needs_verify": 0,
+    "large_turns_5k": 0
+  },
+  "errors": [],
+  "metrics": {
+    "extract_facts": [
+      "[extract]   Stored 1 facts",
+      "[extract]   Stored 5 facts",
+      "[extract]   Stored 4 facts",
+      "[extract]   Stored 4 facts",
+      "[extract]   Stored 3 facts",
+      "[extract]   Stored 3 facts"
+    ],
+    "extract_done": "Done: 6 processed, 0 failed, 20 facts (1253.5s)",
+    "enrich_done": "Done: 6 enriched, 0 failed (LLM: 820.9s, total: 822.4s)",
+    "verify_faithfulness": [
+      "[06:43:56]     faithfulness: 4 entities (0 ungrounded), tldr=OK",
+      "[06:43:57]     entity: 1 files (1 missing), 1 syms (1 missing) | faithfulness: 4 entities (0 ungrounded) | tldr=OK",
+      "[06:43:57]     faithfulness: 0 entities (0 ungrounded), tldr=OK",
+      "[06:43:58]     entity: 0 files (0 missing), 0 syms (0 missing) | faithfulness: 0 entities (0 ungrounded) | tldr=OK",
+      "[06:43:58]     faithfulness: 4 entities (0 ungrounded), tldr=OK",
+      "[06:43:58]     entity: 2 files (2 missing), 1 syms (1 missing) | faithfulness: 4 entities (0 ungrounded) | tldr=OK",
+      "[06:43:59]     faithfulness: 11 entities (0 ungrounded), tldr=OK",
+      "[06:43:59]     entity: 1 files (0 missing), 4 syms (4 missing) | faithfulness: 11 entities (0 ungrounded) | tldr=OK",
+      "[06:43:59]     faithfulness: 1 entities (0 ungrounded), tldr=OK",
+      "[06:44:00]     entity: 0 files (0 missing), 0 syms (0 missing) | faithfulness: 1 entities (0 ungrounded) | tldr=OK",
+      "[06:44:00]     faithfulness: 3 entities (0 ungrounded), tldr=OK",
+      "[06:44:01]     entity: 2 files (2 missing), 0 syms (0 missing) | faithfulness: 3 entities (0 ungrounded) | tldr=OK"
+    ],
+    "verify_done": "[06:44:01] Done: 6 verified, 0 failed (97.1s)"
+  }
+}

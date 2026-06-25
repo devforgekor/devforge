@@ -1,0 +1,60 @@
+{
+  "proposals": [
+    {
+      "id": "F01",
+      "type": "bug",
+      "severity": "critical",
+      "description": "In 'de_mod_pipeline.py', the intent classification logic incorrectly identifies 'report' as the expected value in turns 4fa75004-1e15-427d-913b-057a6967ed04 and d668e495-97cc-4d6c-af68-8d0da61d0978.",
+      "rationale": "This could lead to incorrect processing of user requests, resulting in user dissatisfaction or system errors.",
+      "proposed_action": "Review and correct the intent classification logic in 'de_mod_pipeline.py' to accurately identify the expected intent.",
+      "_chunk": 0
+    },
+    {
+      "id": "F02",
+      "type": "performance",
+      "severity": "major",
+      "description": "The extract completeness issue in turn d5ec4da3-06a5-452b-9247-e8e3ec517a61 indicates that the system is not extracting all relevant facts from user inputs.",
+      "rationale": "Incomplete fact extraction can lead to missing information in the system's response, affecting the quality of the interaction.",
+      "proposed_action": "Investigate the extract completeness logic and enhance it to ensure all relevant facts are captured.",
+      "_chunk": 0
+    },
+    {
+      "id": "F03",
+      "type": "bug",
+      "severity": "major",
+      "description": "In 'de_mod_pipeline.py', there is a potential issue with entity correctness in turn d5ec4da3-06a5-452b-9247-e8e3ec517a61, as indicated by the evidence.",
+      "rationale": "Incorrect entity recognition can lead to misunderstandings and errors in the system's responses.",
+      "proposed_action": "Review the entity recognition logic in 'de_mod_pipeline.py' and ensure it correctly identifies all entities.",
+      "_chunk": 0
+    },
+    {
+      "id": "F04",
+      "type": "security",
+      "severity": "major",
+      "description": "The system's response to the short turn '1+1 답만 해줘' (9ch) in turn 81f898a0-37af-41c6-9ab2-c0378eaff3ff may not be secure or appropriate.",
+      "rationale": "Inadequate handling of short turns can expose the system to security risks or inappropriate responses.",
+      "proposed_action": "Implement security checks and appropriate response handling for short turns in the system.",
+      "_chunk": 0
+    },
+    {
+      "id": "F05",
+      "type": "data_loss",
+      "severity": "minor",
+      "description": "The MCP tags in turn 4fa75004-1e15-427d-913b-057a6967ed04 include 'greeting', 'welcome', and 'assistant-response', but the evidence does not provide details on the data loss.",
+      "rationale": "Data loss can lead to incomplete or incorrect system behavior, affecting user experience and system reliability.",
+      "proposed_action": "Investigate the data loss issue in turn 4fa75004-1e15-427d-913b-057a6967ed04 and ensure all relevant data is correctly captured and processed.",
+      "_chunk": 0
+    }
+  ],
+  "usage": {
+    "completion_tokens": 815,
+    "prompt_tokens": 779,
+    "total_tokens": 1594,
+    "prompt_tokens_details": 0
+  },
+  "elapsed_ms": 322832.5938050111,
+  "status": "ok",
+  "chunks": 7,
+  "chunks_done": 7,
+  "model": "Qwen3-Coder-30B-A3B-Q4_K_S"
+}

@@ -1,0 +1,48 @@
+{
+  "total_elapsed_s": 2512.7,
+  "phases_run": [
+    4
+  ],
+  "results": {
+    "phase4": {
+      "phase": 4,
+      "role": "night_prj",
+      "timestamp": "2026-06-07T06:29:31.199373+00:00",
+      "p": {
+        "model": "Qwen3-Coder-30B-A3B-Q4_K_S",
+        "proposals": 5,
+        "usage": {
+          "completion_tokens": 815,
+          "prompt_tokens": 779,
+          "total_tokens": 1594,
+          "prompt_tokens_details": 0
+        },
+        "elapsed_ms": 322832.5938050111
+      },
+      "r": {
+        "model": "Qwen2.5-Coder-14B-Instruct",
+        "verdicts": 3,
+        "usage": {
+          "completion_tokens": 207,
+          "prompt_tokens": 838,
+          "total_tokens": 1045,
+          "prompt_tokens_details": 0
+        },
+        "elapsed_ms": 916112.8042760247
+      },
+      "j": {
+        "model": "NextCoder-14B-Q4_K_M",
+        "result": {},
+        "usage": {},
+        "elapsed_ms": 0,
+        "chunks": 0,
+        "chunks_done": 0
+      },
+      "result": {}
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

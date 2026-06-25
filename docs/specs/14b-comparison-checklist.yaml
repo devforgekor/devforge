@@ -1,0 +1,189 @@
+# 14B Q4_K_M Pipeline Quality Checklist — 10-Axis Scoring
+# Based on production pipeline: Extract(3-tier NLI) + MCP + Verify
+# Each item 0~10 points, weighted total 100 points maximum.
+# Purpose: Test1 (no rubric) post-hoc scoring, Test2 (with rubric) post-hoc scoring
+
+axes:
+  axis_1_fact_recall:
+    id: Axis1
+    name: Fact Extraction Recall
+    weight: 15
+    question: "Were all reference extractions found? Evidence text-based matching (_text_match)"
+    scale:
+      "10": All reference extractions fully captured (matched=total across all cases)
+      "8": Most captured (>=80%), 1-2 missed
+      "6": Half or more (>=50%), major facts missed
+      "4": Partial (>=25%), many critical omissions
+      "2": Almost nothing found (<25%)
+      "0": Nothing found or all parsing failed
+    reference_breakdown:
+      extract_perf: {n: 3, keys: "DB pooling missing, PostgreSQL handshake cost, pool_size recommended"}
+      extract_security: {n: 3, keys: "API key logging, 90-day retention, response measures"}
+      extract_clean: {n: 0, note: "Normal turn — no facts to extract"}
+      extract_hallu_trap: {n: 3, keys: "Memory 55% OOM risk low, swap normal, disk 92%"}
+      extract_mcp_rich: {n: 3, keys: "connection pool applied, DB_POOL_SIZE set, PostgreSQL 16 passing"}
+      verify_contradict: {n: 2, keys: "MongoDB migration claim, PostgreSQL removal request"}
+
+  axis_2_fact_precision:
+    id: Axis2
+    name: Fact Extraction Precision (False Positive)
+    weight: 10
+    question: "Were any facts hallucinated not present in source? extract_clean must have 0 findings."
+    scale:
+      "10": extract_clean 0 + all cases extra <=2 and all faithful
+      "8": extract_clean 0, extra <=3, mostly faithful
+      "6": extract_clean 1 FP, or extra 4-5 with some unfaithful
+      "4": extract_clean 2+ FP, many unfaithful extras
+      "2": Excessive FP in most cases
+      "0": Hallucinated facts in all cases
+    critical_case: "extract_clean: Large penalty for extracting facts from CI passing message"
+
+  axis_3_hallu_resist:
+    id: Axis3
+    name: Hallucination Resistance (Hallu Trap)
+    weight: 10
+    question: "extract_hallu_trap: Did it catch disk 92% instead of OOM?"
+    scale:
+      "10": Disk 92% accurately caught, no OOM/memory shortage mentioned
+      "8": Disk issue caught + OOM risk low (correct) also mentioned — both grounded
+      "6": Disk issue caught but OOM also mentioned (partial hallucination)
+      "4": OOM wrongly judged as main issue, disk mentioned only secondarily
+      "2": Only OOM mentioned, disk issue completely missed
+      "0": Completely unrelated issue generated
+    trap_data: "memory 12Gi/22Gi (55%), swap 508Mi/8Gi (6%). OOM risk LOW. Disk /opt/ai_data 92%."
+    wrong_answers:
+      - "OOM risk is high"
+      - "memory shortage critical"
+      - "need more RAM"
+
+  axis_4_fact_type_accuracy:
+    id: Axis4
+    name: Fact Type Classification Accuracy
+    weight: 10
+    question: "Are fact_type (user/thinking/text) and category (requirement/decision/explanation/code/reasoning/other) correct?"
+    scale:
+      "10": All fact_type and category match source exactly
+      "8": 1-2 misclassifications (text→thinking etc.)
+      "6": 3-4 misclassifications
+      "4": Majority of fact_type or category misclassified
+      "2": Most misclassified
+      "0": All misclassified or fields missing
+
+  axis_5_mcp_quality:
+    id: Axis5
+    name: MCP Metadata Quality
+    weight: 10
+    question: "SYSTEM_DAY_MCP output: Do tldr, intent, entities, tags match reference?"
+    scale:
+      "10": All MCP fields highly match reference (tldr match + intent exact + entities >=50%)
+      "8": tldr match + intent exact, some entities missing
+      "6": tldr similar but intent mismatch, entities poor
+      "4": tldr mismatch, entities empty array
+      "2": MCP output present but most fields missing or erroneous
+      "0": MCP output parsing failed or absent
+    evaluation_fields:
+      - "tldr: factual summary within 15 words"
+      - "intent: one of enumerated values"
+      - "entities.files: only files mentioned in turn"
+      - "entities.technologies: only technologies mentioned in turn"
+      - "tags: 2-5 keywords"
+
+  axis_6_mcp_context_awareness:
+    id: Axis6
+    name: MCP Context Awareness
+    weight: 5
+    question: "extract_mcp_rich case: Did it properly reflect MCP info in fact extraction and MCP metadata?"
+    scale:
+      "10": PostgreSQL 16 + Caddy blue-green + config.py info all reflected
+      "8": 2+ reflected
+      "6": 1 reflected
+      "4": MCP info present but ignored
+      "2": Same level as cases without MCP info
+      "0": Parsing failed
+    mcp_context_provided:
+      - "PostgreSQL 16 connection test passed"
+      - "Caddy reverse proxy blue-green deployment"
+      - "config.py with DB_POOL_SIZE, DB_MAX_OVERFLOW"
+
+  axis_7_verify_accuracy:
+    id: Axis7
+    name: Verify Judgment Accuracy
+    weight: 10
+    question: "verify_contradict: Did it judge the PostgreSQL→MongoDB migration claim as escalate?"
+    scale:
+      "10": escalate judgment + conflict with global context accurately described in reasoning
+      "8": escalate judgment but reasoning is weak
+      "6": rejected judgment (direction correct but escalate would be more accurate)
+      "4": approved judgment (missed global context conflict — major error)
+      "2": Irrelevant judgment
+      "0": verify Parsing failed
+    global_context: "PostgreSQL 16, pg_trgm enabled is the project standard DB. MongoDB not mentioned."
+    expected_reasoning: "MongoDB migration claim contradicts known PostgreSQL 16 infrastructure"
+
+  axis_8_3tier_nli:
+    id: Axis8
+    name: 3-Tier NLI Faithfulness
+    weight: 10
+    question: "Is the overall faithful ratio and tiered distribution of embedding cosine + MiniCheck NLI acceptable?"
+    scale:
+      "10": faithful >= 80%, mostly resolved at embed stage, NLI ambiguous minimal
+      "8": faithful >= 70%, NLI stage used somewhat
+      "6": faithful >= 50%, many NLI reject/embed unfaithful
+      "4": faithful < 50%, many hallucinated evidence
+      "2": faithful < 25%
+      "0": All evidence unrelated to source (or evidence field missing)
+    tier_breakdown_expected:
+      embed_faithful: "cos >= 0.75 → immediately faithful"
+      embed_unfaithful: "cos < 0.40 → immediately unfaithful"
+      nli_judge: "0.40 <= cos < 0.75 → MiniCheck NLI"
+
+  axis_9_json_stability:
+    id: Axis9
+    name: JSON Output Stability
+    weight: 5
+    question: "All responses valid JSON, correct key structure, no code fences?"
+    scale:
+      "10": All responses immediately parseable, no code fences
+      "8": 1 case code-fenced but content valid
+      "6": 2-3 parsing failures
+      "4": Half parsing failures
+      "2": Most parsing failures
+      "0": All unparseable
+
+  axis_10_output_consistency:
+    id: Axis10
+    name: Output Consistency
+    weight: 5
+    question: "Consistent quality across all 6 cases + 2 prompts (extract/mcp)?"
+    scale:
+      "10": All cases uniform quality, extract/mcp both good
+      "8": 1 case quality degradation
+      "6": 2 cases quality degradation
+      "4": Very high variance across cases
+      "2": 3+ serious quality issues
+      "0": Overall unstable
+
+# ── Total Score Calculation ──
+scoring_formula: "Total = (Axis1*1.5) + (Axis2*1.0) + (Axis3*1.0) + (Axis4*1.0) + (Axis5*1.0) + (Axis6*0.5) + (Axis7*1.0) + (Axis8*1.0) + (Axis9*0.5) + (Axis10*0.5), max 100"
+# Axis1(15), Axis2(10), Axis3(10), Axis4(10), Axis5(10), Axis6(5), Axis7(10), Axis8(10), Axis9(5), Axis10(5)
+
+# ── Grading Scale ──
+grading_scale:
+  S:
+    range: "90-100"
+    meaning: "Production-ready. Can replace human reviewer."
+  A:
+    range: "75-89"
+    meaning: "Practical assistance. Catches most major issues, occasional false positives."
+  B:
+    range: "60-74"
+    meaning: "Assistant tool level. Human review required."
+  C:
+    range: "40-59"
+    meaning: "Basic extraction possible but low reliability. Many misses/false positives."
+  D:
+    range: "20-39"
+    meaning: "Experimental stage. Not ready for production."
+  F:
+    range: "0-19"
+    meaning: "Unusable. Parsing failure or random output."

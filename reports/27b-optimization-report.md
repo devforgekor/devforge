@@ -175,7 +175,7 @@ Failed to bind port 8081 (Address already in use)
 
 1. **Dual-server 재설계**: Pod A와 27B가 물리적 메모리를 공유하지 못하는 문제
    - 해결책: systemd timer로 Pod A → 27B 전환을 명시적 시퀀스로
-   - `nightly_batch.sh` Phase 4→5 전환 시 Pod A 정지 후 27B 시작
+   - `night_cycle.sh` Phase 4→5 전환 시 Pod A 정지 후 27B 시작
 
 2. **Verify 전용 컨테이너 분리**:
    - 현재 `container-devforge-qwen` 하나가 Pod A(1.7B+3B)와 Pod B(27B)를 모두 담당
@@ -186,7 +186,7 @@ Failed to bind port 8081 (Address already in use)
 | 시나리오 | 상태 | 위험도 |
 |----------|:---:|:---:|
 | review_consumer.py (verify 파이프라인) | ❌ 미실행 | 상 |
-| nightly_batch.sh Phase 5 | ❌ 미실행 | 상 |
+| night_cycle.sh Phase 5 | ❌ 미실행 | 상 |
 | 27B + 14B 병렬 운영 | ❌ 테스트 안 됨 | 중 |
 | 장기 안정성 (>6시간) | ❌ 미검증 (최대 94분) | 상 |
 | JSON 출력 정확도 | ❌ 출력 파싱 자체가 실패 | 상 |

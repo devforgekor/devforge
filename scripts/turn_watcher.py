@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd:devforge-turn-watcher
 """turn_watcher.py — real-time session transcript → PostgreSQL.
 
 Polls Claude Code / Copilot / Gemini / Aider jsonl files every few seconds.
@@ -11,6 +13,7 @@ regardless of agent process state.
 """
 
 import json
+import sqlite3
 import sys
 import time
 import uuid
@@ -18,14 +21,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from lib.agents import normalize as normalize_agent
-from lib.db import psql, psql_ok, esc_sql
+from lib.tracking.agent_names import normalize as normalize_agent
+from lib.db import psql, psql_ok, psql_json, esc_sql
 from lib.parsers.claude import parse as parse_claude
 from lib.parsers.copilot import parse as parse_copilot
 from lib.parsers.gemini import parse as parse_gemini
 from lib.parsers.aider import parse as parse_aider
+from lib.text_cleaner import get_cleaner
+from lib.search.local_index import DB_PATH as FTS5_DB_PATH
 
-# ── config ──────────────────────────────────────────────────────
 POLL_INTERVAL = 3  # seconds between full scans
 CHECKPOINT_FILE = Path("/opt/projects/server/collect_checkpoint.json")
 
@@ -189,13 +193,28 @@ def insert_turns(conversation_id: str, source: str, model: str,
         created_at = turn.get("created_at") or datetime.now(timezone.utc).isoformat()
         agent = esc_sql(src)
         msg_id_col = f"'{msg_id}'" if msg_id else "NULL"
+
+        # Clean text columns (nullable — for BM25 + Embedding pipeline)
+        _cl = get_cleaner()
+        user_clean = _cl.clean(turn.get("user_turn", "")[:8000])
+        text_clean = _cl.clean((turn.get("text") or "")[:8000])
+        think_clean = _cl.clean((turn.get("thinking") or "")[:4000])
+        tokens_col = "NULL"
+        full_text = " ".join(filter(None, [user_clean, text_clean, think_clean]))
+        if full_text.strip():
+            doc = _cl.process_document(full_text)
+            tj = json.dumps({"terms": doc["terms"], "tokens": doc["tokens"]}, ensure_ascii=False)
+            tokens_col = f"'{esc_sql(tj)}'::jsonb"
+
         meta = json.dumps({"model": model}, ensure_ascii=False)
         meta_esc = esc_sql(meta)
 
         rows_values.append(
             f"('{conversation_id}', {seq}, '{user_turn}', '{thinking}', "
             f"'{text}', {msg_id_col}, '{agent}', '{meta_esc}', "
-            f"'{created_at}'::timestamptz)"
+            f"'{created_at}'::timestamptz, "
+            f"'{esc_sql(user_clean)}', '{esc_sql(text_clean)}', "
+            f"'{esc_sql(think_clean)}', {tokens_col})"
         )
 
     if not rows_values:
@@ -205,13 +224,69 @@ def insert_turns(conversation_id: str, source: str, model: str,
     values_sql = ",\n".join(rows_values)
     ok = psql_ok(
         f"INSERT INTO turns (conversation_id, seq, user_turn, thinking, text, "
-        f"  source_message_id, agent, meta, created_at) "
+        f"  source_message_id, agent, meta, created_at, "
+        f"  user_turn_clean, text_clean, thinking_clean, tokens) "
         f"VALUES {values_sql} "
         f"ON CONFLICT (conversation_id, seq) DO NOTHING"
     )
 
     # Count how many actually inserted (approximate: all non-duplicate rows)
     return len(rows_values) if ok else 0
+
+
+def sync_fts5(conversation_id: str, start_seq: int, count: int):
+    """Sync newly inserted turns to SQLite FTS5 index.
+
+    Uses text_clean_polished if available, falls back to text_clean.
+    Called after successful PostgreSQL INSERT to keep FTS5 in sync.
+    Non-fatal on failure — FTS5 can be rebuilt via CLI command.
+    """
+    if count <= 0:
+        return
+    try:
+        rows = psql_json(
+            f"SELECT seq, "
+            f"  COALESCE(user_turn_clean_polished, user_turn_clean) as user_turn_clean, "
+            f"  COALESCE(text_clean_polished, text_clean) as text_clean, "
+            f"  COALESCE(thinking_clean_polished, thinking_clean) as thinking_clean, "
+            f"  tokens "
+            f"FROM turns "
+            f"WHERE conversation_id='{esc_sql(conversation_id)}' "
+            f"  AND seq >= {start_seq} AND seq < {start_seq + count} "
+            f"ORDER BY seq"
+        )
+        if not rows:
+            return
+
+        conn = sqlite3.connect(str(FTS5_DB_PATH))
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA journal_mode=WAL")
+
+        for r in rows:
+            terms_str = ""
+            tokens_data = r.get("tokens", "")
+            if isinstance(tokens_data, str) and tokens_data:
+                try:
+                    td = json.loads(tokens_data)
+                    if isinstance(td, dict):
+                        terms_str = " ".join(td.get("terms", []))
+                except json.JSONDecodeError:
+                    pass
+
+            conn.execute(
+                "INSERT INTO turn_search (terms, user_turn_clean, text_clean, thinking_clean) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    terms_str,
+                    r.get("user_turn_clean") or "",
+                    r.get("text_clean") or "",
+                    r.get("thinking_clean") or "",
+                ),
+            )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  [fts5-sync] WARN: {e}", file=sys.stderr)
 
 
 def process_session(source: str, session_id: str, path: Path,
@@ -257,6 +332,8 @@ def process_session(source: str, session_id: str, path: Path,
         tag = " [active]" if is_active else ""
         print(f"  {source}/{session_id[:8]}: +{inserted} turns "
               f"({prev_count}→{prev_count + inserted}){tag}")
+        # Sync to FTS5 (non-blocking, non-fatal)
+        sync_fts5(session_id, prev_count, inserted)
 
     return inserted
 

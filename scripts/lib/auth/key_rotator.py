@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """
 Lightweight API Key Rotator — in-memory, no DB dependency.
 
@@ -254,3 +257,4 @@ class KeyRotator:
             "avg_calls_per_key": round(avg_calls, 1),
             "keys": key_stats,
         }
+

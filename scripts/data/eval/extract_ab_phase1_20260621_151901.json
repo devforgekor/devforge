@@ -1,0 +1,66 @@
+{
+  "user_long_2000": {
+    "turn_sizes": {
+      "user": 307,
+      "thinking": 146,
+      "text": 331
+    },
+    "A": {
+      "by_type": {
+        "user": 1,
+        "text": 4
+      },
+      "total": 5,
+      "elapsed_s": 401.1
+    },
+    "B": {
+      "error": "all sections returned empty",
+      "elapsed_s": 179.4
+    }
+  },
+  "think_long_4k": {
+    "turn_sizes": {
+      "user": 7,
+      "thinking": 690,
+      "text": 92
+    },
+    "A": {
+      "error": "ConnectionResetError: [Errno 104] Connection reset by peer",
+      "elapsed_s": 0
+    },
+    "B": {
+      "error": "all sections returned empty",
+      "elapsed_s": 0.1
+    }
+  },
+  "text_long_4k": {
+    "turn_sizes": {
+      "user": 10,
+      "thinking": 82,
+      "text": 857
+    },
+    "A": {
+      "error": "RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>",
+      "elapsed_s": 0
+    },
+    "B": {
+      "error": "all sections returned empty",
+      "elapsed_s": 0.1
+    }
+  },
+  "mixed_long_12k": {
+    "turn_sizes": {
+      "user": 425,
+      "thinking": 193,
+      "text": 494
+    },
+    "A": {
+      "error": "RuntimeError: LLM call to :8082 (extractor) failed: <urlopen error [Errno 32] Broken pipe>",
+      "elapsed_s": 0
+    },
+    "B": {
+      "error": "all sections returned empty",
+      "elapsed_s": 0.2
+    }
+  }
+}

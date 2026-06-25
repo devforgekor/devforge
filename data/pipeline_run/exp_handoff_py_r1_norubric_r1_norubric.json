@@ -1,0 +1,72 @@
+{
+  "source": "python_compiled",
+  "p_model": "night_proposer",
+  "r_model": "night_reflector",
+  "j_model": "night_judge",
+  "round": 1,
+  "with_rubric": false,
+  "P_score": 25,
+  "R_score": 22,
+  "consensus": 85,
+  "decision": "APPROVED",
+  "approved_count": 1,
+  "rejected_count": 1,
+  "approved_ids": [
+    "F001"
+  ],
+  "rejected_ids": [
+    "F002"
+  ],
+  "report_summary": "Mock dry-run report summary",
+  "r_rejected_findings": [],
+  "schema_version": 1,
+  "checksum": "3c756e1e3d5d6ee7",
+  "model_metadata": {
+    "P": {
+      "key": "night_proposer",
+      "file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_S.gguf",
+      "size": "17GB",
+      "port": 8080,
+      "mode": "review-p",
+      "model_name": "proposer",
+      "ctx": 8192,
+      "cache_ram": 1024,
+      "mlock": 0,
+      "evict_room": 18000,
+      "memory_check": 18000,
+      "memory_check_mode": "fatal",
+      "report_memory": "1",
+      "cache_type_k": "q8_0",
+      "cache_type_v": "q8_0",
+      "flash_attn": "1"
+    },
+    "R": {
+      "key": "night_reflector",
+      "file": "Qwen2.5-Coder-14B-Instruct.Q8_0.gguf",
+      "size": "15.7GB",
+      "port": 8080,
+      "mode": "review-r",
+      "model_name": "reflector",
+      "ctx": 8192,
+      "cache_ram": 1024,
+      "evict_room": 16000,
+      "memory_check": 16000,
+      "memory_check_mode": "fatal"
+    },
+    "J": {
+      "key": "night_judge",
+      "file": "NextCoder-14B-Q8_0.gguf",
+      "size": "15GB",
+      "port": 8080,
+      "mode": "review-j",
+      "model_name": "judge",
+      "ctx": 6144,
+      "cache_ram": 1024,
+      "mlock": 0,
+      "evict_room": 16000,
+      "memory_check": 2000,
+      "memory_check_mode": "warn",
+      "report_memory": "1"
+    }
+  }
+}

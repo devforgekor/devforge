@@ -1,3 +1,4 @@
+# Language: English only — machine-readable per llm-common-rule.md §Communication
 # ═══════════════════════════════════════════════════════════════
 # DevForge Proxy Runbook — Anthropic ↔ DeepSeek Compatibility Proxy
 # ═══════════════════════════════════════════════════════════════
@@ -96,7 +97,7 @@ debugging_checklist:
     action: "For streaming issues, confirm Transfer-Encoding: chunked. Increase ANTHROPIC_PROXY_STREAM_TIMEOUT to 30s."
 
 maintenance:
-  - "Keep runbook and tasks.yaml updated when making proxy changes"
+  - "Keep runbook updated when making proxy changes"
   - "After debugging, unset ANTHROPIC_PROXY_DEBUG and remove debug dumps from /tmp"
 
 contact: "DevForge on-call: ops-team@example.com"

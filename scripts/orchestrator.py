@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: manual — interactive CLI
 """DevForge Orchestrator — LLM-based smart router to specialized pipelines.
 
 Architecture:
-  1. Classify user intent using 3B model (lightweight, fast)
+  1. Classify user intent using 7B extractor (lightweight, fast)
   2. Route to the appropriate pipeline or answer directly
   3. Return structured result
 
 Tools (wrapped pipelines):
-  - run_p_r_j_pipeline: P→R→J pipeline (R1-8B deep review → Qwen7B reflection → Selene judgment)
-  - run_debate:          30B proposer vs 3B refuter (DART)
+  - run_p_r_j_pipeline: P→R→J pipeline (proposal → reflection → scoring judgment)
+  - run_debate:          30B proposer vs 14B refuter (DART)
   - run_code_review:     3-model code review pipeline
   - execute_code:        Podman-isolated Python sandbox
 
@@ -34,7 +36,6 @@ if _SCRIPTS_DIR not in sys.path:
 
 from lib.llm_client import call_llm  # noqa: E402
 
-# ── Constants ──────────────────────────────────────────────────────────────
 TIMEOUT_CLASSIFY = 30  # classification is fast (< 5s)
 TIMEOUT_DIRECT = 120  # direct answer generation
 MAX_TOKENS_CLASSIFY = 32  # classification needs ~1 token
@@ -71,7 +72,6 @@ Extract Python code from the user request.
 Output ONLY the code, no explanation."""
 
 
-# ── Tool abstraction ───────────────────────────────────────────────────────
 
 
 class OrchestratorTool:
@@ -87,10 +87,10 @@ class OrchestratorTool:
 
 
 class RunPRJTool(OrchestratorTool):
-    """P→R→J pipeline: R1-8B deep review → Qwen7B reflection → Selene judgment."""
+    """P→R→J pipeline: proposal → reflection → scoring judgment."""
 
     name = "run_p_r_j_pipeline"
-    description = "3-model code review pipeline using R1-8B + Qwen7B + Selene"
+    description = "3-model code review pipeline (proposer + reflector + judge)"
     parameters = {
         "type": "object",
         "properties": {
@@ -125,10 +125,10 @@ class RunPRJTool(OrchestratorTool):
 
 
 class RunDebateTool(OrchestratorTool):
-    """DART debate: 30B proposer vs 3B refuter with judge."""
+    """DART debate: 30B proposer vs 14B refuter with judge."""
 
     name = "run_debate"
-    description = "Multi-agent DART debate (30B vs 3B) for adversarial problem-solving"
+    description = "Multi-agent DART debate (30B vs 14B) for adversarial problem-solving"
     parameters = {
         "type": "object",
         "properties": {
@@ -141,7 +141,7 @@ class RunDebateTool(OrchestratorTool):
     }
 
     def execute(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        from local_debate import LocalDebate  # type: ignore
+        from lib.debate.local_debate import LocalDebate  # type: ignore
 
         question = args.get("question", "")
         if not question:
@@ -231,7 +231,6 @@ class ExecuteCodeTool(OrchestratorTool):
         }
 
 
-# ── Built-in tool registry ─────────────────────────────────────────────────
 _BUILTIN_TOOLS: Dict[str, OrchestratorTool] = {
     "p_r_j": RunPRJTool(),
     "debate": RunDebateTool(),
@@ -240,11 +239,10 @@ _BUILTIN_TOOLS: Dict[str, OrchestratorTool] = {
 }
 
 
-# ── Classification ─────────────────────────────────────────────────────────
 
 
 def _classify(user_input: str, verbose: bool = True) -> str:
-    """Use the 3B model to classify a user request into a routing category.
+    """Use the 7B extractor to classify a user request into a routing category.
 
     The classifier uses a short, constrained prompt (``CLASSIFY_PROMPT``) with
     ``max_tokens=32`` so the model returns a single category word.  Non-matching
@@ -263,7 +261,7 @@ def _classify(user_input: str, verbose: bool = True) -> str:
     prompt = CLASSIFY_PROMPT.format(input=user_input[:500])
     messages = [{"role": "user", "content": prompt}]
     try:
-        response = call_llm(messages, model="Qwen3B", max_tokens=MAX_TOKENS_CLASSIFY, timeout=TIMEOUT_CLASSIFY)
+        response = call_llm(messages, model="extractor", max_tokens=MAX_TOKENS_CLASSIFY, timeout=TIMEOUT_CLASSIFY)
     except RuntimeError:
         return "direct_answer"  # safe fallback
     category = response.strip().lower().split("\n")[0].strip()
@@ -277,7 +275,6 @@ def _classify(user_input: str, verbose: bool = True) -> str:
     return "direct_answer"
 
 
-# ── Orchestrator ───────────────────────────────────────────────────────────
 
 
 def orchestrator_run(
@@ -287,8 +284,8 @@ def orchestrator_run(
     """Route a user request to the appropriate pipeline or answer directly.
 
     Two-phase dispatch:
-      1. Classify the request using the 3B model (fast, few-shot).
-      2. Route to the matching tool or answer directly via the 3B model.
+      1. Classify the request using the 7B extractor (fast, few-shot).
+      2. Route to the matching tool or answer directly via the 7B extractor.
 
     Args:
         user_input: The user's request string.
@@ -308,13 +305,13 @@ def orchestrator_run(
     # ── Direct answer (no tool) ──────────────────────────────────────────
     if category == "direct_answer":
         if verbose:
-            print("  [Orch] Answering directly with 3B...", file=sys.stderr)
+            print("  [Orch] Answering directly with 7B extractor...", file=sys.stderr)
         messages = [
             {"role": "system", "content": DIRECT_SYSTEM_PROMPT},
             {"role": "user", "content": user_input},
         ]
         try:
-            response = call_llm(messages, model="Qwen3B", max_tokens=MAX_TOKENS_DIRECT, timeout=TIMEOUT_DIRECT)
+            response = call_llm(messages, model="extractor", max_tokens=MAX_TOKENS_DIRECT, timeout=TIMEOUT_DIRECT)
         except RuntimeError as e:
             return {"status": "error", "output": str(e)}
         return {"status": "ok", "output": response, "tool": None}
@@ -342,7 +339,7 @@ def orchestrator_run(
                 {"role": "user", "content": user_input},
             ]
             try:
-                extracted = call_llm(messages, model="Qwen3B", max_tokens=MAX_TOKENS_EXTRACT)
+                extracted = call_llm(messages, model="extractor", max_tokens=MAX_TOKENS_EXTRACT)
             except RuntimeError as e:
                 return {"status": "error", "output": f"Code extraction failed: {e}"}
             cleaned = _strip_code_fences(extracted)
@@ -436,7 +433,6 @@ def list_tools() -> None:
         print()
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────
 
 
 def main():

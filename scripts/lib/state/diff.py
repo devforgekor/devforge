@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Structural hashing and diff for state change detection."""
 import hashlib
 import json
@@ -39,3 +42,4 @@ def diff_structural(prev, curr) -> list:
 
     _walk("structural", prev, curr)
     return changes
+

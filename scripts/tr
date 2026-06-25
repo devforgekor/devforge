@@ -5,7 +5,7 @@
 #   tr coop   → cooperative: local draft → Azure spot VM debate
 #   tr review    → Pod A(R1) + Pod B(Qwen7B+Selene swap) — night pipeline
 #   tr review-se → Pod B Selene only (Step 3 judge)
-#   tr verify    → Pod A stopped + Pod B(32B) — final gate
+#   tr verify    → Pod A stopped + Pod B(27B verifier) — final gate
 #
 # Mode persistence via separate files per pod.
 
@@ -27,7 +27,24 @@ _get_avail_mb() {
     awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo
 }
 
-_write_mode() { printf '%s' "MODE=$1" > "${2}.tmp" && mv "${2}.tmp" "$2"; }
+_write_mode() {
+    local mode="$1"
+    local file="$2"
+    if [ "$file" = "$MODE_FILE_B" ]; then
+        # Pod B: full env via pod_manager (MODEL_FILE, PORT, CTX_SIZE, etc.)
+        if ! python3 -c "
+import sys; sys.path.insert(0, '$SCRIPTS_DIR')
+from lib.pod_manager import _write_mode_env
+port = {'verify': 8081}.get('$mode', 8080)
+_write_mode_env('$mode', port)
+" 2>/dev/null; then
+            printf '%s' "MODE=$mode" > "${file}.tmp" && mv "${file}.tmp" "$file"
+        fi
+    else
+        # Pod A: MODE only (hardcodes model in its entrypoint)
+        printf '%s' "MODE=$mode" > "${file}.tmp" && mv "${file}.tmp" "$file"
+    fi
+}
 
 _wait_pod_b() {
     local timeout="${1:-300}"
@@ -46,19 +63,19 @@ _wait_pod_b() {
 
 _ensure_pod_a() {
     log "ensuring Pod A is running..."
-    systemctl --user start container-devforge-qwen.service 2>/dev/null || true
+    systemctl --user start container-devforge-pod-a.service 2>/dev/null || true
     sleep 3
 }
 
 _stop_pod_a() {
     log "stopping Pod A (free memory for 32B)..."
-    systemctl --user stop container-devforge-qwen.service 2>/dev/null || true
+    systemctl --user stop container-devforge-pod-a.service 2>/dev/null || true
     sleep 5
 }
 
 _restart_pod_b() {
-    log "restarting container-devforge-swap..."
-    systemctl --user restart container-devforge-swap.service
+    log "restarting container-devforge-pod-b..."
+    systemctl --user restart container-devforge-pod-b.service
 }
 
 # ── Mode commands ──────────────────────────────────────────────

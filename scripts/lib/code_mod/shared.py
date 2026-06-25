@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Shared utilities for code modification pipelines.
 
 Used by both code_mod_pipeline.py and hybrid_pipeline.py.
@@ -11,7 +14,8 @@ SERVER_DIR = Path("/opt/projects/server")
 TASKS_FILE = SERVER_DIR / "code_mod_test_tasks.yaml"
 OUTPUT_DIR = Path("/var/tmp/code_mod_tests")
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-LLAMA_ENDPOINT = "http://127.0.0.1:8081"  # Qwen3.6-27B (verify mode)
+from lib.llm_client import MODEL_REGISTRY
+LLAMA_ENDPOINT = f"http://127.0.0.1:{MODEL_REGISTRY['verifier']['port']}"
 
 
 def read_file(path: str) -> str:
@@ -61,8 +65,9 @@ def extract_json_from_llm_response(llm_result: tuple) -> dict:
 
 def save_result(data: dict, prefix: str, task_id: int, suffix: str = ""):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    name = f"{prefix}_task{task_id:02d}{suffix}_{ts}.json"
+    utc_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    name = f"{prefix}_task{task_id:02d}{suffix}_{utc_ts}.json"
     with open(OUTPUT_DIR / name, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     return name
+

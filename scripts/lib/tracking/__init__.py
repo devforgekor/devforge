@@ -1,3 +1,5 @@
+# Status: production
+# Path: imported by scripts/ modules
 """Tracking — phase detection, dependency tracking, agent name normalization."""
 from lib.tracking.phase_tracker import (
     auto_update_phase_documents,

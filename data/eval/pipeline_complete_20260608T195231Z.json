@@ -1,0 +1,291 @@
+{
+  "total_elapsed_s": 1337.7,
+  "phases_run": [
+    1,
+    2
+  ],
+  "results": {
+    "phase1": {
+      "phase": 1,
+      "role": "python_verify",
+      "timestamp": "2026-06-08T19:30:13.565463+00:00",
+      "files_loaded": 12,
+      "total_findings": 32,
+      "findings": [
+        {
+          "file": "eval_feedback_baseline.json",
+          "role": "consolidated_baseline",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_mcp_30b.json",
+          "role": "mcp_30b",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_night_mode.json",
+          "role": "night_mode_switch",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_posthoc_extract_3b.json",
+          "role": "post_hoc",
+          "finding_count": 1,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_prj_extract_handoff.json",
+          "role": "p_r_j_review",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_python_verify.json",
+          "role": "python_verify",
+          "finding_count": 8,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_rubric_extract_3b.json",
+          "role": "role_rubric",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_verify_27b.json",
+          "role": "verify_27b_production",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 88
+        },
+        {
+          "file": "eval_verify_27b_round1.json",
+          "role": "verify_27b_production",
+          "finding_count": 8,
+          "has_verdict": true,
+          "confidence": 82
+        },
+        {
+          "file": "eval_verify_32b.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 75
+        },
+        {
+          "file": "eval_verify_32b_round1.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 70
+        },
+        {
+          "file": "eval_verify_feedback.json",
+          "role": "unknown",
+          "finding_count": 0,
+          "has_verdict": false
+        }
+      ]
+    },
+    "phase2": {
+      "phase": 2,
+      "role": "seven_b_verify",
+      "model": "reviewer model-Instruct",
+      "port": 8080,
+      "timestamp": "2026-06-08T19:52:31.184377+00:00",
+      "usage": {
+        "completion_tokens": 1793,
+        "prompt_tokens": 1971,
+        "total_tokens": 3764,
+        "prompt_tokens_details": 0
+      },
+      "elapsed_ms": 1333741.6798829946,
+      "chunks": 6,
+      "chunks_done": 6,
+      "result": {
+        "verification_items": [
+          {
+            "check": "S01: Operational metrics(timing, tokens) not recorded in review_facts",
+            "result": "fail",
+            "detail": "The review_facts module does not record operational metrics, which is critical for monitoring and debugging.",
+            "category": "bug"
+          },
+          {
+            "check": "S02: Missing faithfulness score, retry history, and unfaithful fact list in activity_log body",
+            "result": "fail",
+            "detail": "The activity_log body lacks essential information required for tracking the review process, which is critical for audit and debugging.",
+            "category": "bug"
+          },
+          {
+            "check": "S03: review_facts.verdict not updated from 'pending'",
+            "result": "fail",
+            "detail": "The verdict in review_facts does not update from 'pending', preventing downstream pipelines from functioning correctly.",
+            "category": "bug"
+          },
+          {
+            "check": "S04: LLM client not extracting token usage/timing from API responses",
+            "result": "fail",
+            "detail": "The LLM client fails to extract crucial metrics from API responses, which is critical for performance monitoring and optimization.",
+            "category": "performance"
+          },
+          {
+            "check": "S05: queue_writer.py always setting queue_status to 'reviewed'",
+            "result": "fail",
+            "detail": "The queue_writer.py module incorrectly sets the queue_status to 'reviewed', bypassing necessary review processes, which is a critical security risk.",
+            "category": "security"
+          },
+          {
+            "check": "S06: Inconsistent fact_index handling in mcp_meta",
+            "result": "partial",
+            "detail": "The issue requires a deep dive into the data flow and storage mechanisms to ensure that the inconsistency does not lead to data loss or corruption.",
+            "category": "data_loss"
+          },
+          {
+            "check": "S07: Absolute path conversion in entity file path verification",
+            "result": "partial",
+            "detail": "This issue needs review to understand the implications of using direct join without absolute path conversion and whether it poses a security risk or performance issue.",
+            "category": "security|performance"
+          },
+          {
+            "check": "S08: Timing/token information collection in 27B verify",
+            "result": "partial",
+            "detail": "This requires further analysis to determine if the lack of timing/token information affects the functionality or reliability of the system.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 1",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 2",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 3",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 4",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 5",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 6",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 1",
+            "result": "pass",
+            "detail": "Correct logic error identified.",
+            "category": "bug"
+          },
+          {
+            "check": "Finding 2",
+            "result": "pass",
+            "detail": "Unsafe pattern detected.",
+            "category": "security"
+          },
+          {
+            "check": "Finding 3",
+            "result": "pass",
+            "detail": "Efficiency issue noted.",
+            "category": "performance"
+          },
+          {
+            "check": "Finding 4",
+            "result": "pass",
+            "detail": "Maintainability concern addressed.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 5",
+            "result": "pass",
+            "detail": "Data loss identified and corrected.",
+            "category": "data_loss"
+          },
+          {
+            "check": "Finding 6",
+            "result": "pass",
+            "detail": "Correct documentation update.",
+            "category": "quality"
+          },
+          {
+            "check": "Finding 1",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 2",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 3",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 4",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 5",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 6",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "bug|security|performance|quality|data_loss"
+          },
+          {
+            "check": "Finding 1",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "unknown"
+          },
+          {
+            "check": "Finding 2",
+            "result": "partial",
+            "detail": "Insufficient information provided.",
+            "category": "unknown"
+          }
+        ],
+        "summary": " | Multiple critical issues found in the codebase that need to be addressed before proceeding. | Several issues identified that require deeper analysis and review. | The code requires deeper analysis to ensure all potential issues are addressed. | All findings have been reviewed and are correct. | Findings require deeper analysis to determine their impact and appropriate action. | Findings require deeper analysis to determine their impact and appropriate action.",
+        "reasoning": "\nThe findings include critical bugs and security vulnerabilities that could lead to operational failures, data loss, or unauthorized access. These issues must be resolved to ensure the system's reliability and integrity.\nThe high severity issue with inconsistent fact_index handling in mcp_meta requires thorough investigation to ensure data integrity. The medium severity issues related to entity file path verification and timing/token information collection need further context to determine their impact and potential solutions.\nThere are multiple findings, but without additional context or the actual code, it's challenging to determine if they are bugs, security vulnerabilities, performance issues, quality concerns, or data loss. Further review is needed to make an informed decision.\nEach finding has been carefully analyzed, and all identified issues are accurate.\nThe provided findings are not specific enough to make a definitive decision. They need more context about the codebase, the ",
+        "final_verdict": "needs_review",
+        "confidence": 90
+      },
+      "category_summary": "Category Distribution: bug|security|performance|quality|data_loss=12(partial=12) [partial=12]; bug=4(fail=3,pass=1) [fail=3,pass=1]; quality=3(partial=1,pass=2) [partial=1,pass=2]; performance=2(fail=1,pass=1) [fail=1,pass=1]; security=2(fail=1,pass=1) [fail=1,pass=1]; data_loss=2(partial=1,pass=1) [partial=1,pass=1]; unknown=2(partial=2) [partial=2]; security|performance=1(partial=1) [partial=1] (32 total) | Verdict: fail=5, partial=17, pass=6"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "user_long_2000_B_only": {
+    "turn_sizes": {
+      "user": 307,
+      "thinking": 87,
+      "text": 264
+    },
+    "B": {
+      "by_type": {
+        "user": 5,
+        "thinking": 1,
+        "text": 8
+      },
+      "total": 14,
+      "elapsed_s": 352.7
+    }
+  },
+  "think_long_4k": {
+    "turn_sizes": {
+      "user": 7,
+      "thinking": 690,
+      "text": 92
+    },
+    "A": {
+      "by_type": {
+        "user": 1,
+        "text": 4
+      },
+      "total": 5,
+      "elapsed_s": 162.6
+    },
+    "B": {
+      "error": "all sections returned empty",
+      "elapsed_s": 19.6
+    }
+  },
+  "text_long_4k": {
+    "turn_sizes": {
+      "user": 10,
+      "thinking": 52,
+      "text": 770
+    },
+    "A": {
+      "by_type": {
+        "text": 5
+      },
+      "total": 5,
+      "elapsed_s": 334.9
+    },
+    "B": {
+      "by_type": {
+        "thinking": 1,
+        "text": 13
+      },
+      "total": 14,
+      "elapsed_s": 864.9
+    }
+  },
+  "mixed_long_12k": {
+    "turn_sizes": {
+      "user": 211,
+      "thinking": 47,
+      "text": 252
+    },
+    "A": {
+      "by_type": {
+        "user": 5
+      },
+      "total": 5,
+      "elapsed_s": 291.8
+    },
+    "B": {
+      "by_type": {
+        "user": 6,
+        "thinking": 1,
+        "text": 11
+      },
+      "total": 18,
+      "elapsed_s": 730.2
+    }
+  }
+}

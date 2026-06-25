@@ -1,15 +1,22 @@
 # DevForge — Software Architecture
-# auto-generated from CLAUDE.yaml at 2026-06-06 09:00 KST
+# auto-generated from live data at 2026-06-25 09:00 KST
 ---
 metadata:
-  updated: 2026-06-06 09:00 KST
-  source: CLAUDE.yaml.software
+  updated: 2026-06-25 09:00 KST
+  source: live (collect_structural + mode file)
 models:
-- note: Populate CLAUDE.yaml `software.models`
+- name: devforge-pod-a
+  container: devforge-pod-a
+  status: Up 2 hours (healthy)
+  ports: 127.0.0.1:8000->8000/tcp, 127.0.0.1:8080->8080/tcp
+- name: devforge-pod-b
+  container: devforge-pod-b
+  status: Up 7 minutes (healthy)
+  ports: 127.0.0.1:8081-8084->8081-8084/tcp, 127.0.0.1:8089->8089/tcp
 modes:
-  placeholder:
-    note: Populate CLAUDE.yaml `software.modes`
+  current: day
+  available:
+    day: 'Pod A(:8080 reranker) + Pod B(:8081 embed | :8082 swap: extract/enrich/verify)'
+    night: Nightly review pipeline (verify + debate)
 pipelines:
-  placeholder: Populate CLAUDE.yaml `software.pipelines`
-note: Add model/mode/pipeline data to CLAUDE.yaml `software:` key. Until then, see
-  archived agent-architecture.yaml and server-specs-and-llm-architecture.md in `_archive/`.
+  daily structure: activating

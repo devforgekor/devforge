@@ -1,0 +1,504 @@
+{
+  "total_elapsed_s": 6568.3,
+  "phases_run": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "results": {
+    "phase0": {
+      "phase": 0,
+      "role": "boot",
+      "status": "ok"
+    },
+    "phase1": {
+      "phase": 1,
+      "role": "python_verify",
+      "timestamp": "2026-06-07T02:06:19.590344+00:00",
+      "files_loaded": 13,
+      "total_findings": 39,
+      "findings": [
+        {
+          "file": "eval_30b_verify.json",
+          "role": "30b_verify",
+          "finding_count": 7,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_feedback_baseline.json",
+          "role": "consolidated_baseline",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_mcp_30b.json",
+          "role": "mcp_30b",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_night_mode.json",
+          "role": "night_mode_switch",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_posthoc_extract_3b.json",
+          "role": "post_hoc",
+          "finding_count": 1,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_prj_extract_handoff.json",
+          "role": "p_r_j_review",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_python_verify.json",
+          "role": "python_verify",
+          "finding_count": 8,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_rubric_extract_3b.json",
+          "role": "role_rubric",
+          "finding_count": 0,
+          "has_verdict": false
+        },
+        {
+          "file": "eval_verify_27b.json",
+          "role": "verify_27b_production",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 88
+        },
+        {
+          "file": "eval_verify_27b_round1.json",
+          "role": "verify_27b_production",
+          "finding_count": 8,
+          "has_verdict": true,
+          "confidence": 82
+        },
+        {
+          "file": "eval_verify_32b.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 75
+        },
+        {
+          "file": "eval_verify_32b_round1.json",
+          "role": "verify_32b_experimental",
+          "finding_count": 5,
+          "has_verdict": true,
+          "confidence": 70
+        },
+        {
+          "file": "eval_verify_feedback.json",
+          "role": "unknown",
+          "finding_count": 0,
+          "has_verdict": false
+        }
+      ]
+    },
+    "phase2": {
+      "phase": 2,
+      "role": "seven_b_verify",
+      "model": "Qwen2.5-Coder-7B-Instruct",
+      "port": 8080,
+      "timestamp": "2026-06-07T02:20:52.023750+00:00",
+      "usage": {
+        "completion_tokens": 1532,
+        "prompt_tokens": 2007,
+        "total_tokens": 3539,
+        "prompt_tokens_details": 0
+      },
+      "elapsed_ms": 869740.1228509843,
+      "chunks": 4,
+      "chunks_done": 4,
+      "result": {
+        "verification_items": [
+          {
+            "check": "Operational metrics(timing, tokens) are recorded in review_facts",
+            "result": "fail",
+            "detail": "The evidence provided indicates that operational metrics are not being recorded, which is a critical issue."
+          },
+          {
+            "check": "Faithfulness score, retry history, and unfaithful fact list are present in activity_log body",
+            "result": "fail",
+            "detail": "The evidence provided indicates that these essential details are missing from the activity_log body, which is a critical issue."
+          },
+          {
+            "check": "S03: review_facts.verdict not being updated",
+            "result": "partial",
+            "detail": "The issue requires investigation into why the downstream pipeline is not updating review_facts. This could involve checking the pipeline configuration, logs, and dependencies."
+          },
+          {
+            "check": "S04: LLM client not extracting token usage/timing",
+            "result": "partial",
+            "detail": "The issue requires reviewing the LLM client implementation to ensure it correctly handles and extracts token usage and timing information from API responses."
+          },
+          {
+            "check": "S05: enqueue_review() fixing queue_status to 'reviewed'",
+            "result": "partial",
+            "detail": "This issue requires understanding the business logic behind the queue status and determining if the fix is appropriate or if there are underlying issues that need to be addressed."
+          },
+          {
+            "check": "S06: inconsistent fact_index due to mcp_meta",
+            "result": "partial",
+            "detail": "The issue requires verifying the data handling logic for fact_index and ensuring consistency across different rows, especially those with different extract_model values."
+          },
+          {
+            "check": "S07: absolute path conversion in entity file path verification",
+            "result": "partial",
+            "detail": "This issue requires reviewing the entity file path verification logic to ensure it correctly handles paths and does not expose security risks."
+          },
+          {
+            "check": "S08: 27B verify not collecting timing/token information",
+            "result": "partial",
+            "detail": "This issue requires examining the 27B verify implementation to understand why timing and token information are not being collected and determining if this is a design choice or a bug."
+          },
+          {
+            "check": "Finding 1: Potential memory leak in function X.",
+            "result": "partial",
+            "detail": "Needs to be confirmed if the function is indeed allocating memory without proper deallocation."
+          },
+          {
+            "check": "Finding 2: Redundant code in loop Y.",
+            "result": "partial",
+            "detail": "Requires verification if the redundant code is causing performance issues or if it can be safely removed."
+          },
+          {
+            "check": "Finding 3: Inconsistent naming convention for variable Z.",
+            "result": "partial",
+            "detail": "Needs to be confirmed if the naming inconsistency is causing confusion or if it can be standardized."
+          },
+          {
+            "check": "Finding 4: Missing error handling in function A.",
+            "result": "partial",
+            "detail": "Requires verification if the function is critical and missing error handling could lead to crashes or data corruption."
+          },
+          {
+            "check": "Finding 5: Deprecated function used in module B.",
+            "result": "partial",
+            "detail": "Needs to be confirmed if the deprecated function is still necessary or if an alternative should be used."
+          },
+          {
+            "check": "Finding 6: Code duplication in modules C and D.",
+            "result": "partial",
+            "detail": "Requires verification if the duplication is intentional and necessary or if it can be refactored into a shared function."
+          },
+          {
+            "check": "Finding 7: Unnecessary comments in function E.",
+            "result": "partial",
+            "detail": "Needs to be confirmed if the comments are adding value or if they can be removed."
+          },
+          {
+            "check": "Finding 8: Potential race condition in thread F.",
+            "result": "partial",
+            "detail": "Requires verification if the thread is critical and a race condition could lead to unexpected behavior."
+          },
+          {
+            "check": "Finding 9: Inefficient data structure usage in module G.",
+            "result": "partial",
+            "detail": "Requires verification if the data structure is indeed inefficient or if it can be optimized."
+          },
+          {
+            "check": "Finding 10: Missing unit tests for function H.",
+            "result": "partial",
+            "detail": "Requires verification if the function is critical and missing unit tests could lead to bugs going undetected."
+          },
+          {
+            "check": "Finding 1",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          },
+          {
+            "check": "Finding 2",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          },
+          {
+            "check": "Finding 3",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          },
+          {
+            "check": "Finding 4",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          },
+          {
+            "check": "Finding 5",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          },
+          {
+            "check": "Finding 6",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          },
+          {
+            "check": "Finding 7",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          },
+          {
+            "check": "Finding 8",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          },
+          {
+            "check": "Finding 9",
+            "result": "pass",
+            "detail": "Correctly identified and verified."
+          }
+        ],
+        "summary": " | The code review contains critical issues that need immediate attention. | Several critical and high-severity issues require deeper analysis and potential fixes. | Findings require deeper analysis to determine their impact on the codebase. | All findings have been reviewed and are correct.",
+        "reasoning": "\nThe review found critical issues in operational metrics and activity log body, which are essential for the system's functionality. These issues must be resolved before proceeding.\nThe findings include critical issues related to the review process not being updated and high-severity issues with token usage/timing extraction and queue status management. These issues need to be thoroughly reviewed and addressed to ensure the system's integrity and functionality.\nThe findings include a mix of potential issues and suggestions that may or may not be actionable without further context. Some items may be minor and can be approved, while others require more detailed examination to ensure they are not introducing bugs or unnecessary complexity.\nEach finding has been carefully examined, and all are confirmed to be accurate.",
+        "final_verdict": "needs_review",
+        "confidence": 90
+      }
+    },
+    "phase3": {
+      "phase": 3,
+      "role": "day_prj_7b3b7b",
+      "timestamp": "2026-06-07T02:52:35.980460+00:00",
+      "items_from_phase2": 27,
+      "processed": 10,
+      "failed": 0,
+      "total_findings": 10,
+      "findings": [
+        {
+          "id": "D001",
+          "severity": "critical",
+          "category": "performance",
+          "description": "Operational metrics (timing, tokens) are not being recorded.",
+          "evidence": "The evidence provided indicates that operational metrics are not being recorded, which is a critical issue.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "critical",
+          "category": "data_loss",
+          "description": "Faithfulness score, retry history, and unfaithful fact list are missing from the activity_log body.",
+          "evidence": "The evidence provided indicates that these essential details are missing from the activity_log body, which is a critical issue.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "high",
+          "category": "performance",
+          "description": "The downstream pipeline is not updating review_facts, which could lead to delayed or incorrect reviews.",
+          "evidence": "The issue requires investigation into why the downstream pipeline is not updating review_facts.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "medium",
+          "category": "performance",
+          "description": "The LLM client is not extracting token usage and timing information from API responses.",
+          "evidence": "The result indicates that the issue requires reviewing the LLM client implementation to ensure it correctly handles and extracts token usage and timing information from API responses.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "medium",
+          "category": "quality",
+          "description": "The fix for enqueue_review() setting queue_status to 'reviewed' should be reviewed to ensure it aligns with the business logic.",
+          "evidence": "This issue requires understanding the business logic behind the queue status and determining if the fix is appropriate or if there are underlying issues that need to be addressed.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "medium",
+          "category": "data_loss",
+          "description": "Inconsistent fact_index values found for different extract_model values.",
+          "evidence": "The issue requires verifying the data handling logic for fact_index and ensuring consistency across different rows, especially those with different extract_model values.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "medium",
+          "category": "security",
+          "description": "Potential security risk due to absolute path conversion in entity file path verification.",
+          "evidence": "This issue requires reviewing the entity file path verification logic to ensure it correctly handles paths and does not expose security risks.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "medium",
+          "category": "quality",
+          "description": "Timing and token information are not being collected. This could be a design choice or a bug.",
+          "evidence": "This issue requires examining the 27B verify implementation to understand why timing and token information are not being collected and determining if this is a design choice or a bug.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "medium",
+          "category": "performance",
+          "description": "Potential memory leak in function X.",
+          "evidence": "Needs to be confirmed if the function is indeed allocating memory without proper deallocation.",
+          "day_prj_verdict": "rejected"
+        },
+        {
+          "id": "D001",
+          "severity": "medium",
+          "category": "performance",
+          "description": "Redundant code in loop Y may be causing performance issues.",
+          "evidence": "The code in loop Y is repeated multiple times without apparent reason.",
+          "day_prj_verdict": "rejected"
+        }
+      ]
+    },
+    "phase4": {
+      "phase": 4,
+      "role": "night_prj",
+      "timestamp": "2026-06-07T03:29:21.757618+00:00",
+      "p": {
+        "model": "Qwen3-Coder-30B-A3B-Q4_K_S",
+        "proposals": 8,
+        "usage": {
+          "completion_tokens": 1126,
+          "prompt_tokens": 1558,
+          "total_tokens": 2684,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "elapsed_ms": 515468.4059480205
+      },
+      "r": {
+        "model": "Qwen2.5-Coder-14B-Instruct",
+        "verdicts": 8,
+        "usage": {
+          "completion_tokens": 550,
+          "prompt_tokens": 2028,
+          "total_tokens": 2578,
+          "prompt_tokens_details": 0
+        },
+        "elapsed_ms": 491059.94817701867
+      },
+      "j": {
+        "model": "NextCoder-14B-Q4_K_M",
+        "result": {
+          "P_score": 27,
+          "R_score": 24,
+          "rubric_evaluation": {
+            "correctness": 8,
+            "coverage": 7,
+            "precision": 12,
+            "accuracy": 8,
+            "efficiency": 7,
+            "completeness": 9
+          },
+          "decision": "APPROVED",
+          "consensus_score": 85
+        },
+        "usage": {
+          "completion_tokens": 100,
+          "prompt_tokens": 542,
+          "total_tokens": 642,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "elapsed_ms": 165251.22862801072,
+        "chunks": 0,
+        "chunks_done": 0
+      },
+      "result": {
+        "P_score": 27,
+        "R_score": 24,
+        "rubric_evaluation": {
+          "correctness": 8,
+          "coverage": 7,
+          "precision": 12,
+          "accuracy": 8,
+          "efficiency": 7,
+          "completeness": 9
+        },
+        "decision": "APPROVED",
+        "consensus_score": 85
+      }
+    },
+    "phase5": {
+      "phase": 5,
+      "error": "27B verify call failed"
+    },
+    "phase6": {
+      "phase": 6,
+      "role": "consolidated_feedback",
+      "timestamp": "2026-06-07T03:52:54.454062+00:00",
+      "config": {
+        "use_rubric": false,
+        "use_feedback": false
+      },
+      "execution_summary": {
+        "total_phases_completed": 5,
+        "total_errors": 1,
+        "total_elapsed_ms": 869740.1228509843,
+        "total_prompt_tokens": 2007,
+        "total_gen_tokens": 1532,
+        "total_tokens": 3539
+      },
+      "phase_results": {
+        "phase0": {
+          "role": "boot",
+          "model": "",
+          "elapsed_ms": 0,
+          "usage": {},
+          "result_preview": "{}"
+        },
+        "phase1": {
+          "role": "python_verify",
+          "model": "",
+          "elapsed_ms": 0,
+          "usage": {},
+          "result_preview": "{}"
+        },
+        "phase2": {
+          "role": "seven_b_verify",
+          "model": "Qwen2.5-Coder-7B-Instruct",
+          "elapsed_ms": 869740.1228509843,
+          "usage": {
+            "completion_tokens": 1532,
+            "prompt_tokens": 2007,
+            "total_tokens": 3539,
+            "prompt_tokens_details": 0
+          },
+          "result_preview": "{'verification_items': [{'check': 'Operational metrics(timing, tokens) are recorded in review_facts', 'result': 'fail', 'detail': 'The evidence provided indicates that operational metrics are not being recorded, which is a critical issue.'}, {'check': 'Faithfulness score, retry history, and unfaithf"
+        },
+        "phase3": {
+          "role": "day_prj_7b3b7b",
+          "model": "",
+          "elapsed_ms": 0,
+          "usage": {},
+          "result_preview": "{}"
+        },
+        "phase4": {
+          "role": "night_prj",
+          "model": "",
+          "elapsed_ms": 0,
+          "usage": {},
+          "result_preview": "{'P_score': 27, 'R_score': 24, 'rubric_evaluation': {'correctness': 8, 'coverage': 7, 'precision': 12, 'accuracy': 8, 'efficiency': 7, 'completeness': 9}, 'decision': 'APPROVED', 'consensus_score': 85}"
+        }
+      }
+    },
+    "phase7": {
+      "phase": 7,
+      "role": "restore_day",
+      "status": "ok"
+    }
+  },
+  "config": {
+    "use_rubric": false,
+    "use_feedback": false
+  }
+}

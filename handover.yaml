@@ -1,83 +1,30 @@
 last_checkpoint:
-  time: '2026-06-06T06:35:00.000000+00:00'
-  summary: |
-    Session 21 — CLAUDE.md SSoT 통합 + 레거시 정리 + @~/ 버그 수정.
-    모든 CLAUDE.md 진입점이 /home/opc/CLAUDE.md로 수렴. 누락 규칙 7건 마이그레이션.
-    GitHub #8765 (@~/ tilde expansion bug) 발견 → 절대경로로 우회.
-    settings.json COMPACT_WINDOW 불일치 해소.
-  total_files: 7개 수정 + 1개 신규
+  time: '2026-06-25T03:00:13.161871+00:00'
+  summary: no files
+  total_files: 0
   recent_files:
-  - /home/opc/llm-common-rule.md (수정) — 누락 규칙 7건 추가 + Communication 재정비
-  - /home/opc/llm-agent-rule.md (수정) — Session Start에 CLAUDE.yaml 진입점 추가
-  - /home/opc/.claude/CLAUDE.md (신규) — @/home/opc/CLAUDE.md 포인터 (global fallback)
-  - /opt/projects/server/CLAUDE.md (수정) — 레거시 내용 제거, 포인터로 교체
-  - /opt/projects/CLAUDE.md (수정) — 레거시 내용 제거, 포인터로 교체
-  - /home/opc/.claude/settings.json (수정) — COMPACT_WINDOW 200000→128000
-  - /opt/projects/server/handover.yaml (수정) — 세션 상태 업데이트
-  - /opt/projects/server/docs/tasks.yaml (수정) — task 완료 상태
-  task: 'CLAUDE.md SSoT 통합 완료. 다음: 5-phase 실험 전체 실행 (저녁 KST 20:00+)'
-current_context:
-  in_progress: 없음 — CLAUDE.md 통합 완료
-  day_mode: 'System Mode=day. Pod A=day_r(:8082). Pod B=day_p/day_j/day_mcp(:8080)'
-  claude_md_ssot:
-  - 'SSoT: /home/opc/CLAUDE.md → @./infrastructure.md + @./llm-common-rule.md + @./llm-agent-rule.md'
-  - 'Global fallback: ~/.claude/CLAUDE.md → @/home/opc/CLAUDE.md (절대경로)'
-  - 'Repo pointers: /opt/projects/server/CLAUDE.md + /opt/projects/CLAUDE.md → @/home/opc/CLAUDE.md'
-  - 'Legacy server/CLAUDE.md 302B → 17B (pointer). Legacy projects/CLAUDE.md 17lines → 1line (pointer)'
-  - '@~/ 버그: GitHub #8765 — tilde expansion silently fails. 절대경로 @/home/opc/...로 우회'
-  migrated_rules:
-  - 'Python: NEVER utcnow(), bare except:, Tenacity → llm-common-rule.md:33'
-  - 'No import-only files → llm-common-rule.md:40'
-  - 'Token efficiency: grep/glob, Edit vs Write → llm-common-rule.md:41'
-  - 'CAUTION: Over-engineering → llm-common-rule.md:43'
-  - 'Never print secrets → llm-common-rule.md:25'
-  - 'Keep responses short → llm-common-rule.md:21'
-  - 'Read CLAUDE.yaml as entry point → llm-agent-rule.md:4'
-  - 'ALL LLM prompt text MUST be English → llm-common-rule.md:23'
-  env_fix:
-  - 'CLAUDE_CODE_AUTO_COMPACT_WINDOW: settings.json(200000→128000) = bashrc.d(128000) = PROXY_WINDOW(128000)'
-  - 'compact trigger: 128000 * 85% = 108800 tokens — 프록시 거부 전 발동 보장'
-next_steps:
-  - '[P0] 5-phase 실험 전체 실행 — 저녁 KST 20:00+ 예정'
-  - '[P1] MCP 모델 최적화 테스트 진행 중 (Pod B MODE=test-7b)'
-  - '[P1] Dual-pod sequential scheduling (pipeline refactoring, 55% contention)'
+    data: []
+    docs: []
+    config: []
+    source: []
+    generated: []
+  git: {}
+  task: null
 decisions:
-  - '[2026-06-06] CLAUDE.md SSoT = /home/opc/CLAUDE.md. 모든 repo/project CLAUDE.md는 포인터로 전환.'
-  - '[2026-06-06] llm-common-rule.md = 모든 공통 규칙 (Claude + Aider + Cloud AI). llm-agent-rule.md = Claude Code + Cloud AI 전용.'
-  - '[2026-06-06] infrastructure.md = CLAUDE.yaml auto-generated에서 수동 유지보수로 전환. Entry Points 섹션에 CLAUDE.yaml 참조 유지.'
-  - '[2026-06-06] @/absolute/path 사용 결정 — @~/ tilde 확장이 GitHub #8765로 확인된 버그. 절대경로가 안전.'
-  - '[2026-06-06] COMPACT_WINDOW = PROXY_CONTEXT_WINDOW = 128000. 이전 200000은 프록시 거부 시점보다 늦게 발동하는 버그.'
-  - '[2026-06-06] 코드베이스 전면 split("|") 감사 완료. 양방향 검증으로 A/B/C 3군 분류 후 A군(5개, 변환불필요) 제외, B군(6개, 텍스트컬럼 위험)만 변환'
-  - '[2026-06-06] review_facts.evidence는 TEXT 컬럼(JSONB 아님) — psql_json에서도 string으로 전달되므로 json.loads() 유지 필요'
-  - '[2026-06-06] review_consumer.py: regexp_replace(body, "\|", " ")로 body 내 pipe를 공백대체하던 우회코드 제거 — psql_json에서 row_to_json이 자체 JSON 생성하므로 불필요'
-  - '[2026-06-06] worklog_generator.py: regexp_replace(user_turn/text, "\|", " ") 우회코드 제거 — 동일한 이유'
-  - '[2026-06-06] Session 20 검증: psql_json()은 markdown table(파이프 多)에서도 100% 정확. row_to_json이 PostgreSQL 내부에서 JSON escaping 처리.'
+- '{''id'': ''nd01-01'', ''detail'': ''Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port
+  8000)가 port 8000 점유 → pasta 사망 → Pod A :8080+8000 port forwarding 차단. disabled 상태였으나 존재만으로 systemctl --user start 가능. init.scope
+  (systemd user instance startup)에서 trigger 확인됨. watchdog/timer/의존성 아님.''}'
+- '{''id'': ''nd01-02'', ''detail'': ''Legacy MCP 서비스 영구 제거: devforge-mcp.service → .service.disabled rename → rm 삭제. 재발 방지
+  완료.''}'
+- '{''id'': ''nd01-03'', ''detail'': "이전 cycle (Jun 23) 17 extracted → 49 verified turns는 NLI 미수행 상태로 force-pass. 49 day_verify
+  facts 모두 nli_llm=NULL, verdict=pending. source=''day_verify''는 reranker_recover.py 기본 범위 아닐 수 있어 수동 처리 또는 SQL UPDATE 필요."}'
+- '{''id'': ''nd01-04'', ''detail'': ''Slack 봇 crash (ModuleNotFoundError: lib.llm_client)와 MCP 기동은 동시성 이벤트일 뿐 인과관계 없음. slack.py
+  내 MCP 호출 로직 없음.''}'
 known_issues:
-  - '5-phase 실험 미실행 — 저녁 KST 20:00+ 예정'
-  - '7B Q8_0 ARM 4코어 decode 2.85 t/s (3B+7B concurrent Config B)'
-  - 'Pod A+B decode contention: Config B로 9% 개선했으나 solo 대비 13% 저하'
-  - '27B Q4_K_M(16GB) on 22GB RAM — OOM 리스크. recover_and_restart() 3단계 에스컬레이션'
-  - 'Pod B MODE=test-7b — MCP 최적화 테스트 중이므로 pipeline 수정 시 주의'
-  - 'SYS_J(658tok) + RUBRIC(247tok) = 905tok'
-  - '@~/ tilde expansion bug (GitHub #8765) — workaround 적용 완료 (절대경로). 향후 Claude Code 업데이트 시 재확인 필요.'
-completed_log:
-  - '[Session 21] CLAUDE.md SSoT 통합 완료. 3개 레거시 파일 포인터화, 누락 규칙 7건 마이그레이션, @~/ 버그 수정, COMPACT_WINDOW 불일치 해소.'
-  - '[Session 20] split("|") 변환 6개 파일 양방향 검증 완료. psql_json pipe-safety 입증(98%→0% 파손률). DB schema/Python import/CLI 전 항목 통과.'
-  - '[Session 19] 실험 레지스트리 Step 2-4 구현 완료. bench_llm.py --register, CLI experiment, exp-latest alias'
-  - '[2026-06-06] bench_llm.py 신규 생성: benchmark runner + --register (dollar-quoting $json$), --experiment-id/--category/--verdict/--rationale 지원'
-  - '[2026-06-06] cli.py experiment list/compare/active/adopt 서브커맨드 추가 (psql_json 기반)'
-  - '[2026-06-06] cli.py cmd_activity_recent NameError 버그 수정 — 함수 정의 복원'
-  - '[2026-06-06] ~/.bashrc: exp-latest() + exp-active() 함수 등록'
-  - '[Session 18] 코드베이스 전면 split("|") 파싱 감사 및 변환 — 6개 파일 psql_json 교체, 2개 regexp_replace 우회코드 제거'
-  - '[2026-06-06] 양방향 검증: 모든 split("|") 사이트 23곳 분석, A군(변환불필요 5개파일) 제외, B군(텍스트위험 6개파일) 변환'
-  - '[2026-06-06] activity_summarizer.py: fetch_raw_events() + retry_parse_failed() psql_json 교체 (+24/-31)'
-  - '[2026-06-06] review_consumer.py: fetch_queue() regexp_replace 제거 + psql_json 교체 (+1/-9) — body 데이터 정확도 향상'
-  - '[2026-06-06] lib/mcp_consumer.py: fetch_unprocessed_mcp() psql_json 교체 (+6/-14)'
-  - '[2026-06-06] worklog_generator.py: fetch_unlogged_turns() regexp_replace 제거 + psql_json 교체 (+3/-12) — turn 텍스트 원본 보존'
-  - '[2026-06-06] session_context.py: DB source + worklog 2곳 psql_json 교체 (+4/-6)'
-  - '[2026-06-06] link_turns.py: match_turns + orphan/empty/no_agent 4곳 psql_json 교체 (+14/-10)'
-  - '[Session 17] 실험 레지스트리 계획 + DB 테이블 구축 완료'
-  - '[Session 16] extract/classify/prj_cycle 파싱 버그 수정 — lib/db.py psql_json() 도입'
-  - '[Session 15] ARM LLM 최적화 Phase 0-5 완료'
-  - '[Session 14] P0/P1 전 항목 적용 완료 (DLQ/JSON Schema/TokenBudget/events)'
-  - '[Session 13] 모든 물리 모델명 제거 + role 기반 추상화'
+- '{''id'': ''nki01-01'', ''detail'': "이전 cycle 49 day_verify facts NLI/reranker 없이 force-pass. reranker_recover.py 기본 조건에
+  source=''day_verify'' 포함 여부 확인 필요. 미포함 시 SQL 일괄 UPDATE 필요."}'
+- '{''id'': ''nki01-02'', ''detail'': ''cli.py status --json models.pod-a = ["?", "?", "?"]. Pod A /v1/models 응답 문제 지속. Pod
+  A 기능상 정상 작동 중.''}'
+- '{''id'': ''nki01-03'', ''detail'': ''turns 테이블에 updated_at 컬럼 없음. pipeline_state 변경 추적 어려움. (created_at만 존재)''}'
+- '{''id'': ''nki01-04'', ''detail'': ''CONTRADICTION=0 미해결. 신규 GSAR COMPLEMENTARY 4-way NLI 첫 결과 확인 후 재평가 필요.''}'
+completed_log: []

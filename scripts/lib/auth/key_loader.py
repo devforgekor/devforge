@@ -1,6 +1,9 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Unified API key loader — loads encrypted or plaintext keys from secrets.env.
 
-Used by: gemini_rotate.py, gemini_proxy.py, search_manager.py.
+Used by: gemini_rotate.py, proxies/gemini.py, search_manager.py.
 """
 import os
 import sys
@@ -39,7 +42,7 @@ def load_api_keys(provider_prefix: str = "GEMINI") -> list:
         return []
 
     # Import here to avoid circular dependency — decrypt lives in same package
-    from lib.crypto import decrypt_data
+    from lib.auth.api_key_cipher import decrypt_data
 
     keys = []
     for item in keys_str.split(","):
@@ -63,3 +66,4 @@ def load_api_keys(provider_prefix: str = "GEMINI") -> list:
             keys.append((f"key-{len(keys)}", plain))
 
     return keys
+

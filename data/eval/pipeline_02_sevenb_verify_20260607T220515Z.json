@@ -1,0 +1,19 @@
+{
+  "phase": 2,
+  "role": "seven_b_verify",
+  "model": "reviewer model-Instruct",
+  "port": 8080,
+  "timestamp": "2026-06-07T22:05:15.304115+00:00",
+  "usage": {},
+  "elapsed_ms": 0,
+  "chunks": 7,
+  "chunks_done": 0,
+  "result": {
+    "verification_items": [],
+    "summary": "",
+    "reasoning": "",
+    "final_verdict": "unknown",
+    "confidence": 0
+  },
+  "category_summary": ""
+}

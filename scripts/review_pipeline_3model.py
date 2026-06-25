@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""3-Model Review Pipeline — Nightly Code Review (llama.cpp).
+# Status: production
+# Path: orchestrator.py
+"""3-Model Review Pipeline — Code Review Pipeline.
 
 Adversarial 3-stage (P→R→J) pipeline with Scoring Judge:
 
-  Step 1  Deep Review     Pod A R1-8B (:8083)   Bug/security/edge-case discovery
-  Step 2  Reflection      Pod B Qwen7B (:8080)  ACCEPT/REJECT per finding
-  Step 3  Judgment        Pod B Selene (:8081)  Scoring Judge — P_score/R_score/gap/veto
-  Step 4  Diff Gen        Pod B Qwen7B (:8080)  Unified diff (gap≤10 → auto; gap>10 → skip)
+  Step 1  Proposal        Pod B :8083   Bug/security/edge-case discovery (reviewer 14B)
+  Step 2  Reflection      Pod B :8083   ACCEPT/REJECT per finding
+  Step 3  Judgment        Pod B :8083   Scoring Judge — P_score/R_score/gap/veto
+  Step 4  Diff Gen        Pod B :8083   Unified diff (gap≤10 → auto; gap>10 → skip)
 
 Judge gating:
   gap ≤ 5  → diff_generation (high confidence consensus)
@@ -15,10 +17,10 @@ Judge gating:
   P_score==0 | R_score==0 | decision=="REJECT" → veto → skip diff
 
 Model assignment (P→R→J pipeline):
-  Step 1 (Deep Review)   Pod A :8083  R1-8B
-  Step 2 (Reflection)    Pod B :8080  Qwen7B
-  Step 3 (Judgment)      Pod B :8081  Selene (swap)
-  Step 4 (Diff Gen)      Pod B :8080  Qwen7B
+  Step 1 (Proposal)       Pod B :8083
+  Step 2 (Reflection)     Pod B :8083
+  Step 3 (Judgment)       Pod B :8083 (swap)
+  Step 4 (Diff Gen)       Pod B :8083
 
 Usage:
   python3 review_pipeline_3model.py --task-id T01       # single task
@@ -32,22 +34,59 @@ import json
 import os
 import subprocess
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from review_pipeline_steps import (  # noqa: E402
-    QWEN7B_PORT,
-    SELENE_PORT,
+from lib.llm_client import call_llm_json  # noqa: E402
+from pipelines.review import (  # noqa: E402
+    REVIEWER_PORT,
+    JUDGE_PORT,
     _poll_health,
-    run_deep_review,
     run_diff,
     run_judgment,
     run_reflection,
 )
 
-# ── Pod switching ──────────────────────────────────────────────────────────
+SYSTEM_PROPOSAL = """\
+You are a code review PROPOSER. Analyze the given code and find bugs,
+security vulnerabilities, performance issues, and code quality problems.
+
+For each finding, provide:
+  id: unique identifier (F01, F02, ...)
+  severity: "critical" | "high" | "medium" | "low" | "info"
+  category: "bug" | "security" | "performance" | "style" | "maintainability"
+  file: the target file path
+  line: approximate line number or "N/A"
+  title: short, actionable title
+  description: 1-2 sentence explanation
+  suggestion: concrete fix suggestion
+
+Output STRICT JSON:
+{"findings": [{"id": "F01", "severity": "...", "category": "...",
+               "file": "...", "line": "N/A", "title": "...",
+               "description": "...", "suggestion": "..."}]}
+Do NOT include extra text or markdown."""
+
+
+def _run_proposal(code: str, label: str) -> Dict[str, Any]:
+    """Step 1: Reviewer on :8083 generates findings."""
+    print(f"[step1] Proposal on :{REVIEWER_PORT}")
+    if not _poll_health(REVIEWER_PORT, timeout=30):
+        raise RuntimeError(f"reviewer not healthy on :{REVIEWER_PORT}")
+    raw = call_llm_json(
+        [{"role": "system", "content": SYSTEM_PROPOSAL},
+         {"role": "user", "content": f"Review this code:\n```\n{code}\n```"}],
+        model="reviewer",
+        max_tokens=2048,
+        timeout=600,
+    )
+    result = json.loads(raw) if isinstance(raw, str) else raw
+    findings = result.get("findings", [])
+    print(f"[step1] {len(findings)} findings generated")
+    return result
+
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 
 
@@ -59,15 +98,14 @@ def _swap_pod_b(mode: str, timeout: int = 300) -> bool:
         f.write(f"MODE={mode}")
     os.replace(tmp, MODE_FILE_B)
     subprocess.run(
-        ["systemctl", "--user", "restart", "container-devforge-swap.service"],
+        ["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
         capture_output=True,
         timeout=30,
     )
-    check_port = SELENE_PORT if mode == "review-se" else QWEN7B_PORT
+    check_port = JUDGE_PORT if mode == "review-j" else REVIEWER_PORT
     return _poll_health(check_port, timeout=timeout)
 
 
-# ── Orchestrator ───────────────────────────────────────────────────────────
 def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, Any]:
     """Run the complete 4-step P→R→J pipeline. swap_fn(step_name) handles model swaps.
 
@@ -77,8 +115,8 @@ def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, 
     print(f"Review Pipeline: {task_label}")
     print(f"{'=' * 60}")
 
-    # Step 1: Deep Review (R1-8B on Pod A :8083)
-    step1 = run_deep_review(code, task_label)
+    # Step 1: Proposal (reviewer :8083)
+    step1 = _run_proposal(code, task_label)
     findings = step1.get("findings", [])
     if not findings:
         print("[pipeline] No findings — review complete")
@@ -90,19 +128,18 @@ def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, 
             "total_findings": 0,
         }
 
-    # Determine reviewer's accepted findings (R1 reports all as findings;
-    # we treat all as "reviewer accepted" since R1's role is to FIND issues)
+    # All Proposer findings forwarded to reflector for review
     reviewer_accepted = [f["id"] for f in findings]
 
-    # Step 2: Reflection (Qwen7B on Pod B :8080)
+    # Step 2: Reflection (reflector :8082)
     if swap_fn:
-        swap_fn("review-qw")
+        swap_fn("review-r")
     step2 = run_reflection(code, findings)
     reflector_verdicts = step2.get("verdicts", [])
 
-    # Step 3: Judgment (Selene on Pod B :8081) — Scoring Judge
+    # Step 3: Judgment (judge :8083)
     if swap_fn:
-        swap_fn("review-se")
+        swap_fn("review-j")
     step3 = run_judgment(code, findings, reviewer_accepted, reflector_verdicts)
 
     # ── gap-based gating ────────────────────────────────────────────
@@ -123,7 +160,7 @@ def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, 
 
     if next_state == "diff_generation" and not is_veto and approved_findings:
         if swap_fn:
-            swap_fn("review-qw")
+            swap_fn("review-r")
         diff_text = run_diff(code, approved_findings)
     elif is_veto:
         print("[pipeline] Veto triggered — skipping diff generation")
@@ -198,8 +235,8 @@ def _run_orchestrated() -> Dict[str, Any]:
 
         label = f"Task {task_id}"
 
-        # Step 1: R1-8B deep review (Pod A :8083)
-        step1 = run_deep_review(code, label)
+        # Step 1: Proposal (reviewer :8083)
+        step1 = _run_proposal(code, label)
         findings = step1.get("findings", [])
         if not findings:
             results.append({"task_id": task_id, "findings": 0, "diff": ""})
@@ -207,13 +244,13 @@ def _run_orchestrated() -> Dict[str, Any]:
 
         reviewer_accepted = [f["id"] for f in findings]
 
-        # Step 2: Qwen7B reflection (Pod B :8080, loaded as review-qw)
+        # Step 2: Reflection (reflector :8082)
         step2 = run_reflection(code, findings)
         reflector_verdicts = step2.get("verdicts", [])
 
-        # Step 3: Swap to Selene, then judge (Scoring Judge)
-        if not _swap_pod_b("review-se"):
-            raise RuntimeError("Failed to load Selene on Pod B")
+        # Step 3: Judge (judge :8083) — Pod B swap to review-j mode
+        if not _swap_pod_b("review-j"):
+            raise RuntimeError("Failed to load Scoring Judge on Pod B")
         step3 = run_judgment(code, findings, reviewer_accepted, reflector_verdicts)
 
         # ── gap-based gating ────────────────────────────────────────
@@ -229,8 +266,8 @@ def _run_orchestrated() -> Dict[str, Any]:
         approved_findings = [f for f in findings if f["id"] in approved_ids]
 
         if next_state == "diff_generation" and not is_veto and approved_findings:
-            if not _swap_pod_b("review-qw"):
-                raise RuntimeError("Failed to restore Qwen7B on Pod B")
+            if not _swap_pod_b("review-r"):
+                raise RuntimeError("Failed to restore reflector on Pod B")
             diff_text = run_diff(code, approved_findings)
         else:
             if is_veto:
@@ -239,8 +276,8 @@ def _run_orchestrated() -> Dict[str, Any]:
                 print(f"[orchestrate] {task_id}: gap {gap} > threshold — manual review, skipping diff")
             else:
                 print(f"[orchestrate] {task_id}: No approved findings — skipping diff")
-            # Restore Pod B to Qwen7B for clean state (next iteration swaps again if needed)
-            _swap_pod_b("review-qw")
+            # Restore Pod B to reflector for clean state (next iteration swaps again if needed)
+            _swap_pod_b("review-r")
 
         confidence = len(approved_ids) / len(findings) if findings else 1.0
         results.append(
@@ -267,7 +304,6 @@ def _run_orchestrated() -> Dict[str, Any]:
     return {"results": results, "total": len(results)}
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────
 def main() -> None:
     parser = argparse.ArgumentParser(description="3-Model Code Review Pipeline")
     parser.add_argument("--code", help="Code to review (or file path)")
@@ -304,7 +340,7 @@ def main() -> None:
                 code = f.read()
 
         if args.step == 1:
-            result = run_deep_review(code, args.task_label)
+            result = _run_proposal(code, args.task_label)
         elif args.step == 2:
             result = run_reflection(code, data.get("findings", []))
         elif args.step == 3:
@@ -326,7 +362,7 @@ def main() -> None:
         if not code:
             parser.error("--code or --code-file required for full pipeline")
 
-        # In full-pipeline mode, mode switching is handled by nightly_batch.sh.
+        # In full-pipeline mode, mode switching is handled by night_cycle.sh.
         # The model-swap callback writes MODE= to the Pod B mode file and
         # restarts the container.
         def _noop_swap(_step: str) -> None:

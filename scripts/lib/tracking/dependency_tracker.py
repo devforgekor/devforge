@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Reference tracking — external project watch + internal code observation.
 
 Two sources, one output:
@@ -144,3 +147,4 @@ def collect_references() -> dict:
 
 # Backward-compat alias
 collect = collect_references
+

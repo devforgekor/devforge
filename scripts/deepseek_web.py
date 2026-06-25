@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — library
 """deepseek_web.py — DeepSeek web chat CLI via Playwright.
 
 This is an isolated experimental tool for using the DeepSeek web UI from a

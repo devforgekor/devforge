@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """CLAUDE.yaml auto-update — sync storage/services/network from live data."""
 import re
 from pathlib import Path
@@ -104,3 +107,4 @@ def update_claude_yaml(structural, claude_file: Path):
     claude["network"] = old_net
 
     save_yaml(claude_file, claude)
+

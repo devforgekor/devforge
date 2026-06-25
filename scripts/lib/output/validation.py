@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Validation — compare CLAUDE.yaml + blueprint.yaml claims against live data."""
 import re
 from pathlib import Path
@@ -104,3 +107,4 @@ def run_validation(structural, claude_file: Path, server_dir: Path):
 
     status = "fail" if mismatches else "pass"
     return status, mismatches
+

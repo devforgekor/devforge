@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: infra — Caddy/monitoring healthcheck
 import urllib.request
 import sys
 
@@ -8,3 +11,4 @@ try:
 except Exception:
     pass
 sys.exit(1)
+

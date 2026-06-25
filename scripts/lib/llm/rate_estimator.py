@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Rate estimators for LLM inference — token-count-based and timings-based.
 
 PromptCompletionRateEstimator: EMA + median-based, takes token counts + elapsed.
@@ -108,3 +111,4 @@ class TimingsBasedRateEstimator:
             "total_gen": self._total_gen,
             "total_elapsed_s": round(self._total_elapsed / 1000, 1),
         }
+

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Phase auto-tracker — detects completed items from live system state.
 
 SLOC-exempt: 453 lines — single cohesive phase tracker (scan phases.md → evaluate
@@ -21,7 +24,7 @@ from typing import Callable, Optional
 import yaml
 
 from lib.db import db_table_exists, db_row_exists
-from lib.sys_checks import svc_active, svc_enabled, timer_active, container_running, file_exists
+from lib.infra.health_checks import svc_active, svc_enabled, timer_active, container_running, file_exists
 
 REF_ROOT = Path("/opt/projects/server")
 NOW = lambda: datetime.now(timezone.utc).isoformat()
@@ -47,9 +50,9 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
             and file_exists("/usr/local/bin/test_dump_restore.sh")
         ),
         "worklog_entries": lambda: db_table_exists("worklog_entries"),
-        "tasks.yaml": lambda: file_exists("/opt/projects/server/docs/tasks.yaml"),
+        "tasks_db": lambda: db_table_exists("tasks"),
         "auto_commit_guard": lambda: file_exists("/opt/projects/server/scripts/auto_commit_guard.py"),
-        "session_context": lambda: file_exists("/opt/projects/server/scripts/session_context.py"),
+        "session_context": lambda: file_exists("/opt/projects/server/scripts/hooks/session_context.py"),
         "collect_turns": lambda: svc_active("devforge-turn-watcher"),
         "link_turns": lambda: file_exists("/opt/projects/server/scripts/link_turns.py"),
         "activity_log": lambda: db_table_exists("activity_log"),
@@ -57,16 +60,16 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
 
     # Phase 1.5: LLM Inference Infrastructure
     "1.5": {
-        "2-Container": lambda: container_running("devforge-swap"),
+        "2-Container": lambda: container_running("devforge-pod-b"),
         "Podman A": lambda: file_exists(
-            "/home/opc/.config/containers/systemd/container-devforge-qwen.container"
+            "/home/opc/.config/containers/systemd/container-devforge-pod-a.container"
         ),
         "Podman B": lambda: file_exists(
-            "/home/opc/.config/containers/systemd/container-devforge-swap.container"
+            "/home/opc/.config/containers/systemd/container-devforge-pod-b.container"
         ),
         "Mode switching": lambda: file_exists("/opt/ai_data/scripts/current-mode-pod-b.env"),
-        "code_mod_pipeline": lambda: file_exists("/opt/projects/server/scripts/code_mod_pipeline.py"),
-        "prompt ablation": lambda: file_exists("/opt/projects/server/scripts/code_mod_pipeline.py"),
+        "code_mod_pipeline": lambda: file_exists("/opt/projects/server/scripts/pipelines/code_mod.py"),
+        "prompt ablation": lambda: file_exists("/opt/projects/server/scripts/pipelines/code_mod.py"),
         "review_facts": lambda: db_table_exists("review_facts"),
         "Reference tracking": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
         "lib/refs": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
@@ -104,8 +107,8 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
             db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%semantic%'")
             or file_exists("/opt/projects/server/scripts/embed_turns.py")
         ),
-        "MCP mem_search": lambda: (
-            db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%mcp%vector%'")
+        "Enrich mem_search": lambda: (
+            db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%mcp%vector%' OR title ILIKE '%enrich%vector%'")
         ),
         "vector column": lambda: (
             db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%vector%'")
@@ -433,3 +436,4 @@ def auto_update_phase_documents() -> dict:
 # Backward-compat aliases
 collect = collect_phase_summary
 auto_update = auto_update_phase_documents
+

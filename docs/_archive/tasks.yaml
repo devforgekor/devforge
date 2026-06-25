@@ -1,0 +1,166 @@
+# Language: English only — machine-readable per llm-common-rule.md §Communication
+tasks:
+- id: 5phase-experiment
+  status: deferred
+  priority: P0
+  title: 2x2+baseline 5-Phase Experiment Execution
+  description: 'Phase 0 (baseline:S✗R✗F✗) → 1 (structural:R✗F✗) → 2 (structural+R:F✗) → 3 (structural+F:R✗) → 4
+    (structural+R+F). 5 experiment snapshots ready. Consider P-R-J model replacement too.
+
+    '
+  notes:
+  - DEFERRED 2026-06-06 — designed for old 7B+27B architecture. night_verify model was 32B→27B,
+    night_proposer remains Qwen30B. Re-evaluate if transform_prj.py experiments are still relevant.
+  - Slowness causes (7B ~2.3 t/s, 27B OOM risk) — analyze & optimize before execution
+  - Evening time slot (KST 20:00+) execution planned
+  - MCP model 7B Q8_0 ~31s speed bottleneck — consider model/template optimization
+- id: context-bloat-control
+  status: completed
+  priority: P0
+  title: Context Bloat Control — TokenBudget Priority Allocation
+  description: 'TokenBudget class implementation: phase budgets (day_verify=1500, prj_p=2000, prj_r=1200,
+    prj_j=1200, handoff=1500, final_verify=2000 tok) + priority 10-0 based allocation. build_context()
+    full rewrite: 10 priority sections (findings: critical=9, high=7, medium=5, low=3, partial/fail=1-2).
+    Low-priority sections auto-dropped on budget overflow + count-only fallback. 48-finding test verified.
+
+    '
+- id: dlq-schema-validation
+  status: completed
+  priority: P0
+  title: DLQ + JSON Schema Validation + events.jsonl
+  description: 'DLQ: data/dlq/{stage}.jsonl records parse failures (ts+raw_preview+raw_sha256).
+    JSON Schema: PRJ_RESULT_SCHEMA/VERIFY_SCHEMA/HANDOFF_SCHEMA (required keys, type
+    checking, additionalProperties: False). events.jsonl: data/experiment/events/{tag}.jsonl for
+    phase/prj_rotation events. handoff schema_version: 1 + SHA-256 checksum.
+
+    '
+- id: p1-post-refactor
+  status: completed
+  priority: P1
+  title: 'P1 Follow-up: TokenBudget soft limit + enum validation + DLQ checkpoint + events extension'
+  description: '4 P1 items applied (verification passed): 1) TokenBudget soft_limit = limit * 0.8 (truncation
+    starts at 80%, LLM response headroom preserved) 2) JSON Schema enum validation: final_verdict (PASS/FAIL/NEEDS_REVIEW/ESCALATE),
+    decision (APPROVED/REJECT) 3) DLQ checkpoint: checkpoint field added to save_dlq() for
+    resubmission; depth monitoring logging 4) events.jsonl event_id (uuid) + event_type extension, backward
+    compatible. tokenmesh: ARM install succeeded but only 5-6% savings on already-optimized SYS prompts → skip
+
+    '
+- id: llm-optimization
+  status: completed
+  priority: P0
+  title: ARM Neoverse-N1 LLM Inference Optimization (Phase 0-5)
+  description: 'All phases complete. prebuilt ghcr.io/llama.cpp (KleidiAI) is optimal. Runtime parameter
+    changes, Q4_K_M, custom build — all showed no improvement. Key finding: Pod A+B concurrent execution causes 55% performance drop (memory bandwidth).
+    See docs/optimization-summary.yaml.'
+  notes:
+  - decode 3.27 t/s (Q8_0) = maximum, memory bandwidth saturated
+  - Pod A+B concurrent: 3.27→1.39 t/s (55% drop)
+  - THP=madvise applied, NUMA balancing=0 (existing)
+  - 'Phase 0: bench_llm.py created + baseline measurement'
+  - 'Phase 1: MLOCK, CACHE_TYPE, FLASH_ATTN, UBATCH_SIZE — all no effect'
+  - 'Phase 2: Q4_K_M (4.4GB) → 15.9% slower than Q8_0 (no SVE)'
+  - 'Phase 3: THP=madvise confirmed, NUMA=0, swappiness=10 maintained'
+  - 'Phase 4: custom build (-mcpu=neoverse-n1, no KleidiAI) → 33.6% slower'
+  - 'Phase 5: Pod A 3B — existing config optimal (no changes needed)'
+- id: concurrent-3b7b-optimization
+  status: completed
+  priority: P0
+  title: Day Mode 3B+7B Concurrent Optimization
+  description: '4 config experiments (CPU pinning + thread reduction). Config B adopted: Pod A core0 t1,
+    Pod B cores1-3 t3. Pod B decode 2.85 t/s (+9%), Pod A 3.08 t/s (-21%). Day mode
+    MCP(7B) priority policy.'
+  notes:
+  - 'Config A (pin only): 2.59 t/s — pin alone no effect (bandwidth bound)'
+  - 'Config B (pin + thread): Pod B **2.85 t/s** (+9%) — optimal'
+  - 'Config C (2+2 balanced): Pod B 2.26 t/s — 2 threads insufficient for 7B'
+  - 'Config D (no pin): Pod B 1.86 t/s — unpinned worst case'
+  - Pod A threads=1 pinned to core 0, Pod B threads=3 pinned to cores 1-3
+  - taskset wrapper added to entrypoint (CPUS env var)
+  - See docs/optimization-concurrent.yaml
+- id: mcp-model-optimization
+  status: deleted
+  priority: P1
+  title: MCP Extract Model Optimization (Speed / Parsing)
+  description: '7B Q8_0 MCP ~31s speed bottleneck. 4B model rejected — 3B Q8_0 proven optimal on ARM (Q4_K_M 15.9% slower without SVE). Parse_failed counts and JSON format accuracy issues remain open.'
+  notes:
+  - 'Cancelled: user decision "no MCP model change" (Session 23)'
+- id: j-model-replacement
+  status: completed
+  priority: P1
+  title: P-R-J J(Selene) Replacement Model Selection
+  description: 'Selene JSON output malformed (feedback loop blocked). Already switched night_judge to Codestral-22B
+    Q4_K_M. J(7B Q8_0) kept as day_j. All P-R-J abstracted behind role keys — physical model names removed
+    from code.
+
+    '
+- id: memory-reclaim-recovery
+  status: completed
+  priority: P0
+  title: Memory Reclamation + Autonomous Recovery Logic
+  description: 'kill_all() → _reclaim_memory() added (sync+15s wait). recover_and_restart(attempt):
+    3-stage escalation (mild→aggressive→minimal). Applied to experiment runner and prj_cycle.py.
+
+    '
+- id: transform-refactor
+  status: completed
+  priority: P1
+  title: transform_prj.py Independent Flag Refactoring
+  description: 'Old --phase N mode → combinable --structural / --rubric-off/on / --feedback-off/on
+    flags. Phase 0-4 snapshots prepared. Bug fix: \n vs actual newline character mismatch corrected.
+
+    '
+- id: model-name-abstraction
+  status: completed
+  priority: P0
+  title: Remove All Physical Model Names + Role-Based Abstraction
+  description: 'Role aliases integrated into MODEL_REGISTRY. resolve_model() for conversion. ROLE_MAP dict
+    removed. All pipelines: physical model names (7B/27B/30B/Codestral/Selene) replaced with role keys (day_extract/day_mcp/day_p/r/j/night_proposer/reflector/judge/verify).
+    Variables renamed (v7→day_verify, v27→night_verify), data keys (7b→day_verify), logs/output fully replaced.
+    SYS_V27→SYS_VERIFY rename. Two-way verification + dry-run test passed. git commit+push (5e8ef2e, 15 files +357/-319).
+
+    '
+- id: pipe-split-bugfix
+  status: completed
+  priority: P0
+  title: extract/classify/prj_cycle Pipe-Split Parsing Bug Fix
+  description: 'psql_json() introduced in lib/db.py (SQL row_to_json wrapper). extract_pipeline.py
+    2 sites, classify_pipeline.py 2 sites, prj_cycle.py 3 sites — split("|") replaced with JSON-based parsing. Root
+    cause: pipe characters in turns.text markdown tables breaking column alignment. Side effect: JSONB columns already
+    delivered as dicts → json.loads() calls no longer needed.
+
+    '
+- id: claude-yaml-doc-fix
+  status: completed
+  priority: P2
+  title: CLAUDE.yaml Docs — Remove Phantom server-state-collector.timer Reference
+  description: 'state_collector timer was planned but never actually created.
+
+    nightly_batch.sh --validate is the sole execution path. Removed timer line from docs.'
+- id: exp-registry-step2
+  status: completed
+  priority: P0
+  title: 'Step 2: bench_llm.py --register Flag'
+  description: scripts/bench_llm.py created. Benchmark runner + --register for DB INSERT.
+    Dollar-quoting($) used. --experiment-id, --category, --verdict, --rationale supported.
+- id: exp-registry-step3
+  status: completed
+  priority: P0
+  title: 'Step 3: CLI experiment Commands'
+  description: 'cli.py: experiment list/compare/active/adopt subcommands added. psql_json-based
+    output.'
+- id: exp-registry-step4
+  status: completed
+  priority: P0
+  title: 'Step 4: exp-latest/exp-active Aliases'
+  description: '~/.bashrc: exp-latest() function (recent experiment query) + exp-active() function (active config
+    query) registered.'
+- id: full-rule-audit
+  status: completed
+  priority: P0
+  title: Full Server Rule Audit — utcnow, bare except, Status/Path Headers
+  description: '3 rule violations audited and fixed:
+    1) utcnow 1 instance (blob_uploader.py) → datetime.now(timezone.utc)
+    2) bare except 7 instances (4 files) → except Exception
+    3) Status/Path headers added to 142 files — 68 active scripts with shebang + 74 files without shebang (lib/ included)
+    Final: all 127 non-archive .py files have Status/Path headers. 18 scripts/_archive/ files excluded (deprecated-by-location).'
+

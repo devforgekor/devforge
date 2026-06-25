@@ -20,7 +20,7 @@ START_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Run pipeline, redirect all stdout to log
 LOG=$(mktemp)
 cd "$BASE"
-python3 scripts/extract_pipeline.py --limit 50 --json > "$LOG" 2>&1 || true
+python3 scripts/pipelines/extract.py --limit 50 --json > "$LOG" 2>&1 || true
 PIPELINE_EXIT=$?
 
 END_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -45,7 +45,7 @@ cat > "$SUM_FILE" << YAML
 baseline_run:
   timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
   kst: $(TZ='Asia/Seoul' date +"%Y-%m-%d %H:%M:%S KST")
-  pipeline: extract_pipeline.py --limit 50
+  pipeline: pipelines/extract.py --limit 50
   status: $([ "$PIPELINE_EXIT" -eq 0 ] && echo "ok" || echo "error")
 
   summary:

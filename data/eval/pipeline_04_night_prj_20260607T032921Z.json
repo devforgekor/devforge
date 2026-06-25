@@ -1,0 +1,71 @@
+{
+  "phase": 4,
+  "role": "night_prj",
+  "timestamp": "2026-06-07T03:29:21.757618+00:00",
+  "p": {
+    "model": "Qwen3-Coder-30B-A3B-Q4_K_S",
+    "proposals": 8,
+    "usage": {
+      "completion_tokens": 1126,
+      "prompt_tokens": 1558,
+      "total_tokens": 2684,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "elapsed_ms": 515468.4059480205
+  },
+  "r": {
+    "model": "Qwen2.5-Coder-14B-Instruct",
+    "verdicts": 8,
+    "usage": {
+      "completion_tokens": 550,
+      "prompt_tokens": 2028,
+      "total_tokens": 2578,
+      "prompt_tokens_details": 0
+    },
+    "elapsed_ms": 491059.94817701867
+  },
+  "j": {
+    "model": "NextCoder-14B-Q4_K_M",
+    "result": {
+      "P_score": 27,
+      "R_score": 24,
+      "rubric_evaluation": {
+        "correctness": 8,
+        "coverage": 7,
+        "precision": 12,
+        "accuracy": 8,
+        "efficiency": 7,
+        "completeness": 9
+      },
+      "decision": "APPROVED",
+      "consensus_score": 85
+    },
+    "usage": {
+      "completion_tokens": 100,
+      "prompt_tokens": 542,
+      "total_tokens": 642,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "elapsed_ms": 165251.22862801072,
+    "chunks": 0,
+    "chunks_done": 0
+  },
+  "result": {
+    "P_score": 27,
+    "R_score": 24,
+    "rubric_evaluation": {
+      "correctness": 8,
+      "coverage": 7,
+      "precision": 12,
+      "accuracy": 8,
+      "efficiency": 7,
+      "completeness": 9
+    },
+    "decision": "APPROVED",
+    "consensus_score": 85
+  }
+}

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """System state checks — systemd, podman, filesystem.
 
 Usage:
@@ -61,3 +64,4 @@ def container_running(name: str) -> bool:
 
 def file_exists(path: str) -> bool:
     return Path(path).exists()
+

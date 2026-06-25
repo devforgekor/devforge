@@ -1,0 +1,13 @@
+{
+  "total_findings": 48,
+  "issues_found": 0,
+  "issues": [],
+  "severity_distribution": {
+    "high": 9,
+    "medium": 8,
+    "low": 16,
+    "critical": 6,
+    "partial": 4,
+    "fail": 5
+  }
+}

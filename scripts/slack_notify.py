@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""slack_notify.py — Session-end report for all agents → Slack DM.
+# Status: production
+# Path: tmux client-detached hook
+"""slack_notify.py — Session-end report → Slack DM.
 
-Queries DB for per-agent turn counts and proxy journald for token usage,
-then sends a formatted summary via Slack.
+Queries proxy journald for this tmux session's token usage,
+sends a formatted summary via Slack.
 
 Requires in ~/.config/devforge/secrets.env:
   SLACK_BOT_TOKEN=<token>
   SLACK_CHANNEL=<channel>  (optional, defaults to DevForge_Bot DM)
-
-Intended as Claude Code SessionEnd hook.
 """
 
+import argparse
 import json
 import re
 import subprocess
@@ -20,10 +21,15 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-sys.path.insert(0, str(Path(__file__).parent))
-from lib.db import psql
-
 KST = timezone(timedelta(hours=9))
+
+# DeepSeek V4 Flash pricing (USD per 1M tokens)
+PRICING = {
+    "input": 0.14,       # cache miss
+    "cache_read": 0.0028,  # cache hit (98% discount)
+    "output": 0.28,
+}
+USD_TO_CNY = 0.14  # approximate conversion for balance display
 
 _SECRETS: Dict[str, str] = {}
 _SF = Path.home() / ".config/devforge/secrets.env"
@@ -58,27 +64,31 @@ def _slack_send(text: str) -> bool:
         return False
 
 
-# ── Proxy usage parsers ────────────────────────────────────────
 
 DEEPSEEK_RE = re.compile(
-    r"input=(\d+)\s+cache_read=(\d+)\s+cache_create=(\d+)\s+output=(\d+)\s+hit_rate=(\d+)%"
+    r"input=(\d+)\s+cache_read=(\d+)\s+cache_miss=(\d+)\s+output=(\d+)\s+hit_rate=(\d+)%"
+)
+STATS_NONE_RE = re.compile(
+    r"input=(\d+)\s+output=(\d+)\s+stats=none"
 )
 
 
-def _proxy_usage(unit: str, since_minutes: int = 30) -> Dict[str, Any]:
-    """Aggregate proxy token usage from journald for the last N minutes."""
+def _proxy_usage(unit: str, since_ts: Optional[int] = None) -> Dict[str, Any]:
+    """Aggregate proxy token usage from journald since given Unix timestamp."""
     try:
+        since = f"@{since_ts}" if since_ts else "30 min ago"
         r = subprocess.run(
             ["journalctl", "--user", "-u", unit,
-             "--since", f"{since_minutes} min ago", "--no-pager"],
+             "--since", since, "--no-pager"],
             capture_output=True, text=True, timeout=15,
         )
     except Exception as e:
         return {"label": unit, "error": str(e), "requests": 0}
 
-    totals: Dict[str, int] = {"input": 0, "cache_read": 0, "output": 0}
+    totals: Dict[str, int] = {"input": 0, "cache_read": 0, "cache_miss": 0, "output": 0}
     hit_rates: List[int] = []
     count = 0
+    none_count = 0
     for line in r.stdout.split("\n"):
         m = DEEPSEEK_RE.search(line)
         if m:
@@ -87,52 +97,39 @@ def _proxy_usage(unit: str, since_minutes: int = 30) -> Dict[str, Any]:
             totals["cache_read"] += int(m.group(2))
             totals["output"] += int(m.group(4))
             hit_rates.append(int(m.group(5)))
+            continue
+        m2 = STATS_NONE_RE.search(line)
+        if m2:
+            none_count += 1
+            totals["input"] += int(m2.group(1))
+            totals["output"] += int(m2.group(2))
 
     avg_hit = round(sum(hit_rates) / len(hit_rates)) if hit_rates else 0
-    return {"label": unit, "requests": count, **totals, "avg_hit_rate": avg_hit}
+    return {"label": unit, "requests": count, **totals, "avg_hit_rate": avg_hit, "stats_none": none_count}
 
 
-# ── DB queries ─────────────────────────────────────────────────
 
-def _agents() -> List[Dict[str, Any]]:
-    """Per-agent summary: last session, turn count, tokens if available."""
-    agents: List[Dict[str, Any]] = []
-    rows = psql("""
-        SELECT a.agent, a.last_session, a.turns, a.tokens
-        FROM (
-            SELECT t.agent,
-                   MAX(c.created_at)::timestamptz AT TIME ZONE 'Asia/Seoul' AS last_session,
-                   COUNT(*)::int AS turns,
-                   COALESCE(SUM((t.meta->>'tokens')::int), 0) AS tokens
-            FROM turns t
-            JOIN conversations c ON t.conversation_id = c.id
-            GROUP BY t.agent
-        ) a
-        ORDER BY a.turns DESC
-    """)
-    if not rows:
-        return agents
-    for line in rows.split("\n"):
-        if "|" not in line:
-            continue
-        parts = line.split("|")
-        if len(parts) >= 4:
-            agents.append({
-                "name": parts[0],
-                "last": parts[1] if parts[1] and parts[1] != "None" else None,
-                "turns": int(parts[2]),
-                "tokens": int(parts[3]),
-            })
-    return agents
+def _compact(n: int) -> str:
+    """Format token count: <1M → '123k', ≥1M → '12M', <1000 → '500'."""
+    if n < 1000:
+        return str(n)
+    if n >= 1_000_000:
+        return f"{round(n / 1_000_000):,}M"
+    return f"{round(n / 1000):,}k"
 
 
-def _recent_turns(minutes: int = 30) -> int:
-    """Count turns ingested in the last N minutes across all agents."""
-    r = psql(f"""
-        SELECT COUNT(*) FROM turns
-        WHERE created_at > NOW() - INTERVAL '{minutes} minutes'
-    """)
-    return int(r.strip()) if r and r.strip().isdigit() else 0
+def _calc_cost(t: Dict[str, int]) -> Dict[str, float]:
+    """Calculate DeepSeek V4 Flash cost in USD."""
+    def _cny(usd: float) -> float:
+        return usd / USD_TO_CNY
+    inp_u = t.get("input", 0) * PRICING["input"] / 1_000_000
+    cache_u = t.get("cache_read", 0) * PRICING["cache_read"] / 1_000_000
+    out_u = t.get("output", 0) * PRICING["output"] / 1_000_000
+    tot_u = inp_u + cache_u + out_u
+    return {"usd": inp_u, "cny": _cny(inp_u),
+            "cache_usd": cache_u, "cache_cny": _cny(cache_u),
+            "out_usd": out_u, "out_cny": _cny(out_u),
+            "total_usd": tot_u, "total_cny": _cny(tot_u)}
 
 
 def _balance() -> Optional[str]:
@@ -154,65 +151,73 @@ def _balance() -> Optional[str]:
     return None
 
 
-# ── Report builder ─────────────────────────────────────────────
 
 def main() -> int:
+    args = _parse_args()
     now_kst = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
-    agents = _agents()
-    recent = _recent_turns(30)
+
+    # client-detached fires for every detach; skip if session still has clients
+    if args.session_name:
+        try:
+            clients = subprocess.run(
+                ["tmux", "list-clients", "-t", args.session_name],
+                capture_output=True, text=True, timeout=5,
+            )
+            if clients.stdout.strip():
+                print(f"  Session '{args.session_name}' still has clients — skip", file=sys.stderr)
+                return 0
+        except FileNotFoundError:
+            pass  # tmux not in PATH (standalone test)
+        except Exception:
+            pass
+
     bal = _balance()
 
     lines = [f"*DevForge — Session Report* ({now_kst} KST)", ""]
 
-    # Proxy usage (DeepSeek = Claude Code)
-    proxy = _proxy_usage("anthropic-proxy", 30)
-    if proxy.get("requests", 0) > 0:
-        hit = proxy["avg_hit_rate"]
-        bar = "█" * (hit // 10) + "░" * (10 - hit // 10)
-        lines.append(f">*Claude Code (DeepSeek V4 Flash)*")
-        lines.append(f">  API calls: {proxy['requests']}")
-        lines.append(f">  Input: {proxy['input']:,} tok | Cache read: {proxy['cache_read']:,} tok")
-        lines.append(f">  Output: {proxy['output']:,} tok | Hit rate: {hit}% {bar}")
-        lines.append("")
-    elif recent == 0:
-        lines.append(">No API activity in last 30 min")
-        lines.append("")
+    proxy = _proxy_usage("anthropic-proxy", args.session_start)
+    total_req = proxy["requests"] + proxy["stats_none"]
 
-    # Per-agent turns
-    turn_total = sum(a["turns"] for a in agents)
-    if turn_total > 0:
-        lines.append(f"*Agents — {turn_total:,} total turns*")
-        now = datetime.now(KST)
-        for a in agents:
-            when = ""
-            if a["last"]:
-                try:
-                    last_dt = datetime.fromisoformat(a["last"])
-                    delta = now - last_dt
-                    if delta.total_seconds() < 3600:
-                        when = f" ({int(delta.total_seconds()/60)}m ago)"
-                    elif delta.days < 1:
-                        when = f" ({int(delta.total_seconds()/3600)}h ago)"
-                    else:
-                        when = f" ({delta.days}d ago)"
-                except Exception:
-                    pass
-            tok = f" | {a['tokens']:,} tok" if a["tokens"] else ""
-            lines.append(f"  `{a['name']:12s}` {a['turns']:5d} turns{tok}{when}")
+    if total_req > 0:
+        none_str = f" | stats none: {proxy['stats_none']}" if proxy["stats_none"] else ""
+        lines.append(f">*Claude Code* (DeepSeek V4 Flash)")
+        lines.append(f">  Calls: {total_req}{none_str}")
+
+        cost = _calc_cost(proxy)
+
+        lines.append(f">  Input: {_compact(proxy['input']):>7} tok  ¥{cost['cny']:.2f} (${cost['usd']:.2f})")
+        lines.append(f">  Output: {_compact(proxy['output']):>7} tok  ¥{cost['out_cny']:.2f} (${cost['out_usd']:.2f})")
+        lines.append(f">  Cache: {_compact(proxy['cache_read']):>7} tok  ¥{cost['cache_cny']:.2f} (${cost['cache_usd']:.2f})")
+
+        hit = proxy["avg_hit_rate"]
+        lines.append(f">  Hit rate: {hit}%")
+        lines.append(f">  *Total: ¥{cost['total_cny']:.2f} (${cost['total_usd']:.2f})*")
+        lines.append("")
+    else:
+        lines.append(">No API activity in this session")
         lines.append("")
 
     if bal:
-        usd = float(bal) * 0.14
+        usd = float(bal) * USD_TO_CNY
         lines.append(f"DeepSeek balance: ¥{bal} (~${usd:.2f})")
 
     text = "\n".join(lines)
     print(text, file=sys.stderr)
 
-    if proxy.get("requests", 0) == 0 and turn_total == 0:
+    if total_req == 0:
         print("  Nothing to report — skipping", file=sys.stderr)
         return 0
 
     return 0 if _slack_send(text) else 1
+
+
+def _parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser()
+    p.add_argument("--session-name", type=str, default=None,
+                   help="Tmux session name (to check if last client)")
+    p.add_argument("--session-start", type=int, default=None,
+                   help="Unix timestamp of tmux session creation")
+    return p.parse_args()
 
 
 if __name__ == "__main__":

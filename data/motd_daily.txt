@@ -1,26 +1,26 @@
 [0;36m================================================================[0m
 [0;32m[SYSTEM][0m
   [0;37mSpec:      OCI ARM Flex 4ocpu 24ram     OS:   Oracle Linux Server 9.7     Arch:   aarch64[0m
-  [0;37mCPU Load:  0.26, 0.20, 0.28          [0m   [0;37mMem:  11Gi/22Gi                [0m   Zram:   1.3G/4G
+  [0;31mCPU Load:  6.12, 6.91, 5.80          [0m   [0;37mMem:  12Gi/22Gi                [0m   Zram:   451.1M/4G
 
 [0;32m[STORAGE — LVM][0m
   [1mDevice                  Size   Used  Avail  Use%  Mounted[0m
-  [0;37mocivolume-root           20G    14G   6.4G   69%  /[0m
-  [0;37mdatavg-lv_db             30G   442M    30G    2%  /mnt/lv_db[0m
-  [0;37mocivolume-lv_meta       4.5G   1.3G   3.3G   28%  /mnt/secure_meta[0m
-  [1;33mdatavg-lv_ai_data       100G    84G    16G   85%  /opt/ai_data[0m
-  [0;37mdatavg-lv_projects       10G   724M   9.3G    8%  /opt/projects[0m
+  [0;37mocivolume-root           20G    13G   7.5G   63%  /[0m
   [0;37mdatavg-lv_workspace     6.0G   614M   5.4G   11%  /opt/workspace[0m
-  [0;37mocivolume-lv_logs        10G   1.9G   8.2G   19%  /var/log[0m
-  [0;37mocivolume-lv_tmp         10G   4.7G   5.3G   48%  /var/tmp[0m
+  [0;37mdatavg-lv_db             30G   8.4G    22G   29%  /mnt/lv_db[0m
+  [0;37mocivolume-lv_meta       4.5G   1.3G   3.2G   29%  /mnt/secure_meta[0m
+  [0;37mdatavg-lv_projects       10G   729M   9.3G    8%  /opt/projects[0m
+  [0;37mdatavg-lv_ai_data       100G    78G    23G   78%  /opt/ai_data[0m
+  [0;37mocivolume-lv_tmp         10G   4.9G   5.2G   49%  /var/tmp[0m
+  [0;37mocivolume-lv_logs        10G   2.4G   7.6G   25%  /var/log[0m
 
 [0;32m[CONTAINERS][0m
   [1mNAMES           UPTIME               HEALTH     PORT[0m
-  [0;32mpod:data        6 hours              -          -[0m
-  [0;32mpostgres        6 hours (healthy)    [0;32mhealthy[0m 5432[0m
-  [0;32mdevforge-swap   6 hours              -          127[0m
-  [0;32mdevforge-qwen   6 hours              -          127[0m
-  [0;32mcaddy           35 hours (healthy)   [0;32mhealthy[0m 80, 443, 2019, 443[0m
+  [0;32mpod:data        39 hours             -          -[0m
+  [0;32mpostgres        39 hours (healthy)   [0;32mhealthy[0m 5432[0m
+  [0;32mdevforge-qwen   22 minutes           -          127[0m
+  [0;32mdevforge-swap   16 minutes           -          127[0m
+  [0;32mcaddy           39 hours (healthy)   [0;32mhealthy[0m 80, 443, 2019, 443[0m
 
 [0;32m[NETWORK][0m
 IP: 10.0.0.75/24   SSH: 22   Netdata: 19999
@@ -31,10 +31,16 @@ IP: 10.0.0.75/24   SSH: 22   Netdata: 19999
 [0;32m[SERVICES][0m
   devforge-qwen: [0;37mactive[0m   devforge-swap: [0;37mactive[0m   postgres: [0;37mactive[0m   devforge-backup: [1;33minactive[0m   devforge-restore-test: [1;33minactive[0m   caddy: [0;37mactive[0m   netdata: [0;37mactive[0m
 
-[0;31m[VALIDATION ALERTS — 2026-06-05T18:00:46.779931+00:00][0m
-  [0;31m[MISMATCH][0m CLAUDE.yaml service devforge-qwen
-          expected: [1;33mactive[0m  actual: [0;31minactive[0m
+[0;31m[VALIDATION ALERTS — 2026-06-12T18:00:52.355285+00:00][0m
+  [0;31m[MISMATCH][0m CLAUDE.yaml service devforge-pod-a
+          expected: [1;33mfailed[0m  actual: [0;31minactive[0m
+  [0;31m[MISMATCH][0m CLAUDE.yaml service classify
+          expected: [1;33minactive[0m  actual: [0;31mfailed[0m
+  [0;31m[MISMATCH][0m CLAUDE.yaml service nightly
+          expected: [1;33minactive[0m  actual: [0;31mactivating[0m
   [0;31m[MISMATCH][0m CLAUDE.yaml overview.memory
-          expected: [1;33m22Gi + 4G zram (1.1G) + 4G swap (swappiness=10)[0m  actual: [0;31m22Gi + 4G zram (200.4M) + 12G swap (swappiness=10)[0m
+          expected: [1;33m22Gi + 4G zram (89.8M) + 12G swap (swappiness=10)[0m  actual: [0;31m22Gi + 4G zram (48.2M) + 8G swap (swappiness=10)[0m
+  [0;31m[MISMATCH][0m CLAUDE.yaml network.llm_api claims port 8080
+          expected: [1;33mport 8080 listening[0m  actual: [0;31mlistening ports: ['111', '19999', '2019', '22', '4317', '443', '4430', '44777', '80', '8084', '8085', '8125'][0m
 [0;31m  Fix CLAUDE.yaml or blueprint.yaml and re-run --validate[0m
 [0;36m================================================================[0m

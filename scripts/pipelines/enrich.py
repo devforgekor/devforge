@@ -1,0 +1,794 @@
+#!/usr/bin/env python3
+# Status: experimental
+# Path: day_cycle.py — MCP metadata enrichment (runs after extract)
+"""Enrich Pipeline — post-extract MCP metadata enrichment (tldr, intent, entities, tags).
+
+Runs AFTER extract pipeline in day_cycle.py to generate enrichment metadata
+(tldr, intent, entities, tags) from already-extracted facts. This feeds the
+embedding layer and verify stage.
+
+Entity verification chain:
+  1st: Substring match against source text (fast deterministic)
+  2nd: Reranker relevance check (Pod A :8080) — GROUNDED/AMBIGUOUS→keep, UNGROUNDED→drop
+
+State-based: NOT EXISTS enrich_meta is the sole filter. Checkpoint not needed.
+
+Usage:
+  python3 scripts/pipelines/enrich.py                    # batch
+  python3 scripts/pipelines/enrich.py --turn-id <uuid>   # single turn (debug)
+  python3 scripts/pipelines/enrich.py --limit 20         # batch cap
+  python3 scripts/pipelines/enrich.py --dry-run          # simulate, no writes
+"""
+
+import json
+import os
+import re
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, SCRIPTS_DIR)
+
+from lib.db import psql, psql_ok, esc_sql, psql_json
+from lib.common import strip_think
+from lib.enrich_few_shot import load_few_shot
+from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, reranker_nli_verdict
+from lib.llm.json_parser import save_dlq, parse_llm_json
+from lib.token_budget import TokenBudget
+from lib.watchdog.messenger import heartbeat
+from lib.pod_manager import ensure_model
+
+TIMEOUT_ENRICH = 900  # default, overridden by _calc_timeout per-turn
+MAX_TOKENS_ENRICH = 512
+TEMP_ENRICH = 0.1
+BATCH_LIMIT = 50
+PARALLEL = 2  # concurrent LLM calls via ThreadPoolExecutor
+
+# Dynamic timeout constants (extractor model on :8082)
+TIMEOUT_BASE = 60
+TIMEOUT_PER_CHAR = 0.15  # ~3 tok/s prefill for Korean chars
+TIMEOUT_PER_TOK = 1.0    # ~1 tok/s decode
+QUEUE_MARGIN = 2.0       # account for slot queuing with parallel=2
+TIMEOUT_MAX = 3600       # absolute ceiling
+
+
+
+SYSTEM_DAY_ENRICH = """\
+You are a conversation analyst preparing structured metadata for an MCP
+(Model Context Protocol) system. Given the original conversation turn and
+the extracted facts, produce structured MCP fields.
+
+SEQUENTIAL REASONING — Follow these steps internally:
+Step 1 — SCAN: Read the turn and identify the core topic, intent, and any explicit entities (files, technologies, functions, users).
+Step 2 — VERIFY: For each entity candidate, confirm it has a verbatim or near-verbatim match in the turn text. Discard hallucinated entities.
+Step 3 — TLDR: Draft a one-line summary in the source language. Make it specific — capture what happened, not just that something happened.
+Step 4 — FILTER: Remove vague tags and generic categories. Keep only tags that are specific, discoverable, and directly derivable.
+Step 5 — OUTPUT: Produce the JSON below. Every field must be justified by the source.
+
+CRITICAL — Entity Extraction Rules:
+- files & functions: Require EXACT verbatim match in user_turn or text
+- technologies: Include if the conversation clearly discusses the technology, even if the name doesn't appear verbatim (the topic should be obvious from context)
+- mentioned_users: Include only if a specific user/username is explicitly referenced
+- Never hallucinate: if the conversation just "seems related" but doesn't clearly involve the entity, use empty array []
+
+Examples for technologies (ACCEPT when conversation obviously discusses them):
+  - "taskset pinning 제거" → ["taskset"] is OK even if "taskset" wasn't typed as bare name
+  - "Postgres container" → ["PostgreSQL"] is OK
+  - Avoid vague topics like "programming", "development", "API"
+
+Examples for files (REJECT unless exact match):
+  - "night.py 파일 수정" → ["night.py"] OK (exact match)
+  - "runner.py→" → ["runner.py"] OK (exact match)
+  - "the pipeline script" → [] REJECT (vague reference)
+
+Output STRICT JSON:
+{
+  "tldr": "source language로 한 줄 요약 (max 15 words)",
+  "intent": "question|request|report|clarification|code_change|debug|design|other",
+  "category": "requirement|decision|explanation|code|reasoning|other",
+  "entities": {
+    "files": [],
+    "technologies": [],
+    "functions": [],
+    "mentioned_users": []
+  },
+  "tags": []
+}
+
+RULES (strict — follow exactly):
+- tldr: 반드시 source text의 언어로 작성 (한국어 → 한국어 tldr, 영어 → 영어 tldr)
+- tldr must be factual and directly derivable from the turn content
+- intent must be one of the enumerated values
+- category: classify the turn's primary nature — requirement (new ask), decision (choice made), explanation (how/why), code (implementation), reasoning (analysis), other
+- entities: VERBATIM MATCH REQUIRED in user_turn or text
+- entities.technologies: only technologies EXPLICITLY named
+- entities.functions: function/class/method names EXPLICITLY mentioned
+- tags: 2-5 keywords for discovery and routing
+- If a field has no relevant data, use an empty array []"""
+
+SYSTEM_ENRICH_VERIFY = """\
+You are an MCP metadata verifier. Your job is to check the generated MCP fields
+against the original conversation turn and fix errors.
+
+Given:
+  === TURN ===
+  user_turn / thinking / text
+
+  === GENERATED MCP ===
+  tldr / intent / entities / tags
+
+Check each field:
+  1. tldr: Accurate? Max 15 words? No markdown? If wrong, fix.
+  2. intent: Matches the turn? Must be one of:
+     question|request|report|clarification|code_change|debug|design|other
+  3. category: Matches the turn's primary nature? Must be one of:
+     requirement|decision|explanation|code|reasoning|other
+  4. entities.files: Only include files EXPLICITLY mentioned in the turn.
+  5. entities.technologies: Technologies actually discussed.
+  6. entities.functions: Function names actually mentioned.
+  7. tags: Relevant to the turn? Max 5 tags.
+
+Output corrected MCP JSON — same schema, only fix what's wrong.
+Include a verdict block showing what changed.
+
+Output:
+{
+  "tldr": "corrected summary",
+  "intent": "corrected intent",
+  "category": "corrected category",
+  "entities": {"files":[], "technologies":[], "functions":[], "mentioned_users":[]},
+  "tags": ["tag1", "tag2"],
+  "verdict": {"changes_made": false, "tldr_changed": false,
+              "intent_changed": false, "category_changed": false,
+              "entities_changed": false, "tags_changed": false}
+}"""
+
+_VALID_INTENTS = {"question", "request", "report", "clarification",
+                  "code_change", "debug", "design", "other"}
+_VALID_CATEGORIES = {"requirement", "decision", "explanation",
+                     "code", "reasoning", "other"}
+
+def _parse_json(raw: str, label: str = "enrich", attempt: int = 1) -> Optional[Dict[str, Any]]:
+    """Extract JSON from LLM output using shared parse_llm_json + DLQ."""
+    cleaned = strip_think(raw)
+    result = parse_llm_json(cleaned)
+    if result is None:
+        save_dlq(raw, stage=f"enrich_{label}", error="parse_llm_json returned None",
+                 attempt=attempt)
+    return result
+
+
+def _clean_markdown(text: str) -> str:
+    """Strip all markdown formatting from text."""
+    if not text:
+        return text
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    text = re.sub(r'``.*?``', '', text)
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    text = re.sub(r'\*{2,}([^*]+)\*{2,}', r'\1', text)
+    text = re.sub(r'_{2,}([^_]+)_{2,}', r'\1', text)
+    text = re.sub(r'~{2,}([^~]+)~{2,}', r'\1', text)
+    text = text.replace('`', '')
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def _clean_markdown(text: str) -> str:
+    """Remove markdown formatting from text."""
+    if not text:
+        return ""
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    text = re.sub(r'\*{2,}([^*]+)\*{2,}', r'\1', text)
+    text = re.sub(r'_{2,}([^_]+)_{2,}', r'\1', text)
+    text = re.sub(r'~{2,}([^~]+)~{2,}', r'\1', text)
+    text = text.replace('`', '')
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def _post_process_enrich(enrich_data: Optional[Dict[str, Any]],
+                      user_turn: str = "", text: str = ""
+                      ) -> Optional[Dict[str, Any]]:
+    """Python post-processing for enrichment fields: validate, clean, trim, structural filter."""
+    if not enrich_data:
+        return enrich_data
+
+    # tldr
+    tldr = enrich_data.get("tldr", "")
+    if tldr:
+        tldr = _clean_markdown(tldr)
+        words = tldr.split()
+        if len(words) > 20:
+            tldr = " ".join(words[:20]) + "..."
+    enrich_data["tldr"] = tldr[:200] if tldr else ""
+
+    # intent
+    intent = enrich_data.get("intent", "").lower()
+    if intent not in _VALID_INTENTS:
+        enrich_data["intent"] = "other"
+
+    # category (new field)
+    category = enrich_data.get("category", "").lower()
+    if category not in _VALID_CATEGORIES:
+        enrich_data["category"] = "other"
+
+    # entities — with structural pre-filter
+    entities = enrich_data.get("entities", {})
+    if not isinstance(entities, dict):
+        entities = {}
+    for key in ("files", "technologies", "functions", "mentioned_users"):
+        items = entities.get(key, [])
+        if not isinstance(items, list):
+            items = []
+        seen: set = set()
+        clean_items = []
+        for item in items:
+            s = str(item).strip()
+            if not s or s in seen:
+                continue
+            # Filter entities that cannot represent valid code symbols
+            if len(s) < _MIN_ENTITY_LEN:
+                continue
+            if key != "files" and _ENTITY_SPECIAL_CHARS.search(s):
+                continue
+            if any(p.search(s) for p in _ENTITY_REJECT_PATTERNS):
+                continue
+            if len(s.split()) > _MAX_ENTITY_WORDS:
+                continue
+            seen.add(s)
+            if key == "files":
+                s = s.lstrip("./")
+            clean_items.append(s)
+        entities[key] = clean_items[:10]
+    enrich_data["entities"] = entities
+
+    # tags
+    tags = enrich_data.get("tags", [])
+    if not isinstance(tags, list):
+        tags = []
+    seen_tags: set = set()
+    clean_tags = []
+    for tag in tags:
+        t = str(tag).strip().lower()
+        if t and t not in seen_tags:
+            seen_tags.add(t)
+            clean_tags.append(t)
+    enrich_data["tags"] = clean_tags[:5]
+
+    # Tag-intent consistency
+    intent = enrich_data.get("intent", "other")
+    blocked = _INTENT_TAG_BLOCKED.get(intent, set())
+    if blocked:
+        enrich_data["tags"] = [t for t in enrich_data.get("tags", []) if t not in blocked]
+
+    return enrich_data
+
+
+_ENTITY_REJECT_PATTERNS = [
+    re.compile(r'https?://\S+'),
+    re.compile(r'ftp://\S+'),
+    re.compile(r'ftp\b'),
+    re.compile(r'[\[\](){}]'),
+    re.compile(r'^[\d\s]+$'),
+]
+_MAX_ENTITY_WORDS = 8
+_MIN_ENTITY_LEN = 2
+_ENTITY_SPECIAL_CHARS = re.compile(r'[@#$%^&*+=<>|\\~`;]')
+
+# Tag-intent consistency
+_INTENT_TAG_BLOCKED = {
+    "question": {"code_change", "implementation", "refactor", "deploy"},
+    "request": {"debug", "bug"},
+    "clarification": {"implementation", "code_change", "deploy", "bug"},
+    "code_change": {"question", "help", "howto", "debug"},
+    "debug": {"feature", "design", "proposal"},
+    "design": {"bug", "debug", "hotfix"},
+    "report": {"question", "howto"},
+    "other": set(),
+}
+
+
+# ── Entity grounding check (verbatim in source) ─────────────────────────
+
+
+def _normalize(text: str) -> str:
+    """Collapse whitespace, lowercase."""
+    return " ".join(text.split()).lower()
+
+
+def _check_entity_in_source(entity: str, source: str) -> bool:
+    """Return True if entity appears verbatim (case-insensitive) in source."""
+    if not entity or not source:
+        return False
+    return _normalize(entity) in _normalize(source)
+
+
+def _verify_entities(entities: dict, user_turn: str, text: str) -> dict:
+    """Check each entity: substring 1st → reranker for failures. Drop UNGROUNDED.
+
+    Matches extract.py's NLI→reranker pattern: fast deterministic check first,
+    then reranker (topical relevance) for uncertain cases via Pod A :8080.
+    Falls back to substring-only if reranker unavailable.
+    """
+    source = f"{user_turn} {text}"
+    rejected = {}
+    verified = {}
+    for key in ("files", "technologies", "functions", "mentioned_users"):
+        items = entities.get(key, [])
+        kept = []
+        bad = []
+        for item in items:
+            if _check_entity_in_source(item, source):
+                kept.append(item)
+            else:
+                try:
+                    cos = reranker_score(item, source)
+                    grounding = reranker_nli_verdict(cos)
+                    if grounding == "UNGROUNDED":
+                        bad.append(item)
+                    else:
+                        kept.append(item)
+                except Exception:
+                    # Reranker unavailable → accept entity (substring-only fallback)
+                    kept.append(item)
+        verified[key] = kept
+        rejected[key] = bad
+    return {"entities": verified, "rejected": rejected,
+            "all_grounded": all(len(v) == 0 for v in rejected.values())}
+
+
+# ── TLDR NLI Self-Verify (LLM-based, same pattern as extract.py) ──
+_NLI_TLDR_PROMPT = """You are verifying whether a TLDR summary accurately reflects the SOURCE conversation turn.
+
+LABELS:
+- ENTAILMENT: The TLDR is factually supported by the source (may be rephrased).
+- CONTRADICTION: The TLDR contradicts the source — they cannot both be true.
+- COMPLEMENTARY: The TLDR accurately summarizes or synthesizes source content without directly quoting it. This is normal for well-written summaries.
+- NEUTRAL: The TLDR is related but not directly verifiable from the source.
+
+Output EXACTLY one word: ENTAILMENT | CONTRADICTION | COMPLEMENTARY | NEUTRAL
+No punctuation. No explanation.
+
+SOURCE: {source}
+TLDR: {tldr}"""
+
+
+def _verify_tldr(tldr: str, user_turn: str, text: str) -> dict:
+    """Run LLM NLI on tldr against source text. Returns verdict dict.
+
+    Replaces the DeBERTa-v3 NLI server (port 8085 was never deployed).
+    Uses the loaded extractor model on :8082 instead.
+    """
+    if not tldr or not (user_turn or text):
+        return {"verdict": "SKIP", "label": "NEUTRAL", "score": 0.0}
+    source = f"{user_turn}\n{text}"
+    prompt = _NLI_TLDR_PROMPT.format(source=source[:2000], tldr=tldr[:500])
+    try:
+        meta = call_llm_with_retry(
+            [{"role": "user", "content": prompt}],
+            model="day_enrich",
+            max_tokens=16, temperature=0.0, timeout=60,
+            return_meta=True,
+        )
+        raw = meta["content"].strip().upper()
+        for tok in raw.replace("\n", " ").split():
+            tok = tok.strip(".,!?;:\"'()[]")
+            if tok in ("ENTAILMENT", "CONTRADICTION", "COMPLEMENTARY", "NEUTRAL"):
+                return {"verdict": tok, "label": tok, "score": 0.0}
+    except Exception:
+        pass
+    return {"verdict": "NEUTRAL", "label": "NEUTRAL", "score": 0.0}
+
+
+def _calc_timeout(total_chars: int) -> int:
+    """Dynamic timeout for enrich LLM call based on input size.
+
+    Extractor model on 4-core ARM: prefill ~3 tok/s, decode ~1 tok/s.
+    Korean chars ≈ 1 tok/char, so TIMEOUT_PER_CHAR=0.15 is ~6.7 chars/s.
+    QUEUE_MARGIN accounts for parallel=2 slot queuing.
+    """
+    prompt_s = int(total_chars * TIMEOUT_PER_CHAR)
+    decode_s = int(MAX_TOKENS_ENRICH * TIMEOUT_PER_TOK)
+    est = TIMEOUT_BASE + prompt_s + decode_s
+    est = int(est * QUEUE_MARGIN)
+    return min(est, TIMEOUT_MAX)
+
+
+def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
+                         model: str = "day_enrich",
+                         extractions: Optional[List[Dict]] = None,
+                         timeout: Optional[int] = None,
+                         ) -> Optional[Dict[str, Any]]:
+    """Generate enrichment metadata fields (tldr, intent, entities, tags) via *model*.
+
+    Uses TokenBudget priority allocation — sections dropped entirely if
+    budget exceeded (no partial truncation).
+
+    Returns dict with enrich fields + usage/timings metadata.
+    """
+    budget = TokenBudget("enrich")
+    parts = ["=== user_turn ==="]
+    if budget.add_section("user_turn", user_turn or "(empty)", priority=10):
+        parts.append(user_turn or "(empty)")
+
+    parts.append("")
+    parts.append("=== thinking ===")
+    if budget.add_section("thinking", thinking or "(empty)", priority=4):
+        parts.append(thinking or "(empty)")
+
+    parts.append("")
+    parts.append("=== text ===")
+    if budget.add_section("text", text or "(empty)", priority=7):
+        parts.append(text or "(empty)")
+
+    if extractions:
+        parts.append("")
+        parts.append("=== extracted facts ===")
+        for idx, ex in enumerate(extractions):
+            confidence = ex.get('fact_confidence', 100)
+            line = f"  [{ex.get('fact_type','?')}] (conf={confidence}) {ex.get('evidence','')[:300]}"
+            if budget.add_section(f"extract_{idx}", line, priority=6):
+                parts.append(line)
+    parts.append("")
+    if budget.used > 0:
+        parts.append(f"[context budget: {budget.used}/{budget.limit} tok]")
+
+    # Static few-shot from YAML (diversity-first, KV-cache-optimized)
+    system_content = SYSTEM_DAY_ENRICH
+    feedback_text = load_few_shot()
+    if feedback_text:
+        system_content = SYSTEM_DAY_ENRICH + "\n\n" + feedback_text
+
+    t = timeout if timeout is not None else TIMEOUT_ENRICH
+    meta = call_llm_with_retry(
+        [{"role": "system", "content": system_content},
+         {"role": "user", "content": "\n".join(parts)}],
+        model=model,
+        max_tokens=MAX_TOKENS_ENRICH, temperature=TEMP_ENRICH, timeout=t,
+        json_mode=True, return_meta=True,
+    )
+    result = _parse_json(meta["content"], "enrich fields")
+    if result:
+        result["_meta"] = {"usage": meta["usage"], "timings": meta["timings"],
+                           "elapsed_ms": meta["elapsed_ms"], "model": model}
+    return result
+
+
+
+
+def _get_turns_without_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
+    """Return turns without enrich_meta, ordered by creation time.
+    State-based: NOT EXISTS enrich_meta is the sole filter.
+    Also skips turns with unresolved NEUTRAL facts (no user_verdict yet).
+    """
+    sql = (
+        "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at, t.est_chars "
+        "FROM turns t "
+        "WHERE NOT EXISTS ("
+        "  SELECT 1 FROM review_facts rf2 "
+        "  WHERE rf2.turn_id = t.id AND rf2.fact_type = 'enrich_meta'"
+        ")"
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM review_facts rf3 "
+        "  WHERE rf3.turn_id = t.id "
+        "  AND rf3.nli_llm = 'NEUTRAL'"
+        "  AND rf3.user_verdict IS NULL"
+        "  AND rf3.nli_verdict = 'AMBIGUOUS'"
+        ")"
+        "AND t.pipeline_state = 'extracted' "
+        "ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
+        f"LIMIT {limit}"
+    )
+    rows = psql_json(sql)
+    if not rows:
+        return []
+    return [{
+        "id": r.get("id", ""),
+        "user_turn": r.get("user_turn", ""),
+        "thinking": r.get("thinking") or None,
+        "text": r.get("text", ""),
+        "created_at": r.get("created_at", ""),
+        "est_chars": r.get("est_chars", 0),
+    } for r in rows]
+
+
+def _get_turn_extractions(turn_id: str) -> List[Dict[str, Any]]:
+    """Load extracted facts (user/thinking/text) for a turn from review_facts.
+
+    Returns list of dicts with fact_type and evidence keys,
+    ordered by fact_index. Used as input context for MCP generation.
+    """
+    sql = (
+        f"SELECT fact_type, evidence, fact_confidence "
+        f"FROM review_facts "
+        f"WHERE turn_id = '{esc_sql(turn_id)}'::uuid "
+        f"  AND fact_type IN ('user','thinking','text') "
+        f"ORDER BY fact_index ASC"
+    )
+    rows = psql_json(sql)
+    if not rows:
+        return []
+    return [{
+        "fact_type": r.get("fact_type", "text"),
+        "evidence": r.get("evidence", ""),
+        "fact_confidence": r.get("fact_confidence", 100),
+    } for r in rows]
+
+
+def _insert_enrich_fact(turn_id: str, fact_index: int,
+                     enrich_json_str: str, model: str,
+                     prompt_tokens: Optional[int] = None,
+                     gen_tokens: Optional[int] = None,
+                     elapsed_ms: Optional[float] = None,
+                     source_file: Optional[str] = None) -> bool:
+    """Insert an enrich_meta fact row into review_facts."""
+    cols = ["turn_id", "fact_index", "fact_type", "evidence", "extract_model",
+            "verdict", "source", "fact_action", "fact_confidence"]
+    vals = [
+        f"'{esc_sql(turn_id)}'::uuid",
+        str(fact_index),
+        "'enrich_meta'",
+        f"'{esc_sql(enrich_json_str[:5000])}'",
+        f"'{esc_sql(model)}'",
+        "'pending'",
+        "'enrich'",
+        "'enrich_meta'",
+        "100",
+    ]
+    set_clauses = []
+
+    if prompt_tokens is not None:
+        cols.append("prompt_tokens")
+        vals.append(str(prompt_tokens))
+        set_clauses.append(f"prompt_tokens = {prompt_tokens}")
+    if gen_tokens is not None:
+        cols.append("gen_tokens")
+        vals.append(str(gen_tokens))
+        set_clauses.append(f"gen_tokens = {gen_tokens}")
+    if elapsed_ms is not None:
+        cols.append("elapsed_ms")
+        vals.append(f"{elapsed_ms:.1f}")
+        set_clauses.append(f"elapsed_ms = {elapsed_ms:.1f}")
+    if source_file:
+        cols.append("source_file")
+        vals.append(f"'{esc_sql(source_file)}'")
+        set_clauses.append(f"source_file = '{esc_sql(source_file)}'")
+
+    sql = (
+        f"INSERT INTO review_facts ({', '.join(cols)}) "
+        f"VALUES ({', '.join(vals)}) "
+        f"ON CONFLICT (turn_id, fact_index, extract_model) "
+        f"DO UPDATE SET evidence = EXCLUDED.evidence"
+        + (f", {', '.join(set_clauses)}" if set_clauses else "")
+    )
+    return psql_ok(sql)
+
+
+def enrich_pipeline(turn_id: Optional[str] = None,
+                        limit: int = BATCH_LIMIT,
+                        dry_run: bool = False,
+                        model: str = "day_enrich") -> Dict[str, Any]:
+    """Generate enrichment metadata for turns with extraction facts."""
+    t_start = time.monotonic()
+    heartbeat("day_enrich", "pipeline_start")
+    print(f"\n{'=' * 60}")
+    print(f"Enrich Pipeline — {model} enrich fields for extracted turns")
+    if dry_run:
+        print("  [DRY RUN] No writes to DB")
+    print(f"{'=' * 60}")
+
+    # Select turns
+    if turn_id:
+        sql = (
+            "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at, t.est_chars "
+            f"FROM turns t WHERE t.id = '{esc_sql(turn_id)}'::uuid"
+        )
+        rows = psql_json(sql)
+        if not rows:
+            print(f"[enrich] Turn not found: {turn_id}")
+            return {"processed": 0, "failed": 1, "ok": False}
+        r = rows[0]
+        turns = [{
+            "id": r["id"], "user_turn": r.get("user_turn", ""),
+            "thinking": r.get("thinking") or None,
+            "text": r.get("text", ""),
+            "created_at": r.get("created_at", ""),
+            "est_chars": r.get("est_chars", 0),
+        }]
+    else:
+        turns = _get_turns_without_enrich(limit)
+
+    if not turns:
+        print("[enrich] No turns without enrichment found")
+        return {"processed": 0, "failed": 0, "ok": True}
+
+    print(f"[enrich] Processing {len(turns)} turn(s)", flush=True)
+
+    processed = 0
+    failed = 0
+    n = len(turns)
+
+    # ── Phase 0: Pre-load extractions for all turns (fast, no LLM) ──
+    turn_data = []
+    for ti, turn in enumerate(turns, 1):
+        turn_id = turn["id"]
+        user_turn = turn.get("user_turn", "") or ""
+        thinking = turn.get("thinking", "") or ""
+        text = turn.get("text", "") or ""
+        est_chars = turn.get("est_chars", 0) or 0
+        extractions = _get_turn_extractions(turn_id)
+        turn_data.append((turn_id, user_turn, thinking, text, extractions, est_chars))
+
+    if not turn_data:
+        print("[enrich] No turns with extraction context found")
+        return {"processed": 0, "failed": 0, "elapsed_s": 0, "ok": True}
+
+    # ── Helper: process one completed LLM result (post-process → verify → store) ──
+    def _store_result(ti, tid, ut, tx, enrich_result, dr):
+        try:
+            if not enrich_result:
+                print(f"  [{ti}/{n}] {tid[:8]} — LLM returned None, skipping", flush=True)
+                return False
+
+            # Phase 2: Post-processing
+            enrich_result = _post_process_enrich(enrich_result, ut, tx)
+
+            # Phase 3: Entity grounding
+            entities_data = enrich_result.get("entities", {}) or {}
+            verified_entities = _verify_entities(entities_data, ut, tx)
+            enrich_result["entities"] = verified_entities["entities"]
+            if any(verified_entities["rejected"].values()):
+                print(f"  [{ti}/{n}] {tid[:8]} — rejected entities: "
+                      + "; ".join(f"{k}: {v}" for k, vals in
+                                  verified_entities["rejected"].items() if (v := vals)),
+                      flush=True)
+
+            # Phase 3b: TLDR NLI
+            enrich_tldr = enrich_result.get("tldr", "") or ""
+            tldr_verify = _verify_tldr(enrich_tldr, ut, tx)
+            enrich_result["nli_verdict"] = tldr_verify["verdict"]
+            if tldr_verify["verdict"] == "CONTRADICTION":
+                print(f"  [{ti}/{n}] {tid[:8]} — ⚠ tldr CONTRADICTION", flush=True)
+
+            # Log
+            print(f"  [{ti}/{n}] {tid[:8]} — tldr={enrich_result.get('tldr','')[:60]} "
+                  f"intent={enrich_result.get('intent','?')} "
+                  f"entities={len(enrich_result.get('entities',{}).get('files',[]))}f/"
+                  f"{len(enrich_result.get('entities',{}).get('functions',[]))}fn",
+                  flush=True)
+
+            if dr:
+                print(f"    [DRY] Would store", flush=True)
+                return True
+
+            # Store to DB
+            fi_sql = (f"SELECT COALESCE(MAX(fact_index), -1) + 1 FROM review_facts "
+                      f"WHERE turn_id = '{esc_sql(tid)}'::uuid")
+            fi_str = psql(fi_sql)
+            fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
+
+            meta = enrich_result.get("_meta", {})
+            usage = meta.get("usage", {}) if meta else {}
+            _insert_enrich_fact(
+                tid, fi,
+                json.dumps({k: v for k, v in enrich_result.items() if k != "_meta"},
+                          ensure_ascii=False),
+                model,
+                prompt_tokens=usage.get("prompt_tokens"),
+                gen_tokens=usage.get("completion_tokens"),
+                elapsed_ms=meta.get("elapsed_ms") if meta else None,
+            )
+            psql_ok(f"UPDATE turns SET pipeline_state = 'enriched' WHERE id = '{tid}'::uuid")
+            return True
+        except Exception as e:
+            print(f"  [{ti}/{n}] {tid[:8]} — ERROR: {type(e).__name__}: {e}", flush=True)
+            return False
+
+    # ── Phase 1: LLM generation (pool first, then solo large turns) ──
+    MAX_CHARS_SOLO = 5000
+    pool_items = []  # (ti, tid, ut, th, tx, exts, est_c)
+    solo_items = []  # same structure
+    print(f"[enrich] Processing {len(turn_data)} turns (solo threshold={MAX_CHARS_SOLO} chars)...",
+          flush=True)
+    llm_t0 = time.monotonic()
+
+    # Separate solo vs pool
+    for ti, (tid, ut, th, tx, exts, est_c) in enumerate(turn_data, 1):
+        if est_c > MAX_CHARS_SOLO:
+            solo_items.append((ti, tid, ut, th, tx, exts, est_c))
+        else:
+            pool_items.append((ti, tid, ut, th, tx, exts, est_c))
+
+    # Normal turns via ThreadPool (fast path first)
+    if pool_items:
+        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+            fut_map = {}
+            for ti, tid, ut, th, tx, exts, est_c in pool_items:
+                total_chars = est_c
+                call_timeout = _calc_timeout(total_chars)
+                fut = pool.submit(_generate_enrich_fields, ut, th, tx,
+                                model=model, extractions=exts, timeout=call_timeout)
+                fut_map[fut] = (ti, tid, ut, tx)
+
+            for fut in as_completed(fut_map):
+                ti, tid, ut, tx = fut_map[fut]
+                try:
+                    result = fut.result()
+                    ok = _store_result(ti, tid, ut, tx, result, dry_run)
+                    if ok:
+                        processed += 1
+                        heartbeat("day_enrich", f"turn {tid[:8]} done")
+                    else:
+                        failed += 1
+                except Exception as e:
+                    print(f"  [{ti}/{n}] {tid[:8]} — LLM call failed: {type(e).__name__}: {e}",
+                          flush=True)
+                    failed += 1
+
+    # Solo large turns after (slow path, doesn't delay pool)
+    for ti, tid, ut, th, tx, exts, est_c in solo_items:
+        total_chars = est_c
+        call_timeout = _calc_timeout(total_chars)
+        print(f"  [{ti}/{n}] {tid[:8]} — large turn ({est_c} chars), solo after pool",
+              flush=True)
+        try:
+            result = _generate_enrich_fields(ut, th, tx,
+                                            model=model, extractions=exts, timeout=call_timeout)
+            ok = _store_result(ti, tid, ut, tx, result, dry_run)
+            if ok:
+                processed += 1
+                heartbeat("day_enrich", f"turn {tid[:8]} done")
+            else:
+                failed += 1
+        except Exception as e:
+            print(f"  [{ti}/{n}] {tid[:8]} — solo LLM failed: {type(e).__name__}: {e}",
+                  flush=True)
+            failed += 1
+
+    llm_elapsed = round(time.monotonic() - llm_t0, 1)
+    elapsed = round(time.monotonic() - t_start, 1)
+    print(f"\n{'=' * 60}", flush=True)
+    print(f"Done: {processed} enriched, {failed} failed "
+          f"(LLM: {llm_elapsed}s, total: {elapsed}s)", flush=True)
+    if dry_run:
+        print("  [DRY RUN] No data was written", flush=True)
+    print(f"{'=' * 60}", flush=True)
+
+    return {"processed": processed, "failed": failed,
+            "elapsed_s": elapsed, "ok": failed == 0}
+
+
+def main() -> None:
+    ensure_model('day-enrich')  # skip_if_healthy=False: swap from day-extractor to day-enrich
+    from lib.infra.preflight import preflight_checks
+    preflight_checks("enrich.py")
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Enrich Pipeline — generate enrichment fields for extracted turns")
+    parser.add_argument("--turn-id", help="Process a specific turn UUID")
+    parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--model", default="day_enrich",
+                        help="Model for enrichment fields generation (default: day_enrich)")
+    args = parser.parse_args()
+
+    result = enrich_pipeline(
+        turn_id=args.turn_id,
+        limit=args.limit,
+        dry_run=args.dry_run,
+        model=args.model,
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    from lib.llm_client import recall_tiny
+    recall_tiny()
+    sys.exit(0 if result["ok"] else 1)
+
+
+if __name__ == "__main__":
+    main()

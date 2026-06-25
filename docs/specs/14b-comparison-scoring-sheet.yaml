@@ -1,0 +1,206 @@
+# 14B Q4_K_M Pipeline Comparison — Scoring Sheet
+# Test 1: No rubric (extract/mcp/verify raw)
+# Test 2: Same run after rubric prompt injection
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL 1: Qwen Coder 14B
+# ═══════════════════════════════════════════════════════════════
+coder14b:
+  test1:
+    raw_scores:
+      axis1_fact_recall: {score: 0, note: ""}
+      axis2_fact_precision: {score: 0, note: ""}
+      axis3_hallu_resist: {score: 0, note: ""}
+      axis4_fact_type: {score: 0, note: ""}
+      axis5_mcp_quality: {score: 0, note: ""}
+      axis6_mcp_context: {score: 0, note: ""}
+      axis7_verify: {score: 0, note: ""}
+      axis8_3tier_nli: {score: 0, note: ""}
+      axis9_json: {score: 0, note: ""}
+      axis10_consistency: {score: 0, note: ""}
+    weighted_total: 0
+    grade: ""
+    case_details:
+      extract_perf: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_security: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_clean: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_hallu_trap: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0, hallu_hit: false}
+      extract_mcp_rich: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      verify_contradict: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, verify_score: 0}
+    speed: {load_s: 0, avg_s_per_case: 0, avg_tps: 0}
+    notes: ""
+
+  test2:
+    raw_scores:
+      axis1_fact_recall: {score: 0, note: ""}
+      axis2_fact_precision: {score: 0, note: ""}
+      axis3_hallu_resist: {score: 0, note: ""}
+      axis4_fact_type: {score: 0, note: ""}
+      axis5_mcp_quality: {score: 0, note: ""}
+      axis6_mcp_context: {score: 0, note: ""}
+      axis7_verify: {score: 0, note: ""}
+      axis8_3tier_nli: {score: 0, note: ""}
+      axis9_json: {score: 0, note: ""}
+      axis10_consistency: {score: 0, note: ""}
+    weighted_total: 0
+    grade: ""
+    case_details:
+      extract_perf: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_security: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_clean: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_hallu_trap: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0, hallu_hit: false}
+      extract_mcp_rich: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      verify_contradict: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, verify_score: 0}
+    speed: {load_s: 0, avg_s_per_case: 0, avg_tps: 0}
+    notes: ""
+
+  delta:
+    total_change: 0
+    biggest_gain: ""
+    biggest_loss: ""
+    rubric_effect: ""
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL 2: Qwen 2.5 14B Instruct
+# ═══════════════════════════════════════════════════════════════
+qwen25:
+  test1:
+    raw_scores:
+      axis1_fact_recall: {score: 0, note: ""}
+      axis2_fact_precision: {score: 0, note: ""}
+      axis3_hallu_resist: {score: 0, note: ""}
+      axis4_fact_type: {score: 0, note: ""}
+      axis5_mcp_quality: {score: 0, note: ""}
+      axis6_mcp_context: {score: 0, note: ""}
+      axis7_verify: {score: 0, note: ""}
+      axis8_3tier_nli: {score: 0, note: ""}
+      axis9_json: {score: 0, note: ""}
+      axis10_consistency: {score: 0, note: ""}
+    weighted_total: 0
+    grade: ""
+    case_details:
+      extract_perf: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_security: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_clean: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_hallu_trap: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0, hallu_hit: false}
+      extract_mcp_rich: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      verify_contradict: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, verify_score: 0}
+    speed: {load_s: 0, avg_s_per_case: 0, avg_tps: 0}
+    notes: ""
+
+  test2:
+    raw_scores:
+      axis1_fact_recall: {score: 0, note: ""}
+      axis2_fact_precision: {score: 0, note: ""}
+      axis3_hallu_resist: {score: 0, note: ""}
+      axis4_fact_type: {score: 0, note: ""}
+      axis5_mcp_quality: {score: 0, note: ""}
+      axis6_mcp_context: {score: 0, note: ""}
+      axis7_verify: {score: 0, note: ""}
+      axis8_3tier_nli: {score: 0, note: ""}
+      axis9_json: {score: 0, note: ""}
+      axis10_consistency: {score: 0, note: ""}
+    weighted_total: 0
+    grade: ""
+    case_details:
+      extract_perf: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_security: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_clean: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_hallu_trap: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0, hallu_hit: false}
+      extract_mcp_rich: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      verify_contradict: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, verify_score: 0}
+    speed: {load_s: 0, avg_s_per_case: 0, avg_tps: 0}
+    notes: ""
+
+  delta:
+    total_change: 0
+    biggest_gain: ""
+    biggest_loss: ""
+    rubric_effect: ""
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL 3: Qwen3 14B
+# ═══════════════════════════════════════════════════════════════
+qwen3:
+  test1:
+    raw_scores:
+      axis1_fact_recall: {score: 0, note: ""}
+      axis2_fact_precision: {score: 0, note: ""}
+      axis3_hallu_resist: {score: 0, note: ""}
+      axis4_fact_type: {score: 0, note: ""}
+      axis5_mcp_quality: {score: 0, note: ""}
+      axis6_mcp_context: {score: 0, note: ""}
+      axis7_verify: {score: 0, note: ""}
+      axis8_3tier_nli: {score: 0, note: ""}
+      axis9_json: {score: 0, note: ""}
+      axis10_consistency: {score: 0, note: ""}
+    weighted_total: 0
+    grade: ""
+    case_details:
+      extract_perf: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_security: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_clean: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_hallu_trap: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0, hallu_hit: false}
+      extract_mcp_rich: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      verify_contradict: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, verify_score: 0}
+    speed: {load_s: 0, avg_s_per_case: 0, avg_tps: 0}
+    notes: ""
+
+  test2:
+    raw_scores:
+      axis1_fact_recall: {score: 0, note: ""}
+      axis2_fact_precision: {score: 0, note: ""}
+      axis3_hallu_resist: {score: 0, note: ""}
+      axis4_fact_type: {score: 0, note: ""}
+      axis5_mcp_quality: {score: 0, note: ""}
+      axis6_mcp_context: {score: 0, note: ""}
+      axis7_verify: {score: 0, note: ""}
+      axis8_3tier_nli: {score: 0, note: ""}
+      axis9_json: {score: 0, note: ""}
+      axis10_consistency: {score: 0, note: ""}
+    weighted_total: 0
+    grade: ""
+    case_details:
+      extract_perf: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_security: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_clean: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      extract_hallu_trap: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0, hallu_hit: false}
+      extract_mcp_rich: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, mcp_score: 0}
+      verify_contradict: {n_facts: 0, faithful: 0, unfaithful: 0, ambiguous: 0, ext_score: 0, verify_score: 0}
+    speed: {load_s: 0, avg_s_per_case: 0, avg_tps: 0}
+    notes: ""
+
+  delta:
+    total_change: 0
+    biggest_gain: ""
+    biggest_loss: ""
+    rubric_effect: ""
+
+# ── Summary Comparison ──
+summary:
+  phase_scores:
+    description: "Extract(Axis1~4) / MCP(Axis5~6) / Verify(Axis7) / General(Axis8~10)"
+    coder14b:
+      test1: {extract_avg: 0, mcp_avg: 0, verify_avg: 0, total: 0, grade: ""}
+      test2: {extract_avg: 0, mcp_avg: 0, verify_avg: 0, total: 0, grade: ""}
+    qwen25:
+      test1: {extract_avg: 0, mcp_avg: 0, verify_avg: 0, total: 0, grade: ""}
+      test2: {extract_avg: 0, mcp_avg: 0, verify_avg: 0, total: 0, grade: ""}
+    qwen3:
+      test1: {extract_avg: 0, mcp_avg: 0, verify_avg: 0, total: 0, grade: ""}
+      test2: {extract_avg: 0, mcp_avg: 0, verify_avg: 0, total: 0, grade: ""}
+
+  rubric_effect_summary:
+    coder14b: {delta: 0, note: ""}
+    qwen25: {delta: 0, note: ""}
+    qwen3: {delta: 0, note: ""}
+    avg_gain: 0
+    conclusion: ""
+
+  model_ranking:
+    test1: {first: "", second: "", third: ""}
+    test2: {first: "", second: "", third: ""}
+    overall_winner: ""
+    best_for_extract: ""
+    best_for_mcp: ""
+    best_for_verify: ""

@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: systemd:activity-summarizer-safety.timer → activity-summarizer.service
 """activity_summarizer.py — Daily LLM summarization of activity_log events.
 
 Runs via systemd timer at KST 06:00 (21:00 UTC).
 Reads all raw events (summary_status='raw'), groups by run_id, sends to
-Pod B :8081 for summarization, inserts 'summary' rows,
+Pod B (MODEL_REGISTRY proposer) for summarization, inserts 'summary' rows,
 marks source rows as 'summarized'.
 
 Single file, no new dependencies. ~250 lines.
@@ -14,10 +17,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib.db import psql, psql_ok, esc_sql
+from lib.db import psql_json, psql, psql_ok, esc_sql
+from lib.llm_client import MODEL_REGISTRY
 
 LLAMA_HOST = "127.0.0.1"
-LLAMA_PORT = 8081
+LLAMA_PORT = MODEL_REGISTRY['proposer']['port']
 FIVE_MIN = "INTERVAL '5 minutes'"
 SUMMARY_TEMP = 0.0
 SUMMARY_MAX_TOKENS = 1024
@@ -35,26 +39,20 @@ def fetch_raw_events() -> list:
               WHERE summary_status = 'raw'
                 AND created_at < NOW() - {FIVE_MIN}
               ORDER BY created_at ASC"""
-    raw = psql(sql, timeout=30)
-    if not raw:
+    rows = psql_json(sql, timeout=30)
+    if not rows:
         return []
 
     events = []
-    for line in raw.split("\n"):
-        if not line.strip():
-            continue
-        parts = line.split("|", 11)
-        if len(parts) < 10:
-            continue
-        try:
-            body = json.loads(parts[5]) if parts[5] else {}
-        except json.JSONDecodeError:
-            body = {"raw": parts[5][:500]}
+    for row in rows:
+        body = row.get("body")
+        if not isinstance(body, dict):
+            body = {"raw": str(body)[:500]} if body else {}
         events.append({
-            "id": parts[0], "type": parts[1], "source": parts[2],
-            "title": parts[3], "summary": parts[4], "body": body,
-            "agent": parts[6], "model": parts[7], "created_at": parts[8],
-            "run_id": parts[9], "tags": parts[10] if len(parts) > 10 else "",
+            "id": row["id"], "type": row["type"], "source": row["source"],
+            "title": row["title"], "summary": row["summary"], "body": body,
+            "agent": row["agent"], "model": row["model"], "created_at": row["created_at"],
+            "run_id": row["run_id"], "tags": row.get("tags", ""),
         })
     return events
 
@@ -85,7 +83,7 @@ No markdown, no explanation — JSON array only."""
 
 
 def call_llm(prompt: str) -> list:
-    """Call llama.cpp at 127.0.0.1:8081. Returns parsed JSON list on success, None on failure."""
+    """Call llama.cpp (MODEL_REGISTRY proposer). Returns parsed JSON list on success, None on failure."""
     import http.client
 
     body = json.dumps({
@@ -170,18 +168,14 @@ def retry_parse_failed():
                 AND created_at < NOW() - {FIVE_MIN}
               ORDER BY created_at ASC
               LIMIT 50"""
-    raw = psql(sql, timeout=30)
-    if not raw:
+    rows = psql_json(sql, timeout=30)
+    if not rows:
         return
 
-    events = []
-    for line in raw.split("\n"):
-        parts = line.split("|")
-        if len(parts) >= 6:
-            events.append({
-                "id": parts[0], "type": parts[1], "source": parts[2],
-                "title": parts[3], "agent": parts[4], "created_at": parts[5],
-            })
+    events = [{
+        "id": row["id"], "type": row["type"], "source": row["source"],
+        "title": row["title"], "agent": row["agent"], "created_at": row["created_at"],
+    } for row in rows]
 
     if not events:
         return
@@ -266,3 +260,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

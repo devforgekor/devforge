@@ -1,0 +1,6 @@
+{
+  "by_result": {"tldr_ok": 2, "entities_grounded": 2},
+  "total": 2,
+  "elapsed_s": 358,
+  "note": "re-run after initial SIGTERM; 2/3 enriched, 1 failed (8082 crash on 8005-char turn)"
+}

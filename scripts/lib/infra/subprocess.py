@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Status: production
+# Path: imported by — production scripts
 """Subprocess helpers — run commands and collect output lines."""
 import subprocess
 
@@ -13,3 +16,4 @@ def run_subprocess(cmd, timeout=15):
 def run_lines(cmd, timeout=15):
     out = run_subprocess(cmd, timeout)
     return [l for l in out.split("\n") if l.strip()] if out else []
+
