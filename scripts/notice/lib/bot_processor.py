@@ -3,12 +3,12 @@
 # Path: imported by — notice/telegram_bot.py, notice/slack.py
 """scripts/notice/lib/bot_processor.py -- Shared bot message processor for Telegram & Slack.
 
-Uses Qwen2.5-Coder-7B (:8082) for intent classification and conversation.
+Uses day-extractor (Qwen3-8B :8082) for intent classification and conversation.
 No DeepSeek / Claude Code tokens consumed.
 
 Flow:
   process(text) -> response_text
-    1. classify_intent(text) -> Intent  (7B LLM, cheap)
+    1. classify_intent(text) -> Intent  (8B LLM, cheap)
     2. dispatch action based on intent
     3. return response string
 

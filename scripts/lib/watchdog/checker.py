@@ -426,6 +426,9 @@ def check_llm_slots(port: int) -> list[dict]:
             result.append({
                 "id": s.get("id", 0),
                 "is_processing": s.get("is_processing", False),
+                "id_task": s.get("id_task", 0),
+                "n_prompt_tokens_processed": s.get("n_prompt_tokens_processed", 0),
+                "n_prompt_tokens": s.get("n_prompt_tokens", 0),
                 "cache_tokens": s.get("n_prompt_tokens_cache", 0),
                 "ctx_size": s.get("n_ctx", 8192),
                 "cache_pct": round(s.get("n_prompt_tokens_cache", 0) / max(s.get("n_ctx", 1), 1) * 100, 1),

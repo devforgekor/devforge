@@ -34,6 +34,7 @@ from lib.db import psql_json
 from .notifier import heartbeat, send_alert, send_recovery
 from .recovery import (
     graduated_recover, recover_service, kill_stale_process, recover_oom,
+    recover_slot_deadlock,
 )
 from .state import WatchdogState
 from .messenger import log_message, get_undelivered, resolve_pulse
@@ -409,9 +410,21 @@ def build_heartbeat_summary(day_results: dict) -> dict:
         port = probe["port"]
         try:
             metrics[str(port)] = check_llm_metrics(port)
-            slots[str(port)] = check_llm_slots(port)
+            slot_data = check_llm_slots(port)
+            slots[str(port)] = slot_data
+            # Feed slot state into stuck detector
+            _state.update_slots(str(port), slot_data)
         except Exception:
             pass
+
+    # Check for stuck slots (processing but no progress)
+    slots_stuck = _state.check_slots_stuck()
+    if slots_stuck:
+        for ss in slots_stuck:
+            _state.add_event("slot_stuck", "deadlock",
+                             f":{ss['port']} slots[{ss['slots']}] all stuck {ss['min_stuck_checks']} checks")
+            log(f"  [slot-deadlock] :{ss['port']} slots[{ss['slots']}] — "
+                f"deadlock detected ({ss['min_stuck_checks']} checks)")
 
     # Detect test active → collect progress from DB
     test_pulses = _get_active_test_pulses()
@@ -440,6 +453,7 @@ def build_heartbeat_summary(day_results: dict) -> dict:
         "events_30m": _state.events_since(1800),
         "disk_trend": day_results.get("disk_trend", {}),
         "pipeline_stuck": day_results.get("pipeline_stuck", []),
+        "slots_stuck": slots_stuck,
     }
 
 
@@ -495,6 +509,46 @@ def night_fix_loop():
 
 
 # ── Main Loop ───────────────────────────────────────────────────────
+
+def _check_slot_deadlocks(results: dict, dry_run: bool = False):
+    """Detect and recover from slot deadlocks every cycle.
+
+    llama-server --parallel N + --cache-reuse can cause all processing slots
+    to livelock (tokens don't progress). We detect this by tracking
+    slot state: if ALL processing slots on a port make no progress for
+    SLOT_STUCK_THRESHOLD consecutive cycles → restart Pod B.
+    """
+    if dry_run:
+        return
+    if _test_active:
+        log("  [slot-deadlock] SKIP — test active")
+        return
+    if is_experiment_active():
+        log("  [slot-deadlock] SKIP — experiment active")
+        return
+
+    for probe in results.get("probes", []):
+        port = str(probe["port"])
+        try:
+            slot_data = check_llm_slots(probe["port"])
+            _state.update_slots(port, slot_data)
+        except Exception:
+            continue
+
+    stuck_ports = _state.check_slots_stuck()
+    for sp in stuck_ports:
+        _state.add_event("slot_deadlock", "detected",
+                         f":{sp['port']} slots[{sp['slots']}] stuck {sp['min_stuck_checks']} checks")
+        log(f"  [slot-deadlock] :{sp['port']} slots[{sp['slots']}] — "
+            f"deadlock confirmed, recovering...")
+        ok = recover_slot_deadlock(sp["port"])
+        if ok:
+            _state.add_event("slot_deadlock", "recovered", f":{sp['port']} restarted")
+        else:
+            _state.add_event("slot_deadlock", "recovery_failed", f":{sp['port']}")
+            send_alert("slot_deadlock", "DOWN",
+                       f":{sp['port']} deadlock recovery failed")
+
 
 def main_loop(one_shot: bool = False, dry_run: bool = False):
     global _running, _test_active
@@ -575,6 +629,9 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
                 heartbeat(summary)
             except Exception as e:
                 log(f"heartbeat error: {e}")
+
+        # Slot deadlock detection & recovery (every cycle)
+        _check_slot_deadlocks(results, dry_run=dry_run)
 
         if one_shot:
             break

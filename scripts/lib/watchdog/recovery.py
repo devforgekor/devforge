@@ -176,6 +176,31 @@ def graduated_recover(
     return ok
 
 
+def recover_slot_deadlock(port: str) -> bool:
+    """Restart container-devforge-pod-b to resolve cont-batching slot deadlock.
+
+    llama-server --parallel N + --cache-reuse causes slot scheduling deadlock
+    (PR #22083). Workaround --slot-prompt-similarity 0 is applied in entrypoint,
+    but if a deadlock already occurred, the container must restart.
+    """
+    if is_experiment_active():
+        log("  SKIP slot deadlock recovery — experiment active")
+        return False
+
+    log(f"  [slot-deadlock] :{port} — restarting container-devforge-pod-b...")
+    try:
+        subprocess.run(
+            ["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
+            capture_output=True, timeout=60,
+        )
+        time.sleep(5)
+        log("  container-devforge-pod-b restarted")
+        return True
+    except Exception as e:
+        log(f"  restart failed: {e}")
+        return False
+
+
 def kill_stale_process(entry_name: str):
     """Kill stale same-name python processes (systemd-managed 제외)."""
     current_pid = os.getpid()

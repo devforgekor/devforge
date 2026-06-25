@@ -263,6 +263,13 @@ def _build_heartbeat_blocks(state: dict) -> tuple[list, str]:
         for s in pipeline_stuck:
             ctx_parts.append(f"⚠ {s['state']}:{s['cnt']}t {s['stuck_sec']//60}m")
 
+    # Slot stuck alerts (all processing slots deadlocked on a port)
+    slots_stuck = state.get("slots_stuck", [])
+    if slots_stuck:
+        for ss in slots_stuck:
+            dur = ss["min_stuck_checks"] * 60  # ~seconds
+            ctx_parts.append(f"🔴 :{ss['port']} slots[{ss['slots']}] deadlock {dur}s")
+
     if ctx_parts:
         blocks.append({
             "type": "context",

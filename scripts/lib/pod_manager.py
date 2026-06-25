@@ -4,11 +4,11 @@
 """Container management for DevForge — Pod A (devforge-pod-a :8080) and Pod B (devforge-pod-b :8081-8089).
 
 Port map:
-  8080  Pod A  — Reserved for operator (future)
-  8081  Pod B  — embed(f16 day) / proposer(night)
-  8082  Pod B  — extract(day) / reflector(night)
-  8083  Pod B  — judge(night)
-  8084  Pod B  — verifier(night)
+  8080  Pod A  — router mode (tiny idle, reranker/polisher on-demand)
+  8081  Pod B  — embed(Q8 day) / proposer(30B night)
+  8082  Pod B  — day-extractor(8B) / day-enricher(9B) / day-verifier(7B) / reflector(14B night)
+  8083  Pod B  — verify-enrich(14B night) / judge(14B night)
+  8084  Pod B  — verifier(27B night)
   8085+ Pod B  — Future / Azure SSH tunnels
 """
 
@@ -30,10 +30,10 @@ TIMEOUT = 7200
 
 MODEL_METADATA = {
     # Pod B models — port assigned per mode (not from env file):
-    #   8081: embeder(f16 day) / proposer(night)
-    #   8082: day-enricher(day) / verify(day) / reflector(night)
-    #   8083: judge(night)
-    #   8084: verifier(night)
+    #   8081: embed(Q8 day) / proposer(30B night)
+    #   8082: day-extractor(8B) / day-enricher(9B) / day-verifier(7B) / reflector(14B night)
+    #   8083: verify-enrich(14B night) / judge(14B night)
+    #   8084: verifier(27B night)
     "embeder":      {
         "file": "Qwen3-Embedding-8B-Q8_0.gguf",
         "size": "7.5GB", "port": 8081, "mode": "embed",
@@ -95,8 +95,8 @@ MODEL_METADATA = {
         "model_name": "test-qwen", "ctx": 8192, "cache_ram": 512,
         "evict_room": 16000, "memory_check": 16000, "memory_check_mode": "warn",
     },
-    # Swap-based sequential day mode: 8082 reused for both models
-    #   day-extractor → swap → day-verifier (sequential, not simultaneous)
+    # Swap-based sequential day mode: 8082 reused for all 3 day models
+    #   day-extractor(8B) → swap → day-enricher(9B) → swap → day-verifier(9B) (sequential)
     "day-extractor": {
         "file": "Qwen3-8B-Q8_0.gguf",
         "size": "8.2GB", "port": 8082, "mode": "day",

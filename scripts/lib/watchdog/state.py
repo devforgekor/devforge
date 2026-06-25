@@ -181,6 +181,7 @@ class WatchdogState:
         self.disk_trend = TrendTracker()
         self.mem_trend = TrendTracker()
         self._last_pipeline_state: dict[str, float] = {}  # state → first_observed_ts
+        self._slot_state: dict[str, dict] = {}  # port → {slot_id: {task_id, processed, stuck_count}}
 
     def get(self, name: str) -> ComponentTracker:
         if name not in self._components:
@@ -307,3 +308,81 @@ class WatchdogState:
 
         self._last_pipeline_state = current
         return stuck
+
+    # ── Slot stuck detection ─────────────────────────────────────────
+    # Only alerts when ALL active slots on a port are simultaneously stuck.
+    # Single-slot stuck = slow prompt (normal, up to 10+ min for large prompts).
+    # All-slots stuck = cont-batching deadlock (llama.cpp known issue).
+
+    SLOT_STUCK_THRESHOLD = 3  # consecutive cycles all-slots-stuck before alert (3 min @ 60s; 60s = ~300-900 tokens, which must progress)  # noqa
+
+    def update_slots(self, port: str, slot_list: list[dict]):
+        """Register current slot state for stuck detection. Call each cycle."""
+        port_key = f"slots:{port}"
+        prev = self._slot_state.get(port_key, {})
+        current: dict[int, dict] = {}
+
+        for s in slot_list:
+            sid = s.get("id", 0)
+            task_id = s.get("id_task", 0)
+            processed = s.get("n_prompt_tokens_processed", 0)
+            is_proc = s.get("is_processing", False)
+            prev_slot = prev.get(sid)
+
+            if not is_proc:
+                current[sid] = {"task_id": 0, "processed": 0, "stuck_count": 0, "is_processing": False}
+                continue
+
+            stuck_count = 0
+            if prev_slot and prev_slot.get("is_processing"):
+                task_unchanged = (task_id == prev_slot["task_id"] and task_id > 0)
+                no_progress = (processed == prev_slot["processed"])
+                if task_unchanged and no_progress:
+                    stuck_count = prev_slot.get("stuck_count", 0) + 1
+
+            current[sid] = {
+                "task_id": task_id,
+                "processed": processed,
+                "stuck_count": stuck_count,
+                "is_processing": True,
+            }
+
+        self._slot_state[port_key] = current
+
+    def check_slots_stuck(self) -> list[dict]:
+        """Return list of deadlocked ports (ALL processing slots stuck for >= threshold cycles).
+
+        A single slot stuck in processing is normal (slow prompt). Only when
+        every processing slot on a port makes no progress for several consecutive
+        cycles is it a confirmed deadlock (cont-batching slot livelock).
+        """
+        threshold = self.SLOT_STUCK_THRESHOLD
+        stuck_ports: list[dict] = []
+
+        for port_key, slots in self._slot_state.items():
+            port = port_key.replace("slots:", "")
+            processing = {sid: info for sid, info in slots.items()
+                          if info.get("is_processing") and info.get("task_id", 0) > 0}
+            if not processing:
+                continue
+
+            # Single slot stuck = slow prompt (normal, up to 10+ min).
+            # Deadlock requires ≥2 processing slots all stuck simultaneously.
+            if len(processing) < 2:
+                continue
+
+            # All processing slots must be stuck → deadlock confirmed
+            all_stuck = all(info.get("stuck_count", 0) >= threshold
+                            for info in processing.values())
+            if all_stuck:
+                slot_ids = ",".join(str(sid) for sid in processing)
+                min_stuck = min(info["stuck_count"] for info in processing.values())
+                total_processing = len(processing)
+                stuck_ports.append({
+                    "port": port,
+                    "slots": slot_ids,
+                    "total_processing": total_processing,
+                    "min_stuck_checks": min_stuck,
+                })
+
+        return stuck_ports

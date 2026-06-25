@@ -300,7 +300,7 @@ def cmd_discussion(args):
     dry_run = getattr(args, "dry_run", False)
     with_api = getattr(args, "with_api", False)
 
-    # Ensure container is in review mode (14B for DRAG + verification)
+    # Ensure container is in review mode for DRAG + verification
     if not _container_in_review_mode():
         print("Switching container to review mode...")
         if not _switch_mode("review"):

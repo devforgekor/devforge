@@ -303,7 +303,7 @@ def compile_handoff(prj_results, round_num, with_rubric):
 
 def run_propose_review_judge(state, tag, rubric_append):
     """P-R-J 1회 패스. Pod A stop → P → R → J → state 저장."""
-    # Pod A(7B reviewer) stop — Pod B가 30B/14B/N14B로 전환되기 전 RAM 확보
+    # Pod A stop — free RAM before Pod B switches to 30B/14B night models
     stop_pod_a()
 
     log("\n--- Night Debate — Proposer (P) ---")
