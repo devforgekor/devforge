@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from lib.tracking.agent_names import normalize as normalize_agent
-from lib.db import psql, psql_ok, esc_sql
+from lib.db import psql, psql_ok, psql_json, esc_sql
 from lib.parsers.claude import parse as parse_claude
 from lib.parsers.copilot import parse as parse_copilot
 from lib.parsers.gemini import parse as parse_gemini

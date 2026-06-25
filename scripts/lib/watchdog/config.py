@@ -3,7 +3,7 @@
 """Watchdog 설정 — 체크 대상, 간격, 임계값.
 
 MODE=day (관찰형, 60s 주기):
-  Pod A=reserved (:8080) operator
+  Pod A=reranker (:8080)
   Pod B=day (:8082) extractor (day verify via model swap on :8082)
   day_cycle.sh — watchdog-managed async pipeline (embed → extract → enrich → verify)
   Fix loop: Pod A (:8080)가 수정 담당

@@ -17,6 +17,7 @@ import os
 import sys
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
 from urllib.parse import parse_qs
 from urllib.request import Request, urlopen
 
@@ -119,6 +120,44 @@ def _reject_fact(fact_id: str) -> bool:
     return True
 
 
+# ── Extract fail turn: noise skip/admit ───────────────────────────────
+
+def _skip_turn(turn_id: str) -> bool:
+    """Mark turn as noise: insert REJECT into feedback_examples."""
+    turn = psql_json(f"""SELECT id::text,
+       COALESCE(user_turn, '') AS user_turn,
+       COALESCE(text, '') AS text
+    FROM turns WHERE id = '{esc_sql(turn_id)}'::uuid""")
+    if not turn:
+        return False
+    r = turn[0]
+    ev = esc_sql((r.get('user_turn') or '').strip()[:200])
+    src = esc_sql((r.get('text') or '').strip()[:200])
+    psql_ok(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
+       VALUES ('{ev}', '{src}', 'turn', 'REJECT')
+       ON CONFLICT DO NOTHING""")
+    return True
+
+
+def _admit_turn(turn_id: str) -> bool:
+    """Mark turn as valid: insert CONFIRM into feedback_examples, reset to scanned for re-extract."""
+    turn = psql_json(f"""SELECT id::text,
+       COALESCE(user_turn, '') AS user_turn,
+       COALESCE(text, '') AS text
+    FROM turns WHERE id = '{esc_sql(turn_id)}'::uuid""")
+    if not turn:
+        return False
+    r = turn[0]
+    ev = esc_sql((r.get('user_turn') or '').strip()[:200])
+    src = esc_sql((r.get('text') or '').strip()[:200])
+    psql_ok(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
+       VALUES ('{ev}', '{src}', 'turn', 'CONFIRM')
+       ON CONFLICT DO NOTHING""")
+    # Reset to scanned for re-extraction
+    psql_ok(f"UPDATE turns SET pipeline_state = 'scanned' WHERE id = '{esc_sql(turn_id)}'::uuid")
+    return True
+
+
 def _build_resolved_block(original_section: list, verdict: str, fact_id: str) -> dict:
     resolved_text = f"*{':white_check_mark:' if verdict == 'CONFIRM' else ':x:'} {verdict}* ({fact_id[:12]}...)"
     return {"type": "context", "elements": [{"type": "mrkdwn", "text": resolved_text}]}
@@ -174,6 +213,16 @@ class SlackActionHandler(BaseHTTPRequestHandler):
             if _reject_fact(fact_id):
                 verdict = "REJECT"
                 print(f"  REJECTED {fact_id[:12]}... via Slack")
+        elif action_id == "noise_skip":
+            target = value.split(":", 1)[-1]
+            if _skip_turn(target):
+                verdict = "SKIP"
+                print(f"  SKIP turn {target[:12]}... via Slack")
+        elif action_id == "noise_admit":
+            target = value.split(":", 1)[-1]
+            if _admit_turn(target):
+                verdict = "ADMIT"
+                print(f"  ADMIT turn {target[:12]}... via Slack")
 
         if verdict and channel and msg_ts:
             # Update all fact sections: disable buttons by replacing actions with context
@@ -277,6 +326,81 @@ def send_neutral_alert():
         print(f"[slack_interactive] Alert FAILED: {result.get('error', '?')}")
 
 
+_EXTRACT_FAIL_REPORT = Path("/var/tmp/extract_fail_report.json")
+
+
+def send_extract_fail_alert():
+    """Read extract fail report and send interactive Slack message with noise classification buttons."""
+    if not _EXTRACT_FAIL_REPORT.exists():
+        print("[slack_interactive] No extract fail report found")
+        return
+
+    report = json.loads(_EXTRACT_FAIL_REPORT.read_text())
+    fails = report.get("failures", [])
+    noise = report.get("noise", [])
+    if not fails and not noise:
+        print("[slack_interactive] Extract fail report empty")
+        return
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"Extract 결과: {len(fails)}건 실패 / {len(noise)}건 noise", "emoji": True},
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "실패한 turn들을 검토 후 Skip(noise)/Admit(재추출)을 선택하세요.\nAdmit 선택 시 다음 cycle에서 재추출됩니다.",
+            },
+        },
+        {"type": "divider"},
+    ]
+
+    for entry in (fails + noise)[:8]:
+        tid = entry.get("turn_id", "?")
+        reason = entry.get("reason", "?")
+        preview = entry.get("preview", "")[:100]
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*[`{tid[:12]}`]* {reason}\n> {preview}"},
+        })
+        blocks.append({
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Skip (noise)", "emoji": True},
+                    "style": "danger",
+                    "value": f"s:{tid}",
+                    "action_id": "noise_skip",
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Admit (재추출)", "emoji": True},
+                    "style": "primary",
+                    "value": f"a:{tid}",
+                    "action_id": "noise_admit",
+                },
+            ],
+        })
+
+    blocks.append({
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": f"총 {len(fails)+len(noise)}건 중 상위 8개 표시 | 실패 보고서: {_EXTRACT_FAIL_REPORT}"}],
+    })
+
+    result = _slack_post("chat.postMessage", {
+        "channel": SLACK_CHANNEL,
+        "text": f"Extract: {len(fails)} failed, {len(noise)} noise",
+        "blocks": blocks,
+    })
+    if result.get("ok"):
+        print(f"[slack_interactive] Extract fail alert sent: {len(fails)} fails, {len(noise)} noise")
+    else:
+        print(f"[slack_interactive] Extract fail alert FAILED: {result.get('error', '?')}")
+
+
 def run_server():
     server = HTTPServer(("127.0.0.1", PORT), SlackActionHandler)
     print(f"[slack_interactive] Listening on :{PORT}")
@@ -290,5 +414,7 @@ def run_server():
 if __name__ == "__main__":
     if "--send-alert" in sys.argv:
         send_neutral_alert()
+    elif "--send-extract-fail" in sys.argv:
+        send_extract_fail_alert()
     else:
         run_server()

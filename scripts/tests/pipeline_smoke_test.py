@@ -17,7 +17,7 @@ PIPELINES = os.path.join(PROJECT_DIR, "scripts", "pipelines")
 results = []
 ok_count = 0
 
-for phase, model_key in [("extract", "day-extractor"), ("enrich", "day-enrich"), ("day_verify", "day-verifier")]:
+for phase, model_key in [("extract", "day-extractor"), ("enrich", "day-enricher"), ("day_verify", "day-verifier")]:
     log(f"\n{'=' * 60}")
     log(f"Phase: {phase} ({model_key})")
     log(f"{'=' * 60}")

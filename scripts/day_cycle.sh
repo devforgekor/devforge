@@ -21,7 +21,7 @@
 
 set -o pipefail
 
-MAX_CYCLE_SEC=3300
+MAX_CYCLE_SEC=21600
 START_TS=$(date +%s)
 LOG_TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 LOG() { echo "[$(LOG_TS)] $*"; }
@@ -46,6 +46,11 @@ _budget_gate() {
     [ "$est" -le 0 ] && est=60
 
     if [ "$budget_now" -lt "$est" ]; then
+        # Allow partial process: if ≥600s, some pool + 1 solo fits
+        if [ "$budget_now" -ge 600 ]; then
+            LOG "  Budget gate: solo ~${est}s > ${budget_now}s, but ≥600s — partial OK"
+            return 0
+        fi
         LOG "  Budget gate: solo ~${est}s needed ≤ ${budget_now}s — deferring"
         return 1
     fi
@@ -115,8 +120,8 @@ ensure_pod_b() {
     # Port map (Pod B fixed ports)
     local port="8082"
     case "$model_key" in
-        embed)      port=8081 ;;
-        polish|extractor|day|review-r|day-extractor|day-verifier) port=8082 ;;
+        embed|embeder)      port=8081 ;;
+        extractor|day|review-r|day-extractor|day-verifier) port=8082 ;;
         verify-enrich|judge|review-j|test-qwen|test-nextcoder) port=8083 ;;
         verifier|verify) port=8084 ;;
     esac
@@ -220,7 +225,7 @@ elif [ "$IN_FLIGHT" -eq 0 ]; then
     BATCH_COUNT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c "
       WITH batch AS (
         SELECT id FROM turns WHERE pipeline_state = 'pending'
-        ORDER BY created_at ASC LIMIT 10
+        ORDER BY created_at ASC LIMIT 50
       ), upd AS (
         UPDATE turns SET pipeline_state = 'batching'
         FROM batch WHERE turns.id = batch.id
@@ -273,7 +278,7 @@ NEED_POLISH=${NEED_POLISH:-0}
 
 if [ "$NEED_POLISH" -gt 0 ]; then
     LOG "=== Day Polish (${NEED_POLISH} cleaned turns) ==="
-    python3 "$PIPELINE_DIR/polish_batch.py" --no-llm 2>&1
+    python3 "$PIPELINE_DIR/polish_batch.py" --no-llm --limit 50 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     LOG "  Polish exit=$RC, elapsed=${ELAPSED}s"
@@ -286,9 +291,14 @@ fi
 LOG "=== est_chars recalculation ==="
 podman exec postgres psql -U devforge -d devforge_app -c "
   UPDATE turns SET est_chars =
-    LENGTH(COALESCE(user_turn_clean_polished, user_turn_clean, user_turn, ''))
-    + LENGTH(COALESCE(text_clean_polished, text_clean, text, ''))
-    + LENGTH(COALESCE(thinking_clean_polished, thinking_clean, thinking, ''))
+    GREATEST(
+      LENGTH(COALESCE(user_turn, '')),
+      LENGTH(COALESCE(text, '')),
+      LENGTH(COALESCE(thinking, ''))
+    )
+    + LENGTH(COALESCE(user_turn, ''))
+    + LENGTH(COALESCE(text, ''))
+    + LENGTH(COALESCE(thinking, ''))
   WHERE pipeline_state = 'polished'" >/dev/null 2>&1
 
 # ── FTS5 Refresh (text_clean_polished 기준) ─────────
@@ -302,7 +312,7 @@ NEED_EMBED=${NEED_EMBED:-0}
 
 if [ "$NEED_EMBED" -gt 0 ]; then
     LOG "=== Day Embedding (${NEED_EMBED} polished turns) ==="
-    ensure_pod_b "embed" "embed" true 1200
+    ensure_pod_b "embeder" "embeder" true 1200
     python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -332,7 +342,7 @@ NEED_FEEDBACK_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -
 NEED_FEEDBACK_EMBED=${NEED_FEEDBACK_EMBED:-0}
 if [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
     LOG "=== Feedback Embedding (${NEED_FEEDBACK_EMBED} unembedded feedback examples) ==="
-    ensure_pod_b "embed" "embed" true 600
+    ensure_pod_b "embeder" "embeder" true 600
     python3 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -358,17 +368,81 @@ if [ "$NEED_EXTRACT" -gt 0 ]; then
     [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 fi
 
-# ── NEUTRAL Gate: unresolved facts → stop cycle ─────────
-NEUTRAL_NEW=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT COUNT(*) FROM review_facts WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND created_at > now() - interval '1 hour'" 2>/dev/null || echo "0")
-if [ "${NEUTRAL_NEW:-0}" -gt 0 ]; then
-    LOG "  ${NEUTRAL_NEW} NEUTRAL facts - exiting cycle"
-    python3 "$SCRIPT_DIR/lib/slack_interactive.py" --send-alert 2>&1 || \
-    _slack_alert \
-        "NEUTRAL Facts: ${NEUTRAL_NEW}건 검토 필요" \
-        "${NEUTRAL_NEW}건의 fact가 NEUTRAL 판정. cli.py fact list --pending -> cli.py fact confirm/reject 후 다음 cycle에서 enrich 진행." \
-        "warning"
+# ── Extract Fail Alert: failed/noise turns → Slack with classification buttons ──
+if [ -f /var/tmp/extract_fail_report.json ]; then
+    python3 "$SCRIPT_DIR/lib/slack_interactive.py" --send-extract-fail 2>&1 || true
+fi
+
+# ── Noise Marker 처리: 사용자 확인된 건 처리, 미확인은 Telegram ───
+podman exec postgres psql -U devforge -d devforge_app -c "
+UPDATE turns SET pipeline_state = 'verified'
+FROM review_facts rf
+WHERE rf.turn_id = turns.id
+  AND rf.fact_type = 'noise_marker'
+  AND rf.user_verdict = 'CONFIRM'
+  AND turns.pipeline_state = 'scanned';
+" 2>/dev/null
+
+podman exec postgres psql -U devforge -d devforge_app -c "
+DELETE FROM review_facts rf
+USING turns
+WHERE rf.turn_id = turns.id
+  AND rf.fact_type = 'noise_marker'
+  AND rf.user_verdict = 'REJECT'
+  AND turns.pipeline_state = 'scanned';
+" 2>/dev/null
+
+NOISE_PENDING=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT COUNT(*) FROM review_facts WHERE fact_type='noise_marker' AND user_verdict IS NULL AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
+if [ "${NOISE_PENDING:-0}" -gt 0 ]; then
+    LOG "  ${NOISE_PENDING} noise markers - sending Telegram"
+    python3 "$SCRIPT_DIR/lib/telegram_notifier.py" --send-noise 2>&1 || true
+fi
+
+# ── NEUTRAL Auto-Resolve: GROUNDED/UNGROUNDED는 시스템 처리 ───
+podman exec postgres psql -U devforge -d devforge_app -c "
+UPDATE review_facts SET user_verdict = 'GROUNDED'
+WHERE nli_llm = 'NEUTRAL' AND user_verdict IS NULL
+  AND nli_verdict = 'GROUNDED'
+  AND telegram_notified_at IS NULL
+  AND created_at > now() - interval '24 hours'
+  AND source = 'extract_pipeline';
+" 2>/dev/null
+
+podman exec postgres psql -U devforge -d devforge_app -c "
+UPDATE review_facts SET user_verdict = 'UNGROUNDED'
+WHERE nli_llm = 'NEUTRAL' AND user_verdict IS NULL
+  AND nli_verdict = 'UNGROUNDED'
+  AND telegram_notified_at IS NULL
+  AND created_at > now() - interval '24 hours'
+  AND source = 'extract_pipeline';
+" 2>/dev/null
+
+# ── NEUTRAL Gate: 정말 애매한 (AMBIGUOUS) 것만 Telegram → stop cycle ──
+NEUTRAL_AMB=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT COUNT(*) FROM review_facts WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND user_verdict IS NULL AND nli_verdict='AMBIGUOUS' AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
+if [ "${NEUTRAL_AMB:-0}" -gt 0 ]; then
+    LOG "  ${NEUTRAL_AMB} NEUTRAL+AMBIGUOUS facts - Telegram alert + exit"
+    python3 "$SCRIPT_DIR/lib/telegram_notifier.py" --send-neutral 2>&1 || true
     exit 0
+fi
+
+# ── Reranker Recovery: re-score RERANKER_ERROR facts ──
+NEED_RECOVER=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT count(*)::int FROM review_facts WHERE faithful_method = 'reranker_err'" 2>/dev/null || echo "0")
+NEED_RECOVER=${NEED_RECOVER:-0}
+if [ "$NEED_RECOVER" -gt 0 ]; then
+    LOG "=== Reranker Recovery (${NEED_RECOVER} RERANKER_ERROR facts) ==="
+    python3 "$PIPELINE_DIR/reranker_recover.py" 2>&1
+    RC=$?
+    if [ $RC -eq 1 ]; then
+        LOG "  Reranker recover skipped (Pod A unhealthy)"
+    else
+        LOG "  Reranker recover exit=$RC"
+    fi
+    [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
+else
+    LOG "=== Reranker Recovery: skip (0 RERANKER_ERROR facts) ==="
 fi
 
 # ── Day Enrich (:8082) ──
@@ -377,7 +451,7 @@ NEED_ENRICH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
 if [ "$NEED_ENRICH" -gt 0 ]; then
     _budget_gate "extracted" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
     LOG "=== Day Enrich (:8082, ${NEED_ENRICH} extracted turns) ==="
-    ensure_pod_b "day-enrich" "day-enrich" true 300
+    ensure_pod_b "day-enricher" "day-enricher" true 300
     python3 "$PIPELINE_DIR/enrich.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))

@@ -172,7 +172,7 @@ def main():
     from lib.llm_client import MODEL_REGISTRY
     expected = {
         "reranker": 8080,
-        "embedder": 8081,
+        "embeder": 8081,
         "proposer": 8081,
         "extractor": 8082,
         "reviewer": 8083,

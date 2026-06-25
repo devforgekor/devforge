@@ -107,16 +107,25 @@ def send_file(filepath: str, caption: Optional[str] = None) -> bool:
         return False
 
 
-def send_text(text: str) -> bool:
-    """Send a text message via Telegram sendMessage."""
+def send_text(text: str, reply_markup: dict = None) -> bool:
+    """Send a text message via Telegram sendMessage.
+
+    Args:
+        text: Message text (up to 4000 chars)
+        reply_markup: Optional inline keyboard markup dict (e.g. InlineKeyboardMarkup)
+    """
     max_len = 4000
     if len(text) > max_len:
         text = text[:max_len] + "\n... (truncated)"
 
-    result = _tg("sendMessage", data={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"})
+    data = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
+    if reply_markup:
+        data["reply_markup"] = reply_markup
+
+    result = _tg("sendMessage", data=data)
     if not result.get("ok"):
-        # Retry without parse_mode
-        result = _tg("sendMessage", data={"chat_id": CHAT_ID, "text": text})
+        data.pop("parse_mode", None)
+        result = _tg("sendMessage", data=data)
     if result.get("ok"):
         print("Sent: text message", file=sys.stderr)
         return True

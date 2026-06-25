@@ -32,7 +32,7 @@ from lib.search.local_index import FTS5Index
 
 # Embed API (same endpoint as embed_batch.py)
 from lib.llm_client import MODEL_REGISTRY
-EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embedder']['port']}/v1/embeddings"
+EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embeder']['port']}/v1/embeddings"
 EMBED_TIMEOUT = 30
 
 # RRF constant

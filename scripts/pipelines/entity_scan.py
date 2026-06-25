@@ -37,7 +37,7 @@ from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.infra.preflight import preflight_checks
 from lib.watchdog.messenger import heartbeat
 
-BATCH_LIMIT = 10
+BATCH_LIMIT = 50
 
 _EXTENSIONS = (
     r"\.(?:py|sh|yaml|yml|json|md|txt|env|toml"
@@ -185,7 +185,7 @@ def _get_turns_for_scan(limit: int = BATCH_LIMIT) -> List[Dict]:
         "  WHERE rf.turn_id = t.id AND rf.fact_type = 'entity_scan'"
         ")"
         "AND t.pipeline_state = 'embedded' "
-        "ORDER BY t.created_at DESC "
+        "ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
         f"LIMIT {limit}"
     )
     rows = psql_json(sql) or []

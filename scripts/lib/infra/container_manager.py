@@ -94,8 +94,8 @@ def write_mode(pod, mode):
     os.rename(tmp, path)
 
 def start_pod_a(timeout=120):
-    """Start Pod A (reserved:8080)."""
-    log("  Starting Pod A (reserved:8080)...")
+    """Start Pod A (reranker:8080)."""
+    log("  Starting Pod A (reranker:8080)...")
     subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
                    capture_output=True, timeout=60)
     return wait_health(8080, timeout)

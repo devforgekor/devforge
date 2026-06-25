@@ -30,36 +30,22 @@ TIMEOUT = 7200
 
 MODEL_METADATA = {
     # Pod B models — port assigned per mode (not from env file):
-    #   8081: embed(f16 day) / proposer(night)
-    #   8082: extract(day) / enrich(day) / verify(day) / polish / reflector(night)
+    #   8081: embeder(f16 day) / proposer(night)
+    #   8082: day-enricher(day) / verify(day) / reflector(night)
     #   8083: judge(night)
     #   8084: verifier(night)
-    "embed":      {
+    "embeder":      {
         "file": "Qwen3-Embedding-8B-Q8_0.gguf",
         "size": "7.5GB", "port": 8081, "mode": "embed",
-        "model_name": "embed", "ctx": 16384,
+        "model_name": "embeder", "ctx": 16384,
         "threads": 4, "threads_batch": 4,
         "parallel": 1,
     },
-    "polish":  {
-        "file": "Qwen3-4B-Instruct-2507-Q5_K_S-4.74bpw.gguf",
-        "size": "2.3GB", "port": 8082, "mode": "polish",
-        "model_name": "polish", "ctx": 8192,
+    "polisher":  {
+        "file": "qwen3-4b-instruct-2507-q8_0.gguf",
+        "size": "4.0GB", "port": 8080, "mode": "router",
+        "model_name": "polisher", "ctx": 4096,
         "threads": 4, "threads_batch": 4,
-        "parallel": 2, "ubatch_size": 512,
-    },
-    "polish-lite":  {
-        "file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
-        "size": "2.4GB", "port": 8082, "mode": "polish",
-        "model_name": "polish-lite", "ctx": 8192,
-        "threads": 2, "threads_batch": 2,
-        "parallel": 2, "ubatch_size": 512,
-    },
-    "polish-enhanced":  {
-        "file": "Qwen3-4B-Instruct-2507-Q6_K.gguf",
-        "size": "3.1GB", "port": 8082, "mode": "polish",
-        "model_name": "polish-enhanced", "ctx": 8192,
-        "threads": 2, "threads_batch": 2,
         "parallel": 2, "ubatch_size": 512,
     },
     "verify-enrich": {
@@ -76,20 +62,6 @@ MODEL_METADATA = {
         "model_name": "proposer", "ctx": 8192, "cache_ram": 1024, "mlock": 0,
         "evict_room": 18000, "memory_check": 18000, "memory_check_mode": "fatal",
         "report_memory": "1", "cache_type_k": "q8_0", "cache_type_v": "q8_0", "flash_attn": "1",
-    },
-    "extractor":  {
-        "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
-        "size": "7.6GB", "port": 8082, "mode": "day",
-        "model_name": "extractor", "ctx": 8192, "cache_ram": 1024, "evict_room": 8000,
-        "threads": 2, "threads_batch": 2,
-        "parallel": 2, "ubatch_size": 512,
-    },
-    "day":  {
-        "file": "Qwen3-8B-Q8_0.gguf",
-        "size": "8.2GB", "port": 8082, "mode": "day",
-        "model_name": "day", "ctx": 8192, "cache_ram": 1024, "evict_room": 8000,
-        "threads": 2, "threads_batch": 2,
-        "parallel": 2, "ubatch_size": 512,
     },
     "reflector":  {
         "file": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
@@ -132,6 +104,7 @@ MODEL_METADATA = {
         "threads": 4, "threads_batch": 4,
         "parallel": 2, "ubatch_size": 512,
         "cpus": "0-2",
+        "cache_ram": 2048,
         "cache_type_k": "q8_0", "cache_type_v": "q8_0",
     },
     "day-verifier": {
@@ -141,15 +114,17 @@ MODEL_METADATA = {
         "threads": 4, "threads_batch": 4,
         "parallel": 2, "ubatch_size": 512,
         "cpus": "0-2",
+        "cache_ram": 2048,
         "cache_type_k": "q8_0", "cache_type_v": "q8_0",
     },
-    "day-enrich": {
+    "day-enricher": {
         "file": "Qwen-Qwen3.5-9B-Q8_0.gguf",
         "size": "8.9GB", "port": 8082, "mode": "day",
-        "model_name": "day-enrich", "ctx": 8192,
+        "model_name": "day-enricher", "ctx": 8192,
         "threads": 4, "threads_batch": 4,
         "parallel": 2, "ubatch_size": 512,
         "cpus": "0-2",
+        "cache_ram": 2048,
         "cache_type_k": "q8_0", "cache_type_v": "q8_0",
     },
 }
@@ -157,7 +132,7 @@ MODEL_METADATA = {
 # Day phase → physical model key (role-based, no hardcoded names in callers)
 DAY_PHASE_MODELS = {
     "day_extract": "day-extractor",
-    "day_enrich": "day-enrich",
+    "day_enrich": "day-enricher",
     "day_verify": "day-verifier",
 }
 
@@ -546,8 +521,8 @@ def start_pod_a(mode, port, dry_run=False):
 
 
 def start_day_both(dry_run=False):
-    """DEPRECATED — Pod A is reserved operator, no longer runs day reviewer."""
-    log("  start_day_both: DEPRECATED — Pod A is reserved operator port")
+    """DEPRECATED — Pod A is now reranker-only, start_day_both not needed."""
+    log("  start_day_both: DEPRECATED — Pod A is reranker-only")
     return True
 
 

@@ -2,7 +2,7 @@
 # Path: imported by — watchdog.py (entry point only)
 """DevForge Watchdog — 통합 서버 모니터링/자동복구 데몬.
 
-  - T1+T2 LLM probe (:8080 reserved, :8082, :8083)
+  - T1+T2 LLM probe (:8080 reranker, :8082, :8083)
   - day_cycle.sh 파이프라인 감시 (system sync → embed → extract → verify)
   - night_cycle 타이머 감시 (day 중 kick 생략)
   - 시스템 리소스 (swap, memory, disk)
@@ -240,6 +240,31 @@ def run_day_checks(dry_run: bool = False) -> dict:
         results["probes"].append(probe)
 
     pipe_name, _ = check_pipeline("day_cycle.sh")
+    if not pipe_name and not _test_active:
+        try:
+            work = psql_json(
+                "SELECT count(*)::int AS cnt FROM turns "
+                "WHERE pipeline_state NOT IN ('verified', 'pending') "
+                "AND text != ''", timeout=5)
+            in_flight = (work or [{}])[0].get("cnt", 0) if work else 0
+            if in_flight > 0:
+                log(f"  day_cycle.sh not running, {in_flight} in-flight — resuming")
+                _state.add_event("day_cycle", "resume", f"{in_flight} in-flight")
+                subprocess.run(["systemctl", "--user", "start", "devforge-day-cycle.service"],
+                               capture_output=True, timeout=30)
+            else:
+                pending_work = psql_json(
+                    "SELECT count(*)::int AS cnt FROM turns "
+                    "WHERE pipeline_state = 'pending' "
+                    "AND text != ''", timeout=5)
+                pending_cnt = (pending_work or [{}])[0].get("cnt", 0) if pending_work else 0
+                if pending_cnt > 0:
+                    log(f"  day_cycle.sh not running, {pending_cnt} pending — starting first batch")
+                    _state.add_event("day_cycle", "start", f"{pending_cnt} pending")
+                    subprocess.run(["systemctl", "--user", "start", "devforge-day-cycle.service"],
+                                   capture_output=True, timeout=30)
+        except Exception as e:
+            log(f"  day_cycle check error: {e}")
     results["pipeline_running"] = pipe_name
 
     _run_common_checks(results, dry_run, "day")

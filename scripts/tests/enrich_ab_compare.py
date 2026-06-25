@@ -210,7 +210,7 @@ def main():
     results = {"A": None, "B": None}
 
     if phase in ("full", "A_only"):
-        results["A"] = run_phase("A", "day-enrich", "day_enrich")
+        results["A"] = run_phase("A", "day-enricher", "day_enrich")
         if results["A"]:
             save_snapshot("A", results["A"])
         test_heartbeat("Phase A done")

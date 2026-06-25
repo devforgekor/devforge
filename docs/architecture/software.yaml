@@ -1,22 +1,22 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-06-23 09:00 KST
+# auto-generated from live data at 2026-06-25 09:00 KST
 ---
 metadata:
-  updated: 2026-06-23 09:00 KST
+  updated: 2026-06-25 09:00 KST
   source: live (collect_structural + mode file)
 models:
-- name: /models/Qwen3-Reranker-4B-Q8_0.gguf
+- name: devforge-pod-a
   container: devforge-pod-a
-  status: Up 17 hours (healthy)
-  ports: 127.0.0.1:8080->8080/tcp
+  status: Up 2 hours (healthy)
+  ports: 127.0.0.1:8000->8000/tcp, 127.0.0.1:8080->8080/tcp
 - name: devforge-pod-b
   container: devforge-pod-b
-  status: Up About an hour (healthy)
+  status: Up 7 minutes (healthy)
   ports: 127.0.0.1:8081-8084->8081-8084/tcp, 127.0.0.1:8089->8089/tcp
 modes:
   current: day
   available:
-    day: Pod A(reserved:8080) + Pod B(extract 7B:8082 | verify 14B:8083)
+    day: 'Pod A(:8080 reranker) + Pod B(:8081 embed | :8082 swap: extract/enrich/verify)'
     night: Nightly review pipeline (verify + debate)
 pipelines:
   daily structure: activating

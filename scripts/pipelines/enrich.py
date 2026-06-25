@@ -35,7 +35,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql, psql_ok, esc_sql, psql_json
 from lib.common import strip_think
-from lib.enrich_feedback import get_dynamic_few_shot
+from lib.enrich_few_shot import load_few_shot
 from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, reranker_nli_verdict
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.token_budget import TokenBudget
@@ -45,7 +45,7 @@ from lib.pod_manager import ensure_model
 TIMEOUT_ENRICH = 900  # default, overridden by _calc_timeout per-turn
 MAX_TOKENS_ENRICH = 512
 TEMP_ENRICH = 0.1
-BATCH_LIMIT = 10
+BATCH_LIMIT = 50
 PARALLEL = 2  # concurrent LLM calls via ThreadPoolExecutor
 
 # Dynamic timeout constants (extractor model on :8082)
@@ -62,17 +62,28 @@ You are a conversation analyst preparing structured metadata for an MCP
 (Model Context Protocol) system. Given the original conversation turn and
 the extracted facts, produce structured MCP fields.
 
-CRITICAL — Entity Extraction Rule:
-An entity is ONLY valid if its exact text appears VERBATIM in user_turn or text.
-Do NOT infer, assume, or deduce entities from context, topic, or general knowledge.
-If you cannot find the EXACT string in the source, use an empty array [].
+SEQUENTIAL REASONING — Follow these steps internally:
+Step 1 — SCAN: Read the turn and identify the core topic, intent, and any explicit entities (files, technologies, functions, users).
+Step 2 — VERIFY: For each entity candidate, confirm it has a verbatim or near-verbatim match in the turn text. Discard hallucinated entities.
+Step 3 — TLDR: Draft a one-line summary in the source language. Make it specific — capture what happened, not just that something happened.
+Step 4 — FILTER: Remove vague tags and generic categories. Keep only tags that are specific, discoverable, and directly derivable.
+Step 5 — OUTPUT: Produce the JSON below. Every field must be justified by the source.
 
-Examples of REJECTED entities (common mistakes):
-  - "Python" → REJECT unless the user literally said "Python"
-  - "FastAPI" → REJECT unless the user literally said "FastAPI"
-  - "asyncio" → REJECT unless the user literally said "asyncio"
-  - "Docker" → REJECT unless the user literally said "Docker"
-These are NOT acceptable even if the conversation is clearly about them.
+CRITICAL — Entity Extraction Rules:
+- files & functions: Require EXACT verbatim match in user_turn or text
+- technologies: Include if the conversation clearly discusses the technology, even if the name doesn't appear verbatim (the topic should be obvious from context)
+- mentioned_users: Include only if a specific user/username is explicitly referenced
+- Never hallucinate: if the conversation just "seems related" but doesn't clearly involve the entity, use empty array []
+
+Examples for technologies (ACCEPT when conversation obviously discusses them):
+  - "taskset pinning 제거" → ["taskset"] is OK even if "taskset" wasn't typed as bare name
+  - "Postgres container" → ["PostgreSQL"] is OK
+  - Avoid vague topics like "programming", "development", "API"
+
+Examples for files (REJECT unless exact match):
+  - "night.py 파일 수정" → ["night.py"] OK (exact match)
+  - "runner.py→" → ["runner.py"] OK (exact match)
+  - "the pipeline script" → [] REJECT (vague reference)
 
 Output STRICT JSON:
 {
@@ -331,18 +342,15 @@ def _verify_entities(entities: dict, user_turn: str, text: str) -> dict:
 
 
 # ── TLDR NLI Self-Verify (LLM-based, same pattern as extract.py) ──
-_NLI_TLDR_PROMPT = """You are verifying whether a TLDR summary is factually supported by the SOURCE conversation turn.
-
-Follow these steps:
-1. Read the source turn carefully.
-2. Check if the TLDR summary is supported by the source.
+_NLI_TLDR_PROMPT = """You are verifying whether a TLDR summary accurately reflects the SOURCE conversation turn.
 
 LABELS:
-- ENTAILMENT: The TLDR is factually supported by the source.
+- ENTAILMENT: The TLDR is factually supported by the source (may be rephrased).
 - CONTRADICTION: The TLDR contradicts the source — they cannot both be true.
+- COMPLEMENTARY: The TLDR accurately summarizes or synthesizes source content without directly quoting it. This is normal for well-written summaries.
 - NEUTRAL: The TLDR is related but not directly verifiable from the source.
 
-Output EXACTLY one word: ENTAILMENT | CONTRADICTION | NEUTRAL
+Output EXACTLY one word: ENTAILMENT | CONTRADICTION | COMPLEMENTARY | NEUTRAL
 No punctuation. No explanation.
 
 SOURCE: {source}
@@ -369,7 +377,7 @@ def _verify_tldr(tldr: str, user_turn: str, text: str) -> dict:
         raw = meta["content"].strip().upper()
         for tok in raw.replace("\n", " ").split():
             tok = tok.strip(".,!?;:\"'()[]")
-            if tok in ("ENTAILMENT", "CONTRADICTION", "NEUTRAL"):
+            if tok in ("ENTAILMENT", "CONTRADICTION", "COMPLEMENTARY", "NEUTRAL"):
                 return {"verdict": tok, "label": tok, "score": 0.0}
     except Exception:
         pass
@@ -429,9 +437,9 @@ def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
     if budget.used > 0:
         parts.append(f"[context budget: {budget.used}/{budget.limit} tok]")
 
-    # Dynamic few-shot retrieval (pgvector ANN on feedback_examples)
+    # Static few-shot from YAML (diversity-first, KV-cache-optimized)
     system_content = SYSTEM_DAY_ENRICH
-    feedback_text = get_dynamic_few_shot(text or user_turn or "", max_examples=4)
+    feedback_text = load_few_shot()
     if feedback_text:
         system_content = SYSTEM_DAY_ENRICH + "\n\n" + feedback_text
 
@@ -469,9 +477,10 @@ def _get_turns_without_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         "  WHERE rf3.turn_id = t.id "
         "  AND rf3.nli_llm = 'NEUTRAL'"
         "  AND rf3.user_verdict IS NULL"
+        "  AND rf3.nli_verdict = 'AMBIGUOUS'"
         ")"
         "AND t.pipeline_state = 'extracted' "
-        "ORDER BY t.created_at DESC "
+        "ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
         f"LIMIT {limit}"
     )
     rows = psql_json(sql)
@@ -776,6 +785,8 @@ def main() -> None:
     )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
+    from lib.llm_client import recall_tiny
+    recall_tiny()
     sys.exit(0 if result["ok"] else 1)
 
 

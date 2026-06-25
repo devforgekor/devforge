@@ -258,11 +258,11 @@ class WatchdogState:
 
     # ── Pipeline state stuck detection ─────────────────────────────────
 
-    def check_pipeline_stuck(self, stale_sec: int = 1800) -> list[dict]:
+    def check_pipeline_stuck(self, stale_sec: int = 3600) -> list[dict]:
         """Detect pipeline_state stagnation. Returns list of stuck states.
 
         Compares current state counts against previous cycle first-observation.
-        States unchanged for >stale_sec are reported as stuck.
+        States unchanged for >stale_sec are reported as stuck. Default 3600s (~MAX_CYCLE_SEC).
         """
         from lib.db import psql_json
         try:

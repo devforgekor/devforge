@@ -36,22 +36,23 @@ from typing import Any, Dict, List, Optional
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # Physical endpoints (role-based — each describes the LLM's primary job)
     "extractor":    {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300},  # Pod B extractor
-    "polish":       {"port": 8082, "temp": 0.0,  "max_tokens": 512,  "timeout": 600},  # Pod B polish phase
+    "polisher":     {"port": 8080, "temp": 0.0,  "max_tokens": 512,  "timeout": 600},  # Pod A router
     "proposer":     {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},  # Pod B proposer
     "reviewer":     {"port": 8083, "temp": 0.10, "max_tokens": 400,  "timeout": 480},  # Pod B (legacy)
     "day-verify":{"port": 8082, "temp": 0.0,  "max_tokens": 512,  "timeout": 120},  # Pod B verify
-    "day-enrich":{"port": 8082, "temp": 0.1,  "max_tokens": 512,  "timeout": 900},  # Pod B enrich (9B Q8)
+    "day-enricher":{"port": 8082, "temp": 0.1,  "max_tokens": 512,  "timeout": 900},  # Pod B enrich (9B Q8)
     "reflector":    {"port": 8082, "temp": 0.10, "max_tokens": 2048, "timeout": 600},  # Pod B reflector
     "verifier":     {"port": 8084, "temp": 0.10, "max_tokens": 4096, "timeout": 1200}, # Pod B verifier
     "judge":        {"port": 8083, "temp": 0.10, "max_tokens": 4096, "timeout": 7200}, # Pod B judge
     # Non-LLM service endpoints (port-only, for pipeline scripts)
     "reranker":     {"port": 8080},  # Pod A reranker
-    "embedder":     {"port": 8081},  # Pod B embed mode
+    "tiny":         {"port": 8080},  # Pod A tiny 0.5B — lightweight idle model
+    "embeder":     {"port": 8081},  # Pod B embed mode
     # Role aliases — pipeline code uses these; MODEL_REGISTRY is the single
     # place to change when a model/port changes.
     # Day pipeline — extract (:00/:30)
     "day_extract": {"_model": "extractor"},
-    "day_enrich": {"_model": "day-enrich"},  # day enrich pipeline (9B Q4)
+    "day_enrich": {"_model": "day-enricher"},  # day enrich pipeline (9B Q4)
 
     # Day pipeline — verify & rubric
     "day_verify":  {"_model": "day-verify"},
@@ -161,6 +162,7 @@ def call_llm(
 
     port = cfg["port"]
     body: Dict[str, Any] = {
+        "model": model,
         "messages": messages,
         "max_tokens": max_tokens if max_tokens is not None else cfg["max_tokens"],
         "temperature": temperature if temperature is not None else cfg["temp"],
@@ -230,6 +232,7 @@ def reranker_score(query: str, document: str) -> float:
     # Truncate to avoid llama.cpp physical batch size limit
     tr = lambda s: s[:2000] if isinstance(s, str) else str(s)[:2000]
     body = json.dumps({
+        "model": "reranker",
         "query": tr(query),
         "documents": [tr(document)],
         "top_n": 1,
@@ -244,7 +247,7 @@ def reranker_score(query: str, document: str) -> float:
         return float(data["results"][0]["relevance_score"])
     except Exception as e:
         print(f"  [reranker] score call failed: {e}", flush=True)
-        return 0.0
+        return -1.0  # distinguish error from genuine low score
 
 
 def reranker_nli_verdict(score: float) -> str:
@@ -266,10 +269,13 @@ def reranker_nli_verdict(score: float) -> str:
       - Content removal (subset of source text)
 
     Thresholds (aligned with extract.py Phase 3):
-        >= 0.75 → GROUNDED  (confident accept — content is relevant to source)
-        >= 0.40 → AMBIGUOUS (somewhat related — accepted, downstream catches)
-        <  0.40 → UNGROUNDED (confident reject — content unrelated to source)
+        <  0       → RERANKER_ERROR (connection/API failure)
+        >= 0.75   → GROUNDED  (confident accept — content is relevant to source)
+        >= 0.40   → AMBIGUOUS (somewhat related — accepted, downstream catches)
+        <  0.40   → UNGROUNDED (confident reject — content unrelated to source)
     """
+    if score < 0:
+        return "RERANKER_ERROR"
     if score >= 0.75:
         return "GROUNDED"
     elif score >= 0.40:
@@ -310,6 +316,19 @@ def call_llm_json(
     return call_llm(messages, model, json_mode=True, **kwargs)
 
 
+def recall_tiny() -> None:
+    """Recall tiny model on Pod A to evict heavy model and reduce memory.
+
+    Best-effort — never raises. Call after finishing with Pod A heavy models
+    (reranker, polisher) to restore lightweight idle state.
+    """
+    try:
+        messages = [{"role": "user", "content": "ping"}]
+        call_llm(messages, model="tiny", max_tokens=2, temperature=0, timeout=15)
+    except Exception:
+        pass
+
+
 # ── 8082 Auto-Recovery ──────────────────────────────────────────────
 # Used by extract.py, enrich.py, day_verify.py to recover from 8082 crashes.
 # Import call_llm_with_retry from this module instead of duplicating logic.
@@ -330,17 +349,22 @@ def is_8082_connection_error(e: Exception) -> bool:
     return any(s in err for s in _CONNECTION_ERROR_SUBSTRINGS)
 
 
-def recover_8082() -> None:
-    """Reload day-extractor on 8082 (thread-safe, only one recovery at a time)."""
+def recover_8082(model_key: str = "day-extractor") -> None:
+    """Reload model on 8082 (thread-safe, only one recovery at a time).
+
+    Args:
+        model_key: MODEL_METADATA key for the model to reload (default day-extractor).
+                   Must match the current pipeline phase (day-verifier for verify phase).
+    """
     if not _8082_RECOVERY_LOCK.acquire(blocking=False):
         print("  [recovery] Another recovery in progress, waiting...", flush=True)
         _8082_RECOVERY_LOCK.acquire(blocking=True)
         print("  [recovery] Recovery finished by other thread", flush=True)
         return
     try:
-        print("  [recovery] Reloading 8082...", flush=True)
+        print(f"  [recovery] Reloading 8082 → {model_key}...", flush=True)
         from lib.pod_manager import ensure_model
-        ensure_model('day-extractor', skip_if_healthy=False)
+        ensure_model(model_key, skip_if_healthy=False)
         print("  [recovery] 8082 ready", flush=True)
     except Exception as recover_err:
         print(f"  [recovery] 8082 reload failed: {recover_err}", flush=True)
@@ -348,14 +372,40 @@ def recover_8082() -> None:
         _8082_RECOVERY_LOCK.release()
 
 
+def _model_key_for_8082(model: str) -> str:
+    """Map MODEL_REGISTRY role to the correct MODEL_METADATA key for 8082 recovery.
+
+    During day cycle, different phases may be running different models on :8082.
+    This returns the correct model key so recovery loads the right model.
+    """
+    mapping = {
+        # day_verify phase → day-verifier (Qwen2.5-Coder-7B)
+        "day-verify": "day-verifier",
+        # day_extract phase → day-extractor (Qwen3-8B)
+        "day_extract": "day-extractor",
+        "extractor": "day-extractor",
+        # day_enrich phase → day-enricher (Qwen3.5-9B)
+        "day-enricher": "day-enricher",
+        "day_enrich": "day-enricher",
+    }
+    return mapping.get(model, "day-extractor")
+
+
 def call_llm_with_retry(*args, **kwargs):
-    """Call call_llm, retry once with 8082 reload on connection error."""
+    """Call call_llm, retry once with 8082 reload on connection error.
+
+    Uses the model name from kwargs to determine which model to reload,
+    so the correct phase model is restored (day-verifier for verify phase,
+    day-extractor for extract phase, etc.).
+    """
     try:
         return call_llm(*args, **kwargs)
     except Exception as e:
         if is_8082_connection_error(e):
-            print(f"  [recovery] 8082 error: {type(e).__name__}", flush=True)
-            recover_8082()
+            model = kwargs.get("model", "day-extractor")
+            model_key = _model_key_for_8082(model)
+            print(f"  [recovery] 8082 error ({model}): {type(e).__name__}", flush=True)
+            recover_8082(model_key)
             return call_llm(*args, **kwargs)
         raise
 

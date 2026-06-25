@@ -22,10 +22,16 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import psql_json, psql_ok, esc_sql
 from lib.text_cleaner import get_cleaner
 
-BATCH_LIMIT = 10
+BATCH_LIMIT = 50
 
 
 def main():
+    # Advance turns already clean from batching → cleaned
+    psql_ok(
+        "UPDATE turns SET pipeline_state = 'cleaned' "
+        "WHERE pipeline_state = 'batching' AND text_clean IS NOT NULL AND text_clean != ''"
+    )
+
     turns = psql_json(
         "SELECT id, user_turn, text, thinking FROM turns "
         "WHERE (text_clean IS NULL OR text_clean = '') AND pipeline_state = 'batching' "

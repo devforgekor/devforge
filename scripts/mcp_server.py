@@ -1,111 +1,50 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.11
 # Status: experimental
-# Path: none — manual start (planned: systemd:devforge-mcp.service)
-"""MCP Server — SSE-based tool server (protocol 2024-11-05).
+# Path: systemd:devforge-mcp.service
+"""DevForge MCP Server — Streamable HTTP (MCP spec 2025-03-26).
 
 Tools:
   - fact_search: Semantic search on review_facts (pgvector 4096d)
-  - mem_save: Store AI conversation memory (main app conversations/turns)
+  - mem_save: Store AI conversation memory
   - mem_search: Search stored memories by text (pg_trgm)
+  - search_conversations: List/search conversations
+  - get_conversation: Get full conversation thread
+  - search_turns: Search turns with filters
+  - get_turn_facts: Get all facts for a turn
+  - ingest: Batch store conversation + turns
 
 Usage:
-  python3 scripts/mcp_server.py                    # default :8000
-  python3 scripts/mcp_server.py --port 8001        # custom port
+  python3.11 mcp_server.py                    # default :8000
+  python3.11 mcp_server.py --port 8001        # custom port
 """
 
-import asyncio
 import json
 import logging
 import os
 import sys
-import uuid
-from typing import Any, Dict, List, Optional
-
-import httpx
-import uvicorn
-from fastapi import FastAPI, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from typing import Optional
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
 
+import httpx
+from mcp.server.fastmcp import FastMCP
 from lib.db import psql_json, psql_ok, esc_sql
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("mcp_server")
 
-app = FastAPI(title="DevForge MCP", version="0.2.0")
-
-sessions: Dict[str, asyncio.Queue] = {}
+mcp = FastMCP(name="devforge-mcp")
 
 EMBEDDER_PORT = 8081
 EMBED_URL = f"http://127.0.0.1:{EMBEDDER_PORT}/v1/embeddings"
-EMBED_TIMEOUT = 15
-_http = httpx.AsyncClient(timeout=EMBED_TIMEOUT)
-
-TOOLS = [
-    {
-        "name": "fact_search",
-        "description": "review_facts 테이블에서 의미 기반 검색. 사실(fact) 단위로 저장된 지식, 결정, 관찰 내용을 벡터 유사도로 검색합니다.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "검색할 질문 또는 키워드 (자연어)",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "반환할 결과 수 (기본 10, 최대 50)",
-                    "default": 10,
-                },
-                "fact_type": {
-                    "type": "string",
-                    "description": "팩트 유형 필터 (선택: marker, text, entity_scan, enrich_meta, verify_result, observation 등)",
-                },
-            },
-            "required": ["query"],
-        },
-    },
-    {
-        "name": "mem_save",
-        "description": "AI 대화 기록을 저장합니다. tag=분류, summary=요약, detail=대화내용(JSON).",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "tag": {"type": "string", "description": "분류 키워드"},
-                "summary": {"type": "string", "description": "대화 요약"},
-                "detail": {"type": "string", "description": "전체 대화 (JSON: user_query + assistant_answer)"},
-                "model": {"type": "string", "description": "AI 모델명"},
-            },
-            "required": ["tag", "summary", "detail"],
-        },
-    },
-    {
-        "name": "mem_search",
-        "description": "저장된 대화를 텍스트 검색 (pg_trgm 유사도).",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "검색어",
-                },
-                "tag": {
-                    "type": "string",
-                    "description": "분류 필터 (선택)",
-                },
-            },
-            "required": ["query"],
-        },
-    },
-]
+_http = httpx.AsyncClient(timeout=15)
 
 
-# ── Embedding helper (async, httpx) ───────────────────────────────
+# ── Embedding helper ───────────────────────────────────────────
 
 
-async def _get_query_vector(query: str) -> Optional[List[float]]:
+async def _get_query_vector(query: str) -> Optional[list[float]]:
     """Get embedding vector from embedder API. Returns None on failure."""
     try:
         resp = await _http.post(
@@ -121,40 +60,45 @@ async def _get_query_vector(query: str) -> Optional[List[float]]:
         return None
 
 
-# ── DB helpers (sync → async bridge) ────────────────────────────
-
-
-async def _fetch_json(sql: str) -> List[Dict[str, Any]]:
+async def _fetch_json(sql: str) -> list[dict]:
+    """Bridge sync psql_json to async via thread pool."""
+    import asyncio
     return await asyncio.to_thread(psql_json, sql)
 
 
 async def _execute(sql: str) -> bool:
+    import asyncio
     return await asyncio.to_thread(psql_ok, sql)
 
 
-# ── Tool implementations ─────────────────────────────────────────
+# ── Tools ──────────────────────────────────────────────────────
 
 
-async def _tool_fact_search(query: str, limit: int = 10,
-                            fact_type: Optional[str] = None) -> Dict[str, Any]:
-    """Semantic search on review_facts via embedding similarity."""
-    if limit > 50:
-        limit = 50
-    if limit < 1:
-        limit = 1
+@mcp.tool(name="fact_search")
+async def fact_search(query: str, limit: int = 10,
+                      fact_type: Optional[str] = None) -> str:
+    """review_facts 테이블에서 의미 기반 검색. 벡터 유사도로 관련 fact를 찾습니다.
+
+    Args:
+        query: 검색할 질문 또는 키워드 (자연어)
+        limit: 반환할 결과 수 (기본 10, 최대 50)
+        fact_type: 팩트 유형 필터 (marker, text, entity_scan, enrich_meta, verify_result, observation 등)
+    """
+    limit = max(1, min(limit, 50))
 
     vec = await _get_query_vector(query)
     if vec is None:
-        return {"error": "Embedder unavailable (try again when Pod B has embedder loaded)"}
+        return json.dumps(
+            {"error": "Embedder unavailable (try again when Pod B has embedder loaded)"},
+            ensure_ascii=False,
+        )
 
-    # Format as pgvector literal, esc_sql for safety
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
     type_filter = ""
     if fact_type:
-        safe_type = fact_type.replace("'", "''")
-        type_filter = f"AND rf.fact_type = '{safe_type}'"
+        type_filter = f"AND rf.fact_type = '{esc_sql(fact_type)}'"
 
-    sql = f"""
+    rows = await _fetch_json(f"""
         SELECT rf.id, rf.turn_id, rf.fact_type, rf.evidence,
                e.embedding <=> '{esc_sql(vec_str)}'::vector AS distance,
                t.text_clean, t.created_at::text AS turn_created
@@ -167,51 +111,56 @@ async def _tool_fact_search(query: str, limit: int = 10,
           {type_filter}
         ORDER BY e.embedding <=> '{esc_sql(vec_str)}'::vector
         LIMIT {limit}
-    """
-
-    rows = await _fetch_json(sql)
+    """)
     if not rows:
-        return {"count": 0, "results": []}
+        return json.dumps({"count": 0, "results": []}, ensure_ascii=False)
 
     results = []
     for r in rows:
-        evidence = r.get("evidence", "") or ""
-        text_clean = r.get("text_clean") or ""
         results.append({
             "fact_id": str(r["id"]),
             "turn_id": str(r["turn_id"]),
             "fact_type": r.get("fact_type", ""),
-            "evidence": evidence[:500],
+            "evidence": (r.get("evidence") or "")[:500],
             "distance": round(float(r["distance"]), 4),
-            "context": text_clean[:300],
+            "context": (r.get("text_clean") or "")[:300],
             "turn_created": r.get("turn_created", ""),
         })
+    return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
 
-    return {"count": len(results), "results": results}
 
+@mcp.tool(name="mem_save")
+async def mem_save(tag: str, summary: str, detail: str,
+                   model: Optional[str] = None) -> str:
+    """AI 대화 기록을 저장합니다. tag=분류, summary=요약, detail=대화내용.
 
-async def _tool_mem_save(tag: str, summary: str, detail: str,
-                         model: Optional[str] = None) -> Dict[str, Any]:
-    """Store a memory in the main app's conversations/turns tables."""
+    Args:
+        tag: 분류 키워드 (예: claude, debug, design, review)
+        summary: 대화 요약 (200자 이내)
+        detail: 전체 대화 내용. JSON 형태 권장: {"user_query": "...", "assistant_answer": "...", "reasoning": "..."}
+        model: AI 모델명 (선택)
+    """
     if not tag or not summary or not detail:
-        return {"error": "tag, summary, detail are all required"}
+        return json.dumps({"error": "tag, summary, detail are all required"}, ensure_ascii=False)
 
-    parsed = _parse_detail(detail)
-    user_query = parsed.get("user_query", detail)[:2000]
-    assistant_answer = parsed.get("assistant_answer", "")[:4000]
+    try:
+        parsed = json.loads(detail)
+    except (json.JSONDecodeError, TypeError):
+        parsed = {"user_query": detail, "assistant_answer": "", "reasoning": ""}
+
+    user_query = (parsed.get("user_query") or detail)[:2000]
+    assistant_answer = (parsed.get("assistant_answer") or "")[:4000]
     reasoning = parsed.get("reasoning") or ""
 
-    # Create conversation + turn in one go
     cid = await _fetch_json(
         f"INSERT INTO conversations (title, source, model) VALUES ("
-        f"  '{esc_sql(summary[:200])}', '{esc_sql(tag)}', "
-        f"  '{esc_sql(model or '')}'::text) RETURNING id"
+        f"'{esc_sql(summary[:200])}', '{esc_sql(tag)}', "
+        f"'{esc_sql(model or '')}'::text) RETURNING id"
     )
     if not cid:
-        return {"error": "Failed to create conversation"}
+        return json.dumps({"error": "Failed to create conversation"}, ensure_ascii=False)
     conversation_id = cid[0]["id"]
 
-    # Next seq
     seq_row = await _fetch_json(
         f"SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq "
         f"FROM turns WHERE conversation_id = '{esc_sql(conversation_id)}'::uuid"
@@ -220,30 +169,33 @@ async def _tool_mem_save(tag: str, summary: str, detail: str,
 
     turn_id = await _fetch_json(
         f"INSERT INTO turns (conversation_id, seq, user_turn, text, thinking, agent) "
-        f"VALUES ("
-        f"  '{esc_sql(conversation_id)}'::uuid, {seq}, "
-        f"  '{esc_sql(user_query)}', '{esc_sql(assistant_answer)}', "
-        f"  '{esc_sql(reasoning)}', '{esc_sql(tag)}'"
-        f") RETURNING id"
+        f"VALUES ('{esc_sql(conversation_id)}'::uuid, {seq}, "
+        f"'{esc_sql(user_query)}', '{esc_sql(assistant_answer)}', "
+        f"'{esc_sql(reasoning)}', '{esc_sql(tag)}') RETURNING id"
     )
-    tid = turn_id[0]["id"] if turn_id else None
+    tid = str(turn_id[0]["id"]) if turn_id else None
 
-    return {
+    return json.dumps({
         "status": "saved",
-        "conversation_id": conversation_id,
+        "conversation_id": str(conversation_id),
         "turn_id": tid,
         "seq": seq,
-    }
+    }, ensure_ascii=False)
 
 
-async def _tool_mem_search(query: str, tag: Optional[str] = None) -> Dict[str, Any]:
-    """Search stored memories via pg_trgm similarity on turns.text."""
+@mcp.tool(name="mem_search")
+async def mem_search(query: str, tag: Optional[str] = None) -> str:
+    """저장된 대화를 텍스트 검색 (pg_trgm 유사도).
+
+    Args:
+        query: 검색어
+        tag: 분류 필터 (agent 이름, 선택)
+    """
     tag_filter = ""
     if tag:
-        safe_tag = tag.replace("'", "''")
-        tag_filter = f"AND t.agent = '{safe_tag}'"
+        tag_filter = f"AND t.agent = '{esc_sql(tag)}'"
 
-    sql = f"""
+    rows = await _fetch_json(f"""
         SELECT t.id, t.conversation_id, t.seq, t.user_turn, t.text,
                c.title, c.source, c.model, c.created_at::text
         FROM turns t
@@ -252,10 +204,9 @@ async def _tool_mem_search(query: str, tag: Optional[str] = None) -> Dict[str, A
           {tag_filter}
         ORDER BY similarity(t.text, '{esc_sql(query[:200])}') DESC
         LIMIT 20
-    """
-    rows = await _fetch_json(sql)
+    """)
     if not rows:
-        return {"count": 0, "results": []}
+        return json.dumps({"count": 0, "results": []}, ensure_ascii=False)
 
     results = []
     for r in rows:
@@ -270,148 +221,349 @@ async def _tool_mem_search(query: str, tag: Optional[str] = None) -> Dict[str, A
             "assistant_answer": (r.get("text") or "")[:500],
             "created_at": r.get("created_at", ""),
         })
+    return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
 
-    return {"count": len(results), "results": results}
+
+# ── Phase 1 Tools ─────────────────────────────────────────────
 
 
-def _parse_detail(detail: str) -> Dict[str, Any]:
+@mcp.tool(name="search_conversations")
+async def search_conversations(source: Optional[str] = None,
+                                model: Optional[str] = None,
+                                limit: int = 20,
+                                offset: int = 0) -> str:
+    """대화 목록을 검색/조회합니다. source나 model로 필터링 가능.
+
+    Args:
+        source: 출처 필터 (예: claude-code, cli, web)
+        model: 모델명 필터 (예: claude-sonnet-4.6, deepseek-v4-flash)
+        limit: 반환 개수 (기본 20, 최대 100)
+        offset: 건너뛸 개수 (페이지네이션)
+    """
+    limit = max(1, min(limit, 100))
+    conditions = []
+    if source:
+        conditions.append(f"c.source = '{esc_sql(source)}'")
+    if model:
+        conditions.append(f"c.model = '{esc_sql(model)}'")
+    where = " AND ".join(conditions) if conditions else "TRUE"
+
+    rows = await _fetch_json(f"""
+        SELECT c.id, c.title, c.source, c.model, c.created_at::text,
+               (SELECT COUNT(*) FROM turns t WHERE t.conversation_id = c.id) AS turn_count
+        FROM conversations c
+        WHERE {where}
+        ORDER BY c.created_at DESC
+        LIMIT {limit} OFFSET {offset}
+    """)
+    if not rows:
+        return json.dumps({"count": 0, "results": []}, ensure_ascii=False)
+
+    results = []
+    for r in rows:
+        results.append({
+            "id": str(r["id"]),
+            "title": r.get("title") or "",
+            "source": r.get("source") or "",
+            "model": r.get("model") or "",
+            "turn_count": r.get("turn_count", 0),
+            "created_at": r.get("created_at", ""),
+        })
+    return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
+
+
+@mcp.tool(name="get_conversation")
+async def get_conversation(conversation_id: str) -> str:
+    """대화 ID로 전체 대화 스레드를 조회합니다.
+
+    Args:
+        conversation_id: 대화 UUID
+    """
+    conv = await _fetch_json(f"""
+        SELECT c.id, c.title, c.source, c.model, c.created_at::text
+        FROM conversations c WHERE c.id = '{esc_sql(conversation_id)}'::uuid
+    """)
+    if not conv:
+        return json.dumps({"error": "Conversation not found"}, ensure_ascii=False)
+
+    turns = await _fetch_json(f"""
+        SELECT seq, user_turn, text, thinking, agent, meta, pipeline_state, created_at::text
+        FROM turns WHERE conversation_id = '{esc_sql(conversation_id)}'::uuid
+        ORDER BY seq ASC
+    """)
+
+    return json.dumps({
+        "conversation": {
+            "id": str(conv[0]["id"]),
+            "title": conv[0].get("title") or "",
+            "source": conv[0].get("source") or "",
+            "model": conv[0].get("model") or "",
+            "created_at": conv[0].get("created_at", ""),
+        },
+        "turns": [
+            {
+                "seq": t["seq"],
+                "user_turn": (t.get("user_turn") or "")[:500],
+                "text": (t.get("text") or "")[:2000],
+                "thinking": (t.get("thinking") or "")[:500] if t.get("thinking") else None,
+                "agent": t.get("agent"),
+                "pipeline_state": t.get("pipeline_state"),
+            }
+            for t in turns
+        ],
+        "turn_count": len(turns),
+    }, ensure_ascii=False)
+
+
+@mcp.tool(name="search_turns")
+async def search_turns(keyword: Optional[str] = None,
+                        agent: Optional[str] = None,
+                        pipeline_state: Optional[str] = None,
+                        meta_type: Optional[str] = None,
+                        limit: int = 20,
+                        offset: int = 0) -> str:
+    """대화 턴(Turn)을 검색합니다. 키워드, agent, 상태 등으로 필터링.
+
+    Args:
+        keyword: 검색 키워드 (user_turn, text, thinking 전체 ILIKE 검색)
+        agent: agent 필터 (예: claude-code, deepseek-v4-flash)
+        pipeline_state: pipeline 상태 필터 (pending, verified 등)
+        meta_type: meta type 필터
+        limit: 반환 개수 (기본 20, 최대 100)
+        offset: 건너뛸 개수 (페이지네이션)
+    """
+    limit = max(1, min(limit, 100))
+    conditions = []
+    if keyword:
+        kw = esc_sql(keyword)
+        conditions.append(
+            f"(COALESCE(user_turn,'') || ' ' || COALESCE(text,'') || ' ' || COALESCE(thinking,'')) ILIKE '%{kw}%'"
+        )
+    if agent:
+        conditions.append(f"agent = '{esc_sql(agent)}'")
+    if pipeline_state:
+        conditions.append(f"pipeline_state = '{esc_sql(pipeline_state)}'")
+    if meta_type:
+        conditions.append(f"meta->>'type' = '{esc_sql(meta_type)}'")
+    where = " AND ".join(conditions) if conditions else "TRUE"
+
+    rows = await _fetch_json(f"""
+        SELECT id, conversation_id, seq, user_turn, text, agent,
+               pipeline_state, meta, created_at::text, est_chars
+        FROM turns
+        WHERE {where}
+        ORDER BY created_at DESC
+        LIMIT {limit} OFFSET {offset}
+    """)
+    if not rows:
+        return json.dumps({"count": 0, "results": []}, ensure_ascii=False)
+
+    results = []
+    for r in rows:
+        results.append({
+            "id": str(r["id"]),
+            "conversation_id": str(r["conversation_id"]),
+            "seq": r["seq"],
+            "user_turn": (r.get("user_turn") or "")[:300],
+            "text": (r.get("text") or "")[:500],
+            "agent": r.get("agent"),
+            "pipeline_state": r.get("pipeline_state"),
+            "est_chars": r.get("est_chars"),
+            "created_at": r.get("created_at", ""),
+        })
+    return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
+
+
+@mcp.tool(name="get_turn_facts")
+async def get_turn_facts(turn_id: str) -> str:
+    """특정 Turn의 fact(추출된 사실) 목록을 조회합니다.
+
+    Args:
+        turn_id: Turn UUID
+    """
+    rows = await _fetch_json(f"""
+        SELECT id, turn_id, fact_index, fact_type, evidence, verdict, reason,
+               nli_llm, nli_verdict, source, created_at::text
+        FROM review_facts
+        WHERE turn_id = '{esc_sql(turn_id)}'::uuid
+        ORDER BY fact_index ASC
+    """)
+    if not rows:
+        return json.dumps({"count": 0, "results": []}, ensure_ascii=False)
+
+    results = []
+    for r in rows:
+        results.append({
+            "id": str(r["id"]),
+            "fact_index": r["fact_index"],
+            "fact_type": r.get("fact_type", ""),
+            "evidence": (r.get("evidence") or "")[:500],
+            "verdict": r.get("verdict", "pending"),
+            "nli_verdict": r.get("nli_verdict"),
+            "source": r.get("source", ""),
+            "created_at": r.get("created_at", ""),
+        })
+    return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
+
+
+@mcp.tool(name="ingest")
+async def ingest(conversation_json: str) -> str:
+    """대화 + 턴을 일괄 저장합니다. 여러 turn을 한 번에 저장할 때 사용.
+
+    Args:
+        conversation_json: JSON 문자열. 형식:
+            {"source": "claude-code", "model": "...", "title": "...",
+             "turns": [{"user_turn": "...", "text": "...", "thinking": "...", "agent": "..."}]}
+    """
     try:
-        return json.loads(detail)
-    except (json.JSONDecodeError, TypeError):
-        return {"user_query": detail, "assistant_answer": "", "reasoning": ""}
+        data = json.loads(conversation_json)
+    except (json.JSONDecodeError, TypeError) as e:
+        return json.dumps({"error": f"Invalid JSON: {e}"}, ensure_ascii=False)
+
+    source = (data.get("source") or "mcp_ingest")[:50]
+    model = (data.get("model") or "")[:100]
+    title = (data.get("title") or "MCP Ingest")[:200]
+    turns_data = data.get("turns", [])
+
+    if not turns_data:
+        return json.dumps({"error": "turns array is required"}, ensure_ascii=False)
+
+    cid = await _fetch_json(
+        f"INSERT INTO conversations (title, source, model) VALUES ("
+        f"'{esc_sql(title)}', '{esc_sql(source)}', '{esc_sql(model)}') RETURNING id"
+    )
+    if not cid:
+        return json.dumps({"error": "Failed to create conversation"}, ensure_ascii=False)
+    conversation_id = cid[0]["id"]
+
+    seq_row = await _fetch_json(
+        f"SELECT COALESCE(MAX(seq), 0) AS current_max "
+        f"FROM turns WHERE conversation_id = '{esc_sql(conversation_id)}'::uuid"
+    )
+    seq = (seq_row[0]["current_max"] if seq_row else 0) + 1
+
+    inserted = 0
+    for turn in turns_data:
+        user_turn = (turn.get("user_turn") or "")[:4000]
+        text = (turn.get("text") or "")[:8000]
+        thinking = (turn.get("thinking") or "")[:4000]
+        agent = (turn.get("agent") or source)[:50]
+
+        ok = await _execute(
+            f"INSERT INTO turns (conversation_id, seq, user_turn, text, thinking, agent) "
+            f"VALUES ('{esc_sql(conversation_id)}'::uuid, {seq}, "
+            f"'{esc_sql(user_turn)}', '{esc_sql(text)}', "
+            f"'{esc_sql(thinking)}', '{esc_sql(agent)}')"
+        )
+        if ok:
+            inserted += 1
+            seq += 1
+
+    return json.dumps({
+        "status": "saved",
+        "conversation_id": str(conversation_id),
+        "turns_inserted": inserted,
+    }, ensure_ascii=False)
 
 
-# ── Helpers ──────────────────────────────────────────────────────
+# ── Telegram tools ─────────────────────────────────────────────
 
 
-def _rpc_result(req_id: Any, result: Any) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": req_id, "result": result}
+@mcp.tool(name="telegram_send")
+async def telegram_send(text: str) -> str:
+    """텔레그램으로 메시지를 전송합니다. 파이프라인 알림, 상태 보고 등에 사용.
+
+    Args:
+        text: 전송할 메시지 내용
+    """
+    import asyncio
+    from telegram_send import send_text
+    ok = await asyncio.to_thread(send_text, text)
+    return json.dumps({"ok": ok}, ensure_ascii=False)
 
 
-def _rpc_error(req_id: Any, code: int, message: str) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+@mcp.tool(name="fact_list_pending")
+async def fact_list_pending(limit: int = 10) -> str:
+    """NEUTRAL 판정을 받고 아직 사용자 검토가 필요한 fact 목록을 조회합니다.
+
+    Args:
+        limit: 반환할 개수 (기본 10, 최대 50)
+    """
+    limit = max(1, min(limit, 50))
+    rows = await _fetch_json(
+        f"SELECT id::text, left(evidence, 300) AS evidence, fact_type, "
+        f"  turn_id::text, "
+        f"  to_char(created_at AT TIME ZONE 'Asia/Seoul', 'MM/DD HH24:MI') AS kst "
+        f"FROM review_facts "
+        f"WHERE nli_llm='NEUTRAL' AND user_verdict IS NULL "
+        f"ORDER BY created_at DESC LIMIT {limit}"
+    )
+    if not rows:
+        return json.dumps({"count": 0, "results": []}, ensure_ascii=False)
+    return json.dumps({"count": len(rows), "results": rows}, ensure_ascii=False)
 
 
-class _JSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, uuid.UUID):
-            return str(obj)
-        return super().default(obj)
+@mcp.tool(name="fact_confirm")
+async def fact_confirm(fact_id: str) -> str:
+    """NEUTRAL fact를 GROUNDED로 확정합니다. user_verdict='GROUNDED'로 설정.
+
+    Args:
+        fact_id: review_fact UUID
+    """
+    ok = await _execute(
+        f"UPDATE review_facts SET user_verdict = 'GROUNDED' "
+        f"WHERE id = '{esc_sql(fact_id)}'::uuid"
+    )
+    return json.dumps({"ok": ok, "fact_id": fact_id, "verdict": "GROUNDED"}, ensure_ascii=False)
 
 
-def _json_dumps(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, cls=_JSONEncoder)
+@mcp.tool(name="fact_reject")
+async def fact_reject(fact_id: str) -> str:
+    """NEUTRAL fact를 UNGROUNDED로 기각합니다. user_verdict='UNGROUNDED'로 설정.
+
+    Args:
+        fact_id: review_fact UUID
+    """
+    ok = await _execute(
+        f"UPDATE review_facts SET user_verdict = 'UNGROUNDED' "
+        f"WHERE id = '{esc_sql(fact_id)}'::uuid"
+    )
+    return json.dumps({"ok": ok, "fact_id": fact_id, "verdict": "UNGROUNDED"}, ensure_ascii=False)
 
 
-# ── HTTP Endpoints ────────────────────────────────────────────────
+# ── Entry point ────────────────────────────────────────────────
 
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+def _create_app():
+    """Create and configure the ASGI app with health endpoint."""
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
 
+    app = mcp.streamable_http_app()
 
-@app.get("/mcp/sse")
-async def mcp_sse():
-    session_id = str(uuid.uuid4())
-    queue: asyncio.Queue = asyncio.Queue()
-    sessions[session_id] = queue
+    async def health_endpoint(request):
+        return JSONResponse({
+            "status": "ok",
+            "server": "devforge-mcp",
+        })
 
-    async def event_stream():
-        try:
-            yield f"event: endpoint\ndata: /mcp/messages?session_id={session_id}\n\n"
-            while True:
-                try:
-                    msg = await asyncio.wait_for(queue.get(), timeout=300)
-                    yield f"data: {_json_dumps(msg)}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-        except asyncio.CancelledError:
-            pass
-        finally:
-            sessions.pop(session_id, None)
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-@app.post("/mcp/messages")
-async def mcp_messages(session_id: str = Query(...), request: Request = None):
-    try:
-        body = await request.json()
-    except (json.JSONDecodeError, ValueError, TypeError):
-        return JSONResponse(_rpc_error(None, -32700, "Parse error"))
-
-    req_id = body.get("id")
-    method = body.get("method", "")
-
-    try:
-        if method == "initialize":
-            return JSONResponse(_rpc_result(req_id, {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}},
-                "serverInfo": {"name": "devforge-mcp", "version": "0.2.0"},
-            }))
-
-        if method == "notifications/initialized":
-            return JSONResponse({})
-
-        if method == "tools/list":
-            return JSONResponse(_rpc_result(req_id, {"tools": TOOLS}))
-
-        if method == "tools/call":
-            params = body.get("params", {})
-            tool_name = params.get("name", "")
-            arguments = params.get("arguments", {})
-
-            if tool_name == "fact_search":
-                result = await _tool_fact_search(
-                    query=arguments.get("query", ""),
-                    limit=arguments.get("limit", 10),
-                    fact_type=arguments.get("fact_type"),
-                )
-            elif tool_name == "mem_search":
-                result = await _tool_mem_search(
-                    query=arguments.get("query", ""),
-                    tag=arguments.get("tag"),
-                )
-            elif tool_name == "mem_save":
-                result = await _tool_mem_save(
-                    tag=arguments.get("tag", ""),
-                    summary=arguments.get("summary", ""),
-                    detail=arguments.get("detail", ""),
-                    model=arguments.get("model"),
-                )
-            else:
-                result = {"error": f"Unknown tool: {tool_name}"}
-
-            return JSONResponse(
-                _rpc_result(req_id, {
-                    "content": [{"type": "text", "text": _json_dumps(result)}]
-                })
-            )
-
-        if method == "ping":
-            return JSONResponse(_rpc_result(req_id, {}))
-
-        logger.warning("Unknown MCP method: %s", method)
-        return JSONResponse(_rpc_error(req_id, -32601, f"Method not found: {method}"))
-
-    except Exception as e:
-        logger.exception("MCP message error")
-        return JSONResponse(_rpc_error(req_id, -32603, str(e)))
-
-
-# ── Entry point ──────────────────────────────────────────────────
+    app.router.routes.insert(0, Route("/health", health_endpoint, methods=["GET"]))
+    return app
 
 
 def main():
+    """Start the MCP server with uvicorn (Starlette app from FastMCP)."""
     import argparse
     parser = argparse.ArgumentParser(description="DevForge MCP Server")
     parser.add_argument("--port", "-p", type=int, default=8000,
                         help="Port to listen on (default: 8000)")
+    parser.add_argument("--host", type=str, default="127.0.0.1",
+                        help="Host to bind (default: 127.0.0.1)")
     args = parser.parse_args()
-    logger.info("Starting MCP server on :%d", args.port)
-    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info")
+    import uvicorn
+    app = _create_app()
+    logger.info("Starting DevForge MCP server on %s:%d", args.host, args.port)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 
 if __name__ == "__main__":

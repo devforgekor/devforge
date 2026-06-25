@@ -41,9 +41,20 @@ def log(msg: str) -> None:
 def _embed_text(text: str) -> Optional[List[float]]:
     """Embed a single text via qwen3-embed-8b on :8081.
 
-    Returns vector or None on failure.
+    Returns vector or None on failure (embedder not available = expected
+    during enrich phase when Pod B runs day-enrich on :8082, not embed mode).
     """
     import json as _json
+    # Quick health check — embedder is often down during enrich phase
+    # when Pod B has been swapped to day-enrich on :8082.
+    try:
+        hreq = Request("http://127.0.0.1:8081/health", method="GET")
+        with urlopen(hreq, timeout=2) as hresp:
+            if hresp.status != 200:
+                return None
+    except Exception:
+        return None
+
     body = _json.dumps({"input": [text], "model": "default"}).encode()
     req = Request(EMBED_URL, data=body,
                   headers={"Content-Type": "application/json"},
@@ -52,8 +63,7 @@ def _embed_text(text: str) -> Optional[List[float]]:
         with urlopen(req, timeout=EMBED_TIMEOUT) as resp:
             data = _json.loads(resp.read().decode())
         return data["data"][0]["embedding"]
-    except Exception as e:
-        log(f"embed error: {e}")
+    except Exception:
         return None
 
 
@@ -277,19 +287,31 @@ def _format_few_shot(
 
 # ── Public API ───────────────────────────────────────────────────────
 
+def _has_feedback_examples() -> bool:
+    """Quick EXISTS check — avoids embed call when table is empty."""
+    return bool(psql_json("SELECT 1 FROM feedback_examples LIMIT 1"))
+
+
 def get_dynamic_few_shot(turn_text: str, max_examples: int = MAX_EXAMPLES_DB) -> str:
     """Dynamic few-shot retrieval for enrich.
 
-    1. Embed turn_text via :8081
-    2. pgvector ANN on feedback_examples (primary)
-    3. Verify_result supplementary (no embed needed)
-    4. Format and return
+    Early-returns "" if feedback_examples is empty (common during enrich
+    phase when Pod B runs day-enrich on :8082, not embed on :8081).
+
+    1. Quick EXISTS check on feedback_examples
+    2. Embed turn_text via :8081
+    3. pgvector ANN on feedback_examples (primary)
+    4. Verify_result supplementary (no embed needed)
+    5. Format and return
 
     Returns empty string if nothing available or embed fails.
     """
+    if not _has_feedback_examples():
+        # feedback_examples empty — no point embedding or querying
+        return ""
+
     vector = _embed_text(turn_text)
     if vector is None:
-        # Embed failed — try verify-only fallback
         verify = _fetch_verify_feedback()
         if verify.get("bad") or verify.get("good"):
             return _format_few_shot({"bad": [], "good": []}, verify)

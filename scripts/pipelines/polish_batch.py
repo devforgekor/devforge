@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: day_cycle.sh — polish phase (before extract)
-"""Polish Batch Pipeline — 3-phase detect-then-correct with Kiwi.
+"""Polish Batch Pipeline — Kiwi(user) + Hanja substitution(thinking/text).
 
-Phase 1 — Kiwi Detect (free): Compare raw text vs Kiwi-corrected clean text.
-  If Kiwi made changes → field has spelling/grammar errors.
-  text/thinking: only flagged when Kiwi detects changes.
-  user_turn: always flagged for LLM review.
-
-Phase 2 — LLM Correct: user_turn always polished (512 tok), text/thinking only when
-  Kiwi flagged (256 tok). Non-flagged fields auto-pass (Kiwi correction sufficient).
-
-Phase 3 — LLM Verify: diff-based verify on user_turn only (128 tok).
-  text/thinking auto-pass (Kiwi is deterministic, no hallucination risk).
+Phase 1 — Kiwi Detect (user_turn only): raw vs Kiwi-corrected clean.
+Phase 2 — Hanja Substitution (thinking/text only): 중국어 한자→한글 (deterministic).
+Phase 3 — LLM Correct (user_turn only, skip with --no-llm).
+Phase 4 — Verify + DB write.
 
 Usage:
   python3 scripts/pipelines/polish_batch.py                       # batch from NULL-checkpoint
   python3 scripts/pipelines/polish_batch.py --limit 20            # batch cap
   python3 scripts/pipelines/polish_batch.py --turn-id <uuid>      # single turn (debug)
-  python3 scripts/pipelines/polish_batch.py --no-llm              # Kiwi-only, no LLM calls
+  python3 scripts/pipelines/polish_batch.py --no-llm              # Kiwi+hanja only, no LLM calls
   python3 scripts/pipelines/polish_batch.py --dry-run             # simulate, no writes
 """
 
 import atexit
 import os
+import re
 import signal
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
@@ -40,7 +35,9 @@ from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
 from lib.text_cleaner import get_cleaner
 from lib.watchdog.messenger import heartbeat, resolve_pulse
 
-BATCH_LIMIT = 10
+import hanja
+
+BATCH_LIMIT = 50
 SUBBATCH_SIZE = 10
 PARALLEL = 2
 MAX_TOKENS_USER = 512
@@ -52,6 +49,11 @@ TIMEOUT_PER_TOK = 1.5
 SOLO_FACTOR = 2.5
 MAX_CHARS_SOLO = 5000
 QUEUE_MARGIN = 2.0  # account for slot queuing: each call may wait N-1 turns ahead
+
+# ── Code block protection (same pattern as text_cleaner.py) ──
+RE_CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
+RE_INLINE_CODE = re.compile(r"`[^`]+`")
+HANJA_RANGE = re.compile(r"[一-鿿]")
 
 
 # ═══════════════════════════════════════════════
@@ -69,15 +71,64 @@ def _get_kiwi_cleaner():
 
 
 def _kiwi_detect(raw: str) -> bool:
-    """True if Kiwi found spelling/grammar errors in raw text.
-
-    Uses detect_kiwi_changes() which runs Kiwi typo correction and checks
-    if output differs from input (ignoring NFKC/whitespace-only changes).
-    ~5ms per call — effectively free.
-    """
+    """True if Kiwi found spelling/grammar errors in raw text."""
     if not raw.strip():
         return False
     return _get_kiwi_cleaner().detect_kiwi_changes(raw)
+
+
+# ═══════════════════════════════════════════════
+# Phase 2 — Hanja Substitution (thinking/text)
+# ═══════════════════════════════════════════════
+
+def _has_hanja(text: str) -> bool:
+    """True if text contains any Chinese character (CJK Unified Ideographs)."""
+    return bool(HANJA_RANGE.search(text))
+
+
+def _hanja_substitute(text: str) -> Tuple[str, List[Dict[str, str]]]:
+    """Replace hanja (Chinese characters) with Korean hangul.
+
+    Code blocks and inline code preserved verbatim (same pattern as TextCleaner).
+    Returns (corrected_text, changes_list) where changes_list has:
+      [{"from": "...original line...", "to": "...substituted line..."}]
+
+    Deterministic — no LLM call.
+    """
+    if not text.strip() or not _has_hanja(text):
+        return text, []
+
+    # Code block protection
+    code_blocks: List[str] = []
+    inline_codes: List[str] = []
+
+    def _save_code(m: re.Match) -> str:
+        code_blocks.append(m.group())
+        return f"\x00BLOCK{len(code_blocks) - 1}\x00"
+
+    def _save_inline(m: re.Match) -> str:
+        inline_codes.append(m.group())
+        return f"\x00INLINE{len(inline_codes) - 1}\x00"
+
+    t = RE_CODE_BLOCK.sub(_save_code, text)
+    t = RE_INLINE_CODE.sub(_save_inline, t)
+
+    before = t
+    t = hanja.translate(t, 'substitution')
+
+    # Track changed lines
+    changes = []
+    for bl, al in zip(before.split('\n'), t.split('\n')):
+        if bl.strip() != al.strip():
+            changes.append({"from": bl.strip(), "to": al.strip()})
+
+    # Restore code blocks
+    for i, cb in enumerate(code_blocks):
+        t = t.replace(f"\x00BLOCK{i}\x00", cb)
+    for i, ic in enumerate(inline_codes):
+        t = t.replace(f"\x00INLINE{i}\x00", ic)
+
+    return t, changes
 
 
 # ═══════════════════════════════════════════════
@@ -144,7 +195,7 @@ def _nli_check(corrected: str, original: str) -> str:
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
-            model="polish",
+            model="polisher",
             max_tokens=64, temperature=0.0, timeout=30,
             return_meta=True,
         )
@@ -167,7 +218,7 @@ For EACH pair, analyze before deciding. Output a JSON object with your step-by-s
   "analysis": [
     {{
       "change": 1,
-      "type": "spelling|grammar|word_swap|content_added|proper_noun",
+      "type": "spelling|grammar|hanja|word_swap|content_added|proper_noun",
       "meaning_preserved": true or false,
       "note": "What changed and whether meaning is preserved"
     }}
@@ -180,6 +231,7 @@ For EACH pair, analyze before deciding. Output a JSON object with your step-by-s
 Step 1 — Identify each change type:
   - spelling: typo fix (e.g., "안녕하세여" -> "안녕하세요") → ALWAYS valid, meaning preserved
   - grammar: spacing/honorific fix (e.g., "했어요" -> "했습니다") → ALWAYS valid, meaning preserved
+  - hanja: Chinese character → Korean hangul substitution (e.g., "全部" -> "전부") → ALWAYS valid, meaning preserved
   - word_swap: word replaced with different word (e.g., "중요합니다" -> "대단합니다") → INVALID, meaning NOT preserved
   - content_added: new content inserted (e.g., "" -> "새로운", "좋습니다" -> "매우 좋습니다") → INVALID, meaning NOT preserved
   - proper_noun: proper noun or technical term modified → INVALID, meaning NOT preserved
@@ -224,7 +276,7 @@ def _polish_user_turn(text: str, timeout: int = 600) -> Optional[str]:
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
-            model="polish", max_tokens=MAX_TOKENS_USER, temperature=TEMP,
+            model="polisher", max_tokens=MAX_TOKENS_USER, temperature=TEMP,
             timeout=timeout, json_mode=True, return_meta=True,
         )
         parsed = parse_llm_json(_extract_json(meta["content"]))
@@ -241,7 +293,7 @@ def _polish_field(text: str, field: str, timeout: int = 300) -> Optional[str]:
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
-            model="polish", max_tokens=MAX_TOKENS_FIELD, temperature=TEMP,
+            model="polisher", max_tokens=MAX_TOKENS_FIELD, temperature=TEMP,
             timeout=timeout, json_mode=True, return_meta=True,
         )
         parsed = parse_llm_json(_extract_json(meta["content"]))
@@ -281,7 +333,7 @@ def _verify_diffs(diff_text: str) -> bool:
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
-            model="polish", max_tokens=512, temperature=TEMP,
+            model="polisher", max_tokens=512, temperature=TEMP,
             timeout=int(timeout), json_mode=True, return_meta=True,
         )
         parsed = parse_llm_json(_extract_json(meta["content"]))
@@ -303,67 +355,60 @@ def _verify_diffs(diff_text: str) -> bool:
 def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> Tuple[int, int]:
     """Process one sub-batch.
 
-    Phase 1 — Kiwi detection (instant, no LLM): raw vs clean comparison for text/thinking.
-      text/thinking: Kiwi flagged only. user_turn: always processed.
-    Phase 2 — LLM correction (parallel, PARALLEL=2): user_turn always (512 tok),
-      text/thinking only when Kiwi flagged (256 tok).
-    Phase 3 — LLM verify + DB write: diff-based verify on user_turn only.
-      text/thinking auto-pass (Kiwi's changes are deterministic).
+    Phase 1 — Kiwi detect (user_turn only): raw vs Kiwi-corrected clean.
+      user_turn: always flagged for LLM review.
+      text/thinking: SKIP Kiwi (destructive to English/structured text).
+    Phase 2 — Hanja substitution (text/thinking): deterministic 한자→한글.
+    Phase 3 — LLM correction (user_turn only, skip with --no-llm).
+    Phase 4 — Verify + DB write.
     """
-    # ── Phase 1: Kiwi detection for text/thinking ──
-    kiwi_flag: Dict[str, Dict[str, bool]] = {}
+    # ── Phase 1: Kiwi detection for user_turn only ──
+    ut_has_kiwi = {row["id"]: _kiwi_detect(row.get("user_turn_clean", "") or "")
+                   for row in sub_batch}
+    k_ut = sum(1 for v in ut_has_kiwi.values() if v)
+    print(f"    [kiwi] user_turn={k_ut}/{len(sub_batch)} flagged", flush=True)
+
+    # ── Phase 2: Hanja substitution (text/thinking, deterministic) ──
+    hanja_results: Dict[str, Dict[str, Tuple[str, List]]] = {}
     for row in sub_batch:
         tid = row["id"]
-        raw_tx = row.get("text", "") or ""
-        raw_th = row.get("thinking", "") or ""
-        kiwi_flag[tid] = {
-            "text": _kiwi_detect(raw_tx),
-            "thinking": _kiwi_detect(raw_th),
-        }
+        tx = row.get("text_clean", "") or ""
+        th = row.get("thinking_clean", "") or ""
+        tx_sub, tx_changes = _hanja_substitute(tx)
+        th_sub, th_changes = _hanja_substitute(th)
+        if tx_changes or th_changes:
+            hanja_results[tid] = {}
+            if tx_changes:
+                hanja_results[tid]["text"] = (tx_sub, tx_changes)
+            if th_changes:
+                hanja_results[tid]["thinking"] = (th_sub, th_changes)
 
-    k_text = sum(1 for f in kiwi_flag.values() if f.get("text"))
-    k_think = sum(1 for f in kiwi_flag.values() if f.get("thinking"))
-    print(f"    [kiwi] text={k_text}/{len(kiwi_flag)}, thinking={k_think}/{len(kiwi_flag)} flagged", flush=True)
+    h_text = sum(1 for v in hanja_results.values() if "text" in v)
+    h_think = sum(1 for v in hanja_results.values() if "thinking" in v)
+    if h_text or h_think:
+        print(f"    [hanja] text={h_text}/{len(sub_batch)}, thinking={h_think}/{len(sub_batch)} substituted",
+              flush=True)
 
-    # ── Phase 2: LLM correction (parallel) — skip if --no-llm ──
+    # ── Phase 3: LLM correction (user_turn only, parallel) — skip if --no-llm ──
     corrected: Dict[str, Dict[str, Any]] = {}
 
     if no_llm:
-        print(f"    [no-llm] storing originals as polished — Kiwi-only mode", flush=True)
+        print(f"    [no-llm] Kiwi+hanja only — no LLM calls", flush=True)
     else:
         with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
             fmap = {}
             for row in sub_batch:
                 tid = row["id"]
                 ut = row.get("user_turn_clean", "") or ""
-                tx = row.get("text_clean", "") or ""
-                th = row.get("thinking_clean", "") or ""
-                kf = kiwi_flag.get(tid, {"text": False, "thinking": False})
-
-                # Always polish user_turn — calculate dynamic timeout
                 ut_timeout = _calc_timeout(len(ut), MAX_TOKENS_USER)
-                ut_solo = len(ut) > MAX_CHARS_SOLO
-                if ut_solo:
+                if len(ut) > MAX_CHARS_SOLO:
                     ut_timeout = _calc_timeout(len(ut), MAX_TOKENS_USER, solo=True)
                 fmap[pool.submit(_polish_user_turn, ut, ut_timeout)] = (tid, "user_turn")
-
-                # text/thinking only if Kiwi flagged errors
-                if kf.get("text") and tx.strip():
-                    tx_timeout = _calc_timeout(len(tx), MAX_TOKENS_FIELD)
-                    if len(tx) > MAX_CHARS_SOLO:
-                        tx_timeout = _calc_timeout(len(tx), MAX_TOKENS_FIELD, solo=True)
-                    fmap[pool.submit(_polish_field, tx, "text", tx_timeout)] = (tid, "text")
-                if kf.get("thinking") and th.strip():
-                    th_timeout = _calc_timeout(len(th), MAX_TOKENS_FIELD)
-                    if len(th) > MAX_CHARS_SOLO:
-                        th_timeout = _calc_timeout(len(th), MAX_TOKENS_FIELD, solo=True)
-                    fmap[pool.submit(_polish_field, th, "thinking", th_timeout)] = (tid, "thinking")
-
             for f in as_completed(fmap):
                 tid, field = fmap[f]
                 corrected.setdefault(tid, {})[field] = f.result()
 
-    # ── Phase 3: Verify (user_turn only) + reranker + DB ──
+    # ── Phase 4: Verify (user_turn only) + reranker + DB ──
     sub_ok = sub_fail = 0
 
     for row in sub_batch:
@@ -372,23 +417,41 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
         orig_tx = row.get("text_clean", "") or ""
         orig_th = row.get("thinking_clean", "") or ""
         r = corrected.get(tid, {})
-        kf = kiwi_flag.get(tid, {"text": False, "thinking": False})
 
         # user_turn: LLM result or original fallback
         final_ut = r.get("user_turn") if r.get("user_turn") is not None else orig_ut
 
-        # text/thinking: LLM result (if Kiwi flagged), or original (if Kiwi found nothing)
-        final_tx = r.get("text") if r.get("text") is not None else orig_tx
-        final_th = r.get("thinking") if r.get("thinking") is not None else orig_th
+        # text/thinking: hanja-substituted or original
+        h_tx = hanja_results.get(tid, {}).get("text", (orig_tx, []))[0] if tid in hanja_results else orig_tx
+        h_th = hanja_results.get(tid, {}).get("thinking", (orig_th, []))[0] if tid in hanja_results else orig_th
 
-        # Verify user_turn diffs only (text/thinking changes are from Kiwi = deterministic)
+        if r.get("text") is not None:
+            final_tx = r.get("text")
+        else:
+            final_tx = h_tx
+        if r.get("thinking") is not None:
+            final_th = r.get("thinking")
+        else:
+            final_th = h_th
+
+        # Verify ALL diffs in one call (user_turn + text hanja + thinking hanja)
         passed = True
-        if orig_ut != final_ut:
-            diffs = _extract_diffs(orig_ut, final_ut)
-            if diffs:
-                passed = _verify_diffs(diffs)
-        # text/thinking: auto-pass — Kiwi changes are safe, LLM corrections bypassed
-        # unless Kiwi flagged errors, in which case LLM did targeted review.
+        if not no_llm:
+            all_diffs = []
+            if orig_ut != final_ut:
+                d = _extract_diffs(orig_ut, final_ut)
+                if d:
+                    all_diffs.append(f"=== User Turn ===\n{d}")
+            for field, h_val, o_val in [("Text", h_tx, orig_tx), ("Thinking", h_th, orig_th)]:
+                if h_val != o_val:
+                    d = _extract_diffs(o_val, h_val)
+                    if d:
+                        all_diffs.append(f"=== {field} (Hanja) ===\n{d}")
+            if all_diffs:
+                combined = "\n\n".join(all_diffs)
+                passed = _verify_diffs(combined)
+                if not passed:
+                    print(f"    [verify] {tid[:8]} — diffs REJECTED, reverting all fields", flush=True)
 
         if not passed:
             sub_fail += 1
@@ -495,11 +558,10 @@ def main():
         if a == "--turn-id" and i + 1 < len(sys.argv):
             turn_ids.append(sys.argv[i + 1])
 
-    # Ensure Pod B is in polish mode (port auto-resolved from MODEL_METADATA)
+    # Polisher runs on Pod A router (:8080) — no Pod B model switch needed
     if not no_llm:
         from lib.pod_manager import ensure_model, model_info
-        print(f"  Checking Pod B: {model_info('polish')}", flush=True)
-        ensure_model("polish", skip_if_healthy=True)
+        print(f"  Polisher available via Pod A router (:8080)", flush=True)
 
     # Register heartbeat pulse + SIGTERM cleanup
     if not no_llm:
@@ -514,6 +576,14 @@ def main():
     else:
         print("Polish Batch v3 — Kiwi + 2-pass LLM", flush=True)
     print("=" * 60, flush=True)
+
+    # Advance already-polished turns: cleaned → polished
+    if not turn_ids:
+        psql_ok(
+            "UPDATE turns SET pipeline_state = 'polished' "
+            "WHERE pipeline_state = 'cleaned' "
+            "AND text_clean_polished IS NOT NULL AND text_clean_polished != ''"
+        )
 
     t_start = time.monotonic()
 
@@ -558,6 +628,9 @@ def main():
 
     elapsed = time.monotonic() - t_start
     print(f"Polish batch done: {ok_count} ok, {fail_count} failed, {elapsed:.0f}s", flush=True)
+    if not no_llm:
+        from lib.llm_client import recall_tiny
+        recall_tiny()
     if fail_count:
         sys.exit(1)
 

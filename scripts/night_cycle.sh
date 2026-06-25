@@ -12,7 +12,7 @@
 #   Server Validation     — state_collector --validate (snapshot before switching)
 #   Night Debate          — proposer(:8081) → reflector(:8082) → judge(:8083)
 #   Night Verify          — verifier(:8084) final gate via review_consumer.py
-#   Day Mode Restore      — Pod B extractor(:8082) + Pod A reserved(:8080)#   Proxy Audit           — proxy_reviewer.py (DeepSeek Pro verify audit)
+#   Day Mode Restore      — Pod B extractor(:8082) + Pod A reranker(:8080)#   Proxy Audit           — proxy_reviewer.py (DeepSeek Pro verify audit)
 
 set -o pipefail
 
@@ -68,7 +68,7 @@ switch_mode_both() {
     local mode_a="$1"
     local mode_b="$2"
     echo "[$(LOG_TS)] Switching Pod A → $mode_a, Pod B → $mode_b..."
-    # Pod A: MODE=reserved only (hardcodes model in its entrypoint)
+    # Pod A: MODE=reranker only
     printf '%s' "MODE=$mode_a" > "${MODE_FILE_A}.tmp" && mv "${MODE_FILE_A}.tmp" "$MODE_FILE_A"
     # Pod B: full env via pod_manager (MODEL_FILE, PORT, CTX_SIZE, etc.)
     python3 -c "
@@ -212,7 +212,7 @@ fi
 day_restored=true
 
 echo "[$(LOG_TS)] === Night → Day transition ==="
-if ! switch_mode_both "reserved" "day"; then
+if ! switch_mode_both "reranker" "day"; then
     day_restored=false
     echo "[$(LOG_TS)] FATAL: switch_mode day failed" >&2
 else
@@ -222,11 +222,11 @@ else
         day_restored=false
         echo "[$(LOG_TS)] FATAL: extractor (:8082) not responding after restore" >&2
     fi
-    # Pod A reserved(:8080)
-    echo "[$(LOG_TS)] Restarting Pod A (reserved:8080)..."
+    # Pod A reranker(:8080)
+    echo "[$(LOG_TS)] Restarting Pod A (reranker:8080)..."
     systemctl --user restart container-devforge-pod-a 2>&1 || true
     sleep 5
-    if ! wait_for_model 8080 "Pod A (reserved)" 60; then
+    if ! wait_for_model 8080 "Pod A (reranker)" 60; then
         echo "[$(LOG_TS)] WARNING: Pod A :8080 not responding" >&2
     fi
 fi

@@ -1,4 +1,5 @@
 # Status: production
+import glob
 import re
 import os
 import subprocess as sp
@@ -82,6 +83,14 @@ def verify_entities(enrich_data: Optional[Dict],
     for filepath in entities.get("files", []):
         full = os.path.join(project_root, filepath)
         exists = os.path.exists(full)
+        if not exists:
+            alt = os.path.join(project_root, "scripts", filepath.lstrip("./"))
+            if os.path.exists(alt):
+                exists = True
+        if not exists:
+            basename = os.path.basename(filepath)
+            if glob.glob(f"{project_root}/**/{basename}", recursive=True):
+                exists = True
         verified["files"].append({"path": filepath, "exists": exists})
 
     for sym in entities.get("functions", []):

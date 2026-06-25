@@ -1,0 +1,16 @@
+# enrich_few_shot.yaml — Static few-shot examples for enrich pipeline
+# MANAGED BY: weekly_enrich_rebuild.sh (do not edit manually)
+# DIVERSITY-FIRST: max-min embedding distance selection
+#
+# Fields:
+#   cycle: 0 = accumulation (building up to 4), 1+ = rotation (replace oldest)
+#   examples: list of examples, max 4 items
+#     - source_id: UUID from feedback_examples
+#     - text: human-readable summary of the example
+#     - week: which week the example was added
+#
+# The text field is formatted and appended to SYSTEM_DAY_ENRICH.
+# Each example is one CONFIRMed enrichment output pattern.
+
+cycle: 0
+examples: []

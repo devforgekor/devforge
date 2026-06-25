@@ -1,4 +1,5 @@
-# Status: production
+# Status: deprecated
+# Path: replaced by pipelines/extract.py (Pod B embedder :8081) — only called by deprecated lib/extract/core.py, remove after 2026-07
 import json
 import os
 import re

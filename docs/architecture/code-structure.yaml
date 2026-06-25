@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-23'
+  updated: '2026-06-25'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -46,7 +46,7 @@ modules:
         \ \uB3C4\uAD6C."
     day_cycle.sh:
       status: unknown
-      purpose: "day_cycle.sh \u2014 async pipeline (managed by watchdog)"
+      purpose: "day_cycle.sh \u2014 async pipeline (pipeline_state-driven)"
     deepseek_web.py:
       status: experimental
       purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
@@ -70,7 +70,13 @@ modules:
       status: production
       purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
         \ documents."
+    mcp_entrypoint.sh:
+      status: unknown
+      purpose: "mcp_entrypoint.sh \u2014 Start FastMCP server on Pod A pod"
     mcp_server.py:
+      status: experimental
+      purpose: "DevForge MCP Server \u2014 Streamable HTTP (MCP spec 2025-03-26)."
+    mcp_server_sse.py:
       status: experimental
       purpose: "MCP Server \u2014 SSE-based tool server (protocol 2024-11-05)."
     motd_gen.py:
@@ -115,14 +121,6 @@ modules:
     telegram_send.py:
       status: experimental
       purpose: telegram_send.py --- Send files or text to your Telegram chat.
-    test_pipeline_e2e.py:
-      status: deprecated
-      purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
-        \ \u2192 night_review."
-    test_r_role_dsv2.sh:
-      status: unknown
-      purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
-        \uC640 \uBE44\uAD50)"
     turn_watcher.py:
       status: production
       purpose: "turn_watcher.py \u2014 real-time session transcript \u2192 PostgreSQL."
@@ -132,6 +130,9 @@ modules:
     watchdog.py:
       status: production
       purpose: "DevForge Watchdog \u2014 entry point."
+    weekly_enrich_rebuild.sh:
+      status: unknown
+      purpose: "weekly_enrich_rebuild.sh \u2014 Weekly enrich few-shot diversity rebuild"
 - path: scripts/lib/
   purpose: Lib
   files:
@@ -160,8 +161,11 @@ modules:
         \ and prepare for MCP tools."
     enrich_feedback.py:
       status: production
-      purpose: "Enrich Feedback \u2014 collect day_verify.py verify_result for few-shot\
-        \ injection."
+      purpose: "Enrich Feedback \u2014 dynamic few-shot retrieval for enrich pipeline."
+    enrich_few_shot.py:
+      status: experimental
+      purpose: "Enrich Few-Shot \u2014 static diversity-first few-shot examples for\
+        \ enrich pipeline."
     experiment_state.py:
       status: production
       purpose: "Experiment state file \u2014 \uC2E4\uD5D8 \uC911 watchdog\uACFC pipeline\
@@ -177,8 +181,9 @@ modules:
       status: production
       purpose: "Unified LLM client \u2014 single entry point for all pipeline scripts."
     nli_server.py:
-      status: production
-      purpose: "NLI Cross-Encoder Server \u2014 DeBERTa-v3-large for factual consistency."
+      status: deprecated
+      purpose: "NLI Cross-Encoder Server \u2014 DeBERTa-v3-large (DEPRECATED, never\
+        \ deployed)."
     pipeline_common.py:
       status: production
       purpose: "Shared pipeline utilities \u2014 PipelineState, llm_call, call_one,\
@@ -204,6 +209,9 @@ modules:
       status: experimental
       purpose: "Slack Interactive Handler \u2014 receives Slack block_actions payload\
         \ and processes NEUTRAL fact confirm/reject."
+    telegram_notifier.py:
+      status: production
+      purpose: Telegram notifier for pipeline alerts.
     test_common.py:
       status: production
       purpose: "Shared test utilities \u2014 setup, heartbeat, cleanup, re-exports."
@@ -214,6 +222,9 @@ modules:
     text_cleaner.py:
       status: experimental
       purpose: Korean text cleaner using Kiwi morphological analyzer.
+    tg_webhook.py:
+      status: experimental
+      purpose: Minimal Telegram webhook for NEUTRAL fact CONFIRM/REJECT buttons.
     token_budget.py:
       status: production
       purpose: Token budget manager for P-R-J pipeline context allocation.
@@ -280,9 +291,6 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
-    core.py:
-      status: production
-      purpose: core.py
     utils.py:
       status: production
       purpose: utils.py
@@ -293,10 +301,10 @@ modules:
       status: unknown
       purpose: __init__.py
     core.py:
-      status: production
+      status: deprecated
       purpose: core.py
     utils.py:
-      status: production
+      status: deprecated
       purpose: utils.py
 - path: scripts/lib/hybrid/
   purpose: Hybrid
@@ -591,20 +599,6 @@ modules:
     __init__.py:
       status: production
       purpose: DevForge pipeline step implementations.
-    daily_verification_pipeline.py:
-      status: deprecated
-      purpose: daily_verification_pipeline.py
-    data_extraction_pipeline.py:
-      status: deprecated
-      purpose: data_extraction_pipeline.py
-    day_pipeline.py:
-      status: experimental
-      purpose: "Day Pipeline: extract \u2192 py_verify \u2192 activity_log \uC800\uC7A5\
-        \ (classify.py P-R-J \uBCC4\uB3C4)."
-    day_runner.py:
-      status: experimental
-      purpose: "Day Runner: \uCEE8\uD14C\uC774\uB108 \uD655\uC778 \u2192 day_pipeline.py\
-        \ subprocess \u2192 \uC885\uB8CC."
     day_verify.py:
       status: experimental
       purpose: "Day Verify Pipeline \u2014 verify enrichment metadata quality."
@@ -616,34 +610,24 @@ modules:
       status: experimental
       purpose: "Enrich Pipeline \u2014 post-extract MCP metadata enrichment (tldr,\
         \ intent, entities, tags)."
-    enrich_verify.py:
-      status: experimental
-      purpose: "Enrich Verify Pipeline \u2014 score enrichment metadata quality using\
-        \ a judge model."
     entity_scan.py:
       status: experimental
       purpose: "Entity Scan \u2014 Phase 0: deterministic entity extraction via regex\
         \ + DB lookup."
-    evaluation_experiment_pipeline.py:
-      status: production
-      purpose: evaluation_experiment_pipeline.py
     extract.py:
       status: production
       purpose: "Extract Pipeline \u2014 state-based fact extraction via NOT EXISTS\
         \ anti-join."
+    extract_llm.py:
+      status: production
+      purpose: LLM extraction submodule for the Extract Pipeline.
+    extract_verify.py:
+      status: production
+      purpose: Verification submodule for the Extract Pipeline.
     fts5_refresh.py:
       status: production
       purpose: "FTS5 Refresh \u2014 text_clean_polished \uAE30\uC900 FTS5 \uC778\uB371\
         \uC2A4 \uB3D9\uAE30\uD654."
-    hybrid.py:
-      status: experimental
-      purpose: Multi-model code modification pipeline with debate + verification.
-    hybrid_execution_pipeline.py:
-      status: production
-      purpose: hybrid_execution_pipeline.py
-    knowledge_enrichment_pipeline.py:
-      status: deprecated
-      purpose: knowledge_enrichment_pipeline.py
     night_cycle.py:
       status: experimental
       purpose: "Night Pipeline: DB handoff \uB85C\uB4DC \u2192 P-R-J(30B\u219214B\u2192\
@@ -656,16 +640,16 @@ modules:
       purpose: night_debate_pipeline.py
     polish_batch.py:
       status: experimental
-      purpose: "Polish Batch Pipeline \u2014 3-phase detect-then-correct with Kiwi."
+      purpose: "Polish Batch Pipeline \u2014 Kiwi(user) + Hanja substitution(thinking/text)."
     prj_cycle.py:
       status: production
       purpose: prj_cycle.py
     proxy_reviewer.py:
       status: production
       purpose: "proxy_reviewer.py \u2014 DeepSeek Pro verification of 27B verify reasoning."
-    re_embed_check.py:
-      status: experimental
-      purpose: "Re-embed Check \u2014 detect content_hash changes \u2192 reset embedding=NULL."
+    reranker_recover.py:
+      status: production
+      purpose: "Reranker Recovery \u2014 quarantine + retry for RERANKER_ERROR facts."
     review.py:
       status: production
       purpose: Step implementations for the 3-Model Review Pipeline.
@@ -676,9 +660,6 @@ modules:
       status: production
       purpose: "Text Preprocessing \u2014 text_clean \uC0DD\uC131 (NULL\uC778 \uD134\
         \uB9CC \uCC98\uB9AC)."
-    worklog_generation_pipeline.py:
-      status: production
-      purpose: worklog_generation_pipeline.py
     worklog_generator.py:
       status: production
       purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: draft model\
@@ -805,6 +786,9 @@ modules:
       status: experimental
       purpose: "Enrich A/B Quality Comparison \u2014 runs same turns through two models\
         \ and compares."
+    enrich_verify_quality.py:
+      status: experimental
+      purpose: "Enrich Verify \u2014 score enrichment metadata quality manually."
     eval_comparison.py:
       status: experimental
       purpose: DeepSeek Pro evaluation of 12-run comparison test results.
@@ -899,12 +883,21 @@ modules:
       status: experimental
       purpose: "Ground truth \uAE30\uBC18 night P-R-J \uD3C9\uAC00. P=30B(P), R=14B(R),\
         \ J=N14B Q6."
+    test_pipeline_e2e.py:
+      status: deprecated
+      purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
+        \ \u2192 night_review."
     test_progress_watcher.py:
       status: experimental
       purpose: test_progress_watcher.py
+    test_r_role_dsv2.sh:
+      status: unknown
+      purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
+        \uC640 \uBE44\uAD50)"
     test_verify_methods.py:
       status: experimental
-      purpose: "TLDR Verification Method Comparison \u2014 NLI vs Reranker vs Embedding."
+      purpose: "TLDR Verification Method Comparison \u2014 Reranker vs Embedding (NLI\
+        \ :8085 removed)."
     transform_prj.py:
       status: experimental
       purpose: Transform prj_cycle.py for experiment phases.

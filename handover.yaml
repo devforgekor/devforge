@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-06-23T00:34:03.264198+00:00'
+  time: '2026-06-25T03:00:13.161871+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -10,75 +10,21 @@ last_checkpoint:
     generated: []
   git: {}
   task: null
-decisions: []
-known_issues: []
-completed_log:
-- '[Session 35] 14B 10-Axis Test 1 COMPLETE: 3B=50(C) 7B=50(C) Coder14B=52(C) Qwen2.5-14B=52(C) Qwen3-14B=47(C). All C-grade.
-  ~2.3h runtime.'
-- '[Session 32] llm-agent-rule.md: Glossary SSOT workflow 규칙 추가.'
-- '[Session 32] CRITICAL CORRECTION: Session 31 handover night_proposer=Qwen27B는 잘못됨. 30B 유지, 32B→27B만 변경된 것.'
-- '[Session 32] 양방향 검증 완료: compile 127/127 OK, .py 32B refs 0, cli.py lint P0=0, DB glossary clean.'
-- '[Session 30] Doc cleanup: Qwen3-4B stale refs removed from 5 files. review-worker.timer + T01-T16 ghosts cleaned.'
-- '[Session 30] pytest infra created: conftest.py, pytest.ini, tests/__init__.py, dev-requirements.txt.'
-- '[Session 30] prompt-templates/ created: 6 templates for local LLM vibe coding workflow.'
-- '[Session 29] E1 follow-up naming fix: PROPOSEREFLECTOR_MODEL→PROPOSER_MODEL, _run_prj→run_propose_review_judge, P_MODEL/R_MODEL/J_MODEL→PROPOSER/REFLECTOR/JUDGE_MODEL.'
-- '[Session 29] 5 bugs fixed: observer sys.path, run_pipeline_bg.sh 2x missing $ + test path, prj_watchdog test path, 15m-cycle.service
-  description, stale .pyc 16 files.'
-- '[Session 28] devforge-qwen → devforge-pod-a rename complete. 16 files + quadlet + systemd unit + docs updated.'
-- '[Session 27] cli.py status --json implemented. lint_rules.py + cli.py lint.'
-- '[Session 26] Context window 256K expansion. systemd bug fix.'
-- '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
-- '[Session 23] utcnow 1 case + bare except 7 cases fixed + Status/Path headers added to 142 files.'
-- '[Session 22] File Status/Path header rule established + risk reclassification.'
-- '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
-- '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
-- '[Session 33] DIVERGENCE MAP: (A) Scoring test.py:977-982 5-comp vs checklist.yaml:167 10-axis, (B) Rubric test.py:122-183
-  self-made vs rubric-prompt.txt 84-line, (C) Output flat JSON vs scoring-sheet.yaml nested, (D) Injection correct mechanism
-  but wrong text.'
-- '[Session 33] VERDICT: Both Test 1 and Test 2 must be redone with Pro 10-axis specs. Claude Pro baseline also re-run. Scope:
-  5 models × 6 cases × 2 modes = 60 local LLM calls + 12 Pro calls. Files to rewrite: scripts/14b_comparison_test.py. Specs
-  to follow: docs/specs/14b-comparison-*.'
-- '[Session 33] Test 1 completed with simplified system: 3B=57, Coder14B=55, Qwen2.5-14B=54, Qwen3-14B=54, 7B=52. experiment_registry
-  updated.'
-- '[Session 33] Claude Pro baseline (simplified scoring): Test1=89, Test2=90. Registry entries created.'
-- '[Session 33] Test 2 started (21:43 KST), killed at ~22:00 KST. Partial: 3B 6/6, 7B 1/6. /tmp/14b_comparison_results_rubric.json
-  abandoned.'
-- '[Session 33] Handover written with exact file paths, line numbers, and divergence map. Next session: redo from scratch
-  with Pro 10-axis specs.'
-- '[Session 34] Telegram push 금지: watchdog/notifier.py _notify_all() _telegram_send() 제거. memory 등록 완료.'
-- '[Session 34] Slack Block Kit 고도화: notifier.py heartbeat Block Kit + in-place chat.update + alert/recovery colored attachment
-  (danger/warning/good). 의존성 없음.'
-- '[Session 15-18] ARM LLM optimization Phase 0-5 + extract/classify parsing bug fix + experiment registry plan'
-- '[Session 21] CLAUDE.md SSoT consolidation. 3 legacy files converted to pointers.'
-- '[Session 22] File Status/Path header rule established + risk reclassification.'
-- '[Session 23] utcnow 1 case + bare except 7 cases fixed + Status/Path headers added to 142 files.'
-- '[Session 24-25] Server-wide 14-category rule audit complete + compaction window recovery.'
-- '[Session 26] Context window 256K expansion. systemd bug fix.'
-- '[Session 27] cli.py status --json implemented. lint_rules.py + cli.py lint.'
-- '[Session 43] Embedding 동적 배치 구현. httpx 전환. PID lock 추가. pod-b-entrypoint embed env-driven.'
-- '[Session 42] extract/day_verify concurrent batching (Session 41 코드 git으로 복원 확인).'
-- '[Session 41] Extract + day_verify concurrent batching. llama.cpp --parallel 3 + --cont-batching. pod-b-entrypoint.sh env-driven.
-  extract.py ThreadPoolExecutor 3-turn batches. day_verify.py ThreadPoolExecutor 3-chunk batches. Debate not parallelizable
-  (sequential P->R->J). 27B excluded (RAM). Lint 0/0/0.'
-- '[Session 40] Watchdog silent alerting + dead man switch. Pod B mode mapping bug fixed (113 crash loop). Day-cycle liveness
-  check added. Slack format standardized. 6 P2 lint resolved. Heartbeat :15/:45 with chat.update in-place.'
-- '[Session 38] Handover structure reorganized: decisions/known_issues now sequential by session with d38/ki38 IDs.'
-- '[Session 44] Embed runner Slack bug fix — import 경로 오류(ModuleNotFoundError) 수정, 2>/dev/null 제거. Pipeline 현황 확인: embedding
-  20.9% 정상 진행, swap 293MB 안정적. Q8 thrashing 없음.'
-- '[Session 45] extract.py NLI→reranker 순서 교정 + entity_scan.py 신규 + enrich.py entity reranker + day_cycle phase 순서 변경.'
-- '[Session 45] extract.py NLI→reranker 순서 교정: NLI 1차(ENTAILMENT/CONTRADICTION/NEUTRAL) → ENTAILMENT auto grounded, CONTRADICTION
-  drop, NEUTRAL만 reranker. LLM 호출 50% 감소.'
-- '[Session 45] enrich.py entity 검증 reranker 도입: substring 1차 → reranker(:8080) 2차. UNGROUNDED만 drop.'
-- '[Session 45] entity_scan.py 신규 (Phase 0): LLM 없는 deterministic entity 추출 (regex+DB+context).'
-- '[Session 45] extract.py entity context 주입: entity_scan 로드 → system prompt에 === Known Context Entities === 삽입.'
-- '[Session 45] day_cycle.sh + day_cycle.py 에 entity_scan phase 추가. 전체 흐름: text_clean → ... → entity_scan → extract(entity
-  context) → enrich(entity reranker verify) → model swap → day_verify.'
-- '[Session 47] E2E 분석 보고서: docs/reports/pipeline-e2e-20260621.md. 5/5 성공, 2329s, 0 errors. 6→10 turn throughput 분석 (+9%/day).
-  enrich NLI 8085 미배포 발견.'
-- '[Session 47] Enrich NLI 8085 → LLM NLI 전환: enrich.py _verify_tldr() LLM self-verify로 교체. call_llm(model=day_enrich, max_tokens=16,
-  timeout=60). extract.py _llm_nli_check와 동일 패턴.'
-- '[Session 47] Entity scan backlog fix: _scan_turn()에서 conv_ents를 scan 결과에서 제외. backlog 증가 원인 제거.'
-- '[Session 47] BATCH_LIMIT 10 통일: embed/entity_scan/extract/enrich/day_verify 전 phase 10. pipeline test timeout 5400s.'
-- '[Session 47] System sync 분리: system_sync.sh (gen_architecture + duckdns). devforge-system-sync.timer 30분 간격. day_cycle.timer
-  disable. watchdog day_timers = {}.'
-- '[Session 48] Env race fix + recover_oom + day_enrich + zswap'
+decisions:
+- '{''id'': ''nd01-01'', ''detail'': ''Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port
+  8000)가 port 8000 점유 → pasta 사망 → Pod A :8080+8000 port forwarding 차단. disabled 상태였으나 존재만으로 systemctl --user start 가능. init.scope
+  (systemd user instance startup)에서 trigger 확인됨. watchdog/timer/의존성 아님.''}'
+- '{''id'': ''nd01-02'', ''detail'': ''Legacy MCP 서비스 영구 제거: devforge-mcp.service → .service.disabled rename → rm 삭제. 재발 방지
+  완료.''}'
+- '{''id'': ''nd01-03'', ''detail'': "이전 cycle (Jun 23) 17 extracted → 49 verified turns는 NLI 미수행 상태로 force-pass. 49 day_verify
+  facts 모두 nli_llm=NULL, verdict=pending. source=''day_verify''는 reranker_recover.py 기본 범위 아닐 수 있어 수동 처리 또는 SQL UPDATE 필요."}'
+- '{''id'': ''nd01-04'', ''detail'': ''Slack 봇 crash (ModuleNotFoundError: lib.llm_client)와 MCP 기동은 동시성 이벤트일 뿐 인과관계 없음. slack.py
+  내 MCP 호출 로직 없음.''}'
+known_issues:
+- '{''id'': ''nki01-01'', ''detail'': "이전 cycle 49 day_verify facts NLI/reranker 없이 force-pass. reranker_recover.py 기본 조건에
+  source=''day_verify'' 포함 여부 확인 필요. 미포함 시 SQL 일괄 UPDATE 필요."}'
+- '{''id'': ''nki01-02'', ''detail'': ''cli.py status --json models.pod-a = ["?", "?", "?"]. Pod A /v1/models 응답 문제 지속. Pod
+  A 기능상 정상 작동 중.''}'
+- '{''id'': ''nki01-03'', ''detail'': ''turns 테이블에 updated_at 컬럼 없음. pipeline_state 변경 추적 어려움. (created_at만 존재)''}'
+- '{''id'': ''nki01-04'', ''detail'': ''CONTRADICTION=0 미해결. 신규 GSAR COMPLEMENTARY 4-way NLI 첫 결과 확인 후 재평가 필요.''}'
+completed_log: []

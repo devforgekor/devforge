@@ -37,9 +37,9 @@ from lib.watchdog.messenger import heartbeat, resolve_pulse
 from lib.pod_manager import ensure_model
 
 from lib.llm_client import MODEL_REGISTRY
-EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embedder']['port']}/v1/embeddings"
+EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embeder']['port']}/v1/embeddings"
 MAX_BATCH_SIZE = 10   # max texts per request (safety cap)
-BATCH_LIMIT = 10     # max turns per run (matches pipeline slice)
+BATCH_LIMIT = 50     # max turns per run (sliced via MAX_BATCH_SIZE)
 BATCH_TIMEOUT = 1800  # per batch request (30min safety — model cold load ~3.5min + processing)
 MAX_CYCLE = 86400     # 24hr max for full 8.6K turn embed
 SLOT_CTX = 5000       # token budget per slot (--ctx-size 12288 / --parallel 2 * 0.8 margin)
@@ -104,7 +104,7 @@ def get_unembedded_turns(limit: int):
         f"  AND t.pipeline_state = 'polished' "
         f"  AND t.text_clean_polished IS NOT NULL "
         f"  AND (t.retry_count IS NULL OR t.retry_count < 3) "
-        f"ORDER BY t.created_at DESC "
+        f"ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
         f"LIMIT {limit}"
     )
     return rows or []
@@ -211,7 +211,7 @@ def main():
 
     preflight_checks("embed_batch.py", required_ports={8081})
     # Ensure embedding model is running on 8081 (model identity check)
-    if not ensure_model('embed', skip_if_healthy=True):
+    if not ensure_model('embeder', skip_if_healthy=True):
         log("  FATAL: cannot start embedding model on 8081")
         return
 

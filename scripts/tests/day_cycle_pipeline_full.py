@@ -285,7 +285,7 @@ def stage_embed(limit: int) -> dict:
     print(f"  [pod_b] embed mode: {'OK' if sw['ok'] else 'FAIL'} ({sw['elapsed_s']}s)", flush=True)
 
     # Get embedder port from MODEL_REGISTRY
-    embed_port = MODEL_REGISTRY.get("embedder", {}).get("port", 8081)
+    embed_port = MODEL_REGISTRY.get("embeder", {}).get("port", 8081)
     print(f"  [embed] Waiting for :{embed_port} health...", flush=True)
     for i in range(120):
         try:

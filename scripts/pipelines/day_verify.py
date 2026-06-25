@@ -35,7 +35,7 @@ from lib.infra.preflight import preflight_checks
 from lib.watchdog.messenger import heartbeat
 from lib.pod_manager import ensure_model
 
-BATCH_LIMIT = 10
+BATCH_LIMIT = 50
 PARALLEL = 2
 SOLO_THRESHOLD = 5000
 
@@ -47,16 +47,21 @@ def log(msg: str) -> None:
     print(f"[{ts}] {msg}", flush=True)
 
 
-_ENTITY_VERIFY_PROMPT = """You are a factual consistency checker. Given a SOURCE text and a list of CLAIMS, determine if each claim is explicitly supported by the source.
+_ENTITY_VERIFY_PROMPT = """You are a factual consistency checker. Given a SOURCE text and a list of CLAIMS, determine if each claim is explicitly supported.
+
+SEQUENTIAL REASONING — For EACH claim, follow these steps:
+Step 1 — LOCATE: Search the source for the exact entity name or a clear reference to it.
+Step 2 — VERIFY: Confirm the source discusses this specific entity in a substantive way.
+Step 3 — JUDGE: If the entity appears with relevant context → YES. If the source contradicts the claim → NO. If the entity does not appear or only appears incidentally → AMBIGUOUS.
+Step 4 — EVIDENCE: Include the exact source snippet (max 100 chars) that supports your verdict.
 
 SOURCE: {source}
 
 CLAIMS:
 {claims}
 
-For each claim, answer YES if the source explicitly supports it, NO if the source contradicts it, or AMBIGUOUS if the source neither supports nor contradicts it.
-
-Return a JSON object like: {{"claim_0": "YES", "claim_1": "NO", ...}}
+For each claim, return a JSON object with verdict (YES/NO/AMBIGUOUS) and a short evidence quote.
+Format: {{"claim_0": {{"verdict": "YES", "evidence": "exact supporting snippet from source"}}, "claim_1": ...}}
 Answer ONLY with the JSON object, no other text."""
 
 
@@ -96,20 +101,22 @@ def _llm_verify_entities(entities: Dict, source_text: str) -> Dict:
                 )
                 parsed = json.loads(resp)
                 for i, c in enumerate(unverified):
-                    verdict = parsed.get(f"claim_{i}", "AMBIGUOUS")
+                    entry = parsed.get(f"claim_{i}", {"verdict": "AMBIGUOUS"})
+                    verdict = entry["verdict"] if isinstance(entry, dict) else entry
+                    evidence = entry.get("evidence", "") if isinstance(entry, dict) else ""
                     grounded = verdict == "YES"
                     checked.append({
                         "entity": c, "score": 1.0 if grounded else 0.0,
                         "grounding": "GROUNDED" if grounded else ("UNGROUNDED" if verdict == "NO" else "AMBIGUOUS"),
                         "method": "llm_verify", "grounded": grounded,
-                        "_llm_verdict": verdict,
+                        "_llm_verdict": verdict, "_evidence": evidence,
                     })
             except Exception as e:
-                # LLM parse failure — fallback to AMBIGUOUS
+                # LLM parse failure — fallback to AMBIGUOUS (not grounded)
                 for c in unverified:
                     checked.append({
                         "entity": c, "score": 0.5, "grounding": "AMBIGUOUS",
-                        "method": "llm_fallback", "grounded": True,
+                        "method": "llm_fallback", "grounded": False,
                     })
 
         result[key] = checked
@@ -125,13 +132,21 @@ def _llm_verify_tldr(tldr: str, source_text: str) -> Dict:
 
 CLAIM: {tldr}
 
-Is the CLAIM factually supported by the SOURCE? Answer YES, NO, or AMBIGUOUS.
-Answer with one word only."""
+Is the CLAIM supported by the SOURCE? Choose:
+- YES: Factually supported (may be rephrased)
+- NO: Contradicts the source
+- COMPLEMENTARY: Well-written summary that synthesizes content without directly quoting
+- AMBIGUOUS: Cannot determine
+
+Answer with one word only: YES, NO, COMPLEMENTARY, or AMBIGUOUS."""
     try:
         resp = call_llm_with_retry(
             [{"role": "user", "content": prompt}],
             model="day_verify", max_tokens=16, temperature=0.0, timeout=30,
         ).strip().upper()
+        if resp == "COMPLEMENTARY":
+            return {"text": tldr, "score": 1.0, "grounding": "COMPLEMENTARY",
+                    "grounded": True, "method": "llm_verify", "_llm_verdict": resp}
         grounded = resp == "YES"
         verdict = "GROUNDED" if grounded else ("UNGROUNDED" if resp == "NO" else "AMBIGUOUS")
         return {"text": tldr, "score": 1.0 if grounded else 0.0,
@@ -139,7 +154,7 @@ Answer with one word only."""
                 "method": "llm_verify", "_llm_verdict": resp}
     except Exception as e:
         return {"text": tldr, "score": 0.5, "grounding": "AMBIGUOUS",
-                "grounded": True, "method": "llm_fallback"}
+                "grounded": False, "method": "llm_fallback"}
 
 
 # ── Phase 2b: Pod A Reranker Faithfulness ──────────────────────────────
@@ -226,25 +241,30 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT,
         )
     else:
         sql = (
-            "SELECT DISTINCT ON (t.id) "
-            "  t.id, t.user_turn, t.thinking, t.text, "
-            "  rf.evidence::text AS enrich_meta, "
-            "  t.created_at::text, "
-            "  t.est_chars "
-            "FROM turns t "
-            "JOIN review_facts rf ON rf.turn_id = t.id "
-            "  AND rf.fact_type = 'enrich_meta' "
-            "WHERE NOT EXISTS ("
-            "  SELECT 1 FROM review_facts rf2 "
-            "  WHERE rf2.turn_id = t.id "
-            "  AND rf2.fact_type = 'verify_result'"
+            "SELECT sub.id, sub.user_turn, sub.thinking, sub.text, "
+            "  sub.enrich_meta, sub.created_at, sub.est_chars "
+            "FROM ("
+            "  SELECT DISTINCT ON (t.id) "
+            "    t.id, t.user_turn, t.thinking, t.text, "
+            "    rf.evidence::text AS enrich_meta, "
+            "    t.created_at::text, "
+            "    t.est_chars "
+            "  FROM turns t "
+            "  JOIN review_facts rf ON rf.turn_id = t.id "
+            "    AND rf.fact_type = 'enrich_meta' "
+            "  WHERE NOT EXISTS ("
+            "    SELECT 1 FROM review_facts rf2 "
+            "    WHERE rf2.turn_id = t.id "
+            "    AND rf2.fact_type = 'verify_result'"
             ") "
-            "  AND t.pipeline_state = 'enriched' "
-            "ORDER BY t.id, rf.fact_index DESC"
+            "    AND t.pipeline_state = 'enriched' "
+            "  ORDER BY t.id, rf.fact_index DESC"
+            ") sub "
+            "ORDER BY sub.est_chars ASC NULLS LAST, sub.created_at ASC"
         )
     rows = psql_json(sql) or []
     for r in rows:
-        r.setdefault("est_chars", 0)
+        r["est_chars"] = r.get("est_chars") or 0
     return rows[:limit]
 
 
@@ -524,6 +544,8 @@ def main() -> None:
     )
     if args.dry_run:
         print(json.dumps(result, ensure_ascii=False, indent=2))
+    from lib.llm_client import recall_tiny
+    recall_tiny()
     sys.exit(0 if result["ok"] else 1)
 
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: none — standalone tldr verification method comparison
-"""TLDR Verification Method Comparison — NLI vs Reranker vs Embedding.
+"""TLDR Verification Method Comparison — Reranker vs Embedding (NLI :8085 removed).
 
-Compares three methods for detecting hallucinated tldr in enrich output:
+Compares two active methods for detecting hallucinated tldr in enrich output (NLI DeBERTa-v3 :8085 never deployed, removed):
   1. NLI (DeBERTa-v3, :8085) — logical entailment (ENTAIL/CONTRADICT/NEUTRAL)
   2. Reranker (Qwen3-4B Q8, :8080) — topical relevance score (0.0-1.0)
   3. Embedding cosine (Qwen3-8B, :8081) — cosine similarity (0.0-1.0)

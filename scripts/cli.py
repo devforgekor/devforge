@@ -219,8 +219,8 @@ MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
 MODE_MAP = {
-    "day":     ("reserved", "day"),      # Pod A reserved(:8080) + Pod B extractor(:8082)
-    "verify":  ("reserved", "verify"),   # Pod B verifier(:8084), Pod A stopped
+    "day":     ("reranker", "day"),      # Pod A router(8080) + Pod B extractor(8082)
+    "verify":  ("reranker", "verify"),   # Pod B verifier(8084), Pod A router
 }
 
 def _switch_mode(mode: str) -> bool:
