@@ -360,6 +360,7 @@ def recover_8082(model_key: str = "day-extractor") -> None:
         print("  [recovery] Another recovery in progress, waiting...", flush=True)
         _8082_RECOVERY_LOCK.acquire(blocking=True)
         print("  [recovery] Recovery finished by other thread", flush=True)
+        _8082_RECOVERY_LOCK.release()
         return
     try:
         print(f"  [recovery] Reloading 8082 → {model_key}...", flush=True)

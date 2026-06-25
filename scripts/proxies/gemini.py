@@ -318,20 +318,27 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     rest = self.path.split("/models/", 1)[1]
                     req_model = rest.split(":")[0] if ":" in rest else req_model
 
+                chosen = req_model
                 if "flash" in req_model:
                     chosen = classify_query_intent(data, req_model)
                     if chosen != req_model:
                         path = self.path.replace(req_model, chosen)
                         print(f"[proxy] model: {req_model} → {chosen}  [KeyRotator: {name}]", file=sys.stderr)
 
-                # --- Patch 3: inject DevForge rules into systemInstruction ---
-                sys_instr = data.get("systemInstruction", {})
-                sys_parts = sys_instr.get("parts", [])
-                existing_text = " ".join(p.get("text", "") for p in sys_parts)
-                if "DevForge Server Rules" not in existing_text:
-                    sys_parts.insert(0, {"text": DEVFORTE_SYSTEM_RULES})
-                    data["systemInstruction"] = {"parts": sys_parts}
-                    body = json.dumps(data).encode()
+                # --- Patch 3: systemInstruction — only for models that support it ---
+                # gemini-2.5-flash (free tier) does NOT support systemInstruction.
+                # Strip it from the body even if the CLI sent it (e.g. from GEMINI.md).
+                if "flash" in chosen:
+                    data.pop("systemInstruction", None)
+                else:
+                    sys_instr = data.get("systemInstruction", {})
+                    sys_parts = sys_instr.get("parts", [])
+                    existing_text = " ".join(p.get("text", "") for p in sys_parts)
+                    if "DevForge Server Rules" not in existing_text:
+                        sys_parts.insert(0, {"text": DEVFORTE_SYSTEM_RULES})
+                        data["systemInstruction"] = {"parts": sys_parts}
+
+                body = json.dumps(data).encode()
             except Exception:
                 pass
 
@@ -370,6 +377,24 @@ class ProxyHandler(BaseHTTPRequestHandler):
             print(f"[proxy] pro quota exhausted → flash  [KeyRotator: {name}]", file=sys.stderr)
             fallback_path = path.replace(PRO_MODEL, FLASH_MODEL)
             status_code, rest_lines, raw_body = self._make_request(method, fallback_path, req_headers, body, key)
+
+        # Flash 429 — retry with other keys (each key has independent daily quota)
+        if status_code == 429 and ("flash" in path):
+            for retry_no in range(min(2, max(1, len(_get_rotator().keys) - 1))):
+                with _lock:
+                    rotator = _get_rotator()
+                    rotator.rate_limited(idx, 60)
+                    picked = rotator.pick()
+                    if picked is None or picked[0] == idx:
+                        break
+                    new_idx, new_name, new_key = picked
+                    _save_state(rotator)
+                print(f"[proxy] flash 429 ({retry_no+1}) → retry w/ {new_name}", file=sys.stderr)
+                idx, name = new_idx, new_name
+                req_headers["x-goog-api-key"] = new_key
+                status_code, rest_lines, raw_body = self._make_request(method, path, req_headers, body, new_key)
+                if status_code != 429:
+                    break
 
         resp_body = self._dechunk(rest_lines, raw_body)
 

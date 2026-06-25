@@ -115,7 +115,7 @@ stop_llm_services() {
     for svc in activity-summarizer telegram-bot slack; do
         systemctl --user stop "$svc" 2>&1 || true
     done
-    for tmr in activity-summarizer-safety.timer devforge-day-cycle.timer; do
+    for tmr in activity-summarizer-safety.timer; do
         systemctl --user stop "$tmr" 2>&1 || true
     done
     echo "[$(LOG_TS)] [$label] All non-critical LLM services stopped"
@@ -124,7 +124,7 @@ stop_llm_services() {
 start_llm_services() {
     local label="$1"
     echo "[$(LOG_TS)] [$label] Restarting LLM services and timers..."
-    for tmr in activity-summarizer-safety.timer devforge-day-cycle.timer; do
+    for tmr in activity-summarizer-safety.timer; do
         systemctl --user start "$tmr" 2>&1 || true
     done
     for svc in activity-summarizer telegram-bot slack; do

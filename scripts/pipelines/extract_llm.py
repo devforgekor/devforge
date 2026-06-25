@@ -54,6 +54,7 @@ def _recover_8082() -> None:
         print("  [recovery] Another recovery in progress, waiting...", flush=True)
         _8082_RECOVERY_LOCK.acquire(blocking=True)
         print("  [recovery] Recovery finished by other thread", flush=True)
+        _8082_RECOVERY_LOCK.release()
         return
     try:
         print("  [recovery] Reloading 8082...", flush=True)

@@ -281,8 +281,6 @@ def main():
     # 2) Stop day_cycle if running (may conflict with Pod B restarts)
     subprocess.run(["systemctl", "--user", "stop", "devforge-day-cycle.service"],
                    capture_output=True, timeout=30)
-    subprocess.run(["systemctl", "--user", "stop", "devforge-day-cycle.timer"],
-                   capture_output=True, timeout=30)
     subprocess.run(["pkill", "-9", "-f", "day_cycle.sh"], capture_output=True, timeout=5)
     print(f"  [init] Cycles stopped", flush=True)
 

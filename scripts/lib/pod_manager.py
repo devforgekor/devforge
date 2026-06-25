@@ -337,7 +337,7 @@ def kill_all(night=False, dry_run=False):
                        capture_output=True, timeout=30)
         subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
                        capture_output=True, timeout=10)
-        for svc in ("devforge-day-cycle.service", "devforge-day-cycle.timer",
+        for svc in ("devforge-day-cycle.service",
            "devforge-night-cycle.service",
                      "devforge-night-cycle.timer"):
             subprocess.run(["systemctl", "--user", "stop", svc], capture_output=True, timeout=30)

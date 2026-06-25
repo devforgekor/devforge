@@ -5,7 +5,7 @@
 
 IMPORTANT: 모든 test script는 반드시 ``test_setup()`` / ``test_complete()``를
 사용해야 합니다 (직접 ``stop_day_cycle()`` / ``start_day_cycle()`` 호출 불가).
-``test_setup()``이 day_cycle timer를 중단하고 ``test_complete()``가 재시작하여
+``test_setup()``이 day_cycle service를 중단하고 ``test_complete()``가 재시작하여
 Pod B 경합을 방지합니다. 이 함수들을 사용하지 않은 test script는 day_cycle과의
 Pod B 충돌로 실패하거나 OOM이 발생할 수 있습니다.
 
@@ -42,29 +42,27 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # ── Day cycle control ──────────────────────────────────────────────────
 
 _DAY_CYCLE_SVC = "devforge-day-cycle.service"
-_DAY_CYCLE_TIMER = "devforge-day-cycle.timer"
 
 
 def stop_day_cycle():
-    """Stop day-cycle service+timer so they don't compete for Pod B during a test.
+    """Stop day-cycle service so it doesn't compete for Pod B during a test.
 
     Safe to call even if already stopped. Logs status either way.
     """
-    for unit in (_DAY_CYCLE_TIMER, _DAY_CYCLE_SVC):
-        r = os.system(f"systemctl --user stop {unit} 2>/dev/null")
-        code = ">>" if r == 0 else "--"
-        log(f"  [{code}] systemctl --user stop {unit}")
+    r = os.system(f"systemctl --user stop {_DAY_CYCLE_SVC} 2>/dev/null")
+    code = ">>" if r == 0 else "--"
+    log(f"  [{code}] systemctl --user stop {_DAY_CYCLE_SVC}")
     _time.sleep(1)
 
 
 def start_day_cycle():
-    """Restart day-cycle timer after a test completes.
+    """Restart day-cycle service after a test completes.
 
-    Only starts the timer -- the timer activates the service on its schedule.
+    Day-cycle has no timer — watchdog or direct service start triggers it.
     """
-    r = os.system(f"systemctl --user start {_DAY_CYCLE_TIMER} 2>/dev/null")
+    r = os.system(f"systemctl --user start {_DAY_CYCLE_SVC} 2>/dev/null")
     code = ">>" if r == 0 else "--"
-    log(f"  [{code}] systemctl --user start {_DAY_CYCLE_TIMER}")
+    log(f"  [{code}] systemctl --user start {_DAY_CYCLE_SVC}")
 
 # Module-level state
 _test_name: str = ""
