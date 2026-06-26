@@ -23,7 +23,6 @@ import signal
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,10 +45,10 @@ MAX_TOKENS_FIELD = 256
 TEMP = 0.0
 TIMEOUT_BASE = 30
 TIMEOUT_PER_CHAR = 0.05
-TIMEOUT_PER_TOK = 1.5
-SOLO_FACTOR = 2.5
+TIMEOUT_PER_TOK = 0.5   # ~2 t/s actual → 0.5s margin per token
+SOLO_FACTOR = 1.5
 MAX_CHARS_SOLO = 5000
-QUEUE_MARGIN = 2.0  # account for slot queuing: each call may wait N-1 turns ahead
+QUEUE_MARGIN = 1.5  # 2 parallel slots → queue wait max 1x
 
 # ── Code block protection (same pattern as text_cleaner.py) ──
 RE_CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
@@ -174,82 +173,6 @@ Output STRICT JSON: {{"corrected": "the corrected text"}}
 # Phase 3 — Diff-Based Verification
 # ═══════════════════════════════════════════════
 
-_NLI_VERIFY_PROMPT = """You are verifying whether an EVIDENCE sentence is factually supported by a SOURCE sentence.
-
-Follow these steps:
-1. Identify the key factual claim in the evidence.
-2. Check whether that claim is directly stated or clearly implied by the source.
-3. Output exactly one label.
-
-LABELS:
-- ENTAILMENT: The evidence is directly supported by the source.
-- CONTRADICTION: The evidence contradicts the source — they cannot both be true.
-- NEUTRAL: The evidence is not directly supported but does not contradict either.
-
-SOURCE: {source}
-
-EVIDENCE: {evidence}
-
-LABEL:"""
-
-
-def _nli_check(corrected: str, original: str) -> str:
-    """Run NLI self-verify: does corrected mean the same as original?
-    Returns ENTAILMENT, CONTRADICTION, or NEUTRAL.
-    """
-    if not corrected or not original:
-        return "NEUTRAL"
-    prompt = _NLI_VERIFY_PROMPT.format(
-        source=context_limit(original), evidence=corrected[:500]
-    )
-    try:
-        meta = call_llm(
-            [{"role": "user", "content": prompt}],
-            model="polisher",
-            max_tokens=64, temperature=0.0, timeout=30,
-            return_meta=True,
-        )
-        raw = meta["content"].strip().upper()
-        for tok in raw.replace("\n", " ").split():
-            tok = tok.strip(".,!?;:\"'()[]")
-            if tok in ("ENTAILMENT", "CONTRADICTION", "NEUTRAL"):
-                return tok
-        return "NEUTRAL"
-    except Exception:
-        return "NEUTRAL"
-
-VERIFY_DIFF_PROMPT = """You verify Korean text corrections. Each "before -> after" pair shows how a text segment was changed.
-
-{changes}
-
-For EACH pair, analyze before deciding. Output a JSON object with your step-by-step analysis and final verdict:
-
-{{
-  "analysis": [
-    {{
-      "change": 1,
-      "type": "spelling|grammar|hanja|word_swap|content_added|proper_noun",
-      "meaning_preserved": true or false,
-      "note": "What changed and whether meaning is preserved"
-    }}
-  ],
-  "pass": true if ALL changes are VALID, false if ANY is INVALID,
-  "reason": "Overall explanation",
-  "invalid_count": 0
-}}
-
-Step 1 — Identify each change type:
-  - spelling: typo fix (e.g., "안녕하세여" -> "안녕하세요") → ALWAYS valid, meaning preserved
-  - grammar: spacing/honorific fix (e.g., "했어요" -> "했습니다") → ALWAYS valid, meaning preserved
-  - hanja: Chinese character → Korean hangul substitution (e.g., "全部" -> "전부") → ALWAYS valid, meaning preserved
-  - word_swap: word replaced with different word (e.g., "중요합니다" -> "대단합니다") → INVALID, meaning NOT preserved
-  - content_added: new content inserted (e.g., "" -> "새로운", "좋습니다" -> "매우 좋습니다") → INVALID, meaning NOT preserved
-  - proper_noun: proper noun or technical term modified → INVALID, meaning NOT preserved
-
-Step 2 — Set meaning_preserved accordingly.
-
-Step 3 — If ANY change is INVALID, pass MUST be false."""
-
 
 # ═══════════════════════════════════════════════
 # Helpers
@@ -316,50 +239,6 @@ def _polish_field(text: str, field: str, timeout: int = 300) -> Optional[str]:
     except Exception as e:
         print(f"  [polish] polish {field} failed: {e}", flush=True)
     return None
-
-
-def _extract_diffs(original: str, corrected: str, max_pairs: int = 5) -> str:
-    """Extract changed spans and format for verify prompt. Returns empty if identical."""
-    if original == corrected or not original or not corrected:
-        return ""
-    matcher = SequenceMatcher(None, original, corrected)
-    changes = []
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        if tag == "equal":
-            continue
-        before = original[i1:i2][:200]
-        after = corrected[j1:j2][:200]
-        changes.append(f'  before: "{before}"\n  after:  "{after}"')
-        if len(changes) >= max_pairs:
-            break
-    if not changes:
-        return ""
-    return "\n\n".join(f"=== Change {i+1} ===\n{c}" for i, c in enumerate(changes))
-
-
-def _verify_diffs(diff_text: str) -> bool:
-    """Verify changed spans only — faster than full-text verify."""
-    if not diff_text.strip():
-        return True
-    prompt = VERIFY_DIFF_PROMPT.format(changes=diff_text)
-    # Long turns can produce large diffs; polish model needs extra decode time
-    timeout = max(120, min(600, len(diff_text) * 0.5))
-    try:
-        meta = call_llm(
-            [{"role": "user", "content": prompt}],
-            model="polisher", max_tokens=512, temperature=TEMP,
-            timeout=int(timeout), json_mode=True, return_meta=True,
-        )
-        parsed = parse_llm_json(_extract_json(meta["content"]))
-        if isinstance(parsed, dict):
-            ok = bool(parsed.get("pass", False))
-            if not ok:
-                reason = str(parsed.get("reason", "no reason"))[:120]
-                print(f"    [verify] FAIL — {reason}", flush=True)
-            return ok
-    except Exception as e:
-        print(f"  [polish] verify diffs failed: {e}", flush=True)
-    return False
 
 
 # ═══════════════════════════════════════════════
@@ -448,92 +327,24 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
         else:
             final_th = h_th
 
-        # Verify ALL diffs in one call (user_turn + text hanja + thinking hanja)
-        passed = True
-        if not no_llm:
-            all_diffs = []
-            if orig_ut != final_ut:
-                d = _extract_diffs(orig_ut, final_ut)
-                if d:
-                    all_diffs.append(f"=== User Turn ===\n{d}")
-            for field, h_val, o_val in [("Text", h_tx, orig_tx), ("Thinking", h_th, orig_th)]:
-                if h_val != o_val:
-                    d = _extract_diffs(o_val, h_val)
-                    if d:
-                        all_diffs.append(f"=== {field} (Hanja) ===\n{d}")
-            if all_diffs:
-                combined = "\n\n".join(all_diffs)
-                passed = _verify_diffs(combined)
-                if not passed:
-                    print(f"    [verify] {tid[:8]} — diffs REJECTED, reverting all fields", flush=True)
-
-        if not passed:
-            sub_fail += 1
-            psql_ok(
-                f"UPDATE turns SET retry_count = COALESCE(retry_count, 0) + 1 "
-                f"WHERE id = '{esc_sql(tid)}'::uuid",
-                timeout=30,
-            )
-            r2 = psql_json(
-                f"SELECT COALESCE(retry_count, 0) as rc "
-                f"FROM turns WHERE id = '{esc_sql(tid)}'::uuid"
-            )
-            if r2 and r2[0].get("rc", 0) >= 3:
-                psql_ok(
-                    f"UPDATE turns SET "
-                    f"  user_turn_clean_polished = '{esc_sql(orig_ut)}', "
-                    f"  text_clean_polished = '{esc_sql(orig_tx)}', "
-                    f"  thinking_clean_polished = '{esc_sql(orig_th)}' "
-                    f"WHERE id = '{esc_sql(tid)}'::uuid",
-                    timeout=30,
-                )
-                print(f"    SENTINEL {tid[:8]} — 3 verify failures, stored original as-is", flush=True)
-            continue
-
-        # ── Reranker + NLI grounding for user_turn only ──
+        # ── Reranker NLI for user_turn diffs only (no self-verify — crashes polisher) ──
+        nli_pass = True
         if orig_ut and final_ut and orig_ut != final_ut:
             cos = reranker_score(context_limit(final_ut), context_limit(orig_ut))
             nli_v = reranker_nli_verdict(cos)
             score = round(cos * 100, 1)
             if nli_v == "UNGROUNDED":
                 print(f"    [rerank] WARN {tid[:8]} - user_turn diverged (score={score}, {nli_v})", flush=True)
+                nli_pass = False
             elif nli_v == "AMBIGUOUS":
                 print(f"    [rerank] {tid[:8]} - user_turn ambiguous (score={score}, {nli_v})", flush=True)
             else:
                 print(f"    [rerank] {tid[:8]} - user_turn grounded (score={score}, {nli_v})", flush=True)
-            # NLI second opinion for uncertain reranker results
-            if nli_v != "GROUNDED":
-                nli = _nli_check(final_ut[:500], orig_ut[:500])
-                if nli == "ENTAILMENT":
-                    print(f"    [7b_nli] {tid[:8]} - overrode reranker, meaning preserved", flush=True)
-                elif nli == "CONTRADICTION":
-                    print(f"    [7b_nli] {tid[:8]} - CONTRADICTION, failing turn", flush=True)
-                    passed = False
-                else:
-                    print(f"    [7b_nli] {tid[:8]} - NEUTRAL (score={score})", flush=True)
 
-        if not passed:
+        if not nli_pass:
             sub_fail += 1
-            psql_ok(
-                f"UPDATE turns SET retry_count = COALESCE(retry_count, 0) + 1 "
-                f"WHERE id = '{esc_sql(tid)}'::uuid",
-                timeout=30,
-            )
-            r2 = psql_json(
-                f"SELECT COALESCE(retry_count, 0) as rc "
-                f"FROM turns WHERE id = '{esc_sql(tid)}'::uuid"
-            )
-            if r2 and r2[0].get("rc", 0) >= 3:
-                psql_ok(
-                    f"UPDATE turns SET "
-                    f"  user_turn_clean_polished = '{esc_sql(orig_ut)}', "
-                    f"  text_clean_polished = '{esc_sql(orig_tx)}', "
-                    f"  thinking_clean_polished = '{esc_sql(orig_th)}' "
-                    f"WHERE id = '{esc_sql(tid)}'::uuid",
-                    timeout=30,
-                )
-                print(f"    SENTINEL {tid[:8]} - 3 verify failures, stored original as-is", flush=True)
-            continue
+            print(f"    [rerank] {tid[:8]} — UNGROUNDED, reverting to original", flush=True)
+            final_ut = orig_ut
 
         if dry_run:
             print(f"    DRY-RUN {tid[:8]} — ut={len(final_ut)} tx={len(final_tx)} th={len(final_th)}", flush=True)

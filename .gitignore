@@ -30,3 +30,5 @@ _bck_
 _backup/
 batch_results/
 .aider*
+.opencode-handover.md
+.opencode.json
