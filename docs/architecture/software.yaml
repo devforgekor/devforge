@@ -1,18 +1,18 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-06-25 09:00 KST
+# auto-generated from live data at 2026-06-26 09:00 KST
 ---
 metadata:
-  updated: 2026-06-25 09:00 KST
+  updated: 2026-06-26 09:00 KST
   source: live (collect_structural + mode file)
 models:
+- name: /models/Qwen3-Embedding-8B-Q8_0.gguf
+  container: devforge-pod-b
+  status: Up 15 seconds (starting)
+  ports: 127.0.0.1:8081-8084->8081-8084/tcp, 127.0.0.1:8089->8089/tcp
 - name: devforge-pod-a
   container: devforge-pod-a
-  status: Up 2 hours (healthy)
+  status: Up 3 seconds (healthy)
   ports: 127.0.0.1:8000->8000/tcp, 127.0.0.1:8080->8080/tcp
-- name: devforge-pod-b
-  container: devforge-pod-b
-  status: Up 7 minutes (healthy)
-  ports: 127.0.0.1:8081-8084->8081-8084/tcp, 127.0.0.1:8089->8089/tcp
 modes:
   current: day
   available:

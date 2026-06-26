@@ -312,7 +312,7 @@ NEED_EMBED=${NEED_EMBED:-0}
 
 if [ "$NEED_EMBED" -gt 0 ]; then
     LOG "=== Day Embedding (${NEED_EMBED} polished turns) ==="
-    ensure_pod_b "embeder" "embeder" true 1200
+    ensure_pod_b "embeder" "embeder" false 1200
     python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -342,7 +342,7 @@ NEED_FEEDBACK_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -
 NEED_FEEDBACK_EMBED=${NEED_FEEDBACK_EMBED:-0}
 if [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
     LOG "=== Feedback Embedding (${NEED_FEEDBACK_EMBED} unembedded feedback examples) ==="
-    ensure_pod_b "embeder" "embeder" true 600
+    ensure_pod_b "embeder" "embeder" false 600
     python3 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -358,7 +358,7 @@ NEED_EXTRACT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
 if [ "$NEED_EXTRACT" -gt 0 ]; then
     _budget_gate "scanned" 15 120 || { LOG "Budget insufficient for extract — deferring"; exit 0; }
     LOG "=== Day Extract (:8082, ${NEED_EXTRACT} scanned turns) ==="
-    ensure_pod_b "day-extract" "$(_day_phase_model day_extract)" true 1200
+    ensure_pod_b "day-extract" "$(_day_phase_model day_extract)" false 1200
     python3 "$PIPELINE_DIR/extract.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -395,8 +395,8 @@ WHERE rf.turn_id = turns.id
 NOISE_PENDING=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*) FROM review_facts WHERE fact_type='noise_marker' AND user_verdict IS NULL AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
 if [ "${NOISE_PENDING:-0}" -gt 0 ]; then
-    LOG "  ${NOISE_PENDING} noise markers - sending Telegram"
-    python3 "$SCRIPT_DIR/lib/telegram_notifier.py" --send-noise 2>&1 || true
+    LOG "  ${NOISE_PENDING} noise markers - sending Slack"
+    python3 "$SCRIPT_DIR/lib/slack_interactive.py" --send-noise-alert 2>&1 || true
 fi
 
 # ── NEUTRAL Auto-Resolve: GROUNDED/UNGROUNDED는 시스템 처리 ───
@@ -418,12 +418,12 @@ WHERE nli_llm = 'NEUTRAL' AND user_verdict IS NULL
   AND source = 'extract_pipeline';
 " 2>/dev/null
 
-# ── NEUTRAL Gate: 정말 애매한 (AMBIGUOUS) 것만 Telegram → stop cycle ──
+# ── NEUTRAL Gate: 정말 애매한 (AMBIGUOUS) 것만 Slack → stop cycle ──
 NEUTRAL_AMB=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*) FROM review_facts WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND user_verdict IS NULL AND nli_verdict='AMBIGUOUS' AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
 if [ "${NEUTRAL_AMB:-0}" -gt 0 ]; then
-    LOG "  ${NEUTRAL_AMB} NEUTRAL+AMBIGUOUS facts - Telegram alert + exit"
-    python3 "$SCRIPT_DIR/lib/telegram_notifier.py" --send-neutral 2>&1 || true
+    LOG "  ${NEUTRAL_AMB} NEUTRAL+AMBIGUOUS facts - Slack alert + exit"
+    python3 "$SCRIPT_DIR/lib/slack_interactive.py" --send-alert 2>&1 || true
     exit 0
 fi
 
@@ -451,7 +451,7 @@ NEED_ENRICH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
 if [ "$NEED_ENRICH" -gt 0 ]; then
     _budget_gate "extracted" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
     LOG "=== Day Enrich (:8082, ${NEED_ENRICH} extracted turns) ==="
-    ensure_pod_b "day-enricher" "day-enricher" true 300
+    ensure_pod_b "day-enricher" "day-enricher" false 300
     python3 "$PIPELINE_DIR/enrich.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -467,7 +467,7 @@ NEED_VERIFY=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
 if [ "$NEED_VERIFY" -gt 0 ]; then
     _budget_gate "enriched" 25 30 || { LOG "Budget insufficient for verify — deferring"; exit 0; }
     LOG "=== Day Verify (:8082, ${NEED_VERIFY} enriched turns) ==="
-    ensure_pod_b "day-verifier" "day-verifier" true 300
+    ensure_pod_b "day-verifier" "day-verifier" false 300
     python3 "$PIPELINE_DIR/day_verify.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))

@@ -317,7 +317,13 @@ class WatchdogState:
     SLOT_STUCK_THRESHOLD = 3  # consecutive cycles all-slots-stuck before alert (3 min @ 60s; 60s = ~300-900 tokens, which must progress)  # noqa
 
     def update_slots(self, port: str, slot_list: list[dict]):
-        """Register current slot state for stuck detection. Call each cycle."""
+        """Register current slot state for stuck detection. Call each cycle.
+
+        Stuck detection tracks both prefill (n_prompt_tokens_processed) and
+        decode (n_decoded) progress. A slot is "making progress" if either
+        counter advances — prevents false deadlock on long decode-only phases
+        (extract 5-10 min, where prefill finishes quickly then decodes slowly).
+        """
         port_key = f"slots:{port}"
         prev = self._slot_state.get(port_key, {})
         current: dict[int, dict] = {}
@@ -327,22 +333,27 @@ class WatchdogState:
             task_id = s.get("id_task", 0)
             processed = s.get("n_prompt_tokens_processed", 0)
             is_proc = s.get("is_processing", False)
+            decoded = (s.get("next_token") or [{}])[0].get("n_decoded", 0)
             prev_slot = prev.get(sid)
 
             if not is_proc:
-                current[sid] = {"task_id": 0, "processed": 0, "stuck_count": 0, "is_processing": False}
+                current[sid] = {"task_id": 0, "processed": 0, "decoded": 0,
+                                "stuck_count": 0, "is_processing": False}
                 continue
 
             stuck_count = 0
             if prev_slot and prev_slot.get("is_processing"):
                 task_unchanged = (task_id == prev_slot["task_id"] and task_id > 0)
-                no_progress = (processed == prev_slot["processed"])
+                no_progress = (processed == prev_slot["processed"] and
+                               decoded == prev_slot.get("decoded", 0))
                 if task_unchanged and no_progress:
                     stuck_count = prev_slot.get("stuck_count", 0) + 1
 
             current[sid] = {
                 "task_id": task_id,
                 "processed": processed,
+                "decoded": decoded,
+                "prev_n_prompt": s.get("n_prompt_tokens", 0),
                 "stuck_count": stuck_count,
                 "is_processing": True,
             }

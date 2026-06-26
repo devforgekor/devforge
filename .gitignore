@@ -29,3 +29,4 @@ smoke_test_*.log
 _bck_
 _backup/
 batch_results/
+.aider*

@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-25'
+  updated: '2026-06-26'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -19,6 +19,9 @@ modules:
       status: production
       purpose: "activity_summarizer.py \u2014 Daily LLM summarization of activity_log\
         \ events."
+    aider_qwen.py:
+      status: experimental
+      purpose: "Aider wrapper \u2014 OpenRouter key (QWEN_480B_API_KEY) + rule injection."
     auto_commit_guard.py:
       status: production
       purpose: "Session guard \u2014 auto-commit unlogged changes so nothing is lost."
@@ -33,6 +36,9 @@ modules:
     blob_explorer.py:
       status: production
       purpose: 'blob_explorer.py --- Azure Blob web interface: send + receive.'
+    brave_mcp_wrapper.sh:
+      status: unknown
+      purpose: "Wrapper for Brave Search MCP \u2014 extracts API key from secrets.env"
     claude_code_runner.sh:
       status: unknown
       purpose: "Claude Code proxy request runner \u2014 single-mode or A/B multi-variant."
@@ -50,6 +56,15 @@ modules:
     deepseek_web.py:
       status: experimental
       purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
+    gemini.py:
+      status: production
+      purpose: "gemini \u2014 Agentic Gemini CLI with function calling + tool execution."
+    gemini_core.py:
+      status: production
+      purpose: 'Core engine: keys, API calls, tool implementations.'
+    gemini_mcp.py:
+      status: experimental
+      purpose: "gemini_mcp \u2014 MCP server exposing DevForge tools via Gemini API."
     gemini_pool.py:
       status: production
       purpose: "gemini_pool.py \u2014 Async Gemini API key pool with SQLite-backed\
@@ -96,9 +111,23 @@ modules:
     patch_elf_note.py:
       status: experimental
       purpose: Re-apply NOTE phdr patch to Copilot CLI ELF binary.
+    pdf_marker_batch.py:
+      status: experimental
+      purpose: "pdf_marker_batch \u2014 Background high-quality PDF conversion using\
+        \ marker-pdf."
+    pdf_reader_mcp.py:
+      status: experimental
+      purpose: "pdf_reader_mcp \u2014 PDF extraction MCP server using PyMuPDF."
+    pg_mcp.py:
+      status: experimental
+      purpose: "pg_mcp \u2014 PostgreSQL MCP server via podman exec."
     review_pipeline_3model.py:
       status: production
       purpose: "3-Model Review Pipeline \u2014 Code Review Pipeline."
+    review_sequential.py:
+      status: experimental
+      purpose: Call review_sequential MCP tool and print structured analysis as JSON
+        to stdout.
     run_baseline_monitor.sh:
       status: unknown
       purpose: DevForge Baseline Monitor v1.0
@@ -676,6 +705,9 @@ modules:
     gemini.py:
       status: production
       purpose: HTTPS reverse proxy that rotates Gemini API keys per request.
+    gemini_openai.py:
+      status: experimental
+      purpose: OpenAI-compatible reverse proxy for Google Gemini API with key rotation.
     search.py:
       status: production
       purpose: Unified MCP search proxy with cross-provider key rotation.

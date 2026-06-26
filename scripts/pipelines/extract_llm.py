@@ -16,7 +16,6 @@ import signal
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
@@ -482,24 +481,24 @@ def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[
             print(f"      [user section] failed after retries", flush=True)
     time.sleep(6)
 
+    # thinking section: NOT extracted — used as context for text extraction
+    # F-CoT principle: reasoning trace is context only, not extraction target
+    thinking_context = None
     if thinking and len(thinking.strip()) > 5:
-        t0 = time.monotonic()
-        res = _robust_extract("thinking", thinking)
-        if res and res.get("skip"):
-            any_skip = True
-            print(f"      [thinking] noise skip", flush=True)
-        elif res and res.get("extractions"):
-            all_extractions.extend(res["extractions"])
-            _merge_usage(total_usage, res.get("usage", {}))
-            total_elapsed_ms += time.monotonic() - t0
-            print(f"      [thinking] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
-        elif res is None:
-            print(f"      [thinking section] failed after retries", flush=True)
-    time.sleep(6)
+        thinking_context = (
+            "=== Assistant's Internal Reasoning (context only) ===\n"
+            f"{thinking[:2000]}"
+        )
 
     if text:
         t0 = time.monotonic()
-        res = _robust_extract("text", text, pulse_context=entity_context)
+        combined_context = entity_context
+        if thinking_context:
+            combined_context = (
+                f"{thinking_context}\n\n{entity_context}"
+                if entity_context else thinking_context
+            )
+        res = _robust_extract("text", text, pulse_context=combined_context)
         if res and res.get("skip"):
             any_skip = True
             print(f"      [text] noise skip", flush=True)
@@ -535,9 +534,16 @@ def _extract_solo_section_major(
     # Lazy import to avoid circular dependency (extract.py imports us)
     from extract import _save_checkpoint, _load_checkpoint
 
+    # Build entity context for text section (includes thinking as context per F-CoT)
     entity_map = {}
     for t in solo_turns:
-        entity_map[t["id"]] = _load_entity_context(t["id"])
+        base_ctx = _load_entity_context(t["id"]) or ""
+        thinking = (t.get("thinking") or "").strip()
+        if thinking:
+            tc = f"=== Assistant's Internal Reasoning (context only) ===\n{thinking[:2000]}"
+            entity_map[t["id"]] = f"{tc}\n\n{base_ctx}" if base_ctx else tc
+        else:
+            entity_map[t["id"]] = base_ctx or None
 
     turn_data: Dict[str, dict] = {}
     for t in solo_turns:
@@ -573,21 +579,7 @@ def _extract_solo_section_major(
 
         print(f"  [solo] {section_type} section: {len(targets)} turns", flush=True)
 
-        warmup_n = min(2, len(targets))
-        with ThreadPoolExecutor(max_workers=warmup_n) as pool:
-            futs = {}
-            for t, src in targets[:warmup_n]:
-                ctx = entity_map.get(t["id"]) if section_type == "text" else None
-                futs[pool.submit(_extract_section, section_type, src, ctx)] = t
-            for fut in as_completed(futs):
-                t = futs[fut]
-                try:
-                    res = fut.result()
-                    _merge_section(res, t)
-                except Exception as e:
-                    print(f"  [{section_type}] {t['id'][:8]} warmup failed: {e}", flush=True)
-
-        for t, src in targets[warmup_n:]:
+        for t, src in targets:
             try:
                 ctx = entity_map.get(t["id"]) if section_type == "text" else None
                 res = _extract_section(section_type, src, pulse_context=ctx)
@@ -604,19 +596,7 @@ def _extract_solo_section_major(
     heartbeat("day_extract", "solo user done")
     time.sleep(6)
 
-    # Phase 2: thinking section
-    _batch_extract("thinking", lambda t: (
-        (t.get("thinking") or "").strip()
-        if len((t.get("thinking") or "").strip()) > 5 else ""
-    ))
-    if not dry_run:
-        for t in solo_turns:
-            if turn_data[t["id"]]["extractions"]:
-                _save_checkpoint(t["id"], turn_data[t["id"]]["extractions"])
-    heartbeat("day_extract", "solo thinking done")
-    time.sleep(6)
-
-    # Phase 3: text section
+    # Phase 2: text section (thinking is NOT extracted — used as context above)
     _batch_extract("text", lambda t: t.get("text") or "")
     if not dry_run:
         for t in solo_turns:

@@ -4,9 +4,13 @@
 """Extract Pipeline — state-based fact extraction via NOT EXISTS anti-join.
 
 SSOT: turns table. Filters unprocessed turns using NOT EXISTS against review_facts.
-Each cycle: SELECT WHERE NOT EXISTS → extract → verify → store.
+Each cycle: SELECT WHERE NOT EXISTS → section-major extraction → verify → store.
 Failed turns are retried on next cycle (no checkpoint to advance past them).
 DB UNIQUE (turn_id, fact_index, extract_model) prevents duplicate storage.
+
+Extraction: solo section-major (all turns via _extract_solo_section_major).
+  user batch → text batch (thinking as context only, per F-CoT).
+  KV cache: system prompt identical per section, warmup 1 then cached for rest.
 
 Submodules:
   extract_llm.py   — LLM interaction, prompts, section-major extraction
@@ -14,7 +18,7 @@ Submodules:
 
 Flow:
   Phase 1: SELECT unprocessed (NOT EXISTS review_facts WHERE source=extract_pipeline, limit 50)
-  Phase 2: day_extract extraction (user/thinking/text)
+  Phase 2: Solo section-major extraction (user batch → text batch)
   Phase 3: Post-process cleanup (dedup, short filter, markdown)
   Phase 4: LLM NLI self-verify — ENTAILMENT=grounded, CONTRADICTION=drop, NEUTRAL→reranker
   Phase 5: Reranker faithfulness check (Pod A :8080) — only NEUTRAL items
@@ -33,7 +37,6 @@ import os
 import signal
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -335,73 +338,34 @@ def extract_pipeline(
     _failures: list = []
     _noise: list = []
 
-    # ── Phase 1: Concurrent LLM calls (parallel=PARALLEL) ─────────
-    SOLO_THRESHOLD = 3000
-    SOLO_MAX_THRESHOLD = 2500
-    SOLO_TOTAL_THRESHOLD = 5000
-    solo_turns = []
-    pool_turns = []
-    for t in turns:
-        ec = t.get("est_chars", 0) or 0
-        max_raw = max(t.get("user_raw_len", 0) or 0,
-                      t.get("text_raw_len", 0) or 0,
-                      t.get("think_raw_len", 0) or 0)
-        total_raw = (t.get("user_raw_len", 0) or 0) \
-                  + (t.get("text_raw_len", 0) or 0) \
-                  + (t.get("think_raw_len", 0) or 0)
-        if ec > SOLO_THRESHOLD or max_raw > SOLO_MAX_THRESHOLD or total_raw > SOLO_TOTAL_THRESHOLD:
-            solo_turns.append(t)
-        else:
-            pool_turns.append(t)
-    print(f"[extract] Submitting {len(turns)} turns to LLM "
-          f"({len(pool_turns)} pool, {len(solo_turns)} solo, parallel={PARALLEL})...",
+    # ── Phase 1: Solo section-major extraction (KV cache batch) ─────
+    print(f"[extract] Processing {len(turns)} turn(s) via solo section-major...",
           flush=True)
     turn_results: Dict[str, Tuple] = {}
     llm_t0 = time.monotonic()
 
     if not dry_run:
         ckpt_skips = 0
-        for t in list(pool_turns) + list(solo_turns):
+        for t in turns:
             ckpt = _load_checkpoint(t["id"])
             if ckpt:
-                if _checkpoint_sections(ckpt) == {"user", "thinking", "text"}:
+                if _checkpoint_sections(ckpt) >= {"user", "text"}:
                     turn_results[t["id"]] = (None, None)
-                    pool_turns = [x for x in pool_turns if x["id"] != t["id"]]
-                    solo_turns = [x for x in solo_turns if x["id"] != t["id"]]
                     ckpt_skips += 1
         if ckpt_skips:
             print(f"  [extract]   {ckpt_skips} turn(s) have complete checkpoint — skipping extraction", flush=True)
 
-    if pool_turns:
-        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-            fut_map = {}
-            for ti, t in enumerate(pool_turns, 1):
-                fut = pool.submit(_extract_for_turn, t, pulse_context)
-                fut_map[fut] = (ti, t)
-            for fut in as_completed(fut_map):
-                ti, t = fut_map[fut]
-                turn, ex_result, error = fut.result()
-                if error:
-                    print(f"  [{ti}/{len(turns)}] {t['id'][:8]} — LLM call failed: {error}",
-                          flush=True)
-                turn_results[t["id"]] = (ex_result, error)
-                if ex_result is not None and not error and not dry_run:
-                    _save_checkpoint(t["id"], ex_result.get("extractions", []))
-                if ti % 4 == 0:
-                    hb_elapsed = time.monotonic() - t_start
-                    heartbeat("day_extract", f"phase1 {ti}/{len(turns)} turns, {hb_elapsed:.0f}s")
+    # Filter turns without checkpoint (those still need extraction)
+    solo_turns = [t for t in turns if t["id"] not in turn_results]
 
     if solo_turns:
-        plural = ""
-        sv = ""
-        if len(solo_turns) > 1:
-            plural = "s"
-            sv = " (section-major, KV cache)"
-        print(f"  [solo] {len(solo_turns)} turn{plural}{sv}", flush=True)
+        print(f"  [solo] {len(solo_turns)} turns (section-major, KV cache)", flush=True)
         for turn, ex_result, error in _extract_solo_section_major(
             solo_turns, pulse_context, dry_run
         ):
             if error:
+                print(f"  [solo] {turn['id'][:8]} — extraction failed: {error}", flush=True)
+            turn_results[turn["id"]] = (ex_result, error)
                 print(f"  [solo] {turn['id'][:8]} — extraction failed: {error}", flush=True)
             turn_results[turn["id"]] = (ex_result, error)
 

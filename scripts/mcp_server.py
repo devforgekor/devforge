@@ -12,6 +12,7 @@ Tools:
   - search_turns: Search turns with filters
   - get_turn_facts: Get all facts for a turn
   - ingest: Batch store conversation + turns
+  - review_sequential: Sequential code review for Aider task prep
 
 Usage:
   python3.11 mcp_server.py                    # default :8000
@@ -529,6 +530,114 @@ async def fact_reject(fact_id: str) -> str:
         f"WHERE id = '{esc_sql(fact_id)}'::uuid"
     )
     return json.dumps({"ok": ok, "fact_id": fact_id, "verdict": "UNGROUNDED"}, ensure_ascii=False)
+
+
+# ── Aider sequential review tool ─────────────────────────────
+
+
+@mcp.tool(name="review_sequential")
+async def review_sequential(task: str, paths: str) -> str:
+    """Aider 작업을 위한 순차 코드 리뷰. 지정된 파일들을 하나씩 읽어 구조를 분석합니다.
+
+    클로드 코드가 이 리뷰 결과를 바탕으로 Aider 프롬프트를 구성합니다.
+    각 파일의 Status 헤더 → 구조(imports, functions, classes) → 작업 연관성을
+    순차적으로 평가하여 반환합니다.
+
+    Args:
+        task: 수행할 코딩 작업 설명 (자연어)
+        paths: 리뷰할 파일 경로들 (쉼표 구분, /scripts/ 기준 상대 경로)
+    """
+    import re
+    from pathlib import Path
+
+    file_paths = [p.strip() for p in paths.split(",") if p.strip()]
+    if not file_paths:
+        return json.dumps({"error": "paths is required (comma-separated)"}, ensure_ascii=False)
+
+    reviews = []
+    for fp in file_paths:
+        full = Path(SCRIPTS_DIR) / fp if not fp.startswith("/") else Path(fp)
+        if not full.exists():
+            reviews.append({"path": fp, "error": "file not found", "resolved": str(full)})
+            continue
+
+        text = full.read_text()
+        lines = text.split("\n")
+        total = len(lines)
+
+        # header extraction
+        status = "unknown"
+        caller = "unknown"
+        docstring = ""
+        in_doc = False
+        doc_parts = []
+        for line in lines[:20]:
+            if line.startswith("# Status:"):
+                status = line.replace("# Status:", "").strip()
+            elif line.startswith("# Path:"):
+                caller = line.replace("# Path:", "").strip()
+            elif line.strip().startswith(('"""', "'''")):
+                in_doc = not in_doc
+                if not in_doc:
+                    break
+            elif in_doc:
+                doc_parts.append(line.strip())
+        if doc_parts:
+            docstring = " ".join(doc_parts)[:300]
+
+        # structure analysis
+        imports = []
+        funcs = []
+        classes = []
+        constants = {}
+        for line in lines:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            if s.startswith(("import ", "from ")):
+                imports.append(s)
+            elif re.match(r"^(?:async\s+)?def\s+\w+\s*\(", s):
+                m = re.match(r"^(?:async\s+)?def\s+(\w+)\s*\((.*?)\)\s*(?:->\s*(.*?))?\s*:", s)
+                if m:
+                    name = m.group(1)
+                    params = m.group(2)[:80]
+                    returns = (m.group(3) or "").strip()[:40]
+                    sig = f"{name}({params})"
+                    if returns:
+                        sig += f" -> {returns}"
+                    funcs.append(sig)
+            elif s.startswith("class ") and s.endswith(":"):
+                m = re.match(r"class\s+(\w+)(\(.*?\))?\s*:", s)
+                if m:
+                    classes.append(m.group(1) + (m.group(2) or ""))
+            elif re.match(r"^[A-Z][A-Z_0-9]+\s*=", s):
+                k, _, v = s.partition("=")
+                constants[k.strip()] = v.strip()[:60]
+
+        head = [l.rstrip() for l in lines[:8]]
+        tail = [l.rstrip() for l in lines[-6:]] if total > 12 else []
+
+        reviews.append({
+            "path": fp,
+            "status": status,
+            "caller": caller,
+            "lines": total,
+            "docstring": docstring,
+            "imports": imports[:15],
+            "import_count": len(imports),
+            "funcs": funcs[:20],
+            "func_count": len(funcs),
+            "classes": classes[:10],
+            "constants": constants,
+            "head": head,
+            "tail": tail,
+        })
+
+    return json.dumps({
+        "task": task,
+        "file_count": len(reviews),
+        "reviews": reviews,
+    }, ensure_ascii=False, indent=2)
 
 
 # ── Entry point ────────────────────────────────────────────────

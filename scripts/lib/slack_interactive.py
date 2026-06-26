@@ -253,77 +253,164 @@ class SlackActionHandler(BaseHTTPRequestHandler):
 
 
 def send_neutral_alert():
-    """Query pending NEUTRAL facts and send interactive Slack message."""
+    """Query pending NEUTRAL facts and send one Slack message per fact."""
+    # 1. Auto-reject thinking-type facts (AI internal reasoning, not user-verifiable)
+    thought_ids = psql_json(
+        "SELECT id::text FROM review_facts "
+        "WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND user_verdict IS NULL "
+        "  AND fact_type = 'thinking' "
+        "  AND created_at > now() - interval '24 hours'",
+        timeout=10,
+    )
+    if thought_ids:
+        for r in thought_ids:
+            psql_ok(
+                f"UPDATE review_facts SET user_verdict='REJECT', user_verdict_at=NOW() "
+                f"WHERE id = '{r['id']}'::uuid AND user_verdict IS NULL"
+            )
+        print(f"[slack_interactive] Auto-rejected {len(thought_ids)} thinking facts")
+
+    # 2. Send remaining NEUTRAL facts (text/user only) as individual Slack messages
     rows = psql_json(
-        "SELECT id::text, left(evidence, 120) AS evidence, fact_type, "
+        "SELECT id::text, evidence, fact_type, "
         "  to_char(created_at AT TIME ZONE 'Asia/Seoul', 'MM/DD HH24:MI') AS kst "
         "FROM review_facts "
         "WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND user_verdict IS NULL "
-        "  AND created_at > now() - interval '10 hours' "
+        "  AND fact_type IN ('text', 'user') "
+        "  AND created_at > now() - interval '24 hours' "
         "ORDER BY created_at DESC LIMIT 10",
         timeout=10,
     )
     if not rows:
-        print("[slack_interactive] No pending NEUTRAL facts")
+        print("[slack_interactive] No pending NEUTRAL facts (text/user)")
         return
 
-    blocks = [
-        {
-            "type": "header",
-            "text": {"type": "plain_text", "text": f"NEUTRAL Facts: {len(rows)}건 검토 필요", "emoji": True},
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": "아래 fact들을 검토 후 CONFIRM/REJECT를 선택하세요.\n승인 내용은 enrich few-shot으로 학습됩니다.",
-            },
-        },
-        {"type": "divider"},
-    ]
-
-    for r in rows[:5]:
-        ev = (r.get("evidence") or "")[:80]
+    sent = 0
+    for r in rows:
+        ev = (r.get("evidence") or "")
         ft = r.get("fact_type", "?")
         fid = r["id"]
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*[{ft}]* {ev}  `:{fid[:12]}`"},
-        })
-        blocks.append({
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "CONFIRM", "emoji": True},
-                    "style": "primary",
-                    "value": f"c:{fid}",
-                    "action_id": "fact_confirm",
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "REJECT", "emoji": True},
-                    "style": "danger",
-                    "value": f"r:{fid}",
-                    "action_id": "fact_reject",
-                },
-            ],
-        })
+        kst = r.get("kst", "??")
 
-    blocks.append({
-        "type": "context",
-        "elements": [{"type": "mrkdwn", "text": f"CLI: `cli.py fact list --pending` | {len(rows)}건 중 상위 5건 표시"}],
-    })
+        src_label = "사용자 메시지" if ft == "user" else "AI 응답"
+        explanation = (
+            f"*[{ft}]*  _{kst}_  `:{fid[:12]}`\n"
+            f"*출처:* {src_label}에서 추출된 fact입니다. evidence가 원문과 일치하는지 확인 후 CONFIRM/REJECT를 선택하세요.\n\n"
+            f"> {ev}"
+        )
 
-    result = _slack_post("chat.postMessage", {
-        "channel": SLACK_CHANNEL,
-        "text": f"{len(rows)} NEUTRAL facts pending",
-        "blocks": blocks,
-    })
-    if result.get("ok"):
-        print(f"[slack_interactive] Alert sent: {len(rows)} NEUTRAL facts")
-    else:
-        print(f"[slack_interactive] Alert FAILED: {result.get('error', '?')}")
+        blocks = [
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": explanation},
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "CONFIRM", "emoji": True},
+                        "style": "primary",
+                        "value": f"c:{fid}",
+                        "action_id": "fact_confirm",
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "REJECT", "emoji": True},
+                        "style": "danger",
+                        "value": f"r:{fid}",
+                        "action_id": "fact_reject",
+                    },
+                ],
+            },
+        ]
+        result = _slack_post("chat.postMessage", {
+            "channel": SLACK_CHANNEL,
+            "text": f"NEUTRAL [{ft}] {ev[:80]}",
+            "blocks": blocks,
+        })
+        if result.get("ok"):
+            sent += 1
+        else:
+            print(f"[slack_interactive] Failed: {fid[:12]} - {result.get('error', '?')}")
+
+    print(f"[slack_interactive] Sent: {sent}/{len(rows)} NEUTRAL facts individually")
+
+
+def send_noise_alert():
+    """Query pending noise_marker facts and send one Slack message per turn."""
+    rows = psql_json(
+        "SELECT id::text, turn_id::text, "
+        "  substring(t.text, 1, 200) AS turn_preview, "
+        "  substring(t.user_turn, 1, 200) AS user_preview, "
+        "  to_char(rf.created_at AT TIME ZONE 'Asia/Seoul', 'MM/DD HH24:MI') AS kst "
+        "FROM review_facts rf "
+        "JOIN turns t ON t.id = rf.turn_id "
+        "WHERE rf.fact_type = 'noise_marker' AND rf.user_verdict IS NULL "
+        "  AND rf.telegram_notified_at IS NULL "
+        "  AND rf.created_at > now() - interval '24 hours' "
+        "ORDER BY rf.created_at DESC LIMIT 10",
+        timeout=10,
+    )
+    if not rows:
+        print("[slack_interactive] No pending noise markers")
+        return
+
+    sent = 0
+    for r in rows:
+        preview = r.get("turn_preview") or r.get("user_preview", "") or ""
+        tid = r["turn_id"]
+        kst = r.get("kst", "??")
+        explanation = (
+            f"*[NOISE]*  _{kst}_  `:{tid[:12]}`\n"
+            f"*안내:* LLM이 이 turn을 noise(gibberish/API error)로 판단했습니다. "
+            f"실제로 의미 없는 메시지면 Skip, 의미 있는 내용이면 Admit(재추출)을 선택하세요.\n\n"
+            f"> {preview[:200]}"
+        )
+        blocks = [
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": explanation},
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Skip (noise)", "emoji": True},
+                        "style": "danger",
+                        "value": f"s:{tid}",
+                        "action_id": "noise_skip",
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Admit (재추출)", "emoji": True},
+                        "style": "primary",
+                        "value": f"a:{tid}",
+                        "action_id": "noise_admit",
+                    },
+                ],
+            },
+        ]
+        result = _slack_post("chat.postMessage", {
+            "channel": SLACK_CHANNEL,
+            "text": f"Noise: {preview[:80]}",
+            "blocks": blocks,
+        })
+        if result.get("ok"):
+            sent += 1
+        else:
+            print(f"[slack_interactive] Noise send failed: {tid[:12]} - {result.get('error', '?')}")
+
+    if sent > 0:
+        # Mark all as notified
+        for r in rows:
+            psql_ok(
+                f"UPDATE review_facts SET telegram_notified_at = NOW() "
+                f"WHERE id = '{r['id']}'::uuid AND telegram_notified_at IS NULL"
+            )
+
+    print(f"[slack_interactive] Sent: {sent}/{len(rows)} noise markers individually")
 
 
 _EXTRACT_FAIL_REPORT = Path("/var/tmp/extract_fail_report.json")
@@ -414,6 +501,8 @@ def run_server():
 if __name__ == "__main__":
     if "--send-alert" in sys.argv:
         send_neutral_alert()
+    elif "--send-noise-alert" in sys.argv:
+        send_noise_alert()
     elif "--send-extract-fail" in sys.argv:
         send_extract_fail_alert()
     else:

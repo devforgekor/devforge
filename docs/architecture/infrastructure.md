@@ -1,5 +1,5 @@
 # DevForge — Server Identity
-<!-- auto-generated from collect_structural() + CLAUDE.yaml at 2026-06-25 09:00 KST -->
+<!-- auto-generated from collect_structural() + CLAUDE.yaml at 2026-06-26 09:00 KST -->
 
 ## Overview
 - Host: DEVFORGE (ARM Neoverse-N1, 4-core, 22Gi + 4G zram (89.8M) + 12G swap (swappiness=10))
@@ -36,10 +36,7 @@ Caddy (host network)
 - `/mnt/lv_db` (30G) — db
 - `/opt/projects` (10G) — projects
 - `SWAP` (4G) — swap
-- `/var/log` (10G) — logs
-- `/mnt/secure_meta` (4.5G) — meta
-- `/var/tmp` (10G) — tmp
-- `/` (20G) — root
+- `/` (44.5G) — root
 - `/opt/workspace` (6GB) — out of scope (consolidated into `/opt/projects/server/`)
 
 ## Key Services
