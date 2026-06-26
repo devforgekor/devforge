@@ -1,10 +1,8 @@
 last_checkpoint:
-  time: '2026-06-26T14:04:26.492167+00:00'
-  summary: open-newhand 터미널 실행 안됨 버그 수정 — relative path + missing cd
-  total_files: 1
-  recent_files:
-    config:
-    - /home/opc/.bashrc.d/opencode-aliases
+  time: '2026-06-26T23:05:33.192026+00:00'
+  summary: open-newhand() 0바이트 config 버그 수정 — printf+mktemp+OPENCODE_CONFIG_CONTENT, newhand() proc chain || break
+  total_files: 3
+  recent_files: {}
   git: {}
   task: null
 decisions:
@@ -111,6 +109,12 @@ decisions:
   detail: open-newhand 함수 CWD 문제 + 상대 경로 버그 수정. opencode 호출 전 cd /opt/projects/server 누락으로 project-level .opencode.json 미인식
     → handover instructions 미주입. 상대 경로 .opencode-handover.md를 절대 경로로 변경.
   status: open
+- id: nd07-02
+  detail: 'open-newhand() 0바이트 .opencode.json 생성 버그: heredoc(cat > "$OC_CONFIG" << OCEND)이 빈 파일 생성 → opencode가 project-level
+    config를 읽지 못함. 근본 원인 불명(heredoc 자체 문제 또는 타이밍 이슈). 수정: (1) proc chain 루프에 || break 추가 — /proc 읽기 실패 시 무한루프 방지 (2) .opencode.json
+    파일 생성 대신 OPENCODE_CONFIG_CONTENT env var 사용 — printf로 JSON 생성, mktemp + trap으로 merged instructions 파일 관리 (3) heredoc 제거로
+    0바이트 config 생성 원천 차단 (4) handover 파일 크기 출력으로 사용자 확인 가능. newhand()에도 동일 || break 적용.'
+  status: open
 known_issues:
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
   resolved: false
@@ -171,3 +175,5 @@ completed_log:
   >>>, entities→entity, CONTEXT TODO). newhand script reviewed + patches (typ fix, instructions.md guard). DB reset (review_facts+embeddings
   truncated, pipeline_state→pending). Watchdog restarted. 배포 승인됨.'
 - 'open-newhand 터미널 실행 안됨 수정: ~/.bashrc.d/opencode-aliases — cd 누락 + 상대 경로 절대 경로 변경'
+- 'open-newhand() 수정: open-newhand() 0바이트 .opencode.json 버그 수정 — printf + mktemp + OPENCODE_CONFIG_CONTENT'
+- open-newhand() 0바이트 config 버그 수정 — printf+mktemp+OPENCODE_CONFIG_CONTENT, newhand() proc chain || break

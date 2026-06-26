@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: day_cycle.sh — polish phase (before extract)
-"""Polish Batch Pipeline — Kiwi(user) + Hanja substitution(thinking/text).
+"""Polish Batch Pipeline — Kiwi(user) + Hanja substitution(text/thinking) + Verify.
 
-Phase 1 — Kiwi Detect (user_turn only): raw vs Kiwi-corrected clean.
-Phase 2 — Hanja Substitution (thinking/text only): 중국어 한자→한글 (deterministic).
-Phase 3 — LLM Correct (user_turn only, skip with --no-llm).
-Phase 4 — Verify + DB write.
+user_turn_clean already contains Kiwi typo correction (applied during text_clean.py).
+This pipeline detects Kiwi-introduced changes, scores them via reranker, and
+optionally verifies diffs with the polisher LLM (--no-llm skips verify).
+
+Phase 1 — Kiwi diff detection (user_turn vs user_turn_clean).
+Phase 2 — Hanja substitution (text/thinking): deterministic 한자→한글.
+Phase 3 — Reranker NLI on Kiwi diff (all turns).
+Phase 4 — LLM verify diffs (skip with --no-llm).
+DB write — Kiwi output as user_turn_clean_polished.
 
 Usage:
   python3 scripts/pipelines/polish_batch.py                       # batch from NULL-checkpoint
   python3 scripts/pipelines/polish_batch.py --limit 20            # batch cap
   python3 scripts/pipelines/polish_batch.py --turn-id <uuid>      # single turn (debug)
-  python3 scripts/pipelines/polish_batch.py --no-llm              # Kiwi+hanja only, no LLM calls
+  python3 scripts/pipelines/polish_batch.py --no-llm              # Kiwi+hanja only, no verify LLM
   python3 scripts/pipelines/polish_batch.py --dry-run             # simulate, no writes
 """
 
@@ -22,8 +27,8 @@ import re
 import signal
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple
+from difflib import SequenceMatcher
+from typing import Dict, List, Optional, Tuple
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
@@ -31,7 +36,6 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import psql_json, psql_ok, esc_sql
 from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
-from lib.text_cleaner import get_cleaner
 from lib.watchdog.messenger import heartbeat, resolve_pulse
 from lib.common import context_limit
 
@@ -39,16 +43,6 @@ import hanja
 
 BATCH_LIMIT = 50
 SUBBATCH_SIZE = 10
-PARALLEL = 2
-MAX_TOKENS_USER = 512
-MAX_TOKENS_FIELD = 256
-TEMP = 0.0
-TIMEOUT_BASE = 30
-TIMEOUT_PER_CHAR = 0.05
-TIMEOUT_PER_TOK = 0.5   # ~2 t/s actual → 0.5s margin per token
-SOLO_FACTOR = 1.5
-MAX_CHARS_SOLO = 5000
-QUEUE_MARGIN = 1.5  # 2 parallel slots → queue wait max 1x
 
 # ── Code block protection (same pattern as text_cleaner.py) ──
 RE_CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
@@ -57,32 +51,10 @@ HANJA_RANGE = re.compile(r"[一-鿿]")
 
 
 # ═══════════════════════════════════════════════
-# Phase 1 — Kiwi Detection
-# ═══════════════════════════════════════════════
-
-_kiwi_cleaner = None
-
-
-def _get_kiwi_cleaner():
-    global _kiwi_cleaner
-    if _kiwi_cleaner is None:
-        _kiwi_cleaner = get_cleaner()
-    return _kiwi_cleaner
-
-
-def _kiwi_detect(raw: str) -> bool:
-    """True if Kiwi found spelling/grammar errors in raw text."""
-    if not raw.strip():
-        return False
-    return _get_kiwi_cleaner().detect_kiwi_changes(raw)
-
-
-# ═══════════════════════════════════════════════
 # Phase 2 — Hanja Substitution (thinking/text)
 # ═══════════════════════════════════════════════
 
 def _has_hanja(text: str) -> bool:
-    """True if text contains any Chinese character (CJK Unified Ideographs)."""
     return bool(HANJA_RANGE.search(text))
 
 
@@ -98,7 +70,6 @@ def _hanja_substitute(text: str) -> Tuple[str, List[Dict[str, str]]]:
     if not text.strip() or not _has_hanja(text):
         return text, []
 
-    # Code block protection
     code_blocks: List[str] = []
     inline_codes: List[str] = []
 
@@ -116,13 +87,11 @@ def _hanja_substitute(text: str) -> Tuple[str, List[Dict[str, str]]]:
     before = t
     t = hanja.translate(t, 'substitution')
 
-    # Track changed lines
     changes = []
     for bl, al in zip(before.split('\n'), t.split('\n')):
         if bl.strip() != al.strip():
             changes.append({"from": bl.strip(), "to": al.strip()})
 
-    # Restore code blocks
     for i, cb in enumerate(code_blocks):
         t = t.replace(f"\x00BLOCK{i}\x00", cb)
     for i, ic in enumerate(inline_codes):
@@ -132,51 +101,84 @@ def _hanja_substitute(text: str) -> Tuple[str, List[Dict[str, str]]]:
 
 
 # ═══════════════════════════════════════════════
-# Phase 2 — Correction Prompts
+# Phase 3 — Reranker Prompts
 # ═══════════════════════════════════════════════
 
-USER_TURN_PROMPT = """You are a Korean spelling and grammar corrector.
+VERIFY_DIFF_PROMPT = """You verify Korean text corrections. Each "before -> after" pair shows how a text segment was changed.
 
-TASK: Fix ONLY real spelling and grammar errors in the user_turn below.
+{changes}
 
-STEP 1: Identify errors. If NONE exist — output the original text VERBATIM without any changes.
-STEP 2: Only if you found real errors, fix them minimally.
+For EACH pair, analyze before deciding. Output a JSON object with your step-by-step analysis and final verdict:
 
-CONSTRAINTS:
-- Never change word choice, sentence structure, or style
-- Never touch code blocks, URLs, proper nouns, numbers, or special characters
-- If you are unsure whether something is an error, treat it as NOT an error
-- No explanations, no commentary — only the JSON
+{{
+  "analysis": [
+    {{
+      "change": 1,
+      "type": "spelling|grammar|hanja|word_swap|content_added|proper_noun",
+      "meaning_preserved": true or false,
+      "note": "What changed and whether meaning is preserved"
+    }}
+  ],
+  "pass": true if ALL changes are VALID, false if ANY is INVALID,
+  "reason": "Overall explanation",
+  "invalid_count": 0
+}}
 
-Output STRICT JSON: {{"corrected": "the corrected text"}}
+Step 1 — Identify each change type:
+  - spelling: typo fix (e.g., "안녕하세여" -> "안녕하세요") → ALWAYS valid, meaning preserved
+  - grammar: spacing/honorific fix (e.g., "했어요" -> "했습니다") → ALWAYS valid, meaning preserved
+  - hanja: Chinese character → Korean hangul substitution (e.g., "全部" -> "전부") → ALWAYS valid, meaning preserved
+  - word_swap: word replaced with different word (e.g., "중요합니다" -> "대단합니다") → INVALID, meaning NOT preserved
+  - content_added: new content inserted (e.g., "" -> "새로운", "좋습니다" -> "매우 좋습니다") → INVALID, meaning NOT preserved
+  - proper_noun: proper noun or technical term modified → INVALID, meaning NOT preserved
 
-=== user_turn ===
-{text}"""
+Step 2 — Set meaning_preserved accordingly.
 
-CORRECT_PROMPT = """Fix Korean spelling/grammar errors in the {field} field below.
-
-STEP 1: Identify errors. If NONE exist — output the original text VERBATIM.
-STEP 2: Only if you found real errors, fix them minimally.
-
-CONSTRAINTS:
-- Never change word choice, sentence structure, or style
-- Never touch code blocks, URLs, proper nouns, numbers, or special characters
-- If unsure, treat as NOT an error
-
-Output STRICT JSON: {{"corrected": "the corrected text"}}
-
-=== {field} ===
-{text}"""
-
-
-# ═══════════════════════════════════════════════
-# Phase 3 — Diff-Based Verification
-# ═══════════════════════════════════════════════
+Step 3 — If ANY change is INVALID, pass MUST be false."""
 
 
-# ═══════════════════════════════════════════════
-# Helpers
-# ═══════════════════════════════════════════════
+def _extract_diffs(original: str, corrected: str, max_pairs: int = 5) -> str:
+    """Extract changed spans and format for verify prompt."""
+    if original == corrected or not original or not corrected:
+        return ""
+    matcher = SequenceMatcher(None, original, corrected)
+    changes = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        before = original[i1:i2][:200]
+        after = corrected[j1:j2][:200]
+        changes.append(f'  before: "{before}"\n  after:  "{after}"')
+        if len(changes) >= max_pairs:
+            break
+    if not changes:
+        return ""
+    return "\n\n".join(f"=== Change {i+1} ===\n{c}" for i, c in enumerate(changes))
+
+
+def _verify_diffs(diff_text: str) -> bool:
+    """Verify changed spans — uses polisher for accuracy. Single call, no retry."""
+    if not diff_text.strip():
+        return True
+    prompt = VERIFY_DIFF_PROMPT.format(changes=diff_text)
+    timeout = max(300, min(900, len(diff_text) * 0.5))
+    try:
+        meta = call_llm(
+            [{"role": "user", "content": prompt}],
+            model="polisher", max_tokens=512, temperature=0.0,
+            timeout=int(timeout), json_mode=True, return_meta=True,
+        )
+        parsed = parse_llm_json(_extract_json(meta["content"]))
+        if isinstance(parsed, dict):
+            ok = bool(parsed.get("pass", False))
+            if not ok:
+                reason = str(parsed.get("reason", "no reason"))[:120]
+                print(f"    [verify] FAIL — {reason}", flush=True)
+            return ok
+    except Exception as e:
+        print(f"  [polish] verify diffs failed: {e}", flush=True)
+    return False
+
 
 def _extract_json(text: str) -> str:
     """Strip markdown code block markers from LLM response."""
@@ -192,74 +194,28 @@ def _extract_json(text: str) -> str:
     return s
 
 
-def _calc_timeout(total_chars: int, max_tokens: int, solo: bool = False) -> int:
-    """Estimate timeout including queue wait margin for PARALLEL workers."""
-    prompt_s = int(total_chars * TIMEOUT_PER_CHAR)
-    decode_s = int(max_tokens * TIMEOUT_PER_TOK)
-    est = TIMEOUT_BASE + prompt_s + decode_s
-    est = int(est * QUEUE_MARGIN)  # account for slot queuing
-    if solo:
-        est = int(est * SOLO_FACTOR)
-    return min(est, 3600)
-
-
-def _polish_user_turn(text: str, timeout: int = 600) -> Optional[str]:
-    """Polish user_turn — skip empty/whitespace-only input. Returns corrected text or None."""
-    if not text or not text.strip():
-        return None
-    prompt = USER_TURN_PROMPT.format(text=text[:4000])
-    try:
-        meta = call_llm(
-            [{"role": "user", "content": prompt}],
-            model="polisher", max_tokens=MAX_TOKENS_USER, temperature=TEMP,
-            timeout=timeout, json_mode=True, return_meta=True,
-        )
-        parsed = parse_llm_json(_extract_json(meta["content"]))
-        if isinstance(parsed, dict):
-            return str(parsed.get("corrected", "") or "")
-    except Exception as e:
-        print(f"  [polish] polish user_turn failed: {e}", flush=True)
-    return None
-
-
-def _polish_field(text: str, field: str, timeout: int = 300) -> Optional[str]:
-    """Polish text or thinking — only when Kiwi flagged errors. Skip empty input."""
-    if not text or not text.strip():
-        return None
-    prompt = CORRECT_PROMPT.format(field=field, text=text[:3000])
-    try:
-        meta = call_llm(
-            [{"role": "user", "content": prompt}],
-            model="polisher", max_tokens=MAX_TOKENS_FIELD, temperature=TEMP,
-            timeout=timeout, json_mode=True, return_meta=True,
-        )
-        parsed = parse_llm_json(_extract_json(meta["content"]))
-        if isinstance(parsed, dict):
-            return str(parsed.get("corrected", "") or "")
-    except Exception as e:
-        print(f"  [polish] polish {field} failed: {e}", flush=True)
-    return None
-
-
 # ═══════════════════════════════════════════════
-# Main Processing — 3-phase per sub-batch
+# Main Processing — per sub-batch
 # ═══════════════════════════════════════════════
 
 def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> Tuple[int, int]:
     """Process one sub-batch.
 
-    Phase 1 — Kiwi detect (user_turn only): raw vs Kiwi-corrected clean.
-      user_turn: always flagged for LLM review.
-      text/thinking: SKIP Kiwi (destructive to English/structured text).
+    Phase 1 — Kiwi diff detection: user_turn vs user_turn_clean (already Kiwi-corrected).
     Phase 2 — Hanja substitution (text/thinking): deterministic 한자→한글.
-    Phase 3 — LLM correction (user_turn only, skip with --no-llm).
-    Phase 4 — Verify + DB write.
+    Phase 3 — Reranker NLI on Kiwi-introduced diffs (all turns).
+    Phase 4 — LLM verify diffs with polisher (skip with --no-llm).
     """
-    # ── Phase 1: Kiwi detection for user_turn only ──
-    ut_has_kiwi = {row["id"]: _kiwi_detect(row.get("user_turn_clean", "") or "")
-                   for row in sub_batch}
-    k_ut = sum(1 for v in ut_has_kiwi.values() if v)
-    print(f"    [kiwi] user_turn={k_ut}/{len(sub_batch)} flagged", flush=True)
+    # ── Phase 1: Kiwi diff detection ──
+    # user_turn_clean includes Kiwi typo correction (applied in text_clean.py).
+    # Detect Kiwi-introduced changes by comparing raw vs clean.
+    has_kiwi_diff = 0
+    for row in sub_batch:
+        raw = row.get("user_turn", "") or ""
+        clean = row.get("user_turn_clean", "") or ""
+        if raw and clean and raw != clean:
+            has_kiwi_diff += 1
+    print(f"    [kiwi] user_turn diff={has_kiwi_diff}/{len(sub_batch)}", flush=True)
 
     # ── Phase 2: Hanja substitution (text/thinking, deterministic) ──
     hanja_results: Dict[str, Dict[str, Tuple[str, List]]] = {}
@@ -282,69 +238,61 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
         print(f"    [hanja] text={h_text}/{len(sub_batch)}, thinking={h_think}/{len(sub_batch)} substituted",
               flush=True)
 
-    # ── Phase 3: LLM correction (user_turn only, parallel) — skip if --no-llm ──
-    corrected: Dict[str, Dict[str, Any]] = {}
+    # ── Phase 3: Reranker NLI on Kiwi-generated user_turn diffs ──
+    reverted: set = set()
+    for row in sub_batch:
+        tid = row["id"]
+        raw_ut = row.get("user_turn", "") or ""
+        kiwied_ut = row.get("user_turn_clean", "") or ""
+        if not raw_ut or not kiwied_ut or raw_ut == kiwied_ut:
+            continue
+        cos = reranker_score(context_limit(kiwied_ut), context_limit(raw_ut))
+        nli_v = reranker_nli_verdict(cos)
+        score = round(cos * 100, 1)
+        if nli_v == "UNGROUNDED":
+            print(f"    [rerank] {tid[:8]} — Kiwi UNGROUNDED (score={score}), reverting to raw", flush=True)
+            reverted.add(tid)
+        elif nli_v == "AMBIGUOUS":
+            print(f"    [rerank] {tid[:8]} — Kiwi ambiguous (score={score})", flush=True)
+        else:
+            print(f"    [rerank] {tid[:8]} — Kiwi grounded (score={score})", flush=True)
 
-    if no_llm:
-        print(f"    [no-llm] Kiwi+hanja only — no LLM calls", flush=True)
-    else:
-        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-            fmap = {}
-            for row in sub_batch:
-                tid = row["id"]
-                ut = row.get("user_turn_clean", "") or ""
-                ut_timeout = _calc_timeout(len(ut), MAX_TOKENS_USER)
-                if len(ut) > MAX_CHARS_SOLO:
-                    ut_timeout = _calc_timeout(len(ut), MAX_TOKENS_USER, solo=True)
-                fmap[pool.submit(_polish_user_turn, ut, ut_timeout)] = (tid, "user_turn")
-            for f in as_completed(fmap):
-                tid, field = fmap[f]
-                corrected.setdefault(tid, {})[field] = f.result()
+    # ── Phase 4: LLM verify Kiwi diffs with polisher (batch, 0→1 switch to polisher) ──
+    if not no_llm:
+        for row in sub_batch:
+            tid = row["id"]
+            if tid in reverted:
+                continue
+            raw_ut = row.get("user_turn", "") or ""
+            kiwied_ut = row.get("user_turn_clean", "") or ""
+            if raw_ut and kiwied_ut and raw_ut != kiwied_ut:
+                diff_text = _extract_diffs(raw_ut, kiwied_ut)
+                ok = _verify_diffs(diff_text)
+                if not ok:
+                    print(f"    [verify] {tid[:8]} — Kiwi diff REJECTED by polisher, reverting", flush=True)
+                    reverted.add(tid)
 
-    # ── Phase 4: Verify (user_turn only) + reranker + DB ──
+    # ── DB write ──
     sub_ok = sub_fail = 0
 
     for row in sub_batch:
         tid = row["id"]
-        orig_ut = row.get("user_turn_clean", "") or ""
+        raw_ut = row.get("user_turn", "") or ""
+        kiwied_ut = row.get("user_turn_clean", "") or ""
         orig_tx = row.get("text_clean", "") or ""
         orig_th = row.get("thinking_clean", "") or ""
-        r = corrected.get(tid, {})
 
-        # user_turn: LLM result or original fallback
-        final_ut = r.get("user_turn") if r.get("user_turn") is not None else orig_ut
+        # user_turn: Kiwi output (user_turn_clean), or raw if verify rejected
+        final_ut = raw_ut if tid in reverted else kiwied_ut
 
         # text/thinking: hanja-substituted or original
         h_tx = hanja_results.get(tid, {}).get("text", (orig_tx, []))[0] if tid in hanja_results else orig_tx
         h_th = hanja_results.get(tid, {}).get("thinking", (orig_th, []))[0] if tid in hanja_results else orig_th
+        final_tx = h_tx
+        final_th = h_th
 
-        if r.get("text") is not None:
-            final_tx = r.get("text")
-        else:
-            final_tx = h_tx
-        if r.get("thinking") is not None:
-            final_th = r.get("thinking")
-        else:
-            final_th = h_th
-
-        # ── Reranker NLI for user_turn diffs only (no self-verify — crashes polisher) ──
-        nli_pass = True
-        if orig_ut and final_ut and orig_ut != final_ut:
-            cos = reranker_score(context_limit(final_ut), context_limit(orig_ut))
-            nli_v = reranker_nli_verdict(cos)
-            score = round(cos * 100, 1)
-            if nli_v == "UNGROUNDED":
-                print(f"    [rerank] WARN {tid[:8]} - user_turn diverged (score={score}, {nli_v})", flush=True)
-                nli_pass = False
-            elif nli_v == "AMBIGUOUS":
-                print(f"    [rerank] {tid[:8]} - user_turn ambiguous (score={score}, {nli_v})", flush=True)
-            else:
-                print(f"    [rerank] {tid[:8]} - user_turn grounded (score={score}, {nli_v})", flush=True)
-
-        if not nli_pass:
+        if tid in reverted:
             sub_fail += 1
-            print(f"    [rerank] {tid[:8]} — UNGROUNDED, reverting to original", flush=True)
-            final_ut = orig_ut
 
         if dry_run:
             print(f"    DRY-RUN {tid[:8]} — ut={len(final_ut)} tx={len(final_tx)} th={len(final_th)}", flush=True)
@@ -397,9 +345,9 @@ def main():
 
     print("=" * 60, flush=True)
     if no_llm:
-        print("Polish Batch v4 — Kiwi-only (no LLM)", flush=True)
+        print("Polish Batch — Kiwi + reranker only (no verify LLM)", flush=True)
     else:
-        print("Polish Batch v3 — Kiwi + 2-pass LLM", flush=True)
+        print("Polish Batch — Kiwi + reranker + verify(polisher)", flush=True)
     print("=" * 60, flush=True)
 
     # Advance already-polished turns: cleaned → polished
