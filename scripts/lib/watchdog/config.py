@@ -92,6 +92,23 @@ HEARTBEAT_WORKERS: dict[str, int] = {
     "day_verify": 1800,             # day_verify.py — verification pipeline
 }  # worker_name → max_age_seconds. Only register workers that actually call heartbeat().
 
+# ── Pipeline intermediate state recovery ──────────────────────────
+# Stale intermediate states indicate worker crash mid-batch.
+# Threshold per state: max single LLM call time + safety margin.
+# extracting → scanned, enriching → extracted, verifying → enriched
+PIPELINE_INTERMEDIATE_STATES: dict[str, dict] = {
+    "extracting": {"to_state": "scanned",   "stale_sec": 1800},  # 30 min
+    "enriching":  {"to_state": "extracted", "stale_sec": 1800},  # 30 min
+    "verifying":  {"to_state": "enriched",  "stale_sec": 1800},  # 30 min
+}
+
+# ── Token stagnation detection ────────────────────────────────────
+# If /metrics shows processing > 0 but aggregate token counters don't
+# advance for STAGNATION_STUCK_CYCLES consecutive cycles → system hang.
+# Catches cont-batching deadlocks that slot-level check misses (task_id
+# keeps changing but no tokens generated).
+TOKEN_STAGNATION_THRESHOLD = 5  # cycles (~5 min @ 60s)
+
 # ── 임시 podman 검증 ───────────────────────────────────────────────
 SANDBOX_IMAGE = "python:3.12-alpine"
 SANDBOX_TIMEOUT = 30  # seconds

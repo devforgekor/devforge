@@ -516,18 +516,20 @@ def _read_pending_items(limit=5):
 def _build_p_context(turn, facts, body, day_review=None):
     """Build P context from turn + facts + MCP metadata + optional day_review."""
     parts = [
-        "=== TURN ===",
+        "=== INPUT: turn START ===",
         f"User: {turn.get('user_turn', '')[:2000]}",
         f"Thinking: {(turn.get('thinking') or '')[:2000]}",
         f"Response: {(turn.get('text') or '')[:2000]}",
+        "=== INPUT: turn END ===",
         "",
-        f"=== EXTRACTED FACTS ({len(facts)}) ===",
+        f"=== CONTEXT: facts ({len(facts)}) START ===",
     ]
     for f in facts:
         parts.append(f"  [{f.get('fact_type','?')}] {f.get('evidence','')[:300]}")
+    parts.append("=== CONTEXT: facts END ===")
     enrich_data = body.get("enrich") or body.get("mcp", {})
     if enrich_data:
-        parts.extend(["", "=== ENRICH METADATA ===",
+        parts.extend(["", "=== CONTEXT: enrich START ===",
                       f"  tldr: {enrich_data.get('tldr', '')}",
                       f"  intent: {enrich_data.get('intent', '')}"])
         ents = enrich_data.get("entities", {})
@@ -545,6 +547,7 @@ def _build_p_context(turn, facts, body, day_review=None):
         tags = enrich_data.get("tags", [])
         if tags:
             parts.append(f"  tags: {tags[:10]}")
+        parts.append("=== CONTEXT: enrich END ===")
 
     if day_review:
         jr = day_review.get("J_results", {})
@@ -552,7 +555,7 @@ def _build_p_context(turn, facts, body, day_review=None):
         dr_verdicts = day_review.get("R_results", [])
         parts.extend([
             "",
-            "=== DAY PRE-REVIEW REFERENCE ===",
+            "=== CONTEXT: review START ===",
             f"  [note: day review by day_p+day_r, may contain hallucinations]",
             f"  P_score={jr.get('P_score','?')} R_score={jr.get('R_score','?')}",
             f"  decision={jr.get('decision','?')}",
@@ -571,7 +574,7 @@ def _build_p_context(turn, facts, body, day_review=None):
             "",
             "Perform your OWN independent review. Day results are reference only.",
             "Do NOT rely on day findings — verify everything yourself.",
-            "",
+            "=== CONTEXT: review END ===",
         ])
     return "\n".join(parts)
 

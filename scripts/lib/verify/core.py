@@ -20,19 +20,21 @@ def build_findings_from_turn(turn: Dict, extractions: List[Dict]) -> List[Dict]:
 def findings_to_context(findings: List[Dict], user_turn: str, thinking: str, text: str) -> str:
     """Format findings and turn content for the LLM prompt."""
     budget = TokenBudget("day_verify")
-    parts = ["=== ORIGINAL TURN ==="]
+    parts = ["=== INPUT: turn START ==="]
     if budget.add_section("user", user_turn or "", priority=10):
         parts.append(f"USER: {user_turn}")
     if budget.add_section("thinking", thinking or "", priority=3):
         parts.append(f"THINKING: {thinking}")
     if budget.add_section("text", text or "", priority=8):
         parts.append(f"TEXT: {text}")
+    parts.append("=== INPUT: turn END ===")
 
-    parts.append("\n=== FINDINGS TO VERIFY ===")
+    parts.append("\n=== CONTEXT: findings START ===")
     for f in findings:
         line = f"[{f['id']}] ({f['type']}) {f['evidence'][:200]}"
         if budget.add_section(f"finding_{f['id']}", line, priority=7):
             parts.append(line)
+    parts.append("=== CONTEXT: findings END ===")
     
     return "\n".join(parts)
 

@@ -182,6 +182,7 @@ class WatchdogState:
         self.mem_trend = TrendTracker()
         self._last_pipeline_state: dict[str, float] = {}  # state → first_observed_ts
         self._slot_state: dict[str, dict] = {}  # port → {slot_id: {task_id, processed, stuck_count}}
+        self._token_stagnation: dict[str, dict] = {}  # port → {total_prev, stagnation_count, processing_prev}
 
     def get(self, name: str) -> ComponentTracker:
         if name not in self._components:
@@ -308,6 +309,93 @@ class WatchdogState:
 
         self._last_pipeline_state = current
         return stuck
+
+    # ── Pipeline intermediate state stuck detection ─────────────────────
+
+    def check_intermediate_stuck(self) -> list[dict]:
+        """Detect stale intermediate pipeline states (worker crash mid-batch).
+
+        Queries DB for turns stuck in extracting/enriching/verifying beyond
+        the configured stale threshold. Returns list of recoverable states:
+            [{state, cnt, to_state, min_age_sec}]
+        """
+        from lib.db import psql_json
+
+        states = {}
+        try:
+            from lib.watchdog.config import PIPELINE_INTERMEDIATE_STATES
+            states = PIPELINE_INTERMEDIATE_STATES
+        except Exception:
+            return []
+
+        stuck: list[dict] = []
+        for intermediate_state, cfg in states.items():
+            try:
+                rows = psql_json(
+                    f"SELECT count(*)::int AS cnt, "
+                    f"EXTRACT(EPOCH FROM (now() - MIN(created_at)))::int AS min_age_sec "
+                    f"FROM turns "
+                    f"WHERE pipeline_state = '{intermediate_state}'",
+                    timeout=5,
+                )
+                if not rows or not rows[0].get("cnt", 0):
+                    continue
+                cnt = rows[0]["cnt"]
+                min_age = rows[0].get("min_age_sec", 0)
+                if min_age >= cfg["stale_sec"]:
+                    stuck.append({
+                        "state": intermediate_state,
+                        "cnt": cnt,
+                        "to_state": cfg["to_state"],
+                        "min_age_sec": min_age,
+                        "stale_sec": cfg["stale_sec"],
+                    })
+            except Exception:
+                continue
+        return stuck
+
+    # ── Token stagnation detection (aggregate "코인 증가량") ────────────
+
+    def update_token_metrics(self, port: str, metrics: dict):
+        """Register aggregate token totals for stagnation detection.
+
+        Tracks total_prompt + total_gen per port across cycles.
+        If processing > 0 but aggregate total doesn't advance for
+        TOKEN_STAGNATION_THRESHOLD consecutive cycles → hang confirmed.
+        """
+        processing = metrics.get("processing", 0)
+        total = metrics.get("total_prompt", 0) + metrics.get("total_gen", 0)
+        prev = self._token_stagnation.get(port, {})
+
+        stagnation_count = 0
+        if processing > 0 and prev.get("processing_prev", 0) > 0:
+            if total == prev.get("total_prev", 0):
+                stagnation_count = prev.get("stagnation_count", 0) + 1
+
+        self._token_stagnation[port] = {
+            "total_prev": total,
+            "processing_prev": processing,
+            "stagnation_count": stagnation_count,
+        }
+
+    def check_token_stagnation(self) -> list[dict]:
+        """Return list of stagnated ports (processing but no aggregate token growth).
+
+        Complements slot-level deadlock detection: slot-level checks per-task_id
+        progress, but cont-batching can cycle task_ids without generating tokens.
+        This aggregate check catches that case.
+        """
+        from lib.watchdog.config import TOKEN_STAGNATION_THRESHOLD
+
+        stagnated: list[dict] = []
+        for port, state in self._token_stagnation.items():
+            if state.get("stagnation_count", 0) >= TOKEN_STAGNATION_THRESHOLD:
+                stagnated.append({
+                    "port": port,
+                    "stagnation_count": state["stagnation_count"],
+                    "total_prev": state.get("total_prev", 0),
+                })
+        return stagnated
 
     # ── Slot stuck detection ─────────────────────────────────────────
     # Only alerts when ALL active slots on a port are simultaneously stuck.

@@ -34,6 +34,7 @@ from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
 from lib.text_cleaner import get_cleaner
 from lib.watchdog.messenger import heartbeat, resolve_pulse
+from lib.common import context_limit
 
 import hanja
 
@@ -190,7 +191,7 @@ def _nli_check(corrected: str, original: str) -> str:
     if not corrected or not original:
         return "NEUTRAL"
     prompt = _NLI_VERIFY_PROMPT.format(
-        source=original[:2000], evidence=corrected[:500]
+        source=context_limit(original), evidence=corrected[:500]
     )
     try:
         meta = call_llm(
@@ -478,7 +479,7 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
 
         # ── Reranker + NLI grounding for user_turn only ──
         if orig_ut and final_ut and orig_ut != final_ut:
-            cos = reranker_score(final_ut[:2000], orig_ut[:2000])
+            cos = reranker_score(context_limit(final_ut), context_limit(orig_ut))
             nli_v = reranker_nli_verdict(cos)
             score = round(cos * 100, 1)
             if nli_v == "UNGROUNDED":

@@ -10,6 +10,7 @@ JSON parsing, entity context loading, low-value filter.
 """
 
 import json
+import math
 import os
 import re
 import signal
@@ -24,7 +25,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.common import strip_think
+from lib.common import strip_think, context_limit
 from lib.db import esc_sql, psql_json
 from lib.llm.json_parser import save_dlq, parse_llm_json
 from lib.llm_client import call_llm, MODEL_REGISTRY
@@ -78,13 +79,17 @@ def _call_with_8082_retry(fn, *args, **kwargs):
 # ── Constants ────────────────────────────────────────────────────
 
 TIMEOUT_EXTRACT = 900
-MAX_TOKENS_EXTRACT = 512
+MAX_TOKENS_BASE = 512     # minimum: 짧은 turn(1-2 facts)에 충분
+TOKENS_PER_300CH = 50     # 300ch당 약 1 fact 추가, ceil 적용
 TEMP_EXTRACT = 0.0
 TIMEOUT_BASE = 60
 TIMEOUT_PER_CHAR = 0.2
+TIMEOUT_PER_TOK = 1.2     # ~0.83 tok/s decode (20% safety margin)
+GEN_TIME_BUF = 90          # spike/GC/swap buffer
+CAP = 1800                 # hard cap (절대 초과 금지)
+MIN_USEFUL_TOKENS = 256    # 이 미만이면 명시적 거절
 MAX_CHARS_SOLO = 5000
-SOLO_TIMEOUT_FACTOR = 2.5
-GEN_TIME_BUF = 450
+MAX_INPUT_CHARS_ADVERTISED = 6500  # API 에러 메시지용 광고 한계 (실제 6,714 여유)
 
 _SIGTERM_RECEIVED = threading.Event()
 
@@ -306,11 +311,40 @@ def _extract_section(section_type: str, source_text: str,
     return _extract_single(section_type, source_text, pulse_context=pulse_context)
 
 
-def _calc_timeout(total_chars: int, solo: bool = False) -> int:
-    est = TIMEOUT_BASE + int(total_chars * TIMEOUT_PER_CHAR) + GEN_TIME_BUF
-    if solo:
-        est = int(est * SOLO_TIMEOUT_FACTOR)
-    return min(est, 1800)
+def _calc_max_tokens(text_len: int) -> Optional[int]:
+    """CAP 이내 실현 가능한 max_tokens로 역산. 부족 시 None 반환.
+
+    ceil(300ch/1fact) 기반 wanted와 CAP 역산 achievable 중
+    작은 쪽 선택 → 절대 캡 초과 요청 불가.
+    TIMEOUT_PER_TOK=1.2는 solo section-major(동시성=1) 기준.
+    """
+    extra = math.ceil(text_len / 300) * TOKENS_PER_300CH
+    wanted = MAX_TOKENS_BASE + extra
+
+    overhead = TIMEOUT_BASE + int(text_len * TIMEOUT_PER_CHAR) + GEN_TIME_BUF
+    if overhead >= CAP:
+        print(json.dumps({"event": "max_tokens_overflow", "text_len": text_len,
+                          "overhead_sec": overhead, "cap_sec": CAP,
+                          "reason": "prefill_exceeds_cap"}), flush=True)
+        return None  # prefill만으로 CAP 초과
+    achievable = int((CAP - overhead) / TIMEOUT_PER_TOK)
+    if achievable < MIN_USEFUL_TOKENS:
+        print(json.dumps({"event": "max_tokens_overflow", "text_len": text_len,
+                          "achievable": achievable, "min_useful": MIN_USEFUL_TOKENS,
+                          "reason": "below_min_useful"}), flush=True)
+        return None  # 생성 가능 token이 너무 적음 → 명시적 거절
+
+    final = min(wanted, achievable)
+    if final < wanted:
+        print(json.dumps({"event": "tokens_truncated", "wanted": wanted,
+                          "achievable": achievable, "text_len": text_len}), flush=True)
+    return final
+
+
+def _calc_timeout(total_chars: int, max_tokens: int) -> int:
+    est = (TIMEOUT_BASE + int(total_chars * TIMEOUT_PER_CHAR)
+           + int(max_tokens * TIMEOUT_PER_TOK) + GEN_TIME_BUF)
+    return min(est, CAP)
 
 
 # ── Low-value evidence filter ───────────────────────────────────
@@ -359,7 +393,7 @@ def _load_entity_context(turn_id: str) -> Optional[str]:
         return None
 
     parts = [
-        "=== Known Context Entities ==="
+        "=== DATA: entity START ===",
         "The following entities were detected in this turn via pattern matching.",
         "",
     ]
@@ -373,6 +407,7 @@ def _load_entity_context(turn_id: str) -> Optional[str]:
         "If an extracted fact references one of these entities, it is more likely "
         "to be faithful to the source."
     )
+    parts.append("=== DATA: entity END ===")
     return "\n".join(parts)
 
 
@@ -395,14 +430,20 @@ def _extract_single(section_type: str, source_text: str,
         system_prompt = f"{pulse_context}\n\n{system_prompt}"
 
     if timeout is None:
-        timeout = _calc_timeout(len(source_text))
+        max_tok = _calc_max_tokens(len(source_text))
+        if max_tok is None:
+            print(json.dumps({"event": "extract_skip_overflow",
+                              "text_len": len(source_text),
+                              "max_input_advertised": MAX_INPUT_CHARS_ADVERTISED}), flush=True)
+            return None
+        timeout = _calc_timeout(len(source_text), max_tokens=max_tok)
 
     meta = _call_with_8082_retry(
         call_llm,
         [{"role": "system", "content": system_prompt},
          {"role": "user", "content": source_text}],
         model="day_extract",
-        max_tokens=MAX_TOKENS_EXTRACT, temperature=TEMP_EXTRACT,
+        max_tokens=max_tok, temperature=TEMP_EXTRACT,
         timeout=timeout, json_mode=True, return_meta=True,
     )
     raw = meta["content"]
@@ -486,8 +527,9 @@ def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[
     thinking_context = None
     if thinking and len(thinking.strip()) > 5:
         thinking_context = (
-            "=== Assistant's Internal Reasoning (context only) ===\n"
-            f"{thinking[:2000]}"
+            "<<< REASONING: thinking START >>>\n"
+            f"{context_limit(thinking)}\n"
+            "<<< REASONING: thinking END >>>"
         )
 
     if text:
@@ -540,7 +582,7 @@ def _extract_solo_section_major(
         base_ctx = _load_entity_context(t["id"]) or ""
         thinking = (t.get("thinking") or "").strip()
         if thinking:
-            tc = f"=== Assistant's Internal Reasoning (context only) ===\n{thinking[:2000]}"
+            tc = f"<<< REASONING: thinking START >>>\n{context_limit(thinking)}\n<<< REASONING: thinking END >>>"
             entity_map[t["id"]] = f"{tc}\n\n{base_ctx}" if base_ctx else tc
         else:
             entity_map[t["id"]] = base_ctx or None

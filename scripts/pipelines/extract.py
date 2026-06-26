@@ -37,6 +37,7 @@ import os
 import signal
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -232,28 +233,48 @@ def _delete_checkpoint(turn_id: str) -> None:
 
 
 def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
-    sql = (
-        "SELECT t.id, "
-        "  COALESCE(t.user_turn_clean_polished, t.user_turn_clean, t.user_turn) AS user_turn, "
-        "  COALESCE(t.thinking_clean_polished, t.thinking_clean, t.thinking) AS thinking, "
-        "  COALESCE(t.text_clean_polished, t.text_clean, t.text) AS text, "
-        "  t.text_clean, t.thinking_clean, "
-        "  LENGTH(COALESCE(t.user_turn, '')) AS user_raw_len, "
-        "  LENGTH(COALESCE(t.text, '')) AS text_raw_len, "
-        "  LENGTH(COALESCE(t.thinking, '')) AS think_raw_len, "
-        "  t.source_message_id, t.created_at, "
-        "  t.conversation_id, t.seq, t.est_chars "
-        "FROM turns t "
-        "WHERE t.text != '' "
-        "  AND NOT EXISTS ("
-        "    SELECT 1 FROM review_facts rf "
-        "    WHERE rf.turn_id = t.id "
-        "    AND rf.source = 'extract_pipeline'"
-        "  ) "
-        "  AND t.pipeline_state = 'scanned' "
-        "ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
-        f"LIMIT {limit}"
-    )
+    """Atomically claim scanned turns via FOR UPDATE SKIP LOCKED,
+    set pipeline_state='extracting', and return turn data.
+    Prevents duplicate processing when multiple workers run concurrently.
+    """
+    sql = f"""
+        WITH claimable AS (
+            SELECT t.id
+            FROM turns t
+            WHERE t.text != ''
+              AND NOT EXISTS (
+                SELECT 1 FROM review_facts rf
+                WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'
+              )
+              AND t.pipeline_state = 'scanned'
+            ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC
+            LIMIT {limit}
+            FOR UPDATE SKIP LOCKED
+        ),
+        claimed AS (
+            UPDATE turns SET pipeline_state = 'extracting'
+            FROM claimable
+            WHERE turns.id = claimable.id
+            RETURNING turns.*
+        )
+        SELECT
+          claimed.id,
+          COALESCE(claimed.user_turn_clean_polished, claimed.user_turn_clean, claimed.user_turn) AS user_turn,
+          COALESCE(claimed.thinking_clean_polished, claimed.thinking_clean, claimed.thinking) AS thinking,
+          COALESCE(claimed.text_clean_polished, claimed.text_clean, claimed.text) AS text,
+          claimed.text_clean,
+          claimed.thinking_clean,
+          LENGTH(COALESCE(claimed.user_turn, '')) AS user_raw_len,
+          LENGTH(COALESCE(claimed.text, '')) AS text_raw_len,
+          LENGTH(COALESCE(claimed.thinking, '')) AS think_raw_len,
+          claimed.source_message_id,
+          claimed.created_at,
+          claimed.conversation_id,
+          claimed.seq,
+          claimed.est_chars
+        FROM claimed
+        ORDER BY claimed.est_chars ASC NULLS LAST, claimed.created_at DESC
+    """
     rows = psql_json(sql)
     if not rows:
         return []
@@ -364,8 +385,6 @@ def extract_pipeline(
             solo_turns, pulse_context, dry_run
         ):
             if error:
-                print(f"  [solo] {turn['id'][:8]} — extraction failed: {error}", flush=True)
-            turn_results[turn["id"]] = (ex_result, error)
                 print(f"  [solo] {turn['id'][:8]} — extraction failed: {error}", flush=True)
             turn_results[turn["id"]] = (ex_result, error)
 

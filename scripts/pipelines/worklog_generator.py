@@ -26,6 +26,7 @@ from lib.infra.preflight import preflight_checks
 from lib.db import esc_sql, psql, psql_json, psql_ok
 from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import call_llm, call_llm_json
+from lib.common import context_limit
 
 KST = timezone(timedelta(hours=9))
 BATCH_SIZE = 5    # turns per LLM call
@@ -166,7 +167,7 @@ def review_flagged(flagged_entries: List[Dict], turns: List[Dict]) -> tuple:
     ], ensure_ascii=False, indent=2)
     messages = [
         {"role": "system", "content": REVIEW_SYSTEM},
-        {"role": "user", "content": f"Source turn text:\n{source_text[:2000]}\n\nFlagged entries:\n{entries_json}"},
+        {"role": "user", "content": f"Source turn text:\n{context_limit(source_text)}\n\nFlagged entries:\n{entries_json}"},
     ]
     raw = call_llm(messages, model="proposer", max_tokens=512)
     result = parse_llm_json(raw) if raw else None

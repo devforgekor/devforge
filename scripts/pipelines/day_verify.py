@@ -240,28 +240,42 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT,
             "ORDER BY t.id, rf.fact_index DESC"
         )
     else:
-        sql = (
-            "SELECT sub.id, sub.user_turn, sub.thinking, sub.text, "
-            "  sub.enrich_meta, sub.created_at, sub.est_chars "
-            "FROM ("
-            "  SELECT DISTINCT ON (t.id) "
-            "    t.id, t.user_turn, t.thinking, t.text, "
-            "    rf.evidence::text AS enrich_meta, "
-            "    t.created_at::text, "
-            "    t.est_chars "
-            "  FROM turns t "
-            "  JOIN review_facts rf ON rf.turn_id = t.id "
-            "    AND rf.fact_type = 'enrich_meta' "
-            "  WHERE NOT EXISTS ("
-            "    SELECT 1 FROM review_facts rf2 "
-            "    WHERE rf2.turn_id = t.id "
-            "    AND rf2.fact_type = 'verify_result'"
-            ") "
-            "    AND t.pipeline_state = 'enriched' "
-            "  ORDER BY t.id, rf.fact_index DESC"
-            ") sub "
-            "ORDER BY sub.est_chars ASC NULLS LAST, sub.created_at ASC"
-        )
+        sql = f"""
+            WITH claimable AS (
+                SELECT t.id
+                FROM turns t
+                JOIN review_facts rf ON rf.turn_id = t.id
+                  AND rf.fact_type = 'enrich_meta'
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM review_facts rf2
+                    WHERE rf2.turn_id = t.id
+                    AND rf2.fact_type = 'verify_result'
+                )
+                  AND t.pipeline_state = 'enriched'
+                LIMIT {limit}
+                FOR UPDATE OF t SKIP LOCKED
+            ),
+            claimed AS (
+                UPDATE turns SET pipeline_state = 'verifying'
+                FROM claimable WHERE turns.id = claimable.id
+                RETURNING turns.id
+            )
+            SELECT sub.id, sub.user_turn, sub.thinking, sub.text,
+              sub.enrich_meta, sub.created_at, sub.est_chars
+            FROM (
+              SELECT DISTINCT ON (t.id)
+                t.id, t.user_turn, t.thinking, t.text,
+                rf.evidence::text AS enrich_meta,
+                t.created_at::text,
+                t.est_chars
+              FROM turns t
+              JOIN review_facts rf ON rf.turn_id = t.id
+                AND rf.fact_type = 'enrich_meta'
+              WHERE t.id IN (SELECT id FROM claimed)
+              ORDER BY t.id, rf.fact_index DESC
+            ) sub
+            ORDER BY sub.est_chars ASC NULLS LAST, sub.created_at ASC
+        """
     rows = psql_json(sql) or []
     for r in rows:
         r["est_chars"] = r.get("est_chars") or 0

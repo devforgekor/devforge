@@ -329,17 +329,19 @@ def main():
     log_phase_header("Phase 3.5: R handoff writer")
 
     r_ctx_parts = [
-        f"=== NIGHT DEBATE COMPLETE ===",
+        f"=== CONTEXT: night_debate START ===",
         f"P_model={PROPOSER_MODEL} R_model={REFLECTOR_MODEL} J_model={JUDGE_MODEL}\n",
-        f"=== P PROPOSED FINDINGS ({len(p_findings)}) ===",
+        f"=== CONTEXT: p_findings ({len(p_findings)}) START ===",
     ]
     for pf in p_findings:
         r_ctx_parts.append(
             f"  {pf['id']} [{pf.get('severity','?')}/{pf.get('category','?')}]: {pf.get('description','')[:200]}")
-    r_ctx_parts.append(f"\n=== R VERDICTS ({len(r_verdicts)}) ===")
+    r_ctx_parts.append(f"=== CONTEXT: p_findings END ===")
+    r_ctx_parts.append(f"\n=== CONTEXT: r_verdicts ({len(r_verdicts)}) START ===")
     for rv in r_verdicts:
         r_ctx_parts.append(f"  {rv['id']}: {rv.get('verdict','?')} — {rv.get('reason','')[:150]}")
-    r_ctx_parts.append(f"\n=== J FINAL DECISION ===")
+    r_ctx_parts.append(f"=== CONTEXT: r_verdicts END ===")
+    r_ctx_parts.append(f"\n=== CONTEXT: j_decision START ===")
     r_ctx_parts.append(f"  P_score={prj_result.get('P_score','?')} R_score={prj_result.get('R_score','?')}")
     r_ctx_parts.append(f"  consensus={prj_result.get('consensus','?')} decision={prj_result.get('decision','?')}")
     r_ctx_parts.append(f"  approved={prj_result.get('approved',[])}")
@@ -347,6 +349,8 @@ def main():
     r_ctx_parts.append(f"  summary: {prj_result.get('report_summary','')}")
     for ti in (prj_result.get('report_top_issues') or []):
         r_ctx_parts.append(f"  top issue: {ti}")
+    r_ctx_parts.append(f"=== CONTEXT: j_decision END ===")
+    r_ctx_parts.append(f"=== CONTEXT: night_debate END ===")
     r_handoff_ctx = "\n".join(r_ctx_parts)
 
     r_hoff_resp = call_one(REFLECTOR_MODEL, HANDOFF_SYSTEM_PROMPT, r_handoff_ctx, f"handoff_R_{tag}")

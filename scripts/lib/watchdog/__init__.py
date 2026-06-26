@@ -414,6 +414,8 @@ def build_heartbeat_summary(day_results: dict) -> dict:
             slots[str(port)] = slot_data
             # Feed slot state into stuck detector
             _state.update_slots(str(port), slot_data)
+            # Feed aggregate token metrics into stagnation detector
+            _state.update_token_metrics(str(port), metrics[str(port)])
         except Exception:
             pass
 
@@ -550,6 +552,95 @@ def _check_slot_deadlocks(results: dict, dry_run: bool = False):
                        f":{sp['port']} deadlock recovery failed")
 
 
+def _recover_intermediate_states(results: dict, dry_run: bool = False):
+    """Recover stale intermediate pipeline states every cycle.
+
+    detecting → scanned, enriching → extracted, verifying → enriched.
+    Tracked via ComponentTracker to prevent alert spam (circuit breaker).
+    """
+    if dry_run:
+        return
+    if _test_active:
+        return
+
+    from lib.db import psql_ok
+
+    stuck = _state.check_intermediate_stuck()
+    for s in stuck:
+        state = s["state"]
+        to_state = s["to_state"]
+        cnt = s["cnt"]
+
+        tracker = _state.get(f"pipeline_int:{state}")
+        if tracker.consecutive_fail >= 3 and not tracker.can_retry():
+            log(f"  SKIP {state} recovery — circuit open ({tracker.consecutive_fail} fails)")
+            continue
+
+        log(f"  [pipeline-stuck] {state}: {cnt} turns stale ≥{s['stale_sec']}s → reset to {to_state}")
+        try:
+            ok = psql_ok(
+                f"UPDATE turns SET pipeline_state = '{to_state}' "
+                f"WHERE pipeline_state = '{state}' "
+                f"AND created_at < now() - interval '{s['stale_sec']} seconds'",
+                timeout=10,
+            )
+        except Exception as e:
+            log(f"  {state} recovery SQL failed: {e}")
+            tracker.record_failure()
+            continue
+
+        if ok:
+            _state.add_event(f"pipeline_stuck:{state}", "recovered",
+                             f"{cnt} turns → {to_state}")
+            tracker.record_success()
+        else:
+            tracker.record_failure()
+            _state.add_event(f"pipeline_stuck:{state}", "recovery_failed",
+                             f"{cnt} turns stuck")
+
+
+def _check_token_stagnation(results: dict, dry_run: bool = False):
+    """Detect aggregate token stagnation across all LLM ports.
+
+    If a port shows processing > 0 in /metrics but total_prompt+total_gen
+    doesn't advance for TOKEN_STAGNATION_THRESHOLD cycles → restart Pod B.
+    Complements slot-level deadlock detection (catches task_id cycling).
+    """
+    if dry_run:
+        return
+    if _test_active:
+        return
+    if is_experiment_active():
+        return
+
+    # Feed metrics for probes that weren't covered in heartbeat summary
+    for probe in results.get("probes", []):
+        port = str(probe["port"])
+        try:
+            metrics = check_llm_metrics(probe["port"])
+            _state.update_token_metrics(port, metrics)
+        except Exception:
+            continue
+
+    stagnated = _state.check_token_stagnation()
+    for st in stagnated:
+        _state.add_event("token_stagnation", "detected",
+                         f":{st['port']} tokens stuck {st['stagnation_count']} checks")
+        log(f"  [token-stagnation] :{st['port']} — "
+            f"aggregate tokens not advancing ({st['stagnation_count']} checks), recovering...")
+        ok = recover_slot_deadlock(st["port"])
+        if ok:
+            _state.add_event("token_stagnation", "recovered", f":{st['port']} restarted")
+            # Reset stagnation counter after recovery
+            _state._token_stagnation[st["port"]] = {
+                "total_prev": 0, "processing_prev": 0, "stagnation_count": 0,
+            }
+        else:
+            _state.add_event("token_stagnation", "recovery_failed", f":{st['port']}")
+            send_alert("token_stagnation", "DOWN",
+                       f":{st['port']} token stagnation recovery failed")
+
+
 def main_loop(one_shot: bool = False, dry_run: bool = False):
     global _running, _test_active
 
@@ -632,6 +723,12 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
 
         # Slot deadlock detection & recovery (every cycle)
         _check_slot_deadlocks(results, dry_run=dry_run)
+
+        # Intermediate pipeline state recovery (every cycle)
+        _recover_intermediate_states(results, dry_run=dry_run)
+
+        # Token stagnation detection — aggregate token counter check (every cycle)
+        _check_token_stagnation(results, dry_run=dry_run)
 
         if one_shot:
             break

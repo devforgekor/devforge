@@ -21,6 +21,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql_json, psql_ok, esc_sql
 from lib.text_cleaner import get_cleaner
+from lib.common import context_limit
 
 BATCH_LIMIT = 50
 
@@ -49,9 +50,9 @@ def main():
     for i, t in enumerate(turns, 1):
         tid = t["id"]
         try:
-            user_clean = cl.clean((t.get("user_turn") or "")[:2000])
-            text_clean = cl.clean((t.get("text") or "")[:8000])
-            think_clean = cl.clean((t.get("thinking") or "")[:4000])
+            user_clean = cl.clean(context_limit(t.get("user_turn") or "", 2000, ratio_front=1.0))
+            text_clean = cl.clean(context_limit(t.get("text") or "", 8000, ratio_front=1.0))
+            think_clean = cl.clean(context_limit(t.get("thinking") or "", 4000, ratio_front=1.0))
             sql = (
                 f"UPDATE turns SET "
                 f"user_turn_clean = '{esc_sql(user_clean)}', "

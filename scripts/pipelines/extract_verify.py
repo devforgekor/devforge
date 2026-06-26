@@ -24,6 +24,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import esc_sql, psql_json
 from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
 from lib.watchdog.messenger import heartbeat
+from lib.common import context_limit
 
 
 # ── NLI Self-Verify Prompt ──────────────────────────────────────
@@ -272,7 +273,7 @@ def _verify_extractions(
 
 
 def _calc_nli_timeout(source: str, evidence: str) -> int:
-    total = len(source[:2000]) + len(evidence[:500]) + 200
+    total = len(context_limit(source)) + len(evidence[:500]) + 200
     return min(max(30, int(total * 0.15)), 600)
 
 
@@ -281,7 +282,7 @@ def _llm_nli_check(evidence: str, source: str) -> str:
         return "NEUTRAL"
 
     prompt = _NLI_VERIFY_PROMPT.format(
-        source=source[:2000], evidence=evidence[:500]
+        source=context_limit(source), evidence=evidence[:500]
     )
     try:
         meta = call_llm(

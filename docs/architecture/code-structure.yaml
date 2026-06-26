@@ -33,9 +33,6 @@ modules:
       status: production
       purpose: "DevForge LLM Benchmark \u2014 decode tps \uCE21\uC815 \uBC0F \uC2E4\
         \uD5D8 \uB808\uC9C0\uC2A4\uD2B8\uB9AC \uB4F1\uB85D."
-    blob_explorer.py:
-      status: production
-      purpose: 'blob_explorer.py --- Azure Blob web interface: send + receive.'
     brave_mcp_wrapper.sh:
       status: unknown
       purpose: "Wrapper for Brave Search MCP \u2014 extracts API key from secrets.env"
@@ -59,12 +56,12 @@ modules:
     gemini.py:
       status: production
       purpose: "gemini \u2014 Agentic Gemini CLI with function calling + tool execution."
-    gemini_core.py:
-      status: production
-      purpose: 'Core engine: keys, API calls, tool implementations.'
     gemini_mcp.py:
       status: experimental
       purpose: "gemini_mcp \u2014 MCP server exposing DevForge tools via Gemini API."
+    gemini_mon.py:
+      status: unknown
+      purpose: "Live Gemini key pool monitor \u2014 refreshes every 5s."
     gemini_pool.py:
       status: production
       purpose: "gemini_pool.py \u2014 Async Gemini API key pool with SQLite-backed\
@@ -81,10 +78,6 @@ modules:
       status: production
       purpose: "link_turns.py \u2014 nightly: match turns to worklog entries + deep\
         \ review."
-    lint_rules.py:
-      status: production
-      purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
-        \ documents."
     mcp_entrypoint.sh:
       status: unknown
       purpose: "mcp_entrypoint.sh \u2014 Start FastMCP server on Pod A pod"
@@ -94,6 +87,13 @@ modules:
     mcp_server_sse.py:
       status: experimental
       purpose: "MCP Server \u2014 SSE-based tool server (protocol 2024-11-05)."
+    migrate_decisions_v2.py:
+      status: unknown
+      purpose: 'One-time migration: parse str(dict) decision_text into structured
+        columns.'
+    migrate_yaml_to_db.py:
+      status: unknown
+      purpose: 'One-time migration: parse broken handover.yaml and import to DB.'
     motd_gen.py:
       status: production
       purpose: "motd_gen.py \u2014 lightweight MOTD for SSH login. Reads state.yaml\
@@ -199,34 +199,19 @@ modules:
       status: production
       purpose: "Experiment state file \u2014 \uC2E4\uD5D8 \uC911 watchdog\uACFC pipeline\
         \ \uAC04 \uC0C1\uD0DC \uACF5\uC720."
-    feedback.py:
-      status: production
-      purpose: "Feedback provider \u2014 extracts recent fix patterns from activity_log\
-        \ and returns"
     file_registry.py:
       status: production
       purpose: "file_registry.py \u2014 DevForge File Management System."
-    llm_client.py:
+    handover_db.py:
       status: production
-      purpose: "Unified LLM client \u2014 single entry point for all pipeline scripts."
+      purpose: "handover_db.py \u2014 DB read/write operations for update_handover.py."
     nli_server.py:
       status: deprecated
       purpose: "NLI Cross-Encoder Server \u2014 DeBERTa-v3-large (DEPRECATED, never\
         \ deployed)."
-    pipeline_common.py:
-      status: production
-      purpose: "Shared pipeline utilities \u2014 PipelineState, llm_call, call_one,\
-        \ schema, prompts."
-    pod_manager.py:
-      status: production
-      purpose: "Container management for DevForge \u2014 Pod A (devforge-pod-a :8080)\
-        \ and Pod B (devforge-pod-b :8081-8089)."
     protection.py:
       status: production
       purpose: "Protection context manager \u2014 file-based dead man's switch."
-    proxy_utils.py:
-      status: production
-      purpose: Utility functions extracted from anthropic_proxy.
     queue_writer.py:
       status: production
       purpose: "queue_writer \u2014 enqueue items to activity_log for downstream review\
@@ -234,10 +219,6 @@ modules:
     scoring.py:
       status: production
       purpose: "Scoring \u2014 shared veto/gap/early-exit logic."
-    slack_interactive.py:
-      status: experimental
-      purpose: "Slack Interactive Handler \u2014 receives Slack block_actions payload\
-        \ and processes NEUTRAL fact confirm/reject."
     telegram_notifier.py:
       status: production
       purpose: Telegram notifier for pipeline alerts.
@@ -335,6 +316,22 @@ modules:
     utils.py:
       status: deprecated
       purpose: utils.py
+- path: scripts/lib/feedback/
+  purpose: Feedback
+  files:
+    __init__.py:
+      status: production
+      purpose: "Feedback provider \u2014 extracts recent fix patterns from activity_log\
+        \ and returns"
+    messages.py:
+      status: production
+      purpose: "Pattern \u2192 few-shot message conversion for feedback injection."
+    patterns.py:
+      status: production
+      purpose: Review fetching and pattern extraction for feedback.
+    state.py:
+      status: production
+      purpose: Feedback generation state management.
 - path: scripts/lib/hybrid/
   purpose: Hybrid
   files:
@@ -357,9 +354,6 @@ modules:
       status: production
       purpose: "Infrastructure \u2014 health checks for systemd, podman, filesystem,\
         \ container discovery."
-    azure_spot.py:
-      status: experimental
-      purpose: Azure Spot VM lifecycle management for cooperative LLM debate.
     container_manager.py:
       status: production
       purpose: "Container lifecycle management \u2014 stop, start, health, memory\
@@ -382,6 +376,28 @@ modules:
   constraints:
     max_lines_per_file: 100
     no_direct_db: true
+- path: scripts/lib/infra/azure_spot/
+  purpose: Azure Spot
+  files:
+    __init__.py:
+      status: experimental
+      purpose: Azure Spot VM lifecycle management.
+    cli.py:
+      status: unknown
+      purpose: CLI entry point for Azure Spot VM lifecycle management.
+    config.py:
+      status: experimental
+      purpose: Azure Spot VM configuration.
+    manager.py:
+      status: experimental
+      purpose: "Azure Spot VM manager \u2014 create, poll, delete spot VMs."
+    orchestrator.py:
+      status: experimental
+      purpose: "Azure Spot VM orchestrator \u2014 coordinates VM lifecycle for debate\
+        \ rounds."
+    tunnel.py:
+      status: experimental
+      purpose: SSH tunnel management for Azure Spot VMs.
 - path: scripts/lib/llm/
   purpose: Llm
   files:
@@ -399,6 +415,18 @@ modules:
       purpose: "Rate estimators for LLM inference \u2014 token-count-based and timings-based."
   constraints:
     max_lines_per_file: 120
+- path: scripts/lib/llm_client/
+  purpose: Llm Client
+  files:
+    __init__.py:
+      status: production
+      purpose: "Unified LLM client \u2014 single entry point for all pipeline scripts."
+    feedback.py:
+      status: production
+      purpose: "Feedback injection \u2014 few-shot patterns from activity_log."
+    recovery.py:
+      status: production
+      purpose: "8082 auto-recovery \u2014 reload model on connection error."
 - path: scripts/lib/output/
   purpose: Output
   files:
@@ -445,6 +473,40 @@ modules:
       purpose: "parser_gemini.py \u2014 extract turns from Gemini CLI session JSONL."
   constraints:
     max_lines_per_file: 140
+- path: scripts/lib/pipeline_common/
+  purpose: Pipeline Common
+  files:
+    __init__.py:
+      status: production
+      purpose: "Shared pipeline utilities \u2014 PipelineState, llm_call, call_one,\
+        \ schema, prompts."
+    helpers.py:
+      status: production
+      purpose: Helper functions for pipeline_common.
+    llm.py:
+      status: production
+      purpose: LLM call helpers for pipeline use.
+    prompts.py:
+      status: production
+      purpose: P-R-J system prompts and mock test data.
+    schema.py:
+      status: production
+      purpose: Pipeline schemas and validation helpers.
+    state.py:
+      status: production
+      purpose: "PipelineState \u2014 append-only phase results blackboard."
+- path: scripts/lib/pod_manager/
+  purpose: Pod Manager
+  files:
+    __init__.py:
+      status: production
+      purpose: "Container management for DevForge \u2014 Pod A and Pod B."
+    container.py:
+      status: production
+      purpose: Container health checks, model fingerprint, pasta management, env writing.
+    models.py:
+      status: production
+      purpose: Model metadata definitions for Pod A / Pod B.
 - path: scripts/lib/prj/
   purpose: Prj
   files:
@@ -457,6 +519,24 @@ modules:
     utils.py:
       status: production
       purpose: utils.py
+- path: scripts/lib/proxy_utils/
+  purpose: Proxy Utils
+  files:
+    __init__.py:
+      status: production
+      purpose: Utility functions for Anthropic/DeepSeek proxy.
+    cache.py:
+      status: production
+      purpose: Cache-control helpers for Anthropic/DeepSeek proxy.
+    sanitize.py:
+      status: production
+      purpose: Text sanitization helpers for Anthropic/DeepSeek proxy.
+    tools.py:
+      status: production
+      purpose: Tool-use/tool-result adjacency repair for DeepSeek proxy.
+    usage.py:
+      status: production
+      purpose: Usage tracking, streaming parsing, and balance helpers for proxy.
 - path: scripts/lib/rubric/
   purpose: Rubric
   files:
@@ -499,6 +579,21 @@ modules:
       purpose: Multi-API web search manager with intent-based routing and key rotation.
   constraints:
     max_lines_per_file: 280
+- path: scripts/lib/slack_interactive/
+  purpose: Slack Interactive
+  files:
+    __init__.py:
+      status: experimental
+      purpose: "Slack Interactive Handler \u2014 receives Slack block_actions and\
+        \ processes NEUTRAL fact confirm/reject."
+    alerts.py:
+      status: experimental
+      purpose: "Slack alert senders \u2014 NEUTRAL facts, noise markers, extract fail\
+        \ reports."
+    handler.py:
+      status: experimental
+      purpose: "Slack interactive button handler \u2014 receives block_actions and\
+        \ processes fact confirm/reject."
 - path: scripts/lib/state/
   purpose: State
   files:
@@ -607,12 +702,59 @@ modules:
       status: unknown
       purpose: "Watchdog for 5-phase pipeline \u2014 polls log, sends Slack on phase\
         \ changes."
+- path: scripts/blob_explorer/
+  purpose: Blob Explorer
+  files:
+    __init__.py:
+      status: production
+      purpose: "Azure Blob web interface: send + receive \u2014 split from blob_explorer.py."
+    __main__.py:
+      status: unknown
+      purpose: Entry point for python3 -m blob_explorer.
+    blob.py:
+      status: production
+      purpose: Azure Blob storage operations.
+    handler.py:
+      status: production
+      purpose: HTTP handler + HTML UI for Blob Explorer.
+- path: scripts/gemini_core/
+  purpose: Gemini Core
+  files:
+    __init__.py:
+      status: production
+      purpose: "Core engine: keys, API calls, tool implementations \u2014 split from\
+        \ gemini_core.py."
+    api.py:
+      status: production
+      purpose: Gemini API call wrapper.
+    execute.py:
+      status: production
+      purpose: 'Tool execution: run_shell, read_file, edit_file, web_search, etc.'
+    keys.py:
+      status: production
+      purpose: Key loading / rotation for Gemini and Brave APIs.
+    tools_def.py:
+      status: production
+      purpose: Gemini function-calling tool definitions.
 - path: scripts/hooks/
   purpose: Hooks
   files:
     session_context.py:
       status: production
       purpose: "SessionStart hook \u2014 inject DevForge work context into Claude."
+- path: scripts/lint_rules/
+  purpose: Lint Rules
+  files:
+    __init__.py:
+      status: production
+      purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
+        \ documents."
+    checks.py:
+      status: production
+      purpose: Individual lint rule check functions.
+    data.py:
+      status: production
+      purpose: Lint rules constants.
 - path: scripts/notice/
   purpose: Notice
   files:

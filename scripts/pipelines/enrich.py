@@ -34,7 +34,7 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql, psql_ok, esc_sql, psql_json
-from lib.common import strip_think
+from lib.common import strip_think, context_limit
 from lib.enrich_few_shot import load_few_shot
 from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, reranker_nli_verdict
 from lib.llm.json_parser import save_dlq, parse_llm_json
@@ -115,11 +115,13 @@ You are an MCP metadata verifier. Your job is to check the generated MCP fields
 against the original conversation turn and fix errors.
 
 Given:
-  === TURN ===
+  === INPUT: turn START ===
   user_turn / thinking / text
+  === INPUT: turn END ===
 
-  === GENERATED MCP ===
+  === CONTEXT: mcp START ===
   tldr / intent / entities / tags
+  === CONTEXT: mcp END ===
 
 Check each field:
   1. tldr: Accurate? Max 15 words? No markdown? If wrong, fix.
@@ -366,7 +368,7 @@ def _verify_tldr(tldr: str, user_turn: str, text: str) -> dict:
     if not tldr or not (user_turn or text):
         return {"verdict": "SKIP", "label": "NEUTRAL", "score": 0.0}
     source = f"{user_turn}\n{text}"
-    prompt = _NLI_TLDR_PROMPT.format(source=source[:2000], tldr=tldr[:500])
+    prompt = _NLI_TLDR_PROMPT.format(source=context_limit(source), tldr=tldr[:500])
     try:
         meta = call_llm_with_retry(
             [{"role": "user", "content": prompt}],
@@ -411,28 +413,35 @@ def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
     Returns dict with enrich fields + usage/timings metadata.
     """
     budget = TokenBudget("enrich")
-    parts = ["=== user_turn ==="]
+    parts = []
+    # TODO: CONTEXT가 text/facts 두 종류뿐이지만, 향후 enrich/review/mcp 등
+    # 더 추가될 경우 CONTEXT_REF / CONTEXT_DERIVED / CONTEXT_RESULT 3분할 고려.
     if budget.add_section("user_turn", user_turn or "(empty)", priority=10):
+        parts.append("=== INPUT: user_turn START ===")
         parts.append(user_turn or "(empty)")
+        parts.append("=== INPUT: user_turn END ===")
 
-    parts.append("")
-    parts.append("=== thinking ===")
     if budget.add_section("thinking", thinking or "(empty)", priority=4):
+        parts.append("")
+        parts.append("<<< REASONING: thinking START >>>")
         parts.append(thinking or "(empty)")
+        parts.append("<<< REASONING: thinking END >>>")
 
-    parts.append("")
-    parts.append("=== text ===")
     if budget.add_section("text", text or "(empty)", priority=7):
+        parts.append("")
+        parts.append("=== CONTEXT: text START ===")
         parts.append(text or "(empty)")
+        parts.append("=== CONTEXT: text END ===")
 
     if extractions:
         parts.append("")
-        parts.append("=== extracted facts ===")
+        parts.append("=== CONTEXT: facts START ===")
         for idx, ex in enumerate(extractions):
             confidence = ex.get('fact_confidence', 100)
             line = f"  [{ex.get('fact_type','?')}] (conf={confidence}) {ex.get('evidence','')[:300]}"
             if budget.add_section(f"extract_{idx}", line, priority=6):
                 parts.append(line)
+        parts.append("=== CONTEXT: facts END ===")
     parts.append("")
     if budget.used > 0:
         parts.append(f"[context budget: {budget.used}/{budget.limit} tok]")
@@ -461,28 +470,40 @@ def _generate_enrich_fields(user_turn: str, thinking: str, text: str,
 
 
 def _get_turns_without_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
-    """Return turns without enrich_meta, ordered by creation time.
-    State-based: NOT EXISTS enrich_meta is the sole filter.
+    """Atomically claim extracted turns via FOR UPDATE SKIP LOCKED,
+    set pipeline_state='enriching', and return turn data.
     Also skips turns with unresolved NEUTRAL facts (no user_verdict yet).
     """
-    sql = (
-        "SELECT t.id, t.user_turn, t.thinking, t.text, t.created_at, t.est_chars "
-        "FROM turns t "
-        "WHERE NOT EXISTS ("
-        "  SELECT 1 FROM review_facts rf2 "
-        "  WHERE rf2.turn_id = t.id AND rf2.fact_type = 'enrich_meta'"
-        ")"
-        "AND NOT EXISTS ("
-        "  SELECT 1 FROM review_facts rf3 "
-        "  WHERE rf3.turn_id = t.id "
-        "  AND rf3.nli_llm = 'NEUTRAL'"
-        "  AND rf3.user_verdict IS NULL"
-        "  AND rf3.nli_verdict = 'AMBIGUOUS'"
-        ")"
-        "AND t.pipeline_state = 'extracted' "
-        "ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
-        f"LIMIT {limit}"
-    )
+    sql = f"""
+        WITH claimable AS (
+            SELECT t.id
+            FROM turns t
+            WHERE NOT EXISTS (
+                SELECT 1 FROM review_facts rf2
+                WHERE rf2.turn_id = t.id AND rf2.fact_type = 'enrich_meta'
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM review_facts rf3
+                WHERE rf3.turn_id = t.id
+                AND rf3.nli_llm = 'NEUTRAL'
+                AND rf3.user_verdict IS NULL
+                AND rf3.nli_verdict = 'AMBIGUOUS'
+            )
+            AND t.pipeline_state = 'extracted'
+            ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC
+            LIMIT {limit}
+            FOR UPDATE SKIP LOCKED
+        ),
+        claimed AS (
+            UPDATE turns SET pipeline_state = 'enriching'
+            FROM claimable WHERE turns.id = claimable.id
+            RETURNING turns.id, turns.user_turn, turns.thinking, turns.text,
+                      turns.created_at, turns.est_chars
+        )
+        SELECT id, user_turn, thinking, text, created_at, est_chars
+        FROM claimed
+        ORDER BY est_chars ASC NULLS LAST, created_at DESC
+    """
     rows = psql_json(sql)
     if not rows:
         return []
@@ -763,7 +784,7 @@ def enrich_pipeline(turn_id: Optional[str] = None,
 
 
 def main() -> None:
-    ensure_model('day-enrich')  # skip_if_healthy=False: swap from day-extractor to day-enrich
+    ensure_model('day-enricher')  # skip_if_healthy=False: swap from day-extractor to day-enricher
     from lib.infra.preflight import preflight_checks
     preflight_checks("enrich.py")
     import argparse
