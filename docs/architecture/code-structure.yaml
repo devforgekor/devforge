@@ -61,11 +61,11 @@ modules:
       purpose: "gemini_mcp \u2014 MCP server exposing DevForge tools via Gemini API."
     gemini_mon.py:
       status: unknown
-      purpose: "Live Gemini key pool monitor \u2014 refreshes every 5s."
-    gemini_pool.py:
-      status: production
-      purpose: "gemini_pool.py \u2014 Async Gemini API key pool with SQLite-backed\
-        \ persistence."
+      purpose: "Compact Gemini key monitor \u2014 shows the most recently used key,\
+        \ refreshes 5s."
+    gemini_quota.py:
+      status: unknown
+      purpose: Display Gemini API daily quota status.
     gemini_session_start.sh:
       status: unknown
       purpose: Launch Gemini CLI in a persistent tmux session with per-request key
@@ -104,6 +104,10 @@ modules:
     observer.py:
       status: production
       purpose: "DevForge Observer Agent \u2014 interactive CLI agent with tool calling."
+    open-newhand.sh:
+      status: unknown
+      purpose: "open-newhand \u2014 OpenCode \uC138\uC158\uC744 handover context\uC640\
+        \ \uD568\uAED8 \uC2DC\uC791\uD558\uACE0, \uC885\uB8CC \uD6C4 git commit/push"
     orchestrator.py:
       status: production
       purpose: "DevForge Orchestrator \u2014 LLM-based smart router to specialized\
@@ -141,9 +145,12 @@ modules:
     slack_notify.py:
       status: production
       purpose: "slack_notify.py \u2014 Session-end report \u2192 Slack DM."
+    sqlite_mcp.py:
+      status: experimental
+      purpose: "SQLite MCP \u2014 read-only access to OpenCode session database."
     sync_gemini_rules.py:
       status: experimental
-      purpose: Sync shared rules into Gemini CLI instruction file.
+      purpose: Sync shared rules into OpenCode AGENTS.md.
     system_sync.sh:
       status: unknown
       purpose: "system_sync.sh \u2014 30min system maintenance (no Pod B, no pipeline)"
@@ -246,7 +253,8 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Authentication \u2014 key rotation, loading, and encryption."
+      purpose: "Authentication \u2014 key rotation, loading, encryption, and quota\
+        \ tracking."
     api_key_cipher.py:
       status: production
       purpose: AES-256-GCM encryption for API keys and secrets.
@@ -257,6 +265,9 @@ modules:
     key_rotator.py:
       status: production
       purpose: "Lightweight API Key Rotator \u2014 in-memory, no DB dependency."
+    quota_tracker.py:
+      status: production
+      purpose: Daily per-key API quota tracker.
   constraints:
     max_lines_per_file: 260
     no_direct_db: true
@@ -844,9 +855,6 @@ modules:
     anthropic.py:
       status: production
       purpose: Anthropic-compatible reverse proxy for DeepSeek.
-    gemini.py:
-      status: production
-      purpose: HTTPS reverse proxy that rotates Gemini API keys per request.
     gemini_openai.py:
       status: experimental
       purpose: OpenAI-compatible reverse proxy for Google Gemini API with key rotation.

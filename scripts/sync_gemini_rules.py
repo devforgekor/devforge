@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: none — one-off sync, called from proxies/gemini.py
-"""Sync shared rules into Gemini CLI instruction file.
+# Path: none — one-off sync, also called by gen_architecture.py
+"""Sync shared rules into OpenCode AGENTS.md.
 
-Pattern adapted from common-lib core/copilot_rules.py.
-Reads infrastructure.md + llm-common-rule.md, prepends Gemini header, writes GEMINI.md.
+Reads infrastructure.md + llm-common-rule.md + llm-agent-rule.md
+and merges them with a header into AGENTS.md.
 
 Usage:
     python3 /opt/projects/server/scripts/sync_gemini_rules.py
@@ -13,19 +13,19 @@ Usage:
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
-RULE_SRCS = [
+AGENTS_SRCS = [
     Path("/home/opc/infrastructure.md"),
     Path("/home/opc/llm-common-rule.md"),
+    Path("/home/opc/llm-agent-rule.md"),
 ]
-GEMINI_INSTRUCTIONS = Path("/home/opc/GEMINI.md")
-GEMINI_HEADER = Path("/home/opc/.gemini/header.md")
+AGENTS_OUTPUT = Path("/home/opc/AGENTS.md")
 
-DEFAULT_HEADER = (
-    "# Gemini CLI Instructions\n\n"
+DEFAULT_AGENTS_HEADER = (
+    "# OpenCode Instructions (AGENTS.md)\n\n"
     "> 이 파일은 `sync_gemini_rules.py`에 의해 자동 생성됩니다. 직접 수정하지 마세요.\n"
-    "> Gemini 전용 설정은 `~/.gemini/header.md`에서 관리하세요.\n\n"
+    "> OpenCode 전용 설정은 `~/.config/opencode/opencode.json`에서 관리하세요.\n\n"
     "---\n\n"
 )
 
@@ -39,25 +39,10 @@ def _atomic_write_text(path: Path, text: str) -> None:
     os.replace(temp_name, path)
 
 
-def sync_gemini_instructions(
-    rule_srcs: Optional[List[Path]] = None,
-    gemini_instructions: Optional[Path] = None,
-    header_src: Optional[Path] = None,
-) -> bool:
-    """Sync shared rule files into GEMINI.md. Returns True if written."""
-    rule_srcs = rule_srcs or RULE_SRCS
-    gemini_instructions = gemini_instructions or GEMINI_INSTRUCTIONS
-    header_src = header_src or GEMINI_HEADER
-
-    # Read header (Gemini-specific, excluded from sync)
-    if header_src.exists():
-        header = header_src.read_text(encoding="utf-8")
-    else:
-        header = DEFAULT_HEADER
-
-    # Concatenate all rule sources
-    parts = [header]
-    for src in rule_srcs:
+def sync_agents_md() -> bool:
+    """Merge shared rule files into AGENTS.md. Returns True if written."""
+    parts = [DEFAULT_AGENTS_HEADER]
+    for src in AGENTS_SRCS:
         p = Path(src)
         if p.exists():
             parts.append(p.read_text(encoding="utf-8"))
@@ -66,7 +51,7 @@ def sync_gemini_instructions(
 
     new_text = "".join(parts)
 
-    target = Path(gemini_instructions)
+    target = AGENTS_OUTPUT
     if target.exists() and target.read_text(encoding="utf-8") == new_text:
         return False
 
@@ -75,9 +60,8 @@ def sync_gemini_instructions(
 
 
 if __name__ == "__main__":
-    changed = sync_gemini_instructions()
+    changed = sync_agents_md()
     if changed:
-        print("[sync_gemini] GEMINI.md 업데이트 완료")
+        print("[sync_agents] AGENTS.md 업데이트 완료")
     else:
-        print("[sync_gemini] 변경 없음")
-
+        print("[sync_agents] 변경 없음")

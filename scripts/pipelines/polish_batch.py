@@ -136,26 +136,35 @@ def _hanja_substitute(text: str) -> Tuple[str, List[Dict[str, str]]]:
 # Phase 2 — Correction Prompts
 # ═══════════════════════════════════════════════
 
-USER_TURN_PROMPT = """You are a Korean spelling and grammar corrector. Fix the user_turn text below. User messages tend to have more errors — review CAREFULLY.
+USER_TURN_PROMPT = """You are a Korean spelling and grammar corrector.
 
-Rules:
-1. Fix spelling and grammar errors only — never change word choice, sentence structure, or style
-2. Never touch code blocks, URLs, proper nouns, numbers, or special characters
-3. If the text has zero errors, return it exactly as-is
+TASK: Fix ONLY real spelling and grammar errors in the user_turn below.
 
-Output STRICT JSON with one field: {{"corrected": "the corrected text"}}
+STEP 1: Identify errors. If NONE exist — output the original text VERBATIM without any changes.
+STEP 2: Only if you found real errors, fix them minimally.
+
+CONSTRAINTS:
+- Never change word choice, sentence structure, or style
+- Never touch code blocks, URLs, proper nouns, numbers, or special characters
+- If you are unsure whether something is an error, treat it as NOT an error
+- No explanations, no commentary — only the JSON
+
+Output STRICT JSON: {{"corrected": "the corrected text"}}
 
 === user_turn ===
 {text}"""
 
 CORRECT_PROMPT = """Fix Korean spelling/grammar errors in the {field} field below.
 
-Rules:
-1. Fix spelling and grammar errors only — never change word choice, sentence structure, or style
-2. Never touch code blocks, URLs, proper nouns, numbers, or special characters
-3. If the text has zero errors, return it exactly as-is
+STEP 1: Identify errors. If NONE exist — output the original text VERBATIM.
+STEP 2: Only if you found real errors, fix them minimally.
 
-Output STRICT JSON with one field: {{"corrected": "the corrected text"}}
+CONSTRAINTS:
+- Never change word choice, sentence structure, or style
+- Never touch code blocks, URLs, proper nouns, numbers, or special characters
+- If unsure, treat as NOT an error
+
+Output STRICT JSON: {{"corrected": "the corrected text"}}
 
 === {field} ===
 {text}"""
@@ -272,8 +281,10 @@ def _calc_timeout(total_chars: int, max_tokens: int, solo: bool = False) -> int:
 
 
 def _polish_user_turn(text: str, timeout: int = 600) -> Optional[str]:
-    """Polish user_turn — always runs. Returns corrected text or None on error."""
-    prompt = USER_TURN_PROMPT.format(text=text[:4000] or "(empty)")
+    """Polish user_turn — skip empty/whitespace-only input. Returns corrected text or None."""
+    if not text or not text.strip():
+        return None
+    prompt = USER_TURN_PROMPT.format(text=text[:4000])
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
@@ -289,8 +300,10 @@ def _polish_user_turn(text: str, timeout: int = 600) -> Optional[str]:
 
 
 def _polish_field(text: str, field: str, timeout: int = 300) -> Optional[str]:
-    """Polish text or thinking — only when Kiwi flagged errors."""
-    prompt = CORRECT_PROMPT.format(field=field, text=text[:3000] or "(empty)")
+    """Polish text or thinking — only when Kiwi flagged errors. Skip empty input."""
+    if not text or not text.strip():
+        return None
+    prompt = CORRECT_PROMPT.format(field=field, text=text[:3000])
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],

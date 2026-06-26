@@ -5,10 +5,10 @@
 OpenAI-compatible reverse proxy for Google Gemini API with key rotation.
 
 Translates OpenAI /v1/chat/completions requests to Gemini native format,
-rotating API keys via KeyRotator. Independent state from proxies/gemini.py.
+rotating API keys via KeyRotator. Independent state (migrated from the old proxies/gemini.py proxy).
 
-Bypasses /etc/hosts by connecting to hardcoded Google IPs (same pattern as
-proxies/gemini.py), using asyncio + ssl for proper SNI.
+Bypasses /etc/hosts by connecting to hardcoded Google IPs,
+using asyncio + ssl for proper SNI.
 """
 
 import asyncio
@@ -24,8 +24,9 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from lib.auth.key_rotator import KeyRotator
+from lib.auth.key_rotator import KeyRotator, DAILY_QUOTA_THRESHOLD
 from lib.auth.key_loader import load_api_keys
+from lib.auth.quota_tracker import QuotaTracker
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -36,8 +37,9 @@ LISTEN_PORT = int(os.environ.get("GEMINI_OPENAI_PROXY_PORT", "4431"))
 GEMINI_HOST = "generativelanguage.googleapis.com"
 GEMINI_PORT = 443
 STATE_FILE = os.path.expanduser("~/.cache/devforge/gemini_openai_rotator_state.json")
+QUOTA_STATE_FILE = os.path.expanduser("~/.cache/devforge/gemini_openai_quota_state.json")
 
-# Hardcoded IPs bypassing /etc/hosts redirect (same as proxies/gemini.py)
+# Hardcoded IPs bypassing /etc/hosts redirect
 GEMINI_REAL_IPS = [
     "142.250.21.95",
     "142.250.23.95",
@@ -54,6 +56,7 @@ SUPPORTED_MODELS = frozenset({
 })
 
 _rotator: Optional[KeyRotator] = None
+_quota_tracker: Optional[QuotaTracker] = None
 _lock: Optional[asyncio.Lock] = None
 
 app = FastAPI(title="Gemini OpenAI Proxy", version="1.0.0")
@@ -71,6 +74,15 @@ def _get_rotator() -> KeyRotator:
             raise RuntimeError("No Gemini API keys found")
         _rotator = KeyRotator(keys, state_file=STATE_FILE)
     return _rotator
+
+
+def _get_quota_tracker() -> QuotaTracker:
+    global _quota_tracker
+    if _quota_tracker is None:
+        rot = _get_rotator()
+        key_names = [(i, rot.keys[i][0]) for i in range(rot.n)]
+        _quota_tracker = QuotaTracker(QUOTA_STATE_FILE, key_names)
+    return _quota_tracker
 
 
 def _get_lock() -> asyncio.Lock:
@@ -372,8 +384,13 @@ def _gemini_chunk_to_openai(chunk: dict, model: str) -> Optional[dict]:
 async def _parse_sse_stream(
     byte_stream: AsyncGenerator[bytes, None],
     model: str,
+    usage_collected: Optional[dict] = None,
 ) -> AsyncGenerator[str, None]:
-    """Parse Gemini SSE stream and yield OpenAI-format SSE lines."""
+    """Parse Gemini SSE stream and yield OpenAI-format SSE lines.
+
+    If usage_collected is provided, populates it with token counts
+    from usageMetadata found in the final Gemini event.
+    """
     buf = b""
     async for chunk in byte_stream:
         buf += chunk
@@ -389,6 +406,12 @@ async def _parse_sse_stream(
                 data = json.loads(raw)
             except json.JSONDecodeError:
                 continue
+
+            if usage_collected is not None and "usageMetadata" in data:
+                um = data["usageMetadata"]
+                usage_collected["input_tokens"] = um.get("promptTokenCount", 0)
+                usage_collected["output_tokens"] = um.get("candidatesTokenCount", 0)
+
             oai = _gemini_chunk_to_openai(data, model)
             if oai:
                 yield f"data: {json.dumps(oai, ensure_ascii=False)}\n\n"
@@ -412,6 +435,36 @@ async def list_models():
     }
 
 
+@app.get("/v1/quota")
+async def get_quota():
+    try:
+        return _get_quota_tracker().get_all_stats()
+    except RuntimeError as e:
+        return JSONResponse(status_code=503, content={"error": str(e)})
+    except Exception:
+        return JSONResponse(status_code=500, content={"error": "Quota tracker unavailable"})
+
+
+def _parse_retry_delay(resp_body: bytes) -> int:
+    """Extract retry delay from a Gemini 429 error response.
+
+    Returns retry delay in seconds, defaulting to 60 if unparseable.
+    Gemini format: error.details[0].retryDelay = "45s"
+    Daily quota → delay >= 300s (5 min); Rate limit → delay < 300s.
+    """
+    try:
+        err = json.loads(resp_body)
+        details = (err.get("error") or {}).get("details") or []
+        for detail in details:
+            retry_delay = detail.get("retryDelay", "")
+            if retry_delay:
+                val = float(retry_delay.rstrip("s"))
+                return max(int(val), 1)
+    except Exception:
+        pass
+    return 60
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     try:
@@ -430,18 +483,28 @@ async def chat_completions(request: Request):
     gemini_body = _build_gemini_body(body, contents, system_instruction)
     payload = json.dumps(gemini_body).encode()
 
-    # ---- Pick API key ----
+    # ---- Pick API key (RPD-aware) ----
     lock = _get_lock()
     async with lock:
         try:
             rotator = _get_rotator()
         except RuntimeError as e:
             return JSONResponse(status_code=503, content={"error": str(e)})
-        picked = rotator.pick()
+        quota = _get_quota_tracker()
+        picked = None
+        for _ in range(rotator.n):
+            p = rotator.pick()
+            if p is None:
+                break
+            idx, name, key = p
+            if quota.remaining_rpd(idx) > 0:
+                picked = p
+                break
+            # RPD 소진 — _last_used가 갱신됐으므로 다음 pick()이 자연스럽게 다른 키 선택
         if picked is None:
             return JSONResponse(
                 status_code=503,
-                content={"error": {"message": "All Gemini API keys exhausted or in backoff.", "type": "rate_limit_error"}},
+                content={"error": {"message": "오늘 모든 키의 할당량이 소진되었습니다.", "type": "daily_quota_exhausted"}},
             )
         key_idx, key_name, api_key = picked
 
@@ -452,8 +515,21 @@ async def chat_completions(request: Request):
         headers = {"x-goog-api-key": api_key, "Content-Type": "application/json", "Content-Length": str(len(payload))}
         byte_gen = _gemini_stream("POST", stream_path, headers, payload)
 
+        usage_collected: dict = {}
+
+        async def _stream_with_tracking():
+            async for event in _parse_sse_stream(byte_gen, model, usage_collected):
+                yield event
+            if usage_collected.get("input_tokens") or usage_collected.get("output_tokens"):
+                async with _get_lock():
+                    _get_quota_tracker().record_usage(
+                        key_idx,
+                        usage_collected.get("input_tokens", 0),
+                        usage_collected.get("output_tokens", 0),
+                    )
+
         return StreamingResponse(
-            _parse_sse_stream(byte_gen, model),
+            _stream_with_tracking(),
             media_type="text/event-stream",
             headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
         )
@@ -464,10 +540,32 @@ async def chat_completions(request: Request):
 
     async with lock:
         if status_code == 429:
-            rotator.rate_limited(key_idx, 60)
+            retry_seconds = _parse_retry_delay(resp_body)
+            rotator.rate_limited(key_idx, retry_seconds)
+            if retry_seconds >= DAILY_QUOTA_THRESHOLD:
+                try:
+                    _get_quota_tracker().mark_rpd_exhausted(key_idx)
+                except Exception:
+                    pass
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "error": {
+                            "message": "오늘 할당량을 초과했습니다. 다음 키로 전환합니다.",
+                            "type": "daily_quota_exceeded",
+                            "retry_seconds": retry_seconds,
+                        }
+                    },
+                )
             return JSONResponse(
                 status_code=429,
-                content={"error": {"message": "Rate limited. Key rotated.", "type": "rate_limit_error"}},
+                content={
+                    "error": {
+                        "message": "요청이 제한되었습니다. 다음 키로 전환합니다.",
+                        "type": "rate_limit_error",
+                        "retry_seconds": retry_seconds,
+                    }
+                },
             )
         if status_code < 500:
             rotator.success(key_idx)
@@ -480,6 +578,17 @@ async def chat_completions(request: Request):
         return JSONResponse(status_code=status_code, content=err)
 
     data = json.loads(resp_body)
+
+    # ---- Track quota usage ----
+    try:
+        _get_quota_tracker().record_usage(
+            key_idx,
+            (data.get("usageMetadata") or {}).get("promptTokenCount", 0),
+            (data.get("usageMetadata") or {}).get("candidatesTokenCount", 0),
+        )
+    except Exception:
+        pass
+
     text = ""
     for c in data.get("candidates", []):
         for p in (c.get("content") or {}).get("parts", []):

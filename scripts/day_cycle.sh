@@ -5,7 +5,7 @@
 # Each phase queries pipeline_state, each script self-reports completion via UPDATE.
 # Light → Heavy execution order:
 #   System Sync       — code-structure + duckdns + worklog
-#   Pod A Reranker    — ensure reranker :8080 healthy
+#   Pod A Health       — check :8080 (router mode, models loaded dynamically)
 #   Text Preprocess   — text_clean.py (batching → cleaned)
 #   Day Polish        — polish_batch.py (cleaned → polished)
 #   FTS5 Refresh      — local_index refresh
@@ -17,7 +17,7 @@
 # Each phase has its own budget check. Mid-cycle timeout carries forward in pipeline_state.
 #
 # Secrets: DUCKDNS_TOKEN in ~/.config/devforge/secrets.env
-# Server philosophy: Slow but complete. Pod A reranker always on :8080.
+# Server philosophy: Slow but complete. Pod A router (:8080) loads reranker/tiny/polisher on demand.
 
 set -o pipefail
 
@@ -240,18 +240,11 @@ elif [ "$IN_FLIGHT" -eq 0 ]; then
     fi
 fi
 
-# ── Pod A Reranker (Pod A reranker, :8080) — ensure always running ────────
-LOG "=== Pod A: Reranker check ==="
-if curl -sf "http://127.0.0.1:8080/health" >/dev/null 2>&1; then
-    LOG "  Pod A reranker (:8080) healthy"
-else
-    LOG "  Pod A reranker NOT healthy - restarting"
-    python3 -c "
-import sys; sys.path.insert(0, '${SCRIPT_DIR}')
-from lib.pod_manager import start_pod_a
-sys.exit(0 if start_pod_a('reranker', 8080) else 1)
-" 2>&1
-fi
+# ── Pod A health check (only — router handles model switching dynamically) ──
+LOG "=== Pod A: health check (:8080) ==="
+curl -sf "http://127.0.0.1:8080/health" >/dev/null 2>&1 \
+    && LOG "  Pod A (:8080) healthy" \
+    || LOG "  Pod A (:8080) unhealthy — watchdog handles recovery"
 
 # ── Text Preprocess (text_clean) ─────────────────────
 NEED_CLEAN=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
@@ -278,7 +271,7 @@ NEED_POLISH=${NEED_POLISH:-0}
 
 if [ "$NEED_POLISH" -gt 0 ]; then
     LOG "=== Day Polish (${NEED_POLISH} cleaned turns) ==="
-    python3 "$PIPELINE_DIR/polish_batch.py" --no-llm --limit 50 2>&1
+    python3 "$PIPELINE_DIR/polish_batch.py" --limit 50 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     LOG "  Polish exit=$RC, elapsed=${ELAPSED}s"

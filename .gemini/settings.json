@@ -1,0 +1,60 @@
+{
+  "mcpServers": {
+    "devforge-mcp": {
+      "httpUrl": "http://127.0.0.1:8000/mcp",
+      "timeout": 60000
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/opt/projects/server"],
+      "timeout": 30
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@selfagency/git-mcp"],
+      "timeout": 30
+    },
+    "brave-search": {
+      "command": "/opt/projects/server/scripts/brave_mcp_wrapper.sh",
+      "timeout": 30
+    },
+    "fetch": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "timeout": 30
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "timeout": 30
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/memory-mcp-server"],
+      "timeout": 30
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "timeout": 30
+    },
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "notion-mcp-server"],
+      "env": {
+        "NOTION_TOKEN": "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"
+      },
+      "timeout": 30
+    },
+    "gemini-mcp": {
+      "command": "python3.11",
+      "args": ["/opt/projects/server/scripts/gemini_mcp.py"],
+      "timeout": 60
+    },
+    "pdf-reader": {
+      "command": "python3.11",
+      "args": ["/opt/projects/server/scripts/pdf_reader_mcp.py"],
+      "timeout": 60
+    }
+  }
+}

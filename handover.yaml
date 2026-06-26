@@ -1,124 +1,168 @@
 last_checkpoint:
-  time: '2026-06-26T10:12:21.612457+00:00'
-  summary: no files
-  total_files: 0
+  time: '2026-06-26T13:06:16.949186+00:00'
+  summary: QuotaTracker + 429 분기 + AGENTS.md 자동 생성 + 구형 gemini.py 삭제 + SQLite MCP
+    + open-newhand
+  total_files: 8
   recent_files:
-    data: []
-    docs: []
-    config: []
-    source: []
-    generated: []
+    source:
+    - lib/auth/quota_tracker.py
+    - proxies/gemini_openai.py
+    - scripts/gemini_quota.py
+    - scripts/sync_gemini_rules.py
+    - scripts/sqlite_mcp.py
+    - scripts/open-newhand.sh
+    config:
+    - .bashrc.d/claude-aliases (newhand auto-commit)
+    - .bashrc.d/opencode-aliases
+    - .config/opencode/opencode.json
+    - proxies/__init__.py
+    - lib/auth/key_loader.py
+    generated:
+    - /home/opc/AGENTS.md
   git: {}
   task: null
 decisions:
+- gemini.py(4430) + gemini_pool.py 삭제, gemini_openai.py(4431)로 통합
+- 'newhand/open-newhand: 세션 종료 후 자동 git commit/push'
+- AGENTS.md 동기화 sync_gemini_rules.py로 자동화, GEMINI.md 제거
+- 'RPD 추적 + 429 분기: retryDelay >=300s는 daily quota, <300s는 rate limit'
 - id: nd01-01
-  detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta
-    사망 → Pod A :8080+8000 port forwarding 차단. disabled 상태였으나 존재만으로 systemctl --user start 가능. init.scope (systemd user instance
-    startup)에서 trigger 확인됨. watchdog/timer/의존성 아님.'
+  detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py
+    --port 8000)가 port 8000 점유 → pasta 사망 → Pod A :8080+8000 port forwarding 차단. disabled
+    상태였으나 존재만으로 systemctl --user start 가능. init.scope (systemd user instance startup)에서
+    trigger 확인됨. watchdog/timer/의존성 아님.'
   status: open
 - id: nd01-02
-  detail: 'Legacy MCP 서비스 영구 제거: devforge-mcp.service → .service.disabled rename → rm 삭제. 재발 방지 완료.'
+  detail: 'Legacy MCP 서비스 영구 제거: devforge-mcp.service → .service.disabled rename →
+    rm 삭제. 재발 방지 완료.'
   status: open
 - id: nd01-03
-  detail: 이전 cycle (Jun 23) 17 extracted → 49 verified turns는 NLI 미수행 상태로 force-pass. 49 day_verify facts 모두 nli_llm=NULL,
-    verdict=pending. source='day_verify'는 reranker_recover.py 기본 범위 아닐 수 있어 수동 처리 또는 SQL UPDATE 필요.
+  detail: 이전 cycle (Jun 23) 17 extracted → 49 verified turns는 NLI 미수행 상태로 force-pass.
+    49 day_verify facts 모두 nli_llm=NULL, verdict=pending. source='day_verify'는 reranker_recover.py
+    기본 범위 아닐 수 있어 수동 처리 또는 SQL UPDATE 필요.
   status: open
 - id: nd01-04
-  detail: 'Slack 봇 crash (ModuleNotFoundError: lib.llm_client)와 MCP 기동은 동시성 이벤트일 뿐 인과관계 없음. slack.py 내 MCP 호출 로직 없음.'
+  detail: 'Slack 봇 crash (ModuleNotFoundError: lib.llm_client)와 MCP 기동은 동시성 이벤트일 뿐
+    인과관계 없음. slack.py 내 MCP 호출 로직 없음.'
   status: open
 - id: nd02-01
-  detail: 'OCI root 확장: /etc/fstab에서 /var/log, /var/tmp 항목 제거 완료. /var/log(4.4G) + /var/tmp(2.1G) → /opt/ai_data/expansion_bak/
-    백업 완료. LV 제거 blocked: tmux(4472) 및 활성 프로세스가 /var/tmp 점유, lazy umount 후에도 dmsetup/lvremove 실패. 최종 결정: 재부팅 → 싱글유저 모드에서 lv_tmp_new(3G)
-    + lv_logs(10G) + lv_tmp(10G, unmounted) 제거 → lvextend ocivolume/root -l +100%FREE → xfs_growfs / → mkdir /var/log /var/tmp
-    → 재부팅 → backup 복원 → 서비스 재시작.'
+  detail: 'OCI root 확장: /etc/fstab에서 /var/log, /var/tmp 항목 제거 완료. /var/log(4.4G) +
+    /var/tmp(2.1G) → /opt/ai_data/expansion_bak/ 백업 완료. LV 제거 blocked: tmux(4472)
+    및 활성 프로세스가 /var/tmp 점유, lazy umount 후에도 dmsetup/lvremove 실패. 최종 결정: 재부팅 → 싱글유저
+    모드에서 lv_tmp_new(3G) + lv_logs(10G) + lv_tmp(10G, unmounted) 제거 → lvextend ocivolume/root
+    -l +100%FREE → xfs_growfs / → mkdir /var/log /var/tmp → 재부팅 → backup 복원 → 서비스
+    재시작.'
   status: open
 - id: nd02-02
-  detail: Legacy devforge-mcp.service 제거 확인 완료. container-devforge-mcp.service (FastMCP Streamable HTTP, :8000) Quadlet 정상
-    기동 확인.
+  detail: Legacy devforge-mcp.service 제거 확인 완료. container-devforge-mcp.service (FastMCP
+    Streamable HTTP, :8000) Quadlet 정상 기동 확인.
   status: open
 - id: nd02-03
-  detail: Postgres container(data-pod)는 OCI root 확장 대상(/var/log, /var/tmp)과 무관 → 중단 불필요. /mnt/lv_db 정상 마운트 유지.
+  detail: Postgres container(data-pod)는 OCI root 확장 대상(/var/log, /var/tmp)과 무관 → 중단
+    불필요. /mnt/lv_db 정상 마운트 유지.
   status: open
 - id: nd03-01
-  detail: 'gemini.py REPL에서 한글 입력 시 화면 echo 깨짐 (readline이 UTF-8 멀티바이트 문자 폭 계산 실패). 실제 입력값은 정상. 해결: readline.parse_and_bind
-    set input-meta on / set convert-meta off / set output-meta on 추가.'
+  detail: 'gemini.py REPL에서 한글 입력 시 화면 echo 깨짐 (readline이 UTF-8 멀티바이트 문자 폭 계산 실패).
+    실제 입력값은 정상. 해결: readline.parse_and_bind set input-meta on / set convert-meta off
+    / set output-meta on 추가.'
   status: open
 - id: nd05-01
-  detail: 'Slot deadlock auto-detection in watchdog: _check_slot_deadlocks() in __init__.py, SLOT_STUCK_THRESHOLD=3 in state.py,
-    recover_slot_deadlock() in recovery.py. llama-server PR #22083 (--slot-prompt-similarity 0) workaround in pod-b-entrypoint.sh.
-    watchdog restarts Pod B on ≥2 processing slots stuck for ≥3 cycles.'
+  detail: 'Slot deadlock auto-detection in watchdog: _check_slot_deadlocks() in __init__.py,
+    SLOT_STUCK_THRESHOLD=3 in state.py, recover_slot_deadlock() in recovery.py. llama-server
+    PR #22083 (--slot-prompt-similarity 0) workaround in pod-b-entrypoint.sh. watchdog
+    restarts Pod B on ≥2 processing slots stuck for ≥3 cycles.'
   status: open
 - id: nd05-02
-  detail: 'Pod A port publishing failure (pasta crash): root cause = pasta ASSERTION fail + flow_hash crash (GitHub #19405,
-    #26073). Resolution: slirp4netns. Trade-off: 1/7 throughput but Pod A only runs reranker/polish/tiny (latency-insensitive).
+  detail: 'Pod A port publishing failure (pasta crash): root cause = pasta ASSERTION
+    fail + flow_hash crash (GitHub #19405, #26073). Resolution: slirp4netns. Trade-off:
+    1/7 throughput but Pod A only runs reranker/polish/tiny (latency-insensitive).
     Applied via pod-a.pod Network=slirp4netns.'
   status: open
 - id: nd05-03
-  detail: 'MCP --host 127.0.0.1 default caused rootlessport "Connection reset by peer": slirp4netns routes through tap0(10.0.2.x),
-    MCP must bind 0.0.0.0. Fixed mcp_entrypoint.sh --host 0.0.0.0.'
+  detail: 'MCP --host 127.0.0.1 default caused rootlessport "Connection reset by peer":
+    slirp4netns routes through tap0(10.0.2.x), MCP must bind 0.0.0.0. Fixed mcp_entrypoint.sh
+    --host 0.0.0.0.'
   status: open
 - id: nd05-04
-  detail: 'Stale model references cleanup: 5 files had outdated 14B/f16/Q4 comments. day-verifier was mistakenly changed to
-    9B Q8 → user caught it ("9b는 enricher 잖아") → reverted to Qwen2.5-Coder-7B Q8. Rule: port map comments in pod_manager.py
-    are SSOT, pod-b-entrypoint.sh comments are mirror.'
+  detail: 'Stale model references cleanup: 5 files had outdated 14B/f16/Q4 comments.
+    day-verifier was mistakenly changed to 9B Q8 → user caught it ("9b는 enricher 잖아")
+    → reverted to Qwen2.5-Coder-7B Q8. Rule: port map comments in pod_manager.py are
+    SSOT, pod-b-entrypoint.sh comments are mirror.'
   status: open
 - id: nd05-05
-  detail: 'PostgreSQL shared_buffers 4GB→512MB: restarted, verified effect. DB 668MB 기준 적정값. 동적 조정 불필요 확인 (PG가 자체 buffer 관리).'
+  detail: 'PostgreSQL shared_buffers 4GB→512MB: restarted, verified effect. DB 668MB
+    기준 적정값. 동적 조정 불필요 확인 (PG가 자체 buffer 관리).'
   status: open
 - id: nd05-06
-  detail: 'Aider Qwen wrapper: aider_qwen.py replaces gemini wrapper. Gemini SSL blocked (Oracle Cloud TLSV1_ALERT_INTERNAL_ERROR).
-    OpenRouter Qwen3 Coder 480B (:free) via QWEN_480B_API_KEY. Rule injection: infrastructure.md + llm-common-rule.md + llm-agent-rule.md
-    auto-attached via --read. alias aider=''python3 /opt/projects/server/scripts/aider_qwen.py'' in .bashrc.'
+  detail: 'Aider Qwen wrapper: aider_qwen.py replaces gemini wrapper. Gemini SSL blocked
+    (Oracle Cloud TLSV1_ALERT_INTERNAL_ERROR). OpenRouter Qwen3 Coder 480B (:free)
+    via QWEN_480B_API_KEY. Rule injection: infrastructure.md + llm-common-rule.md
+    + llm-agent-rule.md auto-attached via --read. alias aider=''python3 /opt/projects/server/scripts/aider_qwen.py''
+    in .bashrc.'
   status: open
 - id: nd05-07
-  detail: 'Aider real-world test: generated pytest for analyze_exit_code() with 30 parametrized test cases, all passed. Path
-    handling correct (unlike DeepSeek direct mode). $0.0019 cost. Qwen3 Coder 480B is competent for code generation. Free
-    tier rate-limited but usable with pauses.'
+  detail: 'Aider real-world test: generated pytest for analyze_exit_code() with 30
+    parametrized test cases, all passed. Path handling correct (unlike DeepSeek direct
+    mode). $0.0019 cost. Qwen3 Coder 480B is competent for code generation. Free tier
+    rate-limited but usable with pauses.'
   status: open
 - id: nd06-01
-  detail: OpenCode 1.17.11 installed globally via npm. Node.js v24.15.0. Works with Anthropic proxy (DeepSeek V4 Flash via
-    ANTHROPIC_BASE_URL). read-only and tool-using tasks verified. MCP native support confirmed (opencode mcp add --url/--env).
+  detail: OpenCode 1.17.11 installed globally via npm. Node.js v24.15.0. Works with
+    Anthropic proxy (DeepSeek V4 Flash via ANTHROPIC_BASE_URL). read-only and tool-using
+    tasks verified. MCP native support confirmed (opencode mcp add --url/--env).
   status: open
 - id: nd06-02
-  detail: 'Gemini OpenAI-compatible proxy (gemini_openai.py): FastAPI on 127.0.0.1:4431. OpenAI /v1/chat/completions → Gemini
-    native protocol translation. KeyRotator integration with 6 keys from secrets.env (round-robin, auto-backoff on 429). Bypasses
-    /etc/hosts redirect via hardcoded Google IPs (same pattern as proxies/gemini.py). Independent state file (~/.cache/devforge/gemini_openai_rotator_state.json)
-    — does NOT interfere with gemini.py (port 4430). Verified: non-streaming, streaming SSE, /v1/models all pass. systemd
-    user service enabled (boot auto-start).'
+  detail: 'Gemini OpenAI-compatible proxy (gemini_openai.py): FastAPI on 127.0.0.1:4431.
+    OpenAI /v1/chat/completions → Gemini native protocol translation. KeyRotator integration
+    with 6 keys from secrets.env (round-robin, auto-backoff on 429). Bypasses /etc/hosts
+    redirect via hardcoded Google IPs (same pattern as proxies/gemini.py). Independent
+    state file (~/.cache/devforge/gemini_openai_rotator_state.json) — does NOT interfere
+    with gemini.py (port 4430). Verified: non-streaming, streaming SSE, /v1/models
+    all pass. systemd user service enabled (boot auto-start).'
   status: open
 - id: nd06-03
-  detail: 'Extract LLM max_tokens D-approach (reverse-calc from CAP) finalization in extract_llm.py. _calc_max_tokens(text_len)
-    → ceil(300ch/fact) additive wanted vs CAP-reverse achievable → min(). TIMEOUT_PER_TOK=1.2, GEN_TIME_BUF=90, CAP=1800,
-    MIN_USEFUL_TOKENS=256, MAX_INPUT_CHARS_ADVERTISED=6500. Structured JSON logging (print+json.dumps) for 4 operational events:
-    max_tokens_overflow(2 subtypes), tokens_truncated, extract_skip_overflow. Concurrent prefill crash fixed (ThreadPoolExecutor
-    removed → sequential solo section-major). Long-turn truncation (118114e1, f1925ee3) root cause = hardcoded MAX_TOKENS_EXTRACT=512
-    — resolved by dynamic _calc_max_tokens. User sign-off obtained: 구조적 정합 + 운영 가시성 + 동시성 가정 명시. 3개 후속 항목(canary baseline,
+  detail: 'Extract LLM max_tokens D-approach (reverse-calc from CAP) finalization
+    in extract_llm.py. _calc_max_tokens(text_len) → ceil(300ch/fact) additive wanted
+    vs CAP-reverse achievable → min(). TIMEOUT_PER_TOK=1.2, GEN_TIME_BUF=90, CAP=1800,
+    MIN_USEFUL_TOKENS=256, MAX_INPUT_CHARS_ADVERTISED=6500. Structured JSON logging
+    (print+json.dumps) for 4 operational events: max_tokens_overflow(2 subtypes),
+    tokens_truncated, extract_skip_overflow. Concurrent prefill crash fixed (ThreadPoolExecutor
+    removed → sequential solo section-major). Long-turn truncation (118114e1, f1925ee3)
+    root cause = hardcoded MAX_TOKENS_EXTRACT=512 — resolved by dynamic _calc_max_tokens.
+    User sign-off obtained: 구조적 정합 + 운영 가시성 + 동시성 가정 명시. 3개 후속 항목(canary baseline,
     idle timeout SSE, structured logging) 논의 완료. 배포 승인됨.'
   status: open
 - id: nd06-04
-  detail: 'ChatML-style markers applied across all production prompt/context code (6 files). Convention: === SOURCE_xxx ===
-    (underscore) for factual/source data, --- REASONING_xxx --- (dash) for reasoning traces, === CONTEXT_xxx === (underscore)
-    for derived/context data. extract_llm.py: REASONING_THINKING + CONTEXT_ENTITIES. enrich.py: SOURCE_USER_TURN + REASONING_THINKING
-    + SOURCE_TEXT + CONTEXT_FACTS + verifier prompt (SOURCE_TURN + CONTEXT_MCP). prj/core.py: SOURCE_TURN + CONTEXT_FACTS
-    + CONTEXT_ENRICH + CONTEXT_REVIEW. verify/core.py: SOURCE_TURN + CONTEXT_FINDINGS. pipeline_common.py: CONTEXT_PIPELINE.
-    night_cycle.py: CONTEXT_NIGHT_DEBATE + CONTEXT_P_FINDINGS + CONTEXT_R_VERDICTS + CONTEXT_J_DECISION.'
+  detail: 'ChatML-style markers applied across all production prompt/context code
+    (6 files). Convention: === SOURCE_xxx === (underscore) for factual/source data,
+    --- REASONING_xxx --- (dash) for reasoning traces, === CONTEXT_xxx === (underscore)
+    for derived/context data. extract_llm.py: REASONING_THINKING + CONTEXT_ENTITIES.
+    enrich.py: SOURCE_USER_TURN + REASONING_THINKING + SOURCE_TEXT + CONTEXT_FACTS
+    + verifier prompt (SOURCE_TURN + CONTEXT_MCP). prj/core.py: SOURCE_TURN + CONTEXT_FACTS
+    + CONTEXT_ENRICH + CONTEXT_REVIEW. verify/core.py: SOURCE_TURN + CONTEXT_FINDINGS.
+    pipeline_common.py: CONTEXT_PIPELINE. night_cycle.py: CONTEXT_NIGHT_DEBATE + CONTEXT_P_FINDINGS
+    + CONTEXT_R_VERDICTS + CONTEXT_J_DECISION.'
   status: open
 known_issues:
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
   resolved: false
-- text: '(Deprecated) Gemini API SSL blocked from Oracle Cloud no longer blocks connections from gemini_openai.py — proxy
-    uses raw SSL sockets with hardcoded IPs (bypasses /etc/hosts and any DNS-level blocks). Native Gemini protocol (proxies/gemini.py)
-    also works independently. Reference: original issue nki05-01 now resolved for both proxies.'
+- text: '(Deprecated) Gemini API SSL blocked from Oracle Cloud no longer blocks connections
+    from gemini_openai.py — proxy uses raw SSL sockets with hardcoded IPs (bypasses
+    /etc/hosts and any DNS-level blocks). Native Gemini protocol (proxies/gemini.py)
+    also works independently. Reference: original issue nki05-01 now resolved for
+    both proxies.'
   resolved: false
-- text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
-    all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
+- text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR.
+    DeepSeek/OpenAI/OpenRouter all work. Proxy/rotation infrastructure for Gemini
+    unusable from this server.'
   resolved: false
 - id: nki01-01
-  detail: 이전 cycle 49 day_verify facts NLI/reranker 없이 force-pass. reranker_recover.py 기본 조건에 source='day_verify' 포함 여부 확인
-    필요. 미포함 시 SQL 일괄 UPDATE 필요.
+  detail: 이전 cycle 49 day_verify facts NLI/reranker 없이 force-pass. reranker_recover.py
+    기본 조건에 source='day_verify' 포함 여부 확인 필요. 미포함 시 SQL 일괄 UPDATE 필요.
   resolved: false
 - id: nki01-02
-  detail: cli.py status --json models.pod-a = ["?", "?", "?"]. Pod A /v1/models 응답 문제 지속. Pod A 기능상 정상 작동 중.
+  detail: cli.py status --json models.pod-a = ["?", "?", "?"]. Pod A /v1/models 응답
+    문제 지속. Pod A 기능상 정상 작동 중.
   resolved: false
 - id: nki01-03
   detail: turns 테이블에 updated_at 컬럼 없음. pipeline_state 변경 추적 어려움. (created_at만 존재)
@@ -127,38 +171,52 @@ known_issues:
   detail: CONTRADICTION=0 미해결. 신규 GSAR COMPLEMENTARY 4-way NLI 첫 결과 확인 후 재평가 필요.
   resolved: false
 - id: nki02-01
-  detail: 'OCI root 확장 미완료. /etc/fstab 정리 완료, 백업 완료(/opt/ai_data/expansion_bak/var_log, /opt/ai_data/expansion_bak/var_tmp).
-    Pod A+B 현재 의도적으로 DOWN 상태. 다음 절차 필요: reboot → single-user or rescue → lvremove ocivolume/lv_tmp_new ocivolume/lv_logs ocivolume/lv_tmp
-    → lvextend ocivolume/root -l +100%FREE → xfs_growfs / → mkdir /var/log /var/tmp → sync → reboot → restore rsync backup
-    /opt/ai_data/expansion_bak/ → systemctl --user start devforge-pod-a devforge-pod-b devforge-watchdog devforge-slack-interactive
+  detail: 'OCI root 확장 미완료. /etc/fstab 정리 완료, 백업 완료(/opt/ai_data/expansion_bak/var_log,
+    /opt/ai_data/expansion_bak/var_tmp). Pod A+B 현재 의도적으로 DOWN 상태. 다음 절차 필요: reboot
+    → single-user or rescue → lvremove ocivolume/lv_tmp_new ocivolume/lv_logs ocivolume/lv_tmp
+    → lvextend ocivolume/root -l +100%FREE → xfs_growfs / → mkdir /var/log /var/tmp
+    → sync → reboot → restore rsync backup /opt/ai_data/expansion_bak/ → systemctl
+    --user start devforge-pod-a devforge-pod-b devforge-watchdog devforge-slack-interactive
     → sudo systemctl start caddy netdata.'
   resolved: false
-- text: OpenCode not yet fully tested in TUI mode (only headless opencode run verified). MCP server connection via opencode
-    mcp add not tested with devforge-mcp container. OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
+- text: OpenCode not yet fully tested in TUI mode (only headless opencode run verified).
+    MCP server connection via opencode mcp add not tested with devforge-mcp container.
+    OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
     pointing to local proxy.
   resolved: false
 - text: PostgreSQL shared_buffers 512MB — applied via restart. Ok.
   resolved: false
-- text: 'Slot deadlock watchdog is reactive not preventive: --slot-prompt-similarity 0 reduces but doesn''t eliminate risk.
-    If deadlock persists after Pod B restart, need different cache-reuse strategy (--cache-reuse 0 as last resort).'
+- text: 'Slot deadlock watchdog is reactive not preventive: --slot-prompt-similarity
+    0 reduces but doesn''t eliminate risk. If deadlock persists after Pod B restart,
+    need different cache-reuse strategy (--cache-reuse 0 as last resort).'
   resolved: false
+- detail: arm64 npm better-sqlite3 컴파일 실패 → Python MCP로 대체
+  resolved: true
 completed_log:
-- OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
-- PostgreSQL tuning (effective_io_concurrency=200, effective_cache_size=1GB, shared_buffers=512MB). day-cycle.timer removed
-  from 5 files. extract.py deadlock fixed (recover_8082 missing lock.release). Server perf analysis completed (no-mmap keep,
-  netdata fine, zram keep). systemctl kill stuck day_cycle. 48 scanned turns pending watchdog resume.
-- Slot deadlock watchdog auto-detection + recovery. Pod A slirp4netns. MCP --host 0.0.0.0. Stale model refs cleanup (14B→8B,
-  f16→Q8). PostgreSQL shared_buffers restart. --slot-prompt-similarity 0. Aider Qwen wrapper. Gemini SSL blocked.
-- OpenCode 1.17.11 npm install + verification (Anthropic proxy / DeepSeek V4 Flash). Gemini OpenAI-compatible proxy (gemini_openai.py)
-  built with FastAPI + raw SSL sockets + KeyRotator (6 keys round-robin). systemd service gemini-openai-proxy.service on port
-  4431. Verified non-streaming, streaming SSE, /v1/models. OpenCode config points to local proxy. Aider still available but
-  OpenCode tested as alternative.
-- OpenCode AGENTS.md rules research. MCP installation confirmed at /home/opc/.claude/mcp.json (13 servers). Added MCP Tools
-  usage table to llm-agent-rule.md (shared by Claude Code + OpenCode). brave-search simplified (no Claude/OpenCode divergence).
-- 'Extract LLM max_tokens D-approach finalization. Sequential prefill crash fix. Long-turn truncation resolved. Structured
-  JSON logging (4 events). 3-phase review 완료 → 배포 승인. extract_llm.py: _calc_max_tokens, _calc_timeout, MAX_INPUT_CHARS_ADVERTISED
+- OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked
+  at LV removal.
+- PostgreSQL tuning (effective_io_concurrency=200, effective_cache_size=1GB, shared_buffers=512MB).
+  day-cycle.timer removed from 5 files. extract.py deadlock fixed (recover_8082 missing
+  lock.release). Server perf analysis completed (no-mmap keep, netdata fine, zram
+  keep). systemctl kill stuck day_cycle. 48 scanned turns pending watchdog resume.
+- Slot deadlock watchdog auto-detection + recovery. Pod A slirp4netns. MCP --host
+  0.0.0.0. Stale model refs cleanup (14B→8B, f16→Q8). PostgreSQL shared_buffers restart.
+  --slot-prompt-similarity 0. Aider Qwen wrapper. Gemini SSL blocked.
+- OpenCode 1.17.11 npm install + verification (Anthropic proxy / DeepSeek V4 Flash).
+  Gemini OpenAI-compatible proxy (gemini_openai.py) built with FastAPI + raw SSL sockets
+  + KeyRotator (6 keys round-robin). systemd service gemini-openai-proxy.service on
+  port 4431. Verified non-streaming, streaming SSE, /v1/models. OpenCode config points
+  to local proxy. Aider still available but OpenCode tested as alternative.
+- OpenCode AGENTS.md rules research. MCP installation confirmed at /home/opc/.claude/mcp.json
+  (13 servers). Added MCP Tools usage table to llm-agent-rule.md (shared by Claude
+  Code + OpenCode). brave-search simplified (no Claude/OpenCode divergence).
+- 'Extract LLM max_tokens D-approach finalization. Sequential prefill crash fix. Long-turn
+  truncation resolved. Structured JSON logging (4 events). 3-phase review 완료 → 배포
+  승인. extract_llm.py: _calc_max_tokens, _calc_timeout, MAX_INPUT_CHARS_ADVERTISED
   추가. import logging 제거 → print+json.dumps로 복원.'
-- 'Extract max_tokens D-approach finalization (reverse-calc from CAP, structured JSON logging). ChatML-style markers migration
-  (6 files, 3-tier convention: INPUT/CONTEXT/DATA + REASONING <<< >>>, START/END restoration, 5-point review fix: ---→<<<
-  >>>, entities→entity, CONTEXT TODO). newhand script reviewed + patches (typ fix, instructions.md guard). DB reset (review_facts+embeddings
-  truncated, pipeline_state→pending). Watchdog restarted. 배포 승인됨.'
+- 'Extract max_tokens D-approach finalization (reverse-calc from CAP, structured JSON
+  logging). ChatML-style markers migration (6 files, 3-tier convention: INPUT/CONTEXT/DATA
+  + REASONING <<< >>>, START/END restoration, 5-point review fix: ---→<<< >>>, entities→entity,
+  CONTEXT TODO). newhand script reviewed + patches (typ fix, instructions.md guard).
+  DB reset (review_facts+embeddings truncated, pipeline_state→pending). Watchdog restarted.
+  배포 승인됨.'
