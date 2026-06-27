@@ -7,6 +7,7 @@ Tools:
   - fact_search: Semantic search on review_facts (pgvector 4096d)
   - mem_save: Store AI conversation memory
   - mem_search: Search stored memories by text (pg_trgm)
+  - search_similarity: Hybrid BM25+Dense semantic search on turns (RRF fusion)
   - search_conversations: List/search conversations
   - get_conversation: Get full conversation thread
   - search_turns: Search turns with filters
@@ -223,6 +224,66 @@ async def mem_search(query: str, tag: Optional[str] = None) -> str:
             "created_at": r.get("created_at", ""),
         })
     return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
+
+
+@mcp.tool(name="search_similarity")
+async def search_similarity(query: str, limit: int = 10,
+                            rerank: bool = True,
+                            rerank_candidates: int = 50,
+                            max_tokens: int = 4096) -> str:
+    """의미 기반 유사도 검색. BM25(키워드) + Dense(벡터) 하이브리드 RRF 융합 + Cross-Encoder 리랭커.
+
+    Stage 1: BM25 (FTS5) + Dense (pgvector ANN) → RRF fusion
+    Stage 2: Cross-encoder reranker (Qwen3-Reranker-4B) on top candidates
+    Stage 3: Token-budgeted output — 결과 총 토큰이 max_tokens를 넘지 않도록 자동 조정
+
+    각 결과에는 대화 메타데이터(conv_title, conv_source, conv_model)와
+    rerank_score가 포함되어 LLM이 최종 판단에 활용할 수 있습니다.
+
+    Args:
+        query: 검색할 질문 또는 키워드 (자연어)
+        limit: 반환할 결과 수 (기본 10, 최대 30)
+        rerank: Cross-encoder reranker 사용 여부 (기본 True)
+        rerank_candidates: 리랭커에 전달할 상위 후보 수 (기본 50, 최대 100)
+        max_tokens: 출력 결과의 최대 추정 토큰 수 (기본 4096, 최대 8192)
+    """
+    import asyncio
+    from lib.search.hybrid import hybrid_search
+    limit = max(1, min(limit, 30))
+    rerank_candidates = max(10, min(rerank_candidates, 100))
+    max_tokens = max(1024, min(max_tokens, 8192))
+
+    result = await asyncio.to_thread(
+        hybrid_search, query, limit,
+        rerank=rerank,
+        rerank_candidates=rerank_candidates,
+    )
+
+    # --- Token budget enforcement ---
+    results_list = result.get("results", [])
+    meta = result.get("meta", {})
+
+    if results_list:
+        trimmed = []
+        est_total = len(json.dumps({"results": [], "meta": meta}))  # base overhead
+        token_buf = max_tokens - 100  # safety margin
+
+        for r in results_list:
+            # Estimate tokens for this result: JSON string / 2 (conservative for mixed Korean/English)
+            r_json = json.dumps(r, ensure_ascii=False)
+            est_tokens = len(r_json) // 2
+            if est_total + est_tokens > token_buf:
+                break
+            trimmed.append(r)
+            est_total += est_tokens
+
+        result["results"] = trimmed
+        result["meta"] = meta
+        if len(trimmed) < len(results_list):
+            meta["truncated"] = len(results_list) - len(trimmed)
+            meta["truncated_reason"] = "token_budget"
+
+    return json.dumps(result, ensure_ascii=False)
 
 
 # ── Phase 1 Tools ─────────────────────────────────────────────

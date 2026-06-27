@@ -43,6 +43,58 @@ BATCH_LIMIT = 50     # max turns per run (sliced via MAX_BATCH_SIZE)
 BATCH_TIMEOUT = 1800  # per batch request (30min safety — model cold load ~3.5min + processing)
 MAX_CYCLE = 86400     # 24hr max for full 8.6K turn embed
 SLOT_CTX = 5000       # token budget per slot (--ctx-size 12288 / --parallel 2 * 0.8 margin)
+CHUNK_MAX_TOKENS = 512
+SHORT_TURN_CHARS = 200
+EMBED_DIMS = 2048
+
+import re
+
+def truncate_to_mrl(vector: list[float], target_dims: int = EMBED_DIMS) -> list[float]:
+    truncated = vector[:target_dims]
+    norm = sum(x * x for x in truncated) ** 0.5
+    if norm > 0:
+        truncated = [x / norm for x in truncated]
+    return truncated
+
+def split_sentences(text: str) -> list[str]:
+    text = text.replace('\r\n', '\n')
+    sents = re.split(r'(?<=[.!?])\s+', text)
+    result = []
+    for s in sents:
+        paragraphs = re.split(r'\n\n+', s.strip())
+        result.extend(p for p in paragraphs if p.strip())
+    return result
+
+def estimate_tokens(text: str) -> int:
+    return max(1, len(text) * 2 // 5)
+
+def chunk_text(text: str) -> list[tuple[str, int]]:
+    if len(text) < SHORT_TURN_CHARS:
+        return [(text, 0)]
+    sentences = split_sentences(text)
+    chunks: list[tuple[str, int]] = []
+    cur: list[str] = []
+    cur_tok = 0
+    for sent in sentences:
+        sent_tok = estimate_tokens(sent)
+        if sent_tok > CHUNK_MAX_TOKENS:
+            if cur:
+                chunks.append((' '.join(cur), len(chunks)))
+                cur, cur_tok = [], 0
+            max_chars = CHUNK_MAX_TOKENS * 5 // 2
+            chunks.append((sent[:max_chars].rstrip(), len(chunks)))
+        elif cur_tok + sent_tok > CHUNK_MAX_TOKENS:
+            if cur:
+                chunks.append((' '.join(cur), len(chunks)))
+            cur, cur_tok = [sent], sent_tok
+        else:
+            cur.append(sent)
+            cur_tok += sent_tok
+    if cur:
+        chunks.append((' '.join(cur), len(chunks)))
+    if not chunks:
+        chunks = [(text[:CHUNK_MAX_TOKENS * 5 // 2], 0)]
+    return chunks
 
 
 # ── Background liveness heartbeat ────────────────────────────────────
@@ -85,7 +137,7 @@ def embed_batch(texts: list[str], timeout: int = 600) -> Optional[list[Optional[
     try:
         vecs: dict[int, list] = {}
         for item in data["data"]:
-            vecs[item["index"]] = item["embedding"]
+            vecs[item["index"]] = truncate_to_mrl(item["embedding"])
         return [vecs.get(i) for i in range(len(texts))]
     except (KeyError, TypeError) as e:
         log(f"  [error] parse failed: {e}")
@@ -93,14 +145,16 @@ def embed_batch(texts: list[str], timeout: int = 600) -> Optional[list[Optional[
 
 
 def get_unembedded_turns(limit: int):
-    """Return turns without embedding record in embeddings table."""
+    """Return turns without a complete set of embedding chunks."""
     rows = psql_json(
         f"SELECT t.id, t.user_turn_clean_polished, t.text_clean_polished, "
         f"  t.user_turn, t.text, t.created_at::text, t.est_chars "
         f"FROM turns t "
-        f"LEFT JOIN embeddings e ON e.source_type = 'turn' AND e.source_id = t.id "
-        f"  AND e.model_name = 'qwen3-embedding-8b-v1' "
-        f"WHERE e.id IS NULL "
+        f"WHERE NOT EXISTS ("
+        f"  SELECT 1 FROM embeddings e "
+        f"  WHERE e.source_type = 'turn' AND e.source_id = t.id "
+        f"    AND e.model_name = 'qwen3-embedding-8b-v1'"
+        f") "
         f"  AND t.pipeline_state = 'polished' "
         f"  AND t.text_clean_polished IS NOT NULL "
         f"  AND (t.retry_count IS NULL OR t.retry_count < 3) "
@@ -125,15 +179,15 @@ def get_unembedded_facts(limit: int):
     return rows or []
 
 
-def store_embedding(turn_id: str, vector: list, embed_text: str):
+def store_embedding(turn_id: str, vector: list, embed_text: str, chunk_index: int = 0):
     """INSERT INTO embeddings for a turn. UPSERT on conflict."""
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
     safe_text = embed_text[:8000].replace("'", "''")
     psql_ok(
-        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name) "
+        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name, chunk_index) "
         f"VALUES ('turn', '{esc_sql(turn_id)}'::uuid, '{safe_text}', "
-        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1') "
-        f"ON CONFLICT (source_type, source_id, model_name) DO UPDATE SET "
+        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1', {chunk_index}) "
+        f"ON CONFLICT (source_type, source_id, model_name, chunk_index) DO UPDATE SET "
         f"  embedding = EXCLUDED.embedding, embed_text = EXCLUDED.embed_text, "
         f"  created_at = now()"
     )
@@ -209,6 +263,26 @@ def main():
     log(f"Embed Batch — {mode} (max_batch={MAX_BATCH_SIZE})")
     log("=" * 60)
 
+    if not feedback_mode and not facts_mode:
+        orphaned = psql_json(
+            "SELECT count(*) as cnt FROM embeddings e "
+            "WHERE e.source_type = 'turn' AND e.model_name = 'qwen3-embedding-8b-v1' "
+            "AND NOT EXISTS ("
+            "  SELECT 1 FROM turns t "
+            "  WHERE t.id = e.source_id AND t.pipeline_state = 'embedded'"
+            ")"
+        )
+        if orphaned and orphaned[0].get("cnt", 0) > 0:
+            log(f"  [cleanup] removing {orphaned[0]['cnt']} orphaned embedding chunks")
+            psql_ok(
+                "DELETE FROM embeddings e "
+                "WHERE e.source_type = 'turn' AND e.model_name = 'qwen3-embedding-8b-v1' "
+                "AND NOT EXISTS ("
+                "  SELECT 1 FROM turns t "
+                "  WHERE t.id = e.source_id AND t.pipeline_state = 'embedded'"
+                ")"
+            )
+
     preflight_checks("embed_batch.py", required_ports={8081})
     # Ensure embedding model is running on 8081 (model identity check)
     if not ensure_model('embeder', skip_if_healthy=True):
@@ -228,33 +302,36 @@ def main():
         log(f"  [ok] No unembedded {mode.lower()}")
         return
 
-    # Pre-process: prepare text
-    prepared = []
+    # Pre-process: prepare text with sentence-level chunking
+    prepared = []  # (action, row, text, chunk_index)
     for row in rows:
         if feedback_mode:
             text = row.get("evidence_text", "") or ""
         elif facts_mode:
             text = row.get("evidence", "") or ""
         else:
-            user = row.get("user_turn_clean_polished") or row.get("user_turn_clean") or ""
-            text = row.get("text_clean_polished") or row.get("text_clean") or ""
-            text = f"{user} {text}".strip()
+            user = (row.get("user_turn_clean_polished") or row.get("user_turn_clean") or "")
+            resp = (row.get("text_clean_polished") or row.get("text_clean") or "")
+            text = f"{user} {resp}".strip()
         if not text:
-            prepared.append(("skip", row, None))
+            prepared.append(("skip", row, None, None))
         else:
-            if len(text) > 8192:
-                text = text[:8192]
-            prepared.append(("embed", row, text))
+            if feedback_mode or facts_mode:
+                prepared.append(("embed", row, text[:8192], 0))
+            else:
+                chunks = chunk_text(text)
+                for ct, ci in chunks:
+                    prepared.append(("embed", row, ct[:8192], ci))
 
-    emb_rows = [(t, p) for (s, t, p) in prepared if s == "embed"]
-    skip_count = sum(1 for s, _, _ in prepared if s == "skip")
+    emb_rows = [(t, p, c) for (s, t, p, c) in prepared if s == "embed"]
+    skip_count = sum(1 for s, _, _, _ in prepared if s == "skip")
 
     log(f"  Found {len(rows)} {mode.lower()}: {len(emb_rows)} to embed, {skip_count} empty/skip")
 
     ok_count = 0
     fail_count = 0
 
-    for row, _ in [(t, p) for s, t, p in prepared if s == "skip"]:
+    for row, _ in [(t, p) for s, t, p, c in prepared if s == "skip"]:
         log(f"  SKIP (empty) {row.get('created_at','')[:19]}")
 
     # Build batches dynamically by estimated token budget
@@ -264,8 +341,7 @@ def main():
     for item in emb_rows:
         text = item[1]
         row = item[0]
-        # Use DB-calculated est_chars as fallback for character estimation
-        est = row.get("est_chars") or len(text) * 2 // 3 or 1
+        est = max(1, len(text) * 2 // 3)
         if est > SLOT_CTX:
             if cur_batch:
                 batches.append(cur_batch)
@@ -286,11 +362,13 @@ def main():
 
     log(f"  Built {len(batches)} batches (max {MAX_BATCH_SIZE} texts / ~{SLOT_CTX} tok per batch)")
 
+    turn_chunk_progress: dict[str, dict] = {}
+
     for bi, batch in enumerate(batches, 1):
         heartbeat("embed_batch")
 
-        batch_rows = [t for t, _ in batch]
-        batch_texts = [p for _, p in batch]
+        batch_rows = [t for t, _, _ in batch]
+        batch_texts = [p for _, p, _ in batch]
 
         if dry_run:
             for row in batch_rows:
@@ -307,20 +385,26 @@ def main():
             fail_count += len(batch_rows)
             continue
 
-        for (row, text), vec in zip(batch, vectors):
+        for (row, text, ci), vec in zip(batch, vectors):
             if vec is not None:
                 if feedback_mode:
                     store_feedback_embedding(row['id'], vec, text)
                 elif facts_mode:
                     store_fact_embedding(row['id'], vec, text)
                 else:
-                    store_embedding(row['id'], vec, text)
-                    psql_ok(f"UPDATE turns SET pipeline_state = 'embedded' "
-                            f"WHERE id = '{esc_sql(row['id'])}'::uuid")
+                    store_embedding(row['id'], vec, text, ci)
+                    tid = row['id']
+                    if tid not in turn_chunk_progress:
+                        total = sum(1 for _, r, _, _ in prepared if r['id'] == tid)
+                        turn_chunk_progress[tid] = {'total': total, 'ok': 0}
+                    turn_chunk_progress[tid]['ok'] += 1
+                    if turn_chunk_progress[tid]['ok'] >= turn_chunk_progress[tid]['total']:
+                        psql_ok(f"UPDATE turns SET pipeline_state = 'embedded' "
+                                f"WHERE id = '{esc_sql(tid)}'::uuid")
                 ok_count += 1
             else:
                 fail_count += 1
-                log(f"  [warn] null vector for {row.get('created_at','')[:19]}")
+                log(f"  [warn] null vector for {row.get('created_at','')[:19]} chunk {ci}")
                 if not facts_mode and not feedback_mode:
                     r = psql_json(f"""
                         UPDATE turns SET retry_count = COALESCE(retry_count, 0) + 1
@@ -328,10 +412,12 @@ def main():
                         RETURNING retry_count
                     """)
                     if r and r[0].get('retry_count', 0) >= 3:
-                        store_embedding(row['id'], [0.0] * 4096, text or "(sentinel)")
+                        store_embedding(row['id'], [0.0] * 4096, text or "(sentinel)", 0)
+                        psql_ok(f"UPDATE turns SET pipeline_state = 'embedded' "
+                                f"WHERE id = '{esc_sql(row['id'])}'::uuid")
                         log(f"  [skip] {row.get('created_at','')[:19]} — 3 failures, sentinel stored")
 
-        log(f"  batch {bi}/{len(batches)} ({len(batch)} texts, ~{sum(len(p) for _, p in batch)//2} est tok) {elapsed:.1f}s")
+        log(f"  batch {bi}/{len(batches)} ({len(batch)} texts, ~{sum(len(p) for _, p, _ in batch)//2} est tok) {elapsed:.1f}s")
 
     elapsed = time.monotonic() - t_start
     log(f"Embed batch done: {ok_count} ok, {fail_count} failed, {elapsed:.0f}s")

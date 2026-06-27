@@ -4,13 +4,12 @@
 """Polish Batch Pipeline — Kiwi(user) + Hanja substitution(text/thinking) + Verify.
 
 user_turn_clean already contains Kiwi typo correction (applied during text_clean.py).
-This pipeline detects Kiwi-introduced changes, scores them via reranker, and
+This pipeline detects Kiwi-introduced changes and
 optionally verifies diffs with the polisher LLM (--no-llm skips verify).
 
 Phase 1 — Kiwi diff detection (user_turn vs user_turn_clean).
 Phase 2 — Hanja substitution (text/thinking): deterministic 한자→한글.
-Phase 3 — Reranker NLI on Kiwi diff (all turns).
-Phase 4 — LLM verify diffs (skip with --no-llm).
+Phase 3 — LLM verify diffs (skip with --no-llm).
 DB write — Kiwi output as user_turn_clean_polished.
 
 Usage:
@@ -35,9 +34,8 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql_json, psql_ok, esc_sql
 from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
+from lib.llm_client import call_llm
 from lib.watchdog.messenger import heartbeat, resolve_pulse
-from lib.common import context_limit
 
 import hanja
 
@@ -156,16 +154,16 @@ def _extract_diffs(original: str, corrected: str, max_pairs: int = 5) -> str:
     return "\n\n".join(f"=== Change {i+1} ===\n{c}" for i, c in enumerate(changes))
 
 
-def _verify_diffs(diff_text: str) -> bool:
+def _verify_diffs(diff_text: str) -> Optional[bool]:
     """Verify changed spans — uses polisher for accuracy. Single call, no retry."""
     if not diff_text.strip():
         return True
     prompt = VERIFY_DIFF_PROMPT.format(changes=diff_text)
-    timeout = max(300, min(900, len(diff_text) * 0.5))
+    timeout = max(180, min(600, len(diff_text) * 0.3))
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
-            model="polisher", max_tokens=512, temperature=0.0,
+            model="polisher", max_tokens=128, temperature=0.0,
             timeout=int(timeout), json_mode=True, return_meta=True,
         )
         parsed = parse_llm_json(_extract_json(meta["content"]))
@@ -176,8 +174,8 @@ def _verify_diffs(diff_text: str) -> bool:
                 print(f"    [verify] FAIL — {reason}", flush=True)
             return ok
     except Exception as e:
-        print(f"  [polish] verify diffs failed: {e}", flush=True)
-    return False
+        print(f"  [polish] verify diffs skipped (LLM failed): {e}", flush=True)
+    return None
 
 
 def _extract_json(text: str) -> str:
@@ -203,8 +201,7 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
 
     Phase 1 — Kiwi diff detection: user_turn vs user_turn_clean (already Kiwi-corrected).
     Phase 2 — Hanja substitution (text/thinking): deterministic 한자→한글.
-    Phase 3 — Reranker NLI on Kiwi-introduced diffs (all turns).
-    Phase 4 — LLM verify diffs with polisher (skip with --no-llm).
+    Phase 3 — LLM verify diffs with polisher (skip with --no-llm).
     """
     # ── Phase 1: Kiwi diff detection ──
     # user_turn_clean includes Kiwi typo correction (applied in text_clean.py).
@@ -238,38 +235,18 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
         print(f"    [hanja] text={h_text}/{len(sub_batch)}, thinking={h_think}/{len(sub_batch)} substituted",
               flush=True)
 
-    # ── Phase 3: Reranker NLI on Kiwi-generated user_turn diffs ──
+    # ── Phase 3: LLM verify Kiwi diffs with polisher ──
     reverted: set = set()
-    for row in sub_batch:
-        tid = row["id"]
-        raw_ut = row.get("user_turn", "") or ""
-        kiwied_ut = row.get("user_turn_clean", "") or ""
-        if not raw_ut or not kiwied_ut or raw_ut == kiwied_ut:
-            continue
-        cos = reranker_score(context_limit(kiwied_ut), context_limit(raw_ut))
-        nli_v = reranker_nli_verdict(cos)
-        score = round(cos * 100, 1)
-        if nli_v == "UNGROUNDED":
-            print(f"    [rerank] {tid[:8]} — Kiwi UNGROUNDED (score={score}), reverting to raw", flush=True)
-            reverted.add(tid)
-        elif nli_v == "AMBIGUOUS":
-            print(f"    [rerank] {tid[:8]} — Kiwi ambiguous (score={score})", flush=True)
-        else:
-            print(f"    [rerank] {tid[:8]} — Kiwi grounded (score={score})", flush=True)
-
-    # ── Phase 4: LLM verify Kiwi diffs with polisher (batch, 0→1 switch to polisher) ──
     if not no_llm:
         for row in sub_batch:
             tid = row["id"]
-            if tid in reverted:
-                continue
             raw_ut = row.get("user_turn", "") or ""
             kiwied_ut = row.get("user_turn_clean", "") or ""
             if raw_ut and kiwied_ut and raw_ut != kiwied_ut:
                 diff_text = _extract_diffs(raw_ut, kiwied_ut)
                 ok = _verify_diffs(diff_text)
-                if not ok:
-                    print(f"    [verify] {tid[:8]} — Kiwi diff REJECTED by polisher, reverting", flush=True)
+                if ok is False:
+                    print(f"    [verify] {tid[:8]} — Kiwi diff REJECTED, reverting", flush=True)
                     reverted.add(tid)
 
     # ── DB write ──
@@ -331,10 +308,8 @@ def main():
         if a == "--turn-id" and i + 1 < len(sys.argv):
             turn_ids.append(sys.argv[i + 1])
 
-    # Polisher runs on Pod A router (:8080) — no Pod B model switch needed
     if not no_llm:
-        from lib.pod_manager import ensure_model, model_info
-        print(f"  Polisher available via Pod A router (:8080)", flush=True)
+        print(f"  Polisher available via Pod A router (:8083)", flush=True)
 
     # Register heartbeat pulse + SIGTERM cleanup
     if not no_llm:
@@ -345,9 +320,9 @@ def main():
 
     print("=" * 60, flush=True)
     if no_llm:
-        print("Polish Batch — Kiwi + reranker only (no verify LLM)", flush=True)
+        print("Polish Batch — Kiwi only (no verify LLM)", flush=True)
     else:
-        print("Polish Batch — Kiwi + reranker + verify(polisher)", flush=True)
+        print("Polish Batch — Kiwi + verify(polisher)", flush=True)
     print("=" * 60, flush=True)
 
     # Advance already-polished turns: cleaned → polished

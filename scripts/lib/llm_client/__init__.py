@@ -14,7 +14,7 @@ from lib.llm_client.recovery import is_8082_connection_error, recover_8082, _mod
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "extractor":    {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300},
-    "polisher":     {"port": 8080, "temp": 0.0,  "max_tokens": 512,  "timeout": 600},
+    "polisher":     {"port": 8083, "temp": 0.0,  "max_tokens": 512,  "timeout": 600},
     "proposer":     {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},
     "reviewer":     {"port": 8083, "temp": 0.10, "max_tokens": 400,  "timeout": 480},
     "day-verify":{"port": 8082, "temp": 0.0,  "max_tokens": 512,  "timeout": 120},

@@ -1,8 +1,13 @@
 last_checkpoint:
-  time: '2026-06-26T23:05:33.192026+00:00'
-  summary: open-newhand() 0바이트 config 버그 수정 — printf+mktemp+OPENCODE_CONFIG_CONTENT, newhand() proc chain || break
-  total_files: 3
-  recent_files: {}
+  time: '2026-06-27T00:29:31.122578+00:00'
+  summary: no files
+  total_files: 0
+  recent_files:
+    data: []
+    docs: []
+    config: []
+    source: []
+    generated: []
   git: {}
   task: null
 decisions:

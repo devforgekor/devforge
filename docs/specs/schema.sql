@@ -98,6 +98,27 @@ CREATE INDEX IF NOT EXISTS idx_mcp_dec_created ON mcp_dec(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mcp_dec_summary ON mcp_dec USING GIN (summary gin_trgm_ops);
 
 -- ============================================================
+-- 10. Embeddings (vector search)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS embeddings (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_type     TEXT NOT NULL,           -- 'turn' | 'review_fact' | 'feedback_example'
+    source_id       UUID NOT NULL,
+    embed_text      TEXT NOT NULL,
+    embedding       vector(2048),
+    model_name      TEXT NOT NULL DEFAULT 'qwen3-embedding-8b-v1',
+    chunk_index     INTEGER NOT NULL DEFAULT 0,  -- 0-based chunk index for long turns
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_unique
+    ON embeddings (source_type, source_id, model_name, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_embeddings_source
+    ON embeddings (source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_embeddings_source_chunk
+    ON embeddings (source_type, source_id, chunk_index);
+
+-- ============================================================
 -- Phase 2 예약 (주석)
 -- ============================================================
 /*

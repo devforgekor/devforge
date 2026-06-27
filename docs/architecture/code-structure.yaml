@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-26'
+  updated: '2026-06-27'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -106,8 +106,8 @@ modules:
       purpose: "DevForge Observer Agent \u2014 interactive CLI agent with tool calling."
     open-newhand.sh:
       status: unknown
-      purpose: "open-newhand \u2014 OpenCode \uC138\uC158\uC744 handover context\uC640\
-        \ \uD568\uAED8 \uC2DC\uC791\uD558\uACE0, \uC885\uB8CC \uD6C4 git commit/push"
+      purpose: "open-newhand \u2014 NewHand Protocol \uB9C8\uBB34\uB9AC: handover.yaml\
+        \ \u2192 \uCEE4\uBC0B \u2192 \uD478\uC2DC"
     orchestrator.py:
       status: production
       purpose: "DevForge Orchestrator \u2014 LLM-based smart router to specialized\
@@ -822,7 +822,8 @@ modules:
       purpose: night_debate_pipeline.py
     polish_batch.py:
       status: experimental
-      purpose: "Polish Batch Pipeline \u2014 Kiwi(user) + Hanja substitution(thinking/text)."
+      purpose: "Polish Batch Pipeline \u2014 Kiwi(user) + Hanja substitution(text/thinking)\
+        \ + Verify."
     prj_cycle.py:
       status: production
       purpose: prj_cycle.py
