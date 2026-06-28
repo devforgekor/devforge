@@ -24,6 +24,17 @@ from lib.cli_worklog import cmd_worklog_add, cmd_worklog_recent, cmd_worklog_sea
 from lib.db import esc_sql
 from lib.db import psql as _sql
 from lib.llm_client import MODEL_REGISTRY
+from lib.reflex_rules import (
+    rule_create,
+    rule_decay_all,
+    rule_detect_patterns,
+    rule_get,
+    rule_match,
+    rule_promote_all,
+    rule_report,
+    rule_search,
+    rule_update,
+)
 
 
 def _format_results(rows):
@@ -134,41 +145,236 @@ def cmd_activity_add(args):
 
 
 def cmd_obs_search(args):
-    """Search observations table (PostToolUse auto-logs)."""
+    """Search observations using unified API."""
     import json as _json
 
-    from lib.db import psql_json as _pj
+    from lib.observation import obs_search as _search
 
-    category = getattr(args, "category", "")
-    limit = max(1, min(getattr(args, "limit", 10), 50))
+    tags_obj = None
+    if getattr(args, "tags", None):
+        try:
+            tags_obj = json.loads(args.tags)
+        except json.JSONDecodeError:
+            pass
+    limit = max(1, min(getattr(args, "limit", 10), 100))
 
-    cond = ["source = 'hook:PostToolUse'"]
-    if category:
-        cond.append(f"category = '{esc_sql(category)}'")
-    where = " AND ".join(cond)
-
-    rows = _pj(f"""
-        SELECT observation, category, context, created_at::text
-        FROM observations
-        WHERE {where}
-        ORDER BY created_at DESC
-        LIMIT {limit}
-    """)
+    rows = _search(
+        category=getattr(args, "category", None) or None,
+        source=getattr(args, "source", None) or None,
+        tags=tags_obj,
+        query=getattr(args, "query", None) or None,
+        limit=limit,
+    )
     if not rows:
         print("  (no observations)")
         return
 
     for r in rows:
-        ts = r.get("created_at", "")[:19] if r.get("created_at") else ""
-        cat = r.get("category", "")
+        ts = (r.get("created_at") or "")[:19]
+        cat = r.get("category", "") or ""
         obs = (r.get("observation") or "")[:120]
-        ctx = r.get("context", {}) or {}
-        tool = ctx.get("tool") or ctx.get("file_path") or ""
+        ctx = r.get("context") or "{}"
+        try:
+            ctx_obj = _json.loads(ctx) if isinstance(ctx, str) else ctx
+        except (json.JSONDecodeError, TypeError):
+            ctx_obj = {}
+        tool = ctx_obj.get("tool") or ctx_obj.get("file_path") or ""
         extra = f" [{tool}]" if tool else ""
-        print(f"  [{ts}] {cat:12s} {obs}{extra}")
+        tags_str = ""
+        tag_obj = r.get("tags") or {}
+        if isinstance(tag_obj, dict) and tag_obj:
+            flat = []
+            for k, v in tag_obj.items():
+                if isinstance(v, list):
+                    flat.extend(f"{k}={item}" for item in v[:2])
+            if flat:
+                tags_str = f" ({', '.join(flat)})"
+        print(f"  [{ts}] {cat:14s} {obs}{extra}{tags_str}")
 
     if getattr(args, "json", False):
         print(_json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+
+
+def cmd_obs_add(args):
+    """Write an observation via CLI."""
+    from lib.observation import observe as _observe
+
+    tags_obj = None
+    if getattr(args, "tags", None):
+        try:
+            tags_obj = json.loads(args.tags)
+        except json.JSONDecodeError:
+            pass
+    oid = _observe(
+        args.observation,
+        category=getattr(args, "category", "general"),
+        source=getattr(args, "source", "cli:obs"),
+        tags=tags_obj,
+    )
+    if oid:
+        print(f"  Observation recorded: {oid}")
+    else:
+        print("  Failed to record observation")
+
+
+def cmd_obs_stats(args):
+    """Show observation category stats."""
+    from lib.observation import obs_stats as _stats
+
+    days = getattr(args, "days", 7)
+    stats = _stats(days=days)
+    if not stats:
+        print(f"  (no observations in {days}d)")
+        return
+    total = sum(int(s["count"]) for s in stats)
+    print(f"  Observations ({days}d): {total} total")
+    for s in stats:
+        pct = int(s["count"]) / total * 100 if total else 0
+        bar = "#" * int(pct / 5) + "·" * (20 - int(pct / 5))
+        print(f"  {s['category']:14s} {s['count']:>5d} {bar} {pct:.0f}%")
+    print()
+    print("  Sources: use `cli.py obs search --source X` to filter by source")
+    print('  Tags: use `cli.py obs search --tags \'{"domain": ["X"]}\'` to filter by tag')
+
+
+# ── Reflex Rules Commands ──────────────────────────────────────
+
+
+def _fmt_rule(r: dict) -> str:
+    """Format a rule dict into a human-readable string."""
+    rid = (r.get("id") or r.get("rule_id") or "?")[:8]
+    desc = (r.get("description") or "(no description)")[:60]
+    conf = r.get("confidence", 0.0)
+    st = r.get("status", "?")
+    act = r.get("action_type", "?")
+    obs_cnt = r.get("observation_count", 0)
+    return f"  [{rid}] {desc:60s} {st:10s} conf={conf:.2f} cnt={obs_cnt:3d} action={act}"
+
+
+def _cmd_reflex(args, parser):
+    """Dispatch reflex subcommands."""
+    if args.ref_command == "list":
+        rules = rule_search(status=args.status, action_type=args.action, limit=args.limit)
+        if not rules:
+            print("  (no rules)")
+            return
+        if args.json:
+            print(json.dumps(rules, ensure_ascii=False, indent=2, default=str))
+            return
+        print(f"  Rules: {len(rules)}")
+        print(f"  {'ID':8s}  {'Description':60s}  {'Status':10s}  {'Conf':5s}  {'Cnt':3s}  Action")
+        print(f"  {'-' * 8}  {'-' * 60}  {'-' * 10}  {'-' * 5}  {'-' * 3}  {'-' * 10}")
+        for r in rules:
+            rid = (r.get("id") or "?")[:8]
+            desc = (r.get("description") or "")[:60]
+            st = r.get("status", "?")
+            conf = r.get("confidence", 0.0)
+            oc = r.get("observation_count", 0)
+            act = r.get("action_type", "?")
+            print(f"  [{rid}] {desc:60s} {st:10s} {conf:.2f}  {oc:3d}  {act}")
+
+    elif args.ref_command == "show":
+        r = rule_get(args.id)
+        if not r:
+            print(f"  Rule not found: {args.id}")
+            return
+        print(json.dumps(r, ensure_ascii=False, indent=2, default=str))
+
+    elif args.ref_command == "add":
+        params = None
+        if args.action_params:
+            try:
+                params = json.loads(args.action_params)
+            except json.JSONDecodeError:
+                print(f"  Invalid action_params JSON: {args.action_params}")
+                return
+        rid = rule_create(
+            trigger_category=args.category,
+            trigger_source=args.source,
+            trigger_pattern=args.pattern,
+            trigger_min_count=args.min_count,
+            trigger_window_hours=args.window_hours,
+            action_type=args.action,
+            action_params=params,
+            description=args.description,
+        )
+        if rid:
+            print(f"  Rule created: {rid}")
+        else:
+            print("  Failed to create rule")
+
+    elif args.ref_command == "approve":
+        ok = rule_update(args.id, status="approved")
+        print(f"  Rule {args.id[:8]}{' approved' if ok else ' approve FAILED'}")
+
+    elif args.ref_command == "reject":
+        ok = rule_update(args.id, status="archived")
+        print(f"  Rule {args.id[:8]}{' archived' if ok else ' archive FAILED'}")
+
+    elif args.ref_command == "match":
+        matches = rule_match(args.observation, category=args.category)
+        if not matches:
+            print(f"  No matching rules for: {args.observation[:80]}")
+            return
+        print(f"  Matches for: {args.observation[:80]}")
+        for m in matches:
+            print(f"  {_fmt_rule(m)}")
+
+    elif args.ref_command == "detect":
+        patterns = rule_detect_patterns(
+            since_hours=args.hours, min_occurrences=args.min_occurrences
+        )
+        if not patterns:
+            print(
+                f"  No patterns detected (last {args.hours}h, min {args.min_occurrences} occurrences)"
+            )
+            return
+        print(f"  Detected {len(patterns)} patterns (last {args.hours}h):")
+        for p in patterns:
+            cnt = p.get("occurrence_count", 0)
+            src = p.get("pattern_source", "?")
+            cat = p.get("pattern_category", "?")
+            obs = (p.get("pattern_observation") or "")[:80]
+            print(f"  [{cnt:3d}x] {cat}/{src}: {obs}")
+
+    elif args.ref_command == "promote":
+        promoted = rule_promote_all()
+        if not promoted:
+            print("  No rules to promote")
+        else:
+            print(f"  Promoted {len(promoted)} rules:")
+            for p in promoted:
+                print(
+                    f"    Rule {p.get('rule_id', '?')[:8]}: {p.get('old_status')} → {p.get('new_status')} (conf={p.get('confidence', 0):.2f})"
+                )
+
+    elif args.ref_command == "decay":
+        decayed = rule_decay_all()
+        if not decayed:
+            print("  No rules to decay")
+        else:
+            print(f"  Decayed {len(decayed)} rules:")
+            for d in decayed:
+                print(
+                    f"    Rule {d.get('rule_id', '?')[:8]}: {d.get('old_status')} → {d.get('new_status')} (idle {d.get('days_since_match', '?')}d)"
+                )
+
+    elif args.ref_command == "report":
+        rows = rule_report()
+        if not rows:
+            print("  No rule data available")
+            return
+        for r in rows:
+            if r["section"] == "summary":
+                print(f"  {r['line']}")
+            elif r["section"] == "candidates":
+                if r["line"]:
+                    print(f"  Candidate rules:\n    {r['line']}")
+            elif r["section"] == "applied":
+                if r["line"]:
+                    print(f"  Recently applied:\n    {r['line']}")
+    else:
+        parser.print_help()
 
 
 def cmd_search_bm25(args):
@@ -1978,11 +2184,90 @@ async def main():
     file_del.add_argument("id", help="File UUID")
     file_del.add_argument("--remove-local", action="store_true", help="Also delete local file")
 
-    # ── Obs (PostToolUse auto-logs) ──────────────────────────────────
-    p_obs = sub.add_parser("obs", help="Search observations (PostToolUse auto-logs)")
-    p_obs.add_argument("--category", "-c", help="Category filter (test_result, edit, error)")
-    p_obs.add_argument("--limit", "-n", type=int, default=10, help="Max results")
-    p_obs.add_argument("--json", action="store_true", help="JSON output")
+    # ── Obs (observations 통합) ──────────────────────────────────
+    p_obs = sub.add_parser("obs", help="Observations — 기록 및 검색")
+    obs_sub = p_obs.add_subparsers(dest="obs_command")
+
+    obs_search_p = obs_sub.add_parser("search", help="관찰 검색")
+    obs_search_p.add_argument(
+        "--category", "-c", help="Category filter (insight, decision, test_result, 등)"
+    )
+    obs_search_p.add_argument(
+        "--source", "-s", help="Source filter (hook:PostToolUse, mcp:obs_write, cli:obs, 등)"
+    )
+    obs_search_p.add_argument("--tags", help='Tags JSON filter — {"domain": ["mcp"]} 형식')
+    obs_search_p.add_argument("--query", "-q", help="Observation 텍스트 부분 검색")
+    obs_search_p.add_argument("--limit", "-n", type=int, default=10, help="Max results")
+    obs_search_p.add_argument("--json", action="store_true", help="JSON output")
+
+    obs_add_p = obs_sub.add_parser("add", help="관찰 기록")
+    obs_add_p.add_argument("observation", help="관찰 내용")
+    obs_add_p.add_argument("--category", "-c", default="general", help="Category")
+    obs_add_p.add_argument("--source", default="cli:obs", help="Source")
+    obs_add_p.add_argument("--tags", help='Tags JSON — {"domain": ["search"]} 형식')
+
+    obs_stats_p = obs_sub.add_parser("stats", help="카테고리별 통계")
+    obs_stats_p.add_argument("--days", "-d", type=int, default=7, help="조회 기간 (일)")
+
+    # ── Reflex Rules (Pattern 2+4 auto-fix system) ────────────
+    p_reflex = sub.add_parser("reflex", help="Reflex rules — auto-fix pattern 관리")
+    ref_sub = p_reflex.add_subparsers(dest="ref_command")
+
+    ref_list = ref_sub.add_parser("list", help="List rules")
+    ref_list.add_argument(
+        "--status", choices=["candidate", "approved", "dormant", "archived"], help="Status filter"
+    )
+    ref_list.add_argument(
+        "--action", choices=["auto_fix", "notify", "escalate"], help="Action type filter"
+    )
+    ref_list.add_argument("--limit", "-n", type=int, default=20, help="Max results")
+    ref_list.add_argument("--json", action="store_true", help="JSON output")
+
+    ref_show = ref_sub.add_parser("show", help="Show a single rule")
+    ref_show.add_argument("id", help="Rule UUID")
+
+    ref_add = ref_sub.add_parser("add", help="Add a new rule manually")
+    ref_add.add_argument("--description", required=True, help="Rule description")
+    ref_add.add_argument("--category", help="Trigger category (observation category)")
+    ref_add.add_argument("--source", help="Trigger source (observation source)")
+    ref_add.add_argument("--pattern", help="Trigger ILIKE pattern")
+    ref_add.add_argument(
+        "--min-count", type=int, default=1, help="Minimum trigger count (default 1)"
+    )
+    ref_add.add_argument(
+        "--window-hours", type=int, default=24, help="Trigger window in hours (default 24)"
+    )
+    ref_add.add_argument(
+        "--action",
+        choices=["auto_fix", "notify", "escalate"],
+        default="notify",
+        help="Action type (default notify)",
+    )
+    ref_add.add_argument(
+        "--action-params",
+        help='Action params JSON — {"function": "restart_container", "args": {"container_name": "..."}}',
+    )
+
+    ref_approve = ref_sub.add_parser("approve", help="Approve a candidate rule → approved")
+    ref_approve.add_argument("id", help="Rule UUID")
+
+    ref_reject = ref_sub.add_parser("reject", help="Reject/archive a rule")
+    ref_reject.add_argument("id", help="Rule UUID")
+
+    ref_match = ref_sub.add_parser("match", help="Test rule matching against an observation")
+    ref_match.add_argument("observation", help="Observation text to match")
+    ref_match.add_argument("--category", help="Observation category")
+    ref_match.add_argument("--tags", help='Tags JSON — {"domain": ["mcp"]}')
+
+    ref_detect = ref_sub.add_parser("detect", help="Detect patterns from recent observations")
+    ref_detect.add_argument("--hours", type=int, default=24, help="Lookback hours (default 24)")
+    ref_detect.add_argument(
+        "--min-occurrences", type=int, default=3, help="Min occurrences (default 3)"
+    )
+
+    ref_promote = ref_sub.add_parser("promote", help="Auto-promote candidate rules to approved")
+    ref_decay = ref_sub.add_parser("decay", help="Decay unused rules to dormant")
+    ref_report = ref_sub.add_parser("report", help="Daily rule activity summary")
 
     # ── Fact (user feedback on NEUTRAL facts) ───────────────────────
     p_fact = sub.add_parser("fact", help="Manage review_facts — user feedback on NEUTRAL facts")
@@ -2130,7 +2415,16 @@ async def main():
         else:
             p_file.print_help()
     elif args.command == "obs":
-        cmd_obs_search(args)
+        if args.obs_command == "search":
+            cmd_obs_search(args)
+        elif args.obs_command == "add":
+            cmd_obs_add(args)
+        elif args.obs_command == "stats":
+            cmd_obs_stats(args)
+        else:
+            p_obs.print_help()
+    elif args.command == "reflex":
+        _cmd_reflex(args, p_reflex)
     elif args.command == "fact":
         if args.fact_command == "list":
             cmd_fact_list(args)

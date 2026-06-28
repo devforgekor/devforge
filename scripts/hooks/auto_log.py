@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: hooks:PostToolUse in settings.json — auto-log tool calls to observations table
 """PostToolUse hook — auto-log tool calls to DB for session persistence."""
+
 import datetime
 import json
 import os
@@ -13,12 +14,9 @@ _SCRIPTS_DIR = os.path.dirname(_HOOKS_DIR)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from lib.db import psql
+from lib.observation import observe
 
 _ERROR_LOG = "/tmp/devforge-hook-errors.log"
-_OBSERVATIONS_INSERT = (
-    "INSERT INTO observations (observation, category, source, context) VALUES "
-)
 
 TEST_PATTERNS = [
     "pytest",
@@ -37,11 +35,20 @@ def _redact(value: str, max_len: int = 200) -> str:
     if not isinstance(value, str):
         return str(value)[:max_len]
     s = value.strip()
-    # redact obvious secrets
     for pat in [
-        "sk-", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
-        "xoxb-", "xoxp-", "xoxa-", "xoxs-",
-        "AIzaSy", "hf_", "BSA",
+        "sk-",
+        "ghp_",
+        "gho_",
+        "ghu_",
+        "ghs_",
+        "ghr_",
+        "xoxb-",
+        "xoxp-",
+        "xoxa-",
+        "xoxs-",
+        "AIzaSy",
+        "hf_",
+        "BSA",
     ]:
         idx = s.find(pat)
         if idx >= 0:
@@ -84,65 +91,36 @@ def _write_error_log(msg: str) -> None:
         with open(_ERROR_LOG, "a") as f:
             f.write(f"[{ts}] {msg}\n")
     except Exception:
-        pass  # last resort — never break the hook
-
-
-def _log_observation(observation: str, category: str, context: dict) -> None:
-    """Insert a row into observations table. Logs errors to local file."""
-    try:
-        ctx_json = json.dumps(context, ensure_ascii=False, default=str)
-        obs_escaped = observation.replace("'", "''")
-        # Dollar-quoting avoids collision when context JSON contains single quotes
-        sql = (
-            f"{_OBSERVATIONS_INSERT}("
-            f"'{obs_escaped}', '{category}', 'hook:PostToolUse', "
-            f"$JSON${ctx_json}$JSON$::jsonb"
-            f")"
-        )
-        # psql returns empty on success for INSERT (--quiet mode), so we
-        # don't check the return value — exceptions are the error signal
-        psql(sql)
-    except Exception as e:
-        _write_error_log(
-            f"DB insert failed: {e} | observation={observation[:80]} | "
-            f"category={category}"
-        )
-        raise
+        pass
 
 
 def _handle_bash(tool_input: dict, tool_output: dict) -> None:
     cmd = tool_input.get("command", "")
     if not cmd:
         return
-
-    exit_code = tool_output.get("exitCode", -1)
-    is_test = _is_test_command(cmd)
-
-    if not is_test:
+    if not _is_test_command(cmd):
         return
 
+    exit_code = tool_output.get("exitCode", -1)
+    category = "test_result"
+    detail = (
+        "passed" if exit_code == 0 else f"exit={exit_code}" if exit_code >= 0 else "interrupted"
+    )
+    observation = f"test: {_redact(cmd, 120)} [{detail}]"
     context = {
         "tool": "Bash",
         "command": _redact(cmd, 300),
         "exit_code": exit_code,
-        "session_id": os.environ.get("CLAUDE_SESSION_ID", ""),
     }
+    tags = {"domain": ["test"]}
 
-    if is_test:
-        category = "test_result"
-        detail = "passed" if exit_code == 0 else f"exit={exit_code}" if exit_code >= 0 else "interrupted"
-        observation = f"test: {_redact(cmd, 120)} [{detail}]"
-    else:
-        return
-
-    _log_observation(observation, category, context)
+    observe(observation, category=category, source="hook:PostToolUse", context=context, tags=tags)
 
 
 def _handle_edit(tool_input: dict, tool_output: dict) -> None:
     file_path = tool_input.get("file_path", "")
     if not file_path:
         return
-
     if not _is_config_or_source_edit(file_path):
         return
 
@@ -154,17 +132,19 @@ def _handle_edit(tool_input: dict, tool_output: dict) -> None:
         "file_path": file_path,
         "old_len": len(old_str),
         "new_len": len(new_str),
-        "session_id": os.environ.get("CLAUDE_SESSION_ID", ""),
     }
-    observation = f"edit: {file_path}"
-    _log_observation(observation, "edit", context)
+    observation_text = f"edit: {file_path}"
+    tags = {"domain": ["edit"]}
+
+    observe(
+        observation_text, category="edit", source="hook:PostToolUse", context=context, tags=tags
+    )
 
 
 def _handle_write(tool_input: dict, tool_output: dict) -> None:
     file_path = tool_input.get("file_path", "")
     if not file_path:
         return
-
     if not _is_config_or_source_edit(file_path):
         return
 
@@ -173,10 +153,13 @@ def _handle_write(tool_input: dict, tool_output: dict) -> None:
         "tool": "Write",
         "file_path": file_path,
         "content_len": len(content),
-        "session_id": os.environ.get("CLAUDE_SESSION_ID", ""),
     }
-    observation = f"write: {file_path}"
-    _log_observation(observation, "edit", context)
+    observation_text = f"write: {file_path}"
+    tags = {"domain": ["edit"]}
+
+    observe(
+        observation_text, category="edit", source="hook:PostToolUse", context=context, tags=tags
+    )
 
 
 def _handle_tool_error(tool_name: str, tool_input: dict, tool_output: dict) -> None:
@@ -189,10 +172,13 @@ def _handle_tool_error(tool_name: str, tool_input: dict, tool_output: dict) -> N
     context = {
         "tool": tool_name,
         "error": str(error)[:500],
-        "session_id": os.environ.get("CLAUDE_SESSION_ID", ""),
     }
-    observation = f"error: {tool_name} — {str(error)[:200]}"
-    _log_observation(observation, "error", context)
+    observation_text = f"error: {tool_name} — {str(error)[:200]}"
+    tags = {"domain": ["error"]}
+
+    observe(
+        observation_text, category="error", source="hook:PostToolUse", context=context, tags=tags
+    )
 
 
 def main() -> None:
@@ -209,10 +195,8 @@ def main() -> None:
     tool_output = event.get("tool_output", {})
 
     try:
-        # Always log tool errors
         _handle_tool_error(tool_name, tool_input, tool_output)
 
-        # Route by tool type
         if tool_name == "Bash":
             _handle_bash(tool_input, tool_output)
         elif tool_name == "Edit":
@@ -222,13 +206,10 @@ def main() -> None:
     except Exception as e:
         tb = traceback.format_exc()
         _write_error_log(f"Unhandled in main: {e}\n{tb}")
-        # Surface to Claude via additionalContext (non-blocking)
         out = {
             "hookSpecificOutput": {
                 "hookEventName": "PostToolUse",
-                "additionalContext": (
-                    f"[hook:auto_log] {tool_name} logging failed: {e}"
-                ),
+                "additionalContext": (f"[hook:auto_log] {tool_name} logging failed: {e}"),
             }
         }
         print(json.dumps(out, ensure_ascii=False))

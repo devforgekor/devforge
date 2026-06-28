@@ -182,6 +182,9 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
+    auto_fix.py:
+      status: production
+      purpose: "Safe remediation catalog \u2014 Pattern 2 \"Safe First\" engine."
     blob_uploader.py:
       status: production
       purpose: "Azure Blob uploader \u2014 single shared utility for all pipeline\
@@ -223,6 +226,10 @@ modules:
       status: deprecated
       purpose: "NLI Cross-Encoder Server \u2014 DeBERTa-v3-large (DEPRECATED, never\
         \ deployed)."
+    observation.py:
+      status: production
+      purpose: "Unified observation API \u2014 recording and querying the observations\
+        \ table."
     protection.py:
       status: production
       purpose: "Protection context manager \u2014 file-based dead man's switch."
@@ -230,6 +237,9 @@ modules:
       status: production
       purpose: "queue_writer \u2014 enqueue items to activity_log for downstream review\
         \ pipeline."
+    reflex_rules.py:
+      status: production
+      purpose: Reflex rule CRUD and lifecycle management.
     scoring.py:
       status: production
       purpose: "Scoring \u2014 shared veto/gap/early-exit logic."
@@ -759,8 +769,11 @@ modules:
   files:
     auto_log.py:
       status: experimental
-      purpose: "PostToolUse hook \u2014 silently log tool calls to DB for session\
-        \ persistence."
+      purpose: "PostToolUse hook \u2014 auto-log tool calls to DB for session persistence."
+    ruff_lint.py:
+      status: experimental
+      purpose: "PostToolUse hook \u2014 auto-fix Python files with ruff, surface remaining\
+        \ violations."
     session_context.py:
       status: production
       purpose: "SessionStart hook \u2014 inject DevForge work context into Claude."

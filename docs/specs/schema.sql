@@ -69,10 +69,13 @@ CREATE TABLE IF NOT EXISTS observations (
     category TEXT NOT NULL DEFAULT 'general',
     source TEXT NOT NULL DEFAULT 'qwen_worker',
     context JSONB DEFAULT '{}',
+    tags JSONB DEFAULT '{}',             -- {"tier": ["deep-dive"], "domain": ["mcp","search"]}
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_observations_created ON observations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_observations_category ON observations(category);
+CREATE INDEX IF NOT EXISTS idx_observations_tags ON observations USING GIN(tags jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_observations_trgm ON observations USING GIN(observation gin_trgm_ops);
 
 -- ============================================================
 -- 5. 인덱스
@@ -252,3 +255,52 @@ CREATE INDEX IF NOT EXISTS idx_file_registry_source ON file_registry (source);
 CREATE INDEX IF NOT EXISTS idx_file_registry_desc_trgm ON file_registry USING GIN (description gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_file_registry_filename_trgm ON file_registry USING GIN (filename gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_file_registry_created ON file_registry (created_at DESC);
+
+-- ============================================================
+-- 12. Reflex Rules (Pattern 2+4 — auto-fix rule lifecycle)
+-- Added 2026-06-28
+-- ============================================================
+-- Single-DB approach: reflex_rules shares PostgreSQL with observations.
+-- Rule lifecycle: candidate → approved → dormant → archived
+-- Pattern mining via SQL window functions (no external service needed).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS reflex_rules (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trigger_category TEXT,               -- observations.category match (NULL = any)
+    trigger_source   TEXT,               -- observations.source match (NULL = any)
+    trigger_tags     JSONB DEFAULT '{}', -- observations tags containment match
+    trigger_pattern  TEXT,               -- observation ILIKE pattern
+    trigger_min_count INT DEFAULT 1,     -- minimum occurrences to trigger
+    trigger_window_hours INT DEFAULT 24, -- time window for count check
+
+    action_type     TEXT NOT NULL,       -- 'auto_fix' | 'notify' | 'escalate'
+    action_params   JSONB DEFAULT '{}',  -- {"function": "raise_timeout", "args": {"mcp": "..."}}
+
+    confidence      REAL DEFAULT 0.0,    -- 0.0 ~ 1.0
+    status          TEXT NOT NULL DEFAULT 'candidate',  -- candidate | approved | dormant | archived
+
+    description     TEXT,                -- human-readable rule explanation
+    rationale       TEXT,                -- why this rule exists (source observation insight)
+
+    observation_count INT DEFAULT 0,     -- matched observation count
+    last_matched_at TIMESTAMPTZ,
+    last_applied_at TIMESTAMPTZ,
+
+    supersedes      UUID REFERENCES reflex_rules(id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT reflex_rules_status_check CHECK (status IN ('candidate', 'approved', 'dormant', 'archived')),
+    CONSTRAINT reflex_rules_action_check CHECK (action_type IN ('auto_fix', 'notify', 'escalate')),
+    CONSTRAINT reflex_rules_confidence_check CHECK (confidence >= 0.0 AND confidence <= 1.0)
+);
+CREATE INDEX IF NOT EXISTS idx_reflex_rules_status ON reflex_rules(status);
+CREATE INDEX IF NOT EXISTS idx_reflex_rules_trigger ON reflex_rules(trigger_category, trigger_source);
+CREATE INDEX IF NOT EXISTS idx_reflex_rules_pattern ON reflex_rules USING GIN(trigger_pattern gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_reflex_rules_tags ON reflex_rules USING GIN(trigger_tags jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_reflex_rules_updated ON reflex_rules(updated_at DESC);
+
+COMMENT ON TABLE reflex_rules IS 'Pattern 2+4 auto-fix rules — mined from observations, lifecycle-managed';
+COMMENT ON COLUMN reflex_rules.status IS 'candidate:pattern found|approved:user confirmed|dormant:30d no match|archived:explicit archive';
+COMMENT ON COLUMN reflex_rules.confidence IS 'Statistical confidence based on observation match frequency';
+COMMENT ON COLUMN reflex_rules.supersedes IS 'Previous rule ID that this rule replaces (for contradiction resolution)';

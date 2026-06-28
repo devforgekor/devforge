@@ -28,22 +28,37 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from .checker import *
-from .config import CHECK_INTERVAL, HEARTBEAT_INTERVAL, ALERT_ONLY_TARGETS, TIMER_TARGETS
-from lib.db import psql_json
-from .notifier import heartbeat, send_alert, send_recovery
-from .recovery import (
-    graduated_recover, recover_service, kill_stale_process, recover_oom,
-    recover_slot_deadlock,
+from lib.action_queue import (
+    action_claim_pending,
+    action_complete,
+    action_fail,
+    execute_action,
 )
-from .state import WatchdogState
-from .messenger import log_message, get_undelivered, resolve_pulse
+from lib.db import psql_json
 from lib.experiment_state import (
-    cleanup_stale, is_experiment_active, is_experiment_stale,
+    cleanup_stale,
+    is_experiment_active,
+    is_experiment_stale,
+)
+from lib.experiment_state import (
     read_state as read_experiment_state,
+)
+from lib.experiment_state import (
     update_state as update_exp_state,
 )
 
+from .checker import *
+from .config import ALERT_ONLY_TARGETS, CHECK_INTERVAL, HEARTBEAT_INTERVAL, TIMER_TARGETS
+from .messenger import get_undelivered, log_message, resolve_pulse
+from .notifier import heartbeat, send_alert, send_recovery
+from .recovery import (
+    graduated_recover,
+    kill_stale_process,
+    recover_oom,
+    recover_service,
+    recover_slot_deadlock,
+)
+from .state import WatchdogState
 
 # ── Globals ─────────────────────────────────────────────────────────
 
@@ -68,21 +83,25 @@ def sighup_handler(signum, frame):
     log("SIGHUP received, reloading config...")
     importlib.reload(sys.modules.get("lib.watchdog.config"))
     from .checker import read_mode
+
     _state.set_mode(read_mode())
     log(f"config reloaded, mode={_state.mode}")
 
 
 def sigusr1_handler(signum, frame):
     """SIGUSR1 — dump current state to journal."""
-    log(f"=== Watchdog status dump ===")
+    log("=== Watchdog status dump ===")
     log(f"  mode={_state.mode}, running={_running}, uptime={int(time.monotonic() - _start_time)}s")
     for s in _state.all_summaries():
-        log(f"  {s['name']:25s} state={s['state']:10s} fails={s['fail_count']} consecutive={s['consecutive_fail']} circuit={s['circuit_open']}")
+        log(
+            f"  {s['name']:25s} state={s['state']:10s} fails={s['fail_count']} consecutive={s['consecutive_fail']} circuit={s['circuit_open']}"
+        )
     log(f"  events_in_buffer={len(_state._events)}")
-    log(f"==============================")
+    log("==============================")
 
 
 # ── 공통 체크 ──────────────────────────────────────────────────────
+
 
 def _run_services(results: dict, dry_run: bool):
     """서비스 상태 체크 + 필요시 graduated recovery."""
@@ -94,7 +113,8 @@ def _run_services(results: dict, dry_run: bool):
             tracker.record_success()
         elif not dry_run and not is_experiment_active():
             graduated_recover(
-                svc["name"], tracker,
+                svc["name"],
+                tracker,
                 lambda n=svc["name"]: recover_service(n),
             )
             if not _test_active and tracker.is_degraded() and tracker.can_alert():
@@ -143,7 +163,8 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
                     log(f"  kicking {svc_name} (timer delayed {timer['detail']})")
                     subprocess.run(
                         ["systemctl", "--user", "start", svc_name],
-                        capture_output=True, timeout=10,
+                        capture_output=True,
+                        timeout=10,
                     )
         results["timers"].append(timer)
 
@@ -156,8 +177,11 @@ def _run_memory_check(results: dict, dry_run: bool = False):
         mem_tracker.record_success()
     else:
         if mem_tracker.record_failure() and mem_tracker.can_alert():
-            send_alert("system:memory", mem_tracker.state.value,
-                       f"mem={mem_info['pct']}% swap={mem_info['swap_pct']}%")
+            send_alert(
+                "system:memory",
+                mem_tracker.state.value,
+                f"mem={mem_info['pct']}% swap={mem_info['swap_pct']}%",
+            )
             _state.add_event("system:memory", "crit", f"{mem_info['pct']}%/{mem_info['swap_pct']}%")
             if not dry_run:
                 recover_oom()
@@ -181,8 +205,9 @@ def _run_memory_check(results: dict, dry_run: bool = False):
     stuck = _state.check_pipeline_stuck()
     if stuck:
         for s in stuck:
-            _state.add_event("pipeline_state", "stuck",
-                             f"{s['state']}: {s['cnt']} turns, {s['stuck_sec']}s")
+            _state.add_event(
+                "pipeline_state", "stuck", f"{s['state']}: {s['cnt']} turns, {s['stuck_sec']}s"
+            )
     results["pipeline_stuck"] = stuck
 
 
@@ -211,10 +236,17 @@ def _run_common_checks(results: dict, dry_run: bool, mode: str = "day"):
 
 # ── Day checks ──────────────────────────────────────────────────────
 
+
 def run_day_checks(dry_run: bool = False) -> dict:
     """Day mode checks (관찰형)."""
-    results = {"containers": [], "services": [], "timers": [],
-               "probes": [], "memory": {}, "pipeline_running": False}
+    results = {
+        "containers": [],
+        "services": [],
+        "timers": [],
+        "probes": [],
+        "memory": {},
+        "pipeline_running": False,
+    }
 
     for probe in check_all_llm():
         name = probe["name"]
@@ -246,24 +278,34 @@ def run_day_checks(dry_run: bool = False) -> dict:
             work = psql_json(
                 "SELECT count(*)::int AS cnt FROM turns "
                 "WHERE pipeline_state NOT IN ('verified', 'pending') "
-                "AND text != ''", timeout=5)
+                "AND text != ''",
+                timeout=5,
+            )
             in_flight = (work or [{}])[0].get("cnt", 0) if work else 0
             if in_flight > 0:
                 log(f"  day_cycle.sh not running, {in_flight} in-flight — resuming")
                 _state.add_event("day_cycle", "resume", f"{in_flight} in-flight")
-                subprocess.run(["systemctl", "--user", "start", "devforge-day-cycle.service"],
-                               capture_output=True, timeout=30)
+                subprocess.run(
+                    ["systemctl", "--user", "start", "devforge-day-cycle.service"],
+                    capture_output=True,
+                    timeout=30,
+                )
             else:
                 pending_work = psql_json(
                     "SELECT count(*)::int AS cnt FROM turns "
                     "WHERE pipeline_state = 'pending' "
-                    "AND text != ''", timeout=5)
+                    "AND text != ''",
+                    timeout=5,
+                )
                 pending_cnt = (pending_work or [{}])[0].get("cnt", 0) if pending_work else 0
                 if pending_cnt > 0:
                     log(f"  day_cycle.sh not running, {pending_cnt} pending — starting first batch")
                     _state.add_event("day_cycle", "start", f"{pending_cnt} pending")
-                    subprocess.run(["systemctl", "--user", "start", "devforge-day-cycle.service"],
-                                   capture_output=True, timeout=30)
+                    subprocess.run(
+                        ["systemctl", "--user", "start", "devforge-day-cycle.service"],
+                        capture_output=True,
+                        timeout=30,
+                    )
         except Exception as e:
             log(f"  day_cycle check error: {e}")
     results["pipeline_running"] = pipe_name
@@ -275,8 +317,14 @@ def run_day_checks(dry_run: bool = False) -> dict:
 
 def run_night_checks(dry_run: bool = False) -> dict:
     """Night mode checks (능동형)."""
-    results = {"containers": [], "services": [], "timers": [],
-               "probes": [], "memory": {}, "pipeline_running": False}
+    results = {
+        "containers": [],
+        "services": [],
+        "timers": [],
+        "probes": [],
+        "memory": {},
+        "pipeline_running": False,
+    }
 
     for probe in check_all_llm():
         name = probe["name"]
@@ -289,7 +337,11 @@ def run_night_checks(dry_run: bool = False) -> dict:
         else:
             if tracker.record_failure() and tracker.can_alert():
                 if not _test_active:
-                    send_alert(f"llm:{name}", tracker.state.value, f"T1={probe['t1_detail']} T2={probe['t2_detail']}")
+                    send_alert(
+                        f"llm:{name}",
+                        tracker.state.value,
+                        f"T1={probe['t1_detail']} T2={probe['t2_detail']}",
+                    )
                     _state.add_event(f"llm:{name}", "fail", probe["t2_detail"])
         results["probes"].append(probe)
 
@@ -306,7 +358,7 @@ def run_night_checks(dry_run: bool = False) -> dict:
         else:
             if tracker.record_failure() and tracker.can_alert():
                 if not _test_active:
-                    send_alert(f"pipeline:{phase_name}", "STOPPED", f"no process found")
+                    send_alert(f"pipeline:{phase_name}", "STOPPED", "no process found")
                     _state.add_event(f"pipeline:{phase_name}", "stopped", "")
         results["pipeline_running"] = results["pipeline_running"] or running
 
@@ -315,6 +367,7 @@ def run_night_checks(dry_run: bool = False) -> dict:
 
 
 # ── Active Pulse Query ──────────────────────────────────────
+
 
 def _get_active_pulses() -> list[dict]:
     """Query IN_PROGRESS heartbeat pulses from watchdog_pulses."""
@@ -353,11 +406,14 @@ def _get_test_db_progress() -> dict:
             "SELECT count(*) AS cnt FROM embeddings "
             "WHERE created_at > now() - interval '30 minutes'"
         ) or [{"cnt": 0}]
-        facts = psql_json(
-            "SELECT fact_type, count(*) AS cnt FROM review_facts "
-            "WHERE created_at > now() - interval '30 minutes' "
-            "GROUP BY fact_type ORDER BY fact_type"
-        ) or []
+        facts = (
+            psql_json(
+                "SELECT fact_type, count(*) AS cnt FROM review_facts "
+                "WHERE created_at > now() - interval '30 minutes' "
+                "GROUP BY fact_type ORDER BY fact_type"
+            )
+            or []
+        )
         marks = psql_json(
             "SELECT count(*) AS cnt FROM review_facts "
             "WHERE fact_type = 'marker' "
@@ -374,6 +430,7 @@ def _get_test_db_progress() -> dict:
 
 # ── Heartbeat ──────────────────────────────────────────────────────
 
+
 def build_heartbeat_summary(day_results: dict) -> dict:
     """Build summary dict for 30min heartbeat."""
     mode = read_mode()
@@ -382,20 +439,24 @@ def build_heartbeat_summary(day_results: dict) -> dict:
     containers = []
     for probe in day_results.get("probes", []):
         ok = probe["t1_ok"] and probe["t2_ok"]
-        containers.append({
-            "name": probe["name"],
-            "port": probe["port"],
-            "mode": probe.get("name", "?"),
-            "ok": ok,
-            "uptime": probe.get("t2_detail", ""),
-        })
+        containers.append(
+            {
+                "name": probe["name"],
+                "port": probe["port"],
+                "mode": probe.get("name", "?"),
+                "ok": ok,
+                "uptime": probe.get("t2_detail", ""),
+            }
+        )
 
     services = []
     for svc in day_results.get("services", []):
-        services.append({
-            "name": svc["name"],
-            "detail": "OK" if svc["ok"] else "DOWN",
-        })
+        services.append(
+            {
+                "name": svc["name"],
+                "detail": "OK" if svc["ok"] else "DOWN",
+            }
+        )
 
     timers = day_results.get("timers", [])
     mem = day_results.get("memory", {})
@@ -423,10 +484,15 @@ def build_heartbeat_summary(day_results: dict) -> dict:
     slots_stuck = _state.check_slots_stuck()
     if slots_stuck:
         for ss in slots_stuck:
-            _state.add_event("slot_stuck", "deadlock",
-                             f":{ss['port']} slots[{ss['slots']}] all stuck {ss['min_stuck_checks']} checks")
-            log(f"  [slot-deadlock] :{ss['port']} slots[{ss['slots']}] — "
-                f"deadlock detected ({ss['min_stuck_checks']} checks)")
+            _state.add_event(
+                "slot_stuck",
+                "deadlock",
+                f":{ss['port']} slots[{ss['slots']}] all stuck {ss['min_stuck_checks']} checks",
+            )
+            log(
+                f"  [slot-deadlock] :{ss['port']} slots[{ss['slots']}] — "
+                f"deadlock detected ({ss['min_stuck_checks']} checks)"
+            )
 
     # Detect test active → collect progress from DB
     test_pulses = _get_active_test_pulses()
@@ -460,6 +526,7 @@ def build_heartbeat_summary(day_results: dict) -> dict:
 
 
 # ── Fix Loops ──────────────────────────────────────────────────────
+
 
 def _fix_loop_common(pipe: str, llm_port: int):
     """Run fix loop for a pipeline that failed consecutively."""
@@ -512,6 +579,7 @@ def night_fix_loop():
 
 # ── Main Loop ───────────────────────────────────────────────────────
 
+
 def _check_slot_deadlocks(results: dict, dry_run: bool = False):
     """Detect and recover from slot deadlocks every cycle.
 
@@ -539,17 +607,21 @@ def _check_slot_deadlocks(results: dict, dry_run: bool = False):
 
     stuck_ports = _state.check_slots_stuck()
     for sp in stuck_ports:
-        _state.add_event("slot_deadlock", "detected",
-                         f":{sp['port']} slots[{sp['slots']}] stuck {sp['min_stuck_checks']} checks")
-        log(f"  [slot-deadlock] :{sp['port']} slots[{sp['slots']}] — "
-            f"deadlock confirmed, recovering...")
+        _state.add_event(
+            "slot_deadlock",
+            "detected",
+            f":{sp['port']} slots[{sp['slots']}] stuck {sp['min_stuck_checks']} checks",
+        )
+        log(
+            f"  [slot-deadlock] :{sp['port']} slots[{sp['slots']}] — "
+            f"deadlock confirmed, recovering..."
+        )
         ok = recover_slot_deadlock(sp["port"])
         if ok:
             _state.add_event("slot_deadlock", "recovered", f":{sp['port']} restarted")
         else:
             _state.add_event("slot_deadlock", "recovery_failed", f":{sp['port']}")
-            send_alert("slot_deadlock", "DOWN",
-                       f":{sp['port']} deadlock recovery failed")
+            send_alert("slot_deadlock", "DOWN", f":{sp['port']} deadlock recovery failed")
 
 
 def _recover_intermediate_states(results: dict, dry_run: bool = False):
@@ -576,7 +648,9 @@ def _recover_intermediate_states(results: dict, dry_run: bool = False):
             log(f"  SKIP {state} recovery — circuit open ({tracker.consecutive_fail} fails)")
             continue
 
-        log(f"  [pipeline-stuck] {state}: {cnt} turns stale ≥{s['stale_sec']}s → reset to {to_state}")
+        log(
+            f"  [pipeline-stuck] {state}: {cnt} turns stale ≥{s['stale_sec']}s → reset to {to_state}"
+        )
         try:
             ok = psql_ok(
                 f"UPDATE turns SET pipeline_state = '{to_state}' "
@@ -590,13 +664,11 @@ def _recover_intermediate_states(results: dict, dry_run: bool = False):
             continue
 
         if ok:
-            _state.add_event(f"pipeline_stuck:{state}", "recovered",
-                             f"{cnt} turns → {to_state}")
+            _state.add_event(f"pipeline_stuck:{state}", "recovered", f"{cnt} turns → {to_state}")
             tracker.record_success()
         else:
             tracker.record_failure()
-            _state.add_event(f"pipeline_stuck:{state}", "recovery_failed",
-                             f"{cnt} turns stuck")
+            _state.add_event(f"pipeline_stuck:{state}", "recovery_failed", f"{cnt} turns stuck")
 
 
 def _check_token_stagnation(results: dict, dry_run: bool = False):
@@ -624,21 +696,69 @@ def _check_token_stagnation(results: dict, dry_run: bool = False):
 
     stagnated = _state.check_token_stagnation()
     for st in stagnated:
-        _state.add_event("token_stagnation", "detected",
-                         f":{st['port']} tokens stuck {st['stagnation_count']} checks")
-        log(f"  [token-stagnation] :{st['port']} — "
-            f"aggregate tokens not advancing ({st['stagnation_count']} checks), recovering...")
+        _state.add_event(
+            "token_stagnation",
+            "detected",
+            f":{st['port']} tokens stuck {st['stagnation_count']} checks",
+        )
+        log(
+            f"  [token-stagnation] :{st['port']} — "
+            f"aggregate tokens not advancing ({st['stagnation_count']} checks), recovering..."
+        )
         ok = recover_slot_deadlock(st["port"])
         if ok:
             _state.add_event("token_stagnation", "recovered", f":{st['port']} restarted")
             # Reset stagnation counter after recovery
             _state._token_stagnation[st["port"]] = {
-                "total_prev": 0, "processing_prev": 0, "stagnation_count": 0,
+                "total_prev": 0,
+                "processing_prev": 0,
+                "stagnation_count": 0,
             }
         else:
             _state.add_event("token_stagnation", "recovery_failed", f":{st['port']}")
-            send_alert("token_stagnation", "DOWN",
-                       f":{st['port']} token stagnation recovery failed")
+            send_alert(
+                "token_stagnation", "DOWN", f":{st['port']} token stagnation recovery failed"
+            )
+
+
+# ── Action Queue Consumer ──────────────────────────────────────
+
+
+def _consume_actions(dry_run: bool = False):
+    """Consume action pulses from watchdog_pulses.
+
+    Claim PENDING action pulses → execute safely → record results.
+    Never uses shell=True. All subprocess calls have explicit timeouts.
+    Runs every watchdog cycle (typically 60s).
+    """
+    if dry_run:
+        return
+    if _test_active:
+        return
+
+    actions = action_claim_pending(max_count=10)
+    if not actions:
+        return
+
+    log(f"  [action-queue] {len(actions)} actions claimed")
+    for action in actions:
+        pulse_id = action["pulse_id"]
+        action_type = action["action_type"]
+        instruction = action["instruction"]
+        log(f"    executing {pulse_id}: {action_type} - {instruction[:80]}")
+
+        try:
+            ok, msg = execute_action(action)
+        except Exception as e:
+            ok, msg = False, f"execute_action raised: {e}"
+
+        if ok:
+            log(f"    {pulse_id}: OK - {msg[:100]}")
+            action_complete(pulse_id, msg)
+        else:
+            log(f"    {pulse_id}: FAIL - {msg[:100]}")
+            action_fail(pulse_id, msg)
+            _state.add_event(f"action:{action_type}", "failed", f"{pulse_id}: {msg[:100]}")
 
 
 def main_loop(one_shot: bool = False, dry_run: bool = False):
@@ -692,25 +812,27 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
         try:
             if mode == "night":
                 results = run_night_checks(dry_run=dry_run)
-                log(f"night check done")
+                log("night check done")
                 if not dry_run and not experiment_active:
                     night_fix_loop()
             else:
                 results = run_day_checks(dry_run=dry_run)
-                log(f"day check done")
+                log("day check done")
                 if not dry_run and not experiment_active:
                     day_fix_loop()
         except Exception as e:
             log(f"Check cycle error: {e}")
             import traceback
+
             traceback.print_exc()
 
         # Heartbeat stale check — detect + auto-resolve
         stale_beats = check_heartbeats()
         for sb in stale_beats:
             log(f"  HEARTBEAT STALE: {sb['worker']} — last beat {sb['age_sec']} ago")
-            _state.add_event("heartbeat", f"stale:{sb['worker']}",
-                             f"age={sb['age_sec']} last={sb['last_beat']}")
+            _state.add_event(
+                "heartbeat", f"stale:{sb['worker']}", f"age={sb['age_sec']} last={sb['last_beat']}"
+            )
             resolve_pulse(f"heartbeat_{sb['worker']}")
             log(f"  Auto-resolved stale pulse heartbeat_{sb['worker']}")
 
@@ -729,6 +851,9 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
 
         # Token stagnation detection — aggregate token counter check (every cycle)
         _check_token_stagnation(results, dry_run=dry_run)
+
+        # Action queue — consume pending actions (every cycle)
+        _consume_actions(dry_run=dry_run)
 
         if one_shot:
             break

@@ -622,25 +622,40 @@ async def fact_reject(fact_id: str) -> str:
 
 @mcp.tool(name="obs_search")
 async def obs_search(
-    category: Optional[str] = None, source: str = "hook:PostToolUse", limit: int = 10
+    category: Optional[str] = None,
+    source: Optional[str] = None,
+    tags: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 10,
 ) -> str:
-    """observations 테이블 검색. PostToolUse 훅이 자동 기록한 테스트 결과/에디트 이력을 조회합니다.
+    """observations 테이블 검색. PostToolUse 훅 자동 기록 + obs_write 수동 기록을 통합 조회.
 
     Args:
-        category: 카테고리 필터 (test_result, edit, error — 생략 시 전체)
-        source: 출처 필터 (기본 hook:PostToolUse, 빈 문자열로 전체)
-        limit: 반환 개수 (기본 10, 최대 50)
+        category: 카테고리 필터 (insight, decision, test_result, edit, error, reasoning, reference 등)
+        source: 출처 필터 (생략 시 전체 — hook:PostToolUse, mcp:obs_write, cli:obs, 등)
+        tags: JSON 태그 필터 — {"domain": ["mcp"]} 형식 (object-of-arrays JSON 문자열)
+        query: observation 텍스트 부분 검색 (pg_trgm ILIKE)
+        limit: 반환 개수 (기본 10, 최대 200)
     """
-    limit = max(1, min(limit, 50))
-    cond = []
+    limit = max(1, min(limit, 200))
+    conds = []
     if source:
-        cond.append(f"source = '{esc_sql(source)}'")
+        conds.append(f"source = '{esc_sql(source)}'")
     if category:
-        cond.append(f"category = '{esc_sql(category)}'")
-    where = " AND ".join(cond) if cond else "TRUE"
+        conds.append(f"category = '{esc_sql(category)}'")
+    if tags:
+        try:
+            tags_obj = json.loads(tags)
+            conds.append(f"tags @> $JSON${json.dumps(tags_obj, ensure_ascii=False)}$JSON$::jsonb")
+        except json.JSONDecodeError:
+            pass
+    if query:
+        q = esc_sql(query)
+        conds.append(f"observation ILIKE '%{q}%'")
+    where = " AND ".join(conds) if conds else "TRUE"
 
     rows = await _fetch_json(f"""
-        SELECT id::text, observation, category, source, context::text, created_at::text
+        SELECT id::text, observation, category, source, context::text, tags::text, created_at::text
         FROM observations
         WHERE {where}
         ORDER BY created_at DESC
@@ -656,12 +671,18 @@ async def obs_search(
             ctx = json.loads(r.get("context") or "{}")
         except (json.JSONDecodeError, TypeError):
             pass
+        tag_obj = {}
+        try:
+            tag_obj = json.loads(r.get("tags") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            pass
         results.append(
             {
                 "id": r["id"],
                 "observation": (r.get("observation") or "")[:300],
                 "category": r.get("category", ""),
                 "source": r.get("source", ""),
+                "tags": tag_obj,
                 "tool": ctx.get("tool", ""),
                 "exit_code": ctx.get("exit_code"),
                 "file_path": ctx.get("file_path"),
@@ -669,6 +690,116 @@ async def obs_search(
             }
         )
     return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
+
+
+@mcp.tool(name="obs_write")
+async def obs_write(
+    observation: str,
+    category: str = "general",
+    tags: Optional[str] = None,
+    context_json: Optional[str] = None,
+) -> str:
+    """관찰 기록 (수동). 세션 내 어디서든 호출 가능.
+
+    MCP 검색 결과 요약, Deep Dive 분석 과정, DB 분석 결과, 설계 결정 등을 기록.
+    PostToolUse hook이 자동 기록하는 test_result/edit/error 외의 모든 용도.
+
+    Args:
+        observation: 관찰 내용
+        category: 카테고리 (insight, decision, reasoning, reference, db_result, config, general, 등)
+        tags: {"domain": ["mcp","search"], "tier": ["reference"]} 형식 JSON 문자열
+        context_json: 추가 컨텍스트 JSON 문자열 (선택)
+    """
+    from lib.observation import observe as _observe
+
+    tag_obj = None
+    if tags:
+        try:
+            tag_obj = json.loads(tags)
+        except json.JSONDecodeError:
+            pass
+    ctx_obj = None
+    if context_json:
+        try:
+            ctx_obj = json.loads(context_json)
+        except json.JSONDecodeError:
+            pass
+
+    oid = _observe(
+        observation, category=category, source="mcp:obs_write", context=ctx_obj, tags=tag_obj
+    )
+    if oid:
+        return json.dumps({"ok": True, "id": oid}, ensure_ascii=False)
+    return json.dumps(
+        {"ok": False, "error": "observation empty or insert failed"}, ensure_ascii=False
+    )
+
+
+@mcp.tool(name="obs_remediate")
+async def obs_remediate(observation: str, category: str = "error", tags_json: str = "") -> str:
+    """Pattern 2+4: Match observation against reflex rules. Auto-fix>=0.7, notify>=0.3, log unknown."""
+    from lib.auto_fix import remediate_observation
+
+    tags = None
+    if tags_json:
+        try:
+            tags = json.loads(tags_json)
+        except json.JSONDecodeError:
+            pass
+    result = remediate_observation(observation, category=category, tags=tags)
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@mcp.tool(name="action_write")
+async def action_write(
+    instruction: str,
+    action_type: str = "systemctl",
+    action_params_json: str = "",
+    priority: str = "P1_CONTEXT",
+) -> str:
+    """액션을 큐에 등록합니다. Watchdog이 비동기적으로 실행합니다.
+
+    Claude Code는 결정만 내리고, 실제 실행은 Watchdog이 담당합니다.
+    실행 전에 action_type에 해당하는 검증을 Watchdog이 수행합니다.
+
+    Args:
+        instruction: 실행할 명령에 대한 자연어 설명
+        action_type: 실행 유형 (systemctl, podman, cli)
+        action_params_json: 실행 파라미터 JSON 문자열
+            systemctl: {"service": "devforge-pod-b", "command": "restart"}
+            podman: {"container": "devforge-pod-b", "command": "restart"}
+            cli: {"script": "cli.py", "args": ["task", "update", "..."]}
+        priority: P0_HOT_FIX (즉시), P1_CONTEXT (일반), P2_LOW (여유)
+    """
+    from lib.action_queue import action_write as _action_write
+
+    params = None
+    if action_params_json:
+        try:
+            params = json.loads(action_params_json)
+        except json.JSONDecodeError:
+            return json.dumps(
+                {"ok": False, "error": "Invalid action_params_json"}, ensure_ascii=False
+            )
+
+    pid = _action_write(
+        instruction=instruction,
+        priority=priority,
+        action_type=action_type,
+        action_params=params,
+    )
+    if pid:
+        return json.dumps({"ok": True, "pulse_id": pid}, ensure_ascii=False)
+    return json.dumps({"ok": False, "error": "Failed to write action"}, ensure_ascii=False)
+
+
+@mcp.tool(name="action_poll_results")
+async def action_poll_results(pulse_id: str) -> str:
+    """액션 실행 결과를 조회합니다. Watchdog이 실행한 후 observation에 기록됩니다."""
+    from lib.action_queue import action_poll_results as _poll
+
+    results = _poll(pulse_id)
+    return json.dumps({"pulse_id": pulse_id, "results": results}, ensure_ascii=False, default=str)
 
 
 # ── Aider sequential review tool ─────────────────────────────

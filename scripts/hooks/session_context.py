@@ -123,14 +123,25 @@ def main():
     lines.append(f"In progress task: {task_line}")
     lines.append("")
 
-    # Lightweight observation recall — count only, no data dump
-    obs_count = psql(
-        "SELECT COUNT(*) FROM observations WHERE source = 'hook:PostToolUse' AND created_at > NOW() - INTERVAL '7 days'"
-    )
-    if obs_count and obs_count.strip():
-        lines.append(f"Recent observations (7d): {obs_count.strip()}")
-        lines.append("  → Use MCP tool obs_search(category='test_result') for details")
-        lines.append("")
+    # Lightweight observation recall — category stats + key items
+    from lib.observation import obs_search as _obs_search
+    from lib.observation import obs_stats
+
+    stats = obs_stats(days=7)
+    if stats:
+        parts = [f"{s['category']}={s['count']}" for s in stats[:8]]
+        lines.append(f"Recent observations (7d): {' | '.join(parts)}")
+
+        # Show recent insights/decisions if any
+        key_rows = _obs_search(category="insight", limit=3) or []
+        if not key_rows:
+            key_rows = _obs_search(category="decision", limit=3) or []
+        for r in key_rows[:2]:
+            obs = (r.get("observation") or "")[:100]
+            cat = r.get("category", "")
+            lines.append(f"  › [{cat}] {obs}")
+        lines.append("  → Use MCP tool obs_search for details")
+    lines.append("")
 
     auto_commits = _git(["log", "--since=yesterday", "--grep=[auto] unlogged", "--oneline"])
     if auto_commits:
