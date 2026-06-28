@@ -736,8 +736,20 @@ async def obs_write(
 
 
 @mcp.tool(name="obs_remediate")
-async def obs_remediate(observation: str, category: str = "error", tags_json: str = "") -> str:
-    """Pattern 2+4: Match observation against reflex rules. Auto-fix>=0.7, notify>=0.3, log unknown."""
+async def obs_remediate(
+    observation: str,
+    category: str = "error",
+    tags_json: str = "",
+    source: str = "",
+) -> str:
+    """Pattern 2+4: Match observation against reflex rules. Auto-fix>=0.7, notify>=0.3, log unknown.
+
+    Args:
+        observation: 관찰 내용
+        category: 카테고리 (기본 error)
+        tags_json: 태그 JSON 문자열 (선택)
+        source: 관찰 출처 (선택, trigger_source 필터에 사용)
+    """
     from lib.auto_fix import remediate_observation
 
     tags = None
@@ -746,7 +758,7 @@ async def obs_remediate(observation: str, category: str = "error", tags_json: st
             tags = json.loads(tags_json)
         except json.JSONDecodeError:
             pass
-    result = remediate_observation(observation, category=category, tags=tags)
+    result = remediate_observation(observation, category=category, tags=tags, source=source or None)
     return json.dumps(result, ensure_ascii=False, default=str)
 
 

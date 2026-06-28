@@ -186,6 +186,7 @@ def remediate_observation(
     observation_text: str,
     category: Optional[str] = None,
     tags: Optional[Dict] = None,
+    source: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Full Pattern 2 pipeline: match → confidence check → fix or notify.
 
@@ -193,13 +194,14 @@ def remediate_observation(
         observation_text: The observation text to match
         category: Observation category
         tags: Observation tags dict
+        source: Observation source — matched against rule trigger_source
 
     Returns:
         Result dict with status, action, message.
     """
     from lib.reflex_rules import rule_match
 
-    matches = rule_match(observation_text, category=category, tags=tags)
+    matches = rule_match(observation_text, category=category, tags=tags, source=source)
     if not matches:
         action_log_only(
             message=f"[unseen pattern] '{observation_text[:120]}' (category={category})"

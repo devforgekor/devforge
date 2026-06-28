@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-06-28T06:51:00.703501+00:00'
+  time: '2026-06-28T07:36:08.601633+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -163,6 +163,18 @@ decisions:
     Cerebro/corvus (tokio::mpsc channel) all use same "MCP writes -> DB queue -> daemon executes" pattern. Security: mutex-induced
     hang avoided (atomic DB queue, no channel mutex), RCE by design avoided (HTTP transport + shell=False), write access scope
     limited to 3 deterministic action types. Conditional approval secured.'
+  status: open
+- id: nd09-01
+  detail: 'Bug fix: match_rule SQL function had hardcoded trigger_source IS NULL — source filtering dead. Added obs_source
+    param to SQL + Python rule_match() + remediate_observation() + obs_remediate MCP. DB redeployed.'
+  status: open
+- id: nd09-02
+  detail: 'Bug fix: auto_log.py _handle_bash marked denied/blocked commands as bash_executed=true. Added tool_output.error
+    early return — only executed commands get the tag.'
+  status: open
+- id: nd09-03
+  detail: 'All 3 hooks (pretool_bash_log, auto_log, ruff_lint) made fully silent. ruff_lint.py: removed hookSpecificOutput.
+    pretool_bash_log.py: removed stderr output.'
   status: open
 known_issues:
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.

@@ -42,23 +42,8 @@ def main() -> None:
     # Phase 1: auto-fix silently
     _ruff(["ruff", "check", "--fix", "--quiet", file_path])
     _ruff(["ruff", "format", "--quiet", file_path])
-
-    # Phase 2: re-check for unfixable violations
-    output = _ruff(["ruff", "check", file_path]).strip()
-    if not output:
-        return
-
-    lines = [ln for ln in output.split("\n") if ln.strip()][:MAX_LINES]
-    if not lines:
-        return
-
-    out = {
-        "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": f"[ruff] {file_path}:\n" + "\n".join(lines),
-        }
-    }
-    print(json.dumps(out, ensure_ascii=False))
+    # Phase 2: re-check — run only, never print. Hooks are silent.
+    _ruff(["ruff", "check", "--quiet", file_path])
 
 
 if __name__ == "__main__":

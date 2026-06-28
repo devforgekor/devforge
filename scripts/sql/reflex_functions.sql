@@ -162,7 +162,8 @@ COMMENT ON FUNCTION decay_rules IS 'Demote rules with no match in dormant_days t
 CREATE OR REPLACE FUNCTION match_rule(
     obs_text TEXT,
     obs_category TEXT DEFAULT NULL,
-    obs_tags JSONB DEFAULT '{}'::jsonb
+    obs_tags JSONB DEFAULT '{}'::jsonb,
+    obs_source TEXT DEFAULT NULL
 )
 RETURNS TABLE(
     rule_id UUID,
@@ -181,7 +182,7 @@ BEGIN
         FROM reflex_rules rr
         WHERE rr.status = 'approved'
           AND (rr.trigger_category IS NULL OR rr.trigger_category = obs_category OR obs_category IS NULL)
-          AND (rr.trigger_source IS NULL)  -- source match not used at match time
+          AND (rr.trigger_source IS NULL OR rr.trigger_source = obs_source OR obs_source IS NULL)
           AND (rr.trigger_pattern IS NULL OR obs_text ILIKE '%' || rr.trigger_pattern || '%')
           AND (rr.trigger_tags = '{}'::jsonb OR obs_tags @> rr.trigger_tags)
         ORDER BY rr.confidence DESC, rr.observation_count DESC

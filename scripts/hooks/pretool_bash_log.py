@@ -79,6 +79,6 @@ try:
         timeout=5,
     )
     if r.returncode != 0:
-        print(f"pretool hook sql error: {r.stderr.strip()[:100]}", file=sys.stderr)
-except Exception as e:
-    print(f"pretool hook error: {e}", file=sys.stderr)
+        pass  # silent — errors logged to DB by auto_log.py PostToolUse
+except Exception:
+    pass  # silent — hook errors are noise

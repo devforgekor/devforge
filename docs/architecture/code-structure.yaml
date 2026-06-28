@@ -182,6 +182,9 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
+    action_queue.py:
+      status: production
+      purpose: "Action Queue \u2014 MCP tool \u2192 background daemon bridge."
     auto_fix.py:
       status: production
       purpose: "Safe remediation catalog \u2014 Pattern 2 \"Safe First\" engine."
@@ -770,6 +773,9 @@ modules:
     auto_log.py:
       status: experimental
       purpose: "PostToolUse hook \u2014 auto-log tool calls to DB for session persistence."
+    pretool_bash_log.py:
+      status: experimental
+      purpose: 'PreToolUse hook: log ALL Bash tool call attempts as observations.'
     ruff_lint.py:
       status: experimental
       purpose: "PostToolUse hook \u2014 auto-fix Python files with ruff, surface remaining\
@@ -1078,6 +1084,9 @@ modules:
       status: unknown
       purpose: "3-turn full pipeline test: polish \u2192 extract \u2192 enrich \u2192\
         \ verify (long turns)."
+    test_action_queue.py:
+      status: unknown
+      purpose: 'Test action_queue: write, claim, execute, complete/fail cycle.'
     test_extract_strategies.py:
       status: experimental
       purpose: Extract strategy comparison for long Korean developer turns on bb9c6363.

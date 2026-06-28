@@ -197,6 +197,7 @@ def rule_match(
     observation_text: str,
     category: Optional[str] = None,
     tags: Optional[Dict] = None,
+    source: Optional[str] = None,
 ) -> List[Dict]:
     """Find approved rules matching an observation via SQL function.
 
@@ -206,7 +207,8 @@ def rule_match(
     cat_arg = f"'{esc_sql(category)}'" if category else "NULL"
     tags_arg = f"$JSON${json.dumps(tags or {}, ensure_ascii=False)}$JSON$::jsonb"
     obs_arg = f"'{esc_sql(observation_text)}'"
-    sql = f"SELECT rule_id, description, action_type, action_params::text, confidence FROM match_rule({obs_arg}, {cat_arg}, {tags_arg})"
+    src_arg = f"'{esc_sql(source)}'" if source else "NULL"
+    sql = f"SELECT rule_id, description, action_type, action_params::text, confidence FROM match_rule({obs_arg}, {cat_arg}, {tags_arg}, {src_arg})"
     rows = psql_json(sql)
     if not rows:
         return []

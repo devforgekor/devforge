@@ -128,7 +128,12 @@ def _handle_bash(tool_input: dict, tool_output: dict) -> None:
     if not cmd:
         return
 
-    # Always resolve matching PreToolUse observation for any executed Bash
+    # PostToolUse fires even for denied/blocked commands (error in tool_output).
+    # Check error first — if present, command was NOT executed.
+    if isinstance(tool_output, dict) and tool_output.get("error"):
+        return
+
+    # Resolve matching PreToolUse observation as executed
     cmd_token = cmd.strip().split()[0] if cmd.strip() else "unknown"
     esc_token = cmd_token.replace("'", "''")
     _psql_one(
