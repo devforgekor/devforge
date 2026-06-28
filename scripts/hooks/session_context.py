@@ -2,23 +2,29 @@
 # Status: production
 # Path: hooks/session_context.py — Claude SessionStart hook (dormant, not in active hooks config)
 """SessionStart hook — inject DevForge work context into Claude."""
-import os
+
 import json
+import os
 import subprocess
 from pathlib import Path
 
 from lib.db import psql, psql_json
+
 COLLECT_STATUS = Path("/opt/projects/server/data/collect_status.yaml")
 REPORT_FILE = Path("/opt/projects/server/data/consistency_report.yaml")
 LINK_REVIEW = Path("/opt/projects/server/data/link_review.yaml")
 SERVER_DIR = Path("/opt/projects/server")
 
+
 def _git(cmd):
     try:
-        r = subprocess.run(["git"] + cmd, capture_output=True, text=True, timeout=10, cwd=str(SERVER_DIR))
+        r = subprocess.run(
+            ["git"] + cmd, capture_output=True, text=True, timeout=10, cwd=str(SERVER_DIR)
+        )
         return r.stdout.strip() if r.returncode == 0 else ""
     except Exception:
         return ""
+
 
 def main():
     base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
@@ -45,6 +51,7 @@ def main():
     lines.append("")
 
     from lib.db import get_token_stats
+
     stats = get_token_stats()
     lines.append("Token status:")
     if stats:
@@ -71,6 +78,7 @@ def main():
 
     if LINK_REVIEW.exists():
         import yaml
+
         try:
             review_text = LINK_REVIEW.read_text().strip()
             orphan_count = 0
@@ -84,7 +92,7 @@ def main():
 
             if orphan_count > 0:
                 lines.append(f"## ORPHAN TURNS: {orphan_count}")
-                lines.append(f"  Turns without worklog — nightly batch will reconcile.")
+                lines.append("  Turns without worklog — nightly batch will reconcile.")
                 lines.append("")
 
             lines.append("Link review (last nightly):")
@@ -108,22 +116,35 @@ def main():
 
     task_line = "(no in_progress task)"
     from lib.db import psql_json
+
     tasks = psql_json("SELECT title, status FROM tasks WHERE status = 'in_progress' LIMIT 1")
     if tasks and len(tasks) > 0:
         task_line = tasks[0].get("title", "?")
     lines.append(f"In progress task: {task_line}")
     lines.append("")
 
+    # Lightweight observation recall — count only, no data dump
+    obs_count = psql(
+        "SELECT COUNT(*) FROM observations WHERE source = 'hook:PostToolUse' AND created_at > NOW() - INTERVAL '7 days'"
+    )
+    if obs_count and obs_count.strip():
+        lines.append(f"Recent observations (7d): {obs_count.strip()}")
+        lines.append("  → Use MCP tool obs_search(category='test_result') for details")
+        lines.append("")
+
     auto_commits = _git(["log", "--since=yesterday", "--grep=[auto] unlogged", "--oneline"])
     if auto_commits:
         lines.append("## UNLOGGED SESSIONS (auto-committed by git safety net)")
         for line in auto_commits.split("\n"):
             lines.append(f"  {line}")
-        lines.append("ACTION: Review, update tasks via cli.py task update, run worklog add for completed work.")
+        lines.append(
+            "ACTION: Review, update tasks via cli.py task update, run worklog add for completed work."
+        )
         lines.append("")
 
     if REPORT_FILE.exists():
         import yaml
+
         try:
             report = yaml.safe_load(REPORT_FILE.read_text()) or {}
             warns = report.get("warnings", [])
@@ -138,7 +159,9 @@ def main():
     lines.append("---")
     lines.append("Entry point → /opt/projects/server/CLAUDE.yaml (rules, entry_points, handover)")
     lines.append("Key docs:")
-    lines.append("  cli.py status --json — live state (containers, models, timers, services, resources)")
+    lines.append(
+        "  cli.py status --json — live state (containers, models, timers, services, resources)"
+    )
     lines.append("  infra.md — project infrastructure overview")
     lines.append("  blueprint.yaml — phases, target services, roadmap")
     lines.append("  phases.md    — progress tracker (Phase 1 complete, Phase 2 planned)")
@@ -149,10 +172,11 @@ def main():
     output = {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
-            "additionalContext": "\n".join(lines)
+            "additionalContext": "\n".join(lines),
         }
     }
     print(json.dumps(output, ensure_ascii=False))
+
 
 if __name__ == "__main__":
     main()

@@ -30,8 +30,8 @@ SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
 
 import httpx
+from lib.db import esc_sql, psql_json, psql_ok
 from mcp.server.fastmcp import FastMCP
-from lib.db import psql_json, psql_ok, esc_sql
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("mcp_server")
@@ -65,11 +65,13 @@ async def _get_query_vector(query: str) -> Optional[list[float]]:
 async def _fetch_json(sql: str) -> list[dict]:
     """Bridge sync psql_json to async via thread pool."""
     import asyncio
+
     return await asyncio.to_thread(psql_json, sql)
 
 
 async def _execute(sql: str) -> bool:
     import asyncio
+
     return await asyncio.to_thread(psql_ok, sql)
 
 
@@ -77,8 +79,7 @@ async def _execute(sql: str) -> bool:
 
 
 @mcp.tool(name="fact_search")
-async def fact_search(query: str, limit: int = 10,
-                      fact_type: Optional[str] = None) -> str:
+async def fact_search(query: str, limit: int = 10, fact_type: Optional[str] = None) -> str:
     """review_facts 테이블에서 의미 기반 검색. 벡터 유사도로 관련 fact를 찾습니다.
 
     Args:
@@ -119,21 +120,22 @@ async def fact_search(query: str, limit: int = 10,
 
     results = []
     for r in rows:
-        results.append({
-            "fact_id": str(r["id"]),
-            "turn_id": str(r["turn_id"]),
-            "fact_type": r.get("fact_type", ""),
-            "evidence": (r.get("evidence") or "")[:500],
-            "distance": round(float(r["distance"]), 4),
-            "context": (r.get("text_clean") or "")[:300],
-            "turn_created": r.get("turn_created", ""),
-        })
+        results.append(
+            {
+                "fact_id": str(r["id"]),
+                "turn_id": str(r["turn_id"]),
+                "fact_type": r.get("fact_type", ""),
+                "evidence": (r.get("evidence") or "")[:500],
+                "distance": round(float(r["distance"]), 4),
+                "context": (r.get("text_clean") or "")[:300],
+                "turn_created": r.get("turn_created", ""),
+            }
+        )
     return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
 
 
 @mcp.tool(name="mem_save")
-async def mem_save(tag: str, summary: str, detail: str,
-                   model: Optional[str] = None) -> str:
+async def mem_save(tag: str, summary: str, detail: str, model: Optional[str] = None) -> str:
     """AI 대화 기록을 저장합니다. tag=분류, summary=요약, detail=대화내용.
 
     Args:
@@ -177,12 +179,15 @@ async def mem_save(tag: str, summary: str, detail: str,
     )
     tid = str(turn_id[0]["id"]) if turn_id else None
 
-    return json.dumps({
-        "status": "saved",
-        "conversation_id": str(conversation_id),
-        "turn_id": tid,
-        "seq": seq,
-    }, ensure_ascii=False)
+    return json.dumps(
+        {
+            "status": "saved",
+            "conversation_id": str(conversation_id),
+            "turn_id": tid,
+            "seq": seq,
+        },
+        ensure_ascii=False,
+    )
 
 
 @mcp.tool(name="mem_search")
@@ -212,25 +217,30 @@ async def mem_search(query: str, tag: Optional[str] = None) -> str:
 
     results = []
     for r in rows:
-        results.append({
-            "turn_id": str(r["id"]),
-            "conversation_id": str(r["conversation_id"]),
-            "title": r.get("title") or "",
-            "source": r.get("source") or "",
-            "model": r.get("model") or "",
-            "seq": r.get("seq"),
-            "user_query": (r.get("user_turn") or "")[:300],
-            "assistant_answer": (r.get("text") or "")[:500],
-            "created_at": r.get("created_at", ""),
-        })
+        results.append(
+            {
+                "turn_id": str(r["id"]),
+                "conversation_id": str(r["conversation_id"]),
+                "title": r.get("title") or "",
+                "source": r.get("source") or "",
+                "model": r.get("model") or "",
+                "seq": r.get("seq"),
+                "user_query": (r.get("user_turn") or "")[:300],
+                "assistant_answer": (r.get("text") or "")[:500],
+                "created_at": r.get("created_at", ""),
+            }
+        )
     return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
 
 
 @mcp.tool(name="search_similarity")
-async def search_similarity(query: str, limit: int = 10,
-                            rerank: bool = True,
-                            rerank_candidates: int = 50,
-                            max_tokens: int = 4096) -> str:
+async def search_similarity(
+    query: str,
+    limit: int = 10,
+    rerank: bool = True,
+    rerank_candidates: int = 50,
+    max_tokens: int = 4096,
+) -> str:
     """의미 기반 유사도 검색. BM25(키워드) + Dense(벡터) 하이브리드 RRF 융합 + Cross-Encoder 리랭커.
 
     Stage 1: BM25 (FTS5) + Dense (pgvector ANN) → RRF fusion
@@ -248,13 +258,17 @@ async def search_similarity(query: str, limit: int = 10,
         max_tokens: 출력 결과의 최대 추정 토큰 수 (기본 4096, 최대 8192)
     """
     import asyncio
+
     from lib.search.hybrid import hybrid_search
+
     limit = max(1, min(limit, 30))
     rerank_candidates = max(10, min(rerank_candidates, 100))
     max_tokens = max(1024, min(max_tokens, 8192))
 
     result = await asyncio.to_thread(
-        hybrid_search, query, limit,
+        hybrid_search,
+        query,
+        limit,
         rerank=rerank,
         rerank_candidates=rerank_candidates,
     )
@@ -290,10 +304,9 @@ async def search_similarity(query: str, limit: int = 10,
 
 
 @mcp.tool(name="search_conversations")
-async def search_conversations(source: Optional[str] = None,
-                                model: Optional[str] = None,
-                                limit: int = 20,
-                                offset: int = 0) -> str:
+async def search_conversations(
+    source: Optional[str] = None, model: Optional[str] = None, limit: int = 20, offset: int = 0
+) -> str:
     """대화 목록을 검색/조회합니다. source나 model로 필터링 가능.
 
     Args:
@@ -323,14 +336,16 @@ async def search_conversations(source: Optional[str] = None,
 
     results = []
     for r in rows:
-        results.append({
-            "id": str(r["id"]),
-            "title": r.get("title") or "",
-            "source": r.get("source") or "",
-            "model": r.get("model") or "",
-            "turn_count": r.get("turn_count", 0),
-            "created_at": r.get("created_at", ""),
-        })
+        results.append(
+            {
+                "id": str(r["id"]),
+                "title": r.get("title") or "",
+                "source": r.get("source") or "",
+                "model": r.get("model") or "",
+                "turn_count": r.get("turn_count", 0),
+                "created_at": r.get("created_at", ""),
+            }
+        )
     return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
 
 
@@ -354,36 +369,41 @@ async def get_conversation(conversation_id: str) -> str:
         ORDER BY seq ASC
     """)
 
-    return json.dumps({
-        "conversation": {
-            "id": str(conv[0]["id"]),
-            "title": conv[0].get("title") or "",
-            "source": conv[0].get("source") or "",
-            "model": conv[0].get("model") or "",
-            "created_at": conv[0].get("created_at", ""),
+    return json.dumps(
+        {
+            "conversation": {
+                "id": str(conv[0]["id"]),
+                "title": conv[0].get("title") or "",
+                "source": conv[0].get("source") or "",
+                "model": conv[0].get("model") or "",
+                "created_at": conv[0].get("created_at", ""),
+            },
+            "turns": [
+                {
+                    "seq": t["seq"],
+                    "user_turn": (t.get("user_turn") or "")[:500],
+                    "text": (t.get("text") or "")[:2000],
+                    "thinking": (t.get("thinking") or "")[:500] if t.get("thinking") else None,
+                    "agent": t.get("agent"),
+                    "pipeline_state": t.get("pipeline_state"),
+                }
+                for t in turns
+            ],
+            "turn_count": len(turns),
         },
-        "turns": [
-            {
-                "seq": t["seq"],
-                "user_turn": (t.get("user_turn") or "")[:500],
-                "text": (t.get("text") or "")[:2000],
-                "thinking": (t.get("thinking") or "")[:500] if t.get("thinking") else None,
-                "agent": t.get("agent"),
-                "pipeline_state": t.get("pipeline_state"),
-            }
-            for t in turns
-        ],
-        "turn_count": len(turns),
-    }, ensure_ascii=False)
+        ensure_ascii=False,
+    )
 
 
 @mcp.tool(name="search_turns")
-async def search_turns(keyword: Optional[str] = None,
-                        agent: Optional[str] = None,
-                        pipeline_state: Optional[str] = None,
-                        meta_type: Optional[str] = None,
-                        limit: int = 20,
-                        offset: int = 0) -> str:
+async def search_turns(
+    keyword: Optional[str] = None,
+    agent: Optional[str] = None,
+    pipeline_state: Optional[str] = None,
+    meta_type: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> str:
     """대화 턴(Turn)을 검색합니다. 키워드, agent, 상태 등으로 필터링.
 
     Args:
@@ -422,17 +442,19 @@ async def search_turns(keyword: Optional[str] = None,
 
     results = []
     for r in rows:
-        results.append({
-            "id": str(r["id"]),
-            "conversation_id": str(r["conversation_id"]),
-            "seq": r["seq"],
-            "user_turn": (r.get("user_turn") or "")[:300],
-            "text": (r.get("text") or "")[:500],
-            "agent": r.get("agent"),
-            "pipeline_state": r.get("pipeline_state"),
-            "est_chars": r.get("est_chars"),
-            "created_at": r.get("created_at", ""),
-        })
+        results.append(
+            {
+                "id": str(r["id"]),
+                "conversation_id": str(r["conversation_id"]),
+                "seq": r["seq"],
+                "user_turn": (r.get("user_turn") or "")[:300],
+                "text": (r.get("text") or "")[:500],
+                "agent": r.get("agent"),
+                "pipeline_state": r.get("pipeline_state"),
+                "est_chars": r.get("est_chars"),
+                "created_at": r.get("created_at", ""),
+            }
+        )
     return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
 
 
@@ -455,16 +477,18 @@ async def get_turn_facts(turn_id: str) -> str:
 
     results = []
     for r in rows:
-        results.append({
-            "id": str(r["id"]),
-            "fact_index": r["fact_index"],
-            "fact_type": r.get("fact_type", ""),
-            "evidence": (r.get("evidence") or "")[:500],
-            "verdict": r.get("verdict", "pending"),
-            "nli_verdict": r.get("nli_verdict"),
-            "source": r.get("source", ""),
-            "created_at": r.get("created_at", ""),
-        })
+        results.append(
+            {
+                "id": str(r["id"]),
+                "fact_index": r["fact_index"],
+                "fact_type": r.get("fact_type", ""),
+                "evidence": (r.get("evidence") or "")[:500],
+                "verdict": r.get("verdict", "pending"),
+                "nli_verdict": r.get("nli_verdict"),
+                "source": r.get("source", ""),
+                "created_at": r.get("created_at", ""),
+            }
+        )
     return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
 
 
@@ -521,11 +545,14 @@ async def ingest(conversation_json: str) -> str:
             inserted += 1
             seq += 1
 
-    return json.dumps({
-        "status": "saved",
-        "conversation_id": str(conversation_id),
-        "turns_inserted": inserted,
-    }, ensure_ascii=False)
+    return json.dumps(
+        {
+            "status": "saved",
+            "conversation_id": str(conversation_id),
+            "turns_inserted": inserted,
+        },
+        ensure_ascii=False,
+    )
 
 
 # ── Telegram tools ─────────────────────────────────────────────
@@ -539,7 +566,9 @@ async def telegram_send(text: str) -> str:
         text: 전송할 메시지 내용
     """
     import asyncio
+
     from telegram_send import send_text
+
     ok = await asyncio.to_thread(send_text, text)
     return json.dumps({"ok": ok}, ensure_ascii=False)
 
@@ -573,8 +602,7 @@ async def fact_confirm(fact_id: str) -> str:
         fact_id: review_fact UUID
     """
     ok = await _execute(
-        f"UPDATE review_facts SET user_verdict = 'GROUNDED' "
-        f"WHERE id = '{esc_sql(fact_id)}'::uuid"
+        f"UPDATE review_facts SET user_verdict = 'GROUNDED' WHERE id = '{esc_sql(fact_id)}'::uuid"
     )
     return json.dumps({"ok": ok, "fact_id": fact_id, "verdict": "GROUNDED"}, ensure_ascii=False)
 
@@ -587,10 +615,60 @@ async def fact_reject(fact_id: str) -> str:
         fact_id: review_fact UUID
     """
     ok = await _execute(
-        f"UPDATE review_facts SET user_verdict = 'UNGROUNDED' "
-        f"WHERE id = '{esc_sql(fact_id)}'::uuid"
+        f"UPDATE review_facts SET user_verdict = 'UNGROUNDED' WHERE id = '{esc_sql(fact_id)}'::uuid"
     )
     return json.dumps({"ok": ok, "fact_id": fact_id, "verdict": "UNGROUNDED"}, ensure_ascii=False)
+
+
+@mcp.tool(name="obs_search")
+async def obs_search(
+    category: Optional[str] = None, source: str = "hook:PostToolUse", limit: int = 10
+) -> str:
+    """observations 테이블 검색. PostToolUse 훅이 자동 기록한 테스트 결과/에디트 이력을 조회합니다.
+
+    Args:
+        category: 카테고리 필터 (test_result, edit, error — 생략 시 전체)
+        source: 출처 필터 (기본 hook:PostToolUse, 빈 문자열로 전체)
+        limit: 반환 개수 (기본 10, 최대 50)
+    """
+    limit = max(1, min(limit, 50))
+    cond = []
+    if source:
+        cond.append(f"source = '{esc_sql(source)}'")
+    if category:
+        cond.append(f"category = '{esc_sql(category)}'")
+    where = " AND ".join(cond) if cond else "TRUE"
+
+    rows = await _fetch_json(f"""
+        SELECT id::text, observation, category, source, context::text, created_at::text
+        FROM observations
+        WHERE {where}
+        ORDER BY created_at DESC
+        LIMIT {limit}
+    """)
+    if not rows:
+        return json.dumps({"count": 0, "results": []}, ensure_ascii=False)
+
+    results = []
+    for r in rows:
+        ctx = {}
+        try:
+            ctx = json.loads(r.get("context") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+        results.append(
+            {
+                "id": r["id"],
+                "observation": (r.get("observation") or "")[:300],
+                "category": r.get("category", ""),
+                "source": r.get("source", ""),
+                "tool": ctx.get("tool", ""),
+                "exit_code": ctx.get("exit_code"),
+                "file_path": ctx.get("file_path"),
+                "created_at": r.get("created_at", ""),
+            }
+        )
+    return json.dumps({"count": len(results), "results": results}, ensure_ascii=False)
 
 
 # ── Aider sequential review tool ─────────────────────────────
@@ -678,27 +756,33 @@ async def review_sequential(task: str, paths: str) -> str:
         head = [l.rstrip() for l in lines[:8]]
         tail = [l.rstrip() for l in lines[-6:]] if total > 12 else []
 
-        reviews.append({
-            "path": fp,
-            "status": status,
-            "caller": caller,
-            "lines": total,
-            "docstring": docstring,
-            "imports": imports[:15],
-            "import_count": len(imports),
-            "funcs": funcs[:20],
-            "func_count": len(funcs),
-            "classes": classes[:10],
-            "constants": constants,
-            "head": head,
-            "tail": tail,
-        })
+        reviews.append(
+            {
+                "path": fp,
+                "status": status,
+                "caller": caller,
+                "lines": total,
+                "docstring": docstring,
+                "imports": imports[:15],
+                "import_count": len(imports),
+                "funcs": funcs[:20],
+                "func_count": len(funcs),
+                "classes": classes[:10],
+                "constants": constants,
+                "head": head,
+                "tail": tail,
+            }
+        )
 
-    return json.dumps({
-        "task": task,
-        "file_count": len(reviews),
-        "reviews": reviews,
-    }, ensure_ascii=False, indent=2)
+    return json.dumps(
+        {
+            "task": task,
+            "file_count": len(reviews),
+            "reviews": reviews,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 # ── Entry point ────────────────────────────────────────────────
@@ -712,10 +796,12 @@ def _create_app():
     app = mcp.streamable_http_app()
 
     async def health_endpoint(request):
-        return JSONResponse({
-            "status": "ok",
-            "server": "devforge-mcp",
-        })
+        return JSONResponse(
+            {
+                "status": "ok",
+                "server": "devforge-mcp",
+            }
+        )
 
     app.router.routes.insert(0, Route("/health", health_endpoint, methods=["GET"]))
     return app
@@ -724,13 +810,17 @@ def _create_app():
 def main():
     """Start the MCP server with uvicorn (Starlette app from FastMCP)."""
     import argparse
+
     parser = argparse.ArgumentParser(description="DevForge MCP Server")
-    parser.add_argument("--port", "-p", type=int, default=8000,
-                        help="Port to listen on (default: 8000)")
-    parser.add_argument("--host", type=str, default="127.0.0.1",
-                        help="Host to bind (default: 127.0.0.1)")
+    parser.add_argument(
+        "--port", "-p", type=int, default=8000, help="Port to listen on (default: 8000)"
+    )
+    parser.add_argument(
+        "--host", type=str, default="127.0.0.1", help="Host to bind (default: 127.0.0.1)"
+    )
     args = parser.parse_args()
     import uvicorn
+
     app = _create_app()
     logger.info("Starting DevForge MCP server on %s:%d", args.host, args.port)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")

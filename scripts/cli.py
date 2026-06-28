@@ -14,11 +14,16 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from lib.tracking.agent_names import normalize as normalize_agent
-from lib.db import psql as _sql, esc_sql
-from lib.llm_client import MODEL_REGISTRY
+from lib.cli_experiment import (
+    cmd_experiment_active,
+    cmd_experiment_adopt,
+    cmd_experiment_compare,
+    cmd_experiment_list,
+)
 from lib.cli_worklog import cmd_worklog_add, cmd_worklog_recent, cmd_worklog_search
-from lib.cli_experiment import cmd_experiment_list, cmd_experiment_compare, cmd_experiment_active, cmd_experiment_adopt
+from lib.db import esc_sql
+from lib.db import psql as _sql
+from lib.llm_client import MODEL_REGISTRY
 
 
 def _format_results(rows):
@@ -35,6 +40,7 @@ def _format_results(rows):
 
 async def cmd_search(args):
     from api.search import search_memories
+
     results = await search_memories(query=args.query, source=args.source, limit=args.limit)
     print(f"Found {len(results)} results for '{args.query}'\n")
     _format_results(results)
@@ -44,6 +50,7 @@ async def cmd_search(args):
 
 async def cmd_save(args):
     from api.search import save_memory
+
     detail = {}
     if args.detail:
         try:
@@ -65,11 +72,10 @@ async def cmd_save(args):
 
 async def cmd_recent(args):
     from api.search import search_memories
+
     results = await search_memories(query="", source=args.source, limit=args.limit)
     print(f"Recent {len(results)} entries:\n")
     _format_results(results)
-
-
 
 
 def cmd_activity_recent(args):
@@ -79,14 +85,18 @@ def cmd_activity_recent(args):
     where = "WHERE created_at::date = CURRENT_DATE" if today else ""
     sql = f"SELECT id, created_at, type, source, title, summary_status, queue_status FROM activity_log {where} ORDER BY created_at DESC LIMIT {limit}"
     rows = _sql(sql).split("\n") if _sql(sql) else []
-    print(f"{'ID':<6} {'Created':<20} {'Type':<10} {'Source':<14} {'Title':<50} {'Sum.Status':<12} {'Q.Status'}")
+    print(
+        f"{'ID':<6} {'Created':<20} {'Type':<10} {'Source':<14} {'Title':<50} {'Sum.Status':<12} {'Q.Status'}"
+    )
     print("-" * 130)
     for row in rows:
         if not row.strip():
             continue
         parts = row.split("|", 6)
         if len(parts) >= 7:
-            print(f"{parts[0]:<6} {parts[1]:<20} {parts[2]:<10} {parts[3]:<14} {parts[4][:48]:<50} {parts[5]:<12} {parts[6]}")
+            print(
+                f"{parts[0]:<6} {parts[1]:<20} {parts[2]:<10} {parts[3]:<14} {parts[4][:48]:<50} {parts[5]:<12} {parts[6]}"
+            )
 
 
 def cmd_activity_stats(args):
@@ -110,7 +120,11 @@ def cmd_activity_add(args):
     title = esc_sql(args.title)
     summary = esc_sql(getattr(args, "summary", ""))
     tags = getattr(args, "tags", "")
-    tags_sql = "ARRAY[" + ",".join(f"'{esc_sql(t.strip())}'" for t in tags.split(",") if t.strip()) + "]" if tags else "'{}'"
+    tags_sql = (
+        "ARRAY[" + ",".join(f"'{esc_sql(t.strip())}'" for t in tags.split(",") if t.strip()) + "]"
+        if tags
+        else "'{}'"
+    )
     result = _sql(f"""INSERT INTO activity_log (type, source, title, summary, tags, summary_status)
         VALUES ('manual', 'cli', '{title}', '{summary}', {tags_sql}, 'raw') RETURNING id""")
     if result and result.strip():
@@ -119,17 +133,61 @@ def cmd_activity_add(args):
         print("  Failed to add entry")
 
 
+def cmd_obs_search(args):
+    """Search observations table (PostToolUse auto-logs)."""
+    import json as _json
+
+    from lib.db import psql_json as _pj
+
+    category = getattr(args, "category", "")
+    limit = max(1, min(getattr(args, "limit", 10), 50))
+
+    cond = ["source = 'hook:PostToolUse'"]
+    if category:
+        cond.append(f"category = '{esc_sql(category)}'")
+    where = " AND ".join(cond)
+
+    rows = _pj(f"""
+        SELECT observation, category, context, created_at::text
+        FROM observations
+        WHERE {where}
+        ORDER BY created_at DESC
+        LIMIT {limit}
+    """)
+    if not rows:
+        print("  (no observations)")
+        return
+
+    for r in rows:
+        ts = r.get("created_at", "")[:19] if r.get("created_at") else ""
+        cat = r.get("category", "")
+        obs = (r.get("observation") or "")[:120]
+        ctx = r.get("context", {}) or {}
+        tool = ctx.get("tool") or ctx.get("file_path") or ""
+        extra = f" [{tool}]" if tool else ""
+        print(f"  [{ts}] {cat:12s} {obs}{extra}")
+
+    if getattr(args, "json", False):
+        print(_json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+
+
 def cmd_search_bm25(args):
     """FTS5 BM25 search via local_index."""
     from lib.search.local_index import FTS5Index
+
     idx = FTS5Index()
     t0 = time.monotonic()
     results = idx.bm25_search(args.query, limit=args.limit)
     elapsed = round(time.monotonic() - t0, 3)
 
     if args.json:
-        print(json.dumps({"results": results, "meta": {"count": len(results), "elapsed_s": elapsed}},
-                          ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {"results": results, "meta": {"count": len(results), "elapsed_s": elapsed}},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return
 
     print(f"BM25 search: {len(results)} results for '{args.query}' ({elapsed}s)\n")
@@ -143,7 +201,7 @@ def cmd_search_bm25(args):
 
 def cmd_search_hybrid(args):
     """Hybrid BM25 + Dense search via RRF fusion."""
-    from lib.search.hybrid import hybrid_search, bm25_only
+    from lib.search.hybrid import bm25_only, hybrid_search
     from lib.text_cleaner import get_cleaner
 
     # Preprocess query through Kiwi for BM25
@@ -167,15 +225,28 @@ def cmd_search_hybrid(args):
             short_circuited = True
 
     if short_circuited:
-        meta = {"mode": "bm25_short_circuit", "bm25_time": bm25_time,
-                "bm25_count": len(bm25_list), "short_circuit": True,
-                "top1_score": top1_score, "gap": round(top2_score - top1_score, 3)}
-        results = [{"turn_id": r["turn_id"], "conversation_id": r["conversation_id"],
-                     "created_at": r["created_at"], "agent": r["agent"],
-                     "seq": r["seq"],
-                     "text_clean": (r.get("text_clean") or "")[:200],
-                     "bm25_rank": i, "dense_rank": None, "rrf_score": 0}
-                    for i, r in enumerate(bm25_list[:args.limit])]
+        meta = {
+            "mode": "bm25_short_circuit",
+            "bm25_time": bm25_time,
+            "bm25_count": len(bm25_list),
+            "short_circuit": True,
+            "top1_score": top1_score,
+            "gap": round(top2_score - top1_score, 3),
+        }
+        results = [
+            {
+                "turn_id": r["turn_id"],
+                "conversation_id": r["conversation_id"],
+                "created_at": r["created_at"],
+                "agent": r["agent"],
+                "seq": r["seq"],
+                "text_clean": (r.get("text_clean") or "")[:200],
+                "bm25_rank": i,
+                "dense_rank": None,
+                "rrf_score": 0,
+            }
+            for i, r in enumerate(bm25_list[: args.limit])
+        ]
     else:
         result = hybrid_search(args.query, limit=args.limit)
         results = result["results"]
@@ -186,8 +257,7 @@ def cmd_search_hybrid(args):
         meta["short_circuit"] = False
 
     if args.json:
-        print(json.dumps({"results": results, "meta": meta},
-                          ensure_ascii=False, indent=2))
+        print(json.dumps({"results": results, "meta": meta}, ensure_ascii=False, indent=2))
         return
 
     mode_label = "BM25 SHORT-CIRCUIT" if short_circuited else "HYBRID RRF"
@@ -197,8 +267,10 @@ def cmd_search_hybrid(args):
     else:
         if meta.get("embed_error"):
             print(f"  [warn] Dense search: {meta['embed_error']}")
-        print(f"  BM25={meta.get('bm25_count', 0)} dense={meta.get('dense_count', 0)} "
-              f"bm25_time={meta.get('bm25_time', 0)}s dense_time={meta.get('dense_time', 0)}s")
+        print(
+            f"  BM25={meta.get('bm25_count', 0)} dense={meta.get('dense_count', 0)} "
+            f"bm25_time={meta.get('bm25_time', 0)}s dense_time={meta.get('dense_time', 0)}s"
+        )
 
     print()
     for r in results:
@@ -208,7 +280,9 @@ def cmd_search_hybrid(args):
         elif r.get("dense_rank") is None:
             label = f" B{r.get('bm25_rank', '?')}"
         score_str = f"rrf={r.get('rrf_score', 0):.4f}" if r.get("rrf_score") else ""
-        print(f"  [{r.get('rrf_score', r.get('bm25_score', 0)):.2f}{label}] {r.get('agent', '?')} {r.get('created_at', '')[:19]}")
+        print(
+            f"  [{r.get('rrf_score', r.get('bm25_score', 0)):.2f}{label}] {r.get('agent', '?')} {r.get('created_at', '')[:19]}"
+        )
         txt = (r.get("text_clean") or "")[:160]
         if txt:
             print(f"       {txt}")
@@ -219,9 +293,10 @@ MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
 MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
 SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
 MODE_MAP = {
-    "day":     ("reranker", "day"),      # Pod A router(8080) + Pod B extractor(8082)
-    "verify":  ("reranker", "verify"),   # Pod B verifier(8084), Pod A router
+    "day": ("reranker", "day"),  # Pod A router(8080) + Pod B extractor(8082)
+    "verify": ("reranker", "verify"),  # Pod B verifier(8084), Pod A router
 }
+
 
 def _switch_mode(mode: str) -> bool:
     """Write mode files and restart containers. mode: day|review|verify."""
@@ -241,7 +316,9 @@ def _switch_mode(mode: str) -> bool:
     print("Restarting container-devforge-pod-b (Pod B)...")
     r = subprocess.run(
         ["systemctl", "--user", "restart", "container-devforge-pod-b"],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
     if r.returncode != 0:
         print(f"Error restarting container-devforge-pod-b: {r.stderr}")
@@ -252,13 +329,17 @@ def _switch_mode(mode: str) -> bool:
         print("Stopping container-devforge-pod-a (Pod A, not needed in verify)...")
         subprocess.run(
             ["systemctl", "--user", "stop", "container-devforge-pod-a"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
     else:
         print("Restarting container-devforge-pod-a (Pod A)...")
         r = subprocess.run(
             ["systemctl", "--user", "restart", "container-devforge-pod-a"],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         if r.returncode != 0:
             print(f"Warning: container-devforge-pod-a restart: {r.stderr}")
@@ -268,12 +349,15 @@ def _switch_mode(mode: str) -> bool:
     for _ in range(120):
         try:
             req = urllib.request.Request(
-                f"http://127.0.0.1:{MODEL_REGISTRY['verifier']['port']}/health")
+                f"http://127.0.0.1:{MODEL_REGISTRY['verifier']['port']}/health"
+            )
             with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read())
                     if data.get("status") == "ok":
-                        print(f"  Ready: {data.get('slots_idle', '?')} idle / {data.get('slots_processing', '?')} processing")
+                        print(
+                            f"  Ready: {data.get('slots_idle', '?')} idle / {data.get('slots_processing', '?')} processing"
+                        )
                         return True
         except Exception:
             pass
@@ -321,12 +405,13 @@ def cmd_discussion(args):
     print(f"\nStarting debate [{method.upper()}]...")
     print(f"  Question: {question}")
     if skip_drag:
-        print(f"  DRAG: skipped")
+        print("  DRAG: skipped")
     if dry_run:
-        print(f"  Dry-run: enabled")
+        print("  Dry-run: enabled")
 
     # Import and run
     from lib.debate.local_debate import LocalDebateReview
+
     session = LocalDebateReview(
         question=question,
         method=method,
@@ -345,7 +430,9 @@ def _container_in_review_mode() -> bool:
     try:
         r = subprocess.run(
             ["podman", "exec", "devforge-pod-b", "pgrep", "-f", "llama-server.*8081"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return r.returncode == 0
     except Exception:
@@ -363,7 +450,7 @@ def cmd_upload(args):
         print("ERROR: --session-id is required")
         return
 
-    from lib.blob_uploader import upload_review_bundle, upload_raw
+    from lib.blob_uploader import upload_raw, upload_review_bundle
 
     if file_path:
         # Raw file upload
@@ -379,7 +466,7 @@ def cmd_upload(args):
         content = _find_pipeline_output(pipeline, session_id)
         if content is None:
             print(f"ERROR: no output found for {pipeline}/{session_id}")
-            print(f"  Use --file to upload a specific file")
+            print("  Use --file to upload a specific file")
             return
         url = upload_review_bundle(
             content=content,
@@ -387,7 +474,7 @@ def cmd_upload(args):
             session_id=session_id,
             metadata={"title": title} if title else None,
         )
-        print(f"Uploaded review-bundle")
+        print("Uploaded review-bundle")
 
     print(f"  Pipeline: {pipeline}")
     print(f"  Session:  {session_id}")
@@ -413,6 +500,7 @@ def cmd_extract(args):
 def cmd_enrich_consume(args):
     """Read and format enrichment metadata from review_facts."""
     from lib.enrich_consumer import consume_enrich
+
     results = consume_enrich(
         limit=getattr(args, "limit", 50),
         dry_run=getattr(args, "dry_run", False),
@@ -420,6 +508,7 @@ def cmd_enrich_consume(args):
     print(f"  formatted: {len(results)} enrichment items")
     if args.json:
         import json as _json
+
         for r in results:
             print(_json.dumps(r, ensure_ascii=False))
 
@@ -440,6 +529,7 @@ def _find_pipeline_output(pipeline: str, session_id: str) -> Optional[str]:
     patterns = candidates.get(pipeline, [])
     for pattern in patterns:
         import glob as _glob
+
         for p in sorted(_glob.glob(pattern)):
             return Path(p).read_text()
     return None
@@ -454,6 +544,7 @@ AUTO_COMMENT_END = "-->"
 def _read_auto_tasks():
     """Return list of (title, body) tuples from auto_tasks.md, excluding comments."""
     import re
+
     try:
         content = Path(AUTO_TASKS_FILE).read_text()
     except FileNotFoundError:
@@ -480,7 +571,7 @@ def _write_auto_tasks(tasks):
         "",
         AUTO_COMMENT,
         " Tasks execute via night_cycle.sh (03:00 KST / 18:00 UTC).",
-        " CLI: python3 cli.py auto add \"title\" \"description\"",
+        ' CLI: python3 cli.py auto add "title" "description"',
         " Each ## section = a separate Claude Code invocation.",
         " Full permissions granted. Results logged to auto_logs/.",
         AUTO_COMMENT_END,
@@ -540,7 +631,9 @@ GROUP BY extract_model ORDER BY total DESC
         print("데이터 없음")
         return
     print("═══ Model Performance Dashboard ═══\n")
-    print(f"{'Model':<32} {'Total':>5} {'Valid%':>7} {'Halluc%':>8} {'Rate':>6} {'Sec':>5} {'Cache%':>6}")
+    print(
+        f"{'Model':<32} {'Total':>5} {'Valid%':>7} {'Halluc%':>8} {'Rate':>6} {'Sec':>5} {'Cache%':>6}"
+    )
     print("─" * 78)
     for line in result.split("\n"):
         if not line:
@@ -552,12 +645,14 @@ GROUP BY extract_model ORDER BY total DESC
         total = int(p[1].strip() or 0)
         valid = int(p[2].strip() or 0)
         halluc = int(p[3].strip() or 0)
-        valid_pct = f"{valid/total*100:.1f}" if total else "-"
-        halluc_pct = f"{halluc/total*100:.1f}" if total else "-"
+        valid_pct = f"{valid / total * 100:.1f}" if total else "-"
+        halluc_pct = f"{halluc / total * 100:.1f}" if total else "-"
         rate = p[5].strip() or "-"
         secs = p[6].strip() or "-"
         cache = p[7].strip() or "-"
-        print(f"{model:<32} {total:>5} {valid_pct:>7} {halluc_pct:>8} {rate:>6} {secs:>5} {cache:>6}")
+        print(
+            f"{model:<32} {total:>5} {valid_pct:>7} {halluc_pct:>8} {rate:>6} {secs:>5} {cache:>6}"
+        )
 
     sql_daily = """
 SELECT created_at::date AS day,
@@ -582,7 +677,7 @@ GROUP BY day ORDER BY day DESC LIMIT 7
             total = int(p[1].strip() or 0)
             valid = int(p[2].strip() or 0)
             rate = p[3].strip() or "-"
-            valid_pct = f"{valid/total*100:.1f}" if total else "-"
+            valid_pct = f"{valid / total * 100:.1f}" if total else "-"
             print(f"{day:<12} {total:>6} {valid_pct:>7} {rate:>10}")
 
     sql_summary = """
@@ -595,12 +690,15 @@ FROM review_facts
         p = s.strip().split("|")
         if len(p) >= 4:
             total, valid, turns, models = int(p[0]), int(p[1]), int(p[2]), int(p[3])
-            print(f"\n총 {total} facts / {turns} turns / {models} models — overall valid {valid/total*100:.1f}%")
+            print(
+                f"\n총 {total} facts / {turns} turns / {models} models — overall valid {valid / total * 100:.1f}%"
+            )
 
 
 # ═══════════════════════════════════════════════════════════════
 # status — live system query, single source of truth
 # ═══════════════════════════════════════════════════════════════
+
 
 def _run(cmd, timeout=10):
     """Run a shell command, return (stdout, stderr, returncode)."""
@@ -621,21 +719,34 @@ def _get_containers():
         parts = line.split("|", 3)
         if len(parts) < 2:
             continue
-        name, status, ports, image = parts[0], parts[1], parts[2] if len(parts) > 2 else "", parts[3] if len(parts) > 3 else ""
-        containers[name] = {"status": status, "ports": ports, "image": image.split("/")[-1] if image else ""}
+        name, status, ports, image = (
+            parts[0],
+            parts[1],
+            parts[2] if len(parts) > 2 else "",
+            parts[3] if len(parts) > 3 else "",
+        )
+        containers[name] = {
+            "status": status,
+            "ports": ports,
+            "image": image.split("/")[-1] if image else "",
+        }
     return containers
 
 
 def _get_models():
     """Query llama.cpp /v1/models on both pods."""
     import urllib.request
+
     models = {}
     for label, port in [("pod-a", 8080), ("pod-b", 8082)]:
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/models", method="GET")
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode())
-                models[label] = [m.get("name", m.get("model", "?")) for m in data.get("models", data.get("data", []))]
+                models[label] = [
+                    m.get("name", m.get("model", "?"))
+                    for m in data.get("models", data.get("data", []))
+                ]
         except Exception as e:
             models[label] = f"unreachable: {e}"
     return models
@@ -644,6 +755,7 @@ def _get_models():
 def _get_timers():
     """Query systemd user timers. Parse by finding .timer/.service tokens."""
     import re
+
     out, _, rc = _run(["systemctl", "--user", "list-timers", "--no-pager", "--no-legend"])
     if rc != 0:
         return {"error": out}
@@ -669,7 +781,9 @@ def _get_timers():
 
 def _get_services():
     """Query systemd user services."""
-    out, _, rc = _run(["systemctl", "--user", "list-units", "--type=service", "--no-pager", "--no-legend"])
+    out, _, rc = _run(
+        ["systemctl", "--user", "list-units", "--type=service", "--no-pager", "--no-legend"]
+    )
     if rc != 0:
         return {"error": out}
     services = {}
@@ -696,24 +810,53 @@ def _get_resources():
         for line in out.split("\n"):
             if line.startswith("Mem:"):
                 parts = line.split()
-                resources["memory"] = {"total": parts[1], "used": parts[2], "free": parts[3], "available": parts[6]} if len(parts) >= 7 else {}
+                resources["memory"] = (
+                    {"total": parts[1], "used": parts[2], "free": parts[3], "available": parts[6]}
+                    if len(parts) >= 7
+                    else {}
+                )
             elif line.startswith("Swap:"):
                 parts = line.split()
-                resources["swap"] = {"total": parts[1], "used": parts[2], "free": parts[3]} if len(parts) >= 4 else {}
+                resources["swap"] = (
+                    {"total": parts[1], "used": parts[2], "free": parts[3]}
+                    if len(parts) >= 4
+                    else {}
+                )
     # disk
-    out, _, _ = _run(["df", "-h", "/", "/opt/ai_data", "/mnt/lv_db", "/mnt/secure_meta", "/var/log", "/var/tmp", "/opt/projects"])
+    out, _, _ = _run(
+        [
+            "df",
+            "-h",
+            "/",
+            "/opt/ai_data",
+            "/mnt/lv_db",
+            "/mnt/secure_meta",
+            "/var/log",
+            "/var/tmp",
+            "/opt/projects",
+        ]
+    )
     disks = {}
     if out:
         for line in out.split("\n")[1:]:
             parts = line.split()
             if len(parts) >= 6:
-                disks[parts[5]] = {"size": parts[1], "used": parts[2], "avail": parts[3], "use_pct": parts[4]}
+                disks[parts[5]] = {
+                    "size": parts[1],
+                    "used": parts[2],
+                    "avail": parts[3],
+                    "use_pct": parts[4],
+                }
     resources["disks"] = disks
     # load
     try:
         with open("/proc/loadavg") as f:
             lavg = f.read().split()
-            resources["load"] = {"1min": float(lavg[0]), "5min": float(lavg[1]), "15min": float(lavg[2])}
+            resources["load"] = {
+                "1min": float(lavg[0]),
+                "5min": float(lavg[1]),
+                "15min": float(lavg[2]),
+            }
         with open("/proc/uptime") as f:
             up_sec = float(f.read().split()[0])
             d = int(up_sec) // 86400
@@ -739,8 +882,15 @@ def _get_experiments():
         parts = line.split("|")
         if len(parts) < 5:
             continue
-        exps.append({"id": parts[0].strip(), "category": parts[1].strip(), "verdict": parts[2].strip(),
-                      "excerpt": parts[3].strip(), "created_at": parts[4].strip()})
+        exps.append(
+            {
+                "id": parts[0].strip(),
+                "category": parts[1].strip(),
+                "verdict": parts[2].strip(),
+                "excerpt": parts[3].strip(),
+                "created_at": parts[4].strip(),
+            }
+        )
     return exps
 
 
@@ -758,13 +908,20 @@ def _get_active_config():
         parts = line.split("|", 2)
         if len(parts) < 3:
             continue
-        configs.append({"component": parts[0].strip(), "config": parts[1].strip()[:120], "rationale": parts[2].strip()[:120]})
+        configs.append(
+            {
+                "component": parts[0].strip(),
+                "config": parts[1].strip()[:120],
+                "rationale": parts[2].strip()[:120],
+            }
+        )
     return configs
 
 
 def _get_tasks():
     """Query tasks DB table for current task status."""
     from lib.db import psql_json as _pj
+
     rows = _pj(
         "SELECT id, title, status, priority FROM tasks WHERE status IN ('in_progress', 'pending', 'blocked', 'completed')"
     )
@@ -777,7 +934,9 @@ def _get_tasks():
         if t["status"] == "in_progress":
             summary["in_progress"].append({"id": sid, "title": t["title"]})
         elif t["status"] == "pending":
-            summary["pending"].append({"id": sid, "priority": t.get("priority", ""), "title": t["title"]})
+            summary["pending"].append(
+                {"id": sid, "priority": t.get("priority", ""), "title": t["title"]}
+            )
         elif t["status"] == "blocked":
             summary["blocked"].append({"id": sid, "title": t["title"]})
         elif t["status"] == "completed":
@@ -787,7 +946,9 @@ def _get_tasks():
 
 def cmd_task_list(args):
     """List tasks from DB."""
-    from lib.db import psql_json as _pj, esc_sql
+    from lib.db import esc_sql
+    from lib.db import psql_json as _pj
+
     where = ""
     if args.status:
         where = f"WHERE status = '{esc_sql(args.status)}'"
@@ -804,16 +965,20 @@ def cmd_task_list(args):
     print(f"{'ID':<5} {'Status':<12} {'Priority':<8} {'Title':<60} {'Created'}")
     print("-" * 110)
     for r in rows:
-        print(f"{r['id']:<5} {r['status']:<12} {str(r['priority'] or ''):<8} "
-              f"{str(r['title'])[:58]:<60} {str(r['created_at'])[:19]}")
+        print(
+            f"{r['id']:<5} {r['status']:<12} {str(r['priority'] or ''):<8} "
+            f"{str(r['title'])[:58]:<60} {str(r['created_at'])[:19]}"
+        )
 
 
 def cmd_task_add(args):
     """Add a new task to DB."""
-    from lib.db import psql as _sql, esc_sql
+    from lib.db import esc_sql
+    from lib.db import psql as _sql
+
     title = esc_sql(args.title)
-    priority = args.priority or ''
-    desc = esc_sql(args.description or '')
+    priority = args.priority or ""
+    desc = esc_sql(args.description or "")
     result = _sql(f"""INSERT INTO tasks (title, priority, description)
     VALUES ('{title}', '{priority}', '{desc}') RETURNING id""")
     if result and result.strip():
@@ -822,8 +987,12 @@ def cmd_task_add(args):
 
 def cmd_task_update(args):
     """Update task status/notes."""
-    from lib.db import psql as _sql, psql_json as _pj, esc_sql
     import json
+
+    from lib.db import esc_sql
+    from lib.db import psql as _sql
+    from lib.db import psql_json as _pj
+
     rows = _pj(f"SELECT id, title, status, notes FROM tasks WHERE id = {args.id}")
     if not rows:
         print(f"ERROR: task id={args.id} not found")
@@ -834,10 +1003,10 @@ def cmd_task_update(args):
         update_cols.append(f"status = '{esc_sql(args.status)}'")
     if args.description:
         update_cols.append(f"description = '{esc_sql(args.description)}'")
-    if args.status == 'completed' or t['status'] != 'completed' and args.status == 'completed':
+    if args.status == "completed" or t["status"] != "completed" and args.status == "completed":
         update_cols.append("completed_at = NOW()")
     if args.note:
-        notes = t.get('notes', [])
+        notes = t.get("notes", [])
         if not isinstance(notes, list):
             notes = []
         notes.append(args.note)
@@ -855,6 +1024,7 @@ def cmd_task_update(args):
 def cmd_task_delete(args):
     """Soft-delete a task (set status = 'deleted')."""
     from lib.db import psql as _sql
+
     sql = f"UPDATE tasks SET status = 'deleted', updated_at = NOW() WHERE id = {args.id} RETURNING title"
     result = _sql(sql)
     if result and result.strip():
@@ -864,6 +1034,7 @@ def cmd_task_delete(args):
 def cmd_task_show(args):
     """Show full task details."""
     from lib.db import psql_json as _pj
+
     rows = _pj(f"SELECT * FROM tasks WHERE id = {args.id}")
     if not rows:
         print(f"ERROR: task id={args.id} not found")
@@ -871,19 +1042,24 @@ def cmd_task_show(args):
     r = rows[0]
     print(f"Task #{r['id']}: {r['title']}")
     print(f"  Status:    {r['status']}")
-    if r.get('priority'): print(f"  Priority:  {r['priority']}")
-    if r.get('description'):
-        print(f"  Description:")
-        for line in (r['description'] or '').split('\n'): print(f"    {line}")
-    notes = r.get('notes', [])
+    if r.get("priority"):
+        print(f"  Priority:  {r['priority']}")
+    if r.get("description"):
+        print("  Description:")
+        for line in (r["description"] or "").split("\n"):
+            print(f"    {line}")
+    notes = r.get("notes", [])
     if notes and isinstance(notes, list) and len(notes) > 0:
-        print(f"  Notes:")
-        for n in notes: print(f"    - {n}")
+        print("  Notes:")
+        for n in notes:
+            print(f"    - {n}")
     print(f"  Created:   {r['created_at']}")
     print(f"  Updated:   {r['updated_at']}")
-    if r.get('completed_at'): print(f"  Completed: {r['completed_at']}")
-    if r.get('agent'): print(f"  Agent:     {r['agent']}")
-    if r.get('tags') and isinstance(r['tags'], list) and r['tags']:
+    if r.get("completed_at"):
+        print(f"  Completed: {r['completed_at']}")
+    if r.get("agent"):
+        print(f"  Agent:     {r['agent']}")
+    if r.get("tags") and isinstance(r["tags"], list) and r["tags"]:
         print(f"  Tags:      {', '.join(r['tags'])}")
 
 
@@ -908,6 +1084,7 @@ def _get_alerts(containers, resources):
     if mem:
         try:
             import re
+
             used = re.sub(r"[^0-9.]", "", mem.get("used", "0"))
             total = re.sub(r"[^0-9.]", "", mem.get("total", "1"))
             if float(used) / float(total) > 0.95:
@@ -919,7 +1096,9 @@ def _get_alerts(containers, resources):
 
 def _get_rule_status():
     """Run lint_rules and return summary + violation counts."""
-    from lint_rules import run_all_checks, find_python_files, SCRIPTS_DIR as LINT_DIR
+    from lint_rules import SCRIPTS_DIR as LINT_DIR
+    from lint_rules import find_python_files, run_all_checks
+
     try:
         result = run_all_checks(find_python_files(LINT_DIR))
         return {
@@ -930,7 +1109,8 @@ def _get_rule_status():
             # Only include actual violations for P0 (show-stoppers)
             "p0_violations": [
                 {"file": v["file"], "line": v.get("line", ""), "message": v["message"]}
-                for v in result["violations"] if v["severity"] == "P0"
+                for v in result["violations"]
+                if v["severity"] == "P0"
             ][:10],  # cap at 10 to avoid bloat
         }
     except Exception as e:
@@ -940,6 +1120,7 @@ def _get_rule_status():
 def _get_glossary():
     """Return glossary terms with bounded context names."""
     from lib.db import psql_json as _pj
+
     return _pj(
         "SELECT gt.term, gt.definition, bc.name as context "
         "FROM glossary_terms gt LEFT JOIN bounded_contexts bc ON gt.bounded_context_id = bc.id "
@@ -950,6 +1131,7 @@ def _get_glossary():
 def _get_references():
     """Return static references grouped by category."""
     from lib.db import psql_json as _pj
+
     return _pj(
         "SELECT category, name, url, description FROM static_references ORDER BY category, name"
     )
@@ -962,8 +1144,11 @@ def cmd_status(args):
     resources = _get_resources()
 
     result = {
-        "host": {"hostname": os.uname().nodename, "arch": os.uname().machine,
-                  "os": f"{os.uname().sysname} {os.uname().release}"},
+        "host": {
+            "hostname": os.uname().nodename,
+            "arch": os.uname().machine,
+            "os": f"{os.uname().sysname} {os.uname().release}",
+        },
         "containers": containers,
         "models": models,
         "timers": _get_timers(),
@@ -983,19 +1168,25 @@ def cmd_status(args):
     else:
         # Human-readable summary
         print("═══ DevForge Status ═══")
-        print(f"Host: {result['host']['hostname']} ({result['host']['arch']}) — {resources.get('uptime', '?')} up")
-        print(f"Load: {resources.get('load', {}).get('1min', '?')} {resources.get('load', {}).get('5min', '?')} {resources.get('load', {}).get('15min', '?')}")
+        print(
+            f"Host: {result['host']['hostname']} ({result['host']['arch']}) — {resources.get('uptime', '?')} up"
+        )
+        print(
+            f"Load: {resources.get('load', {}).get('1min', '?')} {resources.get('load', {}).get('5min', '?')} {resources.get('load', {}).get('15min', '?')}"
+        )
         mem = resources.get("memory", {})
-        print(f"Mem: {mem.get('used', '?')}/{mem.get('total', '?')} (avail {mem.get('available', '?')})")
+        print(
+            f"Mem: {mem.get('used', '?')}/{mem.get('total', '?')} (avail {mem.get('available', '?')})"
+        )
         swap = resources.get("swap", {})
         if swap:
             print(f"Swap: {swap.get('used', '?')}/{swap.get('total', '?')}")
 
-        print(f"\n── Containers ──")
+        print("\n── Containers ──")
         for name, info in containers.items():
             print(f"  {name}: {info['status']}")
 
-        print(f"\n── Models ──")
+        print("\n── Models ──")
         for pod, model_list in models.items():
             if isinstance(model_list, list):
                 print(f"  {pod} ({' '.join(model_list)})")
@@ -1004,7 +1195,7 @@ def cmd_status(args):
 
         tasks = result.get("tasks", {})
         if isinstance(tasks, dict) and "error" not in tasks:
-            print(f"\n── Tasks ──")
+            print("\n── Tasks ──")
             print(f"  in_progress: {len(tasks.get('in_progress', []))}")
             print(f"  pending: {len(tasks.get('pending', []))}")
             print(f"  blocked: {len(tasks.get('blocked', []))}")
@@ -1012,11 +1203,11 @@ def cmd_status(args):
 
         alerts = result.get("alerts", [])
         if alerts:
-            print(f"\n── Alerts ──")
+            print("\n── Alerts ──")
             for a in alerts:
                 print(f"  ⚠ {a}")
 
-        print(f"\nUse --json for machine-readable output.")
+        print("\nUse --json for machine-readable output.")
 
 
 def cmd_glossary_sync(args):
@@ -1025,8 +1216,8 @@ def cmd_glossary_sync(args):
     YAML is the single source of truth. This is the ONLY write path to DB.
     """
     import yaml
-
-    from lib.db import psql_ok as _ok, esc_sql as _esc
+    from lib.db import esc_sql as _esc
+    from lib.db import psql_ok as _ok
 
     yaml_path = Path("/opt/projects/server/docs/domain-glossary.yaml")
     raw = yaml_path.read_text()
@@ -1044,8 +1235,10 @@ def cmd_glossary_sync(args):
     for bc in data["bounded_contexts"]:
         bc_id = int(bc["id"])
         bc_name = _esc(bc["name"])
-        sql = (f"INSERT INTO bounded_contexts (id, name) VALUES ({bc_id}, '{bc_name}') "
-               f"ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name")
+        sql = (
+            f"INSERT INTO bounded_contexts (id, name) VALUES ({bc_id}, '{bc_name}') "
+            f"ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name"
+        )
         if _ok(sql):
             ctx_count += 1
         else:
@@ -1056,14 +1249,24 @@ def cmd_glossary_sync(args):
             definition = _esc(term_entry["definition"])
             tables = term_entry.get("tables", [])
             files = term_entry.get("related_files", [])
-            tables_pg = "'{}'::text[]" if not tables else "ARRAY[" + ", ".join(f"'{_esc(t)}'" for t in tables) + "]"
-            files_pg = "'{}'::text[]" if not files else "ARRAY[" + ", ".join(f"'{_esc(f)}'" for f in files) + "]"
+            tables_pg = (
+                "'{}'::text[]"
+                if not tables
+                else "ARRAY[" + ", ".join(f"'{_esc(t)}'" for t in tables) + "]"
+            )
+            files_pg = (
+                "'{}'::text[]"
+                if not files
+                else "ARRAY[" + ", ".join(f"'{_esc(f)}'" for f in files) + "]"
+            )
 
-            sql = (f"INSERT INTO glossary_terms (term, definition, bounded_context_id, tables_ref, related_files) "
-                   f"VALUES ('{term}', '{definition}', {bc_id}, {tables_pg}, {files_pg}) "
-                   f"ON CONFLICT (term, bounded_context_id) DO UPDATE SET "
-                   f"definition = EXCLUDED.definition, tables_ref = EXCLUDED.tables_ref, "
-                   f"related_files = EXCLUDED.related_files")
+            sql = (
+                f"INSERT INTO glossary_terms (term, definition, bounded_context_id, tables_ref, related_files) "
+                f"VALUES ('{term}', '{definition}', {bc_id}, {tables_pg}, {files_pg}) "
+                f"ON CONFLICT (term, bounded_context_id) DO UPDATE SET "
+                f"definition = EXCLUDED.definition, tables_ref = EXCLUDED.tables_ref, "
+                f"related_files = EXCLUDED.related_files"
+            )
             if _ok(sql):
                 term_count += 1
             else:
@@ -1083,9 +1286,11 @@ def cmd_glossary_sync(args):
 # File Management commands
 # ═══════════════════════════════════════════════════════════════════
 
+
 def cmd_file_find(args):
     """Search files by keyword (description, filename, tags)."""
     from lib.file_registry import search_files
+
     results = search_files(args.query, limit=args.limit)
     if not results:
         print("No files found.")
@@ -1103,6 +1308,7 @@ def cmd_file_find(args):
 def cmd_file_list(args):
     """List recent files, optionally filtered by source."""
     from lib.file_registry import list_files
+
     results = list_files(source=args.source, limit=args.limit)
     if not results:
         print("No files found.")
@@ -1121,6 +1327,7 @@ def cmd_file_list(args):
 def cmd_file_get(args):
     """Show full details of a single file by UUID."""
     from lib.file_registry import get_file
+
     rec = get_file(args.id)
     if not rec:
         print(f"File not found: {args.id}")
@@ -1132,6 +1339,7 @@ def cmd_file_get(args):
 def cmd_file_push(args):
     """Register a local file into file_registry DB."""
     from lib.file_registry import register_file
+
     tags = args.tags.split(",") if args.tags else None
     fid = register_file(
         src_path=args.path,
@@ -1148,6 +1356,7 @@ def cmd_file_push(args):
 def cmd_file_delete(args):
     """Delete file record from registry, optionally remove local file."""
     from lib.file_registry import delete_file
+
     if delete_file(args.id, remove_local=args.remove_local):
         print(f"Deleted: {args.id}")
     else:
@@ -1156,7 +1365,7 @@ def cmd_file_delete(args):
 
 def cmd_lint(args):
     """Check code against enforced rules."""
-    from lint_rules import run_all_checks, find_python_files, SCRIPTS_DIR
+    from lint_rules import SCRIPTS_DIR, find_python_files, run_all_checks
 
     if args.files:
         files = [Path(f) for f in args.files]
@@ -1177,7 +1386,9 @@ def cmd_lint(args):
                 print(f"  [{v['severity']}] {v['rule']}: {v['message']}")
                 print(f"        at {loc}")
             print(f"\n  Files: {result['total_files']} | Violations: {result['violations_total']}")
-            print(f"  P0:{result['violations_by_severity']['P0']} P1:{result['violations_by_severity']['P1']} P2:{result['violations_by_severity']['P2']}")
+            print(
+                f"  P0:{result['violations_by_severity']['P0']} P1:{result['violations_by_severity']['P1']} P2:{result['violations_by_severity']['P2']}"
+            )
 
     if args.fix:
         print("\n── Suggested Fixes ──")
@@ -1196,10 +1407,11 @@ def cmd_lint(args):
 
 # ── Watch handlers ──────────────────────────────────────────────────────────
 
+
 def cmd_watch_status(args):
     """서버 생존 + pulse 큐 + 이벤트 한눈에."""
-    from lib.watchdog.messenger import list_pulses
     from lib.db import psql_json
+    from lib.watchdog.messenger import list_pulses
 
     print("=" * 55)
     print("   WATCH STATUS")
@@ -1209,7 +1421,9 @@ def cmd_watch_status(args):
     pending = list_pulses("PENDING", 100)
     in_progress = list_pulses("IN_PROGRESS", 100)
     human = list_pulses("HUMAN_REQUIRED", 100)
-    print(f"\n  Pulses: {len(pending)} pending | {len(in_progress)} in-progress | {len(human)} human-required")
+    print(
+        f"\n  Pulses: {len(pending)} pending | {len(in_progress)} in-progress | {len(human)} human-required"
+    )
     for p in pending[:5]:
         fid = p.get("target_file", "")
         fstr = f" → {fid}" if fid else ""
@@ -1221,12 +1435,14 @@ def cmd_watch_status(args):
         "FROM catchdog_events ORDER BY created_at DESC LIMIT 5"
     )
     if rows:
-        print(f"\n  Recent Events:")
+        print("\n  Recent Events:")
         for r in rows:
             raw_ts = r.get("created_at")
             utc_timestamp = raw_ts[11:16] if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
-            print(f"    [{utc_timestamp}] {r['component']}:{r['event_type']}"
-                  f"{' → '+r['to_state'] if r.get('to_state') else ''}")
+            print(
+                f"    [{utc_timestamp}] {r['component']}:{r['event_type']}"
+                f"{' → ' + r['to_state'] if r.get('to_state') else ''}"
+            )
 
     # Alerts
     alerts = psql_json(
@@ -1235,19 +1451,25 @@ def cmd_watch_status(args):
         "ORDER BY created_at DESC LIMIT 5"
     )
     if alerts:
-        print(f"\n  Alerts:")
+        print("\n  Alerts:")
         for a in alerts:
             raw_ts = a.get("created_at")
-            utc_timestamp = raw_ts[5:16].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
-            print(f"    [{utc_timestamp}] {a['component']}: {a['event_type']} — {a.get('detail','?')[:50]}")
+            utc_timestamp = (
+                raw_ts[5:16].replace("T", " ")
+                if isinstance(raw_ts, str) and len(raw_ts) >= 16
+                else "?"
+            )
+            print(
+                f"    [{utc_timestamp}] {a['component']}: {a['event_type']} — {a.get('detail', '?')[:50]}"
+            )
 
     print()
 
 
 def cmd_watch_alerts(args):
     """PENDING + HUMAN_REQUIRED pulse 목록."""
-    from lib.watchdog.messenger import list_pulses
     from lib.db import psql_json
+    from lib.watchdog.messenger import list_pulses
 
     total = 0
     for status in ("PENDING", "HUMAN_REQUIRED"):
@@ -1260,7 +1482,7 @@ def cmd_watch_alerts(args):
                 print(f"    [{p['priority']}] {p['instruction'][:80]}")
                 if p.get("target_file"):
                     print(f"    target: {p['target_file']}")
-                print(f"    retry: {p.get('retry_count',0)}/{p.get('max_retries',3)}")
+                print(f"    retry: {p.get('retry_count', 0)}/{p.get('max_retries', 3)}")
 
     db_alerts = psql_json(
         "SELECT component, event_type, detail, created_at "
@@ -1272,8 +1494,14 @@ def cmd_watch_alerts(args):
         print(f"\n── Server Alerts (24h, {len(db_alerts)}) ──")
         for a in db_alerts:
             raw_ts = a.get("created_at")
-            utc_timestamp = raw_ts[5:16].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
-            print(f"  [{utc_timestamp}] {a['component']}: {a['event_type']} — {a.get('detail','?')[:60]}")
+            utc_timestamp = (
+                raw_ts[5:16].replace("T", " ")
+                if isinstance(raw_ts, str) and len(raw_ts) >= 16
+                else "?"
+            )
+            print(
+                f"  [{utc_timestamp}] {a['component']}: {a['event_type']} — {a.get('detail', '?')[:60]}"
+            )
 
     if total == 0 and not db_alerts:
         print("  No active alerts")
@@ -1283,6 +1511,7 @@ def cmd_watch_alerts(args):
 def cmd_watch_pulses_list(args):
     """PENDING pulses 목록."""
     from lib.watchdog.messenger import list_pulses
+
     pulses = list_pulses("PENDING", args.limit)
     if not pulses:
         print("  No PENDING pulses")
@@ -1290,7 +1519,9 @@ def cmd_watch_pulses_list(args):
     print(f"\n  PENDING pulses ({len(pulses)}):\n")
     for p in pulses:
         raw_ts = p.get("created_at")
-        utc_timestamp = raw_ts[5:16].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
+        utc_timestamp = (
+            raw_ts[5:16].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
+        )
         print(f"  [{utc_timestamp}] {p['pulse_id']}")
         print(f"    [{p['priority']}] {p['instruction'][:80]}")
         if p.get("target_file"):
@@ -1303,20 +1534,27 @@ def cmd_watch_pulses_list(args):
 def cmd_watch_pulse_create(args):
     """새 pulse 생성."""
     from lib.watchdog.messenger import log_message
+
     pid = log_message(
-        source="cli", target="operator", type="manual", content=args.instruction,
-        priority=args.priority, target_file=args.target_file,
-        target_test=args.target_test, category=args.category,
+        source="cli",
+        target="operator",
+        type="manual",
+        content=args.instruction,
+        priority=args.priority,
+        target_file=args.target_file,
+        target_test=args.target_test,
+        category=args.category,
     )
     if pid:
         print(f"  Created: {pid}")
     else:
-        print(f"  ERROR: Could not create pulse (duplicate or DB error)")
+        print("  ERROR: Could not create pulse (duplicate or DB error)")
 
 
 def cmd_watch_pulse_resolve(args):
     """pulse 완료 처리."""
     from lib.watchdog.messenger import resolve_pulse
+
     status = "IGNORED" if args.ignore else "RESOLVED"
     ok = resolve_pulse(args.pulse_id, status)
     if ok:
@@ -1328,6 +1566,7 @@ def cmd_watch_pulse_resolve(args):
 def cmd_watch_pulse_show(args):
     """pulse 상세 정보."""
     from lib.watchdog.messenger import get_pulse
+
     p = get_pulse(args.pulse_id)
     if not p:
         print(f"  Pulse not found: {args.pulse_id}")
@@ -1339,7 +1578,8 @@ def cmd_watch_pulse_show(args):
 
 def cmd_watch_log(args):
     """catchdog_events 최근 로그."""
-    from lib.db import psql_json, esc_sql
+    from lib.db import esc_sql, psql_json
+
     comp_filter = f"AND component = '{esc_sql(args.component)}'" if args.component else ""
     rows = psql_json(
         f"SELECT component, event_type, from_state, to_state, detail, fail_count, created_at "
@@ -1353,7 +1593,9 @@ def cmd_watch_log(args):
     print(f"\n  Events ({len(rows)}):\n")
     for r in rows:
         raw_ts = r.get("created_at")
-        utc_timestamp = raw_ts[5:19].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 19 else "?"
+        utc_timestamp = (
+            raw_ts[5:19].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 19 else "?"
+        )
         fmt = f"  [{utc_timestamp}] {r['component']}:{r['event_type']}"
         if r.get("to_state"):
             fmt += f" → {r['to_state']}"
@@ -1364,9 +1606,11 @@ def cmd_watch_log(args):
 
 # ── Fact management (user feedback on NEUTRAL facts) ──────────────
 
+
 def cmd_fact_list(args):
     """List review_facts with optional NEUTRAL pending filter."""
     from lib.db import psql_json as _pj
+
     where = "WHERE 1=1"
     if getattr(args, "pending", False):
         where = "WHERE nli_llm = 'NEUTRAL' AND user_verdict IS NULL"
@@ -1382,12 +1626,14 @@ def cmd_fact_list(args):
     print(f"{'ID':<38} {'Type':<12} {'NLI':<10} {'User':<8} {'Evidence':<60} {'Created'}")
     print("-" * 140)
     for r in rows:
-        uid = str(r['id'])[:36]
-        etype = (r.get('fact_type') or '')[:10]
-        nli = (r.get('nli_llm') or '')[:8]
-        uv = (r.get('user_verdict') or '-')[:6]
-        ev = (r.get('evidence') or '')[:58]
-        print(f"{uid:<38} {etype:<12} {nli:<10} {uv:<8} {ev:<60} {str(r.get('created_at',''))[:19]}")
+        uid = str(r["id"])[:36]
+        etype = (r.get("fact_type") or "")[:10]
+        nli = (r.get("nli_llm") or "")[:8]
+        uv = (r.get("user_verdict") or "-")[:6]
+        ev = (r.get("evidence") or "")[:58]
+        print(
+            f"{uid:<38} {etype:<12} {nli:<10} {uv:<8} {ev:<60} {str(r.get('created_at', ''))[:19]}"
+        )
 
 
 def _try_embed_feedback(feedback_id: str, text: str) -> None:
@@ -1397,24 +1643,34 @@ def _try_embed_feedback(feedback_id: str, text: str) -> None:
     """
     import json as _json
     from urllib.request import Request, urlopen
+
     body = _json.dumps({"input": [text], "model": "default"}).encode()
-    req = Request("http://127.0.0.1:8081/v1/embeddings", data=body,
-                  headers={"Content-Type": "application/json"}, method="POST")
+    req = Request(
+        "http://127.0.0.1:8081/v1/embeddings",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     try:
         with urlopen(req, timeout=30) as resp:
             data = _json.loads(resp.read().decode())
         vec = data["data"][0]["embedding"]
         vec_str = "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
         from lib.db import psql_ok
-        psql_ok(f"UPDATE feedback_examples SET embedding = '{vec_str}'::vector WHERE id = '{feedback_id}'::uuid")
-        print(f"  (embedded for pgvector similarity search)")
+
+        psql_ok(
+            f"UPDATE feedback_examples SET embedding = '{vec_str}'::vector WHERE id = '{feedback_id}'::uuid"
+        )
+        print("  (embedded for pgvector similarity search)")
     except Exception:
         pass  # embed server unavailable — non-critical
 
 
 def cmd_fact_confirm(args):
     """Set user_verdict=CONFIRM for a fact UUID and store in feedback_examples."""
-    from lib.db import psql_ok, psql_json as _pj, esc_sql
+    from lib.db import esc_sql, psql_ok
+    from lib.db import psql_json as _pj
+
     fid = esc_sql(args.id)
     # Get fact details + source text
     fact = _pj(f"""SELECT rf.id, rf.evidence, rf.fact_type,
@@ -1429,26 +1685,30 @@ def cmd_fact_confirm(args):
     if not fact:
         print(f"  ERROR: fact {args.id[:12]}... not found")
         return
-    if not psql_ok(f"UPDATE review_facts SET user_verdict='CONFIRM', user_verdict_at=NOW() WHERE id='{fid}'"):
+    if not psql_ok(
+        f"UPDATE review_facts SET user_verdict='CONFIRM', user_verdict_at=NOW() WHERE id='{fid}'"
+    ):
         print(f"  ERROR: failed to confirm fact {args.id}")
         return
     # Store feedback example with RETURNING id
     r = fact[0]
-    ev = esc_sql(r.get('evidence', ''))
-    src = esc_sql(r.get('source_text', ''))
-    ft = esc_sql(r.get('fact_type', ''))
+    ev = esc_sql(r.get("evidence", ""))
+    src = esc_sql(r.get("source_text", ""))
+    ft = esc_sql(r.get("fact_type", ""))
     fb_id = _pj(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
        VALUES ('{ev}', '{src}', '{ft}', 'CONFIRM') RETURNING id::text""")
     fb_uuid = (fb_id[0]["id"] if fb_id else "").strip()
     print(f"  Confirmed: {r['id'][:12]}... — {(r.get('evidence') or '')[:60]}")
     if fb_uuid:
-        _try_embed_feedback(fb_uuid, r.get('evidence', ''))
-    print(f"  Stored as feedback example for few-shot NLI")
+        _try_embed_feedback(fb_uuid, r.get("evidence", ""))
+    print("  Stored as feedback example for few-shot NLI")
 
 
 def cmd_fact_reject(args):
     """Set user_verdict=REJECT for a fact UUID and store in feedback_examples."""
-    from lib.db import psql_ok, psql_json as _pj, esc_sql
+    from lib.db import esc_sql, psql_ok
+    from lib.db import psql_json as _pj
+
     fid = esc_sql(args.id)
     fact = _pj(f"""SELECT rf.id, rf.evidence, rf.fact_type,
        CASE rf.fact_type
@@ -1462,20 +1722,22 @@ def cmd_fact_reject(args):
     if not fact:
         print(f"  ERROR: fact {args.id[:12]}... not found")
         return
-    if not psql_ok(f"UPDATE review_facts SET user_verdict='REJECT', user_verdict_at=NOW() WHERE id='{fid}'"):
+    if not psql_ok(
+        f"UPDATE review_facts SET user_verdict='REJECT', user_verdict_at=NOW() WHERE id='{fid}'"
+    ):
         print(f"  ERROR: failed to reject fact {args.id}")
         return
     r = fact[0]
-    ev = esc_sql(r.get('evidence', ''))
-    src = esc_sql(r.get('source_text', ''))
-    ft = esc_sql(r.get('fact_type', ''))
+    ev = esc_sql(r.get("evidence", ""))
+    src = esc_sql(r.get("source_text", ""))
+    ft = esc_sql(r.get("fact_type", ""))
     fb_id = _pj(f"""INSERT INTO feedback_examples (evidence_text, source_text, fact_type, verdict)
        VALUES ('{ev}', '{src}', '{ft}', 'REJECT') RETURNING id::text""")
     fb_uuid = (fb_id[0]["id"] if fb_id else "").strip()
     print(f"  Rejected: {r['id'][:12]}... — {(r.get('evidence') or '')[:60]}")
     if fb_uuid:
-        _try_embed_feedback(fb_uuid, r.get('evidence', ''))
-    print(f"  Stored as feedback example for few-shot NLI")
+        _try_embed_feedback(fb_uuid, r.get("evidence", ""))
+    print("  Stored as feedback example for few-shot NLI")
 
 
 async def main():
@@ -1520,16 +1782,32 @@ async def main():
 
     p_disc = sub.add_parser("discussion", help="Start multi-agent LLM debate (DRAG or Tool-MAD)")
     disc_sub = p_disc.add_subparsers(dest="method")
-    drag_p = disc_sub.add_parser("drag", help="DRAG: 2-stage debate — query consensus → fetch → synthesize")
+    drag_p = disc_sub.add_parser(
+        "drag", help="DRAG: 2-stage debate — query consensus → fetch → synthesize"
+    )
     drag_p.add_argument("question", nargs="?", help="Debate topic / question")
-    drag_p.add_argument("--skip-drag", action="store_true", help="Skip Round 0 DRAG query consensus")
+    drag_p.add_argument(
+        "--skip-drag", action="store_true", help="Skip Round 0 DRAG query consensus"
+    )
     drag_p.add_argument("--dry-run", action="store_true", help="Simulate without LLM calls")
-    drag_p.add_argument("--with-api", action="store_true", help="Use DeepSeek API for real search (internet knowledge)")
-    tmad_p = disc_sub.add_parser("toolmad", help="Tool-MAD: adaptive real-time search during debate rounds")
+    drag_p.add_argument(
+        "--with-api",
+        action="store_true",
+        help="Use DeepSeek API for real search (internet knowledge)",
+    )
+    tmad_p = disc_sub.add_parser(
+        "toolmad", help="Tool-MAD: adaptive real-time search during debate rounds"
+    )
     tmad_p.add_argument("question", nargs="?", help="Debate topic / question")
-    tmad_p.add_argument("--skip-drag", action="store_true", help="Skip Round 0 DRAG query consensus")
+    tmad_p.add_argument(
+        "--skip-drag", action="store_true", help="Skip Round 0 DRAG query consensus"
+    )
     tmad_p.add_argument("--dry-run", action="store_true", help="Simulate without LLM calls")
-    tmad_p.add_argument("--with-api", action="store_true", help="Use DeepSeek API for real search (internet knowledge)")
+    tmad_p.add_argument(
+        "--with-api",
+        action="store_true",
+        help="Use DeepSeek API for real search (internet knowledge)",
+    )
 
     sub.add_parser("dashboard", help="Model performance dashboard")
 
@@ -1538,21 +1816,26 @@ async def main():
     p_extract.add_argument("--limit", "-n", type=int, default=100, help="Max turns to process")
     p_extract.add_argument("--dry-run", action="store_true", help="Simulate without DB writes")
 
-    p_enrich = sub.add_parser("enrich-consume", help="Format enrichment metadata from review_facts for MCP tools")
+    p_enrich = sub.add_parser(
+        "enrich-consume", help="Format enrichment metadata from review_facts for MCP tools"
+    )
     p_enrich.add_argument("--limit", "-n", type=int, default=50)
     p_enrich.add_argument("--dry-run", action="store_true", help="Read only, no verdict update")
     p_enrich.add_argument("--json", action="store_true", help="JSON output")
 
     p_upload = sub.add_parser("upload", help="Upload pipeline result to Azure Blob")
-    p_upload.add_argument("--pipeline", "-p", required=True,
-                          choices=["debate", "code_mod", "extract"],
-                          help="Pipeline name")
-    p_upload.add_argument("--session-id", "-s", required=True,
-                          help="Session identifier")
-    p_upload.add_argument("--file", "-f",
-                          help="Raw file path to upload (skip review-bundle wrapping)")
-    p_upload.add_argument("--title", "-t",
-                          help="Bundle title (for review-bundle mode)")
+    p_upload.add_argument(
+        "--pipeline",
+        "-p",
+        required=True,
+        choices=["debate", "code_mod", "extract"],
+        help="Pipeline name",
+    )
+    p_upload.add_argument("--session-id", "-s", required=True, help="Session identifier")
+    p_upload.add_argument(
+        "--file", "-f", help="Raw file path to upload (skip review-bundle wrapping)"
+    )
+    p_upload.add_argument("--title", "-t", help="Bundle title (for review-bundle mode)")
 
     p_auto = sub.add_parser("auto", help="Auto mode task management")
     auto_sub = p_auto.add_subparsers(dest="auto_command")
@@ -1580,15 +1863,21 @@ async def main():
 
     exp_adopt = exp_sub.add_parser("adopt", help="Adopt experiment as active config")
     exp_adopt.add_argument("experiment_id", help="Experiment ID to adopt")
-    exp_adopt.add_argument("--component", "-c", required=True,
-                           choices=["pod-a-day", "pod-b-day", "pod-b-night"],
-                           help="Component to update")
+    exp_adopt.add_argument(
+        "--component",
+        "-c",
+        required=True,
+        choices=["pod-a-day", "pod-b-day", "pod-b-night"],
+        help="Component to update",
+    )
 
     p_task = sub.add_parser("task", help="Task management (DB)")
     task_sub = p_task.add_subparsers(dest="task_command")
 
     task_list = task_sub.add_parser("list", help="List tasks")
-    task_list.add_argument("--status", choices=["pending", "in_progress", "blocked", "completed", "deleted"])
+    task_list.add_argument(
+        "--status", choices=["pending", "in_progress", "blocked", "completed", "deleted"]
+    )
 
     task_add = task_sub.add_parser("add", help="Add a new task")
     task_add.add_argument("title", help="Task title")
@@ -1597,7 +1886,9 @@ async def main():
 
     task_update = task_sub.add_parser("update", help="Update a task")
     task_update.add_argument("id", type=int, help="Task ID")
-    task_update.add_argument("--status", choices=["pending", "in_progress", "blocked", "completed", "deleted"])
+    task_update.add_argument(
+        "--status", choices=["pending", "in_progress", "blocked", "completed", "deleted"]
+    )
     task_update.add_argument("--description", "-d")
     task_update.add_argument("--note")
 
@@ -1633,15 +1924,22 @@ async def main():
     p_hybrid.add_argument("query", help="검색어 (자연어)")
     p_hybrid.add_argument("--limit", "-n", type=int, default=20, help="Max results")
     p_hybrid.add_argument("--json", action="store_true", help="JSON output")
-    p_hybrid.add_argument("--no-short-circuit", action="store_true",
-                           help="BM25 dominant여도 항상 Dense 실행")
+    p_hybrid.add_argument(
+        "--no-short-circuit", action="store_true", help="BM25 dominant여도 항상 Dense 실행"
+    )
 
-    p_status = sub.add_parser("status", help="Live system status — containers, models, timers, tasks, resources")
+    p_status = sub.add_parser(
+        "status", help="Live system status — containers, models, timers, tasks, resources"
+    )
     p_status.add_argument("--json", "-j", action="store_true", help="Machine-readable JSON output")
 
-    p_lint = sub.add_parser("lint", help="Check code against enforced rules (naming, status, security)")
+    p_lint = sub.add_parser(
+        "lint", help="Check code against enforced rules (naming, status, security)"
+    )
     p_lint.add_argument("--json", "-j", action="store_true", help="Machine-readable JSON output")
-    p_lint.add_argument("--files", nargs="*", help="Specific files to check (default: all scripts/)")
+    p_lint.add_argument(
+        "--files", nargs="*", help="Specific files to check (default: all scripts/)"
+    )
     p_lint.add_argument("--fix", action="store_true", help="Suggest fixes for violations")
 
     p_glossary = sub.add_parser("glossary", help="Glossary (SSOT: docs/domain-glossary.yaml)")
@@ -1657,7 +1955,9 @@ async def main():
     file_find.add_argument("--limit", "-n", type=int, default=20)
 
     file_list = file_sub.add_parser("list", help="List recent files")
-    file_list.add_argument("--source", "-s", help="Filter by source (telegram_upload, pipeline_output, agent_generate)")
+    file_list.add_argument(
+        "--source", "-s", help="Filter by source (telegram_upload, pipeline_output, agent_generate)"
+    )
     file_list.add_argument("--limit", "-n", type=int, default=20)
 
     file_get = file_sub.add_parser("get", help="Show file details by UUID")
@@ -1665,8 +1965,12 @@ async def main():
 
     file_push = file_sub.add_parser("push", help="Register a local file")
     file_push.add_argument("path", help="Path to file on disk")
-    file_push.add_argument("--source", "-s", default="agent_generate",
-                          choices=["telegram_upload", "pipeline_output", "agent_generate"])
+    file_push.add_argument(
+        "--source",
+        "-s",
+        default="agent_generate",
+        choices=["telegram_upload", "pipeline_output", "agent_generate"],
+    )
     file_push.add_argument("--description", "-d", help="File description")
     file_push.add_argument("--tags", help="Comma-separated tags")
 
@@ -1674,12 +1978,20 @@ async def main():
     file_del.add_argument("id", help="File UUID")
     file_del.add_argument("--remove-local", action="store_true", help="Also delete local file")
 
+    # ── Obs (PostToolUse auto-logs) ──────────────────────────────────
+    p_obs = sub.add_parser("obs", help="Search observations (PostToolUse auto-logs)")
+    p_obs.add_argument("--category", "-c", help="Category filter (test_result, edit, error)")
+    p_obs.add_argument("--limit", "-n", type=int, default=10, help="Max results")
+    p_obs.add_argument("--json", action="store_true", help="JSON output")
+
     # ── Fact (user feedback on NEUTRAL facts) ───────────────────────
     p_fact = sub.add_parser("fact", help="Manage review_facts — user feedback on NEUTRAL facts")
     fact_sub = p_fact.add_subparsers(dest="fact_command")
 
     fact_list = fact_sub.add_parser("list", help="List facts")
-    fact_list.add_argument("--pending", action="store_true", help="Only NEUTRAL facts awaiting user verdict")
+    fact_list.add_argument(
+        "--pending", action="store_true", help="Only NEUTRAL facts awaiting user verdict"
+    )
     fact_list.add_argument("--limit", "-n", type=int, default=20, help="Max results (default: 20)")
 
     fact_confirm = fact_sub.add_parser("confirm", help="Set user_verdict=CONFIRM for a fact")
@@ -1700,8 +2012,12 @@ async def main():
     wp_list.add_argument("--limit", "-n", type=int, default=20)
     wp_create = wdp_sub.add_parser("create", help="새 pulse 생성")
     wp_create.add_argument("instruction", help="작업 지시 내용")
-    wp_create.add_argument("--priority", "-p", default="P1_CONTEXT",
-                           choices=["P0_HOT_FIX", "P1_CONTEXT", "HUMAN_REQUIRED"])
+    wp_create.add_argument(
+        "--priority",
+        "-p",
+        default="P1_CONTEXT",
+        choices=["P0_HOT_FIX", "P1_CONTEXT", "HUMAN_REQUIRED"],
+    )
     wp_create.add_argument("--target-file", "-f", default="", help="대상 파일")
     wp_create.add_argument("--target-test", "-t", default="", help="대상 테스트")
     wp_create.add_argument("--category", "-c", default="", help="분류 태그")
@@ -1813,6 +2129,8 @@ async def main():
             cmd_file_delete(args)
         else:
             p_file.print_help()
+    elif args.command == "obs":
+        cmd_obs_search(args)
     elif args.command == "fact":
         if args.fact_command == "list":
             cmd_fact_list(args)
@@ -1847,6 +2165,7 @@ async def main():
 
     if args.command in ("save", "recent"):
         from api.async_pg import close_pool
+
         await close_pool()
 
 
