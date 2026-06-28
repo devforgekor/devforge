@@ -13,11 +13,9 @@ import json
 import math
 import os
 import re
-import signal
 import sys
 import threading
 import time
-from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -25,10 +23,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.common import strip_think, context_limit
+from lib.common import context_limit, strip_think
 from lib.db import esc_sql, psql_json
-from lib.llm.json_parser import save_dlq, parse_llm_json
-from lib.llm_client import call_llm, MODEL_REGISTRY
+from lib.llm.json_parser import parse_llm_json, save_dlq
+from lib.llm_client import call_llm
 from lib.pod_manager import ensure_model as _ensure_model_pod
 from lib.watchdog.messenger import heartbeat
 
@@ -37,8 +35,11 @@ _8082_RECOVERY_LOCK = threading.Lock()
 # ── 8082 Auto-Recovery ──────────────────────────────────────────
 
 _CONNECTION_ERROR_SUBSTRINGS = (
-    "Remote end closed", "Connection reset", "Connection refused",
-    "Broken pipe", "RemoteDisconnected",
+    "Remote end closed",
+    "Connection reset",
+    "Connection refused",
+    "Broken pipe",
+    "RemoteDisconnected",
 )
 
 
@@ -58,7 +59,7 @@ def _recover_8082() -> None:
         return
     try:
         print("  [recovery] Reloading 8082...", flush=True)
-        _ensure_model_pod('day-extractor', skip_if_healthy=False)
+        _ensure_model_pod("day-extractor", skip_if_healthy=False)
         print("  [recovery] 8082 ready", flush=True)
     except Exception as recover_err:
         print(f"  [recovery] 8082 reload failed: {recover_err}", flush=True)
@@ -76,18 +77,19 @@ def _call_with_8082_retry(fn, *args, **kwargs):
             return fn(*args, **kwargs)
         raise
 
+
 # ── Constants ────────────────────────────────────────────────────
 
 TIMEOUT_EXTRACT = 900
-MAX_TOKENS_BASE = 256     # minimum (MIN_USEFUL_TOKENS=256과 동기화)
-TOKENS_PER_300CH = 50     # 300ch당 약 1 fact 추가, ceil 적용
+MAX_TOKENS_BASE = 768  # 30B MoE verbose JSON needs headroom
+TOKENS_PER_300CH = 50  # 300ch당 약 1 fact 추가, ceil 적용
 TEMP_EXTRACT = 0.0
 TIMEOUT_BASE = 60
 TIMEOUT_PER_CHAR = 0.2
-TIMEOUT_PER_TOK = 1.2     # ~0.83 tok/s decode (20% safety margin)
-GEN_TIME_BUF = 90          # spike/GC/swap buffer
-CAP = 1800                 # hard cap (절대 초과 금지)
-MIN_USEFUL_TOKENS = 256    # 이 미만이면 명시적 거절
+TIMEOUT_PER_TOK = 1.2  # ~0.83 tok/s decode (20% safety margin)
+GEN_TIME_BUF = 90  # spike/GC/swap buffer
+CAP = 1800  # hard cap (절대 초과 금지)
+MIN_USEFUL_TOKENS = 256  # 이 미만이면 명시적 거절
 MAX_CHARS_SOLO = 5000
 MAX_INPUT_CHARS_ADVERTISED = 6500  # API 에러 메시지용 광고 한계 (실제 6,714 여유)
 
@@ -107,11 +109,11 @@ def _sigterm_handler(signum, frame):
                         elif line.startswith("PPid:"):
                             pid = int(line.split(":", 1)[1].strip())
                             break
-            except (IOError, ValueError):
+            except (OSError, ValueError):
                 break
         print(f"\n  [SIGTERM] from parent chain: {' > '.join(chain)}", flush=True)
     except Exception:
-        print(f"\n  [SIGTERM] (source chain unavailable)", flush=True)
+        print("\n  [SIGTERM] (source chain unavailable)", flush=True)
     _SIGTERM_RECEIVED.set()
 
 
@@ -165,26 +167,19 @@ RULES:
 
 5. FAITHFULNESS: Directly traceable to source text. NO inference or hallucination.
 
+6. CONCISE: Keep evidence under 12 words. Short, direct sentences only.
+
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "The cook preheated the oven to 180 degrees Celsius.",
-      "category": "other",
-      "subject": "cook",
-      "predicate": "preheats_oven_to",
-      "object": "180 degrees Celsius",
-      "qualifiers": {"unit": "celsius"},
-      "source_context": "The recipe says to bake at 180 degrees."
-    },
-    {
-      "evidence": "The server sets the database connection pool to 10 connections.",
-      "category": "code",
-      "subject": "server",
-      "predicate": "configures_pool_size_to",
-      "object": "10",
-      "qualifiers": {"unit": "connections"},
-      "source_context": "The database config sets pool_size to 10."
+      "evidence": "<exact quote or sentence from source>",
+      "category": "code|decision|explanation|requirement|other",
+      "subject": "<concrete entity>",
+      "predicate": "<snake_case_verb_phrase>",
+      "object": "<specific value or outcome>",
+      "qualifiers": {},
+      "source_context": "<source text surrounding the evidence>"
     }
   ]
 }
@@ -216,26 +211,19 @@ RULES:
 
 5. FAITHFULNESS: Directly traceable to source text. NO inference or hallucination.
 
+6. CONCISE: Keep evidence under 12 words. Short, direct sentences only.
+
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "The researcher mixed the solution at 50 degrees Celsius.",
-      "category": "other",
-      "subject": "researcher",
-      "predicate": "mixes_solution_at",
-      "object": "50 degrees Celsius",
-      "qualifiers": {"unit": "celsius"},
-      "source_context": "The lab protocol states the mixing temperature as 50 degrees."
-    },
-    {
-      "evidence": "The pipeline checks the database for pending turns before starting extraction.",
-      "category": "code",
-      "subject": "pipeline",
-      "predicate": "checks_database_for",
-      "object": "pending turns",
-      "qualifiers": {"status": "pending"},
-      "source_context": "Before running extraction, the pipeline queries turns with pipeline_state=pending."
+      "evidence": "<exact quote or sentence from source>",
+      "category": "code|decision|explanation|requirement|other",
+      "subject": "<concrete entity>",
+      "predicate": "<snake_case_verb_phrase>",
+      "object": "<specific value or outcome>",
+      "qualifiers": {},
+      "source_context": "<source text surrounding the evidence>"
     }
   ]
 }
@@ -267,26 +255,19 @@ RULES:
 
 5. FAITHFULNESS: Directly traceable to source text. NO inference or hallucination.
 
+6. CONCISE: Keep evidence under 12 words. Short, direct sentences only.
+
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "The chef seasoned the steak with salt and pepper.",
-      "category": "other",
-      "subject": "chef",
-      "predicate": "seasons_with",
-      "object": "salt and pepper",
+      "evidence": "<exact quote or sentence from source>",
+      "category": "code|decision|explanation|requirement|other",
+      "subject": "<concrete entity>",
+      "predicate": "<snake_case_verb_phrase>",
+      "object": "<specific value or outcome>",
       "qualifiers": {},
-      "source_context": "The recipe instructs the chef to season both sides."
-    },
-    {
-      "evidence": "The application logs a warning when memory usage exceeds 80 percent.",
-      "category": "code",
-      "subject": "application",
-      "predicate": "logs_warning_when",
-      "object": "memory usage exceeds 80 percent",
-      "qualifiers": {"threshold": "80%"},
-      "source_context": "In the health check module, a warning is emitted at 80% memory usage."
+      "source_context": "<source text surrounding the evidence>"
     }
   ]
 }
@@ -357,8 +338,9 @@ def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict
     cleaned = strip_think(raw)
     result = parse_llm_json(cleaned)
     if result is None:
-        save_dlq(raw, stage=f"extract_{label}", error="parse_llm_json returned None",
-                 attempt=attempt)
+        save_dlq(
+            raw, stage=f"extract_{label}", error="parse_llm_json returned None", attempt=attempt
+        )
     return result
 
 
@@ -366,8 +348,9 @@ def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict
 SYSTEM_DAY_EXTRACT = _SYSTEM_TEXT_EXTRACT
 
 
-def _extract_section(section_type: str, source_text: str,
-                     pulse_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def _extract_section(
+    section_type: str, source_text: str, pulse_context: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
     if not source_text:
         return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
     return _extract_single(section_type, source_text, pulse_context=pulse_context)
@@ -385,27 +368,58 @@ def _calc_max_tokens(text_len: int) -> Optional[int]:
 
     overhead = TIMEOUT_BASE + int(text_len * TIMEOUT_PER_CHAR) + GEN_TIME_BUF
     if overhead >= CAP:
-        print(json.dumps({"event": "max_tokens_overflow", "text_len": text_len,
-                          "overhead_sec": overhead, "cap_sec": CAP,
-                          "reason": "prefill_exceeds_cap"}), flush=True)
+        print(
+            json.dumps(
+                {
+                    "event": "max_tokens_overflow",
+                    "text_len": text_len,
+                    "overhead_sec": overhead,
+                    "cap_sec": CAP,
+                    "reason": "prefill_exceeds_cap",
+                }
+            ),
+            flush=True,
+        )
         return None  # prefill만으로 CAP 초과
     achievable = int((CAP - overhead) / TIMEOUT_PER_TOK)
     if achievable < MIN_USEFUL_TOKENS:
-        print(json.dumps({"event": "max_tokens_overflow", "text_len": text_len,
-                          "achievable": achievable, "min_useful": MIN_USEFUL_TOKENS,
-                          "reason": "below_min_useful"}), flush=True)
+        print(
+            json.dumps(
+                {
+                    "event": "max_tokens_overflow",
+                    "text_len": text_len,
+                    "achievable": achievable,
+                    "min_useful": MIN_USEFUL_TOKENS,
+                    "reason": "below_min_useful",
+                }
+            ),
+            flush=True,
+        )
         return None  # 생성 가능 token이 너무 적음 → 명시적 거절
 
     final = min(wanted, achievable)
     if final < wanted:
-        print(json.dumps({"event": "tokens_truncated", "wanted": wanted,
-                          "achievable": achievable, "text_len": text_len}), flush=True)
+        print(
+            json.dumps(
+                {
+                    "event": "tokens_truncated",
+                    "wanted": wanted,
+                    "achievable": achievable,
+                    "text_len": text_len,
+                }
+            ),
+            flush=True,
+        )
     return final
 
 
 def _calc_timeout(total_chars: int, max_tokens: int) -> int:
-    est = (TIMEOUT_BASE + int(total_chars * TIMEOUT_PER_CHAR)
-           + int(max_tokens * TIMEOUT_PER_TOK) + GEN_TIME_BUF)
+    est = (
+        TIMEOUT_BASE
+        + int(total_chars * TIMEOUT_PER_CHAR)
+        + int(max_tokens * TIMEOUT_PER_TOK)
+        + GEN_TIME_BUF
+    )
     return min(est, CAP)
 
 
@@ -458,7 +472,9 @@ def _load_entity_context(turn_id: str) -> Optional[str]:
     services = data.get("services", [])
 
     # Backward compat: old format only has files+functions
-    all_found = bool(files or functions or classes or libraries or models_list or variables or services)
+    all_found = bool(
+        files or functions or classes or libraries or models_list or variables or services
+    )
     if not all_found:
         return None
 
@@ -494,9 +510,12 @@ def _load_entity_context(turn_id: str) -> Optional[str]:
 # ── Single section extraction ───────────────────────────────────
 
 
-def _extract_single(section_type: str, source_text: str,
-                    pulse_context: Optional[str] = None,
-                    timeout: Optional[int] = None) -> Optional[Dict[str, Any]]:
+def _extract_single(
+    section_type: str,
+    source_text: str,
+    pulse_context: Optional[str] = None,
+    timeout: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
     if not source_text:
         return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
 
@@ -512,19 +531,28 @@ def _extract_single(section_type: str, source_text: str,
     if timeout is None:
         max_tok = _calc_max_tokens(len(source_text))
         if max_tok is None:
-            print(json.dumps({"event": "extract_skip_overflow",
-                              "text_len": len(source_text),
-                              "max_input_advertised": MAX_INPUT_CHARS_ADVERTISED}), flush=True)
+            print(
+                json.dumps(
+                    {
+                        "event": "extract_skip_overflow",
+                        "text_len": len(source_text),
+                        "max_input_advertised": MAX_INPUT_CHARS_ADVERTISED,
+                    }
+                ),
+                flush=True,
+            )
             return None
         timeout = _calc_timeout(len(source_text), max_tokens=max_tok)
 
     meta = _call_with_8082_retry(
         call_llm,
-        [{"role": "system", "content": system_prompt},
-         {"role": "user", "content": source_text}],
+        [{"role": "system", "content": system_prompt}, {"role": "user", "content": source_text}],
         model="day_extract",
-        max_tokens=max_tok, temperature=TEMP_EXTRACT,
-        timeout=timeout, json_mode=True, return_meta=True,
+        max_tokens=max_tok,
+        temperature=TEMP_EXTRACT,
+        timeout=timeout,
+        json_mode=True,
+        return_meta=True,
     )
     raw = meta["content"]
     parsed = _parse_json(raw, f"day_extract_{section_type}")
@@ -535,8 +563,17 @@ def _extract_single(section_type: str, source_text: str,
         return None
     skip = parsed.get("skip_verdict") == "skip"
     if skip:
-        return {"extractions": [], "skip": True, "usage": meta["usage"], "timings": meta["timings"],
-                "elapsed_ms": meta["elapsed_ms"]}
+        result = {
+            "extractions": [],
+            "skip": True,
+            "usage": meta["usage"],
+            "timings": meta["timings"],
+            "elapsed_ms": meta["elapsed_ms"],
+        }
+        _observe_extract_usage(
+            section_type, len(source_text), max_tok, meta["usage"], meta["elapsed_ms"]
+        )
+        return result
     for e in ex:
         e["fact_type"] = section_type
     # Drop incomplete evidence (must end with sentence-ending punctuation)
@@ -548,12 +585,49 @@ def _extract_single(section_type: str, source_text: str,
     before_lv = len(ex)
     ex = [e for e in ex if not _is_low_value(e.get("evidence", ""))]
     if before_lv != len(ex):
-        print(f"  [_extract_single] dropped {before_lv - len(ex)} low-value evidence(s)", flush=True)
-    return {"extractions": ex, "usage": meta["usage"], "timings": meta["timings"],
-            "elapsed_ms": meta["elapsed_ms"]}
+        print(
+            f"  [_extract_single] dropped {before_lv - len(ex)} low-value evidence(s)", flush=True
+        )
+    _observe_extract_usage(
+        section_type, len(source_text), max_tok, meta["usage"], meta["elapsed_ms"]
+    )
+    return {
+        "extractions": ex,
+        "usage": meta["usage"],
+        "timings": meta["timings"],
+        "elapsed_ms": meta["elapsed_ms"],
+    }
 
 
 # ── Per-turn extraction (user → thinking → text) ────────────────
+
+
+def _observe_extract_usage(
+    section_type: str, text_len: int, max_tokens: int, meta_usage: Dict, elapsed_ms: int
+) -> None:
+    """Log extraction token usage to observations table."""
+    try:
+        from lib.observation import observe
+
+        pt = meta_usage.get("prompt_tokens", 0) or 0
+        ct = meta_usage.get("completion_tokens", 0) or 0
+        ctx = {
+            "section": section_type,
+            "text_len": text_len,
+            "max_tokens": max_tokens,
+            "prompt_tokens": pt,
+            "completion_tokens": ct,
+            "elapsed_ms": elapsed_ms,
+        }
+        observe(
+            f"extract: {section_type} prompt={pt} comp={ct} max={max_tokens}",
+            category="usage",
+            source="pipeline:extract_llm",
+            context=ctx,
+            tags={"domain": ["extract", "token_usage"]},
+        )
+    except Exception:
+        pass
 
 
 def _merge_usage(target: Dict[str, int], usage: Dict) -> None:
@@ -564,7 +638,9 @@ def _merge_usage(target: Dict[str, int], usage: Dict) -> None:
         target[k] = (target.get(k, 0) or 0) + v
 
 
-def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[dict, Optional[Dict[str, Any]], Optional[str]]:
+def _extract_for_turn(
+    turn: dict, pulse_context: Optional[str] = None
+) -> Tuple[dict, Optional[Dict[str, Any]], Optional[str]]:
     user_turn = turn.get("user_turn") or ""
     thinking = turn.get("thinking") or ""
     text = turn.get("text") or ""
@@ -576,7 +652,10 @@ def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[
             try:
                 return _extract_section(section_type, source_text, pulse_context=pulse_context)
             except Exception as e:
-                print(f"      [{section_type}] attempt {attempt+1}/{max_attempts} failed: {e}", flush=True)
+                print(
+                    f"      [{section_type}] attempt {attempt + 1}/{max_attempts} failed: {e}",
+                    flush=True,
+                )
                 if attempt < max_attempts - 1:
                     _recover_8082()
                     time.sleep(6)
@@ -592,14 +671,17 @@ def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[
         res = _robust_extract("user", user_turn)
         if res and res.get("skip"):
             any_skip = True
-            print(f"      [user] noise skip", flush=True)
+            print("      [user] noise skip", flush=True)
         elif res and res.get("extractions"):
             all_extractions.extend(res["extractions"])
             _merge_usage(total_usage, res.get("usage", {}))
             total_elapsed_ms += time.monotonic() - t0
-            print(f"      [user] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
+            print(
+                f"      [user] {len(res['extractions'])} facts ({time.monotonic() - t0:.0f}s)",
+                flush=True,
+            )
         elif res is None:
-            print(f"      [user section] failed after retries", flush=True)
+            print("      [user section] failed after retries", flush=True)
     time.sleep(6)
 
     # thinking section: NOT extracted — used as context for text extraction
@@ -617,35 +699,49 @@ def _extract_for_turn(turn: dict, pulse_context: Optional[str] = None) -> Tuple[
         combined_context = entity_context
         if thinking_context:
             combined_context = (
-                f"{thinking_context}\n\n{entity_context}"
-                if entity_context else thinking_context
+                f"{thinking_context}\n\n{entity_context}" if entity_context else thinking_context
             )
         res = _robust_extract("text", text, pulse_context=combined_context)
         if res and res.get("skip"):
             any_skip = True
-            print(f"      [text] noise skip", flush=True)
+            print("      [text] noise skip", flush=True)
         elif res and res.get("extractions"):
             all_extractions.extend(res["extractions"])
             _merge_usage(total_usage, res.get("usage", {}))
             total_elapsed_ms += time.monotonic() - t0
-            print(f"      [text] {len(res['extractions'])} facts ({time.monotonic()-t0:.0f}s)", flush=True)
+            print(
+                f"      [text] {len(res['extractions'])} facts ({time.monotonic() - t0:.0f}s)",
+                flush=True,
+            )
         elif res is None:
-            print(f"      [text section] failed after retries", flush=True)
+            print("      [text section] failed after retries", flush=True)
 
     if not all_extractions and any_skip:
         return (turn, None, "noise skip")
     if not all_extractions:
         return (turn, None, "all sections returned empty")
 
-    return (turn, {"extractions": all_extractions, "usage": total_usage,
-                   "timings": {}, "elapsed_ms": total_elapsed_ms}, None)
+    return (
+        turn,
+        {
+            "extractions": all_extractions,
+            "usage": total_usage,
+            "timings": {},
+            "elapsed_ms": total_elapsed_ms,
+        },
+        None,
+    )
 
 
 # ── Section-major solo processing ───────────────────────────────
 
 
 def _checkpoint_sections(extractions):
-    return set(e.get("fact_type") for e in extractions if e.get("fact_type") in ("user", "thinking", "text"))
+    return set(
+        e.get("fact_type")
+        for e in extractions
+        if e.get("fact_type") in ("user", "thinking", "text")
+    )
 
 
 def _extract_solo_section_major(
@@ -654,7 +750,7 @@ def _extract_solo_section_major(
     dry_run: bool = False,
 ) -> Generator[Tuple[dict, Optional[Dict], Optional[str]], None, None]:
     # Lazy import to avoid circular dependency (extract.py imports us)
-    from extract import _save_checkpoint, _load_checkpoint
+    from extract import _load_checkpoint, _save_checkpoint
 
     # Build entity context for text section (includes thinking as context per F-CoT)
     entity_map = {}
@@ -685,13 +781,14 @@ def _extract_solo_section_major(
             _merge_usage(turn_data[t["id"]]["total_usage"], res.get("usage", {}))
 
     def _has_section(t, section_type):
-        return any(e.get("fact_type") == section_type
-                   for e in turn_data[t["id"]]["extractions"])
+        return any(e.get("fact_type") == section_type for e in turn_data[t["id"]]["extractions"])
 
     def _batch_extract(section_type, source_getter) -> None:
-        targets = [(t, source_getter(t))
-                   for t in solo_turns
-                   if source_getter(t) and not _has_section(t, section_type)]
+        targets = [
+            (t, source_getter(t))
+            for t in solo_turns
+            if source_getter(t) and not _has_section(t, section_type)
+        ]
         if not targets:
             return
         if dry_run:
@@ -724,7 +821,7 @@ def _extract_solo_section_major(
         for t in solo_turns:
             if turn_data[t["id"]]["extractions"]:
                 _save_checkpoint(t["id"], turn_data[t["id"]]["extractions"])
-    heartbeat("day_extract", f"solo text done, total={time.monotonic()-solo_t0:.0f}s")
+    heartbeat("day_extract", f"solo text done, total={time.monotonic() - solo_t0:.0f}s")
 
     for t in solo_turns:
         td = turn_data[t["id"]]
@@ -733,6 +830,13 @@ def _extract_solo_section_major(
         elif not td["extractions"]:
             yield t, None, "all sections returned empty"
         else:
-            yield t, {"extractions": td["extractions"],
-                       "usage": td["total_usage"],
-                       "timings": {}, "elapsed_ms": 0}, None
+            yield (
+                t,
+                {
+                    "extractions": td["extractions"],
+                    "usage": td["total_usage"],
+                    "timings": {},
+                    "elapsed_ms": 0,
+                },
+                None,
+            )

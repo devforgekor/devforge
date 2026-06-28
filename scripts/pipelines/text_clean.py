@@ -26,25 +26,26 @@ Usage:
 
 import atexit
 import os
-import re
 import signal
 import sys
 import time
 from difflib import SequenceMatcher
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql_json, psql_ok, esc_sql
-from lib.text_cleaner import (
-    get_cleaner, detect_language, split_sentences,
-    estimate_tokens, hanja_substitute, detect_kiwi_changes,
-)
+from lib.common import context_limit
+from lib.db import esc_sql, psql_json, psql_ok
 from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import call_llm
+from lib.text_cleaner import (
+    detect_language,
+    estimate_tokens,
+    get_cleaner,
+    hanja_substitute,
+)
 from lib.watchdog.messenger import heartbeat, resolve_pulse
-from lib.common import context_limit
 
 BATCH_LIMIT = 50
 SUBBATCH_SIZE = 10
@@ -87,6 +88,7 @@ Step 3 — If ANY change is INVALID, pass MUST be false."""
 # Phase 3 Helper — LLM Verify Diffs
 # ═══════════════════════════════════════════════
 
+
 def _extract_diffs(original: str, corrected: str, max_pairs: int = 5) -> str:
     """Extract changed spans and format for verify prompt."""
     if original == corrected or not original or not corrected:
@@ -103,7 +105,7 @@ def _extract_diffs(original: str, corrected: str, max_pairs: int = 5) -> str:
             break
     if not changes:
         return ""
-    return "\n\n".join(f"=== Change {i+1} ===\n{c}" for i, c in enumerate(changes))
+    return "\n\n".join(f"=== Change {i + 1} ===\n{c}" for i, c in enumerate(changes))
 
 
 def _extract_json(text: str) -> str:
@@ -111,11 +113,11 @@ def _extract_json(text: str) -> str:
     s = text.strip()
     for prefix in ("```json", "```", "'''json", "'''"):
         if s.startswith(prefix):
-            s = s[len(prefix):].strip()
+            s = s[len(prefix) :].strip()
             break
     for suffix in ("```", "'''"):
         if s.endswith(suffix):
-            s = s[:-len(suffix)].strip()
+            s = s[: -len(suffix)].strip()
             break
     return s
 
@@ -129,8 +131,12 @@ def _verify_diffs(diff_text: str) -> Optional[bool]:
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
-            model="polisher", max_tokens=128, temperature=0.0,
-            timeout=int(timeout), json_mode=True, return_meta=True,
+            model="cleaner",
+            max_tokens=128,
+            temperature=0.0,
+            timeout=int(timeout),
+            json_mode=True,
+            return_meta=True,
         )
         parsed = parse_llm_json(_extract_json(meta["content"]))
         if isinstance(parsed, dict):
@@ -147,6 +153,7 @@ def _verify_diffs(diff_text: str) -> Optional[bool]:
 # ═══════════════════════════════════════════════
 # Main Processing — per sub-batch
 # ═══════════════════════════════════════════════
+
 
 def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> Tuple[int, Dict]:
     """Process one sub-batch of turns.
@@ -184,7 +191,10 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
 
     ko_count = stats["ko"]
     en_count = stats["en"]
-    print(f"    [lang] ko={ko_count}, en={en_count}, other={stats['other']}, total={len(sub_batch)}", flush=True)
+    print(
+        f"    [lang] ko={ko_count}, en={en_count}, other={stats['other']}, total={len(sub_batch)}",
+        flush=True,
+    )
 
     # ── Phase 2: Hanja substitution (Korean text/thinking only) ──
     hanja_text = 0
@@ -207,7 +217,10 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
             hanja_think += 1
 
     if hanja_text or hanja_think:
-        print(f"    [hanja] text={hanja_text}/{ko_count}, thinking={hanja_think}/{ko_count} substituted", flush=True)
+        print(
+            f"    [hanja] text={hanja_text}/{ko_count}, thinking={hanja_think}/{ko_count} substituted",
+            flush=True,
+        )
 
     # ── Phase 3: LLM verify Kiwi diffs (Korean only) ──
     if not no_llm:
@@ -222,7 +235,9 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
                 # diff_text already formatted by _extract_diffs; wrap in prompt format
                 ok = _verify_diffs(diff_text)
                 if ok is False:
-                    print(f"    [verify] {tid[:8]} — Kiwi diff REJECTED, using raw text", flush=True)
+                    print(
+                        f"    [verify] {tid[:8]} — Kiwi diff REJECTED, using raw text", flush=True
+                    )
                     reverted.add(tid)
 
     # ── Phase 4: Store ──
@@ -255,7 +270,10 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
         tok_count = estimate_tokens(final_ut)
 
         if dry_run:
-            print(f"    DRY-RUN {tid[:8]} [{lang}] ut={len(final_ut)} tx={len(final_tx)} tok={tok_count}", flush=True)
+            print(
+                f"    DRY-RUN {tid[:8]} [{lang}] ut={len(final_ut)} tx={len(final_tx)} tok={tok_count}",
+                flush=True,
+            )
             sub_ok += 1
             continue
 
@@ -272,8 +290,7 @@ def _process_sub_batch(sub_batch: list, dry_run: bool, no_llm: bool = False) -> 
             timeout=30,
         )
         psql_ok(
-            f"UPDATE turns SET pipeline_state = 'cleaned' "
-            f"WHERE id = '{esc_sql(tid)}'::uuid",
+            f"UPDATE turns SET pipeline_state = 'cleaned' WHERE id = '{esc_sql(tid)}'::uuid",
             timeout=30,
         )
         sub_ok += 1
@@ -345,7 +362,7 @@ def main():
     sub_total = (total + SUBBATCH_SIZE - 1) // SUBBATCH_SIZE
 
     for sb_idx in range(0, total, SUBBATCH_SIZE):
-        sub_batch = rows[sb_idx:sb_idx + SUBBATCH_SIZE]
+        sub_batch = rows[sb_idx : sb_idx + SUBBATCH_SIZE]
         sb_num = sb_idx // SUBBATCH_SIZE + 1
         print(f"\n  ── Sub-batch {sb_num}/{sub_total} ({len(sub_batch)} turns) ──", flush=True)
         sub_ok, stats = _process_sub_batch(sub_batch, dry_run, no_llm=no_llm)
@@ -362,6 +379,7 @@ def main():
 
     if not no_llm:
         from lib.llm_client import recall_tiny
+
         recall_tiny()
 
     if ok_count != total:

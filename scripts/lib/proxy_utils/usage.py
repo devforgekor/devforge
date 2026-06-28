@@ -9,8 +9,43 @@ balance, formats context-window bars, and logs token usage.
 import http.client
 import json
 import os
+import sys
 import time
 from typing import Any, Dict, Optional
+
+
+# Lazy DB import — avoid circular dependency at module level
+def _observe_token_usage(
+    input_tokens: int,
+    output_tokens: int,
+    cache_read: int,
+    cache_miss: int,
+    hit_rate: float,
+    body_kb: float,
+) -> None:
+    try:
+        sys.path.insert(
+            0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        )
+        from lib.observation import observe
+
+        ctx = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read": cache_read,
+            "cache_miss": cache_miss,
+            "hit_rate": round(hit_rate, 1),
+            "body_kb": round(body_kb, 1),
+        }
+        observe(
+            f"proxy: input={input_tokens} output={output_tokens} hit={hit_rate:.0f}%",
+            category="usage",
+            source="proxy:anthropic",
+            context=ctx,
+            tags={"domain": ["proxy", "token_usage"]},
+        )
+    except Exception:
+        pass
 
 
 def _extract_stream_usage(tail_bytes: bytes) -> bytes:
@@ -40,7 +75,9 @@ def _fetch_deepseek_balance() -> Optional[str]:
     if _balance_cache["cny"] is not None and now - _balance_cache["time"] < _BALANCE_CACHE_TTL:
         return _balance_cache["cny"]
 
-    api_key: Optional[str] = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+    api_key: Optional[str] = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get(
+        "ANTHROPIC_AUTH_TOKEN"
+    )
     if not api_key:
         return None
 
@@ -81,8 +118,12 @@ def _format_context_bar(tokens: int, max_tokens: int) -> str:
     return f"{bar} {pct:.0f}%"
 
 
-_KNOWN_CACHE_KEYS = {"prompt_cache_hit_tokens", "cache_read_input_tokens",
-                      "prompt_cache_miss_tokens", "cache_creation_input_tokens"}
+_KNOWN_CACHE_KEYS = {
+    "prompt_cache_hit_tokens",
+    "cache_read_input_tokens",
+    "prompt_cache_miss_tokens",
+    "cache_creation_input_tokens",
+}
 
 
 def _has_cache_stats(u: dict) -> bool:
@@ -110,10 +151,13 @@ def log_usage(body: Optional[bytes], data: Optional[bytes], resp_status: int) ->
             balance_str = f" ¥{balance}" if balance else ""
 
             if not _has_cache_stats(u):
-                print(f"[anthropic_proxy] usage: input={input_tokens} "
-                      f"output={output_tokens} "
-                      f"stats=none body={body_kb:.0f}KB {context_bar}{balance_str}",
-                      file=sys.stderr)
+                print(
+                    f"[anthropic_proxy] usage: input={input_tokens} "
+                    f"output={output_tokens} "
+                    f"stats=none body={body_kb:.0f}KB {context_bar}{balance_str}",
+                    file=sys.stderr,
+                )
+                _observe_token_usage(input_tokens, output_tokens, 0, 0, 0.0, body_kb)
             else:
                 cache_read = u.get("prompt_cache_hit_tokens", 0)
                 if not cache_read:
@@ -132,9 +176,14 @@ def log_usage(body: Optional[bytes], data: Optional[bytes], resp_status: int) ->
                     denom = max(denom, cache_read + cache_miss)
                 pct = min((cache_read / denom * 100), 100.0) if denom > 0 else 0
 
-                print(f"[anthropic_proxy] usage: input={input_tokens} cache_read={cache_read} "
-                      f"cache_miss={cache_miss} output={output_tokens} "
-                      f"hit_rate={pct:.0f}% body={body_kb:.0f}KB {context_bar}{balance_str}",
-                      file=sys.stderr)
+                print(
+                    f"[anthropic_proxy] usage: input={input_tokens} cache_read={cache_read} "
+                    f"cache_miss={cache_miss} output={output_tokens} "
+                    f"hit_rate={pct:.0f}% body={body_kb:.0f}KB {context_bar}{balance_str}",
+                    file=sys.stderr,
+                )
+                _observe_token_usage(
+                    input_tokens, output_tokens, cache_read, cache_miss, pct, body_kb
+                )
         except Exception:
             pass

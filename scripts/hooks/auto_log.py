@@ -227,6 +227,29 @@ def _handle_tool_error(tool_name: str, tool_input: dict, tool_output: dict) -> N
     )
 
 
+def _track_output_size(tool_name: str, tool_input: dict, tool_output: dict) -> None:
+    """Track tool output sizes for MCP truncation and token-savior-recall measurement."""
+    if not isinstance(tool_output, dict):
+        return
+    result = tool_output.get("result", "")
+    output_size = len(str(result)) if result else 0
+    error = tool_output.get("error", "")
+    if error:
+        output_size = len(str(error))
+    if output_size < 512:
+        return  # skip tiny outputs (noise)
+    try:
+        observe(
+            f"output: {tool_name} {output_size}B",
+            category="tool_output",
+            source="hook:PostToolUse",
+            context={"tool": tool_name, "output_size": output_size},
+            tags={"tool": tool_name, "output_size": str(output_size)},
+        )
+    except Exception:
+        pass
+
+
 def main() -> None:
     try:
         raw = sys.stdin.read()
@@ -242,6 +265,7 @@ def main() -> None:
 
     try:
         _handle_tool_error(tool_name, tool_input, tool_output)
+        _track_output_size(tool_name, tool_input, tool_output)
 
         if tool_name == "Bash":
             _handle_bash(tool_input, tool_output)

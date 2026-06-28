@@ -297,7 +297,6 @@ SSH 접속 없이 채팅 한 줄로 처리.
 | `/deploy restart pod-a` | Pod A 컨테이너 재시작 | admin |
 | `/deploy restart watchdog` | watchdog 재시작 | admin |
 | `/deploy restart turn-watcher` | turn-watcher 재시작 | admin |
-| `/deploy kick 15m-cycle` | 15m-cycle 타이머 강제 실행 | admin |
 | `/deploy list` | 실행 가능한 명령 목록 | all |
 
 ### 데이터 흐름
@@ -340,7 +339,6 @@ DEPLOY_COMMANDS = {
         "turn-watcher": lambda: _restart_service("devforge-turn-watcher"),
     },
     "kick": {
-        "15m-cycle": lambda: _kick_timer("devforge-15m-cycle"),
         "nightly": lambda: _kick_timer("devforge-night-cycle"),
         "daily-structure": lambda: _kick_timer("devforge-daily-structure"),
     },

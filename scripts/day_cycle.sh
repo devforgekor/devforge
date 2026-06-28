@@ -5,7 +5,7 @@
 # Each phase queries pipeline_state, each script self-reports completion via UPDATE.
 # Light → Heavy execution order:
 #   System Sync       — code-structure + duckdns + worklog
-#   Pod A Health       — check :8080 (router mode, models loaded dynamically)
+#   Pod A Health       — check :8080 (stopped by default, auto-start on demand)
 #   Text Preprocess   — text_clean.py (batching → cleaned, language-aware)
 #   FTS5 Refresh      — local_index refresh
 #   Day Embedding     — embed_batch.py (:8081, cleaned → embedded)
@@ -16,7 +16,7 @@
 # Each phase has its own budget check. Mid-cycle timeout carries forward in pipeline_state.
 #
 # Secrets: DUCKDNS_TOKEN in ~/.config/devforge/secrets.env
-# Server philosophy: Slow but complete. Pod A router (:8080) loads reranker/tiny/polisher on demand.
+# Server philosophy: Slow but complete. Pod A router (:8080) loads reranker/tiny/cleaner on demand.
 
 set -o pipefail
 
@@ -42,6 +42,15 @@ _budget_gate() {
     [ "$solo_chars" -le 0 ] && return 0  # no solo turns → always proceed
 
     local est=$(( solo_chars / cps + overhead ))
+    [ "$est" -le 0 ] && est=60
+
+    # Cap estimate for extract (scanned): per-turn CAP=1800s, many auto-skipped.
+    # Raw chars estimate breaks down when most large turns exceed CAP.
+    # Capping at 50% MAX_CYCLE_SEC prevents indefinite deferral of backlog.
+    if [ "$state" = "scanned" ]; then
+        local max_est=$(( MAX_CYCLE_SEC / 2 ))
+        [ "$est" -gt "$max_est" ] && est=$max_est
+    fi
     [ "$est" -le 0 ] && est=60
 
     if [ "$budget_now" -lt "$est" ]; then
@@ -239,7 +248,7 @@ elif [ "$IN_FLIGHT" -eq 0 ]; then
     fi
 fi
 
-# ── Pod A health check (only — router handles model switching dynamically) ──
+# ── Pod A health check (stopped by default, watchdog handles recovery) ──
 LOG "=== Pod A: health check (:8080) ==="
 curl -sf "http://127.0.0.1:8080/health" >/dev/null 2>&1 \
     && LOG "  Pod A (:8080) healthy" \

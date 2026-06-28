@@ -6,42 +6,7 @@
 
 ---
 
-## 1. 타이머 스케줄 충돌 — 수정 필요 ⚠️
-
-### 피드백 내용
-> `15m-cycle *:0/30`과 `day-verify *:30/30`이 **매시 30분**에 동시 실행된다.
-
-### 서버 실측 결과
-```
-devforge-15m-cycle.timer:  OnCalendar=*:0/30  ← :00과 :30 양쪽에서 발화
-```
-15m-cycle 타이머는 **30분 간격**으로 설정되어 있어 **:00과 :30 모두**에서 발화합니다.  
-제안된 대로 15m-cycle을 day_extract 용도로 유지하고 day_verify를 `*:30`에 추가하면:
-
-| 시각 | 실행 | Pod |
-|------|------|-----|
-| :00 | 15m-cycle → day_extract (fast + extract + MCP) | Pod A (3B, 8082) |
-| :30 | 15m-cycle → day_extract (또 한번!) | Pod A (3B) |
-| :30 | day_verify | Pod B (14B) |
-
-**:30에 Pod A와 Pod B가 동시에 실행 → 경합. 현재와 동일한 문제.**
-
-### 적용: 수정
-**타이머를 분리해야 합니다:**
-
-| 타이머 | OnCalendar | 실행 | Pod |
-|--------|------------|------|-----|
-| `devforge-day-extract.timer` | `*:00` | fast tasks → extract → MCP enrich | Pod A (3B) |
-| `devforge-day-verify.timer` | `*:30` | 14B verify + category | Pod B (14B) |
-
-`devforge-15m-cycle.timer`는 **삭제** 또는 fast-only로 축소하고 `*:00` 전용 타이머로 교체.
-
-현재 `15m_cycle.sh`가 이미 mode guard (`MODE=night` 체크)를 가지고 있으므로,  
-day-extract 타이머에도 동일한 로직을 적용: `MODE=night`면 extract/verify 모두 SKIP.
-
----
-
-## 2. 체크포인트 관리 — 이미 적절 (수정 불필요) ✅
+---## 2. 체크포인트 관리 — 이미 적절 (수정 불필요) ✅
 
 ### 피드백 내용
 > extract와 mcp_enrich 체크포인트를 분리하지 말고 하나로 통합하라.

@@ -15,11 +15,13 @@ import sys
 import time
 from typing import Callable, Optional
 
+from lib.experiment_state import is_experiment_active
 from lib.watchdog.config import (
-    CONTAINER_EXCLUSION, MODE_FILE_A, MODE_FILE_B,
+    CONTAINER_EXCLUSION,
+    MODE_FILE_A,
+    MODE_FILE_B,
 )
 from lib.watchdog.state import ComponentTracker
-from lib.experiment_state import is_experiment_active
 
 
 def log(msg: str) -> None:
@@ -28,9 +30,9 @@ def log(msg: str) -> None:
 
 # ── Exit code 분석 ──────────────────────────────────────────────────
 
-EXIT_OOM = 137       # SIGKILL (OOM killer)
+EXIT_OOM = 137  # SIGKILL (OOM killer)
 EXIT_SEGFAULT = 139  # SIGSEGV
-EXIT_SIGTERM = 143   # SIGTERM (normal shutdown)
+EXIT_SIGTERM = 143  # SIGTERM (normal shutdown)
 EXIT_PODMAN_ERR = 125  # Podman 자체 에러
 
 
@@ -51,6 +53,7 @@ def analyze_exit_code(code: int) -> str:
 
 # ── 복구 액션 ──────────────────────────────────────────────────────
 
+
 def recover_container(name: str) -> bool:
     """systemctl --user restart container. Exclusion 체크."""
     if name in CONTAINER_EXCLUSION:
@@ -63,7 +66,8 @@ def recover_container(name: str) -> bool:
     try:
         subprocess.run(
             ["systemctl", "--user", "restart", name],
-            capture_output=True, timeout=30,
+            capture_output=True,
+            timeout=30,
         )
         time.sleep(5)
         return True
@@ -84,7 +88,8 @@ def recover_service(name: str) -> bool:
     try:
         subprocess.run(
             ["systemctl", "--user", "restart", name],
-            capture_output=True, timeout=30,
+            capture_output=True,
+            timeout=30,
         )
         return True
     except Exception:
@@ -95,21 +100,22 @@ def recover_oom() -> bool:
     """OOM kill_all + restore mode.
 
     일반 backoff 생략, 즉시 kill_all로 메모리 확보 후 재시작.
-    Protection active (test running) 시 Pod B env를 보존하여 테스트 모드 유지.
     """
     if is_experiment_active():
         log("  SKIP OOM recovery — experiment active (runner handles recovery)")
         return False
 
-    log(f"  OOM recovery: kill_all + restore...")
+    log("  OOM recovery: kill_all + restore...")
     try:
         subprocess.run(
             ["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
-            capture_output=True, timeout=30,
+            capture_output=True,
+            timeout=30,
         )
         subprocess.run(
             ["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
-            capture_output=True, timeout=30,
+            capture_output=True,
+            timeout=30,
         )
         time.sleep(10)  # 메모리 reclaim
 
@@ -120,11 +126,15 @@ def recover_oom() -> bool:
         # Restore Pod B to day mode
         try:
             subprocess.run(
-                [sys.executable, "-c",
-                 "import sys; sys.path.insert(0, '/opt/projects/server/scripts'); "
-                 "from lib.pod_manager import _write_mode_env; "
-                 "_write_mode_env('day', 8082)"],
-                capture_output=True, timeout=15,
+                [
+                    sys.executable,
+                    "-c",
+                    "import sys; sys.path.insert(0, '/opt/projects/server/scripts'); "
+                    "from lib.pod_manager import _write_mode_env; "
+                    "_write_mode_env('day', 8082)",
+                ],
+                capture_output=True,
+                timeout=15,
             )
         except Exception:
             log("  _write_mode_env failed, falling back to MODE=day for Pod B")
@@ -133,11 +143,13 @@ def recover_oom() -> bool:
 
         subprocess.run(
             ["systemctl", "--user", "start", "container-devforge-pod-a.service"],
-            capture_output=True, timeout=60,
+            capture_output=True,
+            timeout=60,
         )
         subprocess.run(
             ["systemctl", "--user", "start", "container-devforge-pod-b.service"],
-            capture_output=True, timeout=60,
+            capture_output=True,
+            timeout=60,
         )
         return True
     except Exception as e:
@@ -146,6 +158,7 @@ def recover_oom() -> bool:
 
 
 # ── Graduated recovery with CrashLoopBackOff ───────────────────────
+
 
 def graduated_recover(
     name: str,
@@ -191,7 +204,8 @@ def recover_slot_deadlock(port: str) -> bool:
     try:
         subprocess.run(
             ["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-            capture_output=True, timeout=60,
+            capture_output=True,
+            timeout=60,
         )
         time.sleep(5)
         log("  container-devforge-pod-b restarted")
@@ -229,7 +243,7 @@ def kill_stale_process(entry_name: str):
                     cmdline = cf.read().replace("\0", " ")
                 if entry_name not in cmdline:
                     continue
-            except (OSError, IOError):
+            except OSError:
                 continue
             os.kill(pid, signal.SIGTERM)
             log(f"  killed stale {entry_name} PID {pid}")

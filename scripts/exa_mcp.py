@@ -14,7 +14,10 @@ Register in mcp.json:
   }
 """
 
-import json, os, sys, itertools, time, re
+import json
+import os
+import sys
+
 import httpx
 
 # Ensure scripts/ is in path for lib imports when spawned via MCP stdio
@@ -64,7 +67,7 @@ def _load_keys():
             cipher = cipher.strip()
             plain = decrypt_data(cipher)
             if plain is None:
-                print(f"[exa_mcp] Failed to decrypt key, trying as plaintext", file=sys.stderr)
+                print("[exa_mcp] Failed to decrypt key, trying as plaintext", file=sys.stderr)
                 plain = cipher
             keys.append(plain)
     if not keys:
@@ -74,37 +77,54 @@ def _load_keys():
 
 
 def _read_message():
-    headers = {}
+    """Read JSON-RPC message from stdin. Supports both modern JSON-line
+    transport (one JSON per line) and legacy Content-Length header format."""
     while True:
         line = sys.stdin.readline()
         if not line:
             return None
-        line = line.strip()
-        if not line:
-            break
-        if ":" in line:
-            key, val = line.split(":", 1)
-            headers[key.strip().lower()] = val.strip()
-    length = int(headers.get("content-length", 0))
-    if length == 0:
-        return None
-    body = sys.stdin.read(length)
-    return json.loads(body)
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Modern JSON-line format: line is a complete JSON object
+        if stripped.startswith("{"):
+            return json.loads(stripped)
+        # Legacy Content-Length header format
+        headers = {}
+        if ":" in stripped:
+            k, v = stripped.split(":", 1)
+            headers[k.strip().lower()] = v.strip()
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                return None
+            line = line.strip()
+            if not line:
+                break
+            if ":" in line:
+                k, v = line.split(":", 1)
+                headers[k.strip().lower()] = v.strip()
+        length = int(headers.get("content-length", 0))
+        if length == 0:
+            return None
+        body = sys.stdin.read(length)
+        return json.loads(body)
 
 
 def _send_message(msg):
     body = json.dumps(msg)
-    payload = f"Content-Length: {len(body)}\r\n\r\n{body}"
-    sys.stdout.write(payload)
+    sys.stdout.write(body + "\n")
     sys.stdout.flush()
 
 
 def _not_impl(msg, req_id):
-    _send_message({
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "error": {"code": -32601, "message": f"Method not found: {msg.get('method', '?')}"},
-    })
+    _send_message(
+        {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "error": {"code": -32601, "message": f"Method not found: {msg.get('method', '?')}"},
+        }
+    )
 
 
 TOOLS = [
@@ -114,64 +134,68 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query"
-                },
+                "query": {"type": "string", "description": "The search query"},
                 "type": {
                     "type": "string",
                     "enum": ["auto", "fast", "instant", "deep", "deep-lite", "deep-reasoning"],
                     "description": "Search mode. auto (default) balances quality and speed. fast for low latency. instant for real-time. deep for multi-step research. deep-reasoning for complex analysis.",
-                    "default": "auto"
+                    "default": "auto",
                 },
                 "numResults": {
                     "type": "integer",
                     "description": "Number of results (1-100, default 10)",
                     "minimum": 1,
                     "maximum": 100,
-                    "default": 10
+                    "default": 10,
                 },
                 "includeDomains": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Only return results from these domains (e.g., arxiv.org)"
+                    "description": "Only return results from these domains (e.g., arxiv.org)",
                 },
                 "excludeDomains": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Exclude results from these domains"
+                    "description": "Exclude results from these domains",
                 },
                 "category": {
                     "type": "string",
-                    "enum": ["company", "research paper", "news", "personal site", "financial report", "people"],
-                    "description": "Focus search on a specific category"
+                    "enum": [
+                        "company",
+                        "research paper",
+                        "news",
+                        "personal site",
+                        "financial report",
+                        "people",
+                    ],
+                    "description": "Focus search on a specific category",
                 },
                 "startPublishedDate": {
                     "type": "string",
-                    "description": "Only return results published after this date (ISO 8601)"
+                    "description": "Only return results published after this date (ISO 8601)",
                 },
                 "endPublishedDate": {
                     "type": "string",
-                    "description": "Only return results published before this date (ISO 8601)"
+                    "description": "Only return results published before this date (ISO 8601)",
                 },
                 "text": {
                     "type": "boolean",
                     "description": "Include full page text in results",
-                    "default": False
+                    "default": False,
                 },
                 "highlights": {
                     "type": "boolean",
                     "description": "Include relevant highlights/snippets in results",
-                    "default": True
+                    "default": True,
                 },
                 "summary": {
                     "type": "boolean",
                     "description": "Include an LLM-generated summary of each page",
-                    "default": False
-                }
+                    "default": False,
+                },
             },
-            "required": ["query"]
-        }
+            "required": ["query"],
+        },
     },
     {
         "name": "exa_get_contents",
@@ -182,22 +206,22 @@ TOOLS = [
                 "urls": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "URLs to retrieve contents for (max 10)"
+                    "description": "URLs to retrieve contents for (max 10)",
                 },
                 "text": {
                     "type": "boolean",
                     "description": "Include full page text",
-                    "default": True
+                    "default": True,
                 },
                 "highlights": {
                     "type": "boolean",
                     "description": "Include relevant highlights",
-                    "default": True
-                }
+                    "default": True,
+                },
             },
-            "required": ["urls"]
-        }
-    }
+            "required": ["urls"],
+        },
+    },
 ]
 
 
@@ -266,7 +290,11 @@ def _handle_exa_search(args, keys):
             if r.get("highlights"):
                 preview = "\n    Highlights: " + " | ".join(r["highlights"][:2])
             elif r.get("text"):
-                preview = "\n    Text: " + r["text"][:200] + "..." if len(r.get("text", "")) > 200 else "\n    Text: " + r.get("text", "")
+                preview = (
+                    "\n    Text: " + r["text"][:200] + "..."
+                    if len(r.get("text", "")) > 200
+                    else "\n    Text: " + r.get("text", "")
+                )
             elif r.get("summary"):
                 preview = "\n    Summary: " + r["summary"][:200]
             lines.append(f"- {title}\n  URL: {url}\n  Published: {published}{preview}")
@@ -338,22 +366,26 @@ def main():
         params = msg.get("params", {})
 
         if method == "initialize":
-            _send_message({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "exa-mcp", "version": "1.0.0"},
-                },
-            })
+            _send_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "exa-mcp", "version": "1.0.0"},
+                    },
+                }
+            )
 
         elif method == "tools/list":
-            _send_message({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {"tools": TOOLS},
-            })
+            _send_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"tools": TOOLS},
+                }
+            )
 
         elif method == "tools/call":
             name = params.get("name", "")
@@ -368,18 +400,22 @@ def main():
             elif name == "exa_get_contents":
                 result = _handle_exa_get_contents(arguments, keys)
             else:
-                _send_message({
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "error": {"code": -32602, "message": f"Unknown tool: {name}"},
-                })
+                _send_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {"code": -32602, "message": f"Unknown tool: {name}"},
+                    }
+                )
                 continue
 
-            _send_message({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {"content": [{"type": "text", "text": result}]},
-            })
+            _send_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"content": [{"type": "text", "text": result}]},
+                }
+            )
 
         elif method == "shutdown":
             _send_message({"jsonrpc": "2.0", "id": req_id, "result": None})

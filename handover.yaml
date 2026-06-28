@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-06-28T07:36:08.601633+00:00'
+  time: '2026-06-28T16:38:24.550445+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -176,8 +176,47 @@ decisions:
   detail: 'All 3 hooks (pretool_bash_log, auto_log, ruff_lint) made fully silent. ruff_lint.py: removed hookSpecificOutput.
     pretool_bash_log.py: removed stderr output.'
   status: open
+- id: nd09-06
+  detail: 'UI conciseness: same-type tools collapsed, thought minimized, final only'
+  status: open
+- id: nd09-04
+  detail: 'Token savings measurement: proxy→DB, extract_llm→DB, reports/token-stats.py'
+  status: open
+- id: nd09-05
+  detail: 'mcp-trunc-proxy patch: proxy.mjs +1 line, JSONL stats, patches/ saved'
+  status: open
+- id: nd10-01
+  detail: 'Phase 1 — predicate extraction quality test: 3-phase plan (Deep Dive workflow). == Current State (2026-06-28) ==
+    - 30B MoE (Qwen3-Coder-30B-A3B-Q4_K_M, 18G, 8081): no-GS chunk2 FAIL (0/5, 503), with-GS full turn DONE (4/5 GOOD, 243s,
+    1533P+326C). Finish=stop. - 14B Q4 (Qwen3-14B-Q4_K_M, 8.4G, 8081): LOADED at 8081. Tests NOT RUN. - Pod B env: CTX_SIZE=4096,
+    CACHE_RAM=512, UBATCH=256, THREADS=4, FLASH_ATTN=1. MemoryMax=23G. - Pod A: DOWN. Needed for Phase 2 (4B parallel test).
+    - Predicate Golden Set: scripts/docs/predicate-golden-set.yaml (16 entries). - Test scripts: /tmp/test_30b_golden.py (30B
+    GS test, working), /tmp/test_14b_feedback.py (14B with retry, NOT RUN). /tmp/test_14b_golden.py (14B simple version, NOT
+    RUN). == Phase 1 (NEXT) == Run 14B Q4 x 2 tests on the SAME 760-char turn (in /tmp/): A) WITHOUT Golden Set (baseline)
+    B) WITH Golden Set Expected: 80%+ GOOD with GS, clear GS vs no-GS gap (no-GS: ~50%). == Phase 2 (after Pod A recovery)
+    == 4B pre-filter x 2 models: - Qwen3.5-4B-Q8 (4B×4B, DeltaNet+Attention hybrid) - qwen3-4b-instruct-2507-q8 (4B×3B, dense
+    4B + Qwen2.5-0.5B verifier combo) Limit: 3 facts max. Verify with 30B or 14B. == Phase 3 == Top 2 model combos x 12 DB
+    samples (short 4 + medium 4 + long 4). Final comparison. == Execution Protocol == 1. cli.py status --json → check Pod
+    B mode/timer 2. systemctl --user stop devforge-day-cycle.{service,timer} 3. test_setup(name, desc) → heartbeat pulse 4.
+    ensure_model(key) or manual env swap + systemctl restart devforge-pod-b 5. Wait for model loaded (podman logs | grep "model
+    loaded") 6. test_heartbeat(detail) on each step 7. Test with retry loop: max 3 retries, 15s backoff, health check between
+    retries 8. test_complete() 9. systemctl --user start devforge-day-cycle.{service,timer} 10. Compare results, update handover
+    == MCP Tools for Deep Dive == - Yggdrasil: plan/structuring (session dp-20260628-extraction-test-series) - filesystem:
+    read/write test scripts - LSP: analyze extract.py blast_radius - context7: llama.cpp GBNF/json_schema docs - shrimp-task-manager:
+    step-by-step task execution - search-proxy/exa-search: research (golden set quality, model comparison) - devforge-mcp:
+    DB queries, custom tools - time: timestamps == Retry Feedback Loop == - 503/API error → wait 15-30s, recheck /health,
+    retry max 3 - JSON parse fail → log raw, return FAIL, retry - Health check before each attempt - Model D state: wait for
+    slot recovery, retry - All retries exhausted → declare test FAIL, continue next test '
+  status: open
 known_issues:
+- text: '30B MoE (Qwen3-Coder-30B-A3B-Q4_K_M, 18G) slot deadlock after first request: cause is MemoryMax 22G too tight. Fixed
+    at 23G + ctx 4096 + cache-ram 512. 14B Q4 is more stable alternative.'
+  resolved: false
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
+  resolved: false
+- text: 'CRITICAL: exa_mcp.py + context7_mcp.py _read_message()/_send_message() modified for JSON-line compat. If update_handover.py
+    runs before session writes to handover.yaml, completed_log and decisions may get overwritten. Always check handover.yaml
+    after session start.'
   resolved: false
 - text: '(Deprecated) Gemini API SSL blocked from Oracle Cloud no longer blocks connections from gemini_openai.py — proxy
     uses raw SSL sockets with hardcoded IPs (bypasses /etc/hosts and any DNS-level blocks). Native Gemini protocol (proxies/gemini.py)
@@ -185,6 +224,9 @@ known_issues:
   resolved: false
 - text: 'devforge-mcp MCP tools (action_write, action_poll_results) require container restart for FastMCP tool registry update.
     Does not auto-reload on file change. Restart command: systemctl --user restart container-devforge-mcp.'
+  resolved: false
+- text: 'extraction: equals predicate still appears 1/turn even with Golden Set (30B MoE, PARALLEL=1). May need stronger GBNF
+    constraints or prompt refinement.'
   resolved: false
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
@@ -212,6 +254,11 @@ known_issues:
 - text: OpenCode not yet fully tested in TUI mode (only headless opencode run verified). MCP server connection via opencode
     mcp add not tested with devforge-mcp container. OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
     pointing to local proxy.
+  resolved: false
+- text: Phase 1 test scripts in /tmp/ (test_30b_golden.py, test_14b_golden.py, test_14b_feedback.py) — not committed. One-shot
+    test scripts, not production code.
+  resolved: false
+- text: Pod A still DOWN (slirp4netns workaround). Required for Phase 2 parallel 4B tests. Needs recovery before Phase 2.
   resolved: false
 - text: PostgreSQL shared_buffers 512MB — applied via restart. Ok.
   resolved: false
@@ -252,3 +299,15 @@ completed_log:
   + cli.py reflex command + obs_remediate MCP. Action queue bridge: lib/action_queue.py + MCP tools action_write/action_poll_results
   + watchdog _consume_actions(). Security: shell=False, injection validation, timeouts. 9/9 tests passed. Commit 70d78b7 pushed
   to main.'
+- 'extraction: Phase 1 test series init. Models available (30B MoE, 14B Q4, 4B Q8 x2, 0.5B Q8). Downloaded Qwen3.5-4B-Q8_0
+  (4.2G), Qwen3-14B-Q4_K_M (8.4G). Removed Qwen3-8B-Q8_0 (8.2G), Qwen3.5-9B-Q8.'
+- 'Qwen3-Coder-30B-A3B-Q4_K_M test: 30B MoE no-GS (0/5 GOOD on chunk2, 503 slot deadlock). 30B MoE with GS (4/5 GOOD, 243s,
+  1533P+326C). Remaining: equals appears once (PARALLEL=1). Memory fix: MemoryMax 22G->23G, ctx 8192->4096, cache-ram 1024->512,
+  ubatch 512->256. Fixed 30B slot deadlock.'
+- 'Predicate Golden Set YAML: 16 entries (11 GOOD + 5 BAD). Sources: DB review_facts + turns with evidence chains. English/Korean
+  mixed predicates. Created at scripts/docs/predicate-golden-set.yaml.'
+- 'MCP transport compatibility fix: exa_mcp.py + context7_mcp.py had legacy Content-Length header transport. Claude Code v2.1.158
+  uses JSON-line transport. Fixed _read_message() + _send_message() in both. 12/12 MCP servers connected.'
+- 'Pod B: 14B Q4 model loaded at 8081 (2min load, 8.4G). Ready for Phase 1 tests (no-GS + with-GS).'
+- 'Extraction test plan structured: 3-phase plan (Phase 1=model comparison, Phase 2=4B pre-filter, Phase 3=final). Yggdrasil
+  session dp-20260628-extraction-test-series.'

@@ -1,0 +1,16 @@
+--- /tmp/proxy.mjs.bak	2026-06-28 07:59:34.290740231 +0000
++++ /home/opc/.local/lib/node_modules/mcp-trunc-proxy/src/proxy.mjs	2026-06-28 08:02:35.911631694 +0000
+@@ -262,6 +262,13 @@
+   function buildTruncatedToolResult({ artifactId, originalBytes, toolName, toolResult }) {
+     const lines = extractTextLinesFromToolResult(toolResult);
+     const preview = summarizeLines(lines);
++    // PATCH: mcp-trunc-proxy stats logging (re-apply after npm update)
++    import("node:fs").then(fs => {
++      fs.appendFileSync(
++        process.env.MCP_TRUNC_STATS_FILE || "/opt/projects/server/data/mcp-trunc-stats.jsonl",
++        JSON.stringify({ t: Date.now(), tool: toolName, original: originalBytes, artifact: artifactId }) + "\n"
++      );
++    }).catch(() => {});
+ 
+     const msg =
+       "⚠️ Large tool result offloaded by mcp-trunc-proxy\n" +

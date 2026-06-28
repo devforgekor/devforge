@@ -657,8 +657,6 @@ day_pipeline.py + night_cycle.py를 prj_cycle.py와, exp_runner.py를 runner.py�
 | 서비스 | 현재 | 변경 후 |
 |--------|------|--------|
 | `night_cycle.sh` | `prj_cycle.py` 호출 | `day_runner.py → day_pipeline.py` + `night_runner.py → night_cycle.py` |
-| `15m_cycle.sh` | `prj_cycle.py --queue` 호출 | `day_runner.py --queue → day_pipeline.py` |
-| `devforge-15m-cycle.timer` | 15분마다 prj_cycle | 15분마다 day_runner (변경 없음) |
 | `runner.py` (수동) | 실험 전용 | → `exp_runner.py`로 대체 |
 | `day_runner.py` (수동) | — (신규) | 개발/디버깅용 단독 실행 |
 | `night_runner.py` (수동) | — (신규) | 개발/디버깅용 단독 실행 |

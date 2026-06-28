@@ -3,6 +3,7 @@
 """Container health checks, model fingerprint, pasta management, env writing."""
 
 from __future__ import annotations
+
 import json
 import os
 import re
@@ -11,11 +12,12 @@ import subprocess
 import time
 import urllib.request
 
-from lib.pod_manager.models import MODEL_METADATA
+from lib.pod_manager.models import MODEL_METADATA, POD_A_MODELS
 
 
 def _ts():
     from datetime import datetime, timezone
+
     return datetime.now(timezone.utc).strftime("%H:%M:%S")
 
 
@@ -26,6 +28,7 @@ def log(msg):
 def _reclaim_memory():
     try:
         from lib.infra.container_manager import free_memory
+
         free_memory(level=2)
     except ImportError:
         os.sync()
@@ -34,8 +37,10 @@ def _reclaim_memory():
 
 
 def _container_service_name(port):
-    if port == 8080:
-        return "container-devforge-pod-a"
+    for model_key in POD_A_MODELS:
+        meta = MODEL_METADATA.get(model_key)
+        if meta and meta.get("port") == port:
+            return "container-devforge-pod-a"
     return "devforge-pod-b"
 
 
@@ -46,7 +51,10 @@ def _check_container_health(port, label):
     try:
         r = subprocess.run(
             ["systemctl", "--user", "show", f"{svc}.service", "-p", "NRestarts", "--value"],
-            capture_output=True, text=True, timeout=10)
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         restarts = int(r.stdout.strip())
         if restarts > 0:
             warnings.append(f"{svc} NRestarts={restarts} — possible crashloop")
@@ -57,7 +65,10 @@ def _check_container_health(port, label):
     try:
         r = subprocess.run(
             ["podman", "ps", "--filter", f"name={podman_name}", "--format", "{{.Status}}"],
-            capture_output=True, text=True, timeout=10)
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         status = r.stdout.strip()
         if not status:
             warnings.append(f"{svc} not in podman ps — container may be dead")
@@ -69,7 +80,7 @@ def _check_container_health(port, label):
         pass
 
     entrypoint_map = {
-        "container-devforge-pod-a": "/opt/ai_data/scripts/reviewer-entrypoint.sh",
+        "container-devforge-pod-a": "/opt/ai_data/scripts/pod-a-entrypoint.sh",
         "container-devforge-pod-b": "/opt/ai_data/scripts/pod-b-entrypoint.sh",
     }
     ep_path = entrypoint_map.get(svc)
@@ -113,8 +124,8 @@ def _kill_stray_pasta(ports):
     for port in ports:
         try:
             r = subprocess.run(
-                ["ss", "-tlnp", f"sport = :{port}"],
-                capture_output=True, text=True, timeout=10)
+                ["ss", "-tlnp", f"sport = :{port}"], capture_output=True, text=True, timeout=10
+            )
             if "pasta" in r.stdout:
                 pid = _extract_pasta_pid(r.stdout, port)
                 if pid:

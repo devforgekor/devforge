@@ -14,7 +14,10 @@ Register in mcp.json:
   }
 """
 
-import json, os, sys
+import json
+import os
+import sys
+
 import httpx
 
 # Ensure scripts/ is in path for lib imports when spawned via MCP stdio
@@ -61,7 +64,7 @@ def _load_keys():
             cipher = cipher.strip()
             plain = decrypt_data(cipher)
             if plain is None:
-                print(f"[context7_mcp] Failed to decrypt key, trying as plaintext", file=sys.stderr)
+                print("[context7_mcp] Failed to decrypt key, trying as plaintext", file=sys.stderr)
                 plain = cipher
             keys.append(plain)
     if not keys:
@@ -79,15 +82,15 @@ TOOLS = [
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The question or task you need help with (used for relevance ranking)"
+                    "description": "The question or task you need help with (used for relevance ranking)",
                 },
                 "libraryName": {
                     "type": "string",
-                    "description": "Library name to search for. Use the official name (e.g., 'Next.js', 'FastAPI', 'React')"
-                }
+                    "description": "Library name to search for. Use the official name (e.g., 'Next.js', 'FastAPI', 'React')",
+                },
             },
-            "required": ["query", "libraryName"]
-        }
+            "required": ["query", "libraryName"],
+        },
     },
     {
         "name": "query_docs",
@@ -97,42 +100,57 @@ TOOLS = [
             "properties": {
                 "libraryId": {
                     "type": "string",
-                    "description": "Context7 library ID (e.g., '/vercel/next.js', '/mongodb/docs'). Get this from resolve_library_id."
+                    "description": "Context7 library ID (e.g., '/vercel/next.js', '/mongodb/docs'). Get this from resolve_library_id.",
                 },
                 "query": {
                     "type": "string",
-                    "description": "Your specific question about this library"
-                }
+                    "description": "Your specific question about this library",
+                },
             },
-            "required": ["libraryId", "query"]
-        }
-    }
+            "required": ["libraryId", "query"],
+        },
+    },
 ]
 
 
 def _read_message():
-    headers = {}
+    """Read JSON-RPC message from stdin. Supports both modern JSON-line
+    transport (one JSON per line) and legacy Content-Length header format."""
     while True:
         line = sys.stdin.readline()
         if not line:
             return None
-        line = line.strip()
-        if not line:
-            break
-        if ":" in line:
-            key, val = line.split(":", 1)
-            headers[key.strip().lower()] = val.strip()
-    length = int(headers.get("content-length", 0))
-    if length == 0:
-        return None
-    body = sys.stdin.read(length)
-    return json.loads(body)
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Modern JSON-line format: line is a complete JSON object
+        if stripped.startswith("{"):
+            return json.loads(stripped)
+        # Legacy Content-Length header format
+        headers = {}
+        if ":" in stripped:
+            k, v = stripped.split(":", 1)
+            headers[k.strip().lower()] = v.strip()
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                return None
+            line = line.strip()
+            if not line:
+                break
+            if ":" in line:
+                k, v = line.split(":", 1)
+                headers[k.strip().lower()] = v.strip()
+        length = int(headers.get("content-length", 0))
+        if length == 0:
+            return None
+        body = sys.stdin.read(length)
+        return json.loads(body)
 
 
 def _send_message(msg):
     body = json.dumps(msg)
-    payload = f"Content-Length: {len(body)}\r\n\r\n{body}"
-    sys.stdout.write(payload)
+    sys.stdout.write(body + "\n")
     sys.stdout.flush()
 
 
@@ -181,12 +199,16 @@ def _handle_resolve_library_id(args, keys):
         lines.append(f"- {r.get('title', 'Untitled')}")
         lines.append(f"  ID: {r.get('id', 'N/A')}")
         lines.append(f"  Description: {r.get('description', '')[:200]}")
-        lines.append(f"  Snippets: {r.get('totalSnippets', 0)} | "
-                      f"Reputation: {r.get('trustScore', 'N/A')} | "
-                      f"Score: {r.get('benchmarkScore', 'N/A')}")
+        lines.append(
+            f"  Snippets: {r.get('totalSnippets', 0)} | "
+            f"Reputation: {r.get('trustScore', 'N/A')} | "
+            f"Score: {r.get('benchmarkScore', 'N/A')}"
+        )
         versions = r.get("versions", [])
         if versions:
-            lines.append(f"  Versions: {', '.join(versions[:5])}{'...' if len(versions) > 5 else ''}")
+            lines.append(
+                f"  Versions: {', '.join(versions[:5])}{'...' if len(versions) > 5 else ''}"
+            )
         lines.append("")
 
     return "\n".join(lines)
@@ -230,22 +252,26 @@ def main():
         params = msg.get("params", {})
 
         if method == "initialize":
-            _send_message({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "context7-mcp", "version": "1.0.0"},
-                },
-            })
+            _send_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "context7-mcp", "version": "1.0.0"},
+                    },
+                }
+            )
 
         elif method == "tools/list":
-            _send_message({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {"tools": TOOLS},
-            })
+            _send_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"tools": TOOLS},
+                }
+            )
 
         elif method == "tools/call":
             name = params.get("name", "")
@@ -260,29 +286,35 @@ def main():
             elif name == "query_docs":
                 result = _handle_query_docs(arguments, keys)
             else:
-                _send_message({
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "error": {"code": -32602, "message": f"Unknown tool: {name}"},
-                })
+                _send_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {"code": -32602, "message": f"Unknown tool: {name}"},
+                    }
+                )
                 continue
 
-            _send_message({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {"content": [{"type": "text", "text": result}]},
-            })
+            _send_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"content": [{"type": "text", "text": result}]},
+                }
+            )
 
         elif method == "shutdown":
             _send_message({"jsonrpc": "2.0", "id": req_id, "result": None})
             break
 
         else:
-            _send_message({
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {"code": -32601, "message": f"Method not found: {method}"},
-            })
+            _send_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32601, "message": f"Method not found: {method}"},
+                }
+            )
 
 
 if __name__ == "__main__":

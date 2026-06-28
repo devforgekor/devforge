@@ -10,28 +10,32 @@ import os
 import re
 import sys
 import time
-from pathlib import Path
 
 _SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
 from lib.common import log
-from lib.db import psql_json, psql_ok, esc_sql
-from lib.test_common import test_setup, test_heartbeat, test_complete
-from lib.watchdog.messenger import heartbeat as _hb
-from pipelines.extract_llm import _calc_timeout, _calc_max_tokens
+from lib.db import psql_json
+from lib.test_common import test_complete, test_heartbeat, test_setup
+from pipelines.extract_llm import _calc_max_tokens, _calc_timeout
 
 _RESULTS_FILE = "/tmp/predicate_test_results.json"
-_OLD_PREDICATES = {"config_set", "function_added", "function_modified",
-                   "bug_observed", "decision_made", "explanation_provided"}
+_OLD_PREDICATES = {
+    "config_set",
+    "function_added",
+    "function_modified",
+    "bug_observed",
+    "decision_made",
+    "explanation_provided",
+}
 
 CRITERIA = {
-    "non_empty_turn_ratio": 0.80,    # >= 80% turns produce >= 1 fact
-    "predicate_diversity": 0.50,     # >= 50% predicates NOT from old 5-value set
+    "non_empty_turn_ratio": 0.80,  # >= 80% turns produce >= 1 fact
+    "predicate_diversity": 0.50,  # >= 50% predicates NOT from old 5-value set
     "predicate_format_valid": 0.90,  # >= 90% of predicates match snake_case
-    "avg_facts_per_turn": 2.0,       # Atomic splitting increases fact count
-    "triple_completeness": 0.70,     # >= 70% have all 3 (s/p/o)
+    "avg_facts_per_turn": 2.0,  # Atomic splitting increases fact count
+    "triple_completeness": 0.70,  # >= 70% have all 3 (s/p/o)
 }
 
 
@@ -48,7 +52,7 @@ def select_turns():
         WITH candidates AS (
             SELECT id::text, text, COALESCE(user_turn,'') AS user_turn,
                    LENGTH(COALESCE(user_turn,'') || ' ' || COALESCE(text,'')) AS total_len,
-                   CASE WHEN LOWER(COALESCE(user_turn,text))
+                   CASE WHEN LOWER(COALESCE(NULLIF(user_turn,''),text))
                      ~ '(compare|recommend|suggest|plan|propose|think|consider|'
                      'versus|vs|better|faster|instead|alternative|switch|migrat|'
                      'port|config|model|pod|pipeline|extract|error|bug|change|'
@@ -77,20 +81,25 @@ def select_turns():
     if n <= 10:
         return rows
     third = n // 3
-    import random; random.seed(42)
-    selected = (random.sample(rows[:third], min(3, len(rows[:third]))) +
-                random.sample(rows[third:2*third], min(3, len(rows[third:2*third]))) +
-                random.sample(rows[2*third:], min(4, len(rows[2*third:]))))[:10]
+    import random
+
+    random.seed(42)
+    selected = (
+        random.sample(rows[:third], min(3, len(rows[:third])))
+        + random.sample(rows[third : 2 * third], min(3, len(rows[third : 2 * third])))
+        + random.sample(rows[2 * third :], min(4, len(rows[2 * third :])))
+    )[:10]
 
     log(f"Selected {len(selected)} turns")
     for s in selected:
-        log(f"  [{s['id'][:8]}] ({s['total_len']}c) {s['text'][:80].replace(chr(10),' ')}")
+        log(f"  [{s['id'][:8]}] ({s['total_len']}c) {s['text'][:80].replace(chr(10), ' ')}")
     return selected
 
 
 def run_turn_extractions(turns):
-    """Run extract.py --turn-id for each turn with dynamic timeout."""
+    """Run extract.py --turn-id for each turn with per-section summed timeout."""
     import subprocess
+
     completed = []
     env = os.environ.copy()
     env["PYTHONPATH"] = _SCRIPTS_DIR
@@ -98,22 +107,47 @@ def run_turn_extractions(turns):
     for i, turn in enumerate(turns):
         tid = turn["id"]
         total_chars = turn["total_len"]
-        max_tok = _calc_max_tokens(total_chars) or 256
-        timeout = _calc_timeout(total_chars, max_tok)
 
-        test_heartbeat(f"Extracting turn {i+1}/{len(turns)}: {tid[:8]}")
-        set_status("extracting", f"Turn {i+1}: {tid[:8]} ({total_chars}c, timeout={timeout}s)")
-        log(f"  [{tid[:8]}] timeout={timeout}s max_tok={max_tok} ({total_chars}c)")
+        # Per-section timeout: user section → 6s sleep → text section
+        def _section_timeout(text: str) -> int:
+            if not text:
+                return 0
+            max_tok = _calc_max_tokens(len(text))
+            if max_tok is None:
+                return 0  # overflow → fast skip
+            return _calc_timeout(len(text), max_tok)
+
+        user_sec = _section_timeout(turn.get("user_turn", "") or "")
+        text_sec = _section_timeout(turn.get("text", "") or "")
+        timeout = user_sec + 6 + text_sec
+        timeout = min(timeout, 3600)  # absolute ceiling
+
+        test_heartbeat(f"Extracting turn {i + 1}/{len(turns)}: {tid[:8]}")
+        set_status("extracting", f"Turn {i + 1}: {tid[:8]} ({total_chars}c, timeout={timeout}s)")
+        log(
+            f"  [{tid[:8]}] timeout={timeout}s (user={user_sec}s+6+text={text_sec}s) total_len={total_chars}c"
+        )
 
         t0 = time.time()
-        result = subprocess.run(
-            [sys.executable, "pipelines/extract.py", "--turn-id", tid],
-            capture_output=True, text=True, timeout=timeout, env=env, cwd=_SCRIPTS_DIR
-        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "pipelines/extract.py", "--turn-id", tid],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+                cwd=_SCRIPTS_DIR,
+            )
+        except subprocess.TimeoutExpired:
+            log(f"  Turn {i + 1}: TIMEOUT after {timeout}s")
+            completed.append(False)
+            continue
         elapsed = time.time() - t0
         ok = result.returncode == 0
         last_lines = (result.stdout or "")[-500:] + (result.stderr or "")[-500:]
-        log(f"  Turn {i+1}: exit={result.returncode}, elapsed={elapsed:.0f}s, out={len(result.stdout or '')}b")
+        log(
+            f"  Turn {i + 1}: exit={result.returncode}, elapsed={elapsed:.0f}s, out={len(result.stdout or '')}b"
+        )
         if not ok and last_lines.strip():
             log(f"  Error: {last_lines[:300]}")
         completed.append(ok)
@@ -121,7 +155,7 @@ def run_turn_extractions(turns):
     return all(completed)
 
 
-_SNAKE_CASE_RE = re.compile(r'^[a-z][a-z0-9]*(_[a-z0-9]+)*$')
+_SNAKE_CASE_RE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
 
 
 def check_results(turn_ids):
@@ -162,9 +196,9 @@ def check_results(turn_ids):
 
     # predicate_format_valid: snake_case format check
     if preds:
-        valid_format = sum(c for r in preds
-                          if _SNAKE_CASE_RE.match(r["predicate"])
-                          for c in [r["cnt"]])
+        valid_format = sum(
+            c for r in preds if _SNAKE_CASE_RE.match(r["predicate"]) for c in [r["cnt"]]
+        )
         format_ratio = round(valid_format / max(total_pred_count, 1), 3)
     else:
         valid_format = 0
@@ -183,16 +217,31 @@ def check_results(turn_ids):
           AND subject IS NOT NULL LIMIT 15""")
 
     criteria_results = {
-        "non_empty_turn_ratio": {"value": non_empty_ratio, "min": CRITERIA["non_empty_turn_ratio"],
-                                  "pass": non_empty_ratio >= CRITERIA["non_empty_turn_ratio"]},
-        "predicate_diversity": {"value": diversity_ratio, "min": CRITERIA["predicate_diversity"],
-                                "pass": diversity_ratio >= CRITERIA["predicate_diversity"]},
-        "predicate_format_valid": {"value": format_ratio, "min": CRITERIA["predicate_format_valid"],
-                                   "pass": format_ratio >= CRITERIA["predicate_format_valid"]},
-        "avg_facts_per_turn": {"value": avg_facts, "min": CRITERIA["avg_facts_per_turn"],
-                               "pass": avg_facts >= CRITERIA["avg_facts_per_turn"]},
-        "triple_completeness": {"value": completeness, "min": CRITERIA["triple_completeness"],
-                                "pass": completeness >= CRITERIA["triple_completeness"]},
+        "non_empty_turn_ratio": {
+            "value": non_empty_ratio,
+            "min": CRITERIA["non_empty_turn_ratio"],
+            "pass": non_empty_ratio >= CRITERIA["non_empty_turn_ratio"],
+        },
+        "predicate_diversity": {
+            "value": diversity_ratio,
+            "min": CRITERIA["predicate_diversity"],
+            "pass": diversity_ratio >= CRITERIA["predicate_diversity"],
+        },
+        "predicate_format_valid": {
+            "value": format_ratio,
+            "min": CRITERIA["predicate_format_valid"],
+            "pass": format_ratio >= CRITERIA["predicate_format_valid"],
+        },
+        "avg_facts_per_turn": {
+            "value": avg_facts,
+            "min": CRITERIA["avg_facts_per_turn"],
+            "pass": avg_facts >= CRITERIA["avg_facts_per_turn"],
+        },
+        "triple_completeness": {
+            "value": completeness,
+            "min": CRITERIA["triple_completeness"],
+            "pass": completeness >= CRITERIA["triple_completeness"],
+        },
     }
     all_pass = all(c["pass"] for c in criteria_results.values())
 
@@ -239,8 +288,10 @@ def main():
     # Check structured output
     set_status("checking", "Checking structured output")
     results = check_results(turn_ids)
-    results["turns"] = [{"id": t["id"], "len": t["total_len"],
-                          "preview": t["text"][:80].replace(chr(10), " ")} for t in turns]
+    results["turns"] = [
+        {"id": t["id"], "len": t["total_len"], "preview": t["text"][:80].replace(chr(10), " ")}
+        for t in turns
+    ]
     results["state"] = "completed"
     passed = results["criteria_all_pass"]
     results["detail"] = (
@@ -255,12 +306,14 @@ def main():
         json.dump(results, f, indent=2, default=str)
 
     # Report
-    log(f"\n{'='*60}")
-    log(f"RESULTS: {results['valid_facts']}/{results['total_facts']} facts, "
-        f"{results['turns_tested']} turns")
+    log(f"\n{'=' * 60}")
+    log(
+        f"RESULTS: {results['valid_facts']}/{results['total_facts']} facts, "
+        f"{results['turns_tested']} turns"
+    )
     log(f"Predicates: {json.dumps(results['predicates'])}")
     log(f"New predicates (not from old set): {json.dumps(results['new_predicates'])}")
-    log(f"\nCriteria:")
+    log("\nCriteria:")
     for name, cr in results["criteria"].items():
         status = "✅" if cr["pass"] else "❌"
         log(f"  {status} {name}: {cr['value']} (min={cr['min']})")
@@ -268,9 +321,9 @@ def main():
         log(f"\nZero-fact turns: {len(results['zero_fact_turns'])}")
         for z in results["zero_fact_turns"]:
             log(f"  [{z['id'][:8]}] {z['preview']}")
-    log(f"\n{'='*60}")
+    log(f"\n{'=' * 60}")
     log(f"Overall: {'PASS ✅' if passed else 'FAIL ❌'}")
-    log(f"{'='*60}\n")
+    log(f"{'=' * 60}\n")
 
     test_complete(f"done: {results['valid_facts']} facts, {'PASS' if passed else 'FAIL'}")
 

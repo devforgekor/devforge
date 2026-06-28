@@ -18,20 +18,30 @@ Design (2x2 factorial + baseline):
   R=rubric, F=feedback
 """
 
-import json, os, signal, subprocess, sys, time
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
 from datetime import datetime, timezone
 
-from lib.test_common import test_setup, test_heartbeat, test_complete, log
+from lib.test_common import log, test_complete, test_setup
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.experiment_state import ExperimentState, update_state
 from lib.infra.container_manager import (
-    recover_and_restart, report_memory,
+    recover_and_restart,
+    report_memory,
 )
 from lib.runner.metrics import (
-    extract_metrics, generate_comparison_report, send_phase_report, slack_send, utc_timestamp,
+    extract_metrics,
+    generate_comparison_report,
+    send_phase_report,
+    slack_send,
+    utc_timestamp,
 )
 from lib.runner.snapshot import apply_transform, restore_snapshot, save_snapshot
 
@@ -47,6 +57,7 @@ def log(msg):
 
 
 # ── Pipeline execution ──────────────────────────────────────────
+
 
 def run_pipeline(phase):
     """Run prj_cycle.py with extract included. Returns (success, metrics_path)."""
@@ -93,11 +104,12 @@ def run_pipeline(phase):
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
 
-    log(f"Phase {phase} {'OK' if success else 'FAILED'} ({elapsed/60:.1f} min)")
+    log(f"Phase {phase} {'OK' if success else 'FAILED'} ({elapsed / 60:.1f} min)")
     return success, metrics_path
 
 
 # ── Phase preparation ───────────────────────────────────────────
+
 
 def prepare_all_phases():
     """Build phase 0-4 snapshots from original, each with own flag set."""
@@ -115,27 +127,28 @@ def prepare_all_phases():
 
 
 def _restart_services():
-    """Restart watchdog + 15m cycle stopped by run_experiment()."""
+    """Restart watchdog stopped by run_experiment()."""
     known_services = {
         "devforge-watchdog.service",
-        "devforge-15m-cycle.service",
-        "devforge-15m-cycle.timer",
     }
     for unit in sorted(known_services):
         subprocess.run(["systemctl", "--user", "start", unit], capture_output=True, timeout=30)
-    log("  Watchdog + 15m cycle restarted")
+    log("  Watchdog restarted")
 
 
 # ── Experiment orchestrator ─────────────────────────────────────
 
+
 def run_experiment(phases):
     """Run requested phases sequentially."""
-    slack_send(f":rocket: *실험 시작* (Phase {phases[0]}→{phases[-1]})\n{utc_timestamp()} UTC\n각 phase마다 cache reset")
+    slack_send(
+        f":rocket: *실험 시작* (Phase {phases[0]}→{phases[-1]})\n{utc_timestamp()} UTC\n각 phase마다 cache reset"
+    )
 
     for phase in phases:
-        log(f"\n{'='*60}")
+        log(f"\n{'=' * 60}")
         log(f"PHASE {phase}")
-        log(f"{'='*60}")
+        log(f"{'=' * 60}")
         update_state(current_phase=phase, step=f"phase_{phase}_start")
 
         success = False
@@ -153,7 +166,9 @@ def run_experiment(phases):
             report_memory(f"before attempt {attempt}")
             containers_ok = recover_and_restart(attempt=attempt)
             if not containers_ok:
-                slack_send(f":fire: *Phase {phase}* (attempt {attempt}) — container recovery failed")
+                slack_send(
+                    f":fire: *Phase {phase}* (attempt {attempt}) — container recovery failed"
+                )
                 log(f"  recover_and_restart attempt {attempt} failed")
                 continue
 
@@ -162,7 +177,13 @@ def run_experiment(phases):
             if ok:
                 success = True
                 send_phase_report(phase, metrics_path)
-                labels = {0: "기준선", 1: "구조개선", 2: "구조+루브릭", 3: "구조+피드백", 4: "풀스택"}
+                labels = {
+                    0: "기준선",
+                    1: "구조개선",
+                    2: "구조+루브릭",
+                    3: "구조+피드백",
+                    4: "풀스택",
+                }
                 slack_send(f":bar_chart: *Phase {phase}* {labels.get(phase, '완료')}")
                 break
             else:
@@ -184,6 +205,7 @@ def run_experiment(phases):
 def main():
     TEST = test_setup("exp_runner", "5-Phase (2x2+baseline) Experiment Runner")
     from lib.infra.preflight import preflight_checks
+
     preflight_checks("exp_runner.py")
     phases = [0, 1, 2, 3, 4]
     dry_run = "--dry-run" in sys.argv
@@ -195,7 +217,7 @@ def main():
     log("=" * 60)
     log("EXPERIMENT RUNNER")
     log(f"Phases: {phases}")
-    log(f"{'='*60}")
+    log(f"{'=' * 60}")
 
     if dry_run:
         log("DRY RUN — building phase snapshots only")

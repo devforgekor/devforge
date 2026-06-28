@@ -1,0 +1,244 @@
+# Predicate Golden Set v1
+# Source: DB (review_facts + turns) + 30B MoE test (2026-06-28)
+# Purpose: Few-shot examples for extraction LLM prompts
+# Each entry: model sees source_text → generates evidence + predicate
+
+metadata:
+  created: "2026-06-28"
+  total: 16
+  good: 11
+  bad: 5
+  source_chains:
+    - "DB: turn e2cb15c5 seq=1 → 5 facts (assistant compares Test2 vs Pro)"
+    - "DB: turn 198241be seq=3 → 1 fact (assistant plans renames)"
+    - "30B test: chunk1 (Korean developer chat) → 5 facts (3 BAD + 2 duplicate)"
+    - "30B test: chunk2 (English/Korean parallel config) → 5 facts (GOOD)"
+
+entries:
+  # ──────────────────────────────────────────────
+  # GROUP A: DB TURN 1 — Korean assistant text
+  # Model saw: text=1163 chars (comparison table: Pro design vs Test2)
+  # Context (pulse/thinking): user suspects Test2 uses old script
+  # ──────────────────────────────────────────────
+
+  - id: db_01
+    source_type: text
+    source_summary: >
+      어시스턴트가 Test 2(현재 실행 중)와 Pro 설계(4개 파일: rubric prompt, checklist, manual, runner)를
+      비교한 표. Pro는 10축 루브릭을 설계했지만 Test 2는 --rubric 플래그로 간이 루브릭을 사용 중.
+      채점 방식, 항목 구성, 실행 방식이 모두 다르며, Pro의 내용을 반영하지 않음.
+      "중단하고 Pro 설계대로 다시 구현할까요?"라는 질문 포함.
+    evidence: "현재 실행 중인 Test 2가 Pro에서 설계한 내용을 반영하지 않고 있습니다."
+    predicate: does_not_reflect
+    subject: "Test 2"
+    object: "Pro에서 설계한 내용"
+    verdict: GOOD
+    reason: "부정 관계를 구체적 동사(reflect)로 표현. 'does not' + action = 명확한 의미 전달"
+
+  - id: db_02
+    source_type: text
+    evidence: "Pro가 설계한 14b-comparison-rubric-prompt.txt의 10축 상세 루브릭을 전혀 사용하지 않고 있습니다."
+    predicate: does_not_use
+    subject: "Test 2"
+    object: "14b-comparison-rubric-prompt.txt의 10축 상세 루브릭"
+    verdict: GOOD
+    reason: "도구/파일 미사용을 구체적으로 지칭. object에 파일명 포함으로 명확"
+
+  - id: db_03
+    source_type: text
+    evidence: "현재 Test 2는 --rubric 플래그로 자체 제작한 간이 루브릭을 주입하고 있습니다."
+    predicate: uses
+    subject: "Test 2"
+    object: "자체 제작한 간이 루브릭"
+    verdict: GOOD
+    reason: "대체(action)을 구체적 동사로. uses + 구체적 object = 명확"
+
+  - id: db_04
+    source_type: text
+    evidence: "채점 방식도 Pro의 10축 체계와 다릅니다."
+    predicate: differs_from
+    subject: "Test 2"
+    object: "Pro의 10축 체계"
+    verdict: GOOD
+    reason: "비교 관계를 diff라는 정확한 동사로. 핵심 차이점에 초점"
+
+  - id: db_05
+    source_type: text
+    evidence: "현재 Test 2를 중단하고 Pro 설계대로 다시 구현할까요? 아니면 일단 완료까지 두고 결과를 본 후에 결정할까요?"
+    predicate: asks_to_decide
+    subject: "Test 2"
+    object: "중단 및 재구현 여부"
+    verdict: GOOD
+    reason: "질문 행위 자체를 predicate로. asks_to_decide는 의사결정 포인트 명시"
+
+  # ──────────────────────────────────────────────
+  # GROUP B: DB TURN 3 — English assistant text
+  # Model saw: text=1206 chars (assistant plans code renames, describes edits)
+  # Context (pulse/thinking): user asked to fix issues per "code as documentation"
+  # ──────────────────────────────────────────────
+
+  - id: db_06
+    source_type: text
+    source_summary: >
+      어시스턴트가 rename 계획 실행. low-level LLM client를 self-documenting 이름으로 변경.
+      여러 파일(llm_client.py, proxy_reviewer.py, hybrid.py)에서 함수 호출부 수정.
+      settings.json 권한 추가 명령어 제안 포함.
+    evidence: "The assistant suggested running a specific command to add permissions."
+    predicate: suggested_command
+    subject: assistant
+    object: "command to add permissions to settings.json"
+    verdict: GOOD
+    reason: "명령 제안 행위를 정확히 포착. suggested_ 접두사로 행위 유형 명시"
+
+  # ──────────────────────────────────────────────
+  # GROUP C: 30B TEST CHUNK 2 — English + Korean mixed
+  # Model saw: 398 chars: "Now update the pipeline scripts back to... 다시 20턴 실행:"
+  # JSON Schema mode, max_tokens=1500
+  # ──────────────────────────────────────────────
+
+  - id: test_c2_01
+    source_type: text
+    source_summary: >
+      "Now update the pipeline scripts back to parallel=2. Restart Pod B with threads=3 + parallel=2, re-run.
+      아직 env 파일이 parallel=1 상태. ensure_model으로 업데이트 후 재시작.
+      이제 --parallel 2 --threads 3 --cpus 0-2 적용 완료. threads=4 oversubscription이 crash 원인.
+      threads=3으로 맞추면 parallel=2도 안정적. 다시 20턴 실행"
+    evidence: "Now update the pipeline scripts back to `parallel=2` to match."
+    predicate: updated_to
+    subject: "pipeline scripts"
+    object: "parallel=2"
+    verdict: GOOD
+    reason: "변경 방향성을 updated_to로 표현. 방향 전치사(to)로 목표 상태 명확"
+
+  - id: test_c2_02
+    source_type: text
+    evidence: "Restart Pod B with threads=3 + parallel=2, re-run."
+    predicate: restarted_with
+    subject: "Pod B"
+    object: "threads=3 + parallel=2"
+    verdict: GOOD
+    reason: "재시작 행위 + 함께 적용된 설정을 with으로 연결. restarted_with는 재시작 맥락에서 정확"
+
+  - id: test_c2_03
+    source_type: text
+    evidence: "아직 env 파일이 parallel=1 상태. `ensure_model`으로 env 업데이트 후 재시작."
+    predicate: status
+    subject: "env 파일"
+    object: "parallel=1"
+    verdict: GOOD
+    reason: "현재 상태 보고(status)에 적합한 동사. 상태+값 구조 명확"
+
+  - id: test_c2_04
+    source_type: text
+    evidence: "아직 env 파일이 parallel=1 상태. `ensure_model`으로 env 업데이트 후 재시작."
+    predicate: updated_by
+    subject: "env 파일"
+    object: "ensure_model"
+    verdict: GOOD
+    reason: "변경 주체/수단을 명시. 동일 문장에서 다른 측면(상태→변경주체) 캡처"
+
+  - id: test_c2_05
+    source_type: text
+    evidence: "이제 `--parallel 2 --threads 3 --cpus 0-2` 적용 완료."
+    predicate: applied
+    subject: "configuration"
+    object: "--parallel 2 --threads 3 --cpus 0-2"
+    verdict: GOOD
+    reason: "변경 적용을 구체적 동사로. 적용 완료 = applied는 정확한 매핑"
+
+  # ──────────────────────────────────────────────
+  # GROUP D: 30B TEST CHUNK 1 — Korean only (BAD examples)
+  # Model saw: 359 chars Korean developer chat about parallel/threads
+  #     "아닙니다, 현재 parallel=1이라 한 번에 1턴씩 순차 처리 중입니다..."
+  # 30B MoE produced generic predicates: equals, exists
+  # ──────────────────────────────────────────────
+
+  - id: test_c1_bad_01
+    source_type: text
+    source_summary: >
+      "아닙니다, 현재 parallel=1이라 한 번에 1턴씩 순차 처리 중입니다. 코드를 보면
+      ThreadPoolExecutor(max_workers=PARALLEL)로 20개를 한꺼번에 submit 하지만,
+      PARALLEL=1이면 1개씩만 실행됩니다.
+      **문제 재분석**: 이전 crash는 threads=4 (3코어 oversubscription)가 원인이었지
+      parallel=2가 원인이 아니었을 가능성이 있습니다."
+    evidence: "현재 parallel=1이라 한 번에 1턴씩 순차 처리 중입니다."
+    predicate: equals
+    subject: "parallel"
+    object: "1"
+    verdict: BAD
+    reason: "equals는 값 나열에 불과. 'configured_to' 또는 'set_to'가 적합 — 설정 관계를 나타내야 함"
+
+  - id: test_c1_bad_02
+    source_type: text
+    evidence: "PARALLEL=1이면 1개씩만 실행됩니다."
+    predicate: equals
+    subject: "parallel"
+    object: "1"
+    verdict: BAD
+    reason: "bad_01과 동일 사실 중복. equals를 다시 사용했을 뿐만 아니라 같은 정보를 중복 추출"
+
+  - id: test_c1_bad_03
+    source_type: text
+    evidence: "threads=4 (3코어 oversubscription)가 원인이었지 parallel=2가 원인이 아니었을 가능성이 있습니다."
+    predicate: equals
+    subject: "threads"
+    object: "4"
+    verdict: BAD
+    reason: "핵심 내용은 원인-결과(인과) 관계. equals 대신 'caused'나 'led_to'가
+      적합 — 'threads=4가 oversubscription을 유발'이 본질"
+
+  - id: test_c1_bad_04
+    source_type: text
+    evidence: "threads=4 (3코어 oversubscription)가 원인이었지 parallel=2가 원인이 아니었을 가능성이 있습니다."
+    predicate: exists
+    subject: "oversubscription"
+    object: "true"
+    verdict: BAD
+    reason: "exists=true는 의미 없는 Boolean. 'caused_by: threads=4'처럼 인과관계를 표현해야 함.
+      단순 존재론적 사실에는 extraction 자체가 불필요"
+
+  - id: test_c1_bad_05
+    source_type: text
+    evidence: "threads=4 (3코어 oversubscription)가 원인이었지 parallel=2가 원인이 아니었을 가능성이 있습니다."
+    predicate: equals
+    subject: "parallel"
+    object: "2"
+    verdict: BAD
+    reason: "동일 문장에서 3번째 extraction (bad_03, 04, 05가 같은 evidence).
+      중복+padding. 'not_a_cause_of'나 'unrelated_to'가 의미상 더 정확.
+      단순 값 나열(equals)보다 부정 관계를 구체적 동사로"
+
+bad_patterns:
+  - pattern: equals
+    description: "값-변수 할당을 단순 나열 (parallel=1 → equals parallel 1)"
+    good_alternative: "configured_to / set_to / running_with"
+    trigger: "숫자/값이 단순 대입될 때"
+
+  - pattern: exists
+    description: "존재 여부를 Boolean으로 (oversubscription = true)"
+    good_alternative: "caused / occurred / happened"
+    trigger: "exists→true/false 형태"
+
+  - pattern: duplicate_from_same_sentence
+    description: "동일 문장에서 3+개의 fact를 padding하듯 생성"
+    fix: "maxItems를 낮추거나, 중복 감지 로직 추가. 억지 생성 금지"
+
+  - pattern: equals_for_not_relationship
+    description: "부정/인과 관계를 equals로 평탄화"
+    good_alternative: "not_a_cause_of / unrelated_to / differs_from"
+    trigger: "'아니었을' '원인이' 같은 인과/부정 표현을 equals로 처리"
+
+# 추론: bad_01-bad_05는 모두 한글 텍스트에서 발생.
+# DB_01-06과 test_c2_01-05도 한글 텍스트에서 추출했지만 predicate 품질이 좋았음.
+# 차이점: DB_01-06은 prompt 구조적 제약 + 품질 검증을 거친 pipeline 결과.
+# test_c2는 영문+한글 혼합 텍스트로 모델이 관계를 더 잘 파악.
+# test_c1_01-05는 순수 한글에서 equals/exists로 퇴화.
+# → predicate 예시를 프롬프트에 포함하면 한글 텍스트에서도 품질 향상 가능.
+
+good_rule_extraction:
+  - "행위(action)는 동사로: suggested_command, updated_to, restarted_with, applied"
+  - "상태(state)는 구체적 설정 동사로: uses, configured_to, set_to, running_with"
+  - "비교(comparison)는 비교 동사로: differs_from, does_not_reflect, unrelated_to"
+  - "인과(causation)는 인과 동사로: caused, triggered, led_to, resulted_in"
+  - "질문/결정은 행위 중심으로: asks_to_decide"
+  - "부정은 동사 앞에 not: does_not_use, does_not_reflect"

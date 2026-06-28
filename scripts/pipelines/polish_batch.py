@@ -170,7 +170,7 @@ def _verify_diffs(diff_text: str) -> Optional[bool]:
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
-            model="polisher", max_tokens=128, temperature=0.0,
+            model="cleaner", max_tokens=128, temperature=0.0,
             timeout=int(timeout), json_mode=True, return_meta=True,
         )
         parsed = parse_llm_json(_extract_json(meta["content"]))
