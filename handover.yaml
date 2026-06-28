@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-06-28T04:57:54.329957+00:00'
+  time: '2026-06-28T06:51:00.703501+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -144,12 +144,35 @@ decisions:
     530s), Turn 2 timeout (0d73684c, 258c, 568s). Interrupted by user. MAX_TOKENS_BASE 256 verified working. Need to restart
     Pod B health (was down after cleanup) and day-cycle timer before full retest.
   status: open
+- id: nd08-01
+  detail: 'Pattern 2+4 auto-fix system implemented. reflex_rules DDL (schema.sql), 5 PL/pgSQL functions (reflex_functions.sql:
+    detect_patterns, promote_rules, decay_rules, match_rule, daily_rule_report), lib/reflex_rules.py (CRUD + lifecycle), lib/auto_fix.py
+    (safe remediation catalog: raise_timeout, restart_container, notify, log_only), lib/observation.py (unified observation
+    API). cli.py reflex command group (list/show/add/approve/reject/match/detect/promote/decay/report). obs_remediate MCP
+    tool (confidence-based: >=0.7 auto-fix, >=0.3 notify, <0.3 log). auto_log PostToolUse hook.'
+  status: open
+- id: nd08-02
+  detail: 'Action queue bridge — MCP tool writes action to watchdog_pulses (category=action), watchdog _consume_actions()
+    executes safely per cycle. lib/action_queue.py: action_write, action_claim_pending (atomic PENDING->IN_PROGRESS), execute_action,
+    action_complete/action_fail (retry->escalation). 3 executors (systemctl, podman, cli) with shell=False, injection validation,
+    explicit timeouts. MCP tools: action_write, action_poll_results. watchdog __init__.py: _consume_actions() called every
+    cycle. 9/9 tests passed (mocked unit + real DB integration).'
+  status: open
+- id: nd08-03
+  detail: 'Web research validated architecture. AgentScope (Postgres row-level lock queue), ClawDaemon (SQLite event queue),
+    Cerebro/corvus (tokio::mpsc channel) all use same "MCP writes -> DB queue -> daemon executes" pattern. Security: mutex-induced
+    hang avoided (atomic DB queue, no channel mutex), RCE by design avoided (HTTP transport + shell=False), write access scope
+    limited to 3 deterministic action types. Conditional approval secured.'
+  status: open
 known_issues:
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
   resolved: false
 - text: '(Deprecated) Gemini API SSL blocked from Oracle Cloud no longer blocks connections from gemini_openai.py — proxy
     uses raw SSL sockets with hardcoded IPs (bypasses /etc/hosts and any DNS-level blocks). Native Gemini protocol (proxies/gemini.py)
     also works independently. Reference: original issue nki05-01 now resolved for both proxies.'
+  resolved: false
+- text: 'devforge-mcp MCP tools (action_write, action_poll_results) require container restart for FastMCP tool registry update.
+    Does not auto-reload on file change. Restart command: systemctl --user restart container-devforge-mcp.'
   resolved: false
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
@@ -213,3 +236,7 @@ completed_log:
 - 'T20 predicate extraction test: 1/10 completed, 1/10 timeout, user interrupted. MAX_TOKENS_BASE 256 verified.'
 - Slack MCP and postgres MCP removed (13→11 MCPs). .claudeignore created.
 - 'ui: 진행 표시 영어(간결), 요약=한글, 상세는 파일 저장. Token 절약 패턴 확립.'
+- 'Pattern 2+4 auto-fix system: reflex_rules DDL + 5 SQL functions + lib/reflex_rules.py + lib/auto_fix.py + lib/observation.py
+  + cli.py reflex command + obs_remediate MCP. Action queue bridge: lib/action_queue.py + MCP tools action_write/action_poll_results
+  + watchdog _consume_actions(). Security: shell=False, injection validation, timeouts. 9/9 tests passed. Commit 70d78b7 pushed
+  to main.'
