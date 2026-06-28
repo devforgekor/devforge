@@ -94,10 +94,51 @@ def _write_error_log(msg: str) -> None:
         pass
 
 
+def _psql_one(sql: str) -> str:
+    """Execute SQL, return one row/empty."""
+    import subprocess as _sp
+
+    try:
+        r = _sp.run(
+            [
+                "podman",
+                "exec",
+                "-i",
+                "postgres",
+                "psql",
+                "-U",
+                "devforge",
+                "-d",
+                "devforge_app",
+                "-tA",
+                "-c",
+                sql,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
 def _handle_bash(tool_input: dict, tool_output: dict) -> None:
     cmd = tool_input.get("command", "")
     if not cmd:
         return
+
+    # Always resolve matching PreToolUse observation for any executed Bash
+    cmd_token = cmd.strip().split()[0] if cmd.strip() else "unknown"
+    esc_token = cmd_token.replace("'", "''")
+    _psql_one(
+        "UPDATE observations SET tags = tags || '{\"bash_executed\": true}'::jsonb "
+        f"WHERE source = 'pretool:bash' "
+        f"AND tags->>'command' = '{esc_token}' "
+        f"AND NOT (tags ? 'bash_executed') "
+        f"ORDER BY created_at DESC LIMIT 1"
+    )
+
     if not _is_test_command(cmd):
         return
 
