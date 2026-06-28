@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: hooks:PostToolUse in settings.json — auto-log tool calls to observations table
-"""PostToolUse hook — silently log tool calls to DB for session persistence."""
+"""PostToolUse hook — auto-log tool calls to DB for session persistence."""
+import datetime
 import json
 import os
 import sys
@@ -14,6 +15,7 @@ if _SCRIPTS_DIR not in sys.path:
 
 from lib.db import psql
 
+_ERROR_LOG = "/tmp/devforge-hook-errors.log"
 _OBSERVATIONS_INSERT = (
     "INSERT INTO observations (observation, category, source, context) VALUES "
 )
@@ -75,20 +77,37 @@ def _is_config_or_source_edit(path: str) -> bool:
     return False
 
 
+def _write_error_log(msg: str) -> None:
+    """Append timestamped error to local log file for debugging."""
+    try:
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        with open(_ERROR_LOG, "a") as f:
+            f.write(f"[{ts}] {msg}\n")
+    except Exception:
+        pass  # last resort — never break the hook
+
+
 def _log_observation(observation: str, category: str, context: dict) -> None:
-    """Insert a row into observations table. Silently ignores DB errors."""
+    """Insert a row into observations table. Logs errors to local file."""
     try:
         ctx_json = json.dumps(context, ensure_ascii=False, default=str)
         obs_escaped = observation.replace("'", "''")
+        # Dollar-quoting avoids collision when context JSON contains single quotes
         sql = (
             f"{_OBSERVATIONS_INSERT}("
-            f"'{obs_escaped}', '{category}', 'hook:PostToolUse', '{ctx_json}'::jsonb"
+            f"'{obs_escaped}', '{category}', 'hook:PostToolUse', "
+            f"$JSON${ctx_json}$JSON$::jsonb"
             f")"
         )
+        # psql returns empty on success for INSERT (--quiet mode), so we
+        # don't check the return value — exceptions are the error signal
         psql(sql)
-    except Exception:
-        # silent failure — hook must never break the tool call
-        pass
+    except Exception as e:
+        _write_error_log(
+            f"DB insert failed: {e} | observation={observation[:80]} | "
+            f"category={category}"
+        )
+        raise
 
 
 def _handle_bash(tool_input: dict, tool_output: dict) -> None:
@@ -189,16 +208,30 @@ def main() -> None:
     tool_input = event.get("tool_input", {})
     tool_output = event.get("tool_output", {})
 
-    # Always log errors
-    _handle_tool_error(tool_name, tool_input, tool_output)
+    try:
+        # Always log tool errors
+        _handle_tool_error(tool_name, tool_input, tool_output)
 
-    # Route by tool type
-    if tool_name == "Bash":
-        _handle_bash(tool_input, tool_output)
-    elif tool_name == "Edit":
-        _handle_edit(tool_input, tool_output)
-    elif tool_name == "Write":
-        _handle_write(tool_input, tool_output)
+        # Route by tool type
+        if tool_name == "Bash":
+            _handle_bash(tool_input, tool_output)
+        elif tool_name == "Edit":
+            _handle_edit(tool_input, tool_output)
+        elif tool_name == "Write":
+            _handle_write(tool_input, tool_output)
+    except Exception as e:
+        tb = traceback.format_exc()
+        _write_error_log(f"Unhandled in main: {e}\n{tb}")
+        # Surface to Claude via additionalContext (non-blocking)
+        out = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": (
+                    f"[hook:auto_log] {tool_name} logging failed: {e}"
+                ),
+            }
+        }
+        print(json.dumps(out, ensure_ascii=False))
 
 
 if __name__ == "__main__":
