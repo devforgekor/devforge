@@ -757,6 +757,10 @@ modules:
 - path: scripts/hooks/
   purpose: Hooks
   files:
+    auto_log.py:
+      status: experimental
+      purpose: "PostToolUse hook \u2014 silently log tool calls to DB for session\
+        \ persistence."
     session_context.py:
       status: production
       purpose: "SessionStart hook \u2014 inject DevForge work context into Claude."

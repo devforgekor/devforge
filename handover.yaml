@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-06-27T09:53:38.12087+00:00'
+  time: '2026-06-28T04:30:45.661955+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -121,19 +121,28 @@ decisions:
     0바이트 config 생성 원천 차단 (4) handover 파일 크기 출력으로 사용자 확인 가능. newhand()에도 동일 || break 적용.'
   status: open
 - id: nd07-03
-  detail: 'Pod B Quadlet → direct systemd service (devforge-pod-b.service) + symlink. Workaround for Podman 5.6 cgroup bug: 219/CGROUP crashloop because --cgroups=split + --sdnotify=conmon fail in rootless cgroup v2 (no CPU delegation). Type=exec works. container-devforge-pod-b.service is now a symlink → devforge-pod-b.service. No changes needed in 34 calling files.'
+  detail: 'Pod B Quadlet → direct systemd service (devforge-pod-b.service) + symlink. Workaround for Podman 5.6 cgroup bug:
+    219/CGROUP crashloop because --cgroups=split + --sdnotify=conmon fail in rootless cgroup v2 (no CPU delegation). Type=exec
+    works. container-devforge-pod-b.service is now a symlink → devforge-pod-b.service. No changes needed in 34 calling files.'
   status: open
 - id: nd07-04
-  detail: 'MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns (200-500c): was 512-612 max_tok, now 256-356. At 2 t/s, halves generation time. T20 Turn 1: 524c→356max_tok, 530s elapsed. MIN_USEFUL_TOKENS=256 already exists.'
+  detail: 'MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns (200-500c): was 512-612 max_tok, now 256-356. At 2 t/s,
+    halves generation time. T20 Turn 1: 524c→356max_tok, 530s elapsed. MIN_USEFUL_TOKENS=256 already exists.'
   status: open
 - id: nd07-05
-  detail: 'mcp-trunc-proxy v0.2.2 installed (npm global). Wrapped 8/11 MCPs (filesystem, search-proxy, exa-search, fetch, github, context7, yggdrasil, lsp) with 50-80KB thresholds, memory store. time/shrimp/devforge-mcp excluded (tiny output/HTTP). 90-98% token reduction on large responses. Requires Claude Code restart.'
+  detail: mcp-trunc-proxy v0.2.2 installed (npm global). Wrapped 8/11 MCPs (filesystem, search-proxy, exa-search, fetch, github,
+    context7, yggdrasil, lsp) with 50-80KB thresholds, memory store. time/shrimp/devforge-mcp excluded (tiny output/HTTP).
+    90-98% token reduction on large responses. Requires Claude Code restart.
   status: open
 - id: nd07-06
-  detail: 'token-savior-recall v4.4.1 installed (pip3.11). Profile: optimized (15 tools). Structural code nav + persistent memory (SQLite FTS5) + Bash output compaction (34 patterns). tsbench: -80% tokens, 97.9% score. MCP entry added to mcp.json, requires restart. Env: WORKSPACE_ROOTS=/opt/projects/server, TOKEN_SAVIOR_PROFILE=optimized.'
+  detail: 'token-savior-recall v4.4.1 installed (pip3.11). Profile: optimized (15 tools). Structural code nav + persistent
+    memory (SQLite FTS5) + Bash output compaction (34 patterns). tsbench: -80% tokens, 97.9% score. MCP entry added to mcp.json,
+    requires restart. Env: WORKSPACE_ROOTS=/opt/projects/server, TOKEN_SAVIOR_PROFILE=optimized.'
   status: open
 - id: nd07-07
-  detail: 'T20 predicate extraction test (free-form + atomic, Pod B day mode Qwen3-8B-Q8_0). Turn 1 success (ec91527a, 524c, 530s), Turn 2 timeout (0d73684c, 258c, 568s). Interrupted by user. MAX_TOKENS_BASE 256 verified working. Need to restart Pod B health (was down after cleanup) and day-cycle timer before full retest.'
+  detail: T20 predicate extraction test (free-form + atomic, Pod B day mode Qwen3-8B-Q8_0). Turn 1 success (ec91527a, 524c,
+    530s), Turn 2 timeout (0d73684c, 258c, 568s). Interrupted by user. MAX_TOKENS_BASE 256 verified working. Need to restart
+    Pod B health (was down after cleanup) and day-cycle timer before full retest.
   status: open
 known_issues:
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
@@ -174,20 +183,7 @@ known_issues:
 - text: 'Slot deadlock watchdog is reactive not preventive: --slot-prompt-similarity 0 reduces but doesn''t eliminate risk.
     If deadlock persists after Pod B restart, need different cache-reuse strategy (--cache-reuse 0 as last resort).'
   resolved: false
-- id: nki02-02
-  detail: 'T20 predicate extraction test incomplete. Turn 1 success (530s), Turn 2 timeout (568s). User interrupted. Pod B health DOWN (was restarting after atexit cleanup). day-cycle timer inactive. review_facts may have stale data from Turn 1 (turn ec91527a).'
-  resolved: true
-- id: nki02-03
-  detail: 'Pod B health endpoint DOWN at session end. Container restarted after T20 cleanup (model loading). Service active but /health not responding yet. day-cycle.timer inactive, day-cycle.service failed.'
-  resolved: true
 completed_log:
-- 'Pod B Quadlet → direct systemd service (devforge-pod-b.service + symlink). Podman 5.6 cgroup workaround for 219/CGROUP crashloop.'
-- 'MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns halved generation time.'
-- 'mcp-trunc-proxy v0.2.2 installed + 8/11 MCPs wrapped (90-98% token reduction on large responses).'
-- 'token-savior-recall v4.4.1 installed (pip3.11, optimized profile). Structural nav + memory + Bash compaction.'
-- 'T20 predicate extraction test: 1/10 completed, 1/10 timeout, user interrupted. MAX_TOKENS_BASE 256 verified.'
-- 'Slack MCP and postgres MCP removed (13→11 MCPs). .claudeignore created.'
-- 'ui: 진행 표시 영어(간결), 요약=한글, 상세는 파일 저장. Token 절약 패턴 확립.'
 - OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
 - PostgreSQL tuning (effective_io_concurrency=200, effective_cache_size=1GB, shared_buffers=512MB). day-cycle.timer removed
   from 5 files. extract.py deadlock fixed (recover_8082 missing lock.release). Server perf analysis completed (no-mmap keep,
@@ -210,3 +206,10 @@ completed_log:
 - 'open-newhand 터미널 실행 안됨 수정: ~/.bashrc.d/opencode-aliases — cd 누락 + 상대 경로 절대 경로 변경'
 - 'open-newhand() 수정: open-newhand() 0바이트 .opencode.json 버그 수정 — printf + mktemp + OPENCODE_CONFIG_CONTENT'
 - open-newhand() 0바이트 config 버그 수정 — printf+mktemp+OPENCODE_CONFIG_CONTENT, newhand() proc chain || break
+- Pod B Quadlet → direct systemd service (devforge-pod-b.service + symlink). Podman 5.6 cgroup workaround for 219/CGROUP crashloop.
+- MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns halved generation time.
+- mcp-trunc-proxy v0.2.2 installed + 8/11 MCPs wrapped (90-98% token reduction on large responses).
+- token-savior-recall v4.4.1 installed (pip3.11, optimized profile). Structural nav + memory + Bash compaction.
+- 'T20 predicate extraction test: 1/10 completed, 1/10 timeout, user interrupted. MAX_TOKENS_BASE 256 verified.'
+- Slack MCP and postgres MCP removed (13→11 MCPs). .claudeignore created.
+- 'ui: 진행 표시 영어(간결), 요약=한글, 상세는 파일 저장. Token 절약 패턴 확립.'
