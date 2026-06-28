@@ -159,7 +159,7 @@ def start_pod_b(mode, port, night=False, dry_run=False, skip_probe=False, model_
         if not _check_model_identity(port, model_key):
             log(f"  :{port} wrong model after start — retrying with env re-write")
             _write_mode_env(mode, port, model_key=model_key)
-            subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
+            subprocess.run(["systemctl", "--user", "restart", "devforge-pod-b.service"],
                            capture_output=True, timeout=60)
             ok = _start_and_wait(port, min(health_timeout, 300), skip_probe, mode)
             if not ok or not _check_model_identity(port, model_key):

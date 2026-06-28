@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-# Status: experimental
-# Path: day_cycle.sh — polish phase (before extract)
-"""Polish Batch Pipeline — Kiwi(user) + Hanja substitution(text/thinking) + Verify.
+# Status: deprecated
+# Path: migrated to text_clean.py (unified preprocessing) 2026-06-27
+"""DEPRECATED — Merged into text_clean.py.
+
+text_clean.py now handles everything: language detection → language-branched cleaning
+→ hanja substitution → LLM verify → tiktoken token stats.
+
+This file kept for reference but no longer called by day_cycle.sh.
+Remove after 2026-07-27 if no issues.
+"""
 
 user_turn_clean already contains Kiwi typo correction (applied during text_clean.py).
 This pipeline detects Kiwi-introduced changes and

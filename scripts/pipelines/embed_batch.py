@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # Status: production
 # Path: day_cycle.sh
-"""Embed Batch Pipeline — text_clean_polished 기준 embedding 단 1회.
+"""Embed Batch Pipeline — text_clean 기준 embedding (unified preprocessing).
 
 State-based: LEFT JOIN embeddings WHERE NULL → embed → INSERT INTO embeddings.
 Failed turns do NOT advance — retried next cycle via retry_count.
+
+Uses text_clean (SSOT after text_clean+polish merge).
+Backward compat: COALESCE(text_clean, text_clean_polished) for pre-merge data.
 
 Usage:
   python3 scripts/pipelines/embed_batch.py              # batch from checkpoint
@@ -35,6 +38,7 @@ from lib.infra.preflight import preflight_checks
 from lib.common import log
 from lib.watchdog.messenger import heartbeat, resolve_pulse
 from lib.pod_manager import ensure_model
+from lib.text_cleaner import get_cleaner
 
 from lib.llm_client import MODEL_REGISTRY
 EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embeder']['port']}/v1/embeddings"
@@ -47,7 +51,6 @@ CHUNK_MAX_TOKENS = 512
 SHORT_TURN_CHARS = 200
 EMBED_DIMS = 2048
 
-import re
 
 def truncate_to_mrl(vector: list[float], target_dims: int = EMBED_DIMS) -> list[float]:
     truncated = vector[:target_dims]
@@ -57,16 +60,14 @@ def truncate_to_mrl(vector: list[float], target_dims: int = EMBED_DIMS) -> list[
     return truncated
 
 def split_sentences(text: str) -> list[str]:
-    text = text.replace('\r\n', '\n')
-    sents = re.split(r'(?<=[.!?])\s+', text)
-    result = []
-    for s in sents:
-        paragraphs = re.split(r'\n\n+', s.strip())
-        result.extend(p for p in paragraphs if p.strip())
-    return result
+    """Language-aware sentence splitting via text_cleaner."""
+    cleaner = get_cleaner()
+    lang, _ = cleaner.detect_language(text)
+    return cleaner.split_sentences(text, lang=lang)
 
 def estimate_tokens(text: str) -> int:
-    return max(1, len(text) * 2 // 5)
+    """Token estimation via tiktoken (o200k_base) from text_cleaner."""
+    return get_cleaner().estimate_tokens(text)
 
 def chunk_text(text: str) -> list[tuple[str, int]]:
     if len(text) < SHORT_TURN_CHARS:
@@ -147,16 +148,19 @@ def embed_batch(texts: list[str], timeout: int = 600) -> Optional[list[Optional[
 def get_unembedded_turns(limit: int):
     """Return turns without a complete set of embedding chunks."""
     rows = psql_json(
-        f"SELECT t.id, t.user_turn_clean_polished, t.text_clean_polished, "
-        f"  t.user_turn, t.text, t.created_at::text, t.est_chars "
+        f"SELECT t.id, "
+        f"  COALESCE(t.user_turn_clean, t.user_turn_clean_polished) AS user_turn_clean, "
+        f"  COALESCE(t.text_clean, t.text_clean_polished) AS text_clean, "
+        f"  t.user_turn, t.text, t.created_at::text, t.est_chars, "
+        f"  t.agent, t.meta->>'model' AS model "
         f"FROM turns t "
         f"WHERE NOT EXISTS ("
         f"  SELECT 1 FROM embeddings e "
         f"  WHERE e.source_type = 'turn' AND e.source_id = t.id "
         f"    AND e.model_name = 'qwen3-embedding-8b-v1'"
         f") "
-        f"  AND t.pipeline_state = 'polished' "
-        f"  AND t.text_clean_polished IS NOT NULL "
+        f"  AND t.pipeline_state IN ('cleaned', 'polished') "
+        f"  AND COALESCE(t.text_clean, t.text_clean_polished) IS NOT NULL"
         f"  AND (t.retry_count IS NULL OR t.retry_count < 3) "
         f"ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
         f"LIMIT {limit}"
@@ -179,17 +183,21 @@ def get_unembedded_facts(limit: int):
     return rows or []
 
 
-def store_embedding(turn_id: str, vector: list, embed_text: str, chunk_index: int = 0):
+def store_embedding(turn_id: str, vector: list, embed_text: str, chunk_index: int = 0,
+                     metadata: Optional[dict] = None):
     """INSERT INTO embeddings for a turn. UPSERT on conflict."""
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
     safe_text = embed_text[:8000].replace("'", "''")
+    meta_json = json.dumps(metadata or {})
+    meta_esc = meta_json.replace("'", "''")
     psql_ok(
-        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name, chunk_index) "
+        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name, chunk_index, metadata) "
         f"VALUES ('turn', '{esc_sql(turn_id)}'::uuid, '{safe_text}', "
-        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1', {chunk_index}) "
+        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1', {chunk_index}, "
+        f"  '{meta_esc}'::jsonb) "
         f"ON CONFLICT (source_type, source_id, model_name, chunk_index) DO UPDATE SET "
         f"  embedding = EXCLUDED.embedding, embed_text = EXCLUDED.embed_text, "
-        f"  created_at = now()"
+        f"  metadata = EXCLUDED.metadata, created_at = now()"
     )
 
 
@@ -310,8 +318,8 @@ def main():
         elif facts_mode:
             text = row.get("evidence", "") or ""
         else:
-            user = (row.get("user_turn_clean_polished") or row.get("user_turn_clean") or "")
-            resp = (row.get("text_clean_polished") or row.get("text_clean") or "")
+            user = (row.get("user_turn_clean") or "")
+            resp = (row.get("text_clean") or "")
             text = f"{user} {resp}".strip()
         if not text:
             prepared.append(("skip", row, None, None))
@@ -392,7 +400,12 @@ def main():
                 elif facts_mode:
                     store_fact_embedding(row['id'], vec, text)
                 else:
-                    store_embedding(row['id'], vec, text, ci)
+                    meta = {}
+                    if row.get("agent"):
+                        meta["agent"] = row["agent"]
+                    if row.get("model"):
+                        meta["model"] = row["model"]
+                    store_embedding(row['id'], vec, text, ci, metadata=meta or None)
                     tid = row['id']
                     if tid not in turn_chunk_progress:
                         total = sum(1 for _, r, _, _ in prepared if r['id'] == tid)
@@ -412,7 +425,12 @@ def main():
                         RETURNING retry_count
                     """)
                     if r and r[0].get('retry_count', 0) >= 3:
-                        store_embedding(row['id'], [0.0] * 4096, text or "(sentinel)", 0)
+                        meta = {}
+                        if row.get("agent"):
+                            meta["agent"] = row["agent"]
+                        if row.get("model"):
+                            meta["model"] = row["model"]
+                        store_embedding(row['id'], [0.0] * EMBED_DIMS, text or "(sentinel)", 0, metadata=meta or None)
                         psql_ok(f"UPDATE turns SET pipeline_state = 'embedded' "
                                 f"WHERE id = '{esc_sql(row['id'])}'::uuid")
                         log(f"  [skip] {row.get('created_at','')[:19]} — 3 failures, sentinel stored")

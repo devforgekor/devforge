@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-27'
+  updated: '2026-06-28'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -33,9 +33,6 @@ modules:
       status: production
       purpose: "DevForge LLM Benchmark \u2014 decode tps \uCE21\uC815 \uBC0F \uC2E4\
         \uD5D8 \uB808\uC9C0\uC2A4\uD2B8\uB9AC \uB4F1\uB85D."
-    brave_mcp_wrapper.sh:
-      status: unknown
-      purpose: "Wrapper for Brave Search MCP \u2014 extracts API key from secrets.env"
     claude_code_runner.sh:
       status: unknown
       purpose: "Claude Code proxy request runner \u2014 single-mode or A/B multi-variant."
@@ -47,12 +44,19 @@ modules:
       status: production
       purpose: "DevForge CLI \u2014 AI \uB300\uD654 \uAC80\uC0C9 \uBC0F \uC800\uC7A5\
         \ \uB3C4\uAD6C."
+    context7_mcp.py:
+      status: unknown
+      purpose: "context7_mcp \u2014 MCP server for Context7 documentation with round-robin\
+        \ key rotation."
     day_cycle.sh:
       status: unknown
       purpose: "day_cycle.sh \u2014 async pipeline (pipeline_state-driven)"
     deepseek_web.py:
       status: experimental
       purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
+    exa_mcp.py:
+      status: unknown
+      purpose: "exa_mcp \u2014 MCP server for Exa Search with round-robin key rotation."
     gemini.py:
       status: production
       purpose: "gemini \u2014 Agentic Gemini CLI with function calling + tool execution."
@@ -74,6 +78,9 @@ modules:
       status: experimental
       purpose: Generate infrastructure.md, software.yaml, code-structure.yaml, and
         timer-registry.yaml
+    github_mcp_wrapper.sh:
+      status: unknown
+      purpose: github_mcp_wrapper.sh
     link_turns.py:
       status: production
       purpose: "link_turns.py \u2014 nightly: match turns to worklog entries + deep\
@@ -237,8 +244,8 @@ modules:
       purpose: "Test execution sandbox \u2014 Podman read-only tmpfs for safe code\
         \ execution."
     text_cleaner.py:
-      status: experimental
-      purpose: Korean text cleaner using Kiwi morphological analyzer.
+      status: production
+      purpose: Language-aware text cleaner with sentence segmentation and token estimation.
     tg_webhook.py:
       status: experimental
       purpose: Minimal Telegram webhook for NEUTRAL fact CONFIRM/REJECT buttons.
@@ -580,8 +587,8 @@ modules:
       purpose: "Search \u2014 web search (Brave) + local FTS5 + hybrid (BM25 + pgvector)."
     hybrid.py:
       status: experimental
-      purpose: "Hybrid search \u2014 Reciprocal Rank Fusion (RRF) of FTS5 BM25 + pgvector\
-        \ ANN."
+      purpose: "Hybrid search \u2014 BM25 + Dense RRF fusion, optional cross-encoder\
+        \ reranker."
     local_index.py:
       status: experimental
       purpose: "SQLite FTS5 search index \u2014 Korean-aware BM25 via Kiwi terms."
@@ -786,8 +793,8 @@ modules:
       purpose: "Day Verify Pipeline \u2014 verify enrichment metadata quality."
     embed_batch.py:
       status: production
-      purpose: "Embed Batch Pipeline \u2014 text_clean_polished \uAE30\uC900 embedding\
-        \ \uB2E8 1\uD68C."
+      purpose: "Embed Batch Pipeline \u2014 text_clean \uAE30\uC900 embedding (unified\
+        \ preprocessing)."
     enrich.py:
       status: experimental
       purpose: "Enrich Pipeline \u2014 post-extract MCP metadata enrichment (tldr,\
@@ -808,8 +815,8 @@ modules:
       purpose: Verification submodule for the Extract Pipeline.
     fts5_refresh.py:
       status: production
-      purpose: "FTS5 Refresh \u2014 text_clean_polished \uAE30\uC900 FTS5 \uC778\uB371\
-        \uC2A4 \uB3D9\uAE30\uD654."
+      purpose: "FTS5 Refresh \u2014 text_clean \uAE30\uC900 FTS5 \uC778\uB371\uC2A4\
+        \ \uB3D9\uAE30\uD654."
     night_cycle.py:
       status: experimental
       purpose: "Night Pipeline: DB handoff \uB85C\uB4DC \u2192 P-R-J(30B\u219214B\u2192\
@@ -821,9 +828,8 @@ modules:
       status: production
       purpose: night_debate_pipeline.py
     polish_batch.py:
-      status: experimental
-      purpose: "Polish Batch Pipeline \u2014 Kiwi(user) + Hanja substitution(text/thinking)\
-        \ + Verify."
+      status: deprecated
+      purpose: "DEPRECATED \u2014 Merged into text_clean.py."
     prj_cycle.py:
       status: production
       purpose: prj_cycle.py
@@ -841,8 +847,7 @@ modules:
       purpose: "review_consumer.py \u2014 27B production final verify."
     text_clean.py:
       status: production
-      purpose: "Text Preprocessing \u2014 text_clean \uC0DD\uC131 (NULL\uC778 \uD134\
-        \uB9CC \uCC98\uB9AC)."
+      purpose: "Unified Text Preprocessing \u2014 Clean + Polish in one stage."
     worklog_generator.py:
       status: production
       purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: draft model\
@@ -861,7 +866,7 @@ modules:
       purpose: OpenAI-compatible reverse proxy for Google Gemini API with key rotation.
     search.py:
       status: production
-      purpose: Unified MCP search proxy with cross-provider key rotation.
+      purpose: 'MCP search proxy: Brave + Tavily (Tier 1) with you.com (Tier 2 fallback).'
 - path: scripts/state_collector/
   purpose: State Collector
   files:
@@ -1070,6 +1075,10 @@ modules:
       status: deprecated
       purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
         \ \u2192 night_review."
+    test_predicate_extract.py:
+      status: unknown
+      purpose: "test_predicate_extract.py \u2014 Phase B: free-form predicate + atomic\
+        \ claim extraction test."
     test_progress_watcher.py:
       status: experimental
       purpose: test_progress_watcher.py

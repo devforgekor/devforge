@@ -251,9 +251,9 @@ class FTS5Index:
             conn.close()
 
     def refresh_turns(self, turn_ids: list[str]) -> dict:
-        """Update FTS5 rows for specific turn IDs using text_clean_polished.
+        """Update FTS5 rows for specific turn IDs using text_clean (SSOT).
 
-        Called after polish_batch to sync polished text to FTS5 index.
+        Called after text_clean to sync cleaned text to FTS5 index.
         Skips turns not yet in FTS5 (turn_watcher will insert them later).
 
         Returns:
@@ -268,8 +268,8 @@ class FTS5Index:
             batch = turn_ids[i:i + 100]
             ids_esc = ", ".join(f"'{esc_sql(tid)}'::uuid" for tid in batch)
             rows = psql_json(
-                f"SELECT t.id, t.seq, t.user_turn_clean_polished, t.text_clean_polished, "
-                f"  t.thinking_clean_polished, t.tokens "
+                f"SELECT t.id, t.seq, t.user_turn_clean, t.text_clean, "
+                f"  t.thinking_clean, t.tokens "
                 f"FROM turns t "
                 f"WHERE t.id IN ({ids_esc})"
             )
@@ -293,11 +293,11 @@ class FTS5Index:
                         skipped += 1
                         continue
 
-                    user = row.get("user_turn_clean_polished") or ""
-                    text = row.get("text_clean_polished") or ""
-                    think = row.get("thinking_clean_polished") or ""
+                    user = row.get("user_turn_clean") or ""
+                    text = row.get("text_clean") or ""
+                    think = row.get("thinking_clean") or ""
 
-                    # Re-parse tokens from clean_polished if available
+                    # Re-parse tokens from text_clean if available
                     terms_str = ""
                     tokens_data = row.get("tokens", "")
                     if isinstance(tokens_data, str) and tokens_data:

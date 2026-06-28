@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: day_cycle.sh — FTS5 refresh phase
-"""FTS5 Refresh — text_clean_polished 기준 FTS5 인덱스 동기화.
+# Path: day_cycle.sh — FTS5 refresh phase (post text_clean)
+"""FTS5 Refresh — text_clean 기준 FTS5 인덱스 동기화.
 
-Polish batch가 완료된 후 호출. text_clean_polished가 NULL이 아닌 turn 중
-FTS5의 text_clean 컬럼을 polished 버전으로 업데이트.
-FTS5에 없는 turn은 skip (turn_watcher가 나중에 insert).
+text_clean.py 실행 후 호출. pipeline_state = 'cleaned'인 turn의
+text_clean/thinking_clean을 FTS5 인덱스에 반영.
+
+Backward compat: 기존 'polished' 상태도 포함 (unified preprocessing merge 이전).
 """
 from __future__ import annotations
 
@@ -21,12 +22,16 @@ from lib.search.local_index import FTS5Index
 
 
 def get_stale_turn_ids(limit: int = 500) -> list[str]:
-    """Return turn IDs whose text_clean_polished exists but FTS5 has stale text_clean."""
+    """Return turn IDs with text_clean set but FTS5 may be stale.
+
+    Compares text_clean vs COALESCE(text_clean_polished, text_clean) to detect
+    newly unified clean text that needs FTS5 sync.
+    """
     rows = psql_json(
         f"SELECT id FROM turns "
-        f"WHERE text_clean_polished IS NOT NULL "
-        f"  AND text_clean_polished != text_clean "
-        f"ORDER BY created_at ASC "
+        f"WHERE (pipeline_state IN ('cleaned', 'polished')) "
+        f"  AND text_clean IS NOT NULL AND text_clean != '' "
+        f"ORDER BY id ASC "
         f"LIMIT {limit}"
     )
     return [r["id"] for r in rows] if rows else []
@@ -35,7 +40,7 @@ def get_stale_turn_ids(limit: int = 500) -> list[str]:
 def main():
     t0 = time.monotonic()
     print("=" * 60, flush=True)
-    print("FTS5 Refresh — text_clean_polished sync", flush=True)
+    print("FTS5 Refresh — text_clean sync (unified preprocessing)", flush=True)
     print("=" * 60, flush=True)
 
     idx = FTS5Index()

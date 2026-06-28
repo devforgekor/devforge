@@ -1,0 +1,39 @@
+# .claudeignore — DevForge project-level ignore patterns
+# Prevents Claude Code from reading wasteful/generated files.
+# Syntax: same as .gitignore (glob patterns)
+
+# Version control (never needed by LLM)
+.git/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated / auto-produced artifacts
+data/
+batch_results/
+_aider*
+.opencode-handover.md
+.opencode.json
+.handover.lock
+.last-structural-hash
+collect_checkpoint.json
+
+# Large generated logs
+changelog.yaml
+blueprint.yaml
+code_mod_test_tasks.yaml
+
+# Archive (old docs, not current)
+_archive/
+_backup/
+
+# Container definitions (rarely needed for code tasks)
+containers/
+
+# Test outputs (rarely relevant)
+tests/__pycache__/
+
+# Local MCP / temp files
+.gemini/

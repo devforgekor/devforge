@@ -36,7 +36,7 @@ def _reclaim_memory():
 def _container_service_name(port):
     if port == 8080:
         return "container-devforge-pod-a"
-    return "container-devforge-pod-b"
+    return "devforge-pod-b"
 
 
 def _check_container_health(port, label):

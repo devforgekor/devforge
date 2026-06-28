@@ -79,7 +79,7 @@ def _call_with_8082_retry(fn, *args, **kwargs):
 # ── Constants ────────────────────────────────────────────────────
 
 TIMEOUT_EXTRACT = 900
-MAX_TOKENS_BASE = 512     # minimum: 짧은 turn(1-2 facts)에 충분
+MAX_TOKENS_BASE = 256     # minimum (MIN_USEFUL_TOKENS=256과 동기화)
 TOKENS_PER_300CH = 50     # 300ch당 약 1 fact 추가, ceil 적용
 TEMP_EXTRACT = 0.0
 TIMEOUT_BASE = 60
@@ -115,124 +115,186 @@ def _sigterm_handler(signum, frame):
     _SIGTERM_RECEIVED.set()
 
 
+# ── Structured predicate fields ─────────────────────────────────
+
+_STRUCTURED_FIELDS = """
+Structured fields — every extraction MUST have subject, predicate, object:
+  subject:   The concrete entity this fact is about (file, function, config key, service, port, model).
+  predicate: Free-form snake_case verb phrase capturing the relation between subject and object.
+             MUST be snake_case (lowercase + underscores, 2-5 words). Describe WHAT subject DOES TO object.
+             Avoid vague words like "is", "has", "does", "related_to".
+  object:    The specific value, outcome, or target entity.
+  qualifiers: Optional JSON for additional context (e.g., {"from": "8081"}). Omit if not needed.
+
+Good predicate examples:
+  configures_port_to    ("the server configures the port to 8082")
+  replaces_with         ("the patch replaces the old implementation with the new one")
+  preheats_oven_to      ("the cook preheats the oven to 180 degrees")  — any domain works
+  runs_on_version       ("the service runs on version 3.2.1")
+  documents_usage_in    ("the comment documents usage in README.md")
+
+Bad predicate patterns — do NOT use:
+  "is" / "has" / "does" / "was" / "are" — too vague, don't describe the specific relation
+  Full sentences or phrases with spaces — use snake_case
+  Multi-word descriptions that repeat subject/object (e.g. "config_set" — what config? be specific)
+"""
+
 # ── Section-specific System prompts ─────────────────────────────
 
 _SYSTEM_USER_EXTRACT = """\
-You are a fact extractor for a developer conversation. Given a USER MESSAGE,
-extract key factual statements that are EXPLICITLY present in the message.
+You are a fact extractor for a developer conversation. Extract factual triples
+(subject, predicate, object) that are EXPLICITLY stated in the USER MESSAGE.
 
 Do NOT infer, summarize, or add information not present in the source.
 
-SEQUENTIAL REASONING — Follow these steps internally:
-Step 1 — SCAN: Locate passages with specific, factual claims about code, config, decisions, requirements, or explanations.
-Step 2 — VERIFY: For each candidate, confirm it is EXPLICITLY stated in the source. Discard any hallucinated or inferred content.
-Step 3 — RESOLVE: Make each candidate self-contained. Replace pronouns ("it", "this", "that") and implicit references with the specific entities.
-Step 4 — FILTER: Keep only specific, informative, non-obvious facts. Drop trivial statements about conversation flow or common knowledge.
-Step 5 — OUTPUT: Produce the JSON below.
+RULES:
+1. ATOMIC CLAIM: Each evidence MUST contain exactly ONE atomic claim.
+   "X and Y" → split into two entries with separate evidence.
+   BAD: "the API returns 200 and the rate limit is 100"
+   GOOD: "the API returns status code 200" (one entry)
+   GOOD: "the rate limit is set to 100 per minute" (separate entry)
 
-CRITICAL — Self-Contained Evidence Rule:
-Each evidence sentence MUST be self-contained. Resolve pronouns ("it", "this", "that")
-and implicit references. If the evidence refers to a specific concept, file, or
-person mentioned in the surrounding context, include that referent explicitly.
+2. SELF-CONTAINED: Resolve pronouns ("it", "this", "that") and implicit references.
+   "it uses port 8082" → "the LLM server uses port 8082"
+
+3. SUBJECT-PREDICATE-OBJECT: Every fact MUST have all three. The predicate is a
+   snake_case verb phrase describing the relation (see STRUCTURED FIELDS above).
+
+4. SIGNIFICANCE: Extract only specific, non-obvious, informative facts.
+   Do NOT extract trivial statements about conversation flow.
+
+5. FAITHFULNESS: Directly traceable to source text. NO inference or hallucination.
 
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "Self-contained factual statement (resolve pronouns)",
-      "category": "requirement|decision|explanation|code|reasoning|other",
-      "source_context": "Surrounding 1-2 sentences that provide context — helps disambiguate this evidence"
+      "evidence": "The cook preheated the oven to 180 degrees Celsius.",
+      "category": "other",
+      "subject": "cook",
+      "predicate": "preheats_oven_to",
+      "object": "180 degrees Celsius",
+      "qualifiers": {"unit": "celsius"},
+      "source_context": "The recipe says to bake at 180 degrees."
+    },
+    {
+      "evidence": "The server sets the database connection pool to 10 connections.",
+      "category": "code",
+      "subject": "server",
+      "predicate": "configures_pool_size_to",
+      "object": "10",
+      "qualifiers": {"unit": "connections"},
+      "source_context": "The database config sets pool_size to 10."
     }
   ]
 }
 
-Rules:
-- evidence must be directly traceable to the source text
-- evidence must be self-contained: "it uses port 8082" → "the LLM server uses port 8082"
-- evidence MUST be a complete, grammatically valid sentence — do NOT output fragments or truncated text
-- SIGNIFICANCE: Do NOT extract trivial/obvious statements. A fact is low-value if an observer could deduce it just from knowing the conversation exists. Extract only specific, non-obvious, informative facts.
-- source_context: include the surrounding sentence(s) that clarify pronouns, references, or conditions
-- Extract at least 1 fact if there is meaningful content
-- If nothing extractable, return {"extractions": []}
-- NOISE DETECTION: If the message is keyboard smash, gibberish, API error message (e.g. "API Error: ECONNRESET", "ConnectionRefused"), or otherwise meaningless text (e.g. "ㅑ다냐졷ㄷ", "asdfasdf"), return {"skip_verdict": "skip"} — do NOT extract facts from noise."""
+- Extract at least 1 fact if there is meaningful content.
+- If nothing extractable, return {"extractions": []}.
+- NOISE DETECTION: keyboard smash, gibberish, API error messages,
+  meaningless text → return {"skip_verdict": "skip"}."""
 
 _SYSTEM_THINKING_EXTRACT = """\
-You are a fact extractor for a developer conversation. Given the ASSISTANT'S
-INTERNAL REASONING (thinking), extract key factual statements.
+You are a fact extractor for a developer conversation. Extract factual triples
+(subject, predicate, object) that are EXPLICITLY stated in the ASSISTANT'S
+INTERNAL REASONING (thinking).
 
 Do NOT infer, summarize, or add information not present in the source.
 
-SEQUENTIAL REASONING — Follow these steps internally:
-Step 1 — SCAN: Locate passages with specific, factual claims about code, config, decisions, requirements, or explanations.
-Step 2 — VERIFY: For each candidate, confirm it is EXPLICITLY stated in the source. Discard any hallucinated or inferred content.
-Step 3 — RESOLVE: Make each candidate self-contained. Replace pronouns ("it", "this", "that") and implicit references with the specific entities.
-Step 4 — FILTER: Keep only specific, informative, non-obvious facts. Drop trivial statements about conversation flow or common knowledge.
-Step 5 — OUTPUT: Produce the JSON below.
+RULES:
+1. ATOMIC CLAIM: Each evidence MUST contain exactly ONE atomic claim.
+   "X and Y" → split into two entries with separate evidence.
 
-CRITICAL — Self-Contained Evidence Rule:
-Each evidence sentence MUST be self-contained. Resolve pronouns ("it", "this", "that")
-and implicit references. If the evidence refers to a specific concept, file, or
-person mentioned in the surrounding context, include that referent explicitly.
+2. SELF-CONTAINED: Resolve pronouns ("it", "this", "that") and implicit references.
+   "add an index" → "the user requested adding a database index"
+
+3. SUBJECT-PREDICATE-OBJECT: Every fact MUST have all three. The predicate is a
+   snake_case verb phrase describing the relation (see STRUCTURED FIELDS above).
+
+4. SIGNIFICANCE: Extract only specific, non-obvious, informative facts.
+   Do NOT extract trivial statements about conversation flow.
+
+5. FAITHFULNESS: Directly traceable to source text. NO inference or hallucination.
 
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "Self-contained factual statement (resolve pronouns)",
-      "category": "requirement|decision|explanation|code|reasoning|other",
-      "source_context": "Surrounding 1-2 sentences that provide context — helps disambiguate this evidence"
+      "evidence": "The researcher mixed the solution at 50 degrees Celsius.",
+      "category": "other",
+      "subject": "researcher",
+      "predicate": "mixes_solution_at",
+      "object": "50 degrees Celsius",
+      "qualifiers": {"unit": "celsius"},
+      "source_context": "The lab protocol states the mixing temperature as 50 degrees."
+    },
+    {
+      "evidence": "The pipeline checks the database for pending turns before starting extraction.",
+      "category": "code",
+      "subject": "pipeline",
+      "predicate": "checks_database_for",
+      "object": "pending turns",
+      "qualifiers": {"status": "pending"},
+      "source_context": "Before running extraction, the pipeline queries turns with pipeline_state=pending."
     }
   ]
 }
 
-Rules:
-- evidence must be directly traceable to the source text
-- evidence must be self-contained: "add an index" → "the user requested adding a database index"
-- evidence MUST be a complete, grammatically valid sentence — do NOT output fragments or truncated text
-- SIGNIFICANCE: Do NOT extract trivial/obvious statements. Extract only specific, non-obvious, informative facts.
-- source_context: include the surrounding sentence(s) that clarify pronouns, references, or conditions
-- Extract at least 1 fact if there is meaningful content
-- If thinking is empty or contains only formatting, return {"extractions": []}
-- NOISE DETECTION: If the message is keyboard smash, gibberish, API error message (e.g. "API Error: ECONNRESET", "ConnectionRefused"), or otherwise meaningless text (e.g. "ㅑ다냐졷ㄷ", "asdfasdf"), return {"skip_verdict": "skip"} — do NOT extract facts from noise."""
+- Extract at least 1 fact if there is meaningful content.
+- If thinking is empty or contains only formatting, return {"extractions": []}.
+- NOISE DETECTION: keyboard smash, gibberish, API error messages,
+  meaningless text → return {"skip_verdict": "skip"}."""
 
 _SYSTEM_TEXT_EXTRACT = """\
-You are a fact extractor for a developer conversation. Given the ASSISTANT'S
-RESPONSE (text), extract key factual statements that are EXPLICITLY present.
+You are a fact extractor for a developer conversation. Extract factual triples
+(subject, predicate, object) that are EXPLICITLY present in the ASSISTANT'S
+RESPONSE (text).
 
 Do NOT infer, summarize, or add information not present in the source.
 
-SEQUENTIAL REASONING — Follow these steps internally:
-Step 1 — SCAN: Locate passages with specific, factual claims about code, config, decisions, requirements, or explanations.
-Step 2 — VERIFY: For each candidate, confirm it is EXPLICITLY stated in the source. Discard any hallucinated or inferred content.
-Step 3 — RESOLVE: Make each candidate self-contained. Replace pronouns ("it", "this", "that") and implicit references with the specific entities.
-Step 4 — FILTER: Keep only specific, informative, non-obvious facts. Drop trivial statements about conversation flow or common knowledge.
-Step 5 — OUTPUT: Produce the JSON below.
+RULES:
+1. ATOMIC CLAIM: Each evidence MUST contain exactly ONE atomic claim.
+   "X and Y" → split into two entries with separate evidence.
 
-CRITICAL — Self-Contained Evidence Rule:
-Each evidence sentence MUST be self-contained. Resolve pronouns ("it", "this", "that")
-and implicit references. If the evidence refers to a specific concept, file, or
-person mentioned in the surrounding context, include that referent explicitly.
+2. SELF-CONTAINED: Resolve pronouns ("it", "this", "that") and implicit references.
+   "port 8082" → "the Pod B extractor runs on port 8082"
+
+3. SUBJECT-PREDICATE-OBJECT: Every fact MUST have all three. The predicate is a
+   snake_case verb phrase describing the relation (see STRUCTURED FIELDS above).
+
+4. SIGNIFICANCE: Extract only specific, non-obvious, informative facts.
+   Do NOT extract trivial statements about conversation flow.
+
+5. FAITHFULNESS: Directly traceable to source text. NO inference or hallucination.
 
 Output STRICT JSON:
 {
   "extractions": [
     {
-      "evidence": "Self-contained factual statement (resolve pronouns)",
-      "category": "requirement|decision|explanation|code|reasoning|other",
-      "source_context": "Surrounding 1-2 sentences that provide context — helps disambiguate this evidence"
+      "evidence": "The chef seasoned the steak with salt and pepper.",
+      "category": "other",
+      "subject": "chef",
+      "predicate": "seasons_with",
+      "object": "salt and pepper",
+      "qualifiers": {},
+      "source_context": "The recipe instructs the chef to season both sides."
+    },
+    {
+      "evidence": "The application logs a warning when memory usage exceeds 80 percent.",
+      "category": "code",
+      "subject": "application",
+      "predicate": "logs_warning_when",
+      "object": "memory usage exceeds 80 percent",
+      "qualifiers": {"threshold": "80%"},
+      "source_context": "In the health check module, a warning is emitted at 80% memory usage."
     }
   ]
 }
 
-Rules:
-- evidence must be directly traceable to the source text
-- evidence must be self-contained: "port 8082" → "the Pod B extractor runs on port 8082"
-- evidence MUST be a complete, grammatically valid sentence — do NOT output fragments or truncated text
-- SIGNIFICANCE: Do NOT extract trivial/obvious statements. Extract only specific, non-obvious, informative facts.
-- source_context: include the surrounding sentence(s) that clarify pronouns, references, or conditions
-- Extract at least 1 fact if there is meaningful content
-- If nothing extractable, return {"extractions": []}
-- NOISE DETECTION: If the message is keyboard smash, gibberish, API error message (e.g. "API Error: ECONNRESET", "ConnectionRefused"), or otherwise meaningless text (e.g. "ㅑ다냐졷ㄷ", "asdfasdf"), return {"skip_verdict": "skip"} — do NOT extract facts from noise."""
+- Extract at least 1 fact if there is meaningful content.
+- If nothing extractable, return {"extractions": []}.
+- NOISE DETECTION: keyboard smash, gibberish, API error messages,
+  meaningless text → return {"skip_verdict": "skip"}."""
 
 SYSTEM_DESCRIBE_FILE = """\
 You are a file description agent for a developer server. Given a filename,
@@ -389,7 +451,15 @@ def _load_entity_context(turn_id: str) -> Optional[str]:
         return None
     files = data.get("files", [])
     functions = data.get("functions", [])
-    if not files and not functions:
+    classes = data.get("classes", [])
+    libraries = data.get("libraries", [])
+    models_list = data.get("models", [])
+    variables = data.get("variables", [])
+    services = data.get("services", [])
+
+    # Backward compat: old format only has files+functions
+    all_found = bool(files or functions or classes or libraries or models_list or variables or services)
+    if not all_found:
         return None
 
     parts = [
@@ -401,6 +471,16 @@ def _load_entity_context(turn_id: str) -> Optional[str]:
         parts.append("Files referenced: " + ", ".join(sorted(files)))
     if functions:
         parts.append("Functions referenced: " + ", ".join(sorted(functions)))
+    if classes:
+        parts.append("Classes referenced: " + ", ".join(sorted(classes)))
+    if libraries:
+        parts.append("Libraries referenced: " + ", ".join(sorted(libraries)))
+    if models_list:
+        parts.append("Models referenced: " + ", ".join(sorted(models_list)))
+    if variables:
+        parts.append("Constants referenced: " + ", ".join(sorted(variables)))
+    if services:
+        parts.append("Services referenced: " + ", ".join(sorted(services)))
     parts.append("")
     parts.append(
         "Use these as grounding references when extracting facts. "

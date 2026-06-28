@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-# Status: experimental
-# Path: preprocessing pipeline — turn_watcher.py, backfill scripts
-"""Korean text cleaner using Kiwi morphological analyzer.
+# Status: production
+# Path: text_clean.py — language-aware preprocessing (Kiwi for ko, skip for en)
+"""Language-aware text cleaner with sentence segmentation and token estimation.
 
-Two phases:
-  1. clean(text) → normalized text (NFKC, whitespace, emoticons, repeat chars)
-  2. tokenize(text) → Kiwi POS tags for BM25 indexing
+Languages supported:
+  - Korean (ko): NFKC → emoji → Kiwi typo correction → hanja substitution → sentence split
+  - English (en): NFKC → emoji → sentence split (Kiwi.split_into_sents works for both)
+  - Other: NFKC → whitespace normalization only
 
-Code blocks (```...```) and inline code (`...`) are preserved verbatim.
+Sentence segmentation via Kiwi.split_into_sents (works for ko + en).
+Token estimation via tiktoken (o200k_base).
 """
 
 from __future__ import annotations
@@ -17,7 +19,9 @@ import re
 import unicodedata
 from typing import Dict, List, Optional, Tuple
 
+import tiktoken
 from kiwipiepy import Kiwi
+from langdetect import detect as langdetect_detect, LangDetectException
 
 # Emoji removal — only well-known emoji blocks, no Hangul overlap
 RE_EMOJI = re.compile(
@@ -33,9 +37,18 @@ RE_EMOJI = re.compile(
 )
 RE_KOREAN_EMOTICON = re.compile(r"[ㅋㅠㅜㅎㅡ]{3,}")
 RE_REPEAT_HANGUL = re.compile(r"([가-힣])\1{3,}")
+RE_ZERO_WIDTH = re.compile(r"[​‌‍‎‏﻿⁠­]")
+RE_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]")
+RE_NBSP = re.compile(r" ")
 RE_MULTI_SPACE = re.compile(r"\s+")
 RE_CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
 RE_INLINE_CODE = re.compile(r"`[^`]+`")
+
+# Hanja range for Korean-only substitution
+HANJA_RANGE = re.compile(r"[一-鿟]")
+
+# Korean sentence boundary heuristics (for . which can also mark abbreviations)
+RE_ABBREV = re.compile(r"(?:etc|vs|no|vol|fig|ref|Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St)\.", re.IGNORECASE)
 
 # Tags that carry lexical meaning for BM25 indexing
 LEXICAL_TAGS = frozenset({
@@ -51,19 +64,131 @@ TOPIC_TAGS = frozenset({"NNP"})
 
 
 class TextCleaner:
-    """Korean text cleaner with Kiwi-based tokenization.
+    """Language-aware text cleaner with Kiwi-based tokenization.
+
+    Languages:
+      - Korean (ko): clean → Kiwi typo correction → hanja substitution
+      - English (en): clean only (no Kiwi, no hanja)
+      - Other: basic NLFKC + whitespace normalization
 
     Usage:
         cleaner = TextCleaner()
-        clean_text = cleaner.clean(raw_text)
-        tokens = cleaner.tokenize(clean_text)
+        lang = cleaner.detect_language(text)  # 'ko', 'en', 'unknown'
+        clean_text = cleaner.clean(text, lang=lang)
+        sents = cleaner.split_sentences(clean_text, lang=lang)
+        tokens = cleaner.tokenize(clean_text)  # Kiwi POS (Korean only)
+        tok_count = cleaner.estimate_tokens(clean_text)  # tiktoken
     """
 
     def __init__(self) -> None:
         self._kiwi = Kiwi()
+        self._tiktoken_enc = tiktoken.get_encoding("o200k_base")
 
     # ------------------------------------------------------------------
-    # Phase 1: Text Cleaning
+    # Language Detection
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def detect_language(text: str) -> Tuple[str, float]:
+        """Detect text language using langdetect.
+
+        Returns ('ko', confidence) or ('en', confidence) or ('unknown', 0.0).
+        Confidence threshold: returns 'ko'/'en' only if > 0.5.
+        """
+        if not text.strip():
+            return "unknown", 0.0
+        try:
+            lang = langdetect_detect(text)
+        except LangDetectException:
+            return "unknown", 0.0
+        if lang not in ("ko", "en"):
+            return "unknown", 0.0
+        return lang, 0.8
+
+    # ------------------------------------------------------------------
+    # Sentence Segmentation (language-dependent)
+    # ------------------------------------------------------------------
+
+    def split_sentences(self, text: str, lang: str = "ko") -> List[str]:
+        """Split text into sentences.
+
+        Korean (ko): Kiwi.split_into_sents (morphology-aware).
+        English (en): PySBD (rule-based, Golden Rule Set 97.9%).
+        Other: simple regex split on [.!?].
+        """
+        if not text.strip():
+            return [text] if text else []
+
+        try:
+            if lang == "ko":
+                sents = self._kiwi.split_into_sents(text)
+                return [s.text for s in sents if s.text.strip()]
+            elif lang == "en":
+                import pysbd
+                segmenter = pysbd.Segmenter(language="en", clean=False)
+                return segmenter.segment(text)
+            else:
+                # Simple regex fallback for unknown languages
+                cleaned = RE_ABBREV.sub(lambda m: m.group().replace(".", "\x00DOT\x00"), text)
+                parts = re.split(r'(?<=[.!?])\s+', cleaned)
+                return [p.replace("\x00DOT\x00", ".") for p in parts if p.strip()]
+        except Exception:
+            pass
+
+        # Ultimate fallback
+        parts = re.split(r'(?<=[.!?])\s+', text)
+        return [p for p in parts if p.strip()]
+
+    # ------------------------------------------------------------------
+    # Hanja Substitution (Korean only)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _has_hanja(text: str) -> bool:
+        return bool(HANJA_RANGE.search(text))
+
+    def hanja_substitute(self, text: str) -> Tuple[str, List[Dict[str, str]]]:
+        """Replace hanja (Chinese characters) with Korean hangul.
+
+        Korean-only operation. Code blocks and inline code preserved.
+        Returns (corrected_text, changes_list).
+        """
+        import hanja
+
+        if not text.strip() or not self._has_hanja(text):
+            return text, []
+
+        code_blocks: List[str] = []
+        inline_codes: List[str] = []
+
+        def _save_code(m: re.Match) -> str:
+            code_blocks.append(m.group())
+            return f"\x00BLOCK{len(code_blocks) - 1}\x00"
+
+        def _save_inline(m: re.Match) -> str:
+            inline_codes.append(m.group())
+            return f"\x00INLINE{len(inline_codes) - 1}\x00"
+
+        t = RE_CODE_BLOCK.sub(_save_code, text)
+        t = RE_INLINE_CODE.sub(_save_inline, t)
+
+        before = t
+        t = hanja.translate(t, 'substitution')
+
+        changes = []
+        for bl, al in zip(before.split('\n'), t.split('\n')):
+            if bl.strip() != al.strip():
+                changes.append({"from": bl.strip(), "to": al.strip()})
+
+        for i, cb in enumerate(code_blocks):
+            t = t.replace(f"\x00BLOCK{i}\x00", cb)
+        for i, ic in enumerate(inline_codes):
+            t = t.replace(f"\x00INLINE{i}\x00", ic)
+
+        return t, changes
+
+    # ------------------------------------------------------------------
+    # Text Cleaning (Language-Aware)
     # ------------------------------------------------------------------
 
     def _clean_non_kiwi(self, text: str) -> Tuple[str, List[str], List[str]]:
@@ -87,8 +212,11 @@ class TextCleaner:
 
         t = RE_KOREAN_EMOTICON.sub(lambda m: m.group()[0] * 2, t)
         t = unicodedata.normalize("NFKC", t)
+        t = RE_ZERO_WIDTH.sub("", t)
+        t = RE_CONTROL_CHARS.sub("", t)
         t = RE_EMOJI.sub(" ", t)
         t = RE_REPEAT_HANGUL.sub(lambda m: m.group(1) * 2, t)
+        t = RE_NBSP.sub(" ", t)
         t = RE_MULTI_SPACE.sub(" ", t)
         t = t.strip()
         return t, code_blocks, inline_codes
@@ -107,22 +235,41 @@ class TextCleaner:
             text = text.replace(f"\x00INLINE{i}\x00", ic)
         return text
 
-    def clean(self, text: str) -> str:
-        """Normalize Korean text for BM25 + Embedding.
+    def clean(self, text: str, lang: Optional[str] = None) -> str:
+        """Language-aware text normalization.
 
-        Preserves code blocks (``````) and inline code (``) verbatim.
+        Args:
+            text: Raw text to clean.
+            lang: Language hint ('ko', 'en', None=auto-detect).
+
+        Korean: NFKC → emoji → Kiwi typo correction → hanja substitution.
+        English: NFKC → emoji → whitespace (no Kiwi, no hanja).
+        Other: NFKC → whitespace only.
+
+        Code blocks (``````) and inline code (``) preserved verbatim.
         """
+        if not text:
+            return ""
+
+        if lang is None:
+            lang, _ = self.detect_language(text)
+
         t, code_blocks, inline_codes = self._clean_non_kiwi(text)
-        if t:
+
+        if t and lang == "ko":
             t = self._apply_kiwi(t)
-        return self._restore_placeholders(t, code_blocks, inline_codes)
+
+        result = self._restore_placeholders(t, code_blocks, inline_codes)
+
+        if lang == "ko":
+            result, _ = self.hanja_substitute(result)
+
+        return result
 
     def detect_kiwi_changes(self, text: str) -> bool:
         """True if Kiwi typo correction modified the text (vs NFKC/whitespace-only changes).
 
-        Runs non-Kiwi cleaning, then Kiwi, then compares. Returns True only when
-        Kiwi actually corrected spelling/grammar — ignores NFKC/emoji/whitespace changes.
-        ~5ms per call.
+        Only meaningful for Korean text.
         """
         if not text.strip():
             return False
@@ -131,66 +278,19 @@ class TextCleaner:
         return t != after
 
     # ------------------------------------------------------------------
-    # Phase 2: Kiwi Tokenization (for BM25)
+    # Token Estimation (tiktoken)
     # ------------------------------------------------------------------
 
-    def tokenize(self, text: str) -> List[Dict]:
-        """Kiwi POS tagging. Returns list of {form, tag, start, len} dicts."""
-        tokens = self._kiwi.tokenize(
-            text,
-            normalize_coda=True,
-            typos="basic_with_continual_and_lengthening",
-            oov_handling="chr_freq",
-        )
-        return [
-            {"form": t.form, "tag": t.tag, "start": t.start, "len": len(t.form)}
-            for t in tokens
-        ]
-
-    def extract_terms(self, text: str) -> List[str]:
-        """Extract lexical terms (nouns, verbs, foreign) for BM25 indexing."""
-        tokens = self._kiwi.tokenize(
-            text,
-            normalize_coda=True,
-            typos="basic_with_continual_and_lengthening",
-            oov_handling="chr_freq",
-        )
-        return [t.form for t in tokens if t.tag in LEXICAL_TAGS]
-
-    def extract_nnp(self, text: str) -> List[str]:
-        """Extract proper nouns (NNP) for topic/keyword tagging."""
-        if not text.strip():
-            return []
-        tokens = self._kiwi.tokenize(
-            text,
-            normalize_coda=True,
-            typos="basic_with_continual_and_lengthening",
-            oov_handling="chr_freq",
-        )
-        seen = set()
-        result = []
-        for t in tokens:
-            if t.tag == "NNP" and t.form not in seen:
-                seen.add(t.form)
-                result.append(t.form)
-        return result
-
     def estimate_tokens(self, text: str) -> int:
-        """Estimate LLM token count for Korean text using Kiwi.
+        """Estimate token count using tiktoken (o200k_base).
 
-        Kiwi POS tokens approximate LLM subword tokens. Korean averages ~1.2x
-        Kiwi→LLM-token ratio, so we multiply by 1.2 for a safe estimate.
-        Returns 0 for empty text.
+        Returns 0 for empty text. Minimum 4 tokens for non-empty.
+        Works for any language (Korean, English, code, etc.).
         """
         if not text.strip():
             return 0
-        tokens = self._kiwi.tokenize(
-            text,
-            normalize_coda=True,
-            typos="basic_with_continual_and_lengthening",
-            oov_handling="chr_freq",
-        )
-        return max(4, int(len(tokens) * 1.2))
+        tokens = self._tiktoken_enc.encode(text)
+        return max(4, len(tokens))
 
     # ------------------------------------------------------------------
     # Batch processing
@@ -230,8 +330,16 @@ def get_cleaner() -> TextCleaner:
     return _cleaner
 
 
-def clean(text: str) -> str:
-    return get_cleaner().clean(text)
+def detect_language(text: str) -> Tuple[str, float]:
+    return get_cleaner().detect_language(text)
+
+
+def split_sentences(text: str, lang: str = "ko") -> List[str]:
+    return get_cleaner().split_sentences(text, lang=lang)
+
+
+def clean(text: str, lang: Optional[str] = None) -> str:
+    return get_cleaner().clean(text, lang=lang)
 
 
 def tokenize(text: str) -> List[Dict]:
@@ -252,3 +360,7 @@ def estimate_tokens(text: str) -> int:
 
 def detect_kiwi_changes(text: str) -> bool:
     return get_cleaner().detect_kiwi_changes(text)
+
+
+def hanja_substitute(text: str) -> Tuple[str, List[Dict[str, str]]]:
+    return get_cleaner().hanja_substitute(text)

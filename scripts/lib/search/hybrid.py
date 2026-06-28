@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.request
 from typing import Dict, List, Optional, Tuple
@@ -45,6 +46,12 @@ DENSE_SEARCH_LIMIT = 100
 # Reranker (Pod A, same network namespace as MCP container)
 RERANKER_URL = "http://127.0.0.1:8080/v1/rerank"
 RERANKER_TIMEOUT = 120
+
+# LLM listwise reranker (RankGPT-style via Gemini 2.5 Flash, Stage 3)
+LLM_RERANK_URL = "http://127.0.0.1:4431/v1/chat/completions"
+LLM_RERANK_TIMEOUT = 120
+LLM_RERANK_WINDOW = 10
+LLM_RERANK_MAX_CANDIDATES = 30
 
 
 def _get_query_vector(query: str) -> Optional[List[float]]:
@@ -142,7 +149,7 @@ def _rerank_results(query: str, candidates: List[Tuple], top_k: int) -> Tuple[Li
         with urllib.request.urlopen(req, timeout=RERANKER_TIMEOUT) as resp:
             data = json.loads(resp.read().decode())
     except Exception as e:
-        return candidates[:top_k], f"reranker call failed: {e}"
+        return [(0.0, c[0], c[1], c[2], c[3]) for c in candidates[:top_k]], f"reranker call failed: {e}"
 
     scores = [0.0] * len(pool)
     for r in data.get("results", []):
@@ -155,6 +162,94 @@ def _rerank_results(query: str, candidates: List[Tuple], top_k: int) -> Tuple[Li
         key=lambda x: (-x[0], -x[1]),
     )
     return ordered, None
+
+
+def _llm_listwise_rerank(
+    query: str,
+    candidates: List[Tuple],
+    text_map: Dict[str, str],
+    window_size: int = 10,
+    top_k: int = 30,
+) -> Tuple[List[Tuple], Optional[str]]:
+    pool = candidates[:top_k]
+    if not pool:
+        return [], "no candidates for LLM rerank"
+
+    n = len(pool)
+    step = window_size // 2 or 1
+    windows = []
+    end = n
+    while end > 0:
+        start = max(0, end - window_size)
+        windows.append((start, end))
+        end -= step
+    windows.reverse()
+
+    result = list(pool)
+
+    for start, end in windows:
+        subset = result[start:end]
+        if len(subset) <= 1:
+            continue
+
+        texts = []
+        for item in subset:
+            tid = item[2]
+            raw = text_map.get(tid, "")
+            texts.append(" ".join(raw.split())[:800])
+
+        lines = [f"[{i+1}] {t}" for i, t in enumerate(texts)]
+        prompt = (
+            f"Query: {query[:300]}\n\n"
+            f"Rank passages by relevance. Output only a JSON array of indices "
+            f"from most to least relevant.\n\n"
+            + "\n".join(lines)
+        )
+
+        body = json.dumps({
+            "model": "gemini-2.5-flash",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1,
+            "max_tokens": 256,
+        }).encode()
+        req = urllib.request.Request(
+            LLM_RERANK_URL, data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=LLM_RERANK_TIMEOUT) as resp:
+                data = json.loads(resp.read().decode())
+            content = data["choices"][0]["message"]["content"]
+        except Exception as e:
+            return pool[:top_k], f"LLM rerank call failed: {e}"
+
+        match = re.search(r'\[[\d,\s]+\]', content)
+        if not match:
+            continue
+
+        try:
+            ranked = json.loads(match.group())
+        except json.JSONDecodeError:
+            continue
+
+        ordered = []
+        seen = set()
+        for idx in ranked:
+            if isinstance(idx, int) and 1 <= idx <= len(subset) and idx - 1 not in seen:
+                ordered.append(subset[idx - 1])
+                seen.add(idx - 1)
+        for i in range(len(subset)):
+            if i not in seen:
+                ordered.append(subset[i])
+
+        result[start:end] = ordered
+
+    output = []
+    for i, item in enumerate(result):
+        new_score = 1.0 / (1 + i)
+        output.append((new_score, item[0], item[1], item[2], item[3], item[4]))
+
+    return output[:top_k], None
 
 
 def _fetch_turn_metadata(tid_list: List[str]) -> Dict[str, dict]:
@@ -181,23 +276,28 @@ def _fetch_turn_metadata(tid_list: List[str]) -> Dict[str, dict]:
 
 def hybrid_search(query: str, limit: int = 20, *,
                   rerank: bool = True,
-                  rerank_candidates: int = 50) -> Dict:
-    """Hybrid BM25 + Dense search via RRF fusion, optional cross-encoder reranker.
+                  rerank_candidates: int = 50,
+                  llm_rerank: bool = False,
+                  llm_rerank_candidates: int = 30) -> Dict:
+    """Hybrid BM25 + Dense search via RRF fusion, optional cross-encoder + LLM listwise rerank.
 
     Args:
         query: Natural language query.
         limit: Max results to return.
         rerank: Whether to apply cross-encoder reranker on RRF results.
-        rerank_candidates: How many RRF top candidates to rerank (default 50).
+        rerank_candidates: How many RRF top candidates to cross-encode (default 50).
+        llm_rerank: Whether to apply LLM listwise reranker (RankGPT-style).
+                    Requires Gemini OpenAI proxy on :4431. Incurs API cost.
+        llm_rerank_candidates: How many cross-encoder top candidates to LLM-rerank (default 30).
 
     Returns:
         {
             results: [{turn_id, conversation_id, created_at, agent, seq,
                        user_turn, text, text_clean,
                        conv_title, conv_source, conv_model,
-                       bm25_rank, dense_rank, rrf_score, rerank_score}],
+                       bm25_rank, dense_rank, rrf_score, rerank_score, llm_rerank_score}],
             meta: {bm25_count, dense_count, bm25_time, dense_time,
-                   rerank_time, rerank_error, embed_error}
+                   rerank_time, rerank_error, llm_rerank_time, llm_rerank_error, embed_error}
         }
     """
     meta: Dict = {"bm25_count": 0, "dense_count": 0,
@@ -250,6 +350,7 @@ def hybrid_search(query: str, limit: int = 20, *,
 
     # --- Stage 2: Cross-encoder reranker (optional) ---
     rerank_error = None
+    reranked = None
     if rerank and len(rerank_pool) >= 1:
         t0 = time.monotonic()
         reranked, rerank_error = _rerank_results(query, rerank_pool, rr_candidates)
@@ -265,9 +366,27 @@ def hybrid_search(query: str, limit: int = 20, *,
         meta["rerank_time"] = 0.0
         ordered = [(None, r[0], r[1], r[2], r[3]) for r in scored]
 
+    # --- Stage 3: LLM listwise reranker (optional, RankGPT-style) ---
+    llm_rerank_error = None
+    if llm_rerank and reranked:
+        t0 = time.monotonic()
+        text_map = {c[1]: c[4] for c in rerank_pool}
+        llm_in = reranked[:llm_rerank_candidates]
+        llm_out, llm_rerank_error = _llm_listwise_rerank(
+            query, llm_in, text_map,
+            top_k=llm_rerank_candidates,
+        )
+        meta["llm_rerank_time"] = round(time.monotonic() - t0, 3)
+        if llm_rerank_error:
+            meta["llm_rerank_error"] = llm_rerank_error
+        llm_set = {c[3] for c in llm_out}
+        tail = [r for r in ordered[len(llm_out):] if (r[3] if len(r) == 6 else r[2]) not in llm_set]
+        ordered = list(llm_out) + tail
+
     # --- Build results ---
     top = ordered[:limit]
-    result_tids = [r[2] for r in top]
+    # 6-element LLM tuples have tid at pos 3, 5-element at pos 2
+    result_tids = [r[3] if len(r) == 6 else r[2] for r in top]
     # Fetch full metadata for all top results (some may not be in meta_map yet)
     missing = [tid for tid in result_tids if tid not in meta_map]
     if missing:
@@ -275,11 +394,20 @@ def hybrid_search(query: str, limit: int = 20, *,
 
     results = []
     for entry in top:
-        rerank_score_t = entry[0]
-        rrf_score_t = entry[1]
-        tid = entry[2]
-        b_rank = entry[3]
-        d_rank = entry[4]
+        if len(entry) == 6:
+            llm_score_t = entry[0]
+            rerank_score_t = entry[1]
+            rrf_score_t = entry[2]
+            tid = entry[3]
+            b_rank = entry[4]
+            d_rank = entry[5]
+        else:
+            llm_score_t = None
+            rerank_score_t = entry[0]
+            rrf_score_t = entry[1]
+            tid = entry[2]
+            b_rank = entry[3]
+            d_rank = entry[4]
         info = meta_map.get(tid, {})
 
         text_raw = info.get("text") or ""
@@ -301,6 +429,7 @@ def hybrid_search(query: str, limit: int = 20, *,
             "dense_rank": d_rank,
             "rrf_score": round(rrf_score_t, 4),
             "rerank_score": round(rerank_score_t, 4) if rerank_score_t is not None else None,
+            "llm_rerank_score": round(llm_score_t, 4) if llm_score_t is not None else None,
         })
 
     return {"results": results, "meta": meta}

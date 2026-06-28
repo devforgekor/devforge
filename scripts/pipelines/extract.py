@@ -87,6 +87,10 @@ def _insert_fact(
     nli_llm: Optional[str] = None,
     source_file: Optional[str] = None,
     corrected_evidence: Optional[str] = None,
+    subject: Optional[str] = None,
+    predicate: Optional[str] = None,
+    object_: Optional[str] = None,
+    qualifiers: Optional[dict] = None,
 ) -> bool:
     cols = ["turn_id", "fact_index", "fact_type", "evidence",
             "extract_model", "verdict", "source", "fact_action"]
@@ -133,6 +137,23 @@ def _insert_fact(
         cols.append("corrected_evidence")
         vals.append(f"'{esc_sql(corrected_evidence[:5000])}'")
         set_clauses.append(f"corrected_evidence = '{esc_sql(corrected_evidence[:5000])}'")
+    if subject:
+        cols.append("subject")
+        vals.append(f"'{esc_sql(subject)}'")
+        set_clauses.append(f"subject = '{esc_sql(subject)}'")
+    if predicate:
+        cols.append("predicate")
+        vals.append(f"'{esc_sql(predicate)}'")
+        set_clauses.append(f"predicate = '{esc_sql(predicate)}'")
+    if object_:
+        cols.append("object")
+        vals.append(f"'{esc_sql(object_)}'")
+        set_clauses.append(f"object = '{esc_sql(object_)}'")
+    if qualifiers:
+        qjson = json.dumps(qualifiers).replace("'", "''")
+        cols.append("qualifiers")
+        vals.append(f"'{qjson}'::jsonb")
+        set_clauses.append(f"qualifiers = '{qjson}'::jsonb")
 
     sql = (
         f"INSERT INTO review_facts ({', '.join(cols)}) "
@@ -567,7 +588,11 @@ def extract_pipeline(
                              faithful_method=ex.get("faithful_method"),
                              grounding=ex.get("grounding"),
                              nli_llm=ex.get("nli_llm"),
-                             corrected_evidence=ex.get("corrected_evidence"))
+                             corrected_evidence=ex.get("corrected_evidence"),
+                             subject=ex.get("subject"),
+                             predicate=ex.get("predicate"),
+                             object_=ex.get("object"),
+                             qualifiers=ex.get("qualifiers"))
                 fi += 1
 
             if mark:

@@ -164,9 +164,29 @@ def _post_process_extractions(
 
         ex["category"] = _infer_category(evidence, ex.get("category", "explanation"))
         ex["evidence"] = evidence
+
+        pred = ex.get("predicate", "")
+        if pred:
+            ex["predicate"] = _sanitize_predicate(pred)
+
         cleaned.append(ex)
 
     return cleaned
+
+
+def _sanitize_predicate(pred: str) -> str:
+    """Validate and normalize predicate to clean snake_case. Return empty if too vague."""
+    if not pred or not isinstance(pred, str):
+        return ""
+    p = pred.strip().lower()
+    p = re.sub(r'[\s\-]+', '_', p)
+    p = re.sub(r'[^a-z0-9_]', '', p)
+    p = p.strip('_')
+    if len(p) < 3 or p in ('is', 'has', 'was', 'are', 'does', 'do', 'be'):
+        return ""
+    if not re.match(r'^[a-z][a-z0-9]*(_[a-z0-9]+)*$', p):
+        return ""
+    return p[:60]
 
 
 # ── Incomplete Fact Refinement ──────────────────────────────────

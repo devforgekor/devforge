@@ -1,15 +1,14 @@
 #!/bin/bash
 # day_cycle.sh — async pipeline (pipeline_state-driven)
-# pipeline_state flow: pending → batching → cleaned → polished → embedded → scanned → extracted → enriched → verified
+# pipeline_state flow: pending → batching → cleaned → embedded → scanned → extracted → enriched → verified
 # Batch reservation at start: 10 pending → batching
 # Each phase queries pipeline_state, each script self-reports completion via UPDATE.
 # Light → Heavy execution order:
 #   System Sync       — code-structure + duckdns + worklog
 #   Pod A Health       — check :8080 (router mode, models loaded dynamically)
-#   Text Preprocess   — text_clean.py (batching → cleaned)
-#   Day Polish        — polish_batch.py (cleaned → polished)
+#   Text Preprocess   — text_clean.py (batching → cleaned, language-aware)
 #   FTS5 Refresh      — local_index refresh
-#   Day Embedding     — embed_batch.py (:8081, polished → embedded)
+#   Day Embedding     — embed_batch.py (:8081, cleaned → embedded)
 #   Day Entity Scan   — entity_scan.py (embedded → scanned, deterministic, regex+DB, no LLM)
 #   Day Extract       — extract.py (:8082, scanned → extracted)
 #   Day Enrich        — enrich.py (:8082, extracted → enriched)
@@ -264,47 +263,28 @@ else
     LOG "=== Text Preprocess: skip (0 batching turns) ==="
 fi
 
-# ── Day Polish (Kiwi-only, --no-llm) ──────────
-NEED_POLISH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'cleaned'" 2>/dev/null || echo "0")
-NEED_POLISH=${NEED_POLISH:-0}
-
-if [ "$NEED_POLISH" -gt 0 ]; then
-    LOG "=== Day Polish (${NEED_POLISH} cleaned turns) ==="
-    python3 "$PIPELINE_DIR/polish_batch.py" --limit 50 2>&1
-    RC=$?
-    ELAPSED=$(( $(date +%s) - START_TS ))
-    LOG "  Polish exit=$RC, elapsed=${ELAPSED}s"
-    [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
-else
-    LOG "=== Day Polish: skip (0 cleaned turns) ==="
-fi
-
-# ── est_chars Recalculation (post-polish, pre-heavy) ──
-LOG "=== est_chars recalculation ==="
+# ── est_chars update (post-clean, pre-heavy) ──
+# est_chars is now set by text_clean.py via tiktoken.
+# This is a compat fallback for turns processed before the merge.
+LOG "=== est_chars update ==="
 podman exec postgres psql -U devforge -d devforge_app -c "
-  UPDATE turns SET est_chars =
-    GREATEST(
-      LENGTH(COALESCE(user_turn, '')),
-      LENGTH(COALESCE(text, '')),
-      LENGTH(COALESCE(thinking, ''))
-    )
-    + LENGTH(COALESCE(user_turn, ''))
-    + LENGTH(COALESCE(text, ''))
-    + LENGTH(COALESCE(thinking, ''))
-  WHERE pipeline_state = 'polished'" >/dev/null 2>&1
+  UPDATE turns SET est_chars = GREATEST(
+    LENGTH(COALESCE(user_turn_clean, user_turn, '')),
+    LENGTH(COALESCE(text_clean, text, '')),
+    LENGTH(COALESCE(thinking_clean, thinking, ''))
+  ) WHERE pipeline_state = 'cleaned' AND est_chars = 0" >/dev/null 2>&1
 
-# ── FTS5 Refresh (text_clean_polished 기준) ─────────
+# ── FTS5 Refresh (text_clean 기준) ─────────
 LOG "=== FTS5 Refresh ==="
 python3 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
 
 # ── Day Embedding (:8081) ─────
 NEED_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'polished'" 2>/dev/null || echo "0")
+  "SELECT count(*)::int FROM turns WHERE pipeline_state IN ('cleaned', 'polished')" 2>/dev/null || echo "0")
 NEED_EMBED=${NEED_EMBED:-0}
 
 if [ "$NEED_EMBED" -gt 0 ]; then
-    LOG "=== Day Embedding (${NEED_EMBED} polished turns) ==="
+    LOG "=== Day Embedding (${NEED_EMBED} cleaned turns) ==="
     ensure_pod_b "embeder" "embeder" false 1200
     python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
     RC=$?
@@ -312,7 +292,7 @@ if [ "$NEED_EMBED" -gt 0 ]; then
     LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
     [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
 else
-    LOG "=== Day Embedding: skip (0 polished turns) ==="
+    LOG "=== Day Embedding: skip (0 cleaned turns) ==="
 fi
 
 # ── Entity Scan (no LLM, no Pod B) ──

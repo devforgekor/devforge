@@ -2,27 +2,27 @@
 # Status: production
 # Path: Caddy reverse-proxy
 """
-Unified MCP search proxy with cross-provider key rotation.
+MCP search proxy: Brave + Tavily (Tier 1) with you.com (Tier 2 fallback).
 
-SLOC-exempt: 448 lines — single cohesive search proxy (key rotation → provider
-dispatch → API call → result formatting). MultiProviderRotator, per-provider
-response parsers, and HTTP client share key state. Splitting would scatter
-rotation logic across files.
-
-Providers (Tier 1): Brave ×4 + Exa ×4 + Tavily ×4 = 12 keys, even rotation
-Provider  (Tier 2): you.com ×4 — only when Tier 1 all in backoff
-
-Protocol: MCP stdio (JSON-RPC over stdin/stdout).
-Replaces search-mcp-wrapper + per-provider MCP servers.
+Per-provider key rotation + combined web_search rotation tool.
+For Exa, use exa-search MCP separately.
+For Brave, use brave-search MCP separately.
+For Tavily, use tavily-search MCP separately.
 """
 
 import html
 import json
 import os
 import re
+import sys
 import time
 import urllib.request
 import urllib.error
+
+# Ensure scripts/ is in path for lib imports when spawned via MCP stdio
+_SCRIPTS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _SCRIPTS not in sys.path:
+    sys.path.insert(0, _SCRIPTS)
 
 from lib.auth.key_rotator import KeyRotator
 from lib.auth.api_key_cipher import decrypt_data
@@ -36,15 +36,6 @@ PROVIDERS = {
         "max_results": 20,
         "method": "GET",
         "params": lambda q, n: {"q": q, "count": str(n)},
-    },
-    "exa": {
-        "prefix": "EXA",
-        "search_url": "https://api.exa.ai/search",
-        "auth_header": "x-api-key",
-        "max_results": 10,
-        "method": "POST",
-        "body": lambda q, n: json.dumps({"query": q, "numResults": n, "type": "auto"}),
-        "headers": {"Content-Type": "application/json"},
     },
     "tavily": {
         "prefix": "TRAVILY",
@@ -69,90 +60,81 @@ PROVIDERS = {
 }
 
 STATE_DIR = os.path.expanduser("~/.cache/devforge")
-STATE_FILE = os.path.join(STATE_DIR, "search_proxy_state.json")
 
 # you.com: Tier 2 fallback — preload with high calls so they sort last
 YOUCOM_CALLS_PRELOAD = 1_000_000
 
 
-def _load_all_keys() -> list[tuple[str, str]]:
-    """Load all search API keys from secrets, prefixed by provider."""
+def _load_keys_for(service: str) -> list[tuple[str, str]]:
+    """Load API keys for a single provider from secrets.env."""
+    cfg = PROVIDERS.get(service)
+    if not cfg:
+        return []
     secrets_path = os.path.expanduser("~/.config/devforge/secrets.env")
     if not os.path.exists(secrets_path):
         return []
 
-    all_keys = []
-    for provider, cfg in PROVIDERS.items():
-        env_name = f"{cfg['prefix']}_API_KEYS"
-        keys_str = ""
-        with open(secrets_path) as f:
-            for line in f:
-                if line.startswith(f"{env_name}="):
-                    keys_str = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
-        if not keys_str:
+    env_name = f"{cfg['prefix']}_API_KEYS"
+    keys_str = ""
+    with open(secrets_path) as f:
+        for line in f:
+            if line.startswith(f"{env_name}="):
+                keys_str = line.split("=", 1)[1].strip().strip('"').strip("'")
+                break
+    if not keys_str:
+        return []
+
+    keys = []
+    for item in keys_str.split(","):
+        item = item.strip()
+        if not item:
             continue
-
-        for item in keys_str.split(","):
-            item = item.strip()
-            if not item:
-                continue
-            if ":" in item:
-                name, cipher = item.split(":", 1)
-                plain = decrypt_data(cipher.strip())
-                if plain is None:
-                    plain = cipher.strip()
-                # Prefix key name with provider for routing
-                all_keys.append((f"{provider}:{name.strip()}", plain))
-            else:
-                all_keys.append((f"{provider}:key-{len(all_keys)}", item.strip()))
-    return all_keys
-
-
-def _get_provider(key_name: str) -> str:
-    """Extract provider from key name prefix. 'brave:mesids_...' → 'brave'"""
-    return key_name.split(":", 1)[0]
-
-
-def _get_key_name(key_name: str) -> str:
-    """Extract bare key name without provider prefix."""
-    return key_name.split(":", 1)[1] if ":" in key_name else key_name
+        if ":" in item:
+            name, cipher = item.split(":", 1)
+            plain = decrypt_data(cipher.strip())
+            if plain is None:
+                plain = cipher.strip()
+            keys.append((f"{service}:{name.strip()}", plain))
+        else:
+            keys.append((f"{service}:key-{len(keys)}", item.strip()))
+    return keys
 
 
 class SearchProxy:
-    """Unified MCP search server with cross-provider key rotation."""
+    """MCP search server with per-provider key rotation. Exposes separate tools + rotation."""
 
     def __init__(self):
-        keys = _load_all_keys()
-        if not keys:
+        self._rotators = {}
+        for service in ("brave", "tavily", "youcom"):
+            keys = _load_keys_for(service)
+            if keys:
+                self._rotators[service] = KeyRotator(
+                    keys, state_file=os.path.join(STATE_DIR, f"{service}_state.json")
+                )
+
+        if not self._rotators:
             print("[search_proxy] No search API keys found", file=sys.stderr)
-            self._rotator = None
             return
 
-        self._rotator = KeyRotator(keys, state_file=STATE_FILE)
+        # you.com: preload with high calls → natural fallback
+        you_rot = self._rotators.get("youcom")
+        if you_rot:
+            for i in range(you_rot.n):
+                if you_rot._calls.get(i, 0) < YOUCOM_CALLS_PRELOAD:
+                    you_rot._calls[i] = YOUCOM_CALLS_PRELOAD
+            you_rot._save_state()
 
-        # Preload you.com keys with high call counts → sort last
-        for i, (name, _key) in enumerate(keys):
-            if name.startswith("youcom:"):
-                if self._rotator._calls.get(i, 0) < YOUCOM_CALLS_PRELOAD:
-                    self._rotator._calls[i] = YOUCOM_CALLS_PRELOAD
-
-        self._rotator._save_state()
-        print(
-            f"[search_proxy] {len(keys)} keys loaded "
-            f"({sum(1 for n,_ in keys if not n.startswith('youcom:'))} Tier1 + "
-            f"{sum(1 for n,_ in keys if n.startswith('youcom:'))} Tier2)",
-            file=sys.stderr,
-        )
+        _log(f"{sum(len(r.keys) for r in self._rotators.values())} keys loaded "
+             f"(brave={len(self._rotators.get('brave',{}).keys or [])}, "
+             f"tavily={len(self._rotators.get('tavily',{}).keys or [])}, "
+             f"youcom={len(self._rotators.get('youcom',{}).keys or [])})")
 
     def _call_api(self, provider: str, key: str, query: str, max_results: int = 5) -> dict:
-        """Call a search provider's REST API."""
         cfg = PROVIDERS[provider]
         url = cfg["search_url"]
         headers = {}
 
         if "auth_key_field" in cfg:
-            # API key in body (Tavily) — body builder needs the key
             body_str = cfg["body"](query, max_results, key)
             headers.update(cfg.get("headers", {}))
         elif "auth_header" in cfg:
@@ -180,52 +162,50 @@ class SearchProxy:
         except Exception as e:
             return {"status": 0, "error": str(e)[:500], "data": None}
 
-    def search(self, query: str, max_results: int = 5) -> list[str]:
-        """Execute a search with automatic provider fallback."""
-        if self._rotator is None:
-            return ["error: No search keys available"]
+    def _search_provider(self, provider: str, query: str, max_results: int = 5) -> list[str]:
+        """Search using a single provider with its own key rotation."""
+        rotator = self._rotators.get(provider)
+        if rotator is None:
+            return [f"error: {provider} not configured"]
 
         attempts = 0
-        max_attempts = self._rotator.n
-
-        while attempts < max_attempts:
+        while attempts < rotator.n:
             attempts += 1
-            picked = self._rotator.pick()
+            picked = rotator.pick()
             if picked is None:
                 break
 
             idx, full_name, key = picked
-            provider = _get_provider(full_name)
-            bare_name = _get_key_name(full_name)
-
-            print(
-                f"[search_proxy] {full_name} → {provider}  (query: {query[:40]}...)",
-                file=sys.stderr,
-            )
+            _log(f"{full_name} → {provider}  (query: {query[:40]}...)")
 
             resp = self._call_api(provider, key, query, max_results)
 
             if resp["status"] in (200, 201):
-                self._rotator.success(idx)
-                self._rotator._save_state()
-                return self._format_text(provider, bare_name, resp["data"])
+                rotator.success(idx)
+                rotator._save_state()
+                results = self._format_text(provider, full_name, resp["data"])
+                return results
             elif resp["status"] == 429:
-                print(
-                    f"[search_proxy] {full_name} → 429, backoff 60s",
-                    file=sys.stderr,
-                )
-                self._rotator.rate_limited(idx, 60)
-                self._rotator._save_state()
+                rotator.rate_limited(idx, 60)
+                rotator._save_state()
                 continue
             else:
-                print(
-                    f"[search_proxy] {full_name} → {resp['status']}: {resp.get('error','?')[:100]}",
-                    file=sys.stderr,
-                )
-                self._rotator.rate_limited(idx, 30)
-                self._rotator._save_state()
+                _log(f"{full_name} → {resp['status']}: {resp.get('error','?')[:100]}")
+                rotator.rate_limited(idx, 30)
+                rotator._save_state()
                 continue
 
+        return [f"error: {provider} exhausted"]
+
+    def search(self, query: str, max_results: int = 5) -> list[str]:
+        """Search with rotation across all Tier 1 providers, you.com as Tier 2 fallback."""
+        for provider in ("brave", "tavily", "youcom"):
+            result = self._search_provider(provider, query, max_results)
+            if result and not result[0].startswith("error:"):
+                if provider == "youcom":
+                    _log("⚠️ you.com fallback activated (all Tier 1 keys exhausted)")
+                    result = ["⚠️ you.com fallback (budget provider, $100/mo limit — use results sparingly)"] + result
+                return result
         return ["error: All search providers exhausted"]
 
     _STRIP_TAGS_RE = re.compile(r"<[^>]*>")
@@ -259,15 +239,6 @@ class SearchProxy:
                         "description": c(r.get("description", "")),
                     }
                 )
-        elif provider == "exa":
-            for r in data.get("results", []) or []:
-                formatted.append(
-                    {
-                        "title": c(r.get("title", "")),
-                        "url": r.get("url", ""),
-                        "description": c(r.get("text", "") or r.get("highlights", [""])[0]),
-                    }
-                )
         elif provider == "tavily":
             for r in data.get("results", []) or []:
                 formatted.append(
@@ -289,13 +260,7 @@ class SearchProxy:
         return formatted
 
     def _format_text(self, provider: str, key_name: str, data: dict) -> list[str]:
-        """Format results as clean concise text.
-
-        [provider:key]
-        title | url | description (truncated)
-        ...
-        """
-        lines = [f"[{provider}:{key_name}]"]
+        lines = []
         formatted = self._format_results(provider, data)
         for r in formatted:
             title = r.get("title", "")
@@ -309,18 +274,19 @@ class SearchProxy:
         return ["\n".join(lines)]
 
     def stats(self) -> str:
-        if self._rotator is None:
-            return json.dumps({"error": "No keys"})
-        return json.dumps(self._rotator.stats(), ensure_ascii=False)
+        return json.dumps(
+            {name: rot.stats() for name, rot in self._rotators.items()},
+            ensure_ascii=False,
+        )
 
 
 TOOLS = [
     {
         "name": "web_search",
         "description": (
-            "Search the web using a unified pool of search engines (Brave, Exa, Tavily, you.com). "
-            "Keys rotate evenly across providers. On 429, automatically falls back to the next provider. "
-            "you.com is used only as a last resort when all other providers are exhausted."
+            "Search the web with automatic rotation: Brave → Tavily → you.com fallback. "
+            "Each provider has independent key rotation. Failed provider → next pick. "
+            "For provider-specific search, use brave-search, exa-search, or tavily-search separately."
         ),
         "inputSchema": {
             "type": "object",
@@ -342,7 +308,7 @@ TOOLS = [
     },
     {
         "name": "search_stats",
-        "description": "Show search proxy key rotation statistics.",
+        "description": "Show search proxy key rotation statistics per provider.",
         "inputSchema": {
             "type": "object",
             "properties": {},

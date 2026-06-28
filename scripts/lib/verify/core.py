@@ -38,7 +38,7 @@ def findings_to_context(findings: List[Dict], user_turn: str, thinking: str, tex
     
     return "\n".join(parts)
 
-def call_verifier(context: str, model_label: str = "14b", dry_run: bool = False) -> Optional[Dict]:
+def call_verifier(context: str, model_label: str = "day_verify", dry_run: bool = False) -> Optional[Dict]:
     if dry_run:
         return {
             "final_verdict": "approved",
