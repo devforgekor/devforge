@@ -21,7 +21,7 @@ Flow:
   Phase 2: Solo section-major extraction (user batch → text batch)
   Phase 3: Post-process cleanup (dedup, short filter, markdown)
   Phase 4: LLM NLI self-verify — ENTAILMENT=grounded, CONTRADICTION=drop, NEUTRAL→reranker
-  Phase 5: Reranker faithfulness check (Pod A :8080) — only NEUTRAL items
+  Phase 5: Reranker faithfulness check (inference :8080) — only NEUTRAL items
   Phase 6: Handle failures — retry or mark
   Phase 7: Store to review_facts + enqueue
 
@@ -46,20 +46,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql, psql_ok, esc_sql, psql_json
-from lib.infra.preflight import preflight_checks
-from lib.llm_client import call_llm
-from lib.pod_manager import ensure_model as _ensure_model_pod
-from lib.watchdog.messenger import heartbeat
-
 from extract_llm import (
-    _checkpoint_sections,
-    _extract_for_turn,
-    _extract_solo_section_major,
-    _sigterm_handler,
     _SIGTERM_RECEIVED,
     SYSTEM_DESCRIBE_FILE,
+    _checkpoint_sections,
     _parse_json,
+    _sigterm_handler,
+)
+from extract_llm import (
+    _extract_edcr_freeform as _extract_solo_section_major,
 )
 from extract_verify import (
     _llm_nli_verify,
@@ -67,6 +62,11 @@ from extract_verify import (
     _refine_batch,
     _verify_extractions,
 )
+from lib.db import esc_sql, psql_json, psql_ok
+from lib.infra.preflight import preflight_checks
+from lib.llm_client import call_llm
+from lib.pod_manager import ensure_model as _ensure_model_pod
+from lib.watchdog.messenger import heartbeat
 
 BATCH_LIMIT = 50
 PARALLEL = 2
@@ -76,7 +76,10 @@ PARALLEL = 2
 
 
 def _insert_fact(
-    turn_id: str, fact_index: int, fact_type: str, evidence: str,
+    turn_id: str,
+    fact_index: int,
+    fact_type: str,
+    evidence: str,
     extract_model: str,
     prompt_tokens: Optional[int] = None,
     gen_tokens: Optional[int] = None,
@@ -92,23 +95,35 @@ def _insert_fact(
     object_: Optional[str] = None,
     qualifiers: Optional[dict] = None,
 ) -> bool:
-    cols = ["turn_id", "fact_index", "fact_type", "evidence",
-            "extract_model", "verdict", "source", "fact_action"]
+    cols = [
+        "turn_id",
+        "fact_index",
+        "fact_type",
+        "evidence",
+        "extract_model",
+        "verdict",
+        "source",
+        "fact_action",
+    ]
     vals = [
-        f"'{esc_sql(turn_id)}'::uuid", str(fact_index),
-        f"'{esc_sql(fact_type)}'", f"'{esc_sql(evidence[:5000])}'",
-        f"'{esc_sql(extract_model)}'", "'passed'",
-        "'extract_pipeline'", "'extracted'",
+        f"'{esc_sql(turn_id)}'::uuid",
+        str(fact_index),
+        f"'{esc_sql(fact_type)}'",
+        f"'{esc_sql(evidence[:5000])}'",
+        f"'{esc_sql(extract_model)}'",
+        "'passed'",
+        "'extract_pipeline'",
+        "'extracted'",
     ]
     set_clauses = []
     if prompt_tokens is not None:
         cols.append("prompt_tokens")
         vals.append(str(prompt_tokens))
-        set_clauses.append(f"prompt_tokens = EXCLUDED.prompt_tokens")
+        set_clauses.append("prompt_tokens = EXCLUDED.prompt_tokens")
     if gen_tokens is not None:
         cols.append("gen_tokens")
         vals.append(str(gen_tokens))
-        set_clauses.append(f"gen_tokens = EXCLUDED.gen_tokens")
+        set_clauses.append("gen_tokens = EXCLUDED.gen_tokens")
     if faithful_score is not None:
         cols.append("faithful_score")
         vals.append(f"{faithful_score:.1f}")
@@ -280,11 +295,12 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         )
         SELECT
           claimed.id,
-          COALESCE(claimed.user_turn_clean_polished, claimed.user_turn_clean, claimed.user_turn) AS user_turn,
-          COALESCE(claimed.thinking_clean_polished, claimed.thinking_clean, claimed.thinking) AS thinking,
-          COALESCE(claimed.text_clean_polished, claimed.text_clean, claimed.text) AS text,
+          COALESCE(claimed.user_turn_clean, claimed.user_turn_clean_polished, claimed.user_turn) AS user_turn,
+          COALESCE(claimed.thinking_clean, claimed.thinking_clean_polished, claimed.thinking) AS thinking,
+          COALESCE(claimed.text_clean, claimed.text_clean_polished, claimed.text) AS text,
           claimed.text_clean,
           claimed.thinking_clean,
+          claimed.detected_lang,
           LENGTH(COALESCE(claimed.user_turn, '')) AS user_raw_len,
           LENGTH(COALESCE(claimed.text, '')) AS text_raw_len,
           LENGTH(COALESCE(claimed.thinking, '')) AS think_raw_len,
@@ -301,22 +317,25 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
         return []
     turns = []
     for row in rows:
-        turns.append({
-            "id": row.get("id", ""),
-            "user_turn": row.get("user_turn", ""),
-            "thinking": row.get("thinking") or None,
-            "text": row.get("text", ""),
-            "text_clean_orig": row.get("text_clean") or "",
-            "thinking_clean_orig": row.get("thinking_clean") or "",
-            "user_raw_len": row.get("user_raw_len", 0) or 0,
-            "text_raw_len": row.get("text_raw_len", 0) or 0,
-            "think_raw_len": row.get("think_raw_len", 0) or 0,
-            "source_message_id": row.get("source_message_id", ""),
-            "created_at": row.get("created_at", ""),
-            "conversation_id": row.get("conversation_id", ""),
-            "seq": row.get("seq", 0) or 0,
-            "est_chars": row.get("est_chars", 0) or 0,
-        })
+        turns.append(
+            {
+                "id": row.get("id", ""),
+                "user_turn": row.get("user_turn", ""),
+                "thinking": row.get("thinking") or None,
+                "text": row.get("text", ""),
+                "text_clean_orig": row.get("text_clean") or "",
+                "thinking_clean_orig": row.get("thinking_clean") or "",
+                "detected_lang": row.get("detected_lang"),
+                "user_raw_len": row.get("user_raw_len", 0) or 0,
+                "text_raw_len": row.get("text_raw_len", 0) or 0,
+                "think_raw_len": row.get("think_raw_len", 0) or 0,
+                "source_message_id": row.get("source_message_id", ""),
+                "created_at": row.get("created_at", ""),
+                "conversation_id": row.get("conversation_id", ""),
+                "seq": row.get("seq", 0) or 0,
+                "est_chars": row.get("est_chars", 0) or 0,
+            }
+        )
     return turns
 
 
@@ -333,7 +352,7 @@ def extract_pipeline(
     heartbeat("day_extract", "pipeline_start")
 
     print(f"\n{'=' * 60}")
-    print(f"Extract Pipeline — LLM extract → reranker verify → store")
+    print("Extract Pipeline — LLM extract → reranker verify → store")
     if dry_run:
         print("  [DRY RUN] No writes to DB")
     print(f"{'=' * 60}")
@@ -348,7 +367,7 @@ def extract_pipeline(
         sql = (
             "SELECT t.id, t.user_turn, t.thinking, t.text, "
             "  t.source_message_id, t.created_at, "
-            "  t.conversation_id, t.seq "
+            "  t.conversation_id, t.seq, t.detected_lang "
             f"FROM turns t WHERE t.id = '{esc_sql(turn_id)}'::uuid"
         )
         rows = psql_json(sql)
@@ -356,14 +375,19 @@ def extract_pipeline(
             print(f"[extract] Turn not found: {turn_id}")
             return {"processed": 0, "failed": 1, "facts": 0, "ok": False}
         r = rows[0]
-        turns = [{
-            "id": r["id"], "user_turn": r["user_turn"],
-            "thinking": r.get("thinking") or None, "text": r["text"],
-            "source_message_id": r.get("source_message_id", ""),
-            "created_at": r["created_at"],
-            "conversation_id": r["conversation_id"],
-            "seq": r.get("seq", 0) or 0,
-        }]
+        turns = [
+            {
+                "id": r["id"],
+                "user_turn": r["user_turn"],
+                "thinking": r.get("thinking") or None,
+                "text": r["text"],
+                "detected_lang": r.get("detected_lang"),
+                "source_message_id": r.get("source_message_id", ""),
+                "created_at": r["created_at"],
+                "conversation_id": r["conversation_id"],
+                "seq": r.get("seq", 0) or 0,
+            }
+        ]
     else:
         turns = _get_unprocessed_turns(limit)
 
@@ -381,8 +405,7 @@ def extract_pipeline(
     _noise: list = []
 
     # ── Phase 1: Solo section-major extraction (KV cache batch) ─────
-    print(f"[extract] Processing {len(turns)} turn(s) via solo section-major...",
-          flush=True)
+    print(f"[extract] Processing {len(turns)} turn(s) via solo section-major...", flush=True)
     turn_results: Dict[str, Tuple] = {}
     llm_t0 = time.monotonic()
 
@@ -395,7 +418,10 @@ def extract_pipeline(
                     turn_results[t["id"]] = (None, None)
                     ckpt_skips += 1
         if ckpt_skips:
-            print(f"  [extract]   {ckpt_skips} turn(s) have complete checkpoint — skipping extraction", flush=True)
+            print(
+                f"  [extract]   {ckpt_skips} turn(s) have complete checkpoint — skipping extraction",
+                flush=True,
+            )
 
     # Filter turns without checkpoint (those still need extraction)
     solo_turns = [t for t in turns if t["id"] not in turn_results]
@@ -421,8 +447,10 @@ def extract_pipeline(
         user_turn = turn["user_turn"] or ""
         thinking = turn["thinking"] or ""
         text = turn["text"] or ""
-        print(f"\n[{idx}/{len(turns)}] Turn {turn_id_val[:8]}... "
-              f"user={len(user_turn)}ch think={len(thinking)}ch text={len(text)}ch")
+        print(
+            f"\n[{idx}/{len(turns)}] Turn {turn_id_val[:8]}... "
+            f"user={len(user_turn)}ch think={len(thinking)}ch text={len(text)}ch"
+        )
 
         try:
             ex_result, error = turn_results.get(turn_id_val, (None, "missing batch result"))
@@ -433,18 +461,26 @@ def extract_pipeline(
                     ex_result = {"extractions": ckpt, "usage": {}, "timings": {}}
                     error = None
                 elif error == "missing batch result":
-                    print(f"  [extract]   Skip — turn not processed (no checkpoint)", flush=True)
+                    print("  [extract]   Skip — turn not processed (no checkpoint)", flush=True)
                     continue
             used_model = "day_extract"
             mark = ""
 
             if error == "noise skip":
-                print(f"  [extract]   Noise skip (gibberish/API error) — noise_marker inserted", flush=True)
+                print(
+                    "  [extract]   Noise skip (gibberish/API error) — noise_marker inserted",
+                    flush=True,
+                )
                 if not dry_run:
                     _insert_noise_marker(turn_id_val)
                 skipped_noise += 1
-                _noise.append({"turn_id": turn_id_val, "reason": "noise skip",
-                               "preview": (text or user_turn or "")[:100]})
+                _noise.append(
+                    {
+                        "turn_id": turn_id_val,
+                        "reason": "noise skip",
+                        "preview": (text or user_turn or "")[:100],
+                    }
+                )
                 continue
 
             if error:
@@ -452,20 +488,34 @@ def extract_pipeline(
                 mark = "추출 실패"
                 if not dry_run:
                     _insert_mark(turn_id_val, mark, used_model, is_final=True)
-                    psql_ok(f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
+                    psql_ok(
+                        f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
+                    )
                 failed += 1
-                _failures.append({"turn_id": turn_id_val, "reason": error,
-                                  "preview": (text or user_turn or "")[:100]})
+                _failures.append(
+                    {
+                        "turn_id": turn_id_val,
+                        "reason": error,
+                        "preview": (text or user_turn or "")[:100],
+                    }
+                )
                 continue
 
             if ex_result is None:
-                print(f"  [extract]   Parse failure")
+                print("  [extract]   Parse failure")
                 if not dry_run:
                     _insert_mark(turn_id_val, "추출 parse 실패", used_model, is_final=True)
-                    psql_ok(f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
+                    psql_ok(
+                        f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
+                    )
                 failed += 1
-                _failures.append({"turn_id": turn_id_val, "reason": "추출 parse 실패",
-                                  "preview": (text or user_turn or "")[:100]})
+                _failures.append(
+                    {
+                        "turn_id": turn_id_val,
+                        "reason": "추출 parse 실패",
+                        "preview": (text or user_turn or "")[:100],
+                    }
+                )
                 continue
 
             raw_ex = ex_result["extractions"]
@@ -473,16 +523,32 @@ def extract_pipeline(
             ex_timings = ex_result.get("timings", {})
             ex_elapsed = ex_result.get("elapsed_ms", 0)
             verified = _post_process_extractions(raw_ex, turn_id_val, user_turn, thinking, text)
-            nli_tasks.append((turn_id_val, verified, user_turn, thinking, text,
-                              ex_usage, ex_elapsed, used_model, mark))
+            nli_tasks.append(
+                (
+                    turn_id_val,
+                    verified,
+                    user_turn,
+                    thinking,
+                    text,
+                    ex_usage,
+                    ex_elapsed,
+                    used_model,
+                    mark,
+                )
+            )
 
         except Exception as e:
             print(f"  [extract]   ERROR: {type(e).__name__}: {e}", flush=True)
             if not dry_run:
                 _insert_mark(turn_id_val, f"ERROR: {e}"[:200], "day_extract", is_final=False)
             failed += 1
-            _failures.append({"turn_id": turn_id_val, "reason": f"ERROR: {e}",
-                              "preview": (text or user_turn or "")[:100]})
+            _failures.append(
+                {
+                    "turn_id": turn_id_val,
+                    "reason": f"ERROR: {e}",
+                    "preview": (text or user_turn or "")[:100],
+                }
+            )
 
     # ── Phase 2b: Parallel LLM NLI verify ──────────────────────
     def _nli_worker(task):
@@ -526,45 +592,90 @@ def extract_pipeline(
             for v in verified:
                 nli = v.get("nli_llm", "NEUTRAL")
                 if nli == "ENTAILMENT":
-                    v.update({"faithful": True, "faithful_score": 100,
-                              "faithful_method": "nli", "grounding": "GROUNDED"})
+                    v.update(
+                        {
+                            "faithful": True,
+                            "faithful_score": 100,
+                            "faithful_method": "nli",
+                            "grounding": "GROUNDED",
+                        }
+                    )
                     entail.append(v)
                 elif nli == "CONTRADICTION":
-                    v.update({"faithful": False, "faithful_score": 0,
-                              "faithful_method": "nli", "grounding": "UNGROUNDED"})
+                    v.update(
+                        {
+                            "faithful": False,
+                            "faithful_score": 0,
+                            "faithful_method": "nli",
+                            "grounding": "UNGROUNDED",
+                        }
+                    )
                 else:
                     neutral.append(v)
             rerankered = _verify_extractions(neutral, user_turn, thinking, text) if neutral else []
             extractions = entail + rerankered
 
-            if extractions is None:
-                print(f"  [extract]   No faithful extractions — marking failure")
+            if not extractions:
+                print("  [extract]   No faithful extractions — marking failure")
                 if not dry_run:
                     _insert_mark(turn_id_val, mark or "추출 2회실패", used_model, is_final=True)
-                    psql_ok(f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
+                    psql_ok(
+                        f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
+                    )
                 failed += 1
-                _failures.append({"turn_id": turn_id_val, "reason": mark or "추출 2회실패",
-                                  "preview": (text or user_turn or "")[:100]})
+                _failures.append(
+                    {
+                        "turn_id": turn_id_val,
+                        "reason": mark or "추출 2회실패",
+                        "preview": (text or user_turn or "")[:100],
+                    }
+                )
                 continue
 
             extractions_by_turn[turn_id_val] = extractions
-            store_tasks.append((turn_id_val, extractions, user_turn, thinking, text,
-                                ex_usage, ex_elapsed, used_model, mark))
+            store_tasks.append(
+                (
+                    turn_id_val,
+                    extractions,
+                    user_turn,
+                    thinking,
+                    text,
+                    ex_usage,
+                    ex_elapsed,
+                    used_model,
+                    mark,
+                )
+            )
 
         except Exception as e:
             print(f"  [extract]   ERROR: {type(e).__name__}: {e}", flush=True)
             if not dry_run:
                 _insert_mark(turn_id_val, f"ERROR: {e}"[:200], "day_extract", is_final=False)
             failed += 1
-            _failures.append({"turn_id": turn_id_val, "reason": f"ERROR: {e}",
-                              "preview": (text or user_turn or "")[:100]})
+            _failures.append(
+                {
+                    "turn_id": turn_id_val,
+                    "reason": f"ERROR: {e}",
+                    "preview": (text or user_turn or "")[:100],
+                }
+            )
 
     # ── Phase 2c-2: Parallel refine ─────────────────────────────
     if extractions_by_turn:
         _refine_batch(extractions_by_turn)
 
     # ── Phase 2c-3: Store (sequential, DB writes) ──────────────
-    for tid, extractions, user_turn, thinking, text, ex_usage, ex_elapsed, used_model, mark in store_tasks:
+    for (
+        tid,
+        extractions,
+        user_turn,
+        thinking,
+        text,
+        ex_usage,
+        ex_elapsed,
+        used_model,
+        mark,
+    ) in store_tasks:
         extractions = extractions_by_turn.get(tid, extractions)
 
         if dry_run:
@@ -582,17 +693,25 @@ def extract_pipeline(
             for ex in extractions:
                 ft = ex.get("fact_type", "text")
                 evidence = ex.get("evidence", "")
-                _insert_fact(tid, fi, ft, evidence, used_model,
-                             prompt_tokens=pt, gen_tokens=gt, elapsed_ms=em,
-                             faithful_score=ex.get("faithful_score"),
-                             faithful_method=ex.get("faithful_method"),
-                             grounding=ex.get("grounding"),
-                             nli_llm=ex.get("nli_llm"),
-                             corrected_evidence=ex.get("corrected_evidence"),
-                             subject=ex.get("subject"),
-                             predicate=ex.get("predicate"),
-                             object_=ex.get("object"),
-                             qualifiers=ex.get("qualifiers"))
+                _insert_fact(
+                    tid,
+                    fi,
+                    ft,
+                    evidence,
+                    used_model,
+                    prompt_tokens=pt,
+                    gen_tokens=gt,
+                    elapsed_ms=em,
+                    faithful_score=ex.get("faithful_score"),
+                    faithful_method=ex.get("faithful_method"),
+                    grounding=ex.get("grounding"),
+                    nli_llm=ex.get("nli_llm"),
+                    corrected_evidence=ex.get("corrected_evidence"),
+                    subject=ex.get("subject"),
+                    predicate=ex.get("predicate"),
+                    object_=ex.get("object"),
+                    qualifiers=ex.get("qualifiers"),
+                )
                 fi += 1
 
             if mark:
@@ -600,7 +719,9 @@ def extract_pipeline(
 
             print(f"  [extract]   Stored {fi} facts", flush=True)
             if not dry_run:
-                psql_ok(f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(tid)}'::uuid")
+                psql_ok(
+                    f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(tid)}'::uuid"
+                )
                 _delete_checkpoint(tid)
             heartbeat("day_extract", f"turn {tid[:8]} stored {fi} facts")
             total_facts += fi
@@ -615,8 +736,13 @@ def extract_pipeline(
             if not dry_run:
                 _insert_mark(tid, f"ERROR: {e}"[:200], "day_extract", is_final=False)
             failed += 1
-            _failures.append({"turn_id": tid, "reason": f"ERROR: {e}",
-                              "preview": (text or user_turn or "")[:100]})
+            _failures.append(
+                {
+                    "turn_id": tid,
+                    "reason": f"ERROR: {e}",
+                    "preview": (text or user_turn or "")[:100],
+                }
+            )
 
     elapsed = round(time.monotonic() - t_start, 1)
 
@@ -631,8 +757,10 @@ def extract_pipeline(
 
     print(f"\n{'=' * 60}", flush=True)
     noise_part = f", {skipped_noise} noise skip" if skipped_noise else ""
-    print(f"Done: {processed} processed, {failed} failed{noise_part}, "
-          f"{total_facts} facts ({elapsed}s)")
+    print(
+        f"Done: {processed} processed, {failed} failed{noise_part}, "
+        f"{total_facts} facts ({elapsed}s)"
+    )
     if dry_run:
         print("  [DRY RUN] No data was written")
     print(f"{'=' * 60}")
@@ -645,15 +773,40 @@ def extract_pipeline(
             "  WHERE rf.turn_id = cp.turn_id AND rf.source = 'extract_pipeline')"
         )
 
-    return {"processed": processed, "failed": failed, "skipped_noise": skipped_noise,
-            "facts": total_facts, "elapsed_s": elapsed, "ok": processed > 0}
+    return {
+        "processed": processed,
+        "failed": failed,
+        "skipped_noise": skipped_noise,
+        "facts": total_facts,
+        "elapsed_s": elapsed,
+        "ok": processed > 0,
+    }
 
 
 # ── File description phase ────────────────────────────────────────────
 
-_TEXT_EXTENSIONS = {".txt", ".md", ".py", ".json", ".yaml", ".yml", ".csv",
-                    ".log", ".html", ".css", ".js", ".sh", ".toml", ".xml",
-                    ".cfg", ".ini", ".conf", ".env", ".rst", ".tex"}
+_TEXT_EXTENSIONS = {
+    ".txt",
+    ".md",
+    ".py",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".csv",
+    ".log",
+    ".html",
+    ".css",
+    ".js",
+    ".sh",
+    ".toml",
+    ".xml",
+    ".cfg",
+    ".ini",
+    ".conf",
+    ".env",
+    ".rst",
+    ".tex",
+}
 
 
 def _sample_content(path: str, max_bytes: int = 2048) -> str:
@@ -661,7 +814,7 @@ def _sample_content(path: str, max_bytes: int = 2048) -> str:
     if ext not in _TEXT_EXTENSIONS:
         return ""
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             return f.read(max_bytes)
     except Exception:
         return ""
@@ -702,23 +855,28 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
             parts.append(content)
 
         meta = call_llm(
-            [{"role": "system", "content": SYSTEM_DESCRIBE_FILE},
-             {"role": "user", "content": "\n".join(parts)}],
+            [
+                {"role": "system", "content": SYSTEM_DESCRIBE_FILE},
+                {"role": "user", "content": "\n".join(parts)},
+            ],
             model="day_extract",
-            max_tokens=256, temperature=0.1, timeout=60,
-            json_mode=True, return_meta=True,
+            max_tokens=256,
+            temperature=0.1,
+            timeout=60,
+            json_mode=True,
+            return_meta=True,
         )
         raw = meta["content"]
         parsed = _parse_json(raw, "describe_file")
         if not parsed:
-            print(f"    Parse failure, skipping")
+            print("    Parse failure, skipping")
             failed += 1
             continue
 
         desc = parsed.get("description", "")
         tags = parsed.get("tags", [])
         if not desc:
-            print(f"    Empty description from LLM")
+            print("    Empty description from LLM")
             failed += 1
             continue
 
@@ -738,20 +896,29 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
 
 def main() -> None:
     signal.signal(signal.SIGTERM, _sigterm_handler)
-    _ensure_model_pod('day-extractor', skip_if_healthy=True)
+    _ensure_model_pod("day-extractor", skip_if_healthy=True)
     preflight_checks("extract.py")
     import argparse
+
     parser = argparse.ArgumentParser(
-        description=f"Extract Pipeline — day_extract → Python verify → store")
+        description="Extract Pipeline — day_extract → Python verify → store"
+    )
     parser.add_argument("--turn-id", help="Process a specific turn UUID")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--pulse-context", help="Inject Watchdog Pulse context")
-    parser.add_argument("--describe-files", action="store_true",
-                        help="Scan file_registry for undescribed files and generate descriptions")
-    parser.add_argument("--parallel", type=int, default=None,
-                        help="Override parallel workers (default: PARALLEL constant)")
+    parser.add_argument(
+        "--describe-files",
+        action="store_true",
+        help="Scan file_registry for undescribed files and generate descriptions",
+    )
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=None,
+        help="Override parallel workers (default: PARALLEL constant)",
+    )
     args = parser.parse_args()
 
     if args.parallel is not None:
@@ -771,21 +938,21 @@ def main() -> None:
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     from lib.llm_client import recall_tiny
+
     recall_tiny()
 
 
 # ── Backward-compatible re-exports ─────────────────────────────────────
 # Test files import these from extract.py; re-export from submodules
 from extract_llm import (  # noqa: E402, F401
-    _parse_json,
     SYSTEM_DAY_EXTRACT,
-    _extract_for_turn,
 )
 from extract_verify import (  # noqa: E402, F401
     _check_faithfulness,
     _cosine_faithfulness,
 )
-COSINE_FAITHFUL = 0.75   # noqa: E402 — used by test files
+
+COSINE_FAITHFUL = 0.75  # noqa: E402 — used by test files
 COSINE_UNFAITHFUL = 0.40  # noqa: E402
 
 

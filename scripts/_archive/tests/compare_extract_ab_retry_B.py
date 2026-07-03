@@ -16,7 +16,7 @@ ensure_model('day-extractor', skip_if_healthy=False)
 turn = {
     "id": "00000000-0000-0000-0000-000000000000",
     "user_turn": "이슈가 뭐야?",
-    "thinking": "The user is asking about the issue. Let me trace through the error. The error occurred in the enrichment phase. The NLI server at port 8085 returned a 404 error. This is because we removed the DeBERTa-v3 NLI server from Pod A but forgot to update the enrich pipeline. The enrich.py was still calling _call_nli_server(port=8085) which doesn't exist anymore. We fixed this by switching to LLM self-verify NLI instead. The fix was to use call_llm with day_enrich model and max_tokens=16, temperature=0.0, with a 60s timeout. This actually works better because it catches logical contradictions that the reranker would miss. The reranker only measures topical relevance, not logical entailment.",
+    "thinking": "The user is asking about the issue. Let me trace through the error. The error occurred in the enrichment phase. The NLI server at port 8085 returned a 404 error. This is because we removed the DeBERTa-v3 NLI server from inference but forgot to update the enrich pipeline. The enrich.py was still calling _call_nli_server(port=8085) which doesn't exist anymore. We fixed this by switching to LLM self-verify NLI instead. The fix was to use call_llm with day_enrich model and max_tokens=16, temperature=0.0, with a 60s timeout. This actually works better because it catches logical contradictions that the reranker would miss. The reranker only measures topical relevance, not logical entailment.",
     "text": "NLI 서버 8085 미배포 문제였습니다. enrich.py가 존재하지 않는 DeBERTa-v3 서버를 호출하고 있었고, LLM self-verify로 교체했습니다.",
 }
 
