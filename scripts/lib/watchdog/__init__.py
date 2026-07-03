@@ -525,6 +525,59 @@ def build_heartbeat_summary(day_results: dict) -> dict:
     }
 
 
+# ── Code Quality Scanner ───────────────────────────────────────────
+
+_code_scan_counter = 0
+CODE_SCAN_INTERVAL = 10  # cycles (~10 min @ 60s)
+
+
+def _code_quality_scan():
+    """Periodic silent-catch pattern scan with auto-fix via fixloop.
+
+    Runs every CODE_SCAN_INTERVAL cycles. When it finds new silent
+    `except Exception:` patterns, it feeds them to run_fix_loop() so
+    the LLM generates, sandbox-verifies, and applies a logging fix.
+    """
+    from . import codescanner
+    from .fixloop import run_fix_loop
+
+    findings = codescanner.run_scan()
+    if not findings:
+        return
+
+    for finding in findings:
+        error_log = (
+            f"Code quality issue in {finding['file']}:{finding['line']}\n"
+            f"Pattern: {finding['label']}\n"
+            f"Matched:\n{finding['matched']}\n\n"
+            f"Context:\n{finding['context']}"
+        )
+        context = (
+            f"This is a batch LLM pipeline file under "
+            f"/opt/projects/server/scripts/pipelines/{finding['file']}.\n"
+            f"Fix by converting 'except Exception:' to "
+            f"'except Exception as e:' and adding a "
+            f"print(f'  [{component}] {{e}}', flush=True) line with "
+            f"the appropriate component label based on context."
+        )
+        # Day mode → use :8082 for fix LLM
+        result = run_fix_loop(error_log, context, llm_port=8082, max_attempts=2)
+        if result["fixed"]:
+            codescanner.mark_fixed(finding)
+            log(
+                f"  [code-scan] auto-fixed {finding['file']}:{finding['line']} "
+                f"({result['detail'][:60]})"
+            )
+        else:
+            ft = result.get("failure_type", "unknown")
+            fp = result.get("failure_phase", "")
+            codescanner.mark_failed(finding, f"[{fp}/{ft}] {result.get('detail', '')[:180]}")
+            log(
+                f"  [code-scan] FAILED {finding['file']}:{finding['line']} "
+                f"— {result['failure_phase']}/{result['failure_type']}: {result['detail'][:60]}"
+            )
+
+
 # ── Fix Loops ──────────────────────────────────────────────────────
 
 
@@ -560,7 +613,7 @@ def _fix_loop_common(pipe: str, llm_port: int):
 
 
 def day_fix_loop():
-    """Day mode: fix loop for day_cycle.sh failures (Pod A :8080)."""
+    """Day mode: fix loop for day_cycle.sh failures (inference :8080)."""
     if _test_active:
         log(f"  SKIP day fix loop — protection active ({_test_active})")
         return
@@ -569,7 +622,7 @@ def day_fix_loop():
 
 
 def night_fix_loop():
-    """Night mode: fix loop for night pipeline failures (Pod B :8081)."""
+    """Night mode: fix loop for night pipeline failures (inference :8081)."""
     if _test_active:
         log(f"  SKIP night fix loop — protection active ({_test_active})")
         return
@@ -586,7 +639,7 @@ def _check_slot_deadlocks(results: dict, dry_run: bool = False):
     llama-server --parallel N + --cache-reuse can cause all processing slots
     to livelock (tokens don't progress). We detect this by tracking
     slot state: if ALL processing slots on a port make no progress for
-    SLOT_STUCK_THRESHOLD consecutive cycles → restart Pod B.
+    SLOT_STUCK_THRESHOLD consecutive cycles → restart inference.
     """
     if dry_run:
         return
@@ -675,7 +728,7 @@ def _check_token_stagnation(results: dict, dry_run: bool = False):
     """Detect aggregate token stagnation across all LLM ports.
 
     If a port shows processing > 0 in /metrics but total_prompt+total_gen
-    doesn't advance for TOKEN_STAGNATION_THRESHOLD cycles → restart Pod B.
+    doesn't advance for TOKEN_STAGNATION_THRESHOLD cycles → restart inference.
     Complements slot-level deadlock detection (catches task_id cycling).
     """
     if dry_run:
@@ -854,6 +907,18 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
 
         # Action queue — consume pending actions (every cycle)
         _consume_actions(dry_run=dry_run)
+
+        # Code quality scan — every 10 cycles, auto-fix via LLM
+        global _code_scan_counter
+        _code_scan_counter += 1
+        if (
+            _code_scan_counter >= CODE_SCAN_INTERVAL
+            and not dry_run
+            and not experiment_active
+            and not _test_active
+        ):
+            _code_scan_counter = 0
+            _code_quality_scan()
 
         if one_shot:
             break
