@@ -955,7 +955,12 @@ def _stop_extract_b_8083() -> None:
 
 
 def _start_extract_b_8083() -> bool:
-    """Launch day-extract-b (:8083) inside inference container."""
+    """Launch day-extract-b (:8083) inside inference container.
+
+    Reads MODEL_METADATA for KV cache tuning (cache_type_k, cache_type_v,
+    cache_ram, flash_attn) to match entrypoint behavior and minimize
+    memory pressure on 4-core ARM.
+    """
     from lib.pod_manager import wait_health as _wh
 
     meta = MODEL_METADATA.get("day-extractor-b")
@@ -968,6 +973,10 @@ def _start_extract_b_8083() -> bool:
     threads = meta.get("threads", 4)
     parallel = meta.get("parallel", 1)
     cpus = meta.get("cpus", "")
+    flash_attn = meta.get("flash_attn", "")
+    cache_ram = meta.get("cache_ram", "")
+    cache_type_k = meta.get("cache_type_k", "")
+    cache_type_v = meta.get("cache_type_v", "")
 
     launch_cmd = ["/app/llama-server"]
     if cpus:
@@ -991,8 +1000,6 @@ def _start_extract_b_8083() -> bool:
             str(threads),
             "--temp",
             "0.1",
-            "--flash-attn",
-            "on",
             "--timeout",
             "28800",
             "--batch-size",
@@ -1006,6 +1013,24 @@ def _start_extract_b_8083() -> bool:
             "--metrics",
         ]
     )
+
+    # Match entrypoint cache tuning — critical on 4-core ARM with dual 4B models
+    if flash_attn == "1":
+        cmd.append("--flash-attn")
+        cmd.append("on")
+    if cache_ram:
+        cmd.append("--cache-ram")
+        cmd.append(str(cache_ram))
+        cmd.append("--kv-unified")
+        cmd.append("--cache-idle-slots")
+        cmd.append("--cache-reuse")
+        cmd.append("256")
+    if cache_type_k:
+        cmd.append("--cache-type-k")
+        cmd.append(str(cache_type_k))
+    if cache_type_v:
+        cmd.append("--cache-type-v")
+        cmd.append(str(cache_type_v))
 
     print(f"  [extract-b] launching {model_file} on :{port} via podman exec...")
     import subprocess as _sp
