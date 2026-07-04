@@ -47,9 +47,9 @@ from lib.watchdog.messenger import heartbeat
 
 TIMEOUT_ENRICH = 900  # default, overridden by _calc_timeout per-turn
 MAX_TOKENS_ENRICH = 512
-TEMP_ENRICH = 0.7
-TOP_P_ENRICH = 0.8
-TOP_K_ENRICH = 20
+TEMP_ENRICH = 0.1
+TOP_P_ENRICH = 0.9
+TOP_K_ENRICH = 0  # 0 = disabled (unnecessary for classification)
 REPEAT_PENALTY_ENRICH = 1.0
 SHORT_TURN_THRESHOLD = 50
 BATCH_LIMIT = 50
@@ -614,6 +614,7 @@ def _generate_enrich_fields(
         repeat_penalty=REPEAT_PENALTY_ENRICH,
         timeout=t,
         json_mode=True,
+        chat_template_kwargs={"enable_thinking": False},
         return_meta=True,
     )
     result = _parse_json(meta["content"], "enrich fields")

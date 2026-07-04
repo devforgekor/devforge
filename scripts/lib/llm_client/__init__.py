@@ -62,6 +62,7 @@ def call_llm(
     frequency_penalty: Optional[float] = None,
     timeout: Optional[int] = None,
     json_mode: bool = False,
+    chat_template_kwargs: Optional[Dict[str, Any]] = None,
     return_meta: bool = False,
 ) -> Any:
     cfg = MODEL_REGISTRY.get(model)
@@ -93,6 +94,8 @@ def call_llm(
         body["frequency_penalty"] = frequency_penalty
     if json_mode:
         body["response_format"] = {"type": "json_object"}
+    if chat_template_kwargs is not None:
+        body["chat_template_kwargs"] = chat_template_kwargs
 
     t_start = time.monotonic()
     url = f"http://127.0.0.1:{port}/v1/chat/completions"
