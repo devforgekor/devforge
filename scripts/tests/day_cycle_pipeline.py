@@ -27,27 +27,41 @@ def log(msg: str) -> None:
 
 
 def run_pipeline_file(py_file: str, limit: int, extra_args: list = None) -> dict:
-    """Run a pipeline .py file as subprocess, return timing + exit info."""
+    """Run a pipeline .py file as subprocess, stream output in real-time."""
     cmd = [sys.executable, "-u", py_file, "--limit", str(limit)]
     if extra_args:
         cmd.extend(extra_args)
     t0 = time.monotonic()
+    stdout_lines = []
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        for line in proc.stdout:
+            stdout_lines.append(line)
+            sys.stdout.write(line)
+            sys.stdout.flush()
+        proc.wait(timeout=3600)
         elapsed = time.monotonic() - t0
         return {
-            "exit": r.returncode,
+            "exit": proc.returncode,
             "elapsed_s": round(elapsed, 1),
-            "stdout_tail": r.stdout.strip().splitlines()[-5:] if r.stdout else [],
-            "stderr": r.stderr[:300] if r.stderr else "",
-            "ok": r.returncode == 0,
+            "stdout_tail": stdout_lines[-5:] if stdout_lines else [],
+            "stderr": "",
+            "ok": proc.returncode == 0,
         }
     except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
         elapsed = time.monotonic() - t0
         return {
             "exit": -1,
             "elapsed_s": round(elapsed, 1),
-            "stdout_tail": [],
+            "stdout_tail": stdout_lines[-5:] if stdout_lines else [],
             "stderr": "TIMEOUT",
             "ok": False,
         }
@@ -55,7 +69,7 @@ def run_pipeline_file(py_file: str, limit: int, extra_args: list = None) -> dict
         return {
             "exit": -2,
             "elapsed_s": 0,
-            "stdout_tail": [],
+            "stdout_tail": stdout_lines[-5:] if stdout_lines else [],
             "stderr": str(e),
             "ok": False,
         }
