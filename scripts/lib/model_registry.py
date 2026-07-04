@@ -198,6 +198,8 @@ MODEL_METADATA = {
         "ubatch_size": 256,
         "cpus": "2-3",
         "flash_attn": "1",
+        "cache_type_k": "q8_0",
+        "cache_type_v": "q8_0",
     },
     "day-verifier": {
         "file": "veritas-8B-fact-checker-non-thinking-1.0.Q4_K_M.gguf",
