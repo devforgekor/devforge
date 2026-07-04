@@ -64,6 +64,33 @@ TIMEOUT_MAX = 3600  # absolute ceiling
 
 SCHEMA_VERSION = 2  # increment on backward-incompatible enrich_meta changes
 
+# Technology gazetteer — known tech names for entity extraction filtering
+_GAZETTEER_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data",
+    "technology_gazetteer.yaml",
+)
+_TECHNOLOGY_GAZETTEER: frozenset[str] = frozenset()
+
+
+def _load_technology_gazetteer() -> frozenset[str]:
+    """Load technology gazetteer from YAML. Empty set on failure."""
+    global _TECHNOLOGY_GAZETTEER
+    if _TECHNOLOGY_GAZETTEER:
+        return _TECHNOLOGY_GAZETTEER
+    try:
+        import yaml as _yaml
+
+        with open(_GAZETTEER_PATH) as f:
+            data = _yaml.safe_load(f)
+        raw = data.get("technologies", []) if isinstance(data, dict) else []
+        _TECHNOLOGY_GAZETTEER = frozenset(t.lower().strip() for t in raw if t and t.strip())
+        print(f"  [gazetteer] loaded {len(_TECHNOLOGY_GAZETTEER)} technology names", flush=True)
+    except Exception as e:
+        print(f"  [gazetteer] load failed: {e} — using empty set", flush=True)
+        _TECHNOLOGY_GAZETTEER = frozenset()
+    return _TECHNOLOGY_GAZETTEER
+
 
 def _get_git_short_hash() -> str:
     """Return short git hash for provenance stamping. Falls back to 'unknown'."""
@@ -100,14 +127,16 @@ Step 6 — OUTPUT: Produce the JSON below. Every field must be justified by the 
 
 CRITICAL — Entity Extraction Rules:
 - files & functions: Require EXACT verbatim match in user_turn or text
-- technologies: Include if the conversation clearly discusses the technology, even if the name doesn't appear verbatim (the topic should be obvious from context)
+- technologies: Require EXACT verbatim match of a well-known technology name (Python, PostgreSQL, llama.cpp, Kubernetes, etc.). Internal functions, variable names, and project-internal codenames are NOT technologies. If unsure, put in functions or omit.
 - mentioned_users: Include only if a specific user/username is explicitly referenced
 - Never hallucinate: if the conversation just "seems related" but doesn't clearly involve the entity, use empty array []
 
-Examples for technologies (ACCEPT when conversation obviously discusses them):
-  - "taskset pinning 제거" → ["taskset"] is OK even if "taskset" wasn't typed as bare name
-  - "Postgres container" → ["PostgreSQL"] is OK
-  - Avoid vague topics like "programming", "development", "API"
+Examples for technologies (REJECT unless exact well-known technology verbatim match):
+  - "taskset pinning 제거" → [] REJECT (taskset is a Linux command, not a technology)
+  - "Postgres container" → ["PostgreSQL"] OK (well-known DB, alias recognized)
+  - "llama-server --port 8082" → ["llama.cpp"] OK (well-known LLM runtime)
+  - "ensure_model retry" → [] REJECT (internal function name, not a technology)
+  - "와치독 개선" → [] REJECT (internal concept, not a technology)
 
 Examples for files (REJECT unless exact match):
   - "night.py 파일 수정" → ["night.py"] OK (exact match)
@@ -339,6 +368,22 @@ def _post_process_enrich(
             s_h, _ = get_cleaner().hanja_substitute(s)
             deduped.append(s_h or s)
         entities[key] = deduped[:10]
+    # Cross-category dedup: priority functions > technologies > files
+    # If a symbol is in functions, remove from technologies
+    functions_set = set(e.lower() for e in entities.get("functions", []))
+    entities["technologies"] = [
+        t for t in entities.get("technologies", []) if t.lower() not in functions_set
+    ]
+    # mentioned_users overrides all other categories
+    users_set = set(e.lower() for e in entities.get("mentioned_users", []))
+    for cat in ("files", "technologies", "functions"):
+        entities[cat] = [e for e in entities.get(cat, []) if e.lower() not in users_set]
+    # Gazetteer filter: only known technologies survive
+    gazetteer = _load_technology_gazetteer()
+    if gazetteer:
+        entities["technologies"] = [
+            t for t in entities.get("technologies", []) if t.lower() in gazetteer
+        ]
     enrich_data["entities"] = entities
 
     # tags

@@ -1,0 +1,194 @@
+# Technology Gazetteer — known technology names for entity extraction
+# Used by enrich.py post-processing to filter LLM-generated technology entities.
+# Only entries in this list survive the technology category filter.
+# Functions/files/users are NOT affected — this is technology-only.
+#
+# Maintenance: add new entries as needed. Tech names change slowly (~few/year).
+# Format: lowercase, one per line, no wildcards.
+technologies:
+  # Languages
+  - python
+  - javascript
+  - typescript
+  - go
+  - rust
+  - java
+  - kotlin
+  - sql
+  - bash
+  - ruby
+  - php
+  - c
+  - cpp
+  - c++
+  - c#
+  - scala
+  - perl
+  - r
+  - lua
+
+  # Databases / Storage
+  - postgresql
+  - postgres
+  - mysql
+  - mariadb
+  - mongodb
+  - redis
+  - sqlite
+  - elasticsearch
+  - minio
+  - s3
+
+  # Container / Runtime
+  - docker
+  - podman
+  - kubernetes
+  - containerd
+  - caddy
+  - nginx
+  - apache
+
+  # LLM / AI
+  - llama.cpp
+  - vllm
+  - ollama
+  - openai
+  - anthropic
+  - deepseek
+  - qwen
+  - gemini
+  - mistral
+  - llama
+  - claude
+  - chatgpt
+  - gpt-4
+  - gpt-3.5
+  - openrouter
+  - pytorch
+  - tensorflow
+  - transformer
+  - sentence-transformers
+  - spacy
+  - gliner
+
+  # Web / API
+  - fastapi
+  - flask
+  - django
+  - express
+  - next.js
+  - react
+  - vue
+  - node.js
+  - deno
+  - graphql
+  - grpc
+  - websocket
+  - sse
+  - rest
+
+  # Search
+  - elasticsearch
+  - meilisearch
+  - tavily
+  - brave
+  - serpapi
+  - exa
+  - algolia
+
+  # Monitoring / Observability
+  - grafana
+  - netdata
+  - prometheus
+  - opentelemetry
+  - jaeger
+  - datadog
+  - sentry
+
+  # VCS / CI
+  - git
+  - github
+  - gitlab
+  - bitbucket
+  - jenkins
+  - github actions
+  - circleci
+
+  # OS / Platform
+  - linux
+  - ubuntu
+  - oracle linux
+  - debian
+  - alpine
+  - macos
+  - windows
+  - arm
+  - amd64
+  - x86_64
+  - aarch64
+  - systemd
+
+  # Cloud
+  - aws
+  - gcp
+  - azure
+  - oracle cloud
+  - oci
+  - cloudflare
+  - vercel
+
+  # Protocols / Formats
+  - http
+  - https
+  - tcp
+  - udp
+  - dns
+  - tls
+  - ssl
+  - json
+  - yaml
+  - toml
+  - xml
+  - csv
+  - markdown
+
+  # Package Managers
+  - pip
+  - npm
+  - pnpm
+  - yarn
+  - apt
+  - dnf
+  - yum
+  - brew
+  - cargo
+  - go mod
+  - maven
+  - gradle
+
+  # Python Ecosystems
+  - pydantic
+  - sqlalchemy
+  - alembic
+  - pytest
+  - celery
+  - httpx
+  - requests
+  - aiohttp
+  - uvicorn
+  - gunicorn
+  - psycopg2
+  - asyncpg
+  - jinja2
+  - click
+  - typer
+  - rich
+
+  # Data / Streaming
+  - kafka
+  - rabbitmq
+  - nats
+  - zeromq
+  - spark
+  - airflow
+  - dbt
