@@ -5,7 +5,7 @@
 
 Runs via systemd timer at KST 06:00 (21:00 UTC).
 Reads all raw events (summary_status='raw'), groups by run_id, sends to
-Pod B (MODEL_REGISTRY proposer) for summarization, inserts 'summary' rows,
+inference (MODEL_REGISTRY proposer) for summarization, inserts 'summary' rows,
 marks source rows as 'summarized'.
 
 Single file, no new dependencies. ~250 lines.

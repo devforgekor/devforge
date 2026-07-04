@@ -45,7 +45,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql, psql_ok, esc_sql, psql_json
+from lib.db import esc_sql, psql, psql_json, psql_ok
 from lib.infra.preflight import preflight_checks
 from lib.watchdog.messenger import heartbeat
 
@@ -59,40 +59,28 @@ _EXTENSIONS = (
     r"|Dockerfile|dockerfile|Makefile|makefile)"
 )
 
-_FILE_PATTERN = re.compile(
-    r'(?:^|[\s(])([\w./-]+' + _EXTENSIONS + r')(?=[\s,;:!?)\]})\n]|$)'
-)
+_FILE_PATTERN = re.compile(r"(?:^|[\s(])([\w./-]+" + _EXTENSIONS + r")(?=[\s,;:!?)\]})\n]|$)")
 
-_DEF_PATTERN = re.compile(
-    r'\b(?:def|async\s+def|fn|func|function)\s+(\w+)\s*\('
-)
+_DEF_PATTERN = re.compile(r"\b(?:def|async\s+def|fn|func|function)\s+(\w+)\s*\(")
 
-_CLASS_PATTERN = re.compile(
-    r'\bclass\s+(\w+)(?:\s*[\(:])'
-)
+_CLASS_PATTERN = re.compile(r"\bclass\s+(\w+)(?:\s*[\(:])")
 
-_IMPORT_FROM_PATTERN = re.compile(
-    r'(?:^|[\s;])from\s+(\S+)\s+import\s+\S+'
-)
-_IMPORT_DIRECT_PATTERN = re.compile(
-    r'^import\s+(\S+)', re.MULTILINE
-)
+_IMPORT_FROM_PATTERN = re.compile(r"(?:^|[\s;])from\s+(\S+)\s+import\s+\S+")
+_IMPORT_DIRECT_PATTERN = re.compile(r"^import\s+(\S+)", re.MULTILINE)
 
 _MODEL_PATTERN = re.compile(
-    r'(?:^|\s|[(\"])(qwen[\w.-]*|deepseek[\w.-]*|llama[\w.-]*|'
-    r'nemotron[\w.-]*|gemma[\w.-]*|mistral[\w.-]*|phi[\w.-]*|'
-    r'codestral[\w.-]*|starcoder[\w.-]*|gpt[\d.-]*|claude[\w.-]*|'
-    r'bert[\w.-]*|minilm[\w.-]*|bge-[\w.-]*|e5-[\w.-]*|'
-    r'jina-embed[\w.-]*|nomic-embed[\w.-]*)(?<!\.)(?=[\s,;:.!?)\]}\n]|$)',
-    re.IGNORECASE
+    r"(?:^|\s|[(\"])(qwen[\w.-]*|deepseek[\w.-]*|llama[\w.-]*|"
+    r"nemotron[\w.-]*|gemma[\w.-]*|mistral[\w.-]*|phi[\w.-]*|"
+    r"codestral[\w.-]*|starcoder[\w.-]*|gpt[\d.-]*|claude[\w.-]*|"
+    r"bert[\w.-]*|minilm[\w.-]*|bge-[\w.-]*|e5-[\w.-]*|"
+    r"jina-embed[\w.-]*|nomic-embed[\w.-]*)(?<!\.)(?=[\s,;:.!?)\]}\n]|$)",
+    re.IGNORECASE,
 )
 
-_VAR_PATTERN = re.compile(
-    r'(?:^|[\s(])([A-Z][A-Z_0-9]{2,})\s*[:=]'
-)
+_VAR_PATTERN = re.compile(r"(?:^|[\s(])([A-Z][A-Z_0-9]{2,})\s*[:=]")
 
 _SERVICE_PATTERN = re.compile(
-    r'(?:^|[\s(\"])([\w-]+\.(?:service|timer|socket|path|target))(?=[\s,;:!?)\]})\n]|$)'
+    r"(?:^|[\s(\"])([\w-]+\.(?:service|timer|socket|path|target))(?=[\s,;:!?)\]})\n]|$)"
 )
 
 
@@ -191,10 +179,13 @@ def _scan_services(text: str) -> List[str]:
 def _lookup_file_registry(text: str) -> List[str]:
     """Check text for known filenames in file_registry."""
     try:
-        rows = psql_json(
-            "SELECT DISTINCT filename FROM file_registry "
-            "WHERE filename IS NOT NULL AND filename != ''"
-        ) or []
+        rows = (
+            psql_json(
+                "SELECT DISTINCT filename FROM file_registry "
+                "WHERE filename IS NOT NULL AND filename != ''"
+            )
+            or []
+        )
     except Exception:
         return []
     found: List[str] = []
@@ -205,13 +196,16 @@ def _lookup_file_registry(text: str) -> List[str]:
     return found
 
 
-def _get_conversation_entities(
-    conversation_id: str, current_turn_id: str
-) -> Dict[str, List[str]]:
+def _get_conversation_entities(conversation_id: str, current_turn_id: str) -> Dict[str, List[str]]:
     """Get entities (all types) from same conversation's previous enrich_meta."""
     result: Dict[str, List[str]] = {
-        "files": [], "functions": [], "classes": [],
-        "libraries": [], "models": [], "variables": [], "services": [],
+        "files": [],
+        "functions": [],
+        "classes": [],
+        "libraries": [],
+        "models": [],
+        "variables": [],
+        "services": [],
     }
     if not conversation_id:
         return result
@@ -250,11 +244,13 @@ def _get_conversation_entities(
 
 def _scan_turn(turn: dict) -> Dict[str, Any]:
     """Run all deterministic entity scans on a single turn."""
-    combined = "\n".join([
-        turn.get("user_turn") or "",
-        turn.get("thinking") or "",
-        turn.get("text") or "",
-    ])
+    combined = "\n".join(
+        [
+            turn.get("user_turn") or "",
+            turn.get("thinking") or "",
+            turn.get("text") or "",
+        ]
+    )
 
     regex_files = _scan_file_names(combined)
     regex_funcs = _scan_functions(combined)
@@ -303,24 +299,31 @@ def _scan_turn(turn: dict) -> Dict[str, Any]:
 def _get_turns_for_scan(limit: int = BATCH_LIMIT) -> List[Dict]:
     """Turns without entity_scan, ordered by creation time."""
     sql = (
-        "SELECT t.id, t.user_turn, t.thinking, t.text, t.conversation_id "
+        "SELECT t.id, "
+        "COALESCE(t.user_turn_clean, t.user_turn) AS user_turn, "
+        "COALESCE(t.thinking_clean, t.thinking) AS thinking, "
+        "COALESCE(t.text_clean, t.text) AS text, "
+        "t.conversation_id "
         "FROM turns t WHERE t.text != '' "
         "AND NOT EXISTS ("
         "  SELECT 1 FROM review_facts rf "
         "  WHERE rf.turn_id = t.id AND rf.fact_type = 'entity_scan'"
         ")"
-        "AND t.pipeline_state = 'embedded' "
+        "AND t.pipeline_state = 'cleaned' "
         "ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
         f"LIMIT {limit}"
     )
     rows = psql_json(sql) or []
-    return [{
-        "id": r["id"],
-        "user_turn": r.get("user_turn", ""),
-        "thinking": r.get("thinking", ""),
-        "text": r.get("text", ""),
-        "conversation_id": r.get("conversation_id", ""),
-    } for r in rows]
+    return [
+        {
+            "id": r["id"],
+            "user_turn": r.get("user_turn", ""),
+            "thinking": r.get("thinking", ""),
+            "text": r.get("text", ""),
+            "conversation_id": r.get("conversation_id", ""),
+        }
+        for r in rows
+    ]
 
 
 def _insert_scan(turn_id: str, scan_data: Dict) -> bool:
@@ -347,15 +350,20 @@ def _insert_scan(turn_id: str, scan_data: Dict) -> bool:
     return psql_ok(sql)
 
 
-def entity_scan_pipeline(
-    limit: int = BATCH_LIMIT, dry_run: bool = False
-) -> Dict[str, Any]:
+def entity_scan_pipeline(limit: int = BATCH_LIMIT, dry_run: bool = False) -> Dict[str, Any]:
     """Run deterministic entity scan on turns without it."""
     t_start = time.monotonic()
     processed = 0
     failed = 0
-    totals = {"files": 0, "functions": 0, "classes": 0,
-              "libraries": 0, "models": 0, "variables": 0, "services": 0}
+    totals = {
+        "files": 0,
+        "functions": 0,
+        "classes": 0,
+        "libraries": 0,
+        "models": 0,
+        "variables": 0,
+        "services": 0,
+    }
 
     print(f"\n{'=' * 60}")
     print("Entity Scan — Phase 0: deterministic extraction (no LLM)")
@@ -384,12 +392,12 @@ def entity_scan_pipeline(
         print(
             f"  [{ti}/{len(turns)}] {turn['id'][:8]} — "
             f"{', '.join(parts)} "
-            f"(rx_f={meta.get('regex_files',0)} "
-            f"cl={meta.get('regex_classes',0)} "
-            f"lib={meta.get('regex_libs',0)} "
-            f"mdl={meta.get('regex_models',0)} "
-            f"var={meta.get('regex_vars',0)} "
-            f"svc={meta.get('regex_services',0)})",
+            f"(rx_f={meta.get('regex_files', 0)} "
+            f"cl={meta.get('regex_classes', 0)} "
+            f"lib={meta.get('regex_libs', 0)} "
+            f"mdl={meta.get('regex_models', 0)} "
+            f"var={meta.get('regex_vars', 0)} "
+            f"svc={meta.get('regex_services', 0)})",
             flush=True,
         )
         if dry_run:
@@ -411,10 +419,7 @@ def entity_scan_pipeline(
     elapsed = round(time.monotonic() - t_start, 1)
     parts_summary = ", ".join(f"{totals[t]} {t}" for t in totals if totals[t])
     print(f"\n{'=' * 60}")
-    print(
-        f"Done: {processed} scanned, {failed} failed — "
-        f"{parts_summary} ({elapsed}s)"
-    )
+    print(f"Done: {processed} scanned, {failed} failed — {parts_summary} ({elapsed}s)")
     print(f"{'=' * 60}")
 
     return {

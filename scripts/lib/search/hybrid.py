@@ -14,7 +14,7 @@ Requires:
   - lib/search/local_index.FTS5Index (rebuild first)
   - turns.embedding populated via embeddings table with embed model vectors
   - pgvector HNSW index on embedding
-  - (optional) Pod A reranker on :8080 for Stage 2
+  - (optional) inference reranker on :8080 for Stage 2
 
 Usage:
   python3 -c "from lib.search.hybrid import hybrid_search; print(hybrid_search('질문'))"
@@ -43,7 +43,7 @@ RRF_K = 60
 # Dense ANN search limit per call
 DENSE_SEARCH_LIMIT = 100
 
-# Reranker (Pod A, same network namespace as MCP container)
+# Reranker (inference, same network namespace as MCP container)
 RERANKER_URL = "http://127.0.0.1:8080/v1/rerank"
 RERANKER_TIMEOUT = 120
 
@@ -118,7 +118,7 @@ def _rrf_score(rank: int) -> float:
 
 
 def _rerank_results(query: str, candidates: List[Tuple], top_k: int) -> Tuple[List[Tuple], Optional[str]]:
-    """Cross-encoder reranking via Pod A reranker on :8080.
+    """Cross-encoder reranking via inference reranker on :8080.
 
     Args:
         query: Original search query.

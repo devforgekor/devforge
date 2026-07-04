@@ -5,6 +5,7 @@
 
 Pure functions with no class dependency. Imported by both LocalDebate and CooperativeDebate.
 """
+
 import json
 import os
 import re
@@ -14,24 +15,28 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from lib.llm_client import MODEL_REGISTRY
+
 from .debate_data import MODELS, PROMPTS, SWITCH_FILE
 
 # Map debate_data model_id → MODEL_REGISTRY key (for unified config access)
 _DEBATE_TO_REGISTRY: Dict[str, str] = {
     "qwen3-30b-a3b-local": "proposer",
-    "qwen2.5-coder-7b":    "extractor",
+    "qwen2.5-coder-7b": "extractor",
 }
 
 
 # ── JSON parsing ────────────────────────────────────────────────────────────
 
+
 def _parse_json(raw: str) -> Optional[dict]:
     """Thin wrapper — delegates to shared Recovery Ladder in lib.llm.json_parser."""
     from lib.llm.json_parser import parse_llm_json
+
     return parse_llm_json(raw)
 
 
 # ── Message building ────────────────────────────────────────────────────────
+
 
 def _build_messages(prompt_key: str, model_id: str, **kwargs) -> List[Dict[str, str]]:
     """Build chat messages respecting system_prompt_support flag."""
@@ -48,6 +53,7 @@ def _build_messages(prompt_key: str, model_id: str, **kwargs) -> List[Dict[str, 
 
 
 # ── Supervisor switch file ──────────────────────────────────────────────────
+
 
 def _write_switch_file(model_id: str) -> None:
     """Write model-switch.json for supervisor on :8081 to detect."""
@@ -68,6 +74,7 @@ def _write_switch_file(model_id: str) -> None:
 
 # ── Page cache eviction ─────────────────────────────────────────────────────
 
+
 def _evict_file_cache(filepath: str) -> bool:
     """Evict a file's pages from kernel page cache via posix_fadvise(DONTNEED).
 
@@ -79,7 +86,7 @@ def _evict_file_cache(filepath: str) -> bool:
         try:
             st_size = os.fstat(fd).st_size
             os.posix_fadvise(fd, 0, st_size, os.POSIX_FADV_DONTNEED)
-            print(f"  [evict] {os.path.basename(filepath)}: {st_size // (1024*1024)}MB evicted")
+            print(f"  [evict] {os.path.basename(filepath)}: {st_size // (1024 * 1024)}MB evicted")
             return True
         finally:
             os.close(fd)
@@ -92,6 +99,7 @@ def _evict_file_cache(filepath: str) -> bool:
 
 
 # ── Health polling ──────────────────────────────────────────────────────────
+
 
 def _poll_health(port: int, timeout: int = 240, backoff_base: float = 2.0) -> bool:
     """Poll :<port>/health with exponential backoff."""
@@ -112,13 +120,14 @@ def _poll_health(port: int, timeout: int = 240, backoff_base: float = 2.0) -> bo
         except Exception:
             pass
         attempt += 1
-        delay = min(backoff_base * (2 ** attempt), 8.0)
+        delay = min(backoff_base * (2**attempt), 8.0)
         time.sleep(delay)
     print(f"  [health] :{port} TIMEOUT after {timeout}s")
     return False
 
 
 # ── Error classification ────────────────────────────────────────────────────
+
 
 def _is_retryable(err_msg: str) -> bool:
     """Check if error is a transient connection issue worth retrying."""
@@ -127,6 +136,7 @@ def _is_retryable(err_msg: str) -> bool:
 
 
 # ── File I/O ────────────────────────────────────────────────────────────────
+
 
 def _read_file_content(file_path: str) -> Optional[str]:
     """Read target file for DRAG analysis. Returns None if file not found."""
@@ -150,8 +160,10 @@ def _extract_file_path(question: str) -> Optional[str]:
 
 # ── LLM calling ─────────────────────────────────────────────────────────────
 
-def call_llm(messages: List[Dict], model_id: str, dry_run: bool = False,
-             max_tokens: Optional[int] = None) -> Optional[str]:
+
+def call_llm(
+    messages: List[Dict], model_id: str, dry_run: bool = False, max_tokens: Optional[int] = None
+) -> Optional[str]:
     """Call llama-server and return raw text response.
 
     Timeout = max_tokens / bench_toks + 600s buffer.
@@ -165,6 +177,7 @@ def call_llm(messages: List[Dict], model_id: str, dry_run: bool = False,
     registry_key = _DEBATE_TO_REGISTRY.get(model_id)
     if registry_key:
         from lib.llm_client import _inject_feedback
+
         messages = _inject_feedback(messages, registry_key)
 
     mt = max_tokens if max_tokens is not None else cfg["max_tokens"]
@@ -181,20 +194,25 @@ def call_llm(messages: List[Dict], model_id: str, dry_run: bool = False,
         body["chat_template_kwargs"] = cfg["chat_template_kwargs"]
 
     if dry_run:
-        print(f"  [dry-run] LLM call :{port}: {len(body['messages'])} msgs, "
-              f"max_tokens={body['max_tokens']}")
+        print(
+            f"  [dry-run] LLM call :{port}: {len(body['messages'])} msgs, "
+            f"max_tokens={body['max_tokens']}"
+        )
         return '{"dry_run": true}'
 
     for attempt in range(2):
         gen_rate = cfg.get("bench_toks", 2.0)
         timeout = int(body["max_tokens"] / gen_rate) + 600
-        print(f"  [llm] calling {model_id} on :{port} (max_tokens={body['max_tokens']}, timeout={timeout}s"
-              f"{', retry' if attempt > 0 else ''})...")
+        print(
+            f"  [llm] calling {model_id} on :{port} (max_tokens={body['max_tokens']}, timeout={timeout}s"
+            f"{', retry' if attempt > 0 else ''})..."
+        )
         t_start = time.monotonic()
         try:
             data = json.dumps(body).encode()
             req = urllib.request.Request(
-                llm_url, data=data,
+                llm_url,
+                data=data,
                 headers={"Content-Type": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -205,7 +223,9 @@ def call_llm(messages: List[Dict], model_id: str, dry_run: bool = False,
                     reasoning = result["choices"][0]["message"].get("reasoning_content", "")
                     if reasoning:
                         content = reasoning
-                        print(f"  [llm] response in {elapsed:.1f}s ({len(content)} chars, from reasoning_content)")
+                        print(
+                            f"  [llm] response in {elapsed:.1f}s ({len(content)} chars, from reasoning_content)"
+                        )
                     else:
                         print(f"  [llm] response in {elapsed:.1f}s (0 chars, empty)")
                         if attempt == 0 and body["max_tokens"] > 256:
@@ -232,8 +252,9 @@ def call_llm(messages: List[Dict], model_id: str, dry_run: bool = False,
     return None
 
 
-def call_llm_json(prompt_key: str, model_id: str, dry_run: bool = False,
-                  retry: int = 1, **kwargs) -> Optional[dict]:
+def call_llm_json(
+    prompt_key: str, model_id: str, dry_run: bool = False, retry: int = 1, **kwargs
+) -> Optional[dict]:
     """Call LLM and parse JSON response. Retry once with strict prompt on failure."""
     messages = _build_messages(prompt_key, model_id, **kwargs)
     raw = call_llm(messages, model_id, dry_run=dry_run)
@@ -246,8 +267,10 @@ def call_llm_json(prompt_key: str, model_id: str, dry_run: bool = False,
 
     if retry > 0:
         print("  [json] parse failed, retrying with strict prompt...")
-        strict_msg = ("Your previous response was not valid JSON. "
-                      "Output STRICT JSON ONLY. No extra text, no markdown.")
+        strict_msg = (
+            "Your previous response was not valid JSON. "
+            "Output STRICT JSON ONLY. No extra text, no markdown."
+        )
         messages.append({"role": "assistant", "content": raw})
         messages.append({"role": "user", "content": strict_msg})
         raw2 = call_llm(messages, model_id, dry_run=dry_run)
@@ -263,6 +286,7 @@ def call_llm_json(prompt_key: str, model_id: str, dry_run: bool = False,
 
 # ── Trend formatting ────────────────────────────────────────────────────────
 
+
 def format_trend(consensus_scores: list) -> str:
     """Format consensus scores as a visual trend bar string."""
     if not consensus_scores:
@@ -271,14 +295,21 @@ def format_trend(consensus_scores: list) -> str:
     for i, s in enumerate(consensus_scores):
         filled = s // 10
         bar = "█" * filled + "░" * (10 - filled)
-        parts.append(f"R{i+1}: {bar} {s}%")
+        parts.append(f"R{i + 1}: {bar} {s}%")
     return " | ".join(parts)
 
 
 # ── Report writing ──────────────────────────────────────────────────────────
 
-def write_report(state_dir: Path, session_id: str, question: str, method: str,
-                 consensus_scores: list, final: dict) -> Path:
+
+def write_report(
+    state_dir: Path,
+    session_id: str,
+    question: str,
+    method: str,
+    consensus_scores: list,
+    final: dict,
+) -> Path:
     """Write final_report.md from debate results."""
     path = state_dir / "final_report.md"
     trend = format_trend(consensus_scores)
@@ -321,11 +352,12 @@ def write_report(state_dir: Path, session_id: str, question: str, method: str,
 
 # ── Local model switching ───────────────────────────────────────────────────
 
-def switch_local_model(model_id: str, dry_run: bool = False) -> bool:
-    """Switch model on local Pod B via supervisor (:8081/:8082/:8083).
 
-    Pod A is always-on — just verify health.
-    Pod B uses switch-file protocol — write model-switch.json, wait for supervisor.
+def switch_local_model(model_id: str, dry_run: bool = False) -> bool:
+    """Switch model on inference container via supervisor (:8081/:8082/:8083).
+
+    Port 8080 (reranker) is always-on — just verify health.
+    Other ports use switch-file protocol — write model-switch.json, wait for supervisor.
     """
     cfg = MODELS[model_id]
     port = cfg["port"]
@@ -337,7 +369,7 @@ def switch_local_model(model_id: str, dry_run: bool = False) -> bool:
     if port == 8080:
         return _poll_health(port=8080, timeout=cfg.get("bench_load_s", 30) + 30)
 
-    # Pod B (:8081) — supervisor-managed
+    # Inference container (:8081+) — supervisor-managed
     same_model = False
     try:
         if os.path.exists(SWITCH_FILE):
@@ -349,23 +381,29 @@ def switch_local_model(model_id: str, dry_run: bool = False) -> bool:
         pass
 
     if same_model:
-        return _poll_health(port=MODEL_REGISTRY['proposer']['port'], timeout=cfg.get("bench_load_s", 120) + 60)
+        return _poll_health(
+            port=MODEL_REGISTRY["proposer"]["port"], timeout=cfg.get("bench_load_s", 120) + 60
+        )
 
     _write_switch_file(model_id)
     time.sleep(5)
     for _ in range(12):
         try:
             req = urllib.request.Request(
-                f"http://127.0.0.1:{MODEL_REGISTRY['proposer']['port']}/health")
+                f"http://127.0.0.1:{MODEL_REGISTRY['proposer']['port']}/health"
+            )
             with urllib.request.urlopen(req, timeout=3):
                 pass
             time.sleep(5)
         except Exception:
             break
-    return _poll_health(port=MODEL_REGISTRY['proposer']['port'], timeout=cfg.get("bench_load_s", 120) + 60)
+    return _poll_health(
+        port=MODEL_REGISTRY["proposer"]["port"], timeout=cfg.get("bench_load_s", 120) + 60
+    )
 
 
 # ── Early exit check ────────────────────────────────────────────────────────
+
 
 def check_early_exit(consensus_scores: list) -> Optional[str]:
     """Check if debate should exit early based on consensus scores."""
@@ -379,4 +417,3 @@ def check_early_exit(consensus_scores: list) -> Optional[str]:
         if improvement < 5:
             return f"stagnation: improvement < 5% ({improvement}%)"
     return None
-

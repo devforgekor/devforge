@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-06-28T16:38:24.550445+00:00'
+  time: '2026-07-03T07:46:21.157979+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -47,15 +47,6 @@ decisions:
   detail: 'Slot deadlock auto-detection in watchdog: _check_slot_deadlocks() in __init__.py, SLOT_STUCK_THRESHOLD=3 in state.py,
     recover_slot_deadlock() in recovery.py. llama-server PR #22083 (--slot-prompt-similarity 0) workaround in pod-b-entrypoint.sh.
     watchdog restarts Pod B on ≥2 processing slots stuck for ≥3 cycles.'
-  status: open
-- id: nd05-02
-  detail: 'Pod A port publishing failure (pasta crash): root cause = pasta ASSERTION fail + flow_hash crash (GitHub #19405,
-    #26073). Resolution: slirp4netns. Trade-off: 1/7 throughput but Pod A only runs reranker/polish/tiny (latency-insensitive).
-    Applied via pod-a.pod Network=slirp4netns.'
-  status: open
-- id: nd05-03
-  detail: 'MCP --host 127.0.0.1 default caused rootlessport "Connection reset by peer": slirp4netns routes through tap0(10.0.2.x),
-    MCP must bind 0.0.0.0. Fixed mcp_entrypoint.sh --host 0.0.0.0.'
   status: open
 - id: nd05-04
   detail: 'Stale model references cleanup: 5 files had outdated 14B/f16/Q4 comments. day-verifier was mistakenly changed to
@@ -189,10 +180,10 @@ decisions:
   detail: 'Phase 1 — predicate extraction quality test: 3-phase plan (Deep Dive workflow). == Current State (2026-06-28) ==
     - 30B MoE (Qwen3-Coder-30B-A3B-Q4_K_M, 18G, 8081): no-GS chunk2 FAIL (0/5, 503), with-GS full turn DONE (4/5 GOOD, 243s,
     1533P+326C). Finish=stop. - 14B Q4 (Qwen3-14B-Q4_K_M, 8.4G, 8081): LOADED at 8081. Tests NOT RUN. - Pod B env: CTX_SIZE=4096,
-    CACHE_RAM=512, UBATCH=256, THREADS=4, FLASH_ATTN=1. MemoryMax=23G. - Pod A: DOWN. Needed for Phase 2 (4B parallel test).
-    - Predicate Golden Set: scripts/docs/predicate-golden-set.yaml (16 entries). - Test scripts: /tmp/test_30b_golden.py (30B
-    GS test, working), /tmp/test_14b_feedback.py (14B with retry, NOT RUN). /tmp/test_14b_golden.py (14B simple version, NOT
-    RUN). == Phase 1 (NEXT) == Run 14B Q4 x 2 tests on the SAME 760-char turn (in /tmp/): A) WITHOUT Golden Set (baseline)
+    CACHE_RAM=512, UBATCH=256, THREADS=4, FLASH_ATTN=1. MemoryMax=23G. - Pod A: UP (devforge-net bridge). Available for Phase
+    2 (4B parallel test). - Predicate Golden Set: scripts/docs/predicate-golden-set.yaml (16 entries). - Test scripts: /tmp/test_30b_golden.py
+    (30B GS test, working), /tmp/test_14b_feedback.py (14B with retry, NOT RUN). /tmp/test_14b_golden.py (14B simple version,
+    NOT RUN). == Phase 1 (NEXT) == Run 14B Q4 x 2 tests on the SAME 760-char turn (in /tmp/): A) WITHOUT Golden Set (baseline)
     B) WITH Golden Set Expected: 80%+ GOOD with GS, clear GS vs no-GS gap (no-GS: ~50%). == Phase 2 (after Pod A recovery)
     == 4B pre-filter x 2 models: - Qwen3.5-4B-Q8 (4B×4B, DeltaNet+Attention hybrid) - qwen3-4b-instruct-2507-q8 (4B×3B, dense
     4B + Qwen2.5-0.5B verifier combo) Limit: 3 facts max. Verify with 30B or 14B. == Phase 3 == Top 2 model combos x 12 DB
@@ -208,7 +199,55 @@ decisions:
     retry max 3 - JSON parse fail → log raw, return FAIL, retry - Health check before each attempt - Model D state: wait for
     slot recovery, retry - All retries exhausted → declare test FAIL, continue next test '
   status: open
+- id: nd10-02
+  detail: dev_pipeline.py — GitHub Issue → PR pipeline 모듈 생성. poll_issues(), claim_issue(), create_pr() 포함. gh CLI wrapper
+    기반, state JSON 파일로 중복 추적. cli.py dev 서브커맨드 (poll/claim/pr) 추가.
+  status: open
+- id: nd10-03
+  detail: 'Label tracking: claim_issue()에서 dev:in-progress label 추가, create_pr()에서 dev:pending-review로 전환. _label_issue()
+    helper — gh issue edit --add-label/--remove-label non-fatal wrapper.'
+  status: open
+- id: nd10-04
+  detail: 'Governance tier (auto-safe): poll_issues(auto_safe=True)로 auto-safe label이 있는 Issue만 필터. dev poll --auto-safe --claim
+    조합으로 timer와 연동.'
+  status: open
+- id: nd10-05
+  detail: 'systemd timer: devforge-dev-poll.service + timer. 10분 간격(*:0/10), cli.py dev poll --auto-safe --claim --once 실행.
+    활성화 완료.'
+  status: open
+- id: nd10-06
+  detail: 'Web 검증 결과: autonomous-dev-team(GitHub) ✅ 실제 README+코드 검증 완료. Baton ✅ 우리와 가장 유사한 아키텍처. sentinel-mcp ❌ GitHub Issue
+    자동화와 무관 (검증 실패).'
+  status: open
+- id: archive-dead-extract-logic-20260703
+  detail: Removed STRICT/XPLORE prompts, _extract_single, _extract_for_turn, _extract_dual_section_major, _observe_extract_usage,
+    _is_low_value, _load_entity_context, _backward_compat. SYSTEM_DAY_EXTRACT re-pointed to _SYSTEM_TEXT_EXTRACT_FREE. 2522→1632
+    lines. E2E all 5 PASS.
+  status: done
+- id: archive-dead-tests-20260703
+  detail: compare_extract_ab*.py (4 files importing _extract_for_turn) → _archive/tests/
+  status: done
+- id: fix-def-gen-timeout-20260701
+  detail: '_get_predicate_definition timeout increased. Root cause: Qwen3-4B-Q8 ~12-14s on 2 cores, not port contention.'
+  status: done
+- id: watchdog-codescanner-20260701
+  detail: 'DB-backed silent except Exception: pass auto-detection + auto-fix. Relifix regression detection. Experimental.'
+  status: open
+- id: edcr-pipeline-20260701
+  detail: '3-phase: OIE (8082+8083) → Canonicalize (8081 embed+judge) → Refinement (8083 re-extract). E2E all 5 checks PASS
+    ~390s.'
+  status: done
+- id: nd11-01
+  detail: 'context7_mcp.py query_docs fix: 3 bugs fixed. (1) type=json param missing → API returns markdown text → resp.json()
+    fails with ''Expecting value'' → all 4 keys appear exhausted → ''All Context7 API keys exhausted or API unavailable''.
+    (2) data["data"] assumed wrong response field — actual JSON has codeSnippets+infoSnippets. (3) _call_api unconditional
+    resp.json() → content-type detection added (JSON→resp.json(), text→resp.text wrapped as {data: text}). Also cleaned 2
+    orphaned context7 processes.'
+  status: closed
 known_issues:
+- text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
+    GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
+  resolved: false
 - text: '30B MoE (Qwen3-Coder-30B-A3B-Q4_K_M, 18G) slot deadlock after first request: cause is MemoryMax 22G too tight. Fixed
     at 23G + ctx 4096 + cache-ram 512. 14B Q4 is more stable alternative.'
   resolved: false
@@ -228,6 +267,10 @@ known_issues:
 - text: 'extraction: equals predicate still appears 1/turn even with Golden Set (30B MoE, PARALLEL=1). May need stronger GBNF
     constraints or prompt refinement.'
   resolved: false
+- id: sys-day-extract-re-export
+  detail: Backward compat for nli_compare.py, extract_compare.py. Now FREE. These tests work but test different prompts than
+    before.
+  resolved: false
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
   resolved: false
@@ -245,11 +288,7 @@ known_issues:
   detail: CONTRADICTION=0 미해결. 신규 GSAR COMPLEMENTARY 4-way NLI 첫 결과 확인 후 재평가 필요.
   resolved: false
 - id: nki02-01
-  detail: 'OCI root 확장 미완료. /etc/fstab 정리 완료, 백업 완료(/opt/ai_data/expansion_bak/var_log, /opt/ai_data/expansion_bak/var_tmp).
-    Pod A+B 현재 의도적으로 DOWN 상태. 다음 절차 필요: reboot → single-user or rescue → lvremove ocivolume/lv_tmp_new ocivolume/lv_logs ocivolume/lv_tmp
-    → lvextend ocivolume/root -l +100%FREE → xfs_growfs / → mkdir /var/log /var/tmp → sync → reboot → restore rsync backup
-    /opt/ai_data/expansion_bak/ → systemctl --user start devforge-pod-a devforge-pod-b devforge-watchdog devforge-slack-interactive
-    → sudo systemctl start caddy netdata.'
+  detail: OCI root 확장 미완료. /etc/fstab 정리 완료, 백업 완료. Pod A는 정상 기동 중 (devforge-net 브릿지), Pod B 복구 필요.
   resolved: false
 - text: OpenCode not yet fully tested in TUI mode (only headless opencode run verified). MCP server connection via opencode
     mcp add not tested with devforge-mcp container. OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
@@ -258,12 +297,26 @@ known_issues:
 - text: Phase 1 test scripts in /tmp/ (test_30b_golden.py, test_14b_golden.py, test_14b_feedback.py) — not committed. One-shot
     test scripts, not production code.
   resolved: false
-- text: Pod A still DOWN (slirp4netns workaround). Required for Phase 2 parallel 4B tests. Needs recovery before Phase 2.
+- text: 'Phase 1 test scripts: scripts/lib/test_runner.py (TestRunner framework) + scripts/tests/test_phase1_14b.py (14B Q4
+    GS comparison). /tmp/ scripts (test_14b_golden.py, test_14b_feedback.py, test_30b_golden.py) are legacy — not committed.'
   resolved: false
 - text: PostgreSQL shared_buffers 512MB — applied via restart. Ok.
   resolved: false
 - text: 'Slot deadlock watchdog is reactive not preventive: --slot-prompt-similarity 0 reduces but doesn''t eliminate risk.
     If deadlock persists after Pod B restart, need different cache-reuse strategy (--cache-reuse 0 as last resort).'
+  resolved: false
+- id: strict-xplore-removed
+  detail: 3 experimental test files (*_7b_vs_9b*) import FREE variants as aliases. Body still uses old names. Verify prompt
+    equivalence.
+  resolved: false
+- text: 'day-verifier-b (qwen2.5-coder-7b Q4_K_M, :8083): 등록만 되어 있고 day_verify.py에서 실제 호출 없음
+    (single model port 8082만 사용). Legacy dead config. 제거해도 무방하지만 유지해도 무해.
+    문제 생기면 llm_client/__init__.py, model_registry.py에서 제거.'
+  resolved: false
+- text: 'Veritas single-batch predicate 간섭 리스크: MiniCheck 원 설계는 (document, single_claim) → binary.
+    _binary_nli_batch에서 모든 predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음.
+    max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도 문제 발견 시 각 predicate
+    개별 호출로 분리 (latency N배 증가).'
   resolved: false
 completed_log:
 - OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
@@ -311,3 +364,7 @@ completed_log:
 - 'Pod B: 14B Q4 model loaded at 8081 (2min load, 8.4G). Ready for Phase 1 tests (no-GS + with-GS).'
 - 'Extraction test plan structured: 3-phase plan (Phase 1=model comparison, Phase 2=4B pre-filter, Phase 3=final). Yggdrasil
   session dp-20260628-extraction-test-series.'
+- 'Phase 1 test completed: Devin-like TestRunner framework (scripts/lib/test_runner.py) + test_phase1_14b.py. 14B Q4 with/without
+  GS comparison. A) no-GS: GOOD, 5 facts, 216s, 499P+281C. B) with-GS: MIXED, 5 facts (1 dup), 257s, 1489P+316C. Verdict:
+  INCONCLUSIVE — GS adds 3x token cost without clear quality gain on this turn. Self-healing retry verified. LSP blast_radius
+  confirmed zero production impact. Pod B mode restored (review-p, :8081). Day-cycle restarted.'

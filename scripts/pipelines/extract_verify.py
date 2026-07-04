@@ -7,13 +7,10 @@ Contains NLI self-verify, reranker faithfulness, post-processing cleanup,
 batch refinement, and fallback extraction logic.
 """
 
-import json
 import os
 import re
 import sys
-import time
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -21,11 +18,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import esc_sql, psql_json
-from lib.llm_client import call_llm, reranker_score, reranker_nli_verdict
-from lib.watchdog.messenger import heartbeat
 from lib.common import context_limit
-
+from lib.db import esc_sql, psql_json
+from lib.llm_client import call_llm, reranker_nli_verdict, reranker_score
+from lib.text_cleaner import get_cleaner
 
 # ── NLI Self-Verify Prompt ──────────────────────────────────────
 
@@ -64,16 +60,43 @@ Task: Refine the evidence to be complete and self-contained by incorporating rel
 # ── Post-processing constants ───────────────────────────────────
 
 _OPERATIONAL_PATTERNS = re.compile(
-    r'^(?:네[,.!]?\s*)?(?:알겠습니다|이해했습니다|확인했습니다|시작합니다|시작하겠습니다'
-    r'|검토하겠습니다|진행하겠습니다|수정하겠습니다|업데이트하겠습니다'
-    r'|적용하겠습니다|확인해보겠습니다|찾아보겠습니다|만들겠습니다)'
-    r'|^(?:좋습니다|좋아요|맞습니다|그렇습니다|그럼|자[,.!]?)'
-    r'|^(?:감사합니다|고맙습니다|수고하셨습니다)'
-    r'|^분석 공유 감사|^끝났습니다|^완료했습니다|^완료'
-    r'|(?:Let me|I will|I.ll|I can|I need to|Lets)',
+    r"^(?:네[,.!]?\s*)?(?:알겠습니다|이해했습니다|확인했습니다|시작합니다|시작하겠습니다"
+    r"|검토하겠습니다|진행하겠습니다|수정하겠습니다|업데이트하겠습니다"
+    r"|적용하겠습니다|확인해보겠습니다|찾아보겠습니다|만들겠습니다)"
+    r"|^(?:좋습니다|좋아요|맞습니다|그렇습니다|그럼|자[,.!]?)"
+    r"|^(?:감사합니다|고맙습니다|수고하셨습니다)"
+    r"|^분석 공유 감사|^끝났습니다|^완료했습니다|^완료"
+    r"|(?:Let me|I will|I.ll|I can|I need to|Lets)",
     re.IGNORECASE,
 )
 _VALID_CATS = {"requirement", "decision", "explanation", "code", "reasoning", "other"}
+
+_METADATA_SUBJECT_PATTERNS = re.compile(r"^(claude pro(\s|$)|test \d+$|mcp\b)", re.IGNORECASE)
+
+_OPERATIONAL_EVIDENCE = re.compile(
+    r"(available_functions|tool_call|system_message|user_role|"
+    r"i am a|let me |i will |i.ll )",
+    re.IGNORECASE,
+)
+
+_GENERIC_PREDICATES = frozenset(
+    {
+        "is",
+        "has",
+        "have",
+        "use",
+        "uses",
+        "used",
+        "was",
+        "were",
+        "does",
+        "do",
+        "be",
+        "are",
+        "called",
+        "known",
+    }
+)
 
 
 # ── Post-processing functions ───────────────────────────────────
@@ -82,14 +105,14 @@ _VALID_CATS = {"requirement", "decision", "explanation", "code", "reasoning", "o
 def _clean_markdown(text: str) -> str:
     if not text:
         return text
-    text = re.sub(r'```[\s\S]*?```', '', text)
-    text = re.sub(r'``.*?``', '', text)
-    text = re.sub(r'`([^`]+)`', r'\1', text)
-    text = re.sub(r'\*{2,}([^*]+)\*{2,}', r'\1', text)
-    text = re.sub(r'_{2,}([^_]+)_{2,}', r'\1', text)
-    text = re.sub(r'~{2,}([^~]+)~{2,}', r'\1', text)
-    text = text.replace('`', '')
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"```[\s\S]*?```", "", text)
+    text = re.sub(r"``.*?``", "", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"\*{2,}([^*]+)\*{2,}", r"\1", text)
+    text = re.sub(r"_{2,}([^_]+)_{2,}", r"\1", text)
+    text = re.sub(r"~{2,}([^~]+)~{2,}", r"\1", text)
+    text = text.replace("`", "")
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
@@ -97,7 +120,7 @@ def _infer_category(evidence: str, current_cat: str) -> str:
     cat = current_cat.lower()
     if cat in _VALID_CATS:
         return cat
-    if re.search(r'(?:\.py|\.sh|\.yaml|\.md|\.env|\.json|\bdef\s+\w+\b)', evidence):
+    if re.search(r"(?:\.py|\.sh|\.yaml|\.md|\.env|\.json|\bdef\s+\w+\b)", evidence):
         return "code"
     if "=" in evidence and re.search(r"\w+\s*=\s*[\w\d/\"']", evidence):
         return "code"
@@ -132,7 +155,7 @@ def _post_process_extractions(
             for row in rows:
                 ev = row.get("evidence", "")
                 if ev:
-                    key = re.sub(r'[^a-zA-Z0-9가-힣]', '', ev[:50]).lower()
+                    key = re.sub(r"[^a-zA-Z0-9가-힣]", "", ev[:50]).lower()
                     if len(key) > 5:
                         recent_evidence.add(key)
     except Exception:
@@ -148,15 +171,22 @@ def _post_process_extractions(
         if len(evidence.strip()) < 12 and "=" not in evidence and ":" not in evidence:
             continue
 
+        # Metadata subject filter
+        subj = str(ex.get("subject", ""))
+        if _METADATA_SUBJECT_PATTERNS.match(subj) and len(evidence) < 20:
+            continue
+
         evidence = _clean_markdown(evidence)
         if not evidence:
             continue
+        evidence_h, _ = get_cleaner().hanja_substitute(evidence)
+        evidence = evidence_h or evidence
 
         if evidence in seen_exact:
             continue
         seen_exact.add(evidence)
 
-        norm_key = re.sub(r'[^a-zA-Z0-9가-힣]', '', evidence[:50]).lower()
+        norm_key = re.sub(r"[^a-zA-Z0-9가-힣]", "", evidence[:50]).lower()
         if len(norm_key) > 5:
             if norm_key in recent_evidence or norm_key in seen_normalized:
                 continue
@@ -167,26 +197,97 @@ def _post_process_extractions(
 
         pred = ex.get("predicate", "")
         if pred:
-            ex["predicate"] = _sanitize_predicate(pred)
+            ex["predicate"] = _sanitize_predicate(pred, evidence, subj)
+
+        if not ex.get("predicate"):
+            continue
 
         cleaned.append(ex)
 
     return cleaned
 
 
-def _sanitize_predicate(pred: str) -> str:
-    """Validate and normalize predicate to clean snake_case. Return empty if too vague."""
+def _sanitize_predicate(pred: str, evidence: str = "", subject: str = "") -> str:
+    """Validate/normalize predicate. Attempt evidence-based rewrite for generic predicates."""
     if not pred or not isinstance(pred, str):
         return ""
     p = pred.strip().lower()
-    p = re.sub(r'[\s\-]+', '_', p)
-    p = re.sub(r'[^a-z0-9_]', '', p)
-    p = p.strip('_')
-    if len(p) < 3 or p in ('is', 'has', 'was', 'are', 'does', 'do', 'be'):
-        return ""
-    if not re.match(r'^[a-z][a-z0-9]*(_[a-z0-9]+)*$', p):
-        return ""
-    return p[:60]
+    if p not in _GENERIC_PREDICATES:
+        # Normal path: sanitize to snake_case
+        p_out = re.sub(r"[\s\-]+", "_", p)
+        p_out = re.sub(r"[^a-z0-9_]", "", p_out).strip("_")
+        if len(p_out) < 3:
+            return ""
+        if not re.match(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$", p_out):
+            return ""
+        return p_out[:60]
+
+    # Generic predicate: try evidence-based rewrite
+    if evidence:
+        rewritten = _evidence_rewrite(pred, evidence, subject)
+        if rewritten:
+            p_out = re.sub(r"[\s\-]+", "_", rewritten.lower())
+            p_out = re.sub(r"[^a-z0-9_]", "", p_out).strip("_")
+            if p_out and len(p_out) >= 3:
+                return p_out[:60]
+
+    # Fallback: aggressively generic → drop
+    return ""
+
+
+def _evidence_rewrite(pred: str, evidence: str, subject: str) -> str:
+    """Find a concrete action verb near the subject in evidence to replace generic pred."""
+    ev_lower = evidence.lower().strip()
+    subj_lower = subject.lower().strip()
+    subj_parts = subj_lower.split()
+    words = ev_lower.split()
+
+    stop = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "to",
+            "in",
+            "on",
+            "at",
+            "for",
+            "of",
+            "and",
+            "or",
+            "with",
+            "by",
+            "from",
+            "as",
+            "is",
+            "was",
+            "be",
+        }
+    )
+    verb_suffixes = ("s", "ed", "en", "ing", "다")
+
+    # Pattern: find subject in evidence, grab next verb-like word
+    if subj_parts:
+        for i in range(len(words) - len(subj_parts)):
+            if any(
+                words[i + k].strip(".,;:!?()[]{}'\"") != part for k, part in enumerate(subj_parts)
+            ):
+                continue
+            for w in words[i + len(subj_parts) : i + len(subj_parts) + 8]:
+                wc = w.strip(".,;:!?()[]{}'\"")
+                if len(wc) > 2 and wc not in stop:
+                    if wc.endswith(verb_suffixes):
+                        return wc
+            break
+
+    # Fallback: first verb-like word in evidence
+    for w in words[:15]:
+        wc = w.strip(".,;:!?()[]{}'\"")
+        if len(wc) > 2 and wc not in stop:
+            if wc.endswith(verb_suffixes):
+                return wc
+
+    return ""
 
 
 # ── Incomplete Fact Refinement ──────────────────────────────────
@@ -199,8 +300,9 @@ def _refine_batch(
     for tid, extractions in extractions_by_turn.items():
         for i, ex in enumerate(extractions):
             if len(ex.get("source_context", "") or "") > 10:
-                candidates.append((tid, i, ex["source_context"][:500],
-                                   ex.get("evidence", "")[:300]))
+                candidates.append(
+                    (tid, i, ex["source_context"][:500], ex.get("evidence", "")[:300])
+                )
 
     if not candidates:
         return
@@ -209,10 +311,18 @@ def _refine_batch(
         tid, idx, src, ev = cand
         try:
             reply = call_llm(
-                [{"role": "user", "content": _REFINE_FACT_PROMPT.format(evidence=ev, source_context=src)}],
-                model="day_extract", max_tokens=256, temperature=0.0, timeout=60,
+                [
+                    {
+                        "role": "user",
+                        "content": _REFINE_FACT_PROMPT.format(evidence=ev, source_context=src),
+                    }
+                ],
+                model="day_extract",
+                max_tokens=256,
+                temperature=0.0,
+                timeout=60,
             )
-            refined = reply.strip().strip('"\'')
+            refined = reply.strip().strip("\"'")
             if len(refined) > 10 and refined != ev:
                 return (tid, idx, refined)
         except Exception:
@@ -225,7 +335,10 @@ def _refine_batch(
     for tid, idx, corrected in results:
         if tid in extractions_by_turn and idx < len(extractions_by_turn[tid]):
             extractions_by_turn[tid][idx]["corrected_evidence"] = corrected
-            print(f"      [refine] turn {tid[:8]} fact {idx}: refined ({len(corrected)}ch)", flush=True)
+            print(
+                f"      [refine] turn {tid[:8]} fact {idx}: refined ({len(corrected)}ch)",
+                flush=True,
+            )
 
 
 # ── Reranker faithfulness ───────────────────────────────────────
@@ -249,7 +362,9 @@ def _check_faithfulness(evidence: str, source: str) -> bool:
 
 def _verify_extractions(
     extractions: List[Dict[str, Any]],
-    user_turn: str, thinking: str, text: str,
+    user_turn: str,
+    thinking: str,
+    text: str,
 ) -> List[Dict[str, Any]]:
     source_map = {"user": user_turn, "thinking": thinking, "text": text}
 
@@ -261,31 +376,53 @@ def _verify_extractions(
         score = round(cos * 100, 1)
         grounding = reranker_nli_verdict(cos)
         if grounding == "GROUNDED":
-            verdict = {"faithful": True, "score": score, "method": "reranker",
-                       "grounding": grounding}
+            verdict = {
+                "faithful": True,
+                "score": score,
+                "method": "reranker",
+                "grounding": grounding,
+            }
         elif grounding == "UNGROUNDED":
-            verdict = {"faithful": False, "score": score, "method": "reranker",
-                       "grounding": grounding}
+            verdict = {
+                "faithful": False,
+                "score": score,
+                "method": "reranker",
+                "grounding": grounding,
+            }
         elif grounding == "RERANKER_ERROR":
-            verdict = {"faithful": False, "score": score, "method": "reranker_err",
-                       "grounding": "RERANKER_ERROR"}
+            verdict = {
+                "faithful": False,
+                "score": score,
+                "method": "reranker_err",
+                "grounding": "RERANKER_ERROR",
+            }
         else:
             if _check_faithfulness(evidence, source):
-                verdict = {"faithful": True, "score": score, "method": "reranker_substr",
-                           "grounding": "GROUNDED"}
+                verdict = {
+                    "faithful": True,
+                    "score": score,
+                    "method": "reranker_substr",
+                    "grounding": "GROUNDED",
+                }
             else:
-                verdict = {"faithful": True, "score": score, "method": "reranker_ambig",
-                           "grounding": "AMBIGUOUS"}
-        results.append({
-            "fact_type": ex.get("fact_type", ""),
-            "evidence": evidence,
-            "category": ex.get("category", "other"),
-            "faithful": verdict["faithful"],
-            "faithful_score": verdict["score"],
-            "faithful_method": verdict["method"],
-            "grounding": verdict["grounding"],
-            "nli_llm": ex.get("nli_llm", "NEUTRAL"),
-        })
+                verdict = {
+                    "faithful": True,
+                    "score": score,
+                    "method": "reranker_ambig",
+                    "grounding": "AMBIGUOUS",
+                }
+        results.append(
+            {
+                "fact_type": ex.get("fact_type", ""),
+                "evidence": evidence,
+                "category": ex.get("category", "other"),
+                "faithful": verdict["faithful"],
+                "faithful_score": verdict["score"],
+                "faithful_method": verdict["method"],
+                "grounding": verdict["grounding"],
+                "nli_llm": ex.get("nli_llm", "NEUTRAL"),
+            }
+        )
     return results
 
 
@@ -301,14 +438,14 @@ def _llm_nli_check(evidence: str, source: str) -> str:
     if not evidence or not source:
         return "NEUTRAL"
 
-    prompt = _NLI_VERIFY_PROMPT.format(
-        source=context_limit(source), evidence=evidence[:500]
-    )
+    prompt = _NLI_VERIFY_PROMPT.format(source=context_limit(source), evidence=evidence[:500])
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
             model="day_extract",
-            max_tokens=64, temperature=0.0, timeout=_calc_nli_timeout(source, evidence),
+            max_tokens=64,
+            temperature=0.0,
+            timeout=_calc_nli_timeout(source, evidence),
             return_meta=True,
         )
         raw = meta["content"].strip().upper()
@@ -323,7 +460,9 @@ def _llm_nli_check(evidence: str, source: str) -> str:
 
 def _llm_nli_verify(
     extractions: List[Dict[str, Any]],
-    user_turn: str, thinking: str, text: str,
+    user_turn: str,
+    thinking: str,
+    text: str,
 ) -> List[Dict[str, Any]]:
     source_map = {"user": user_turn, "thinking": thinking, "text": text}
 
@@ -344,15 +483,24 @@ def _llm_nli_verify(
 # ── Fallback extraction ─────────────────────────────────────────
 
 
-def _fallback_extract(user_turn: str, thinking: str, text: str,
-                      model: str = "day_extract",
-                      pulse_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    from extract_llm import SYSTEM_FALLBACK, _parse_json, _call_with_8082_retry
+def _fallback_extract(
+    user_turn: str,
+    thinking: str,
+    text: str,
+    model: str = "day_extract",
+    pulse_context: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    from extract_llm import SYSTEM_FALLBACK, _call_with_8082_retry, _parse_json
 
     parts = [
-        "=== user_turn ===", user_turn or "(empty)",
-        "", "=== thinking ===", thinking or "(empty)",
-        "", "=== text ===", text or "(empty)",
+        "=== user_turn ===",
+        user_turn or "(empty)",
+        "",
+        "=== thinking ===",
+        thinking or "(empty)",
+        "",
+        "=== text ===",
+        text or "(empty)",
     ]
     source_text = "\n".join(parts)
 
@@ -363,11 +511,13 @@ def _fallback_extract(user_turn: str, thinking: str, text: str,
     try:
         meta = _call_with_8082_retry(
             call_llm,
-            [{"role": "system", "content": system},
-             {"role": "user", "content": source_text}],
+            [{"role": "system", "content": system}, {"role": "user", "content": source_text}],
             model=model,
-            max_tokens=1024, temperature=0.1, timeout=300,
-            json_mode=True, return_meta=True,
+            max_tokens=1024,
+            temperature=0.1,
+            timeout=300,
+            json_mode=True,
+            return_meta=True,
         )
     except Exception:
         return None
@@ -383,13 +533,19 @@ def _fallback_extract(user_turn: str, thinking: str, text: str,
 
     rubric = parsed.get("rubric_evaluation", {})
     if rubric:
-        print(f"  [fallback] rubric: C={rubric.get('caution','?')} "
-              f"F={rubric.get('faithfulness','?')} U={rubric.get('usefulness','?')}",
-              flush=True)
+        print(
+            f"  [fallback] rubric: C={rubric.get('caution', '?')} "
+            f"F={rubric.get('faithfulness', '?')} U={rubric.get('usefulness', '?')}",
+            flush=True,
+        )
 
     for e in ex:
         if "fact_type" not in e:
             e["fact_type"] = "text"
 
-    return {"extractions": ex, "usage": meta["usage"],
-            "timings": meta["timings"], "elapsed_ms": meta["elapsed_ms"]}
+    return {
+        "extractions": ex,
+        "usage": meta["usage"],
+        "timings": meta["timings"],
+        "elapsed_ms": meta["elapsed_ms"],
+    }

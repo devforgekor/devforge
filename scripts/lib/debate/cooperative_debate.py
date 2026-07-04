@@ -31,7 +31,7 @@ class CooperativeDebate(LocalDebate):
         self.reuse_vms = reuse_vms
 
         # Cooperative model assignments
-        # Pod B (:8081): Qwen3-30B — DRAG + Synthesis
+        # inference (:8081): Qwen3-30B — DRAG + Synthesis
         self.drag_model = "qwen3-30b-a3b-local"
         self.synthesizer_model = "qwen3-30b-a3b-local"
         # Azure spot VMs (provisioned on demand, terminated on consensus)

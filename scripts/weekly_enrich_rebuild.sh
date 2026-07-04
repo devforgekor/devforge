@@ -5,7 +5,7 @@
 #   1. Quality check (CONTRADICTION rate week-over-week)
 #   2. Diversity-first pick from feedback_examples
 #   3. Update config/enrich_few_shot.yaml
-#   4. Cycle Pod B if running (next day_cycle picks up new prompts)
+#   4. Cycle inference if running (next day_cycle picks up new prompts)
 #
 # Schedule: weekly, Monday 03:00 KST (= Sunday 18:00 UTC)
 

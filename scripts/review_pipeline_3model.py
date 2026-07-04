@@ -5,10 +5,10 @@
 
 Adversarial 3-stage (P→R→J) pipeline with Scoring Judge:
 
-  Step 1  Proposal        Pod B :8083   Bug/security/edge-case discovery (reviewer 14B)
-  Step 2  Reflection      Pod B :8083   ACCEPT/REJECT per finding
-  Step 3  Judgment        Pod B :8083   Scoring Judge — P_score/R_score/gap/veto
-  Step 4  Diff Gen        Pod B :8083   Unified diff (gap≤10 → auto; gap>10 → skip)
+  Step 1  Proposal        Inference :8083   Bug/security/edge-case discovery (reviewer 14B)
+  Step 2  Reflection      Inference :8083   ACCEPT/REJECT per finding
+  Step 3  Judgment        Inference :8083   Scoring Judge — P_score/R_score/gap/veto
+  Step 4  Diff Gen        Inference :8083   Unified diff (gap≤10 → auto; gap>10 → skip)
 
 Judge gating:
   gap ≤ 5  → diff_generation (high confidence consensus)
@@ -17,10 +17,10 @@ Judge gating:
   P_score==0 | R_score==0 | decision=="REJECT" → veto → skip diff
 
 Model assignment (P→R→J pipeline):
-  Step 1 (Proposal)       Pod B :8083
-  Step 2 (Reflection)     Pod B :8083
-  Step 3 (Judgment)       Pod B :8083 (swap)
-  Step 4 (Diff Gen)       Pod B :8083
+  Step 1 (Proposal)       Inference :8083
+  Step 2 (Reflection)     Inference :8083
+  Step 3 (Judgment)       Inference :8083 (swap)
+  Step 4 (Diff Gen)       Inference :8083
 
 Usage:
   python3 review_pipeline_3model.py --task-id T01       # single task
@@ -32,17 +32,16 @@ Usage:
 import argparse
 import json
 import os
-import subprocess
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.llm_client import call_llm_json  # noqa: E402
 from pipelines.review import (  # noqa: E402
-    REVIEWER_PORT,
     JUDGE_PORT,
+    REVIEWER_PORT,
     _poll_health,
     run_diff,
     run_judgment,
@@ -76,8 +75,10 @@ def _run_proposal(code: str, label: str) -> Dict[str, Any]:
     if not _poll_health(REVIEWER_PORT, timeout=30):
         raise RuntimeError(f"reviewer not healthy on :{REVIEWER_PORT}")
     raw = call_llm_json(
-        [{"role": "system", "content": SYSTEM_PROPOSAL},
-         {"role": "user", "content": f"Review this code:\n```\n{code}\n```"}],
+        [
+            {"role": "system", "content": SYSTEM_PROPOSAL},
+            {"role": "user", "content": f"Review this code:\n```\n{code}\n```"},
+        ],
         model="reviewer",
         max_tokens=2048,
         timeout=600,
@@ -87,21 +88,21 @@ def _run_proposal(code: str, label: str) -> Dict[str, Any]:
     print(f"[step1] {len(findings)} findings generated")
     return result
 
-MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
+
+MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
 
 
-def _swap_pod_b(mode: str, timeout: int = 300) -> bool:
-    """Switch Pod B to the given mode by writing MODE_FILE and restarting."""
-    print(f"[orchestrate] Switching Pod B → {mode}")
-    tmp = MODE_FILE_B + ".tmp"
+def _swap_inference(mode: str, timeout: int = 300) -> bool:
+    """Switch inference container to the given mode by writing MODE_FILE and restarting."""
+    print(f"[orchestrate] Switching inference → {mode}")
+    tmp = MODE_FILE + ".tmp"
     with open(tmp, "w") as f:
         f.write(f"MODE={mode}")
-    os.replace(tmp, MODE_FILE_B)
-    subprocess.run(
-        ["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-        capture_output=True,
-        timeout=30,
-    )
+    os.replace(tmp, MODE_FILE)
+    from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+
+    _podman_stop_inference()
+    _podman_start_inference()
     check_port = JUDGE_PORT if mode == "review-j" else REVIEWER_PORT
     return _poll_health(check_port, timeout=timeout)
 
@@ -150,8 +151,10 @@ def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, 
     next_state = step3.get("machine_summary", {}).get("next_state", "diff_generation")
     runtime_metrics = step3.get("runtime_metrics", {})
 
-    print(f"[pipeline] judge verdict: P_score={p_score} R_score={r_score} "
-          f"gap={gap} next_state={next_state}" + (" VETO" if is_veto else ""))
+    print(
+        f"[pipeline] judge verdict: P_score={p_score} R_score={r_score} "
+        f"gap={gap} next_state={next_state}" + (" VETO" if is_veto else "")
+    )
 
     # Step 4: Diff Generation (only if auto-approved)
     diff_text = ""
@@ -200,7 +203,7 @@ def run_full_review(code: str, task_label: str = "", swap_fn=None) -> Dict[str, 
 
 
 def _run_orchestrated() -> Dict[str, Any]:
-    """Full 4-step pipeline with automatic Pod B mode switching between steps."""
+    """Full 4-step pipeline with automatic inference mode switching between steps."""
     # Load review tasks from activity_log (unprocessed code mod tasks)
     from lib.db import psql
 
@@ -248,9 +251,9 @@ def _run_orchestrated() -> Dict[str, Any]:
         step2 = run_reflection(code, findings)
         reflector_verdicts = step2.get("verdicts", [])
 
-        # Step 3: Judge (judge :8083) — Pod B swap to review-j mode
-        if not _swap_pod_b("review-j"):
-            raise RuntimeError("Failed to load Scoring Judge on Pod B")
+        # Step 3: Judge (judge :8083) — inference swap to review-j mode
+        if not _swap_inference("review-j"):
+            raise RuntimeError("Failed to load Scoring Judge on inference")
         step3 = run_judgment(code, findings, reviewer_accepted, reflector_verdicts)
 
         # ── gap-based gating ────────────────────────────────────────
@@ -266,18 +269,20 @@ def _run_orchestrated() -> Dict[str, Any]:
         approved_findings = [f for f in findings if f["id"] in approved_ids]
 
         if next_state == "diff_generation" and not is_veto and approved_findings:
-            if not _swap_pod_b("review-r"):
-                raise RuntimeError("Failed to restore reflector on Pod B")
+            if not _swap_inference("review-r"):
+                raise RuntimeError("Failed to restore reflector on inference")
             diff_text = run_diff(code, approved_findings)
         else:
             if is_veto:
                 print(f"[orchestrate] {task_id}: VETO — skipping diff generation")
             elif next_state == "manual_review":
-                print(f"[orchestrate] {task_id}: gap {gap} > threshold — manual review, skipping diff")
+                print(
+                    f"[orchestrate] {task_id}: gap {gap} > threshold — manual review, skipping diff"
+                )
             else:
                 print(f"[orchestrate] {task_id}: No approved findings — skipping diff")
-            # Restore Pod B to reflector for clean state (next iteration swaps again if needed)
-            _swap_pod_b("review-r")
+            # Restore inference to reflector for clean state (next iteration swaps again if needed)
+            _swap_inference("review-r")
 
         confidence = len(approved_ids) / len(findings) if findings else 1.0
         results.append(
@@ -317,7 +322,7 @@ def main() -> None:
     parser.add_argument(
         "--orchestrate",
         action="store_true",
-        help="Full pipeline with automatic Pod B mode switching",
+        help="Full pipeline with automatic inference mode switching",
     )
     args = parser.parse_args()
 
@@ -363,7 +368,7 @@ def main() -> None:
             parser.error("--code or --code-file required for full pipeline")
 
         # In full-pipeline mode, mode switching is handled by night_cycle.sh.
-        # The model-swap callback writes MODE= to the Pod B mode file and
+        # The model-swap callback writes MODE= to the inference mode file and
         # restarts the container.
         def _noop_swap(_step: str) -> None:
             pass

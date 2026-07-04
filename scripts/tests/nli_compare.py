@@ -51,7 +51,7 @@ Output STRICT JSON:
 Faithfulness: ENTAILMENT ONLY. NEUTRAL and CONTRADICTION are UNFAITHFUL."""
 
 def llm_extract_nli(evidence: str, source: str) -> dict:
-    """7B LLM NLI via Pod A :8082 (day_verify model). ~30-60s/call."""
+    """7B LLM NLI via inference :8082 (day_verify model). ~30-60s/call."""
     if not evidence or not source:
         return {"faithful": False, "verdict": "N/A", "reason": "empty input", "elapsed_s": 0}
     t0 = time.monotonic()
@@ -135,8 +135,8 @@ def print_header(s):
 # ── Main ────────────────────────────────────────────────────────
 TEST = test_setup("nli_compare", "MiniCheck vs 7B LLM NLI comparison test")
 print_header("MiniCheck vs 7B LLM NLI Comparison")
-print(f"  Extractor: Qwen2.5-Coder-7B-Instruct.Q8_0 (Pod B :8082)")
-print(f"  7B NLI:    Qwen2.5-Coder-7B-Instruct.Q8_0 (Pod A :8082, model=day_verify)")
+print(f"  Extractor: Qwen2.5-Coder-7B-Instruct.Q8_0 (inference :8082)")
+print(f"  7B NLI:    Qwen2.5-Coder-7B-Instruct.Q8_0 (inference :8082, model=day_verify)")
 print(f"  MiniCheck: flan-t5-large (770M, ~2s/call)")
 print(f"  Thresholds: cos>={COSINE_FAITHFUL}=faithful, cos<{COSINE_UNFAITHFUL}=unfaithful, between→NLI")
 print()

@@ -23,6 +23,7 @@ from lib.cli_experiment import (
 from lib.cli_worklog import cmd_worklog_add, cmd_worklog_recent, cmd_worklog_search
 from lib.db import esc_sql
 from lib.db import psql as _sql
+from lib.dev_pipeline import claim_issue, create_pr, poll_issues
 from lib.llm_client import MODEL_REGISTRY
 from lib.reflex_rules import (
     rule_create,
@@ -495,62 +496,30 @@ def cmd_search_hybrid(args):
         print()
 
 
-MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
-MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
+MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"
 SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
-MODE_MAP = {
-    "day": ("reranker", "day"),  # Pod A reranker(8080) + Pod B extractor(8082)
-    "verify": ("reranker", "verify"),  # Pod B verifier(8084), Pod A reranker
-}
 
 
 def _switch_mode(mode: str) -> bool:
-    """Write mode files and restart containers. mode: day|review|verify."""
-    if mode not in MODE_MAP:
+    """Write mode file and restart inference container. mode: day|review|verify."""
+    valid_modes = {"day", "review", "verify"}
+    if mode not in valid_modes:
         print(f"Unknown mode: {mode}")
         return False
 
-    mode_a, mode_b = MODE_MAP[mode]
+    # Write mode file
+    with open(MODE_FILE_INFERENCE, "w") as f:
+        f.write(f"MODE={mode}\n")
+    print(f"Switched inference to {mode}")
 
-    # Write mode files
-    for fpath, m in [(MODE_FILE_A, mode_a), (MODE_FILE_B, mode_b)]:
-        with open(fpath, "w") as f:
-            f.write(f"MODE={m}\n")
-    print(f"Switched to {mode} (Pod A: {mode_a}, Pod B: {mode_b})")
+    # Restart inference container
+    print("Restarting devforge-inference...")
+    from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
 
-    # Restart Pod B
-    print("Restarting container-devforge-pod-b (Pod B)...")
-    r = subprocess.run(
-        ["systemctl", "--user", "restart", "container-devforge-pod-b"],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    if r.returncode != 0:
-        print(f"Error restarting container-devforge-pod-b: {r.stderr}")
-        return False
+    _podman_stop_inference()
+    _podman_start_inference()
 
-    # Handle Pod A
-    if mode_a == "verify":
-        print("Stopping container-devforge-pod-a (Pod A, not needed in verify)...")
-        subprocess.run(
-            ["systemctl", "--user", "stop", "container-devforge-pod-a"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    else:
-        print("Restarting container-devforge-pod-a (Pod A)...")
-        r = subprocess.run(
-            ["systemctl", "--user", "restart", "container-devforge-pod-a"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if r.returncode != 0:
-            print(f"Warning: container-devforge-pod-a restart: {r.stderr}")
-
-    # Wait for Pod B model to load
+    # Wait for model to load
     print("Waiting for models to load...")
     for _ in range(120):
         try:
@@ -579,7 +548,7 @@ def cmd_discussion(args):
         content = open(SYSTEM_MODE_FILE).read().strip()
         if "MODE=night" in content:
             print("ERROR: nightly pipeline active (MODE=night) — discussion blocked")
-            print("  Pod A+B are managed by night_cycle.sh. Retry after KST 07:00.")
+            print("  Inference container is managed by night_cycle.sh. Retry after KST 07:00.")
             return
     except FileNotFoundError:
         pass
@@ -632,10 +601,10 @@ def cmd_discussion(args):
 
 
 def _container_in_review_mode() -> bool:
-    """Check if devforge-pod-b container is running in review mode (llama-server on :8081)."""
+    """Check if devforge-inference container is running in review mode (llama-server on :8081)."""
     try:
         r = subprocess.run(
-            ["podman", "exec", "devforge-pod-b", "pgrep", "-f", "llama-server.*8081"],
+            ["podman", "exec", "devforge-inference", "pgrep", "-f", "llama-server.*8081"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -818,6 +787,54 @@ def cmd_auto_clear(args):
     print("Auto tasks cleared")
 
 
+def cmd_dev_poll(args):
+    """Poll for unassigned issues not yet seen."""
+    issues = poll_issues(label=args.label, auto_safe=bool(args.auto_safe))
+    if not issues:
+        print("처리할 이슈가 없습니다.")
+        return
+    for i in issues:
+        num = i["number"]
+        ttl = i["title"]
+        print(f"  #{num} {ttl}")
+    if args.claim:
+        claimed = 0
+        for i in issues:
+            ok = claim_issue(i["number"])
+            if ok:
+                claimed += 1
+        print(f"\n{claimed}/{len(issues)} issues claimed.")
+    elif not args.once:
+        state_path = os.path.join(SCRIPTS_DIR, "data", "dev_pipeline_state.json")
+        if os.path.isfile(state_path):
+            with open(state_path) as f:
+                state = json.load(f)
+            seen = state.get("seen_issues", [])
+        else:
+            seen = []
+        new_count = len(issues)
+        total = len(seen) + new_count
+        print(f"\n{new_count} new / {total} total tracked issues")
+
+
+def cmd_dev_claim(args):
+    """Claim an issue: assign, branch, auto task."""
+    ok = claim_issue(args.number)
+    if ok:
+        print(f"Issue #{args.number} assigned, branch created, auto task written.")
+    else:
+        print(f"Issue #{args.number} claim failed — check gh auth & issue number.")
+
+
+def cmd_dev_pr(args):
+    """Create a PR from the issue branch."""
+    url = create_pr(args.number)
+    if url:
+        print(f"PR created: {url}")
+    else:
+        print("PR creation failed — push branch first, then retry.")
+
+
 def cmd_dashboard(args):
     """Show review_facts model performance dashboard."""
     sql_model = """
@@ -940,11 +957,11 @@ def _get_containers():
 
 
 def _get_models():
-    """Query llama.cpp /v1/models on both pods."""
+    """Query llama.cpp /v1/models on inference container."""
     import urllib.request
 
     models = {}
-    for label, port in [("pod-a", 8080), ("pod-b", 8082)]:
+    for label, port in [("inference", 8082)]:
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/models", method="GET")
             with urllib.request.urlopen(req, timeout=5) as resp:
@@ -1273,7 +1290,7 @@ def _get_alerts(containers, resources):
     """Derive alerts from thresholds."""
     alerts = []
     # container down
-    expected = ["postgres", "devforge-pod-a", "devforge-pod-b"]
+    expected = ["postgres", "devforge-inference"]
     for name in expected:
         if name not in containers:
             alerts.append(f"Container {name} is DOWN")
@@ -2054,6 +2071,22 @@ async def main():
 
     auto_clear = auto_sub.add_parser("clear", help="Clear all auto tasks")
 
+    p_dev = sub.add_parser("dev", help="Dev(Devin-like) — GitHub Issue → PR pipeline")
+    dev_sub = p_dev.add_subparsers(dest="dev_command")
+    dev_poll = dev_sub.add_parser("poll", help="Poll for unassigned issues")
+    dev_poll.add_argument("--label", help="Filter by label")
+    dev_poll.add_argument("--once", action="store_true", help="Don't read state file")
+    dev_poll.add_argument("--auto-safe", action="store_true", help="Only auto-safe labeled issues")
+    dev_poll.add_argument(
+        "--claim",
+        action="store_true",
+        help="Auto-claim all polled issues (use with --auto-safe)",
+    )
+    dev_claim = dev_sub.add_parser("claim", help="Claim an issue and create branch")
+    dev_claim.add_argument("number", type=int, help="Issue number")
+    dev_pr = dev_sub.add_parser("pr", help="Create PR from issue branch")
+    dev_pr.add_argument("number", type=int, help="Issue number")
+
     p_experiment = sub.add_parser("experiment", help="실험 레지스트리 관리")
     exp_sub = p_experiment.add_subparsers(dest="exp_command")
 
@@ -2073,7 +2106,7 @@ async def main():
         "--component",
         "-c",
         required=True,
-        choices=["pod-a-day", "pod-b-day", "pod-b-night"],
+        choices=["inference-day", "inference-night"],
         help="Component to update",
     )
 
@@ -2454,6 +2487,15 @@ async def main():
             cmd_watch_log(args)
         else:
             p_watch.print_help()
+    elif args.command == "dev":
+        if args.dev_command == "poll":
+            cmd_dev_poll(args)
+        elif args.dev_command == "claim":
+            cmd_dev_claim(args)
+        elif args.dev_command == "pr":
+            cmd_dev_pr(args)
+        else:
+            p_dev.print_help()
     else:
         parser.print_help()
 

@@ -29,10 +29,21 @@ from typing import Any, Dict, List
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql_json, psql, psql_ok, esc_sql
+from lib.db import esc_sql, psql_json, psql_ok
 
 BATCH_LIMIT = 50
-ENRICH_FIELDS = ("tldr", "intent", "entities", "tags", "verified")
+ENRICH_FIELDS = (
+    "tldr",
+    "intent",
+    "entities",
+    "tags",
+    "verified",
+    "sentiment",
+    "sentiment_intensity",
+    "confidence",
+    "schema_version",
+    "provenance",
+)
 
 
 def fetch_unprocessed_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
@@ -58,16 +69,18 @@ def fetch_unprocessed_enrich(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
             evidence = json.loads(row.get("evidence") or "{}")
         except (json.JSONDecodeError, TypeError):
             evidence = {}
-        items.append({
-            "id": row["id"],
-            "turn_id": row["turn_id"],
-            "evidence": evidence,
-            "extract_model": row.get("extract_model", ""),
-            "created_at": row.get("created_at", ""),
-            "seq": int(row["seq"]) if row.get("seq") else 0,
-            "conversation_id": row.get("conversation_id", ""),
-            "faithfulness_score": row.get("faithfulness_score"),
-        })
+        items.append(
+            {
+                "id": row["id"],
+                "turn_id": row["turn_id"],
+                "evidence": evidence,
+                "extract_model": row.get("extract_model", ""),
+                "created_at": row.get("created_at", ""),
+                "seq": int(row["seq"]) if row.get("seq") else 0,
+                "conversation_id": row.get("conversation_id", ""),
+                "faithfulness_score": row.get("faithfulness_score"),
+            }
+        )
     return items
 
 
@@ -89,15 +102,11 @@ def format_enrich_output(item: Dict[str, Any]) -> Dict[str, Any]:
 
 def mark_processed(fact_id: str) -> bool:
     """Mark a review_fact as processed by enrich consumer."""
-    sql = (
-        f"UPDATE review_facts SET verdict = 'enrich_processed' "
-        f"WHERE id = {esc_sql(fact_id)}"
-    )
+    sql = f"UPDATE review_facts SET verdict = 'enrich_processed' WHERE id = {esc_sql(fact_id)}"
     return psql_ok(sql)
 
 
-def consume_enrich(limit: int = BATCH_LIMIT,
-                dry_run: bool = False) -> List[Dict[str, Any]]:
+def consume_enrich(limit: int = BATCH_LIMIT, dry_run: bool = False) -> List[Dict[str, Any]]:
     """Fetch unprocessed enrichment facts, format for MCP tools, mark processed.
 
     Returns list of MCP-ready dicts.
@@ -119,20 +128,17 @@ def consume_enrich(limit: int = BATCH_LIMIT,
         if not dry_run:
             mark_processed(item["id"])
 
-    print(f"[enrich_consumer] {len(results)} formatted"
-          f" ({'dry-run' if dry_run else 'processed'})")
+    print(f"[enrich_consumer] {len(results)} formatted ({'dry-run' if dry_run else 'processed'})")
     return results
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(
-        description="MCP Consumer — read and format MCP metadata")
+
+    parser = argparse.ArgumentParser(description="MCP Consumer — read and format MCP metadata")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Read only, no verdict update")
-    parser.add_argument("--json", action="store_true",
-                        help="Output as JSON lines")
+    parser.add_argument("--dry-run", action="store_true", help="Read only, no verdict update")
+    parser.add_argument("--json", action="store_true", help="Output as JSON lines")
     args = parser.parse_args()
 
     results = consume_enrich(limit=args.limit, dry_run=args.dry_run)
@@ -146,4 +152,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

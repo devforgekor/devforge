@@ -4,9 +4,9 @@
 """Step implementations for the 3-Model Review Pipeline.
 
 Contains constants, system prompts, HTTP helpers, and the 3 step functions:
-  Step 1  run_reflection    Pod B (:8083) — ACCEPT/REJECT per finding
-  Step 2  run_judgment      Pod B (:8083) — Scoring Judge (P/R scores, gap, veto)
-  Step 3  run_diff          Pod B (:8083) — unified diff for approved findings
+  Step 1  run_reflection    inference (:8083) — ACCEPT/REJECT per finding
+  Step 2  run_judgment      inference (:8083) — Scoring Judge (P/R scores, gap, veto)
+  Step 3  run_diff          inference (:8083) — unified diff for approved findings
 
 Exported symbols consumed by review_pipeline_3model.py:
   REVIEWER_PORT, JUDGE_PORT, _poll_health,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: day_cycle.sh — Phase 3 (verify checkpoint-based)
-"""Day Verify Pipeline — 14B verify + category on Pod B only.
+"""Day Verify Pipeline — 14B verify + category on inference only.
 
 Called at :30 by systemd timer. Reads extraction facts and MCP metadata
 from DB, runs chunked LLM verification (reuses night.py Phase 2 logic),
@@ -341,7 +341,7 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
     failed_total = 0
 
     log("=" * 60)
-    log(f"DevForge Day Verify — verification on Pod B (:8083)")
+    log(f"DevForge Day Verify — verification on inference (:8083)")
     log(f"  Label: {model_label}")
     if dry_run:
         log("  [DRY RUN] No writes to DB")

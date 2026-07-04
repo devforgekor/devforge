@@ -12,7 +12,8 @@
 #   Server Validation     — state_collector --validate (snapshot before switching)
 #   Night Debate          — proposer(:8081) → reflector(:8082) → judge(:8083)
 #   Night Verify          — verifier(:8084) final gate via review_consumer.py
-#   Day Mode Restore      — Pod B extractor(:8082) + Pod A reranker(:8080)#   Proxy Audit           — proxy_reviewer.py (DeepSeek Pro verify audit)
+#   Day Mode Restore      — inference container extractor(:8082) restore
+#   Proxy Audit           — proxy_reviewer.py (DeepSeek Pro verify audit)
 
 set -o pipefail
 
@@ -23,10 +24,12 @@ flock -n 200 || { echo "[$(LOG_TS)] night_cycle already running — exit"; exit 
 
 LOG_TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 STATUS_FILE="/opt/projects/server/data/nightly_status.yaml"
-MODE_FILE_A="/opt/ai_data/scripts/current-mode-pod-a.env"
-MODE_FILE_B="/opt/ai_data/scripts/current-mode-pod-b.env"
 MODE_FILE="/opt/ai_data/scripts/current-system-mode.env"
 SCRIPTS_DIR="/opt/projects/server/scripts"
+MODEL_CTL="$SCRIPTS_DIR/lib/model_ctl.sh"
+if [ -f "$MODEL_CTL" ]; then
+    source "$MODEL_CTL"
+fi
 
 # System mode trap: always restore to day on exit (crash or normal)
 _restored=false
@@ -64,73 +67,35 @@ wait_for_model() {
     return 1
 }
 
-switch_mode_both() {
-    local mode_a="$1"
-    local mode_b="$2"
-    echo "[$(LOG_TS)] Switching Pod A → $mode_a, Pod B → $mode_b..."
-    # Pod A: MODE=reranker only
-    printf '%s' "MODE=$mode_a" > "${MODE_FILE_A}.tmp" && mv "${MODE_FILE_A}.tmp" "$MODE_FILE_A"
-    # Pod B: full env via pod_manager (MODEL_FILE, PORT, CTX_SIZE, etc.)
-    python3 -c "
-import sys; sys.path.insert(0, '$SCRIPTS_DIR')
-from lib.pod_manager import _write_mode_env
-_write_mode_env('$mode_b', 8082)
-" 2>&1 || {
-        echo "[$(LOG_TS)] WARNING: _write_mode_env failed — Pod B may not start"
-    }
-    systemctl --user stop container-devforge-pod-b 2>&1 || true
-    sleep 3  # wait for pasta to release ports 8081-8084
-    if systemctl --user start container-devforge-pod-b 2>&1; then
-        return 0
-    else
-        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-pod-b (port race)" >&2
+switch_inference() {
+    local model_key="$1"
+    local port="${2:-$(_model_port "$model_key")}"
+    echo "[$(LOG_TS)] Switching inference to $model_key (:$port)..."
+    _ensure_model "$model_key" "$port" false 600 || {
+        echo "[$(LOG_TS)] ERROR: failed to start inference as $model_key" >&2
         return 1
-    fi
-}
-
-switch_mode_pod_b() {
-    local mode="$1"
-    local port="${2:-8082}"
-    echo "[$(LOG_TS)] Switching Pod B to $mode (:$port)..."
-    python3 -c "
-import sys; sys.path.insert(0, '$SCRIPTS_DIR')
-from lib.pod_manager import _write_mode_env
-_write_mode_env('$mode', $port)
-" 2>&1 || {
-        echo "[$(LOG_TS)] WARNING: _write_mode_env failed — Pod B may not start"
     }
-    systemctl --user stop container-devforge-pod-b 2>&1 || true
-    sleep 3  # wait for pasta to release ports 8081-8084
-    if systemctl --user start container-devforge-pod-b 2>&1; then
-        return 0
-    else
-        echo "[$(LOG_TS)] ERROR: failed to start container-devforge-pod-b (port race)" >&2
-        return 1
-    fi
+    return 0
 }
 
 stop_llm_services() {
     local label="$1"
-    echo "[$(LOG_TS)] [$label] Stopping LLM services and timers..."
-    for svc in activity-summarizer telegram-bot slack; do
-        systemctl --user stop "$svc" 2>&1 || true
-    done
+    echo "[$(LOG_TS)] [$label] Stopping LLM-adjacent services (slack/telegram in svc.pod — no-op)..."
+    # slack/telegram-bot now run inside svc.pod — no need to stop
+    # Other aux timers:
     for tmr in activity-summarizer-safety.timer; do
         systemctl --user stop "$tmr" 2>&1 || true
     done
-    echo "[$(LOG_TS)] [$label] All non-critical LLM services stopped"
+    echo "[$(LOG_TS)] [$label] All non-critical service timers stopped"
 }
 
 start_llm_services() {
     local label="$1"
-    echo "[$(LOG_TS)] [$label] Restarting LLM services and timers..."
+    echo "[$(LOG_TS)] [$label] Restarting service timers..."
     for tmr in activity-summarizer-safety.timer; do
         systemctl --user start "$tmr" 2>&1 || true
     done
-    for svc in activity-summarizer telegram-bot slack; do
-        systemctl --user start "$svc" 2>&1 || true
-    done
-    echo "[$(LOG_TS)] [$label] LLM services restored"
+    echo "[$(LOG_TS)] [$label] Service timers restored"
 }
 
 # --- Night mode activation ---
@@ -165,7 +130,7 @@ fi
 
 # ── Night Debate ── (queue consumer) ──────────────
 # night_cycle.py --queue handles its own container management
-# (kill_all → sequential P→R→J model loading on Pod B).
+# (kill_all → sequential P→R→J model loading on inference container).
 # Reads pending extract_results from activity_log.
 # On success: queue_status → 'reviewed' (consumed by Night Verify).
 
@@ -195,11 +160,9 @@ if [ "$queue_count" = "0" ] || [ -z "$queue_count" ]; then
 else
     echo "[$(LOG_TS)] === Night Verify (verifier) ==="
     stop_llm_services "verify"
-    echo "[$(LOG_TS)] Stopping Pod A (memory for verifier)..."
-    systemctl --user stop container-devforge-pod-a 2>&1 || true
-    sleep 5
+    sleep 3
 
-    if switch_mode_pod_b "verify" 8084 && wait_for_model 8084 "verifier" 600; then
+    if switch_inference "verifier" && wait_for_model 8084 "verifier" 600; then
         retry "verify" 2 python3 "$SCRIPTS_DIR/pipelines/review_consumer.py" || verify_ok=false
     else
         echo "[$(LOG_TS)] Failed to start verify mode" >&2
@@ -212,22 +175,15 @@ fi
 day_restored=true
 
 echo "[$(LOG_TS)] === Night → Day transition ==="
-if ! switch_mode_both "reranker" "day"; then
+if ! switch_inference "day-extractor"; then
     day_restored=false
     echo "[$(LOG_TS)] FATAL: switch_mode day failed" >&2
 else
     start_llm_services "day-restore"
-    # Pod B extractor mode on :8082
-    if ! wait_for_model 8082 "Pod B extractor (day)" 300; then
+    # Inference extractor mode on :8082
+    if ! wait_for_model 8082 "inference extractor (day)" 300; then
         day_restored=false
         echo "[$(LOG_TS)] FATAL: extractor (:8082) not responding after restore" >&2
-    fi
-    # Pod A reranker(:8080)
-    echo "[$(LOG_TS)] Restarting Pod A (reranker:8080)..."
-    systemctl --user restart container-devforge-pod-a 2>&1 || true
-    sleep 5
-    if ! wait_for_model 8080 "Pod A (reranker)" 60; then
-        echo "[$(LOG_TS)] WARNING: Pod A :8080 not responding" >&2
     fi
 fi
 

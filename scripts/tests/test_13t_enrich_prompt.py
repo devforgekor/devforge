@@ -43,10 +43,10 @@ def main():
     with open(FEWSHOT_PATH, "w") as f:
         json.dump([], f)
 
-    # Step 1: Ensure Pod B
-    log("[pod] Ensuring Pod B (enrich mode)")
+    # Step 1: Ensure inference
+    log("[pod] Ensuring inference (enrich mode)")
     ensure_model("day_enrich")
-    test_heartbeat("Pod B ready")
+    test_heartbeat("inference ready")
 
     # Step 2: Polish batch (all 13 turns)
     log(f"[polish] Running polish_batch on {TOTAL} turns")

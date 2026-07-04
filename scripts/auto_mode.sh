@@ -41,7 +41,9 @@ _ensure_memory() {
     fi
 
     log "  mem: available ${avail_mb}MB < ${min_avail_mb}MB — running cleanup..."
-    systemctl --user restart container-devforge-pod-b.service 2>/dev/null || true
+    # Inference: podman run --rm, restart by rm + run via model_ctl
+    podman rm -v -f -i devforge-inference 2>/dev/null || true
+    $INFERENCE_RUN_CMD 2>/dev/null || true
     sleep 30
 
     local swap_used

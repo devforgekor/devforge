@@ -1,8 +1,8 @@
 # DevForge — Timer Registry
-# auto-generated from live systemd data at 2026-06-28 09:00 KST
+# auto-generated from live systemd data at 2026-06-29 09:00 KST
 ---
 metadata:
-  updated: 2026-06-28 09:00 KST
+  updated: 2026-06-29 09:00 KST
   source: live (systemctl list-timers)
 user_timers:
 - unit: devforge-backup-safety
@@ -13,6 +13,10 @@ user_timers:
   on_calendar: 00:00
   last: ''
   next: ''
+- unit: devforge-dev-poll
+  on_calendar: '*:0/10'
+  last: ''
+  next: Mon 2026-06-29 00:10:00 GMT
 - unit: devforge-night-cycle
   on_calendar: '*-*-* 18:00:00'
   last: ''
@@ -24,15 +28,15 @@ user_timers:
 - unit: devforge-restore-test
   on_calendar: '*-*-01 20:30:00 UTC'
   last: ''
-  next: Wed 2026-07-01 20:30:02 GMT
+  next: Wed 2026-07-01 20:32:27 GMT
 - unit: devforge-system-sync
   on_calendar: '*:0/30'
   last: ''
-  next: Sun 2026-06-28 00:00:17 GMT
+  next: Mon 2026-06-29 00:00:05 GMT
 - unit: devforge-weekly-enrich-rebuild
   on_calendar: Sun *-*-* 18:00:00
   last: ''
-  next: Sun 2026-06-28 18:02:52 GMT
+  next: Sun 2026-07-05 18:01:37 GMT
 - unit: grub-boot-success
   on_calendar: ''
   last: ''
@@ -40,5 +44,5 @@ user_timers:
 - unit: reference-monitor
   on_calendar: Mon *-*-* 16:00:00
   last: ''
-  next: Mon 2026-06-29 16:04:34 GMT
+  next: Mon 2026-06-29 16:00:59 GMT
 system_timers: []

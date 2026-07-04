@@ -152,8 +152,8 @@ log(f'  entity_scan done: {scan_count} facts')
 
 heartbeat "phase:switch_extract"
 
-# Switch Pod B to day-extractor
-log "--- Switching Pod B to day-extractor (:8082) ---"
+# Switch inference to day-extractor
+log "--- Switching inference to day-extractor (:8082) ---"
 $PY -c "
 import sys; sys.path.insert(0, '.')
 from lib.pod_manager import ensure_model
@@ -252,8 +252,8 @@ log(f'  enrich snapshot: {total} enriched: {by_result}')
 
 heartbeat "phase:switch_verify"
 
-# Switch Pod B to day-verifier
-log "--- Switching Pod B to day-verifier (:8082) ---"
+# Switch inference to day-verifier
+log "--- Switching inference to day-verifier (:8082) ---"
 $PY -c "
 import sys; sys.path.insert(0, '.')
 from lib.pod_manager import ensure_model

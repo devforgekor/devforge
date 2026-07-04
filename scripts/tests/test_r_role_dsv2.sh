@@ -1,11 +1,11 @@
 #!/bin/bash
-# DSV2 Lite R 역할 테스트 (Qwen14B R 결과와 비교)
+# DSV2 Lite R 역할 테스트 (Qwen14B R 결과와 비교) — inference container
 set -e
 
 P_EXP="/opt/projects/server/data/experiment/exp_p_rot1_r1_norubric_r1_norubric.json"
 R_EXP_Q14="/opt/projects/server/data/experiment/exp_r_rot1_r1_norubric_r1_norubric.json"
 EXPER_DIR="/opt/projects/server/data/experiment"
-MODE_FILE_B="/opt/ai_data/scripts/current-mode-pod-b.env"
+MODE_FILE_B="/opt/ai_data/scripts/current-mode-inference.env"
 TIMESTAMP=$(date -u +%H:%M:%S)
 mkdir -p "$EXPER_DIR"
 
@@ -36,13 +36,27 @@ log "Qwen14B R results: $(echo "$R_Q14" | python3 -c 'import json,sys; d=json.lo
 
 # Kill all containers
 log "Podman stop all..."
-systemctl --user stop container-devforge-pod-b 2>/dev/null || true
+podman rm -v -f -i devforge-inference 2>/dev/null || true
 sleep 3
 
-# Start DSV2 Lite on Pod B
+# Start DSV2 Lite on inference
 log "Loading DSV2 Lite Q8.0..."
 echo "MODE=review-dsv2" > "$MODE_FILE_B"
-systemctl --user start container-devforge-pod-b 2>/dev/null || true
+podman run -d --replace --name devforge-inference --rm \
+  --entrypoint /bin/bash \
+  --pull newer \
+  --network devforge-net \
+  -v /opt/ai_data/models/gguf:/models:Z \
+  -v /opt/ai_data/scripts/inference-entrypoint.sh:/entrypoint.d/inference-entrypoint.sh:Z \
+  -v /opt/ai_data/scripts/current-mode-inference.env:/entrypoint.d/current-mode.env:Z \
+  --publish 127.0.0.1:8080:8080 
+  --publish 127.0.0.1:8081:8081 \
+  --publish 127.0.0.1:8082:8082 \
+  --publish 127.0.0.1:8083:8083 \
+  --publish 127.0.0.1:8084:8084 \
+  --env SERVER_TIMEOUT=28800 \
+  ghcr.io/ggml-org/llama.cpp:server \
+  /entrypoint.d/inference-entrypoint.sh 2>/dev/null || true
 
 # Wait for health
 RETRIES=120

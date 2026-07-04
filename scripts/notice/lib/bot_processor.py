@@ -12,14 +12,17 @@ Flow:
     2. dispatch action based on intent
     3. return response string
 
-Note: BOT_LLM_ENDPOINT defaults to :8082 (Pod A). Pod A death produces
+Note: BOT_LLM_ENDPOINT defaults to :8082 (inference). inference death produces
 [ERROR] messages but does NOT crash the calling service.
 """
 
-import json, os, subprocess, sys, urllib.request
+import json
+import os
+import subprocess
+import sys
+import urllib.request
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class Intent(Enum):
@@ -32,8 +35,10 @@ class Intent(Enum):
 
 from lib.llm_client import MODEL_REGISTRY
 
-LLM_ENDPOINT = os.environ.get("BOT_LLM_ENDPOINT",
-    f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/v1/chat/completions")
+LLM_ENDPOINT = os.environ.get(
+    "BOT_LLM_ENDPOINT",
+    f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/v1/chat/completions",
+)
 LLM_MODEL = os.environ.get("BOT_LLM_MODEL", "qwen2.5-coder-7b")
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", "/opt/projects/server"))
 
@@ -49,12 +54,20 @@ def _load_secrets() -> dict:
                 secrets[key.strip()] = val.strip().strip('"').strip("'")
     return secrets
 
+
 _SECRETS = _load_secrets()
 
 
 def _call_llm(messages: list, temperature: float = 0.3, max_tokens: int = 512) -> str:
-    body = {"model": LLM_MODEL, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
-    req = urllib.request.Request(LLM_ENDPOINT, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    body = {
+        "model": LLM_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    req = urllib.request.Request(
+        LLM_ENDPOINT, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
             result = json.loads(resp.read())
@@ -88,7 +101,9 @@ def classify_intent(text: str) -> Intent:
 
 def _exec_status() -> str:
     lines = []
-    for label, mf in [("A", Path("/opt/ai_data/scripts/current-mode-pod-a.env")), ("B", Path("/opt/ai_data/scripts/current-mode-pod-b.env"))]:
+    for label, mf in [
+        ("Inference", Path("/opt/ai_data/scripts/current-mode-inference.env")),
+    ]:
         if mf.exists():
             m = mf.read_text().strip().replace("MODE=", "")
             lines.append(f"<b>모드 Pod {label}</b>\n<code>{m}</code>")
@@ -97,11 +112,18 @@ def _exec_status() -> str:
         for l in r.stdout.split("\n"):
             if "Mem:" in l:
                 parts = l.split()
-                lines.append(f"\n<b>메모리</b>\n전체 {parts[1]} / 사용 {parts[2]} / 여유 {parts[-1]}")
+                lines.append(
+                    f"\n<b>메모리</b>\n전체 {parts[1]} / 사용 {parts[2]} / 여유 {parts[-1]}"
+                )
     except Exception:
         pass
     try:
-        r = subprocess.run(["podman", "ps", "--format", "{{.Names}} ({{.Status}})"], capture_output=True, text=True, timeout=5)
+        r = subprocess.run(
+            ["podman", "ps", "--format", "{{.Names}} ({{.Status}})"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         containers = [cl.strip() for cl in r.stdout.strip().split("\n")[:8] if cl.strip()]
         if containers:
             lines.append("\n<b>컨테이너</b>")
@@ -114,7 +136,9 @@ def _exec_status() -> str:
 
 def _exec_shell(command: str) -> str:
     try:
-        r = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30, cwd=str(PROJECT_DIR))
+        r = subprocess.run(
+            command, shell=True, capture_output=True, text=True, timeout=30, cwd=str(PROJECT_DIR)
+        )
         out = r.stdout.strip() or r.stderr.strip() or "(no output)"
         return out[:2500] + "\n... (truncated)" if len(out) > 2500 else out
     except subprocess.TimeoutExpired:
@@ -125,7 +149,12 @@ def _exec_shell(command: str) -> str:
 
 def _exec_log(lines_count: int = 20) -> str:
     try:
-        r = subprocess.run(["journalctl", "--user", "-n", str(lines_count), "--no-pager", "-q"], capture_output=True, text=True, timeout=10)
+        r = subprocess.run(
+            ["journalctl", "--user", "-n", str(lines_count), "--no-pager", "-q"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         out = r.stdout.strip()
         return "..." + out[-2500:] if len(out) > 2500 else out
     except Exception as e:
@@ -133,7 +162,7 @@ def _exec_log(lines_count: int = 20) -> str:
 
 
 def _current_mode() -> str:
-    mf = Path("/opt/ai_data/scripts/current-mode-pod-b.env")
+    mf = Path("/opt/ai_data/scripts/current-mode-inference.env")
     if mf.exists():
         mode = mf.read_text().strip().replace("MODE=", "")
         return "review" if mode.startswith("review-") else mode
@@ -170,19 +199,27 @@ CMD: df -h /
 
 
 def _chat(text: str) -> str:
-    messages = [{"role": "system", "content": _CHAT_SYSTEM}, {"role": "user", "content": text + "\n/no_think"}]
+    messages = [
+        {"role": "system", "content": _CHAT_SYSTEM},
+        {"role": "user", "content": text + "\n/no_think"},
+    ]
     resp1 = _call_llm(messages)
     if not resp1 or resp1.startswith("[ERROR"):
         return resp1 or "(응답 없음)"
     if not resp1.startswith("CMD:"):
         return resp1
-    cmd = resp1[len("CMD:"):].strip()
+    cmd = resp1[len("CMD:") :].strip()
     if not cmd:
         return "(빈 명령어)"
     print(f"[bot_processor] executing: {cmd}", file=sys.stderr, flush=True)
     result = _exec_shell(cmd)
     messages.append({"role": "assistant", "content": resp1})
-    messages.append({"role": "user", "content": f"[RESULT]\n{result[:3000]}\n[/RESULT]\n\nCompose a natural Korean response based on the result above.\n/no_think"})
+    messages.append(
+        {
+            "role": "user",
+            "content": f"[RESULT]\n{result[:3000]}\n[/RESULT]\n\nCompose a natural Korean response based on the result above.\n/no_think",
+        }
+    )
     resp2 = _call_llm(messages, max_tokens=512)
     return resp2 or result[:1500]
 

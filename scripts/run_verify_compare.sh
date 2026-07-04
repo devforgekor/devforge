@@ -68,13 +68,13 @@ with open('lib/pod_manager.py', 'w') as f:
 print('pod_manager.py updated to NextCoder Q8')
 "
 
-# 3. Restart Pod B with NextCoder Q8
-echo "[$(date)] Starting Pod B with NextCoder Q8..."
+# 3. Restart inference with NextCoder Q8
+echo "[$(date)] Starting inference with NextCoder Q8..."
 python3 -c "
 import sys
 sys.path.insert(0, '/opt/projects/server/scripts')
-from lib.pod_manager import start_pod_b
-ok = start_pod_b('test-q8', 8083)
+from lib.pod_manager import ensure_model
+ok = ensure_model('test-q8')
 print(f'START: {\"OK\" if ok else \"FAIL\"}')
 " 2>&1
 

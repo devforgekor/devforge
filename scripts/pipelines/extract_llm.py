@@ -537,16 +537,16 @@ def _group_predicates(facts: list[dict]) -> list[dict]:
         rep_map[id(g)] = (rep_idx, g)
 
     rep_ids = list(rep_map.keys())
+    merged_group_ids: set[int] = set()
+    embed_ok = False
+    embed_count = 0
     if len(rep_ids) >= 2:
         # Try embed — if :8081 unavailable, skip to LLM-as-judge for all pairs
-        embed_ok = False
-        embed_count = 0
         test_vec = _embed_text_8081("test")
         if test_vec:
             embed_ok = True
             print(f"    [embed] checking {len(rep_ids)} group representatives...")
 
-        merged_group_ids: set[int] = set()
         for i in range(len(rep_ids)):
             if rep_ids[i] in merged_group_ids:
                 continue
@@ -1022,6 +1022,18 @@ def _start_extract_b_8083() -> bool:
     return ok
 
 
+def _cleanup_all_llms() -> None:
+    """Kill all llama-server instances to free memory before enrich."""
+    import subprocess as _sp
+
+    _sp.run(
+        ["podman", "exec", "devforge-inference", "pkill", "-f", "llama-server"],
+        timeout=10,
+        capture_output=True,
+    )
+    print("  [cleanup] all llama-server instances killed", flush=True)
+
+
 def _extract_edcr_freeform(
     dual_turns: List[dict],
     pulse_context: Optional[str] = None,
@@ -1035,13 +1047,16 @@ def _extract_edcr_freeform(
     Phase 1 (OIE): Dual 4B (8082+8083) → FactArbiter → LLM conflict resolve
     Phase 2 (Canonicalize): SeqMatcher → Embed 3-tier (8081) → LLM-judge → dedup
     Phase 3 (Refinement): FACT-style context rewrite → Xplore(8083) re-extract → merge → cap 6
+    Phase 4 (Post-merge EDC): Stop-and-Swap → re-run _normalize_freeform_pipeline on merged facts
+    Phase 5 (Cleanup): Kill all llama-server instances to free memory for enrich
 
     Key improvements over the old approach:
     1. Free-form prompts (no predicate snake_case constraints — Taxonomy Trap fix)
     2. 400-char no-overlap sentence/paragraph chunking (max 4 facts per chunk)
     3. EDC-style definition embedding for predicate canonicalization
-    4. Stop-and-Swap: kill 8083 → embed 8081 → normalize → restart 8083
+    4. Stop-and-Swap ×2: kill 8083 → embed 8081 → normalize (Phase 2 + Phase 4)
     5. FACT-style Refinement: remove identified facts → Xplore re-extract → merge → cap 6
+    6. Cleanup: kill all llama-server before enrich for memory
     """
     from difflib import SequenceMatcher
 
@@ -1355,6 +1370,12 @@ or
 
     t0 = time.monotonic()
 
+    # Start secondary model on :8083 for B-Free parallel extraction
+    print("  [start] Starting extract-b on :8083 for dual extraction...", flush=True)
+    b_ok = _start_extract_b_8083()
+    if not b_ok:
+        print("  [start] extract-b FAILED — will degrade to single-model (8082 only)", flush=True)
+
     _dual_extract_section("user", lambda t: t.get("user_turn", "") or "")
     heartbeat("day_extract", "free user done")
     time.sleep(6)
@@ -1602,6 +1623,45 @@ or
         n_ref = min(4, len(refine_turns))
         with ThreadPoolExecutor(max_workers=n_ref) as exe:
             exe.map(_refine_one_turn, refine_turns)
+
+    # ── Post-Phase-3 EDC: normalize after refinement merge ──
+    all_fact_groups = {}
+    for t in dual_turns:
+        all_facts = turn_data[t["id"]]["extractions"]
+        if all_facts:
+            all_fact_groups[t["id"]] = all_facts
+
+    if all_fact_groups:
+        print("\n  [swap] Stopping extract-b (:8083) for post-refinement EDC...", flush=True)
+        _stop_extract_b_8083()
+        time.sleep(2)
+
+        print("  [swap] Starting embed on :8081...", flush=True)
+        embed_ok = _ensure_embed_8081()
+        time.sleep(1)
+
+        if embed_ok:
+            for tid, facts in all_fact_groups.items():
+                before = len(facts)
+                print(f"    -- Post-refinement normalization ({tid[:8]}) --", flush=True)
+                facts = _normalize_freeform_pipeline(facts)
+                if tid in turn_data:
+                    turn_data[tid]["extractions"] = facts
+                    after = len(facts)
+                    if after < before:
+                        print(
+                            f"    [{tid[:8]}] refinement EDC removed {before - after} semantic duplicates",
+                            flush=True,
+                        )
+
+        print("  [swap] Stopping embed (:8081)...", flush=True)
+        _stop_embed_8081()
+    else:
+        print("  [swap] No facts to normalize after refinement, skipping Stop-and-Swap", flush=True)
+
+    # ── Final cleanup: free all LLM memory before enrich ──
+    print("\n  [cleanup] Freeing all LLM instances...", flush=True)
+    _cleanup_all_llms()
 
     for t in dual_turns:
         td = turn_data[t["id"]]

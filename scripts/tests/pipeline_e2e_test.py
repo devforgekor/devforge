@@ -147,7 +147,7 @@ def main():
     log(f"  entity_scan: {'OK' if r['ok'] else 'FAIL'} ({r['elapsed_s']}s)")
     heartbeat_status["entity_scan"] = _check_heartbeat("entity_scan")
 
-    # ── Phase 3: Extract (switch Pod B to day-extractor on :8082) ──
+    # ── Phase 3: Extract (switch inference to day-extractor on :8082) ──
     test_heartbeat("phase3_model_switch_extract")
     log(f"[pipeline_e2e] Phase 3: switch to day-extractor (:8082), then extract...")
     # Switch model: embed(:8081) -> day-extractor(:8082)

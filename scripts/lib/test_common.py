@@ -6,8 +6,8 @@
 IMPORTANT: 모든 test script는 반드시 ``test_setup()`` / ``test_complete()``를
 사용해야 합니다 (직접 ``stop_day_cycle()`` / ``start_day_cycle()`` 호출 불가).
 ``test_setup()``이 day_cycle service를 중단하고 ``test_complete()``가 재시작하여
-Pod B 경합을 방지합니다. 이 함수들을 사용하지 않은 test script는 day_cycle과의
-Pod B 충돌로 실패하거나 OOM이 발생할 수 있습니다.
+inference 경합을 방지합니다. 이 함수들을 사용하지 않은 test script는 day_cycle과의
+inference 충돌로 실패하거나 OOM이 발생할 수 있습니다.
 
 Usage::
 
@@ -24,13 +24,10 @@ import os
 import signal
 import sys
 import time as _time
-from typing import Any, Dict, List, Optional
 
 from lib.common import log
-from lib.db import psql_json, esc_sql
-from lib.llm.json_parser import parse_llm_json
-from lib.llm_client import MODEL_REGISTRY, call_llm, call_llm_json
-from lib.watchdog.messenger import heartbeat as _heartbeat, resolve_pulse
+from lib.watchdog.messenger import heartbeat as _heartbeat
+from lib.watchdog.messenger import resolve_pulse
 
 # Ensure scripts dir is on path for direct execution
 _SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,7 +42,7 @@ _DAY_CYCLE_SVC = "devforge-day-cycle.service"
 
 
 def stop_day_cycle():
-    """Stop day-cycle service so it doesn't compete for Pod B during a test.
+    """Stop day-cycle service so it doesn't compete for inference during a test.
 
     Safe to call even if already stopped. Logs status either way.
     """
@@ -63,6 +60,7 @@ def start_day_cycle():
     r = os.system(f"systemctl --user start {_DAY_CYCLE_SVC} 2>/dev/null")
     code = ">>" if r == 0 else "--"
     log(f"  [{code}] systemctl --user start {_DAY_CYCLE_SVC}")
+
 
 # Module-level state
 _test_name: str = ""
@@ -86,22 +84,23 @@ def test_setup(name: str, description: str = "") -> dict:
 
     pulse_id = f"test_{name}"
 
-    # Duplicate guard — check DB for existing IN_PROGRESS test pulse
+    # Stale pulse guard — auto-resolve any leftover IN_PROGRESS pulse first.
+    # This replaces the old "DUPLICATE DETECTED → sys.exit(1)" pattern which
+    # was fragile: TaskStop/SIGKILL could leave the pulse stuck, blocking all
+    # future runs. The resolve-first approach is idempotent - if the previous
+    # run already cleaned up, this is a no-op; if not, it unblocks us.
     try:
-        existing = psql_json(
-            f"SELECT pulse_id FROM watchdog_pulses "
+        psql_ok(
+            f"UPDATE watchdog_pulses SET status = 'RESOLVED', resolved_at = now() "
             f"WHERE pulse_id = 'heartbeat_{pulse_id}' AND status = 'IN_PROGRESS'"
         )
-        if existing:
-            log(f"[test:{name}] DUPLICATE DETECTED — same test already running, abort")
-            sys.exit(1)
     except Exception:
-        pass  # DB unavailable → best-effort check
+        pass  # DB unavailable → best-effort
 
-    # Register heartbeat
+    # Register heartbeat (creates or upserts IN_PROGRESS)
     _heartbeat(pulse_id, detail="started")
 
-    # Stop day-cycle — prevents Pod B contention during test
+    # Stop day-cycle — prevents inference contention during test
     stop_day_cycle()
 
     def _cleanup(signum=None, frame=None):

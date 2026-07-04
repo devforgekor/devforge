@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: none — day cycle pipeline test harness (embed → extract → MCP enrich → verify)
+# Path: none — day cycle pipeline test harness (scan → extract → verify → enrich → embed)
 """Day cycle pipeline test harness.
 
 Usage:
@@ -19,7 +19,8 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.infra.preflight import preflight_checks
-from lib.test_common import test_setup, test_heartbeat, test_complete
+from lib.test_common import test_complete, test_setup
+
 
 def log(msg: str) -> None:
     print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -44,13 +45,19 @@ def run_pipeline_file(py_file: str, limit: int, extra_args: list = None) -> dict
     except subprocess.TimeoutExpired:
         elapsed = time.monotonic() - t0
         return {
-            "exit": -1, "elapsed_s": round(elapsed, 1),
-            "stdout_tail": [], "stderr": "TIMEOUT", "ok": False,
+            "exit": -1,
+            "elapsed_s": round(elapsed, 1),
+            "stdout_tail": [],
+            "stderr": "TIMEOUT",
+            "ok": False,
         }
     except Exception as e:
         return {
-            "exit": -2, "elapsed_s": 0,
-            "stdout_tail": [], "stderr": str(e), "ok": False,
+            "exit": -2,
+            "elapsed_s": 0,
+            "stdout_tail": [],
+            "stderr": str(e),
+            "ok": False,
         }
 
 
@@ -85,7 +92,7 @@ def score_stability(results: list) -> int:
     elapsed_list = [r.get("elapsed_s", 0) for r in results]
     avg_e = sum(elapsed_list) / len(elapsed_list)
     var = sum((e - avg_e) ** 2 for e in elapsed_list) / len(elapsed_list) if avg_e > 0 else 999
-    cv = (var ** 0.5) / avg_e if avg_e > 0 else 1.0
+    cv = (var**0.5) / avg_e if avg_e > 0 else 1.0
     stability = ok_ratio * 60 + max(0, 40 - int(cv * 100))
     return min(100, int(stability))
 
@@ -144,7 +151,7 @@ def print_score_table(run_results: list) -> None:
 
     # Print table
     print(f"\n  {'Metric':<20s} {'Score':>6s}  Bar")
-    print(f"  {'-'*20} {'-'*6}  {'-'*20}")
+    print(f"  {'-' * 20} {'-' * 6}  {'-' * 20}")
     for label, val in [
         ("Correctness", correctness),
         ("Speed", speed_score),
@@ -176,7 +183,11 @@ def print_score_table(run_results: list) -> None:
                 "exit": rr.get("exit", -1),
                 "elapsed_s": rr.get("elapsed_s", 0),
                 "phases": [
-                    {"name": p["name"], "ok": p.get("ok", False), "elapsed_s": p.get("elapsed_s", 0)}
+                    {
+                        "name": p["name"],
+                        "ok": p.get("ok", False),
+                        "elapsed_s": p.get("elapsed_s", 0),
+                    }
                     for p in rr.get("phases", [])
                 ],
             }
@@ -191,8 +202,6 @@ def print_score_table(run_results: list) -> None:
 
 def run_test(limit: int, runs: int) -> None:
     """Run day cycle pipeline test with scoring."""
-    from lib.pod_manager import start_pod_b
-
     print("=" * 60)
     print("  DevForge Day Cycle Test Harness")
     print(f"  limit={limit}, runs={runs}")
@@ -208,41 +217,29 @@ def run_test(limit: int, runs: int) -> None:
         run_start = time.monotonic()
         phases = []
 
-        # Phase 1: Embed
-        print(f"\n  == Phase 1/4: Embed (8B f16 :8081) ==")
-        print("  Starting Pod B embed mode...", flush=True)
-        if not start_pod_b("embed", 8081, skip_probe=True):
-            print("  [warn] Embed start reported failure", flush=True)
+        # Phase 1: Extract (handles model startup via ensure_model inside)
+        print("\n  == Phase 1/4: Extract (4B Q8 :8082) ==")
         t0 = time.monotonic()
-        # embed_batch.py is already fixed (missing imports + nested f-string)
-        r1 = run_pipeline_file(os.path.join(PIPELINE_DIR, "embed_batch.py"), limit)
-        phases.append({"name": "embed", "ok": r1["ok"], "elapsed_s": r1["elapsed_s"]})
-        if r1["stderr"] and "error" in r1["stderr"].lower():
-            print(f"  [warn] embed: {r1['stderr'][:200]}")
+        r1 = run_pipeline_file(os.path.join(PIPELINE_DIR, "extract.py"), limit)
+        phases.append({"name": "extract", "ok": r1["ok"], "elapsed_s": r1["elapsed_s"]})
 
-        # Phase 2: Extract
-        print(f"\n  == Phase 2/4: Extract (7B Q8 :8082) ==")
-        print("  Switching Pod B to day mode...", flush=True)
-        if not start_pod_b("day", 8082, skip_probe=True):
-            print("  [warn] Extract start reported failure", flush=True)
+        # Phase 2: Verify — predicate NLI with Veritas-8B (handles model startup via ensure_model)
+        print("\n  == Phase 2/4: Verify (Veritas-8B Q4_K_M :8082) ==")
         t0 = time.monotonic()
-        r2 = run_pipeline_file(os.path.join(PIPELINE_DIR, "extract.py"), limit)
-        phases.append({"name": "extract", "ok": r2["ok"], "elapsed_s": r2["elapsed_s"]})
+        r2 = run_pipeline_file(os.path.join(PIPELINE_DIR, "day_verify.py"), limit)
+        phases.append({"name": "verify", "ok": r2["ok"], "elapsed_s": r2["elapsed_s"]})
 
-        # Phase 3: MCP Enrich (stays on :8082 extractor)
-        print(f"\n  == Phase 3/4: MCP Enrich (7B Q8 :8082) ==")
+        # Phase 3: Enrich (handles model startup via ensure_sequential_dual)
+        print("\n  == Phase 3/4: Enrich (Qwen3-8B Q4_K_M :8082+:8083) ==")
         t0 = time.monotonic()
         r3 = run_pipeline_file(os.path.join(PIPELINE_DIR, "enrich.py"), limit)
         phases.append({"name": "enrich", "ok": r3["ok"], "elapsed_s": r3["elapsed_s"]})
 
-        # Phase 4: Verify
-        print(f"\n  == Phase 4/4: Verify (14B Q6_K :8083) ==")
-        print("  Switching Pod B to review-j mode...", flush=True)
-        if not start_pod_b("review-j", 8083, skip_probe=True):
-            print("  [warn] Verify start reported failure", flush=True)
+        # Phase 4: Embed (handles model startup via ensure_model inside)
+        print("\n  == Phase 4/4: Embed (8B Q8 :8081) ==")
         t0 = time.monotonic()
-        r4 = run_pipeline_file(os.path.join(PIPELINE_DIR, "day_verify.py"), limit)
-        phases.append({"name": "verify", "ok": r4["ok"], "elapsed_s": r4["elapsed_s"]})
+        r4 = run_pipeline_file(os.path.join(PIPELINE_DIR, "embed_batch.py"), limit)
+        phases.append({"name": "embed", "ok": r4["ok"], "elapsed_s": r4["elapsed_s"]})
 
         total_s = round(time.monotonic() - run_start, 1)
         exit_code = 0 if all(p["ok"] for p in phases) else 1
@@ -265,14 +262,16 @@ def main() -> None:
     parser.add_argument("--test", action="store_true", help="Run in test mode with scoring")
     parser.add_argument("--limit", type=int, default=10, help="Batch limit per phase")
     parser.add_argument("--runs", type=int, default=2, help="Number of test runs")
-    parser.add_argument("--dry-run", action="store_true", help="Simulate execution (skip subprocess)")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Simulate execution (skip subprocess)"
+    )
     args = parser.parse_args()
 
     if args.dry_run:
         print("Dry run mode — checking resources only")
         preflight_checks("day_cycle_pipeline.py", required_ports={8081, 8082, 8083})
         print("  [ok] All ports available")
-        print("  Phases: embed(:8081) → extract(:8082) → enrich(:8082) → verify(:8083)")
+        print("  Phases: extract(:8082) → verify(:8082, Veritas-8B) → enrich(:8082) → embed(:8081)")
         test_complete("dry_run")
         return
 

@@ -1,0 +1,137 @@
+{
+  "tasks": [
+    {
+      "id": "8d27b733-1c5e-41c9-989c-ac369653e153",
+      "name": "DB detected_lang 컬럼 추가 및 raw_consumer 저장",
+      "description": "turns 테이블에 detected_lang TEXT 컬럼 추가, raw_consumer.py UPDATE SET에 detected_lang 저장 로직 추가",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-07-01T06:51:10.196Z",
+      "updatedAt": "2026-07-01T06:51:38.208Z",
+      "relatedFiles": [
+        {
+          "path": "/opt/projects/server/scripts/pipelines/raw_consumer.py",
+          "type": "TO_MODIFY",
+          "description": "UPDATE SET에 detected_lang 저장 추가",
+          "lineStart": 79,
+          "lineEnd": 88
+        }
+      ],
+      "implementationGuide": "1. SQL: ALTER TABLE turns ADD COLUMN IF NOT EXISTS detected_lang TEXT;\n2. raw_consumer.py line 79-88 UPDATE SET에 detected_lang = lang 추가",
+      "verificationCriteria": "컬럼 존재 확인, raw_consumer 실행 후 detected_lang 값 확인",
+      "analysisResult": "DevForge 파이프라인 두 가지 개선:\n\n1. detected_lang 저장: raw_consumer가 이미 cl.detect_language() 호출 중(line 62), 결과만 DB에 저장하면 됨. \n   - raw_consumer.py:62-88 사이에 detected_lang 저장\n   - extract.py:294-309 SELECT에 detected_lang 추가\n   - enrich.py:525-528 SELECT에 detected_lang 추가\n   - day_verify.py:304-316 SELECT에 detected_lang 추가\n\n2. LLM 출력 한자 변환 확장: text_cleaner.py의 hanja_substitute()는 production 검증 완료.\n   - extract_verify.py:104-115 _clean_markdown() 직후 hanja_substitute 적용\n   - extract.py:100-110 _store_fact() evidence에 적용\n   - enrich.py:203-217 _post_process_enrich() tldr에 적용\n   - day_verify.py:344-370 _insert_verify_result() evidence에 적용\n\n모든 파일 # Status: production (extract_verify.py, enrich.py, extract.py, day_verify.py) — P0 품질 유지.\nraw_consumer.py # Status: experimental — 변경 자유로움.",
+      "summary": "Task 1 완료: turns 테이블에 detected_lang TEXT 컬럼 추가, raw_consumer.py UPDATE SET에 detected_lang = lang 저장 라인 추가 (line 86). 컬럼 존재 확인 완료.",
+      "completedAt": "2026-07-01T06:51:38.205Z"
+    },
+    {
+      "id": "03bea5d9-dfea-4cb1-be10-4e1d10af0284",
+      "name": "extract/enrich/verify SELECT에 detected_lang 추가",
+      "description": "extract.py, enrich.py, day_verify.py의 turn SELECT 쿼리와 dict에 detected_lang 추가",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "8d27b733-1c5e-41c9-989c-ac369653e153"
+        }
+      ],
+      "createdAt": "2026-07-01T06:51:10.196Z",
+      "updatedAt": "2026-07-01T06:52:26.323Z",
+      "relatedFiles": [
+        {
+          "path": "/opt/projects/server/scripts/pipelines/extract.py",
+          "type": "TO_MODIFY",
+          "description": "claimed.detected_lang SELECT 추가",
+          "lineStart": 294,
+          "lineEnd": 335
+        },
+        {
+          "path": "/opt/projects/server/scripts/pipelines/enrich.py",
+          "type": "TO_MODIFY",
+          "description": "detected_lang SELECT 추가",
+          "lineStart": 525,
+          "lineEnd": 545
+        },
+        {
+          "path": "/opt/projects/server/scripts/pipelines/day_verify.py",
+          "type": "TO_MODIFY",
+          "description": "detected_lang SELECT 추가",
+          "lineStart": 304,
+          "lineEnd": 320
+        }
+      ],
+      "implementationGuide": "1. extract.py:294-309 SELECT에 claimed.detected_lang 추가\n2. enrich.py:528 SELECT에 detected_lang 추가\n3. day_verify.py:304-316 SELECT에 detected_lang 추가\n4. 각 파일의 dict에 detected_lang 키 추가",
+      "verificationCriteria": "SELECT 쿼리에 detected_lang 포함 확인",
+      "analysisResult": "DevForge 파이프라인 두 가지 개선:\n\n1. detected_lang 저장: raw_consumer가 이미 cl.detect_language() 호출 중(line 62), 결과만 DB에 저장하면 됨. \n   - raw_consumer.py:62-88 사이에 detected_lang 저장\n   - extract.py:294-309 SELECT에 detected_lang 추가\n   - enrich.py:525-528 SELECT에 detected_lang 추가\n   - day_verify.py:304-316 SELECT에 detected_lang 추가\n\n2. LLM 출력 한자 변환 확장: text_cleaner.py의 hanja_substitute()는 production 검증 완료.\n   - extract_verify.py:104-115 _clean_markdown() 직후 hanja_substitute 적용\n   - extract.py:100-110 _store_fact() evidence에 적용\n   - enrich.py:203-217 _post_process_enrich() tldr에 적용\n   - day_verify.py:344-370 _insert_verify_result() evidence에 적용\n\n모든 파일 # Status: production (extract_verify.py, enrich.py, extract.py, day_verify.py) — P0 품질 유지.\nraw_consumer.py # Status: experimental — 변경 자유로움.",
+      "summary": "Task 2 완료: extract.py SELECT+dict (line 301, 326), enrich.py SELECT+dict (line 528, 541), day_verify.py 3곳 SELECT (line 274, 306, 310)에 detected_lang 추가 완료. 모든 값은 NULL-safe (기존 row는 NULL 유지).",
+      "completedAt": "2026-07-01T06:52:26.320Z"
+    },
+    {
+      "id": "4bb8dce7-eae3-4df5-b385-44225515a056",
+      "name": "extract_verify.py evidence 한자 변환",
+      "description": "extract_verify.py _post_process_extractions()에서 evidence에 hanja_substitute 적용",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-07-01T06:51:10.196Z",
+      "updatedAt": "2026-07-01T06:53:13.267Z",
+      "relatedFiles": [
+        {
+          "path": "/opt/projects/server/scripts/pipelines/extract_verify.py",
+          "type": "TO_MODIFY",
+          "description": "evidence hanja_substitute 적용",
+          "lineStart": 176,
+          "lineEnd": 180
+        }
+      ],
+      "implementationGuide": "1. extract_verify.py에 from lib.text_cleaner import get_cleaner 추가\n2. _post_process_extractions() markdown cleaning 후 hanja_substitute 호출",
+      "verificationCriteria": "import 추가, evidence 한자 변환 확인",
+      "analysisResult": "DevForge 파이프라인 두 가지 개선:\n\n1. detected_lang 저장: raw_consumer가 이미 cl.detect_language() 호출 중(line 62), 결과만 DB에 저장하면 됨. \n   - raw_consumer.py:62-88 사이에 detected_lang 저장\n   - extract.py:294-309 SELECT에 detected_lang 추가\n   - enrich.py:525-528 SELECT에 detected_lang 추가\n   - day_verify.py:304-316 SELECT에 detected_lang 추가\n\n2. LLM 출력 한자 변환 확장: text_cleaner.py의 hanja_substitute()는 production 검증 완료.\n   - extract_verify.py:104-115 _clean_markdown() 직후 hanja_substitute 적용\n   - extract.py:100-110 _store_fact() evidence에 적용\n   - enrich.py:203-217 _post_process_enrich() tldr에 적용\n   - day_verify.py:344-370 _insert_verify_result() evidence에 적용\n\n모든 파일 # Status: production (extract_verify.py, enrich.py, extract.py, day_verify.py) — P0 품질 유지.\nraw_consumer.py # Status: experimental — 변경 자유로움.",
+      "summary": "Task 3 완료: extract_verify.py line 24에 `from lib.text_cleaner import get_cleaner` import 추가, line 182-183에 _clean_markdown 직후 `get_cleaner().hanja_substitute(evidence)` 적용. 중복 제거/필터링 보다 먼저 실행되어 정규화된 text로 비교함.",
+      "completedAt": "2026-07-01T06:53:13.265Z"
+    },
+    {
+      "id": "734183c3-de96-4348-8aef-a8eefe2501f5",
+      "name": "enrich.py post_process_enrich 한자 변환",
+      "description": "enrich.py _post_process_enrich()에서 tldr/entities에 hanja_substitute 적용",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-07-01T06:51:10.196Z",
+      "updatedAt": "2026-07-01T06:54:10.812Z",
+      "relatedFiles": [
+        {
+          "path": "/opt/projects/server/scripts/pipelines/enrich.py",
+          "type": "TO_MODIFY",
+          "description": "tldr/entities hanja_substitute 적용",
+          "lineStart": 212,
+          "lineEnd": 230
+        }
+      ],
+      "implementationGuide": "1. enrich.py에 from lib.text_cleaner import get_cleaner 추가\n2. tldr = _clean_markdown(tldr) 직후 hanja_substitute 호출\n3. entities 값도 동일 적용",
+      "verificationCriteria": "import 추가, tldr 한자 변환 확인",
+      "analysisResult": "DevForge 파이프라인 두 가지 개선:\n\n1. detected_lang 저장: raw_consumer가 이미 cl.detect_language() 호출 중(line 62), 결과만 DB에 저장하면 됨. \n   - raw_consumer.py:62-88 사이에 detected_lang 저장\n   - extract.py:294-309 SELECT에 detected_lang 추가\n   - enrich.py:525-528 SELECT에 detected_lang 추가\n   - day_verify.py:304-316 SELECT에 detected_lang 추가\n\n2. LLM 출력 한자 변환 확장: text_cleaner.py의 hanja_substitute()는 production 검증 완료.\n   - extract_verify.py:104-115 _clean_markdown() 직후 hanja_substitute 적용\n   - extract.py:100-110 _store_fact() evidence에 적용\n   - enrich.py:203-217 _post_process_enrich() tldr에 적용\n   - day_verify.py:344-370 _insert_verify_result() evidence에 적용\n\n모든 파일 # Status: production (extract_verify.py, enrich.py, extract.py, day_verify.py) — P0 품질 유지.\nraw_consumer.py # Status: experimental — 변경 자유로움.",
+      "summary": "Task 4 완료: enrich.py line 42 import 추가, line 214 tldr _clean_markdown 직후 hanja_substitute 적용, line 257 entity values 필터링 후 append 전 hanja_substitute 적용.",
+      "completedAt": "2026-07-01T06:54:10.810Z"
+    },
+    {
+      "id": "f21ee2be-7c60-4dd6-961d-5f9d0c8705f8",
+      "name": "day_verify.py 한자 변환",
+      "description": "day_verify.py _process_turn()에서 verify 결과 evidence에 hanja_substitute 적용",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-07-01T06:51:10.196Z",
+      "updatedAt": "2026-07-01T06:55:27.778Z",
+      "relatedFiles": [
+        {
+          "path": "/opt/projects/server/scripts/pipelines/day_verify.py",
+          "type": "TO_MODIFY",
+          "description": "verify 결과 hanja_substitute 적용",
+          "lineStart": 408,
+          "lineEnd": 450
+        }
+      ],
+      "implementationGuide": "1. day_verify.py에 from lib.text_cleaner import get_cleaner 추가\n2. _process_turn()에서 verify 결과 evidence에 hanja_substitute 호출",
+      "verificationCriteria": "import 추가, verify 결과 evidence 한자 변환 확인",
+      "analysisResult": "DevForge 파이프라인 두 가지 개선:\n\n1. detected_lang 저장: raw_consumer가 이미 cl.detect_language() 호출 중(line 62), 결과만 DB에 저장하면 됨. \n   - raw_consumer.py:62-88 사이에 detected_lang 저장\n   - extract.py:294-309 SELECT에 detected_lang 추가\n   - enrich.py:525-528 SELECT에 detected_lang 추가\n   - day_verify.py:304-316 SELECT에 detected_lang 추가\n\n2. LLM 출력 한자 변환 확장: text_cleaner.py의 hanja_substitute()는 production 검증 완료.\n   - extract_verify.py:104-115 _clean_markdown() 직후 hanja_substitute 적용\n   - extract.py:100-110 _store_fact() evidence에 적용\n   - enrich.py:203-217 _post_process_enrich() tldr에 적용\n   - day_verify.py:344-370 _insert_verify_result() evidence에 적용\n\n모든 파일 # Status: production (extract_verify.py, enrich.py, extract.py, day_verify.py) — P0 품질 유지.\nraw_consumer.py # Status: experimental — 변경 자유로움.",
+      "summary": "Task 5 완료: day_verify.py line 589에 inline import + line 591-592 json.dumps 직후 hanja_substitute 적용. formatter가 상단 import를 제거하여 inline import 사용, Python 모듈 캐시로 추가 오버헤드 없음.",
+      "completedAt": "2026-07-01T06:55:27.776Z"
+    }
+  ]
+}

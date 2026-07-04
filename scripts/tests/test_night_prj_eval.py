@@ -4,11 +4,16 @@
 """Ground truth 기반 night P-R-J 평가. P=30B(P), R=14B(R), J=N14B Q6.
 R을 hallucination detector로 활용 (MiniCheck 제거).
 night.py의 SYSTEM_PROPOSER/REFUTER/JUDGE (with few-shot) 사용.
-Pod B swap 방식: P→R→J 순차 swap.
+inference swap 방식: P→R→J 순차 swap.
 점수: GT 5개 시나리오 × P/R/J 각 100점 만점."""
-import json, os, subprocess, sys, time, urllib.request
+
+import json
+import os
+import sys
+import time
+import urllib.request
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
@@ -16,7 +21,8 @@ os.chdir(SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from lib.llm_client import MODEL_REGISTRY
-from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm
+from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+from lib.test_common import call_llm, log, test_complete, test_setup
 
 # ── Night models (night.py v4.0) ──────────────────────────────────────
 # review-p → 30B Q4_K_M (strong reasoning for finding generation)
@@ -117,9 +123,15 @@ GT = [
             "DB connection pool exhaustion이 근본 원인으로 의심됨",
         ],
         "expect": {
-            "p_min": 1, "p_cats": ["performance"], "p_hallu_max": 20,
+            "p_min": 1,
+            "p_cats": ["performance"],
+            "p_hallu_max": 20,
             "r_hallu_kw": [],
-            "j_dec": "APPROVED", "j_p_min": 15, "j_p_max": 30, "j_r_min": 15, "j_r_max": 30,
+            "j_dec": "APPROVED",
+            "j_p_min": 15,
+            "j_p_max": 30,
+            "j_r_min": 15,
+            "j_r_max": 30,
         },
     },
     {
@@ -134,9 +146,15 @@ GT = [
             "Logs accessible by all developers",
         ],
         "expect": {
-            "p_min": 1, "p_cats": ["security"], "p_hallu_max": 20,
+            "p_min": 1,
+            "p_cats": ["security"],
+            "p_hallu_max": 20,
             "r_hallu_kw": [],
-            "j_dec": "APPROVED", "j_p_min": 15, "j_p_max": 30, "j_r_min": 15, "j_r_max": 30,
+            "j_dec": "APPROVED",
+            "j_p_min": 15,
+            "j_p_max": 30,
+            "j_r_min": 15,
+            "j_r_max": 30,
         },
     },
     {
@@ -151,9 +169,15 @@ GT = [
             "Code coverage is 87%",
         ],
         "expect": {
-            "p_min": 0, "p_cats": [], "p_hallu_max": 0,
+            "p_min": 0,
+            "p_cats": [],
+            "p_hallu_max": 0,
             "r_hallu_kw": [],
-            "j_dec": "APPROVED", "j_p_min": 0, "j_p_max": 10, "j_r_min": 0, "j_r_max": 10,
+            "j_dec": "APPROVED",
+            "j_p_min": 0,
+            "j_p_max": 10,
+            "j_r_min": 0,
+            "j_r_max": 10,
         },
     },
     {
@@ -169,9 +193,15 @@ GT = [
             "/opt/ai_data disk at 92% — needs cleanup",
         ],
         "expect": {
-            "p_min": 1, "p_cats": ["quality"], "p_hallu_max": 30,
+            "p_min": 1,
+            "p_cats": ["quality"],
+            "p_hallu_max": 30,
             "r_hallu_kw": ["crash", "OOM", "out of memory"],
-            "j_dec": "APPROVED", "j_p_min": 5, "j_p_max": 30, "j_r_min": 5, "j_r_max": 30,
+            "j_dec": "APPROVED",
+            "j_p_min": 5,
+            "j_p_max": 30,
+            "j_r_min": 5,
+            "j_r_max": 30,
         },
     },
     {
@@ -187,9 +217,15 @@ GT = [
             "Variable naming: user_age, userEmail, UserName — inconsistent",
         ],
         "expect": {
-            "p_min": 2, "p_cats": ["security"], "p_hallu_max": 20,
+            "p_min": 2,
+            "p_cats": ["security"],
+            "p_hallu_max": 20,
             "r_hallu_kw": [],
-            "j_dec": "APPROVED", "j_p_min": 15, "j_p_max": 30, "j_r_min": 15, "j_r_max": 30,
+            "j_dec": "APPROVED",
+            "j_p_min": 15,
+            "j_p_max": 30,
+            "j_r_min": 15,
+            "j_r_max": 30,
         },
     },
 ]
@@ -199,6 +235,7 @@ GT = [
 TIMEOUT = 600
 LOG_TIMESTAMP = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
+
 def log(msg):
     timestamp_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
     print(f"[{timestamp_str}] {msg}", flush=True)
@@ -207,13 +244,15 @@ def log(msg):
 def build_ctx(gt):
     """Build P user context — same format as prj_ground_truth_test.py."""
     ftext = "\n".join(f"[text] {f}" for f in gt["facts"])
-    return (f"=== USER TURN ===\n{gt['user']}\n\n=== THINKING ===\n{gt['think']}\n\n"
-            f"=== RESPONSE ===\n{gt['text']}\n\n=== EXTRACTED FACTS ===\n{ftext}"), ftext
+    return (
+        f"=== USER TURN ===\n{gt['user']}\n\n=== THINKING ===\n{gt['think']}\n\n"
+        f"=== RESPONSE ===\n{gt['text']}\n\n=== EXTRACTED FACTS ===\n{ftext}"
+    ), ftext
 
 
 def _current_mode() -> Optional[str]:
     """Read current mode from env file."""
-    env_path = "/opt/ai_data/scripts/current-mode-pod-b.env"
+    env_path = "/opt/ai_data/scripts/current-mode-inference.env"
     try:
         with open(env_path) as f:
             for line in f:
@@ -244,19 +283,32 @@ def _health_ok(timeout: int = 600) -> bool:
 _SWAP_OVERRIDE = {
     "review-p": {
         "MODEL_FILE": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
-        "CTX_SIZE": "4096", "CACHE_RAM": "512", "MLOCK": "0",
-        "EVICT_ROOM": "14000", "THREADS": "4", "THREADS_BATCH": "4",
-        "CACHE_TYPE_K": "q8_0", "CACHE_TYPE_V": "q8_0",
+        "CTX_SIZE": "4096",
+        "CACHE_RAM": "512",
+        "MLOCK": "0",
+        "EVICT_ROOM": "14000",
+        "THREADS": "4",
+        "THREADS_BATCH": "4",
+        "CACHE_TYPE_K": "q8_0",
+        "CACHE_TYPE_V": "q8_0",
     },
     "review-r": {
         "MODEL_FILE": "qwen2.5-coder-14b-instruct-q4_k_m.gguf",
-        "CTX_SIZE": "8192", "CACHE_RAM": "512", "MLOCK": "0",
-        "EVICT_ROOM": "13000", "THREADS": "4", "THREADS_BATCH": "4",
+        "CTX_SIZE": "8192",
+        "CACHE_RAM": "512",
+        "MLOCK": "0",
+        "EVICT_ROOM": "13000",
+        "THREADS": "4",
+        "THREADS_BATCH": "4",
     },
     "review-j": {
         "MODEL_FILE": "NextCoder-14B-Q6_K.gguf",
-        "CTX_SIZE": "6144", "CACHE_RAM": "512", "MLOCK": "0",
-        "EVICT_ROOM": "13000", "THREADS": "4", "THREADS_BATCH": "4",
+        "CTX_SIZE": "6144",
+        "CACHE_RAM": "512",
+        "MLOCK": "0",
+        "EVICT_ROOM": "13000",
+        "THREADS": "4",
+        "THREADS_BATCH": "4",
     },
 }
 
@@ -272,8 +324,8 @@ def _check_swap_skip(cur: str, target: str) -> bool:
     return False
 
 
-def swap_pod_b(mode: str, max_wait: int = 1200) -> bool:
-    """Swap Pod B model. Skips restart when same MODEL_FILE as current mode."""
+def swap_inference(mode: str, max_wait: int = 1200) -> bool:
+    """Swap inference model. Skips restart when same MODEL_FILE as current mode."""
     cur = _current_mode()
     skip_restart = _check_swap_skip(cur, mode)
     if not skip_restart:
@@ -283,11 +335,12 @@ def swap_pod_b(mode: str, max_wait: int = 1200) -> bool:
                 log("  [swap] healthy, skip swap")
                 return True
             log("  [swap] unhealthy — will force restart")
-        log(f"  [swap] Pod B -> {mode}")
+        log(f"  [swap] inference -> {mode}")
     try:
         from lib.pod_manager import _write_mode_env as _wenv
+
         _wenv(mode, 8081)
-        env_file = "/opt/ai_data/scripts/current-mode-pod-b.env"
+        env_file = "/opt/ai_data/scripts/current-mode-inference.env"
         ov = _SWAP_OVERRIDE.get(mode)
         if ov:
             with open(env_file) as f:
@@ -306,16 +359,13 @@ def swap_pod_b(mode: str, max_wait: int = 1200) -> bool:
                         f.write(f"{k}={v}\n")
     except Exception as e:
         log(f"  [swap] env write failed ({e})")
-        env = "/opt/ai_data/scripts/current-mode-pod-b.env"
+        env = "/opt/ai_data/scripts/current-mode-inference.env"
         with open(env, "w") as f:
             f.write(f"MODE={mode}")
     if skip_restart:
         return True
-    r = subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-                       capture_output=True, timeout=60)
-    if r.returncode != 0:
-        log(f"  [swap] restart failed: {r.stderr.decode()[:200]}")
-        return False
+    _podman_stop_inference()
+    _podman_start_inference()
     ok = _health_ok(max_wait)
     if ok:
         log(f"  [swap] :8081 ready for {mode}")
@@ -324,23 +374,26 @@ def swap_pod_b(mode: str, max_wait: int = 1200) -> bool:
     return ok
 
 
-def call_llm_json(system: str, user: str, model: str = "proposer",
-                  max_tokens: int = 1024) -> dict:
-    """Call Pod B with JSON mode. `model` must be a MODEL_REGISTRY key."""
+def call_llm_json(system: str, user: str, model: str = "proposer", max_tokens: int = 1024) -> dict:
+    """Call inference with JSON mode. `model` must be a MODEL_REGISTRY key."""
     t0 = time.monotonic()
     try:
         meta = call_llm(
-            [{"role": "system", "content": system},
-             {"role": "user", "content": user}],
-            model=model, max_tokens=max_tokens, temperature=0.1,
-            timeout=TIMEOUT, json_mode=True, return_meta=True,
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            model=model,
+            max_tokens=max_tokens,
+            temperature=0.1,
+            timeout=TIMEOUT,
+            json_mode=True,
+            return_meta=True,
         )
         raw = meta.get("content", "")
         # JSON parse (handle ```json fences like night.py call_model)
         if isinstance(raw, str):
             import re
+
             raw = raw.strip()
-            m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', raw)
+            m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw)
             if m:
                 raw = m.group(1).strip()
             try:
@@ -349,17 +402,27 @@ def call_llm_json(system: str, user: str, model: str = "proposer",
                 # Try finding last }
                 end = raw.rfind("}")
                 if end > 0 and "Extra data" in str(e):
-                    parsed = json.loads(raw[:end + 1])
+                    parsed = json.loads(raw[: end + 1])
                 else:
                     parsed = None
         else:
             parsed = raw
         ok = parsed is not None
-        return {"ok": ok, "parsed": parsed, "raw": str(raw)[:400],
-                "elapsed_s": round(time.monotonic() - t0, 1), "error": ""}
+        return {
+            "ok": ok,
+            "parsed": parsed,
+            "raw": str(raw)[:400],
+            "elapsed_s": round(time.monotonic() - t0, 1),
+            "error": "",
+        }
     except Exception as e:
-        return {"ok": False, "parsed": None, "raw": str(e)[:400],
-                "elapsed_s": round(time.monotonic() - t0, 1), "error": str(e)[:200]}
+        return {
+            "ok": False,
+            "parsed": None,
+            "raw": str(e)[:400],
+            "elapsed_s": round(time.monotonic() - t0, 1),
+            "error": str(e)[:200],
+        }
 
 
 # ── Scoring (from prj_ground_truth_test.py) ──────────────────────────
@@ -409,9 +472,15 @@ def score_r(verdicts, findings, exp):
     h_rej_ok = True
     if h_kw:
         for f in findings:
-            blob = (f.get("description","") + " " + f.get("evidence","") + " " + f.get("rationale","")).lower()
+            blob = (
+                f.get("description", "")
+                + " "
+                + f.get("evidence", "")
+                + " "
+                + f.get("rationale", "")
+            ).lower()
             if any(k.lower() in blob for k in h_kw):
-                if f.get("id","") not in rej_ids:
+                if f.get("id", "") not in rej_ids:
                     h_rej_ok = False
     ratio = len(acc) / len(verdicts) if verdicts else 1
     pts = (60 if h_rej_ok else 0) + (40 if ratio >= 0.5 else 0)
@@ -436,33 +505,38 @@ def score_j(res, exp):
 
 
 # ── Role runners ──────────────────────────────────────────────────────
-def run_role(role: str, system_prompt: str, user_inputs: List[str],
-             model: str = "proposer",
-             max_tokens: int = 1024) -> List[dict]:
+def run_role(
+    role: str,
+    system_prompt: str,
+    user_inputs: List[str],
+    model: str = "proposer",
+    max_tokens: int = 1024,
+) -> List[dict]:
     """Run one role across all GT cases. Batch: same model for all cases."""
     results = []
     for i, gt in enumerate(GT):
         ctx = user_inputs[i]
         resp = call_llm_json(system_prompt, ctx, model=model, max_tokens=max_tokens)
         parsed = resp["parsed"] if resp["ok"] else {}
-        results.append({"resp": resp, "parsed": parsed,
-                        "elapsed": resp["elapsed_s"], "ok": resp["ok"]})
-        log(f"    [{i+1}] {gt['id']}: {resp['elapsed_s']}s {'OK' if resp['ok'] else 'FAIL'}")
+        results.append(
+            {"resp": resp, "parsed": parsed, "elapsed": resp["elapsed_s"], "ok": resp["ok"]}
+        )
+        log(f"    [{i + 1}] {gt['id']}: {resp['elapsed_s']}s {'OK' if resp['ok'] else 'FAIL'}")
     return results
 
 
 def run_round():
     """Full P→R→J round. R = hallucination detector for P scoring."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("  Night P-R-J Ground Truth Evaluation (v2)")
     print("  R = hallucination detector (MiniCheck 제거)")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # Phase P — 30B
-    print(f"\n{'─'*70}")
-    print(f"  [P] 30B Q4_K_M — Proposer")
-    print(f"{'─'*70}")
-    if not swap_pod_b(P_MODE, max_wait=1200):
+    print(f"\n{'─' * 70}")
+    print("  [P] 30B Q4_K_M — Proposer")
+    print(f"{'─' * 70}")
+    if not swap_inference(P_MODE, max_wait=1200):
         print("  ERROR: P swap failed — aborting")
         return None
     p_ctxs = []
@@ -472,10 +546,10 @@ def run_round():
     p_results = run_role("P", SYSTEM_PROPOSER, p_ctxs, model="proposer", max_tokens=2048)
 
     # Phase R — 14B (hallucination detector)
-    print(f"\n{'─'*70}")
-    print(f"  [R] 14B Q4_K_M — Refuter & Hallucination Detector")
-    print(f"{'─'*70}")
-    if not swap_pod_b(R_MODE, max_wait=600):
+    print(f"\n{'─' * 70}")
+    print("  [R] 14B Q4_K_M — Refuter & Hallucination Detector")
+    print(f"{'─' * 70}")
+    if not swap_inference(R_MODE, max_wait=600):
         print("  ERROR: R swap failed — aborting")
         return None
     r_ctxs = []
@@ -486,9 +560,9 @@ def run_round():
     r_results = run_role("R", SYSTEM_REFUTER, r_ctxs, model="reflector", max_tokens=1024)
 
     # Score P + R
-    print(f"\n{'─'*70}")
-    print(f"  SCORES (P+R)")
-    print(f"{'─'*70}")
+    print(f"\n{'─' * 70}")
+    print("  SCORES (P+R)")
+    print(f"{'─' * 70}")
     scores = []
     for i, gt in enumerate(GT):
         p = p_results[i]
@@ -499,12 +573,21 @@ def run_round():
 
         ps, pd, _ = score_p(pf, gt["expect"], gt["text"], accepted_ids=acc_ids if rv else None)
         rs, rd, _ = score_r(rv, pf, gt["expect"])
-        scores.append({"case": gt["id"], "title": gt["title"],
-                       "P": ps, "p_detail": pd, "p_elapsed": p["elapsed"],
-                       "R": rs, "r_detail": rd, "r_elapsed": r["elapsed"]})
+        scores.append(
+            {
+                "case": gt["id"],
+                "title": gt["title"],
+                "P": ps,
+                "p_detail": pd,
+                "p_elapsed": p["elapsed"],
+                "R": rs,
+                "r_detail": rd,
+                "r_elapsed": r["elapsed"],
+            }
+        )
         pbar = "█" * int(ps / 10) + "░" * (10 - int(ps / 10))
         rbar = "█" * int(rs / 10) + "░" * (10 - int(rs / 10))
-        print(f"  [{i+1}] {gt['title']}")
+        print(f"  [{i + 1}] {gt['title']}")
         print(f"    P: {ps:>3}/100 {pbar} ({pd}) [{p['elapsed']:.0f}s]")
         print(f"    R: {rs:>3}/100 {rbar} ({rd}) [{r['elapsed']:.0f}s]")
 
@@ -513,10 +596,10 @@ def run_round():
     print(f"\n  P={p_avg:.0f} R={r_avg:.0f}")
 
     # Phase J — 14B
-    print(f"\n{'─'*70}")
-    print(f"  [J] N14B Q6_K — Judge")
-    print(f"{'─'*70}")
-    if not swap_pod_b(J_MODE, max_wait=600):
+    print(f"\n{'─' * 70}")
+    print("  [J] N14B Q6_K — Judge")
+    print(f"{'─' * 70}")
+    if not swap_inference(J_MODE, max_wait=600):
         print("  ERROR: J swap failed — aborting")
         return None
     j_ctxs = []
@@ -546,7 +629,7 @@ def run_round():
 
     j_avg = sum(s["J"] for s in scores) / len(scores)
     total = round((p_avg + r_avg + j_avg) / 3, 1)
-    print(f"\n  {'─'*50}")
+    print(f"\n  {'─' * 50}")
     print(f"  종합: P={p_avg:.0f} R={r_avg:.0f} J={j_avg:.0f} 평균={total}")
 
     save_results(scores, p_results, r_results, j_results)
@@ -565,7 +648,15 @@ def save_results(scores: list, p_res, r_res, j_res):
     if scores and "R" in scores[0]:
         out["r_avg"] = sum(s["R"] for s in scores) / len(scores)
         out["j_avg"] = sum(s["J"] for s in scores) / len(scores)
-        out["total"] = round((sum(s["P"] for s in scores) + sum(s["R"] for s in scores) + sum(s["J"] for s in scores)) / (len(scores) * 3), 1)
+        out["total"] = round(
+            (
+                sum(s["P"] for s in scores)
+                + sum(s["R"] for s in scores)
+                + sum(s["J"] for s in scores)
+            )
+            / (len(scores) * 3),
+            1,
+        )
     fpath = f"/tmp/night_prj_eval_P30B_R14B_JN14B_{LOG_TIMESTAMP}.json"
     with open(fpath, "w") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
@@ -578,7 +669,7 @@ def main():
     print("=" * 70)
     print("  Night P-R-J Ground Truth Evaluation")
     print(f"  {len(GT)} scenarios, night.py v4.0 models")
-    print(f"  P=30B Q4_K_M | R=hallucination_detector(14B) | J=N14B Q6_K")
+    print("  P=30B Q4_K_M | R=hallucination_detector(14B) | J=N14B Q6_K")
     print("=" * 70)
 
     result = run_round()
@@ -587,16 +678,17 @@ def main():
         sys.exit(1)
     scores, p_results, r_results, j_results = result
 
-    # Restore Pod B
-    print("\n  Restoring Pod B to day mode...")
+    # Restore inference
+    print("\n  Restoring inference to day mode...")
     try:
         from lib.pod_manager import _write_mode_env as _wenv
+
         _wenv("day", 8082)
     except Exception:
-        with open("/opt/ai_data/scripts/current-mode-pod-b.env", "w") as f:
+        with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
             f.write("MODE=day")
-    subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-                   capture_output=True, timeout=120)
+    _podman_stop_inference()
+    _podman_start_inference()
     print("  Done.")
     test_complete("night PRJ evaluation done")
 

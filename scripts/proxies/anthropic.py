@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: systemd:devforge-pod-a (proxied port)
+# Path: systemd:devforge-inference (proxied port)
 """Anthropic-compatible reverse proxy for DeepSeek.
 
 Rewrites system-role messages into the top-level system field before forwarding
@@ -12,13 +12,12 @@ import hashlib
 import http.client
 import json
 import os
-import sys
-import re
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlsplit
-import time
 import socket
+import sys
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 
 # Default context window: DeepSeek V4 Flash supports 1M input tokens
 # Override via ANTHROPIC_PROXY_CONTEXT_WINDOW env var for other models
@@ -38,24 +37,24 @@ MODEL_MAP = {
 }
 from lib.proxy_utils import (
     HOP_BY_HOP_HEADERS,
-    _flatten_text,
-    _strip_cache_control,
-    _strip_system_billing_header,
-    _flatten_system_blocks,
-    _sanitize_messages,
-    _fix_orphan_tool_results,
+    _apply_cache_padding,
+    _cleanup,
     _collect_referenced_tool_use_ids,
     _collect_tool_use_ids_present,
-    _cleanup,
-    _remove_adjacent_orphans,
-    _strict_tool_adjacency_fix,
-    _message_has_nonempty_content,
-    _apply_cache_padding,
-    _json_dumps_system_first,
-    normalize_proxy_path,
-    filter_response_headers,
     _extract_stream_usage,
+    _fix_orphan_tool_results,
+    _flatten_system_blocks,
+    _flatten_text,
+    _json_dumps_system_first,
+    _message_has_nonempty_content,
+    _remove_adjacent_orphans,
+    _sanitize_messages,
+    _strict_tool_adjacency_fix,
+    _strip_cache_control,
+    _strip_system_billing_header,
+    filter_response_headers,
     log_usage,
+    normalize_proxy_path,
 )
 
 
@@ -79,7 +78,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
             )
         return conn
 
-    def _stream_response(self, conn: http.client.HTTPConnection, resp: http.client.HTTPResponse) -> bytes:
+    def _stream_response(
+        self, conn: http.client.HTTPConnection, resp: http.client.HTTPResponse
+    ) -> bytes:
         """Stream chunked response to client with idle timeout handling.
 
         Captures the last ~2.5 kB of the raw stream and, after the connection
@@ -103,7 +104,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     chunk = resp.read(chunk_size)
                 except socket.timeout:
                     if time.time() - last_read > idle_timeout:
-                        print(f"[anthropic_proxy] stream idle timeout after {idle_timeout}s", file=sys.stderr)
+                        print(
+                            f"[anthropic_proxy] stream idle timeout after {idle_timeout}s",
+                            file=sys.stderr,
+                        )
                         break
                     else:
                         continue
@@ -143,12 +147,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def _inject_auth_header(self, headers: Dict[str, str]) -> None:
         """Inject Authorization header from env if none is set."""
         try:
-            if not any(k.lower() == 'authorization' for k in headers):
-                key = os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')
+            if not any(k.lower() == "authorization" for k in headers):
+                key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
                 if key:
-                    headers['Authorization'] = f'Bearer {key}'
-                    if os.environ.get('ANTHROPIC_PROXY_DEBUG','0') == '1':
-                        print('[anthropic_proxy] injected Authorization header from env', file=sys.stderr)
+                    headers["Authorization"] = f"Bearer {key}"
+                    if os.environ.get("ANTHROPIC_PROXY_DEBUG", "0") == "1":
+                        print(
+                            "[anthropic_proxy] injected Authorization header from env",
+                            file=sys.stderr,
+                        )
         except Exception:
             pass
 
@@ -162,10 +169,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
             key: value
             for key, value in self.headers.items()
             if key.lower() not in HOP_BY_HOP_HEADERS
-            and key.lower() not in {"host", "content-length", "date", "user-agent", "x-request-id", "x-trace-id"}
+            and key.lower()
+            not in {"host", "content-length", "date", "user-agent", "x-request-id", "x-trace-id"}
         }
         # enforce a fixed User-Agent to improve prefix caching stability
-        headers['User-Agent'] = 'devforge-proxy/1.0'
+        headers["User-Agent"] = "devforge-proxy/1.0"
 
         if body:
             content_type = self.headers.get("content-type", "")
@@ -174,7 +182,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 try:
                     payload = json.loads(body.decode("utf-8"))
                 except Exception as e:
-                    err = json.dumps({"error": {"message": "Malformed JSON in request", "detail": str(e)}}).encode("utf-8")
+                    err = json.dumps(
+                        {"error": {"message": "Malformed JSON in request", "detail": str(e)}}
+                    ).encode("utf-8")
                     try:
                         self.send_response(400, "Bad Request")
                         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -187,7 +197,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     return
 
                 if not isinstance(payload, dict):
-                    err = json.dumps({"error": {"message": "Expected JSON object in request body"}}).encode("utf-8")
+                    err = json.dumps(
+                        {"error": {"message": "Expected JSON object in request body"}}
+                    ).encode("utf-8")
                     try:
                         self.send_response(400, "Bad Request")
                         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -202,8 +214,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 cache_stripped = _strip_cache_control(payload)
                 payload, cch_stripped = _strip_system_billing_header(payload)
                 if cch_stripped:
-                    print("[anthropic_proxy] stripped x-anthropic-billing-header from top-level system field",
-                          file=sys.stderr)
+                    print(
+                        "[anthropic_proxy] stripped x-anthropic-billing-header from top-level system field",
+                        file=sys.stderr,
+                    )
                 payload, _ = _flatten_system_blocks(payload)
                 payload, system_rewritten = _sanitize_messages(payload)
                 payload, orphans_fixed = _fix_orphan_tool_results(payload)
@@ -212,7 +226,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 try:
                     APPROX_CHARS_PER_TOKEN = 4
                     try:
-                        APPROX_CHARS_PER_TOKEN = int(os.environ.get("ANTHROPIC_PROXY_CHARS_PER_TOKEN", "4"))
+                        APPROX_CHARS_PER_TOKEN = int(
+                            os.environ.get("ANTHROPIC_PROXY_CHARS_PER_TOKEN", "4")
+                        )
                     except Exception:
                         pass
                     # char_budget based on model context window (1M for both Flash & Pro),
@@ -220,13 +236,20 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     # Override via ANTHROPIC_PROXY_CHAR_BUDGET env var if needed.
                     char_budget = DEEPSEEK_CONTEXT_WINDOW * APPROX_CHARS_PER_TOKEN
                     try:
-                        char_budget = int(os.environ.get("ANTHROPIC_PROXY_CHAR_BUDGET", str(char_budget)))
+                        char_budget = int(
+                            os.environ.get("ANTHROPIC_PROXY_CHAR_BUDGET", str(char_budget))
+                        )
                     except Exception:
                         pass
                     if isinstance(payload, dict) and isinstance(payload.get("messages"), list):
                         msgs = payload["messages"]
                         # compute approximate characters in each message using _flatten_text on content
-                        sizes = [len(_flatten_text(m.get("content"))) if isinstance(m, dict) else len(str(m)) for m in msgs]
+                        sizes = [
+                            len(_flatten_text(m.get("content")))
+                            if isinstance(m, dict)
+                            else len(str(m))
+                            for m in msgs
+                        ]
                         total_chars = sum(sizes)
                         if total_chars > int(char_budget * 0.85):
                             # keep most recent messages up to a lower threshold, collapse older ones
@@ -295,7 +318,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                                     final_kept.append(m)
                                     appended_idxs.add(idx)
 
-                            notice = {"role": "system", "content": "Conversation truncated by proxy: older messages removed to fit model context."}
+                            notice = {
+                                "role": "system",
+                                "content": "Conversation truncated by proxy: older messages removed to fit model context.",
+                            }
                             payload["messages"] = [notice] + final_kept
 
                             # Enforce upstream requirement: any tool_result block must have its corresponding
@@ -304,26 +330,39 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
                             # Remove messages that have empty content (upstream requires non-empty message content)
                             cleaned_msgs = []
-                            for m in payload.get('messages', []):
+                            for m in payload.get("messages", []):
                                 if _message_has_nonempty_content(m):
                                     cleaned_msgs.append(m)
                                 else:
                                     # allow system notice messages even if content is empty? skip them to satisfy upstream
-                                    print(f"[anthropic_proxy] dropping empty-message role={m.get('role')}", file=sys.stderr)
+                                    print(
+                                        f"[anthropic_proxy] dropping empty-message role={m.get('role')}",
+                                        file=sys.stderr,
+                                    )
 
                             # If cleaning removed all non-system messages, try to preserve most recent original non-empty message
-                            if len([x for x in cleaned_msgs if x.get('role') != 'system']) == 0:
+                            if len([x for x in cleaned_msgs if x.get("role") != "system"]) == 0:
                                 # try to find last non-empty message from original msgs
                                 for orig in reversed(msgs):
-                                    if isinstance(orig, dict) and _message_has_nonempty_content(orig) and orig.get('role') != 'system':
+                                    if (
+                                        isinstance(orig, dict)
+                                        and _message_has_nonempty_content(orig)
+                                        and orig.get("role") != "system"
+                                    ):
                                         cleaned_msgs.append(orig)
-                                        print('[anthropic_proxy] restored last non-system message to avoid empty payload', file=sys.stderr)
+                                        print(
+                                            "[anthropic_proxy] restored last non-system message to avoid empty payload",
+                                            file=sys.stderr,
+                                        )
                                         break
 
                             payload["messages"] = cleaned_msgs
 
-                            headers['X-Proxy-Conversation-Truncated'] = '1'
-                            print(f"[anthropic_proxy] truncated conversation: was {total_chars} chars, kept {accum} chars", file=sys.stderr)
+                            headers["X-Proxy-Conversation-Truncated"] = "1"
+                            print(
+                                f"[anthropic_proxy] truncated conversation: was {total_chars} chars, kept {accum} chars",
+                                file=sys.stderr,
+                            )
                 except Exception as e:
                     print(f"[anthropic_proxy] truncation check failed: {e}", file=sys.stderr)
 
@@ -340,7 +379,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 if isinstance(payload, dict):
                     m = payload.get("model")
                     if not isinstance(m, str) or not m:
-                        err = json.dumps({"error": {"message": "Missing or invalid 'model' field in request"}}).encode("utf-8")
+                        err = json.dumps(
+                            {"error": {"message": "Missing or invalid 'model' field in request"}}
+                        ).encode("utf-8")
                         try:
                             self.send_response(400, "Bad Request")
                             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -362,7 +403,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                         for k, v in MODEL_MAP.items():
                             if isinstance(m, str) and m.startswith(k):
                                 payload["model"] = v
-                                print(f"[anthropic_proxy] remapped model {m} -> {v} (prefix match)", file=sys.stderr)
+                                print(
+                                    f"[anthropic_proxy] remapped model {m} -> {v} (prefix match)",
+                                    file=sys.stderr,
+                                )
                                 break
                 # Always re-serialize for consistent JSON formatting (compact, sorted keys)
                 # to ensure DeepSeek's automatic prefix caching sees identical byte prefixes.
@@ -372,17 +416,43 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 _seps = (",", ":") if _compact else (", ", ": ")
 
                 try:
-                    msgs_before = payload.get('messages', [])
-                    filtered = [m for m in msgs_before if _message_has_nonempty_content(m) or (isinstance(m, dict) and m.get('role') == 'system' and isinstance(m.get('content'), str) and m.get('content').strip())]
+                    msgs_before = payload.get("messages", [])
+                    filtered = [
+                        m
+                        for m in msgs_before
+                        if _message_has_nonempty_content(m)
+                        or (
+                            isinstance(m, dict)
+                            and m.get("role") == "system"
+                            and isinstance(m.get("content"), str)
+                            and m.get("content").strip()
+                        )
+                    ]
                     # If no non-system messages remain, try to restore last non-system from original msgs
                     _orig_msgs = payload.get("messages", [])
-                    if len([x for x in filtered if isinstance(x, dict) and x.get('role') != 'system']) == 0:
+                    if (
+                        len(
+                            [
+                                x
+                                for x in filtered
+                                if isinstance(x, dict) and x.get("role") != "system"
+                            ]
+                        )
+                        == 0
+                    ):
                         for orig in reversed(_orig_msgs):
-                            if isinstance(orig, dict) and orig.get('role') != 'system' and _message_has_nonempty_content(orig):
+                            if (
+                                isinstance(orig, dict)
+                                and orig.get("role") != "system"
+                                and _message_has_nonempty_content(orig)
+                            ):
                                 filtered.append(orig)
-                                print('[anthropic_proxy] restored last non-system message during final validation', file=sys.stderr)
+                                print(
+                                    "[anthropic_proxy] restored last non-system message during final validation",
+                                    file=sys.stderr,
+                                )
                                 break
-                    payload['messages'] = filtered
+                    payload["messages"] = filtered
                 except Exception:
                     # fail safe: leave payload as-is
                     pass
@@ -394,96 +464,135 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 # _remove_adjacent_orphans check, and the tool_result-first
                 # guard with a single comprehensive pass.
                 try:
-                    payload['messages'] = _strict_tool_adjacency_fix(payload.get('messages', []))
+                    payload["messages"] = _strict_tool_adjacency_fix(payload.get("messages", []))
                 except Exception as _e:
                     print(f"[anthropic_proxy] strict adjacency fix failed: {_e}", file=sys.stderr)
 
                 # If all user/assistant messages were removed (only system notice remains),
                 # add a synthetic user prompt so the API call doesn't fail with "no user message".
-                if payload.get('messages') and not any(
-                    m.get('role') in ('user', 'assistant') for m in payload['messages']
+                if payload.get("messages") and not any(
+                    m.get("role") in ("user", "assistant") for m in payload["messages"]
                 ):
-                    payload['messages'].append({
-                        "role": "user",
-                        "content": "Please continue — my previous message was lost during context truncation."
-                    })
-                    print("[anthropic_proxy] added synthetic user message after full orphan cleanup", file=sys.stderr)
+                    payload["messages"].append(
+                        {
+                            "role": "user",
+                            "content": "Please continue — my previous message was lost during context truncation.",
+                        }
+                    )
+                    print(
+                        "[anthropic_proxy] added synthetic user message after full orphan cleanup",
+                        file=sys.stderr,
+                    )
 
                 # Ensure there's at least one message (upstream requires messages non-empty)
-                if not payload.get('messages'):
-                    payload['messages'] = [{"role":"system","content":"Conversation truncated by proxy: no messages available after cleaning."}]
+                if not payload.get("messages"):
+                    payload["messages"] = [
+                        {
+                            "role": "system",
+                            "content": "Conversation truncated by proxy: no messages available after cleaning.",
+                        }
+                    ]
 
                 # ── Cache padding (extends DeepSeek's automatic prefix cache) ──
                 payload, _ = _apply_cache_padding(payload)
 
-                body = _json_dumps_system_first(payload, ensure_ascii=False, sort_keys=_sort_keys, separators=_seps)
+                body = _json_dumps_system_first(
+                    payload, ensure_ascii=False, sort_keys=_sort_keys, separators=_seps
+                )
                 body = body.encode("utf-8")
 
                 # ── Insurance truncation (proxy safety net) ────────────────
                 # Removes oldest non-system messages when body exceeds 90% of
                 # Claude's auto-compact trigger (612K chars).  Fires only when
                 # Claude's own auto-compact hasn't reduced the body in time.
-                _INSURANCE_TRIGGER = int(os.environ.get(
-                    "ANTHROPIC_PROXY_INSURANCE_TRIGGER",
-                    str(int(680_000 * 0.9)),  # default: 90% of 680K = 612K
-                ))
+                _INSURANCE_TRIGGER = int(
+                    os.environ.get(
+                        "ANTHROPIC_PROXY_INSURANCE_TRIGGER",
+                        str(int(680_000 * 0.9)),  # default: 90% of 680K = 612K
+                    )
+                )
                 if _INSURANCE_TRIGGER > 0 and len(body) > _INSURANCE_TRIGGER:
                     try:
                         msgs = payload.get("messages", [])
                         # Split into system and non-system messages
-                        sys_msgs = [m for m in msgs if isinstance(m, dict) and m.get("role") == "system"]
-                        non_sys_msgs = [m for m in msgs if isinstance(m, dict) and m.get("role") != "system"]
+                        sys_msgs = [
+                            m for m in msgs if isinstance(m, dict) and m.get("role") == "system"
+                        ]
+                        non_sys_msgs = [
+                            m for m in msgs if isinstance(m, dict) and m.get("role") != "system"
+                        ]
                         before = len(msgs)
                         while len(non_sys_msgs) > 1 and len(body) > _INSURANCE_TRIGGER:
                             non_sys_msgs.pop(0)  # remove oldest
                             payload["messages"] = sys_msgs + non_sys_msgs
-                            body = _json_dumps_system_first(payload, ensure_ascii=False,
-                                              sort_keys=_sort_keys, separators=_seps)
+                            body = _json_dumps_system_first(
+                                payload, ensure_ascii=False, sort_keys=_sort_keys, separators=_seps
+                            )
                             body = body.encode("utf-8")
                         if len(msgs) < before:
-                            print(f"[anthropic_proxy] insurance: removed {before - len(msgs)} msgs, "
-                                  f"body={len(body)} chars", file=sys.stderr)
-                            headers['X-Proxy-Insurance-Truncated'] = '1'
+                            print(
+                                f"[anthropic_proxy] insurance: removed {before - len(msgs)} msgs, "
+                                f"body={len(body)} chars",
+                                file=sys.stderr,
+                            )
+                            headers["X-Proxy-Insurance-Truncated"] = "1"
                             # Strict adjacency fix after insurance truncation
                             try:
-                                payload['messages'] = _strict_tool_adjacency_fix(payload.get('messages', []))
+                                payload["messages"] = _strict_tool_adjacency_fix(
+                                    payload.get("messages", [])
+                                )
                             except Exception:
                                 pass
-                            if not payload.get('messages') or not any(
-                                m.get('role') in ('user', 'assistant') for m in payload['messages']
+                            if not payload.get("messages") or not any(
+                                m.get("role") in ("user", "assistant") for m in payload["messages"]
                             ):
-                                payload['messages'] = payload.get('messages', []) + [
-                                    {"role": "user", "content": "Please continue — context was truncated."}
+                                payload["messages"] = payload.get("messages", []) + [
+                                    {
+                                        "role": "user",
+                                        "content": "Please continue — context was truncated.",
+                                    }
                                 ]
                             # Re-serialize body after guard/synthetic message modification
-                            body = _json_dumps_system_first(payload, ensure_ascii=False,
-                                              sort_keys=_sort_keys, separators=_seps)
+                            body = _json_dumps_system_first(
+                                payload, ensure_ascii=False, sort_keys=_sort_keys, separators=_seps
+                            )
                             body = body.encode("utf-8")
                     except Exception as e:
-                        print(f"[anthropic_proxy] insurance truncation failed: {e}", file=sys.stderr)
+                        print(
+                            f"[anthropic_proxy] insurance truncation failed: {e}", file=sys.stderr
+                        )
 
                 # attach SHA256 of the serialized body to headers (also write to debug file when enabled)
                 try:
                     sha = hashlib.sha256(body).hexdigest()
-                    headers['X-Proxy-Body-SHA256'] = sha
-                    if os.environ.get('ANTHROPIC_PROXY_DEBUG','0') == '1':
+                    headers["X-Proxy-Body-SHA256"] = sha
+                    if os.environ.get("ANTHROPIC_PROXY_DEBUG", "0") == "1":
                         request_ms = int(time.time() * 1000)
                         dump_base = f"/tmp/anthropic_debug_{request_ms}"
-                        with open(dump_base + '_forward.json','wb') as fwd:
+                        with open(dump_base + "_forward.json", "wb") as fwd:
                             fwd.write(body)
-                        with open(dump_base + '_sha256.txt','w', encoding='utf-8') as sf:
+                        with open(dump_base + "_sha256.txt", "w", encoding="utf-8") as sf:
                             sf.write(sha)
-                        with open(dump_base + '_headers.json','w', encoding='utf-8') as hf:
+                        with open(dump_base + "_headers.json", "w", encoding="utf-8") as hf:
                             json.dump(headers, hf, ensure_ascii=False, indent=2)
-                        print(f"[anthropic_proxy] wrote debug dumps {dump_base}_*.json", file=sys.stderr)
+                        print(
+                            f"[anthropic_proxy] wrote debug dumps {dump_base}_*.json",
+                            file=sys.stderr,
+                        )
                 except Exception:
                     pass
                 if cache_stripped:
-                    print(f"[anthropic_proxy] stripped cache_control from request", file=sys.stderr)
+                    print("[anthropic_proxy] stripped cache_control from request", file=sys.stderr)
                 if system_rewritten:
-                    print(f"[anthropic_proxy] moved system-role messages to top-level system field", file=sys.stderr)
+                    print(
+                        "[anthropic_proxy] moved system-role messages to top-level system field",
+                        file=sys.stderr,
+                    )
                 if orphans_fixed:
-                    print(f"[anthropic_proxy] fixed orphan tool_result blocks (tool_use/tool_result mismatch after compaction)", file=sys.stderr)
+                    print(
+                        "[anthropic_proxy] fixed orphan tool_result blocks (tool_use/tool_result mismatch after compaction)",
+                        file=sys.stderr,
+                    )
 
         self._inject_auth_header(headers)
 
@@ -497,7 +606,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"[anthropic_proxy] upstream request failed: {e}", file=sys.stderr)
             conn.close()
-            err = json.dumps({"error": {"message": f"Upstream connection failed: {e}", "type": "upstream_error"}}).encode("utf-8")
+            err = json.dumps(
+                {"error": {"message": f"Upstream connection failed: {e}", "type": "upstream_error"}}
+            ).encode("utf-8")
             try:
                 self.send_response(502, "Bad Gateway")
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -542,12 +653,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     with open(dump_path, "wb") as _df:
                         _df.write(body)
                     # keep only the last 5 dumps
-                    _existing = sorted(p for p in os.listdir("/tmp") if p.startswith("anthropic_4xx_"))
+                    _existing = sorted(
+                        p for p in os.listdir("/tmp") if p.startswith("anthropic_4xx_")
+                    )
                     for _stale in _existing[:-5]:
-                        try: os.remove(os.path.join("/tmp", _stale))
-                        except Exception: pass
-                    print(f"[anthropic_proxy] upstream returned {resp.status}, dumped body to {dump_path}",
-                          file=sys.stderr)
+                        try:
+                            os.remove(os.path.join("/tmp", _stale))
+                        except Exception:
+                            pass
+                    print(
+                        f"[anthropic_proxy] upstream returned {resp.status}, dumped body to {dump_path}",
+                        file=sys.stderr,
+                    )
                 except Exception as _de:
                     print(f"[anthropic_proxy] debug dump failed: {_de}", file=sys.stderr)
 
@@ -575,7 +692,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--listen", default=os.environ.get("ANTHROPIC_PROXY_LISTEN", DEFAULT_LISTEN))
+    parser.add_argument(
+        "--listen", default=os.environ.get("ANTHROPIC_PROXY_LISTEN", DEFAULT_LISTEN)
+    )
     parser.add_argument(
         "--upstream",
         default=os.environ.get("ANTHROPIC_PROXY_UPSTREAM", DEFAULT_UPSTREAM),

@@ -1,18 +1,77 @@
 #!/usr/bin/env python3
 # Status: production
-"""Container health checks, model fingerprint, pasta management, env writing."""
+"""Container health checks, model fingerprint, env writing, podman lifecycle."""
 
 from __future__ import annotations
 
 import json
 import os
-import re
-import signal
 import subprocess
 import time
 import urllib.request
 
-from lib.pod_manager.models import MODEL_METADATA, POD_A_MODELS
+from lib.model_registry import MODEL_METADATA
+
+# ── Inference container: podman run --rm ───────────────────────────
+INFERENCE_CONTAINER = "devforge-inference"
+_INFERENCE_RUN_ARGS = [
+    "podman",
+    "run",
+    "-d",
+    "--replace",
+    "--name",
+    INFERENCE_CONTAINER,
+    "--rm",
+    "--entrypoint",
+    "/bin/bash",
+    "--pull",
+    "newer",
+    "--network",
+    "devforge-net",
+    "-v",
+    "/opt/ai_data/models/gguf:/models:Z",
+    "-v",
+    "/opt/ai_data/scripts/inference-entrypoint.sh:/entrypoint.d/inference-entrypoint.sh:Z",
+    "-v",
+    "/opt/ai_data/scripts/current-mode-inference.env:/entrypoint.d/current-mode.env:Z",
+    # Port 8080 is NOT published — Pod A (reranker) owns it.
+    # Inference container only needs 8081-8084 for embed/extract/enrich/verify/judge.
+    "--publish",
+    "127.0.0.1:8081:8081",
+    "--publish",
+    "127.0.0.1:8082:8082",
+    "--publish",
+    "127.0.0.1:8083:8083",
+    "--publish",
+    "127.0.0.1:8084:8084",
+    "--env",
+    "SERVER_TIMEOUT=28800",
+    "ghcr.io/ggml-org/llama.cpp:server",
+    "/entrypoint.d/inference-entrypoint.sh",
+]
+
+
+def _podman_start_inference():
+    """Start inference container via podman run --rm. Returns True on success."""
+    r = subprocess.run(_INFERENCE_RUN_ARGS, capture_output=True, timeout=120)
+    if r.returncode != 0:
+        err = r.stderr.strip()[:200] if r.stderr else "(no stderr)"
+        log(f"  podman run failed (rc={r.returncode}): {err}")
+        return False
+    return True
+
+
+def _podman_stop_inference():
+    """Stop inference container via podman rm -f --volumes."""
+    subprocess.run(
+        ["podman", "rm", "-v", "-f", "-i", INFERENCE_CONTAINER],
+        capture_output=True,
+        timeout=30,
+    )
+
+
+MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
+_cached_entrypoint = "/opt/ai_data/scripts/inference-entrypoint.sh"
 
 
 def _ts():
@@ -36,56 +95,28 @@ def _reclaim_memory():
         time.sleep(15)
 
 
-def _container_service_name(port):
-    for model_key in POD_A_MODELS:
-        meta = MODEL_METADATA.get(model_key)
-        if meta and meta.get("port") == port:
-            return "container-devforge-pod-a"
-    return "devforge-pod-b"
-
-
-def _check_container_health(port, label):
+def _check_container_health(_port=None, _label=None):
+    """Check inference container running state and entrypoint."""
     warnings = []
-    svc = _container_service_name(port)
-
     try:
         r = subprocess.run(
-            ["systemctl", "--user", "show", f"{svc}.service", "-p", "NRestarts", "--value"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        restarts = int(r.stdout.strip())
-        if restarts > 0:
-            warnings.append(f"{svc} NRestarts={restarts} — possible crashloop")
-    except Exception:
-        pass
-
-    podman_name = "devforge-pod-a" if "pod-a" in svc else "devforge-pod-b"
-    try:
-        r = subprocess.run(
-            ["podman", "ps", "--filter", f"name={podman_name}", "--format", "{{.Status}}"],
+            ["podman", "ps", "--filter", f"name={INFERENCE_CONTAINER}", "--format", "{{.Status}}"],
             capture_output=True,
             text=True,
             timeout=10,
         )
         status = r.stdout.strip()
         if not status:
-            warnings.append(f"{svc} not in podman ps — container may be dead")
+            warnings.append("inference container not in podman ps — container may be dead")
         elif status.startswith("Up ") and "second" in status:
-            warnings.append(f"{svc} just started ({status}) — may not be fully initialized")
+            warnings.append(f"inference just started ({status}) — may not be fully initialized")
         elif "unhealthy" in status:
-            warnings.append(f"{svc} status=unhealthy — health check failing")
+            warnings.append("inference status=unhealthy — health check failing")
     except Exception:
         pass
 
-    entrypoint_map = {
-        "container-devforge-pod-a": "/opt/ai_data/scripts/pod-a-entrypoint.sh",
-        "container-devforge-pod-b": "/opt/ai_data/scripts/pod-b-entrypoint.sh",
-    }
-    ep_path = entrypoint_map.get(svc)
-    if ep_path and not os.path.exists(ep_path):
-        warnings.append(f"entrypoint missing: {ep_path}")
+    if not os.path.exists(_cached_entrypoint):
+        warnings.append(f"entrypoint missing: {_cached_entrypoint}")
 
     for w in warnings:
         log(f"  [container-warn] {w}")
@@ -120,32 +151,8 @@ def _check_model_identity(port, model_key):
     return ok
 
 
-def _kill_stray_pasta(ports):
-    for port in ports:
-        try:
-            r = subprocess.run(
-                ["ss", "-tlnp", f"sport = :{port}"], capture_output=True, text=True, timeout=10
-            )
-            if "pasta" in r.stdout:
-                pid = _extract_pasta_pid(r.stdout, port)
-                if pid:
-                    log(f"  killing stray pasta (PID {pid}) holding :{port}")
-                    os.kill(pid, signal.SIGKILL)
-        except Exception:
-            pass
-
-
-def _extract_pasta_pid(ss_out: str, port: str) -> int | None:
-    for line in ss_out.splitlines():
-        if f":{port}" in line and "pasta" in line:
-            m = re.search(r"pid=(\d+)", line)
-            if m:
-                return int(m.group(1))
-    return None
-
-
 def _write_mode_env(mode: str, port: int, model_key: str | None = None) -> None:
-    MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
+    """Write mode env for inference container. Single file — all models run here."""
     meta = None
     if model_key:
         meta = MODEL_METADATA.get(model_key)
@@ -191,6 +198,52 @@ def _write_mode_env(mode: str, port: int, model_key: str | None = None) -> None:
                 pairs.append((env_key, str(val)))
 
     lines = [f"{k}={v}" for k, v in pairs]
-    with open(MODE_FILE_B, "w") as fh:
+    with open(MODE_FILE, "w") as fh:
         fh.write("\n".join(lines) + "\n")
-    log(f"  wrote env for {mode}:{port} ({meta['file'] if meta else '?'})")
+    log(f"  wrote env for {mode}:{port} → inference ({meta['file'] if meta else '?'})")
+
+
+def _write_dual_env(model_key_a: str, model_key_b: str) -> None:
+    """Write dual-server mode env for inference container.
+
+    Two llama-server instances in one container, config via _A / _B suffixes.
+    """
+    meta_a = MODEL_METADATA.get(model_key_a)
+    meta_b = MODEL_METADATA.get(model_key_b)
+    if not meta_a or not meta_b:
+        log(f"  FATAL: unknown model keys for dual: {model_key_a} / {model_key_b}")
+        return
+
+    lines = ["MODE=dual"]
+    for prefix, meta in [("A", meta_a), ("B", meta_b)]:
+        f = meta.get
+        key_name = model_key_a if prefix == "A" else model_key_b
+        field_map: list[tuple[str, str]] = [
+            ("model_name", f"MODEL_NAME_{prefix}"),
+            ("", f"PORT_{prefix}"),
+            ("file", f"MODEL_FILE_{prefix}"),
+            ("ctx", f"CTX_SIZE_{prefix}"),
+            ("threads", f"THREADS_{prefix}"),
+            ("threads_batch", f"THREADS_BATCH_{prefix}"),
+        ]
+        for meta_key, env_key in field_map:
+            val = f(meta_key) if meta_key else meta.get("port")
+            if val is not None:
+                lines.append(f"{env_key}={val}")
+        for meta_key, env_key in [
+            ("cache_ram", f"CACHE_RAM_{prefix}"),
+            ("mlock", f"MLOCK_{prefix}"),
+            ("evict_room", f"EVICT_ROOM_{prefix}"),
+            ("flash_attn", f"FLASH_ATTN_{prefix}"),
+            ("batch_size", f"BATCH_SIZE_{prefix}"),
+            ("ubatch_size", f"UBATCH_SIZE_{prefix}"),
+            ("parallel", f"PARALLEL_{prefix}"),
+            ("cpus", f"CPUS_{prefix}"),
+        ]:
+            val = f(meta_key)
+            if val is not None and val != "":
+                lines.append(f"{env_key}={val}")
+
+    with open(MODE_FILE, "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+    log(f"  wrote dual env: {model_key_a}(:{meta_a['port']}) + {model_key_b}(:{meta_b['port']})")

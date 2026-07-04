@@ -4,12 +4,13 @@
 """Raw HTTP client for any OpenAI-compatible endpoint.
 
 Callers pass an explicit endpoint URL.  This module handles:
-- TCP keepalive to prevent podman/pasta from dropping idle connections
+- TCP keepalive to prevent podman from dropping idle connections
 - DeepSeek workaround (rewrite system role to user role)
 - HTTPS and HTTP connections
 
 For model-alias-based local pod calls, use lib.llm_client instead.
 """
+
 import http.client
 import json
 import socket
@@ -17,7 +18,7 @@ from typing import Tuple
 
 
 def _enable_keepalive(sock: socket.socket) -> None:
-    """Enable aggressive TCP keepalive to prevent idle connection drops by pasta/podman.
+    """Enable aggressive TCP keepalive to prevent idle connection drops by podman.
     Probes start at 10s idle, every 10s — keeps connection alive during long prompt eval."""
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
@@ -47,11 +48,17 @@ def _normalize_messages(messages: list, endpoint: str) -> list:
     return out
 
 
-def call_llm_endpoint(endpoint: str, messages: list, api_key: str = "",
-                      model: str = "", timeout: int = 1200, max_tokens: int = 2048) -> Tuple[int, dict]:
+def call_llm_endpoint(
+    endpoint: str,
+    messages: list,
+    api_key: str = "",
+    model: str = "",
+    timeout: int = 1200,
+    max_tokens: int = 2048,
+) -> Tuple[int, dict]:
     """Call any OpenAI-compatible chat completions endpoint. Returns (status, body).
 
-    Uses TCP keepalive to prevent pasta/podman from dropping idle connections
+    Uses TCP keepalive to prevent podman from dropping idle connections
     during long prompt evaluation on ARM CPU.
 
     Note:
@@ -86,9 +93,9 @@ def call_llm_endpoint(endpoint: str, messages: list, api_key: str = "",
     try:
         if endpoint.startswith("https://"):
             import ssl
+
             conn = http.client.HTTPSConnection(
-                host, timeout=timeout,
-                context=ssl.create_default_context()
+                host, timeout=timeout, context=ssl.create_default_context()
             )
         else:
             conn = http.client.HTTPConnection(host, timeout=timeout)

@@ -3,20 +3,27 @@
 # Path: imported by — pipelines/exp_runner.py, day_runner.py, night_runner.py
 """Container lifecycle management — stop, start, health, memory reclaim."""
 
-import os, subprocess, time, urllib.request
+import os
+import subprocess
+import time
+import urllib.request
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
 def log(msg):
     from datetime import datetime, timezone
+
     t = datetime.now(timezone.utc).strftime("%H:%M:%S")
     print(f"[{t}] {msg}", flush=True)
 
+
 def stop_all():
-    """Stop both LLM containers."""
-    for svc in ["container-devforge-pod-b.service", "container-devforge-pod-a.service"]:
-        subprocess.run(["systemctl", "--user", "stop", svc], capture_output=True, timeout=30)
-        subprocess.run(["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10)
+    """Stop inference container."""
+    from lib.pod_manager.container import _podman_stop_inference
+
+    _podman_stop_inference()
+
 
 def free_memory(level=1):
     """Memory reclamation. level:
@@ -50,6 +57,7 @@ def free_memory(level=1):
 
     report_memory("after reclaim")
 
+
 def report_memory(label=""):
     """Log free/available memory."""
     try:
@@ -64,6 +72,7 @@ def report_memory(label=""):
     except Exception:
         pass
 
+
 def get_available_mb():
     """Return MemAvailable in MB, or 0 on error."""
     try:
@@ -74,38 +83,32 @@ def get_available_mb():
     except Exception:
         return 0
 
+
+def wait_health(port, timeout=120):
+    """Poll /health until 200 or timeout."""
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/health")
+            with urllib.request.urlopen(req, timeout=3) as r:
+                if r.status == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(3)
+    return False
+
+
 def write_mode(pod, mode):
-    """Write mode file atomically."""
-    if pod == "pod-b":
-        from lib.pod_manager import _write_mode_env
-        from lib.pod_manager import MODEL_METADATA
-        # Find port from MODEL_METADATA by matching mode
-        port = 8082
-        for m in MODEL_METADATA.values():
-            if m.get("mode") == mode:
-                port = m.get("port", 8082)
-                break
-        _write_mode_env(mode, port)
-        return
-    path = f"/opt/ai_data/scripts/current-mode-{pod}.env"
+    """Write mode file atomically (inference mode only now)."""
+    from lib.pod_manager.container import MODE_FILE
+
+    path = MODE_FILE
     tmp = f"{path}.tmp"
     with open(tmp, "w") as f:
         f.write(f"MODE={mode}")
     os.rename(tmp, path)
 
-def start_pod_a(timeout=120):
-    """Start Pod A (reranker:8080)."""
-    log("  Starting Pod A (reranker:8080)...")
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a.service"],
-                   capture_output=True, timeout=60)
-    return wait_health(8080, timeout)
-
-def start_pod_b(port=8082, timeout=120):
-    """Start Pod B with specified port."""
-    log(f"  Starting Pod B (port:{port})...")
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b.service"],
-                   capture_output=True, timeout=60)
-    return wait_health(port, timeout)
 
 def recover_and_restart(attempt=1):
     """OOM/failure recovery + day mode restart.
@@ -116,37 +119,27 @@ def recover_and_restart(attempt=1):
     """
     stop_all()
     free_memory(level=min(attempt, 3))
-    write_mode("pod-b", "day")
-    write_mode("pod-a", "day")
+    write_mode("inference", "day")
 
     if attempt <= 2:
-        log("  Attempt: Pod A reserved + Pod B extractor (standard day mode)")
-        pod_a_ready = start_pod_a(120)
-        log(f"  Pod A (reserved:8080) = {'OK' if pod_a_ready else 'TIMEOUT'}")
+        log("  Attempt: inference extractor (standard day mode)")
+        from lib.pod_manager import start_inference
 
-        if not pod_a_ready and attempt == 2:
-            report_memory("after Pod A failure")
-            stop_all()
-            free_memory(level=2)
-            pod_a_ready = start_pod_a(120)
-            log(f"  Pod A retry (reserved:8080) = {'OK' if pod_a_ready else 'TIMEOUT'}")
-
-        if pod_a_ready:
-            pod_b_ready = start_pod_b(180)
-            log(f"  Pod B (extractor:8082) = {'OK' if pod_b_ready else 'TIMEOUT'}")
-            if pod_b_ready:
-                return True
-
-        log("  Escalating to minimal mode (day model only)...")
+        ok = start_inference("day", 8082, skip_probe=False)
+        if ok:
+            return True
+        log("  Escalating to minimal mode...")
 
     stop_all()
     free_memory(level=3)
-    write_mode("pod-b", "day")
+    write_mode("inference", "day")
 
-    log("  Minimal mode: Pod B only (extractor:8082)")
-    pod_b_ready = start_pod_b(300)
-    if pod_b_ready:
-        log("  Minimal mode OK: day model running alone")
+    log("  Minimal mode: inference extractor")
+    from lib.pod_manager import start_inference
+
+    ok = start_inference("day", 8082, skip_probe=True)
+    if ok:
+        log("  Minimal mode OK")
         return True
 
     log("  FATAL: even minimal mode failed")

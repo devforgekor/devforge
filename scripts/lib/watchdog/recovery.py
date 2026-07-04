@@ -18,8 +18,6 @@ from typing import Callable, Optional
 from lib.experiment_state import is_experiment_active
 from lib.watchdog.config import (
     CONTAINER_EXCLUSION,
-    MODE_FILE_A,
-    MODE_FILE_B,
 )
 from lib.watchdog.state import ComponentTracker
 
@@ -55,7 +53,7 @@ def analyze_exit_code(code: int) -> str:
 
 
 def recover_container(name: str) -> bool:
-    """systemctl --user restart container. Exclusion 체크."""
+    """Restart container. Inference container → podman rm+run, others → systemctl."""
     if name in CONTAINER_EXCLUSION:
         log(f"  SKIP: {name} is excluded from restart")
         return False
@@ -64,11 +62,17 @@ def recover_container(name: str) -> bool:
         return False
     log(f"  restart container {name}...")
     try:
-        subprocess.run(
-            ["systemctl", "--user", "restart", name],
-            capture_output=True,
-            timeout=30,
-        )
+        if name == "devforge-inference":
+            from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+
+            _podman_stop_inference()
+            _podman_start_inference()
+        else:
+            subprocess.run(
+                ["systemctl", "--user", "restart", name],
+                capture_output=True,
+                timeout=30,
+            )
         time.sleep(5)
         return True
     except Exception as e:
@@ -107,23 +111,12 @@ def recover_oom() -> bool:
 
     log("  OOM recovery: kill_all + restore...")
     try:
-        subprocess.run(
-            ["systemctl", "--user", "stop", "container-devforge-pod-b.service"],
-            capture_output=True,
-            timeout=30,
-        )
-        subprocess.run(
-            ["systemctl", "--user", "stop", "container-devforge-pod-a.service"],
-            capture_output=True,
-            timeout=30,
-        )
+        from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+
+        _podman_stop_inference()
         time.sleep(10)  # 메모리 reclaim
 
-        # Pod A always restores to day mode
-        with open(MODE_FILE_A, "w") as f:
-            f.write("MODE=day")
-
-        # Restore Pod B to day mode
+        # Restore inference to day mode
         try:
             subprocess.run(
                 [
@@ -137,20 +130,11 @@ def recover_oom() -> bool:
                 timeout=15,
             )
         except Exception:
-            log("  _write_mode_env failed, falling back to MODE=day for Pod B")
-            with open(MODE_FILE_B, "w") as f:
+            log("  _write_mode_env failed, falling back to MODE=day for inference")
+            with open(MODE_FILE_INFERENCE, "w") as f:
                 f.write("MODE=day")
 
-        subprocess.run(
-            ["systemctl", "--user", "start", "container-devforge-pod-a.service"],
-            capture_output=True,
-            timeout=60,
-        )
-        subprocess.run(
-            ["systemctl", "--user", "start", "container-devforge-pod-b.service"],
-            capture_output=True,
-            timeout=60,
-        )
+        _podman_start_inference()
         return True
     except Exception as e:
         log(f"  OOM recovery failed: {e}")
@@ -190,7 +174,7 @@ def graduated_recover(
 
 
 def recover_slot_deadlock(port: str) -> bool:
-    """Restart container-devforge-pod-b to resolve cont-batching slot deadlock.
+    """Restart devforge-inference to resolve cont-batching slot deadlock.
 
     llama-server --parallel N + --cache-reuse causes slot scheduling deadlock
     (PR #22083). Workaround --slot-prompt-similarity 0 is applied in entrypoint,
@@ -200,15 +184,14 @@ def recover_slot_deadlock(port: str) -> bool:
         log("  SKIP slot deadlock recovery — experiment active")
         return False
 
-    log(f"  [slot-deadlock] :{port} — restarting container-devforge-pod-b...")
+    log(f"  [slot-deadlock] :{port} — restarting devforge-inference...")
     try:
-        subprocess.run(
-            ["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-            capture_output=True,
-            timeout=60,
-        )
+        from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+
+        _podman_stop_inference()
+        _podman_start_inference()
         time.sleep(5)
-        log("  container-devforge-pod-b restarted")
+        log("  devforge-inference restarted")
         return True
     except Exception as e:
         log(f"  restart failed: {e}")

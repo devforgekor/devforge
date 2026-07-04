@@ -25,7 +25,6 @@ import sys
 import threading
 import time
 import urllib.request
-from datetime import datetime, timezone
 from typing import Optional
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -33,20 +32,20 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql, psql_ok, psql_json, esc_sql
-from lib.infra.preflight import preflight_checks
 from lib.common import log
-from lib.watchdog.messenger import heartbeat, resolve_pulse
+from lib.db import esc_sql, psql_json, psql_ok
+from lib.infra.preflight import preflight_checks
 from lib.pod_manager import ensure_model
 from lib.text_cleaner import get_cleaner
+from lib.watchdog.messenger import heartbeat, resolve_pulse
+from lib.work_steal import WorkStealer
 
-from lib.llm_client import MODEL_REGISTRY
-EMBED_URL = f"http://127.0.0.1:{MODEL_REGISTRY['embeder']['port']}/v1/embeddings"
-MAX_BATCH_SIZE = 10   # max texts per request (safety cap)
-BATCH_LIMIT = 50     # max turns per run (sliced via MAX_BATCH_SIZE)
-BATCH_TIMEOUT = 1800  # per batch request (30min safety — model cold load ~3.5min + processing)
-MAX_CYCLE = 86400     # 24hr max for full 8.6K turn embed
-SLOT_CTX = 5000       # token budget per slot (--ctx-size 12288 / --parallel 2 * 0.8 margin)
+EMBED_PORTS = [8080, 8081]  # inference :8080 + inference :8081
+MAX_BATCH_SIZE = 10  # max texts per request (safety cap)
+BATCH_LIMIT = 50  # max turns per run (sliced via MAX_BATCH_SIZE)
+BATCH_TIMEOUT = 600  # per batch request (10min — ~2-4min typical, safety margin for retry)
+MAX_CYCLE = 86400  # 24hr max for full 8.6K turn embed
+SLOT_CTX = 1600  # token budget per slot (--ctx-size 2048 / --parallel 1 * 0.8 margin)
 CHUNK_MAX_TOKENS = 512
 SHORT_TURN_CHARS = 200
 EMBED_DIMS = 2048
@@ -59,15 +58,18 @@ def truncate_to_mrl(vector: list[float], target_dims: int = EMBED_DIMS) -> list[
         truncated = [x / norm for x in truncated]
     return truncated
 
+
 def split_sentences(text: str) -> list[str]:
     """Language-aware sentence splitting via text_cleaner."""
     cleaner = get_cleaner()
     lang, _ = cleaner.detect_language(text)
     return cleaner.split_sentences(text, lang=lang)
 
+
 def estimate_tokens(text: str) -> int:
     """Token estimation via tiktoken (o200k_base) from text_cleaner."""
     return get_cleaner().estimate_tokens(text)
+
 
 def chunk_text(text: str) -> list[tuple[str, int]]:
     if len(text) < SHORT_TURN_CHARS:
@@ -80,21 +82,21 @@ def chunk_text(text: str) -> list[tuple[str, int]]:
         sent_tok = estimate_tokens(sent)
         if sent_tok > CHUNK_MAX_TOKENS:
             if cur:
-                chunks.append((' '.join(cur), len(chunks)))
+                chunks.append((" ".join(cur), len(chunks)))
                 cur, cur_tok = [], 0
             max_chars = CHUNK_MAX_TOKENS * 5 // 2
             chunks.append((sent[:max_chars].rstrip(), len(chunks)))
         elif cur_tok + sent_tok > CHUNK_MAX_TOKENS:
             if cur:
-                chunks.append((' '.join(cur), len(chunks)))
+                chunks.append((" ".join(cur), len(chunks)))
             cur, cur_tok = [sent], sent_tok
         else:
             cur.append(sent)
             cur_tok += sent_tok
     if cur:
-        chunks.append((' '.join(cur), len(chunks)))
+        chunks.append((" ".join(cur), len(chunks)))
     if not chunks:
-        chunks = [(text[:CHUNK_MAX_TOKENS * 5 // 2], 0)]
+        chunks = [(text[: CHUNK_MAX_TOKENS * 5 // 2], 0)]
     return chunks
 
 
@@ -113,12 +115,15 @@ def _liveness_heartbeat():
         time.sleep(60)
 
 
-def _post_embed(texts: list[str], timeout: int) -> Optional[dict]:
+def _post_embed(texts: list[str], timeout: int, port: int) -> Optional[dict]:
     """POST to /v1/embeddings with a fresh TCP connection (no reuse — avoids server-side hang)."""
     import json as _json
+
     body = _json.dumps({"input": texts, "model": "default"}).encode()
+    url = f"http://127.0.0.1:{port}/v1/embeddings"
     req = urllib.request.Request(
-        EMBED_URL, data=body,
+        url,
+        data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
@@ -126,13 +131,15 @@ def _post_embed(texts: list[str], timeout: int) -> Optional[dict]:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return _json.loads(resp.read().decode())
     except Exception as e:
-        log(f"  [error] batch embed failed ({len(texts)} texts): {e}")
+        log(f"  [error] batch embed failed (:{port}, {len(texts)} texts): {e}")
         return None
 
 
-def embed_batch(texts: list[str], timeout: int = 600) -> Optional[list[Optional[list]]]:
+def embed_batch(
+    texts: list[str], timeout: int = 600, port: int = 8081
+) -> Optional[list[Optional[list]]]:
     """Send multiple texts to /v1/embeddings, return list of vectors (None for failed)."""
-    data = _post_embed(texts, timeout)
+    data = _post_embed(texts, timeout, port)
     if data is None:
         return None
     try:
@@ -159,7 +166,7 @@ def get_unembedded_turns(limit: int):
         f"  WHERE e.source_type = 'turn' AND e.source_id = t.id "
         f"    AND e.model_name = 'qwen3-embedding-8b-v1'"
         f") "
-        f"  AND t.pipeline_state IN ('cleaned', 'polished') "
+        f"  AND t.pipeline_state = 'enriched'"
         f"  AND COALESCE(t.text_clean, t.text_clean_polished) IS NOT NULL"
         f"  AND (t.retry_count IS NULL OR t.retry_count < 3) "
         f"ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
@@ -183,8 +190,13 @@ def get_unembedded_facts(limit: int):
     return rows or []
 
 
-def store_embedding(turn_id: str, vector: list, embed_text: str, chunk_index: int = 0,
-                     metadata: Optional[dict] = None):
+def store_embedding(
+    turn_id: str,
+    vector: list,
+    embed_text: str,
+    chunk_index: int = 0,
+    metadata: Optional[dict] = None,
+):
     """INSERT INTO embeddings for a turn. UPSERT on conflict."""
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
     safe_text = embed_text[:8000].replace("'", "''")
@@ -291,9 +303,20 @@ def main():
                 ")"
             )
 
-    preflight_checks("embed_batch.py", required_ports={8081})
-    # Ensure embedding model is running on 8081 (model identity check)
-    if not ensure_model('embeder', skip_if_healthy=True):
+    # Check inference embed health, fall back to inference only if inference unavailable
+    pod_a_healthy = False
+    try:
+        req = urllib.request.Request("http://127.0.0.1:8080/health")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            pod_a_healthy = True
+    except Exception:
+        log("  inference :8080 unavailable — using inference :8081 only")
+
+    ports = EMBED_PORTS if pod_a_healthy else [8081]
+    log(f"  Embed ports: {ports}")
+
+    preflight_checks("embed_batch.py", required_ports=set(ports))
+    if not ensure_model("embeder", skip_if_healthy=True):
         log("  FATAL: cannot start embedding model on 8081")
         return
 
@@ -318,8 +341,8 @@ def main():
         elif facts_mode:
             text = row.get("evidence", "") or ""
         else:
-            user = (row.get("user_turn_clean") or "")
-            resp = (row.get("text_clean") or "")
+            user = row.get("user_turn_clean") or ""
+            resp = row.get("text_clean") or ""
             text = f"{user} {resp}".strip()
         if not text:
             prepared.append(("skip", row, None, None))
@@ -336,11 +359,8 @@ def main():
 
     log(f"  Found {len(rows)} {mode.lower()}: {len(emb_rows)} to embed, {skip_count} empty/skip")
 
-    ok_count = 0
-    fail_count = 0
-
     for row, _ in [(t, p) for s, t, p, c in prepared if s == "skip"]:
-        log(f"  SKIP (empty) {row.get('created_at','')[:19]}")
+        log(f"  SKIP (empty) {row.get('created_at', '')[:19]}")
 
     # Build batches dynamically by estimated token budget
     batches = []
@@ -356,10 +376,7 @@ def main():
                 cur_batch, cur_tok = [], 0
             batches.append([item])
             log(f"  [solo] text with ~{est} est tok")
-        elif cur_tok + est > SLOT_CTX:
-            batches.append(cur_batch)
-            cur_batch, cur_tok = [item], est
-        elif len(cur_batch) >= MAX_BATCH_SIZE:
+        elif cur_tok + est > SLOT_CTX or len(cur_batch) >= MAX_BATCH_SIZE:
             batches.append(cur_batch)
             cur_batch, cur_tok = [item], est
         else:
@@ -371,78 +388,107 @@ def main():
     log(f"  Built {len(batches)} batches (max {MAX_BATCH_SIZE} texts / ~{SLOT_CTX} tok per batch)")
 
     turn_chunk_progress: dict[str, dict] = {}
+    _progress_lock = threading.Lock()
 
-    for bi, batch in enumerate(batches, 1):
-        heartbeat("embed_batch")
-
-        batch_rows = [t for t, _, _ in batch]
+    def process_embed_batch(port: int, item: list, item_timeout: int) -> dict:
+        """WorkStealer process_fn: embed a single batch on given port, store results."""
+        batch = item
         batch_texts = [p for _, p, _ in batch]
-
-        if dry_run:
-            for row in batch_rows:
-                log(f"  DRY-RUN: {row.get('created_at','')[:19]}")
-            ok_count += len(batch_rows)
-            continue
-
-        t0 = time.monotonic()
-        vectors = embed_batch(batch_texts, timeout=BATCH_TIMEOUT)
-        elapsed = time.monotonic() - t0
+        vectors = embed_batch(batch_texts, timeout=item_timeout, port=port)
 
         if vectors is None:
-            log(f"  batch {bi}/{len(batches)} — ALL FAILED ({elapsed:.1f}s)")
-            fail_count += len(batch_rows)
-            continue
+            return {"ok": False, "error": "embed_batch returned None", "n_items": len(batch)}
 
+        ok = 0
+        fail = 0
         for (row, text, ci), vec in zip(batch, vectors):
             if vec is not None:
                 if feedback_mode:
-                    store_feedback_embedding(row['id'], vec, text)
+                    store_feedback_embedding(row["id"], vec, text)
                 elif facts_mode:
-                    store_fact_embedding(row['id'], vec, text)
+                    store_fact_embedding(row["id"], vec, text)
                 else:
                     meta = {}
                     if row.get("agent"):
                         meta["agent"] = row["agent"]
                     if row.get("model"):
                         meta["model"] = row["model"]
-                    store_embedding(row['id'], vec, text, ci, metadata=meta or None)
-                    tid = row['id']
-                    if tid not in turn_chunk_progress:
-                        total = sum(1 for _, r, _, _ in prepared if r['id'] == tid)
-                        turn_chunk_progress[tid] = {'total': total, 'ok': 0}
-                    turn_chunk_progress[tid]['ok'] += 1
-                    if turn_chunk_progress[tid]['ok'] >= turn_chunk_progress[tid]['total']:
-                        psql_ok(f"UPDATE turns SET pipeline_state = 'embedded' "
-                                f"WHERE id = '{esc_sql(tid)}'::uuid")
-                ok_count += 1
+                    store_embedding(row["id"], vec, text, ci, metadata=meta or None)
+                    tid = row["id"]
+                    with _progress_lock:
+                        if tid not in turn_chunk_progress:
+                            total = sum(1 for _, r, _, _ in prepared if r["id"] == tid)
+                            turn_chunk_progress[tid] = {"total": total, "ok": 0}
+                        turn_chunk_progress[tid]["ok"] += 1
+                        complete = (
+                            turn_chunk_progress[tid]["ok"] >= turn_chunk_progress[tid]["total"]
+                        )
+                    if complete:
+                        psql_ok(
+                            f"UPDATE turns SET pipeline_state = 'embedded' "
+                            f"WHERE id = '{esc_sql(tid)}'::uuid"
+                        )
+                ok += 1
             else:
-                fail_count += 1
-                log(f"  [warn] null vector for {row.get('created_at','')[:19]} chunk {ci}")
+                fail += 1
+                log(f"  [warn] null vector for {row.get('created_at', '')[:19]} chunk {ci}")
                 if not facts_mode and not feedback_mode:
                     r = psql_json(f"""
                         UPDATE turns SET retry_count = COALESCE(retry_count, 0) + 1
-                        WHERE id = '{esc_sql(row['id'])}'::uuid
+                        WHERE id = '{esc_sql(row["id"])}'::uuid
                         RETURNING retry_count
                     """)
-                    if r and r[0].get('retry_count', 0) >= 3:
+                    if r and r[0].get("retry_count", 0) >= 3:
                         meta = {}
                         if row.get("agent"):
                             meta["agent"] = row["agent"]
                         if row.get("model"):
                             meta["model"] = row["model"]
-                        store_embedding(row['id'], [0.0] * EMBED_DIMS, text or "(sentinel)", 0, metadata=meta or None)
-                        psql_ok(f"UPDATE turns SET pipeline_state = 'embedded' "
-                                f"WHERE id = '{esc_sql(row['id'])}'::uuid")
-                        log(f"  [skip] {row.get('created_at','')[:19]} — 3 failures, sentinel stored")
+                        store_embedding(
+                            row["id"],
+                            [0.0] * EMBED_DIMS,
+                            text or "(sentinel)",
+                            0,
+                            metadata=meta or None,
+                        )
+                        psql_ok(
+                            f"UPDATE turns SET pipeline_state = 'embedded' "
+                            f"WHERE id = '{esc_sql(row['id'])}'::uuid"
+                        )
+                        log(
+                            f"  [skip] {row.get('created_at', '')[:19]} — 3 failures, sentinel stored"
+                        )
 
-        log(f"  batch {bi}/{len(batches)} ({len(batch)} texts, ~{sum(len(p) for _, p, _ in batch)//2} est tok) {elapsed:.1f}s")
+        return {"ok": ok > 0 or fail == 0, "n_ok": ok, "n_fail": fail, "n_items": len(batch)}
+
+    if dry_run:
+        for batch in batches:
+            for row, _, _ in batch:
+                log(f"  DRY-RUN: {row.get('created_at', '')[:19]}")
+        return
+
+    stealer = WorkStealer(ports=ports, item_timeout=BATCH_TIMEOUT)
+
+    def progress_cb(done: int, total: int):
+        heartbeat("embed_batch")
+        log(f"  [progress] {done}/{total} batches  {stealer.worker_report()}")
+
+    results = stealer.run(
+        items=batches,
+        process_fn=process_embed_batch,
+        progress_cb=progress_cb,
+    )
+
+    ok_count = sum(r.get("n_ok", 0) for r in results if r.get("ok"))
+    fail_count = sum(r.get("n_fail", 0) for r in results if not r.get("ok"))
 
     elapsed = time.monotonic() - t_start
-    log(f"Embed batch done: {ok_count} ok, {fail_count} failed, {elapsed:.0f}s")
+    log(
+        f"Embed batch done: {ok_count} ok, {fail_count} failed, {elapsed:.0f}s ({stealer.worker_report()})"
+    )
     if ok_count == 0 and fail_count > 0:
         sys.exit(1)  # ALL FAILED — signal upstream (day_cycle.sh) to retry
 
 
 if __name__ == "__main__":
     main()
-

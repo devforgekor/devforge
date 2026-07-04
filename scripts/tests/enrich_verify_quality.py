@@ -3,7 +3,7 @@
 # Path: none — manual enrich quality scoring test (moved from pipelines/)
 """Enrich Verify — score enrichment metadata quality manually.
 
-Manual test. Reads turn + enrich_meta from DB, sends to judge model (Pod B :8083),
+Manual test. Reads turn + enrich_meta from DB, sends to judge model (inference :8083),
 per-field scores 0-100, stores as fact_type='enrich_verify'.
 
 Usage:
@@ -229,7 +229,7 @@ def enrich_verify_pipeline(turn_ids: Optional[List[str]] = None,
     """Verify enrichment metadata quality using judge model."""
     t_start = time.monotonic()
     print(f"\n{'=' * 60}")
-    print(f"Enrich Verify Pipeline — judge model on Pod B (:8083)")
+    print(f"Enrich Verify Pipeline — judge model on inference (:8083)")
     print(f"  Label: {model_label}")
     if dry_run:
         print("  [DRY RUN] No writes to DB")

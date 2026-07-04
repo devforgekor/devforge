@@ -67,16 +67,14 @@ bounded_contexts:
         definition: "activity_log self-referencing FK: child event → parent event (e.g., stage → commit)."
 
   - id: 3
-    name: "LLM Inference (Pod Architecture)"
+    name: "LLM Inference (legacy Pod Architecture → inference container)"
     terms:
       - term: "Pod"
-        definition: "A Podman Quadlet container running a llama.cpp server with one or more GGUF models."
-        related_files: ["blueprint.yaml", "state.yaml"]
-      - term: "Pod A (devforge-qwen)"
-        definition: "Qwen2.5-Coder-3B operator Pod. Day mode: 3B on :8082. review-r1 mode: R1-8B on :8083."
-        related_files: ["blueprint.yaml"]
-      - term: "Pod B (devforge-swap)"
-        definition: "Mode-switchable Pod. Day: 30B on :8080. Night: transitions through 7B→14B→27B per phase."
+        definition: "[Legacy] Previous Podman Quadlet container architecture. Superseded by single inference container."
+      - term: "inference container (devforge-inference)"
+        definition: "Single podman run --rm container running llama.cpp server. Ports: 8080=reranker, 8081=embed/proposer, 8082=extract/enrich/verify/reflector, 8083=judge/verify-enrich, 8084=verifier. Mode switching via current-mode-inference.env."
+      - term: "Pod A / Pod B"
+        definition: "[Legacy] Previous dual-container architecture. Fully replaced by single inference container."
         related_files: ["blueprint.yaml", "night_cycle.sh"]
       - term: "Mode"
         definition: "Operational mode controlling which model runs in each Pod: day (normal ops), night (batch pipeline)."

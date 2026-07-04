@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: lib/debate/local_debate.py — imported by cli.py, orchestrator.py, cooperative_debate.py
-"""LocalDebate — multi-agent debate using local Pod A + Pod B.
+"""LocalDebate — multi-agent debate using local inference + inference.
 
 debate mode (v6.0, 2-person):
-  Pod B (:8081): Qwen3-30B — Proposer + Judge + DRAG + Summary + Synthesis
-  Pod A (:8082): Qwen2.5-Coder-7B — Refuter
+  inference (:8081): Qwen3-30B — Proposer + Judge + DRAG + Summary + Synthesis
+  inference (:8082): Qwen2.5-Coder-7B — Refuter
 
 review mode (v1.0, 2-person):
-  Pod B (:8081): Qwen3-30B — Proposer + DRAG + Synthesis
-  Pod B (:8082): Reviewer (Refuter + Judge combined)
+  inference (:8081): Qwen3-30B — Proposer + DRAG + Synthesis
+  inference (:8082): Reviewer (Refuter + Judge combined)
 
 SLOC exception (~640 lines, limit 400):
   Two debate classes (LocalDebate + LocalDebateReview) share the same file.
@@ -17,12 +17,14 @@ SLOC exception (~640 lines, limit 400):
   Proposer → Refuter → Judge form a single atomic DART cycle with shared state.
   Decision: 2026-05-28, review mode added as subclass.
 """
+
 import json
 import random
-import subprocess
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
+
+from lib import scoring as _sc
 
 from .debate_data import MODELS, SESSIONS_DIR
 from .debate_llm import (
@@ -36,7 +38,6 @@ from .debate_llm import (
     format_trend,
     write_report,
 )
-from lib import scoring as _sc
 
 
 class LocalDebate:
@@ -67,12 +68,12 @@ class LocalDebate:
         self._tunnels_open: set = set()
 
         # Resident model assignments — fixed ports, always-on
-        self.drag_model = "qwen3-30b-a3b-local"        # Pod B :8081
-        self.proposer_model = "qwen3-30b-a3b-local"     # Pod B :8081
-        self.refuter_model = "qwen2.5-coder-7b"          # Pod B :8082
-        self.judge_model = "qwen3-30b-a3b-local"        # Pod B :8081
-        self.summary_model = "qwen3-30b-a3b-local"      # Pod B :8081
-        self.synthesizer_model = "qwen3-30b-a3b-local"  # Pod B :8081
+        self.drag_model = "qwen3-30b-a3b-local"  # inference :8081
+        self.proposer_model = "qwen3-30b-a3b-local"  # inference :8081
+        self.refuter_model = "qwen2.5-coder-7b"  # inference :8082
+        self.judge_model = "qwen3-30b-a3b-local"  # inference :8081
+        self.summary_model = "qwen3-30b-a3b-local"  # inference :8081
+        self.synthesizer_model = "qwen3-30b-a3b-local"  # inference :8081
 
     # ── Persistence ────────────────────────────────────────────────────
 
@@ -96,9 +97,7 @@ class LocalDebate:
 
     # ── Anonymize ──────────────────────────────────────────────────────
 
-    def _shuffle_proposals(
-        self, prop_a: dict, prop_b: dict
-    ) -> Tuple[dict, dict, str, str]:
+    def _shuffle_proposals(self, prop_a: dict, prop_b: dict) -> Tuple[dict, dict, str, str]:
         """Randomly assign Alpha/Beta labels for blind judging."""
         if random.random() < 0.5:
             labeled = [("alpha", prop_a), ("beta", prop_b)]
@@ -107,16 +106,20 @@ class LocalDebate:
             labeled = [("alpha", prop_b), ("beta", prop_a)]
             mapping = {"alpha": self.refuter_model, "beta": self.proposer_model}
 
-        self._save_state({
-            "type": "winner_map",
-            "alpha": mapping["alpha"],
-            "beta": mapping["beta"],
-        })
-        self.winner_map.append({
-            "round": self.current_round,
-            "alpha": mapping["alpha"],
-            "beta": mapping["beta"],
-        })
+        self._save_state(
+            {
+                "type": "winner_map",
+                "alpha": mapping["alpha"],
+                "beta": mapping["beta"],
+            }
+        )
+        self.winner_map.append(
+            {
+                "round": self.current_round,
+                "alpha": mapping["alpha"],
+                "beta": mapping["beta"],
+            }
+        )
 
         return (
             {"label": labeled[0][0], **labeled[0][1]},
@@ -168,12 +171,16 @@ class LocalDebate:
 
     def _inject_runtime_metrics(self, verdict: dict, round_num: int) -> dict:
         """Server-injected observability. Delegates to shared."""
-        prev_gaps = [getattr(self, "_last_gap")] if getattr(self, "_last_gap", None) is not None else []
+        prev_gaps = (
+            [getattr(self, "_last_gap")] if getattr(self, "_last_gap", None) is not None else []
+        )
         return _sc.inject_runtime_metrics(verdict, round_num, prev_gaps)
 
     def _convergence_trend(self, current_gap: int) -> str:
         """narrowing | stable | diverging — delegates to shared."""
-        prev_gaps = [getattr(self, "_last_gap")] if getattr(self, "_last_gap", None) is not None else []
+        prev_gaps = (
+            [getattr(self, "_last_gap")] if getattr(self, "_last_gap", None) is not None else []
+        )
         return _sc.convergence_trend(current_gap, prev_gaps)
 
     # ═══════════════════════════════════════════════════════════════════
@@ -186,17 +193,17 @@ class LocalDebate:
             print("\n─── Round 0 (DRAG) SKIPPED (--skip-drag) ───\n")
             self._save_state({"type": "round_skip", "reason": "--skip-drag flag"})
             if not self.switch_model(self.drag_model):
-                print("  [ERROR] Drag model failed to load on Pod B (skip_drag path)")
+                print("  [ERROR] Drag model failed to load on inference (skip_drag path)")
                 return False
             return False
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Round 0: DRAG — Context Analysis ({self.drag_model})")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
         self._save_state({"type": "round_start", "phase": "drag"})
 
         if not self.switch_model(self.drag_model):
-            print("  [ERROR] Drag model failed to load on Pod B")
+            print("  [ERROR] Drag model failed to load on inference")
             return False
 
         file_path = _extract_file_path(self.question)
@@ -208,7 +215,9 @@ class LocalDebate:
         print(f"  [drag] Analyzing {file_path} ({len(file_content)} chars)...")
 
         analysis = call_llm_json(
-            "drag_lite", self.drag_model, dry_run=self.dry_run,
+            "drag_lite",
+            self.drag_model,
+            dry_run=self.dry_run,
             question=self.question,
             file_content=file_content[-12000:],
         )
@@ -217,9 +226,15 @@ class LocalDebate:
             return False
 
         self.drag_context = json.dumps(analysis, indent=2)
-        self._save_state({"type": "llm_response", "phase": "drag_analysis",
-                          "model": self.drag_model, "output": analysis,
-                          "file_path": file_path})
+        self._save_state(
+            {
+                "type": "llm_response",
+                "phase": "drag_analysis",
+                "model": self.drag_model,
+                "output": analysis,
+                "file_path": file_path,
+            }
+        )
 
         decision_points = len(analysis.get("decision_points", []))
         print(f"\n  [drag] Analysis complete: {decision_points} decision points identified")
@@ -227,7 +242,7 @@ class LocalDebate:
         return True
 
     def round_1_to_4_dart(self) -> bool:
-        """DART: Rounds 1-4 — Proposer → Refuter → Judge on Pod B sequentially."""
+        """DART: Rounds 1-4 — Proposer → Refuter → Judge on inference sequentially."""
         proposer_output = None
         refuter_output = None
         last_disagreement = "N/A (first round)"
@@ -242,16 +257,20 @@ class LocalDebate:
                 self._save_state({"type": "early_exit", "reason": reason})
                 return True
 
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Round {rnd}: DART Debate")
-            print(f"{'='*60}\n")
+            print(f"{'=' * 60}\n")
             self._save_state({"type": "round_start", "phase": "dart"})
 
-            history_summary = json.dumps({
-                "round": rnd,
-                "prior_consensus": self.consensus_scores,
-            })
-            drag_ctx = self.drag_context or json.dumps({"note": "DRAG skipped, no pre-debate context"})
+            history_summary = json.dumps(
+                {
+                    "round": rnd,
+                    "prior_consensus": self.consensus_scores,
+                }
+            )
+            drag_ctx = self.drag_context or json.dumps(
+                {"note": "DRAG skipped, no pre-debate context"}
+            )
 
             # A — Proposer
             if not self.switch_model(self.proposer_model):
@@ -261,13 +280,17 @@ class LocalDebate:
                     return False
                 continue
             proposer_output = call_llm_json(
-                "dart_proposer", self.proposer_model, dry_run=self.dry_run,
+                "dart_proposer",
+                self.proposer_model,
+                dry_run=self.dry_run,
                 question=self.question,
                 drag_context=drag_ctx,
                 history_summary=history_summary,
                 consensus_score=str(self.consensus_scores[-1] if self.consensus_scores else "N/A"),
                 disagreement_points=last_disagreement,
-                refuter_last_output=json.dumps(refuter_output, indent=2) if refuter_output else "N/A (first round)",
+                refuter_last_output=json.dumps(refuter_output, indent=2)
+                if refuter_output
+                else "N/A (first round)",
             )
             if not proposer_output:
                 consecutive_failures += 1
@@ -275,8 +298,14 @@ class LocalDebate:
                     print("  [ABORT] 2 consecutive round failures")
                     return False
                 continue
-            self._save_state({"type": "llm_response", "phase": "dart_proposer",
-                              "model": self.proposer_model, "output": proposer_output})
+            self._save_state(
+                {
+                    "type": "llm_response",
+                    "phase": "dart_proposer",
+                    "model": self.proposer_model,
+                    "output": proposer_output,
+                }
+            )
 
             # B — Refuter
             if not self.switch_model(self.refuter_model):
@@ -286,7 +315,9 @@ class LocalDebate:
                     return False
                 continue
             refuter_output = call_llm_json(
-                "dart_refuter", self.refuter_model, dry_run=self.dry_run,
+                "dart_refuter",
+                self.refuter_model,
+                dry_run=self.dry_run,
                 question=self.question,
                 drag_context=drag_ctx,
                 history_summary=history_summary,
@@ -300,8 +331,14 @@ class LocalDebate:
                     print("  [ABORT] 2 consecutive round failures")
                     return False
                 continue
-            self._save_state({"type": "llm_response", "phase": "dart_refuter",
-                              "model": self.refuter_model, "output": refuter_output})
+            self._save_state(
+                {
+                    "type": "llm_response",
+                    "phase": "dart_refuter",
+                    "model": self.refuter_model,
+                    "output": refuter_output,
+                }
+            )
 
             # C — Judge
             if not self.switch_model(self.judge_model):
@@ -309,7 +346,9 @@ class LocalDebate:
                 continue
             alpha, beta, _, _ = self._shuffle_proposals(proposer_output, refuter_output)
             judge_output = call_llm_json(
-                "dart_judge", self.judge_model, dry_run=self.dry_run,
+                "dart_judge",
+                self.judge_model,
+                dry_run=self.dry_run,
                 question=self.question,
                 drag_context=drag_ctx,
                 proposal_a_anonymized=json.dumps(alpha, indent=2),
@@ -322,7 +361,9 @@ class LocalDebate:
             winner = self._resolve_winner(judge_output)
             score = judge_output.get("consensus_score", 0)
             self.consensus_scores.append(score)
-            last_disagreement = judge_output.get("disagreement_analysis", "no specific disagreements")
+            last_disagreement = judge_output.get(
+                "disagreement_analysis", "no specific disagreements"
+            )
 
             # ── : server-side veto + gap + runtime_metrics ──────────
             is_veto = self._check_veto(judge_output)
@@ -331,38 +372,50 @@ class LocalDebate:
             gap = abs(p_score - r_score)
             runtime_metrics = self._inject_runtime_metrics(judge_output, self.current_round)
             if is_veto:
-                print(f"  [judge] VETO triggered: P={p_score} R={r_score} decision={judge_output.get('decision')}")
-            print(f"  [judge] Gap: {gap} (P={p_score}, R={r_score}) | "
-                  f"Threshold: {_sc.THRESHOLDS.get(self.current_round)}")
+                print(
+                    f"  [judge] VETO triggered: P={p_score} R={r_score} decision={judge_output.get('decision')}"
+                )
+            print(
+                f"  [judge] Gap: {gap} (P={p_score}, R={r_score}) | "
+                f"Threshold: {_sc.THRESHOLDS.get(self.current_round)}"
+            )
 
             consecutive_failures = 0
-            self._save_state({
-                "type": "judge_verdict",
-                "consensus_score": score,
-                "winner_label": judge_output.get("winner"),
-                "winner_model": winner,
-                "output": judge_output,
-                "is_veto": is_veto,
-                "gap": gap,
-                "runtime_metrics": runtime_metrics,
-            })
+            self._save_state(
+                {
+                    "type": "judge_verdict",
+                    "consensus_score": score,
+                    "winner_label": judge_output.get("winner"),
+                    "winner_model": winner,
+                    "output": judge_output,
+                    "is_veto": is_veto,
+                    "gap": gap,
+                    "runtime_metrics": runtime_metrics,
+                }
+            )
 
-            print(f"  Consensus: {score}% | Winner: {winner} | "
-                  f"Trend: {format_trend(self.consensus_scores)}")
+            print(
+                f"  Consensus: {score}% | Winner: {winner} | "
+                f"Trend: {format_trend(self.consensus_scores)}"
+            )
 
             # ── early termination ─────────────────────────────────
             if is_veto:
                 print("  [judge] Veto upheld — terminating debate")
                 return True
             if not self._should_continue_round(judge_output, self.current_round):
-                print(f"  [judge] Terminating — gap {gap} exceeds round {self.current_round} threshold")
+                print(
+                    f"  [judge] Terminating — gap {gap} exceeds round {self.current_round} threshold"
+                )
                 return True
 
     def round_5_synthesis(self) -> Optional[dict]:
-        """Synthesis: summary + final code on Pod B."""
-        print(f"\n{'='*60}")
-        print(f"Round 5: Synthesis ({self.summary_model} summary + {self.synthesizer_model} synthesis)")
-        print(f"{'='*60}\n")
+        """Synthesis: summary + final code on inference."""
+        print(f"\n{'=' * 60}")
+        print(
+            f"Round 5: Synthesis ({self.summary_model} summary + {self.synthesizer_model} synthesis)"
+        )
+        print(f"{'=' * 60}\n")
         self.current_round = 5
         self._save_state({"type": "round_start", "phase": "synthesis"})
 
@@ -376,10 +429,13 @@ class LocalDebate:
             print("  [ERROR] Summary model switch failed")
             return None
         summary_raw = call_llm(
-            _build_messages("history_summary", self.summary_model,
-                            question=self.question,
-                            full_history=full_history[-8000:],
-                            consensus_trend=consensus_trend),
+            _build_messages(
+                "history_summary",
+                self.summary_model,
+                question=self.question,
+                full_history=full_history[-8000:],
+                consensus_trend=consensus_trend,
+            ),
             self.summary_model,
             dry_run=self.dry_run,
         )
@@ -390,20 +446,23 @@ class LocalDebate:
                 history_summary = summary_raw
         else:
             history_summary = full_history[-3000:]
-        self._save_state({"type": "history_summary", "model": self.summary_model,
-                          "content": history_summary})
+        self._save_state(
+            {"type": "history_summary", "model": self.summary_model, "content": history_summary}
+        )
 
         # Post-summary hook (CooperativeDebate closes Judge/Gemma tunnel here)
         self._post_summary_hook()
 
-            # Step 2: Final synthesis (Qwen3-30B, already resident on Pod B :8081)
+        # Step 2: Final synthesis (Qwen3-30B, already resident on inference :8081)
         if not self.switch_model(self.synthesizer_model):
             print("  [ERROR] Synthesizer health check failed")
             return None
 
         drag_ctx = self.drag_context or json.dumps({"note": "no DRAG context"})
         final = call_llm_json(
-            "final_synthesis", self.synthesizer_model, dry_run=self.dry_run,
+            "final_synthesis",
+            self.synthesizer_model,
+            dry_run=self.dry_run,
             question=self.question,
             history_summary=history_summary,
             consensus_trend=consensus_trend,
@@ -411,13 +470,15 @@ class LocalDebate:
         )
         if not final:
             cfg = MODELS.get(self.synthesizer_model, {})
-            print(f"  [ERROR] synthesis failed (max_tokens={cfg.get('max_tokens','?')}, "
-                  f"bench_toks={cfg.get('bench_toks','?')})")
+            print(
+                f"  [ERROR] synthesis failed (max_tokens={cfg.get('max_tokens', '?')}, "
+                f"bench_toks={cfg.get('bench_toks', '?')})"
+            )
             return None
 
-        self._save_state({"type": "final_synthesis",
-                          "model": self.synthesizer_model,
-                          "output": final})
+        self._save_state(
+            {"type": "final_synthesis", "model": self.synthesizer_model, "output": final}
+        )
 
         print(f"\n  [done] Final synthesis complete: confidence={final.get('confidence', 'N/A')}")
         return final
@@ -441,13 +502,14 @@ class LocalDebate:
         """Enqueue debate result to activity_log for night batch review (14B→27B)."""
         try:
             from lib.queue_writer import enqueue_review
+
             enqueue_review(
                 entry_type="debate_result",
                 source="local_debate",
                 title=f"debate: {self.question[:80]}",
                 summary=f"consensus={self.consensus_scores[-1] if self.consensus_scores else '?'}%, "
-                        f"confidence={final.get('confidence', '?')}, "
-                        f"rounds={len(self.consensus_scores)}",
+                f"confidence={final.get('confidence', '?')}, "
+                f"rounds={len(self.consensus_scores)}",
                 body={
                     "session_id": self.session_id,
                     "question": self.question[:200],
@@ -474,36 +536,38 @@ class LocalDebate:
     # ═══════════════════════════════════════════════════════════════════
 
     def _print_header(self) -> None:
-        print(f"\n{'█'*60}")
+        print(f"\n{'█' * 60}")
         print(f"█ DevForge Multi-Agent LLM Debate v6.0 ({self.mode}, resident)")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print("█ Pod B (:8081): Qwen3-30B — Proposer + Judge + DRAG + Synthesis")
-        print("█ Pod B (:8082): Qwen2.5-Coder-7B — Refuter")
+        print("█ Inference (:8081): Qwen3-30B — Proposer + Judge + DRAG + Synthesis")
+        print("█ Inference (:8082): Qwen2.5-Coder-7B — Refuter")
         print(f"█ Question: {self.question[:80]}...")
-        print(f"{'█'*60}")
+        print(f"{'█' * 60}")
 
     def run_session(self) -> Optional[dict]:
         self._print_header()
 
-        self._save_state({
-            "type": "session_start",
-            "question": self.question,
-            "method": self.method,
-            "skip_drag": self.skip_drag,
-            "mode": self.mode,
-        })
+        self._save_state(
+            {
+                "type": "session_start",
+                "question": self.question,
+                "method": self.method,
+                "skip_drag": self.skip_drag,
+                "mode": self.mode,
+            }
+        )
 
-        # Ensure Pod B is running (Qwen3-30B Judge/DRAG/Summary/Synthesis)
+        # Ensure inference container is running (Qwen3-30B Judge/DRAG/Summary/Synthesis)
         if not self.dry_run:
-            subprocess.run(
-                ["systemctl", "--user", "start", "container-devforge-pod-b.service"],
-                capture_output=True)
-            print("  [pod] Pod B start requested (Qwen3-30B :8081)")
+            from lib.pod_manager.container import _podman_start_inference
+
+            _podman_start_inference()
+            print("  [pod] inference start requested (Qwen3-30B :8081)")
             # Brief wait for container init, then health check
             time.sleep(5)
             if not _poll_health(port=8081, timeout=30):
-                print("  [WARN] Pod B :8081 health check failed — continuing anyway")
+                print("  [WARN] inference :8081 health check failed — continuing anyway")
 
         # Round 0: DRAG
         self.current_round = 0
@@ -532,10 +596,15 @@ class LocalDebate:
 
         # Write report + upload
         if final:
-            report_path = write_report(self.state_dir, self.session_id,
-                                        self.question, self.method,
-                                        self.consensus_scores, final)
-            print(f"\n{'█'*60}")
+            report_path = write_report(
+                self.state_dir,
+                self.session_id,
+                self.question,
+                self.method,
+                self.consensus_scores,
+                final,
+            )
+            print(f"\n{'█' * 60}")
             print("█ DEBATE COMPLETE")
             print(f"█ Session: {self.session_id}")
             print(f"█ Confidence: {final.get('confidence', '?')}")
@@ -546,6 +615,7 @@ class LocalDebate:
 
             try:
                 from lib.blob_uploader import upload_review_bundle
+
                 url = upload_review_bundle(
                     content=report_path.read_text(),
                     pipeline="debate_v3",
@@ -562,7 +632,7 @@ class LocalDebate:
             except Exception as e:
                 print(f"█ Upload skipped: {e}")
 
-            print(f"{'█'*60}")
+            print(f"{'█' * 60}")
 
         return final
 
@@ -581,28 +651,27 @@ class LocalDebateReview(LocalDebate):
         skip_drag: bool = False,
         dry_run: bool = False,
     ):
-        super().__init__(question=question, method=method, skip_drag=skip_drag,
-                         dry_run=dry_run)
+        super().__init__(question=question, method=method, skip_drag=skip_drag, dry_run=dry_run)
         self.mode = "review"
 
-        # 2-person model assignments — Pod B :8081 + :8082
-        self.proposer_model = "qwen3-30b-a3b-local"   # Pod B :8081 — Proposer + DRAG + Synthesis
-        self.reviewer_model = "qwen2.5-coder-7b"            # Pod B :8082 — Reviewer (Refuter + Judge)
+        # 2-person model assignments — inference :8081 + :8082
+        self.proposer_model = "qwen3-30b-a3b-local"  # inference :8081 — Proposer + DRAG + Synthesis
+        self.reviewer_model = "qwen2.5-coder-7b"  # inference :8082 — Reviewer (Refuter + Judge)
 
-        # Synthesis/Summary still on Pod A
+        # Synthesis/Summary still on inference
         self.drag_model = "qwen3-30b-a3b-local"
         self.summary_model = "qwen3-30b-a3b-local"
         self.synthesizer_model = "qwen3-30b-a3b-local"
 
     def _print_header(self) -> None:
-        print(f"\n{'█'*60}")
+        print(f"\n{'█' * 60}")
         print(f"█ DevForge 2-Person Debate v1.0 ({self.mode})")
         print(f"█ Session: {self.session_id}")
         print(f"█ Method: {self.method} | Dry-run: {self.dry_run}")
-        print("█ Pod B (:8081): Qwen3-30B — Proposer + DRAG + Synthesis")
-        print("█ Pod B (:8081): Reviewer (Refuter + Judge combined)")
+        print("█ inference (:8081): Qwen3-30B — Proposer + DRAG + Synthesis")
+        print("█ inference (:8081): Reviewer (Refuter + Judge combined)")
         print(f"█ Question: {self.question[:80]}...")
-        print(f"{'█'*60}")
+        print(f"{'█' * 60}")
 
     def round_1_to_4_dart(self) -> bool:
         """2-person DART: Proposer → Reviewer (refutes + scores in single call)."""
@@ -620,18 +689,22 @@ class LocalDebateReview(LocalDebate):
                 self._save_state({"type": "early_exit", "reason": reason})
                 return True
 
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Round {rnd}: 2-Person DART (Proposer → Reviewer)")
-            print(f"{'='*60}\n")
+            print(f"{'=' * 60}\n")
             self._save_state({"type": "round_start", "phase": "dart"})
 
-            history_summary = json.dumps({
-                "round": rnd,
-                "prior_consensus": self.consensus_scores,
-            })
-            drag_ctx = self.drag_context or json.dumps({"note": "DRAG skipped, no pre-debate context"})
+            history_summary = json.dumps(
+                {
+                    "round": rnd,
+                    "prior_consensus": self.consensus_scores,
+                }
+            )
+            drag_ctx = self.drag_context or json.dumps(
+                {"note": "DRAG skipped, no pre-debate context"}
+            )
 
-            # A — Proposer (Pod B :8081)
+            # A — Proposer (inference :8081)
             if not self.switch_model(self.proposer_model):
                 consecutive_failures += 1
                 if consecutive_failures >= 2:
@@ -639,13 +712,17 @@ class LocalDebateReview(LocalDebate):
                     return False
                 continue
             proposer_output = call_llm_json(
-                "dart_proposer", self.proposer_model, dry_run=self.dry_run,
+                "dart_proposer",
+                self.proposer_model,
+                dry_run=self.dry_run,
                 question=self.question,
                 drag_context=drag_ctx,
                 history_summary=history_summary,
                 consensus_score=str(self.consensus_scores[-1] if self.consensus_scores else "N/A"),
                 disagreement_points=last_disagreement,
-                refuter_last_output=json.dumps(reviewer_output, indent=2) if reviewer_output else "N/A (first round)",
+                refuter_last_output=json.dumps(reviewer_output, indent=2)
+                if reviewer_output
+                else "N/A (first round)",
             )
             if not proposer_output:
                 consecutive_failures += 1
@@ -653,10 +730,16 @@ class LocalDebateReview(LocalDebate):
                     print("  [ABORT] 2 consecutive round failures")
                     return False
                 continue
-            self._save_state({"type": "llm_response", "phase": "dart_proposer",
-                              "model": self.proposer_model, "output": proposer_output})
+            self._save_state(
+                {
+                    "type": "llm_response",
+                    "phase": "dart_proposer",
+                    "model": self.proposer_model,
+                    "output": proposer_output,
+                }
+            )
 
-            # B — Reviewer (Pod B :8081) — refutes + judges in single call
+            # B — Reviewer (inference :8081) — refutes + judges in single call
             if not self.switch_model(self.reviewer_model):
                 consecutive_failures += 1
                 if consecutive_failures >= 2:
@@ -664,7 +747,9 @@ class LocalDebateReview(LocalDebate):
                     return False
                 continue
             reviewer_output = call_llm_json(
-                "dart_reviewer", self.reviewer_model, dry_run=self.dry_run,
+                "dart_reviewer",
+                self.reviewer_model,
+                dry_run=self.dry_run,
                 question=self.question,
                 drag_context=drag_ctx,
                 history_summary=history_summary,
@@ -682,18 +767,23 @@ class LocalDebateReview(LocalDebate):
             score = reviewer_output.get("consensus_score", 0)
             winner = reviewer_output.get("winner", "tie")
             self.consensus_scores.append(score)
-            last_disagreement = reviewer_output.get("disagreement_analysis", "no specific disagreements")
+            last_disagreement = reviewer_output.get(
+                "disagreement_analysis", "no specific disagreements"
+            )
 
             consecutive_failures = 0
-            self._save_state({
-                "type": "reviewer_verdict",
-                "consensus_score": score,
-                "winner": winner,
-                "output": reviewer_output,
-            })
+            self._save_state(
+                {
+                    "type": "reviewer_verdict",
+                    "consensus_score": score,
+                    "winner": winner,
+                    "output": reviewer_output,
+                }
+            )
 
-            print(f"  Consensus: {score}% | Winner: {winner} | "
-                  f"Trend: {format_trend(self.consensus_scores)}")
+            print(
+                f"  Consensus: {score}% | Winner: {winner} | "
+                f"Trend: {format_trend(self.consensus_scores)}"
+            )
 
         return True
-

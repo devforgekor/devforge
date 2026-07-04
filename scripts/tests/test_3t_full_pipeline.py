@@ -114,7 +114,7 @@ def main():
     # ===== Phase 1: Polish =====
     log("=== Phase 1: Polish ===")
     ensure_model("polish")
-    test_heartbeat("Pod B → polish")
+    test_heartbeat("inference → polish")
     for tid in turn_ids:
         ret = _run(f"stdbuf -oL python3 pipelines/polish_batch.py --turn-id {tid} --no-llm")
         if ret == 0:
@@ -140,7 +140,7 @@ def main():
     # ===== Phase 2: Extract =====
     log("=== Phase 2: Extract ===")
     ensure_model("extractor")
-    test_heartbeat("Pod B → extractor")
+    test_heartbeat("inference → extractor")
     for tid in turn_ids:
         ret = _run(f"python3 pipelines/extract.py --turn-id {tid}")
         if ret == 0:

@@ -335,7 +335,7 @@ def step_extract(turn_ids: List[str]) -> bool:
 def step_verify():
     """Run day_verify against test DB (reads extracted review_facts). Score verify quality."""
     print(f"\n{'=' * 70}")
-    print("  Step 2: Verify Pipeline (Pod B 14B)")
+    print("  Step 2: Verify Pipeline (inference 14B)")
     print(f"{'=' * 70}")
 
     import lib.db
@@ -385,7 +385,7 @@ def step_verify():
 def step_night_review():
     """Run night.py --review against extracted facts. Score P-R-J quality."""
     print(f"\n{'=' * 70}")
-    print("  Step 3: Night Debate (Pod B 30B→14B→N14B)")
+    print("  Step 3: Night Debate (inference 30B→14B→N14B)")
     print(f"{'=' * 70}")
 
     import lib.db

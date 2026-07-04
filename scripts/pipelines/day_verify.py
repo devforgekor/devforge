@@ -1,21 +1,35 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: day_cycle.sh — Phase 3 (verify chain)
-"""Day Verify Pipeline — verify enrichment metadata quality.
+# Path: day_cycle.sh — Phase 4 (verify after extract, before enrich)
+"""Day Verify Pipeline — predicate NLI with Veritas-8B Fact Checker.
 
-Reads enrich_meta from DB and runs verification phases:
-  Phase 1: Entity disk/symbol verify (files exist? symbols found?)
-  Phase 2: LLM-based faithfulness (entity + tldr grounding via verify model)
-  Phase 2b: Pod A reranker relevance check on uncertain entities
+Verifies extracted predicates against source text using Veritas-8B,
+fine-tuned for factual consistency NLI.
 
-Called by day_cycle.sh after extract + enrich completes.
-Stores results as fact_type='verify_result', separate from enrich_meta.
-Uses role alias "day_verify" (different model family from
-extract/enrich — catches blind spots).
-Reranker (Pod A :8080) provides topical relevance check."""
+Pipeline position: AFTER extract → BEFORE enrich
+State flow: extracted → verified
+
+Method:
+  Pass 1 — Binary YES/NO (batch all predicates per turn):
+    YES  → GROUNDED
+    NO   → Pass 2
+  Pass 2 — CONTRADICTION check (per predicate):
+    YES  → CONTRADICTION
+    NO   → UNGROUNDED
+
+Veritas is a Qwen3-8B finetune specialized for fact-checking (MiniCheck
+bespoke format, 75.47% LLM-AggreFact balanced accuracy). Two-pass binary
+NLI stays close to its training distribution while supporting 4-way verdicts.
+
+Caveats:
+  - Source chunked into ~800c segments; each chunk must fit with claims in Veritas ctx=4096
+  - CONTRADICTION requires an extra LLM call per rejected claim
+"""
 
 import json
 import os
+import re
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,23 +37,37 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EVAL_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "eval")
-os.makedirs(EVAL_DIR, exist_ok=True)
 sys.path.insert(0, SCRIPTS_DIR)
-os.chdir(os.path.join(SCRIPTS_DIR, "pipelines"))
 
-from lib.db import psql, psql_ok, esc_sql, psql_json
-from lib.llm_client import call_llm, call_llm_with_retry, reranker_score, reranker_nli_verdict
-from lib.enrich.utils import verify_entities
+from lib.db import PSQL, esc_sql, psql_json, psql_ok
 from lib.infra.preflight import preflight_checks
-from lib.watchdog.messenger import heartbeat
+from lib.llm_client import call_llm_with_retry
 from lib.pod_manager import ensure_model
+from lib.watchdog.messenger import heartbeat
 
 BATCH_LIMIT = 50
 PARALLEL = 2
 SOLO_THRESHOLD = 5000
 
+# Veritas was fine-tuned on MiniCheck bespoke format (Document + Claim → YES/NO).
+# We use the same format for Pass 1 (binary), then Pass 2 for NO→CONTRADICTION.
+_VERITAS_PROMPT_BINARY = """Document:
+{source}
 
+Claims:
+{claims}
+
+For each claim, answer YES if the document supports it, NO otherwise.
+Number each answer:
+
+{claim_lines}"""
+
+_VERITAS_PROMPT_CONTRADICT = """Document:
+{source}
+
+Claim: {claim}
+
+Does the document explicitly CONTRADICT this claim? Answer YES or NO."""
 
 
 def log(msg: str) -> None:
@@ -47,211 +75,39 @@ def log(msg: str) -> None:
     print(f"[{ts}] {msg}", flush=True)
 
 
-_ENTITY_VERIFY_PROMPT = """You are a factual consistency checker. Given a SOURCE text and a list of CLAIMS, determine if each claim is explicitly supported.
-
-SEQUENTIAL REASONING — For EACH claim, follow these steps:
-Step 1 — LOCATE: Search the source for the exact entity name or a clear reference to it.
-Step 2 — VERIFY: Confirm the source discusses this specific entity in a substantive way.
-Step 3 — JUDGE: If the entity appears with relevant context → YES. If the source contradicts the claim → NO. If the entity does not appear or only appears incidentally → AMBIGUOUS.
-Step 4 — EVIDENCE: Include the exact source snippet (max 100 chars) that supports your verdict.
-
-SOURCE: {source}
-
-CLAIMS:
-{claims}
-
-For each claim, return a JSON object with verdict (YES/NO/AMBIGUOUS) and a short evidence quote.
-Format: {{"claim_0": {{"verdict": "YES", "evidence": "exact supporting snippet from source"}}, "claim_1": ...}}
-Answer ONLY with the JSON object, no other text."""
+# ── DB helpers ─────────────────────────────────────────────────────────────────
 
 
-def _llm_verify_entities(entities: Dict, source_text: str) -> Dict:
-    """Verify entity grounding via LLM (verify role model)."""
-    if not entities:
-        return {}
-
-    result: Dict[str, list] = {}
-    for key in ("files", "technologies", "functions", "mentioned_users"):
-        items = entities.get(key, [])
-        if not isinstance(items, list):
-            items = []
-        checked = []
-        unverified = []
-        for item in items:
-            s = str(item).strip()
-            if not s:
-                continue
-            # Fast path: substring match
-            if s.lower() in source_text.lower():
-                checked.append({
-                    "entity": s, "score": 1.0, "grounding": "GROUNDED",
-                    "method": "substr", "grounded": True,
-                })
-            else:
-                unverified.append(s)
-
-        # Batch verify remaining via LLM
-        if unverified:
-            claims_str = "\n".join(f"claim_{i}: {c}" for i, c in enumerate(unverified))
-            prompt = _ENTITY_VERIFY_PROMPT.format(source=source_text[:3000], claims=claims_str)
-            try:
-                resp = call_llm_with_retry(
-                    [{"role": "user", "content": prompt}],
-                    model="day_verify", max_tokens=512, temperature=0.0, timeout=60,
-                )
-                parsed = json.loads(resp)
-                for i, c in enumerate(unverified):
-                    entry = parsed.get(f"claim_{i}", {"verdict": "AMBIGUOUS"})
-                    verdict = entry["verdict"] if isinstance(entry, dict) else entry
-                    evidence = entry.get("evidence", "") if isinstance(entry, dict) else ""
-                    grounded = verdict == "YES"
-                    checked.append({
-                        "entity": c, "score": 1.0 if grounded else 0.0,
-                        "grounding": "GROUNDED" if grounded else ("UNGROUNDED" if verdict == "NO" else "AMBIGUOUS"),
-                        "method": "llm_verify", "grounded": grounded,
-                        "_llm_verdict": verdict, "_evidence": evidence,
-                    })
-            except Exception as e:
-                # LLM parse failure — fallback to AMBIGUOUS (not grounded)
-                for c in unverified:
-                    checked.append({
-                        "entity": c, "score": 0.5, "grounding": "AMBIGUOUS",
-                        "method": "llm_fallback", "grounded": False,
-                    })
-
-        result[key] = checked
-    return result
-
-
-def _llm_verify_tldr(tldr: str, source_text: str) -> Dict:
-    """Verify tldr factual consistency via LLM (verify model on :8082)."""
-    if not tldr or not source_text:
-        return {"text": tldr, "grounded": True, "grounding": "SKIP", "method": "skip"}
-
-    prompt = f"""SOURCE: {source_text[:3000]}
-
-CLAIM: {tldr}
-
-Is the CLAIM supported by the SOURCE? Choose:
-- YES: Factually supported (may be rephrased)
-- NO: Contradicts the source
-- COMPLEMENTARY: Well-written summary that synthesizes content without directly quoting
-- AMBIGUOUS: Cannot determine
-
-Answer with one word only: YES, NO, COMPLEMENTARY, or AMBIGUOUS."""
-    try:
-        resp = call_llm_with_retry(
-            [{"role": "user", "content": prompt}],
-            model="day_verify", max_tokens=16, temperature=0.0, timeout=30,
-        ).strip().upper()
-        if resp == "COMPLEMENTARY":
-            return {"text": tldr, "score": 1.0, "grounding": "COMPLEMENTARY",
-                    "grounded": True, "method": "llm_verify", "_llm_verdict": resp}
-        grounded = resp == "YES"
-        verdict = "GROUNDED" if grounded else ("UNGROUNDED" if resp == "NO" else "AMBIGUOUS")
-        return {"text": tldr, "score": 1.0 if grounded else 0.0,
-                "grounding": verdict, "grounded": grounded,
-                "method": "llm_verify", "_llm_verdict": resp}
-    except Exception as e:
-        return {"text": tldr, "score": 0.5, "grounding": "AMBIGUOUS",
-                "grounded": False, "method": "llm_fallback"}
-
-
-# ── Phase 2b: Pod A Reranker Faithfulness ──────────────────────────────
-
-
-def _reranker_verify(faithfulness: Dict, source_text: str) -> Dict:
-    """Phase 2b: Pod A reranker relevance check on uncertain entities.
-
-    For entities/tldr that the LLM couldn't confirm via substring match,
-    run Pod A reranker (:8080) as a topical relevance second opinion.
-
-    Reranker measures TOPICAL RELATEDNESS, NOT logical entailment:
-      - GROUNDED (>=0.75): on-topic → upgrade to AMBIGUOUS
-        (topically relevant but reranker can't confirm factual accuracy)
-      - UNGROUNDED (<0.40): off-topic → confirm ungrounded
-
-    Mutates faithfulness dict in-place and returns it.
-    """
-    for key in ("files", "technologies", "functions", "mentioned_users"):
-        items = faithfulness.get(key, [])
-        if not isinstance(items, list):
-            continue
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            if item.get("grounded", True) or item.get("score", 1.0) >= 0.8:
-                continue
-            entity = item.get("entity", "")
-            if not entity:
-                continue
-            score = reranker_score(entity, source_text)
-            grounding = reranker_nli_verdict(score)
-            if grounding == "GROUNDED":
-                # On-topic but can't confirm factual accuracy
-                item["grounded"] = True
-                item["grounding"] = "AMBIGUOUS"
-                item["score"] = round(score * 100, 1)
-                item["method"] = "reranker_override"
-                item["_reranker"] = grounding
-            elif grounding == "UNGROUNDED":
-                item["grounded"] = False
-                item["grounding"] = "UNGROUNDED"
-                item["score"] = round(score * 100, 1)
-                item["method"] = "reranker"
-                item["_reranker"] = grounding
-            else:
-                item["_reranker"] = grounding
-    # Also check tldr
-    tldr = faithfulness.get("tldr", {})
-    if isinstance(tldr, dict) and not tldr.get("grounded", True):
-        entity = tldr.get("text", "")
-        if entity:
-            score = reranker_score(entity, source_text)
-            grounding = reranker_nli_verdict(score)
-            if grounding == "GROUNDED":
-                tldr["grounded"] = True
-                tldr["grounding"] = "AMBIGUOUS"
-                tldr["score"] = round(score * 100, 1)
-                tldr["method"] = "reranker_override"
-                tldr["_reranker"] = grounding
-    return faithfulness
-
-
-# ── DB helpers ────────────────────────────────────────────────────────────
-
-def _get_turns_for_verify(limit: int = BATCH_LIMIT,
-                            turn_id: Optional[str] = None) -> List[Dict]:
-    """Turns that completed enrichment but still need verification.
+def _get_turns_for_verify(limit: int = BATCH_LIMIT, turn_id: Optional[str] = None) -> List[Dict]:
+    """Turns that completed extract but still need predicate verification.
 
     If turn_id is given, re-verify that specific turn (skips NOT EXISTS filter).
+
+    Note: psql_json wraps in SELECT row_to_json(r) FROM (...) r, which breaks
+    if the WITH clause contains UPDATE (PostgreSQL restriction). So we run the
+    batch query via subprocess directly with inline row_to_json.
     """
     if turn_id:
         sql = (
-            "SELECT DISTINCT ON (t.id) "
-            "  t.id, t.user_turn, t.thinking, t.text, "
-            "  rf.evidence::text AS enrich_meta, "
-            "  t.created_at::text, "
-            "  t.est_chars "
+            "SELECT t.id, t.user_turn, t.thinking, t.text, "
+            "  t.detected_lang, t.created_at::text, t.est_chars "
             "FROM turns t "
-            "JOIN review_facts rf ON rf.turn_id = t.id "
-            f"  AND rf.fact_type = 'enrich_meta' "
             f"WHERE t.id = '{esc_sql(turn_id)}'::uuid "
-            "ORDER BY t.id, rf.fact_index DESC"
+            "  AND t.pipeline_state IN ('extracted', 'verifying')"
         )
+        rows = psql_json(sql) or []
     else:
         sql = f"""
             WITH claimable AS (
                 SELECT t.id
                 FROM turns t
-                JOIN review_facts rf ON rf.turn_id = t.id
-                  AND rf.fact_type = 'enrich_meta'
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM review_facts rf2
-                    WHERE rf2.turn_id = t.id
-                    AND rf2.fact_type = 'verify_result'
-                )
-                  AND t.pipeline_state = 'enriched'
+                WHERE t.pipeline_state = 'extracted'
+                  AND EXISTS (
+                      SELECT 1 FROM review_facts rf
+                      WHERE rf.turn_id = t.id
+                        AND rf.fact_type = 'text'
+                        AND rf.source = 'extract_pipeline'
+                  )
                 LIMIT {limit}
                 FOR UPDATE OF t SKIP LOCKED
             ),
@@ -259,179 +115,286 @@ def _get_turns_for_verify(limit: int = BATCH_LIMIT,
                 UPDATE turns SET pipeline_state = 'verifying'
                 FROM claimable WHERE turns.id = claimable.id
                 RETURNING turns.id
+            ),
+            result AS (
+                SELECT t.id, t.user_turn, t.thinking, t.text,
+                       t.detected_lang, t.created_at::text, t.est_chars
+                FROM turns t
+                WHERE t.id IN (SELECT id FROM claimed)
+                ORDER BY t.est_chars ASC NULLS LAST, t.created_at ASC
             )
-            SELECT sub.id, sub.user_turn, sub.thinking, sub.text,
-              sub.enrich_meta, sub.created_at, sub.est_chars
-            FROM (
-              SELECT DISTINCT ON (t.id)
-                t.id, t.user_turn, t.thinking, t.text,
-                rf.evidence::text AS enrich_meta,
-                t.created_at::text,
-                t.est_chars
-              FROM turns t
-              JOIN review_facts rf ON rf.turn_id = t.id
-                AND rf.fact_type = 'enrich_meta'
-              WHERE t.id IN (SELECT id FROM claimed)
-              ORDER BY t.id, rf.fact_index DESC
-            ) sub
-            ORDER BY sub.est_chars ASC NULLS LAST, sub.created_at ASC
+            SELECT row_to_json(r) FROM result r
         """
-    rows = psql_json(sql) or []
+        try:
+            r = subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=30)
+            if r.returncode != 0:
+                print(f"  SQL ERROR: {r.stderr.strip()[:200]}")
+                return []
+            rows = []
+            for line in r.stdout.strip().split("\n"):
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+        except Exception as e:
+            print(f"  SQL ERROR: {e}")
+            return []
     for r in rows:
         r["est_chars"] = r.get("est_chars") or 0
     return rows[:limit]
 
 
-def _compute_reranker_verdict(faithfulness: Dict) -> Optional[str]:
-    """Aggregate per-entity _reranker values into a single verdict.
+def _get_predicates(turn_id: str) -> List[Dict]:
+    """Get all extracted predicates for a turn, ordered by fact_index."""
+    rows = psql_json(f"""
+        SELECT id::text, fact_index, evidence::text,
+               verdict, nli_verdict, extract_model
+        FROM review_facts
+        WHERE turn_id = '{esc_sql(turn_id)}'::uuid
+          AND fact_type = 'text'
+          AND source = 'extract_pipeline'
+        ORDER BY fact_index
+    """)
+    return rows or []
 
-    Returns UNGROUNDED if any entity was confirmed ungrounded by reranker,
-    otherwise None (no decisive verdict from reranker alone).
+
+def _update_predicate_nli(pred_id: str, nli_verdict: str) -> bool:
+    """Update a single predicate's NLI verdict from Veritas."""
+    return psql_ok(f"""
+        UPDATE review_facts
+        SET nli_verdict = '{esc_sql(nli_verdict)}',
+            nli_llm = 'veritas-8b-fact-checker',
+            verify_model = 'day-verifier'
+        WHERE id = '{esc_sql(pred_id)}'::uuid
+    """)
+
+
+# ── Veritas NLI ────────────────────────────────────────────────────────────
+
+
+def _extract_binary_answer(line: str, idx: int) -> str:
+    """Parse a single line for YES/NO answer. Returns GROUNDED, PASS2, or AMBIGUOUS."""
+    s = line.strip().upper()
+    # Strip leading number prefix ("1. YES" → "YES")
+    if s.startswith(f"{idx}."):
+        s = s.split(".", 1)[1].strip()
+    # Strip trailing punctuation or labels
+    for sep in (" -", " —", "|", "("):
+        if sep in s:
+            s = s.split(sep)[0].strip()
+    if s.startswith("YES") or "YES" in s.split()[:1]:
+        return "GROUNDED"
+    elif s.startswith("NO") or "NO" in s.split()[:1]:
+        return "PASS2"
+    return "AMBIGUOUS"
+
+
+def _chunk_text(text: str, max_chars: int = 800) -> List[str]:
+    """Split text into ~max_chars chunks at sentence/paragraph boundaries.
+
+    Same approach as extract_llm._split_atomic — preserves semantic units,
+    no overlap needed, small fragments merged into previous chunk.
     """
-    for key in ("files", "technologies", "functions", "mentioned_users"):
-        items = faithfulness.get(key, [])
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict) and item.get("_reranker") == "UNGROUNDED":
-                    return "UNGROUNDED"
-    tldr = faithfulness.get("tldr", {})
-    if isinstance(tldr, dict) and tldr.get("_reranker") == "UNGROUNDED":
+    if len(text) <= max_chars:
+        return [text]
+    paragraphs = re.split(r"\n\s*\n", text)
+    chunks = []
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        if len(para) <= max_chars:
+            chunks.append(para)
+            continue
+        sentences = re.split(r"(?<=[.!?])\s+", para)
+        current = ""
+        for sent in sentences:
+            if len(current) + len(sent) + 1 <= max_chars:
+                current = (current + " " + sent).strip()
+            else:
+                if current:
+                    chunks.append(current)
+                current = sent
+        if current:
+            chunks.append(current)
+    merged = []
+    for c in chunks:
+        if merged and len(c) < 40:
+            merged[-1] += " " + c
+        else:
+            merged.append(c)
+    return merged
+
+
+def _binary_nli_batch(source: str, predicates: List[Dict]) -> List[Tuple[int, str]]:
+    """Pass 1: Binary YES/NO across chunked source (~800c each).
+
+    Each chunk evaluated independently. A predicate is GROUNDED if
+    ANY chunk finds it supported.
+    """
+    if not predicates:
+        return []
+
+    chunks = _chunk_text(source, max_chars=800)
+    claims_lines = "\n".join(
+        f"{i}. {p.get('evidence', '')[:300]}" for i, p in enumerate(predicates, 1)
+    )
+    chunk_votes: List[List[str]] = [[] for _ in range(len(predicates))]
+
+    for ci, chunk in enumerate(chunks):
+        answer_lines = "\n".join(f"{i}." for i in range(1, len(predicates) + 1))
+        prompt = _VERITAS_PROMPT_BINARY.format(
+            source=chunk,
+            claims=claims_lines,
+            claim_lines=answer_lines,
+        )
+
+        try:
+            resp = call_llm_with_retry(
+                [{"role": "user", "content": prompt}],
+                model="day_verify",
+                max_tokens=len(predicates) * 8 + 16,
+                temperature=0.0,
+                timeout=120,
+            )
+            lines = resp.strip().split("\n")
+            for i in range(len(predicates)):
+                matched = False
+                for line in lines:
+                    if line.strip().startswith(f"{i + 1}.") or line.strip().startswith(f"{i + 1}:"):
+                        chunk_votes[i].append(_extract_binary_answer(line, i + 1))
+                        matched = True
+                        break
+                if not matched:
+                    if i < len(lines):
+                        chunk_votes[i].append(_extract_binary_answer(lines[i], i + 1))
+                    else:
+                        chunk_votes[i].append("AMBIGUOUS")
+        except Exception as e:
+            log(f"      chunk {ci} NLI error: {e}")
+            for i in range(len(predicates)):
+                chunk_votes[i].append("AMBIGUOUS")
+
+    # Aggregate: YES from any chunk -> GROUNDED
+    # All NO -> PASS2 (check CONTRADICTION)
+    # Mixed -> AMBIGUOUS
+    results = []
+    for i in range(len(predicates)):
+        votes = chunk_votes[i]
+        yes_count = sum(1 for v in votes if v == "GROUNDED")
+        no_count = sum(1 for v in votes if v == "PASS2")
+        if yes_count > 0:
+            results.append((i, "GROUNDED"))
+        elif no_count == len(votes):
+            results.append((i, "PASS2"))
+        else:
+            results.append((i, "AMBIGUOUS"))
+
+    if len(chunks) > 1:
+        n_yes = sum(1 for _, v in results if v == "GROUNDED")
+        log(f"      {len(chunks)} chunks, {n_yes}/{len(predicates)} grounded")
+
+    return results
+
+
+def _contradiction_check(source: str, claim: str) -> str:
+    """Pass 2: Determine if source contradicts claim (chunked source)."""
+    chunks = _chunk_text(source, max_chars=800)
+    votes = []
+    for chunk in chunks:
+        prompt = _VERITAS_PROMPT_CONTRADICT.format(source=chunk, claim=claim[:500])
+        try:
+            resp = call_llm_with_retry(
+                [{"role": "user", "content": prompt}],
+                model="day_verify",
+                max_tokens=8,
+                temperature=0.0,
+                timeout=30,
+            )
+            s = resp.strip().upper()
+            if s.startswith("YES") or "YES" in s.split()[:1]:
+                votes.append("CONTRADICTION")
+            elif s.startswith("NO") or "NO" in s.split()[:1]:
+                votes.append("UNGROUNDED")
+            else:
+                votes.append("AMBIGUOUS")
+        except Exception as e:
+            log(f"      contradiction chunk error: {e}")
+            votes.append("AMBIGUOUS")
+
+    # Any chunk says CONTRADICTION -> CONTRADICTION
+    # All UNGROUNDED -> UNGROUNDED
+    # Mixed -> AMBIGUOUS
+    if any(v == "CONTRADICTION" for v in votes):
+        return "CONTRADICTION"
+    if all(v == "UNGROUNDED" for v in votes):
         return "UNGROUNDED"
-    return None
+    return "AMBIGUOUS"
 
 
-def _insert_verify_result(turn_id: str, fact_index: int,
-                           verify_json_str: str,
-                           nli_verdict: Optional[str] = None) -> bool:
-    cols = ["turn_id", "fact_index", "fact_type", "evidence",
-            "extract_model", "verdict", "source", "fact_action"]
-    vals = [f"'{esc_sql(turn_id)}'::uuid", str(fact_index),
-            "'verify_result'",
-            f"'{esc_sql(verify_json_str[:5000])}'",
-            "'enrich-self'", "'pending'",
-            "'day_verify'", "'verify'"]
-    if nli_verdict:
-        cols.append("nli_verdict")
-        vals.append(f"'{esc_sql(nli_verdict)}'")
-    sql = (
-        f"INSERT INTO review_facts ({', '.join(cols)}) "
-        f"VALUES ({', '.join(vals)})"
-    )
-    return psql_ok(sql)
+# ── Per-turn processing ────────────────────────────────────────────────────
 
 
-def _build_category_summary(verify_data: Dict) -> str:
-    parts = []
+def _verify_turn(turn: Dict) -> Tuple[str, List[Dict], Optional[str]]:
+    """Verify all predicates for one turn. Returns (turn_id, updates, error).
 
-    # Entity verify
-    ev = verify_data.get("entity_verify", {})
-    files = ev.get("files", [])
-    syms = ev.get("symbols", [])
-    missing_files = sum(1 for f in files if not f.get("exists"))
-    missing_syms = sum(1 for s in syms if not s.get("found"))
-    parts.append(f"entity: {len(files)} files ({missing_files} missing), "
-                 f"{len(syms)} syms ({missing_syms} missing)")
-
-    # Faithfulness
-    fh = verify_data.get("faithfulness", {})
-    n_ent = sum(len(v) for v in fh.values() if isinstance(v, list))
-    n_fail = sum(
-        1 for v in fh.values()
-        if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
-    )
-    parts.append(f"faithfulness: {n_ent} entities ({n_fail} ungrounded)")
-    tldr = fh.get("tldr", {})
-    if isinstance(tldr, dict):
-        tldr_ok = tldr.get("grounded", True)
-        parts.append(f"tldr={'OK' if tldr_ok else 'LOW'}")
-
-    return " | ".join(parts)
-
-
-# ── Pipeline ──────────────────────────────────────────────────────────────
-
-def _process_turn(turn: Dict) -> Tuple[str, Optional[Dict], Optional[str]]:
-    """Process a single turn in thread pool. Returns (turn_id, verify_result, error).
-
-    verify_result embeds _log_* keys for sequential logging after parallel phase.
+    updates: list of {id, fact_index, verdict}
     """
     try:
         turn_id = turn["id"]
-        enrich_meta_str = turn.get("enrich_meta", "")
-        enrich_data = json.loads(enrich_meta_str) if enrich_meta_str else {}
-        if not enrich_data:
-            return (turn_id, None, None)
+        predicates = _get_predicates(turn_id)
+        if not predicates:
+            return (turn_id, [], None)
 
-        verify_result: Dict[str, Any] = {}
-
-        # Phase 1: Entity disk/symbol verify
-        entities = enrich_data.get("entities", {})
-        if entities:
-            ev = verify_entities(enrich_data)
-            verify_result["entity_verify"] = ev
-
-        # Phase 2: LLM-based faithfulness via role "day_verify"
         user_turn = turn.get("user_turn", "") or ""
         thinking = turn.get("thinking", "") or ""
         text = turn.get("text", "") or ""
+        # Truncate to 4000 chars: Veritas ctx=4096, chunked to 800c + claims ~500c
         source_text = " ".join(f"{user_turn}\n{thinking}\n{text}".split())[:4000]
-        faithfulness = _llm_verify_entities(entities, source_text)
 
-        tldr = (enrich_data.get("tldr", "") or "").strip()
-        if tldr:
-            faithfulness["tldr"] = _llm_verify_tldr(tldr, source_text)
-        verify_result["faithfulness"] = faithfulness
+        # Pass 1: Binary NLI (all predicates batched)
+        binary = _binary_nli_batch(source_text, predicates)
 
-        # Phase 2b: Pod A reranker second opinion on uncertain entities
-        pre_reranker_ungrounded = sum(
-            1 for v in faithfulness.values()
-            if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
-        )
-        if pre_reranker_ungrounded > 0:
-            _reranker_verify(faithfulness, source_text)
-            reranker_overrides = pre_reranker_ungrounded - sum(
-                1 for v in faithfulness.values()
-                if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
+        # Pass 2: CONTRADICTION check for PASS2 items
+        updates = []
+        for idx, verdict in binary:
+            pred = predicates[idx]
+            if verdict == "PASS2":
+                final = _contradiction_check(source_text, pred.get("evidence", ""))
+            else:
+                final = verdict
+            updates.append(
+                {
+                    "id": pred["id"],
+                    "fact_index": pred["fact_index"],
+                    "verdict": final,
+                    "old_nli": pred.get("nli_verdict", ""),
+                }
             )
-        else:
-            reranker_overrides = 0
 
-        # Embed log metadata (popped in sequential store loop)
-        if entities:
-            ev = verify_result.get("entity_verify", {})
-            n_files = len(ev.get("files", []))
-            n_syms = len(ev.get("symbols", []))
-            n_missing_files = sum(1 for f in ev.get("files", []) if not f["exists"])
-            n_missing_syms = sum(1 for s in ev.get("symbols", []) if not s["found"])
-            verify_result["_log_entity"] = (n_files, n_missing_files, n_syms, n_missing_syms)
-
-        if faithfulness:
-            n_ent = sum(len(v) for v in faithfulness.values() if isinstance(v, list))
-            n_fail = sum(
-                1 for v in faithfulness.values()
-                if isinstance(v, list) and any(not e.get("grounded", True) for e in v)
-            )
-            tldr_ok = faithfulness.get("tldr", {}).get("grounded", True) if isinstance(faithfulness.get("tldr"), dict) else True
-            verify_result["_log_faith"] = (n_ent, n_fail, tldr_ok, reranker_overrides)
-
-        return (turn_id, verify_result, None)
-
+        return (turn_id, updates, None)
     except Exception as e:
-        return (turn["id"], None, f"{type(e).__name__}: {e}")
+        return (turn["id"], [], f"{type(e).__name__}: {e}")
 
 
-def day_verify_pipeline(limit: int = BATCH_LIMIT,
-                         dry_run: bool = False,
-                         turn_id: Optional[str] = None) -> Dict[str, Any]:
-    """Verify enrichment metadata: entity disk check + reranker + NLI self-verify."""
+# ── Pipeline ───────────────────────────────────────────────────────────────
+
+
+def day_verify_pipeline(
+    limit: int = BATCH_LIMIT, dry_run: bool = False, turn_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """Verify extracted predicates against source using Veritas two-pass NLI."""
     t_start = time.monotonic()
     processed = 0
+    verified_count = 0
+    contradicted = 0
+    ungrounded = 0
+    ambiguous = 0
     failed = 0
 
     heartbeat("day_verify", "pipeline_start")
 
     log("=" * 60)
-    log("Day Verify — enrichment metadata quality check")
+    log("Day Verify — predicate NLI (Veritas-8B Fact Checker)")
     if dry_run:
         log("  [DRY RUN] No writes to DB")
     if turn_id:
@@ -445,110 +408,134 @@ def day_verify_pipeline(limit: int = BATCH_LIMIT,
 
     solo_turns = [t for t in turns if t.get("est_chars", 0) > SOLO_THRESHOLD]
     pool_turns = [t for t in turns if t.get("est_chars", 0) <= SOLO_THRESHOLD]
-    log(f"Processing {len(turns)} turn(s): {len(solo_turns)} solo (>{SOLO_THRESHOLD} chars), "
-        f"{len(pool_turns)} parallel (max_workers={PARALLEL})")
+    log(
+        f"Processing {len(turns)} turn(s): {len(solo_turns)} solo (>{SOLO_THRESHOLD} chars), "
+        f"{len(pool_turns)} parallel (max_workers={PARALLEL})"
+    )
 
-    # ── Phase 1+2+2b: Processing ──────────────────────────────────────
-    turn_results: Dict[str, Tuple[Optional[Dict], Optional[str]]] = {}
+    # ── Processing ────────────────────────────────────────────────────────
+    turn_results: Dict[str, Tuple[List[Dict], Optional[str]]] = {}
     llm_t0 = time.monotonic()
 
-    # Normal turns first: parallel pool (fast path)
     if pool_turns:
         with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
             fut_map = {}
             for turn in pool_turns:
-                fut = pool.submit(_process_turn, turn)
+                fut = pool.submit(_verify_turn, turn)
                 fut_map[fut] = turn
             for fut in as_completed(fut_map):
-                turn = fut_map[fut]
-                turn_id_val, verify_result, error = fut.result()
-                turn_results[turn["id"]] = (verify_result, error)
+                trn = fut_map[fut]
+                _, updates, error = fut.result()
+                turn_results[trn["id"]] = (updates, error)
 
-    # Solo turns after: sequential (large turns don't delay pool)
     for turn in solo_turns:
-        turn_id_val, verify_result, error = _process_turn(turn)
-        turn_results[turn["id"]] = (verify_result, error)
+        _, updates, error = _verify_turn(turn)
+        turn_results[turn["id"]] = (updates, error)
 
     log(f"  processing phase: {time.monotonic() - llm_t0:.1f}s")
 
-    # ── Sequential store + logging ─────────────────────────────────────
+    # ── Store results ─────────────────────────────────────────────────────
     for turn in turns:
         turn_id_val = turn["id"]
         turn_short = turn_id_val[:8]
         log(f"\n  [{turn_short}]")
 
-        verify_result, error = turn_results.get(turn_id_val, (None, "missing batch result"))
+        updates, error = turn_results.get(turn_id_val, ([], "missing batch result"))
 
         if error:
             log(f"    ERROR: {error}")
             failed += 1
             continue
 
-        if verify_result is None:
-            log(f"    No enrich data — skip")
-            continue
-
-        # Phase 1 log
-        log_entity = verify_result.pop("_log_entity", None)
-        if log_entity:
-            n_files, n_missing_files, n_syms, n_missing_syms = log_entity
-            log(f"    entity: {n_files} files ({n_missing_files} missing), "
-                f"{n_syms} symbols ({n_missing_syms} missing)")
-
-        # Phase 2 log
-        log_faith = verify_result.pop("_log_faith", None)
-        if log_faith:
-            n_ent, n_fail, tldr_ok, reranker_overrides = log_faith
-            r_log = f", {reranker_overrides} reranker override" if reranker_overrides else ""
-            log(f"    faithfulness: {n_ent} entities ({n_fail} ungrounded), "
-                f"tldr={'OK' if tldr_ok else 'LOW'}{r_log}")
-
-        if dry_run:
-            log(f"    [DRY] Would store verify_result")
+        if not updates:
+            log("    No predicates — skip")
+            # Still advance state — nothing to verify is OK
+            if not dry_run:
+                psql_ok(
+                    f"UPDATE turns SET pipeline_state = 'verified' "
+                    f"WHERE id = '{esc_sql(turn_id_val)}'::uuid"
+                )
             processed += 1
             continue
 
-        # Store to DB
-        fi_str = psql(
-            f"SELECT COALESCE(MAX(fact_index), -1) + 1 "
-            f"FROM review_facts WHERE turn_id = '{esc_sql(turn_id_val)}'::uuid"
+        # Log per-verdict counts
+        n_g = sum(1 for u in updates if u["verdict"] == "GROUNDED")
+        n_c = sum(1 for u in updates if u["verdict"] == "CONTRADICTION")
+        n_u = sum(1 for u in updates if u["verdict"] == "UNGROUNDED")
+        n_a = sum(1 for u in updates if u["verdict"] == "AMBIGUOUS")
+        log(f"    predicates: {len(updates)} total (G={n_g} C={n_c} U={n_u} A={n_a})")
+
+        # Show changed verdicts
+        changed = [u for u in updates if u["verdict"] != u["old_nli"]]
+        if changed:
+            for ch in changed[:5]:
+                old = ch.get("old_nli", "") or "NONE"
+                log(f"      fi={ch['fact_index']}: {old} → {ch['verdict']}")
+            if len(changed) > 5:
+                log(f"      ... and {len(changed) - 5} more")
+
+        if dry_run:
+            log("    [DRY] Would update nli_verdict")
+            processed += 1
+            continue
+
+        # Batch UPDATE nli_verdict per predicate
+        for upd in updates:
+            _update_predicate_nli(upd["id"], upd["verdict"])
+
+        # Advance turn state
+        psql_ok(
+            f"UPDATE turns SET pipeline_state = 'verified' "
+            f"WHERE id = '{esc_sql(turn_id_val)}'::uuid"
         )
-        fi = int(fi_str) if fi_str and fi_str != "-infinity" else 0
+        log(f"    {len(updates)} predicates updated → verified")
 
-        verify_json = json.dumps(verify_result, ensure_ascii=False)
-        faithfulness = verify_result.get("faithfulness", {})
-        reranker_verdict = _compute_reranker_verdict(faithfulness)
-        _insert_verify_result(turn_id_val, fi, verify_json, reranker_verdict)
-        psql_ok(f"UPDATE turns SET pipeline_state = 'verified' WHERE id = '{esc_sql(turn_id_val)}'::uuid")
-        log(f"    Stored verify_result (fact_index={fi})")
-
-        cat_summary = _build_category_summary(verify_result)
-        if cat_summary:
-            log(f"    {cat_summary}")
-
+        verified_count += n_g
+        contradicted += n_c
+        ungrounded += n_u
+        ambiguous += n_a
         processed += 1
         heartbeat("day_verify", f"turn {turn_id_val[:8]} verified")
 
     elapsed = round(time.monotonic() - t_start, 1)
     log(f"\n{'=' * 60}")
-    log(f"Done: {processed} verified, {failed} failed ({elapsed}s)")
+    log(
+        f"Done: {processed} turns, "
+        f"{verified_count}G/{contradicted}C/{ungrounded}U/{ambiguous}A "
+        f"({elapsed}s)"
+    )
+    if failed:
+        log(f"  FAILED: {failed} turns")
     log(f"{'=' * 60}")
 
-    return {"ok": failed == 0, "processed": processed, "failed": failed,
-            "elapsed_s": elapsed}
+    return {
+        "ok": failed == 0,
+        "processed": processed,
+        "failed": failed,
+        "elapsed_s": elapsed,
+        "verdicts": {
+            "grounded": verified_count,
+            "contradiction": contradicted,
+            "ungrounded": ungrounded,
+            "ambiguous": ambiguous,
+        },
+    }
 
 
 def main() -> None:
-    ensure_model('day-verifier')  # skip_if_healthy=False: swap from day-enrich to day-verifier
+    ensure_model("day-verifier", skip_if_healthy=True)
     preflight_checks("day_verify.py", required_ports={8082})
     import argparse
-    parser = argparse.ArgumentParser(
-        description="Day Verify — enrichment metadata quality check")
+
+    parser = argparse.ArgumentParser(description="Day Verify — predicate NLI with Veritas-8B")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
-    parser.add_argument("--turn-id", type=str, default=None,
-                        help="Re-verify a specific turn UUID (skips NOT EXISTS filter)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Simulate without DB writes")
+    parser.add_argument(
+        "--turn-id",
+        type=str,
+        default=None,
+        help="Re-verify a specific turn UUID",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Simulate without DB writes")
     args = parser.parse_args()
 
     result = day_verify_pipeline(
@@ -559,6 +546,7 @@ def main() -> None:
     if args.dry_run:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     from lib.llm_client import recall_tiny
+
     recall_tiny()
     sys.exit(0 if result["ok"] else 1)
 

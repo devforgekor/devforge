@@ -46,7 +46,7 @@ for cfg in CONFIGS:
 
     # Force restart with new params
     t0 = time.monotonic()
-    log(f"  Restarting Pod B with {cfg}...")
+    log(f"  Restarting inference with {cfg}...")
     ensure_model("day-extractor", skip_if_healthy=False)
     restart_elapsed = time.monotonic() - t0
     log(f"  Pod restart: {restart_elapsed:.0f}s")

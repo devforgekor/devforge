@@ -1,10 +1,11 @@
 # Status: production
-import json, os, subprocess, time, urllib.request, glob
+import subprocess
+import time
+import urllib.request
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
 
 # Constants
-MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
+MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
 TIMEOUT_LLM = 600
 TIMEOUT_SWAP = 300
 
@@ -86,32 +87,60 @@ Output JSON:
   "feedback": {"proposer_improvement":"...","refuter_improvement":"...","judge_improvement":"..."}
 }"""
 
+
 def inject_rubric(system_prompt: str, role: str) -> str:
     """Append rubric instructions to a system prompt."""
     if "proposer" in role or "P " in role or "Finder" in system_prompt:
-        section = "### P (Proposer) — Finding Quality Scoring\n" + REVIEW_RUBRIC.split("### P")[1].split("\n### R")[0]
+        section = (
+            "### P (Proposer) — Finding Quality Scoring\n"
+            + REVIEW_RUBRIC.split("### P")[1].split("\n### R")[0]
+        )
     elif "refuter" in role or "R " in role or "reflector" in role.lower():
-        section = "### R (Refuter) — Verdict Quality Scoring\n" + REVIEW_RUBRIC.split("### R")[1].split("\n### J")[0]
+        section = (
+            "### R (Refuter) — Verdict Quality Scoring\n"
+            + REVIEW_RUBRIC.split("### R")[1].split("\n### J")[0]
+        )
     elif "judge" in role or "J " in role or "Scoring Judge" in system_prompt:
-        section = "### J (Judge) — Scoring Criteria\n" + REVIEW_RUBRIC.split("### J")[1].split("\n### V")[0]
+        section = (
+            "### J (Judge) — Scoring Criteria\n"
+            + REVIEW_RUBRIC.split("### J")[1].split("\n### V")[0]
+        )
     elif "verify" in role or "V " in role:
         section = "### V (Verify 27B) — Final Verdict Criteria\n" + REVIEW_RUBRIC.split("### V")[1]
     else:
         section = REVIEW_RUBRIC
     return system_prompt + "\n\n" + section
 
+
 def log(msg):
     log_ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
     print(f"[{log_ts}] {msg}", flush=True)
 
-def swap_pod_b(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
-    log(f"  [swap] Pod B → {mode}")
+
+def swap_inference(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
+    log(f"  [swap] inference → {mode}")
     try:
-        with open(MODE_FILE_B, "w") as f:
+        from lib.pod_manager.container import (
+            INFERENCE_CONTAINER,
+            MODE_FILE,
+            _podman_start_inference,
+            _podman_stop_inference,
+        )
+
+        # Write mode file directly
+        with open(MODE_FILE, "w") as f:
             f.write(f"MODE={mode}")
-        r = subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-                           capture_output=True, timeout=60)
-        if r.returncode != 0:
+
+        _podman_stop_inference()
+        _podman_start_inference()
+
+        r = subprocess.run(
+            ["podman", "ps", "--filter", f"name={INFERENCE_CONTAINER}", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if INFERENCE_CONTAINER not in r.stdout:
             return False
         port = 8080 if mode == "review-r" else 8081
         t0 = time.monotonic()

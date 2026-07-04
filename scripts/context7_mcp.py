@@ -172,7 +172,10 @@ def _call_api(path, params, keys, method="GET"):
                     continue
                 resp.raise_for_status()
                 keys["idx"] = (idx + 1) % len(keys["pool"])
-                return resp.json()
+                ct = resp.headers.get("content-type", "")
+                if ct.startswith("application/json"):
+                    return resp.json()
+                return {"data": resp.text}
         except Exception as e:
             print(f"[context7_mcp] Key {idx} failed: {e}", file=sys.stderr)
             continue
@@ -220,12 +223,39 @@ def _handle_query_docs(args, keys):
     if not libraryId:
         return "Error: libraryId is required"
 
-    params = {"libraryId": libraryId, "query": query or "general usage"}
+    params = {"libraryId": libraryId, "query": query or "general usage", "type": "json"}
     data = _call_api("/v2/context", params, keys)
     if data is None:
         return "Error: All Context7 API keys exhausted or API unavailable."
 
-    text = data.get("data", "")
+    snippets = data.get("codeSnippets", []) or []
+    info = data.get("infoSnippets", []) or []
+
+    parts = []
+    for s in info:
+        parts.append(f"### {s.get('breadcrumb', 'Documentation')}")
+        parts.append(s.get("content", ""))
+        if s.get("pageId"):
+            parts.append(f"Source: {s['pageId']}")
+        parts.append("")
+
+    for s in snippets:
+        title = s.get("codeTitle", "Code Example")
+        parts.append(f"### {title}")
+        if s.get("codeDescription"):
+            parts.append(s["codeDescription"])
+        for c in s.get("codeList", []):
+            lang = c.get("language", "")
+            code = c.get("code", "")
+            if lang and code:
+                parts.append(f"```{lang}\n{code}\n```")
+            elif code:
+                parts.append(f"```\n{code}\n```")
+        if s.get("pageTitle"):
+            parts.append(f"Source: {s['pageTitle']}")
+        parts.append("")
+
+    text = "\n".join(parts).strip()
     if not text:
         return f"No documentation found for library ID '{libraryId}'."
 

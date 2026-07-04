@@ -27,7 +27,9 @@ def log(msg: str) -> None:
         pass
 
 
-def preflight_checks(entry_name: str = "pipeline", required_ports: Optional[Set[int]] = None) -> None:
+def preflight_checks(
+    entry_name: str = "pipeline", required_ports: Optional[Set[int]] = None
+) -> None:
     """Run pre-flight checks before starting a pipeline.
 
     1. Kill stale python3 processes matching entry_name.
@@ -39,8 +41,8 @@ def preflight_checks(entry_name: str = "pipeline", required_ports: Optional[Set[
         entry_name: The script name to match in cmdline (e.g. "night.py", "hybrid.py").
         required_ports: Set of ports to health-check before proceeding.
     """
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     current_pid = os.getpid()
 
@@ -84,7 +86,7 @@ def preflight_checks(entry_name: str = "pipeline", required_ports: Optional[Set[
                     cmdline = cf.read().replace("\0", " ")
                 if entry_name not in cmdline:
                     continue
-            except (OSError, IOError):
+            except OSError:
                 continue
             if pid in protected_pids:
                 continue  # don't kill protected processes
@@ -95,9 +97,9 @@ def preflight_checks(entry_name: str = "pipeline", required_ports: Optional[Set[
                 with open(f"/proc/{pid}/status") as sf:
                     for sl in sf:
                         if sl.startswith("PPid:"):
-                            _kill_ok = (int(sl.split()[1]) == 1)
+                            _kill_ok = int(sl.split()[1]) == 1
                             break
-            except (OSError, IOError, ValueError):
+            except (OSError, ValueError):
                 pass
             if not _kill_ok:
                 continue
@@ -143,24 +145,18 @@ def preflight_checks(entry_name: str = "pipeline", required_ports: Optional[Set[
             except Exception:
                 log(f"  [preflight] :{port} NOT healthy — will start during boot")
 
-    # 4. Mode file sanity check — Pod B must not be in review/verify mode (32B+ models)
+    # 4. Mode file sanity check — inference must not be in review/verify mode (32B+ models)
     #    during day pipeline operation (would cause memory_guard failure)
-    _mode_file_b = "/opt/ai_data/scripts/current-mode-pod-b.env"
-    _mode_file_a = "/opt/ai_data/scripts/current-mode-pod-a.env"
+    _mode_file = "/opt/ai_data/scripts/current-mode-inference.env"
     _large_modes = {"review-p", "review-r", "review-j", "verify"}
-    for label, mf in [("A", _mode_file_a), ("B", _mode_file_b)]:
-        if os.path.exists(mf):
-            mode = Path(mf).read_text().strip().replace("MODE=", "")
-            if mode in _large_modes:
-                log(f"  [preflight] WARNING: Pod {label} mode={mode} (large model) — may cause OOM")
-    if os.path.exists(_mode_file_b):
-        mode_b = Path(_mode_file_b).read_text().strip().replace("MODE=", "")
-        if mode_b in _large_modes and entry_name in ("prj_cycle.py", "runner.py"):
-            # In experiment mode, Pod B should start in day mode; reset if stuck in large mode
-            log(f"  [preflight] Pod B in {mode_b} mode — resetting to day")
-            Path(_mode_file_b).write_text("MODE=day")
-            subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b.service"],
-                           capture_output=True, timeout=10)
+    if os.path.exists(_mode_file):
+        mode = Path(_mode_file).read_text().strip().replace("MODE=", "")
+        if mode in _large_modes:
+            log(f"  [preflight] WARNING: inference mode={mode} (large model) — may cause OOM")
+        if mode in _large_modes and entry_name in ("prj_cycle.py", "runner.py"):
+            # In experiment mode, start in day mode; reset if stuck in large mode
+            log(f"  [preflight] inference in {mode} mode — resetting to day")
+            Path(_mode_file).write_text("MODE=day")
 
     # 5. Clean stale experiment state (PID dead but state file exists)
     if is_experiment_stale():

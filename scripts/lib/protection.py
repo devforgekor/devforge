@@ -4,7 +4,7 @@
 """Protection context manager — file-based dead man's switch.
 
 Any process can register a protection context via ``protect()`` to prevent:
-  - Timer/cycle from stopping Pod B
+  - Timer/cycle from stopping inference
   - Port-stray-kill from killing its ports
   - Preflight from resetting mode
 

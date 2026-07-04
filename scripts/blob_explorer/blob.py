@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
+from azure.storage.blob import BlobSasPermissions, BlobServiceClient, generate_blob_sas
 
 ACCOUNT_NAME = "stshareddevforgeprodkrc"
 CONTAINER = "devforge"
@@ -22,11 +22,14 @@ def _get_account_key() -> str:
     if _account_key:
         return _account_key
     sf = Path.home() / ".config/devforge/secrets.env"
-    with open(sf) as f:
-        for line in f:
-            if line.startswith("AZURE_STORAGE_ACCOUNT_KEY="):
-                _account_key = line.strip().split("=", 1)[1].strip("'\"")
-                break
+    if sf.exists():
+        with open(sf) as f:
+            for line in f:
+                if line.startswith("AZURE_STORAGE_ACCOUNT_KEY="):
+                    _account_key = line.strip().split("=", 1)[1].strip("'\"")
+                    break
+    if not _account_key:
+        _account_key = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY", "")
     if not _account_key:
         raise RuntimeError("AZURE_STORAGE_ACCOUNT_KEY not found")
     return _account_key
@@ -46,12 +49,14 @@ def _list_blobs(prefix: str) -> list[dict]:
     for blob in cc.list_blobs(name_starts_with=prefix):
         if blob.name == prefix:
             continue
-        results.append({
-            "name": blob.name,
-            "size": blob.size or 0,
-            "updated": blob.last_modified.isoformat() if blob.last_modified else "",
-        })
-    results.sort(key=lambda b: (0 if "/" in b["name"][len(prefix):] else 1, b["name"]))
+        results.append(
+            {
+                "name": blob.name,
+                "size": blob.size or 0,
+                "updated": blob.last_modified.isoformat() if blob.last_modified else "",
+            }
+        )
+    results.sort(key=lambda b: (0 if "/" in b["name"][len(prefix) :] else 1, b["name"]))
     return results
 
 
@@ -75,8 +80,11 @@ def _virtual_tree(prefix: str, blobs: list[dict]) -> dict:
 def _generate_sas(blob_name: str) -> str:
     key = _get_account_key()
     sas = generate_blob_sas(
-        account_name=ACCOUNT_NAME, container_name=CONTAINER, blob_name=blob_name,
-        account_key=key, permission=BlobSasPermissions(read=True),
+        account_name=ACCOUNT_NAME,
+        container_name=CONTAINER,
+        blob_name=blob_name,
+        account_key=key,
+        permission=BlobSasPermissions(read=True),
         expiry=datetime.now(timezone.utc) + timedelta(hours=SAS_HOURS),
     )
     return f"https://{ACCOUNT_NAME}.blob.core.windows.net/{CONTAINER}/{blob_name}?{sas}"

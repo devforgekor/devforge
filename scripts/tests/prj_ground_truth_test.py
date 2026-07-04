@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: none — P/R/J ground-truth evaluation (Pod B swap, 4 cores dedicated)
+# Path: none — P/R/J ground-truth evaluation (inference swap, 4 cores dedicated)
 """Ground truth 기반 P→R→J day 분류 3모델 정밀 평가.
-Pod B swap 방식: 각 모델마다 Pod B stop → model load → test → stop → swap.
-4코어 전용 할당. Pod A 미사용 (완전 중단).
+inference swap 방식: 각 모델마다 inference stop → model load → test → stop → swap.
+4코어 전용 할당. inference 미사용 (완전 중단).
 P(Mistral) → R(Qwen Instruct) → J(Llama 3.1).
 종합 점수: hallucination(MiniCheck), 정확도, 일관성."""
 import json, os, subprocess, sys, time, urllib.request
@@ -14,6 +14,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from lib.llm_client import MODEL_REGISTRY
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
+from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
 from minicheck.minicheck import MiniCheck
 
 # ── MiniCheck ───────────────────────────────────────────────────────
@@ -173,22 +174,20 @@ def log(msg):
     print(f"  {msg}", flush=True)
 
 
-def restart_pod_b(model_file: str, model_name: str = "test") -> bool:
-    """Swap Pod B to new model on :8082. 4 cores dedicated, no Pod A."""
-    ENV = "/opt/ai_data/scripts/current-mode-pod-b.env"
+def restart_inference(model_file: str, model_name: str = "test") -> bool:
+    """Swap inference to new model on :8082. 4 cores dedicated, no inference."""
+    ENV = "/opt/ai_data/scripts/current-mode-inference.env"
     with open(ENV, "w") as f:
         escaped_name = model_name.replace('"', '\\"')
         f.write(f"MODE=day\nMODEL_NAME=\"{escaped_name}\"\nPORT=8082\nMODEL_FILE={model_file}\n"
                 f"CTX_SIZE=8192\nTHREADS=4\nTHREADS_BATCH=4\nCACHE_RAM=1024\n")
-    log("Stopping Pod B...")
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b"],
-                   capture_output=True, timeout=60)
+    log("Stopping inference...")
+    _podman_stop_inference()
     time.sleep(3)
-    subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b"],
+    subprocess.run(["podman", "rm", "-v", "-f", "-i", "devforge-inference"],  # was reset-failed
                    capture_output=True, timeout=10)
-    log(f"Starting Pod B with {model_file}...")
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b"],
-                   capture_output=True, timeout=60)
+    log(f"Starting inference with {model_file}...")
+    _podman_start_inference()
     for i in range(300):
         try:
             resp = urllib.request.urlopen(
@@ -206,7 +205,7 @@ def restart_pod_b(model_file: str, model_name: str = "test") -> bool:
 
 
 def call_llm_json(system: str, user: str) -> dict:
-    """Call Pod B :8082 with JSON mode. Returns {'ok', 'parsed', 'elapsed_s', 'error'}."""
+    """Call inference :8082 with JSON mode. Returns {'ok', 'parsed', 'elapsed_s', 'error'}."""
     t0 = time.monotonic()
     try:
         meta = call_llm(
@@ -376,19 +375,19 @@ def run_j(p_results, r_results):
 
 
 def restore_default():
-    """Restore Pod B to 7B extractor (normal day mode)."""
-    log("Restoring Pod B to 7B extractor (day mode)...")
-    with open("/opt/ai_data/scripts/current-mode-pod-b.env", "w") as f:
+    """Restore inference to 7B extractor (normal day mode)."""
+    log("Restoring inference to 7B extractor (day mode)...")
+    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
         f.write("MODE=day\nMODEL_NAME=extractor\nPORT=8082\n"
                 "MODEL_FILE=Qwen2.5-Coder-7B-Instruct.Q8_0.gguf\n"
                 "CTX_SIZE=8192\nTHREADS=2\nTHREADS_BATCH=2\nCACHE_RAM=512\n")
-    subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b"],
-                   capture_output=True, timeout=120)
+    _podman_stop_inference()
+    _podman_start_inference()
 
 
 # ── Main ────────────────────────────────────────────────────────────
 def main():
-    TEST = test_setup("prj_ground_truth", "P/R/J ground-truth evaluation (Pod B swap, 4 cores)")
+    TEST = test_setup("prj_ground_truth", "P/R/J ground-truth evaluation (inference swap, 4 cores)")
     print("=" * 70)
     print("  Ground Truth Evaluation — P→R→J Day Classification")
     print(f"  {len(GT)} scenarios, 3 models")
@@ -403,7 +402,7 @@ def main():
     if not os.path.exists(f"/opt/ai_data/models/gguf/{P_MODEL}"):
         log(f"SKIP: {P_MODEL} not found")
         ok_to_continue = False
-    if ok_to_continue and restart_pod_b(P_MODEL, P_NAME):
+    if ok_to_continue and restart_inference(P_MODEL, P_NAME):
         p_res = run_p()
     else:
         p_res = [{"findings": []} for _ in GT]
@@ -413,7 +412,7 @@ def main():
     if not os.path.exists(f"/opt/ai_data/models/gguf/{R_MODEL}"):
         log(f"SKIP: {R_MODEL} not found")
         r_res = [{"verdicts": []} for _ in GT]
-    elif ok_to_continue and restart_pod_b(R_MODEL, R_NAME):
+    elif ok_to_continue and restart_inference(R_MODEL, R_NAME):
         r_res = run_r(p_res)
     else:
         r_res = [{"verdicts": []} for _ in GT]
@@ -423,14 +422,14 @@ def main():
     if not os.path.exists(f"/opt/ai_data/models/gguf/{J_MODEL}"):
         log(f"SKIP: {J_MODEL} not found")
         judge_results = [{"result": {}} for _ in GT]
-    elif ok_to_continue and restart_pod_b(J_MODEL, J_NAME):
+    elif ok_to_continue and restart_inference(J_MODEL, J_NAME):
         judge_results = run_j(p_res, r_res)
     else:
         judge_results = [{"result": {}} for _ in GT]
 
     # ── Report ─────────────────────────────────────────────────────
     print(f"\n{'='*70}")
-    print("  REPORT — Pod B swap (4 cores dedicated)")
+    print("  REPORT — inference swap (4 cores dedicated)")
     print(f"{'='*70}")
 
     # Role summary
@@ -448,9 +447,9 @@ def main():
         print(f"    R: {r['score']}/100 ({r['detail']}) [{r.get('elapsed',0):.0f}s]")
         print(f"    J: {j['score']}/100 ({j['detail']}) [{j.get('elapsed',0):.0f}s]")
 
-    # Restore Pod B to day mode (7B extractor)
+    # Restore inference to day mode (7B extractor)
     if ok_to_continue:
-        print(f"\n  Restoring Pod B to 7B extractor (day mode)...")
+        print(f"\n  Restoring inference to 7B extractor (day mode)...")
         restore_default()
         log("Done")
     else:

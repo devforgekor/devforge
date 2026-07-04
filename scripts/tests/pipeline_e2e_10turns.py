@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pipeline E2E test — 10 newest turns, all 5 phases with Pod B mode switching."""
+"""Pipeline E2E test — 10 newest turns, all 5 phases with inference mode switching."""
 import json, os, subprocess, sys, time
 
 SCRIPTS_DIR = "/opt/projects/server/scripts"
@@ -28,7 +28,7 @@ r = results["embed_batch"] = {"returncode": proc.returncode, "elapsed_s": round(
 log(f"  embed_batch: {'OK' if r['success'] else 'FAIL'} ({elapsed:.0f}s)")
 test_heartbeat(f"embed done ({elapsed:.0f}s)")
 
-# Switch Pod B to day-extractor mode (8082) for remaining phases
+# Switch inference to day-extractor mode (8082) for remaining phases
 log(f"\n--- ensure_model(day-extractor) ---")
 t_model = time.monotonic()
 ensure_model("day-extractor", skip_if_healthy=True)

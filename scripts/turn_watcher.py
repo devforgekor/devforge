@@ -1,34 +1,29 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: systemd:devforge-turn-watcher
-"""turn_watcher.py — real-time session transcript → PostgreSQL.
+# Path: devforge-fastapi lifespan — turn_watcher scan loop
+"""turn_watcher.py — real-time session transcript → PostgreSQL (raw insert).
 
 Polls Claude Code / Copilot / Gemini / Aider jsonl files every few seconds.
-Insert new turns directly to conversations + turns tables — no API dependency.
-Runs as a systemd user service, independent of Claude Code lifecycle.
+Inserts new turns with pipeline_state='raw' — text_clean is deferred to
+raw_consumer (Pass 2) in the devforge-worker container.
 
-SSOT: turns table. All downstream systems (worklog, review, link) derive from turns.
-OOM-safe: jsonl lines written to disk synchronously by agents; watcher reads them
-regardless of agent process state.
+Pipe: turn_watcher (jsonl → DB raw) → raw_consumer (raw → pending) → day_cycle
 """
 
 import json
-import sqlite3
 import sys
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from lib.tracking.agent_names import normalize as normalize_agent
-from lib.db import psql, psql_ok, psql_json, esc_sql
+from lib.db import esc_sql, psql, psql_ok
+from lib.parsers.aider import parse as parse_aider
 from lib.parsers.claude import parse as parse_claude
 from lib.parsers.copilot import parse as parse_copilot
 from lib.parsers.gemini import parse as parse_gemini
-from lib.parsers.aider import parse as parse_aider
-from lib.text_cleaner import get_cleaner
-from lib.search.local_index import DB_PATH as FTS5_DB_PATH
+from lib.tracking.agent_names import normalize as normalize_agent
 
 POLL_INTERVAL = 3  # seconds between full scans
 CHECKPOINT_FILE = Path("/opt/projects/server/collect_checkpoint.json")
@@ -140,8 +135,7 @@ def _cp_get(checkpoint: Dict, source: str, session_id: str) -> dict:
     return {"count": entry.get("count", 0), "mtime": entry.get("mtime", 0)}
 
 
-def ensure_conversation(session_id: str, source: str, model: str = "",
-                        title: str = "") -> bool:
+def ensure_conversation(session_id: str, source: str, model: str = "", title: str = "") -> bool:
     """Upsert conversation row."""
     sid = esc_sql(session_id)
     src = esc_sql(normalize_agent(source))
@@ -154,8 +148,9 @@ def ensure_conversation(session_id: str, source: str, model: str = "",
     )
 
 
-def insert_turns(conversation_id: str, source: str, model: str,
-                 new_turns: List[Dict], start_seq: int) -> int:
+def insert_turns(
+    conversation_id: str, source: str, model: str, new_turns: List[Dict], start_seq: int
+) -> int:
     """Batch INSERT new turns. Returns count inserted."""
     src = normalize_agent(source)
 
@@ -164,8 +159,7 @@ def insert_turns(conversation_id: str, source: str, model: str,
     existing_ids = set()
     if msg_ids:
         ids_sql = ",".join(f"'{esc_sql(m)}'" for m in msg_ids)
-        rows = psql(f"SELECT source_message_id FROM turns "
-                    f"WHERE source_message_id IN ({ids_sql})")
+        rows = psql(f"SELECT source_message_id FROM turns WHERE source_message_id IN ({ids_sql})")
         if rows:
             for line in rows.strip().split("\n"):
                 if line.strip():
@@ -194,27 +188,13 @@ def insert_turns(conversation_id: str, source: str, model: str,
         agent = esc_sql(src)
         msg_id_col = f"'{msg_id}'" if msg_id else "NULL"
 
-        # Clean text columns (nullable — for BM25 + Embedding pipeline)
-        _cl = get_cleaner()
-        user_clean = _cl.clean(turn.get("user_turn", "")[:8000])
-        text_clean = _cl.clean((turn.get("text") or "")[:8000])
-        think_clean = _cl.clean((turn.get("thinking") or "")[:4000])
-        tokens_col = "NULL"
-        full_text = " ".join(filter(None, [user_clean, text_clean, think_clean]))
-        if full_text.strip():
-            doc = _cl.process_document(full_text)
-            tj = json.dumps({"terms": doc["terms"], "tokens": doc["tokens"]}, ensure_ascii=False)
-            tokens_col = f"'{esc_sql(tj)}'::jsonb"
-
         meta = json.dumps({"model": model}, ensure_ascii=False)
         meta_esc = esc_sql(meta)
 
         rows_values.append(
             f"('{conversation_id}', {seq}, '{user_turn}', '{thinking}', "
             f"'{text}', {msg_id_col}, '{agent}', '{meta_esc}', "
-            f"'{created_at}'::timestamptz, "
-            f"'{esc_sql(user_clean)}', '{esc_sql(text_clean)}', "
-            f"'{esc_sql(think_clean)}', {tokens_col})"
+            f"'{created_at}'::timestamptz, 'raw')"
         )
 
     if not rows_values:
@@ -224,8 +204,7 @@ def insert_turns(conversation_id: str, source: str, model: str,
     values_sql = ",\n".join(rows_values)
     ok = psql_ok(
         f"INSERT INTO turns (conversation_id, seq, user_turn, thinking, text, "
-        f"  source_message_id, agent, meta, created_at, "
-        f"  user_turn_clean, text_clean, thinking_clean, tokens) "
+        f"  source_message_id, agent, meta, created_at, pipeline_state) "
         f"VALUES {values_sql} "
         f"ON CONFLICT (conversation_id, seq) DO NOTHING"
     )
@@ -234,64 +213,7 @@ def insert_turns(conversation_id: str, source: str, model: str,
     return len(rows_values) if ok else 0
 
 
-def sync_fts5(conversation_id: str, start_seq: int, count: int):
-    """Sync newly inserted turns to SQLite FTS5 index.
-
-    Uses text_clean (SSOT after text_clean+polish merge).
-    COALESCE with _polished columns for backward compat.
-    Called after successful PostgreSQL INSERT to keep FTS5 in sync.
-    Non-fatal on failure — FTS5 can be rebuilt via CLI command.
-    """
-    if count <= 0:
-        return
-    try:
-        rows = psql_json(
-            f"SELECT seq, "
-            f"  COALESCE(user_turn_clean, user_turn_clean_polished) as user_turn_clean, "
-            f"  COALESCE(text_clean, text_clean_polished) as text_clean, "
-            f"  COALESCE(thinking_clean, thinking_clean_polished) as thinking_clean, "
-            f"  tokens "
-            f"FROM turns "
-            f"WHERE conversation_id='{esc_sql(conversation_id)}' "
-            f"  AND seq >= {start_seq} AND seq < {start_seq + count} "
-            f"ORDER BY seq"
-        )
-        if not rows:
-            return
-
-        conn = sqlite3.connect(str(FTS5_DB_PATH))
-        conn.execute("PRAGMA busy_timeout=5000")
-        conn.execute("PRAGMA journal_mode=WAL")
-
-        for r in rows:
-            terms_str = ""
-            tokens_data = r.get("tokens", "")
-            if isinstance(tokens_data, str) and tokens_data:
-                try:
-                    td = json.loads(tokens_data)
-                    if isinstance(td, dict):
-                        terms_str = " ".join(td.get("terms", []))
-                except json.JSONDecodeError:
-                    pass
-
-            conn.execute(
-                "INSERT INTO turn_search (terms, user_turn_clean, text_clean, thinking_clean) "
-                "VALUES (?, ?, ?, ?)",
-                (
-                    terms_str,
-                    r.get("user_turn_clean") or "",
-                    r.get("text_clean") or "",
-                    r.get("thinking_clean") or "",
-                ),
-            )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"  [fts5-sync] WARN: {e}", file=sys.stderr)
-
-
-def process_session(source: str, session_id: str, path: Path,
-                    parser_fn, checkpoint: Dict) -> int:
+def process_session(source: str, session_id: str, path: Path, parser_fn, checkpoint: Dict) -> int:
     """Parse session, insert new turns. Returns count of newly inserted turns."""
     cp_entry = _cp_get(checkpoint, source, session_id)
     prev_count = cp_entry["count"]
@@ -307,14 +229,16 @@ def process_session(source: str, session_id: str, path: Path,
     # Record empty sessions so we don't re-parse them every cycle
     if parsed is None or len(parsed) == 0:
         checkpoint.setdefault(source, {})[session_id] = {
-            "count": prev_count, "mtime": current_mtime,
+            "count": prev_count,
+            "mtime": current_mtime,
         }
         return 0
 
     if len(parsed) <= prev_count:
         # mtime changed but no new turns (e.g., file touched). Update mtime only.
         checkpoint.setdefault(source, {})[session_id] = {
-            "count": prev_count, "mtime": current_mtime,
+            "count": prev_count,
+            "mtime": current_mtime,
         }
         return 0
 
@@ -326,15 +250,16 @@ def process_session(source: str, session_id: str, path: Path,
     inserted = insert_turns(session_id, source, model or "", new_turns, prev_count)
 
     checkpoint.setdefault(source, {})[session_id] = {
-        "count": prev_count + inserted, "mtime": current_mtime,
+        "count": prev_count + inserted,
+        "mtime": current_mtime,
     }
 
     if inserted > 0:
         tag = " [active]" if is_active else ""
-        print(f"  {source}/{session_id[:8]}: +{inserted} turns "
-              f"({prev_count}→{prev_count + inserted}){tag}")
-        # Sync to FTS5 (non-blocking, non-fatal)
-        sync_fts5(session_id, prev_count, inserted)
+        print(
+            f"  {source}/{session_id[:8]}: +{inserted} turns "
+            f"({prev_count}→{prev_count + inserted}){tag}"
+        )
 
     return inserted
 
@@ -351,8 +276,7 @@ def run_once() -> int:
 
         for session_id, path in sessions:
             try:
-                n = process_session(source, session_id, path,
-                                   config["parser"], checkpoint)
+                n = process_session(source, session_id, path, config["parser"], checkpoint)
                 total += n
             except Exception as e:
                 print(f"  ERROR {source}/{session_id[:8]}: {e}")
@@ -365,15 +289,23 @@ def run_once() -> int:
 
 def main():
     import argparse
+
     ap = argparse.ArgumentParser(description="Real-time session turn watcher")
-    ap.add_argument("--once", action="store_true",
-                    help="Run one scan and exit (for testing / cron)")
-    ap.add_argument("--interval", type=int, default=POLL_INTERVAL,
-                    help=f"Poll interval in seconds (default: {POLL_INTERVAL})")
+    ap.add_argument(
+        "--once", action="store_true", help="Run one scan and exit (for testing / cron)"
+    )
+    ap.add_argument(
+        "--interval",
+        type=int,
+        default=POLL_INTERVAL,
+        help=f"Poll interval in seconds (default: {POLL_INTERVAL})",
+    )
     args = ap.parse_args()
 
-    print(f"[{datetime.now(timezone.utc).isoformat()}] turn_watcher starting "
-          f"(interval={args.interval}s)")
+    print(
+        f"[{datetime.now(timezone.utc).isoformat()}] turn_watcher starting "
+        f"(interval={args.interval}s)"
+    )
 
     if args.once:
         n = run_once()
@@ -385,11 +317,9 @@ def main():
         try:
             n = run_once()
             if n > 0:
-                print(f"[{datetime.now(timezone.utc).isoformat()}] "
-                      f"scan complete: {n} new turns")
+                print(f"[{datetime.now(timezone.utc).isoformat()}] scan complete: {n} new turns")
         except Exception as e:
-            print(f"[{datetime.now(timezone.utc).isoformat()}] "
-                  f"scan error: {e}", file=sys.stderr)
+            print(f"[{datetime.now(timezone.utc).isoformat()}] scan error: {e}", file=sys.stderr)
 
         time.sleep(args.interval)
 

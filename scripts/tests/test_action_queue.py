@@ -27,14 +27,14 @@ class TestExecDispatch:
         ok, msg = execute_action(
             {
                 "action_type": "systemctl",
-                "action_params": {"service": "devforge-pod-b", "command": "restart"},
+                "action_params": {"service": "devforge-inference", "command": "restart"},
             }
         )
         assert ok
         assert "OK" in msg
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
-        assert args == ["systemctl", "--user", "restart", "devforge-pod-b"]
+        assert args == ["systemctl", "--user", "restart", "devforge-inference"]
 
     @patch("lib.action_queue.subprocess.run")
     def test_systemctl_invalid_service(self, mock_run):
@@ -127,7 +127,7 @@ class TestActionDBCycle:
             instruction="Test action: restart pod B",
             priority="P2_LOW",
             action_type="systemctl",
-            action_params={"service": "devforge-pod-b", "command": "restart"},
+            action_params={"service": "devforge-inference", "command": "restart"},
             max_retries=1,
         )
         assert pid is not None
@@ -139,7 +139,7 @@ class TestActionDBCycle:
             matching = [a for a in actions if a["pulse_id"] == pid]
             assert len(matching) == 1
             assert matching[0]["action_type"] == "systemctl"
-            assert matching[0]["action_params"]["service"] == "devforge-pod-b"
+            assert matching[0]["action_params"]["service"] == "devforge-inference"
 
             # Complete
             ok = action_complete(pid, "Test: completed")

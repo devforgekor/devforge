@@ -37,7 +37,7 @@ for cfg in CONFIGS:
     meta["cpus"] = cfg["cpus"]
 
     t0 = time.monotonic()
-    log(f"  Restarting Pod B...")
+    log(f"  Restarting inference...")
     ensure_model("day-extractor", skip_if_healthy=False)
     restart_s = round(time.monotonic() - t0)
     log(f"  Pod restart: {restart_s}s")

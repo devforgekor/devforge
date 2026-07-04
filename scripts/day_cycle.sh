@@ -1,22 +1,28 @@
 #!/bin/bash
 # day_cycle.sh — async pipeline (pipeline_state-driven)
-# pipeline_state flow: pending → batching → cleaned → embedded → scanned → extracted → enriched → verified
+# pipeline_state flow: pending → batching → cleaned → scanned → extracted → verified → enriched → embedded
 # Batch reservation at start: 10 pending → batching
 # Each phase queries pipeline_state, each script self-reports completion via UPDATE.
 # Light → Heavy execution order:
 #   System Sync       — code-structure + duckdns + worklog
-#   Pod A Health       — check :8080 (stopped by default, auto-start on demand)
+#   Inference Ports   — :8080 reranker, :8081 embed, :8082-8084 day models
 #   Text Preprocess   — text_clean.py (batching → cleaned, language-aware)
 #   FTS5 Refresh      — local_index refresh
-#   Day Embedding     — embed_batch.py (:8081, cleaned → embedded)
-#   Day Entity Scan   — entity_scan.py (embedded → scanned, deterministic, regex+DB, no LLM)
+#   FTS5 Refresh      — local_index refresh
+#   Day Entity Scan   — entity_scan.py (cleaned → scanned, deterministic, regex+DB, no LLM)
 #   Day Extract       — extract.py (:8082, scanned → extracted)
-#   Day Enrich        — enrich.py (:8082, extracted → enriched)
-#   Day Verify        — day_verify.py (:8082, enriched → verified)
+#   Day Verify        — day_verify.py (:8082, extracted → verified, Veritas-8B NLI)
+#   Day Enrich        — enrich.py (:8082, verified → enriched)
+#   Day Embedding     — embed_batch.py (:8081, enriched → embedded)
 # Each phase has its own budget check. Mid-cycle timeout carries forward in pipeline_state.
 #
 # Secrets: DUCKDNS_TOKEN in ~/.config/devforge/secrets.env
-# Server philosophy: Slow but complete. Pod A router (:8080) loads reranker/tiny/cleaner on demand.
+# Server philosophy: Slow but complete. Single inference container handles all ports.
+
+MODEL_CTL="/opt/projects/server/scripts/lib/model_ctl.sh"
+if [ -f "$MODEL_CTL" ]; then
+    source "$MODEL_CTL"
+fi
 
 set -o pipefail
 
@@ -105,8 +111,7 @@ print(json.dumps(payload))
 
 SCRIPT_DIR="/opt/projects/server/scripts"
 PIPELINE_DIR="$SCRIPT_DIR/pipelines"
-MODE_ENV="/opt/ai_data/scripts/current-mode-pod-b.env"
-MODE_ENV_A="/opt/ai_data/scripts/current-mode-pod-a.env"
+MODE_ENV="/opt/ai_data/scripts/current-mode-inference.env"
 
 LOG "day_cycle start"
 
@@ -121,51 +126,15 @@ print(DAY_PHASE_MODELS['$1'])
 "
 }
 
-ensure_pod_b() {
-    local target_mode="$1" model_key="$2" skip_probe="${3:-false}"
-    local timeout="${4:-600}"
-
-    # Port map (Pod B fixed ports)
-    local port="8082"
-    case "$model_key" in
-        embed|embeder)      port=8081 ;;
-        extractor|day|review-r|day-extractor|day-verifier) port=8082 ;;
-        verify-enrich|judge|review-j|test-qwen|test-nextcoder) port=8083 ;;
-        verifier|verify) port=8084 ;;
-    esac
-
-    local current_mode=""
-    [ -f "$MODE_ENV" ] && current_mode=$(grep '^MODE=' "$MODE_ENV" | cut -d= -f2)
-    if [ "$current_mode" = "$target_mode" ] && curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
-        LOG "  Pod B already $target_mode (:${port}) — skip restart"
-        return 0
-    fi
-
-    # Check test heartbeat before restart
-    if python3 -c "
-import sys; sys.path.insert(0, '$SCRIPT_DIR')
-from lib.db import psql_json
-rows = psql_json(\"SELECT pulse_id FROM watchdog_pulses WHERE pulse_id LIKE 'heartbeat_test_%' AND status = 'IN_PROGRESS' LIMIT 1\")
-if rows:
-    print(f'  Test active ({rows[0][\"pulse_id\"]}) — skip Pod B restart')
-    sys.exit(0)
-sys.exit(1)
-" 2>&1; then
-        LOG "  Pod B restart skipped (test heartbeat active)"
-        return 0
-    fi
-
-    LOG "  Restarting Pod B → $target_mode (:${port})..."
-    local probe_opt=""; [ "$skip_probe" = true ] && probe_opt=", skip_probe=True"
-    if ! timeout "$timeout" python3 -c "
-import sys; sys.path.insert(0, '$SCRIPT_DIR')
-from lib.pod_manager import start_pod_b
-sys.exit(0 if start_pod_b('$model_key', $port$probe_opt) else 1)
-" 2>&1; then
-        LOG "  [warn] Pod B start failed ($target_mode) — continuing anyway"
+ensure_inference() {
+    local model_key="$2" skip_probe="${3:-false}" timeout="${4:-600}"
+    local port
+    port=$(_model_port "$model_key")
+    LOG "  ensure_inference → ${model_key} (:$port, skip_probe=${skip_probe})"
+    _ensure_model "$model_key" "$port" "$skip_probe" "$timeout" || {
+        LOG "  [warn] Inference start failed ($model_key) — continuing anyway"
         return 1
-    fi
-    return 0
+    }
 }
 
 # ── Night window guard ───────────────────────────────────────────────
@@ -222,7 +191,7 @@ LOG "System sync done in ${ELAPSED}s — remaining budget=${BUDGET}s"
 
 # ── In-flight check ─────────────────────────────────────────────────
 IN_FLIGHT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT count(*)::int FROM turns WHERE pipeline_state NOT IN ('pending', 'verified')" 2>/dev/null || echo "0")
+  "SELECT count(*)::int FROM turns WHERE pipeline_state NOT IN ('pending', 'embedded')" 2>/dev/null || echo "0")
 IN_FLIGHT=${IN_FLIGHT:-0}
 
 if [ "$IN_FLIGHT" -gt 0 ]; then
@@ -247,12 +216,6 @@ elif [ "$IN_FLIGHT" -eq 0 ]; then
         exit 0
     fi
 fi
-
-# ── Pod A health check (stopped by default, watchdog handles recovery) ──
-LOG "=== Pod A: health check (:8080) ==="
-curl -sf "http://127.0.0.1:8080/health" >/dev/null 2>&1 \
-    && LOG "  Pod A (:8080) healthy" \
-    || LOG "  Pod A (:8080) unhealthy — watchdog handles recovery"
 
 # ── Text Preprocess (text_clean) ─────────────────────
 NEED_CLEAN=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
@@ -287,28 +250,11 @@ podman exec postgres psql -U devforge -d devforge_app -c "
 LOG "=== FTS5 Refresh ==="
 python3 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
 
-# ── Day Embedding (:8081) ─────
-NEED_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT count(*)::int FROM turns WHERE pipeline_state IN ('cleaned', 'polished')" 2>/dev/null || echo "0")
-NEED_EMBED=${NEED_EMBED:-0}
-
-if [ "$NEED_EMBED" -gt 0 ]; then
-    LOG "=== Day Embedding (${NEED_EMBED} cleaned turns) ==="
-    ensure_pod_b "embeder" "embeder" false 1200
-    python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
-    RC=$?
-    ELAPSED=$(( $(date +%s) - START_TS ))
-    LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
-    [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
-else
-    LOG "=== Day Embedding: skip (0 cleaned turns) ==="
-fi
-
-# ── Entity Scan (no LLM, no Pod B) ──
+# ── Entity Scan (no LLM, no inference) ──
 NEED_SCAN=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'embedded'" 2>/dev/null || echo "0")
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'cleaned'" 2>/dev/null || echo "0")
 if [ "$NEED_SCAN" -gt 0 ]; then
-    LOG "=== Entity Scan (${NEED_SCAN} embedded turns) ==="
+    LOG "=== Entity Scan (${NEED_SCAN} cleaned turns) ==="
     python3 "$PIPELINE_DIR/entity_scan.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -318,29 +264,13 @@ if [ "$NEED_SCAN" -gt 0 ]; then
     [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 fi
 
-# ── Feedback Embedding (feedback_examples for pgvector NLI) ──
-NEED_FEEDBACK_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT COUNT(*) FROM feedback_examples fe LEFT JOIN embeddings e ON e.source_type='feedback_example' AND e.source_id=fe.id AND e.model_name='qwen3-embedding-8b-v1' WHERE e.id IS NULL" 2>/dev/null || echo "0")
-NEED_FEEDBACK_EMBED=${NEED_FEEDBACK_EMBED:-0}
-if [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
-    LOG "=== Feedback Embedding (${NEED_FEEDBACK_EMBED} unembedded feedback examples) ==="
-    ensure_pod_b "embeder" "embeder" false 600
-    python3 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
-    RC=$?
-    ELAPSED=$(( $(date +%s) - START_TS ))
-    LOG "  Feedback embed exit=$RC, elapsed=${ELAPSED}s"
-    [ $(BUDGET) -le 60 ] && LOG "Budget exhausted" && exit 0
-else
-    LOG "=== Feedback Embedding: skip (0 unembedded feedback examples) ==="
-fi
-
 # ── Day Extract (:8082) ──
 NEED_EXTRACT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM turns WHERE pipeline_state = 'scanned'" 2>/dev/null || echo "0")
 if [ "$NEED_EXTRACT" -gt 0 ]; then
     _budget_gate "scanned" 15 120 || { LOG "Budget insufficient for extract — deferring"; exit 0; }
     LOG "=== Day Extract (:8082, ${NEED_EXTRACT} scanned turns) ==="
-    ensure_pod_b "day-extract" "$(_day_phase_model day_extract)" false 1200
+    ensure_inference "day-extract" "$(_day_phase_model day_extract)" false 1200
     python3 "$PIPELINE_DIR/extract.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -352,7 +282,7 @@ fi
 
 # ── Extract Fail Alert: failed/noise turns → Slack with classification buttons ──
 if [ -f /var/tmp/extract_fail_report.json ]; then
-    python3 "$SCRIPT_DIR/lib/slack_interactive.py" --send-extract-fail 2>&1 || true
+    python3 -m lib.slack_interactive --send-extract-fail 2>&1 || true
 fi
 
 # ── Noise Marker 처리: 사용자 확인된 건 처리, 미확인은 Telegram ───
@@ -378,7 +308,7 @@ NOISE_PENDING=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*) FROM review_facts WHERE fact_type='noise_marker' AND user_verdict IS NULL AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
 if [ "${NOISE_PENDING:-0}" -gt 0 ]; then
     LOG "  ${NOISE_PENDING} noise markers - sending Slack"
-    python3 "$SCRIPT_DIR/lib/slack_interactive.py" --send-noise-alert 2>&1 || true
+    python3 -m lib.slack_interactive --send-noise-alert 2>&1 || true
 fi
 
 # ── NEUTRAL Auto-Resolve: GROUNDED/UNGROUNDED는 시스템 처리 ───
@@ -405,7 +335,7 @@ NEUTRAL_AMB=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*) FROM review_facts WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND user_verdict IS NULL AND nli_verdict='AMBIGUOUS' AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
 if [ "${NEUTRAL_AMB:-0}" -gt 0 ]; then
     LOG "  ${NEUTRAL_AMB} NEUTRAL+AMBIGUOUS facts - Slack alert + exit"
-    python3 "$SCRIPT_DIR/lib/slack_interactive.py" --send-alert 2>&1 || true
+    python3 -m lib.slack_interactive --send-alert 2>&1 || true
     exit 0
 fi
 
@@ -418,7 +348,7 @@ if [ "$NEED_RECOVER" -gt 0 ]; then
     python3 "$PIPELINE_DIR/reranker_recover.py" 2>&1
     RC=$?
     if [ $RC -eq 1 ]; then
-        LOG "  Reranker recover skipped (Pod A unhealthy)"
+        LOG "  Reranker recover skipped (inference unhealthy)"
     else
         LOG "  Reranker recover exit=$RC"
     fi
@@ -427,13 +357,29 @@ else
     LOG "=== Reranker Recovery: skip (0 RERANKER_ERROR facts) ==="
 fi
 
-# ── Day Enrich (:8082) ──
-NEED_ENRICH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+# ── Day Verify (:8082) — predicate NLI before enrich ──
+NEED_VERIFY=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM turns WHERE pipeline_state = 'extracted'" 2>/dev/null || echo "0")
+if [ "$NEED_VERIFY" -gt 0 ]; then
+    _budget_gate "extracted" 25 30 || { LOG "Budget insufficient for verify — deferring"; exit 0; }
+    LOG "=== Day Verify (:8082 Veritas-8B, ${NEED_VERIFY} extracted turns) ==="
+    ensure_inference "day-verifier" "day-verifier" false 300
+    python3 "$PIPELINE_DIR/day_verify.py" 2>&1
+    RC=$?
+    ELAPSED=$(( $(date +%s) - START_TS ))
+    BUDGET=$(BUDGET)
+    [ $RC -eq 124 ] && LOG "  Verify timed out" || LOG "  Verify exit=$RC"
+    LOG "Budget=${BUDGET}s"
+    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+fi
+
+# ── Day Enrich (:8082) — after verify, predicates have NLI verdicts ──
+NEED_ENRICH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'verified'" 2>/dev/null || echo "0")
 if [ "$NEED_ENRICH" -gt 0 ]; then
-    _budget_gate "extracted" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
-    LOG "=== Day Enrich (:8082, ${NEED_ENRICH} extracted turns) ==="
-    ensure_pod_b "day-enricher" "day-enricher" false 300
+    _budget_gate "verified" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
+    LOG "=== Day Enrich (:8082+:8083 dual, ${NEED_ENRICH} verified turns) ==="
+    # enrich.py handles model startup via ensure_dual (day-enricher + day-enricher-b)
     python3 "$PIPELINE_DIR/enrich.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
@@ -443,20 +389,40 @@ if [ "$NEED_ENRICH" -gt 0 ]; then
     [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 fi
 
-# ── Day Verify (:8082) ──
-NEED_VERIFY=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+# ── Embedding (embed on :8081, no inference dependency) ──
+NEED_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM turns WHERE pipeline_state = 'enriched'" 2>/dev/null || echo "0")
-if [ "$NEED_VERIFY" -gt 0 ]; then
-    _budget_gate "enriched" 25 30 || { LOG "Budget insufficient for verify — deferring"; exit 0; }
-    LOG "=== Day Verify (:8082, ${NEED_VERIFY} enriched turns) ==="
-    ensure_pod_b "day-verifier" "day-verifier" false 300
-    python3 "$PIPELINE_DIR/day_verify.py" 2>&1
-    RC=$?
-    ELAPSED=$(( $(date +%s) - START_TS ))
-    BUDGET=$(BUDGET)
-    [ $RC -eq 124 ] && LOG "  Verify timed out" || LOG "  Verify exit=$RC"
-    LOG "Budget=${BUDGET}s"
-    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+NEED_EMBED=${NEED_EMBED:-0}
+
+NEED_FEEDBACK_EMBED=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT COUNT(*) FROM feedback_examples fe LEFT JOIN embeddings e ON e.source_type='feedback_example' AND e.source_id=fe.id AND e.model_name='qwen3-embedding-8b-v1' WHERE e.id IS NULL" 2>/dev/null || echo "0")
+NEED_FEEDBACK_EMBED=${NEED_FEEDBACK_EMBED:-0}
+
+if [ "$NEED_EMBED" -gt 0 ] || [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
+    LOG "=== Embedding: ${NEED_EMBED} turns, ${NEED_FEEDBACK_EMBED} feedback examples ==="
+    ensure_inference "embeder" "embeder" false 1200
+
+    if [ "$NEED_EMBED" -gt 0 ]; then
+        LOG "=== Day Embedding (${NEED_EMBED} enriched turns) ==="
+        python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
+        RC=$?
+        ELAPSED=$(( $(date +%s) - START_TS ))
+        LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
+        [ $(BUDGET) -le 60 ] && { LOG "Budget exhausted"; exit 0; }
+    fi
+
+    if [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
+        _budget_gate "enriched" 20 30 || { LOG "Budget insufficient for feedback embed — deferring"; exit 0; }
+        LOG "=== Feedback Embedding (${NEED_FEEDBACK_EMBED} unembedded feedback examples) ==="
+        python3 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
+        RC=$?
+        ELAPSED=$(( $(date +%s) - START_TS ))
+        LOG "  Feedback embed exit=$RC, elapsed=${ELAPSED}s"
+        [ $(BUDGET) -le 60 ] && { LOG "Budget exhausted"; exit 0; }
+    fi
+
+else
+    LOG "=== Embedding: skip (0 turns, 0 feedback) ==="
 fi
 
 TOTAL=$(( $(date +%s) - START_TS ))

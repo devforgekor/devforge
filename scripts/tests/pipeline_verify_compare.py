@@ -24,7 +24,6 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVAL_DIR = os.path.join(SCRIPTS_DIR, "..", "data", "eval")
@@ -33,17 +32,21 @@ os.makedirs(EVAL_DIR, exist_ok=True)
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from lib.llm_client import call_llm
-from lib.test_common import test_setup, test_heartbeat, test_complete
 from lib.db import psql_json, psql_ok
+from lib.llm_client import call_llm
+from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+from lib.test_common import test_complete, test_heartbeat, test_setup
 
 # ── Snapshot helpers (from pipeline_preverify_test.py) ───────────
+
 
 def _ts() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
+
 def _fmt_ids(turn_ids: list) -> str:
     return ",".join(f"'{tid}'" for tid in turn_ids)
+
 
 def save_snapshot(stage: str, turn_ids: list, tag: str = "") -> str:
     ts = _ts()
@@ -68,9 +71,13 @@ def save_snapshot(stage: str, turn_ids: list, tag: str = "") -> str:
     )
 
     snapshot = {
-        "timestamp": ts, "stage": stage, "tag": tag or None,
-        "n_turns": len(rows), "n_facts": len(facts or []),
-        "turns": rows, "review_facts": facts or [],
+        "timestamp": ts,
+        "stage": stage,
+        "tag": tag or None,
+        "n_turns": len(rows),
+        "n_facts": len(facts or []),
+        "turns": rows,
+        "review_facts": facts or [],
     }
     with open(path, "w") as f:
         json.dump(snapshot, f, indent=2, ensure_ascii=False, default=str)
@@ -84,7 +91,7 @@ def run_subprocess(cmd: list, timeout: int = 3600, label: str = "") -> bool:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         ok = r.returncode == 0
     except subprocess.TimeoutExpired:
-        print(f"  [{label}] TIMEOUT after {time.monotonic()-t0:.0f}s", flush=True)
+        print(f"  [{label}] TIMEOUT after {time.monotonic() - t0:.0f}s", flush=True)
         return False
     except Exception as e:
         print(f"  [{label}] ERROR: {e}", flush=True)
@@ -97,6 +104,7 @@ def run_subprocess(cmd: list, timeout: int = 3600, label: str = "") -> bool:
 
 
 # ── Phase 1: Pre-verify pipeline stages ──────────────────────────
+
 
 def select_turns(limit: int = 10) -> list:
     """Pick N oldest turns needing full processing (no polished text)."""
@@ -115,18 +123,22 @@ def select_turns(limit: int = 10) -> list:
         print("  [error] No turns need processing!", flush=True)
         return []
     sizes = [(r.get("text_len", 0) or 0) for r in rows]
-    print(f"  [select] {len(rows)} turns (min={min(sizes)}, max={max(sizes)}, avg={sum(sizes)//len(sizes)} chars)", flush=True)
+    print(
+        f"  [select] {len(rows)} turns (min={min(sizes)}, max={max(sizes)}, avg={sum(sizes) // len(sizes)} chars)",
+        flush=True,
+    )
     for r in rows[:10]:
         preview = (r.get("user_turn", "") or "")[:50]
-        print(f"    {r['id'][:8]} ({r.get('text_len',0)}c) \"{preview}\"", flush=True)
+        print(f'    {r["id"][:8]} ({r.get("text_len", 0)}c) "{preview}"', flush=True)
     return rows
 
 
 def stage_text_clean(turn_ids: list) -> bool:
     """Create text_clean for turns that need it."""
-    print(f"\n{'─'*50}\n  Stage: Text Preprocess\n{'─'*50}", flush=True)
+    print(f"\n{'─' * 50}\n  Stage: Text Preprocess\n{'─' * 50}", flush=True)
     test_heartbeat("text_clean")
     from lib.text_cleaner import get_cleaner
+
     cl = get_cleaner()
     id_list = _fmt_ids(turn_ids)
     needs = psql_json(
@@ -140,6 +152,7 @@ def stage_text_clean(turn_ids: list) -> bool:
     ok = 0
     for t in needs:
         from lib.db import esc_sql
+
         sql = (
             f"UPDATE turns SET "
             f"user_turn_clean = '{esc_sql(cl.clean((t.get('user_turn') or '')[:2000]))}', "
@@ -154,38 +167,48 @@ def stage_text_clean(turn_ids: list) -> bool:
 
 
 def stage_polish(limit: int) -> bool:
-    print(f"\n{'─'*50}\n  Stage: Polish + Self-Verify (7B Q8 :8082)\n{'─'*50}", flush=True)
+    print(f"\n{'─' * 50}\n  Stage: Polish + Self-Verify (7B Q8 :8082)\n{'─' * 50}", flush=True)
     test_heartbeat("polish")
     return run_subprocess(
-        [sys.executable, "-u", os.path.join(PIPELINES_DIR, "polish_batch.py"), "--limit", str(limit)],
-        timeout=7200, label="polish"
+        [
+            sys.executable,
+            "-u",
+            os.path.join(PIPELINES_DIR, "polish_batch.py"),
+            "--limit",
+            str(limit),
+        ],
+        timeout=7200,
+        label="polish",
     )
 
 
 def stage_fts5() -> bool:
-    print(f"\n{'─'*50}\n  Stage: FTS5 Refresh\n{'─'*50}", flush=True)
+    print(f"\n{'─' * 50}\n  Stage: FTS5 Refresh\n{'─' * 50}", flush=True)
     test_heartbeat("fts5")
     return run_subprocess(
         [sys.executable, "-u", os.path.join(PIPELINES_DIR, "fts5_refresh.py")],
-        timeout=120, label="fts5"
+        timeout=120,
+        label="fts5",
     )
 
 
 def stage_extract(limit: int) -> bool:
-    print(f"\n{'─'*50}\n  Stage: Extract + Reranker\n{'─'*50}", flush=True)
+    print(f"\n{'─' * 50}\n  Stage: Extract + Reranker\n{'─' * 50}", flush=True)
     test_heartbeat("extract")
     return run_subprocess(
         [sys.executable, "-u", os.path.join(PIPELINES_DIR, "extract.py"), "--limit", str(limit)],
-        timeout=7200, label="extract"
+        timeout=7200,
+        label="extract",
     )
 
 
 def stage_enrich(limit: int) -> bool:
-    print(f"\n{'─'*50}\n  Stage: Enrich (7B Q8 :8082)\n{'─'*50}", flush=True)
+    print(f"\n{'─' * 50}\n  Stage: Enrich (7B Q8 :8082)\n{'─' * 50}", flush=True)
     test_heartbeat("enrich")
     return run_subprocess(
         [sys.executable, "-u", os.path.join(PIPELINES_DIR, "enrich.py"), "--limit", str(limit)],
-        timeout=3600, label="enrich"
+        timeout=3600,
+        label="enrich",
     )
 
 
@@ -350,50 +373,67 @@ def build_findings_from_snapshot(snapshot: dict) -> list:
                 continue
             tldr = enrich_data.get("tldr", "")
             if tldr:
-                findings.append({
-                    "id": f"ENR-{turn_id[:8]}-tldr", "severity": "medium",
-                    "category": "quality",
-                    "description": "Enrich tldr summary",
-                    "evidence": tldr[:300], "_turn_id": turn_id,
-                })
+                findings.append(
+                    {
+                        "id": f"ENR-{turn_id[:8]}-tldr",
+                        "severity": "medium",
+                        "category": "quality",
+                        "description": "Enrich tldr summary",
+                        "evidence": tldr[:300],
+                        "_turn_id": turn_id,
+                    }
+                )
             entities = enrich_data.get("entities", {}) or {}
             if entities.get("files"):
-                findings.append({
-                    "id": f"ENR-{turn_id[:8]}-files", "severity": "medium",
-                    "category": "quality",
-                    "description": "Files referenced",
-                    "evidence": json.dumps(entities["files"], ensure_ascii=False)[:300],
-                    "_turn_id": turn_id,
-                })
+                findings.append(
+                    {
+                        "id": f"ENR-{turn_id[:8]}-files",
+                        "severity": "medium",
+                        "category": "quality",
+                        "description": "Files referenced",
+                        "evidence": json.dumps(entities["files"], ensure_ascii=False)[:300],
+                        "_turn_id": turn_id,
+                    }
+                )
             if entities.get("technologies"):
-                findings.append({
-                    "id": f"ENR-{turn_id[:8]}-tech", "severity": "medium",
-                    "category": "quality",
-                    "description": "Technologies mentioned",
-                    "evidence": json.dumps(entities["technologies"], ensure_ascii=False)[:300],
-                    "_turn_id": turn_id,
-                })
+                findings.append(
+                    {
+                        "id": f"ENR-{turn_id[:8]}-tech",
+                        "severity": "medium",
+                        "category": "quality",
+                        "description": "Technologies mentioned",
+                        "evidence": json.dumps(entities["technologies"], ensure_ascii=False)[:300],
+                        "_turn_id": turn_id,
+                    }
+                )
             tags = enrich_data.get("tags", [])
             if tags:
-                findings.append({
-                    "id": f"ENR-{turn_id[:8]}-tags", "severity": "low",
-                    "category": "quality",
-                    "description": "Conversation tags",
-                    "evidence": json.dumps(tags, ensure_ascii=False)[:200],
-                    "_turn_id": turn_id,
-                })
+                findings.append(
+                    {
+                        "id": f"ENR-{turn_id[:8]}-tags",
+                        "severity": "low",
+                        "category": "quality",
+                        "description": "Conversation tags",
+                        "evidence": json.dumps(tags, ensure_ascii=False)[:200],
+                        "_turn_id": turn_id,
+                    }
+                )
         else:
             turn = turns_map.get(turn_id, {})
-            desc_text = turn.get("user_turn", "")[:80] or turn.get("text", "")[:80] or "extracted content"
-            findings.append({
-                "id": f"EX-{turn_id[:8]}-{f.get('fact_index','?')}",
-                "severity": "medium",
-                "category": "quality",
-                "description": f"Extracted {ftype}: {desc_text}",
-                "evidence": evidence,
-                "source": f.get("fact_action", "extract"),
-                "_turn_id": turn_id,
-            })
+            desc_text = (
+                turn.get("user_turn", "")[:80] or turn.get("text", "")[:80] or "extracted content"
+            )
+            findings.append(
+                {
+                    "id": f"EX-{turn_id[:8]}-{f.get('fact_index', '?')}",
+                    "severity": "medium",
+                    "category": "quality",
+                    "description": f"Extracted {ftype}: {desc_text}",
+                    "evidence": evidence,
+                    "source": f.get("fact_action", "extract"),
+                    "_turn_id": turn_id,
+                }
+            )
 
     return findings
 
@@ -404,23 +444,26 @@ def findings_to_context(findings: list, max_evid_len: int = 200) -> str:
     for fi, f in enumerate(findings):
         ev = f.get("evidence", "")[:max_evid_len]
         tid = f.get("_turn_id", "?")[:8]
-        parts.append(f"  [{fi+1}] {f['id']} ({f['severity']}/{f['category']}): \"{ev}\"")
+        parts.append(f'  [{fi + 1}] {f["id"]} ({f["severity"]}/{f["category"]}): "{ev}"')
     return "\n".join(parts)
 
 
-def verify_chunk(chunk: list, ci: int, total: int, system_prompt: str,
-                 timeout: int = 480, max_tokens: int = 1024) -> dict:
+def verify_chunk(
+    chunk: list, ci: int, total: int, system_prompt: str, timeout: int = 480, max_tokens: int = 1024
+) -> dict:
     """Single chunk verify call. Returns grounding distribution."""
     ctx = findings_to_context(chunk)
     print(f"  [chunk {ci}/{total}] {len(chunk)} items", flush=True)
 
     try:
         resp = call_llm(
-            [{"role": "system", "content": system_prompt},
-             {"role": "user", "content": ctx}],
+            [{"role": "system", "content": system_prompt}, {"role": "user", "content": ctx}],
             model="reviewer",
-            max_tokens=max_tokens, temperature=0.1,
-            timeout=timeout, json_mode=True, return_meta=True,
+            max_tokens=max_tokens,
+            temperature=0.1,
+            timeout=timeout,
+            json_mode=True,
+            return_meta=True,
         )
     except Exception as e:
         print(f"    ERROR chunk {ci}: {e}", flush=True)
@@ -428,7 +471,7 @@ def verify_chunk(chunk: list, ci: int, total: int, system_prompt: str,
 
     r_content = resp.get("content", "") or ""
     if isinstance(r_content, str):
-        m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', r_content)
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", r_content)
         if m:
             r_content = m.group(1)
         try:
@@ -462,12 +505,13 @@ def verify_chunk(chunk: list, ci: int, total: int, system_prompt: str,
     }
 
 
-def run_verify_on_snapshot(snapshot_path: str, system_prompt: str,
-                           label: str, chunk_size: int = 6) -> dict:
+def run_verify_on_snapshot(
+    snapshot_path: str, system_prompt: str, label: str, chunk_size: int = 6
+) -> dict:
     """Load snapshot, build findings, chunk-verify, return metrics."""
-    print(f"\n{'='*50}", flush=True)
+    print(f"\n{'=' * 50}", flush=True)
     print(f"  [{label}] VERIFY on {os.path.basename(snapshot_path)}", flush=True)
-    print(f"{'='*50}", flush=True)
+    print(f"{'=' * 50}", flush=True)
     t0 = time.monotonic()
 
     snap = load_snapshot(snapshot_path)
@@ -477,7 +521,7 @@ def run_verify_on_snapshot(snapshot_path: str, system_prompt: str,
     if not findings:
         return {"label": label, "findings": 0, "error": "no_findings"}
 
-    chunks = [findings[i:i+chunk_size] for i in range(0, len(findings), chunk_size)]
+    chunks = [findings[i : i + chunk_size] for i in range(0, len(findings), chunk_size)]
     merged_items = []
     grounding_dist = {"ENTAILMENT": 0, "CONTRADICTION": 0, "NEUTRAL": 0}
     result_dist = {"pass": 0, "fail": 0, "partial": 0}
@@ -524,8 +568,11 @@ def run_verify_on_snapshot(snapshot_path: str, system_prompt: str,
     result_path = os.path.join(EVAL_DIR, f"verify_compare_{label}_{ts}.json")
     with open(result_path, "w") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
-    print(f"  [{label}] {result['items_verified']} items, G={dict(result['grounding_dist'])}, "
-          f"R={dict(result['result_dist'])} ({elapsed:.0f}s)", flush=True)
+    print(
+        f"  [{label}] {result['items_verified']} items, G={dict(result['grounding_dist'])}, "
+        f"R={dict(result['result_dist'])} ({elapsed:.0f}s)",
+        flush=True,
+    )
     print(f"  [save] {result_path}", flush=True)
 
     return result
@@ -533,9 +580,9 @@ def run_verify_on_snapshot(snapshot_path: str, system_prompt: str,
 
 def print_comparison(results: list):
     """Side-by-side comparison of verify results across prompt variants."""
-    print(f"\n{'='*70}", flush=True)
-    print(f"  COMPARISON: Verify Prompt Variants", flush=True)
-    print(f"{'='*70}", flush=True)
+    print(f"\n{'=' * 70}", flush=True)
+    print("  COMPARISON: Verify Prompt Variants", flush=True)
+    print(f"{'=' * 70}", flush=True)
 
     labels = [r["label"] for r in results if "error" not in r]
     if not labels:
@@ -545,7 +592,7 @@ def print_comparison(results: list):
     # Grounding distribution table
     header = f"{'Metric':<25s}" + "".join(f"{l:>15s}" for l in labels)
     print(f"\n  {header}", flush=True)
-    print(f"  {'─'* (25 + 15*len(labels))}", flush=True)
+    print(f"  {'─' * (25 + 15 * len(labels))}", flush=True)
 
     # Items verified
     vals = [str(r.get("items_verified", 0)) for r in results if "error" not in r]
@@ -560,9 +607,10 @@ def print_comparison(results: list):
     def neutral_pct(r):
         gd = r.get("grounding_dist", {})
         total = sum(gd.values())
-        return f"{gd.get('NEUTRAL', 0)/total*100:.0f}%" if total > 0 else "-"
+        return f"{gd.get('NEUTRAL', 0) / total * 100:.0f}%" if total > 0 else "-"
+
     vals = [neutral_pct(r) for r in results if "error" not in r]
-    print(f"  {f'NEUTRAL %':<25s}" + "".join(f"{v:>15s}" for v in vals), flush=True)
+    print(f"  {'NEUTRAL %':<25s}" + "".join(f"{v:>15s}" for v in vals), flush=True)
 
     # Pass/fail distribution
     for res in ("pass", "fail", "partial"):
@@ -581,14 +629,18 @@ def print_comparison(results: list):
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "n_turns": results[0].get("turns", 0) if results else 0,
-        "variants": [{
-            "label": r["label"],
-            "items_verified": r.get("items_verified", 0),
-            "grounding_dist": r.get("grounding_dist", {}),
-            "result_dist": r.get("result_dist", {}),
-            "elapsed_s": r.get("elapsed_s", 0),
-            "final_verdict": r.get("final_verdict", ""),
-        } for r in results if "error" not in r],
+        "variants": [
+            {
+                "label": r["label"],
+                "items_verified": r.get("items_verified", 0),
+                "grounding_dist": r.get("grounding_dist", {}),
+                "result_dist": r.get("result_dist", {}),
+                "elapsed_s": r.get("elapsed_s", 0),
+                "final_verdict": r.get("final_verdict", ""),
+            }
+            for r in results
+            if "error" not in r
+        ],
     }
     ts = _ts()
     report_path = os.path.join(EVAL_DIR, f"verify_compare_summary_{ts}.json")
@@ -597,24 +649,33 @@ def print_comparison(results: list):
     print(f"  [report] {report_path}", flush=True)
 
 
-def switch_pod_b_to_14b() -> bool:
-    """Switch Pod B to verify mode (14B Q6 :8083)."""
-    env_file = "/opt/ai_data/scripts/current-mode-pod-b.env"
+def switch_inference_to_14b() -> bool:
+    """Switch inference container to verify mode (14B Q6 :8083)."""
+    env_file = "/opt/ai_data/scripts/current-mode-inference.env"
     env = {
-        "MODE": "test-q8", "MODEL_NAME": "test-nextcoder-q8",
-        "PORT": "8083", "MODEL_FILE": "NextCoder-14B-q6_k_m.gguf",
-        "CTX_SIZE": "8192", "THREADS": "4", "THREADS_BATCH": "4", "CACHE_RAM": "512",
+        "MODE": "test-q8",
+        "MODEL_NAME": "test-nextcoder-q8",
+        "PORT": "8083",
+        "MODEL_FILE": "NextCoder-14B-q6_k_m.gguf",
+        "CTX_SIZE": "8192",
+        "THREADS": "4",
+        "THREADS_BATCH": "4",
+        "CACHE_RAM": "512",
     }
     lines = [f"{k}={v}" for k, v in env.items()]
     with open(env_file, "w") as f:
         f.write("\n".join(lines) + "\n")
-    subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-                   capture_output=True, timeout=60)
+    _podman_stop_inference()
+    _podman_start_inference()
     for i in range(120):
-        h = subprocess.run(["curl", "-sf", "--max-time", "5", "http://127.0.0.1:8083/health"],
-                           capture_output=True, text=True, timeout=10)
+        h = subprocess.run(
+            ["curl", "-sf", "--max-time", "5", "http://127.0.0.1:8083/health"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         if h.returncode == 0 and "ok" in h.stdout:
-            print(f"  [switch] 14B ready after {i*3}s", flush=True)
+            print(f"  [switch] 14B ready after {i * 3}s", flush=True)
             return True
         time.sleep(3)
     return False
@@ -622,27 +683,37 @@ def switch_pod_b_to_14b() -> bool:
 
 # ── Main ─────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(description="Full Pipeline NEUTRAL Test")
     parser.add_argument("--limit", type=int, default=10, help="Number of turns")
-    parser.add_argument("--skip-phase1", action="store_true", help="Skip pre-verify pipeline stages")
-    parser.add_argument("--snapshot", type=str, default="", help="Load existing snapshot path (skip Phase 1 & 2)")
+    parser.add_argument(
+        "--skip-phase1", action="store_true", help="Skip pre-verify pipeline stages"
+    )
+    parser.add_argument(
+        "--snapshot", type=str, default="", help="Load existing snapshot path (skip Phase 1 & 2)"
+    )
     args = parser.parse_args()
 
-    TEST = test_setup("pipeline_verify_compare",
-                      f"Full pipeline verify comparison on {args.limit} real turns")
+    TEST = test_setup(
+        "pipeline_verify_compare", f"Full pipeline verify comparison on {args.limit} real turns"
+    )
 
     # Stop day_cycle
-    subprocess.run(["systemctl", "--user", "stop", "devforge-day-cycle.service"], capture_output=True, timeout=30)
+    subprocess.run(
+        ["systemctl", "--user", "stop", "devforge-day-cycle.service"],
+        capture_output=True,
+        timeout=30,
+    )
     subprocess.run(["pkill", "-9", "-f", "day_cycle.sh"], capture_output=True, timeout=5)
 
     # ── Phase 1: Pre-verify pipeline ──
     snapshot_path = args.snapshot
     if not snapshot_path and not args.skip_phase1:
-        print("\n" + "="*60, flush=True)
+        print("\n" + "=" * 60, flush=True)
         print("  PHASE 1: Pre-Verify Pipeline", flush=True)
         print("  Text Clean → Polish → FTS5 → Extract → MCP Enrich", flush=True)
-        print("="*60, flush=True)
+        print("=" * 60, flush=True)
         test_heartbeat("phase1_pipeline")
 
         turns = select_turns(args.limit)
@@ -664,29 +735,41 @@ def main():
     elif args.skip_phase1 and not snapshot_path:
         # Still need a snapshot — find the latest one
         import glob
-        snaps = sorted(glob.glob(os.path.join(EVAL_DIR, "pipeline_verify_compare_pre_verify_*.json")))
+
+        snaps = sorted(
+            glob.glob(os.path.join(EVAL_DIR, "pipeline_verify_compare_pre_verify_*.json"))
+        )
         if snaps:
             snapshot_path = snaps[-1]
             print(f"  [phase1] Skipped. Using existing snapshot: {snapshot_path}", flush=True)
         else:
-            print("  [error] --skip-phase1 but no existing snapshot found. Run without --skip-phase1 first.", flush=True)
+            print(
+                "  [error] --skip-phase1 but no existing snapshot found. Run without --skip-phase1 first.",
+                flush=True,
+            )
             test_complete("error: no snapshot")
             return
 
     # ── Phase 2: Verify with 3 prompt variants on snapshot ──
-    print("\n" + "="*60, flush=True)
+    print("\n" + "=" * 60, flush=True)
     print("  PHASE 2: Switch to 14B + Verify with 3 prompt variants", flush=True)
-    print("="*60, flush=True)
+    print("=" * 60, flush=True)
     test_heartbeat("phase2_switch_14b")
 
-    if not switch_pod_b_to_14b():
+    if not switch_inference_to_14b():
         print("  [error] 14B not ready", flush=True)
         test_complete("error: 14b_start")
         return
 
     # Warm-up
     print("  Warming up 14B...", flush=True)
-    call_llm([{"role": "user", "content": "Reply OK"}], model="reviewer", max_tokens=5, temperature=0.0, timeout=120)
+    call_llm(
+        [{"role": "user", "content": "Reply OK"}],
+        model="reviewer",
+        max_tokens=5,
+        temperature=0.0,
+        timeout=120,
+    )
     print("  Warm-up OK", flush=True)
 
     # Run 3 verify variants

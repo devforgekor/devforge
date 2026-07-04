@@ -3,31 +3,44 @@
 # Path: called by — night_runner.py (subprocess), night_cycle.sh
 """Night Pipeline: DB handoff 로드 → P-R-J(30B→14B→N14B) → night_verify → DB 저장.
 
-Pod B swap sequence: 30B(proposer) → 14B(reflector) → N14B(judge) → 27B(verifier).
-Pod A stop for RAM before P-R-J, Pod B restored to day mode after.
+inference swap sequence: 30B(proposer) → 14B(reflector) → N14B(judge) → 27B(verifier).
+inference stop for RAM before P-R-J, inference restored to day mode after.
 
 Usage:
   python3 night_cycle.py --run-id <run_id> [--tag r1]
 """
 
-import json, os, subprocess, sys
-from datetime import datetime, timezone
+import json
+import os
+import subprocess
+import sys
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.watchdog.messenger import log_message
 from lib.pipeline_common import (
-    JUDGE_MODEL, JUDGE_SYSTEM_PROMPT, PROPOSER_MODEL,
-    PROPOSER_SYSTEM_PROMPT, REFLECTOR_MODEL, REFLECTOR_SYSTEM_PROMPT,
-    VERIFIER_SYSTEM_PROMPT, HANDOFF_SYSTEM_PROMPT,
+    HANDOFF_SYSTEM_PROMPT,
+    JUDGE_MODEL,
+    JUDGE_SYSTEM_PROMPT,
     MODEL_METADATA,
-    PipelineState, _dedup_findings, abort,
-    call_one, compile_handoff_single,
-    load_input, log, log_phase_header, resolve_model,
-    save, slack_send,
+    PROPOSER_MODEL,
+    PROPOSER_SYSTEM_PROMPT,
+    REFLECTOR_MODEL,
+    REFLECTOR_SYSTEM_PROMPT,
+    VERIFIER_SYSTEM_PROMPT,
+    PipelineState,
+    _dedup_findings,
+    call_one,
+    compile_handoff_single,
+    load_input,
+    log,
+    log_phase_header,
+    resolve_model,
+    save,
+    slack_send,
 )
-from lib.pod_manager import model_info, stop_pod_a
+from lib.pod_manager import model_info
+from lib.watchdog.messenger import log_message
 
 DRY_RUN = "--dry-run" in sys.argv
 
@@ -41,9 +54,26 @@ def _fetch_day_review(run_id):
         "ORDER BY id DESC LIMIT 1"
     )
     r = subprocess.run(
-        ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
-         "-d", "devforge_app", "-t", "-A", "-F", "|", "-c", sql],
-        capture_output=True, text=True, timeout=15,
+        [
+            "podman",
+            "exec",
+            "-i",
+            "postgres",
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "devforge_app",
+            "-t",
+            "-A",
+            "-F",
+            "|",
+            "-c",
+            sql,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     if r.returncode != 0 or not r.stdout.strip():
         log(f"  No day_review found for run_id={run_id}")
@@ -59,29 +89,38 @@ def _fetch_day_review(run_id):
 
 
 def run_propose_review_judge(state, tag, rubric_append):
-    """P-R-J 1회 패스. Pod A stop → P → R → J → state 저장."""
-    stop_pod_a()
+    """P-R-J 1회 패스. P → R → J → state 저장."""
 
     log_phase_header("Night Debate — Proposer (P)")
     handoff_fragment = {}
 
     # P → data/pipeline_run/exp_p_{tag}.json
     p_max = 4096
-    proposer_output = call_one(PROPOSER_MODEL, PROPOSER_SYSTEM_PROMPT + rubric_append,
-                   state.build_context("prj_proposer"),
-                   f"P_{tag}", max_tok=p_max)
+    proposer_output = call_one(
+        PROPOSER_MODEL,
+        PROPOSER_SYSTEM_PROMPT + rubric_append,
+        state.build_context("prj_proposer"),
+        f"P_{tag}",
+        max_tok=p_max,
+    )
     save(f"p_{tag}", tag, proposer_output)  # → data/pipeline_run/exp_p_{tag}.json
     p_findings = (proposer_output or {}).get("result", {}).get("findings", [])
     prev_count = len(p_findings)
     p_findings = _dedup_findings(p_findings)
     if len(p_findings) < prev_count:
-        log(f"  Dedup: {prev_count} → {len(p_findings)} findings ({prev_count - len(p_findings)} removed)")
+        log(
+            f"  Dedup: {prev_count} → {len(p_findings)} findings ({prev_count - len(p_findings)} removed)"
+        )
 
     # R → data/pipeline_run/exp_r_{tag}.json
     r_max = 2048
-    reflector_output = call_one(REFLECTOR_MODEL, REFLECTOR_SYSTEM_PROMPT + rubric_append,
-                   f"Proposer findings:\n{json.dumps(p_findings, ensure_ascii=False, indent=2)[:4000]}",
-                   f"R_{tag}", max_tok=r_max)
+    reflector_output = call_one(
+        REFLECTOR_MODEL,
+        REFLECTOR_SYSTEM_PROMPT + rubric_append,
+        f"Proposer findings:\n{json.dumps(p_findings, ensure_ascii=False, indent=2)[:4000]}",
+        f"R_{tag}",
+        max_tok=r_max,
+    )
     save(f"r_{tag}", tag, reflector_output)  # → data/pipeline_run/exp_r_{tag}.json
     r_verdicts = (reflector_output or {}).get("result", {}).get("verdicts", [])
     r_rejected = (reflector_output or {}).get("result", {}).get("rejected_findings", [])
@@ -90,13 +129,17 @@ def run_propose_review_judge(state, tag, rubric_append):
 
     # J → data/pipeline_run/exp_j_{tag}.json
     j_max = 2048
-    judge_output = call_one(JUDGE_MODEL, JUDGE_SYSTEM_PROMPT + rubric_append,
-                   state.build_context("prj_judge", {"rotation_index": 0})
-                   + f"\n\n### P findings:\n"
-                   + json.dumps(p_findings, ensure_ascii=False, indent=2)[:2000]
-                   + f"\n\n### R verdicts:\n"
-                   + json.dumps(r_verdicts, ensure_ascii=False, indent=2)[:2000],
-                   f"J_{tag}", max_tok=j_max)
+    judge_output = call_one(
+        JUDGE_MODEL,
+        JUDGE_SYSTEM_PROMPT + rubric_append,
+        state.build_context("prj_judge", {"rotation_index": 0})
+        + "\n\n### P findings:\n"
+        + json.dumps(p_findings, ensure_ascii=False, indent=2)[:2000]
+        + "\n\n### R verdicts:\n"
+        + json.dumps(r_verdicts, ensure_ascii=False, indent=2)[:2000],
+        f"J_{tag}",
+        max_tok=j_max,
+    )
     save(f"j_{tag}", tag, judge_output)  # → data/pipeline_run/exp_j_{tag}.json
 
     judge_result = (judge_output or {}).get("result", {})
@@ -104,7 +147,9 @@ def run_propose_review_judge(state, tag, rubric_append):
     j_handoff = judge_result.get("handoff", {})
     handoff_fragment = j_handoff
     prj_result = {
-        "p_model": PROPOSER_MODEL, "r_model": REFLECTOR_MODEL, "j_model": JUDGE_MODEL,
+        "p_model": PROPOSER_MODEL,
+        "r_model": REFLECTOR_MODEL,
+        "j_model": JUDGE_MODEL,
         "P_score": judge_result.get("P_score", 0),
         "R_score": judge_result.get("R_score", 0),
         "consensus": judge_result.get("consensus_score", 0),
@@ -122,11 +167,13 @@ def run_propose_review_judge(state, tag, rubric_append):
         "report_recommendation": j_report.get("recommendation", ""),
     }
     state.add_prj_rotation(prj_result)
-    ps = prj_result['P_score']
-    rs = prj_result['R_score']
-    cs = prj_result['consensus']
-    slack_msg = (f"[Night Debate] P-R-J *Round {state.round_num}*\n"
-                 f"P={PROPOSER_MODEL}→{ps} | R={REFLECTOR_MODEL}→{rs} | J={JUDGE_MODEL}→consensus={cs}\n")
+    ps = prj_result["P_score"]
+    rs = prj_result["R_score"]
+    cs = prj_result["consensus"]
+    slack_msg = (
+        f"[Night Debate] P-R-J *Round {state.round_num}*\n"
+        f"P={PROPOSER_MODEL}→{ps} | R={REFLECTOR_MODEL}→{rs} | J={JUDGE_MODEL}→consensus={cs}\n"
+    )
     if j_report.get("summary"):
         slack_msg += f"> {j_report['summary'][:120]}"
     slack_send(slack_msg)
@@ -152,31 +199,35 @@ def _trim_handoff(text, label=""):
 
     hoff = data if "executive_summary" in data else data.get("handoff", data)
     if isinstance(hoff, dict) and hoff.get("executive_summary"):
-        trimmed.update({
-            "source": "llm_r",
-            "executive_summary": hoff.get("executive_summary", "")[:200],
-            "unresolved_count": hoff.get("unresolved_count", 0),
-            "critical_remaining": hoff.get("critical_remaining", [])[:3],
-            "p_score": hoff.get("p_score", 0),
-            "r_score": hoff.get("r_score", 0),
-            "j_consensus": hoff.get("j_consensus", 0),
-            "approved_ids": [a.get("id","") for a in (hoff.get("approved") or [])[:5]],
-            "rejected_ids": [r.get("id","") for r in (hoff.get("rejected") or [])[:5]],
-            "verifier_priority": (hoff.get("verifier_priority") or [])[:3],
-        })
+        trimmed.update(
+            {
+                "source": "llm_r",
+                "executive_summary": hoff.get("executive_summary", "")[:200],
+                "unresolved_count": hoff.get("unresolved_count", 0),
+                "critical_remaining": hoff.get("critical_remaining", [])[:3],
+                "p_score": hoff.get("p_score", 0),
+                "r_score": hoff.get("r_score", 0),
+                "j_consensus": hoff.get("j_consensus", 0),
+                "approved_ids": [a.get("id", "") for a in (hoff.get("approved") or [])[:5]],
+                "rejected_ids": [r.get("id", "") for r in (hoff.get("rejected") or [])[:5]],
+                "verifier_priority": (hoff.get("verifier_priority") or [])[:3],
+            }
+        )
         return json.dumps(trimmed, ensure_ascii=False, indent=2)
 
     if "P_score" in data and "decision" in data:
-        trimmed.update({
-            "source": "python",
-            "P_score": data.get("P_score"),
-            "R_score": data.get("R_score"),
-            "consensus": data.get("consensus"),
-            "decision": data.get("decision"),
-            "approved_count": data.get("approved_count", data.get("total_approved", 0)),
-            "rejected_count": data.get("rejected_count", data.get("total_rejected", 0)),
-            "report_summary": (data.get("report_summary") or "")[:200],
-        })
+        trimmed.update(
+            {
+                "source": "python",
+                "P_score": data.get("P_score"),
+                "R_score": data.get("R_score"),
+                "consensus": data.get("consensus"),
+                "decision": data.get("decision"),
+                "approved_count": data.get("approved_count", data.get("total_approved", 0)),
+                "rejected_count": data.get("rejected_count", data.get("total_rejected", 0)),
+                "report_summary": (data.get("report_summary") or "")[:200],
+            }
+        )
         return json.dumps(trimmed, ensure_ascii=False, indent=2)
 
     s = json.dumps(data, ensure_ascii=False, indent=2)
@@ -208,12 +259,20 @@ def save_feedback_to_db(night_verify_feedback, tag):
         findings = []
         for i, w in enumerate(weaknesses):
             fix = improvements[i] if i < len(improvements) else "Review and address this weakness."
-            findings.append({
-                "description": str(w)[:300], "severity": "medium", "category": "quality",
-                "fix": str(fix)[:300],
-            })
+            findings.append(
+                {
+                    "description": str(w)[:300],
+                    "severity": "medium",
+                    "category": "quality",
+                    "fix": str(fix)[:300],
+                }
+            )
         verification_items = [
-            {"check": str(s)[:300], "result": "pass", "detail": "Strength confirmed in night_verify review"}
+            {
+                "check": str(s)[:300],
+                "result": "pass",
+                "detail": "Strength confirmed in night_verify review",
+            }
             for s in strengths
         ]
 
@@ -243,9 +302,22 @@ def save_feedback_to_db(night_verify_feedback, tag):
             ")"
         )
         r = subprocess.run(
-            ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
-             "-d", "devforge_app", "-c", sql],
-            capture_output=True, text=True, timeout=15,
+            [
+                "podman",
+                "exec",
+                "-i",
+                "postgres",
+                "psql",
+                "-U",
+                "postgres",
+                "-d",
+                "devforge_app",
+                "-c",
+                sql,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if r.returncode == 0:
             count += 1
@@ -257,7 +329,15 @@ def save_feedback_to_db(night_verify_feedback, tag):
                     target="operator",
                     type="HOT_FIX" if score < 70 else "CONTEXT",
                     content=f"[{role}] {weaknesses[0] if weaknesses else 'Performance Feedback'}",
-                    detail=json.dumps({"model": model, "role": role, "improvements": improvements, "score": score}, ensure_ascii=False)
+                    detail=json.dumps(
+                        {
+                            "model": model,
+                            "role": role,
+                            "improvements": improvements,
+                            "score": score,
+                        },
+                        ensure_ascii=False,
+                    ),
                 )
             except Exception as e:
                 log(f"  [Watchdog] Error reporting feedback: {e}")
@@ -275,6 +355,7 @@ def main():
             if a == "--limit" and i + 1 < len(sys.argv):
                 limit = int(sys.argv[i + 1])
         from pipelines.prj_cycle import run_queue_mode
+
         result = run_queue_mode(limit=limit)
         log(f"Queue mode complete: {result['processed']}/{result['total']} processed")
         return
@@ -320,7 +401,9 @@ def main():
     round_num = 1
 
     # Phase 3: P-R-J 1 pass
-    prj_result, handoff_fragment, p_findings, r_verdicts = run_propose_review_judge(state, tag, rubric_append)
+    prj_result, handoff_fragment, p_findings, r_verdicts = run_propose_review_judge(
+        state, tag, rubric_append
+    )
 
     # Phase 3.5: R(night_reflector) writes final handoff
     # → data/pipeline_run/exp_handoff_r_{tag}.json (LLM-R)
@@ -329,36 +412,53 @@ def main():
     log_phase_header("Phase 3.5: R handoff writer")
 
     r_ctx_parts = [
-        f"=== CONTEXT: night_debate START ===",
+        "=== CONTEXT: night_debate START ===",
         f"P_model={PROPOSER_MODEL} R_model={REFLECTOR_MODEL} J_model={JUDGE_MODEL}\n",
         f"=== CONTEXT: p_findings ({len(p_findings)}) START ===",
     ]
     for pf in p_findings:
         r_ctx_parts.append(
-            f"  {pf['id']} [{pf.get('severity','?')}/{pf.get('category','?')}]: {pf.get('description','')[:200]}")
-    r_ctx_parts.append(f"=== CONTEXT: p_findings END ===")
+            f"  {pf['id']} [{pf.get('severity', '?')}/{pf.get('category', '?')}]: {pf.get('description', '')[:200]}"
+        )
+    r_ctx_parts.append("=== CONTEXT: p_findings END ===")
     r_ctx_parts.append(f"\n=== CONTEXT: r_verdicts ({len(r_verdicts)}) START ===")
     for rv in r_verdicts:
-        r_ctx_parts.append(f"  {rv['id']}: {rv.get('verdict','?')} — {rv.get('reason','')[:150]}")
-    r_ctx_parts.append(f"=== CONTEXT: r_verdicts END ===")
-    r_ctx_parts.append(f"\n=== CONTEXT: j_decision START ===")
-    r_ctx_parts.append(f"  P_score={prj_result.get('P_score','?')} R_score={prj_result.get('R_score','?')}")
-    r_ctx_parts.append(f"  consensus={prj_result.get('consensus','?')} decision={prj_result.get('decision','?')}")
-    r_ctx_parts.append(f"  approved={prj_result.get('approved',[])}")
-    r_ctx_parts.append(f"  rejected={prj_result.get('rejected',[])}")
-    r_ctx_parts.append(f"  summary: {prj_result.get('report_summary','')}")
-    for ti in (prj_result.get('report_top_issues') or []):
+        r_ctx_parts.append(f"  {rv['id']}: {rv.get('verdict', '?')} — {rv.get('reason', '')[:150]}")
+    r_ctx_parts.append("=== CONTEXT: r_verdicts END ===")
+    r_ctx_parts.append("\n=== CONTEXT: j_decision START ===")
+    r_ctx_parts.append(
+        f"  P_score={prj_result.get('P_score', '?')} R_score={prj_result.get('R_score', '?')}"
+    )
+    r_ctx_parts.append(
+        f"  consensus={prj_result.get('consensus', '?')} decision={prj_result.get('decision', '?')}"
+    )
+    r_ctx_parts.append(f"  approved={prj_result.get('approved', [])}")
+    r_ctx_parts.append(f"  rejected={prj_result.get('rejected', [])}")
+    r_ctx_parts.append(f"  summary: {prj_result.get('report_summary', '')}")
+    for ti in prj_result.get("report_top_issues") or []:
         r_ctx_parts.append(f"  top issue: {ti}")
-    r_ctx_parts.append(f"=== CONTEXT: j_decision END ===")
-    r_ctx_parts.append(f"=== CONTEXT: night_debate END ===")
+    r_ctx_parts.append("=== CONTEXT: j_decision END ===")
+    r_ctx_parts.append("=== CONTEXT: night_debate END ===")
     r_handoff_ctx = "\n".join(r_ctx_parts)
 
-    r_hoff_resp = call_one(REFLECTOR_MODEL, HANDOFF_SYSTEM_PROMPT, r_handoff_ctx, f"handoff_R_{tag}")
+    r_hoff_resp = call_one(
+        REFLECTOR_MODEL, HANDOFF_SYSTEM_PROMPT, r_handoff_ctx, f"handoff_R_{tag}"
+    )
     r_hoff_data = (r_hoff_resp or {}).get("result", {}).get("handoff", {})
-    save(f"handoff_r_{tag}", tag, {  # → data/pipeline_run/exp_handoff_r_{tag}.json
-        "source": "llm_r", "handoff": r_hoff_data,
-        "p_findings_count": len(p_findings), "r_verdicts_count": len(r_verdicts),
-        "model_metadata": {k: MODEL_METADATA.get(resolve_model(k)) for k in (PROPOSER_MODEL, REFLECTOR_MODEL, JUDGE_MODEL)}})
+    save(
+        f"handoff_r_{tag}",
+        tag,
+        {  # → data/pipeline_run/exp_handoff_r_{tag}.json
+            "source": "llm_r",
+            "handoff": r_hoff_data,
+            "p_findings_count": len(p_findings),
+            "r_verdicts_count": len(r_verdicts),
+            "model_metadata": {
+                k: MODEL_METADATA.get(resolve_model(k))
+                for k in (PROPOSER_MODEL, REFLECTOR_MODEL, JUDGE_MODEL)
+            },
+        },
+    )
 
     # Save handoffs
     handoff_models = {
@@ -369,24 +469,35 @@ def main():
     hoff_meta = json.dumps(handoff_models, ensure_ascii=False, indent=2)
     hoff_header = f"## Model Metadata (for future reference)\n{hoff_meta}\n\n"
 
-    llm_save = {"source": "llm_r", "round": round_num,
-                "r_model": REFLECTOR_MODEL, "handoff": r_hoff_data}
+    llm_save = {
+        "source": "llm_r",
+        "round": round_num,
+        "r_model": REFLECTOR_MODEL,
+        "handoff": r_hoff_data,
+    }
     save(f"handoff_llm_{tag}", tag, llm_save)  # → data/pipeline_run/exp_handoff_llm_{tag}.json
-    llm_text = (hoff_header
-                + f"## Handoff (R={model_info(REFLECTOR_MODEL)}) [LLM-R]\n"
-                + json.dumps(llm_save, ensure_ascii=False, indent=2))
+    llm_text = (
+        hoff_header
+        + f"## Handoff (R={model_info(REFLECTOR_MODEL)}) [LLM-R]\n"
+        + json.dumps(llm_save, ensure_ascii=False, indent=2)
+    )
 
     py_single = compile_handoff_single(prj_result, round_num, False)
     py_single["model_metadata"] = handoff_models
     save(f"handoff_py_{tag}", tag, py_single)  # → data/pipeline_run/exp_handoff_py_{tag}.json
-    py_text = f"## Handoff [Python]\n" + json.dumps(py_single, ensure_ascii=False, indent=2)
+    py_text = "## Handoff [Python]\n" + json.dumps(py_single, ensure_ascii=False, indent=2)
     pyc_text = json.dumps(py_single, ensure_ascii=False, indent=2)
 
-    state.add_phase("handoffs", {"llm_texts": [llm_text], "py_texts": [py_text],
-                                 "consolidated": py_single})
+    state.add_phase(
+        "handoffs", {"llm_texts": [llm_text], "py_texts": [py_text], "consolidated": py_single}
+    )
 
-    log(f"  P-R-J 완료: {prj_result.get('decision','?')} (consensus={prj_result.get('consensus','?')})")
-    slack_send(f"[Night Debate] P-R-J 완료: {prj_result.get('decision','?')} (consensus={prj_result.get('consensus','?')})")
+    log(
+        f"  P-R-J 완료: {prj_result.get('decision', '?')} (consensus={prj_result.get('consensus', '?')})"
+    )
+    slack_send(
+        f"[Night Debate] P-R-J 완료: {prj_result.get('decision', '?')} (consensus={prj_result.get('consensus', '?')})"
+    )
 
     # Phase 4: night_verify (27B) → data/pipeline_run/exp_night_verify_{tag}.json
     log_phase_header("Phase 4: night_verify")
@@ -411,19 +522,27 @@ def main():
     )
 
     night_verify_context = state.build_context("final_verify") + "\n\n" + verifier_input
-    night_verify_resp = call_one("night_verify", VERIFIER_SYSTEM_PROMPT + rubric_append,
-                   night_verify_context, f"night_verify_{tag}")
+    night_verify_resp = call_one(
+        "night_verify",
+        VERIFIER_SYSTEM_PROMPT + rubric_append,
+        night_verify_context,
+        f"night_verify_{tag}",
+    )
     night_verify_result = (night_verify_resp or {}).get("result", {})
-    save(f"night_verify_{tag}", tag, night_verify_resp)  # → data/pipeline_run/exp_night_verify_{tag}.json
+    save(
+        f"night_verify_{tag}", tag, night_verify_resp
+    )  # → data/pipeline_run/exp_night_verify_{tag}.json
     state.add_phase("night_verify", night_verify_result)
-    night_verify_verdict = night_verify_result.get('final_verdict', '?')
-    night_verify_confidence = night_verify_result.get('confidence', '?')
-    handoff_comparison = night_verify_result.get('handoff_comparison', {})
-    night_verify_feedback = night_verify_result.get('feedback', {})
+    night_verify_verdict = night_verify_result.get("final_verdict", "?")
+    night_verify_confidence = night_verify_result.get("confidence", "?")
+    handoff_comparison = night_verify_result.get("handoff_comparison", {})
+    night_verify_feedback = night_verify_result.get("feedback", {})
     log(f"  night_verify verdict={night_verify_verdict} confidence={night_verify_confidence}")
     log(f"  handoff preference: {handoff_comparison.get('better_handoff', '?')}")
-    slack_send(f"[Night Pipeline] night_verify: *{night_verify_verdict}* "
-               f"(conf={night_verify_confidence}) handoff={handoff_comparison.get('better_handoff','?')}")
+    slack_send(
+        f"[Night Pipeline] night_verify: *{night_verify_verdict}* "
+        f"(conf={night_verify_confidence}) handoff={handoff_comparison.get('better_handoff', '?')}"
+    )
 
     # Save feedback to DB → activity_log (type='feedback')
     fb_count = save_feedback_to_db(night_verify_feedback, tag)
@@ -432,16 +551,25 @@ def main():
 
     # Save final summary
     summary = {
-        "round": round_num, "with_rubric": False,
-        "run_id": run_id, "day_review_log_id": day_review["log_id"],
-        "python_verify": {"issues_found": py_verify.get("issues_found", 0) if py_verify else 0,
-                          "total": py_verify.get("total_findings", 0) if py_verify else 0},
-        "day_verify": {"verdict": day_verify.get("final_verdict", "?"), "confidence": day_verify.get("confidence", 0)},
+        "round": round_num,
+        "with_rubric": False,
+        "run_id": run_id,
+        "day_review_log_id": day_review["log_id"],
+        "python_verify": {
+            "issues_found": py_verify.get("issues_found", 0) if py_verify else 0,
+            "total": py_verify.get("total_findings", 0) if py_verify else 0,
+        },
+        "day_verify": {
+            "verdict": day_verify.get("final_verdict", "?"),
+            "confidence": day_verify.get("confidence", 0),
+        },
         "prj": [prj_result],
-        "night_verify": {"verdict": night_verify_result.get("final_verdict", "?"),
-                         "confidence": night_verify_result.get("confidence", 0),
-                         "feedback": night_verify_feedback,
-                         "handoff_comparison": handoff_comparison},
+        "night_verify": {
+            "verdict": night_verify_result.get("final_verdict", "?"),
+            "confidence": night_verify_result.get("confidence", 0),
+            "feedback": night_verify_feedback,
+            "handoff_comparison": handoff_comparison,
+        },
         "feedback_saved": fb_count,
     }
     save(f"summary_night_{tag}", tag, summary)  # → data/pipeline_run/exp_summary_night_{tag}.json
@@ -468,18 +596,31 @@ def main():
         ")"
     )
     r = subprocess.run(
-        ["podman", "exec", "-i", "postgres", "psql", "-U", "postgres",
-         "-d", "devforge_app", "-c", sql],
-        capture_output=True, text=True, timeout=15,
+        [
+            "podman",
+            "exec",
+            "-i",
+            "postgres",
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "devforge_app",
+            "-c",
+            sql,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     if r.returncode == 0:
         log(f"  night_review saved (run_id={run_id})")
     else:
         log(f"  DB save failed (non-fatal): {r.stderr[:200]}")
 
-    log(f"\n{'='*60}")
+    log(f"\n{'=' * 60}")
     log("NIGHT PIPELINE COMPLETE")
-    log(f"{'='*60}")
+    log(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

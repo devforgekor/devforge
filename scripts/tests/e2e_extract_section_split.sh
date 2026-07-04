@@ -48,7 +48,7 @@ test_heartbeat('$1')
 }
 
 # ═══════════════════════════════════════════════════════════════
-# Phase 1: embed_batch (SKIPPED — 8081 requires Pod B mode switch)
+# Phase 1: embed_batch (SKIPPED — 8081 requires inference mode switch)
 # ═══════════════════════════════════════════════════════════════
 log "============================================================"
 log "Phase 1/5: embed_batch (SKIPPED — 8081 down)"
@@ -57,7 +57,7 @@ $PY -c "
 import sys; sys.path.insert(0, '.')
 import json
 with open('$SNAPSHOT_DIR/e2e_embed_batch_$TS.json', 'w') as f:
-    json.dump({'skipped': True, 'reason': '8081 requires separate Pod B mode'}, f, indent=2)
+    json.dump({'skipped': True, 'reason': '8081 requires separate inference mode'}, f, indent=2)
 print('  embed_batch skipped')
 "
 

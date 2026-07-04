@@ -236,13 +236,13 @@ def stage_fts5() -> bool:
 
 
 def stage_extract(limit: int) -> bool:
-    """Run extract.py (LLM extract + Reranker faithfulness via :8080 if Pod A up)."""
+    """Run extract.py (LLM extract + Reranker faithfulness via :8080 if inference up)."""
     print(f"\n{'─'*60}", flush=True)
-    print(f"  Stage: Extract + Reranker (7B Q8 :8082 + Pod A reranker)", flush=True)
+    print(f"  Stage: Extract + Reranker (7B Q8 :8082 + inference reranker)", flush=True)
     print(f"{'─'*60}", flush=True)
     test_heartbeat("extract")
 
-    # Check if Pod A reranker is up (native /v1/rerank, no embedding workaround)
+    # Check if inference reranker is up (native /v1/rerank, no embedding workaround)
     reranker_ok = False
     try:
         import urllib.request as req
@@ -260,9 +260,9 @@ def stage_extract(limit: int) -> bool:
     )
 
     if not reranker_ok:
-        print(f"  [reranker] Pod A :8080/v1/rerank unreachable — no reranker verdicts", flush=True)
+        print(f"  [reranker] inference :8080/v1/rerank unreachable — no reranker verdicts", flush=True)
     else:
-        print(f"  [reranker] Pod A :8080 available — reranker ran within extract", flush=True)
+        print(f"  [reranker] inference :8080 available — reranker ran within extract", flush=True)
     return ok
 
 
@@ -280,17 +280,17 @@ def stage_enrich(limit: int) -> bool:
 
 
 def stage_embed(limit: int) -> bool:
-    """Swap Pod B → embed mode, run embed_batch.py."""
+    """Swap inference → embed mode, run embed_batch.py."""
     print(f"\n{'─'*60}", flush=True)
-    print(f"  Stage: Embed (Swap Pod B :8082 → :8081, 8B f16)", flush=True)
+    print(f"  Stage: Embed (Swap inference :8082 → :8081, 8B f16)", flush=True)
     print(f"{'─'*60}", flush=True)
     test_heartbeat("embed")
 
-    # Swap Pod B to embed mode
-    from lib.pod_manager import start_pod_b
+    # Swap inference to embed mode
+    from lib.pod_manager import start_inference
     print(f"  [swap] Stopping day mode, starting embed (:8081)...", flush=True)
-    if not start_pod_b("embed", 8081, skip_probe=True):
-        print(f"  [swap] WARNING: start_pod_b embed reported failure", flush=True)
+    if not start_inference("embed", 8081, skip_probe=True):
+        print(f"  [swap] WARNING: start_inference embed reported failure", flush=True)
 
     # Wait for embed health
     print(f"  [swap] Waiting for embed server (MODEL_REGISTRY embedder)...", flush=True)
@@ -316,8 +316,8 @@ def stage_embed(limit: int) -> bool:
     )
 
     # Swap back to day mode (7B Q8) for subsequent operation
-    print(f"  [swap] Switching Pod B back to day mode (:8082)...", flush=True)
-    start_pod_b("day", 8082, skip_probe=True)
+    print(f"  [swap] Switching inference back to day mode (:8082)...", flush=True)
+    start_inference("day", 8082, skip_probe=True)
     return ok
 
 

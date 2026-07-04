@@ -1,0 +1,36 @@
+{
+  "tasks": [
+    {
+      "id": "8a4d6c9a-e97f-43cd-9f9c-bc8eea0c1270",
+      "name": "gh auth 설정 및 dev_pipeline.py 기본 구조 생성",
+      "description": "GITHUB_TOKEN을 사용해 gh CLI 인증 설정. lib/dev_pipeline.py 생성 — poll_issues(), claim_issue(), create_pr() 함수 기본 구조. DB 미사용, json/subprocess/os/ datetime만 import. secrets.env에서 GITHUB_TOKEN 추출 로직 포함.",
+      "notes": "lib/dev_pipeline.py는 cli.py에서 import. gh CLI는 미인증 상태이므로 GH_TOKEN 환경변수로 전달. TODO: gh auth login --with-token 1회 실행 필요.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-06-28T16:49:42.921Z",
+      "updatedAt": "2026-06-28T16:50:41.839Z",
+      "relatedFiles": [
+        {
+          "path": "/opt/projects/server/scripts/lib/dev_pipeline.py",
+          "type": "CREATE",
+          "description": "새 모듈 — gh CLI wrapper + issue→PR 로직"
+        },
+        {
+          "path": "/home/opc/.config/devforge/secrets.env",
+          "type": "REFERENCE",
+          "description": "GITHUB_TOKEN 소스"
+        },
+        {
+          "path": "/opt/projects/server/scripts/lib/observation.py",
+          "type": "REFERENCE",
+          "description": "기존 lib 모듈 구조 참조"
+        }
+      ],
+      "implementationGuide": "CREATE lib/dev_pipeline.py:\n# Status: production\n# Path: imported by — cli.py (dev subcommand)\n'''GitHub Issue → PR pipeline (DevForge Devin-like)'''\n\nimport json, os, subprocess, datetime\nfrom pathlib import Path\n...\n\nSECRETS_PATH = os.path.expanduser('~/.config/devforge/secrets.env')\nSTATE_PATH = '/opt/projects/server/data/dev_pipeline_state.json'\n\n_run_gh(args, env_extra=None) — helper: reads GITHUB_TOKEN from SECRETS_PATH, calls subprocess.run(['gh', ...], capture_output=True, text=True, timeout=30, env={**os.environ, 'GH_TOKEN': token}).\n\n_load_state() / _save_state(data) — JSON read/write.\n\npoll_issues(label=None, repo='devforgekor/devforge') → list[dict]: state에서 seen_issues 제외한 미할당 issue 목록. gh issue list --json.\n\nclaim_issue(issue_number) → bool: gh issue develop으로 branch 생성. state에 claimed 기록. auto_tasks.md에 task 추가.\n\ncreate_pr(issue_number) → str|None: gh pr create --fill --issue. state에 pr_created 기록.",
+      "verificationCriteria": "python3 -c 'from lib.dev_pipeline import poll_issues, claim_issue, create_pr' 성공. poll_issues()가 빈 리스트 반환 (미인증이므로). subprocess mock 없이 import만 확인.",
+      "analysisResult": "DevForge GitHub Issue→자동 PR 파이프라인. 핵심: polling 기반 (10분), auto_mode.sh 재사용, gh CLI 사용, 4-core ARM 최적화. cli.py dev 서브커맨드 + lib/dev_pipeline.py + systemd timer. 기존 인프라 (auto_mode.sh, action_queue, watchdog) 그대로 활용.",
+      "summary": "lib/dev_pipeline.py 생성 완료: _read_token() (secrets.env 파싱), _gh_env() (GH_TOKEN 전달), poll_issues() (미할당 issue 감지), claim_issue() (할당+브랜치+task 작성), create_pr() (PR 생성). import 검증 통과 (python3 scripts/에서 정상). gh CLI 직접 테스트 — GITHUB_TOKEN via GH_TOKEN 정상 작동 확인. poll_issues() → [] 반환 (repo issue 없음).",
+      "completedAt": "2026-06-28T16:50:41.836Z"
+    }
+  ]
+}

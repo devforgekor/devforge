@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: none — day_verify(reviewer) 3-model comprehensive comparison
-"""Pod A(7B reviewer) 모델 비교: 5개 역할 전체 테스트.
+"""inference(7B reviewer) 모델 비교: 5개 역할 전체 테스트.
 day_verify / rubric / enrich / classify-proposer / classify-judge
 
 MODEL_FILE override + pod restart → 동일 태스크 → 결과 비교"""
@@ -181,14 +181,14 @@ D001 → ACCEPT: evidence clearly shows missing session pooling in auth_routes.p
 def log(msg):
     print(f"  {msg}", flush=True)
 
-def restart_pod_a(model_file: str) -> bool:
-    env_file = "/opt/ai_data/scripts/current-mode-pod-a.env"
+def restart_inference(model_file: str) -> bool:
+    env_file = "/opt/ai_data/scripts/current-mode-inference.env"
     with open(env_file, "w") as f:
         f.write(f"MODE=day\nMODEL_FILE={model_file}\n")
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a"],
+    subprocess.run(["systemctl", "--user", "stop", "devforge-inference"],
                    capture_output=True, timeout=60)
     time.sleep(3)
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a"],
+    subprocess.run(["systemctl", "--user", "start", "devforge-inference"],
                    capture_output=True, timeout=60)
     for i in range(180):
         try:
@@ -206,9 +206,9 @@ def restart_pod_a(model_file: str) -> bool:
     return False
 
 def restore_default():
-    with open("/opt/ai_data/scripts/current-mode-pod-a.env", "w") as f:
+    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
         f.write("MODE=day\n")
-    subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-a"],
+    subprocess.run(["systemctl", "--user", "restart", "devforge-inference"],
                    capture_output=True, timeout=120)
 
 def run_task(system: str, user: str, timeout: int = 120) -> dict:
@@ -245,10 +245,10 @@ def print_bar(score):
 
 # ── Main ───────────────────────────────────────────────────────
 
-TEST = test_setup("day_verify_compare", "Pod A(7B reviewer) 5-role x 3-model comprehensive comparison")
+TEST = test_setup("day_verify_compare", "inference(7B reviewer) 5-role x 3-model comprehensive comparison")
 
 print("=" * 70)
-print("  [Pod A 7B] 5개 역할 × 3개 모델 종합 비교")
+print("  [inference 7B] 5개 역할 × 3개 모델 종합 비교")
 print(f"  {len(TASKS)} tasks, {len(MODELS)} models")
 print("  Roles: day_verify / rubric / enrich / classify-P / classify-J / edge cases")
 print("=" * 70)
@@ -260,9 +260,9 @@ for mi, model in enumerate(MODELS):
     print(f"  [{mi+1}/{len(MODELS)}] {model['name']} ({model['file']})")
     print(f"{'─'*70}")
 
-    ok = restart_pod_a(model["file"])
+    ok = restart_inference(model["file"])
     if not ok:
-        log(f"FAILED: Pod A won't start")
+        log(f"FAILED: inference won't start")
         all_results[model["name"]] = None
         continue
 
@@ -333,6 +333,6 @@ for ti, task in enumerate(TASKS):
     print(f"{role:<18} {'|'.join(f'{v:^16}' for v in vals)}")
 
 restore_default()
-print(f"\n  Pod A 복원 완료 (Coder Q8_0)")
+print(f"\n  inference 복원 완료 (Coder Q8_0)")
 print(f"{'='*70}")
 test_complete("verification comparison done")

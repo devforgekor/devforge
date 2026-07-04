@@ -4,7 +4,7 @@
 """14B NLI Grounding Comparison — sequential test of both 14B Q8 models.
 
 Follows test_common conventions: auto protection, heartbeat, cleanup.
-Switches Pod B between NextCoder-14B-Q8 and Qwen2.5-Coder-14B-Q8,
+Switches inference between NextCoder-14B-Q8 and Qwen2.5-Coder-14B-Q8,
 runs 13 synthetic NLI test cases on each, saves results to data/eval/.
 
 Usage:
@@ -27,8 +27,9 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.llm_client import call_llm
 from lib.llm.json_parser import parse_llm_json
 from lib.test_common import test_setup, test_heartbeat, test_complete
+from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
 
-MODE_FILE = "/opt/ai_data/scripts/current-mode-pod-b.env"
+MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
 
 # ── NLI Test Cases (13 known-truth pairs) ──
 
@@ -52,8 +53,8 @@ TEST_CASES = [
 ]
 
 
-def _switch_pod_b(model_key: str) -> bool:
-    """Write env file for test model and restart Pod B container.
+def _switch_inference(model_key: str) -> bool:
+    """Write env file for test model and restart inference container.
 
     Direct approach (not via ensure_model) to avoid race with protection.
     """
@@ -82,10 +83,8 @@ def _switch_pod_b(model_key: str) -> bool:
     print(f"  [switch] Env written for {model_key}")
 
     # Restart container
-    r = subprocess.run(
-        ["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-        capture_output=True, timeout=60
-    )
+    r = _podman_stop_inference()
+    _podman_start_inference()
     print(f"  [switch] Restart exit={r.returncode}")
 
     # Wait for port forwarding
@@ -160,13 +159,13 @@ def run_case(messages: list) -> dict:
 
 
 def test_model(model_key: str, model_label: str) -> dict:
-    """Switch Pod B to model, run all 13 NLI cases."""
+    """Switch inference to model, run all 13 NLI cases."""
     print(f"\n{'='*60}", flush=True)
     print(f"  Switching → {model_label} ({model_key})", flush=True)
     print(f"{'='*60}", flush=True)
     test_heartbeat(f"switch {model_label}")
 
-    if not _switch_pod_b(model_key):
+    if not _switch_inference(model_key):
         return {"model": model_label, "error": "pod_start_failed"}
 
     # Warm-up: one cheap inference to cover model cold-start
@@ -278,7 +277,7 @@ def main():
     TEST = test_setup("nli_compare_14b",
                       "NextCoder 14B Q8 vs Qwen2.5-Coder 14B Q8 NLI grounding comparison")
 
-    # 2) Stop day_cycle if running (may conflict with Pod B restarts)
+    # 2) Stop day_cycle if running (may conflict with inference restarts)
     subprocess.run(["systemctl", "--user", "stop", "devforge-day-cycle.service"],
                    capture_output=True, timeout=30)
     subprocess.run(["pkill", "-9", "-f", "day_cycle.sh"], capture_output=True, timeout=5)

@@ -62,7 +62,7 @@ from extract_verify import (
     _refine_batch,
     _verify_extractions,
 )
-from lib.db import esc_sql, psql_json, psql_ok
+from lib.db import esc_sql, psql, psql_json, psql_ok
 from lib.infra.preflight import preflight_checks
 from lib.llm_client import call_llm
 from lib.pod_manager import ensure_model as _ensure_model_pod
@@ -272,47 +272,62 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
     """Atomically claim scanned turns via FOR UPDATE SKIP LOCKED,
     set pipeline_state='extracting', and return turn data.
     Prevents duplicate processing when multiple workers run concurrently.
+
+    Uses raw psql() instead of psql_json() because PG forbids data-modifying
+    CTEs inside subqueries — psql_json wraps in SELECT row_to_json(r) FROM ({sql}) r.
     """
     sql = f"""
-        WITH claimable AS (
-            SELECT t.id
-            FROM turns t
-            WHERE t.text != ''
-              AND NOT EXISTS (
-                SELECT 1 FROM review_facts rf
-                WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'
-              )
-              AND t.pipeline_state = 'scanned'
-            ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC
-            LIMIT {limit}
-            FOR UPDATE SKIP LOCKED
-        ),
-        claimed AS (
+        WITH claimed AS (
             UPDATE turns SET pipeline_state = 'extracting'
-            FROM claimable
-            WHERE turns.id = claimable.id
+            WHERE id IN (
+                SELECT t.id
+                FROM turns t
+                WHERE t.text != ''
+                  AND NOT EXISTS (
+                    SELECT 1 FROM review_facts rf
+                    WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'
+                  )
+                  AND t.pipeline_state = 'scanned'
+                ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC
+                LIMIT {limit}
+                FOR UPDATE SKIP LOCKED
+            )
             RETURNING turns.*
         )
-        SELECT
-          claimed.id,
-          COALESCE(claimed.user_turn_clean, claimed.user_turn_clean_polished, claimed.user_turn) AS user_turn,
-          COALESCE(claimed.thinking_clean, claimed.thinking_clean_polished, claimed.thinking) AS thinking,
-          COALESCE(claimed.text_clean, claimed.text_clean_polished, claimed.text) AS text,
-          claimed.text_clean,
-          claimed.thinking_clean,
-          claimed.detected_lang,
-          LENGTH(COALESCE(claimed.user_turn, '')) AS user_raw_len,
-          LENGTH(COALESCE(claimed.text, '')) AS text_raw_len,
-          LENGTH(COALESCE(claimed.thinking, '')) AS think_raw_len,
-          claimed.source_message_id,
-          claimed.created_at,
-          claimed.conversation_id,
-          claimed.seq,
-          claimed.est_chars
-        FROM claimed
-        ORDER BY claimed.est_chars ASC NULLS LAST, claimed.created_at DESC
+        SELECT row_to_json(r.*) FROM (
+            SELECT
+              claimed.id,
+              COALESCE(claimed.user_turn_clean, claimed.user_turn_clean_polished, claimed.user_turn) AS user_turn,
+              COALESCE(claimed.thinking_clean, claimed.thinking_clean_polished, claimed.thinking) AS thinking,
+              COALESCE(claimed.text_clean, claimed.text_clean_polished, claimed.text) AS text,
+              claimed.text_clean,
+              claimed.thinking_clean,
+              claimed.detected_lang,
+              LENGTH(COALESCE(claimed.user_turn, '')) AS user_raw_len,
+              LENGTH(COALESCE(claimed.text, '')) AS text_raw_len,
+              LENGTH(COALESCE(claimed.thinking, '')) AS think_raw_len,
+              claimed.source_message_id,
+              claimed.created_at,
+              claimed.conversation_id,
+              claimed.seq,
+              claimed.est_chars
+            FROM claimed
+        ) r
+        ORDER BY r.est_chars ASC NULLS LAST, r.created_at DESC
     """
-    rows = psql_json(sql)
+    raw = psql(sql)
+    if not raw:
+        return []
+    import json as _json
+
+    rows = []
+    for line in raw.strip().split("\n"):
+        line = line.strip()
+        if line:
+            try:
+                rows.append(_json.loads(line))
+            except _json.JSONDecodeError:
+                continue
     if not rows:
         return []
     turns = []

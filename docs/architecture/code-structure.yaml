@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-06-28'
+  updated: '2026-07-03'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -57,6 +57,9 @@ modules:
     exa_mcp.py:
       status: unknown
       purpose: "exa_mcp \u2014 MCP server for Exa Search with round-robin key rotation."
+    fastapi-entrypoint.sh:
+      status: unknown
+      purpose: fastapi-entrypoint.sh
     gemini.py:
       status: production
       purpose: "gemini \u2014 Agentic Gemini CLI with function calling + tool execution."
@@ -87,7 +90,7 @@ modules:
         \ review."
     mcp_entrypoint.sh:
       status: unknown
-      purpose: "mcp_entrypoint.sh \u2014 Start FastMCP server on Pod A pod"
+      purpose: "mcp_entrypoint.sh \u2014 Start FastMCP server on inference pod"
     mcp_server.py:
       status: experimental
       purpose: "DevForge MCP Server \u2014 Streamable HTTP (MCP spec 2025-03-26)."
@@ -111,6 +114,10 @@ modules:
     observer.py:
       status: production
       purpose: "DevForge Observer Agent \u2014 interactive CLI agent with tool calling."
+    oci_launch_retry.py:
+      status: unknown
+      purpose: "OCI instance launch retry \u2014 exponential backoff, max 5min reset,\
+        \ durable."
     open-newhand.sh:
       status: unknown
       purpose: "open-newhand \u2014 NewHand Protocol \uB9C8\uBB34\uB9AC: handover.yaml\
@@ -160,13 +167,14 @@ modules:
       purpose: Sync shared rules into OpenCode AGENTS.md.
     system_sync.sh:
       status: unknown
-      purpose: "system_sync.sh \u2014 30min system maintenance (no Pod B, no pipeline)"
+      purpose: "system_sync.sh \u2014 30min system maintenance (no inference, no pipeline)"
     telegram_send.py:
       status: experimental
       purpose: telegram_send.py --- Send files or text to your Telegram chat.
     turn_watcher.py:
       status: production
-      purpose: "turn_watcher.py \u2014 real-time session transcript \u2192 PostgreSQL."
+      purpose: "turn_watcher.py \u2014 real-time session transcript \u2192 PostgreSQL\
+        \ (raw insert)."
     update_handover.py:
       status: production
       purpose: "update_handover.py \u2014 Quality-scored session context capture."
@@ -176,6 +184,12 @@ modules:
     weekly_enrich_rebuild.sh:
       status: unknown
       purpose: "weekly_enrich_rebuild.sh \u2014 Weekly enrich few-shot diversity rebuild"
+    worker-entrypoint.sh:
+      status: unknown
+      purpose: "worker-entrypoint.sh \u2014 DevForge Worker supervisor runner"
+    worker_supervisor.py:
+      status: experimental
+      purpose: Worker container supervisor.
 - path: scripts/lib/
   purpose: Lib
   files:
@@ -185,6 +199,9 @@ modules:
     action_queue.py:
       status: production
       purpose: "Action Queue \u2014 MCP tool \u2192 background daemon bridge."
+    arbiter.py:
+      status: production
+      purpose: Pure Python fact consolidation for multi-pass extraction pipeline.
     auto_fix.py:
       status: production
       purpose: "Safe remediation catalog \u2014 Pattern 2 \"Safe First\" engine."
@@ -204,6 +221,9 @@ modules:
     db.py:
       status: production
       purpose: Shared PostgreSQL helpers for DevForge scripts.
+    dev_pipeline.py:
+      status: production
+      purpose: GitHub Issue -> PR pipeline (DevForge Devin-like).
     enrich_consumer.py:
       status: production
       purpose: "enrich_consumer \u2014 read enrichment metadata from review_facts\
@@ -225,10 +245,22 @@ modules:
     handover_db.py:
       status: production
       purpose: "handover_db.py \u2014 DB read/write operations for update_handover.py."
+    model_ctl.sh:
+      status: unknown
+      purpose: "model_ctl.sh \u2014 DevForge inference container model management\
+        \ shell functions"
+    model_registry.py:
+      status: production
+      purpose: "Model metadata registry \u2014 single source of truth for all model\
+        \ definitions."
     nli_server.py:
       status: deprecated
       purpose: "NLI Cross-Encoder Server \u2014 DeBERTa-v3-large (DEPRECATED, never\
         \ deployed)."
+    notify.py:
+      status: experimental
+      purpose: "Unified notification module \u2014 Apprise (Telegram, Email) + native\
+        \ Slack."
     observation.py:
       status: production
       purpose: "Unified observation API \u2014 recording and querying the observations\
@@ -252,6 +284,9 @@ modules:
     test_common.py:
       status: production
       purpose: "Shared test utilities \u2014 setup, heartbeat, cleanup, re-exports."
+    test_runner.py:
+      status: experimental
+      purpose: "TestRunner \u2014 Devin-like self-healing test framework for LLM evaluation."
     test_sandbox.py:
       status: experimental
       purpose: "Test execution sandbox \u2014 Podman read-only tmpfs for safe code\
@@ -265,6 +300,9 @@ modules:
     token_budget.py:
       status: production
       purpose: Token budget manager for P-R-J pipeline context allocation.
+    work_steal.py:
+      status: production
+      purpose: Shared-queue work distribution across independent model pods.
     worklog.py:
       status: production
       purpose: "Git commit \u2192 worklog sync."
@@ -325,7 +363,7 @@ modules:
       purpose: "LLM calling, JSON parsing, model switching \u2014 shared infrastructure."
     local_debate.py:
       status: experimental
-      purpose: "LocalDebate \u2014 multi-agent debate using local Pod A + Pod B."
+      purpose: "LocalDebate \u2014 multi-agent debate using local inference + inference."
 - path: scripts/lib/enrich/
   purpose: Enrich
   files:
@@ -531,13 +569,15 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Container management for DevForge \u2014 Pod A and Pod B."
+      purpose: "Container management for DevForge \u2014 all models run in inference\
+        \ container."
     container.py:
       status: production
-      purpose: Container health checks, model fingerprint, pasta management, env writing.
+      purpose: Container health checks, model fingerprint, env writing, podman lifecycle.
     models.py:
       status: production
-      purpose: Model metadata definitions for Pod A / Pod B.
+      purpose: "Model metadata \u2014 re-exported from lib.model_registry for backward\
+        \ compat."
 - path: scripts/lib/prj/
   purpose: Prj
   files:
@@ -617,6 +657,9 @@ modules:
       status: experimental
       purpose: "Slack Interactive Handler \u2014 receives Slack block_actions and\
         \ processes NEUTRAL fact confirm/reject."
+    __main__.py:
+      status: unknown
+      purpose: Entry point for python3 -m lib.slack_interactive.
     alerts.py:
       status: experimental
       purpose: "Slack alert senders \u2014 NEUTRAL facts, noise markers, extract fail\
@@ -682,6 +725,10 @@ modules:
     checker.py:
       status: production
       purpose: "Health check runners \u2014 LLM 3-tier probe, timer, service, resource."
+    codescanner.py:
+      status: experimental
+      purpose: "Code scanner \u2014 DB-backed auto-fix feedback loop for silent exception\
+        \ patterns."
     config.py:
       status: production
       purpose: "Watchdog \uC124\uC815 \u2014 \uCCB4\uD06C \uB300\uC0C1, \uAC04\uACA9\
@@ -748,6 +795,13 @@ modules:
     handler.py:
       status: production
       purpose: HTTP handler + HTML UI for Blob Explorer.
+- path: scripts/devforge_fastapi/
+  purpose: Devforge Fastapi
+  files:
+    app.py:
+      status: experimental
+      purpose: "DevForge FastAPI \u2014 notification hub (Slack + Telegram + Email)\
+        \ + Blob Explorer."
 - path: scripts/gemini_core/
   purpose: Gemini Core
   files:
@@ -801,7 +855,7 @@ modules:
   files:
     slack.py:
       status: production
-      purpose: slack.py --- Slack Events API receiver for DevForge bot.
+      purpose: slack.py --- Slack Events API + Interactive actions for DevForge bot.
     telegram_bot.py:
       status: production
       purpose: telegram_bot.py --- DevForge Telegram bot for remote operations.
@@ -859,6 +913,9 @@ modules:
     proxy_reviewer.py:
       status: production
       purpose: "proxy_reviewer.py \u2014 DeepSeek Pro verification of 27B verify reasoning."
+    raw_consumer.py:
+      status: experimental
+      purpose: "Consume raw turns from DB \u2014 apply text_clean, advance to pending."
     reranker_recover.py:
       status: production
       purpose: "Reranker Recovery \u2014 quarantine + retry for RERANKER_ERROR facts."
@@ -910,19 +967,6 @@ modules:
       status: unknown
       purpose: Compare current E2E result (10-turn, GEN_TIME_BUF=750) against baseline
         (6-turn).
-    compare_extract_ab.py:
-      status: unknown
-      purpose: 'A/B extract comparison: A(control, old prompt) vs B(treatment, section-split
-        + chunking).'
-    compare_extract_ab_resume.py:
-      status: unknown
-      purpose: Resume A/B extract comparison from user_long_2000 onward.
-    compare_extract_ab_resume2.py:
-      status: unknown
-      purpose: "Resume2 \u2014 Auto-recover A/B test from think_long_4k onward."
-    compare_extract_ab_retry_B.py:
-      status: unknown
-      purpose: Retry think_long_4k B (failed due to 8082 crash).
     compare_extract_affinity.py:
       status: experimental
       purpose: 'Compare extract affinity configs: parallel/threads/cpus.'
@@ -959,11 +1003,11 @@ modules:
       purpose: day_model_test_direct.py
     day_verify_compare.py:
       status: experimental
-      purpose: "Pod A(7B reviewer) \uBAA8\uB378 \uBE44\uAD50: 5\uAC1C \uC5ED\uD560\
+      purpose: "inference(7B reviewer) \uBAA8\uB378 \uBE44\uAD50: 5\uAC1C \uC5ED\uD560\
         \ \uC804\uCCB4 \uD14C\uC2A4\uD2B8."
     day_verify_q8test.py:
       status: experimental
-      purpose: "Day Verify Pipeline \u2014 14B verify + category on Pod B only."
+      purpose: "Day Verify Pipeline \u2014 14B verify + category on inference only."
     day_verify_retry.py:
       status: experimental
       purpose: "Coder Q8_0\uB9CC classify-P / classify-J / edge cases \uC7AC\uD14C\
@@ -1043,7 +1087,7 @@ modules:
         \ models."
     pipeline_e2e_10turns.py:
       status: unknown
-      purpose: "Pipeline E2E test \u2014 10 newest turns, all 5 phases with Pod B\
+      purpose: "Pipeline E2E test \u2014 10 newest turns, all 5 phases with inference\
         \ mode switching."
     pipeline_e2e_test.py:
       status: experimental
@@ -1084,12 +1128,46 @@ modules:
       status: unknown
       purpose: "3-turn full pipeline test: polish \u2192 extract \u2192 enrich \u2192\
         \ verify (long turns)."
+    test_4b_dual_review_7b_vs_9b.py:
+      status: experimental
+      purpose: "4B full pipeline (dual + FactArbiter + LLM conflict) \u2192 7B/9B\
+        \ review comparison."
+    test_7b_vs_9b_text_extract.py:
+      status: experimental
+      purpose: Compare 7B vs 9B extraction from narrative Korean text where 4B returns
+        0.
+    test_9b_review.py:
+      status: experimental
+      purpose: "9B Extraction Review Test: 4B results \u2192 9B finds missed facts."
     test_action_queue.py:
       status: unknown
       purpose: 'Test action_queue: write, claim, execute, complete/fail cycle.'
+    test_arbiter_dual_7b9b.py:
+      status: experimental
+      purpose: 'Dual arbiter comparison: 9B (2 instances) vs 7B (2 instances) on V6
+        raw pairs.'
+    test_arbiter_v6_7b9b.py:
+      status: experimental
+      purpose: 'Arbiter model comparison: 4B vs 7B/9B on identical V6 extraction pairs.'
+    test_dual_4b.py:
+      status: experimental
+      purpose: 'Dual 4B concurrent test: inference core 0 (:8083) B-Xplore, inference
+        core 1 (:8082) A-Strict.'
+    test_dual_extract_7b_vs_9b.py:
+      status: experimental
+      purpose: '7B dual vs 9B dual extraction: which model/persona combo performs
+        best.'
+    test_edcr_e2e.py:
+      status: experimental
+      purpose: "E2E test for _extract_edcr_freeform: OIE \u2192 Canonicalize \u2192\
+        \ Refinement."
     test_extract_strategies.py:
       status: experimental
       purpose: Extract strategy comparison for long Korean developer turns on bb9c6363.
+    test_fact5_comparison.py:
+      status: experimental
+      purpose: 'Fact 5 vs V6 Comparison: Increase "Max 4 facts" to "Max 5 facts" in
+        detective prompt.'
     test_hardcoded_ports.py:
       status: experimental
       purpose: Validate no hardcoded 127.0.0.1:808{0-4} ports remain in modified files.
@@ -1097,6 +1175,16 @@ modules:
       status: experimental
       purpose: "Ground truth \uAE30\uBC18 night P-R-J \uD3C9\uAC00. P=30B(P), R=14B(R),\
         \ J=N14B Q6."
+    test_phase1_14b.py:
+      status: experimental
+      purpose: 'Phase 1: Test Qwen3-14B-Q4_K_M with/without Golden Set on the same
+        full turn.'
+    test_phase2_3.py:
+      status: experimental
+      purpose: 'Phase 2+3: 4B extraction quality + 12-sample final comparison.'
+    test_phase3_rerun.py:
+      status: unknown
+      purpose: Phase 3 re-run with fixed DB sampling (char_length not est_chars).
     test_pipeline_e2e.py:
       status: deprecated
       purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
@@ -1111,7 +1199,23 @@ modules:
     test_r_role_dsv2.sh:
       status: unknown
       purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
-        \uC640 \uBE44\uAD50)"
+        \uC640 \uBE44\uAD50) \u2014 inference container"
+    test_review_7b.py:
+      status: experimental
+      purpose: Sequential dual 4B (Strict+Xplore) -> 7B review on real DB turns.
+    test_review_9b.py:
+      status: experimental
+      purpose: Sequential dual 4B (Strict+Xplore) -> 9B review on real DB turns.
+    test_taxonomy_trap_fix.py:
+      status: experimental
+      purpose: Test free-form extraction (Taxonomy Trap fix) + 3-stage predicate canonicalization.
+    test_v5_arbiter_fallback.py:
+      status: experimental
+      purpose: 'V5 Pre-Extract Test: Pure Python FactArbiter with CONFLICT-only LLM
+        fallback.'
+    test_v6_quality_filters.py:
+      status: experimental
+      purpose: 'V6 Quality Filters: Post-processing improvements for arbiter output.'
     test_verify_methods.py:
       status: experimental
       purpose: "TLDR Verification Method Comparison \u2014 Reranker vs Embedding (NLI\

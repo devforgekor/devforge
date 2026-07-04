@@ -3,20 +3,20 @@
 # Path: systemd:container-devforge-tg-webhook.service — Telegram callback handler
 """Minimal Telegram webhook for NEUTRAL fact CONFIRM/REJECT buttons.
 
-Runs on :8001 inside pod-a pod. Caddy routes /devforge/tg-webhook here.
+Runs on :8001 (inference container). Caddy routes /devforge/tg-webhook here.
 """
 
 import json
 import os
 import sys
 import urllib.request
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.db import psql_ok, esc_sql
+from lib.db import esc_sql, psql_ok
 
 
 def _load_token() -> str:
@@ -86,29 +86,40 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if action == "c":
-            psql_ok(f"UPDATE review_facts SET user_verdict = 'GROUNDED' WHERE id = '{esc_sql(fact_id)}'::uuid")
+            psql_ok(
+                f"UPDATE review_facts SET user_verdict = 'GROUNDED' WHERE id = '{esc_sql(fact_id)}'::uuid"
+            )
             verdict = "GROUNDED"
             badge = "✅ GROUNDED"
         elif action == "r":
-            psql_ok(f"UPDATE review_facts SET user_verdict = 'UNGROUNDED' WHERE id = '{esc_sql(fact_id)}'::uuid")
+            psql_ok(
+                f"UPDATE review_facts SET user_verdict = 'UNGROUNDED' WHERE id = '{esc_sql(fact_id)}'::uuid"
+            )
             verdict = "UNGROUNDED"
             badge = "❌ UNGROUNDED"
         elif action == "nc":
-            psql_ok(f"UPDATE review_facts SET user_verdict = 'CONFIRM' WHERE id = '{esc_sql(fact_id)}'::uuid")
+            psql_ok(
+                f"UPDATE review_facts SET user_verdict = 'CONFIRM' WHERE id = '{esc_sql(fact_id)}'::uuid"
+            )
             badge = "🗑 noise confirmed"
         elif action == "nr":
-            psql_ok(f"UPDATE review_facts SET user_verdict = 'REJECT' WHERE id = '{esc_sql(fact_id)}'::uuid")
+            psql_ok(
+                f"UPDATE review_facts SET user_verdict = 'REJECT' WHERE id = '{esc_sql(fact_id)}'::uuid"
+            )
             badge = "🔄 re-extract"
         else:
             self._respond(200, b'{"ok":true}')
             return
 
         # Answer callback (remove loading spinner)
-        self._tg_post("answerCallbackQuery", {
-            "callback_query_id": cb_id,
-            "text": badge,
-            "show_alert": False,
-        })
+        self._tg_post(
+            "answerCallbackQuery",
+            {
+                "callback_query_id": cb_id,
+                "text": badge,
+                "show_alert": False,
+            },
+        )
 
         # Update message — append verdict next to the matching line
         lines = (msg.get("text") or "").split("\n")
@@ -118,12 +129,15 @@ class Handler(BaseHTTPRequestHandler):
                 updated.append(f"{line}  →  {badge}")
             else:
                 updated.append(line)
-        self._tg_post("editMessageText", {
-            "chat_id": chat_id,
-            "message_id": msg_id,
-            "text": "\n".join(updated),
-            "parse_mode": "HTML",
-        })
+        self._tg_post(
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": msg_id,
+                "text": "\n".join(updated),
+                "parse_mode": "HTML",
+            },
+        )
 
         self._respond(200, json.dumps({"ok": True}).encode())
 
@@ -136,6 +150,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Telegram webhook handler")
     parser.add_argument("--port", type=int, default=8001, help="Listen port")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Bind host")

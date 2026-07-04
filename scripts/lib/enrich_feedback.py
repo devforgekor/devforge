@@ -42,11 +42,11 @@ def _embed_text(text: str) -> Optional[List[float]]:
     """Embed a single text via qwen3-embed-8b on :8081.
 
     Returns vector or None on failure (embedder not available = expected
-    during enrich phase when Pod B runs day-enrich on :8082, not embed mode).
+    during enrich phase when inference runs day-enrich on :8082, not embed mode).
     """
     import json as _json
     # Quick health check — embedder is often down during enrich phase
-    # when Pod B has been swapped to day-enrich on :8082.
+    # when inference has been swapped to day-enrich on :8082.
     try:
         hreq = Request("http://127.0.0.1:8081/health", method="GET")
         with urlopen(hreq, timeout=2) as hresp:
@@ -296,7 +296,7 @@ def get_dynamic_few_shot(turn_text: str, max_examples: int = MAX_EXAMPLES_DB) ->
     """Dynamic few-shot retrieval for enrich.
 
     Early-returns "" if feedback_examples is empty (common during enrich
-    phase when Pod B runs day-enrich on :8082, not embed on :8081).
+    phase when inference runs day-enrich on :8082, not embed on :8081).
 
     1. Quick EXISTS check on feedback_examples
     2. Embed turn_text via :8081

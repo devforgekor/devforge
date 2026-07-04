@@ -1,5 +1,5 @@
 # Status: deprecated
-# Path: replaced by pipelines/extract.py (Pod B embedder :8081 + LLM self-verify + reranker) — bge-m3/ko-sroberta removed, remove after 2026-07
+# Path: replaced by pipelines/extract.py (inference embedder :8081 + LLM self-verify + reranker) — bge-m3/ko-sroberta removed, remove after 2026-07
 import os
 import sys
 import time

@@ -22,8 +22,9 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.llm_client import call_llm
 from lib.llm.json_parser import parse_llm_json
 from lib.test_common import test_setup, test_heartbeat, test_complete
+from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
 
-MODE_FILE = "/opt/ai_data/scripts/current-mode-pod-b.env"
+MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
 
 NEUTRAL_CASES = [
     ("비타민C는 면역력에 좋다", "비타민C는 피부 미백에 도움된다", "NEUTRAL", "different aspect"),
@@ -119,8 +120,8 @@ PROMPTS = [
 ]
 
 
-def switch_pod_b():
-    """Switch Pod B to NextCoder 14B Q6."""
+def switch_inference():
+    """Switch inference to NextCoder 14B Q6."""
     env = {
         "MODE": "test-q8", "MODEL_NAME": "test-nextcoder-q8",
         "PORT": "8083", "MODEL_FILE": "NextCoder-14B-q6_k_m.gguf",
@@ -129,8 +130,8 @@ def switch_pod_b():
     lines = [f"{k}={v}" for k, v in env.items()]
     with open(MODE_FILE, "w") as f:
         f.write("\n".join(lines) + "\n")
-    subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-                   capture_output=True, timeout=60)
+    _podman_stop_inference()
+    _podman_start_inference()
     for i in range(120):
         h = subprocess.run(["curl", "-sf", "--max-time", "5", "http://127.0.0.1:8083/health"],
                            capture_output=True, text=True, timeout=10)
@@ -167,8 +168,8 @@ def main():
     subprocess.run(["systemctl", "--user", "stop", "devforge-day-cycle.service"], capture_output=True, timeout=30)
     subprocess.run(["pkill", "-9", "-f", "day_cycle.sh"], capture_output=True, timeout=5)
 
-    if not switch_pod_b():
-        print("FATAL: Pod B not ready", flush=True)
+    if not switch_inference():
+        print("FATAL: inference not ready", flush=True)
         test_complete("error")
         return
 

@@ -14,11 +14,14 @@ from lib.llm_client.recovery import _model_key_for_8082, is_8082_connection_erro
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "extractor": {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300},
-    "cleaner": {"port": 8083, "temp": 0.0, "max_tokens": 512, "timeout": 600},
+    "extractor-b": {"port": 8083, "temp": 0.0, "max_tokens": 1024, "timeout": 300},
+    "cleaner": {"port": 8080, "temp": 0.0, "max_tokens": 512, "timeout": 600},
     "proposer": {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},
     "reviewer": {"port": 8083, "temp": 0.10, "max_tokens": 400, "timeout": 480},
     "day-verify": {"port": 8082, "temp": 0.0, "max_tokens": 512, "timeout": 120},
+    "day-verify-b": {"port": 8083, "temp": 0.0, "max_tokens": 512, "timeout": 120},
     "day-enricher": {"port": 8082, "temp": 0.1, "max_tokens": 512, "timeout": 900},
+    "day-enricher-b": {"port": 8083, "temp": 0.1, "max_tokens": 512, "timeout": 900},
     "reflector": {"port": 8082, "temp": 0.10, "max_tokens": 2048, "timeout": 600},
     "verifier": {"port": 8084, "temp": 0.10, "max_tokens": 4096, "timeout": 1200},
     "judge": {"port": 8083, "temp": 0.10, "max_tokens": 4096, "timeout": 7200},
@@ -26,8 +29,11 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "tiny": {"port": 8080},
     "embeder": {"port": 8081},
     "day_extract": {"_model": "extractor"},
+    "day_extract_b": {"_model": "extractor-b"},
     "day_enrich": {"_model": "day-enricher"},
+    "day_enrich_b": {"_model": "day-enricher-b"},
     "day_verify": {"_model": "day-verify"},
+    "day_verify_b": {"_model": "day-verify-b"},
     "day_proposer": {"_model": "reviewer"},
     "day_reviewer": {"_model": "reviewer"},
     "day_judge": {"_model": "reviewer"},
@@ -49,6 +55,11 @@ def call_llm(
     *,
     max_tokens: Optional[int] = None,
     temperature: Optional[float] = None,
+    top_p: Optional[float] = None,
+    top_k: Optional[int] = None,
+    repeat_penalty: Optional[float] = None,
+    presence_penalty: Optional[float] = None,
+    frequency_penalty: Optional[float] = None,
     timeout: Optional[int] = None,
     json_mode: bool = False,
     return_meta: bool = False,
@@ -70,6 +81,16 @@ def call_llm(
         "temperature": temperature if temperature is not None else cfg["temp"],
         "stream": False,
     }
+    if top_p is not None:
+        body["top_p"] = top_p
+    if top_k is not None:
+        body["top_k"] = top_k
+    if repeat_penalty is not None:
+        body["repeat_penalty"] = repeat_penalty
+    if presence_penalty is not None:
+        body["presence_penalty"] = presence_penalty
+    if frequency_penalty is not None:
+        body["frequency_penalty"] = frequency_penalty
     if json_mode:
         body["response_format"] = {"type": "json_object"}
 
@@ -119,12 +140,11 @@ def call_llm(
 
 def reranker_score(query: str, document: str) -> float:
     reranker_port = MODEL_REGISTRY["reranker"]["port"]
-    tr = lambda s: s[:2000] if isinstance(s, str) else str(s)[:2000]
     body = json.dumps(
         {
             "model": "reranker",
-            "query": tr(query),
-            "documents": [tr(document)],
+            "query": query,
+            "documents": [document],
             "top_n": 1,
         }
     ).encode()

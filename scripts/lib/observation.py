@@ -8,7 +8,7 @@ Usage:
 
     # Record
     oid = observe("something happened", category="insight", source="script:analyze")
-    observe_insight("root cause = pasta ASSERTION", tags={"domain": ["mcp"]})
+    observe_insight("detected slot deadlock in inference", tags={"domain": ["mcp"]})
 
     # Query
     rows = obs_search(category="insight", limit=20)

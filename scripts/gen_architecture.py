@@ -17,10 +17,10 @@ Outputs (all AI agents read infrastructure.md via @include):
 
 import os
 import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import yaml
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
 CLAUDE_YAML = Path("/opt/projects/server/CLAUDE.yaml")
 CODE_STRUCTURE_YAML = Path("/opt/projects/server/docs/architecture/code-structure.yaml")
@@ -37,6 +37,7 @@ def _q(v):
 
 
 # ── infrastructure.md ────────────────────────────────────────────────
+
 
 def _build_overview(data: dict) -> str:
     ov = data.get("overview", {})
@@ -96,13 +97,18 @@ def _build_storage(structural: dict) -> str:
             continue
         label = s.get("lv", "").replace("lv_", "")
         lines.append(f"- `{_q(mount)}` ({_q(s['size'])}) — {_q(label)}")
-    lines.append("- `/opt/workspace` (6GB) — out of scope (consolidated into `/opt/projects/server/`)")
+    lines.append(
+        "- `/opt/workspace` (6GB) — out of scope (consolidated into `/opt/projects/server/`)"
+    )
     return "\n".join(lines)
 
 
 def _build_services(structural: dict, claude: dict) -> str:
-    live_status = {s["name"]: s["status"] for s in structural.get("services", [])
-                   if isinstance(s, dict) and "name" in s}
+    live_status = {
+        s["name"]: s["status"]
+        for s in structural.get("services", [])
+        if isinstance(s, dict) and "name" in s
+    }
     old = claude.get("services", [])
     lines = [
         "## Key Services",
@@ -189,12 +195,14 @@ def _build_software(structural: dict, claude: dict) -> str:
         if m:
             port = int(m.group(1))
         model_name = c.get("model") or (query_llama_model(port) if port else "")
-        models.append({
-            "name": model_name or c.get("name", "?"),
-            "container": c.get("name", "?"),
-            "status": c.get("status", "?"),
-            "ports": ports,
-        })
+        models.append(
+            {
+                "name": model_name or c.get("name", "?"),
+                "container": c.get("name", "?"),
+                "status": c.get("status", "?"),
+                "ports": ports,
+            }
+        )
 
     # Current mode from env file
     current_mode = "unknown"
@@ -205,7 +213,7 @@ def _build_software(structural: dict, claude: dict) -> str:
     modes = {
         "current": current_mode,
         "available": {
-            "day": "Pod A(:8080 reranker) + Pod B(:8081 embed | :8082 swap: extract/enrich/verify)",
+            "day": "Inference container(:8080 reranker | :8081 embed | :8082 swap: extract/enrich/verify)",
             "night": "Nightly review pipeline (verify + debate)",
         },
     }
@@ -228,11 +236,7 @@ def _build_software(structural: dict, claude: dict) -> str:
         "pipelines": pipelines if pipelines else {"note": "No pipeline services detected"},
     }
 
-    header = (
-        "# DevForge — Software Architecture\n"
-        f"# auto-generated from live data at {now}\n"
-        "---\n"
-    )
+    header = f"# DevForge — Software Architecture\n# auto-generated from live data at {now}\n---\n"
     return header + yaml.dump(doc, default_flow_style=False, sort_keys=False)
 
 
@@ -352,6 +356,7 @@ def _config_key(dir_path: Path) -> str:
 def _scripts_hash() -> str:
     """Quick hash of scripts/ directory structure (files exist/removed, not content)."""
     import hashlib
+
     hasher = hashlib.md5()
     for d in sorted(_discover_dirs()):
         hasher.update(d.relative_to(SCRIPTS_DIR).as_posix().encode())
@@ -390,8 +395,7 @@ def _sync_code_structure() -> list[str]:
         existing_mod = existing_by_path.get(key)
 
         # Preserve existing purpose AND metadata; fallback to auto-inferred
-        purpose = (existing_mod.get("purpose") if existing_mod
-                   else _infer_group_purpose(d))
+        purpose = existing_mod.get("purpose") if existing_mod else _infer_group_purpose(d)
 
         module: dict = {
             "path": key + "/",
@@ -399,8 +403,15 @@ def _sync_code_structure() -> list[str]:
             "files": {},
         }
         if existing_mod:
-            for k in ("constraints", "allow_new_files", "no_subprocess", "import_restrictions",
-                       "entry_points_only", "delegate_logic_to_lib", "max_lines"):
+            for k in (
+                "constraints",
+                "allow_new_files",
+                "no_subprocess",
+                "import_restrictions",
+                "entry_points_only",
+                "delegate_logic_to_lib",
+                "max_lines",
+            ):
                 if k in existing_mod:
                     module[k] = existing_mod[k]
 
@@ -411,7 +422,10 @@ def _sync_code_structure() -> list[str]:
         new_modules.append(module)
 
     # Drop modules that no longer have files on disk
-    result = {"metadata": {"updated": datetime.now(KST).strftime("%Y-%m-%d")}, "modules": new_modules}
+    result = {
+        "metadata": {"updated": datetime.now(KST).strftime("%Y-%m-%d")},
+        "modules": new_modules,
+    }
 
     raw = yaml.dump(result, default_flow_style=False, sort_keys=False)
     new_content = CODE_STRUCTURE_HEADER + raw
@@ -419,8 +433,10 @@ def _sync_code_structure() -> list[str]:
     changes = []
     if new_content != content:
         CODE_STRUCTURE_YAML.write_text(new_content)
-        changes.append(f"[sync] code-structure.yaml regenerated ({len(new_modules)} groups, "
-                       f"{sum(len(m['files']) for m in new_modules)} files)")
+        changes.append(
+            f"[sync] code-structure.yaml regenerated ({len(new_modules)} groups, "
+            f"{sum(len(m['files']) for m in new_modules)} files)"
+        )
     else:
         changes.append("[sync] code-structure.yaml unchanged")
 
@@ -436,9 +452,15 @@ SYSTEM_TIMER_NAMES = {"logrotate", "mlocate-updatedb", "systemd-tmpfiles-clean",
 def _get_timer_prop(unit_name: str, prop: str, scope: str = "user") -> str:
     """Get a single property from a systemd timer unit."""
     import subprocess
+
     try:
-        cmd = (["systemctl", "--user"] if scope == "user" else []) + \
-              ["show", f"{unit_name}.timer", "-p", prop, "--value"]
+        cmd = (["systemctl", "--user"] if scope == "user" else []) + [
+            "show",
+            f"{unit_name}.timer",
+            "-p",
+            prop,
+            "--value",
+        ]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         val = r.stdout.strip()
         return val if val != "n/a" else ""
@@ -455,10 +477,16 @@ def _parse_timers() -> dict:
     # Discover user timer unit names
     user_timer_names = []
     try:
-        lines = subprocess.run(
-            ["systemctl", "--user", "list-unit-files", "--no-legend", "--type=timer"],
-            capture_output=True, text=True, timeout=10
-        ).stdout.strip().split("\n")
+        lines = (
+            subprocess.run(
+                ["systemctl", "--user", "list-unit-files", "--no-legend", "--type=timer"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            .stdout.strip()
+            .split("\n")
+        )
         for line in lines:
             if line.strip():
                 name = line.strip().split()[0].replace(".timer", "")
@@ -467,7 +495,10 @@ def _parse_timers() -> dict:
         pass
 
     for tname in user_timer_names:
-        if not (tname.startswith("devforge-") or tname in ("reference-monitor", "activity-summarizer", "grub-boot-success")):
+        if not (
+            tname.startswith("devforge-")
+            or tname in ("reference-monitor", "activity-summarizer", "grub-boot-success")
+        ):
             continue
 
         # Read OnCalendar from unit file directly (systemctl show may not expand it)
@@ -484,12 +515,14 @@ def _parse_timers() -> dict:
         next_ts = _get_timer_prop(tname, "NextElapseUSecRealtime")
         last_ts = _get_timer_prop(tname, "LastTriggerUSecRealtime")
 
-        timers["user"].append({
-            "unit": tname,
-            "on_calendar": on_cal,
-            "last": last_ts,
-            "next": next_ts,
-        })
+        timers["user"].append(
+            {
+                "unit": tname,
+                "on_calendar": on_cal,
+                "last": last_ts,
+                "next": next_ts,
+            }
+        )
 
     # System timers
     for tname in SYSTEM_TIMER_NAMES:
@@ -498,12 +531,14 @@ def _parse_timers() -> dict:
             continue
         next_ts = _get_timer_prop(tname, "NextElapseUSecRealtime", "system")
         last_ts = _get_timer_prop(tname, "LastTriggerUSecRealtime", "system")
-        timers["system"].append({
-            "unit": tname,
-            "on_calendar": on_cal,
-            "last": last_ts,
-            "next": next_ts,
-        })
+        timers["system"].append(
+            {
+                "unit": tname,
+                "on_calendar": on_cal,
+                "last": last_ts,
+                "next": next_ts,
+            }
+        )
 
     return timers
 
@@ -524,12 +559,9 @@ def _gen_timer_registry() -> str:
         "system_timers": timers["system"],
     }
 
-    header = (
-        "# DevForge — Timer Registry\n"
-        f"# auto-generated from live systemd data at {now}\n"
-        "---\n"
-    )
+    header = f"# DevForge — Timer Registry\n# auto-generated from live systemd data at {now}\n---\n"
     return header + yaml.dump(doc, default_flow_style=False, sort_keys=False)
+
 
 def _write_if_changed(path: Path, content: str, label: str) -> bool:
     if path.exists() and path.read_text() == content:
@@ -563,7 +595,9 @@ def main():
 
     _write_if_changed(INFRA_OUTPUT, _gen_infrastructure(structural, claude), "infrastructure.md")
     ARCH_INFRA_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    _write_if_changed(ARCH_INFRA_OUTPUT, _gen_infrastructure(structural, claude), "architecture/infrastructure.md")
+    _write_if_changed(
+        ARCH_INFRA_OUTPUT, _gen_infrastructure(structural, claude), "architecture/infrastructure.md"
+    )
     SOFTWARE_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     _write_if_changed(SOFTWARE_OUTPUT, _build_software(structural, claude), "software.yaml")
 

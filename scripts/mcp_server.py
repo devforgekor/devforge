@@ -20,18 +20,20 @@ Usage:
   python3.11 mcp_server.py --port 8001        # custom port
 """
 
+import asyncio
 import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Optional
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
 
 import httpx
+from fastmcp import FastMCP
 from lib.db import esc_sql, psql_json, psql_ok
-from mcp.server.fastmcp import FastMCP
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("mcp_server")
@@ -64,14 +66,10 @@ async def _get_query_vector(query: str) -> Optional[list[float]]:
 
 async def _fetch_json(sql: str) -> list[dict]:
     """Bridge sync psql_json to async via thread pool."""
-    import asyncio
-
     return await asyncio.to_thread(psql_json, sql)
 
 
 async def _execute(sql: str) -> bool:
-    import asyncio
-
     return await asyncio.to_thread(psql_ok, sql)
 
 
@@ -92,7 +90,7 @@ async def fact_search(query: str, limit: int = 10, fact_type: Optional[str] = No
     vec = await _get_query_vector(query)
     if vec is None:
         return json.dumps(
-            {"error": "Embedder unavailable (try again when Pod B has embedder loaded)"},
+            {"error": "Embedder unavailable (try again when inference has embedder loaded)"},
             ensure_ascii=False,
         )
 
@@ -243,12 +241,9 @@ async def search_similarity(
 ) -> str:
     """의미 기반 유사도 검색. BM25(키워드) + Dense(벡터) 하이브리드 RRF 융합 + Cross-Encoder 리랭커.
 
-    Stage 1: BM25 (FTS5) + Dense (pgvector ANN) → RRF fusion
+    Stage 1: BM25 (FTS5) + Dense (pgvector ANN) -> RRF fusion
     Stage 2: Cross-encoder reranker (Qwen3-Reranker-4B) on top candidates
-    Stage 3: Token-budgeted output — 결과 총 토큰이 max_tokens를 넘지 않도록 자동 조정
-
-    각 결과에는 대화 메타데이터(conv_title, conv_source, conv_model)와
-    rerank_score가 포함되어 LLM이 최종 판단에 활용할 수 있습니다.
+    Stage 3: Token-budgeted output
 
     Args:
         query: 검색할 질문 또는 키워드 (자연어)
@@ -257,8 +252,6 @@ async def search_similarity(
         rerank_candidates: 리랭커에 전달할 상위 후보 수 (기본 50, 최대 100)
         max_tokens: 출력 결과의 최대 추정 토큰 수 (기본 4096, 최대 8192)
     """
-    import asyncio
-
     from lib.search.hybrid import hybrid_search
 
     limit = max(1, min(limit, 30))
@@ -273,17 +266,15 @@ async def search_similarity(
         rerank_candidates=rerank_candidates,
     )
 
-    # --- Token budget enforcement ---
     results_list = result.get("results", [])
     meta = result.get("meta", {})
 
     if results_list:
         trimmed = []
-        est_total = len(json.dumps({"results": [], "meta": meta}))  # base overhead
-        token_buf = max_tokens - 100  # safety margin
+        est_total = len(json.dumps({"results": [], "meta": meta}))
+        token_buf = max_tokens - 100
 
         for r in results_list:
-            # Estimate tokens for this result: JSON string / 2 (conservative for mixed Korean/English)
             r_json = json.dumps(r, ensure_ascii=False)
             est_tokens = len(r_json) // 2
             if est_total + est_tokens > token_buf:
@@ -565,11 +556,19 @@ async def telegram_send(text: str) -> str:
     Args:
         text: 전송할 메시지 내용
     """
-    import asyncio
+    from lib.notify import Notifier
 
-    from telegram_send import send_text
-
-    ok = await asyncio.to_thread(send_text, text)
+    _sf = Path.home() / ".config/devforge/secrets.env"
+    if _sf.exists():
+        _s = {}
+        for _line in _sf.read_text().split("\n"):
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _, _v = _line.partition("=")
+                _s[_k.strip()] = _v.strip().strip('"').strip("'")
+        ok = await asyncio.to_thread(Notifier(_s).send_telegram, text)
+    else:
+        ok = False
     return json.dumps({"ok": ok}, ensure_ascii=False)
 
 
@@ -632,8 +631,8 @@ async def obs_search(
 
     Args:
         category: 카테고리 필터 (insight, decision, test_result, edit, error, reasoning, reference 등)
-        source: 출처 필터 (생략 시 전체 — hook:PostToolUse, mcp:obs_write, cli:obs, 등)
-        tags: JSON 태그 필터 — {"domain": ["mcp"]} 형식 (object-of-arrays JSON 문자열)
+        source: 출처 필터 (생략 시 전체 - hook:PostToolUse, mcp:obs_write, cli:obs, 등)
+        tags: JSON 태그 필터 - {"domain": ["mcp"]} 형식 (object-of-arrays JSON 문자열)
         query: observation 텍스트 부분 검색 (pg_trgm ILIKE)
         limit: 반환 개수 (기본 10, 최대 200)
     """
@@ -778,8 +777,8 @@ async def action_write(
         instruction: 실행할 명령에 대한 자연어 설명
         action_type: 실행 유형 (systemctl, podman, cli)
         action_params_json: 실행 파라미터 JSON 문자열
-            systemctl: {"service": "devforge-pod-b", "command": "restart"}
-            podman: {"container": "devforge-pod-b", "command": "restart"}
+            systemctl: {"service": "devforge-inference", "command": "restart"}
+            podman: {"container": "devforge-inference", "command": "restart"}
             cli: {"script": "cli.py", "args": ["task", "update", "..."]}
         priority: P0_HOT_FIX (즉시), P1_CONTEXT (일반), P2_LOW (여유)
     """
@@ -821,8 +820,7 @@ async def action_poll_results(pulse_id: str) -> str:
 async def review_sequential(task: str, paths: str) -> str:
     """Aider 작업을 위한 순차 코드 리뷰. 지정된 파일들을 하나씩 읽어 구조를 분석합니다.
 
-    클로드 코드가 이 리뷰 결과를 바탕으로 Aider 프롬프트를 구성합니다.
-    각 파일의 Status 헤더 → 구조(imports, functions, classes) → 작업 연관성을
+    각 파일의 Status 헤더 -> 구조(imports, functions, classes) -> 작업 연관성을
     순차적으로 평가하여 반환합니다.
 
     Args:
@@ -830,7 +828,6 @@ async def review_sequential(task: str, paths: str) -> str:
         paths: 리뷰할 파일 경로들 (쉼표 구분, /scripts/ 기준 상대 경로)
     """
     import re
-    from pathlib import Path
 
     file_paths = [p.strip() for p in paths.split(",") if p.strip()]
     if not file_paths:
@@ -847,7 +844,6 @@ async def review_sequential(task: str, paths: str) -> str:
         lines = text.split("\n")
         total = len(lines)
 
-        # header extraction
         status = "unknown"
         caller = "unknown"
         docstring = ""
@@ -867,7 +863,6 @@ async def review_sequential(task: str, paths: str) -> str:
         if doc_parts:
             docstring = " ".join(doc_parts)[:300]
 
-        # structure analysis
         imports = []
         funcs = []
         classes = []
@@ -928,45 +923,50 @@ async def review_sequential(task: str, paths: str) -> str:
     )
 
 
-# ── Entry point ────────────────────────────────────────────────
+# ── ASGI app factory ─────────────────────────────────────────
 
 
 def _create_app():
-    """Create and configure the ASGI app with health endpoint."""
+    """Create the FastMCP ASGI app with /health endpoint."""
+    from starlette.applications import Starlette
+    from starlette.routing import Mount, Route
+
+    root = Starlette(
+        routes=[
+            Mount("/mcp", app=mcp.http_app(path="/mcp")),
+            Route("/health", health_endpoint, methods=["GET"]),
+        ],
+    )
+    return root
+
+
+async def health_endpoint(request):
     from starlette.responses import JSONResponse
-    from starlette.routing import Route
 
-    app = mcp.streamable_http_app()
+    return JSONResponse({"status": "ok", "server": "devforge-mcp"})
 
-    async def health_endpoint(request):
-        return JSONResponse(
-            {
-                "status": "ok",
-                "server": "devforge-mcp",
-            }
-        )
 
-    app.router.routes.insert(0, Route("/health", health_endpoint, methods=["GET"]))
-    return app
+# ── Entry point ─────────────────────────────────────────────
 
 
 def main():
-    """Start the MCP server with uvicorn (Starlette app from FastMCP)."""
+    """Start the MCP server with uvicorn."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="DevForge MCP Server")
-    parser.add_argument(
-        "--port", "-p", type=int, default=8000, help="Port to listen on (default: 8000)"
-    )
-    parser.add_argument(
-        "--host", type=str, default="127.0.0.1", help="Host to bind (default: 127.0.0.1)"
-    )
-    args = parser.parse_args()
     import uvicorn
 
-    app = _create_app()
-    logger.info("Starting DevForge MCP server on %s:%d", args.host, args.port)
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    parser = argparse.ArgumentParser(description="DevForge MCP Server")
+    parser.add_argument("--port", "-p", type=int, default=8000, help="Port (default: 8000)")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host (default: 127.0.0.1)")
+    args = parser.parse_args()
+
+    logger.info("Starting DevForge MCP on %s:%d", args.host, args.port)
+    uvicorn.run(
+        "mcp_server:_create_app().root" if False else _create_app(),
+        host=args.host,
+        port=args.port,
+        log_level="info",
+    )
 
 
 if __name__ == "__main__":

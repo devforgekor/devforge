@@ -86,14 +86,14 @@ D001 → ACCEPT: evidence clearly shows missing session pooling in auth_routes.p
     },
 ]
 
-def restart_pod_a(model_file: str) -> bool:
-    env_file = "/opt/ai_data/scripts/current-mode-pod-a.env"
+def restart_inference(model_file: str) -> bool:
+    env_file = "/opt/ai_data/scripts/current-mode-inference.env"
     with open(env_file, "w") as f:
         f.write(f"MODE=day\nMODEL_FILE={model_file}\n")
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a"],
+    subprocess.run(["systemctl", "--user", "stop", "devforge-inference"],
                    capture_output=True, timeout=60)
     time.sleep(3)
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a"],
+    subprocess.run(["systemctl", "--user", "start", "devforge-inference"],
                    capture_output=True, timeout=60)
     for i in range(180):
         try:
@@ -111,7 +111,7 @@ def restart_pod_a(model_file: str) -> bool:
     return False
 
 def restore_default():
-    with open("/opt/ai_data/scripts/current-mode-pod-a.env", "w") as f:
+    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
         f.write("MODE=day\n")
 
 def run_task(system: str, user: str, timeout: int = 300) -> dict:
@@ -149,9 +149,9 @@ print("  Coder Q8_0 retry: timeout=300s (480s)")
 print(f"  {len(TASKS)} edge-case tasks")
 print("=" * 65)
 
-ok = restart_pod_a(MODEL)
+ok = restart_inference(MODEL)
 if not ok:
-    print("FAILED: Pod A won't start")
+    print("FAILED: inference won't start")
     sys.exit(1)
 
 for ti, task in enumerate(TASKS):

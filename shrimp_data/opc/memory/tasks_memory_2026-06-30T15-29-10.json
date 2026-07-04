@@ -1,0 +1,178 @@
+{
+  "tasks": [
+    {
+      "id": "f80ffd39-2faa-448b-a981-d14296d63287",
+      "name": "dev_pipeline.py _label_issue helper + label tracking",
+      "description": "Add _label_issue(issue_number, labels, repo) helper using _run_gh. Modify claim_issue() to add 'dev:in-progress' label. Modify create_pr() to change to 'dev:pending-review' label via --add-label/--remove-label. _label_issue catches subprocess errors (non-fatal if label missing).",
+      "notes": "Label names (dev:in-progress, dev:pending-review) use colon separator matching GitHub label convention. Labels must exist in repo or gh fails silently — non-fatal.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-06-28T17:00:13.483Z",
+      "updatedAt": "2026-06-28T17:01:00.906Z",
+      "implementationGuide": "1. Add _label_issue(issue_number, labels, repo=DEFAULT_REPO) → calls _run_gh(['issue', 'edit', str(issue_number), '--repo', repo, '--add-label', ','.join(labels)]) 2. In claim_issue(), after successful assign: _label_issue(issue_number, ['dev:in-progress']) 3. In create_pr(), after PR created: _label_issue(issue_number, ['dev:pending-review']); remove dev:in-progress via _run_gh with --remove-label 4. Wrap each in try/except for non-fatal label failures",
+      "analysisResult": "DevForge Devin-like pipeline label tracking + governance tier + systemd timer. dev_pipeline.py already has gh CLI wrapper (_run_gh) and state persistence. cli.py has dev subcommand. Systemd timer pattern exists in devforge-day-cycle.",
+      "summary": "_label_issue helper added with add/remove label support via _run_gh. claim_issue() adds dev:in-progress after assign. create_pr() swaps dev:in-progress → dev:pending-review. All wrapped in non-fatal try/except.",
+      "completedAt": "2026-06-28T17:01:00.904Z"
+    },
+    {
+      "id": "fc5bc60f-5e7e-450a-bd47-fd050aadcda0",
+      "name": "dev_pipeline.py auto-safe poll filter",
+      "description": "Modify poll_issues() to support --auto-safe filter that only returns issues with 'auto-safe' label (in addition to existing filters). Add auto_safe=False parameter.",
+      "notes": "auto-safe is a GitHub label prefix for governance tier. Only docs/tests/refactor PRs should use this label.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "f80ffd39-2faa-448b-a981-d14296d63287"
+        }
+      ],
+      "createdAt": "2026-06-28T17:00:13.483Z",
+      "updatedAt": "2026-06-28T17:01:28.848Z",
+      "implementationGuide": "1. Add auto_safe: bool = False parameter to poll_issues() 2. In the unassigned filter, if auto_safe: add check `any(lb.get('name') == 'auto-safe' for lb in i.get('labels', []))` 3. Maintain backward compatibility (default False → existing behavior unchanged)",
+      "analysisResult": "DevForge Devin-like pipeline label tracking + governance tier + systemd timer. dev_pipeline.py already has gh CLI wrapper (_run_gh) and state persistence. cli.py has dev subcommand. Systemd timer pattern exists in devforge-day-cycle.",
+      "summary": "poll_issues() gains auto_safe=False parameter. When True, filters to only issues with 'auto-safe' label. Backward compatible (default False, existing callers unchanged).",
+      "completedAt": "2026-06-28T17:01:28.845Z"
+    },
+    {
+      "id": "a3c73da7-6f82-4761-ba1e-f0bcc0fe12c9",
+      "name": "cli.py dev poll --auto-safe --claim flags",
+      "description": "Add --auto-safe flag to dev poll subparser (filters to auto-safe issues). Add --claim flag that auto-claims all polled issues. Implement auto-claim loop in cmd_dev_poll.",
+      "notes": "--claim without --auto-safe claims ALL unassigned issues. Usually used together: --auto-safe --claim.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "fc5bc60f-5e7e-450a-bd47-fd050aadcda0"
+        }
+      ],
+      "createdAt": "2026-06-28T17:00:13.483Z",
+      "updatedAt": "2026-06-28T17:02:12.145Z",
+      "implementationGuide": "1. dev_poll.add_argument('--auto-safe', action='store_true') 2. dev_poll.add_argument('--claim', action='store_true') 3. In cmd_dev_poll: if args.auto_safe: issues = poll_issues(auto_safe=True) 4. If args.claim: for i in issues: ok = claim_issue(i['number']); print result. Add counter at end.",
+      "analysisResult": "DevForge Devin-like pipeline label tracking + governance tier + systemd timer. dev_pipeline.py already has gh CLI wrapper (_run_gh) and state persistence. cli.py has dev subcommand. Systemd timer pattern exists in devforge-day-cycle.",
+      "summary": "cli.py dev poll now has --auto-safe (passes auto_safe=True to poll_issues()) and --claim (auto-claims all polled issues). Help text verified. Syntax verified. Live poll --auto-safe: 0 issues (expected — no auto-safe issues in repo).",
+      "completedAt": "2026-06-28T17:02:12.143Z"
+    },
+    {
+      "id": "fe7ba74a-3f85-4830-8d01-11ead3b8474e",
+      "name": "systemd timer/service for auto-safe polling",
+      "description": "Create devforge-dev-poll.service (ExecStart=cli.py dev poll --auto-safe --claim --once) and devforge-dev-poll.timer (OnCalendar=*:0/10). Enable timer.",
+      "notes": "Type=oneshot + OnCalendar=*:0/10 follows same pattern as devforge-day-cycle. No Restart= needed for oneshot.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "a3c73da7-6f82-4761-ba1e-f0bcc0fe12c9"
+        }
+      ],
+      "createdAt": "2026-06-28T17:00:13.483Z",
+      "updatedAt": "2026-06-28T17:03:03.804Z",
+      "implementationGuide": "1. Write ~/.config/systemd/user/devforge-dev-poll.service: [Unit] Description=DevForge Dev Poll — auto-safe issues claim\\n[Service] Type=oneshot ExecStart=/usr/bin/python3 /opt/projects/server/scripts/cli.py dev poll --auto-safe --claim --once WorkingDirectory=/opt/projects/server/scripts 2. Write ~/.config/systemd/user/devforge-dev-poll.timer: [Unit] Description=DevForge Dev Poll 10min timer\\n[Timer] OnCalendar=*:0/10 Persistent=true\\n[Install] WantedBy=default.target 3. systemctl --user daemon-reload 4. systemctl --user enable --now devforge-dev-poll.timer 5. Verify with systemctl --user list-timers",
+      "analysisResult": "DevForge Devin-like pipeline label tracking + governance tier + systemd timer. dev_pipeline.py already has gh CLI wrapper (_run_gh) and state persistence. cli.py has dev subcommand. Systemd timer pattern exists in devforge-day-cycle.",
+      "summary": "devforge-dev-poll.service + devforge-dev-poll.timer created. Service runs cli.py dev poll --auto-safe --claim --once. Timer fires every 10 minutes (*:0/10). Test run: 처리할 이슈가 없습니다. (0 issues — expected). Timer enabled, active (waiting), next fire 17:10 GMT.",
+      "completedAt": "2026-06-28T17:03:03.802Z"
+    },
+    {
+      "id": "371d753c-8713-4194-9d69-df4c45c89c77",
+      "name": "LSP blast_radius analysis",
+      "description": "Run LSP blast_radius on test_runner.py and test_phase1_14b.py to verify no existing code affected.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-06-28T17:13:07.706Z",
+      "updatedAt": "2026-06-28T17:14:36.610Z",
+      "relatedFiles": [
+        {
+          "path": "scripts/lib/test_runner.py",
+          "type": "CREATE",
+          "description": "New TestRunner file"
+        },
+        {
+          "path": "scripts/tests/test_phase1_14b.py",
+          "type": "CREATE",
+          "description": "New Phase 1 test"
+        },
+        {
+          "path": "scripts/lib/test_common.py",
+          "type": "REFERENCE",
+          "description": "Common test utils"
+        }
+      ],
+      "implementationGuide": "Use lsp.blast_radius with changed_files = both new files. Verify zero non-test callers.",
+      "verificationCriteria": "Zero non-test callers, zero affected production symbols.",
+      "analysisResult": "Devin-like test automation for Phase 1. TestRunner framework and test_phase1_14b.py already created. Execute: LSP analysis → pre-check → Test A → Test B → compare → cleanup.",
+      "summary": "LSP blast_radius confirmed: zero non-test callers, zero affected production symbols. Diagnostics showed only 1 unused param (fixed: _method) and 1 unused variable (fixed: _TEST). Both new files are self-contained.",
+      "completedAt": "2026-06-28T17:14:36.608Z"
+    },
+    {
+      "id": "dc793305-560a-44d2-b9c9-d688aaa4e4f7",
+      "name": "Pre-check Pod B health",
+      "description": "Verify Pod B model endpoint responds correctly.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "371d753c-8713-4194-9d69-df4c45c89c77"
+        }
+      ],
+      "createdAt": "2026-06-28T17:13:07.706Z",
+      "updatedAt": "2026-06-28T17:14:55.358Z",
+      "relatedFiles": [
+        {
+          "path": "scripts/lib/test_runner.py",
+          "type": "TO_MODIFY",
+          "description": "TestRunner lib"
+        }
+      ],
+      "implementationGuide": "Run health_check() via python. Confirm Qwen3-14B-Q4_K_M loaded at :8081.",
+      "verificationCriteria": "Health OK with latency under 30s.",
+      "analysisResult": "Devin-like test automation for Phase 1. TestRunner framework and test_phase1_14b.py already created. Execute: LSP analysis → pre-check → Test A → Test B → compare → cleanup.",
+      "summary": "Pod B health check passed. Qwen3-14B-Q4_K_M loaded at internal :8081. Latency 3.3s. Model endpoint responsive and ready for Phase 1 tests.",
+      "completedAt": "2026-06-28T17:14:55.355Z"
+    },
+    {
+      "id": "aca3f90b-7e3f-4859-8591-b988bfa42ac4",
+      "name": "Run Phase 1 full test",
+      "description": "Execute test_phase1_14b.py — both Test A (no GS) and Test B (with GS) with self-healing retry.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "dc793305-560a-44d2-b9c9-d688aaa4e4f7"
+        }
+      ],
+      "createdAt": "2026-06-28T17:13:07.706Z",
+      "updatedAt": "2026-06-28T19:06:54.406Z",
+      "relatedFiles": [
+        {
+          "path": "scripts/tests/test_phase1_14b.py",
+          "type": "TO_MODIFY",
+          "description": "Phase 1 test script"
+        }
+      ],
+      "implementationGuide": "Run the test script. Retry triggers on FAIL/ERROR automatically (max 3, backoff 15s^2).",
+      "verificationCriteria": "Both tests complete. Verdict generated.",
+      "analysisResult": "Devin-like test automation for Phase 1. TestRunner framework and test_phase1_14b.py already created. Execute: LSP analysis → pre-check → Test A → Test B → compare → cleanup.",
+      "summary": "Phase 1 test completed. Test A (no GS): GOOD | Test B (with GS): MIXED. Self-healing retry verified (1 error recovered). Key finding: 14B Q4 produces quality extractions without GS. Verdict: INCONCLUSIVE - GS adds 3x token cost without clear quality improvement in this test.",
+      "completedAt": "2026-06-28T19:06:54.404Z"
+    },
+    {
+      "id": "fa0ad082-8208-4775-b03e-43b21cce4a8d",
+      "name": "Compare & update handover",
+      "description": "Compare results and update handover.yaml with findings.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "aca3f90b-7e3f-4859-8591-b988bfa42ac4"
+        }
+      ],
+      "createdAt": "2026-06-28T17:13:07.706Z",
+      "updatedAt": "2026-06-28T19:07:51.838Z",
+      "relatedFiles": [
+        {
+          "path": "scripts/lib/test_runner.py",
+          "type": "REFERENCE",
+          "description": "TestRunner lib"
+        }
+      ],
+      "implementationGuide": "Use print_comparison() output. Write structured observation. Update handover.",
+      "verificationCriteria": "Handover updated with Phase 1 findings.",
+      "analysisResult": "Devin-like test automation for Phase 1. TestRunner framework and test_phase1_14b.py already created. Execute: LSP analysis → pre-check → Test A → Test B → compare → cleanup.",
+      "summary": "Handover updated with Phase 1 test results. nd10-01 updated with test outcomes. known_issues updated (old /tmp/ scripts → new scripts/tests/ paths, added 14B Q4 GS finding). completed_log entry added. Observation written to DB.",
+      "completedAt": "2026-06-28T19:07:51.836Z"
+    }
+  ]
+}

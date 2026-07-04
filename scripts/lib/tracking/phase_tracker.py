@@ -23,8 +23,14 @@ from typing import Callable, Optional
 
 import yaml
 
-from lib.db import db_table_exists, db_row_exists
-from lib.infra.health_checks import svc_active, svc_enabled, timer_active, container_running, file_exists
+from lib.db import db_row_exists, db_table_exists
+from lib.infra.health_checks import (
+    container_running,
+    file_exists,
+    svc_active,
+    svc_enabled,
+    timer_active,
+)
 
 REF_ROOT = Path("/opt/projects/server")
 NOW = lambda: datetime.now(timezone.utc).isoformat()
@@ -51,32 +57,33 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
         ),
         "worklog_entries": lambda: db_table_exists("worklog_entries"),
         "tasks_db": lambda: db_table_exists("tasks"),
-        "auto_commit_guard": lambda: file_exists("/opt/projects/server/scripts/auto_commit_guard.py"),
-        "session_context": lambda: file_exists("/opt/projects/server/scripts/hooks/session_context.py"),
+        "auto_commit_guard": lambda: file_exists(
+            "/opt/projects/server/scripts/auto_commit_guard.py"
+        ),
+        "session_context": lambda: file_exists(
+            "/opt/projects/server/scripts/hooks/session_context.py"
+        ),
         "collect_turns": lambda: svc_active("devforge-turn-watcher"),
         "link_turns": lambda: file_exists("/opt/projects/server/scripts/link_turns.py"),
         "activity_log": lambda: db_table_exists("activity_log"),
     },
-
     # Phase 1.5: LLM Inference Infrastructure
     "1.5": {
-        "2-Container": lambda: container_running("devforge-pod-b"),
-        "Podman A": lambda: file_exists(
-            "/home/opc/.config/containers/systemd/container-devforge-pod-a.container"
+        "2-Container": lambda: container_running("devforge-inference"),
+        "Inference": lambda: container_running("devforge-inference"),
+        "Mode switching": lambda: file_exists("/opt/ai_data/scripts/current-mode-inference.env"),
+        "code_mod_pipeline": lambda: file_exists(
+            "/opt/projects/server/scripts/pipelines/code_mod.py"
         ),
-        "Podman B": lambda: file_exists(
-            "/home/opc/.config/containers/systemd/container-devforge-pod-b.container"
+        "prompt ablation": lambda: file_exists(
+            "/opt/projects/server/scripts/pipelines/code_mod.py"
         ),
-        "Mode switching": lambda: file_exists("/opt/ai_data/scripts/current-mode-pod-b.env"),
-        "code_mod_pipeline": lambda: file_exists("/opt/projects/server/scripts/pipelines/code_mod.py"),
-        "prompt ablation": lambda: file_exists("/opt/projects/server/scripts/pipelines/code_mod.py"),
         "review_facts": lambda: db_table_exists("review_facts"),
         "Reference tracking": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
         "lib/refs": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
         # Matches "DB references table" in phases.md
         "references": lambda: db_table_exists("references"),
     },
-
     # Phase 2.1: Recovery / Stabilization
     "2.1": {
         "review-worker.timer": lambda: timer_active("review-worker.timer"),
@@ -89,32 +96,32 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
         ),
         "devforge-llm": lambda: (
             not svc_active("container-devforge-llm")
-            and not file_exists("/home/opc/.config/containers/systemd/container-devforge-llm.container")
+            and not file_exists(
+                "/home/opc/.config/containers/systemd/container-devforge-llm.container"
+            )
         ),
         "journald": lambda: file_exists("/etc/systemd/journald.conf.d/99-retention.conf"),
     },
-
     # Phase 2.2: Semantic Search (pgvector)
     "2.2": {
-        "pgvector": lambda: (
-            db_row_exists("SELECT 1 FROM pg_extension WHERE extname='vector'")
-        ),
+        "pgvector": lambda: db_row_exists("SELECT 1 FROM pg_extension WHERE extname='vector'"),
         "embed_turns": lambda: (
-            db_row_exists("SELECT 1 FROM information_schema.columns WHERE table_name='turns' AND column_name='embedding'")
+            db_row_exists(
+                "SELECT 1 FROM information_schema.columns WHERE table_name='turns' AND column_name='embedding'"
+            )
             or db_row_exists("SELECT 1 FROM activity_log WHERE type='embed'")
         ),
         "semantic": lambda: (
             db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%semantic%'")
             or file_exists("/opt/projects/server/scripts/embed_turns.py")
         ),
-        "Enrich mem_search": lambda: (
-            db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%mcp%vector%' OR title ILIKE '%enrich%vector%'")
+        "Enrich mem_search": lambda: db_row_exists(
+            "SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%mcp%vector%' OR title ILIKE '%enrich%vector%'"
         ),
-        "vector column": lambda: (
-            db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%vector%'")
+        "vector column": lambda: db_row_exists(
+            "SELECT 1 FROM activity_log WHERE title ILIKE '%mem_search%' OR title ILIKE '%vector%'"
         ),
     },
-
     # Phase 2.3: MemPalace Classification
     "2.3": {
         "wing/room": lambda: db_row_exists(
@@ -130,7 +137,6 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
             "SELECT 1 FROM activity_log WHERE title ILIKE '%mempalace%' AND type='classify'"
         ),
     },
-
     # Phase 2.4: Search-Augmented Integration
     "2.4": {
         "DuckDuckGo": lambda: db_row_exists(
@@ -146,12 +152,13 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
             "SELECT 1 FROM activity_log WHERE title ILIKE '%augmented%'"
         ),
     },
-
     # Phase 2.5: Reference Tracking Upgrade
     "2.5": {
         "rss-monitor": lambda: (
             timer_active("reference-monitor.timer")
-            or db_row_exists("SELECT 1 FROM activity_log WHERE title ILIKE '%rss%' AND source='reference'")
+            or db_row_exists(
+                "SELECT 1 FROM activity_log WHERE title ILIKE '%rss%' AND source='reference'"
+            )
         ),
         "Snyk": lambda: db_row_exists(
             "SELECT 1 FROM activity_log WHERE title ILIKE '%snyk%' OR title ILIKE '%vulnerability%scan%'"
@@ -161,7 +168,6 @@ RULES: dict[str, dict[str, Callable[[], bool]]] = {
             "SELECT 1 FROM activity_log WHERE title ILIKE '%refresh-log%'"
         ),
     },
-
     # Phase 2.6: Web UI
     "2.6": {
         "dashboard": lambda: db_row_exists(
@@ -192,7 +198,9 @@ def _extract_phase_key(header_line: str) -> Optional[str]:
     return None
 
 
-def evaluate_phase_detection_rule(item_text: str, phase_key: Optional[str] = None) -> Optional[bool]:
+def evaluate_phase_detection_rule(
+    item_text: str, phase_key: Optional[str] = None
+) -> Optional[bool]:
     """Find a detection rule matching this item text and evaluate it.
 
     When phase_key is provided, only rules registered for that phase are checked.
@@ -250,7 +258,10 @@ def scan_phases_md(path: Optional[Path] = None) -> dict:
             current_phase = m_top.group(1).strip()
             current_phase_key = _extract_phase_key(line)
             phases[current_phase] = {
-                "status": "planned", "items": [], "checked": 0, "total": 0,
+                "status": "planned",
+                "items": [],
+                "checked": 0,
+                "total": 0,
             }
             continue
 
@@ -261,14 +272,17 @@ def scan_phases_md(path: Optional[Path] = None) -> dict:
             current_phase_key = _extract_phase_key(line)
             current_phase = f"Phase {sub_header}"
             phases[current_phase] = {
-                "status": "planned", "items": [], "checked": 0, "total": 0,
+                "status": "planned",
+                "items": [],
+                "checked": 0,
+                "total": 0,
             }
             continue
 
         # Detect checkbox items: - [x] ... or - [ ] ...
         m = re.match(r"^(-\s+\[)(x|\s)(\]\s+)(.*)", line)
         if m and current_phase:
-            is_checked = (m.group(2) == "x")
+            is_checked = m.group(2) == "x"
             item_text = m.group(4).strip()
             detected = evaluate_phase_detection_rule(item_text, current_phase_key)
             phases[current_phase]["total"] += 1
@@ -329,7 +343,7 @@ def update_phases_md(path: Optional[Path] = None) -> bool:
     for line in lines:
         m = re.match(r"^(-\s+\[)(x|\s)(\]\s+)(.*)", line)
         if m:
-            is_checked = (m.group(2) == "x")
+            is_checked = m.group(2) == "x"
             item_text = m.group(4).strip()
             if item_text in should_check and not is_checked:
                 new_lines.append(f"- [x] {item_text}")
@@ -399,7 +413,9 @@ def update_blueprint_yaml(path: Optional[Path] = None) -> bool:
             else:
                 break
 
-        body = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False, width=120)
+        body = yaml.dump(
+            data, default_flow_style=False, allow_unicode=True, sort_keys=False, width=120
+        )
         path.write_text("\n".join(header) + "\n" + body)
 
     return changed
@@ -436,4 +452,3 @@ def auto_update_phase_documents() -> dict:
 # Backward-compat aliases
 collect = collect_phase_summary
 auto_update = auto_update_phase_documents
-

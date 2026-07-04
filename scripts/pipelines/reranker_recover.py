@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: day_cycle.sh:380 — re-score RERANKER_ERROR facts after Pod A recovery
+# Path: day_cycle.sh:380 — re-score RERANKER_ERROR facts after inference recovery
 """Reranker Recovery — quarantine + retry for RERANKER_ERROR facts.
 
 Selects facts where faithful_method='reranker_err' (previous reranker failure),
 re-runs reranker scoring, and updates faithful_score/faitful_method/nli_verdict.
 
 Designed for day_cycle.sh between extract and enrich:
-  extract → reranker_recover (if Pod A healthy) → enrich → verify
+  extract → reranker_recover (if inference healthy) → enrich → verify
 """
 
 import os
@@ -25,7 +25,7 @@ from lib.llm_client import reranker_score, reranker_nli_verdict
 
 
 def _reranker_healthy() -> bool:
-    """Quick health check via /health. Returns True if Pod A responds."""
+    """Quick health check via /health. Returns True if inference responds."""
     import urllib.request
     try:
         resp = urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=5)
@@ -40,7 +40,7 @@ def _reranker_healthy() -> bool:
 def recover_reranker_errors(limit: int = 50) -> int:
     """Re-score facts with RERANKER_ERROR. Returns count of updated facts."""
     if not _reranker_healthy():
-        print("[reranker_recover] Pod A reranker NOT healthy — skipping", flush=True)
+        print("[reranker_recover] inference reranker NOT healthy — skipping", flush=True)
         return -1
 
     rows = psql_json(

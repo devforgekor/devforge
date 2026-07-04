@@ -1,0 +1,202 @@
+{
+  "tasks": [
+    {
+      "id": "4faf21ba-88a1-45d8-b913-5f3c5bf62314",
+      "name": "svc.pod Quadlet 생성",
+      "description": "/home/opc/.config/containers/systemd/svc.pod 생성. Network=devforge-net, PublishPort=127.0.0.1:8000:8000 (MCP용). ExitPolicy=continue (postgres만 exit해도 pod 유지). postgres(5432)는 pod 내부 통신만 필요하므로 PublishPort 불필요.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-06-30T15:29:10.312Z",
+      "updatedAt": "2026-06-30T15:30:26.436Z",
+      "relatedFiles": [
+        {
+          "path": "/home/opc/.config/containers/systemd/svc.pod",
+          "type": "CREATE",
+          "description": "svc.pod Quadlet (postgres + MCP shared network)"
+        },
+        {
+          "path": "/home/opc/.config/containers/systemd/pod-a.pod",
+          "type": "REFERENCE",
+          "description": "기존 pod-a 형식 참조"
+        },
+        {
+          "path": "/opt/projects/server/docs/plans/track-b-migration.md",
+          "type": "REFERENCE",
+          "description": "Track B 계획 문서"
+        }
+      ],
+      "implementationGuide": "1. /home/opc/.config/containers/systemd/svc.pod 생성\n2. [Pod] PodName=svc, Network=devforge-net, PublishPort=127.0.0.1:8000:8000\n3. ExitPolicy=continue (MCP가 단독으로 떠도 pod 유지)\n4. [Install] WantedBy=default.target",
+      "verificationCriteria": "svc.pod 파일이 정상적으로 생성되고 systemctl --user daemon-reload 후 svc-pod.service가 list-units에 표시됨",
+      "analysisResult": "PR 1: svc.pod 생성 + postgres/MCP 이관 + Caddy rootless 전환. 기존 pod-a.pod/pod-data-pod.pod 유지 (병행 운영). Context7 검증 완료.",
+      "summary": "svc.pod Quadlet 생성 완료. Network=devforge-net, PublishPort=127.0.0.1:8000:8000, ExitPolicy=continue 설정. systemctl --user daemon-reload 후 svc-pod.service loaded 확인.",
+      "completedAt": "2026-06-30T15:30:26.433Z"
+    },
+    {
+      "id": "967c4b63-67b4-4793-9ca1-70993a5928ab",
+      "name": "postgres container Pod=svc.pod 변경",
+      "description": "container-postgres.container의 Pod=pod-data-pod.pod → Pod=svc.pod로 변경. postgres는 5432만 listen하고 pod 내부에서만 접근 가능하면 충분 (PublishPort 불필요). podman exec postgres psql로 쿼리하는 방식과 호환.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "4faf21ba-88a1-45d8-b913-5f3c5bf62314"
+        }
+      ],
+      "createdAt": "2026-06-30T15:29:10.312Z",
+      "updatedAt": "2026-06-30T15:33:32.448Z",
+      "relatedFiles": [
+        {
+          "path": "/home/opc/.config/containers/systemd/container-postgres.container",
+          "type": "TO_MODIFY",
+          "description": "Pod=svc.pod로 변경"
+        },
+        {
+          "path": "/home/opc/.config/containers/systemd/pod-data-pod.pod",
+          "type": "REFERENCE",
+          "description": "data-pod 유지 (빈 pod)"
+        },
+        {
+          "path": "/opt/projects/server/docs/plans/track-b-migration.md",
+          "type": "REFERENCE",
+          "description": "Track B 계획 문서"
+        }
+      ],
+      "implementationGuide": "1. /home/opc/.config/containers/systemd/container-postgres.container 읽기\n2. Pod=pod-data-pod.pod → Pod=svc.pod\n3. 기존 HealthCmd(pg_isready -U postgres), CgroupsMode=no-conmon, StartWithPod=true 유지\n4. Wants=data-pod.service → Wants=svc.pod (선택, AutoWants=pod가 처리)\n5. After=data-pod.service → After=svc.pod\n6. 변경 후 svc.pod와 함께 daemon-reload 후 start",
+      "verificationCriteria": "systemctl --user daemon-reload → start svc-pod.service 후 podman exec postgres psql -U devforge -d devforge_app -c 'SELECT 1' 정상",
+      "analysisResult": "PR 1: svc.pod 생성 + postgres/MCP 이관 + Caddy rootless 전환. 기존 pod-a.pod/pod-data-pod.pod 유지 (병행 운영). Context7 검증 완료.",
+      "summary": "postgres container Pod=pod-data-pod.pod → Pod=svc.pod 변경 완료. systemctl --user daemon-reload 후 svc-pod.service 시작, podman exec postgres psql -U devforge -d devforge_app -c 'SELECT 1' → 1 반환 정상. postgres (healthy).",
+      "completedAt": "2026-06-30T15:33:32.443Z"
+    },
+    {
+      "id": "e7d55f2d-fd13-40f0-ab45-3ff684eae8cc",
+      "name": "devforge-mcp container Pod=svc.pod 변경",
+      "description": "container-devforge-mcp.container의 Pod=pod-a.pod → Pod=svc.pod로 변경. MCP는 8000 포트 사용, svc.pod의 PublishPort=8000으로 host 매핑 유지. HealthCmd의 127.0.0.1:8000은 pod 내부 loopback이므로 svc.pod 내에서도 유효.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "4faf21ba-88a1-45d8-b913-5f3c5bf62314"
+        }
+      ],
+      "createdAt": "2026-06-30T15:29:10.313Z",
+      "updatedAt": "2026-06-30T15:33:48.758Z",
+      "relatedFiles": [
+        {
+          "path": "/home/opc/.config/containers/systemd/container-devforge-mcp.container",
+          "type": "TO_MODIFY",
+          "description": "Pod=svc.pod로 변경"
+        },
+        {
+          "path": "/home/opc/.config/containers/systemd/pod-a.pod",
+          "type": "REFERENCE",
+          "description": "pod-a.pod에서 MCP 분리"
+        }
+      ],
+      "implementationGuide": "1. /home/opc/.config/containers/systemd/container-devforge-mcp.container 읽기\n2. Pod=pod-a.pod → Pod=svc.pod\n3. 기존 HealthCmd(127.0.0.1:8000/health), Entrypoint, Volume, Exec 유지\n4. Wants=pod-a.service → Wants=svc.pod (선택)\n5. 변경 후 daemon-reload",
+      "verificationCriteria": "curl -sf http://127.0.0.1:8000/health → 200 OK. MCP가 svc.pod에서 정상 기동.",
+      "analysisResult": "PR 1: svc.pod 생성 + postgres/MCP 이관 + Caddy rootless 전환. 기존 pod-a.pod/pod-data-pod.pod 유지 (병행 운영). Context7 검증 완료.",
+      "summary": "devforge-mcp container Pod=svc.pod 변경 완료. curl -sf http://127.0.0.1:8000/health → 200 OK. devforge-mcp (healthy) in svc.pod 확인. postgres (healthy)과 함께 svc.pod 정상 운영 중.",
+      "completedAt": "2026-06-30T15:33:48.755Z"
+    },
+    {
+      "id": "b05468ea-58aa-48d4-a85d-81c7fd992c19",
+      "name": "Caddy rootless Quadlet 생성",
+      "description": "/home/opc/.config/containers/systemd/container-devforge-caddy.container 생성. Network=host (Caddyfile이 127.0.0.1:8084 등 host 서비스로 프록시). ip_unprivileged_port_start=80 적용 완료로 rootless 80/443 바인딩 가능. Notify=true (Caddy native sdnotify). 기존 /etc/caddy/Caddyfile (root 소유)은 opc 읽기 가능. /var/lib/caddy (opc 소유) 그대로 마운트.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "4faf21ba-88a1-45d8-b913-5f3c5bf62314"
+        },
+        {
+          "taskId": "e7d55f2d-fd13-40f0-ab45-3ff684eae8cc"
+        }
+      ],
+      "createdAt": "2026-06-30T15:29:10.313Z",
+      "updatedAt": "2026-06-30T15:34:15.596Z",
+      "relatedFiles": [
+        {
+          "path": "/home/opc/.config/containers/systemd/container-devforge-caddy.container",
+          "type": "CREATE",
+          "description": "Caddy rootless Quadlet"
+        },
+        {
+          "path": "/etc/systemd/system/caddy.service",
+          "type": "REFERENCE",
+          "description": "기존 rootful Caddy service (전환 후 중지)"
+        },
+        {
+          "path": "/etc/caddy/Caddyfile",
+          "type": "REFERENCE",
+          "description": "Caddyfile (변경 없음)"
+        },
+        {
+          "path": "/var/lib/caddy",
+          "type": "REFERENCE",
+          "description": "Caddy 데이터 (ACME 인증서 등)"
+        }
+      ],
+      "implementationGuide": "1. container-devforge-caddy.container 생성\n2. [Container] ContainerName=caddy, Image=docker.io/library/caddy:2.11.2, Pull=newer\n3. Network=host (필수 — Caddyfile이 127.0.0.1:8084,8001,8085,19999로 프록시)\n4. Notify=true (Caddy native sdnotify → Type=notify 유지)\n5. Volume=/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:Z,ro\n6. Volume=/var/lib/caddy:/data:Z\n7. HealthCmd=wget -q -O- http://127.0.0.1:2019/config/\n8. HealthInterval=30s, HealthRetries=3\n9. [Service] Restart=on-failure, TimeoutStopSec=30\n10. [Install] WantedBy=default.target\n11. /etc/caddy/Caddyfile 권한 확인 (644면 opc 읽기 가능)",
+      "verificationCriteria": "systemctl --user daemon-reload 후 container-devforge-caddy.service가 list-units에 표시됨",
+      "analysisResult": "PR 1: svc.pod 생성 + postgres/MCP 이관 + Caddy rootless 전환. 기존 pod-a.pod/pod-data-pod.pod 유지 (병행 운영). Context7 검증 완료.",
+      "summary": "Caddy rootless Quadlet 생성 완료. Network=host, Notify=true (native sdnotify), docker.io/library/caddy:2.11.2, /etc/caddy/Caddyfile:ro, /var/lib/caddy:/data:Z, health check=wget localhost:2019/config. systemctl --user list-unit-files 에 container-devforge-caddy.service (generated) 확인.",
+      "completedAt": "2026-06-30T15:34:15.594Z"
+    },
+    {
+      "id": "0935501a-fce4-44e1-8b26-53dd859e2c75",
+      "name": "Caddy rootful→rootless 전환 실행",
+      "description": "기존 rootful Caddy 중지 후 새 rootless Quadlet 시작. 순서: (1) svc.pod start (postgres+MCP) (2) MCP health 확인 (3) rootful Caddy stop (4) rootless Caddy start (5) HTTPS 접속 확인. MCP가 먼저 준비되어야 Caddy가 proxy error 없이 시작됨.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "4faf21ba-88a1-45d8-b913-5f3c5bf62314"
+        },
+        {
+          "taskId": "967c4b63-67b4-4793-9ca1-70993a5928ab"
+        },
+        {
+          "taskId": "e7d55f2d-fd13-40f0-ab45-3ff684eae8cc"
+        },
+        {
+          "taskId": "b05468ea-58aa-48d4-a85d-81c7fd992c19"
+        }
+      ],
+      "createdAt": "2026-06-30T15:29:10.313Z",
+      "updatedAt": "2026-06-30T15:38:24.536Z",
+      "relatedFiles": [
+        {
+          "path": "/etc/systemd/system/caddy.service",
+          "type": "REFERENCE",
+          "description": "기존 rootful Caddy service"
+        }
+      ],
+      "implementationGuide": "1. systemctl --user daemon-reload\n2. systemctl --user start svc-pod.service → postgres + MCP 기동\n3. curl -sf http://127.0.0.1:8000/health 확인 (MCP 준비)\n4. sudo systemctl stop caddy.service (rootful stop)\n5. sudo systemctl disable caddy.service\n6. systemctl --user start container-devforge-caddy.service\n7. curl -sf https://devforge.152-69-229-246.nip.io/ → 200 OK 확인\n8. curl -sf http://127.0.0.1:2019/config/ → Caddy API 확인",
+      "verificationCriteria": "HTTPS 접속 정상. Caddy API 정상. MCP reverse proxy 정상. Slack/Telegram/webhook 모두 정상.",
+      "analysisResult": "PR 1: svc.pod 생성 + postgres/MCP 이관 + Caddy rootless 전환. 기존 pod-a.pod/pod-data-pod.pod 유지 (병행 운영). Context7 검증 완료.",
+      "summary": "Caddy rootful → rootless 전환 완료. container-devforge-caddy.service active (running), sdnotify=container 정상, Caddyfile 홈 디렉토리 마운트, nip.io 200, duckdns 200. 기존 rootful caddy.service stop/disable 완료.",
+      "completedAt": "2026-06-30T15:38:24.534Z"
+    },
+    {
+      "id": "77761dbe-7649-4adb-93c6-493f05bd3b57",
+      "name": "전환 검증",
+      "description": "모든 서비스 정상 동작 확인. MCP health, postgres 쿼리, Caddy HTTPS, 리버스 프록시(webhook/slack/telegram/netdata) 전수 확인. 기존 pod-a.pod에서 MCP가 빠졌으므로 pod-a infra는 남지만 8000 publish만 사라짐.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "0935501a-fce4-44e1-8b26-53dd859e2c75"
+        }
+      ],
+      "createdAt": "2026-06-30T15:29:10.313Z",
+      "updatedAt": "2026-06-30T15:39:08.536Z",
+      "relatedFiles": [
+        {
+          "path": "/opt/projects/server/docs/plans/track-b-migration.md",
+          "type": "REFERENCE",
+          "description": "Track B 계획 문서"
+        }
+      ],
+      "implementationGuide": "1. podman ps → postgres, devforge-mcp, caddy, devforge-pod-a, devforge-pod-b 모두 running\n2. curl -sf http://127.0.0.1:8000/health → MCP OK\n3. podman exec postgres psql -U devforge -d devforge_app -c 'SELECT 1' → PG OK\n4. curl -sf https://devforge.152-69-229-246.nip.io/ → HTTPS OK\n5. curl -sf https://devforgekor.duckdns.org/ → DuckDNS OK\n6. cli.py status --json → containers 모두 정상, model 접근 가능\n7. journalctl --user -u svc-pod.service --no-pager -n 20 → 오류 없음\n8. journalctl --user -u container-devforge-caddy.service --no-pager -n 20 → 오류 없음",
+      "verificationCriteria": "모든 health check 통과. cli.py status 정상. ACME 인증서 유지. 데이터 무손실.",
+      "analysisResult": "PR 1: svc.pod 생성 + postgres/MCP 이관 + Caddy rootless 전환. 기존 pod-a.pod/pod-data-pod.pod 유지 (병행 운영). Context7 검증 완료.",
+      "summary": "PR 1 전환 검증 완료. 모든 컨테이너 정상: postgres (healthy) + devforge-mcp (healthy) in svc.pod, caddy (healthy, rootless). HTTPS nip.io 200. Postgres 쿼리 정상. Caddy API config 정상 (리버스 프록시 Slack/Telegram/Azure/Netdata/MCP 모두 유지). cli.py status container 6개 정상. Caddyfile 변경 없음.",
+      "completedAt": "2026-06-30T15:39:08.534Z"
+    }
+  ]
+}

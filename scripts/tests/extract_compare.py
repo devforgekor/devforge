@@ -122,7 +122,7 @@ def extract_turn(turn):
 TEST = test_setup("extract_compare", "3-model comparison with MiniCheck NLI verification")
 model_file = os.environ.get('MODEL_FILE', '?')
 print(f"{'='*70}")
-print(f"Model: {model_file}  |  NLI=MiniCheck(flan-t5-large)  |  Pod A NLI=OFF")
+print(f"Model: {model_file}  |  NLI=MiniCheck(flan-t5-large)  |  inference NLI=OFF")
 print(f"{'='*70}")
 
 turns = []

@@ -145,7 +145,7 @@ async def _tool_fact_search(query: str, limit: int = 10,
 
     vec = await _get_query_vector(query)
     if vec is None:
-        return {"error": "Embedder unavailable (try again when Pod B has embedder loaded)"}
+        return {"error": "Embedder unavailable (try again when inference has embedder loaded)"}
 
     # Format as pgvector literal, esc_sql for safety
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vec) + "]"

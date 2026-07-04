@@ -1,0 +1,3 @@
+FROM localhost/devforge-base:latest
+ENV PYTHONPATH=/scripts
+RUN pip install --no-cache-dir 'pysbd>=0.3' 'hanja>=0.9' && rm -rf /root/.cache/pip

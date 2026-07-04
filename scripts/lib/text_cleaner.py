@@ -14,25 +14,46 @@ Token estimation via tiktoken (o200k_base).
 
 from __future__ import annotations
 
-import json
 import re
 import unicodedata
 from typing import Dict, List, Optional, Tuple
 
 import tiktoken
-from kiwipiepy import Kiwi
-from langdetect import detect as langdetect_detect, LangDetectException
+
+# Heavy NLP deps — lazy import to avoid pulling into container images unnecessarily
+_kiwi = None
+_langdetect = None
+
+
+def _get_kiwi():
+    global _kiwi
+    if _kiwi is None:
+        from kiwipiepy import Kiwi as _K
+
+        _kiwi = _K()
+    return _kiwi
+
+
+def _get_langdetect():
+    global _langdetect
+    if _langdetect is None:
+        from langdetect import LangDetectException as _LDE
+        from langdetect import detect as _detect
+
+        _langdetect = (_detect, _LDE)
+    return _langdetect
+
 
 # Emoji removal — only well-known emoji blocks, no Hangul overlap
 RE_EMOJI = re.compile(
-    "[\U0001F600-\U0001F64F"  # emoticons
-    "\U0001F300-\U0001F5FF"  # symbols & pictographs
-    "\U0001F680-\U0001F6FF"  # transport
-    "\U0001F1E0-\U0001F1FF"  # flags
-    "\U0001F900-\U0001F9FF"  # supplemental symbols
-    "\U0001FA00-\U0001FA6F"  # chess symbols
-    "\U0001FA70-\U0001FAFF"  # symbols extended-A
-    "\U00002702-\U000027B0"  # dingbats
+    "[\U0001f600-\U0001f64f"  # emoticons
+    "\U0001f300-\U0001f5ff"  # symbols & pictographs
+    "\U0001f680-\U0001f6ff"  # transport
+    "\U0001f1e0-\U0001f1ff"  # flags
+    "\U0001f900-\U0001f9ff"  # supplemental symbols
+    "\U0001fa00-\U0001fa6f"  # chess symbols
+    "\U0001fa70-\U0001faff"  # symbols extended-A
+    "\U00002702-\U000027b0"  # dingbats
     "]+"
 )
 RE_KOREAN_EMOTICON = re.compile(r"[ㅋㅠㅜㅎㅡ]{3,}")
@@ -51,13 +72,24 @@ HANJA_RANGE = re.compile(r"[一-鿟]")
 RE_ABBREV = re.compile(r"(?:etc|vs|no|vol|fig|ref|Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St)\.", re.IGNORECASE)
 
 # Tags that carry lexical meaning for BM25 indexing
-LEXICAL_TAGS = frozenset({
-    "NNG", "NNP", "NNB", "NR", "NP",  # nouns
-    "VV", "VA", "VX",  # verbs/adjectives
-    "MAG", "MAJ",  # adverbs
-    "SL", "SH", "SN",  # foreign/chinese/numbers
-    "XR",  # roots
-})
+LEXICAL_TAGS = frozenset(
+    {
+        "NNG",
+        "NNP",
+        "NNB",
+        "NR",
+        "NP",  # nouns
+        "VV",
+        "VA",
+        "VX",  # verbs/adjectives
+        "MAG",
+        "MAJ",  # adverbs
+        "SL",
+        "SH",
+        "SN",  # foreign/chinese/numbers
+        "XR",  # roots
+    }
+)
 
 # Tags used for topic/keyword extraction (topic-bearing nouns)
 TOPIC_TAGS = frozenset({"NNP"})
@@ -81,7 +113,6 @@ class TextCleaner:
     """
 
     def __init__(self) -> None:
-        self._kiwi = Kiwi()
         self._tiktoken_enc = tiktoken.get_encoding("o200k_base")
 
     # ------------------------------------------------------------------
@@ -97,9 +128,10 @@ class TextCleaner:
         """
         if not text.strip():
             return "unknown", 0.0
+        _detect, _LDE = _get_langdetect()
         try:
-            lang = langdetect_detect(text)
-        except LangDetectException:
+            lang = _detect(text)
+        except _LDE:
             return "unknown", 0.0
         if lang not in ("ko", "en"):
             return "unknown", 0.0
@@ -121,22 +153,23 @@ class TextCleaner:
 
         try:
             if lang == "ko":
-                sents = self._kiwi.split_into_sents(text)
+                sents = _get_kiwi().split_into_sents(text)
                 return [s.text for s in sents if s.text.strip()]
             elif lang == "en":
                 import pysbd
+
                 segmenter = pysbd.Segmenter(language="en", clean=False)
                 return segmenter.segment(text)
             else:
                 # Simple regex fallback for unknown languages
                 cleaned = RE_ABBREV.sub(lambda m: m.group().replace(".", "\x00DOT\x00"), text)
-                parts = re.split(r'(?<=[.!?])\s+', cleaned)
+                parts = re.split(r"(?<=[.!?])\s+", cleaned)
                 return [p.replace("\x00DOT\x00", ".") for p in parts if p.strip()]
         except Exception:
             pass
 
         # Ultimate fallback
-        parts = re.split(r'(?<=[.!?])\s+', text)
+        parts = re.split(r"(?<=[.!?])\s+", text)
         return [p for p in parts if p.strip()]
 
     # ------------------------------------------------------------------
@@ -173,10 +206,10 @@ class TextCleaner:
         t = RE_INLINE_CODE.sub(_save_inline, t)
 
         before = t
-        t = hanja.translate(t, 'substitution')
+        t = hanja.translate(t, "substitution")
 
         changes = []
-        for bl, al in zip(before.split('\n'), t.split('\n')):
+        for bl, al in zip(before.split("\n"), t.split("\n")):
             if bl.strip() != al.strip():
                 changes.append({"from": bl.strip(), "to": al.strip()})
 
@@ -225,10 +258,13 @@ class TextCleaner:
         """Apply Kiwi typo correction only. Placeholders pass through unchanged."""
         if not text.strip():
             return text
-        tokens = self._kiwi.tokenize(text, typos="basic_with_continual_and_lengthening")
-        return self._kiwi.join(tokens)
+        kiwi = _get_kiwi()
+        tokens = kiwi.tokenize(text, typos="basic_with_continual_and_lengthening")
+        return kiwi.join(tokens)
 
-    def _restore_placeholders(self, text: str, code_blocks: List[str], inline_codes: List[str]) -> str:
+    def _restore_placeholders(
+        self, text: str, code_blocks: List[str], inline_codes: List[str]
+    ) -> str:
         for i, cb in enumerate(code_blocks):
             text = text.replace(f"\x00BLOCK{i}\x00", cb)
         for i, ic in enumerate(inline_codes):
@@ -296,6 +332,22 @@ class TextCleaner:
     # Batch processing
     # ------------------------------------------------------------------
 
+    def tokenize(self, text: str) -> List[Dict]:
+        """Kiwi POS tokenization. Returns list of {form, tag, start, len} dicts."""
+        if not text or not text.strip():
+            return []
+        try:
+            kiwi = _get_kiwi()
+            results = kiwi.tokenize(text)
+            return [{"form": t.form, "tag": t.tag, "start": t.start, "len": t.len} for t in results]
+        except Exception:
+            return []
+
+    def extract_nnp(self, text: str) -> List[str]:
+        """Extract proper nouns (NNP) via Kiwi tokenization."""
+        tokens = self.tokenize(text)
+        return [t["form"] for t in tokens if t["tag"] == "NNP"]
+
     def process_document(self, text: str) -> Dict:
         """Full document processing: clean → tokenize → extract.
 
@@ -305,7 +357,7 @@ class TextCleaner:
             return {"clean": "", "terms": [], "tokens": [], "kiwi_changed": False, "nnp": []}
 
         clean_text = self.clean(text)
-        tokens = self.tokenize(clean_text)
+        tokens = tokenize(clean_text)
         terms = [t["form"] for t in tokens if t["tag"] in LEXICAL_TAGS]
         nnp = self.extract_nnp(clean_text)
         kiwi_changed = self.detect_kiwi_changes(text)

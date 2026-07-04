@@ -7,18 +7,23 @@ import os
 import subprocess
 import sys
 import time
-from lib.pipeline_common.helpers import strip_code_fence, slack_send, abort
 
 from lib.common import log, timestamp
+from lib.pipeline_common.helpers import abort, slack_send, strip_code_fence
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.db import psql_json
-from lib.llm.json_parser import save_dlq, validate_schema, parse_llm_json as _extract_json
+from lib.llm.json_parser import parse_llm_json as _extract_json
+from lib.llm.json_parser import save_dlq, validate_schema
 from lib.llm_client import call_llm, resolve_model
 from lib.pod_manager import (
-    MODEL_METADATA, NIGHT_MODELS, ensure_model, model_info, stop_pod_a, TIMEOUT,
+    MODEL_METADATA,
+    NIGHT_MODELS,
+    TIMEOUT,
+    ensure_model,
+    model_info,
 )
 from lib.token_budget import TokenBudget
 
@@ -29,17 +34,26 @@ os.makedirs(EXPER_DIR, exist_ok=True)
 os.makedirs(PIPELINE_DIR, exist_ok=True)
 os.makedirs(EVENTS_DIR, exist_ok=True)
 
-from lib.pipeline_common.schema import (
-    VERIFY_SCHEMA, PRJ_RESULT_SCHEMA, HANDOFF_SCHEMA,
-    _schema_for_label, _log_schema_warnings, _dedup_findings,
-)
-from lib.pipeline_common.state import PipelineState, compile_handoff_single, compile_handoff
-from lib.pipeline_common.llm import llm_call, call_one, PROPOSER_MODEL, REFLECTOR_MODEL, JUDGE_MODEL
+from lib.pipeline_common.llm import JUDGE_MODEL, PROPOSER_MODEL, REFLECTOR_MODEL, call_one, llm_call
 from lib.pipeline_common.prompts import (
-    PROPOSER_SYSTEM_PROMPT, REFLECTOR_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT,
-    VERIFIER_SYSTEM_PROMPT, RUBRIC, RUBRIC_SYSTEM_PROMPT, HANDOFF_SYSTEM_PROMPT,
+    HANDOFF_SYSTEM_PROMPT,
+    JUDGE_SYSTEM_PROMPT,
     MOCK_RESULT,
+    PROPOSER_SYSTEM_PROMPT,
+    REFLECTOR_SYSTEM_PROMPT,
+    RUBRIC,
+    RUBRIC_SYSTEM_PROMPT,
+    VERIFIER_SYSTEM_PROMPT,
 )
+from lib.pipeline_common.schema import (
+    HANDOFF_SCHEMA,
+    PRJ_RESULT_SCHEMA,
+    VERIFY_SCHEMA,
+    _dedup_findings,
+    _log_schema_warnings,
+    _schema_for_label,
+)
+from lib.pipeline_common.state import PipelineState, compile_handoff, compile_handoff_single
 
 
 def save(phase, tag, data):
@@ -64,6 +78,6 @@ def load_input(input_override=None):
 
 
 def log_phase_header(title):
-    log(f"\n{'='*60}")
+    log(f"\n{'=' * 60}")
     log(title)
-    log(f"{'='*60}")
+    log(f"{'=' * 60}")

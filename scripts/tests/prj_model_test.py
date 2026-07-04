@@ -2,7 +2,7 @@
 # Status: experimental
 # Path: none — P/R/J 3-model comparison: Mistral(P) vs Qwen2.5-7B-Instruct(R) vs Llama 3.1 8B(J)
 """P(Proposer)/R(Refuter)/J(Judge) 역할별 추천 모델 검증.
-각 모델을 Pod A에 로드 → 해당 역할 프롬프트 실행 → 정확도/속도 측정."""
+각 모델을 inference에 로드 → 해당 역할 프롬프트 실행 → 정확도/속도 측정."""
 import json, os, subprocess, sys, time, urllib.request
 
 SCRIPTS_DIR = "/opt/projects/server/scripts"
@@ -109,7 +109,7 @@ D003 [high/security]: Password stored in plaintext — evidence: password column
                 "user": """Proposed findings:
 D001 [critical/bug]: The server crashed 3 times today — evidence: uptime is 1d 14h 51m
 D002 [medium/security]: Root login detected — evidence: last login shows user 'opc'
-D003 [high/performance]: 30B model inference timeout — evidence: Pod B runs Qwen3-Coder-30B-A3B""",
+D003 [high/performance]: 30B model inference timeout — evidence: inference runs Qwen3-Coder-30B-A3B""",
                 "expected_keys": {"verdicts"},
             },
         ],
@@ -184,16 +184,16 @@ TIMEOUT = 300  # 5min per call
 def log(msg):
     print(f"  {msg}", flush=True)
 
-def restart_pod_a(model_file: str) -> bool:
-    env_file = "/opt/ai_data/scripts/current-mode-pod-a.env"
+def restart_inference(model_file: str) -> bool:
+    env_file = "/opt/ai_data/scripts/current-mode-inference.env"
     with open(env_file, "w") as f:
         f.write(f"MODE=day\nMODEL_FILE={model_file}\n")
-    log(f"Stopping Pod A...")
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-a"],
+    log(f"Stopping inference...")
+    subprocess.run(["systemctl", "--user", "stop", "devforge-inference"],
                    capture_output=True, timeout=60)
     time.sleep(3)
     log(f"Starting with {model_file}...")
-    subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-a"],
+    subprocess.run(["systemctl", "--user", "start", "devforge-inference"],
                    capture_output=True, timeout=60)
     log(f"Waiting for extractor health (MODEL_REGISTRY)...")
     for i in range(300):
@@ -212,9 +212,9 @@ def restart_pod_a(model_file: str) -> bool:
     return False
 
 def restore_coder():
-    with open("/opt/ai_data/scripts/current-mode-pod-a.env", "w") as f:
+    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
         f.write("MODE=day\n")
-    subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-a"],
+    subprocess.run(["systemctl", "--user", "restart", "devforge-inference"],
                    capture_output=True, timeout=120)
 
 def run_case(system: str, user: str) -> dict:
@@ -294,10 +294,10 @@ for role_key in ["P", "R", "J"]:
         results[role_key] = [{"score": 0, "elapsed_s": 0, "ok": False, "error": "model not found"} for _ in cases]
         continue
 
-    ok = restart_pod_a(model_file)
+    ok = restart_inference(model_file)
     if not ok:
-        log(f"FAILED: Pod A won't start with {model_file}")
-        results[role_key] = [{"score": 0, "elapsed_s": 0, "ok": False, "error": "Pod A failed"} for _ in cases]
+        log(f"FAILED: inference won't start with {model_file}")
+        results[role_key] = [{"score": 0, "elapsed_s": 0, "ok": False, "error": "inference failed"} for _ in cases]
         continue
 
     role_results = []
@@ -356,6 +356,6 @@ print_table(results)
 
 print(f"\n{'─'*70}")
 restore_coder()
-print("  Pod A restored to Coder Q8_0")
+print("  inference restored to Coder Q8_0")
 print(f"{'='*70}")
 test_complete("PRJ model comparison done")

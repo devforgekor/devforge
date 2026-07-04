@@ -7,40 +7,52 @@ Phase B: 3-tier faithfulness (cosine embed → MiniCheck NLI)
 Phase C: MCP metadata (SYSTEM_DAY_MCP, tldr/intent/entities/tags)
 Phase D: Verify (verification report, global context)
 """
-import argparse, json, os, re, subprocess, sys, time, urllib.request
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.request
 
 SCRIPTS_DIR = "/opt/projects/server/scripts"
 sys.path.insert(0, SCRIPTS_DIR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from lib.llm_client import MODEL_REGISTRY
-from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm, parse_llm_json
-from sentence_transformers import SentenceTransformer
+from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+from lib.test_common import call_llm, log, parse_llm_json, test_complete, test_setup
 from minicheck.minicheck import MiniCheck
+from sentence_transformers import SentenceTransformer
 
 # ── NLI/Embedding models ──
 log_t0 = time.monotonic()
+
+
 def log(m):
     elapsed = round(time.monotonic() - log_t0, 1)
     print(f"[{elapsed:>6.1f}s] {m}", flush=True)
 
+
 log("Loading embedding model (all-MiniLM-L6-v2)...")
-EMBED = SentenceTransformer('all-MiniLM-L6-v2')
-log(f"  Embedding model ready")
+EMBED = SentenceTransformer("all-MiniLM-L6-v2")
+log("  Embedding model ready")
 
 log("Loading MiniCheck (roberta-large — lighter than flan-t5 for ARM)...")
 t_mc = time.monotonic()
-NLI = MiniCheck(model_name='roberta-large', cache_dir='/opt/ai_data/models')
+NLI = MiniCheck(model_name="roberta-large", cache_dir="/opt/ai_data/models")
 mc_init_s = round(time.monotonic() - t_mc, 1)
 log(f"  MiniCheck ready ({mc_init_s}s)")
 
 # ── NLI Thresholds (matching production extract.py) ──
 COSINE_FAITHFUL = 0.75
 COSINE_UNFAITHFUL = 0.40
-MC_THRESHOLD = 0.5      # MiniCheck faithful
-MC_AMBIGUOUS = 0.3       # MiniCheck ambiguous
+MC_THRESHOLD = 0.5  # MiniCheck faithful
+MC_AMBIGUOUS = 0.3  # MiniCheck ambiguous
 
-OUTPUT = "/tmp/14b_comparison_results.json"   # updated in __main__ for --rubric
+OUTPUT = "/tmp/14b_comparison_results.json"  # updated in __main__ for --rubric
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -155,17 +167,31 @@ GT_CASES = [
         "thinking": "The user reports slow login at 3s. auth_routes.py is the suspect. Need to check if it's a DB connection issue or something else. Could be connection pooling missing since they mentioned new sessions per request.",
         "text": "/api/v1/auth/login 확인했습니다. auth_routes.py의 login() 함수가 매 요청마다 새로운 async DB 세션을 생성합니다. 연결 풀링이 전혀 적용되어 있지 않아 PostgreSQL 커넥션 핸드셰이크 비용이 매번 발생합니다. 이게 3초 응답의 주요 원인입니다. 해결책으로 SQLAlchemy connection pool 설정( pool_size=5, max_overflow=10 )을 추가하고, DB 세션을 의존성 주입 방식으로 변경하는 것을 추천합니다.",
         "ref_extractions": [
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "auth_routes.py login() creates new async DB session per request, connection pooling not applied, causing 3s response time"},
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "PostgreSQL connection handshake cost occurs every request"},
-            {"fact_type": "text", "category": "decision",
-             "evidence": "SQLAlchemy pool_size=5, max_overflow=10 recommended"},
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "auth_routes.py login() creates new async DB session per request, connection pooling not applied, causing 3s response time",
+            },
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "PostgreSQL connection handshake cost occurs every request",
+            },
+            {
+                "fact_type": "text",
+                "category": "decision",
+                "evidence": "SQLAlchemy pool_size=5, max_overflow=10 recommended",
+            },
         ],
         "ref_mcp": {
             "tldr": "Login API 3s latency caused by missing DB connection pooling in auth_routes.py",
             "intent": "debug",
-            "entities": {"files": ["auth_routes.py"], "technologies": ["Python", "FastAPI", "PostgreSQL", "SQLAlchemy"], "functions": ["login"], "mentioned_users": []},
+            "entities": {
+                "files": ["auth_routes.py"],
+                "technologies": ["Python", "FastAPI", "PostgreSQL", "SQLAlchemy"],
+                "functions": ["login"],
+                "mentioned_users": [],
+            },
             "tags": ["performance", "database", "connection-pooling", "auth"],
         },
         "ref_verify": "approved",  # facts are consistent with project context (PostgreSQL 16)
@@ -180,17 +206,31 @@ GT_CASES = [
         "thinking": "This is critical. API keys in error logs means any developer with log access can see them. Retention is 90 days which makes it worse. Need to check what's being logged - Authorization header probably. Fix: sanitize logs and rotate keys.",
         "text": "/var/log/app/error.log 확인 결과, 인증 실패 시 stack trace와 함께 요청 파라미터 전체가 기록되고 있습니다. 특히 Authorization 헤더의 API key도 함께 로깅됩니다. 로그 보존 기간은 90일이며, 모든 개발자가 로그에 접근 가능한 상태입니다. 즉시 조치사항: (1) 로그에서 Authorization 헤더 마스킹 (2) 기존 로그에서 키 노출 부분 삭제 (3) API 키 전량 교체 (4) 로그 민감정보 필터 미들웨어 도입.",
         "ref_extractions": [
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "API keys from Authorization header logged to /var/log/app/error.log on auth failure"},
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "Log retention is 90 days, all developers have access"},
-            {"fact_type": "text", "category": "decision",
-             "evidence": "Actions: mask Authorization header in logs, delete exposed key entries, rotate all API keys, add sensitive data filter middleware"},
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "API keys from Authorization header logged to /var/log/app/error.log on auth failure",
+            },
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "Log retention is 90 days, all developers have access",
+            },
+            {
+                "fact_type": "text",
+                "category": "decision",
+                "evidence": "Actions: mask Authorization header in logs, delete exposed key entries, rotate all API keys, add sensitive data filter middleware",
+            },
         ],
         "ref_mcp": {
             "tldr": "API keys exposed in error logs — requires immediate masking, log cleanup, and key rotation",
             "intent": "report",
-            "entities": {"files": ["/var/log/app/error.log"], "technologies": ["Python"], "functions": [], "mentioned_users": []},
+            "entities": {
+                "files": ["/var/log/app/error.log"],
+                "technologies": ["Python"],
+                "functions": [],
+                "mentioned_users": [],
+            },
             "tags": ["security", "api-key", "logging", "p0"],
         },
         "ref_verify": "approved",  # consistent — no prior fix exists in global context
@@ -208,7 +248,12 @@ GT_CASES = [
         "ref_mcp": {
             "tldr": "CI pipeline passed with 87% coverage, proceeding to deployment",
             "intent": "report",
-            "entities": {"files": [], "technologies": ["GitHub Actions", "Caddy"], "functions": [], "mentioned_users": []},
+            "entities": {
+                "files": [],
+                "technologies": ["GitHub Actions", "Caddy"],
+                "functions": [],
+                "mentioned_users": [],
+            },
             "tags": ["ci", "deployment", "testing"],
         },
         "ref_verify": "approved",  # consistent with known CI pipeline
@@ -223,17 +268,31 @@ GT_CASES = [
         "thinking": "User is worried about OOM. Let me check the actual data. Memory shows 12Gi used out of 22Gi — that's only 55%, 10Gi free. Swap is barely touched. Load is moderate. The real issue is actually the disk. Don't assume the user's concern is correct — report what the data says.",
         "text": "서버 상태 점검 결과입니다:\n- 메모리: 22Gi 중 12Gi 사용 (55%), 10Gi 여유\n- 스왑: 8Gi 중 508Mi 사용 (6%)\n- 부하: 1min=2.55, 5min=2.46, 15min=4.02\n\nOOM 위험은 현재 낮습니다. 메모리 여유가 충분하고 스왑 사용률도 정상입니다.\n\n다만 /opt/ai_data 디스크가 92% (77G/100G)로 임계치에 근접했습니다. 모델 파일 정리가 필요합니다. 디스크 부족이 현재 더 시급한 이슈입니다.",
         "ref_extractions": [
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "Memory: 22Gi total, 12Gi used (55%), 10Gi free — OOM risk is low"},
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "Swap: 8Gi total, 508Mi used (6%) — normal"},
-            {"fact_type": "text", "category": "requirement",
-             "evidence": "/opt/ai_data disk at 92% (77G/100G) — model file cleanup needed"},
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "Memory: 22Gi total, 12Gi used (55%), 10Gi free — OOM risk is low",
+            },
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "Swap: 8Gi total, 508Mi used (6%) — normal",
+            },
+            {
+                "fact_type": "text",
+                "category": "requirement",
+                "evidence": "/opt/ai_data disk at 92% (77G/100G) — model file cleanup needed",
+            },
         ],
         "ref_mcp": {
             "tldr": "Server health check: OOM risk low, but /opt/ai_data disk at 92% needs cleanup",
             "intent": "report",
-            "entities": {"files": ["/opt/ai_data"], "technologies": [], "functions": [], "mentioned_users": []},
+            "entities": {
+                "files": ["/opt/ai_data"],
+                "technologies": [],
+                "functions": [],
+                "mentioned_users": [],
+            },
             "tags": ["monitoring", "disk-space", "infrastructure"],
         },
         "ref_verify": "approved",  # factual — consistent with known 100G disk
@@ -249,17 +308,31 @@ GT_CASES = [
         "thinking": "The fix is ready. Need to guide deployment. We have Caddy reverse proxy and blue-green deployment capability. Zero-downtime deployment is available. PostgreSQL 16 is the database. Should mention the connection pool change needs config update.",
         "text": "auth_routes.py login()에 SQLAlchemy connection pool 적용 완료했습니다. config.py에 DB_POOL_SIZE=5, DB_MAX_OVERFLOW=10 추가했습니다. PostgreSQL 16 연결 테스트 통과. Caddy reverse proxy 통해 blue-green deployment로 무중단 배포 가능합니다.",
         "ref_extractions": [
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "SQLAlchemy connection pool applied to auth_routes.py login()"},
-            {"fact_type": "text", "category": "code",
-             "evidence": "DB_POOL_SIZE=5, DB_MAX_OVERFLOW=10 in config.py"},
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "PostgreSQL 16 connection test passed, Caddy blue-green deployment available"},
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "SQLAlchemy connection pool applied to auth_routes.py login()",
+            },
+            {
+                "fact_type": "text",
+                "category": "code",
+                "evidence": "DB_POOL_SIZE=5, DB_MAX_OVERFLOW=10 in config.py",
+            },
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "PostgreSQL 16 connection test passed, Caddy blue-green deployment available",
+            },
         ],
         "ref_mcp": {
             "tldr": "Login API fix deployed — connection pool + config update via blue-green deployment",
             "intent": "code_change",
-            "entities": {"files": ["auth_routes.py", "config.py"], "technologies": ["Python", "PostgreSQL 16", "SQLAlchemy", "Caddy"], "functions": ["login"], "mentioned_users": []},
+            "entities": {
+                "files": ["auth_routes.py", "config.py"],
+                "technologies": ["Python", "PostgreSQL 16", "SQLAlchemy", "Caddy"],
+                "functions": ["login"],
+                "mentioned_users": [],
+            },
             "tags": ["deployment", "database", "connection-pooling", "blue-green"],
         },
         "ref_verify": "approved",
@@ -274,15 +347,26 @@ GT_CASES = [
         "thinking": "User says they migrated to MongoDB and wants to remove PostgreSQL. But global context says the project uses PostgreSQL 16 with pg_trgm. This contradicts the known project stack. The user might be confused or testing me. Need to flag this as inconsistent with global context.",
         "text": "MongoDB로 마이그레이션 완료했습니다. 모든 데이터 이전했고, PostgreSQL은 더 이상 사용하지 않습니다.",
         "ref_extractions": [
-            {"fact_type": "text", "category": "explanation",
-             "evidence": "User claims migration to MongoDB completed, all data transferred"},
-            {"fact_type": "text", "category": "decision",
-             "evidence": "User requests PostgreSQL removal"},
+            {
+                "fact_type": "text",
+                "category": "explanation",
+                "evidence": "User claims migration to MongoDB completed, all data transferred",
+            },
+            {
+                "fact_type": "text",
+                "category": "decision",
+                "evidence": "User requests PostgreSQL removal",
+            },
         ],
         "ref_mcp": {
             "tldr": "User claims MongoDB migration complete, requests PostgreSQL removal",
             "intent": "request",
-            "entities": {"files": [], "technologies": ["MongoDB", "PostgreSQL"], "functions": [], "mentioned_users": []},
+            "entities": {
+                "files": [],
+                "technologies": ["MongoDB", "PostgreSQL"],
+                "functions": [],
+                "mentioned_users": [],
+            },
             "tags": ["database", "migration", "infrastructure"],
         },
         # Verify phase: global context says PostgreSQL 16 + pg_trgm. This claim contradicts.
@@ -293,18 +377,43 @@ GT_CASES = [
 ]
 
 MODELS = [
-    {"name": "7B Q8",           "file": "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf",   "tag": "7b",    "threads": 3, "threads_batch": 3},
-    {"name": "Qwen Coder 14B",  "file": "qwen2.5-coder-14b-instruct-q4_k_m.gguf", "tag": "coder14b", "threads": 4, "threads_batch": 4},
-    {"name": "Qwen 2.5 14B",    "file": "Qwen2.5-14B-Instruct-Q4_K_M.gguf",      "tag": "qwen25",   "threads": 4, "threads_batch": 4},
-    {"name": "Qwen3 14B",       "file": "Qwen3-14B-Q4_K_M.gguf",                 "tag": "qwen3",    "threads": 4, "threads_batch": 4},
+    {
+        "name": "7B Q8",
+        "file": "Qwen2.5-Coder-7B-Instruct.Q8_0.gguf",
+        "tag": "7b",
+        "threads": 3,
+        "threads_batch": 3,
+    },
+    {
+        "name": "Qwen Coder 14B",
+        "file": "qwen2.5-coder-14b-instruct-q4_k_m.gguf",
+        "tag": "coder14b",
+        "threads": 4,
+        "threads_batch": 4,
+    },
+    {
+        "name": "Qwen 2.5 14B",
+        "file": "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
+        "tag": "qwen25",
+        "threads": 4,
+        "threads_batch": 4,
+    },
+    {
+        "name": "Qwen3 14B",
+        "file": "Qwen3-14B-Q4_K_M.gguf",
+        "tag": "qwen3",
+        "threads": 4,
+        "threads_batch": 4,
+    },
 ]
 
-ENV_FILE = "/opt/ai_data/scripts/current-mode-pod-b.env"
+ENV_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
 
 
 # ═══════════════════════════════════════════════════════════════
 # 3-Tier Faithfulness (matching production extract.py)
 # ═══════════════════════════════════════════════════════════════
+
 
 def _cosine_faithfulness(evidence: str, source: str) -> float:
     """Tier 1: all-MiniLM-L6-v2 cosine similarity."""
@@ -336,7 +445,7 @@ def check_faithfulness(evidence: str, source: str) -> dict:
     score = round(cos * 100, 1)
 
     if cos >= COSINE_FAITHFUL:
-        return {"faithful": True,  "score": score, "method": "embed", "nli_prob": None}
+        return {"faithful": True, "score": score, "method": "embed", "nli_prob": None}
     if cos < COSINE_UNFAITHFUL:
         return {"faithful": False, "score": score, "method": "embed", "nli_prob": None}
 
@@ -351,15 +460,17 @@ def check_faithfulness(evidence: str, source: str) -> dict:
 # Scoring helpers
 # ═══════════════════════════════════════════════════════════════
 
+
 def _tokenize(text):
-    cleaned = re.sub(r'[.,;:\-—/()\[\]{}\'"]+', ' ', text.lower())
+    cleaned = re.sub(r'[.,;:\-—/()\[\]{}\'"]+', " ", text.lower())
     return set(cleaned.split())
 
 
 def _text_match(t1, t2):
     """Jaccard >= 0.25 OR (containment >= 0.5 AND intersection >= 3)."""
     w1, w2 = _tokenize(t1), _tokenize(t2)
-    if not w1 or not w2: return False
+    if not w1 or not w2:
+        return False
     inter = len(w1 & w2)
     jac = inter / len(w1 | w2)
     cont = inter / min(len(w1), len(w2))
@@ -368,7 +479,7 @@ def _text_match(t1, t2):
 
 def _cats_compatible(c1, c2):
     """Category match: exact OR one is 'bug' (wildcard, backward compat)."""
-    return c1 == c2 or 'bug' in (c1, c2)
+    return c1 == c2 or "bug" in (c1, c2)
 
 
 def _hallu_match(bad_phrase, evidence):
@@ -396,17 +507,18 @@ def score_extractions(model_extractions, ref_extractions):
         # Precision-only case: clean turn with no facts to extract
         precision_score = 100 if mn == 0 else max(0, 100 - mn * 25)
         return {
-            "matched": 0, "total": 0,
+            "matched": 0,
+            "total": 0,
             "score": precision_score,
             "evidence_only": 0,
             "typed_matched": 0,
             "category_matched": 0,
-            "detail": f"precision_only: {mn} extractions (0 expected)"
+            "detail": f"precision_only: {mn} extractions (0 expected)",
         }
 
-    evidence_matched = 0   # text-matched (weakest)
-    typed_matched = 0      # text + fact_type matched
-    category_matched = 0   # text + fact_type + category matched (strictest)
+    evidence_matched = 0  # text-matched (weakest)
+    typed_matched = 0  # text + fact_type matched
+    category_matched = 0  # text + fact_type + category matched (strictest)
 
     for ref in ref_extractions:
         for mdl in model_extractions:
@@ -425,10 +537,10 @@ def score_extractions(model_extractions, ref_extractions):
 
     # Weighted score
     score = round(
-        ev_recall * 40 +           # Axis 1: evidence recall
-        ft_acc * 25 +              # Axis 4: fact_type accuracy
-        cat_acc * 15 +             # Axis 4: category accuracy
-        max(0, 20 - extra * 4)     # Axis 2: precision (no invented facts)
+        ev_recall * 40  # Axis 1: evidence recall
+        + ft_acc * 25  # Axis 4: fact_type accuracy
+        + cat_acc * 15  # Axis 4: category accuracy
+        + max(0, 20 - extra * 4)  # Axis 2: precision (no invented facts)
     )
 
     return {
@@ -438,7 +550,7 @@ def score_extractions(model_extractions, ref_extractions):
         "evidence_only": evidence_matched,
         "typed_matched": typed_matched,
         "category_matched": category_matched,
-        "detail": f"ev={evidence_matched}/{rn} ft={typed_matched}/{rn} cat={category_matched}/{rn} extra={extra}"
+        "detail": f"ev={evidence_matched}/{rn} ft={typed_matched}/{rn} cat={category_matched}/{rn} extra={extra}",
     }
 
 
@@ -466,7 +578,7 @@ def score_faithfulness(faithful, unfaithful, ambiguous, total_facts):
         score = 40
     else:
         score = 20
-    detail = f"F={faithful}/{total_facts}({round(f_ratio*100)}%) U={unfaithful} A={ambiguous}"
+    detail = f"F={faithful}/{total_facts}({round(f_ratio * 100)}%) U={unfaithful} A={ambiguous}"
     return score, detail
 
 
@@ -498,10 +610,10 @@ def score_mcp(model_mcp, ref_mcp):
         if ref_set:
             overlap = len(ref_set & mdl_set) / len(ref_set)
             if overlap >= 0.5:
-                detail.append(f"entities.{key}:{round(overlap*100)}%")
+                detail.append(f"entities.{key}:{round(overlap * 100)}%")
             else:
                 score -= 10
-                detail.append(f"entities.{key}:low({round(overlap*100)}%)")
+                detail.append(f"entities.{key}:low({round(overlap * 100)}%)")
         elif mdl_set:
             score -= 5
             detail.append(f"entities.{key}:unexpected")
@@ -520,10 +632,10 @@ def score_mcp(model_mcp, ref_mcp):
     if ref_tags and mdl_tags:
         overlap = len(ref_tags & mdl_tags) / len(ref_tags | mdl_tags)
         if overlap >= 0.3:
-            detail.append(f"tags:ok({round(overlap*100)}%)")
+            detail.append(f"tags:ok({round(overlap * 100)}%)")
         else:
             score -= 10
-            detail.append(f"tags:low({round(overlap*100)}%)")
+            detail.append(f"tags:low({round(overlap * 100)}%)")
 
     return max(0, score), "; ".join(detail)
 
@@ -550,8 +662,8 @@ def score_verify(model_verdict, ref_verdict, reasoning="", ref_reason=""):
 
     # Reasoning quality: check if reference reasoning keywords appear
     if ref_reason and reasoning:
-        ref_kw = set(re.sub(r'[^a-z0-9 ]', ' ', ref_reason.lower()).split())
-        mdl_kw = set(re.sub(r'[^a-z0-9 ]', ' ', reasoning.lower()).split())
+        ref_kw = set(re.sub(r"[^a-z0-9 ]", " ", ref_reason.lower()).split())
+        mdl_kw = set(re.sub(r"[^a-z0-9 ]", " ", reasoning.lower()).split())
         kw_hit = len(ref_kw & mdl_kw)
         if kw_hit >= 3:
             detail.append(f"reasoning:good({kw_hit}kw)")
@@ -572,9 +684,15 @@ def score_verify(model_verdict, ref_verdict, reasoning="", ref_reason=""):
 # ═══════════════════════════════════════════════════════════════
 
 AXIS_WEIGHTS = {
-    "ax1_recall": 1.5, "ax2_precision": 1.0, "ax3_hallu": 1.0,
-    "ax4_fact_type": 1.0, "ax5_mcp": 1.0, "ax6_mcp_context": 0.5,
-    "ax7_verify": 1.0, "ax8_nli": 1.0, "ax9_json": 0.5,
+    "ax1_recall": 1.5,
+    "ax2_precision": 1.0,
+    "ax3_hallu": 1.0,
+    "ax4_fact_type": 1.0,
+    "ax5_mcp": 1.0,
+    "ax6_mcp_context": 0.5,
+    "ax7_verify": 1.0,
+    "ax8_nli": 1.0,
+    "ax9_json": 0.5,
     "ax10_consistency": 0.5,
 }
 
@@ -642,13 +760,13 @@ def score_axis3_hallu(cases):
     if ev_matched >= 2 and not hallu_hit:
         return 10  # disk issue captured, no OOM hallucination
     elif ev_matched >= 1 and not hallu_hit:
-        return 8   # some facts captured, no OOM
+        return 8  # some facts captured, no OOM
     elif ev_matched >= 1 and hallu_hit:
-        return 6   # disk captured but OOM also mentioned
+        return 6  # disk captured but OOM also mentioned
     elif ev_matched == 0 and hallu_hit:
-        return 4   # OOM as primary, disk missed
+        return 4  # OOM as primary, disk missed
     elif ev_matched == 0 and not hallu_hit:
-        return 2   # missed everything
+        return 2  # missed everything
     else:
         return 0
 
@@ -669,8 +787,11 @@ def score_axis4_fact_type(cases):
 
 def score_axis5_mcp(cases):
     """Axis 5: MCP Quality (weight 10). Average MCP score / 10."""
-    mcp_scores = [c["mcp"]["score"] for c in cases
-                  if c["mcp"].get("score", 0) > 0 and c.get("phase") != "verify"]
+    mcp_scores = [
+        c["mcp"]["score"]
+        for c in cases
+        if c["mcp"].get("score", 0) > 0 and c.get("phase") != "verify"
+    ]
     if not mcp_scores:
         return 0
     avg = sum(mcp_scores) / len(mcp_scores)
@@ -712,15 +833,15 @@ def score_axis7_verify(cases):
     if verdict == "escalate" and vscore >= 80:
         return 10  # escalate + good reasoning
     elif verdict == "escalate":
-        return 8   # escalate + weak reasoning
+        return 8  # escalate + weak reasoning
     elif verdict == "rejected":
-        return 6   # correct direction but not escalate
+        return 6  # correct direction but not escalate
     elif verdict == "approved":
-        return 4   # missed contradiction
+        return 4  # missed contradiction
     elif verdict:
-        return 2   # unrelated verdict
+        return 2  # unrelated verdict
     else:
-        return 0   # parse fail
+        return 0  # parse fail
 
 
 def score_axis8_nli(cases):
@@ -751,12 +872,18 @@ def score_axis10_consistency(cases):
     mean = sum(scores) / len(scores)
     var = (sum((s - mean) ** 2 for s in scores) / len(scores)) ** 0.5
     # Lower variance = higher consistency
-    if var <= 5: return 10
-    elif var <= 10: return 8
-    elif var <= 15: return 6
-    elif var <= 20: return 4
-    elif var <= 25: return 2
-    else: return 0
+    if var <= 5:
+        return 10
+    elif var <= 10:
+        return 8
+    elif var <= 15:
+        return 6
+    elif var <= 20:
+        return 4
+    elif var <= 25:
+        return 2
+    else:
+        return 0
 
 
 def compute_10axis(cases):
@@ -782,24 +909,31 @@ def compute_10axis(cases):
 
 def grade_10axis(composite):
     """Grade based on checklist.yaml grading_scale."""
-    if composite >= 90: return "S"
-    elif composite >= 75: return "A"
-    elif composite >= 60: return "B"
-    elif composite >= 40: return "C"
-    elif composite >= 20: return "D"
-    else: return "F"
+    if composite >= 90:
+        return "S"
+    elif composite >= 75:
+        return "A"
+    elif composite >= 60:
+        return "B"
+    elif composite >= 40:
+        return "C"
+    elif composite >= 20:
+        return "D"
+    else:
+        return "F"
 
 
 # ═══════════════════════════════════════════════════════════════
-# Pod B swap
+# inference swap
 # ═══════════════════════════════════════════════════════════════
+
 
 def swap_model(model_file, model_name, threads=4, threads_batch=4):
     log(f"  Swapping to {model_name} ({model_file}) [t={threads}/{threads_batch}]...")
     with open(ENV_FILE, "w") as f:
         f.write(
             f"MODE=day\n"
-            f"MODEL_NAME=\"{model_name}\"\n"
+            f'MODEL_NAME="{model_name}"\n'
             f"PORT=8082\n"
             f"MODEL_FILE={model_file}\n"
             f"CTX_SIZE=16384\n"
@@ -812,63 +946,46 @@ def swap_model(model_file, model_name, threads=4, threads_batch=4):
             f"REPORT_MEMORY=1\n"
             f"MLOCK=0\n"
         )
-    subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b"],
-                   capture_output=True, timeout=60)
+    _podman_stop_inference()
     time.sleep(3)
-    subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b"],
-                   capture_output=True, timeout=10)
-
-    # Extend HealthStartPeriod via drop-in (14B loading may exceed default 300s)
-    dropin_dir = os.path.expanduser("~/.config/systemd/user/container-devforge-pod-b.service.d")
-    dropin_file = os.path.join(dropin_dir, "50-health-override.conf")
-    os.makedirs(dropin_dir, exist_ok=True)
-    with open(dropin_file, "w") as f:
-        f.write("[Service]\nHealthStartPeriod=600s\n")
-    subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, timeout=10)
-
+    _podman_start_inference()
     t0 = time.monotonic()
-    result = subprocess.run(["systemctl", "--user", "start", "container-devforge-pod-b"],
-                            capture_output=True, timeout=60, text=True)
-    if result.returncode != 0:
-        # Clean up drop-in on failure
-        os.remove(dropin_file)
-        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, timeout=10)
-        raise RuntimeError(f"systemctl start failed: {result.stderr.strip()[:300]}")
 
-    # Wait for health + clean up drop-in
-    try:
-        for i in range(300):
-            try:
-                r = urllib.request.urlopen(urllib.request.Request(
-                    f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/health"), timeout=5)
-                if r.status == 200:
-                    load_s = round(time.monotonic() - t0, 1)
-                    log(f"  Ready in {i+1}s ({load_s}s total)")
-                    time.sleep(3)
-                    return load_s
-            except Exception:
-                pass
+    # Wait for health
+    for i in range(300):
+        try:
+            r = urllib.request.urlopen(
+                urllib.request.Request(
+                    f"http://127.0.0.1:{MODEL_REGISTRY['extractor']['port']}/health"
+                ),
+                timeout=5,
+            )
+            if r.status == 200:
+                load_s = round(time.monotonic() - t0, 1)
+                log(f"  Ready in {i + 1}s ({load_s}s total)")
+                time.sleep(3)
+                return load_s
+        except Exception:
+            pass
             if i % 30 == 0 and i > 0:
-                log(f"  ... {i+1}s elapsed")
+                log(f"  ... {i + 1}s elapsed")
             time.sleep(2)
         raise RuntimeError(f"Failed to start {model_name}")
-    finally:
-        # Always restore original HealthStartPeriod
-        if os.path.exists(dropin_file):
-            os.remove(dropin_file)
-            subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, timeout=10)
 
 
 def _extract_tokens(usage):
-    if not isinstance(usage, dict): return 0
+    if not isinstance(usage, dict):
+        return 0
     for key in ("completion_tokens", "tokens_predicted", "predicted_n"):
         v = usage.get(key)
-        if isinstance(v, (int, float)) and v > 0: return int(v)
+        if isinstance(v, (int, float)) and v > 0:
+            return int(v)
     timings = usage.get("timings", {})
     if isinstance(timings, dict):
         for key in ("predicted_n", "predicted_tokens"):
             v = timings.get(key)
-            if isinstance(v, (int, float)) and v > 0: return int(v)
+            if isinstance(v, (int, float)) and v > 0:
+                return int(v)
     return 0
 
 
@@ -877,61 +994,91 @@ def call_reviewer(system, user, timeout=600):
     try:
         meta = call_llm(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            model="extractor", max_tokens=1024, temperature=0.1,
-            timeout=timeout, json_mode=True, return_meta=True)
+            model="extractor",
+            max_tokens=1024,
+            temperature=0.1,
+            timeout=timeout,
+            json_mode=True,
+            return_meta=True,
+        )
         raw = meta.get("content", "")
         parsed = parse_llm_json(raw)
         elapsed = round(time.monotonic() - t0, 1)
         tok = _extract_tokens(meta.get("usage", {}))
         tps = round(tok / elapsed, 2) if elapsed > 0 and tok > 0 else 0
-        return {"ok": parsed is not None, "parsed": parsed, "raw": raw[:500],
-                "elapsed_s": elapsed, "tokens": tok, "tps": tps, "error": ""}
+        return {
+            "ok": parsed is not None,
+            "parsed": parsed,
+            "raw": raw[:500],
+            "elapsed_s": elapsed,
+            "tokens": tok,
+            "tps": tps,
+            "error": "",
+        }
     except Exception as e:
         elapsed = round(time.monotonic() - t0, 1)
-        return {"ok": False, "parsed": None, "raw": "", "elapsed_s": elapsed,
-                "tokens": 0, "tps": 0, "error": str(e)[:200]}
+        return {
+            "ok": False,
+            "parsed": None,
+            "raw": "",
+            "elapsed_s": elapsed,
+            "tokens": 0,
+            "tps": 0,
+            "error": str(e)[:200],
+        }
 
 
 # ═══════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════
 
+
 def main():
-    TEST = test_setup("model_comparison", "14B Q4_K_M x3 비교: Extract + NLI + MCP + Verify 4-phase")
+    TEST = test_setup(
+        "model_comparison", "14B Q4_K_M x3 비교: Extract + NLI + MCP + Verify 4-phase"
+    )
     all_results = {}
 
     # Pre-check
-    log("Pre-check: Pod B state...")
+    log("Pre-check: inference state...")
     import socket
+
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     port_used = False
     try:
-        s.connect(("127.0.0.1", 8082)); port_used = True; s.close()
+        s.connect(("127.0.0.1", 8082))
+        port_used = True
+        s.close()
     except Exception:
         s.close()
-    result = subprocess.run(["systemctl", "--user", "is-active", "container-devforge-pod-b"],
-                            capture_output=True, text=True)
+    result = subprocess.run(
+        ["podman", "ps", "--filter", "name=devforge-inference", "--format", "{{.Names}}"],
+        capture_output=True,
+        text=True,
+    )
     svc_state = result.stdout.strip()
     if port_used:
         log(f"  :8082 in use, svc={svc_state} — stopping")
-        subprocess.run(["systemctl", "--user", "stop", "container-devforge-pod-b"], capture_output=True, timeout=60)
+        _podman_stop_inference()
         time.sleep(3)
-        subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b"], capture_output=True, timeout=10)
-    elif svc_state in ("failed", "activating"):
-        log(f"  svc={svc_state} — resetting")
-        subprocess.run(["systemctl", "--user", "reset-failed", "container-devforge-pod-b"], capture_output=True, timeout=10)
+    elif svc_state in ("devforge-inference",):
+        log(f"  svc={svc_state} — removing")
+        subprocess.run(
+            ["podman", "rm", "-v", "-f", "-i", "devforge-inference"], capture_output=True, timeout=10
+        )
     else:
         log(f"  svc={svc_state}, :8082 free — ready")
 
     for mi, model in enumerate(MODELS):
         tag = model["tag"]
-        log(f"\n{'='*60}")
-        log(f"  [{mi+1}/{len(MODELS)}] {model['name']} ({model['file']})")
-        log(f"{'='*60}")
+        log(f"\n{'=' * 60}")
+        log(f"  [{mi + 1}/{len(MODELS)}] {model['name']} ({model['file']})")
+        log(f"{'=' * 60}")
 
         try:
-            load_s = swap_model(model["file"], model["name"],
-                                model.get("threads", 4), model.get("threads_batch", 4))
+            load_s = swap_model(
+                model["file"], model["name"], model.get("threads", 4), model.get("threads_batch", 4)
+            )
         except Exception as e:
             log(f"  !! SWAP FAILED: {str(e)[:300]} — skipping")
             all_results[tag] = {"model": model, "error": f"swap_failed: {str(e)[:300]}"}
@@ -939,21 +1086,37 @@ def main():
 
         # Warm-up
         log("  ── Warm-up (2 calls) ──")
-        w1 = call_reviewer(SYSTEM_DAY_EXTRACT, "user_turn: hello\nthinking: greeting\n\n=== text ===\nHello! How can I help?", timeout=120)
-        w2 = call_reviewer(SYSTEM_DAY_EXTRACT, "user_turn: hello\nthinking: greeting\n\n=== text ===\nHello! How can I help?", timeout=120)
+        w1 = call_reviewer(
+            SYSTEM_DAY_EXTRACT,
+            "user_turn: hello\nthinking: greeting\n\n=== text ===\nHello! How can I help?",
+            timeout=120,
+        )
+        w2 = call_reviewer(
+            SYSTEM_DAY_EXTRACT,
+            "user_turn: hello\nthinking: greeting\n\n=== text ===\nHello! How can I help?",
+            timeout=120,
+        )
         warmup_ok = bool(w1["parsed"]) or bool(w2["parsed"])
-        log(f"  W#1: {w1['elapsed_s']}s/{w1['tps']}t/s ok={w1['ok']}  W#2: {w2['elapsed_s']}s/{w2['tps']}t/s ok={w2['ok']}  json_valid={warmup_ok}")
+        log(
+            f"  W#1: {w1['elapsed_s']}s/{w1['tps']}t/s ok={w1['ok']}  W#2: {w2['elapsed_s']}s/{w2['tps']}t/s ok={w2['ok']}  json_valid={warmup_ok}"
+        )
 
         model_data = {
-            "model": model, "load_s": load_s,
-            "warmup": {"call1_elapsed": w1["elapsed_s"], "call2_elapsed": w2["elapsed_s"],
-                       "call1_tps": w1["tps"], "call2_tps": w2["tps"], "json_mode_ok": warmup_ok},
+            "model": model,
+            "load_s": load_s,
+            "warmup": {
+                "call1_elapsed": w1["elapsed_s"],
+                "call2_elapsed": w2["elapsed_s"],
+                "call1_tps": w1["tps"],
+                "call2_tps": w2["tps"],
+                "json_mode_ok": warmup_ok,
+            },
             "cases": [],
         }
 
         for ci, case in enumerate(GT_CASES):
             phase = case["phase"]
-            log(f"  ── [{ci+1}/6] {case['title']} [{phase}] ──")
+            log(f"  ── [{ci + 1}/6] {case['title']} [{phase}] ──")
 
             # Initialize all phase variables (verify-only case needs these)
             extractions, faithful, unfaithful, ambiguous = [], 0, 0, 0
@@ -975,7 +1138,11 @@ def main():
                     extractions = []
 
                 # 3-tier faithfulness
-                sources = {"user": case["user_turn"], "thinking": case["thinking"], "text": case["text"]}
+                sources = {
+                    "user": case["user_turn"],
+                    "thinking": case["thinking"],
+                    "text": case["text"],
+                }
                 faithful, unfaithful, ambiguous = 0, 0, 0
                 nli_results = []
                 for ex in extractions:
@@ -994,26 +1161,42 @@ def main():
                         unfaithful += 1
 
                 ext_score = score_extractions(extractions, case["ref_extractions"])
-                faith_score, faith_det = score_faithfulness(faithful, unfaithful, ambiguous, len(extractions))
+                faith_score, faith_det = score_faithfulness(
+                    faithful, unfaithful, ambiguous, len(extractions)
+                )
                 json_ok = resp["ok"]
-                log(f"  Extract: {len(extractions)} facts ({faithful}F/{unfaithful}U/{ambiguous}A)"
-                    f" | ref_match={ext_score['matched']}/{ext_score['total']} (ev={ext_score.get('evidence_only','?')} cat={ext_score.get('category_matched','?')})"
-                    f" | score={ext_score['score']}/100 faith={faith_score}/100 json={'OK' if json_ok else 'FAIL'}")
+                log(
+                    f"  Extract: {len(extractions)} facts ({faithful}F/{unfaithful}U/{ambiguous}A)"
+                    f" | ref_match={ext_score['matched']}/{ext_score['total']} (ev={ext_score.get('evidence_only', '?')} cat={ext_score.get('category_matched', '?')})"
+                    f" | score={ext_score['score']}/100 faith={faith_score}/100 json={'OK' if json_ok else 'FAIL'}"
+                )
 
                 # ── Incremental save: extract phase done ──
                 partial_case = {
-                    "case_id": case["id"], "phase": phase,
-                    "extract": {"n_facts": len(extractions), "faithful": faithful,
-                                "unfaithful": unfaithful, "ambiguous": ambiguous,
-                                "ref_n": len(case["ref_extractions"]),
-                                "ref_score": ext_score["score"], "ref_detail": ext_score["detail"],
-                                "evidence_matched": ext_score.get("evidence_only", 0),
-                                "typed_matched": ext_score.get("typed_matched", 0),
-                                "category_matched": ext_score.get("category_matched", 0),
-                                "faithfulness_score": faith_score,
-                                "json_ok": json_ok},
-                    "mcp": {}, "verify": {}, "hallu_trap_hit": False,
-                    "speed": {"elapsed_s": resp["elapsed_s"], "tps": resp["tps"], "tokens": resp["tokens"]},
+                    "case_id": case["id"],
+                    "phase": phase,
+                    "extract": {
+                        "n_facts": len(extractions),
+                        "faithful": faithful,
+                        "unfaithful": unfaithful,
+                        "ambiguous": ambiguous,
+                        "ref_n": len(case["ref_extractions"]),
+                        "ref_score": ext_score["score"],
+                        "ref_detail": ext_score["detail"],
+                        "evidence_matched": ext_score.get("evidence_only", 0),
+                        "typed_matched": ext_score.get("typed_matched", 0),
+                        "category_matched": ext_score.get("category_matched", 0),
+                        "faithfulness_score": faith_score,
+                        "json_ok": json_ok,
+                    },
+                    "mcp": {},
+                    "verify": {},
+                    "hallu_trap_hit": False,
+                    "speed": {
+                        "elapsed_s": resp["elapsed_s"],
+                        "tps": resp["tps"],
+                        "tokens": resp["tokens"],
+                    },
                     "error": resp.get("error", ""),
                 }
                 model_data["cases"].append(partial_case)
@@ -1036,7 +1219,11 @@ def main():
 
                 # ── Incremental save: MCP phase done ──
                 if model_data["cases"]:
-                    model_data["cases"][-1]["mcp"] = {"score": mcp_score, "detail": mcp_det, "parsed": mcp_parsed}
+                    model_data["cases"][-1]["mcp"] = {
+                        "score": mcp_score,
+                        "detail": mcp_det,
+                        "parsed": mcp_parsed,
+                    }
                     model_data["cases"][-1]["hallu_trap_hit"] = hallu_hit
                     all_results[tag] = dict(model_data)
                     with open(OUTPUT, "w") as f:
@@ -1069,11 +1256,16 @@ def main():
                 if vfy_resp["parsed"] and isinstance(vfy_resp["parsed"], dict):
                     verify_parsed = vfy_resp["parsed"]
                     model_verdict = verify_parsed.get("final_verdict", "unknown")
-                    verify_score, verify_det = score_verify(model_verdict, case["ref_verify"],
-                                                            verify_parsed.get("reasoning", ""),
-                                                            case.get("verify_reason", ""))
-                log(f"  Verify: verdict={verify_parsed.get('final_verdict','?')} "
-                    f"score={verify_score}/100 ({verify_det})")
+                    verify_score, verify_det = score_verify(
+                        model_verdict,
+                        case["ref_verify"],
+                        verify_parsed.get("reasoning", ""),
+                        case.get("verify_reason", ""),
+                    )
+                log(
+                    f"  Verify: verdict={verify_parsed.get('final_verdict', '?')} "
+                    f"score={verify_score}/100 ({verify_det})"
+                )
             else:
                 verify_score = 100  # extract cases — verify not tested
                 verify_det = "not_applicable"
@@ -1097,10 +1289,17 @@ def main():
                     "json_ok": json_ok,
                 },
                 "mcp": {"score": mcp_score, "detail": mcp_det, "parsed": mcp_parsed},
-                "verify": {"score": verify_score, "detail": verify_det,
-                           "parsed": verify_parsed if phase == "verify" else {}},
+                "verify": {
+                    "score": verify_score,
+                    "detail": verify_det,
+                    "parsed": verify_parsed if phase == "verify" else {},
+                },
                 "hallu_trap_hit": hallu_hit,
-                "speed": {"elapsed_s": resp["elapsed_s"], "tps": resp["tps"], "tokens": resp["tokens"]},
+                "speed": {
+                    "elapsed_s": resp["elapsed_s"],
+                    "tps": resp["tps"],
+                    "tokens": resp["tokens"],
+                },
                 "error": resp.get("error", ""),
             }
             if model_data["cases"] and model_data["cases"][-1].get("case_id") == case["id"]:
@@ -1117,10 +1316,10 @@ def main():
 
     # ── Final Report (10-Axis) ──
     test_label = "TEST 2 (with rubric)" if USE_RUBRIC else "TEST 1 (no rubric)"
-    log(f"\n{'='*60}")
+    log(f"\n{'=' * 60}")
     log(f"  LLM EXTRACT COMPARISON — FINAL REPORT — {test_label}")
-    log(f"  Scoring: 10-Axis (checklist.yaml) — each axis 0-10, weighted composite 0-100")
-    log(f"{'='*60}")
+    log("  Scoring: 10-Axis (checklist.yaml) — each axis 0-10, weighted composite 0-100")
+    log(f"{'=' * 60}")
 
     all_axis_results = {}
     for tag, data in all_results.items():
@@ -1147,23 +1346,41 @@ def main():
         json_oks = sum(1 for c in cases if c["extract"].get("json_ok"))
 
         log(f"\n  [{m['name']}] ({m['file']})")
-        log(f"    Load: {data['load_s']}s | Warm-up: #{1} {data['warmup']['call1_elapsed']}s/{data['warmup']['call1_tps']}t/s, #{2} {data['warmup']['call2_elapsed']}s/{data['warmup']['call2_tps']}t/s")
-        log(f"    Faith: {total_f}F/{total_u}U/{total_a}A | Evidence: {total_ev} | Type: {total_typed} | JSON: {json_oks}/{n} | Speed: {avg_s:.0f}s/case, {avg_tps:.1f}t/s")
-        log(f"    ── 10-Axis Scores (0-10) ──")
-        log(f"    축1 Recall: {axes['ax1_recall']:>2}  축2 Precision: {axes['ax2_precision']:>2}  축3 Hallu: {axes['ax3_hallu']:>2}  축4 FactType: {axes['ax4_fact_type']:>2}")
-        log(f"    축5 MCP:     {axes['ax5_mcp']:>2}  축6 MCP Ctx:   {axes['ax6_mcp_context']:>2}  축7 Verify: {axes['ax7_verify']:>2}  축8 NLI:    {axes['ax8_nli']:>2}")
+        log(
+            f"    Load: {data['load_s']}s | Warm-up: #{1} {data['warmup']['call1_elapsed']}s/{data['warmup']['call1_tps']}t/s, #{2} {data['warmup']['call2_elapsed']}s/{data['warmup']['call2_tps']}t/s"
+        )
+        log(
+            f"    Faith: {total_f}F/{total_u}U/{total_a}A | Evidence: {total_ev} | Type: {total_typed} | JSON: {json_oks}/{n} | Speed: {avg_s:.0f}s/case, {avg_tps:.1f}t/s"
+        )
+        log("    ── 10-Axis Scores (0-10) ──")
+        log(
+            f"    축1 Recall: {axes['ax1_recall']:>2}  축2 Precision: {axes['ax2_precision']:>2}  축3 Hallu: {axes['ax3_hallu']:>2}  축4 FactType: {axes['ax4_fact_type']:>2}"
+        )
+        log(
+            f"    축5 MCP:     {axes['ax5_mcp']:>2}  축6 MCP Ctx:   {axes['ax6_mcp_context']:>2}  축7 Verify: {axes['ax7_verify']:>2}  축8 NLI:    {axes['ax8_nli']:>2}"
+        )
         log(f"    축9 JSON:    {axes['ax9_json']:>2}  축10 Consist:  {axes['ax10_consistency']:>2}")
         log(f"    ★ COMPOSITE: {axes['composite']}/100 [{grade}] ★")
 
     # ── 10-Axis Comparison Table ──
-    log(f"\n  ── 10-Axis Comparison ──")
+    log("\n  ── 10-Axis Comparison ──")
     tags = [m["tag"] for m in MODELS]
     ax_labels = ["축1", "축2", "축3", "축4", "축5", "축6", "축7", "축8", "축9", "축10", "COMP", "G"]
-    ax_keys = ["ax1_recall", "ax2_precision", "ax3_hallu", "ax4_fact_type",
-               "ax5_mcp", "ax6_mcp_context", "ax7_verify", "ax8_nli",
-               "ax9_json", "ax10_consistency"]
-    header = f"  {'Model':20s}" + "".join(f'{a:>6s}' for a in ax_labels)
-    log(header); log(f"  {'─'* (22 + 6 * len(ax_labels))}")
+    ax_keys = [
+        "ax1_recall",
+        "ax2_precision",
+        "ax3_hallu",
+        "ax4_fact_type",
+        "ax5_mcp",
+        "ax6_mcp_context",
+        "ax7_verify",
+        "ax8_nli",
+        "ax9_json",
+        "ax10_consistency",
+    ]
+    header = f"  {'Model':20s}" + "".join(f"{a:>6s}" for a in ax_labels)
+    log(header)
+    log(f"  {'─' * (22 + 6 * len(ax_labels))}")
     for mi, model in enumerate(MODELS):
         tag = model["tag"]
         parts = [f"  {model['name']:20s}"]
@@ -1172,16 +1389,17 @@ def main():
             parts.append(" ERR")
         else:
             for k in ax_keys:
-                parts.append(f"{ax.get(k,0):>6d}")
-            parts.append(f"{ax.get('composite',0):>6d}")
-            parts.append(f"{grade_10axis(ax.get('composite',0)):>6s}")
+                parts.append(f"{ax.get(k, 0):>6d}")
+            parts.append(f"{ax.get('composite', 0):>6d}")
+            parts.append(f"{grade_10axis(ax.get('composite', 0)):>6s}")
         log("".join(parts))
 
     # Case detail table
-    log(f"\n  ── Extract Evidence Matched by Case ──")
+    log("\n  ── Extract Evidence Matched by Case ──")
     col_w = max(10, *[len(t) + 2 for t in tags])
-    header = f"  {'Case':20s} {'Phase':8s}" + "".join(f'{t:>{col_w}}' for t in tags)
-    log(header); log(f"  {'─'* (30 + col_w * len(tags))}")
+    header = f"  {'Case':20s} {'Phase':8s}" + "".join(f"{t:>{col_w}}" for t in tags)
+    log(header)
+    log(f"  {'─' * (30 + col_w * len(tags))}")
     for ci, case in enumerate(GT_CASES):
         cid = case["id"][:20]
         ph = case["phase"]
@@ -1198,7 +1416,7 @@ def main():
         log("".join(parts))
 
     # Restore 7B
-    log(f"\n  Restoring 7B extractor...")
+    log("\n  Restoring 7B extractor...")
     with open(ENV_FILE, "w") as f:
         f.write(
             "MODE=day\n"
@@ -1211,14 +1429,10 @@ def main():
             "EVICT_ROOM=0\n"
             "MLOCK=0\n"
         )
-    result = subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b"],
-                            capture_output=True, timeout=120, text=True)
-    if result.returncode != 0:
-        log(f"  !! 7B 복원 실패 (exit={result.returncode}): {result.stderr.strip()[:300]}")
-        log(f"  수동 복원: systemctl --user restart container-devforge-pod-b")
-    else:
-        log(f"  7B extractor 복원 완료")
-    log(f"{'='*60}")
+    _podman_stop_inference()
+    _podman_start_inference()
+    log("  7B extractor restored")
+    log(f"{'=' * 60}")
     test_complete("comparison complete")
 
 

@@ -9,19 +9,25 @@ LLM probe tiers (TensorRT-LLM RFC #4513):
 """
 
 import json
-import os
 import subprocess
 import time
 import urllib.request
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional
 
-from lib.infra.health_checks import svc_active
 from lib.db import psql_json
+from lib.infra.health_checks import svc_active
 from lib.watchdog.config import (
-    DAY_PORTS, SWAP_WARN_MB, SWAP_CRIT_MB, MEM_WARN_PCT, MEM_CRIT_PCT,
-    TIMER_TARGETS, LLM_TARGETS, SERVICE_TARGETS, MODE_FILE, MODE_FILE_B,
-    LATENCY_CHECK_INTERVAL, HEARTBEAT_WORKERS,
+    DAY_PORTS,
+    HEARTBEAT_WORKERS,
+    LATENCY_CHECK_INTERVAL,
+    LLM_TARGETS,
+    MEM_CRIT_PCT,
+    MEM_WARN_PCT,
+    MODE_FILE,
+    SERVICE_TARGETS,
+    SWAP_CRIT_MB,
+    TIMER_TARGETS,
 )
 from lib.watchdog.messenger import check_heartbeat
 
@@ -31,6 +37,7 @@ def log(msg: str) -> None:
 
 
 # ── MODE ────────────────────────────────────────────────────────────
+
 
 def read_mode() -> str:
     try:
@@ -43,15 +50,15 @@ def read_mode() -> str:
     return "day"
 
 
-def _current_pod_b_port() -> Optional[int]:
-    """Read Pod B's currently serving port from env file.
+def _current_inference_port() -> Optional[int]:
+    """Read inference container's currently serving port from env file.
 
-    Pod B runs a single llama-server per mode. The port is written to
-    current-mode-pod-b.env by pod_manager.py on each mode switch.
+    The inference container runs a single llama-server per mode. The port is
+    written to current-mode-inference.env on each mode switch.
     Returns None if the env file can't be read.
     """
     try:
-        with open(MODE_FILE_B) as f:
+        with open(MODE_FILE_INFERENCE) as f:
             for line in f:
                 if line.startswith("PORT="):
                     return int(line.strip().split("=", 1)[1])
@@ -61,6 +68,7 @@ def _current_pod_b_port() -> Optional[int]:
 
 
 # ── T1: HTTP Health ─────────────────────────────────────────────────
+
 
 def check_health(port: int, label: str = "") -> tuple[bool, str]:
     """T1: GET /health. Returns (ok, detail)."""
@@ -77,17 +85,23 @@ def check_health(port: int, label: str = "") -> tuple[bool, str]:
 
 # ── T2: LLM Probe (실제 추론 검증) ─────────────────────────────────
 
+
 def check_llm_probe(port: int, label: str = "", timeout: int = 15) -> tuple[bool, str]:
     """T2: POST /v1/chat with max_tokens=1. Returns (ok, latency_ms)."""
-    body = json.dumps({
-        "messages": [{"role": "user", "content": "hi"}],
-        "max_tokens": 1, "temperature": 0.1, "stream": False,
-    }).encode()
+    body = json.dumps(
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 1,
+            "temperature": 0.1,
+            "stream": False,
+        }
+    ).encode()
     t0 = time.monotonic()
     try:
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/v1/chat/completions",
-            data=body, headers={"Content-Type": "application/json"},
+            data=body,
+            headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read())
@@ -126,6 +140,7 @@ def check_probe_latency(port: int, baseline_ms: int = 2000) -> tuple[bool, str]:
 
 # ── Service / Container ─────────────────────────────────────────────
 
+
 def check_service(name: str) -> tuple[bool, str]:
     ok = svc_active(name)
     return ok, "active" if ok else "inactive"
@@ -135,7 +150,9 @@ def container_running(name: str) -> tuple[bool, str]:
     try:
         r = subprocess.run(
             ["podman", "ps", "--format", "{{.Names}}"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         names = r.stdout.strip().split("\n")
         return name in names, "running" if name in names else "not found"
@@ -145,14 +162,26 @@ def container_running(name: str) -> tuple[bool, str]:
 
 # ── PostgreSQL 실제 헬스체크 ────────────────────────────────────────
 
+
 def check_postgres() -> tuple[bool, str]:
     """실제 PG 쿼리로 postgres 상태 확인."""
     try:
         r = subprocess.run(
-            ["podman", "exec", "postgres", "psql",
-             "-U", "devforge", "-d", "devforge_app",
-             "-c", "SELECT 1"],
-            capture_output=True, text=True, timeout=10,
+            [
+                "podman",
+                "exec",
+                "postgres",
+                "psql",
+                "-U",
+                "devforge",
+                "-d",
+                "devforge_app",
+                "-c",
+                "SELECT 1",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if r.returncode == 0 and "1" in r.stdout:
             return True, "query ok"
@@ -163,10 +192,17 @@ def check_postgres() -> tuple[bool, str]:
 
 # ── 시스템 리소스 ──────────────────────────────────────────────────
 
+
 def check_memory() -> tuple[bool, dict]:
     """return (all_ok, {used_gb, total_gb, pct, swap_used_mb, swap_total_mb, swap_pct, detail})"""
-    result = {"used_gb": 0, "total_gb": 0, "pct": 0,
-              "swap_used_mb": 0, "swap_total_mb": 0, "swap_pct": 0}
+    result = {
+        "used_gb": 0,
+        "total_gb": 0,
+        "pct": 0,
+        "swap_used_mb": 0,
+        "swap_total_mb": 0,
+        "swap_pct": 0,
+    }
     try:
         r = subprocess.run(["free", "-m"], capture_output=True, text=True, timeout=5)
         lines = r.stdout.strip().split("\n")
@@ -196,17 +232,23 @@ def check_memory() -> tuple[bool, dict]:
 def check_disk() -> list[dict]:
     mounts = []
     try:
-        r = subprocess.run(["df", "-h", "--output=target,size,used,pcent"],
-                           capture_output=True, text=True, timeout=5)
+        r = subprocess.run(
+            ["df", "-h", "--output=target,size,used,pcent"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         for line in r.stdout.strip().split("\n")[1:]:  # skip header
             parts = line.split()
             if len(parts) >= 4:
-                mounts.append({
-                    "mount": parts[0],
-                    "size": parts[1],
-                    "used": parts[2],
-                    "pct": int(parts[3].replace("%", "")),
-                })
+                mounts.append(
+                    {
+                        "mount": parts[0],
+                        "size": parts[1],
+                        "used": parts[2],
+                        "pct": int(parts[3].replace("%", "")),
+                    }
+                )
     except Exception:
         pass
     return mounts
@@ -214,13 +256,15 @@ def check_disk() -> list[dict]:
 
 # ── 타이머 ─────────────────────────────────────────────────────────
 
+
 def check_timer(timer_name: str, max_idle_sec: int = 2100) -> tuple[bool, str]:
     """Timer가 max_idle_sec 내에 마지막으로 실행됐는지 확인."""
     try:
         r = subprocess.run(
-            ["systemctl", "--user", "show", timer_name,
-             "--property=LastTriggerUSec", "--value"],
-            capture_output=True, text=True, timeout=5,
+            ["systemctl", "--user", "show", timer_name, "--property=LastTriggerUSec", "--value"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         last_str = r.stdout.strip()
         if not last_str or last_str == "n/a":
@@ -238,12 +282,15 @@ def check_timer(timer_name: str, max_idle_sec: int = 2100) -> tuple[bool, str]:
 
 # ── Pipeline 프로세스 감시 ─────────────────────────────────────────
 
+
 def check_pipeline(name: str) -> tuple[bool, int]:
     """Pipeline 프로세스 생존 확인. (running, pid)."""
     try:
         r = subprocess.run(
             ["pgrep", "-f", name],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if r.stdout.strip():
             pids = r.stdout.strip().split("\n")
@@ -281,12 +328,14 @@ def check_heartbeats() -> list[dict]:
                     age_str = f"{age:.0f}s"
                 except Exception:
                     age_str = "unknown"
-            results.append({
-                "worker": worker,
-                "alive": False,
-                "last_beat": last_beat or "never",
-                "age_sec": age_str,
-            })
+            results.append(
+                {
+                    "worker": worker,
+                    "alive": False,
+                    "last_beat": last_beat or "never",
+                    "age_sec": age_str,
+                }
+            )
 
     # 2. Ad-hoc test heartbeats (discovered in DB)
     # Test scripts register heartbeat("test_*") at startup.
@@ -313,12 +362,14 @@ def check_heartbeats() -> list[dict]:
                         age_str = f"{age:.0f}s"
                     except Exception:
                         age_str = "unknown"
-                results.append({
-                    "worker": worker,
-                    "alive": False,
-                    "last_beat": last_beat or "never",
-                    "age_sec": age_str,
-                })
+                results.append(
+                    {
+                        "worker": worker,
+                        "alive": False,
+                        "last_beat": last_beat or "never",
+                        "age_sec": age_str,
+                    }
+                )
     except Exception:
         pass  # best-effort — registered workers still checked
 
@@ -327,23 +378,23 @@ def check_heartbeats() -> list[dict]:
 
 # ── Health check ────────────────────────────────────────────────────
 
+
 def check_all_llm() -> list[dict]:
     """Check active LLM endpoints: T1 + T2 probe.
 
-    Pod A (:8080) is always probed. For Pod B, only the current
-    serving port is probed (reads from current-mode-pod-b.env).
-    This prevents false alerts on ports that aren't currently serving
-    a model (Pod B is single-server, one port per mode).
+    The inference container runs one model at a time on its configured port.
+    Only the currently serving port is probed (reads from current-mode-inference.env).
+    This prevents false alerts on ports that aren't currently serving a model.
     """
     results = []
-    pod_b_port = _current_pod_b_port()
+    inference_port = _current_inference_port()
 
     for key, cfg in LLM_TARGETS.items():
         if cfg["port"] not in DAY_PORTS and read_mode() == "day":
             continue  # Night-only ports, skip during day
 
-        # Pod A :8080 always probed. Pod B ports: only probe the active one.
-        if cfg["port"] != 8080 and pod_b_port is not None and cfg["port"] != pod_b_port:
+        # Only probe the currently active port
+        if inference_port is not None and cfg["port"] != inference_port:
             continue  # Not currently serving — skip false alert
 
         t1_ok, t1_detail = check_health(cfg["port"], cfg["label"])
@@ -352,14 +403,16 @@ def check_all_llm() -> list[dict]:
         if t1_ok:
             t2_ok, t2_detail = check_llm_probe(cfg["port"], cfg["label"])
 
-        results.append({
-            "name": key,
-            "port": cfg["port"],
-            "t1_ok": t1_ok,
-            "t1_detail": t1_detail,
-            "t2_ok": t2_ok,
-            "t2_detail": t2_detail,
-        })
+        results.append(
+            {
+                "name": key,
+                "port": cfg["port"],
+                "t1_ok": t1_ok,
+                "t1_detail": t1_detail,
+                "t2_ok": t2_ok,
+                "t2_detail": t2_detail,
+            }
+        )
     return results
 
 
@@ -381,13 +434,14 @@ def check_all_timers() -> list[dict]:
 
 # ── LLM Metrics (/metrics) ────────────────────────────────────────
 
+
 def _parse_metrics_value(text: str, key: str) -> float:
     """Extract a Prometheus gauge/counter value by key prefix."""
     for line in text.splitlines():
         line = line.strip()
         if line.startswith(key + " "):
             try:
-                return float(line[len(key) + 1:].split()[0])
+                return float(line[len(key) + 1 :].split()[0])
             except (ValueError, IndexError):
                 return 0.0
     return 0.0
@@ -395,16 +449,27 @@ def _parse_metrics_value(text: str, key: str) -> float:
 
 def check_llm_metrics(port: int) -> dict:
     """GET /metrics, parse key values. Returns {processing, deferred, prompt_tps, gen_tps, max_ctx, total_prompt, total_gen}."""
-    result = {"processing": 0, "deferred": 0, "prompt_tps": 0.0, "gen_tps": 0.0,
-              "max_ctx": 0, "total_prompt": 0, "total_gen": 0}
+    result = {
+        "processing": 0,
+        "deferred": 0,
+        "prompt_tps": 0.0,
+        "gen_tps": 0.0,
+        "max_ctx": 0,
+        "total_prompt": 0,
+        "total_gen": 0,
+    }
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{port}/metrics")
         with urllib.request.urlopen(req, timeout=5) as resp:
             body = resp.read().decode()
         result["processing"] = int(_parse_metrics_value(body, "llamacpp:requests_processing"))
         result["deferred"] = int(_parse_metrics_value(body, "llamacpp:requests_deferred"))
-        result["prompt_tps"] = round(_parse_metrics_value(body, "llamacpp:prompt_tokens_seconds"), 2)
-        result["gen_tps"] = round(_parse_metrics_value(body, "llamacpp:predicted_tokens_seconds"), 2)
+        result["prompt_tps"] = round(
+            _parse_metrics_value(body, "llamacpp:prompt_tokens_seconds"), 2
+        )
+        result["gen_tps"] = round(
+            _parse_metrics_value(body, "llamacpp:predicted_tokens_seconds"), 2
+        )
         result["max_ctx"] = int(_parse_metrics_value(body, "llamacpp:n_tokens_max"))
         result["total_prompt"] = int(_parse_metrics_value(body, "llamacpp:prompt_tokens_total"))
         result["total_gen"] = int(_parse_metrics_value(body, "llamacpp:tokens_predicted_total"))
@@ -415,6 +480,7 @@ def check_llm_metrics(port: int) -> dict:
 
 # ── LLM Slots (/slots) ────────────────────────────────────────────
 
+
 def check_llm_slots(port: int) -> list[dict]:
     """GET /slots, return slot state list. Detect potential hangs is_processing=True beyond threshold."""
     try:
@@ -423,17 +489,20 @@ def check_llm_slots(port: int) -> list[dict]:
             slots = json.loads(resp.read())
         result = []
         for s in slots:
-            result.append({
-                "id": s.get("id", 0),
-                "is_processing": s.get("is_processing", False),
-                "id_task": s.get("id_task", 0),
-                "n_prompt_tokens_processed": s.get("n_prompt_tokens_processed", 0),
-                "n_prompt_tokens": s.get("n_prompt_tokens", 0),
-                "cache_tokens": s.get("n_prompt_tokens_cache", 0),
-                "ctx_size": s.get("n_ctx", 8192),
-                "cache_pct": round(s.get("n_prompt_tokens_cache", 0) / max(s.get("n_ctx", 1), 1) * 100, 1),
-            })
+            result.append(
+                {
+                    "id": s.get("id", 0),
+                    "is_processing": s.get("is_processing", False),
+                    "id_task": s.get("id_task", 0),
+                    "n_prompt_tokens_processed": s.get("n_prompt_tokens_processed", 0),
+                    "n_prompt_tokens": s.get("n_prompt_tokens", 0),
+                    "cache_tokens": s.get("n_prompt_tokens_cache", 0),
+                    "ctx_size": s.get("n_ctx", 8192),
+                    "cache_pct": round(
+                        s.get("n_prompt_tokens_cache", 0) / max(s.get("n_ctx", 1), 1) * 100, 1
+                    ),
+                }
+            )
         return result
     except Exception:
         return []
-

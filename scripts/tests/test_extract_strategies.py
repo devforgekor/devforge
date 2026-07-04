@@ -581,13 +581,13 @@ def main():
                                  "combined"])
     parser.add_argument("--model", default="7b",
                         choices=list(TEST_MODELS.keys()),
-                        help="Which model to load on Pod B :8082")
+                        help="Which model to load on inference :8082")
     args = parser.parse_args()
 
     from lib.test_common import test_setup, test_heartbeat, test_complete
     ctx = test_setup("extract_strategies", f"Extract strategy comparison ({args.model})")
 
-    # Register temp MODEL_METADATA + ensure Pod B
+    # Register temp MODEL_METADATA + ensure inference
     meta = TEST_MODELS[args.model]
     meta["threads"] = 2
     meta["threads_batch"] = 2
@@ -596,9 +596,9 @@ def main():
         meta["cache_ram"] = 512
         meta["mlock"] = 0
     pod_manager.MODEL_METADATA[f"test-{args.model}"] = meta
-    log(f"  Switching Pod B → {args.model}")
+    log(f"  Switching inference → {args.model}")
     ensure_model(f"test-{args.model}")
-    test_heartbeat(f"Pod B → {args.model}")
+    test_heartbeat(f"inference → {args.model}")
 
     # Resolve turn IDs
     if args.turn == "all":

@@ -17,7 +17,7 @@ Architecture::
         2. Format as text block → appended to SYSTEM_DAY_ENRICH
 
 Design rationale — why static instead of dynamic embed retrieval:
-  1. feedback_examples is empty during normal enrich phase (Pod B on :8082, not :8081)
+  1. feedback_examples is empty during normal enrich phase (inference on :8082, not :8081)
   2. Non-monotonic few-shot curve: embedding-similar examples cause gradient sensitivity collapse
   3. Diversity-first: max-min distance picks examples from different intent/category quadrants
   4. KV cache: static system prompt → llama.cpp prefix cache hit across section-major batches

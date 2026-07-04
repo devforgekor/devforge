@@ -8,8 +8,8 @@ Watchdog consumes them asynchronously, executes safely, records results.
 
 Usage:
     # MCP tool side (write-only, returns immediately)
-    pid = action_write("Restart pod B", action_type="podman",
-                       action_params={"container": "devforge-pod-b"})
+    pid = action_write("Restart inference", action_type="podman",
+                       action_params={"container": "devforge-inference"})
 
     # Watchdog side (consume + execute)
     for a in action_claim_pending():

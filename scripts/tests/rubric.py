@@ -28,9 +28,10 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.infra.preflight import preflight_checks
 from lib.test_common import test_setup, test_heartbeat, test_complete, log, call_llm
 from lib.db import psql_ok
+from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
 
 # ── Constants ────────────────────────────────────────────────────────────
-MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
+MODE_FILE_B = "/opt/ai_data/scripts/current-mode-inference.env"
 TIMEOUT_LLM = 600
 TIMEOUT_SWAP = 300
 
@@ -174,12 +175,12 @@ def load_input() -> Dict:
         return json.load(f)
 
 
-def swap_pod_b(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
-    log(f"  [swap] Pod B → {mode}")
+def swap_inference(mode: str, timeout: int = TIMEOUT_SWAP) -> bool:
+    log(f"  [swap] inference → {mode}")
     with open(MODE_FILE_B, "w") as f:
         f.write(f"MODE={mode}")
-    r = subprocess.run(["systemctl", "--user", "restart", "container-devforge-pod-b.service"],
-                       capture_output=True, timeout=60)
+    r = _podman_stop_inference()
+    _podman_start_inference()
     if r.returncode != 0:
         return False
     port = 8080 if mode == "review-r" else 8081
@@ -263,7 +264,7 @@ def run_primary_verify(input_data: Dict, with_rubric: bool = False, output_suffi
 
 def run_prj_combo(combo: Dict, input_data: Dict, round_num: int,
                   with_rubric: bool = False) -> Dict:
-    """Run P→R→J with a specific model combo. Swap Pod B twice."""
+    """Run P→R→J with a specific model combo. Swap inference twice."""
     suffix = f"_round{round_num}"
     rubric_tag = "_rubric" if with_rubric else ""
 
@@ -284,9 +285,9 @@ def run_prj_combo(combo: Dict, input_data: Dict, round_num: int,
     with open(fpath, "w") as f:
         json.dump(p_resp, f, ensure_ascii=False, indent=2)
 
-    # ── Step 2: Refuter — swap Pod B ──
-    log(f"  [swap] Pod B → {combo['refuter_mode']}")
-    swap_pod_b(combo["refuter_mode"])
+    # ── Step 2: Refuter — swap inference ──
+    log(f"  [swap] inference → {combo['refuter_mode']}")
+    swap_inference(combo["refuter_mode"])
 
     p_findings = p_resp.get("result", {}).get("findings", [])
     log(f"  [llm] Refuter ({combo['refuter_model']}) on {len(p_findings)} findings...")
@@ -305,9 +306,9 @@ def run_prj_combo(combo: Dict, input_data: Dict, round_num: int,
     with open(fpath, "w") as f:
         json.dump(r_resp, f, ensure_ascii=False, indent=2)
 
-    # ── Step 3: Judge — swap Pod B again ──
-    log(f"  [swap] Pod B → {combo['judge_mode']}")
-    swap_pod_b(combo["judge_mode"])
+    # ── Step 3: Judge — swap inference again ──
+    log(f"  [swap] inference → {combo['judge_mode']}")
+    swap_inference(combo["judge_mode"])
 
     r_verdicts = r_resp.get("result", {}).get("verdicts", [])
     log(f"  [llm] Judge ({combo['judge_model']})...")
@@ -355,8 +356,8 @@ def run_final_verify(input_data: Dict, prj_results: List[Dict],
                    with_rubric: bool = False, output_suffix: str = "") -> Dict:
     """Phase: 27B verify — reviews all P-R-J results."""
     log("\n=== 27B Verify (:8081 verified) ===")
-    if not swap_pod_b("verify"):
-        return {"error": "Pod B verify swap failed"}
+    if not swap_inference("verify"):
+        return {"error": "inference verify swap failed"}
 
     suffix = f"_rubric{output_suffix}" if with_rubric else output_suffix
     summaries = []

@@ -1,23 +1,21 @@
 # Status: production
-import json, os, subprocess, sys, time, urllib.request, hashlib, uuid
 import builtins
-from datetime import datetime, timezone
-from pathlib import Path
+import hashlib
+import json
+import os
+import sys
 
 # Add scripts dir to sys.path
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.infra.preflight import preflight_checks
-from lib.llm.json_parser import save_dlq, validate_schema
-from lib.pod_manager import *
-from lib.token_budget import TokenBudget
-from lib.llm_client import call_llm, resolve_model
-from lib.db import psql, psql_ok, escape_sql_string, psql_json
-from lib.pipeline_common import *
-from pipelines.night_cycle import save_feedback_to_db
 from lib.common import log
+from lib.db import escape_sql_string, psql_json
+from lib.llm_client import resolve_model
+from lib.pipeline_common import *
+from lib.pod_manager import *
+
 try:
     from sentence_transformers import SentenceTransformer
 except ImportError:
@@ -32,16 +30,28 @@ REFLECTOR_MODEL = "night_reflector"
 JUDGE_MODEL = "night_judge"
 
 PROPOSER_SYSTEM_PROMPT = """You are a code review specialist. Analyze the evaluation findings below. Identify bugs, security issues, data loss risks, and edge cases."""
-REFLECTOR_SYSTEM_PROMPT = """You are a reflector. Review the proposer's suggestions and provide feedback."""
+REFLECTOR_SYSTEM_PROMPT = (
+    """You are a reflector. Review the proposer's suggestions and provide feedback."""
+)
 JUDGE_SYSTEM_PROMPT = """You are a judge. Decide which suggestions are valid based on proposer and reflector inputs."""
 
-if not hasattr(builtins, 'DRY_RUN'): builtins.DRY_RUN = False
+if not hasattr(builtins, "DRY_RUN"):
+    builtins.DRY_RUN = False
+
 
 def call_one(model_name, sys_prompt, user_text, tag_label, max_tok=2048):
     if builtins.DRY_RUN:
         log(f"  [DRY] call_one({model_name}) → mock response")
-        return {"P_score": 5, "R_score": 5, "consensus": 1, "decision": "APPROVED", "approved": [], "rejected": []}
+        return {
+            "P_score": 5,
+            "R_score": 5,
+            "consensus": 1,
+            "decision": "APPROVED",
+            "approved": [],
+            "rejected": [],
+        }
     return llm_call(model_name, sys_prompt, user_text, max_tok, tag_label)
+
 
 def rubric_evaluate_findings(findings, tag):
     """Phase 2: Evaluate each finding against rubric criteria (day_verify)."""
@@ -72,12 +82,13 @@ def rubric_evaluate_findings(findings, tag):
 
     avg_score = 0.0
     if rubrics:
-        scores = [r.get("weighted_score", 0) for r in rubrics if r.get("weighted_score") is not None]
+        scores = [
+            r.get("weighted_score", 0) for r in rubrics if r.get("weighted_score") is not None
+        ]
         avg_score = sum(scores) / len(scores) if scores else 0.0
 
     log(f"  Evaluated {len(rubrics)} findings, avg weighted_score={avg_score:.2f}")
     return rubrics
-
 
 
 def python_verify(data, tag):
@@ -89,8 +100,9 @@ def python_verify(data, tag):
     ids = [f.get("id", f.get("fid", f"idx_{i}")) for i, f in enumerate(findings_list)]
     dupes = {i for i in ids if ids.count(i) > 1}
     if dupes:
-        issues.append({"check": "id_duplicates", "severity": "error",
-                       "detail": f"Duplicate IDs: {dupes}"})
+        issues.append(
+            {"check": "id_duplicates", "severity": "error", "detail": f"Duplicate IDs: {dupes}"}
+        )
         log(f"  {FAIL} ID duplicates: {dupes}")
     else:
         log(f"  {PASS} All {total} IDs unique")
@@ -102,36 +114,57 @@ def python_verify(data, tag):
         if m:
             missing.append((ids[i], m))
     if missing:
-        issues.append({"check": "missing_fields", "severity": "error",
-                       "detail": f"{len(missing)} findings missing fields: {missing}"})
+        issues.append(
+            {
+                "check": "missing_fields",
+                "severity": "error",
+                "detail": f"{len(missing)} findings missing fields: {missing}",
+            }
+        )
         log(f"  {FAIL} {len(missing)} findings missing required fields")
     else:
         log(f"  {PASS} All {total} findings have required fields")
 
     VALID_SEV = {"critical", "high", "medium", "low", "pass", "fail", "partial"}
-    invalid_severity = [(ids[i], f.get("severity", "?"))
-               for i, f in enumerate(findings_list)
-               if f.get("severity", "").lower() not in VALID_SEV]
+    invalid_severity = [
+        (ids[i], f.get("severity", "?"))
+        for i, f in enumerate(findings_list)
+        if f.get("severity", "").lower() not in VALID_SEV
+    ]
     if invalid_severity:
-        issues.append({"check": "invalid_severity", "severity": "warn", "detail": str(invalid_severity)})
+        issues.append(
+            {"check": "invalid_severity", "severity": "warn", "detail": str(invalid_severity)}
+        )
         log(f"  {WARN} Invalid severities: {invalid_severity}")
     else:
         log(f"  {PASS} All severities valid")
 
-    empty = [(ids[i], f.get("description", "")[:50])
-             for i, f in enumerate(findings_list)
-             if not f.get("description", "").strip()]
+    empty = [
+        (ids[i], f.get("description", "")[:50])
+        for i, f in enumerate(findings_list)
+        if not f.get("description", "").strip()
+    ]
     if empty:
-        issues.append({"check": "empty_description", "severity": "error",
-                       "detail": f"{len(empty)} empty descriptions"})
+        issues.append(
+            {
+                "check": "empty_description",
+                "severity": "error",
+                "detail": f"{len(empty)} empty descriptions",
+            }
+        )
         log(f"  {FAIL} {len(empty)} empty descriptions")
     else:
         log(f"  {PASS} All descriptions non-empty")
 
     expected = data.get("total_findings", 0)
     if expected and expected != total:
-        issues.append({"check": "count_mismatch", "severity": "error",
-                       "detail": f"meta={expected} actual={total}"})
+        issues.append(
+            {
+                "check": "count_mismatch",
+                "severity": "error",
+                "detail": f"meta={expected} actual={total}",
+            }
+        )
         log(f"  {FAIL} Count mismatch: meta={expected} actual={total}")
     else:
         log(f"  {PASS} Finding count matches metadata ({total})")
@@ -146,45 +179,80 @@ def python_verify(data, tag):
         severity_dist[s] = severity_dist.get(s, 0) + 1
     log(f"  Severity distribution: {severity_dist}")
 
-    result = {"total_findings": total, "issues_found": len(issues),
-              "issues": issues, "severity_distribution": severity_dist}
+    result = {
+        "total_findings": total,
+        "issues_found": len(issues),
+        "issues": issues,
+        "severity_distribution": severity_dist,
+    }
     save(f"pyverify_{tag}", tag, result)
     log(f"  -> {len(issues)} issues, {total} findings checked")
     return result
 
 
-
 MOCK_RESULT = {
     "result": {
         "findings": [
-            {"id": "F001", "severity": "critical", "category": "bug", "description": "Mock finding for dry-run test", "file": "mock.py"},
-            {"id": "F002", "severity": "high", "category": "security", "description": "Another mock finding", "file": "mock.py"},
+            {
+                "id": "F001",
+                "severity": "critical",
+                "category": "bug",
+                "description": "Mock finding for dry-run test",
+                "file": "mock.py",
+            },
+            {
+                "id": "F002",
+                "severity": "high",
+                "category": "security",
+                "description": "Another mock finding",
+                "file": "mock.py",
+            },
         ],
         "rubric_evaluations": [
-            {"id": "F001", "correctness": 8, "correctness_justification": "Real issue",
-             "actionability": 7, "actionability_justification": "Clear fix",
-             "evidence": 9, "evidence_justification": "Code evidence present",
-             "novelty": 6, "novelty_justification": "Known pattern",
-             "weighted_score": 7.65},
-            {"id": "F002", "correctness": 5, "correctness_justification": "Unclear",
-             "actionability": 4, "actionability_justification": "No mitigation",
-             "evidence": 6, "evidence_justification": "Partial evidence",
-             "novelty": 3, "novelty_justification": "Well known",
-             "weighted_score": 4.75},
+            {
+                "id": "F001",
+                "correctness": 8,
+                "correctness_justification": "Real issue",
+                "actionability": 7,
+                "actionability_justification": "Clear fix",
+                "evidence": 9,
+                "evidence_justification": "Code evidence present",
+                "novelty": 6,
+                "novelty_justification": "Known pattern",
+                "weighted_score": 7.65,
+            },
+            {
+                "id": "F002",
+                "correctness": 5,
+                "correctness_justification": "Unclear",
+                "actionability": 4,
+                "actionability_justification": "No mitigation",
+                "evidence": 6,
+                "evidence_justification": "Partial evidence",
+                "novelty": 3,
+                "novelty_justification": "Well known",
+                "weighted_score": 4.75,
+            },
         ],
         "verdicts": [
             {"id": "F001", "verdict": "accept", "reason": "Valid dry-run finding"},
             {"id": "F002", "verdict": "reject", "reason": "Not reproducible in dry-run"},
         ],
-        "P_score": 25, "R_score": 22,
+        "P_score": 25,
+        "R_score": 22,
         "P_rubric": {"correctness": 8, "coverage": 9, "precision": 8},
         "R_rubric": {"accuracy": 7, "efficiency": 8, "completeness": 7},
-        "decision": "APPROVED", "consensus_score": 85,
-        "approved": ["F001"], "rejected": ["F002"],
+        "decision": "APPROVED",
+        "consensus_score": 85,
+        "approved": ["F001"],
+        "rejected": ["F002"],
         "rubric_evaluation": {
-            "fairness": 8, "fairness_justification": "Balanced scoring",
-            "clarity": 7, "clarity_justification": "Clear report",
-            "consistency": 8, "consistency_justification": "Consistent decisions",
+            "fairness": 8,
+            "fairness_justification": "Balanced scoring",
+            "clarity": 7,
+            "clarity_justification": "Clear report",
+            "consistency": 8,
+            "consistency_justification": "Consistent decisions",
         },
         "report": {
             "summary": "Mock dry-run report summary",
@@ -195,24 +263,71 @@ MOCK_RESULT = {
         "handoff": {
             "source": "dry_run_mock",
             "executive_summary": "Dry-run test handoff",
-            "approved": [{"id": "F001", "severity":"critical","category":"bug","finding":"dry-run","approval_rationale":"test"}],
-            "rejected": [{"id": "F002", "severity":"high","category":"security","finding":"dry-run","rejection_rationale":"test"}],
-            "critical_remaining": [], "unresolved_count": 0,
-            "verifier_priority": ["Check F001"], "quality_red_flags": [],
-            "p_score": 25, "r_score": 22, "j_consensus": 85,
+            "approved": [
+                {
+                    "id": "F001",
+                    "severity": "critical",
+                    "category": "bug",
+                    "finding": "dry-run",
+                    "approval_rationale": "test",
+                }
+            ],
+            "rejected": [
+                {
+                    "id": "F002",
+                    "severity": "high",
+                    "category": "security",
+                    "finding": "dry-run",
+                    "rejection_rationale": "test",
+                }
+            ],
+            "critical_remaining": [],
+            "unresolved_count": 0,
+            "verifier_priority": ["Check F001"],
+            "quality_red_flags": [],
+            "p_score": 25,
+            "r_score": 22,
+            "j_consensus": 85,
         },
         "handoff_comparison": {
-            "better_handoff": "equal", "reason": "Both sources agree in dry-run",
-            "llm_r_strengths": ["Rich descriptions"], "python_strengths": ["Deterministic counts"],
+            "better_handoff": "equal",
+            "reason": "Both sources agree in dry-run",
+            "llm_r_strengths": ["Rich descriptions"],
+            "python_strengths": ["Deterministic counts"],
         },
-        "final_verdict": "approved_with_conditions", "action": "commit", "confidence": 80,
+        "final_verdict": "approved_with_conditions",
+        "action": "commit",
+        "confidence": 80,
         "summary": "Dry-run verification passed with conditions",
         "reasoning": "Mock reasoning for dry-run test",
-        "verification_items": [{"check":"All findings verified","result":"pass","detail":"Mock verification"}],
+        "verification_items": [
+            {"check": "All findings verified", "result": "pass", "detail": "Mock verification"}
+        ],
         "feedback": {
-            "P": {"model":"night_proposer","role":"proposer","score":80,"strengths":["Good coverage"],"weaknesses":["Needs more detail"],"improvements":["Add more context"]},
-            "R": {"model":"night_reflector","role":"reflector","score":75,"strengths":["Accurate"],"weaknesses":["Brief reasoning"],"improvements":["Elaborate on rejections"]},
-            "J": {"model":"night_judge","role":"judge","score":85,"strengths":["Fair"],"weaknesses":["Could be more detailed"],"improvements":["Add more rationale"]},
+            "P": {
+                "model": "night_proposer",
+                "role": "proposer",
+                "score": 80,
+                "strengths": ["Good coverage"],
+                "weaknesses": ["Needs more detail"],
+                "improvements": ["Add more context"],
+            },
+            "R": {
+                "model": "night_reflector",
+                "role": "reflector",
+                "score": 75,
+                "strengths": ["Accurate"],
+                "weaknesses": ["Brief reasoning"],
+                "improvements": ["Elaborate on rejections"],
+            },
+            "J": {
+                "model": "night_judge",
+                "role": "judge",
+                "score": 85,
+                "strengths": ["Fair"],
+                "weaknesses": ["Could be more detailed"],
+                "improvements": ["Add more rationale"],
+            },
         },
     },
     "usage": {"prompt_tokens": 500, "completion_tokens": 200},
@@ -225,25 +340,24 @@ REFLECTOR_MODEL = "night_reflector"
 JUDGE_MODEL = "night_judge"
 
 
-
 def call_one(model_name, sys_prompt, user_text, tag_label, max_tok=2048):
     """ensure_model -> LLM call. Day models skip restart if already healthy."""
     physical = resolve_model(model_name)
     if DRY_RUN:
         log(f"  [DRY] call_one({model_name}) → mock response")
         return MOCK_RESULT
-    # Day models (reviewer/extractor) skip restart — Pod B stays running
+    # Day models (reviewer/extractor) skip restart — inference stays running
     # Night models (proposer/reflector/judge/verifier) always restart for mode swap
     skip_if_healthy = physical not in NIGHT_MODELS
     ok = ensure_model(physical, skip_if_healthy=skip_if_healthy)
     if not ok:
-        abort("컨테이너 시작 실패", model_name,
-              f"{model_name} 컨테이너가 300s 내에 준비되지 않음")
+        abort("컨테이너 시작 실패", model_name, f"{model_name} 컨테이너가 300s 내에 준비되지 않음")
     return llm_call(
-        [{"role": "system", "content": sys_prompt},
-         {"role": "user", "content": user_text}],
-        physical, max_tokens=max_tok, label=tag_label)
-
+        [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_text}],
+        physical,
+        max_tokens=max_tok,
+        label=tag_label,
+    )
 
 
 def compile_handoff_single(r, round_num, with_rubric):
@@ -300,32 +414,39 @@ def compile_handoff(prj_results, round_num, with_rubric):
     return handoff
 
 
-
 def run_propose_review_judge(state, tag, rubric_append):
-    """P-R-J 1회 패스. Pod A stop → P → R → J → state 저장."""
-    # Pod A stop — free RAM before Pod B switches to 30B/14B night models
-    stop_pod_a()
+    """P-R-J 1회 패스. P → R → J → state 저장."""
 
     log("\n--- Night Debate — Proposer (P) ---")
     handoff_fragment = {}
 
     # P — gets findings by severity + P context
     p_max = 4096
-    proposer_output = call_one(PROPOSER_MODEL, PROPOSER_SYSTEM_PROMPT + rubric_append,
-                   state.build_context("prj_proposer"),
-                   f"P_{tag}", max_tok=p_max)
+    proposer_output = call_one(
+        PROPOSER_MODEL,
+        PROPOSER_SYSTEM_PROMPT + rubric_append,
+        state.build_context("prj_proposer"),
+        f"P_{tag}",
+        max_tok=p_max,
+    )
     save(f"p_{tag}", tag, proposer_output)
     p_findings = (proposer_output or {}).get("result", {}).get("findings", [])
     prev_count = len(p_findings)
     p_findings = utils._dedup_findings(p_findings)
     if len(p_findings) < prev_count:
-        log(f"  Dedup: {prev_count} → {len(p_findings)} findings ({prev_count - len(p_findings)} removed)")
+        log(
+            f"  Dedup: {prev_count} → {len(p_findings)} findings ({prev_count - len(p_findings)} removed)"
+        )
 
     # R
     r_max = 2048
-    reflector_output = call_one(REFLECTOR_MODEL, REFLECTOR_SYSTEM_PROMPT + rubric_append,
-                   f"Proposer findings:\n{json.dumps(p_findings, ensure_ascii=False, indent=2)[:4000]}",
-                   f"R_{tag}", max_tok=r_max)
+    reflector_output = call_one(
+        REFLECTOR_MODEL,
+        REFLECTOR_SYSTEM_PROMPT + rubric_append,
+        f"Proposer findings:\n{json.dumps(p_findings, ensure_ascii=False, indent=2)[:4000]}",
+        f"R_{tag}",
+        max_tok=r_max,
+    )
     save(f"r_{tag}", tag, reflector_output)
     r_verdicts = (reflector_output or {}).get("result", {}).get("verdicts", [])
     r_rejected = (reflector_output or {}).get("result", {}).get("rejected_findings", [])
@@ -334,13 +455,17 @@ def run_propose_review_judge(state, tag, rubric_append):
 
     # J
     j_max = 2048
-    judge_output = call_one(JUDGE_MODEL, JUDGE_SYSTEM_PROMPT + rubric_append,
-                   state.build_context("prj_judge", {"rotation_index": 0})
-                   + f"\n\n### P findings:\n"
-                   + json.dumps(p_findings, ensure_ascii=False, indent=2)[:2000]
-                   + f"\n\n### R verdicts:\n"
-                   + json.dumps(r_verdicts, ensure_ascii=False, indent=2)[:2000],
-                   f"J_{tag}", max_tok=j_max)
+    judge_output = call_one(
+        JUDGE_MODEL,
+        JUDGE_SYSTEM_PROMPT + rubric_append,
+        state.build_context("prj_judge", {"rotation_index": 0})
+        + "\n\n### P findings:\n"
+        + json.dumps(p_findings, ensure_ascii=False, indent=2)[:2000]
+        + "\n\n### R verdicts:\n"
+        + json.dumps(r_verdicts, ensure_ascii=False, indent=2)[:2000],
+        f"J_{tag}",
+        max_tok=j_max,
+    )
     save(f"j_{tag}", tag, judge_output)
 
     judge_result = (judge_output or {}).get("result", {})
@@ -348,7 +473,9 @@ def run_propose_review_judge(state, tag, rubric_append):
     j_handoff = judge_result.get("handoff", {})
     handoff_fragment = j_handoff
     prj_result = {
-        "p_model": PROPOSER_MODEL, "r_model": REFLECTOR_MODEL, "j_model": JUDGE_MODEL,
+        "p_model": PROPOSER_MODEL,
+        "r_model": REFLECTOR_MODEL,
+        "j_model": JUDGE_MODEL,
         "P_score": judge_result.get("P_score", 0),
         "R_score": judge_result.get("R_score", 0),
         "consensus": judge_result.get("consensus_score", 0),
@@ -366,16 +493,17 @@ def run_propose_review_judge(state, tag, rubric_append):
         "report_recommendation": j_report.get("recommendation", ""),
     }
     state.add_prj_rotation(prj_result)
-    ps = prj_result['P_score']
-    rs = prj_result['R_score']
-    cs = prj_result['consensus']
-    slack_msg = (f"[P-R-J] *Round {state.round_num}*\n"
-                 f"P={PROPOSER_MODEL}→{ps} | R={REFLECTOR_MODEL}→{rs} | J={JUDGE_MODEL}→consensus={cs}\n")
+    ps = prj_result["P_score"]
+    rs = prj_result["R_score"]
+    cs = prj_result["consensus"]
+    slack_msg = (
+        f"[P-R-J] *Round {state.round_num}*\n"
+        f"P={PROPOSER_MODEL}→{ps} | R={REFLECTOR_MODEL}→{rs} | J={JUDGE_MODEL}→consensus={cs}\n"
+    )
     if j_report.get("summary"):
         slack_msg += f"> {j_report['summary'][:120]}"
     slack_send(slack_msg)
     return prj_result, handoff_fragment, p_findings, r_verdicts
-
 
 
 HANDOFF_SYSTEM_PROMPT = """You are a senior reviewer (R) writing the final handoff document after a complete P-R-J review cycle.
@@ -432,7 +560,6 @@ Schema:
 }"""
 
 
-
 def _get_turn(turn_id):
     """Query turns table by UUID."""
     sql = (
@@ -445,8 +572,10 @@ def _get_turn(turn_id):
         return None
     r = rows[0]
     return {
-        "id": r["id"], "user_turn": r["user_turn"],
-        "thinking": r.get("thinking") or None, "text": r["text"],
+        "id": r["id"],
+        "user_turn": r["user_turn"],
+        "thinking": r.get("thinking") or None,
+        "text": r["text"],
         "source_message_id": r.get("source_message_id", ""),
         "created_at": r["created_at"],
         "conversation_id": r["conversation_id"],
@@ -468,13 +597,15 @@ def _get_facts(turn_id):
         return []
     facts = []
     for row in rows:
-        facts.append({
-            "fact_index": row.get("fact_index", 0) or 0,
-            "fact_type": row.get("fact_type", ""),
-            "evidence": row.get("evidence", ""),
-            "extract_model": row.get("extract_model", ""),
-            "verdict": row.get("verdict", ""),
-        })
+        facts.append(
+            {
+                "fact_index": row.get("fact_index", 0) or 0,
+                "fact_type": row.get("fact_type", ""),
+                "evidence": row.get("evidence", ""),
+                "extract_model": row.get("extract_model", ""),
+                "verdict": row.get("verdict", ""),
+            }
+        )
     return facts
 
 
@@ -502,14 +633,16 @@ def _read_pending_items(limit=5):
         body = row.get("body")
         if not isinstance(body, dict):
             continue
-        items.append({
-            "log_id": row.get("id", 0) or 0,
-            "body": body,
-            "title": row.get("title", ""),
-            "summary": row.get("summary", ""),
-            "created_at": row.get("created_at", ""),
-            "day_review": row.get("day_review_body"),
-        })
+        items.append(
+            {
+                "log_id": row.get("id", 0) or 0,
+                "body": body,
+                "title": row.get("title", ""),
+                "summary": row.get("summary", ""),
+                "created_at": row.get("created_at", ""),
+                "day_review": row.get("day_review_body"),
+            }
+        )
     return items
 
 
@@ -525,19 +658,26 @@ def _build_p_context(turn, facts, body, day_review=None):
         f"=== CONTEXT: facts ({len(facts)}) START ===",
     ]
     for f in facts:
-        parts.append(f"  [{f.get('fact_type','?')}] {f.get('evidence','')[:300]}")
+        parts.append(f"  [{f.get('fact_type', '?')}] {f.get('evidence', '')[:300]}")
     parts.append("=== CONTEXT: facts END ===")
     enrich_data = body.get("enrich") or body.get("mcp", {})
     if enrich_data:
-        parts.extend(["", "=== CONTEXT: enrich START ===",
-                      f"  tldr: {enrich_data.get('tldr', '')}",
-                      f"  intent: {enrich_data.get('intent', '')}"])
+        parts.extend(
+            [
+                "",
+                "=== CONTEXT: enrich START ===",
+                f"  tldr: {enrich_data.get('tldr', '')}",
+                f"  intent: {enrich_data.get('intent', '')}",
+            ]
+        )
         ents = enrich_data.get("entities", {})
         if ents:
             files = ents.get("files", [])[:5]
             funcs = ents.get("functions", [])[:5]
-            parts.append(f"  entities: files={len(ents.get('files',[]))}, "
-                         f"funcs={len(ents.get('functions',[]))}")
+            parts.append(
+                f"  entities: files={len(ents.get('files', []))}, "
+                f"funcs={len(ents.get('functions', []))}"
+            )
             if files:
                 for f in files:
                     parts.append(f"    file: {f}")
@@ -553,29 +693,33 @@ def _build_p_context(turn, facts, body, day_review=None):
         jr = day_review.get("J_results", {})
         dr_findings = day_review.get("P_results", [])
         dr_verdicts = day_review.get("R_results", [])
-        parts.extend([
-            "",
-            "=== CONTEXT: review START ===",
-            f"  [note: day review by day_p+day_r, may contain hallucinations]",
-            f"  P_score={jr.get('P_score','?')} R_score={jr.get('R_score','?')}",
-            f"  decision={jr.get('decision','?')}",
-            f"  approved={jr.get('approved',[])}",
-            f"  rejected={jr.get('rejected',[])}",
-        ])
+        parts.extend(
+            [
+                "",
+                "=== CONTEXT: review START ===",
+                "  [note: day review by day_p+day_r, may contain hallucinations]",
+                f"  P_score={jr.get('P_score', '?')} R_score={jr.get('R_score', '?')}",
+                f"  decision={jr.get('decision', '?')}",
+                f"  approved={jr.get('approved', [])}",
+                f"  rejected={jr.get('rejected', [])}",
+            ]
+        )
         if dr_findings:
             parts.append(f"  Day findings ({len(dr_findings)}):")
             for f in dr_findings[:5]:
-                parts.append(f"    [{f.get('severity','?')}] {f.get('description','')[:120]}")
+                parts.append(f"    [{f.get('severity', '?')}] {f.get('description', '')[:120]}")
         if dr_verdicts:
             parts.append(f"  Day verdicts ({len(dr_verdicts)}):")
             for v in dr_verdicts[:5]:
-                parts.append(f"    {v.get('id','?')}: {v.get('verdict','?')}")
-        parts.extend([
-            "",
-            "Perform your OWN independent review. Day results are reference only.",
-            "Do NOT rely on day findings — verify everything yourself.",
-            "=== CONTEXT: review END ===",
-        ])
+                parts.append(f"    {v.get('id', '?')}: {v.get('verdict', '?')}")
+        parts.extend(
+            [
+                "",
+                "Perform your OWN independent review. Day results are reference only.",
+                "Do NOT rely on day findings — verify everything yourself.",
+                "=== CONTEXT: review END ===",
+            ]
+        )
     return "\n".join(parts)
 
 
@@ -584,8 +728,15 @@ def _batch_p(items, rubric_append):
     log(f"\n--- P Batch Review ({len(items)} items) ---")
     if DRY_RUN:
         log("  [DRY] mock P batch")
-        MOCK = [{"id": "M001", "severity": "medium", "category": "quality",
-                  "description": "Dry-run P finding for extract review", "file": "extract"}]
+        MOCK = [
+            {
+                "id": "M001",
+                "severity": "medium",
+                "category": "quality",
+                "description": "Dry-run P finding for extract review",
+                "file": "extract",
+            }
+        ]
         return [MOCK for _ in items]
 
     ok = ensure_model(PROPOSER_MODEL)
@@ -598,16 +749,21 @@ def _batch_p(items, rubric_append):
         turn_id = item["body"].get("turn_id", "")
         turn = _get_turn(turn_id)
         if not turn:
-            log(f"  [{idx+1}/{len(items)}] Turn not found: {turn_id[:8]}")
+            log(f"  [{idx + 1}/{len(items)}] Turn not found: {turn_id[:8]}")
             results.append([])
             continue
         facts = _get_facts(turn_id)
-        log(f"  [{idx+1}/{len(items)}] {turn_id[:8]}: {len(facts)} facts")
+        log(f"  [{idx + 1}/{len(items)}] {turn_id[:8]}: {len(facts)} facts")
         ctx = _build_p_context(turn, facts, item["body"], day_review=item.get("day_review"))
         resp = llm_call(
-            [{"role": "system", "content": PROPOSER_SYSTEM_PROMPT + rubric_append},
-             {"role": "user", "content": ctx}],
-            model=PROPOSER_MODEL, max_tokens=4096, label=f"P_queue_{idx}")
+            [
+                {"role": "system", "content": PROPOSER_SYSTEM_PROMPT + rubric_append},
+                {"role": "user", "content": ctx},
+            ],
+            model=PROPOSER_MODEL,
+            max_tokens=4096,
+            label=f"P_queue_{idx}",
+        )
         findings = resp.get("result", {}).get("findings", [])
         log(f"    P: {len(findings)} findings")
         results.append(findings)
@@ -634,9 +790,14 @@ def _batch_r(items, p_results, rubric_append):
             continue
         ctx = f"Proposer findings:\n{json.dumps(p_findings, ensure_ascii=False, indent=2)[:4000]}"
         resp = llm_call(
-            [{"role": "system", "content": REFLECTOR_SYSTEM_PROMPT + rubric_append},
-             {"role": "user", "content": ctx}],
-            model=REFLECTOR_MODEL, max_tokens=2048, label=f"R_queue_{idx}")
+            [
+                {"role": "system", "content": REFLECTOR_SYSTEM_PROMPT + rubric_append},
+                {"role": "user", "content": ctx},
+            ],
+            model=REFLECTOR_MODEL,
+            max_tokens=2048,
+            label=f"R_queue_{idx}",
+        )
         verdicts = resp.get("result", {}).get("verdicts", [])
         log(f"    R: {len(verdicts)} verdicts")
         results.append(verdicts)
@@ -648,8 +809,14 @@ def _batch_j(items, p_results, r_results, rubric_append):
     log(f"\n--- J(night_judge) Batch Scoring ({len(items)} items) ---")
     if DRY_RUN:
         log("  [DRY] mock J batch")
-        MOCK = {"P_score": 25, "R_score": 22, "decision": "APPROVED",
-                "consensus_score": 85, "approved": ["M001"], "rejected": []}
+        MOCK = {
+            "P_score": 25,
+            "R_score": 22,
+            "decision": "APPROVED",
+            "consensus_score": 85,
+            "approved": ["M001"],
+            "rejected": [],
+        }
         return [MOCK for _ in items]
 
     ok = ensure_model(JUDGE_MODEL)
@@ -666,13 +833,18 @@ def _batch_j(items, p_results, r_results, rubric_append):
             json.dumps(r_verdicts, ensure_ascii=False, indent=2)[:2000],
         ]
         resp = llm_call(
-            [{"role": "system", "content": JUDGE_SYSTEM_PROMPT + rubric_append},
-             {"role": "user", "content": "\n".join(ctx_parts)}],
-            model=JUDGE_MODEL, max_tokens=2048, label=f"J_queue_{idx}")
+            [
+                {"role": "system", "content": JUDGE_SYSTEM_PROMPT + rubric_append},
+                {"role": "user", "content": "\n".join(ctx_parts)},
+            ],
+            model=JUDGE_MODEL,
+            max_tokens=2048,
+            label=f"J_queue_{idx}",
+        )
         jr = resp.get("result", {})
-        log(f"    J: P_score={jr.get('P_score','?')} R_score={jr.get('R_score','?')} "
-            f"decision={jr.get('decision','?')}")
+        log(
+            f"    J: P_score={jr.get('P_score', '?')} R_score={jr.get('R_score', '?')} "
+            f"decision={jr.get('decision', '?')}"
+        )
         results.append(jr if jr.get("decision") in ("APPROVED", "REJECT") else None)
     return results
-
-

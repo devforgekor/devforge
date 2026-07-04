@@ -3,10 +3,10 @@
 """Watchdog 설정 — 체크 대상, 간격, 임계값.
 
 MODE=day (관찰형, 60s 주기):
-  Pod A=reranker (:8080)
-  Pod B=day (:8082) extractor (day verify via model swap on :8082)
+  inference=reranker (:8080)
+  inference=day (:8082) extractor (day verify via model swap on :8082)
   day_cycle.sh — watchdog-managed async pipeline (embed → extract → enrich → verify)
-  Fix loop: Pod A (:8080)가 수정 담당
+  Fix loop: inference (:8080)가 수정 담당
 
 MODE=night (능동형, 60s 주기):
   Night Debate (:8081 P → :8082 R → :8083 J, sequential)
@@ -16,23 +16,20 @@ MODE=night (능동형, 60s 주기):
 """
 
 import os
-from pathlib import Path
 
 # ── 인터벌 ──────────────────────────────────────────────────────────
-CHECK_INTERVAL = 60        # seconds between check cycles
+CHECK_INTERVAL = 60  # seconds between check cycles
 HEARTBEAT_INTERVAL = 1800  # 30min Slack heartbeat (aligned to :15 / :45)
-LIVENESS_STALE_SEC = 900   # 15min — watchdog dead man's switch threshold
+LIVENESS_STALE_SEC = 900  # 15min — watchdog dead man's switch threshold
 LATENCY_CHECK_INTERVAL = 300  # 5min between T3 latency checks
 
 # ── MODE ────────────────────────────────────────────────────────────
 MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
-MODE_FILE_A = "/opt/ai_data/scripts/current-mode-pod-a.env"
-MODE_FILE_B = "/opt/ai_data/scripts/current-mode-pod-b.env"
+MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"
 
 # ── 포트 / 라벨 ─────────────────────────────────────────────────────
-# Day mode targets: Pod A reserved + Pod B day chain
+# Inference container serves all models across ports 8080-8084
 LLM_TARGETS = {
-    "pod-a":     {"port": 8080, "label": "pod-a",     "day_model": "operator"},
     "day-extract": {"port": 8082, "label": "day-extract", "day_model": "extractor"},
     "day-verify": {"port": 8082, "label": "day-verify", "day_model": "judge"},
     # Night-only model: verifier on :8084
@@ -40,12 +37,10 @@ LLM_TARGETS = {
 }
 
 # Day mode: check these ports for LLM probes
-DAY_PORTS = {8080, 8082, 8083}
+DAY_PORTS = {8080, 8082}
 
 # ── 서비스 / 타이머 ─────────────────────────────────────────────────
 SERVICE_TARGETS = [
-    "container-devforge-pod-a",
-    "container-devforge-pod-b",
     "devforge-turn-watcher",
 ]
 
@@ -55,7 +50,7 @@ ALERT_ONLY_TARGETS = [
 ]
 
 TIMER_TARGETS = {
-    "devforge-night-cycle.timer":  {"expected": "night_cycle",   "max_idle": 90000},    # 25h
+    "devforge-night-cycle.timer": {"expected": "night_cycle", "max_idle": 90000},  # 25h
 }
 
 # ── 컨테이너 exclusion (절대 재시작 금지) ───────────────────────────
@@ -83,13 +78,13 @@ ALERT_DEDUP_SEC = 300  # 5min per-component dedup
 # ── Heartbeat (Dead Man's Switch) ────────────────────────────────────
 HEARTBEAT_STALE_SEC = 1800  # 30min without heartbeat → hang 판정
 HEARTBEAT_WORKERS: dict[str, int] = {
-    "embed_batch": 1800,            # embed_batch.py batch loop
-    "liveness_embed_batch": 1800,   # background liveness thread (embed_batch.py)
-    "entity_scan": 1800,            # entity_scan.py — deterministic entity scan
-    "polish_batch": 1800,           # polish_batch.py — kiwi text polish
-    "day_extract": 1800,            # extract.py — LLM extraction pipeline
-    "day_enrich": 1800,             # enrich.py — LLM enrichment pipeline
-    "day_verify": 1800,             # day_verify.py — verification pipeline
+    "embed_batch": 1800,  # embed_batch.py batch loop
+    "liveness_embed_batch": 1800,  # background liveness thread (embed_batch.py)
+    "entity_scan": 1800,  # entity_scan.py — deterministic entity scan
+    "polish_batch": 1800,  # polish_batch.py — kiwi text polish
+    "day_extract": 1800,  # extract.py — LLM extraction pipeline
+    "day_enrich": 1800,  # enrich.py — LLM enrichment pipeline
+    "day_verify": 1800,  # day_verify.py — verification pipeline
 }  # worker_name → max_age_seconds. Only register workers that actually call heartbeat().
 
 # ── Pipeline intermediate state recovery ──────────────────────────
@@ -97,9 +92,9 @@ HEARTBEAT_WORKERS: dict[str, int] = {
 # Threshold per state: max single LLM call time + safety margin.
 # extracting → scanned, enriching → extracted, verifying → enriched
 PIPELINE_INTERMEDIATE_STATES: dict[str, dict] = {
-    "extracting": {"to_state": "scanned",   "stale_sec": 1800},  # 30 min
-    "enriching":  {"to_state": "extracted", "stale_sec": 1800},  # 30 min
-    "verifying":  {"to_state": "enriched",  "stale_sec": 1800},  # 30 min
+    "extracting": {"to_state": "scanned", "stale_sec": 1800},  # 30 min
+    "enriching": {"to_state": "extracted", "stale_sec": 1800},  # 30 min
+    "verifying": {"to_state": "enriched", "stale_sec": 1800},  # 30 min
 }
 
 # ── Token stagnation detection ────────────────────────────────────

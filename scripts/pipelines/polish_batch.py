@@ -316,7 +316,7 @@ def main():
             turn_ids.append(sys.argv[i + 1])
 
     if not no_llm:
-        print(f"  Polisher available via Pod A router (:8083)", flush=True)
+        print(f"  Polisher available via inference router (:8083)", flush=True)
 
     # Register heartbeat pulse + SIGTERM cleanup
     if not no_llm:

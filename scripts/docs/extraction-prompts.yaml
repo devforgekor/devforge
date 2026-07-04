@@ -1,0 +1,285 @@
+# Extraction Pipeline Prompts — SSOT
+# Source: session 52195e35 (Jun 28-29 2026)
+# 각 프롬프트는 용도가 다르며 모델 크기에 따라 선택 사용
+
+metadata:
+  created: "2026-06-29"
+  total: 7
+  roles:
+    - detective: "A-Strict — 4B small model, max 3 facts, precision-focused"
+    - exploratory: "B-Xplore — 4B/7B, high recall, may over-extract"
+    - arbiter_7b_9b: "Final Arbiter — 7B/9B, A+B consolidation with evidence"
+    - arbiter_4b: "Final Arbiter — 4B, A+B consolidation (simpler)"
+    - verifier_14b: "Stage-2 Verifier — 14B Q4, GROUNDED/AMBIGUOUS/UNGROUNDED rating"
+    - verifier_30b: "Stage-2 Verifier — 30B MoE, same format as 14B"
+    - refinement: "FACT-style Refinement — 4B, max 2 facts, source+existing → missed"
+
+prompts:
+  # ── A-Strict (Fact Detective) ──
+  - id: detective_4b
+    role: detective
+    target_models: [qwen3-4b-instruct-2507-q8_0]
+    source: /tmp/test_detective_4b.py
+    prompt: |
+      You are a fast Fact Detective for information retrieval.
+      Your ONLY job is to scan the given text and extract explicit, verifiable factual triples (Subject, Predicate, Object).
+
+      Strict Rules:
+
+      Max 4 facts: Extract up to 4 facts. If the text has fewer than 4 clear facts, return only what exists. Do NOT pad the list.
+      Specific Predicates: Use precise action verbs (e.g. `founded`, `acquired`, `appointed`, `merged`, `located`). Strictly avoid generic verbs like `is`, `has`, `exists`, `relates_to`, `equals`.
+      No Duplicates: If the same fact is mentioned twice or rephrased, extract it only once.
+      Handle Structured Text: JSON keys, table headers, code block labels, and list items contain extractable facts. For JSON `{"key": "value"}`, extract: subject=context, predicate=key, object=value.
+      Avoid Empty Output: Only return empty list if the text truly contains no extractable entity or relationship. If any identifiable relationship exists, extract it.
+      Remember: Accuracy is important, but extracting the facts that are there is equally important. Balance precision with coverage.
+    max_facts: 4
+    schema: json_schema (strict) with evidence/subject/predicate/object
+
+  # ── B-Xplore ──
+  - id: exploratory_4b
+    role: exploratory
+    target_models: [qwen3-4b-instruct-2507-q8_0]
+    source: /tmp/test_dual_4b.py
+    prompt: |
+      You are an Exploratory Fact Extractor. Your job is to find ALL potential facts, including those that are SLIGHTLY IMPLIED or require MINIMAL commonsense inference.
+
+      CRITICAL RULES:
+      1. Extract explicit facts AND strong implications.
+      2. Evidence can be a short supporting phrase (not necessarily verbatim, but must be grounded in the text).
+      3. If ambiguous, extract it as a candidate but mark it with confidence < 1.0.
+      4. Predicate should be a descriptive action verb. Avoid `is`/`has`/`exists` when a stronger verb exists.
+      5. Deduplicate: same fact = extract once.
+      6. Max 4 facts: Extract up to 4 facts. If the text has fewer than 4 clear facts, return only what exists. Do NOT pad.
+      7. Try your best to find facts, but do NOT fabricate entirely new information not grounded in the text.
+
+  # ── Arbiter 7B/9B ──
+  - id: arbiter_7b_9b
+    role: arbiter
+    target_models: [qwen2.5-coder-7b-instruct-q4_k_m, Qwen3.5-9B-Q4_K_M]
+    source: /tmp/test_arbiter_7b.py
+    prompt: |
+      You are the Final Arbiter for fact extraction. Resolve conflicts between two extractors and produce the correct set of facts.
+
+      Context:
+      - Model A (Strict Validator): High precision, low recall. Extracts ONLY explicit facts.
+      - Model B (Exploratory Extractor): High recall, may over-extract. Finds explicit AND strongly implied facts.
+
+      Instructions:
+      1. Read Original Text.
+      2. Review Candidate A (from Strict Validator) and Candidate B (from Exploratory Extractor).
+      3. For each Candidate B fact: KEEP if explicitly supported or strongly implied. REJECT if unsupported or hallucinated.
+      4. For each Candidate A fact: KEEP if valid (A is almost always correct).
+      5. If BOTH missed a clear fact in the text, EXTRACT it yourself.
+      6. If no clear facts, return {"facts": []}.
+      7. Deduplicate: merge semantically identical facts.
+
+      Output ONLY JSON:
+      {"facts": [{"subject": "...", "predicate": "...", "object": "...", "evidence": "..."}]}
+      Maximum 4 facts.
+    max_facts: 4
+    includes_evidence: true
+
+  # ── Arbiter 4B ──
+  - id: arbiter_4b
+    role: arbiter
+    target_models: [qwen3-4b-instruct-2507-q8_0]
+    source: /tmp/extraction_v4_test.py
+    prompt: |
+      You are a Fact Arbiter that merges two candidate extractions into one definitive set.
+
+      DECISION RULES (follow strictly):
+
+      Rule 1 — A facts: KEEP ALL Candidate A facts. They are high-precision.
+        Exception: Discard only if an A fact EXACTLY CONTRADICTS the Original Text.
+
+      Rule 2 — B facts: For EACH Candidate B fact, compare against Candidate A:
+        IF B's predicate is more specific (action verb vs generic `is`/`has`) AND text supports B
+          → REPLACE A's matching fact with B's version (better predicate quality)
+        IF B fact is new (not in A) AND text explicitly states it
+          → KEEP as additional fact
+        IF B fact is vague or text does not clearly support it
+          → SKIP
+        IF B fact duplicates A (same subject-predicate-object)
+          → SKIP (dedup)
+
+      Rule 3 — Missing facts: After processing all candidates, scan the Original Text.
+        IF both A and B missed a clear factual triple that is EXPLICITLY STATED
+          → APPEND it
+        IF no missing facts
+          → do not pad
+
+      Rule 4 — Dedup: Merge facts with identical (subject, object). Keep the more specific predicate.
+
+      Max 4 facts. English only.
+
+      Output JSON:
+      {"reasoning": "...", "facts": [{"subject": "...", "predicate": "...", "object": "..."}]}
+    max_facts: 4
+    includes_reasoning: true
+
+  # ── Conflict Resolver 4B ──
+  - id: conflict_resolver_4b
+    role: arbiter
+    target_models: [qwen3-4b-instruct-2507-q8_0]
+    source: scripts/tests/test_v5_arbiter_fallback.py
+    prompt: |
+      You are a Conflict Resolver. Two fact extractors each extracted a fact about the same subject.
+
+      — Fact A came from a Strict Extractor (high precision, conservative, max 4 facts).
+      — Fact B came from an Exploratory Extractor (high recall, includes evidence text).
+      — Original source text may be included as "Evidence" for one or both facts.
+
+      Decide which relationship best describes the pair:
+
+      CONSENSUS: Same claim, different wording. (e.g. `DB connection pooling missing` vs `missing DB connection pooling`)
+      CONTRADICT: Mutually exclusive. One must be wrong. (e.g. `latency = 100ms` vs `latency = 200ms`)
+      DIFFERENT_ASPECT: Same topic, different facet. Both can be true. (e.g. `Postgres handles DB connections` vs `Postgres uses SQLAlchemy`)
+
+      RULES:
+      1. If Evidence confirms both facts are valid in context → DIFFERENT_ASPECT (not CONTRADICT).
+      2. If Evidence is absent → base judgment on the facts alone.
+      3. If Fact A and Fact B say the same thing with different words → CONSENSUS.
+      4. If one fact claims X and the other claims not-X on the same axis → CONTRADICT.
+      5. If they cover different attributes of the same subject → DIFFERENT_ASPECT.
+
+      English only. Return ONLY valid JSON, no extra text:
+
+      {"verdict": "CONSENSUS", "reason": "why (≤15 words)"}
+    max_facts: 0
+
+  # ── Stage-2 Verifier 14B/30B ──
+  - id: verifier_14b_30b
+    role: verifier
+    target_models: [Qwen3-14B-Q4_K_M, Qwen3-Coder-30B-A3B-Instruct-Q4_K_M]
+    source: /tmp/test_stage2_compare.py
+    prompt: |
+      Rate each candidate fact from the text. Respond with one line per candidate:
+
+      N. VERDICT confidence reason
+
+      VERDICT = GROUNDED|AMBIGUOUS|UNGROUNDED. confidence = 0.0-1.0. reason = short (max 50 chars).
+
+      After all candidates, if you find important missing facts, add:
+      ==NEW==
+      subject -> predicate -> object | evidence
+
+      Examples:
+      1. GROUNDED 0.95 directly stated in text
+      2. AMBIGUOUS 0.50 partially implied, not explicit
+      3. UNGROUNDED 0.10 contradicts text
+
+      Do NOT add new facts that repeat candidates. Only truly missing facts.
+    output_format: "N. VERDICT confidence reason + optional ==NEW== section"
+
+  # ── Refinement (FACT-style) ──
+  - id: refinement_4b
+    role: refinement
+    target_models: [qwen3-4b-instruct-2507-q8_0]
+    source: scripts/pipelines/extract_llm.py
+    prompt: |
+      You are a fact extraction REFINER. Facts were already extracted from the source text.
+      Find MISSED factual triples that are in the source but NOT in the existing list.
+
+      Output ONLY valid JSON. No extra text.
+
+      RULES:
+      1. Max 2 new facts. If nothing missed, return empty list.
+      2. HIGH PRECISION: Only extract facts EXPLICITLY in the source.
+      3. Do NOT repeat facts from the existing list.
+      4. Each evidence MUST be a sentence ending in period.
+      5. Self-contained: Resolve pronouns and implicit references.
+      6. Predicate is descriptive verb phrase — natural language, NOT snake_case.
+
+      Output format:
+      {
+        "extractions": [
+          {
+            "evidence": "<sentence ending with .>",
+            "category": "code|decision|explanation|requirement|other",
+            "subject": "<entity name>",
+            "predicate": "<descriptive verb phrase>",
+            "object": "<value>",
+            "qualifiers": {}
+          }
+        ]
+      }
+
+      If nothing missed: {"extractions": []}.
+    max_facts: 2
+
+# ── Comparison matrix ──
+comparison:
+  detective_vs_exploratory:
+    detective: "precision-focused, max 3, no implications"
+    exploratory: "recall-focused, max unlimited, allows strong implications"
+    use: "Run both in parallel → arbiter resolves conflicts"
+  arbiter_4b_vs_7b:
+    4b: "Simpler — no evidence field, includes reasoning. Faster. For 4B-only pipeline."
+    7b: "Full arbiter with evidence. Richer context. For mixed 4B+7B/9B pipeline."
+  verifier_role:
+    description: "Stage-2 only — rates existing candidates, does NOT consolidate. Complementary to arbiter."
+    source: "Used after B-Xplore produces candidates, before arbiter consolidates"
+  refinement_role:
+    description: "Phase 3 of EDC+R — FACT-style re-extraction. Source + existing facts → missed facts (max 2). Called after Canonicalize."
+    source: "scripts/pipelines/extract_llm.py _SYSTEM_REFINEMENT_FREE"
+    target_models: [qwen3-4b-instruct-2507-q8_0 (8083)]
+
+# ── Web Validation (2026-06-29) ──
+# Sources:
+#   - Polat et al. "Testing Prompt Engineering Methods for Knowledge Extraction from Text" (SAGE 2025)
+#     https://journals.sagepub.com/doi/10.3233/SW-243719
+#     → Simple instruction + zero-shot sufficient for SPO extraction. Few-shot increases error on small models.
+#   - "From Parameters to Prompts" (IEEE 2026)
+#     https://ieeexplore.ieee.org/document/11463475
+#     → Prompt design dominates fine-tuning quality. Zero-shot ICL with structured format is optimal.
+#   - Mem0 ADDITIVE_EXTRACTION_PROMPT (CSDN)
+#     → Integrity rules, self-contained facts, no fabrication — key patterns mirrored in detective/arbiter prompts.
+#   - Penny Issue #280 / PR #281 (2026)
+#     → Entity name quality, skip negatives, dedup via normalization — partially reflected, can improve.
+#   - "The Constraint Tax" arXiv 2605.26128 (May 2026)
+#     https://arxiv.org/abs/2605.26128
+#     → Hard schema: validity 61.5%→100% but accuracy 19.7%→11.0% on 3B models.
+#     → "Reason free, constrain late" — validate after generation, not during.
+#   - "When Correct Isn't Usable" arXiv 2605.02363 (May 2026)
+#     https://arxiv.org/abs/2605.02363
+#     → Naive reference prompting: 85% task accuracy, 0% output accuracy.
+#     → Small models need meta-optimization for structured output reliability.
+#   - Agents-K1 (Hugging Face, 2026)
+#     https://huggingface.co/InternScience/Agents-K1
+#     → Qwen3-4B + GRPO fine-tuned for NER/RE. +3.3 F1. Schema-driven prompting required.
+#   - "Post-hoc Verification of LLMs with Knowledge Graphs" (IEEE 2026)
+#     https://ieeexplore.ieee.org/document/11472693
+#     → Multi-tiered validation: token alignment > regex > LLM-judge for small model extraction.
+#   - llm-feedback-control (PyPI v0.2.4, 2026)
+#     → 3.8B + feedback loop ≈ 7x larger model. Validate after, not constrain during.
+validation:
+  date: "2026-06-29"
+  method: web_search + paper review (2 rounds)
+  key_findings:
+    - "Simple instruction + structured format > CoT/ReAct for triple extraction (Polat et al. 2025)"
+    - "Few-shot increases prompt length → higher error rate on 4B models. Decision: zero-shot retention confirmed."
+    - "Predicate quality: detective's banned list (is/has/exists/equals) is correct pattern."
+    - "Constraint Tax (arXiv 2605.26128): For 3B models, hard schema raises validity but DROPS accuracy 19.7%→11.0%. 'Reason free, constrain late' is the validated approach for 4B."
+    - "Agents-K1 shows fine-tuned 4B can match larger models for extraction, but needs schema-driven prompt"
+    - "Post-hoc validation: multi-tiered (token alignment → regex → LLM judge) recommended for 4B pipelines"
+  decisions:
+    - id: vd01
+      detail: "No few-shot examples. Increases error on 4B models per Polat et al. 2025 + user experience."
+    - id: vd02
+      detail: "detective_4b is best-in-class among our prompts: schema + banned list + integrity rules + max constraint. Keep as-is."
+    - id: vd03
+      detail: "exploratory_4b — RESEARCH REVISED: Adding strict JSON constraint increases parse reliability but may reduce accuracy per Constraint Tax paper. Recommendation: add lightweight 'Output facts only' hint, but keep free-form. Validate post-hoc."
+    - id: vd04
+      detail: "arbiter_4b — RESEARCH REVISED: Adding predicate quality guidance ('avoid is/has/equals') adds ~20-30 tokens competing with reasoning capacity. Better to keep prompt minimal for 4B and validate predicate quality post-hoc."
+    - id: vd05
+      detail: "arbiter_7b_9b structurally sound. Deduplication (semantic merge) already present."
+    - id: vd06
+      detail: "NEW: Post-hoc validation tier recommended for production 4B pipeline — token-alignment verification before arbiter, avoiding LLM-judge overhead."
+    - id: vd07
+      detail: "NEW: Agents-K1 (fine-tuned Qwen3-4B) could replace our base 4B model with +3.3 F1 gain. Worth evaluating as alternative to prompt engineering for extraction quality."
+    - id: vd08
+      detail: "EDC+R (NUS 2024, EMNLP) framework adopted: OIE (Dual 4B) → Canonicalize (SeqMatcher+Embed 3-tier) → Refinement (FACT-style re-extract, max 2). Function: _extract_edcr_freeform()."
+    - id: vd09
+      detail: "FACT (NAACL 2025) pattern for Refinement: remove identified facts from context → re-retrieve remaining. Applied via _SYSTEM_REFINEMENT_FREE prompt on Xplore(8083)."
+    - id: vd10
+      detail: "Cap strategy confirmed per-web: 6 per chunk (initial max 4 + refinement max 2). Empty list allowed, no padding. 400-char _split_atomic boundary.
