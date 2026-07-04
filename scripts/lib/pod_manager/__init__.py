@@ -131,8 +131,19 @@ def start_inference(mode, port, night=False, dry_run=False, skip_probe=False, mo
             _podman_stop_inference()
             _podman_start_inference()
             ok = _start_and_wait(port, min(health_timeout, 300), skip_probe, mode)
-            if not ok or not _check_model_identity(port, model_key):
-                log(f"  FATAL: :{port} wrong model after retry — continuing anyway")
+            if ok:
+                # Retry identity check with backoff — ARM loads ~70s, may not
+                # be ready immediately even after probe passes
+                for attempt in range(5):
+                    if _check_model_identity(port, model_key):
+                        break
+                    log(
+                        f"  :{port} model identity check #{attempt + 1} failed — waiting {10 * (attempt + 1)}s"
+                    )
+                    time.sleep(10 * (attempt + 1))
+                    _write_mode_env(mode, port, model_key=model_key)
+                else:
+                    log(f"  FATAL: :{port} wrong model after 5 retries — continuing anyway")
     if ok:
         log(f"  :{port} ready")
         _check_container_health()
