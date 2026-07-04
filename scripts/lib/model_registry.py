@@ -244,7 +244,7 @@ MODEL_METADATA = {
         "threads_batch": 2,
         "parallel": 2,
         "ubatch_size": 256,
-        "cpus": "0-2",
+        "cpus": "0-1",
         "cache_ram": 1024,
         "cache_type_k": "q8_0",
         "cache_type_v": "q8_0",

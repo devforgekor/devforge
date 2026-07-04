@@ -324,6 +324,8 @@ def _launch_dual_secondary(meta: dict) -> bool:
     cpus = meta.get("cpus", "")
     flash_attn = meta.get("flash_attn", "")
     cache_ram = meta.get("cache_ram", "")
+    cache_type_k = meta.get("cache_type_k", "")
+    cache_type_v = meta.get("cache_type_v", "")
 
     launch_cmd = ["/app/llama-server"]
     if cpus:
@@ -377,6 +379,10 @@ def _launch_dual_secondary(meta: dict) -> bool:
             "--cache-reuse",
             "256",
         ]
+    if cache_type_k:
+        cmd += ["--cache-type-k", cache_type_k]
+    if cache_type_v:
+        cmd += ["--cache-type-v", cache_type_v]
 
     log(f"  launching secondary {model_file} on :{port} via podman exec")
     log(f"  {' '.join(str(c) for c in cmd[:8])} ...")
@@ -430,6 +436,9 @@ def ensure_dual_extraction(dry_run=False):
     parallel = meta_b.get("parallel", 1)
     cpus = meta_b.get("cpus", "")
     flash_attn = meta_b.get("flash_attn", "")
+    cache_ram = meta_b.get("cache_ram", "")
+    cache_type_k = meta_b.get("cache_type_k", "")
+    cache_type_v = meta_b.get("cache_type_v", "")
 
     launch_cmd = ["/app/llama-server"]
     if cpus:
@@ -479,6 +488,19 @@ def ensure_dual_extraction(dry_run=False):
     )
     if flash_attn:
         cmd += ["--flash-attn", "on"]
+    if cache_ram:
+        cmd += [
+            "--cache-ram",
+            str(cache_ram),
+            "--kv-unified",
+            "--cache-idle-slots",
+            "--cache-reuse",
+            "256",
+        ]
+    if cache_type_k:
+        cmd += ["--cache-type-k", cache_type_k]
+    if cache_type_v:
+        cmd += ["--cache-type-v", cache_type_v]
 
     log(f"  launching secondary {model_file} on :{port} via podman exec")
     log(f"  {' '.join(str(c) for c in cmd[:8])} ...")
