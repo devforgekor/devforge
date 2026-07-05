@@ -34,8 +34,9 @@ _INFERENCE_RUN_ARGS = [
     "/opt/ai_data/scripts/inference-entrypoint.sh:/entrypoint.d/inference-entrypoint.sh:Z",
     "-v",
     "/opt/ai_data/scripts/current-mode-inference.env:/entrypoint.d/current-mode.env:Z",
-    # Port 8080 is NOT published — Pod A (reranker) owns it.
-    # Inference container only needs 8081-8084 for embed/extract/enrich/verify/judge.
+    # Port 8080 is NOW published — Pod A is inactive, inference can serve reranker.
+    "--publish",
+    "127.0.0.1:8080:8080",
     "--publish",
     "127.0.0.1:8081:8081",
     "--publish",
@@ -192,6 +193,8 @@ def _write_mode_env(mode: str, port: int, model_key: str | None = None) -> None:
             ("ubatch_size", "UBATCH_SIZE"),
             ("parallel", "PARALLEL"),
             ("cpus", "CPUS"),
+            ("cpu_range", "CPU_RANGE"),
+            ("cpu_strict", "CPU_STRICT"),
         ]:
             val = f(key)
             if val is not None and val != "":
@@ -239,6 +242,8 @@ def _write_dual_env(model_key_a: str, model_key_b: str) -> None:
             ("ubatch_size", f"UBATCH_SIZE_{prefix}"),
             ("parallel", f"PARALLEL_{prefix}"),
             ("cpus", f"CPUS_{prefix}"),
+            ("cpu_range", f"CPU_RANGE_{prefix}"),
+            ("cpu_strict", f"CPU_STRICT_{prefix}"),
         ]:
             val = f(meta_key)
             if val is not None and val != "":

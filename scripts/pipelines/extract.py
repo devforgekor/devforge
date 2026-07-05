@@ -708,6 +708,10 @@ def extract_pipeline(
             for ex in extractions:
                 ft = ex.get("fact_type", "text")
                 evidence = ex.get("evidence", "")
+                qualifiers = ex.get("qualifiers") or {}
+                evidence_span = ex.get("evidence_span")
+                if evidence_span:
+                    qualifiers["evidence_span"] = evidence_span
                 _insert_fact(
                     tid,
                     fi,
@@ -725,7 +729,7 @@ def extract_pipeline(
                     subject=ex.get("subject"),
                     predicate=ex.get("predicate"),
                     object_=ex.get("object"),
-                    qualifiers=ex.get("qualifiers"),
+                    qualifiers=qualifiers,
                 )
                 fi += 1
 

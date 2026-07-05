@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-07-03'
+  updated: '2026-07-05'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -867,7 +867,7 @@ modules:
       purpose: DevForge pipeline step implementations.
     day_verify.py:
       status: experimental
-      purpose: "Day Verify Pipeline \u2014 verify enrichment metadata quality."
+      purpose: "Day Verify Pipeline \u2014 predicate NLI with Veritas-8B Fact Checker."
     embed_batch.py:
       status: production
       purpose: "Embed Batch Pipeline \u2014 text_clean \uAE30\uC900 embedding (unified\
@@ -1149,6 +1149,10 @@ modules:
     test_arbiter_v6_7b9b.py:
       status: experimental
       purpose: 'Arbiter model comparison: 4B vs 7B/9B on identical V6 extraction pairs.'
+    test_chunk_verify.py:
+      status: unknown
+      purpose: "Test chunk-aware verification \u2014 creates synthetic long-source\
+        \ turn + predicates, runs day_verify."
     test_dual_4b.py:
       status: experimental
       purpose: 'Dual 4B concurrent test: inference core 0 (:8083) B-Xplore, inference
@@ -1161,6 +1165,10 @@ modules:
       status: experimental
       purpose: "E2E test for _extract_edcr_freeform: OIE \u2192 Canonicalize \u2192\
         \ Refinement."
+    test_extract_3config_comparison.py:
+      status: experimental
+      purpose: 'Compare 3 extraction configs: 8B Q8 parallel=2 vs 8B Q4 dual vs 4B
+        Q8 dual.'
     test_extract_strategies.py:
       status: experimental
       purpose: Extract strategy comparison for long Korean developer turns on bb9c6363.

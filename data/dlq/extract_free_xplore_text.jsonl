@@ -1,0 +1,4 @@
+{"ts": 1783170314.3570817, "stage": "extract_free_xplore_text", "model": "", "attempt": 1, "error": "parse_llm_json returned None", "raw_len": 0, "raw_preview": "", "raw_sha256": "e3b0c44298fc1c14"}
+{"ts": 1783171067.764487, "stage": "extract_free_xplore_text", "model": "", "attempt": 1, "error": "parse_llm_json returned None", "raw_len": 0, "raw_preview": "", "raw_sha256": "e3b0c44298fc1c14"}
+{"ts": 1783171746.1774607, "stage": "extract_free_xplore_text", "model": "", "attempt": 1, "error": "parse_llm_json returned None", "raw_len": 0, "raw_preview": "", "raw_sha256": "e3b0c44298fc1c14"}
+{"ts": 1783172413.3648086, "stage": "extract_free_xplore_text", "model": "", "attempt": 1, "error": "parse_llm_json returned None", "raw_len": 0, "raw_preview": "", "raw_sha256": "e3b0c44298fc1c14"}

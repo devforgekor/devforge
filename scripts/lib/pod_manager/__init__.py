@@ -322,6 +322,8 @@ def _launch_dual_secondary(meta: dict) -> bool:
     ubatch = meta.get("ubatch_size", 256)
     parallel = meta.get("parallel", 1)
     cpus = meta.get("cpus", "")
+    cpu_range = meta.get("cpu_range", "")
+    cpu_strict = meta.get("cpu_strict", "")
     flash_attn = meta.get("flash_attn", "")
     cache_ram = meta.get("cache_ram", "")
     cache_type_k = meta.get("cache_type_k", "")
@@ -368,6 +370,10 @@ def _launch_dual_secondary(meta: dict) -> bool:
             "0",
         ]
     )
+    if cpu_range:
+        cmd += ["--cpu-range", cpu_range]
+    if cpu_strict:
+        cmd += ["--cpu-strict", cpu_strict]
     if flash_attn:
         cmd += ["--flash-attn", "on"]
     if cache_ram:
@@ -435,6 +441,8 @@ def ensure_dual_extraction(dry_run=False):
     ubatch = meta_b.get("ubatch_size", 256)
     parallel = meta_b.get("parallel", 1)
     cpus = meta_b.get("cpus", "")
+    cpu_range = meta_b.get("cpu_range", "")
+    cpu_strict = meta_b.get("cpu_strict", "")
     flash_attn = meta_b.get("flash_attn", "")
     cache_ram = meta_b.get("cache_ram", "")
     cache_type_k = meta_b.get("cache_type_k", "")
@@ -486,6 +494,10 @@ def ensure_dual_extraction(dry_run=False):
             "0",
         ]
     )
+    if cpu_range:
+        cmd += ["--cpu-range", cpu_range]
+    if cpu_strict:
+        cmd += ["--cpu-strict", cpu_strict]
     if flash_attn:
         cmd += ["--flash-attn", "on"]
     if cache_ram:

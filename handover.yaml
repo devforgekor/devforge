@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-07-03T07:46:21.157979+00:00'
+  time: '2026-07-05T02:44:48.08824+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -26,6 +26,12 @@ decisions:
 - id: nd01-04
   detail: 'Slack 봇 crash (ModuleNotFoundError: lib.llm_client)와 MCP 기동은 동시성 이벤트일 뿐 인과관계 없음. slack.py 내 MCP 호출 로직 없음.'
   status: open
+- id: nd03-01
+  detail: 'OpenRouter 설정 정리. FREE_ROTATION1/2 키 삭제. Cohere North Mini Code 키 추가 후 → OPENROUTER_DEEPSEEK_V4_FLASH_FREE_API_KEY로 rename (fallback용).'
+  status: closed
+- id: nd03-02
+  detail: 'opencode: Gemini provider 제거, 기본 모델 opencode/deepseek-v4-flash-free로 변경. opencode-model-fallback-chain 플러그인 설치. fallback chain: opencode/deepseek-v4-flash-free → openrouter/deepseek/deepseek-v4-flash:free. DeepSeek 동일 모델 유지, 할당량 풀만 분리.'
+  status: closed
 - id: nd02-01
   detail: 'OCI root 확장: /etc/fstab에서 /var/log, /var/tmp 항목 제거 완료. /var/log(4.4G) + /var/tmp(2.1G) → /opt/ai_data/expansion_bak/
     백업 완료. LV 제거 blocked: tmux(4472) 및 활성 프로세스가 /var/tmp 점유, lazy umount 후에도 dmsetup/lvremove 실패. 최종 결정: 재부팅 → 싱글유저 모드에서 lv_tmp_new(3G)
@@ -244,6 +250,9 @@ decisions:
     resp.json() → content-type detection added (JSON→resp.json(), text→resp.text wrapped as {data: text}). Also cleaned 2
     orphaned context7 processes.'
   status: closed
+- 'system_sync.sh (30분 주기)에 git auto-commit 추가 — 변경사항 있을 때만 git add -A && git commit -m "auto: sync YYYY-MM-DD"'
+- devforge-daily-structure.service (00:00 UTC=KST 09:00)에 git push 추가 — push할 게 없으면 skip
+- argcomplete 모듈 누락修复 — pip3 install --user argcomplete 로 해결
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -256,6 +265,9 @@ known_issues:
 - text: 'CRITICAL: exa_mcp.py + context7_mcp.py _read_message()/_send_message() modified for JSON-line compat. If update_handover.py
     runs before session writes to handover.yaml, completed_log and decisions may get overwritten. Always check handover.yaml
     after session start.'
+  resolved: false
+- text: 'day-verifier-b (qwen2.5-coder-7b Q4_K_M, :8083): 등록만 되어 있고 day_verify.py에서 실제 호출 없음 (single model port 8082만 사용).
+    Legacy dead config. 제거해도 무방하지만 유지해도 무해. 문제 생기면 llm_client/__init__.py, model_registry.py에서 제거.'
   resolved: false
 - text: '(Deprecated) Gemini API SSL blocked from Oracle Cloud no longer blocks connections from gemini_openai.py — proxy
     uses raw SSL sockets with hardcoded IPs (bypasses /etc/hosts and any DNS-level blocks). Native Gemini protocol (proxies/gemini.py)
@@ -309,14 +321,9 @@ known_issues:
   detail: 3 experimental test files (*_7b_vs_9b*) import FREE variants as aliases. Body still uses old names. Verify prompt
     equivalence.
   resolved: false
-- text: 'day-verifier-b (qwen2.5-coder-7b Q4_K_M, :8083): 등록만 되어 있고 day_verify.py에서 실제 호출 없음
-    (single model port 8082만 사용). Legacy dead config. 제거해도 무방하지만 유지해도 무해.
-    문제 생기면 llm_client/__init__.py, model_registry.py에서 제거.'
-  resolved: false
-- text: 'Veritas single-batch predicate 간섭 리스크: MiniCheck 원 설계는 (document, single_claim) → binary.
-    _binary_nli_batch에서 모든 predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음.
-    max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도 문제 발견 시 각 predicate
-    개별 호출로 분리 (latency N배 증가).'
+- text: 'Veritas single-batch predicate 간섭 리스크: MiniCheck 원 설계는 (document, single_claim) → binary. _binary_nli_batch에서 모든
+    predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음. max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도
+    문제 발견 시 각 predicate 개별 호출로 분리 (latency N배 증가).'
   resolved: false
 completed_log:
 - OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
@@ -368,3 +375,7 @@ completed_log:
   GS comparison. A) no-GS: GOOD, 5 facts, 216s, 499P+281C. B) with-GS: MIXED, 5 facts (1 dup), 257s, 1489P+316C. Verdict:
   INCONCLUSIVE — GS adds 3x token cost without clear quality gain on this turn. Self-healing retry verified. LSP blast_radius
   confirmed zero production impact. Pod B mode restored (review-p, :8081). Day-cycle restarted.'
+- pip3 install --user argcomplete (tracer bash-completion 오류 해결)
+- 'system_sync.sh: git auto-commit 로직 추가'
+- 'devforge-daily-structure.service: git commit + git push ExecStart 추가 (%% 이스케이프)'
+- systemd daemon-reload 완료, 실제 커밋 생성 확인 (5811f6e)

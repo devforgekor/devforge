@@ -28,7 +28,6 @@ Caveats:
 
 import json
 import os
-import re
 import subprocess
 import sys
 import time
@@ -42,32 +41,37 @@ sys.path.insert(0, SCRIPTS_DIR)
 from lib.db import PSQL, esc_sql, psql_json, psql_ok
 from lib.infra.preflight import preflight_checks
 from lib.llm_client import call_llm_with_retry
-from lib.pod_manager import ensure_model
+from lib.model_registry import MODEL_METADATA
+from lib.pod_manager import ensure_dual, ensure_model, wait_health
 from lib.watchdog.messenger import heartbeat
 
 BATCH_LIMIT = 50
 PARALLEL = 2
 SOLO_THRESHOLD = 5000
 
-# Veritas was fine-tuned on MiniCheck bespoke format (Document + Claim → YES/NO).
-# We use the same format for Pass 1 (binary), then Pass 2 for NO→CONTRADICTION.
-_VERITAS_PROMPT_BINARY = """Document:
-{source}
+# Veritas timeout: same formula pattern as extract_llm._calc_timeout
+_VERIFY_TIMEOUT_BASE = 10
+_VERIFY_TIMEOUT_PER_CHAR = 0.02  # ~50 chars/s prefill on 2-thread ARM
+_VERIFY_TIMEOUT_PER_TOK = 5  # decode buffer per gen token
+_VERIFY_GEN_TIME_BUF = 20  # spike/GC/swap buffer
+_VERIFY_TIMEOUT_CAP = 120  # hard cap
 
-Claims:
-{claims}
+"""Veritas Bis (Bespoke) operating mode.
 
-For each claim, answer YES if the document supports it, NO otherwise.
-Number each answer:
-
-{claim_lines}"""
-
-_VERITAS_PROMPT_CONTRADICT = """Document:
-{source}
-
+Document: {source}
 Claim: {claim}
 
-Does the document explicitly CONTRADICT this claim? Answer YES or NO."""
+→ "Yes" (supported, GROUNDED) or "No" (unsupported, → CONTRADICTION check)
+No system prompt, no instructions — Veritas is fine-tuned on Document/Claim pairs.
+See https://github.com/Liyan06/MiniCheck and ollama bespoke-minicheck.
+"""
+
+_VERITAS_PROMPT_BINARY = "Document: {source}\nClaim: {claim}"
+
+_VERITAS_PROMPT_CONTRADICT = (
+    "Document: {source}\nClaim: {claim}\n\n"
+    "Does the document explicitly CONTRADICT this claim? Answer YES or NO."
+)
 
 
 def log(msg: str) -> None:
@@ -171,173 +175,153 @@ def _update_predicate_nli(pred_id: str, nli_verdict: str) -> bool:
 # ── Veritas NLI ────────────────────────────────────────────────────────────
 
 
-def _extract_binary_answer(line: str, idx: int) -> str:
-    """Parse a single line for YES/NO answer. Returns GROUNDED, PASS2, or AMBIGUOUS."""
-    s = line.strip().upper()
-    # Strip leading number prefix ("1. YES" → "YES")
-    if s.startswith(f"{idx}."):
-        s = s.split(".", 1)[1].strip()
-    # Strip trailing punctuation or labels
-    for sep in (" -", " —", "|", "("):
-        if sep in s:
-            s = s.split(sep)[0].strip()
-    if s.startswith("YES") or "YES" in s.split()[:1]:
-        return "GROUNDED"
-    elif s.startswith("NO") or "NO" in s.split()[:1]:
-        return "PASS2"
-    return "AMBIGUOUS"
+def _chunk_source(text: str, max_chars: int = 3500) -> List[str]:
+    """Split source text into chunks fitting Veritas ctx=4096.
 
-
-def _chunk_text(text: str, max_chars: int = 800) -> List[str]:
-    """Split text into ~max_chars chunks at sentence/paragraph boundaries.
-
-    Same approach as extract_llm._split_atomic — preserves semantic units,
-    no overlap needed, small fragments merged into previous chunk.
+    Reserves ~600 chars per chunk for the claim + formatting.
+    Breaks at paragraph/sentence boundaries when possible.
     """
+    if not text:
+        return [""]
     if len(text) <= max_chars:
         return [text]
-    paragraphs = re.split(r"\n\s*\n", text)
+
     chunks = []
-    for para in paragraphs:
-        para = para.strip()
-        if not para:
-            continue
-        if len(para) <= max_chars:
-            chunks.append(para)
-            continue
-        sentences = re.split(r"(?<=[.!?])\s+", para)
-        current = ""
-        for sent in sentences:
-            if len(current) + len(sent) + 1 <= max_chars:
-                current = (current + " " + sent).strip()
-            else:
-                if current:
-                    chunks.append(current)
-                current = sent
-        if current:
-            chunks.append(current)
-    merged = []
-    for c in chunks:
-        if merged and len(c) < 40:
-            merged[-1] += " " + c
+    start = 0
+    while start < len(text):
+        end = min(start + max_chars, len(text))
+        if end >= len(text):
+            chunks.append(text[start:])
+            break
+        search_start = max(start, end - 200)
+        break_point = -1
+        for sep in ["\n\n", ". ", ".\n", "! ", "? "]:
+            idx = text.rfind(sep, search_start, end)
+            if idx > break_point:
+                break_point = idx + len(sep)
+        if break_point > start:
+            chunks.append(text[start:break_point])
+            start = break_point
         else:
-            merged.append(c)
-    return merged
+            chunks.append(text[start:end])
+            start = end
+    return chunks
 
 
-def _binary_nli_batch(source: str, predicates: List[Dict]) -> List[Tuple[int, str]]:
-    """Pass 1: Binary YES/NO across chunked source (~800c each).
+def _calc_verify_timeout(source_len: int, gen_tokens: int = 2) -> int:
+    """Scale timeout by input length + gen tokens. Same formula as extract_llm."""
+    return min(
+        _VERIFY_TIMEOUT_BASE
+        + int(source_len * _VERIFY_TIMEOUT_PER_CHAR)
+        + int(gen_tokens * _VERIFY_TIMEOUT_PER_TOK)
+        + _VERIFY_GEN_TIME_BUF,
+        _VERIFY_TIMEOUT_CAP,
+    )
 
-    Each chunk evaluated independently. A predicate is GROUNDED if
-    ANY chunk finds it supported.
+
+def _binary_nli_batch(
+    source: str, predicates: List[Dict], model_key: str = "day_verify"
+) -> List[Tuple[int, str]]:
+    """Pass 1: Chunk-aware binary NLI — MAX over chunks (MiniCheck max_j).
+
+    Splits source into ~3500c chunks (fits Veritas ctx=4096 with claim ~500c).
+    Each predicate checked against ALL chunks independently.
+    If ANY chunk returns YES → GROUNDED (MiniCheck max_j M(D_i,j, c_i)).
+    Only if ALL chunks return NO → PASS2 (→ contradiction check).
     """
     if not predicates:
         return []
 
-    chunks = _chunk_text(source, max_chars=800)
-    claims_lines = "\n".join(
-        f"{i}. {p.get('evidence', '')[:300]}" for i, p in enumerate(predicates, 1)
-    )
-    chunk_votes: List[List[str]] = [[] for _ in range(len(predicates))]
+    chunks = _chunk_source(source)
+    log(f"      {len(chunks)} chunk(s) — {sum(len(c) for c in chunks)} total chars")
 
-    for ci, chunk in enumerate(chunks):
-        answer_lines = "\n".join(f"{i}." for i in range(1, len(predicates) + 1))
-        prompt = _VERITAS_PROMPT_BINARY.format(
-            source=chunk,
-            claims=claims_lines,
-            claim_lines=answer_lines,
-        )
+    results: List[Tuple[int, str]] = []
 
-        try:
-            resp = call_llm_with_retry(
-                [{"role": "user", "content": prompt}],
-                model="day_verify",
-                max_tokens=len(predicates) * 8 + 16,
-                temperature=0.0,
-                timeout=120,
-            )
-            lines = resp.strip().split("\n")
-            for i in range(len(predicates)):
-                matched = False
-                for line in lines:
-                    if line.strip().startswith(f"{i + 1}.") or line.strip().startswith(f"{i + 1}:"):
-                        chunk_votes[i].append(_extract_binary_answer(line, i + 1))
-                        matched = True
-                        break
-                if not matched:
-                    if i < len(lines):
-                        chunk_votes[i].append(_extract_binary_answer(lines[i], i + 1))
-                    else:
-                        chunk_votes[i].append("AMBIGUOUS")
-        except Exception as e:
-            log(f"      chunk {ci} NLI error: {e}")
-            for i in range(len(predicates)):
-                chunk_votes[i].append("AMBIGUOUS")
+    for i, pred in enumerate(predicates):
+        claim = pred.get("evidence", "")[:500]
+        verdict = "PASS2"  # default — all chunks must fail to stay PASS2
 
-    # Aggregate: YES from any chunk -> GROUNDED
-    # All NO -> PASS2 (check CONTRADICTION)
-    # Mixed -> AMBIGUOUS
-    results = []
-    for i in range(len(predicates)):
-        votes = chunk_votes[i]
-        yes_count = sum(1 for v in votes if v == "GROUNDED")
-        no_count = sum(1 for v in votes if v == "PASS2")
-        if yes_count > 0:
-            results.append((i, "GROUNDED"))
-        elif no_count == len(votes):
-            results.append((i, "PASS2"))
-        else:
-            results.append((i, "AMBIGUOUS"))
+        for ci, chunk in enumerate(chunks):
+            prompt = _VERITAS_PROMPT_BINARY.format(source=chunk, claim=claim)
+            messages = [{"role": "user", "content": prompt}]
+            try:
+                resp = call_llm_with_retry(
+                    messages,
+                    model=model_key,
+                    max_tokens=2,
+                    temperature=0.0,
+                    timeout=_calc_verify_timeout(len(chunk)),
+                )
+                s = resp.strip().upper()
+                if s.startswith("YES"):
+                    verdict = "GROUNDED"
+                    if ci > 0:
+                        log(f"        p{i} chunk {ci}: YES → GROUNDED")
+                    break  # MAX over chunks — first YES wins
+                elif s.startswith("NO"):
+                    continue  # try next chunk
+                else:
+                    verdict = "AMBIGUOUS"
+                    break  # non-parse: skip to next predicate
+            except Exception as e:
+                log(f"      predicate {i} chunk {ci} error: {e}")
+                verdict = "AMBIGUOUS"
+                break
 
-    if len(chunks) > 1:
-        n_yes = sum(1 for _, v in results if v == "GROUNDED")
-        log(f"      {len(chunks)} chunks, {n_yes}/{len(predicates)} grounded")
+        results.append((i, verdict))
+
+    n_g = sum(1 for _, v in results if v == "GROUNDED")
+    log(f"      {n_g}/{len(predicates)} grounded (chunk-aware MAX)")
 
     return results
 
 
-def _contradiction_check(source: str, claim: str) -> str:
-    """Pass 2: Determine if source contradicts claim (chunked source)."""
-    chunks = _chunk_text(source, max_chars=800)
-    votes = []
-    for chunk in chunks:
+def _contradiction_check(source: str, claim: str, model_key: str = "day_verify") -> str:
+    """Pass 2: Chunk-aware CONTRADICTION check — MAX over chunks.
+
+    If ANY chunk signals contradiction → CONTRADICTION.
+    Only if ALL chunks say NO or timeout → UNGROUNDED.
+    """
+    chunks = _chunk_source(source)
+    overall = "UNGROUNDED"
+
+    for ci, chunk in enumerate(chunks):
         prompt = _VERITAS_PROMPT_CONTRADICT.format(source=chunk, claim=claim[:500])
+        messages = [{"role": "user", "content": prompt}]
         try:
             resp = call_llm_with_retry(
-                [{"role": "user", "content": prompt}],
-                model="day_verify",
-                max_tokens=8,
+                messages,
+                model=model_key,
+                max_tokens=2,
                 temperature=0.0,
-                timeout=30,
+                timeout=_calc_verify_timeout(len(chunk)),
             )
             s = resp.strip().upper()
-            if s.startswith("YES") or "YES" in s.split()[:1]:
-                votes.append("CONTRADICTION")
-            elif s.startswith("NO") or "NO" in s.split()[:1]:
-                votes.append("UNGROUNDED")
+            if s.startswith("YES"):
+                return "CONTRADICTION"  # MAX — any chunk contradicts
+            elif s.startswith("NO"):
+                continue  # try next chunk
             else:
-                votes.append("AMBIGUOUS")
+                overall = "AMBIGUOUS"
+                break
         except Exception as e:
-            log(f"      contradiction chunk error: {e}")
-            votes.append("AMBIGUOUS")
+            log(f"      contradiction chunk {ci} error: {e}")
+            overall = "AMBIGUOUS"
+            break
 
-    # Any chunk says CONTRADICTION -> CONTRADICTION
-    # All UNGROUNDED -> UNGROUNDED
-    # Mixed -> AMBIGUOUS
-    if any(v == "CONTRADICTION" for v in votes):
-        return "CONTRADICTION"
-    if all(v == "UNGROUNDED" for v in votes):
-        return "UNGROUNDED"
-    return "AMBIGUOUS"
+    return overall
 
 
 # ── Per-turn processing ────────────────────────────────────────────────────
 
 
-def _verify_turn(turn: Dict) -> Tuple[str, List[Dict], Optional[str]]:
+def _verify_turn(
+    turn: Dict, model_key: str = "day_verify"
+) -> Tuple[str, List[Dict], Optional[str]]:
     """Verify all predicates for one turn. Returns (turn_id, updates, error).
 
     updates: list of {id, fact_index, verdict}
+    model_key: 'day_verify' (:8082) or 'day_verify_b' (:8083)
     """
     try:
         turn_id = turn["id"]
@@ -348,18 +332,19 @@ def _verify_turn(turn: Dict) -> Tuple[str, List[Dict], Optional[str]]:
         user_turn = turn.get("user_turn", "") or ""
         thinking = turn.get("thinking", "") or ""
         text = turn.get("text", "") or ""
-        # Truncate to 4000 chars: Veritas ctx=4096, chunked to 800c + claims ~500c
-        source_text = " ".join(f"{user_turn}\n{thinking}\n{text}".split())[:4000]
+        source_text = " ".join(f"{user_turn}\n{text}".split())
 
         # Pass 1: Binary NLI (all predicates batched)
-        binary = _binary_nli_batch(source_text, predicates)
+        binary = _binary_nli_batch(source_text, predicates, model_key=model_key)
 
         # Pass 2: CONTRADICTION check for PASS2 items
         updates = []
         for idx, verdict in binary:
             pred = predicates[idx]
             if verdict == "PASS2":
-                final = _contradiction_check(source_text, pred.get("evidence", ""))
+                final = _contradiction_check(
+                    source_text, pred.get("evidence", ""), model_key=model_key
+                )
             else:
                 final = verdict
             updates.append(
@@ -380,7 +365,10 @@ def _verify_turn(turn: Dict) -> Tuple[str, List[Dict], Optional[str]]:
 
 
 def day_verify_pipeline(
-    limit: int = BATCH_LIMIT, dry_run: bool = False, turn_id: Optional[str] = None
+    limit: int = BATCH_LIMIT,
+    dry_run: bool = False,
+    turn_id: Optional[str] = None,
+    model_keys: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Verify extracted predicates against source using Veritas two-pass NLI."""
     t_start = time.monotonic()
@@ -390,6 +378,11 @@ def day_verify_pipeline(
     ungrounded = 0
     ambiguous = 0
     failed = 0
+
+    if model_keys is None:
+        model_keys = ["day-verify"]
+
+    n_workers = min(PARALLEL, len(model_keys))
 
     heartbeat("day_verify", "pipeline_start")
 
@@ -417,19 +410,24 @@ def day_verify_pipeline(
     turn_results: Dict[str, Tuple[List[Dict], Optional[str]]] = {}
     llm_t0 = time.monotonic()
 
+    # Round-robin model assignment across turns
+    n_keys = len(model_keys)
+
     if pool_turns:
         with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
             fut_map = {}
-            for turn in pool_turns:
-                fut = pool.submit(_verify_turn, turn)
+            for i, turn in enumerate(pool_turns):
+                mk = model_keys[i % n_keys]
+                fut = pool.submit(_verify_turn, turn, mk)
                 fut_map[fut] = turn
             for fut in as_completed(fut_map):
                 trn = fut_map[fut]
                 _, updates, error = fut.result()
                 turn_results[trn["id"]] = (updates, error)
 
-    for turn in solo_turns:
-        _, updates, error = _verify_turn(turn)
+    for i, turn in enumerate(solo_turns):
+        mk = model_keys[i % n_keys]
+        _, updates, error = _verify_turn(turn, mk)
         turn_results[turn["id"]] = (updates, error)
 
     log(f"  processing phase: {time.monotonic() - llm_t0:.1f}s")
@@ -522,27 +520,95 @@ def day_verify_pipeline(
     }
 
 
+def _launch_reranker() -> bool:
+    """Launch reranker (Qwen3-Reranker-4B-Q8) on :8080 via podman exec."""
+    import subprocess
+
+    reranker = MODEL_METADATA["reranker"]
+    cmd = [
+        "podman",
+        "exec",
+        "-d",
+        "devforge-inference",
+        "taskset",
+        "-c",
+        "0-3",
+        "/app/llama-server",
+        "-m",
+        f"/models/{reranker['file']}",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--ctx-size",
+        str(reranker.get("ctx", 2048)),
+        "--batch-size",
+        str(reranker.get("batch_size", 256)),
+        "--ubatch-size",
+        str(reranker.get("ubatch_size", 256)),
+        "--threads",
+        str(reranker.get("threads", 4)),
+        "--threads-batch",
+        str(reranker.get("threads_batch", 4)),
+        "--no-mmap",
+        "-lv",
+        "6",
+    ]
+    log("  launching reranker on :8080 via podman exec")
+    r = subprocess.run(cmd, capture_output=True, timeout=30, text=True)
+    if r.returncode != 0:
+        log(f"  reranker launch failed (rc={r.returncode}): {r.stderr.strip()[:200]}")
+        return False
+    ok = wait_health(8080, timeout=300)
+    if ok:
+        log("  reranker :8080 healthy")
+    else:
+        log("  reranker :8080 health timeout")
+    return ok
+
+
 def main() -> None:
-    ensure_model("day-verifier", skip_if_healthy=True)
-    preflight_checks("day_verify.py", required_ports={8082})
     import argparse
 
     parser = argparse.ArgumentParser(description="Day Verify — predicate NLI with Veritas-8B")
     parser.add_argument("--limit", "-n", type=int, default=BATCH_LIMIT)
+    parser.add_argument("--turn-id", type=str, default=None)
+    parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
-        "--turn-id",
-        type=str,
-        default=None,
-        help="Re-verify a specific turn UUID",
+        "--mode",
+        choices=["q8", "q4", "q8-dual"],
+        default="q8",
+        help="'q8' = single :8082 Q8_0 parallel=2 (default), 'q4' = dual :8082+:8083 Q4_K_M, 'q8-dual' = dual Q8_0",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Simulate without DB writes")
     args = parser.parse_args()
 
-    result = day_verify_pipeline(
-        limit=args.limit,
-        dry_run=args.dry_run,
-        turn_id=args.turn_id,
-    )
+    if args.mode == "q4":
+        ensure_dual("day-verifier-q4", "day-verifier-q4-b")
+        preflight_checks("day_verify.py", required_ports={8082, 8083})
+        result = day_verify_pipeline(
+            limit=args.limit,
+            dry_run=args.dry_run,
+            turn_id=args.turn_id,
+            model_keys=["day_verify_q4", "day_verify_q4_b"],
+        )
+    elif args.mode == "q8-dual":
+        ensure_dual("day-verifier-q8", "day-verifier-q8-b")
+        preflight_checks("day_verify.py", required_ports={8082, 8083})
+        result = day_verify_pipeline(
+            limit=args.limit,
+            dry_run=args.dry_run,
+            turn_id=args.turn_id,
+            model_keys=["day_verify_q8", "day_verify_q8_b"],
+        )
+    else:  # q8 (default)
+        ensure_model("day-verifier")
+        preflight_checks("day_verify.py", required_ports={8082})
+        result = day_verify_pipeline(
+            limit=args.limit,
+            dry_run=args.dry_run,
+            turn_id=args.turn_id,
+        )
+
     if args.dry_run:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     from lib.llm_client import recall_tiny
