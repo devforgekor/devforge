@@ -314,6 +314,68 @@ def _ensure_model_healthy(port, key=""):
         return False
 
 
+def _start_embed():
+    """Start embed-4b on :8081 in inference container. No-op if healthy."""
+    import urllib.request as _ur
+
+    try:
+        req = _ur.Request("http://127.0.0.1:8081/health")
+        with _ur.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                log("  [embed] :8081 already healthy")
+                return True
+    except Exception:
+        pass
+
+    meta = MODEL_METADATA.get("embed-4b")
+    if not meta:
+        log("  [embed] FATAL: embed-4b not in MODEL_METADATA")
+        return False
+
+    cmd = ["podman", "exec", "-d", INFERENCE_CONTAINER, "/app/llama-server"] + [
+        "-m",
+        f"/models/{meta['file']}",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8081",
+        "--ctx-size",
+        str(meta.get("ctx", 2048)),
+        "--parallel",
+        "1",
+        "--threads",
+        str(meta.get("threads", 2)),
+        "--threads-batch",
+        str(meta.get("threads_batch", 2)),
+        "--timeout",
+        "28800",
+        "--batch-size",
+        "512",
+        "--ubatch-size",
+        "512",
+        "--embedding",
+        "--pooling",
+        "last",
+        "--embd-normalize",
+        "-1",
+        "--cont-batching",
+        "--no-mmap",
+        "-lv",
+        "6",
+        "--metrics",
+    ]
+
+    log(f"  [embed] launching {meta['file']} on :8081...")
+    r = subprocess.run(cmd, capture_output=True, timeout=30, text=True)
+    if r.returncode != 0:
+        log(f"  [embed] launch failed: {r.stderr.strip()[:200]}")
+        return False
+
+    ok = _wait_health(8081, timeout=120)
+    log(f"  [embed] :8081 {'healthy' if ok else 'health timeout'}")
+    return ok
+
+
 def _check_oom():
     """Check dmesg for OOM killer events during test."""
     try:
@@ -710,6 +772,7 @@ def main():
     elif not _start_secondary("day-extractor-8b-q4-b"):
         log("FATAL: Config B secondary start failed")
     else:
+        _start_embed()
         result_b = run_config_b(all_turns)
         all_results.append(result_b)
         print_detailed([result_b])
@@ -728,6 +791,7 @@ def main():
     _reclaim_memory()
     time.sleep(5)
     if _start_primary("day-extractor"):
+        _start_embed()
         result_a = run_config_a(all_turns)
         all_results.append(result_a)
         print_detailed([result_a])
@@ -750,6 +814,7 @@ def main():
     elif not _start_secondary("day-extractor-4b-q8-b"):
         log("FATAL: Config C secondary start failed")
     else:
+        _start_embed()
         result_c = run_config_c(all_turns)
         all_results.append(result_c)
         print_detailed([result_c])
