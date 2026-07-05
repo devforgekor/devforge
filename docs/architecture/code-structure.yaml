@@ -122,6 +122,10 @@ modules:
       status: unknown
       purpose: "open-newhand \u2014 NewHand Protocol \uB9C8\uBB34\uB9AC: handover.yaml\
         \ \u2192 \uCEE4\uBC0B \u2192 \uD478\uC2DC"
+    or_rate_limiter.py:
+      status: experimental
+      purpose: "OpenRouter rate-limiting proxy (15 RPM \u2192 safe margin from 20\
+        \ RPM limit)."
     orchestrator.py:
       status: production
       purpose: "DevForge Orchestrator \u2014 LLM-based smart router to specialized\

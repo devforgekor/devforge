@@ -26,6 +26,10 @@ from urllib.parse import urlsplit
 DEFAULT_LISTEN = "127.0.0.1:44778"
 DEFAULT_UPSTREAM = "https://openrouter.ai/api/v1"
 
+# Append ":floor" to route to the cheapest provider for each model.
+# Set to "" to use default load balancing (price-weighted + fallback).
+FLOOR_SUFFIX = ":floor"
+
 MODEL_MAP = {
     "claude": "deepseek/deepseek-v4-flash",
     "claude-pro": "deepseek/deepseek-v4-pro",
@@ -165,7 +169,9 @@ def _anthropic_to_openai(anthropic_body: dict) -> dict:
                     msg_obj["tool_calls"] = tool_calls
                 msgs.append(msg_obj)
 
-    model = MODEL_MAP.get(anthropic_body.get("model", ""), "deepseek/deepseek-v4-flash")
+    model = (
+        MODEL_MAP.get(anthropic_body.get("model", ""), "deepseek/deepseek-v4-flash") + FLOOR_SUFFIX
+    )
     stream = anthropic_body.get("stream", False)
 
     req: dict = {
@@ -249,6 +255,12 @@ def _openai_to_anthropic_nonstream(openai_resp: dict, anthropic_model: str) -> d
 
     usage = openai_resp.get("usage", {})
 
+    # Forward cached_tokens info if present
+    cached_tokens = 0
+    ptd = usage.get("prompt_tokens_details", {})
+    if isinstance(ptd, dict):
+        cached_tokens = ptd.get("cached_tokens", 0)
+
     return {
         "id": f"msg_{int(time.time() * 1000)}",
         "type": "message",
@@ -260,6 +272,8 @@ def _openai_to_anthropic_nonstream(openai_resp: dict, anthropic_model: str) -> d
         "usage": {
             "input_tokens": usage.get("prompt_tokens", 0),
             "output_tokens": usage.get("completion_tokens", 0),
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": cached_tokens,
         },
     }
 
@@ -280,6 +294,7 @@ class _StreamConverter:
         self.meta_sent = False
         self.input_tokens = 0
         self.output_tokens = 0
+        self.cached_tokens = 0
         self.final_stop_reason = "end_turn"
         self.ended = False
 
@@ -406,7 +421,11 @@ class _StreamConverter:
                 "stop_reason": self.final_stop_reason,
                 "stop_sequence": None,
             },
-            "usage": {"output_tokens": self.output_tokens},
+            "usage": {
+                "output_tokens": self.output_tokens,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": self.cached_tokens,
+            },
         }
         return f"event: message_delta\ndata: {json.dumps(ev)}\n\n"
 
@@ -426,6 +445,9 @@ class _StreamConverter:
             if usage:
                 self.input_tokens = usage.get("prompt_tokens", self.input_tokens)
                 self.output_tokens = usage.get("completion_tokens", self.output_tokens)
+                ptd = usage.get("prompt_tokens_details", {})
+                if isinstance(ptd, dict):
+                    self.cached_tokens = ptd.get("cached_tokens", self.cached_tokens)
             return None
 
         choice = choices[0]
@@ -437,6 +459,9 @@ class _StreamConverter:
         if isinstance(usage, dict):
             self.input_tokens = usage.get("prompt_tokens", self.input_tokens)
             self.output_tokens = usage.get("completion_tokens", self.output_tokens)
+            ptd = usage.get("prompt_tokens_details", {})
+            if isinstance(ptd, dict):
+                self.cached_tokens = ptd.get("cached_tokens", self.cached_tokens)
 
         # Emit message_start on first chunk
         out = self._maybe_send_meta()
@@ -743,7 +768,11 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
             ev = {
                 "type": "message_delta",
                 "delta": {"stop_reason": "end_turn", "stop_sequence": None},
-                "usage": {"output_tokens": converter.output_tokens},
+                "usage": {
+                    "output_tokens": converter.output_tokens,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": converter.cached_tokens,
+                },
             }
             term += f"event: message_delta\ndata: {json.dumps(ev)}\n\n".encode()
             term += b'event: message_stop\ndata: {"type":"message_stop"}\n\n'
@@ -761,16 +790,6 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
             self._handle_models()
             return
 
-        print(
-            f"[openrouter-proxy] DEBUG route: command={self.command} path={repr(self.path)} rpath={repr(path)}",
-            file=sys.stderr,
-        )
-        debug_endswith = path.endswith("/messages")
-        debug_endswith_v1 = path.endswith("/v1/messages")
-        print(
-            f"[openrouter-proxy] CONDITION CHECK: command={self.command!r} path={path!r} endswith_messages={debug_endswith} endswith_v1_messages={debug_endswith_v1}",
-            file=sys.stderr,
-        )
         if self.command == "POST" and (path.endswith("/messages") or path.endswith("/v1/messages")):
             length = int(self.headers.get("content-length") or "0")
             body = self.rfile.read(length) if length > 0 else b""
