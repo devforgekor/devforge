@@ -3,11 +3,8 @@
 # Path: systemd:anthropic-openrouter-proxy
 """Anthropic-to-OpenAI format conversion proxy for OpenRouter.
 
-Anthropic Messages API is NOT compatible with OpenRouter (which uses OpenAI
-Chat Completions format). This proxy bridges the gap:
-
   Claude Code → anthropic-openrouter-proxy (:44778)
-    → OpenRouter /v1/chat/completions → DeepSeek V4 Flash (paid)
+    → OpenRouter /v1/chat/completions → DeepSeek V4 Flash (paid, GMICloud pinned)
 
 Supports streaming SSE, tool_use↔tool_calls conversion, and model name mapping.
 """
@@ -26,9 +23,9 @@ from urllib.parse import urlsplit
 DEFAULT_LISTEN = "127.0.0.1:44778"
 DEFAULT_UPSTREAM = "https://openrouter.ai/api/v1"
 
-# Append ":floor" to route to the cheapest provider for each model.
-# Set to "" to use default load balancing (price-weighted + fallback).
-FLOOR_SUFFIX = ":floor"
+# Pin to a specific OpenRouter provider slug for cache consistency.
+# Set to None to use default load balancing (price-weighted + fallback).
+PROVIDER_PIN = "gmicloud"
 
 MODEL_MAP = {
     "claude": "deepseek/deepseek-v4-flash",
@@ -169,9 +166,7 @@ def _anthropic_to_openai(anthropic_body: dict) -> dict:
                     msg_obj["tool_calls"] = tool_calls
                 msgs.append(msg_obj)
 
-    model = (
-        MODEL_MAP.get(anthropic_body.get("model", ""), "deepseek/deepseek-v4-flash") + FLOOR_SUFFIX
-    )
+    model = MODEL_MAP.get(anthropic_body.get("model", ""), "deepseek/deepseek-v4-flash")
     stream = anthropic_body.get("stream", False)
 
     req: dict = {
@@ -220,6 +215,10 @@ def _anthropic_to_openai(anthropic_body: dict) -> dict:
             if tc_name:
                 req["tool_choice"] = {"type": "function", "function": {"name": tc_name}}
         # "auto" is the default in OpenAI, no need to set it explicitly
+
+    # Pin to specific provider for cache consistency
+    if PROVIDER_PIN:
+        req["provider"] = {"only": [PROVIDER_PIN]}
 
     return req
 
@@ -647,11 +646,18 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
             "X-Title": "devforge-proxy",
             "Accept": "text/event-stream" if is_stream else "application/json",
             "User-Agent": "devforge-proxy/1.0",
+            "X-OpenRouter-Cache": "true",
         }
 
         try:
             conn.request("POST", path, body=openai_body, headers=headers)
             resp = conn.getresponse()
+            cache_state = resp.getheader("x-openrouter-cache-status", "UNKNOWN")
+            cache_age = resp.getheader("x-openrouter-cache-age")
+            if cache_age:
+                print(f"[openrouter-proxy] cache={cache_state} age={cache_age}s", file=sys.stderr)
+            else:
+                print(f"[openrouter-proxy] cache={cache_state}", file=sys.stderr)
         except Exception as e:
             print(f"[openrouter-proxy] upstream connection failed: {e}", file=sys.stderr)
             conn.close()
