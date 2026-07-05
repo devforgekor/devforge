@@ -36,7 +36,7 @@ from lib.pod_manager.container import (
     log,
 )
 from pipelines.extract_llm import (
-    _SYSTEM_TEXT_EXTRACT_FREE,
+    _SYSTEM_TEXT_EXTRACT_FREE_8B,
     _calc_max_tokens,
     _calc_timeout,
     _normalize_freeform_pipeline,
@@ -58,37 +58,25 @@ for _k in _EXTRACTOR_KEYS:
     if _k in MODEL_METADATA:
         MODEL_METADATA[_k]["ctx"] = 4096
 
-# ── Prompt for 4B backup pass (additional facts) ────────────────
+# ── 4B-specific extraction prompt ────────────────────────────
+# 4B Q8 is weaker than 8B — keep prompt short, concrete, direct.
+# Same snake_case requirement but fewer abstract rules.
 
-_PROMPT_ADDITIONAL_FACTS = """\
-Extract ADDITIONAL factual triples NOT covered by previous extraction.
-Review the source text and identify facts that were missed in the first pass.
-Focus on specific details, numbers, references, and actionable information.
-
-Each fact MUST be traceable to an exact span in the source text.
-The `evidence` field MUST be a direct quote from the source.
-
-Output ONLY valid JSON. No extra text.
+_PROMPT_4B_EXTRACT_FREE = """\
+Extract factual triples from this text. Each fact: (subject, predicate, object).
 
 RULES:
-1. Max 2 additional facts. If none remain, return empty array.
-2. Evidence MUST be a direct quote from source, ending with period.
-3. Self-contained: Resolve pronouns.
-4. No duplicates with first pass.
-5. Do NOT fabricate — only extract facts directly stated.
+1. Max 4 facts. Fewer clean > many noisy.
+2. Predicate: short snake_case (2-4 words). Example: "deploys_on_port", "requires_version".
+   NOT empty, NOT Korean, NOT "has"/"is"
+3. Object = extracted value. NOT a copy of the evidence.
+4. Evidence = direct quote with period.
+5. Self-contained: resolve pronouns.
+6. Skip: greetings, questions, small talk, speculation.
 
-Output format:
-{"extractions": [
-  {
-    "evidence": "<direct quote from source ending with .>",
-    "predicate": "<descriptive verb phrase>",
-    "subject": "<entity name>",
-    "object": "<value>",
-    "category": "code|decision|explanation|requirement|other"
-  }
-]}
+Output JSON with extractions list. Each: evidence, category, subject, predicate, object, source_context.
 
-If nothing extractable: {"extractions": []}."""
+Empty: {"extractions":[]}."""
 
 # ── Minimum text length for meaningful extraction ──────────
 MIN_TEXT_LEN = 300
@@ -381,7 +369,7 @@ def run_config_a(turns, timeout=180):
         all_facts = []
 
         for ci, chunk in enumerate(chunks):
-            prompt = _SYSTEM_TEXT_EXTRACT_FREE
+            prompt = _SYSTEM_TEXT_EXTRACT_FREE_8B
             max_tok = _calc_max_tokens(len(chunk))
             max_tok = min(4096, (max_tok or 768) * 2)
             timeout_s = _calc_timeout(len(chunk), max_tokens=max_tok)
@@ -482,7 +470,7 @@ def run_config_b(turns, timeout=180):
             continue
 
         chunks = _split_atomic(src, max_chars=400)
-        prompt = _SYSTEM_TEXT_EXTRACT_FREE
+        prompt = _SYSTEM_TEXT_EXTRACT_FREE_8B
 
         # Workstealer: submit all chunks, dispatch to any available server
         # Alternating initial assignment for load balance, then whichever finishes first
@@ -544,29 +532,21 @@ def run_config_b(turns, timeout=180):
 
 
 def run_config_c(turns, timeout=180):
-    """4B Q8 dual with 4+2 backup logic: two 4B Q8 on 8082+8083.
+    """4B Q8 dual workstealer: single-pass extraction on 8082+8083.
 
-    Two-pass extraction with dual FactArbiter consolidation:
-    Pass 1: up to 4 facts per chunk (port A)
-    → FactArbiter self-consolidate (dedup pass1 by chunk parity split)
-    Pass 2: up to 2 additional facts per chunk (port B)
-    → FactArbiter(pass1_consolidated, pass2) final merge
+    Identical logic to Config B (workstealer), but uses the simpler
+    4B-specific prompt _PROMPT_4B_EXTRACT_FREE.
     """
-    from lib.arbiter import FactArbiter
-
-    log("── Config C: 4B Q8 dual 4+2 (8082 pass1, 8083 pass2) ──")
+    log("--- Config C: 4B Q8 dual workstealer (8082+8083, threads=2 each) ---")
     t0 = time.monotonic()
     results = []
     mem_before = _get_memory()
+    log(f"  Memory before: {mem_before['avail_mb']}MB avail, swap={mem_before['swap_used_mb']}MB")
+    ports = [8082, 8083]
 
-    for i, turn in enumerate(turns):
-        port_a = 8082 if i % 2 == 0 else 8083
-        port_b = 8083 if i % 2 == 0 else 8082
-        if not (
-            _ensure_model_healthy(port_a, " Config C pass1")
-            and _ensure_model_healthy(port_b, " Config C pass2")
-        ):
-            log("  Model(s) crashed — aborting Config C")
+    for turn in turns:
+        if not any(_ensure_model_healthy(p, " Config C") for p in ports):
+            log("  Both models crashed -- aborting Config C")
             break
         turn_t0 = time.monotonic()
         src = build_source_text(turn)
@@ -575,128 +555,50 @@ def run_config_c(turns, timeout=180):
             continue
 
         chunks = _split_atomic(src, max_chars=400)
+        prompt = _PROMPT_4B_EXTRACT_FREE
 
-        # ── Pass 1: up to 4 facts per chunk ──
-        pass1_facts = []
-        for ci, chunk in enumerate(chunks):
-            prompt = _SYSTEM_TEXT_EXTRACT_FREE
-            max_tok = _calc_max_tokens(len(chunk))
-            max_tok = min(4096, (max_tok or 768) * 2)
-            timeout_s = _calc_timeout(len(chunk), max_tokens=max_tok)
+        args_list = [
+            (ports[ci % 2], chunk, turn["id"], ci, prompt) for ci, chunk in enumerate(chunks)
+        ]
 
-            resp = _call_model(
-                port_a,
-                [
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": chunk},
-                ],
-                max_tokens=max_tok or 768,
-                timeout=timeout_s + 30,
-            )
-            if resp["error"]:
-                log(f"    [{turn['id'][:8]}] pass1 ch{ci} FAILED: {resp['error']}")
-                continue
-            facts = _parse_extractions(resp["content"], turn["id"], ci)
-            pass1_facts.extend(facts[:4])
-            log(
-                f"    [{turn['id'][:8]}] pass1 ch{ci} on :{port_a}: {len(facts[:4])} facts ({resp['elapsed_ms']}ms)"
-            )
+        all_facts = []
+        served_by = {8082: 0, 8083: 0}
 
-        # ── FactArbiter 1: self-consolidate pass1 (split by chunk parity) ──
-        arbiter = FactArbiter(threshold=0.95)
-        pass1_even = [f for fi, f in enumerate(pass1_facts) if fi % 2 == 0]
-        pass1_odd = [f for fi, f in enumerate(pass1_facts) if fi % 2 == 1]
-        refs_1 = arbiter.consolidate(pass1_even, pass1_odd)
-        pass1_merged = [ref.fact for ref in refs_1]
-        n1_consensus = sum(1 for r in refs_1 if r.status.value == "CONSENSUS")
-        n1_ua = sum(1 for r in refs_1 if r.status.value == "UNIQUE_A")
-        n1_ub = sum(1 for r in refs_1 if r.status.value == "UNIQUE_B")
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            futures = {ex.submit(_process_chunk, a): a for a in args_list}
+            for fut in as_completed(futures):
+                a = futures[fut]
+                tid, ci, facts, err, port, ms = fut.result()
+                served_by[port] = served_by.get(port, 0) + 1
+                if err:
+                    log(f"    [{tid[:8]}] ch{ci} on :{port} FAILED: {err}")
+                else:
+                    all_facts.extend(facts)
+                    log(f"    [{tid[:8]}] ch{ci} on :{port}: {len(facts)} facts ({ms}ms)")
 
-        # ── Pass 2: up to 2 additional facts per chunk ──
-        pass2_facts = []
-        for ci, chunk in enumerate(chunks):
-            already_evidence = "\n".join(f"- {f.get('evidence', '')[:100]}" for f in pass1_merged)
-            pass2_prompt = (
-                f"{_PROMPT_ADDITIONAL_FACTS}\n\nAlready extracted evidence:\n{already_evidence}"
-            )
-
-            max_tok = _calc_max_tokens(len(chunk))
-            max_tok = min(2048, (max_tok or 512) * 2)
-            timeout_s = _calc_timeout(len(chunk), max_tokens=max_tok)
-
-            resp = _call_model(
-                port_b,
-                [
-                    {"role": "system", "content": pass2_prompt},
-                    {"role": "user", "content": chunk},
-                ],
-                max_tokens=512,
-                timeout=min(timeout_s + 90, 240),
-            )
-            if resp["error"]:
-                log(f"    [{turn['id'][:8]}] pass2 ch{ci} FAILED: {resp['error']}")
-                continue
-            extra = _parse_extractions(resp["content"], turn["id"], ci)
-            pass2_facts.extend(extra)
-
-        # ── FactArbiter 2: merge pass2 into pass1 consolidated result ──
-        refs_2 = arbiter.consolidate(pass1_merged, pass2_facts)
-        all_facts = [ref.fact for ref in refs_2]
         before_dedup = len(all_facts)
         all_facts = _normalize_freeform_pipeline(all_facts)
         if len(all_facts) != before_dedup:
             log(f"    [{turn['id'][:8]}] EDC dedup: {before_dedup} -> {len(all_facts)}")
-        n2_consensus = sum(1 for r in refs_2 if r.status.value == "CONSENSUS")
-        n2_ua = sum(1 for r in refs_2 if r.status.value == "UNIQUE_A")
-        n2_ub = sum(1 for r in refs_2 if r.status.value == "UNIQUE_B")
-        n2_cf = sum(1 for r in refs_2 if r.status.value == "CONFLICT")
-
+        load_str = " | ".join(f":{p}={n}" for p, n in sorted(served_by.items()))
         elapsed = time.monotonic() - turn_t0
         results.append(
             {
                 "id": turn["id"],
                 "facts": all_facts,
                 "n_facts": len(all_facts),
-                "n_pass1_raw": len(pass1_facts),
-                "n_pass1": len(pass1_merged),
-                "n_pass2": len(pass2_facts),
-                "arbiter1": f"con={n1_consensus},ua={n1_ua},ub={n1_ub}",
-                "arbiter2": f"con={n2_consensus},ua={n2_ua},ub={n2_ub},cf={n2_cf}",
                 "time_s": round(elapsed, 1),
                 "chunks": len(chunks),
+                "load": load_str,
             }
         )
-        log(
-            f"  [{turn['id'][:8]}] => {len(all_facts)} facts "
-            f"(pass1:{len(pass1_facts)}→{len(pass1_merged)}, pass2:{len(pass2_facts)}, "
-            f"arb1={n1_consensus}c+{n1_ua}ua+{n1_ub}ub, "
-            f"arb2={n2_consensus}c+{n2_ua}ua+{n2_ub}ub+{n2_cf}cf), "
-            f"{elapsed:.0f}s"
-        )
+        log(f"  [{turn['id'][:8]}] => {len(all_facts)} facts, {elapsed:.0f}s [{load_str}]")
 
     total_time = time.monotonic() - t0
     mem_after = _get_memory()
     oom = _check_oom()
     return {
-        "config": "C: 4B Q8 dual 4+2 + FactArbiter",
-        "total_time_s": round(total_time, 1),
-        "n_turns": len(turns),
-        "total_facts": sum(r["n_facts"] for r in results),
-        "avg_facts": round(sum(r["n_facts"] for r in results) / max(len(results), 1), 1),
-        "parse_failures": sum(1 for r in results if r.get("error")),
-        "mem_avail_before": mem_before["avail_mb"],
-        "mem_avail_after": mem_after["avail_mb"],
-        "swap_before": mem_before["swap_used_mb"],
-        "swap_after": mem_after["swap_used_mb"],
-        "oom_events": len(oom),
-        "per_turn": results,
-    }
-
-    total_time = time.monotonic() - t0
-    mem_after = _get_memory()
-    oom = _check_oom()
-    return {
-        "config": "C: 4B Q8 dual 4+2 + FactArbiter",
+        "config": "C: 4B Q8 dual workstealer",
         "total_time_s": round(total_time, 1),
         "n_turns": len(turns),
         "total_facts": sum(r["n_facts"] for r in results),
@@ -781,7 +683,7 @@ def main():
     output_path = "/tmp/test_comparison_results.json"
 
     log("=" * 60)
-    log("Extraction Config Comparison: A (8B Q8) vs B (8B Q4 workstealer) vs C (4B Q8 4+2)")
+    log("Extraction Config Comparison: A (8B Q8) vs B (8B Q4 workstealer) vs C (4B Q8 workstealer)")
     log("=" * 60)
 
     # 1. Stop everything
@@ -836,9 +738,9 @@ def main():
     _reclaim_memory()
     time.sleep(10)
 
-    # ── Config C: 4B Q8 dual 4+2 (production backup) ──
+    # ── Config C: 4B Q8 dual workstealer ──
     log("\n" + "=" * 60)
-    log("CONFIG C: 4B Q8 dual 4+2 (8082 pass1, 8083 pass2)")
+    log("CONFIG C: 4B Q8 dual workstealer (8082+8083)")
     log("=" * 60)
     _ensure_stopped()
     _reclaim_memory()

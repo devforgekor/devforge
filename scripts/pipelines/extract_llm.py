@@ -116,7 +116,9 @@ def _sigterm_handler(signum, frame):
     _SIGTERM_RECEIVED.set()
 
 
-# ── Optimized prompts (snake_case predicate, anti-tautology) ──────────
+# ── Optimized prompts ────────────────────────────────────────
+# _SYSTEM_*_EXTRACT_FREE → 4B (simple, reduced rules)
+# _SYSTEM_*_EXTRACT_FREE_8B → 8B (more specific, richer examples)
 
 _SYSTEM_USER_EXTRACT_FREE = """\
 Extract factual triples from the USER MESSAGE. Each fact: (subject, predicate=snake_case, object).
@@ -149,6 +151,72 @@ RULES:
 Output: {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
 
 Empty: {"extractions":[]}."""
+
+# ── 8B-specific prompts ──────────────────────────────────────
+# 8B has higher capacity — use richer guidance for quality.
+# Production (day-extractor) uses 8B Q8 → SYSTEM_DAY_EXTRACT uses these.
+
+_SYSTEM_USER_EXTRACT_FREE_8B = """\
+Extract factual triples from the USER MESSAGE. Each fact: (subject, predicate, object) where predicate is concise snake_case.
+
+CATEGORIES (pick exactly one):
+- code: actual code, function names, CLI commands, paths, ports, config keys/values
+- decision: design choice, selection rationale, trade-off accepted
+- explanation: how something works, causal relationship, mechanism
+- requirement: constraint, dependency, version pin, prerequisite
+- other: anything else factual (status, observation, metadata)
+
+PREDICATE rules:
+- Short snake_case (2-5 words): "deploys_on_port", "requires_version_minimum", "sets_timeout_to", "configures_cors_origin", "writes_log_to_path", "depends_on_service", "overrides_default".
+- NOT empty, NOT Korean, NOT "has"/"is"/"uses"/"does"/"사용".
+- MUST capture the relationship, not a verbatim fragment.
+
+OBJECT rules:
+- Extracted or normalized value. NOT a raw copy of the evidence (anti-tautology).
+- For numbers: normalized form ("30000" not "thirty thousand").
+- Avoid repeating evidence verbatim as the object.
+
+RULES:
+1. Max 4 facts. Fewer clean > many noisy. Skip filler, small talk, reasoning steps.
+2. Self-contained: resolve pronouns to named entities.
+3. Evidence: exact quote ending with period.
+
+Output ONLY valid JSON. No markdown fences.
+
+Output: {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
+
+Empty response: {"extractions":[]}. Non-extractable input: {"extractions":[]}."""
+
+_SYSTEM_TEXT_EXTRACT_FREE_8B = """\
+Extract factual triples from the ASSISTANT RESPONSE. Each fact: (subject, predicate, object) where predicate is concise snake_case.
+
+CATEGORIES (pick exactly one):
+- code: actual code, function names, CLI commands, paths, ports, config keys/values
+- decision: design choice, selection rationale, trade-off accepted
+- explanation: how something works, causal relationship, mechanism
+- requirement: constraint, dependency, version pin, prerequisite
+- other: anything else factual (status, observation, metadata)
+
+PREDICATE rules:
+- Short snake_case (2-5 words): "deploys_on_port", "requires_version_minimum", "sets_timeout_to", "configures_cors_origin", "writes_log_to_path", "depends_on_service", "overrides_default".
+- NOT empty, NOT Korean, NOT "has"/"is"/"uses"/"does"/"사용".
+- MUST capture the relationship, not a verbatim fragment.
+
+OBJECT rules:
+- Extracted or normalized value. NOT a raw copy of the evidence (anti-tautology).
+- For numbers: normalized form ("30000" not "thirty thousand").
+- Avoid repeating evidence verbatim as the object.
+
+RULES:
+1. Max 4 facts. Fewer clean > many noisy. Skip filler, small talk, reasoning steps.
+2. Self-contained: resolve pronouns to named entities.
+3. Evidence: exact quote ending with period.
+
+Output ONLY valid JSON. No markdown fences.
+
+Output: {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
+
+Empty response: {"extractions":[]}. Non-extractable input: {"extractions":[]}."""
 
 
 # ── Chunking utility ──────────────────────────────────────────
@@ -549,7 +617,8 @@ def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict
 
 
 # Backward compat aliases for test files
-SYSTEM_DAY_EXTRACT = _SYSTEM_TEXT_EXTRACT_FREE
+# Production (day-extractor 8B Q8) → 8B prompt
+SYSTEM_DAY_EXTRACT = _SYSTEM_TEXT_EXTRACT_FREE_8B
 
 
 def _calc_max_tokens(text_len: int) -> Optional[int]:
