@@ -605,6 +605,46 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     # ── POST /v1/messages (main endpoint) ────────────────────────────────────
+
+    def _forward_to_deepseek(
+        self, anthropic_body: bytes, anthropic_model: str, is_stream: bool
+    ) -> None:
+        """Fallback: forward the original Anthropic request to local DeepSeek proxy (:44777).
+
+        Called when OpenRouter returns 5xx or connection fails.
+        """
+        print("[openrouter-proxy] fallback → DeepSeek proxy :44777", file=sys.stderr)
+        conn = http.client.HTTPConnection("127.0.0.1", 44777, timeout=120)
+        ds_key = os.environ.get("DEEPSEEK_API_KEY", "")
+        ds_headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {ds_key}",
+            "User-Agent": "devforge-proxy/1.0",
+        }
+        if is_stream:
+            ds_headers["Accept"] = "text/event-stream"
+        try:
+            conn.request("POST", "/v1/messages", body=anthropic_body, headers=ds_headers)
+            resp = conn.getresponse()
+        except Exception as e:
+            conn.close()
+            print(f"[openrouter-proxy] DeepSeek fallback also failed: {e}", file=sys.stderr)
+            err = json.dumps({"error": {"message": f"All upstreams failed: {e}"}}).encode("utf-8")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(err)))
+            self.end_headers()
+            self.wfile.write(err)
+            return
+
+        try:
+            if is_stream:
+                self._stream_response(resp, anthropic_model)
+            else:
+                self._nonstream_response(resp, anthropic_model)
+        finally:
+            conn.close()
+
     def _handle_messages(self, body: bytes) -> None:
         # Parse Anthropic request
         try:
@@ -661,12 +701,18 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"[openrouter-proxy] upstream connection failed: {e}", file=sys.stderr)
             conn.close()
-            err = json.dumps({"error": {"message": f"Upstream error: {e}"}}).encode("utf-8")
-            self.send_response(502)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(err)))
-            self.end_headers()
-            self.wfile.write(err)
+            self._forward_to_deepseek(body, anthropic_model, is_stream)
+            return
+
+        # OpenRouter 5xx → fallback to DeepSeek
+        if resp.status >= 500:
+            raw = resp.read()
+            conn.close()
+            print(
+                f"[openrouter-proxy] OpenRouter {resp.status}, falling back to DeepSeek",
+                file=sys.stderr,
+            )
+            self._forward_to_deepseek(body, anthropic_model, is_stream)
             return
 
         try:

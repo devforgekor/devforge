@@ -1,16 +1,33 @@
 last_checkpoint:
-  time: '2026-07-05T21:10:31.223239+00:00'
-  summary: no files
-  total_files: 0
+  time: '2026-07-06T08:23:29.806327+09:00'
+  summary: 'GitHub Copilot CLI 인증, OpenCode MCP Claude 기준 정리, OpenRouter 15RPM rate-limit proxy'
+  total_files: 5
   recent_files:
-    data: []
-    docs: []
-    config: []
     source: []
+    config: []
+    docs: []
+    data: []
     generated: []
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 2 files changed, 53 insertions(+), 7 deletions(-)
+      staged: (none)
+      untracked_files: 0
   task: null
 decisions:
+- id: nd12-01
+  detail: 'Claude Code MCP 기준으로 OpenCode MCP 설정 통일 (enabled 상태 동기화). 토글 스크립트(opencode-deepdive)로 deepdive 모드 지원. token-savior/git/postgres/sequential-thinking 제외.'
+  status: open
+- id: nd12-02
+  detail: 'Fallback 모델: DeepSeek V4 Flash Free → Poolside Laguna XS 2.1 (free). OpenRouter 유료 키 사용 (cost $0).'
+  status: open
+- id: nd12-03
+  detail: 'OpenRouter 20RPM rate limit 대응: 15RPM token-bucket proxy (or-rate-limiter.service, systemd user, 자동 재시작). opencode.json baseURL → 127.0.0.1:4311.'
+  status: open
+- id: nd12-04
+  detail: 'GitHub Copilot CLI 1.0.68 설치/인증 완료. fine-grained PAT (github_pat_, Copilot Requests 권한) → COPILOT_GITHUB_TOKEN 환경변수. keychain 없는 환경에서 token 저장 안 되는 버그 존재 (plaintext fallback 미작동).'
+  status: open
 - id: nd01-01
   detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta
     사망 → Pod A :8080+8000 port forwarding 차단. disabled 상태였으나 존재만으로 systemctl --user start 가능. init.scope (systemd user instance
@@ -253,6 +270,12 @@ decisions:
     분리.'
   status: closed
 known_issues:
+- id: nki12-01
+  detail: 'copilot CLI 1.0.68: keychain 없는 Linux 환경에서 plaintext token 저장 fallback이 동작 안 함. Login succeeds but token not saved. 해결: COPILOT_GITHUB_TOKEN env var.'
+  resolved: false
+- id: nki12-02
+  detail: 'OpenRouter free model (:free)은 유료 키($10+)로 호출해도 cost=$0이지만 RPM 20 제한은 키 등급과 무관하게 동일. 15RPM proxy로 대응.'
+  resolved: false
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
   resolved: false
