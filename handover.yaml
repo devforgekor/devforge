@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-07-05T02:44:48.08824+00:00'
+  time: '2026-07-05T21:10:31.223239+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -26,12 +26,6 @@ decisions:
 - id: nd01-04
   detail: 'Slack 봇 crash (ModuleNotFoundError: lib.llm_client)와 MCP 기동은 동시성 이벤트일 뿐 인과관계 없음. slack.py 내 MCP 호출 로직 없음.'
   status: open
-- id: nd03-01
-  detail: 'OpenRouter 설정 정리. FREE_ROTATION1/2 키 삭제. Cohere North Mini Code 키 추가 후 → OPENROUTER_DEEPSEEK_V4_FLASH_FREE_API_KEY로 rename (fallback용).'
-  status: closed
-- id: nd03-02
-  detail: 'opencode: Gemini provider 제거, 기본 모델 opencode/deepseek-v4-flash-free로 변경. opencode-model-fallback-chain 플러그인 설치. fallback chain: opencode/deepseek-v4-flash-free → openrouter/deepseek/deepseek-v4-flash:free. DeepSeek 동일 모델 유지, 할당량 풀만 분리.'
-  status: closed
 - id: nd02-01
   detail: 'OCI root 확장: /etc/fstab에서 /var/log, /var/tmp 항목 제거 완료. /var/log(4.4G) + /var/tmp(2.1G) → /opt/ai_data/expansion_bak/
     백업 완료. LV 제거 blocked: tmux(4472) 및 활성 프로세스가 /var/tmp 점유, lazy umount 후에도 dmsetup/lvremove 실패. 최종 결정: 재부팅 → 싱글유저 모드에서 lv_tmp_new(3G)
@@ -253,6 +247,11 @@ decisions:
 - 'system_sync.sh (30분 주기)에 git auto-commit 추가 — 변경사항 있을 때만 git add -A && git commit -m "auto: sync YYYY-MM-DD"'
 - devforge-daily-structure.service (00:00 UTC=KST 09:00)에 git push 추가 — push할 게 없으면 skip
 - argcomplete 모듈 누락修复 — pip3 install --user argcomplete 로 해결
+- id: nd03-02
+  detail: 'opencode: Gemini provider 제거, 기본 모델 opencode/deepseek-v4-flash-free로 변경. opencode-model-fallback-chain 플러그인 설치.
+    fallback chain: opencode/deepseek-v4-flash-free → openrouter/deepseek/deepseek-v4-flash:free. DeepSeek 동일 모델 유지, 할당량 풀만
+    분리.'
+  status: closed
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
