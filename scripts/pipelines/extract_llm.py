@@ -214,9 +214,7 @@ Empty: {"extractions":[]}."""
 # ── Chunking utility ──────────────────────────────────────────
 
 
-def _split_atomic(text: str, max_chars: Optional[int] = None) -> list[str]:
-    if max_chars is None:
-        max_chars = int(os.environ.get("EXTRACT_CHUNK_SIZE", "400"))
+def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
     """Split text into ~max_chars chunks at sentence/paragraph boundaries."""
     paragraphs = re.split(r"\n\s*\n", text)
     chunks = []

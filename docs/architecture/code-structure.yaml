@@ -932,10 +932,6 @@ modules:
     review_consumer.py:
       status: production
       purpose: "review_consumer.py \u2014 27B production final verify."
-    test_chunk_size.py:
-      status: unknown
-      purpose: 'Test chunk size impact: runs extract + supplement with EXTRACT_CHUNK_SIZE
-        env var.'
     test_e2e_phases_1_2.py:
       status: unknown
       purpose: 'E2E pipeline test: Phase 1 (inline post-processing) + Phase 2 (offline

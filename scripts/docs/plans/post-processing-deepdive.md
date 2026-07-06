@@ -222,8 +222,8 @@ def _normalize_freeform_pipeline(facts: list[dict]) -> list[dict]:
 
 ```
 [원본 텍스트]
-    ↓ _split_atomic(400)
-[Chunk 1] [Chunk 2] [Chunk 3]
+    ↓ _split_atomic(600)
+[Chunk 1] [Chunk 2]
     ↓ LLM extract (각 chunk별 4 facts max)
 [10 raw facts]
     ↓ _normalize_freeform_pipeline
