@@ -1,0 +1,1 @@
+{"ts": 1783298595.9603333, "stage": "extract_free_text", "model": "", "attempt": 1, "error": "parse_llm_json returned None", "raw_len": 0, "raw_preview": "", "raw_sha256": "e3b0c44298fc1c14"}
