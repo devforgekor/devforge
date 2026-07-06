@@ -631,6 +631,91 @@ def _llm_judge_entity(name_a: str, name_b: str) -> float:
     return 0.5
 
 
+# ── Post-processing: Multi-value Expansion ──────────────────────
+
+_FIXED_PHRASES = frozenset({
+    "research and development", "rock and roll", "back and forth",
+    "up and down", "left and right", "black and white",
+    "pros and cons", "dos and don ts", "by and large",
+})
+
+
+def _is_splittable_conjunction(obj: str) -> list[str]:
+    """Split object on ' and ' if right side starts with an action verb.
+
+    Returns [original] (no split) or [part1, part2, ...].
+    """
+    low = obj.lower().strip()
+    if low in _FIXED_PHRASES:
+        return [obj]
+    if " and " not in obj:
+        return [obj]
+    idx = obj.index(" and ")
+    left, right = obj[:idx].strip(), obj[idx + 5:].strip()
+    if not left or not right:
+        return [obj]
+    right_words = right.split()
+    _ACTION_STARTS = frozenset({"tuned", "added", "removed", "fixed", "set", "configured"})
+    if right_words and right_words[0].lower() in _ACTION_STARTS:
+        return [left, right]
+    return [obj]
+
+
+def _expand_multi_value(facts: list[dict]) -> list[dict]:
+    """Expand facts whose object contains ' and ' + action into separate facts.
+
+    No LLM calls. Expanded facts keep predicate_raw untouched; caller
+    must re-run _normalize_predicate and _group_predicates.
+    """
+    expanded = []
+    for f in facts:
+        obj = f.get("object", "")
+        parts = _is_splittable_conjunction(obj)
+        if len(parts) <= 1:
+            expanded.append(f)
+            continue
+        # First part keeps original fact
+        first = dict(f)
+        first["object"] = parts[0]
+        expanded.append(first)
+        # Subsequent parts become new facts
+        for part in parts[1:]:
+            new_f = dict(f)
+            new_f["object"] = part
+            expanded.append(new_f)
+    return expanded
+
+
+# ── Post-processing: Qualifier Splitting ────────────────────────
+
+_QUALIFIER_PATTERNS: list[tuple[str, str]] = [
+    (r",?\s*for\s+(\d+\s*%[^,]*)$", "percentage"),
+    (r",?\s*during\s+(.+?)$", "context"),
+    (r",?\s*of\s+(\w+\s*%)$", "percentage"),
+    (r",?\s*with\s+(.+?)$", "condition"),
+]
+
+
+def _split_qualifiers(facts: list[dict]) -> list[dict]:
+    """Extract trailing qualifier phrases from objects into qualifiers dict.
+
+    Modifies facts in place. No LLM calls.
+    """
+    for f in facts:
+        obj = f.get("object", "")
+        if not obj:
+            continue
+        quals = f.get("qualifiers", {}) or {}
+        for pattern, qual_key in _QUALIFIER_PATTERNS:
+            m = re.search(pattern, obj, re.IGNORECASE)
+            if m:
+                quals[qual_key] = m.group(1).strip()
+                obj = obj[:m.start()].strip().rstrip(",").strip()
+        f["object"] = obj
+        f["qualifiers"] = quals
+    return facts
+
+
 def _normalize_predicate(fact: dict) -> dict:
     """Normalize predicate: store raw, write snake_case canonical form."""
     raw = fact.get("predicate", "")
@@ -653,7 +738,7 @@ def _dedup_post_norm(facts: list[dict]) -> list[dict]:
 
 
 def _normalize_freeform_pipeline(facts: list[dict]) -> list[dict]:
-    """Full EDC normalization pipeline: subject → predicate group → dedup."""
+    """Full EDC normalization pipeline: subject → predicate → post-process."""
     if not facts:
         return facts
     before = len(facts)
@@ -667,6 +752,21 @@ def _normalize_freeform_pipeline(facts: list[dict]) -> list[dict]:
     norm_preds = sorted({f.get("predicate", "") for f in facts})
     print(f"    After grouping: {len(norm_preds)} unique predicates")
     facts = _dedup_post_norm(facts)
+
+    # ── Post-processing: multi-value expansion + qualifier split ──
+    pp_before = len(facts)
+    facts = _expand_multi_value(facts)
+    facts = _split_qualifiers(facts)
+    # Re-normalize predicates for expanded facts (no LLM — just snake_case)
+    for f in facts:
+        _normalize_predicate(f)
+    facts = _group_predicates(facts)
+    facts = _dedup_post_norm(facts)
+    pp_added = len(facts) - pp_before
+    if pp_added:
+        print(f"    Post-process: +{pp_added} facts (multi-value + qualifier split)")
+    # ───────────────────────────────────────────────────────────────
+
     print(f"    Dedup: {before} -> {len(facts)} (ent+pred+dedup removed {before - len(facts)})")
     return facts
 
