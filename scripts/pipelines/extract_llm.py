@@ -519,13 +519,13 @@ def _group_entities(facts: list[dict], field: str = "subject") -> list[dict]:
     global _llm_judge_stats_edc
     _llm_judge_stats_edc = {"calls": 0, "merged": 0, "split": 0, "uncertain": 0}
 
-    # Stage 1: SequenceMatcher blocking
+    # Stage 1: SequenceMatcher blocking (case-insensitive)
     groups = []
     for i, ea in enumerate(entities):
         matched = False
         for g in groups:
             rep = entities[min(g)]
-            if SequenceMatcher(None, ea, rep).ratio() >= 0.85:
+            if SequenceMatcher(None, ea.lower(), rep.lower()).ratio() >= 0.85:
                 g.add(i)
                 matched = True
                 break
@@ -572,9 +572,11 @@ def _group_entities(facts: list[dict], field: str = "subject") -> list[dict]:
                         groups[i] |= groups[j]
                         merged_group_ids.add(id(groups[j]))
 
-    # Build entity → canonical mapping
+    # Build entity → canonical mapping (skip dead groups)
     entity_to_canonical = {}
     for g in groups:
+        if id(g) in merged_group_ids:
+            continue
         members = [entities[i] for i in g]
         # Pick shortest form as canonical (most concise)
         canonical = min(members, key=lambda x: (len(x), x))
