@@ -270,7 +270,7 @@ def _get_predicate_definition(raw_predicate: str) -> str:
             data=body,
             headers={"Content-Type": "application/json"},
         )
-        with _ur.urlopen(req, timeout=30) as resp:
+        with _ur.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read())
             definition = data["choices"][0]["message"]["content"].strip().strip("\"'")
             if definition and len(definition) > 5:
@@ -321,7 +321,7 @@ def _llm_judge(pred_a: str, pred_b: str) -> float:
             data=body,
             headers={"Content-Type": "application/json"},
         )
-        with _ur.urlopen(req, timeout=15) as resp:
+        with _ur.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
             raw = data["choices"][0]["message"]["content"].strip().lower()
     except Exception:
@@ -519,13 +519,13 @@ def _group_entities(facts: list[dict], field: str = "subject") -> list[dict]:
     global _llm_judge_stats_edc
     _llm_judge_stats_edc = {"calls": 0, "merged": 0, "split": 0, "uncertain": 0}
 
-    # Stage 1: SequenceMatcher blocking (case-insensitive)
+    # Stage 1: SequenceMatcher blocking (case-sensitive — embed stage handles case variants)
     groups = []
     for i, ea in enumerate(entities):
         matched = False
         for g in groups:
             rep = entities[min(g)]
-            if SequenceMatcher(None, ea.lower(), rep.lower()).ratio() >= 0.85:
+            if SequenceMatcher(None, ea, rep).ratio() >= 0.85:
                 g.add(i)
                 matched = True
                 break
@@ -614,7 +614,7 @@ def _llm_judge_entity(name_a: str, name_b: str) -> float:
             data=body,
             headers={"Content-Type": "application/json"},
         )
-        with _ur.urlopen(req, timeout=15) as resp:
+        with _ur.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
             raw = data["choices"][0]["message"]["content"].strip().lower()
     except Exception:
