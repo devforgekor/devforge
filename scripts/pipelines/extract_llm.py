@@ -157,66 +157,54 @@ Empty: {"extractions":[]}."""
 # Production (day-extractor) uses 8B Q8 → SYSTEM_DAY_EXTRACT uses these.
 
 _SYSTEM_USER_EXTRACT_FREE_8B = """\
-Extract factual triples from the USER MESSAGE. Each fact: (subject, predicate, object) where predicate is concise snake_case.
+You are a precise fact extractor. Extract factual (subject, predicate, object) triples from the USER MESSAGE.
 
-CATEGORIES (pick exactly one):
-- code: actual code, function names, CLI commands, paths, ports, config keys/values
-- decision: design choice, selection rationale, trade-off accepted
-- explanation: how something works, causal relationship, mechanism
-- requirement: constraint, dependency, version pin, prerequisite
-- other: anything else factual (status, observation, metadata)
+CATEGORY (pick the best match):
+- code → function names, CLI commands, file paths, ports, config keys, literal values
+- decision → design choice, rationale, trade-off accepted, alternative rejected
+- explanation → causal relationship, mechanism, how something works
+- requirement → constraint, dependency, version pin, prerequisite, must-have
+- other → status, observation, metadata (only if none of the above fits)
 
-PREDICATE rules:
-- Short snake_case (2-5 words): "deploys_on_port", "requires_version_minimum", "sets_timeout_to", "configures_cors_origin", "writes_log_to_path", "depends_on_service", "overrides_default".
-- NOT empty, NOT Korean, NOT "has"/"is"/"uses"/"does"/"사용".
-- MUST capture the relationship, not a verbatim fragment.
+PREDICATE: Use a concise action verb phrase in snake_case (2-5 words).
+  Good: "deploys_on_port", "requires_version_minimum", "configures_timeout_to", "writes_log_to_path", "depends_on_service"
+  Weak: "has_port", "is_version", "uses" — choose a more specific verb instead.
 
-OBJECT rules:
-- Extracted or normalized value. NOT a raw copy of the evidence (anti-tautology).
-- For numbers: normalized form ("30000" not "thirty thousand").
-- Avoid repeating evidence verbatim as the object.
+OBJECT: The extracted value in normalized form. For numbers use digits ("30000" not "thirty thousand"). Make it self-contained — resolve pronouns to the entity name.
 
-RULES:
-1. Max 4 facts. Fewer clean > many noisy. Skip filler, small talk, reasoning steps.
-2. Self-contained: resolve pronouns to named entities.
-3. Evidence: exact quote ending with period.
+3 RULES:
+1. Prioritize facts that are specific, actionable, and explicitly stated. Skip filler, greetings, reasoning traces.
+2. Evidence must be a direct quote ending with a period.
+3. Up to 4 facts per response. Fewer precise facts > many noisy ones.
 
 Output ONLY valid JSON. No markdown fences.
-
-Output: {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
-
-Empty response: {"extractions":[]}. Non-extractable input: {"extractions":[]}."""
+{"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
+Empty: {"extractions":[]}."""
 
 _SYSTEM_TEXT_EXTRACT_FREE_8B = """\
-Extract factual triples from the ASSISTANT RESPONSE. Each fact: (subject, predicate, object) where predicate is concise snake_case.
+You are a precise fact extractor. Extract factual (subject, predicate, object) triples from the ASSISTANT RESPONSE.
 
-CATEGORIES (pick exactly one):
-- code: actual code, function names, CLI commands, paths, ports, config keys/values
-- decision: design choice, selection rationale, trade-off accepted
-- explanation: how something works, causal relationship, mechanism
-- requirement: constraint, dependency, version pin, prerequisite
-- other: anything else factual (status, observation, metadata)
+CATEGORY (pick the best match):
+- code → function names, CLI commands, file paths, ports, config keys, literal values
+- decision → design choice, rationale, trade-off accepted, alternative rejected
+- explanation → causal relationship, mechanism, how something works
+- requirement → constraint, dependency, version pin, prerequisite, must-have
+- other → status, observation, metadata (only if none of the above fits)
 
-PREDICATE rules:
-- Short snake_case (2-5 words): "deploys_on_port", "requires_version_minimum", "sets_timeout_to", "configures_cors_origin", "writes_log_to_path", "depends_on_service", "overrides_default".
-- NOT empty, NOT Korean, NOT "has"/"is"/"uses"/"does"/"사용".
-- MUST capture the relationship, not a verbatim fragment.
+PREDICATE: Use a concise action verb phrase in snake_case (2-5 words).
+  Good: "deploys_on_port", "requires_version_minimum", "configures_timeout_to", "writes_log_to_path", "depends_on_service"
+  Weak: "has_port", "is_version", "uses" — choose a more specific verb instead.
 
-OBJECT rules:
-- Extracted or normalized value. NOT a raw copy of the evidence (anti-tautology).
-- For numbers: normalized form ("30000" not "thirty thousand").
-- Avoid repeating evidence verbatim as the object.
+OBJECT: The extracted value in normalized form. For numbers use digits ("30000" not "thirty thousand"). Make it self-contained — resolve pronouns to the entity name.
 
-RULES:
-1. Max 4 facts. Fewer clean > many noisy. Skip filler, small talk, reasoning steps.
-2. Self-contained: resolve pronouns to named entities.
-3. Evidence: exact quote ending with period.
+3 RULES:
+1. Prioritize facts that are specific, actionable, and explicitly stated. Skip filler, greetings, reasoning traces.
+2. Evidence must be a direct quote ending with a period.
+3. Up to 4 facts per response. Fewer precise facts > many noisy ones.
 
 Output ONLY valid JSON. No markdown fences.
-
-Output: {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
-
-Empty response: {"extractions":[]}. Non-extractable input: {"extractions":[]}."""
+{"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
+Empty: {"extractions":[]}."""
 
 
 # ── Chunking utility ──────────────────────────────────────────
@@ -875,7 +863,7 @@ or
     def _strict_freeform(section_type: str, source_text: str) -> Optional[Dict]:
         if not source_text:
             return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
-        prompt = _SYSTEM_USER_EXTRACT_FREE if section_type == "user" else _SYSTEM_TEXT_EXTRACT_FREE
+        prompt = _SYSTEM_USER_EXTRACT_FREE_8B if section_type == "user" else _SYSTEM_TEXT_EXTRACT_FREE_8B
         max_tok = _calc_max_tokens(len(source_text))
         if max_tok is None:
             return None
