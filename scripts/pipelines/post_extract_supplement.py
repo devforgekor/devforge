@@ -212,7 +212,6 @@ def _store_supplement_fact(
         evidence += "."
 
     fact_type = fact.get("fact_type", "text") or "text"
-    category = fact.get("category", "explanation") or "explanation"
     subject = (fact.get("subject") or "").strip()
     predicate = _clean_predicate(fact.get("predicate", ""))
     object_ = (fact.get("object") or "").strip()
@@ -230,7 +229,7 @@ def _store_supplement_fact(
         f"INSERT INTO review_facts "
         f"(turn_id, fact_index, fact_type, evidence, extract_model, verdict, "
         f" source, fact_action, subject, predicate, object, qualifiers, "
-        f" corrected_evidence, category) "
+        f" corrected_evidence) "
         f"VALUES ("
         f"'{esc_sql(turn_id)}'::uuid, "
         f"{fact_index}, "
@@ -244,8 +243,7 @@ def _store_supplement_fact(
         f"'{esc_sql(predicate)}', "
         f"'{esc_sql(object_)}', "
         f"'{qjson}'::jsonb, "
-        f"'{esc_sql(source_context)}', "
-        f"'{esc_sql(category)}'"
+        f"'{esc_sql(source_context)}'"
         f") "
         f"ON CONFLICT (turn_id, fact_index, extract_model) DO NOTHING"
     )
