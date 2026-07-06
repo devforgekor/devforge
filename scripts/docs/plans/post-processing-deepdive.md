@@ -259,8 +259,8 @@ def _normalize_freeform_pipeline(facts: list[dict]) -> list[dict]:
 | **Phase 2** | `post_extract_supplement.py` 신규 작성 | `scripts/pipelines/` | ~150줄 |
 | **Phase 2** | `_nli_verify_batch()` 재사용 | `extract_llm.py` | ~20줄 |
 | **Phase 2** | day_cycle.sh에 Step 3 통합 | `day_cycle.sh` | ~5줄 |
-| **Test** | Unit test (multi-value, qualifier regex) | `tests/` | ~100줄 |
-| **Test** | Full pipeline E2E test | `test_8b_q8_parallel2.py` | 기존 활용 |
+| **Test** | Unit test (multi-value, qualifier regex) | `tests/` | ~30줄 |
+| **Test** | E2E pipeline integration (DB → extract → post-process → verify) | `test_edcr_e2e.py` 패턴 재사용 | 기존 활용 |
 
 ---
 
@@ -296,14 +296,35 @@ def _normalize_freeform_pipeline(facts: list[dict]) -> list[dict]:
 | Step 3 생성 fact enrich 누락 | plan에서 verify만 수행, enrich 생략 | 중 | supplement 후 pipeline이 verify → enrich → embed를 자연스럽게 통과하도록 설계 |
 | 8082 포트 경합 | Step 3가 8082 점유 시 day_verify/day_enrich 불가 (병렬 불가) | 중 | Dedicated port 분리 또는 skip-if-busy 로직. 전자가 구조적으로 깔끔 |
 | 50 turn = 2-3h 총 소요 | day_cycle.sh budget gate (30분) 초과 | 중 | Batch당 10 turn 제한. budget gate 진입 전 supplement만 먼저 수행 |
-| regex 테스트 골든셋 없음 | multi-value/qualifier 패턴 검증 수단 부재 | 경 | 5-10개 golden set 작성 후 커밋 |
+
+### Golden Set 부적합 판정
+
+**원래 안건**: regex 패턴 검증용 golden set unit test
+**web 검증 결과 — 3개 소스 일관**:
+
+| Source | 결론 |
+|--------|------|
+| Techment (7 Proven Strategies) | "Risk of overfitting — Models may perform well on curated tests but fail in broader contexts" |
+| The Neural Base (Automated Regression Testing) | "The most damaging mistake: using your current extraction pipeline's output as the golden truth" |
+| Heavy Thought (Golden Sets for Probabilistic Systems) | Golden set은 **CI gate용 회귀 감지** 도구 — 결정적 코드의 정확도 측정에 부적합 |
+
+**이 코드베이스의 실제 경험** (`handover.yaml`):
+```
+Phase 1 test (14B Q4):
+  A) no-GS:  GOOD, 5 facts, 216s, 499P+281C
+  B) with-GS: MIXED, 5 facts (1 dup), 257s, 1489P+316C
+  → GS 3x token cost, quality benefit 불명확
+```
+
+**결론**: post-processing은 **결정적 함수**(regex)라 golden set의 비결정적 LLM 회귀 탐지 목적과 부합하지 않음. golden set 유지보수비만 증가시킴. 대신 E2E pipeline test(`test_edcr_e2e.py` 패턴)로 NLI GROUNDED pass rate 비교로 대체.
 
 ### 최종 판단
 
 **Phase 1 (regex post-processing)** — **APPROVED**
 - `_expand_multi_value` + `_split_qualifiers` 구현 가능. LLM-free 검증 완료.
 - `_infer_predicate()`는 신규 함수 금지. 분리된 fact를 `_normalize_predicate` + `_group_predicates` 재진입으로 해결.
-- 5-10개 golden set unit test 필수.
+- golden set 금지. E2E pipeline integration test (`test_edcr_e2e.py` 패턴 재사용)로 NLI GROUNDED pass rate 비교.
+- regex 자체는 결정적 함수이므로 unit test 2-3개 (edge case만) + 코드 리뷰로 충분.
 
 **Phase 2 (LLM supplement)** — **CONDITIONAL APPROVED**
 해결 조건:

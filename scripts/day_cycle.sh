@@ -357,6 +357,27 @@ else
     LOG "=== Reranker Recovery: skip (0 RERANKER_ERROR facts) ==="
 fi
 
+# ── Post-Extract Supplement (:8082, offline missing-fact LLM) ──
+NEED_SUPPLEMENT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
+  "SELECT count(*)::int FROM turns t JOIN review_facts rf ON rf.turn_id = t.id WHERE t.pipeline_state = 'extracted' AND rf.source = 'extract_pipeline' AND rf.fact_action = 'extracted'" 2>/dev/null || echo "0")
+NEED_SUPPLEMENT=${NEED_SUPPLEMENT:-0}
+if [ "$NEED_SUPPLEMENT" -gt 0 ]; then
+    SUPP_BUDGET=$(BUDGET)
+    if [ "$SUPP_BUDGET" -ge 600 ]; then
+        SUPP_LIMIT=5
+        [ "$SUPP_BUDGET" -ge 2400 ] && SUPP_LIMIT=10
+        LOG "=== Post-Extract Supplement (:8082, ${NEED_SUPPLEMENT} turns, limit=${SUPP_LIMIT}) ==="
+        python3 "$PIPELINE_DIR/post_extract_supplement.py" --limit "$SUPP_LIMIT" 2>&1
+        RC=$?
+        ELAPSED=$(( $(date +%s) - START_TS ))
+        BUDGET=$(BUDGET)
+        LOG "  Supplement exit=$RC, elapsed=${ELAPSED}s"
+        [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
+    else
+        LOG "  Supplement: budget ${SUPP_BUDGET}s < 600s — deferring"
+    fi
+fi
+
 # ── Day Verify (:8082) — predicate NLI before enrich ──
 NEED_VERIFY=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM turns WHERE pipeline_state = 'extracted'" 2>/dev/null || echo "0")

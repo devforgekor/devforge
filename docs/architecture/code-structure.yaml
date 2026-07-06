@@ -911,6 +911,9 @@ modules:
     polish_batch.py:
       status: deprecated
       purpose: "DEPRECATED \u2014 Merged into text_clean.py."
+    post_extract_supplement.py:
+      status: experimental
+      purpose: "Post-extract supplement \u2014 offline LLM call to find missing facts."
     prj_cycle.py:
       status: production
       purpose: prj_cycle.py
