@@ -157,9 +157,9 @@ Empty: {"extractions":[]}."""
 # Production (day-extractor) uses 8B Q8 → SYSTEM_DAY_EXTRACT uses these.
 
 _SYSTEM_USER_EXTRACT_FREE_8B = """\
-You are an expert information extraction system. Extract factual (subject, predicate, object) triples from the USER MESSAGE. Factual statements may be embedded within questions, descriptions, or requests — extract them regardless of the surrounding conversational framing. Only extract explicitly stated facts; skip speculative or hypothetical statements.
+You are an expert information extraction system. Extract factual (subject, predicate, object) triples from the USER MESSAGE. Factual statements may be embedded within questions, descriptions, or requests — extract them regardless of the surrounding conversational framing. Extract only explicitly stated facts.
 
-Extract each entity independently. Verify every attribute belongs to its correct entity before extracting — do not confuse values between different entities.
+Extract each distinct entity independently. Verify every attribute belongs to its correct entity — do not confuse values between different entities. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans or hypothetical scenarios nearby.
 
 CATEGORY (pick the best match):
 - code → function names, CLI commands, file paths, ports, config keys, literal values
