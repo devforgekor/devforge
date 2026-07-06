@@ -170,7 +170,9 @@ PREDICATE: Concise action verb phrase in snake_case (2-5 words).
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
 
-OBJECT: The extracted value in normalized form. For numbers use digits ("30000" not "thirty thousand"). Make it self-contained — resolve pronouns to the entity name.
+SUBJECT: Must be a specific entity name explicitly mentioned in the text. Avoid generic placeholders ("system", "it", "the process", "application").
+
+OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
 1. Prioritize facts that are specific, actionable, and explicitly stated. Skip filler, greetings, reasoning traces.
@@ -178,7 +180,7 @@ OBJECT: The extracted value in normalized form. For numbers use digits ("30000" 
 3. Up to 4 facts per response. Fewer precise facts > many noisy ones.
 
 Output ONLY valid JSON. No markdown fences.
-{"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
+{"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"specific_entity","predicate":"snake_case","object":"value","source_context":"...","qualifiers":{"key":"value"}}]}
 Empty: {"extractions":[]}."""
 
 _SYSTEM_TEXT_EXTRACT_FREE_8B = """\
@@ -195,7 +197,9 @@ PREDICATE: Concise action verb phrase in snake_case (2-5 words).
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
 
-OBJECT: The extracted value in normalized form. For numbers use digits ("30000" not "thirty thousand"). Make it self-contained — resolve pronouns to the entity name.
+SUBJECT: Must be a specific entity name explicitly mentioned in the text. Avoid generic placeholders ("system", "it", "the process", "application").
+
+OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
 1. Prioritize facts that are specific, actionable, and explicitly stated. Skip filler, greetings, reasoning traces.
@@ -203,7 +207,7 @@ OBJECT: The extracted value in normalized form. For numbers use digits ("30000" 
 3. Up to 4 facts per response. Fewer precise facts > many noisy ones.
 
 Output ONLY valid JSON. No markdown fences.
-{"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"...","predicate":"snake_case","object":"...","source_context":"..."}]}
+{"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"specific_entity","predicate":"snake_case","object":"value","source_context":"...","qualifiers":{"key":"value"}}]}
 Empty: {"extractions":[]}."""
 
 
@@ -498,6 +502,133 @@ def _group_predicates(facts: list[dict]) -> list[dict]:
     return facts
 
 
+def _group_entities(facts: list[dict], field: str = "subject") -> list[dict]:
+    """Group equivalent entity surface forms via 3-tier: SeqMatcher → Embed → LLM.
+
+    Normalizes subjects/objects so 'ETL pipeline processing time' and
+    'etl_pipeline' resolve to the same canonical form.
+    """
+    if not facts:
+        return facts
+    from difflib import SequenceMatcher
+
+    entities = sorted({f.get(field, "") for f in facts if f.get(field, "")})
+    if len(entities) <= 1:
+        return facts
+
+    global _llm_judge_stats_edc
+    _llm_judge_stats_edc = {"calls": 0, "merged": 0, "split": 0, "uncertain": 0}
+
+    # Stage 1: SequenceMatcher blocking
+    groups = []
+    for i, ea in enumerate(entities):
+        matched = False
+        for g in groups:
+            rep = entities[min(g)]
+            if SequenceMatcher(None, ea, rep).ratio() >= 0.85:
+                g.add(i)
+                matched = True
+                break
+        if not matched:
+            groups.append({i})
+
+    # Stage 2+3: Embed 3-tier for groups with multiple distinct forms
+    embed_ok = False
+    embed_count = 0
+    merged_group_ids: set[int] = set()
+    if len(groups) >= 2:
+        test_vec = _embed_text_8081("test")
+        if test_vec:
+            embed_ok = True
+
+        for i in range(len(groups)):
+            if id(groups[i]) in merged_group_ids:
+                continue
+            ea = entities[min(groups[i])]
+            if embed_ok:
+                ei = _cached_embed_edc(ea)
+                if ei is None:
+                    continue
+                embed_count += 1
+            for j in range(i + 1, len(groups)):
+                if id(groups[j]) in merged_group_ids:
+                    continue
+                eb = entities[min(groups[j])]
+                if embed_ok:
+                    ej = _cached_embed_edc(eb)
+                    if ej is None:
+                        continue
+                    embed_count += 1
+                    sim = _cosine_similarity(ei, ej)
+                else:
+                    sim = 0.70
+
+                if embed_ok and sim >= 0.85:
+                    groups[i] |= groups[j]
+                    merged_group_ids.add(id(groups[j]))
+                elif sim >= 0.65:
+                    verdict = _llm_judge_entity(ea, eb)
+                    if verdict == 0.85:
+                        groups[i] |= groups[j]
+                        merged_group_ids.add(id(groups[j]))
+
+    # Build entity → canonical mapping
+    entity_to_canonical = {}
+    for g in groups:
+        members = [entities[i] for i in g]
+        # Pick shortest form as canonical (most concise)
+        canonical = min(members, key=lambda x: (len(x), x))
+        for m in members:
+            entity_to_canonical[m] = canonical
+
+    # Apply mapping
+    for f in facts:
+        original = f.get(field, "")
+        canonical = entity_to_canonical.get(original, original)
+        if canonical != original:
+            f[field] = canonical
+            f[f"{field}_original"] = original
+
+    merged = sum(1 for g in groups if len(g) > 1)
+    if merged:
+        print(f"    [entity-{field}] {merged} groups canonicalized ({len(entities)}→{len(groups)})")
+    return facts
+
+
+def _llm_judge_entity(name_a: str, name_b: str) -> float:
+    """LLM-as-judge for entity equivalence via 8082."""
+    global _llm_judge_stats_edc
+    prompt = (
+        f"Do these two entity names refer to the same real-world entity?\n\n"
+        f"A: '{name_a}'\nB: '{name_b}'\n\n"
+        f"Answer ONLY: equivalent | different | uncertain"
+    )
+    import urllib.request as _ur
+
+    body = json.dumps({"model": "test", "messages": [{"role": "user", "content": prompt}]}).encode()
+    try:
+        req = _ur.Request(
+            "http://127.0.0.1:8082/v1/chat/completions",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        with _ur.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+            raw = data["choices"][0]["message"]["content"].strip().lower()
+    except Exception:
+        _llm_judge_stats_edc["uncertain"] += 1
+        return 0.5
+    _llm_judge_stats_edc["calls"] += 1
+    if "equivalent" in raw:
+        _llm_judge_stats_edc["merged"] += 1
+        return 0.85
+    if "different" in raw:
+        _llm_judge_stats_edc["split"] += 1
+        return 0.0
+    _llm_judge_stats_edc["uncertain"] += 1
+    return 0.5
+
+
 def _normalize_predicate(fact: dict) -> dict:
     """Normalize predicate: store raw, write snake_case canonical form."""
     raw = fact.get("predicate", "")
@@ -520,20 +651,21 @@ def _dedup_post_norm(facts: list[dict]) -> list[dict]:
 
 
 def _normalize_freeform_pipeline(facts: list[dict]) -> list[dict]:
-    """Full EDC normalization pipeline: snake_case → group → dedup."""
+    """Full EDC normalization pipeline: subject → predicate group → dedup."""
     if not facts:
         return facts
+    before = len(facts)
+    facts = _group_entities(facts, field="subject")
+    facts = _group_entities(facts, field="object")
     for f in facts:
         _normalize_predicate(f)
     raw_preds = sorted({_raw_pred(f) for f in facts})
     print(f"    Unique raw predicates ({len(raw_preds)}): {raw_preds}")
-    before = len(facts)
     facts = _group_predicates(facts)
     norm_preds = sorted({f.get("predicate", "") for f in facts})
     print(f"    After grouping: {len(norm_preds)} unique predicates")
-    after = len(facts)
     facts = _dedup_post_norm(facts)
-    print(f"    Dedup: {before} -> {len(facts)} (group+dedup removed {before - len(facts)})")
+    print(f"    Dedup: {before} -> {len(facts)} (ent+pred+dedup removed {before - len(facts)})")
     return facts
 
 
