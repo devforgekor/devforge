@@ -179,11 +179,13 @@ OBJECT: Extract the core value in normalized form. For numbers use digits ("3000
 3 RULES:
 1. Prioritize facts that are specific, actionable, and explicitly stated. Skip filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
-3. Up to 4 facts per response. Fewer precise facts > many noisy ones.
+3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
 
 Output ONLY valid JSON. No markdown fences, no reasoning, no deliberation.
 {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"specific_entity","predicate":"snake_case","object":"value","source_context":"...","qualifiers":{"key":"value"}}]}
 Empty: {"extractions":[]}."""
+
+
 
 _SYSTEM_TEXT_EXTRACT_FREE_8B = """\
 You are a precise fact extractor. Extract factual (subject, predicate, object) triples from the ASSISTANT RESPONSE.
@@ -206,7 +208,7 @@ OBJECT: Extract the core value in normalized form. For numbers use digits ("3000
 3 RULES:
 1. Prioritize facts that are specific, actionable, and explicitly stated. Skip filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
-3. Up to 4 facts per response. Fewer precise facts > many noisy ones.
+3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
 
 Output ONLY valid JSON. No markdown fences.
 {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"specific_entity","predicate":"snake_case","object":"value","source_context":"...","qualifiers":{"key":"value"}}]}
