@@ -166,9 +166,9 @@ CATEGORY (pick the best match):
 - requirement → constraint, dependency, version pin, prerequisite, must-have
 - other → status, observation, metadata (only if none of the above fits)
 
-PREDICATE: Use a concise action verb phrase in snake_case (2-5 words).
-  Good: "deploys_on_port", "requires_version_minimum", "configures_timeout_to", "writes_log_to_path", "depends_on_service"
-  Weak: "has_port", "is_version", "uses" — choose a more specific verb instead.
+PREDICATE: Concise action verb phrase in snake_case (2-5 words).
+  Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
+  Action verbs capture the relationship more precisely than stative verbs.
 
 OBJECT: The extracted value in normalized form. For numbers use digits ("30000" not "thirty thousand"). Make it self-contained — resolve pronouns to the entity name.
 
@@ -191,9 +191,9 @@ CATEGORY (pick the best match):
 - requirement → constraint, dependency, version pin, prerequisite, must-have
 - other → status, observation, metadata (only if none of the above fits)
 
-PREDICATE: Use a concise action verb phrase in snake_case (2-5 words).
-  Good: "deploys_on_port", "requires_version_minimum", "configures_timeout_to", "writes_log_to_path", "depends_on_service"
-  Weak: "has_port", "is_version", "uses" — choose a more specific verb instead.
+PREDICATE: Concise action verb phrase in snake_case (2-5 words).
+  Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
+  Action verbs capture the relationship more precisely than stative verbs.
 
 OBJECT: The extracted value in normalized form. For numbers use digits ("30000" not "thirty thousand"). Make it self-contained — resolve pronouns to the entity name.
 
