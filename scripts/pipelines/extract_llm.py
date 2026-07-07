@@ -221,36 +221,35 @@ Empty: {"extractions":[]}."""
 
 
 def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
-    """Split text into ~max_chars chunks at sentence/paragraph boundaries."""
+    """Split text into sentence-level chunks, expanding compound sentences to
+    help 8B models overcome the 'dual binding on single token' limitation
+    (Slot Machines, arXiv 2604.21139)."""
+    text = _expand_compounds(text)
     paragraphs = re.split(r"\n\s*\n", text)
     chunks = []
     for para in paragraphs:
         para = para.strip()
         if not para:
             continue
-        if len(para) <= max_chars:
-            chunks.append(para)
-            continue
         sentences = re.split(r"(?<=[.!?])\s+", para)
-        current = ""
         for sent in sentences:
-            if len(current) + len(sent) + 1 <= max_chars:
-                current = (current + " " + sent).strip()
-            else:
-                if current:
-                    chunks.append(current)
-                current = sent
-        if current:
-            chunks.append(current)
-    merged = []
-    for c in chunks:
-        if merged and len(c) < 40:
-            merged[-1] += " " + c
-            continue
-        merged.append(c)
-    if merged and len(merged[-1]) < 40 and len(merged) > 1:
-        merged[-2] += " " + merged.pop()
-    return merged
+            sent = sent.strip()
+            if sent:
+                chunks.append(sent)
+    return chunks
+
+
+def _expand_compounds(text: str) -> str:
+    """Split compound sentences so each entity/attribute gets its own clause.
+    Causal LLMs cannot extract the second entity from structures like
+    'Pod A is DOWN and Pod B runs a model' (Slot Machines, 2025)."""
+    # ", and" → ". " (most common compound pattern)
+    text = re.sub(r',\s+and\s+', '. ', text)
+    # " and [pronoun/entity]" → ". " (second clause has different subject)
+    text = re.sub(r'\s+and\s+(?=(?:we|I|they|he|she|it|this|that|these|those|[A-Z][a-z]+\s+(?:has|runs|uses|consumes|is|are|was|were)))', '. ', text)
+    # "X has A with B" → "X has A. X has B." (preserve subject for 2nd attribute)
+    text = re.sub(r'(\w+(?:\s+\w+){0,3})\s+has\s+([^.]*?)\s+with\s+(\d[\w.]*\s*\w+)', r'\1 has \2. \1 has \3.', text)
+    return text
 
 
 # ── EDC-style predicate canonicalization helpers ──────────────
