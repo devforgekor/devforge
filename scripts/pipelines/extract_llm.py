@@ -1180,7 +1180,7 @@ or
         def _entity_names(text: str) -> set:
             """Extract plausible entity names from text via regex."""
             names: set = set()
-            for m in re.finditer(r'(?:^|[.?!]\s+)([A-Z][a-zA-Z0-9/_-]*(?:\s+[A-Z][a-zA-Z0-9/_-]*)+)', text):
+            for m in re.finditer(r'(\b[A-Z][a-zA-Z0-9/_-]*(?:\s+[A-Z][a-zA-Z0-9/_-]*)+)', text):
                 raw = m.group(1).strip()
                 if raw and len(raw) >= 3:
                     names.add(raw)
