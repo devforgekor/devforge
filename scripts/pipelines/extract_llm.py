@@ -174,7 +174,7 @@ PREDICATE: Concise action verb phrase in snake_case (2-5 words).
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
 
-SUBJECT: Must be a specific entity name explicitly mentioned in the text. Field descriptions are format specifications, not values to extract. Avoid generic placeholders ("it", "the process", "application").
+SUBJECT: Must be the EXACT entity name as written in the text — do not rename or normalize entities during extraction. Field descriptions are format specifications, not values to extract. Avoid generic placeholders ("it", "the process", "application").
 
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
@@ -1105,16 +1105,22 @@ or
         if not source_text:
             return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
         prompt = _SYSTEM_USER_EXTRACT_FREE_8B if section_type == "user" else _SYSTEM_TEXT_EXTRACT_FREE_8B
-        max_tok = _calc_max_tokens(len(source_text))
+        # Isolation marker: force llama-server cache miss between chunks to
+        # prevent cross-chunk entity bleed (Slot Machines, arXiv 2604.21139).
+        # Each chunk gets a unique prefix so KV cache cannot reuse slot state.
+        import secrets as _secrets
+        isolation = f"[{_secrets.token_hex(2)}] "
+        source_text_with_tag = isolation + source_text
+        max_tok = _calc_max_tokens(len(source_text_with_tag))
         if max_tok is None:
             return None
         max_tok = min(4096, max_tok * 2)
-        timeout = _calc_timeout(len(source_text), max_tokens=max_tok)
+        timeout = _calc_timeout(len(source_text_with_tag), max_tokens=max_tok)
         print(f"    [debug] _strict_freeform section={section_type} src_len={len(source_text)} max_tok={max_tok} timeout={timeout}", flush=True)
         try:
             meta = _call_with_8082_retry(
                 call_llm,
-                [{"role": "system", "content": prompt}, {"role": "user", "content": source_text}],
+                [{"role": "system", "content": prompt}, {"role": "user", "content": source_text_with_tag}],
                 model="day_extract",
                 max_tokens=max_tok,
                 temperature=TEMP_EXTRACT,
