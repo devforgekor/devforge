@@ -161,6 +161,10 @@ You are an expert information extraction system. Extract factual (subject, predi
 
 Extract each distinct entity independently. Verify every attribute belongs to its correct entity — do not confuse values between different entities. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans or hypothetical scenarios nearby.
 
+When a sentence contains multiple factual claims about the same entity (e.g. "X uses 4.3GB and we are considering removing it"), extract ALL concrete measurements first ("X uses 4.3GB") before any meta-statements about plans. Prefer concrete numeric attributes over meta-predicates like "considered_for".
+
+Extract every entity mentioned in the text, not just the first one. If a sentence covers multiple entities (e.g. "Pod A is DOWN and Pod B runs a model"), extract facts for each entity separately.
+
 CATEGORY (pick the best match):
 - code → function names, CLI commands, file paths, ports, config keys, literal values
 - decision → design choice, rationale, trade-off accepted, alternative rejected
@@ -1107,6 +1111,7 @@ or
             return None
         max_tok = min(4096, max_tok * 2)
         timeout = _calc_timeout(len(source_text), max_tokens=max_tok)
+        print(f"    [debug] _strict_freeform section={section_type} src_len={len(source_text)} max_tok={max_tok} timeout={timeout}", flush=True)
         try:
             meta = _call_with_8082_retry(
                 call_llm,
