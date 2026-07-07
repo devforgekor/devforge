@@ -1186,6 +1186,17 @@ or
             return 0
         print(f"  [{section_type}] {len(targets)} turns (8082 parallel=2)", flush=True)
 
+        def _chunk_entities(text: str) -> list[str]:
+            """Sorted list of multi-word capitalized entity-like names found in text."""
+            seen: set = set()
+            out: list[str] = []
+            for m in re.finditer(r'(\b[A-Z][a-zA-Z0-9/_-]*(?:\s+[A-Z][a-zA-Z0-9/_-]*)+)', text):
+                raw = m.group(1).strip()
+                if raw and len(raw) >= 3 and raw not in seen:
+                    seen.add(raw)
+                    out.append(raw)
+            return out
+
         def _process_one_turn(t: dict) -> int:
             """Process one turn: chunk → single model extraction → checkpoint."""
             src = source_getter(t)
@@ -1199,17 +1210,13 @@ or
                 if res and res.get("extractions"):
                     for f in res["extractions"]:
                         subj = (f.get("subject") or "").strip()
-                        if subj:
-                            ch_lower = chunk.lower()
-                            subj_lower = subj.lower()
-                            if subj_lower not in ch_lower:
-                                for m in re.finditer(r'(\b[A-Z][a-zA-Z0-9/_-]*(?:\s+[A-Z][a-zA-Z0-9/_-]*)+)', chunk):
-                                    ent = m.group(1).strip()
-                                    if ent and len(ent) >= 3 and ent.lower() in ch_lower and ent.lower() != subj_lower:
-                                        from difflib import SequenceMatcher
-                                        if SequenceMatcher(None, subj_lower, ent.lower()).ratio() >= 0.70:
-                                            f["subject"] = ent
-                                            break
+                        if subj and subj.lower() not in chunk.lower():
+                            chunk_ents = _chunk_entities(chunk)
+                            if chunk_ents:
+                                from difflib import SequenceMatcher as _SM
+                                best = max(chunk_ents, key=lambda e: _SM(None, subj.lower(), e.lower()).ratio())
+                                if _SM(None, subj.lower(), best.lower()).ratio() >= 0.70:
+                                    f["subject"] = best
                     extractions.extend(res["extractions"])
                     _merge_usage(turn_data[t["id"]]["total_usage"], res.get("usage", {}))
                 n = len(res.get("extractions", [])) if res else 0
