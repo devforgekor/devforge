@@ -1083,6 +1083,13 @@ def _extract_edcr_freeform(
 
     from extract import _load_checkpoint, _save_checkpoint
 
+    def _is_entity_single_char_diff(a: str, b: str) -> bool:
+        """True if two entity names differ by only one character (e.g. Pod A vs Pod B)."""
+        if len(a) != len(b):
+            return False
+        diffs = sum(1 for ca, cb in zip(a, b) if ca != cb)
+        return diffs == 1
+
     _ENTITY_RESOLVER_4B = """\
 You are an Entity Resolver. Determine if two entity names refer to the same thing.
 Answer YES only if they clearly refer to the same real-world entity.
@@ -1094,6 +1101,8 @@ Examples:
 - "PostgreSQL" vs "Postgres" → YES
 - "GPU memory" vs "CPU memory" → NO
 - "threads=4" vs "4 threads" → YES
+- "Pod A" vs "Pod B" → NO  # different pods
+- "Server 1" vs "Server 2" → NO  # different servers
 
 Return ONLY valid JSON:
 {"same": "yes", "reason": "why (≤10 words)"}
@@ -1286,7 +1295,7 @@ or
                     canonical = s1 if len(s1) <= len(s2) else s2
                     subj_map[s1] = canonical
                     subj_map[s2] = canonical
-                elif ratio >= 0.70:
+                elif ratio >= 0.70 and not _is_entity_single_char_diff(s1, s2):
                     try:
                         meta = _call_with_8082_retry(
                             call_llm,
