@@ -1192,17 +1192,6 @@ or
             return 0
         print(f"  [{section_type}] {len(targets)} turns (8082 parallel=2)", flush=True)
 
-        def _chunk_entities(text: str) -> list[str]:
-            """Sorted list of multi-word capitalized entity-like names found in text."""
-            seen: set = set()
-            out: list[str] = []
-            for m in re.finditer(r'(\b[A-Z][a-zA-Z0-9/_-]*(?:\s+[A-Z][a-zA-Z0-9/_-]*)+)', text):
-                raw = m.group(1).strip()
-                if raw and len(raw) >= 3 and raw not in seen:
-                    seen.add(raw)
-                    out.append(raw)
-            return out
-
         def _process_one_turn(t: dict) -> int:
             """Process one turn: chunk → single model extraction → checkpoint."""
             src = source_getter(t)
@@ -1214,22 +1203,6 @@ or
             for ci, chunk in enumerate(chunks):
                 res = _strict_freeform(section_type, chunk)
                 if res and res.get("extractions"):
-                    for f in res["extractions"]:
-                        subj = (f.get("subject") or "").strip()
-                        if not subj:
-                            continue
-                        print(f"      [debug-eb] subj={subj!r} in chunk={subj.lower() in chunk.lower()!r}", flush=True)
-                        if subj.lower() not in chunk.lower():
-                            chunk_ents = _chunk_entities(chunk)
-                            print(f"      [debug-eb] chunk_ents={chunk_ents}", flush=True)
-                            if chunk_ents:
-                                from difflib import SequenceMatcher as _SM
-                                best = max(chunk_ents, key=lambda e: _SM(None, subj.lower(), e.lower()).ratio())
-                                ratio = _SM(None, subj.lower(), best.lower()).ratio()
-                                print(f"      [debug-eb] best={best!r} ratio={ratio:.2f}", flush=True)
-                                if ratio >= 0.70:
-                                    print(f"      [entity-bleed-fix] {subj!r} -> {best!r}", flush=True)
-                                    f["subject"] = best
                     extractions.extend(res["extractions"])
                     _merge_usage(turn_data[t["id"]]["total_usage"], res.get("usage", {}))
                 n = len(res.get("extractions", [])) if res else 0
