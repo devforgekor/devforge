@@ -1197,7 +1197,7 @@ or
             chunk_entities: list[set] = []
             for c in raw_chunks:
                 entities = _entity_names(c)
-                if chunks and entities and chunk_entities[-1]:
+                if chunks and entities and len(chunk_entities[-1]) > 0:
                     merge = False
                     for e1 in chunk_entities[-1]:
                         for e2 in entities:
