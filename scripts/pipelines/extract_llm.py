@@ -1215,7 +1215,9 @@ or
                             if chunk_ents:
                                 from difflib import SequenceMatcher as _SM
                                 best = max(chunk_ents, key=lambda e: _SM(None, subj.lower(), e.lower()).ratio())
-                                if _SM(None, subj.lower(), best.lower()).ratio() >= 0.70:
+                                ratio = _SM(None, subj.lower(), best.lower()).ratio()
+                                if ratio >= 0.70:
+                                    print(f"      [entity-bleed-fix] {subj!r} -> {best!r} (chunk has {chunk_ents}, ratio={ratio:.2f})", flush=True)
                                     f["subject"] = best
                     extractions.extend(res["extractions"])
                     _merge_usage(turn_data[t["id"]]["total_usage"], res.get("usage", {}))
