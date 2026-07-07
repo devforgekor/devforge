@@ -1210,14 +1210,19 @@ or
                 if res and res.get("extractions"):
                     for f in res["extractions"]:
                         subj = (f.get("subject") or "").strip()
-                        if subj and subj.lower() not in chunk.lower():
+                        if not subj:
+                            continue
+                        print(f"      [debug-eb] subj={subj!r} in chunk={subj.lower() in chunk.lower()!r}", flush=True)
+                        if subj.lower() not in chunk.lower():
                             chunk_ents = _chunk_entities(chunk)
+                            print(f"      [debug-eb] chunk_ents={chunk_ents}", flush=True)
                             if chunk_ents:
                                 from difflib import SequenceMatcher as _SM
                                 best = max(chunk_ents, key=lambda e: _SM(None, subj.lower(), e.lower()).ratio())
                                 ratio = _SM(None, subj.lower(), best.lower()).ratio()
+                                print(f"      [debug-eb] best={best!r} ratio={ratio:.2f}", flush=True)
                                 if ratio >= 0.70:
-                                    print(f"      [entity-bleed-fix] {subj!r} -> {best!r} (chunk has {chunk_ents}, ratio={ratio:.2f})", flush=True)
+                                    print(f"      [entity-bleed-fix] {subj!r} -> {best!r}", flush=True)
                                     f["subject"] = best
                     extractions.extend(res["extractions"])
                     _merge_usage(turn_data[t["id"]]["total_usage"], res.get("usage", {}))
