@@ -159,9 +159,9 @@ Empty: {"extractions":[]}."""
 _SYSTEM_USER_EXTRACT_FREE_8B = """\
 You are a system architect reviewing a user message. Extract all concrete, explicitly stated facts about the infrastructure described. Look for facts about: system status (UP/DOWN), model assignments, resource consumption (RAM, disk, GPU), performance metrics (speed, scores), configuration settings, and dependencies.
 
-Extract each distinct entity independently. Verify every attribute belongs to its correct entity — do not confuse values between different entities. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans or hypothetical scenarios nearby.
+Extract each distinct entity independently. Names that differ by a single letter or number (e.g. "Pod A" vs "Pod B", "v2" vs "v3") are DIFFERENT entities. Do NOT merge or confuse them. Verify every attribute belongs to its correct entity — do not confuse values between different entities. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans nearby.
 
-When a sentence contains multiple attributes of the same entity (e.g. "22Gi total RAM with 16Gi available"), extract ALL attributes as separate facts. When a sentence covers multiple entities (e.g. "Pod A is DOWN and Pod B runs a model"), extract facts for each entity separately.
+When a sentence gives multiple attributes of the same entity (e.g. "22Gi total RAM with 16Gi available"), extract ALL attributes. When a sentence covers multiple entities (e.g. "Pod A is DOWN and Pod B runs a model"), extract facts for each entity separately.
 
 CATEGORY (pick the best match):
 - code → function names, CLI commands, file paths, ports, config keys, literal values
@@ -1105,28 +1105,23 @@ or
         if not source_text:
             return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
         prompt = _SYSTEM_USER_EXTRACT_FREE_8B if section_type == "user" else _SYSTEM_TEXT_EXTRACT_FREE_8B
-        # Isolation marker: force llama-server cache miss between chunks to
-        # prevent cross-chunk entity bleed (Slot Machines, arXiv 2604.21139).
-        # Each chunk gets a unique prefix so KV cache cannot reuse slot state.
-        import secrets as _secrets
-        isolation = f"[{_secrets.token_hex(2)}] "
-        source_text_with_tag = isolation + source_text
-        max_tok = _calc_max_tokens(len(source_text_with_tag))
+        max_tok = _calc_max_tokens(len(source_text))
         if max_tok is None:
             return None
         max_tok = min(4096, max_tok * 2)
-        timeout = _calc_timeout(len(source_text_with_tag), max_tokens=max_tok)
+        timeout = _calc_timeout(len(source_text), max_tokens=max_tok)
         print(f"    [debug] _strict_freeform section={section_type} src_len={len(source_text)} max_tok={max_tok} timeout={timeout}", flush=True)
         try:
             meta = _call_with_8082_retry(
                 call_llm,
-                [{"role": "system", "content": prompt}, {"role": "user", "content": source_text_with_tag}],
+                [{"role": "system", "content": prompt}, {"role": "user", "content": source_text}],
                 model="day_extract",
                 max_tokens=max_tok,
                 temperature=TEMP_EXTRACT,
                 timeout=timeout,
                 json_mode=True,
                 return_meta=True,
+                cache_prompt=False,
             )
         except Exception as e:
             print(f"  [extract] call failed: {e}", flush=True)

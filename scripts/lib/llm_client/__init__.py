@@ -72,6 +72,7 @@ def call_llm(
     json_mode: bool = False,
     chat_template_kwargs: Optional[Dict[str, Any]] = None,
     return_meta: bool = False,
+    cache_prompt: Optional[bool] = None,
 ) -> Any:
     cfg = MODEL_REGISTRY.get(model)
     if not cfg:
@@ -104,6 +105,8 @@ def call_llm(
         body["response_format"] = {"type": "json_object"}
     if chat_template_kwargs is not None:
         body["chat_template_kwargs"] = chat_template_kwargs
+    if cache_prompt is not None:
+        body["cache_prompt"] = cache_prompt
 
     t_start = time.monotonic()
     url = f"http://127.0.0.1:{port}/v1/chat/completions"
