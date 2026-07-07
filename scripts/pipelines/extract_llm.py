@@ -174,7 +174,7 @@ PREDICATE: Concise action verb phrase in snake_case (2-5 words).
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
 
-SUBJECT: Must be the EXACT entity name as written in the text — do not rename or normalize entities during extraction. Field descriptions are format specifications, not values to extract. Avoid generic placeholders ("it", "the process", "application").
+SUBJECT: Must be the EXACT entity name as written in the text — do not rename or normalize entities during extraction. Field descriptions are format specifications, not values to extract. Resolve pronouns ("it", "they", "this", "that") to the specific entity name they refer to; never output a pronoun as the subject.
 
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
@@ -203,7 +203,7 @@ PREDICATE: Concise action verb phrase in snake_case (2-5 words).
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
 
-SUBJECT: Must be a specific entity name explicitly mentioned in the text. Avoid generic placeholders ("system", "it", "the process", "application").
+SUBJECT: Must be a specific entity name explicitly mentioned in the text. Resolve pronouns ("it", "they", "this", "that") to the specific entity name they refer to; never output a pronoun as the subject.
 
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
@@ -245,8 +245,9 @@ def _expand_compounds(text: str) -> str:
     'Pod A is DOWN and Pod B runs a model' (Slot Machines, 2025)."""
     # ", and" → ". " (most common compound pattern)
     text = re.sub(r',\s+and\s+', '. ', text)
-    # " and [pronoun/entity]" → ". " (second clause has different subject)
-    text = re.sub(r'\s+and\s+(?=(?:we|I|they|he|she|it|this|that|these|those|[A-Z][a-z]+\s+(?:has|runs|uses|consumes|is|are|was|were)))', '. ', text)
+    # " and [Entity verb]" → ". " (second clause has different subject — Slot Machines fix)
+    # Do NOT split at pronouns (we, it, they) to avoid orphaning the referent
+    text = re.sub(r'\s+and\s+(?=(?:[A-Z][a-z]+\s+(?:has|runs|uses|consumes|is|are|was|were)))', '. ', text)
     # "X has A with B" → "X has A. X has B." (preserve subject for 2nd attribute)
     text = re.sub(r'(\w+(?:\s+\w+){0,3})\s+has\s+([^.]*?)\s+with\s+(\d[\w.]*\s*\w+)', r'\1 has \2. \1 has \3.', text)
     return text
