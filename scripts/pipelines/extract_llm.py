@@ -539,6 +539,12 @@ def _group_entities(facts: list[dict], field: str = "subject") -> list[dict]:
         if not matched:
             groups.append({i})
 
+    def _same_len_single_char_diff(a: str, b: str) -> bool:
+        """True if two strings same length, differ by 1 character."""
+        if len(a) != len(b):
+            return False
+        return sum(1 for ca, cb in zip(a, b) if ca != cb) == 1
+
     # Stage 2+3: Embed 3-tier for groups with multiple distinct forms
     embed_ok = False
     embed_count = 0
@@ -570,10 +576,10 @@ def _group_entities(facts: list[dict], field: str = "subject") -> list[dict]:
                 else:
                     sim = 0.70
 
-                if embed_ok and sim >= 0.85:
+                if embed_ok and sim >= 0.85 and not _same_len_single_char_diff(ea, eb):
                     groups[i] |= groups[j]
                     merged_group_ids.add(id(groups[j]))
-                elif sim >= 0.65:
+                elif sim >= 0.65 and not _same_len_single_char_diff(ea, eb):
                     verdict = _llm_judge_entity(ea, eb)
                     if verdict == 0.85:
                         groups[i] |= groups[j]
