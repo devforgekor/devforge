@@ -157,11 +157,9 @@ Empty: {"extractions":[]}."""
 # Production (day-extractor) uses 8B Q8 → SYSTEM_DAY_EXTRACT uses these.
 
 _SYSTEM_USER_EXTRACT_FREE_8B = """\
-You are a system architect reviewing a user message. Extract all concrete, explicitly stated facts about the infrastructure described. Look for facts about: system status (UP/DOWN), model assignments, resource consumption (RAM, disk, GPU), performance metrics (speed, scores), configuration settings, and dependencies.
+Extract all factual (subject, predicate, object) triples from the USER MESSAGE. Extract every explicitly stated claim regardless of conversational framing. Only skip speculative/hypothetical statements.
 
-Extract each distinct entity independently. Verify every attribute belongs to its correct entity — do not confuse values between different entities. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans or hypothetical scenarios nearby.
-
-When a sentence contains multiple attributes of the same entity (e.g. "22Gi total RAM with 16Gi available"), extract ALL attributes as separate facts. When a sentence covers multiple entities (e.g. "Pod A is DOWN and Pod B runs a model"), extract facts for each entity separately.
+Extract each entity independently with ALL its attributes. If a sentence gives multiple attributes (e.g. "22Gi total RAM with 16Gi available"), extract both as separate triples. If a sentence covers multiple entities (e.g. "Pod A and Pod B..."), extract facts for each entity separately.
 
 CATEGORY (pick the best match):
 - code → function names, CLI commands, file paths, ports, config keys, literal values
@@ -221,34 +219,20 @@ Empty: {"extractions":[]}."""
 
 
 def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
-    """Split text into ~max_chars chunks at sentence/paragraph boundaries."""
-    paragraphs = re.split(r"\n\s*\n", text)
+    """Split text into individual sentences (one per chunk) to maximize per-sentence extraction."""
+    import re as _re
+    paragraphs = _re.split(r"\n\s*\n", text)
     chunks = []
     for para in paragraphs:
         para = para.strip()
         if not para:
             continue
-        if len(para) <= max_chars:
-            chunks.append(para)
-            continue
-        sentences = re.split(r"(?<=[.!?])\s+", para)
-        current = ""
-        for sent in sentences:
-            if len(current) + len(sent) + 1 <= max_chars:
-                current = (current + " " + sent).strip()
-            else:
-                if current:
-                    chunks.append(current)
-                current = sent
-        if current:
-            chunks.append(current)
-    merged = []
-    for c in chunks:
-        if merged and len(c) < 40:
-            merged[-1] += " " + c
-        else:
-            merged.append(c)
-    return merged
+        sents = _re.split(r"(?<=[.!?])\s+", para)
+        for s in sents:
+            s = s.strip()
+            if s:
+                chunks.append(s)
+    return chunks
 
 
 # ── EDC-style predicate canonicalization helpers ──────────────
