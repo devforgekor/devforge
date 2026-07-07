@@ -1177,24 +1177,48 @@ or
             return 0
         print(f"  [{section_type}] {len(targets)} turns (8082 parallel=2)", flush=True)
 
+        def _entity_names(text: str) -> set:
+            """Extract plausible entity names from text via regex."""
+            names: set = set()
+            for m in re.finditer(r'(?:^|[.?!]\s+)([A-Z][a-zA-Z0-9/_-]*(?:\s+[A-Z][a-zA-Z0-9/_-]*)+)', text):
+                raw = m.group(1).strip()
+                if raw and len(raw) >= 3:
+                    names.add(raw)
+            return names
+
         def _process_one_turn(t: dict) -> int:
             """Process one turn: chunk → single model extraction → checkpoint."""
+            from difflib import SequenceMatcher
             src = source_getter(t)
             if not src:
                 return 0
-            chunks = _split_atomic(src)
+            raw_chunks = _split_atomic(src)
+            chunks: list[str] = []
+            chunk_entities: list[set] = []
+            for c in raw_chunks:
+                entities = _entity_names(c)
+                if chunks and entities and chunk_entities[-1]:
+                    merge = False
+                    for e1 in chunk_entities[-1]:
+                        for e2 in entities:
+                            if SequenceMatcher(None, e1.lower(), e2.lower()).ratio() >= 0.70:
+                                merge = True
+                                break
+                        if merge:
+                            break
+                    if merge:
+                        chunks[-1] = chunks[-1] + " " + c
+                        chunk_entities[-1] |= entities
+                        continue
+                if not c:
+                    continue
+                chunks.append(c)
+                chunk_entities.append(entities)
             extractions: List[Dict] = []
 
-            _seen_entities: set = set()
             for ci, chunk in enumerate(chunks):
-                if ci > 0 and _seen_entities:
-                    chunk = f"[Existing entities: {', '.join(sorted(_seen_entities)[:8])}] {chunk}"
                 res = _strict_freeform(section_type, chunk)
                 if res and res.get("extractions"):
-                    for f in res["extractions"]:
-                        subj = (f.get("subject") or "").strip()
-                        if subj:
-                            _seen_entities.add(subj)
                     extractions.extend(res["extractions"])
                     _merge_usage(turn_data[t["id"]]["total_usage"], res.get("usage", {}))
                 n = len(res.get("extractions", [])) if res else 0
