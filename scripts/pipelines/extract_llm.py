@@ -1112,9 +1112,10 @@ or
         timeout = _calc_timeout(len(source_text), max_tokens=max_tok)
         print(f"    [debug] _strict_freeform section={section_type} src_len={len(source_text)} max_tok={max_tok} timeout={timeout}", flush=True)
         try:
+            user_msg = source_text
             meta = _call_with_8082_retry(
                 call_llm,
-                [{"role": "system", "content": prompt}, {"role": "user", "content": source_text}],
+                [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}],
                 model="day_extract",
                 max_tokens=max_tok,
                 temperature=TEMP_EXTRACT,
@@ -1184,9 +1185,16 @@ or
             chunks = _split_atomic(src)
             extractions: List[Dict] = []
 
+            _seen_entities: set = set()
             for ci, chunk in enumerate(chunks):
+                if ci > 0 and _seen_entities:
+                    chunk = f"[Existing entities: {', '.join(sorted(_seen_entities)[:8])}] {chunk}"
                 res = _strict_freeform(section_type, chunk)
                 if res and res.get("extractions"):
+                    for f in res["extractions"]:
+                        subj = (f.get("subject") or "").strip()
+                        if subj:
+                            _seen_entities.add(subj)
                     extractions.extend(res["extractions"])
                     _merge_usage(turn_data[t["id"]]["total_usage"], res.get("usage", {}))
                 n = len(res.get("extractions", [])) if res else 0
