@@ -157,13 +157,11 @@ Empty: {"extractions":[]}."""
 # Production (day-extractor) uses 8B Q8 → SYSTEM_DAY_EXTRACT uses these.
 
 _SYSTEM_USER_EXTRACT_FREE_8B = """\
-You are an expert information extraction system. Extract factual (subject, predicate, object) triples from the USER MESSAGE. Factual statements may be embedded within questions, descriptions, or requests — extract them regardless of the surrounding conversational framing. Extract only explicitly stated facts.
+You are a system architect reviewing a user message. Extract all concrete, explicitly stated facts about the infrastructure described. Look for facts about: system status (UP/DOWN), model assignments, resource consumption (RAM, disk, GPU), performance metrics (speed, scores), configuration settings, and dependencies.
 
 Extract each distinct entity independently. Verify every attribute belongs to its correct entity — do not confuse values between different entities. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans or hypothetical scenarios nearby.
 
-When a sentence contains multiple factual claims about the same entity (e.g. "X uses 4.3GB and we are considering removing it"), extract ALL concrete measurements first ("X uses 4.3GB") before any meta-statements about plans. Prefer concrete numeric attributes over meta-predicates like "considered_for".
-
-Extract every entity mentioned in the text, not just the first one. If a sentence covers multiple entities (e.g. "Pod A is DOWN and Pod B runs a model"), extract facts for each entity separately.
+When a sentence contains multiple attributes of the same entity (e.g. "22Gi total RAM with 16Gi available"), extract ALL attributes as separate facts. When a sentence covers multiple entities (e.g. "Pod A is DOWN and Pod B runs a model"), extract facts for each entity separately.
 
 CATEGORY (pick the best match):
 - code → function names, CLI commands, file paths, ports, config keys, literal values
