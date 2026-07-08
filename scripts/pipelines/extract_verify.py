@@ -145,7 +145,7 @@ def _post_process_extractions(
     recent_evidence: set = set()
     try:
         sql = (
-            f"SELECT DISTINCT evidence FROM review_facts "
+            f"SELECT evidence, subject, predicate FROM review_facts "
             f"WHERE turn_id != '{esc_sql(turn_id)}'::uuid "
             f"AND created_at > NOW() - INTERVAL '24 hours' "
             f"LIMIT {context_limit}"
@@ -154,9 +154,11 @@ def _post_process_extractions(
         if rows:
             for row in rows:
                 ev = row.get("evidence", "")
+                sub = row.get("subject", "") or ""
+                pre = row.get("predicate", "") or ""
                 if ev:
-                    key = re.sub(r"[^a-zA-Z0-9가-힣]", "", ev[:50]).lower()
-                    if len(key) > 5:
+                    key = (re.sub(r"[^a-zA-Z0-9가-힣]", "", ev[:50]).lower(), sub, pre)
+                    if len(key[0]) > 5:
                         recent_evidence.add(key)
     except Exception:
         pass
@@ -191,7 +193,7 @@ def _post_process_extractions(
 
         norm_key = (re.sub(r"[^a-zA-Z0-9가-힣]", "", evidence[:50]).lower(), subj, pred)
         if len(norm_key[0]) > 5:
-            if norm_key[0] in recent_evidence:
+            if norm_key in recent_evidence:
                 continue
             if norm_key in seen_normalized:
                 continue
