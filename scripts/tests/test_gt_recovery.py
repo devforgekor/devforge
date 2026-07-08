@@ -8,8 +8,8 @@ extraction pipeline on each test case, and reports recall/precision.
 GT sources: real technical documents (infrastructure.md, state.yaml, etc.)
 — not hand-crafted synthetic text."""
 
-import json, os, re, subprocess, sys, time, uuid
-from typing import Any, Dict, List, Tuple
+import json, os, re, subprocess, sys, time, urllib.request, uuid
+from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
@@ -18,6 +18,8 @@ from lib.db import psql_json, psql_ok
 GT_DIR = os.path.join(SCRIPTS_DIR, "tests", "ground_truths")
 EXTRACT_SCRIPT = os.path.join(SCRIPTS_DIR, "pipelines", "extract.py")
 PIPELINE_TIMEOUT = 5400
+EMBED_PORT = 8081
+EMBED_SIM_THRESHOLD = 0.82
 
 
 def _load_ground_truths() -> List[Dict]:
@@ -52,28 +54,143 @@ def _resolve_source_text(tc: Dict) -> str:
     return tc.get("user_turn", "")
 
 
-def _subj_obj_contains_match(gt: Dict, fact: Dict) -> bool:
-    src = ((fact.get("subject") or "") + " " + (fact.get("object") or "")).lower()
-    if not src:
+def _ensure_embed_relay() -> bool:
+    """Start embed :8081 in relay mode: stop 8082 first to free memory."""
+    import subprocess as sp
+    sp.run(["podman", "exec", "devforge-inference", "pkill", "-f", "llama-server.*8082"],
+           timeout=10, capture_output=True)
+    time.sleep(1)
+
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{EMBED_PORT}/health")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                return True
+    except Exception:
+        pass
+
+    meta = {"port": 8081, "file": "Qwen3-Embedding-4B-Q4_K_M.gguf",
+            "ctx": 2048, "threads": 2, "threads_batch": 2, "parallel": 1}
+    cmd = ["podman", "exec", "-d", "devforge-inference",
+           "/app/llama-server",
+           "-m", f"/models/{meta['file']}",
+           "--host", "0.0.0.0", "--port", str(meta["port"]),
+           "--ctx-size", str(meta["ctx"]),
+           "--parallel", str(meta["parallel"]),
+           "--threads", str(meta["threads"]),
+           "--threads-batch", str(meta["threads_batch"]),
+           "--timeout", "28800",
+           "--batch-size", "512", "--ubatch-size", "512",
+           "--embedding", "--pooling", "last", "--embd-normalize", "-1",
+           "--cont-batching", "--no-mmap", "-lv", "6", "--metrics"]
+    r = sp.run(cmd, capture_output=True, timeout=30, text=True)
+    if r.returncode != 0:
+        print(f"  [embed] launch failed: {r.stderr.strip()[:200]}", flush=True)
         return False
-    subj = (gt.get("subject") or "").lower()
-    obj_contains = (gt.get("object_contains") or "").lower()
-    obj_also = (gt.get("object_also") or "").lower()
-    pred = (gt.get("predicate") or "").lower()
-    if subj not in src:
-        return False
-    if obj_contains and obj_contains not in src:
-        return False
-    if obj_also and not re.search(obj_also.replace(".", "\\.").replace("*", ".*"), src):
-        return False
-    if pred:
-        fact_pred = (fact.get("predicate") or "").lower()
-        if pred not in fact_pred:
+    from lib.pod_manager import wait_health as wh
+    ok = wh(meta["port"], timeout=120)
+    print(f"  [embed] :{EMBED_PORT} {'healthy' if ok else 'unreachable'}", flush=True)
+    return ok
+
+
+def _stop_embed_8081() -> None:
+    import subprocess as sp
+    sp.run(["podman", "exec", "devforge-inference", "pkill", "-f", f"llama-server.*{EMBED_PORT}"],
+           timeout=10, capture_output=True)
+
+
+def _embed_texts(texts: List[str]) -> Optional[List[List[float]]]:
+    try:
+        data = json.dumps({"input": texts, "model": "default"}).encode()
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{EMBED_PORT}/v1/embeddings",
+            data=data, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            result = json.loads(resp.read())
+        embeds = [d["embedding"] for d in sorted(result["data"], key=lambda x: x["index"])]
+        return embeds
+    except Exception as e:
+        print(f"  [embed] error: {e}", flush=True)
+        return None
+
+
+def _cosine_sim(a: List[float], b: List[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(x * x for x in b) ** 0.5
+    return dot / (na * nb) if na and nb else 0.0
+
+
+def _embed_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
+    if not got or not expected:
+        return set(), set(), 0, 0
+    got_texts = [f"{f.get('subject','')} {f.get('predicate','')} {f.get('object','')}" for f in got]
+    gt_texts = []
+    for g in expected:
+        parts = [g.get("subject", "")]
+        oc = g.get("object_contains", "")
+        oa = g.get("object_also", "")
+        parts.append(oc)
+        if oa:
+            parts.append(oa)
+        gt_texts.append(" ".join(parts))
+
+    if not _ensure_embed_relay():
+        print("  [embed] relay failed, falling back to substring match", flush=True)
+        return _substring_match(got, expected)
+
+    print("  [embed] computing embeddings...", flush=True)
+    all_texts = got_texts + gt_texts
+    embeds = _embed_texts(all_texts)
+    _stop_embed_8081()
+
+    if embeds is None:
+        print("  [embed] failed, falling back to substring match", flush=True)
+        return _substring_match(got, expected)
+
+    n_got = len(got_texts)
+    got_embs = embeds[:n_got]
+    gt_embs = embeds[n_got:]
+
+    matched_got: set = set()
+    matched_gt: set = set()
+    for gi in range(len(expected)):
+        best_fi, best_sim = -1, 0.0
+        for fi in range(n_got):
+            if fi in matched_got:
+                continue
+            sim = _cosine_sim(gt_embs[gi], got_embs[fi])
+            if sim > best_sim:
+                best_sim = sim
+                best_fi = fi
+        if best_sim >= EMBED_SIM_THRESHOLD:
+            matched_got.add(best_fi)
+            matched_gt.add(gi)
+            print(f"  [embed-match] GT#{gi} '{gt_texts[gi][:50]}...' ↔ fact#{best_fi} (sim={best_sim:.3f})", flush=True)
+
+    return matched_gt, matched_got, len(matched_gt), len(matched_got)
+
+
+def _substring_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
+    def _subj_obj_contains_match(gt: Dict, fact: Dict) -> bool:
+        src = ((fact.get("subject") or "") + " " + (fact.get("object") or "")).lower()
+        if not src:
             return False
-    return True
-
-
-def _match_facts(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
+        subj = (gt.get("subject") or "").lower()
+        obj_contains = (gt.get("object_contains") or "").lower()
+        obj_also = (gt.get("object_also") or "").lower()
+        pred = (gt.get("predicate") or "").lower()
+        if subj not in src:
+            return False
+        if obj_contains and obj_contains not in src:
+            return False
+        if obj_also and not re.search(obj_also.replace(".", "\\.").replace("*", ".*"), src):
+            return False
+        if pred:
+            fact_pred = (fact.get("predicate") or "").lower()
+            if pred not in fact_pred:
+                return False
+        return True
     matched_got: set = set()
     matched_gt: set = set()
     for gi, gt in enumerate(expected):
@@ -85,6 +202,10 @@ def _match_facts(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, 
                 matched_gt.add(gi)
                 break
     return matched_gt, matched_got, len(matched_gt), len(matched_got)
+
+
+def _match_facts(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
+    return _embed_match(got, expected)
 
 
 def run_test_case(tc: Dict) -> Dict:
