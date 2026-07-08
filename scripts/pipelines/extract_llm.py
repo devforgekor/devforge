@@ -220,10 +220,90 @@ Empty: {"extractions":[]}."""
 # ── Chunking utility ──────────────────────────────────────────
 
 
+def _tables_to_sentences(text: str) -> str:
+    """Convert markdown tables into per-row natural-language sentences.
+
+    Each table row becomes 'Header1: val1, Header2: val2, Header3: val3.'
+    so the sentence splitter can separate rows into individual chunks.
+
+    Input:
+    | Service | Type | Status |
+    |---------|------|--------|
+    | devforge-pod-a | systemd user | inactive |
+
+    Output:
+    Service: devforge-pod-a, Type: systemd user, Status: inactive.
+    """
+    lines = text.split('\n')
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        # Detect table: line starting/ending with |, followed by separator
+        # (separator is only pipes, dashes, colons, spaces — no letters)
+        if (stripped.startswith('|') and stripped.endswith('|')
+                and i + 1 < len(lines)
+                and re.match(r'^\|[\s\-:|]+\|$', lines[i + 1].strip())):
+            headers = [c.strip() for c in stripped.split('|')[1:-1]]
+            i += 2
+            while i < len(lines):
+                row = lines[i].strip()
+                if not (row.startswith('|') and row.endswith('|')):
+                    break
+                cells = [c.strip() for c in row.split('|')[1:-1]]
+                if len(cells) == len(headers) and len(headers) > 0:
+                    pairs = ', '.join(f'{h}: {v}' for h, v in zip(headers, cells))
+                    out.append(pairs + '.')
+                elif cells:
+                    out.append(', '.join(cells) + '.')
+                i += 1
+        else:
+            out.append(line)
+            i += 1
+    return '\n'.join(out)
+
+
+def _terminate_lines(text: str) -> str:
+    """Add periods to content lines lacking sentence-ending punctuation.
+
+    Lines like list items and data rows become sentence-terminated so
+    _split_atomic can split them into individual chunks per line rather
+    than treating the entire section as one unsplittable block.
+    Skips headings, code fences, empty lines, and markdown HRs.
+    """
+    lines = text.split('\n')
+    out = []
+    in_code_block = False
+    for line in lines:
+        stripped = line.rstrip()
+        if stripped.startswith('```') or stripped.startswith('~~~'):
+            in_code_block = not in_code_block
+            out.append(stripped)
+            continue
+        if in_code_block:
+            out.append(stripped)
+            continue
+        if (stripped
+                and not stripped.endswith(('.', '?', '!', ':', ';'))
+                and not stripped.startswith(('#', '---', '___', '***', '|'))):
+            stripped += '.'
+        out.append(stripped)
+    return '\n'.join(out)
+
+
 def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
     """Split text into sentence-level chunks, expanding compound sentences to
     help 8B models overcome the 'dual binding on single token' limitation
-    (Slot Machines, arXiv 2604.21139)."""
+    (Slot Machines, arXiv 2604.21139).
+
+    Preprocessing converts markdown tables to sentences and terminates
+    list-item lines so dense structured sections (storage mounts, service
+    states, hardware specs) split into per-line chunks instead of one
+    unsplittable block.
+    """
+    text = _tables_to_sentences(text)
+    text = _terminate_lines(text)
     text = _expand_compounds(text)
     paragraphs = re.split(r"\n\s*\n", text)
     chunks = []
