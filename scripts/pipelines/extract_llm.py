@@ -179,7 +179,7 @@ SUBJECT: Must be the EXACT entity name as written in the text — do not rename 
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
-1. Extract ALL explicitly stated facts — hardware specs, versions, sizes, statuses, configs. Do not skip facts that seem "unimportant" or merely descriptive. Skip only filler, greetings, reasoning traces.
+1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
 3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
 
@@ -208,7 +208,7 @@ SUBJECT: Must be a specific entity name explicitly mentioned in the text. Resolv
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
-1. Extract ALL explicitly stated facts — hardware specs, versions, sizes, statuses, configs. Do not skip facts that seem "unimportant" or merely descriptive. Skip only filler, greetings, reasoning traces.
+1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
 3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
 
@@ -220,96 +220,16 @@ Empty: {"extractions":[]}."""
 # ── Chunking utility ──────────────────────────────────────────
 
 
-def _split_list_items(text: str) -> str:
-    """Insert blank lines before each list item and table row so
-    _split_atomic's paragraph splitter creates separate chunks per item.
-
-    Unlike _terminate_lines, this preserves the original text format
-    (markdown bullets, pipes) so the LLM can parse structure naturally.
-    Only splits within sections that contain 4+ items, to avoid
-    fragmenting small lists where the 8-fact cap is sufficient.
-    """
-    def _count_consecutive(pattern: re.Pattern, lines: list[str], start: int) -> int:
-        count = 0
-        for j in range(start, len(lines)):
-            if pattern.match(lines[j]):
-                count += 1
-            elif lines[j].strip() == "":
-                continue
-            else:
-                break
-        return count
-
-    lines = text.split('\n')
-    out = []
-    i = 0
-    in_code = False
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
-        if stripped.startswith('```') or stripped.startswith('~~~'):
-            in_code = not in_code
-            out.append(line)
-            i += 1
-            continue
-        if in_code:
-            out.append(line)
-            i += 1
-            continue
-        # Check for bullet list of 4+ items
-        bullet_pat = re.compile(r'^(\s*[-*]\s|\s*\d+[.)]\s)')
-        if bullet_pat.match(stripped):
-            count = _count_consecutive(bullet_pat, lines, i)
-            if count >= 4:
-                if out and out[-1] != "":
-                    out.append("")  # blank line before first bullet
-                out.append(line)
-                i += 1
-                for _ in range(count - 1):
-                    if i < len(lines):
-                        out.append("")  # blank line before each subsequent bullet
-                        out.append(lines[i])
-                        i += 1
-                continue
-        # Check for table of 4+ rows (line starts with | after header/separator)
-        table_row = re.compile(r'^\|.*\|$')
-        if table_row.match(stripped) and i + 1 < len(lines) and re.match(r'^\|[\s\-:|]+\|$', lines[i + 1].strip()):
-            # Table detected — count data rows
-            j = i + 2
-            rows = 0
-            while j < len(lines) and table_row.match(lines[j].strip()):
-                rows += 1
-                j += 1
-            if rows >= 4:
-                out.append(line)     # header
-                i += 1
-                out.append(lines[i])  # separator
-                i += 1
-                for _ in range(rows):
-                    if i < len(lines):
-                        out.append("")  # blank line before each row
-                        out.append(lines[i])
-                        i += 1
-                continue
-        out.append(line)
-        i += 1
-    return '\n'.join(out)
-
-
 def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
     """Split text into paragraph-level chunks.
 
-    Preprocessing inserts blank lines before list items and table rows
-    (4+ items) so dense sections split into individual chunks, giving
-    the LLM per-item extraction headroom within the 8-fact cap.
-    Small consecutive chunks are merged to avoid excessive LLM calls
-    with cache_prompt=False.
+    Expands compound sentences to help 8B models overcome the
+    'dual binding on single token' limitation
+    (Slot Machines, arXiv 2604.21139).
     """
-    MIN_CHARS = 250
-    text = _split_list_items(text)
     text = _expand_compounds(text)
     paragraphs = re.split(r"\n\s*\n", text)
-    raw_chunks = []
+    chunks = []
     for para in paragraphs:
         para = para.strip()
         if not para:
@@ -318,23 +238,8 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
         for sent in sentences:
             sent = sent.strip()
             if sent:
-                raw_chunks.append(sent)
-    merged = []
-    buf = ""
-    for c in raw_chunks:
-        if not buf:
-            buf = c
-        elif len(buf) + len(c) + 1 <= max_chars and len(buf.split()) < 40:
-            buf += " " + c
-        else:
-            merged.append(buf)
-            buf = c
-    if buf:
-        if len(merged) > 0 and len(buf) < MIN_CHARS:
-            merged[-1] += " " + buf
-        else:
-            merged.append(buf)
-    return merged
+                chunks.append(sent)
+    return chunks
 
 
 def _expand_compounds(text: str) -> str:
