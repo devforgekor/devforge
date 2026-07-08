@@ -537,7 +537,13 @@ def extract_pipeline(
             ex_usage = ex_result.get("usage", {})
             ex_timings = ex_result.get("timings", {})
             ex_elapsed = ex_result.get("elapsed_ms", 0)
+            print(f"  [debug-flow] raw_ex={len(raw_ex)} before post_process", flush=True)
+            for _i, _f in enumerate(raw_ex):
+                print(f"    [debug-flow]   {_i}: pred={_f.get('predicate','')!r} obj={_f.get('object','')!r} subj={_f.get('subject','')!r}", flush=True)
             verified = _post_process_extractions(raw_ex, turn_id_val, user_turn, thinking, text)
+            print(f"  [debug-flow] verified={len(verified)} after post_process", flush=True)
+            for _i, _f in enumerate(verified):
+                print(f"    [debug-flow]   {_i}: pred={_f.get('predicate','')!r} obj={_f.get('object','')!r}", flush=True)
             nli_tasks.append(
                 (
                     turn_id_val,
@@ -915,7 +921,7 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
 
 def main() -> None:
     signal.signal(signal.SIGTERM, _sigterm_handler)
-    _ensure_model_pod("day-extractor", skip_if_healthy=True)
+    _ensure_model_pod("day-extractor", skip_if_healthy=False)
     preflight_checks("extract.py")
     import argparse
 
