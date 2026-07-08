@@ -179,7 +179,7 @@ SUBJECT: Must be the EXACT entity name as written in the text — do not rename 
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
-1. Prioritize facts that are specific, actionable, and explicitly stated. Skip filler, greetings, reasoning traces.
+1. Extract ALL explicitly stated facts — hardware specs, versions, sizes, statuses, configs. Do not skip facts that seem "unimportant" or merely descriptive. Skip only filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
 3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
 
@@ -208,7 +208,7 @@ SUBJECT: Must be a specific entity name explicitly mentioned in the text. Resolv
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
-1. Prioritize facts that are specific, actionable, and explicitly stated. Skip filler, greetings, reasoning traces.
+1. Extract ALL explicitly stated facts — hardware specs, versions, sizes, statuses, configs. Do not skip facts that seem "unimportant" or merely descriptive. Skip only filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
 3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
 
@@ -220,91 +220,93 @@ Empty: {"extractions":[]}."""
 # ── Chunking utility ──────────────────────────────────────────
 
 
-def _tables_to_sentences(text: str) -> str:
-    """Convert markdown tables into per-row natural-language sentences.
+def _split_list_items(text: str) -> str:
+    """Insert blank lines before each list item and table row so
+    _split_atomic's paragraph splitter creates separate chunks per item.
 
-    Each table row becomes 'Header1: val1, Header2: val2, Header3: val3.'
-    so the sentence splitter can separate rows into individual chunks.
-
-    Input:
-    | Service | Type | Status |
-    |---------|------|--------|
-    | devforge-pod-a | systemd user | inactive |
-
-    Output:
-    Service: devforge-pod-a, Type: systemd user, Status: inactive.
+    Unlike _terminate_lines, this preserves the original text format
+    (markdown bullets, pipes) so the LLM can parse structure naturally.
+    Only splits within sections that contain 4+ items, to avoid
+    fragmenting small lists where the 8-fact cap is sufficient.
     """
+    def _count_consecutive(pattern: re.Pattern, lines: list[str], start: int) -> int:
+        count = 0
+        for j in range(start, len(lines)):
+            if pattern.match(lines[j]):
+                count += 1
+            elif lines[j].strip() == "":
+                continue
+            else:
+                break
+        return count
+
     lines = text.split('\n')
     out = []
     i = 0
+    in_code = False
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
-        # Detect table: line starting/ending with |, followed by separator
-        # (separator is only pipes, dashes, colons, spaces — no letters)
-        if (stripped.startswith('|') and stripped.endswith('|')
-                and i + 1 < len(lines)
-                and re.match(r'^\|[\s\-:|]+\|$', lines[i + 1].strip())):
-            headers = [c.strip() for c in stripped.split('|')[1:-1]]
-            i += 2
-            while i < len(lines):
-                row = lines[i].strip()
-                if not (row.startswith('|') and row.endswith('|')):
-                    break
-                cells = [c.strip() for c in row.split('|')[1:-1]]
-                if len(cells) == len(headers) and len(headers) > 0:
-                    pairs = ', '.join(f'{h}: {v}' for h, v in zip(headers, cells))
-                    out.append(pairs + '.')
-                elif cells:
-                    out.append(', '.join(cells) + '.')
-                i += 1
-        else:
+        if stripped.startswith('```') or stripped.startswith('~~~'):
+            in_code = not in_code
             out.append(line)
             i += 1
-    return '\n'.join(out)
-
-
-def _terminate_lines(text: str) -> str:
-    """Add periods to content lines lacking sentence-ending punctuation.
-
-    Lines like list items and data rows become sentence-terminated so
-    _split_atomic can split them into individual chunks per line rather
-    than treating the entire section as one unsplittable block.
-    Skips headings, code fences, empty lines, and markdown HRs.
-    """
-    lines = text.split('\n')
-    out = []
-    in_code_block = False
-    for line in lines:
-        stripped = line.rstrip()
-        if stripped.startswith('```') or stripped.startswith('~~~'):
-            in_code_block = not in_code_block
-            out.append(stripped)
             continue
-        if in_code_block:
-            out.append(stripped)
+        if in_code:
+            out.append(line)
+            i += 1
             continue
-        if (stripped
-                and not stripped.endswith(('.', '?', '!', ':', ';'))
-                and not stripped.startswith(('#', '---', '___', '***', '|'))):
-            stripped += '.'
-        out.append(stripped)
+        # Check for bullet list of 4+ items
+        bullet_pat = re.compile(r'^(\s*[-*]\s|\s*\d+[.)]\s)')
+        if bullet_pat.match(stripped):
+            count = _count_consecutive(bullet_pat, lines, i)
+            if count >= 4:
+                if out and out[-1] != "":
+                    out.append("")  # blank line before first bullet
+                out.append(line)
+                i += 1
+                for _ in range(count - 1):
+                    if i < len(lines):
+                        out.append("")  # blank line before each subsequent bullet
+                        out.append(lines[i])
+                        i += 1
+                continue
+        # Check for table of 4+ rows (line starts with | after header/separator)
+        table_row = re.compile(r'^\|.*\|$')
+        if table_row.match(stripped) and i + 1 < len(lines) and re.match(r'^\|[\s\-:|]+\|$', lines[i + 1].strip()):
+            # Table detected — count data rows
+            j = i + 2
+            rows = 0
+            while j < len(lines) and table_row.match(lines[j].strip()):
+                rows += 1
+                j += 1
+            if rows >= 4:
+                out.append(line)     # header
+                i += 1
+                out.append(lines[i])  # separator
+                i += 1
+                for _ in range(rows):
+                    if i < len(lines):
+                        out.append("")  # blank line before each row
+                        out.append(lines[i])
+                        i += 1
+                continue
+        out.append(line)
+        i += 1
     return '\n'.join(out)
 
 
 def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
-    """Split text into sentence-level chunks, expanding compound sentences to
-    help 8B models overcome the 'dual binding on single token' limitation
-    (Slot Machines, arXiv 2604.21139).
+    """Split text into paragraph-level chunks.
 
-    Preprocessing converts markdown tables to sentences and terminates
-    list-item lines so dense structured sections split into individual
-    sentences. Small consecutive chunks are then merged back up to
-    MIN_CHARS to avoid excessive LLM calls with cache_prompt=False.
+    Preprocessing inserts blank lines before list items and table rows
+    (4+ items) so dense sections split into individual chunks, giving
+    the LLM per-item extraction headroom within the 8-fact cap.
+    Small consecutive chunks are merged to avoid excessive LLM calls
+    with cache_prompt=False.
     """
-    MIN_CHARS = 250  # merge tiny chunks to avoid per-call KV overhead
-    text = _tables_to_sentences(text)
-    text = _terminate_lines(text)
+    MIN_CHARS = 250
+    text = _split_list_items(text)
     text = _expand_compounds(text)
     paragraphs = re.split(r"\n\s*\n", text)
     raw_chunks = []
@@ -317,7 +319,6 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
             sent = sent.strip()
             if sent:
                 raw_chunks.append(sent)
-    # Merge tiny chunks to reduce LLM calls with cache_prompt=False
     merged = []
     buf = ""
     for c in raw_chunks:
