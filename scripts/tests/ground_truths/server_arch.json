@@ -1,28 +1,25 @@
 {
   "test_cases": [
     {
-      "name": "server_specs_archived",
-      "description": "Extract architecture facts from archived server-specs-and-llm-architecture.md",
-      "source_file": "_archive/server-specs-and-llm-architecture.md",
+      "name": "server_specs_from_infra_doc",
+      "description": "Extract architecture facts from infrastructure.md (auto-generated SSOT)",
+      "source_file": "docs/architecture/infrastructure.md",
       "section_type": "user",
       "facts": [
-        {"subject": "system", "object_contains": "22 GB usable", "note": "Usable RAM 22GB"},
-        {"subject": "system", "object_contains": "4 cores", "object_also": "Neoverse", "note": "CPU 4-core Neoverse-N1"},
-        {"subject": "swap", "object_contains": "8 GB", "note": "Swap total 8GB"},
-        {"subject": "zram", "object_contains": "4 GB", "note": "ZRAM 4GB"},
+        {"subject": "system", "object_contains": "22Gi", "note": "Total RAM"},
+        {"subject": "system", "object_contains": "ARM Neoverse-N1", "object_also": "4-core", "note": "CPU"},
+        {"subject": "system", "object_contains": "zram", "object_also": "12G swap", "note": "Swap"},
         {"subject": "Oracle Linux", "object_contains": "9.7", "note": "OS version"},
-        {"subject": "PostgreSQL", "object_contains": "16", "object_also": "pgvector", "note": "DB version + extension"},
-        {"subject": "/mnt/lv_db", "object_contains": "30 GB", "note": "DB volume size"},
-        {"subject": "/opt/ai_data", "object_contains": "100 GB", "note": "AI data volume size"},
-        {"subject": "/opt/projects", "object_contains": "10 GB", "note": "Projects volume size"},
-        {"subject": "Qwen2.5-Coder-32B-Instruct", "object_contains": "20 GB", "object_also": "IQ4_XS", "note": "32B model"},
-        {"subject": "Phi-4-mini", "object_contains": "3.9 GB", "object_also": "Q8_0", "note": "Phi-4-mini 4B Q8"},
-        {"subject": "Selene Mini", "object_contains": "4.6 GB", "object_also": "Q4_K_M", "note": "Selene 8B Q4"},
-        {"subject": "Qwen3-4B", "object_contains": "2.4 GB", "object_also": "Q4_K_M", "note": "Qwen3-4B model"},
-        {"subject": "Podman B", "object_contains": "8081", "object_also": "8082", "note": "Pod B ports"},
-        {"subject": "Podman A", "object_contains": "8080", "note": "Pod A port"},
-        {"subject": "data-pod", "object_contains": "postgres", "object_also": "5432", "note": "Data pod postgres"},
-        {"subject": "Caddy", "object_contains": "443", "note": "Caddy HTTPS port"}
+        {"subject": "Podman", "object_contains": "rootless", "note": "Container runtime"},
+        {"subject": "PostgreSQL", "object_contains": "16", "object_also": "JSONB", "note": "DB version"},
+        {"subject": "Caddy", "object_contains": "auto-HTTPS", "note": "Proxy"},
+        {"subject": "/opt/ai_data", "object_contains": "100G", "note": "AI data mount size"},
+        {"subject": "/mnt/lv_db", "object_contains": "30G", "note": "DB mount size"},
+        {"subject": "/opt/projects", "object_contains": "10G", "note": "Projects mount size"},
+        {"subject": "SWAP", "object_contains": "4G", "note": "Swap volume size"},
+        {"subject": "data-pod", "object_contains": "postgres", "object_also": "5432", "note": "Data pod"},
+        {"subject": "devforge-pod-a", "object_contains": "inactive", "note": "Pod A status"},
+        {"subject": "devforge-swap", "object_contains": "active", "note": "Swap service status"}
       ]
     }
   ]
