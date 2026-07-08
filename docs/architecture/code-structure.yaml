@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-07-06'
+  updated: '2026-07-08'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -1190,6 +1190,9 @@ modules:
       status: experimental
       purpose: 'Fact 5 vs V6 Comparison: Increase "Max 4 facts" to "Max 5 facts" in
         detective prompt.'
+    test_gt_recovery.py:
+      status: experimental
+      purpose: Ground-truth extraction recovery comparison harness.
     test_hardcoded_ports.py:
       status: experimental
       purpose: Validate no hardcoded 127.0.0.1:808{0-4} ports remain in modified files.

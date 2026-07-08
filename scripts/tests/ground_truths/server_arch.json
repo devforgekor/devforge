@@ -1,0 +1,39 @@
+{
+  "test_cases": [
+    {
+      "name": "server_arch_en",
+      "description": "English Server Architecture review with Pod A/B, RAM, disk, NLI, GGUF",
+      "user_turn": "I would like a comprehensive review of our current architecture and recent optimization experiments.\n\nWe have two Pods: Pod A has been DOWN for 3 days after an OOM crash, and Pod B runs only a 3B Q8 model consuming 3.2GB RAM. The system has 22Gi total RAM with 16Gi available. BGE-m3 embedding model uses 4.3GB and we are considering removing it to free up 12.5GB disk space. The sentence-transformers alternative in FP16 uses only 800MB.\n\nFor the NLI verification pipeline, we are using DeBERTa-v3 which currently achieves F1 0.53. I have been reading about SciHal 2025 shared task results where DeBERTa-v3-Large 304M scored F1 0.60, outperforming GPT-4o at F1 0.43 and DeepSeek-R1 at F1 0.49. We are considering GPT-4o-mini distillation which could push our F1 to 0.57.",
+      "text": "I will analyze these findings systematically.\n\nFirst, on the Cascade Architecture question. The Pre-processor pattern used by GSCP-Lite and ACL Compressor systems fits our P-R-J fixed pipeline well. I have ruled out Router-first approaches like AutoMix, Doorman, and CSCR because they would require restructuring our pipeline. The Pre-processor approach reduced end-to-end latency by 35 percent in GSCP-Lite production deployment.\n\nSecond, the GGUF quantization benchmarks show clear trade-offs. Q4_K_M cuts DRAM reads by 44 percent versus Q8_0, Q6_K by 25 percent, and Q5_K_M by 33 percent. We tested Q4_K_M on our 7B model: inference speed improved from 3.5 tok/s to 5.2 tok/s, a 48 percent gain. However, MMLU score dropped from 72.3 to 70.1, a 2.2 percent regression. We also tested speculative decoding with a 0.6B draft model which added 12 percent throughput improvement on top of Q4_K_M, bringing total speed to 5.8 tok/s with only 0.8 percent MMLU loss. The 0.6B draft model itself uses just 1.1GB RAM.\n\nThird, the heartbeat monitoring system had two bugs. The _build_heartbeat_blocks function was incorrectly marking test ports as unhealthy. I fixed that by adding port status filtering. Also, active_contexts now properly gates the 30-minute reporting interval it only fires when there are active user contexts. I verified all systemd timers: activity-summarizer runs at KST 06:00, validate-gen at KST 00:30, devforge-nightly at KST 03:00. I found one documentation bug: auto_mode.sh line 238 comments say KST 02:00 but the actual timer runs at KST 03:00.",
+      "expected": {
+        "user": [
+          {"subject": "Pod A", "object": "DOWN", "note": "Pod A status"},
+          {"subject": "Pod B", "object": "3B Q8", "note": "Pod B model"},
+          {"subject": "Pod B", "object": "3.2GB", "note": "Pod B RAM consumption"},
+          {"subject": "system", "object": "22Gi", "object_also": "22Gi total RAM", "note": "Total RAM"},
+          {"subject": "system", "object": "16Gi", "object_also": "16Gi available", "note": "Available RAM"},
+          {"subject": "BGE-m3", "object": "4.3GB", "predicate": "uses", "note": "BGE-m3 usage"},
+          {"subject": "BGE-m3", "object": "12.5GB", "object_also": "free up 12.5GB", "note": "BGE-m3 disk space"},
+          {"subject": "sentence-transformers", "object": "800MB", "note": "Alt model size"},
+          {"subject": "DeBERTa-v3", "object": "F1 0.53", "note": "Current NLI F1"},
+          {"subject": "GPT-4o-mini", "object": "F1 0.57", "note": "Distillation target"}
+        ],
+        "text": [
+          {"subject": "Pre-processor", "object": "35 percent", "note": "Latency reduction"},
+          {"subject": "Q4_K_M", "object": "44 percent", "note": "DRAM cut vs Q8_0"},
+          {"subject": "Q6_K", "object": "25 percent", "note": "DRAM cut vs Q8_0"},
+          {"subject": "Q5_K_M", "object": "33 percent", "note": "DRAM cut vs Q8_0"},
+          {"subject": "7B model", "object": "5.2 tok/s", "object_also": "3.5 to 5.2", "note": "Inference speed after Q4_K_M"},
+          {"subject": "Q4_K_M", "object": "2.2 percent", "object_also": "MMLU.*72.3.*70.1", "note": "MMLU regression"},
+          {"subject": "0.6B draft", "object": "12 percent", "note": "Speculative decoding throughput"},
+          {"subject": "0.6B draft", "object": "0.8 percent", "note": "MMLU loss with spec decode"},
+          {"subject": "0.6B draft", "object": "1.1GB", "note": "Draft model RAM"},
+          {"subject": "activity-summarizer", "object": "KST 06:00", "note": "Systemd timer"},
+          {"subject": "validate-gen", "object": "KST 00:30", "note": "Systemd timer"},
+          {"subject": "devforge-nightly", "object": "KST 03:00", "note": "Systemd timer"},
+          {"subject": "auto_mode.sh", "object": "KST 03:00", "note": "Actual timer value"}
+        ]
+      }
+    }
+  ]
+}
