@@ -54,16 +54,23 @@ def _resolve_source_text(tc: Dict) -> str:
     return tc.get("user_turn", "")
 
 
-def _ensure_embed_relay() -> bool:
-    """Start embed :8081 in relay mode: stop 8082 first to free memory."""
+def _start_embed_relay() -> bool:
+    """Start embed :8081 inside devforge-inference (created by pipeline).
+    Relay mode: kill 8082 first to free RAM. Then start 8081."""
     import subprocess as sp
+    cid = sp.run(["podman", "ps", "-q", "--filter", "name=devforge-inference"],
+                  capture_output=True, text=True, timeout=10).stdout.strip()
+    if not cid:
+        print("  [embed] devforge-inference not found, skipping", flush=True)
+        return False
+
     sp.run(["podman", "exec", "devforge-inference", "pkill", "-f", "llama-server.*8082"],
            timeout=10, capture_output=True)
-    time.sleep(1)
+    time.sleep(2)
 
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{EMBED_PORT}/health")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:
             if resp.status == 200:
                 return True
     except Exception:
@@ -85,15 +92,15 @@ def _ensure_embed_relay() -> bool:
            "--cont-batching", "--no-mmap", "-lv", "6", "--metrics"]
     r = sp.run(cmd, capture_output=True, timeout=30, text=True)
     if r.returncode != 0:
-        print(f"  [embed] launch failed: {r.stderr.strip()[:200]}", flush=True)
+        print(f"  [embed] exec failed: {r.stderr.strip()[:200]}", flush=True)
         return False
     from lib.pod_manager import wait_health as wh
-    ok = wh(meta["port"], timeout=120)
+    ok = wh(meta["port"], timeout=300)
     print(f"  [embed] :{EMBED_PORT} {'healthy' if ok else 'unreachable'}", flush=True)
     return ok
 
 
-def _stop_embed_8081() -> None:
+def _stop_embed() -> None:
     import subprocess as sp
     sp.run(["podman", "exec", "devforge-inference", "pkill", "-f", f"llama-server.*{EMBED_PORT}"],
            timeout=10, capture_output=True)
@@ -135,14 +142,14 @@ def _embed_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, 
             parts.append(oa)
         gt_texts.append(" ".join(parts))
 
-    if not _ensure_embed_relay():
+    if not _start_embed_relay():
         print("  [embed] relay failed, falling back to substring match", flush=True)
         return _substring_match(got, expected)
 
     print("  [embed] computing embeddings...", flush=True)
     all_texts = got_texts + gt_texts
     embeds = _embed_texts(all_texts)
-    _stop_embed_8081()
+    _stop_embed()
 
     if embeds is None:
         print("  [embed] failed, falling back to substring match", flush=True)
