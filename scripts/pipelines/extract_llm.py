@@ -298,15 +298,16 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
     (Slot Machines, arXiv 2604.21139).
 
     Preprocessing converts markdown tables to sentences and terminates
-    list-item lines so dense structured sections (storage mounts, service
-    states, hardware specs) split into per-line chunks instead of one
-    unsplittable block.
+    list-item lines so dense structured sections split into individual
+    sentences. Small consecutive chunks are then merged back up to
+    MIN_CHARS to avoid excessive LLM calls with cache_prompt=False.
     """
+    MIN_CHARS = 250  # merge tiny chunks to avoid per-call KV overhead
     text = _tables_to_sentences(text)
     text = _terminate_lines(text)
     text = _expand_compounds(text)
     paragraphs = re.split(r"\n\s*\n", text)
-    chunks = []
+    raw_chunks = []
     for para in paragraphs:
         para = para.strip()
         if not para:
@@ -315,8 +316,24 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
         for sent in sentences:
             sent = sent.strip()
             if sent:
-                chunks.append(sent)
-    return chunks
+                raw_chunks.append(sent)
+    # Merge tiny chunks to reduce LLM calls with cache_prompt=False
+    merged = []
+    buf = ""
+    for c in raw_chunks:
+        if not buf:
+            buf = c
+        elif len(buf) + len(c) + 1 <= max_chars and len(buf.split()) < 40:
+            buf += " " + c
+        else:
+            merged.append(buf)
+            buf = c
+    if buf:
+        if len(merged) > 0 and len(buf) < MIN_CHARS:
+            merged[-1] += " " + buf
+        else:
+            merged.append(buf)
+    return merged
 
 
 def _expand_compounds(text: str) -> str:
