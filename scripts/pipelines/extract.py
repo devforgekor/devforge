@@ -915,7 +915,7 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
 
 def main() -> None:
     signal.signal(signal.SIGTERM, _sigterm_handler)
-    _ensure_model_pod("day-extractor", skip_if_healthy=False)
+    _ensure_model_pod("day-extractor", skip_if_healthy=True)
     preflight_checks("extract.py")
     import argparse
 

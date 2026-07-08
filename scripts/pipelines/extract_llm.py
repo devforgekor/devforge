@@ -1138,7 +1138,7 @@ or
                 timeout=timeout,
                 json_mode=True,
                 return_meta=True,
-                cache_prompt=True,
+                cache_prompt=False,
             )
         except Exception as e:
             print(f"  [extract] call failed: {e}", flush=True)
