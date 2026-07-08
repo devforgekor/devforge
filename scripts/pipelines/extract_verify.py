@@ -182,13 +182,18 @@ def _post_process_extractions(
         evidence_h, _ = get_cleaner().hanja_substitute(evidence)
         evidence = evidence_h or evidence
 
-        if evidence in seen_exact:
+        subj = str(ex.get("subject", ""))
+        pred = ex.get("predicate", "")
+        dedup_key = (evidence, subj, pred)
+        if dedup_key in seen_exact:
             continue
-        seen_exact.add(evidence)
+        seen_exact.add(dedup_key)
 
-        norm_key = re.sub(r"[^a-zA-Z0-9가-힣]", "", evidence[:50]).lower()
-        if len(norm_key) > 5:
-            if norm_key in recent_evidence or norm_key in seen_normalized:
+        norm_key = (re.sub(r"[^a-zA-Z0-9가-힣]", "", evidence[:50]).lower(), subj, pred)
+        if len(norm_key[0]) > 5:
+            if norm_key[0] in recent_evidence:
+                continue
+            if norm_key in seen_normalized:
                 continue
             seen_normalized.add(norm_key)
 
