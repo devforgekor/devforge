@@ -209,9 +209,51 @@ def _post_process_extractions(
         if not ex.get("predicate"):
             continue
 
+        obj = ex.get("object", "")
+        pred = ex.get("predicate", "")
+        if isinstance(obj, str) and obj.strip().lower() in ("true", "false", "yes", "no"):
+            extracted = _extract_object_from_evidence(evidence, subj, pred)
+            if extracted:
+                print(f"    [obj-fix] '{pred}' obj='{obj}' -> '{extracted}'", flush=True)
+                ex["object"] = extracted
+
         cleaned.append(ex)
 
     return cleaned
+
+
+def _extract_object_from_evidence(evidence: str, subject: str, predicate: str) -> str:
+    """Try to recover a meaningful object when the LLM emitted a boolean or placeholder."""
+    if not evidence or not subject:
+        return ""
+    p_lower = predicate.lower()
+    subj_lower = subject.lower()
+    idx = evidence.lower().find(subj_lower)
+    if idx < 0:
+        idx = 0
+    after_subj = evidence[idx + len(subj_lower):]
+
+    if "consider" in p_lower and "remov" in p_lower:
+        m = re.search(r'(?:to|for)\s+(.+?)(?:\.|$)', after_subj)
+        if m:
+            return m.group(1).strip()
+        m = re.search(r'(?:free up|remove|replace|swap)\s+(.+?)(?:\.|$)', evidence)
+        if m:
+            return m.group(1).strip()
+
+    if "status" in p_lower:
+        m = re.search(r'(?:is|was|became|changed to?)\s+(.+?)(?:\.|$)', after_subj)
+        if m:
+            return m.group(1).strip()
+
+    # Generic fallback: return the rest of the sentence after the subject
+    m = re.search(r'(?:is|has|was|are)\s+(.+?)(?:\.|$)', after_subj)
+    if m:
+        candidate = m.group(1).strip()
+        if len(candidate) > 5 and candidate.lower() not in ("true", "false"):
+            return candidate
+
+    return ""
 
 
 def _sanitize_predicate(pred: str, evidence: str = "", subject: str = "") -> str:

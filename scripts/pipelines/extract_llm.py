@@ -1144,6 +1144,9 @@ or
             print(f"  [extract] call failed: {e}", flush=True)
             return None
         raw = meta["content"]
+        if "BGE-m3" in source_text or "considering" in source_text:
+            print(f"    [raw_llm] section={section_type} src={source_text[:120]!r}", flush=True)
+            print(f"    [raw_llm] response={raw[:600]!r}", flush=True)
         parsed = _parse_json(raw, f"free_{section_type}")
         if parsed is None:
             return None
@@ -1152,6 +1155,12 @@ or
             return None
         for e in ex:
             e["fact_type"] = section_type
+            for field in ("subject", "predicate", "object", "evidence"):
+                val = e.get(field)
+                if val is None:
+                    e[field] = ""
+                elif not isinstance(val, str):
+                    e[field] = str(val)
         before = len(ex)
         fixed = 0
         cleaned = []
