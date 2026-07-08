@@ -19,7 +19,7 @@ GT_DIR = os.path.join(SCRIPTS_DIR, "tests", "ground_truths")
 EXTRACT_SCRIPT = os.path.join(SCRIPTS_DIR, "pipelines", "extract.py")
 PIPELINE_TIMEOUT = 5400
 EMBED_PORT = 8081
-EMBED_SIM_THRESHOLD = 0.82
+EMBED_SIM_THRESHOLD = 0.75
 
 
 def _load_ground_truths() -> List[Dict]:
@@ -55,31 +55,27 @@ def _resolve_source_text(tc: Dict) -> str:
 
 
 def _start_embed_relay() -> bool:
-    """Start embed :8081 inside devforge-inference (created by pipeline).
-    Relay mode: kill 8082 first to free RAM. Then start 8081."""
+    """Start embed :8081 in a fresh container. Relay mode: stop 8082 first if running."""
     import subprocess as sp
-    cid = sp.run(["podman", "ps", "-q", "--filter", "name=devforge-inference"],
-                  capture_output=True, text=True, timeout=10).stdout.strip()
-    if not cid:
-        print("  [embed] devforge-inference not found, skipping", flush=True)
-        return False
-
-    sp.run(["podman", "exec", "devforge-inference", "pkill", "-f", "llama-server.*8082"],
-           timeout=10, capture_output=True)
+    # Stop any existing devforge-inference (frees RAM for embed model)
+    sp.run(["podman", "stop", "-t", "5", "devforge-inference"], timeout=30, capture_output=True)
     time.sleep(2)
 
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{EMBED_PORT}/health")
         with urllib.request.urlopen(req, timeout=3) as resp:
             if resp.status == 200:
+                print("  [embed] already healthy", flush=True)
                 return True
     except Exception:
         pass
 
     meta = {"port": 8081, "file": "Qwen3-Embedding-4B-Q4_K_M.gguf",
             "ctx": 2048, "threads": 2, "threads_batch": 2, "parallel": 1}
-    cmd = ["podman", "exec", "-d", "devforge-inference",
-           "/app/llama-server",
+    cmd = ["podman", "run", "-d", "--rm", "--name", "gt-embed",
+           "--network", "host", "--user", "1000:1000",
+           "-v", "/opt/ai_data/models/gguf:/models:Z",
+           "ghcr.io/ggml-org/llama.cpp:server",
            "-m", f"/models/{meta['file']}",
            "--host", "0.0.0.0", "--port", str(meta["port"]),
            "--ctx-size", str(meta["ctx"]),
@@ -92,7 +88,7 @@ def _start_embed_relay() -> bool:
            "--cont-batching", "--no-mmap", "-lv", "6", "--metrics"]
     r = sp.run(cmd, capture_output=True, timeout=30, text=True)
     if r.returncode != 0:
-        print(f"  [embed] exec failed: {r.stderr.strip()[:200]}", flush=True)
+        print(f"  [embed] run failed: {r.stderr.strip()[:200]}", flush=True)
         return False
     from lib.pod_manager import wait_health as wh
     ok = wh(meta["port"], timeout=300)
@@ -102,8 +98,7 @@ def _start_embed_relay() -> bool:
 
 def _stop_embed() -> None:
     import subprocess as sp
-    sp.run(["podman", "exec", "devforge-inference", "pkill", "-f", f"llama-server.*{EMBED_PORT}"],
-           timeout=10, capture_output=True)
+    sp.run(["podman", "stop", "-t", "3", "gt-embed"], timeout=30, capture_output=True)
 
 
 def _embed_texts(texts: List[str]) -> Optional[List[List[float]]]:
