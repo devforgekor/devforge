@@ -13,7 +13,7 @@ from lib.llm_client.feedback import _inject_feedback
 from lib.llm_client.recovery import _model_key_for_8082, is_8082_connection_error, recover_8082
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
-    "extractor": {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300},
+    "extractor": {"port": 8082, "temp": 0.12, "max_tokens": 2048, "timeout": 300, "cache_prompt": False},
     "extractor-b": {"port": 8083, "temp": 0.0, "max_tokens": 1024, "timeout": 300},
     "cleaner": {"port": 8080, "temp": 0.0, "max_tokens": 512, "timeout": 600},
     "proposer": {"port": 8081, "temp": 0.22, "max_tokens": 2048, "timeout": 600},
@@ -105,8 +105,9 @@ def call_llm(
         body["response_format"] = {"type": "json_object"}
     if chat_template_kwargs is not None:
         body["chat_template_kwargs"] = chat_template_kwargs
-    if cache_prompt is not None:
-        body["cache_prompt"] = cache_prompt
+    cache_prompt_val = cache_prompt if cache_prompt is not None else cfg.get("cache_prompt")
+    if cache_prompt_val is not None:
+        body["cache_prompt"] = cache_prompt_val
 
     t_start = time.monotonic()
     url = f"http://127.0.0.1:{port}/v1/chat/completions"
