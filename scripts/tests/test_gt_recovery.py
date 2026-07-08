@@ -15,7 +15,7 @@ from lib.db import psql_json, psql_ok
 
 GT_DIR = os.path.join(SCRIPTS_DIR, "tests", "ground_truths")
 EXTRACT_SCRIPT = os.path.join(SCRIPTS_DIR, "pipelines", "extract.py")
-PIPELINE_TIMEOUT = 5400
+PIPELINE_TIMEOUT = 5400  # 90 min — pipeline includes NLI verify (~30 min)
 
 
 def _load_ground_truths() -> List[Dict]:

@@ -13,7 +13,7 @@
           {"subject": "system", "object": "22Gi", "object_also": "22Gi total RAM", "note": "Total RAM"},
           {"subject": "system", "object": "16Gi", "object_also": "16Gi available", "note": "Available RAM"},
           {"subject": "BGE-m3", "object": "4.3GB", "predicate": "uses", "note": "BGE-m3 usage"},
-          {"subject": "BGE-m3", "object": "12.5GB", "object_also": "free up 12.5GB", "note": "BGE-m3 disk space"},
+          {"subject": "BGE-m3", "object": "free up", "object_also": "12.5GB", "note": "BGE-m3 disk space"},
           {"subject": "sentence-transformers", "object": "800MB", "note": "Alt model size"},
           {"subject": "DeBERTa-v3", "object": "F1 0.53", "note": "Current NLI F1"},
           {"subject": "GPT-4o-mini", "object": "F1 0.57", "note": "Distillation target"}

@@ -228,26 +228,27 @@ def _extract_object_from_evidence(evidence: str, subject: str, predicate: str) -
         return ""
     p_lower = predicate.lower()
     subj_lower = subject.lower()
+    # Find subject in evidence or use full evidence
     idx = evidence.lower().find(subj_lower)
     if idx < 0:
         idx = 0
     after_subj = evidence[idx + len(subj_lower):]
 
     if "consider" in p_lower and "remov" in p_lower:
-        m = re.search(r'(?:to|for)\s+(.+?)(?:\.|$)', after_subj)
+        m = re.search(r'(?:to|for)\s+(.+?)(?:[.!?](?:\s|$)|$)', after_subj)
         if m:
             return m.group(1).strip()
-        m = re.search(r'(?:free up|remove|replace|swap)\s+(.+?)(?:\.|$)', evidence)
+        m = re.search(r'(?:free up|remove|replace|swap)\s+(.+?)(?:[.!?](?:\s|$)|$)', evidence)
         if m:
             return m.group(1).strip()
 
     if "status" in p_lower:
-        m = re.search(r'(?:is|was|became|changed to?)\s+(.+?)(?:\.|$)', after_subj)
+        m = re.search(r'(?:is|was|became|changed to?)\s+(.+?)(?:[.!?](?:\s|$)|$)', after_subj)
         if m:
             return m.group(1).strip()
 
-    # Generic fallback: return the rest of the sentence after the subject
-    m = re.search(r'(?:is|has|was|are)\s+(.+?)(?:\.|$)', after_subj)
+    # Generic fallback
+    m = re.search(r'(?:is|has|was|are)\s+(.+?)(?:[.!?](?:\s|$)|$)', after_subj)
     if m:
         candidate = m.group(1).strip()
         if len(candidate) > 5 and candidate.lower() not in ("true", "false"):
