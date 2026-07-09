@@ -220,26 +220,106 @@ Empty: {"extractions":[]}."""
 # ── Chunking utility ──────────────────────────────────────────
 
 
-def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
-    """Split text into paragraph-level chunks.
+def _split_dense_bullets(text: str) -> str:
+    """Insert blank lines before each bullet in dense sections (4+ items).
 
-    Expands compound sentences to help 8B models overcome the
-    'dual binding on single token' limitation
-    (Slot Machines, arXiv 2604.21139).
+    Preserves original text format — only adds paragraph boundaries so
+    _split_atomic splits each item into its own chunk.  Without this,
+    sections like Overview (8 bullets, no periods) become one chunk and
+    hit the 8-fact cap, causing the LLM to skip HW specs and storage
+    mounts.
     """
+    lines = text.split('\n')
+    out = []
+    i = 0
+    in_code = False
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith('```') or stripped.startswith('~~~'):
+            in_code = not in_code
+            out.append(line)
+            i += 1
+            continue
+        if in_code:
+            out.append(line)
+            i += 1
+            continue
+        # Detect run of 4+ consecutive bullet lines
+        if stripped.startswith('- ') or stripped.startswith('* '):
+            j = i
+            count = 0
+            while j < len(lines) and (lines[j].strip().startswith('- ') or lines[j].strip().startswith('* ')):
+                count += 1
+                j += 1
+            if count >= 4:
+                for k in range(i, j):
+                    if k > i:
+                        out.append("")
+                    out.append(lines[k])
+                i = j
+                continue
+        # Detect table (header+separator+4+ data rows)
+        tbl_row = re.compile(r'^\|.*\|$')
+        if tbl_row.match(stripped) and i + 1 < len(lines) and re.match(r'^\|[\s\-:|]+\|$', lines[i + 1].strip()):
+            j = i + 2
+            rows = 0
+            while j < len(lines) and tbl_row.match(lines[j].strip()):
+                rows += 1
+                j += 1
+            if rows >= 4:
+                out.append(lines[i])    # header
+                i += 1
+                out.append(lines[i])    # separator
+                i += 1
+                for k in range(rows):
+                    if k > 0:
+                        out.append("")
+                    out.append(lines[i])
+                    i += 1
+                continue
+        out.append(line)
+        i += 1
+    return '\n'.join(out)
+
+
+def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
+    """Split text into paragraph-level chunks with merging.
+
+    Pre-inserts blank lines in dense bullet/table sections so each item
+    becomes its own paragraph.  Small consecutive chunks are then merged
+    to ~100-200 chars each — enough for 2-3 items per chunk, giving the
+    LLM 8-fact headroom while keeping LLM calls manageable.
+    """
+    MERGE_MAX_CHARS = 180
+    text = _split_dense_bullets(text)
     text = _expand_compounds(text)
     paragraphs = re.split(r"\n\s*\n", text)
-    chunks = []
+    merged = []
+    buf = ""
     for para in paragraphs:
         para = para.strip()
         if not para:
             continue
+        # Split paragraph into sentences
         sentences = re.split(r"(?<=[.!?])\s+", para)
         for sent in sentences:
             sent = sent.strip()
-            if sent:
-                chunks.append(sent)
-    return chunks
+            if not sent:
+                continue
+            if not buf:
+                buf = sent
+            elif len(buf) + len(sent) + 1 <= MERGE_MAX_CHARS:
+                buf += " " + sent
+            else:
+                if buf:
+                    merged.append(buf)
+                buf = sent
+        # Flush buffer at paragraph boundary — NEVER merge across paragraphs
+        if buf:
+            merged.append(buf)
+            buf = ""
+    return merged
 
 
 def _expand_compounds(text: str) -> str:
