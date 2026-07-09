@@ -339,6 +339,22 @@ def _expand_compounds(text: str) -> str:
     text = re.sub(r',\s*(?=\d)', r'. ', text)
     # " + digit" → ". digit" — split plus-separated specs like "22Gi + 4G zram + 12G swap"
     text = re.sub(r'\s*\+\s*(?=\d)', r'. ', text)
+    # Convert "`path` (size) — description" storage listings into attribute
+    # format so the LLM can extract path/size triples instead of nothing.
+    text = re.sub(
+        r'^-\s*`([^`]+)`\s*\((\d+\.?\d*[KMGTPE]?[B]?)\)\s*\u2014\s*(.+)$',
+        r'- \1: size=\2, purpose=\3',
+        text,
+        flags=re.MULTILINE,
+    )
+    # Convert "| entity | type | status |" table rows (without table header)
+    # into bullet format so each service gets its own extraction.
+    text = re.sub(
+        r'^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(\w[\w\s()]*\w)\s*\|$',
+        r'- Service \1: type=\2, status=\3',
+        text,
+        flags=re.MULTILINE,
+    )
     # Expand "Label: Entity (spec1. spec2. spec3.)" into factual statements
     # so each spec gets its own subject-verb-object triple.
     # Pattern: bullet, label, colon, entity name, parenthetical with period-separated specs
