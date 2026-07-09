@@ -338,6 +338,30 @@ def _expand_compounds(text: str) -> str:
     text = re.sub(r',\s*(?=\d)', r'. ', text)
     # " + digit" → ". digit" — split plus-separated specs like "22Gi + 4G zram + 12G swap"
     text = re.sub(r'\s*\+\s*(?=\d)', r'. ', text)
+    # Expand "Label: Entity (spec1. spec2. spec3.)" into factual statements
+    # so each spec gets its own subject-verb-object triple.
+    # Pattern: bullet, label, colon, entity name, parenthetical with period-separated specs
+    def _expand_spec_parens(m):
+        label = m.group(1).strip()
+        entity = m.group(2).strip()
+        inner = m.group(3)
+        parts = [p.strip().rstrip(')') for p in re.split(r'\.\s+', inner) if p.strip()]
+        if len(parts) <= 1:
+            return m.group(0)
+        has_specs = any(bool(re.search(r'\d', p)) for p in parts)
+        if not has_specs:
+            return m.group(0)
+        result = f"- {label}: {entity}."
+        for p in parts:
+            result += f" {entity} has {p}."
+        return result
+
+    text = re.sub(
+        r'^-\s+([^:]+):\s+(\S[^(]+?)\s*\((.*)\)\s*$',
+        _expand_spec_parens,
+        text,
+        flags=re.MULTILINE,
+    )
     return text
 
 
