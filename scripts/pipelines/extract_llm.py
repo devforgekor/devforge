@@ -343,7 +343,7 @@ def _expand_compounds(text: str) -> str:
     # format so the LLM can extract path/size triples instead of nothing.
     text = re.sub(
         r'^-[^\S\n]*`([^`]+)`[^\S\n]*\((\d+\.?\d*[KMGTPE]?[B]?)\)[^\S\n]*\u2014[^\S\n]*(.+)$',
-        r'- Mount: `\1`.\n\n- `\1` provides \2 of storage.\n\n- `\1` serves \3.',
+        r'- Mount: `\1`.\n\n- \1: \2.\n\n- \1: \3.',
         text,
         flags=re.MULTILINE,
     )
