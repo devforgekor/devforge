@@ -351,9 +351,15 @@ def _expand_compounds(text: str) -> str:
         has_specs = any(bool(re.search(r'\d', p)) for p in parts)
         if not has_specs:
             return m.group(0)
-        result = f"- {label}: {entity}."
-        for p in parts:
-            result += f" {entity} has {p}."
+        # Put each spec on its own paragraph so _split_atomic gives each
+        # its own chunk.  One-line expansions cause the LLM to extract
+        # only 1 of 5+ specs from the same bullet.
+        result = f"- {label}: {entity}.\n\n"
+        for i, p in enumerate(parts):
+            if i > 0:
+                result += "\n\n"
+            result += f"- {entity} has {p}."
+        result += "\n"
         return result
 
     text = re.sub(
@@ -362,27 +368,7 @@ def _expand_compounds(text: str) -> str:
         text,
         flags=re.MULTILINE,
     )
-    # Split expanded bullets into individual items so each spec becomes
-    # its own line. After expansion, lines look like:
-    #   - Label: Entity. Entity has A. Entity has B.
-    # We split ". Entity has" into "\n- Entity has" so each spec is on
-    # its own bullet line. The merge logic in _split_atomic then groups
-    # ~7 short bullets per chunk instead of having all 5 in one line.
-    lines = text.split('\n')
-    out = []
-    for line in lines:
-        if line.startswith('- '):
-            content = line[2:]
-            parts = re.split(r'\.\s+(?=\w[\w\s]* has )', content)
-            if len(parts) > 1:
-                out.append('- ' + parts[0].strip().rstrip('.'))
-                for p in parts[1:]:
-                    p = p.strip().rstrip('.')
-                    if p:
-                        out.append('- ' + p + '.')
-                continue
-        out.append(line)
-    return '\n'.join(out)
+    return text
 
 
 # ── EDC-style predicate canonicalization helpers ──────────────
