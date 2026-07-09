@@ -342,15 +342,20 @@ def _expand_compounds(text: str) -> str:
     # Convert "`path` (size) — description" storage listings into attribute
     # format so the LLM can extract path/size triples instead of nothing.
     text = re.sub(
-        r'^-\s*`([^`]+)`\s*\((\d+\.?\d*[KMGTPE]?[B]?)\)\s*\u2014\s*(.+)$',
+        r'^-[^\S\n]*`([^`]+)`[^\S\n]*\((\d+\.?\d*[KMGTPE]?[B]?)\)[^\S\n]*\u2014[^\S\n]*(.+)$',
         r'- \1: size=\2, purpose=\3',
         text,
         flags=re.MULTILINE,
     )
     # Convert "| entity | type | status |" table rows (without table header)
     # into bullet format so each service gets its own extraction.
+    # [^\S\n]* = whitespace but NOT newline — prevents \s* from crossing
+    # line boundaries when the regex engine backtracks past its own ^/$ anchors.
+    # The lookahead (?!...) excludes header rows where all 3 cells are
+    # single capitalized words ("Service", "Type", "Status").
     text = re.sub(
-        r'^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(\w[\w\s()]*\w)\s*\|$',
+        r'^(?!\|[^\S\n]*[A-Z][a-z]+[^\S\n]*\|[^\S\n]*[A-Z][a-z]+[^\S\n]*\|[^\S\n]*[A-Z][a-z]+[^\S\n]*\|\s*$)'
+        r'\|[^\S\n]*(.+?)[^\S\n]*\|[^\S\n]*(.+?)[^\S\n]*\|[^\S\n]*(\w[\w()\s]*\w)[^\S\n]*\|$',
         r'- Service \1: type=\2, status=\3',
         text,
         flags=re.MULTILINE,
