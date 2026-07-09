@@ -362,7 +362,27 @@ def _expand_compounds(text: str) -> str:
         text,
         flags=re.MULTILINE,
     )
-    return text
+    # Split expanded bullets into individual items so each spec becomes
+    # its own line. After expansion, lines look like:
+    #   - Label: Entity. Entity has A. Entity has B.
+    # We split ". Entity has" into "\n- Entity has" so each spec is on
+    # its own bullet line. The merge logic in _split_atomic then groups
+    # ~7 short bullets per chunk instead of having all 5 in one line.
+    lines = text.split('\n')
+    out = []
+    for line in lines:
+        if line.startswith('- '):
+            content = line[2:]
+            parts = re.split(r'\.\s+(?=\w[\w\s]* has )', content)
+            if len(parts) > 1:
+                out.append('- ' + parts[0].strip().rstrip('.'))
+                for p in parts[1:]:
+                    p = p.strip().rstrip('.')
+                    if p:
+                        out.append('- ' + p + '.')
+                continue
+        out.append(line)
+    return '\n'.join(out)
 
 
 # ── EDC-style predicate canonicalization helpers ──────────────
