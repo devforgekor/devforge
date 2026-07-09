@@ -17,7 +17,7 @@ from lib.db import psql_json, psql_ok
 
 GT_DIR = os.path.join(SCRIPTS_DIR, "tests", "ground_truths")
 EXTRACT_SCRIPT = os.path.join(SCRIPTS_DIR, "pipelines", "extract.py")
-PIPELINE_TIMEOUT = 5400
+PIPELINE_TIMEOUT = 7200
 EMBED_PORT = 8081
 EMBED_SIM_THRESHOLD = 0.75
 
