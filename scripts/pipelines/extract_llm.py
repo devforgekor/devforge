@@ -341,9 +341,15 @@ def _expand_compounds(text: str) -> str:
     text = re.sub(r'\s*\+\s*(?=\d)', r'. ', text)
     # Convert "`path` (size) — description" storage listings into attribute
     # format so the LLM can extract path/size triples instead of nothing.
+    def _storage_mount(m):
+        path = m.group(1)
+        size = m.group(2)
+        purpose = m.group(3)
+        name = path.lstrip("/") or "root"
+        return f"- Mount: `{path}`.\n\n- {name}: {size}.\n\n- {name}: {purpose}."
     text = re.sub(
         r'^-[^\S\n]*`([^`]+)`[^\S\n]*\((\d+\.?\d*[KMGTPE]?[B]?)\)[^\S\n]*\u2014[^\S\n]*(.+)$',
-        r'- Mount: `\1`.\n\n- \1: \2.\n\n- \1: \3.',
+        _storage_mount,
         text,
         flags=re.MULTILINE,
     )
