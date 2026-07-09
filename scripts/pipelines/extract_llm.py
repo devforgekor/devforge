@@ -333,6 +333,11 @@ def _expand_compounds(text: str) -> str:
     text = re.sub(r'\s+and\s+(?=(?:[A-Z][a-z]+\s+(?:has|runs|uses|consumes|is|are|was|were)))', '. ', text)
     # "X has A with B" → "X has A. X has B." (preserve subject for 2nd attribute)
     text = re.sub(r'(\w+(?:\s+\w+){0,3})\s+has\s+([^.]*?)\s+with\s+(\d[\w.]*\s*\w+)', r'\1 has \2. \1 has \3.', text)
+    # ", \d" → ". \d" — split comma-separated hardware specs like "4-core, 22Gi, 4G"
+    # inside parenthetical spec lists (e.g. "(ARM Neoverse-N1, 4-core, 22Gi)")
+    text = re.sub(r',\s*(?=\d)', r'. ', text)
+    # " + digit" → ". digit" — split plus-separated specs like "22Gi + 4G zram + 12G swap"
+    text = re.sub(r'\s*\+\s*(?=\d)', r'. ', text)
     return text
 
 
