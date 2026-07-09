@@ -253,6 +253,7 @@ def _split_dense_bullets(text: str) -> str:
                 count += 1
                 j += 1
             if count >= 4:
+                out.append("")  # blank line before first bullet separates it from heading
                 for k in range(i, j):
                     if k > i:
                         out.append("")
@@ -273,7 +274,7 @@ def _split_dense_bullets(text: str) -> str:
                 out.append(lines[i])    # separator
                 i += 1
                 for k in range(rows):
-                    if k > 0:
+                    if k > 0 or rows >= 4:
                         out.append("")
                     out.append(lines[i])
                     i += 1
