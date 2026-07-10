@@ -878,6 +878,65 @@ def _normalize_predicate(fact: dict) -> dict:
     return fact
 
 
+def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]:
+    """Fix status=active hallucination by cross-referencing source text.
+
+    Qwen3-8B has a training bias where it extracts ALL services as
+    status=active regardless of source text. This function reads the
+    actual status from the source text's services table and corrects
+    extracted facts.
+    """
+    status_pattern = re.compile(
+        r'\|[^\S\n]*([\w][\w\s-]*[\w])[^\S\n]*\|[^\S\n]*[\w\s-]+[^\S\n]*\|[^\S\n]*(\w+)[^\S\n]*\|',
+        re.MULTILINE,
+    )
+    source_statuses = {}
+    for m in status_pattern.finditer(source_text):
+        service = m.group(1).strip()
+        if service.lower() in ("service", "항목", "조치", "시나리오", "세션"):
+            continue
+        status = m.group(2).strip().lower()
+        if status in ("active", "inactive", "activating"):
+            source_statuses[service] = status
+
+    if not source_statuses:
+        return facts
+
+    fixed = 0
+    for f in facts:
+        subj = f.get("subject", "").strip()
+        obj = f.get("object", "").strip()
+
+        if subj not in source_statuses:
+            continue
+
+        actual = source_statuses[subj]
+        obj_lower = obj.lower()
+
+        if "status=active" in obj_lower and actual != "active":
+            f["object"] = re.sub(
+                r'status=active', f'status={actual}', obj, flags=re.IGNORECASE
+            )
+            fixed += 1
+        elif "status=inactive" in obj_lower and actual != "inactive":
+            f["object"] = re.sub(
+                r'status=inactive', f'status={actual}', obj, flags=re.IGNORECASE
+            )
+            fixed += 1
+        elif obj_lower in ("active", "inactive") and obj_lower != actual:
+            pred = f.get("predicate", "").lower()
+            if "status" in pred:
+                f["object"] = actual
+                fixed += 1
+
+    if fixed:
+        print(
+            f"    [status-fix] corrected {fixed} fact(s) via source text cross-reference",
+            flush=True,
+        )
+    return facts
+
+
 def _dedup_post_norm(facts: list[dict]) -> list[dict]:
     """Re-dedup after normalization: collapse (subject, normalized_pred, object)."""
     seen = {}
@@ -1490,6 +1549,9 @@ or
     for t in dual_turns:
         all_facts = turn_data[t["id"]]["extractions"]
         if all_facts:
+            source = t.get("user_turn", "") or t.get("text", "") or ""
+            all_facts = _fix_status_hallucination(all_facts, source)
+            turn_data[t["id"]]["extractions"] = all_facts
             all_fact_groups[t["id"]] = all_facts
 
     if all_fact_groups:

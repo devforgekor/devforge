@@ -5,6 +5,7 @@
       "description": "Extract performance facts from Korean-language 27B optimization report",
       "source_file": "reports/27b-optimization-report.md",
       "section_type": "user",
+      "timeout": 14400,
       "facts": [
         {"subject": "시스템", "object_contains": "22 GiB", "note": "Total RAM"},
         {"subject": "시스템", "object_contains": "8.1 GiB", "object_also": "37%", "note": "Current RAM usage"},

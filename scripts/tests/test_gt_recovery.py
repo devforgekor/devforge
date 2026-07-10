@@ -263,11 +263,12 @@ def run_test_case(tc: Dict) -> Dict:
         f"ON CONFLICT DO NOTHING"
     )
 
+    timeout = tc.get("timeout", PIPELINE_TIMEOUT)
     t0 = time.monotonic()
-    print(f"  Running pipeline (timeout={PIPELINE_TIMEOUT}s)...", flush=True)
+    print(f"  Running pipeline (timeout={timeout}s)...", flush=True)
     r = subprocess.run(
         [sys.executable, EXTRACT_SCRIPT, "--turn-id", tid],
-        capture_output=True, text=True, timeout=PIPELINE_TIMEOUT
+        capture_output=True, text=True, timeout=timeout
     )
     elapsed = time.monotonic() - t0
 
