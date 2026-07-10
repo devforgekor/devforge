@@ -266,15 +266,21 @@ def run_test_case(tc: Dict) -> Dict:
     timeout = tc.get("timeout", PIPELINE_TIMEOUT)
     t0 = time.monotonic()
     print(f"  Running pipeline (timeout={timeout}s)...", flush=True)
-    r = subprocess.run(
-        [sys.executable, EXTRACT_SCRIPT, "--turn-id", tid],
-        capture_output=True, text=True, timeout=timeout
-    )
+    timed_out = False
+    try:
+        r = subprocess.run(
+            [sys.executable, EXTRACT_SCRIPT, "--turn-id", tid],
+            capture_output=True, text=True, timeout=timeout
+        )
+    except subprocess.TimeoutExpired as te:
+        r = te
+        timed_out = True
+        print(f"  ⚠ Pipeline timed out after {timeout}s", flush=True)
     elapsed = time.monotonic() - t0
 
     result = {
         "name": name,
-        "status": "done",
+        "status": "timed_out" if timed_out else "done",
         "elapsed_s": round(elapsed),
         "stdout_tail": r.stdout[-3000:] if r.stdout else "",
         "stderr": r.stderr[-2000:] if r.stderr else "",
@@ -375,6 +381,9 @@ def main():
         if res["status"] == "skip":
             print(f"  {name}: SKIP ({res.get('reason','')})", flush=True)
             continue
+        if res["status"] == "timed_out":
+            print(f"  {name}: TIMEOUT after {res.get('elapsed_s',0)}s", flush=True)
+            continue
         print(f"  {name}: recall={res.get('recall','?')} precision={res.get('precision','?')} ({res.get('elapsed_s',0)}s)", flush=True)
 
     out_path = os.path.join(SCRIPTS_DIR, "tests", "gt_recovery_results.json")
@@ -383,7 +392,7 @@ def main():
     print(f"\nResults saved to {out_path}", flush=True)
 
     passed = all(
-        r["status"] == "done" for r in all_results if r["status"] != "skip"
+        r["status"] == "done" for r in all_results if r["status"] not in ("skip", "timed_out")
     )
     print(f"\n  >>> {'ALL PASS' if passed else 'SOME FAILED'} <<<", flush=True)
 

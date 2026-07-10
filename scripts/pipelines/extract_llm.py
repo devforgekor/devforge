@@ -296,12 +296,31 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
     text = _split_dense_bullets(text)
     text = _expand_compounds(text)
     paragraphs = re.split(r"\n\s*\n", text)
+    # Merge consecutive short paragraphs to reduce chunk count.
+    # After _split_dense_bullets and _expand_compounds, dense bullets
+    # and table rows become separate paragraphs of ~50-80 chars each.
+    # Without merging, 100+ tiny chunks waste LLM calls due to
+    # cache_prompt=False (830-token system prompt per chunk).
+    merged_paras = []
+    buf = ""
+    for p in paragraphs:
+        p = p.strip()
+        if not p:
+            continue
+        if not buf:
+            buf = p
+        elif len(buf) < 120 and len(p) < 120 and len(buf) + len(p) + 1 <= 300:
+            buf += " " + p
+        else:
+            merged_paras.append(buf)
+            buf = p
+    if buf:
+        merged_paras.append(buf)
+    paragraphs = merged_paras
+
     merged = []
     buf = ""
     for para in paragraphs:
-        para = para.strip()
-        if not para:
-            continue
         # Split paragraph into sentences
         sentences = re.split(r"(?<=[.!?])\s+", para)
         for sent in sentences:
