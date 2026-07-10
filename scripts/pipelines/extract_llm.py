@@ -345,8 +345,8 @@ def _expand_compounds(text: str) -> str:
         path = m.group(1)
         size = m.group(2)
         purpose = m.group(3)
-        name = path.lstrip("/") or "root"
-        return f"- Mount: `{path}`.\n\n- {name} has {size}.\n\n- {name} serves {purpose}."
+        name = os.path.basename(path.rstrip("/")) or "root"
+        return f"- `{path}` (mount {name}).\n\n- {name} has {size}.\n\n- {name} serves {purpose}."
     text = re.sub(
         r'^-[^\S\n]*`([^`]+)`[^\S\n]*\((\d+\.?\d*[KMGTPE]?[B]?)\)[^\S\n]*\u2014[^\S\n]*(.+)$',
         _storage_mount,
