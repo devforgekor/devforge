@@ -296,20 +296,22 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
     text = _split_dense_bullets(text)
     text = _expand_compounds(text)
     paragraphs = re.split(r"\n\s*\n", text)
-    # Merge consecutive short paragraphs to reduce chunk count.
-    # After _split_dense_bullets and _expand_compounds, dense bullets
-    # and table rows become separate paragraphs of ~50-80 chars each.
-    # Without merging, 100+ tiny chunks waste LLM calls due to
-    # cache_prompt=False (830-token system prompt per chunk).
+    # Merge consecutive short table-row paragraphs to reduce chunk count.
+    # After _split_dense_bullets, dense table rows become separate paragraphs
+    # of ~40-60 chars each.  Without merging, 100+ tiny chunks waste LLM
+    # calls due to cache_prompt=False (830-token system prompt per chunk).
+    # Only merge | prefixed rows — regular bullets are larger (80-150+ chars)
+    # and need individual chunking for focused extraction.
     merged_paras = []
     buf = ""
     for p in paragraphs:
         p = p.strip()
         if not p:
             continue
+        is_tbl = p.startswith("|")
         if not buf:
             buf = p
-        elif len(buf) < 120 and len(p) < 120 and len(buf) + len(p) + 1 <= 300:
+        elif is_tbl and buf.startswith("|") and len(buf) < 80 and len(p) < 80 and len(buf) + len(p) + 1 <= 300:
             buf += " " + p
         else:
             merged_paras.append(buf)

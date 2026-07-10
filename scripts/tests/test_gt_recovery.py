@@ -338,6 +338,13 @@ def run_test_case(tc: Dict) -> Dict:
         nli = f.get("nli_verdict", "?")[:4]
         print(f"    [{nli:4s}] {subj:32s} | {pred:22s} | {obj}", flush=True)
 
+    # Restart inference container (stopped by _start_embed_relay during _match_facts)
+    try:
+        from lib.pod_manager import ensure_model as _restart_inference
+        _restart_inference("day-extractor", skip_if_healthy=False)
+    except Exception as restart_err:
+        print(f"  [restart] inference restart failed: {restart_err}", flush=True)
+
     # Cleanup
     psql_ok(
         f"DELETE FROM review_facts WHERE turn_id='{tid}'::uuid "
