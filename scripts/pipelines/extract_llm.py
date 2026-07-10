@@ -356,7 +356,7 @@ def _expand_compounds(text: str) -> str:
     text = re.sub(
         r'^(?!\|[^\S\n]*[A-Z][a-z]+[^\S\n]*\|[^\S\n]*[A-Z][a-z]+[^\S\n]*\|[^\S\n]*[A-Z][a-z]+[^\S\n]*\|\s*$)'
         r'\|[^\S\n]*(.+?)[^\S\n]*\|[^\S\n]*(.+?)[^\S\n]*\|[^\S\n]*(\w[\w()\s]*\w)[^\S\n]*\|$',
-        r'- Service \1: type=\2, status=\3',
+        r'- \1: status=\3, type=\2',
         text,
         flags=re.MULTILINE,
     )
