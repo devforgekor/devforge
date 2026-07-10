@@ -21,6 +21,13 @@ PIPELINE_TIMEOUT = 7200
 EMBED_PORT = 8081
 EMBED_SIM_THRESHOLD = 0.75
 
+_HANGUL_RE = re.compile(r'[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F\uA960-\uA97C\uD7B0-\uD7FF]')
+
+def _detect_lang(text: str) -> str:
+    if _HANGUL_RE.search(text):
+        return "ko"
+    return "en"
+
 
 def _load_ground_truths() -> List[Dict]:
     cases = []
@@ -246,11 +253,12 @@ def run_test_case(tc: Dict) -> Dict:
         turn_user = source_text
         turn_text = ""
 
+    detected_lang = _detect_lang(source_text)
     psql_ok(
         f"INSERT INTO turns (id,user_turn,text,thinking,pipeline_state,"
         f"conversation_id,source_message_id,created_at,detected_lang,est_chars,seq) "
         f"VALUES ('{tid}'::uuid,'{esc(turn_user)}','{esc(turn_text)}','','scanned',"
-        f"'{cid}'::uuid,'gt-{name}-{tid[:8]}','2026-07-08T00:00:00Z','en',"
+        f"'{cid}'::uuid,'gt-{name}-{tid[:8]}','2026-07-08T00:00:00Z','{detected_lang}',"
         f"{len(source_text)},{seq}) "
         f"ON CONFLICT DO NOTHING"
     )

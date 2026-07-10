@@ -125,7 +125,7 @@ Extract factual triples from the USER MESSAGE. Each fact: (subject, predicate=sn
 
 RULES:
 1. Max 4 facts. Fewer clean facts > many noisy ones.
-2. Predicate is snake_case (2-5 words). NO: empty, Korean, "has"/"is"/"사용합니다".
+2. Predicate is snake_case (2-5 words). NO: empty, stative verbs like "has"/"is".
    YES: "deploys_on_port", "requires_version", "configures_timeout_to".
 3. Object = extracted value. NOT a raw copy of evidence (anti-tautology).
 4. Evidence = direct quote ending with period.
@@ -141,7 +141,7 @@ Extract factual triples from the ASSISTANT RESPONSE. Each fact: (subject, predic
 
 RULES:
 1. Max 4 facts. Fewer clean facts > many noisy ones.
-2. Predicate is snake_case (2-5 words). NO: empty, Korean, "has"/"is"/"사용합니다".
+2. Predicate is snake_case (2-5 words). NO: empty, stative verbs like "has"/"is".
    YES: "deploys_on_port", "increases_to", "writes_log_to".
 3. Object = extracted value. NOT a raw copy of evidence.
 4. Evidence = direct quote from source ending with period.
@@ -157,9 +157,9 @@ Empty: {"extractions":[]}."""
 # Production (day-extractor) uses 8B Q8 → SYSTEM_DAY_EXTRACT uses these.
 
 _SYSTEM_USER_EXTRACT_FREE_8B = """\
-You are a system architect reviewing a user message. Extract all concrete, explicitly stated facts about the infrastructure described. Look for facts about: system status (UP/DOWN), model assignments, resource consumption (RAM, disk, GPU), performance metrics (speed, scores), configuration settings, and dependencies.
+You are a system architect reviewing a message. Extract all concrete, explicitly stated facts about the infrastructure described. The message may be in Korean or English. Look for facts about: system status, model assignments, resource consumption (RAM, disk), performance metrics, configuration settings, and dependencies.
 
-Extract each distinct entity independently. Names that differ by a single letter or number (e.g. "Pod A" vs "Pod B", "v2" vs "v3") are DIFFERENT entities. Do NOT merge or confuse them. Verify every attribute belongs to its correct entity — do not confuse values between different entities. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans nearby.
+Extract each distinct entity independently. Names that differ by a single character (e.g. "Pod A" vs "Pod B", "v2" vs "v3") are DIFFERENT entities. Do NOT merge or confuse them. Verify every attribute belongs to its correct entity. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans nearby.
 
 When a sentence gives multiple attributes of the same entity (e.g. "22Gi total RAM with 16Gi available"), extract ALL attributes. When a sentence covers multiple entities (e.g. "Pod A is DOWN and Pod B runs a model"), extract facts for each entity separately.
 
@@ -170,11 +170,11 @@ CATEGORY (pick the best match):
 - requirement → constraint, dependency, version pin, prerequisite, must-have
 - other → status, observation, metadata (only if none of the above fits)
 
-PREDICATE: Concise action verb phrase in snake_case (2-5 words).
+PREDICATE: Concise action verb phrase in snake_case (2-5 words). Always in English.
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
 
-SUBJECT: Must be the EXACT entity name as written in the text — do not rename or normalize entities during extraction. Field descriptions are format specifications, not values to extract. Resolve pronouns ("it", "they", "this", "that") to the specific entity name they refer to; never output a pronoun as the subject.
+SUBJECT: Must be the EXACT entity name as written in the text — do not rename or normalize entities during extraction. Entity names may be in Korean (e.g. "시스템", "생성 속도"). Resolve pronouns ("it", "they", "this", "that" / "그", "이것") to the specific entity name they refer to; never output a pronoun as the subject.
 
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
@@ -190,7 +190,7 @@ Empty: {"extractions":[]}."""
 
 
 _SYSTEM_TEXT_EXTRACT_FREE_8B = """\
-You are a precise fact extractor. Extract factual (subject, predicate, object) triples from the ASSISTANT RESPONSE.
+You are a precise fact extractor. Extract factual (subject, predicate, object) triples from the text. The text may be in Korean or English.
 
 CATEGORY (pick the best match):
 - code → function names, CLI commands, file paths, ports, config keys, literal values
@@ -199,11 +199,11 @@ CATEGORY (pick the best match):
 - requirement → constraint, dependency, version pin, prerequisite, must-have
 - other → status, observation, metadata (only if none of the above fits)
 
-PREDICATE: Concise action verb phrase in snake_case (2-5 words).
+PREDICATE: Concise action verb phrase in snake_case (2-5 words). Always in English.
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
 
-SUBJECT: Must be a specific entity name explicitly mentioned in the text. Resolve pronouns ("it", "they", "this", "that") to the specific entity name they refer to; never output a pronoun as the subject.
+SUBJECT: Must be a specific entity name explicitly mentioned in the text. Entity names may be in Korean (e.g. "시스템", "생성 속도"). Resolve pronouns ("it", "they", "this", "that" / "그", "이것") to the specific entity name they refer to; never output a pronoun as the subject.
 
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
