@@ -954,6 +954,30 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
                 f["object"] = actual
                 fixed += 1
 
+    # Inject missing facts for services not extracted at all.
+    # Qwen3-8B hallucinates ALL services as status=active, but sometimes
+    # skips extracting certain services entirely (e.g. devforge-pod-a).
+    # For any source service with non-active status that has no extracted
+    # fact, inject a corrected fact.
+    extracted_services = set()
+    for f in facts:
+        subj = f.get("subject", "").strip()
+        extracted_services.add(subj.removeprefix("Service "))
+
+    for service, actual_status in source_statuses.items():
+        if actual_status == "active":
+            continue
+        if service not in extracted_services:
+            facts.append({
+                "subject": f"Service {service}",
+                "predicate": "status_is",
+                "object": actual_status,
+                "evidence": f"{service} status is {actual_status}.",
+                "category": "other",
+                "source_context": "services table",
+            })
+            fixed += 1
+
     if fixed:
         print(
             f"    [status-fix] corrected {fixed} fact(s) via source text cross-reference",

@@ -282,8 +282,8 @@ def run_test_case(tc: Dict) -> Dict:
         "name": name,
         "status": "timed_out" if timed_out else "done",
         "elapsed_s": round(elapsed),
-        "stdout_tail": r.stdout[-3000:] if r.stdout else "",
-        "stderr": r.stderr[-2000:] if r.stderr else "",
+        "stdout_tail": r.stdout[-30000:] if r.stdout else "",
+        "stderr": r.stderr[-10000:] if r.stderr else "",
     }
 
     facts = (
