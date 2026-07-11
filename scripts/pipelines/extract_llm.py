@@ -920,6 +920,11 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         if status in ("active", "inactive", "activating"):
             source_statuses[service] = status
 
+    print(
+        f"    [status-fix] source_statuses={len(source_statuses)} entries, "
+        f"facts={len(facts)}, source_len={len(source_text)}",
+        flush=True,
+    )
     if not source_statuses:
         return facts
 
@@ -1606,6 +1611,11 @@ or
     for t in dual_turns:
         all_facts = turn_data[t["id"]]["extractions"]
         if all_facts:
+            print(
+                f"    [dbg-status] calling _fix_status_hallucination with "
+                f"{len(all_facts)} facts, source_len={len(full_source_text)}",
+                flush=True,
+            )
             all_facts = _fix_status_hallucination(all_facts, full_source_text)
             turn_data[t["id"]]["extractions"] = all_facts
             all_fact_groups[t["id"]] = all_facts
