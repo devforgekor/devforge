@@ -928,10 +928,14 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         subj = f.get("subject", "").strip()
         obj = f.get("object", "").strip()
 
-        if subj not in source_statuses:
+        # The source table stores bare entity names (e.g. "devforge-pod-a"),
+        # but _expand_compounds prepends "Service " to table row conversions,
+        # so the LLM may extract "Service devforge-pod-a" as the subject.
+        subj_key = subj.removeprefix("Service ")
+        if subj_key not in source_statuses:
             continue
 
-        actual = source_statuses[subj]
+        actual = source_statuses[subj_key]
         obj_lower = obj.lower()
 
         if "status=active" in obj_lower and actual != "active":
