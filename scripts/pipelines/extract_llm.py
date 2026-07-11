@@ -921,6 +921,11 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
             source_statuses[service] = status
 
     if not source_statuses:
+        print(
+            f"    [status-fix] no services table found in source "
+            f"({len(source_text)} chars, preview={source_text[:80]!r})",
+            flush=True,
+        )
         return facts
 
     fixed = 0
@@ -999,11 +1004,15 @@ def _dedup_post_norm(facts: list[dict]) -> list[dict]:
     return result
 
 
-def _normalize_freeform_pipeline(facts: list[dict]) -> list[dict]:
+def _normalize_freeform_pipeline(facts: list[dict], source_text: str = "") -> list[dict]:
     """Full EDC normalization pipeline: subject → predicate → post-process."""
     if not facts:
         return facts
     before = len(facts)
+
+    if source_text:
+        facts = _fix_status_hallucination(facts, source_text)
+
     facts = _group_entities(facts, field="subject")
     facts = _group_entities(facts, field="object")
     for f in facts:
