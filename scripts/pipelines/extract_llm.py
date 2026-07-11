@@ -921,11 +921,6 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
             source_statuses[service] = status
 
     if not source_statuses:
-        print(
-            f"    [status-fix] no services table found in source "
-            f"({len(source_text)} chars, preview={source_text[:80]!r})",
-            flush=True,
-        )
         return facts
 
     fixed = 0
@@ -1604,11 +1599,14 @@ or
 
     # ── Stop-and-Swap: EDC normalization pass ──
     all_fact_groups = {}
+    full_source_text = "\n\n".join(
+        t.get("user_turn", "") or t.get("text", "") or ""
+        for t in dual_turns
+    )
     for t in dual_turns:
         all_facts = turn_data[t["id"]]["extractions"]
         if all_facts:
-            source = t.get("user_turn", "") or t.get("text", "") or ""
-            all_facts = _fix_status_hallucination(all_facts, source)
+            all_facts = _fix_status_hallucination(all_facts, full_source_text)
             turn_data[t["id"]]["extractions"] = all_facts
             all_fact_groups[t["id"]] = all_facts
 
