@@ -943,6 +943,13 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         actual = source_statuses[subj_key]
         obj_lower = obj.lower()
 
+        if actual != "active" or obj_lower != "active":
+            print(
+                f"    [status-fix] check fact: subj={subj!r} subj_key={subj_key!r} "
+                f"obj={obj!r} actual={actual!r}",
+                flush=True,
+            )
+
         if "status=active" in obj_lower and actual != "active":
             f["object"] = re.sub(
                 r'status=active', f'status={actual}', obj, flags=re.IGNORECASE
@@ -969,6 +976,18 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         subj = f.get("subject", "").strip()
         extracted_services.add(subj.removeprefix("Service "))
 
+    non_active = {s: st for s, st in source_statuses.items() if st != "active"}
+    print(
+        f"    [status-fix] extracted_services={sorted(extracted_services)}, "
+        f"non_active={non_active}",
+        flush=True,
+    )
+    unextracted = [s for s in non_active if s not in extracted_services]
+    if unextracted:
+        print(
+            f"    [status-fix] injecting {len(unextracted)} missing: {unextracted}",
+            flush=True,
+        )
     for service, actual_status in source_statuses.items():
         if actual_status == "active":
             continue
