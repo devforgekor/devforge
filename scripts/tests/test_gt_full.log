@@ -1,0 +1,11 @@
+Loaded 2 test case(s):
+  - 27b_optimization_report: 14 GT facts, source=reports/27b-optimization-report.md
+  - server_specs_from_infra_doc: 14 GT facts, source=docs/architecture/infrastructure.md
+
+============================================================
+  Test: 27b_optimization_report
+  File: 27b_optimization_report.json
+  Desc: Extract optimization report facts from 27B optimization report (Korean)
+  Source: reports/27b-optimization-report.md
+============================================================
+  Running pipeline (timeout=18000s)...
