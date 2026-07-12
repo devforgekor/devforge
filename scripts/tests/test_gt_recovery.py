@@ -136,7 +136,8 @@ def _embed_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, 
     got_texts = []
     for f in got:
         subj = (f.get("subject") or "").removeprefix("Service ")
-        got_texts.append(f"{subj} {f.get('predicate','')} {f.get('object','')}")
+        obj = f.get("object", "") or ""
+        got_texts.append(f"{subj} {obj}")
     gt_texts = []
     for g in expected:
         parts = [g.get("subject", "")]
@@ -185,7 +186,8 @@ def _embed_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, 
 
 def _substring_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
     def _subj_obj_contains_match(gt: Dict, fact: Dict) -> bool:
-        src = ((fact.get("subject") or "") + " " + (fact.get("object") or "")).lower()
+        subj = (fact.get("subject") or "").removeprefix("Service ")
+        src = (subj + " " + (fact.get("object") or "")).lower()
         if not src:
             return False
         subj = (gt.get("subject") or "").lower()
