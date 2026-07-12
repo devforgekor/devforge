@@ -920,11 +920,6 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         if status in ("active", "inactive", "activating"):
             source_statuses[service] = status
 
-    print(
-        f"    [status-fix] source_statuses={len(source_statuses)} entries, "
-        f"facts={len(facts)}, source_len={len(source_text)}",
-        flush=True,
-    )
     if not source_statuses:
         return facts
 
@@ -942,13 +937,6 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
 
         actual = source_statuses[subj_key]
         obj_lower = obj.lower()
-
-        if actual != "active" or obj_lower != "active":
-            print(
-                f"    [status-fix] check fact: subj={subj!r} subj_key={subj_key!r} "
-                f"obj={obj!r} actual={actual!r}",
-                flush=True,
-            )
 
         if "status=active" in obj_lower and actual != "active":
             f["object"] = re.sub(
@@ -976,18 +964,7 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         subj = f.get("subject", "").strip()
         extracted_services.add(subj.removeprefix("Service "))
 
-    non_active = {s: st for s, st in source_statuses.items() if st != "active"}
-    print(
-        f"    [status-fix] extracted_services={sorted(extracted_services)}, "
-        f"non_active={non_active}",
-        flush=True,
-    )
-    unextracted = [s for s in non_active if s not in extracted_services]
-    if unextracted:
-        print(
-            f"    [status-fix] injecting {len(unextracted)} missing: {unextracted}",
-            flush=True,
-        )
+    unextracted = [s for s, st in source_statuses.items() if st != "active" and s not in extracted_services]
     for service, actual_status in source_statuses.items():
         if actual_status == "active":
             continue
@@ -1630,11 +1607,6 @@ or
     for t in dual_turns:
         all_facts = turn_data[t["id"]]["extractions"]
         if all_facts:
-            print(
-                f"    [dbg-status] calling _fix_status_hallucination with "
-                f"{len(all_facts)} facts, source_len={len(full_source_text)}",
-                flush=True,
-            )
             all_facts = _fix_status_hallucination(all_facts, full_source_text)
             turn_data[t["id"]]["extractions"] = all_facts
             all_fact_groups[t["id"]] = all_facts

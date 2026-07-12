@@ -133,7 +133,10 @@ def _cosine_sim(a: List[float], b: List[float]) -> float:
 def _embed_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
     if not got or not expected:
         return set(), set(), 0, 0
-    got_texts = [f"{f.get('subject','')} {f.get('predicate','')} {f.get('object','')}" for f in got]
+    got_texts = []
+    for f in got:
+        subj = f.get("subject", "").removeprefix("Service ").removeprefix("Service ")
+        got_texts.append(f"{subj} {f.get('predicate','')} {f.get('object','')}")
     gt_texts = []
     for g in expected:
         parts = [g.get("subject", "")]
