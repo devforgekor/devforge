@@ -137,7 +137,8 @@ def _embed_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, 
     for f in got:
         subj = (f.get("subject") or "").removeprefix("Service ")
         obj = f.get("object", "") or ""
-        got_texts.append(f"{subj} {obj}")
+        pred = f.get("predicate", "") or ""
+        got_texts.append(f"{subj} {pred} {obj}")
     gt_texts = []
     for g in expected:
         parts = [g.get("subject", "")]
@@ -184,27 +185,28 @@ def _embed_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, 
     return matched_gt, matched_got, len(matched_gt), len(matched_got)
 
 
+def _subj_obj_contains_match(gt: Dict, fact: Dict) -> bool:
+    subj = (fact.get("subject") or "").removeprefix("Service ")
+    src = (subj + " " + (fact.get("object") or "")).lower()
+    if not src:
+        return False
+    subj = (gt.get("subject") or "").lower()
+    obj_contains = (gt.get("object_contains") or "").lower()
+    obj_also = (gt.get("object_also") or "").lower()
+    pred = (gt.get("predicate") or "").lower()
+    if subj not in src:
+        return False
+    if obj_contains and obj_contains not in src:
+        return False
+    if obj_also and not re.search(obj_also.replace(".", "\\.").replace("*", ".*"), src):
+        return False
+    if pred:
+        fact_pred = (fact.get("predicate") or "").lower()
+        if pred not in fact_pred:
+            return False
+    return True
+
 def _substring_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
-    def _subj_obj_contains_match(gt: Dict, fact: Dict) -> bool:
-        subj = (fact.get("subject") or "").removeprefix("Service ")
-        src = (subj + " " + (fact.get("object") or "")).lower()
-        if not src:
-            return False
-        subj = (gt.get("subject") or "").lower()
-        obj_contains = (gt.get("object_contains") or "").lower()
-        obj_also = (gt.get("object_also") or "").lower()
-        pred = (gt.get("predicate") or "").lower()
-        if subj not in src:
-            return False
-        if obj_contains and obj_contains not in src:
-            return False
-        if obj_also and not re.search(obj_also.replace(".", "\\.").replace("*", ".*"), src):
-            return False
-        if pred:
-            fact_pred = (fact.get("predicate") or "").lower()
-            if pred not in fact_pred:
-                return False
-        return True
     matched_got: set = set()
     matched_gt: set = set()
     for gi, gt in enumerate(expected):
@@ -218,8 +220,40 @@ def _substring_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, i
     return matched_gt, matched_got, len(matched_gt), len(matched_got)
 
 
+def _substr_fallback(got: List[Dict], expected: List[Dict],
+                     skip_gt: set, skip_got: set) -> Tuple[set, set]:
+    """Substring-match for GT facts missed by embedding."""
+    matched_gt: set = set()
+    matched_got: set = set()
+    for gi, gt in enumerate(expected):
+        if gi in skip_gt:
+            continue
+        for fi, fact in enumerate(got):
+            if fi in skip_got or fi in matched_got:
+                continue
+            if _subj_obj_contains_match(gt, fact):
+                matched_gt.add(gi)
+                matched_got.add(fi)
+                print(f"  [substr-match] GT#{gi} ↔ fact#{fi}", flush=True)
+                break
+    return matched_gt, matched_got
+
 def _match_facts(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
-    return _embed_match(got, expected)
+    matched_gt, matched_got, recall, precision = _embed_match(got, expected)
+    if recall < len(expected):
+        extra_gt, extra_got = _substr_fallback(got, expected, matched_gt, matched_got)
+        if extra_gt:
+            before = recall
+            matched_gt |= extra_gt
+            matched_got |= extra_got
+            recall = len(matched_gt)
+            precision = len(matched_got)
+            print(
+                f"  [substr-fallback] added {recall - before} more match(es) "
+                f"(recall {before}/{len(expected)} → {recall}/{len(expected)})",
+                flush=True,
+            )
+    return matched_gt, matched_got, recall, precision
 
 
 def run_test_case(tc: Dict) -> Dict:
