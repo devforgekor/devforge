@@ -135,7 +135,7 @@ def _embed_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, 
         return set(), set(), 0, 0
     got_texts = []
     for f in got:
-        subj = f.get("subject", "").removeprefix("Service ").removeprefix("Service ")
+        subj = (f.get("subject") or "").removeprefix("Service ")
         got_texts.append(f"{subj} {f.get('predicate','')} {f.get('object','')}")
     gt_texts = []
     for g in expected:
