@@ -227,22 +227,34 @@ def _substr_fallback(got: List[Dict], expected: List[Dict],
     matched_got: set = set()
     print(
         f"  [substr-fallback] checking {len(expected)-len(skip_gt)} GT facts "
-        f"against {len(got)-len(skip_got)} unmatched facts",
+        f"against {len(got)-len(skip_got)} unmatched facts "
+        f"(skip_got={sorted(skip_got)})",
         flush=True,
     )
     for gi, gt in enumerate(expected):
         if gi in skip_gt:
             continue
+        gt_subj = (gt.get("subject") or "").lower()
+        gt_obj = (gt.get("object_contains") or "").lower()
+        fact_count = 0
         for fi, fact in enumerate(got):
             if fi in skip_got or fi in matched_got:
                 continue
+            fact_count += 1
+            fact_subj = (fact.get("subject") or "").removeprefix("Service ")
+            fact_obj = fact.get("object") or ""
+            if gi == 12 and fact_count <= 3:
+                print(
+                    f"  [substr-debug] GT#12 fact#{fi}: subj={fact_subj!r} "
+                    f"obj={fact_obj!r}",
+                    flush=True,
+                )
             if _subj_obj_contains_match(gt, fact):
                 matched_gt.add(gi)
                 matched_got.add(fi)
                 print(f"  [substr-match] GT#{gi} ↔ fact#{fi}", flush=True)
                 break
         else:
-            # No match found for this GT
             print(
                 f"  [substr-fallback] GT#{gi} ({gt.get('subject','')}) "
                 f"no substring match found",
