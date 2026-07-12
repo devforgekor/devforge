@@ -225,6 +225,11 @@ def _substr_fallback(got: List[Dict], expected: List[Dict],
     """Substring-match for GT facts missed by embedding."""
     matched_gt: set = set()
     matched_got: set = set()
+    print(
+        f"  [substr-fallback] checking {len(expected)-len(skip_gt)} GT facts "
+        f"against {len(got)-len(skip_got)} unmatched facts",
+        flush=True,
+    )
     for gi, gt in enumerate(expected):
         if gi in skip_gt:
             continue
@@ -236,6 +241,13 @@ def _substr_fallback(got: List[Dict], expected: List[Dict],
                 matched_got.add(fi)
                 print(f"  [substr-match] GT#{gi} ↔ fact#{fi}", flush=True)
                 break
+        else:
+            # No match found for this GT
+            print(
+                f"  [substr-fallback] GT#{gi} ({gt.get('subject','')}) "
+                f"no substring match found",
+                flush=True,
+            )
     return matched_gt, matched_got
 
 def _match_facts(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
