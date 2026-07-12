@@ -147,3 +147,118 @@ Loaded 2 test case(s):
   Source: docs/architecture/infrastructure.md
 ============================================================
   Running pipeline (timeout=7200s)...
+  [embed] :8081 healthy
+  [embed] computing embeddings...
+  [embed-match] GT#1 'system ARM Neoverse-N1 4-core...' ↔ fact#1 (sim=0.821)
+  [embed-match] GT#2 'system zram 12G swap...' ↔ fact#4 (sim=0.786)
+  [embed-match] GT#3 'Oracle Linux 9.7...' ↔ fact#6 (sim=0.870)
+  [embed-match] GT#4 'Podman rootless...' ↔ fact#7 (sim=0.937)
+  [embed-match] GT#5 'PostgreSQL 16 JSONB...' ↔ fact#8 (sim=0.765)
+  [embed-match] GT#6 'Caddy auto-HTTPS...' ↔ fact#9 (sim=0.858)
+  [embed-match] GT#10 'SWAP 4G...' ↔ fact#17 (sim=0.788)
+  [embed-match] GT#11 'data-pod postgres 5432...' ↔ fact#11 (sim=0.765)
+  [embed-match] GT#13 'devforge-swap active...' ↔ fact#5 (sim=0.765)
+  [substr-fallback] checking 5 GT facts against 35 unmatched facts (skip_got=[1, 4, 5, 6, 7, 8, 9, 11, 17])
+  [substr-fallback] GT#0 (system) no substring match found
+  [substr-fallback] GT#7 (/opt/ai_data) no substring match found
+  [substr-fallback] GT#8 (/mnt/lv_db) no substring match found
+  [substr-fallback] GT#9 (/opt/projects) no substring match found
+  [substr-debug] GT#12 fact#0: subj='Host' obj='DEVFORGE'
+  [substr-debug] GT#12 fact#2: subj='DEVFORGE' obj='4-core'
+  [substr-debug] GT#12 fact#3: subj='DEVFORGE' obj='22Gi'
+  [substr-fallback] GT#12 (devforge-pod-a) no substring match found
+
+  ── Results for server_specs_from_infra_doc ──
+  Time: 3941s
+  Source: 2770 chars
+  Facts: 44 total, 32 grounded (44 in section)
+  Recall: 9/14
+  Precision: 9/44
+
+  MISSED (5):
+    subj='system' obj_contains='22Gi'  # Total RAM
+    subj='/opt/ai_data' obj_contains='100G'  # AI data mount size
+    subj='/mnt/lv_db' obj_contains='30G'  # DB mount size
+    subj='/opt/projects' obj_contains='10G'  # Projects mount size
+    subj='devforge-pod-a' obj_contains='inactive'  # Pod A status
+
+  EXTRA (35 unmatched):
+    'Host' | 'named' | 'DEVFORGE'
+    'DEVFORGE' | 'has' | '4-core'
+    'DEVFORGE' | 'has' | '22Gi'
+    'state.yaml#metrics' | 'contains' | 'live numbers'
+    'Caddy' | 'runs_in' | 'host network'
+    'DEVFORGE' | 'points_to' | 'turn_watcher.py'
+    'netdata' | 'points_to' | 'localhost:19999'
+    'postgres' | 'binds_to' | 'DEVFORGE'
+    ... and 27 more
+
+  All user facts:
+    [GROU] Host                             | named                  | DEVFORGE
+    [GROU] DEVFORGE                         | has                    | ARM Neoverse-N1
+    [GROU] DEVFORGE                         | has                    | 4-core
+    [GROU] DEVFORGE                         | has                    | 22Gi
+    [GROU] DEVFORGE                         | has                    | 4G zram
+    [GROU] DEVFORGE                         | has                    | 12G swap
+    [GROU] OS                               | configured_to          | Oracle Linux Server 9.7 (aarch64)
+    [GROU] Podman                           | configured_to          | rootless mode
+    [GROU] Database                         | configured_to          | PostgreSQL 16
+    [GROU] Proxy                            | auto_https             | Caddy
+    [GROU] state.yaml#metrics               | contains               | live numbers
+    [GROU] data-pod                         | has_memory             | 2GB
+    [GROU] Caddy                            | runs_in                | host network
+    [GROU] DEVFORGE                         | points_to              | turn_watcher.py
+    [GROU] netdata                          | points_to              | localhost:19999
+    [GROU] postgres                         | binds_to               | DEVFORGE
+    [GROU] postgres                         | runs_in                | podman container
+    [GROU] SWAP                             | has_size               | 4G
+    [GROU] Service 15m cycle                | status_is              | active
+    [GROU] Service backup                   | status_is              | active
+    [GROU] Service classify                 | status_is              | active
+    [GROU] Service daily structure          | status_is              | active
+    [GROU] Service night cycle              | status_is              | active
+    [GROU] Service refresh reminder         | status_is              | active
+    [GROU] Service restore test             | status_is              | active
+    [GROU] Caddy                            | status_is              | active
+    [GROU] netdata                          | status_is              | active
+    [GROU] Services                         | services               | journalctl --user -u <service-name>
+    [GROU] cli.py status --json             | describes              | live state
+    [GROU] docs/architecture/software.yaml  | contains               | models, modes, pipelines
+    [GROU] docs/architecture/code-structure | is_ssot_for            | file_layout
+    [GROU] docs/specs/timer-registry.yaml   | describes              | systemd timer schedule
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+[19:14:06]   INFERENCE -> day (:8082)
+[19:14:06]   wrote env for day:8082 → inference (Qwen3-8B-Q8_0.gguf)
+[19:14:06]   Memory reclaim level 2: synced, waiting...
+[19:14:06]   drop_caches failed (non-fatal): [Errno 13] Permission denied: '/proc/sys/vm/drop_caches'
+[19:14:06]   swap re-activated OK
+[19:14:06]   MemAvailable: 20133MB reclaim (0s)
+[19:14:11]   MemAvailable: 20134MB reclaim (5s)
+[19:14:16]   MemAvailable: 20037MB reclaim (10s)
+[19:14:21]   MemAvailable: 20050MB after reclaim
+[19:14:21]   wrote env for day:8082 → inference (Qwen3-8B-Q8_0.gguf)
+[19:15:12]   probe OK (day)
+[19:15:12]   :8082 ready
+[19:15:12]   [container-warn] inference just started (Up 50 seconds) — may not be fully initialized
+  [done] server_specs_from_infra_doc: recall=9/14 precision=9/44
+
+============================================================
+  SUMMARY
+============================================================
+  27b_optimization_report: recall=2/14 precision=2/63 (14721s)
+  server_specs_from_infra_doc: recall=9/14 precision=9/44 (3941s)
+
+Results saved to /opt/projects/server/scripts/tests/gt_recovery_results.json
+
+  >>> ALL PASS <<<
