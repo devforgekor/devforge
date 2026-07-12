@@ -285,63 +285,34 @@ def _split_dense_bullets(text: str) -> str:
 
 
 def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
-    """Split text into paragraph-level chunks with merging.
+    """Split text into chunks at sentence boundaries, up to max_chars.
 
     Pre-inserts blank lines in dense bullet/table sections so each item
-    becomes its own paragraph.  Small consecutive chunks are then merged
-    to ~100-200 chars each — enough for 2-3 items per chunk, giving the
-    LLM 8-fact headroom while keeping LLM calls manageable.
+    becomes its own paragraph.  Short paragraphs are merged across
+    boundaries up to max_chars.  No overlap between chunks.
     """
-    MERGE_MAX_CHARS = 180
     text = _split_dense_bullets(text)
     text = _expand_compounds(text)
+    text = re.sub(r'(?<=\d)\.(?=\d)', '@@@DOT@@@', text)
     paragraphs = re.split(r"\n\s*\n", text)
-    # Merge consecutive short table-row paragraphs to reduce chunk count.
-    # After _split_dense_bullets, dense table rows become separate paragraphs
-    # of ~40-60 chars each.  Without merging, 100+ tiny chunks waste LLM
-    # calls due to cache_prompt=False (830-token system prompt per chunk).
-    # Only merge | prefixed rows — regular bullets are larger (80-150+ chars)
-    # and need individual chunking for focused extraction.
-    merged_paras = []
-    buf = ""
-    for p in paragraphs:
-        p = p.strip()
-        if not p:
-            continue
-        is_tbl = p.startswith("|")
-        if not buf:
-            buf = p
-        elif is_tbl and buf.startswith("|") and len(buf) < 80 and len(p) < 80 and len(buf) + len(p) + 1 <= 300:
-            buf += " " + p
-        else:
-            merged_paras.append(buf)
-            buf = p
-    if buf:
-        merged_paras.append(buf)
-    paragraphs = merged_paras
 
-    merged = []
-    buf = ""
+    chunks = []
     for para in paragraphs:
-        # Split paragraph into sentences
+        para = para.strip()
+        if not para:
+            continue
         sentences = re.split(r"(?<=[.!?])\s+", para)
         for sent in sentences:
-            sent = sent.strip()
+            sent = sent.strip().replace('@@@DOT@@@', '.')
             if not sent:
                 continue
-            if not buf:
-                buf = sent
-            elif len(buf) + len(sent) + 1 <= MERGE_MAX_CHARS:
-                buf += " " + sent
+            if not chunks:
+                chunks.append(sent)
+            elif len(chunks[-1]) + len(sent) + 1 <= max_chars:
+                chunks[-1] += " " + sent
             else:
-                if buf:
-                    merged.append(buf)
-                buf = sent
-        # Flush buffer at paragraph boundary — NEVER merge across paragraphs
-        if buf:
-            merged.append(buf)
-            buf = ""
-    return merged
+                chunks.append(sent)
+    return chunks
 
 
 def _expand_compounds(text: str) -> str:
