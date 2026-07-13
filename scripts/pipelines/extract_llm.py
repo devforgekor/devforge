@@ -285,7 +285,7 @@ def _split_dense_bullets(text: str) -> str:
                             out.append("")
                         out.append(lines[i])
                         i += 1
-                continue
+                    continue
         out.append(line)
         i += 1
     return '\n'.join(out)
