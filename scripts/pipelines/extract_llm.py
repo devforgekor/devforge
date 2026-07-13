@@ -289,18 +289,27 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
 
     Pre-inserts blank lines in dense bullet/table sections so each item
     becomes its own paragraph.  Short paragraphs are merged across
-    boundaries up to max_chars.  No overlap between chunks.
+    boundaries up to max_chars but only when both are under 50 chars
+    (preserves per-row chunks for substantive content).
     """
     text = _split_dense_bullets(text)
     text = _expand_compounds(text)
     text = re.sub(r'(?<=\d)\.(?=\d)', '@@@DOT@@@', text)
     paragraphs = re.split(r"\n\s*\n", text)
 
-    chunks = []
+    merged = []
     for para in paragraphs:
         para = para.strip()
         if not para:
             continue
+        if (merged and len(para) < 50
+                and len(merged[-1]) + len(para) + 1 <= max_chars):
+            merged[-1] += "\n\n" + para
+        else:
+            merged.append(para)
+
+    chunks = []
+    for para in merged:
         sentences = re.split(r"(?<=[.!?])\s+", para)
         para_chunks = []
         for sent in sentences:
