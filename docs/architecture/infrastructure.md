@@ -1,5 +1,5 @@
 # DevForge — Server Identity
-<!-- auto-generated from collect_structural() + CLAUDE.yaml at 2026-06-29 09:00 KST -->
+<!-- auto-generated from collect_structural() + CLAUDE.yaml at 2026-07-13 15:49 KST -->
 
 ## Overview
 - Host: DEVFORGE (ARM Neoverse-N1, 4-core, 22Gi + 4G zram (89.8M) + 12G swap (swappiness=10))
@@ -42,7 +42,7 @@ Caddy (host network)
 ## Key Services
 | Service | Type | Status |
 |---------|------|--------|
-| devforge-pod-a | systemd user | inactive |
+| devforge-pod-a | systemd user | failed |
 | devforge-swap | systemd user | active |
 | postgres | systemd user | active |
 | 15m cycle | systemd user | inactive |
@@ -52,7 +52,7 @@ Caddy (host network)
 | night cycle | systemd user | inactive |
 | refresh reminder | systemd user | inactive |
 | restore test | systemd user | inactive |
-| caddy | systemd system (rootful podman) | active |
+| caddy | systemd system (rootful podman) | failed |
 | netdata | systemd system (native) | active |
 
 ## Logs

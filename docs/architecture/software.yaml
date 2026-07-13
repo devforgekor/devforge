@@ -1,18 +1,18 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-06-29 09:00 KST
+# auto-generated from live data at 2026-07-13 15:49 KST
 ---
 metadata:
-  updated: 2026-06-29 09:00 KST
+  updated: 2026-07-13 15:49 KST
   source: live (collect_structural + mode file)
 models:
-- name: devforge-pod-b
-  container: devforge-pod-b
-  status: Up 3 minutes
-  ports: 127.0.0.1:8082->8082/tcp
+- name: devforge-inference
+  container: devforge-inference
+  status: Up About an hour
+  ports: 127.0.0.1:8080-8084->8080-8084/tcp
 modes:
   current: day
   available:
-    day: 'Pod A(:8080 reranker) + Pod B(:8081 embed | :8082 swap: extract/enrich/verify)'
+    day: 'Inference container(:8080 reranker | :8081 embed | :8082 swap: extract/enrich/verify)'
     night: Nightly review pipeline (verify + debate)
 pipelines:
   daily structure: activating
