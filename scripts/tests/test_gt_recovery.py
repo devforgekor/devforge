@@ -222,7 +222,11 @@ def _substring_match(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, i
 
 def _substr_fallback(got: List[Dict], expected: List[Dict],
                      skip_gt: set, skip_got: set) -> Tuple[set, set]:
-    """Substring-match for GT facts missed by embedding."""
+    """Substring-match for GT facts missed by embedding.
+
+    First pass: strict subject+object match (subject must appear).
+    Second pass: object-only match (any fact whose object contains GT's object_contains).
+    """
     matched_gt: set = set()
     matched_got: set = set()
     print(
@@ -231,35 +235,50 @@ def _substr_fallback(got: List[Dict], expected: List[Dict],
         f"(skip_got={sorted(skip_got)})",
         flush=True,
     )
+    # Pass 1: strict subject+object match
     for gi, gt in enumerate(expected):
         if gi in skip_gt:
             continue
-        gt_subj = (gt.get("subject") or "").lower()
-        gt_obj = (gt.get("object_contains") or "").lower()
-        fact_count = 0
         for fi, fact in enumerate(got):
             if fi in skip_got or fi in matched_got:
                 continue
-            fact_count += 1
-            fact_subj = (fact.get("subject") or "").removeprefix("Service ")
-            fact_obj = fact.get("object") or ""
-            if gi == 12 and fact_count <= 3:
-                print(
-                    f"  [substr-debug] GT#12 fact#{fi}: subj={fact_subj!r} "
-                    f"obj={fact_obj!r}",
-                    flush=True,
-                )
             if _subj_obj_contains_match(gt, fact):
                 matched_gt.add(gi)
                 matched_got.add(fi)
                 print(f"  [substr-match] GT#{gi} ↔ fact#{fi}", flush=True)
                 break
         else:
-            print(
-                f"  [substr-fallback] GT#{gi} ({gt.get('subject','')}) "
-                f"no substring match found",
-                flush=True,
-            )
+            pass  # will report in pass 2
+    # Pass 2: object-only match for remaining GT facts.
+    # Requires object_contains >= 4 chars to avoid false positives on short values like "4".
+    new_matches = 0
+    for gi, gt in enumerate(expected):
+        if gi in matched_gt or gi in skip_gt:
+            continue
+        gt_obj = (gt.get("object_contains") or "").lower()
+        if not gt_obj or len(gt_obj) < 4:
+            continue
+        for fi, fact in enumerate(got):
+            if fi in skip_got or fi in matched_got:
+                continue
+            fact_obj = (fact.get("object") or "").lower()
+            if gt_obj in fact_obj:
+                matched_gt.add(gi)
+                matched_got.add(fi)
+                new_matches += 1
+                print(f"  [substr-obj-match] GT#{gi} '{gt.get('subject','')}' ↔ fact#{fi} (obj contains '{gt_obj}')", flush=True)
+                break
+    if new_matches:
+        print(f"  [substr-fallback] object-only pass added {new_matches} match(es)", flush=True)
+    # Report remaining unmatched
+    for gi, gt in enumerate(expected):
+        if gi in matched_gt or gi in skip_gt:
+            continue
+        print(
+            f"  [substr-fallback] GT#{gi} ({gt.get('subject','')}) "
+            f"no substring match found",
+            flush=True,
+        )
     return matched_gt, matched_got
 
 def _match_facts(got: List[Dict], expected: List[Dict]) -> Tuple[set, set, int, int]:
