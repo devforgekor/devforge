@@ -260,24 +260,31 @@ def _split_dense_bullets(text: str) -> str:
                     out.append(lines[k])
                 i = j
                 continue
-        # Detect table (header+separator+4+ data rows)
+        # Detect table (header+separator+4+ data rows).
+        # Only insert blank lines for English 3-column tables (which
+        # _expand_compounds converts into per-row bullets).  2-column tables
+        # and non-English tables stay as single paragraphs to reduce chunk count.
         tbl_row = re.compile(r'^\|.*\|$')
         if tbl_row.match(stripped) and i + 1 < len(lines) and re.match(r'^\|[\s\-:|]+\|$', lines[i + 1].strip()):
+            sep_cols = lines[i + 1].strip().count('|')
             j = i + 2
             rows = 0
             while j < len(lines) and tbl_row.match(lines[j].strip()):
                 rows += 1
                 j += 1
-            if rows >= 4:
-                out.append(lines[i])    # header
-                i += 1
-                out.append(lines[i])    # separator
-                i += 1
-                for k in range(rows):
-                    if k > 0 or rows >= 4:
-                        out.append("")
-                    out.append(lines[i])
+            if rows >= 4 and sep_cols == 4:
+                header_cells = [c.strip() for c in lines[i].strip().split('|')[1:-1]]
+                is_english_header = all(re.match(r'^[A-Z][a-z]+(\s[A-Z][a-z]+)*$', c) for c in header_cells if c)
+                if is_english_header:
+                    out.append(lines[i])    # header
                     i += 1
+                    out.append(lines[i])    # separator
+                    i += 1
+                    for k in range(rows):
+                        if k > 0 or rows >= 4:
+                            out.append("")
+                        out.append(lines[i])
+                        i += 1
                 continue
         out.append(line)
         i += 1
@@ -288,28 +295,20 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
     """Split text into chunks at sentence boundaries, up to max_chars.
 
     Pre-inserts blank lines in dense bullet/table sections so each item
-    becomes its own paragraph.  Short paragraphs are merged across
-    boundaries up to max_chars but only when both are under 50 chars
-    (preserves per-row chunks for substantive content).
+    becomes its own paragraph.  No merging across paragraph boundaries —
+    each paragraph stays in its own chunk(s), split only at sentence
+    boundaries within a paragraph.
     """
     text = _split_dense_bullets(text)
     text = _expand_compounds(text)
     text = re.sub(r'(?<=\d)\.(?=\d)', '@@@DOT@@@', text)
     paragraphs = re.split(r"\n\s*\n", text)
 
-    merged = []
+    chunks = []
     for para in paragraphs:
         para = para.strip()
         if not para:
             continue
-        if (merged and len(para) < 50
-                and len(merged[-1]) + len(para) + 1 <= max_chars):
-            merged[-1] += "\n\n" + para
-        else:
-            merged.append(para)
-
-    chunks = []
-    for para in merged:
         sentences = re.split(r"(?<=[.!?])\s+", para)
         para_chunks = []
         for sent in sentences:
