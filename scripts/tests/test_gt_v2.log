@@ -9,3 +9,117 @@ Loaded 2 test case(s):
   Source: reports/27b-optimization-report.md
 ============================================================
   Running pipeline (timeout=18000s)...
+  [embed] :8081 healthy
+  [embed] computing embeddings...
+  [embed-match] GT#0 '물리 RAM 22 GiB...' ↔ fact#3 (sim=0.783)
+  [embed-match] GT#1 'Swap 4 GiB...' ↔ fact#4 (sim=0.841)
+  [embed-match] GT#2 'Pod A 27B 동시 구동 불가능...' ↔ fact#5 (sim=0.852)
+  [substr-fallback] checking 11 GT facts against 37 unmatched facts (skip_got=[3, 4, 5])
+  [substr-fallback] GT#3 (현재 사용) no substring match found
+  [substr-fallback] GT#4 (27B 모델) no substring match found
+  [substr-fallback] GT#5 (Pod A 실행 중 27B 로딩) no substring match found
+  [substr-fallback] GT#6 (Cold start) no substring match found
+  [substr-fallback] GT#7 (생성 속도) no substring match found
+  [substr-fallback] GT#8 (Reasoning bleed) no substring match found
+  [substr-fallback] GT#9 (Mode dispatcher) no substring match found
+  [substr-fallback] GT#10 (세션 #1) no substring match found
+  [substr-fallback] GT#11 (세션 #1 종료) no substring match found
+  [substr-debug] GT#12 fact#0: subj='Qwen3.6-27B Q4_K_M' obj='7.3GB'
+  [substr-debug] GT#12 fact#1: subj='devforge OCI ARM' obj='OCI ARM(24GB)'
+  [substr-debug] GT#12 fact#2: subj='context' obj='16384'
+  [substr-fallback] GT#12 (Port 8081) no substring match found
+  [substr-fallback] GT#13 (CPU threads) no substring match found
+
+  ── Results for 27b_optimization_report ──
+  Time: 7822s
+  Source: 6413 chars
+  Facts: 40 total, 22 grounded (40 in section)
+  Recall: 3/14
+  Precision: 3/40
+
+  MISSED (11):
+    subj='현재 사용' obj_contains='8.1 GiB'  # 현재 메모리 사용량
+    subj='27B 모델' obj_contains='8.0'  # 모델 필요 메모리
+    subj='Pod A 실행 중 27B 로딩' obj_contains='7회 연속 실패'  # 메모리 경합 실패
+    subj='Cold start' obj_contains='363 ms/tok'  # 콜드 스타트 속도
+    subj='생성 속도' obj_contains='1.1'  # 27B 생성 속도
+    subj='Reasoning bleed' obj_contains='12'  # reasoning_content 문제
+    subj='Mode dispatcher' obj_contains='generate'  # 모드 선택
+    subj='세션 #1' obj_contains='94분'  # 최대 운영 시간
+    subj='세션 #1 종료' obj_contains='crash'  # 종료 사유
+    subj='Port 8081' obj_contains='충돌'  # 포트 충돌
+    subj='CPU threads' obj_contains='4'  # CPU 스레드 제안
+
+  EXTRA (37 unmatched):
+    'Qwen3.6-27B Q4_K_M' | 'has_size' | '7.3GB'
+    'devforge OCI ARM' | 'has_configuration' | 'OCI ARM(24GB)'
+    'context' | 'has_value' | '16384'
+    '현재 사용' | 'has_usage' | '4 GiB'
+    'system memory' | 'increases_to' | '20931 MiB'
+    'Qwen3.6-27B Q4_K_M' | 'configured_to' | '7.3GB'
+    'context' | 'consumes' | '238 MiB'
+    '컴퓨트 버퍼' | 'consumes' | '238 MiB'
+    ... and 29 more
+
+  All user facts:
+    [GROU] Qwen3.6-27B Q4_K_M               | has_size               | 7.3GB
+    [GROU] devforge OCI ARM                 | has_configuration      | OCI ARM(24GB)
+    [GROU] context                          | has_value              | 16384
+    [GROU] 물리 RAM                           | has_capacity           | 4 GiB
+    [GROU] Swap                             | has_capacity           | 4 GiB
+    [GROU] Pod A. 27B 동시 구동                 | is_status              | 불가능 (OOM)
+    [GROU] 현재 사용                            | has_usage              | 4 GiB
+    [GROU] system memory                    | increases_to           | 20931 MiB
+    [GROU] Qwen3.6-27B Q4_K_M               | configured_to          | 7.3GB
+    [GROU] context                          | consumes               | 238 MiB
+    [GROU] 컴퓨트 버퍼                           | consumes               | 238 MiB
+    [GROU] 총 필요 메모리                         | requires               | 4 GiB
+    [GROU] 27B                              | fails_due_to           | 불가능 (OOM)
+    [GROU] Dual-server 재설계                  | addresses              | Pod A와 27B가 물리적 메모리를 공유하지 못하는 문제
+    [GROU] container-devforge-qwen          | runs                   | Pod A(1.7B. 3B) and Pod B(27B)
+    [GROU] Pod B                            | separated_into         | dedicated_container
+    [GROU] 27B                              | verified_with          | simple_inference
+    [GROU] review_consumer.py               | tested_with            | none
+    [GROU] Qwen3.6-27B Q4_K_M               | runs_on                | OCI ARM(24GB)
+    [GROU] Qwen3.6-27B Q4_K_M               | has_blocker            | Reasoning bleed
+    [GROU] Qwen3.6-27B Q4_K_M               | has_blocker            | 메모리 경합
+    [GROU] Qwen3.6-27B Q4_K_M               | has_blocker            | 저속 생성
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+[03:03:13]   INFERENCE -> day (:8082)
+[03:03:13]   wrote env for day:8082 → inference (Qwen3-8B-Q8_0.gguf)
+[03:03:13]   Memory reclaim level 2: synced, waiting...
+[03:03:13]   drop_caches failed (non-fatal): [Errno 13] Permission denied: '/proc/sys/vm/drop_caches'
+[03:03:13]   swap re-activated OK
+[03:03:13]   MemAvailable: 19655MB reclaim (0s)
+[03:03:18]   MemAvailable: 19688MB reclaim (5s)
+[03:03:23]   MemAvailable: 19699MB reclaim (10s)
+[03:03:28]   MemAvailable: 19701MB after reclaim
+[03:03:28]   wrote env for day:8082 → inference (Qwen3-8B-Q8_0.gguf)
+[03:04:40]   probe OK (day)
+[03:04:40]   :8082 ready
+  [done] 27b_optimization_report: recall=3/14 precision=3/40
+
+============================================================
+  Test: server_specs_from_infra_doc
+  File: server_arch.json
+  Desc: Extract architecture facts from infrastructure.md (auto-generated SSOT)
+  Source: docs/architecture/infrastructure.md
+============================================================
+  Running pipeline (timeout=7200s)...
