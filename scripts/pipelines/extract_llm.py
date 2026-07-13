@@ -302,16 +302,16 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
         if not para:
             continue
         sentences = re.split(r"(?<=[.!?])\s+", para)
+        para_chunks = []
         for sent in sentences:
             sent = sent.strip().replace('@@@DOT@@@', '.')
             if not sent:
                 continue
-            if not chunks:
-                chunks.append(sent)
-            elif len(chunks[-1]) + len(sent) + 1 <= max_chars:
-                chunks[-1] += " " + sent
+            if para_chunks and len(para_chunks[-1]) + len(sent) + 1 <= max_chars:
+                para_chunks[-1] += " " + sent
             else:
-                chunks.append(sent)
+                para_chunks.append(sent)
+        chunks.extend(para_chunks)
     return chunks
 
 

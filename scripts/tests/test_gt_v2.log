@@ -123,3 +123,104 @@ Loaded 2 test case(s):
   Source: docs/architecture/infrastructure.md
 ============================================================
   Running pipeline (timeout=7200s)...
+  [embed] :8081 healthy
+  [embed] computing embeddings...
+  [embed-match] GT#1 'system ARM Neoverse-N1 4-core...' ↔ fact#0 (sim=0.821)
+  [embed-match] GT#11 'data-pod postgres 5432...' ↔ fact#3 (sim=0.824)
+  [substr-fallback] checking 12 GT facts against 21 unmatched facts (skip_got=[0, 3])
+  [substr-fallback] GT#0 (system) no substring match found
+  [substr-fallback] GT#2 (system) no substring match found
+  [substr-fallback] GT#3 (Oracle Linux) no substring match found
+  [substr-fallback] GT#4 (Podman) no substring match found
+  [substr-fallback] GT#5 (PostgreSQL) no substring match found
+  [substr-fallback] GT#6 (Caddy) no substring match found
+  [substr-fallback] GT#7 (/opt/ai_data) no substring match found
+  [substr-fallback] GT#8 (/mnt/lv_db) no substring match found
+  [substr-fallback] GT#9 (/opt/projects) no substring match found
+  [substr-fallback] GT#10 (SWAP) no substring match found
+  [substr-debug] GT#12 fact#1: subj='postgres' obj='devforge-net'
+  [substr-debug] GT#12 fact#2: subj='postgres' obj='podman exec postgres psql'
+  [substr-debug] GT#12 fact#4: subj='classify' obj='active'
+  [substr-fallback] GT#12 (devforge-pod-a) no substring match found
+  [substr-fallback] GT#13 (devforge-swap) no substring match found
+
+  ── Results for server_specs_from_infra_doc ──
+  Time: 1988s
+  Source: 2770 chars
+  Facts: 26 total, 19 grounded (23 in section)
+  Recall: 2/14
+  Precision: 2/23
+
+  MISSED (12):
+    subj='system' obj_contains='22Gi'  # Total RAM
+    subj='system' obj_contains='zram'  # Swap
+    subj='Oracle Linux' obj_contains='9.7'  # OS version
+    subj='Podman' obj_contains='rootless'  # Container runtime
+    subj='PostgreSQL' obj_contains='16'  # DB version
+    subj='Caddy' obj_contains='auto-HTTPS'  # Proxy
+    subj='/opt/ai_data' obj_contains='100G'  # AI data mount size
+    subj='/mnt/lv_db' obj_contains='30G'  # DB mount size
+    subj='/opt/projects' obj_contains='10G'  # Projects mount size
+    subj='SWAP' obj_contains='4G'  # Swap volume size
+    subj='devforge-pod-a' obj_contains='inactive'  # Pod A status
+    subj='devforge-swap' obj_contains='active'  # Swap service status
+
+  EXTRA (21 unmatched):
+    'postgres' | 'binds_to' | 'devforge-net'
+    'postgres' | 'executed_with' | 'podman exec postgres psql'
+    'Service classify' | 'status_is' | 'active'
+    'Service daily structure' | 'status_is' | 'active'
+    'Service night cycle' | 'status_is' | 'active'
+    'Service refresh reminder' | 'status_is' | 'active'
+    'Service restore test' | 'status_is' | 'active'
+    'Service caddy' | 'status_is' | 'active'
+    ... and 13 more
+
+  All user facts:
+    [GROU] DEVFORGE                         | has                    | ARM Neoverse-N1
+    [GROU] postgres                         | binds_to               | devforge-net
+    [GROU] postgres                         | executed_with          | podman exec postgres psql
+    [GROU] postgres                         | configured_to          | podman exec postgres psql
+    [GROU] Service classify                 | status_is              | active
+    [GROU] Service daily structure          | status_is              | active
+    [GROU] Service night cycle              | status_is              | active
+    [GROU] Service refresh reminder         | status_is              | active
+    [GROU] Service restore test             | status_is              | active
+    [GROU] Service caddy                    | status_is              | active
+    [GROU] Service netdata                  | status_is              | active
+    [GROU] Logs                             | contains_command       | journalctl --user -u <service-name>
+    [GROU] cli.py status --json             | describes              | live state
+    [GROU] /opt/projects/server/docs/       | contains               | design, phases, glossary, specs
+    [GROU] devforge_app.worklog_entries     | represents             | work log
+    [GROU] docs/architecture/infrastructure | describes              | server identity
+    [GROU] docs/architecture/software.yaml  | describes              | models, modes, pipelines
+    [GROU] docs/architecture/code-structure | describes              | file layout
+    [GROU] docs/specs/timer-registry.yaml   | describes              | systemd timer schedule
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+    [RERA]                                  |                        | 
+[03:38:51]   INFERENCE -> day (:8082)
+[03:38:51]   wrote env for day:8082 → inference (Qwen3-8B-Q8_0.gguf)
+[03:38:51]   Memory reclaim level 2: synced, waiting...
+[03:38:51]   drop_caches failed (non-fatal): [Errno 13] Permission denied: '/proc/sys/vm/drop_caches'
+[03:38:51]   swap re-activated OK
+[03:38:51]   MemAvailable: 20243MB reclaim (0s)
+[03:38:56]   MemAvailable: 20248MB reclaim (5s)
+[03:39:01]   MemAvailable: 20229MB reclaim (10s)
+[03:39:06]   MemAvailable: 20235MB after reclaim
+[03:39:06]   wrote env for day:8082 → inference (Qwen3-8B-Q8_0.gguf)
+[03:40:00]   probe OK (day)
+[03:40:00]   :8082 ready
+[03:40:00]   [container-warn] inference just started (Up 53 seconds) — may not be fully initialized
+  [done] server_specs_from_infra_doc: recall=2/14 precision=2/23
+
+============================================================
+  SUMMARY
+============================================================
+  27b_optimization_report: recall=3/14 precision=3/40 (7822s)
+  server_specs_from_infra_doc: recall=2/14 precision=2/23 (1988s)
+
+Results saved to /opt/projects/server/scripts/tests/gt_recovery_results.json
+
+  >>> ALL PASS <<<
