@@ -886,7 +886,6 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
     actual status from the source text's services table and corrects
     extracted facts.
     """
-    print(f"    [debug-status] called with {len(facts)} facts, source_len={len(source_text)}", flush=True)
     status_pattern = re.compile(
         r'\|[^\S\n]*([\w][\w\s-]*[\w])[^\S\n]*\|[^\S\n]*[\w\s-]+[^\S\n]*\|[^\S\n]*(\w+)[^\S\n]*\|',
         re.MULTILINE,
@@ -900,7 +899,6 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         if status in ("active", "inactive", "activating", "failed"):
             source_statuses[service] = status
 
-    print(f"    [debug-status] source_statuses ({len(source_statuses)}): {dict(source_statuses)}", flush=True)
     if not source_statuses:
         return facts
 
@@ -915,28 +913,23 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         # so the LLM may extract "Service devforge-pod-a" as the subject.
         subj_key = subj.removeprefix("Service ")
         if subj_key not in source_statuses:
-            if "status" in pred or obj in ("active", "inactive", "failed"):
-                print(f"    [debug-status-skip] subj={subj!r} subj_key={subj_key!r} not in source_statuses; pred={pred!r} obj={obj!r}", flush=True)
             continue
 
         actual = source_statuses[subj_key]
         obj_lower = obj.lower()
 
         if "status=active" in obj_lower and actual != "active":
-            print(f"    [debug-status-fix-v1] subj={subj!r} obj={obj!r} actual={actual!r}", flush=True)
             f["object"] = re.sub(
                 r'status=active', f'status={actual}', obj, flags=re.IGNORECASE
             )
             fixed += 1
         elif "status=inactive" in obj_lower and actual != "inactive":
-            print(f"    [debug-status-fix-v2] subj={subj!r} obj={obj!r} actual={actual!r}", flush=True)
             f["object"] = re.sub(
                 r'status=inactive', f'status={actual}', obj, flags=re.IGNORECASE
             )
             fixed += 1
         elif obj_lower in ("active", "inactive") and obj_lower != actual:
             pred = f.get("predicate", "").lower()
-            print(f"    [debug-status-fix] subj={subj!r} subj_key={subj_key!r} obj={obj!r} actual={actual!r} pred={pred!r} status_in_pred={'status' in pred}", flush=True)
             if "status" in pred:
                 f["object"] = actual
                 fixed += 1

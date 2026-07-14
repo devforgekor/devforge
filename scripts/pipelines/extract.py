@@ -55,6 +55,7 @@ from extract_llm import (
 )
 from extract_llm import (
     _extract_edcr_freeform as _extract_solo_section_major,
+    _fix_status_hallucination,
 )
 from extract_verify import (
     _llm_nli_verify,
@@ -678,6 +679,22 @@ def extract_pipeline(
     # ── Phase 2c-2: Parallel refine ─────────────────────────────
     if extractions_by_turn:
         _refine_batch(extractions_by_turn)
+
+    # ── Phase 2c-2b: Fix status hallucination after refine ─────
+    # Refine re-extracts triples and Qwen3-8B hallucinates ALL
+    # services as status=active. Re-apply the status fix using the
+    # source text's services table.
+    if extractions_by_turn:
+        for tid in list(extractions_by_turn.keys()):
+            src_text = ""
+            for t in turns:
+                if t["id"] == tid:
+                    src_text = t.get("user_turn", "") or t.get("text", "") or ""
+                    break
+            if src_text:
+                extractions_by_turn[tid] = _fix_status_hallucination(
+                    extractions_by_turn[tid], src_text
+                )
 
     # ── Phase 2c-3: Store (sequential, DB writes) ──────────────
     for (
