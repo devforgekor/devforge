@@ -304,11 +304,22 @@ def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
     text = re.sub(r'(?<=\d)\.(?=\d)', '@@@DOT@@@', text)
     paragraphs = re.split(r"\n\s*\n", text)
 
-    chunks = []
+    # Merge small adjacent paragraphs up to max_chars to reduce LLM calls.
+    # Treat ##-prefixed lines as section boundaries — never merge across them.
+    merged = []
     for para in paragraphs:
         para = para.strip()
         if not para:
             continue
+        if para.startswith("##"):
+            merged.append(para)
+        elif merged and not merged[-1].startswith("##") and len(merged[-1]) + len(para) + 1 <= max_chars:
+            merged[-1] += "\n" + para
+        else:
+            merged.append(para)
+
+    chunks = []
+    for para in merged:
         sentences = re.split(r"(?<=[.!?])\s+", para)
         para_chunks = []
         for sent in sentences:
