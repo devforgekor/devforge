@@ -157,7 +157,7 @@ Empty: {"extractions":[]}."""
 # Production (day-extractor) uses 8B Q8 → SYSTEM_DAY_EXTRACT uses these.
 
 _SYSTEM_USER_EXTRACT_FREE_8B = """\
-You are a system architect reviewing a message. Extract all concrete, explicitly stated facts about the infrastructure described. The message may be in Korean or English. Look for facts about: system status, model assignments, resource consumption (RAM, disk), performance metrics, configuration settings, and dependencies.
+You are a system architect reviewing a message. Extract all concrete, explicitly stated facts about the infrastructure described. The message may be in Korean or English. Look for facts about: system status, model assignments, resource consumption (RAM, disk), performance metrics, configuration settings, and dependencies. File paths (e.g. /opt/ai_data, /mnt/lv_db) and mount points are valid subjects — extract their size and purpose.
 
 Extract each distinct entity independently. Names that differ by a single character (e.g. "Pod A" vs "Pod B", "v2" vs "v3") are DIFFERENT entities. Do NOT merge or confuse them. Verify every attribute belongs to its correct entity. A factual claim about the current state of an entity remains valid even if the speaker also mentions future plans nearby.
 
@@ -179,7 +179,7 @@ SUBJECT: Must be the EXACT entity name as written in the text — do not rename 
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
-1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
+1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Extract ALL service statuses including "inactive" and "failed" — do not skip them. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
 3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
 
@@ -190,7 +190,7 @@ Empty: {"extractions":[]}."""
 
 
 _SYSTEM_TEXT_EXTRACT_FREE_8B = """\
-You are a precise fact extractor. Extract factual (subject, predicate, object) triples from the text. The text may be in Korean or English.
+You are a precise fact extractor. Extract factual (subject, predicate, object) triples from the text. The text may be in Korean or English. File paths (e.g. /opt/ai_data, /mnt/lv_db) and mount points are valid subjects — extract their size and purpose.
 
 CATEGORY (pick the best match):
 - code → function names, CLI commands, file paths, ports, config keys, literal values
@@ -208,7 +208,7 @@ SUBJECT: Must be a specific entity name explicitly mentioned in the text. Entity
 OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
-1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
+1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Extract ALL service statuses including "inactive" and "failed" — do not skip them. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
 3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
 
@@ -896,7 +896,7 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         if service.lower() in ("service", "항목", "조치", "시나리오", "세션"):
             continue
         status = m.group(2).strip().lower()
-        if status in ("active", "inactive", "activating"):
+        if status in ("active", "inactive", "activating", "failed"):
             source_statuses[service] = status
 
     if not source_statuses:
