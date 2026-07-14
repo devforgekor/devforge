@@ -886,6 +886,7 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
     actual status from the source text's services table and corrects
     extracted facts.
     """
+    print(f"    [debug-status] called with {len(facts)} facts, source_len={len(source_text)}", flush=True)
     status_pattern = re.compile(
         r'\|[^\S\n]*([\w][\w\s-]*[\w])[^\S\n]*\|[^\S\n]*[\w\s-]+[^\S\n]*\|[^\S\n]*(\w+)[^\S\n]*\|',
         re.MULTILINE,
@@ -899,6 +900,7 @@ def _fix_status_hallucination(facts: list[dict], source_text: str) -> list[dict]
         if status in ("active", "inactive", "activating", "failed"):
             source_statuses[service] = status
 
+    print(f"    [debug-status] source_statuses ({len(source_statuses)}): {dict(source_statuses)}", flush=True)
     if not source_statuses:
         return facts
 
