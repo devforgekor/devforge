@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-07-13'
+  updated: '2026-07-14'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
