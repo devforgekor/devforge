@@ -38,3 +38,23 @@
 - `_split_atomic` paragraph merge (600자): **이미 production에 있음** (extract_llm.py:307-319)
 
 실제로 누락된 건 `_expand_spec_parens`의 `\n\n` → `\n` 뿐. 위의 commit c70e171에서 수정함.
+
+---
+
+## 2026-07-15: Merge logic 제거 + `_expand_spec_parens` 유지 (commit e9861bc)
+
+**변경**:
+- `_split_atomic` paragraph merge logic 제거 (63dd64b에서 추가됐던 코드)
+- `_expand_spec_parens` `\n\n` → `\n` 유지
+
+**결과**:
+| 항목 | 값 |
+|------|-----|
+| English recall | **8/14** |
+| 총 fact 수 | 39 |
+| 테스트 시간 | 5156s (85분) |
+| Grounded fact | 27 |
+| 이전 대비 | 4/14 → 8/14 (merge 제거 효과), 10/14 대비 -2 (Host expansion에서 5개 spec 중 1개만 추출) |
+
+**MISS (6)**: 22Gi RAM, zram, /opt/ai_data, /mnt/lv_db, /opt/projects, data-pod
+**시간 개선**: 5606s → 5156s (청크 수 감소로 인한 LLM 호출 절약)
