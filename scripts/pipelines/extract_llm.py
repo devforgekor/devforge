@@ -384,13 +384,10 @@ def _expand_compounds(text: str) -> str:
         has_specs = any(bool(re.search(r'\d', p)) for p in parts)
         if not has_specs:
             return m.group(0)
-        # Put each spec on its own paragraph so _split_atomic gives each
-        # its own chunk.  One-line expansions cause the LLM to extract
-        # only 1 of 5+ specs from the same bullet.
         result = f"- {label}: {entity}.\n\n"
         for i, p in enumerate(parts):
             if i > 0:
-                result += "\n\n"
+                result += "\n"
             result += f"- {entity} has {p}."
         result += "\n"
         return result
