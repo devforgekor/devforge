@@ -56,5 +56,27 @@
 | Grounded fact | 27 |
 | 이전 대비 | 4/14 → 8/14 (merge 제거 효과), 10/14 대비 -2 (Host expansion에서 5개 spec 중 1개만 추출) |
 
-**MISS (6)**: 22Gi RAM, zram, /opt/ai_data, /mnt/lv_db, /opt/projects, data-pod
+**MISS (6)**: 22Gi RAM, zram, /opt/ai_data, /mnt/lv_db, /opt/projects, data-pod  
 **시간 개선**: 5606s → 5156s (청크 수 감소로 인한 LLM 호출 절약)
+
+---
+
+## 2026-07-15: 400tok/16fact/\n\n 유지 — full config (current HEAD)
+
+**변경**:
+- `_split_atomic max_chars`: 600 → **1600** (~400 tok × 4 chars/tok)
+- `_expand_spec_parens` `\n` → **`\n\n`** 복원 (c70e171 revert)
+- System prompt: `"Up to 8 facts"` → **`"Up to 16 facts"`**
+
+**결과**:
+| 항목 | 값 |
+|------|-----|
+| English recall | **10/14** |
+| 총 fact 수 | 46 |
+| Grounded fact | 33 |
+| Precision | 10/45 |
+| 테스트 시간 | 5866s (97분) |
+| Baseline 대비 | recall 동일 (10/14), 시간 +260s |
+
+**MISS (4)**: /opt/ai_data (100G), /mnt/lv_db (30G), /opt/projects (10G), data-pod (postgres)  
+**결론**: 1600자 청크 + 16 facts 제한으로도 baseline recall 초과 불가. 3개 storage path + data-pod는 청크 크기나 fact cap 문제가 아니라 LLM이 source text에서 아예 추출하지 않음. LLM이 file path를 subject로 인식하지 못하는 것이 근본 원인.
