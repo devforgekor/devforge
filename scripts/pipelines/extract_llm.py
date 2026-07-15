@@ -181,7 +181,7 @@ OBJECT: Extract the core value in normalized form. For numbers use digits ("3000
 3 RULES:
 1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Extract ALL service statuses including "inactive" and "failed" — do not skip them. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
-3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
+3. Up to 16 facts per response. Fewer precise facts > many noisy ones.
 
 Output ONLY valid JSON. No markdown fences, no reasoning, no deliberation.
 {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"specific_entity","predicate":"snake_case","object":"value","source_context":"...","qualifiers":{"key":"value"}}]}
@@ -210,7 +210,7 @@ OBJECT: Extract the core value in normalized form. For numbers use digits ("3000
 3 RULES:
 1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Extract ALL service statuses including "inactive" and "failed" — do not skip them. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
 2. Evidence must be a direct quote ending with a period.
-3. Up to 8 facts per response. Fewer precise facts > many noisy ones.
+3. Up to 16 facts per response. Fewer precise facts > many noisy ones.
 
 Output ONLY valid JSON. No markdown fences.
 {"extractions": [{"evidence":"...","category":"code|decision|explanation|requirement|other","subject":"specific_entity","predicate":"snake_case","object":"value","source_context":"...","qualifiers":{"key":"value"}}]}
@@ -226,7 +226,7 @@ def _split_dense_bullets(text: str) -> str:
     Preserves original text format — only adds paragraph boundaries so
     _split_atomic splits each item into its own chunk.  Without this,
     sections like Overview (8 bullets, no periods) become one chunk and
-    hit the 8-fact cap, causing the LLM to skip HW specs and storage
+    hit the 16-fact cap, causing the LLM to skip HW specs and storage
     mounts.
     """
     lines = text.split('\n')
@@ -291,7 +291,7 @@ def _split_dense_bullets(text: str) -> str:
     return '\n'.join(out)
 
 
-def _split_atomic(text: str, max_chars: int = 600) -> list[str]:
+def _split_atomic(text: str, max_chars: int = 1600) -> list[str]:
     """Split text into chunks at sentence boundaries, up to max_chars.
 
     Each paragraph (blank-line separated) stays independent — no cross-paragraph
@@ -374,7 +374,7 @@ def _expand_compounds(text: str) -> str:
         result = f"- {label}: {entity}.\n\n"
         for i, p in enumerate(parts):
             if i > 0:
-                result += "\n"
+                result += "\n\n"
             result += f"- {entity} has {p}."
         result += "\n"
         return result
@@ -1309,7 +1309,7 @@ def _extract_edcr_freeform(
 
     Key design:
     1. Free-form prompts (no snake_case constraints — Taxonomy Trap fix)
-    2. 400-char sentence/paragraph chunking (max 4 facts per chunk)
+    2. 1600-char sentence/paragraph chunking (max 16 facts per chunk)
     3. llama-server parallel=2 provides intra-chunk slot concurrency
     4. Stop-and-Swap: start embed 8081 → EDC normalization → stop embed
     5. Cleanup: keep 8082 for NLI, free all other LLM memory
