@@ -291,15 +291,38 @@ def _split_dense_bullets(text: str) -> str:
     return '\n'.join(out)
 
 
+def _protect_code_blocks(text: str) -> str:
+    """Replace blank lines inside fenced code blocks with placeholder.
+
+    Prevents _split_atomic's paragraph splitting (\n\s*\n) from fragmenting
+    code blocks while preserving internal line breaks after restoration.
+    Handles ``` and ~~~ fences.
+    """
+    result = []
+    in_code = False
+    for line in text.split('\n'):
+        if line.strip().startswith('```') or line.strip().startswith('~~~'):
+            in_code = not in_code
+            result.append(line)
+        elif in_code and not line.strip():
+            result.append('@@@CBNL@@@')
+        else:
+            result.append(line)
+    return '\n'.join(result)
+
+
 def _split_atomic(text: str, max_chars: int = 1600) -> list[str]:
     """Split text into chunks at sentence boundaries, up to max_chars.
 
     Each paragraph (blank-line separated) stays independent — no cross-paragraph
     merging.  Sentences within a paragraph are grouped up to max_chars.
+    Code blocks are never fragmented: internal blank lines are protected before
+    paragraph splitting and restored in the final chunks.
     """
     text = _split_dense_bullets(text)
     text = _expand_compounds(text)
     text = re.sub(r'(?<=\d)\.(?=\d)', '@@@DOT@@@', text)
+    text = _protect_code_blocks(text)
     paragraphs = re.split(r"\n\s*\n", text)
 
     chunks = []
@@ -310,7 +333,7 @@ def _split_atomic(text: str, max_chars: int = 1600) -> list[str]:
         sentences = re.split(r"(?<=[.!?])\s+", para)
         para_chunks = []
         for sent in sentences:
-            sent = sent.strip().replace('@@@DOT@@@', '.')
+            sent = sent.strip().replace('@@@DOT@@@', '.').replace('@@@CBNL@@@', '')
             if not sent:
                 continue
             if para_chunks and len(para_chunks[-1]) + len(sent) + 1 <= max_chars:
@@ -371,10 +394,12 @@ def _expand_compounds(text: str) -> str:
         has_specs = any(bool(re.search(r'\d', p)) for p in parts)
         if not has_specs:
             return m.group(0)
-        result = f"- {label}: {entity}.\n\n"
+        # Put each spec on its own paragraph so _split_atomic gives each
+        # its own chunk.  Skip the label line (- Label: Entity.) to prevent
+        # the LLM from treating section labels (Host, Runtime) as entities.
+        result = ""
         for i, p in enumerate(parts):
-            if i > 0:
-                result += "\n\n"
+            result += "\n\n" if result else ""
             result += f"- {entity} has {p}."
         result += "\n"
         return result
