@@ -80,3 +80,25 @@
 
 **MISS (4)**: /opt/ai_data (100G), /mnt/lv_db (30G), /opt/projects (10G), data-pod (postgres)  
 **결론**: 1600자 청크 + 16 facts 제한으로도 baseline recall 초과 불가. 3개 storage path + data-pod는 청크 크기나 fact cap 문제가 아니라 LLM이 source text에서 아예 추출하지 않음. LLM이 file path를 subject로 인식하지 못하는 것이 근본 원인.
+
+---
+
+## 2026-07-15: Struct-aware chunking + label line 제거 (current commit)
+
+**변경**:
+- `_protect_code_blocks` 추가: fenced code block 내 `\n\n`을 보호하여 paragraph split에서 code block 분할 방지
+- `_expand_spec_parens` label line 제거: `- Host: DEVFORGE.` 라인 제거 → `Host | named | DEVFORGE` 같은 label-as-entity 방지
+- `_dedup_post_norm` 확인: (subject, predicate, object) key로 exact dedup 이미 존재
+
+**결과**:
+| 항목 | 값 |
+|------|-----|
+| English recall | **10/14** |
+| 총 fact 수 | 42 (-4) |
+| Grounded fact | 29 (-4) |
+| Precision | 10/41 (+2%) |
+| 테스트 시간 | 5434s (-432s) |
+| Chunk 수 | 44 (-2) |
+
+**개선**: `Host | named | DEVFORGE` 제거 성공 (extra에서 35→31). Code block 통합 (1 chunk, 151 chars, data-pod + Caddy + netdata 모두 포함). 시간 7.4% 단축.  
+**미해결**: 동일 4 miss (storage path 3 + data-pod). Data-pod가 unified chunk에 포함되었으나 LLM이 여전히 추출 안 함 — file-path-as-subject 한계 재확인.
