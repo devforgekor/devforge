@@ -411,6 +411,21 @@ def _restore_markers(text: str) -> str:
     return text.replace('@@@DOT@@@', '.').replace('@@@CBNL@@@', '')
 
 
+def _split_header_content(para: str) -> tuple[str, str]:
+    """Split '## Header\\ncontent...' into (header, content).
+
+    Returns (header_text, remaining_content).
+    Header is just the ## line, content is everything after.
+    If no content after header, returns (para, '').
+    """
+    m = re.match(r'^(##\s+[^\n]*?)(?:\n(.*))?$', para, re.DOTALL)
+    if m:
+        header = m.group(1).strip()
+        content = (m.group(2) or '').strip()
+        return (header, content)
+    return (para, '')
+
+
 def _chunk_paragraphs_sectioned(paragraphs: list[str], max_chars: int) -> list[str]:
     """Section-aware chunking: group by ## section, apply context strategy.
 
@@ -437,9 +452,16 @@ def _chunk_paragraphs_sectioned(paragraphs: list[str], max_chars: int) -> list[s
                 section_buffer.clear()
                 preamble_processed = True
             _flush_section_chunks(result, section_buffer, current_section, max_chars)
+
             current_section = section_match.group(1).strip()
             section_buffer = []
-            result.append(_restore_markers(para))
+
+            # Split header+content paragraphs.
+            # Skip standalone header in contextual/hierarchical modes:
+            # the [Section: Name] prefix in content chunks is sufficient.
+            header_only, content = _split_header_content(para)
+            if content:
+                section_buffer.append(content)
         else:
             section_buffer.append(para)
 
@@ -492,10 +514,12 @@ def _flush_section_chunks(
     if CHUNK_STRATEGY == "contextual":
         prefix = f"[Section: {section_name}] "
         for c in base_chunks:
-            if len(prefix) + len(c) <= max_chars:
-                result.append(prefix + c)
+            with_prefix = prefix + c
+            if len(with_prefix) <= max_chars:
+                result.append(with_prefix)
             else:
-                result.append(c)
+                # Prefix fits, truncate content to stay within max_chars
+                result.append(with_prefix[:max_chars])
     elif CHUNK_STRATEGY == "hierarchical":
         _hierarchical_chunks(result, base_chunks, section_name, max_chars)
     else:
