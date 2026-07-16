@@ -507,80 +507,86 @@ def _flush_section_chunks(
             if s:
                 all_sentences.append(s)
 
-    # Group sentences into base chunks (up to max_chars)
-    base_chunks: list[str] = []
-    cur: list[str] = []
-    cur_len = 0
-    for sent in all_sentences:
-        if cur and cur_len + len(sent) + 1 > max_chars:
-            base_chunks.append(" ".join(cur))
-            cur, cur_len = [], 0
-        cur.append(sent)
-        cur_len += len(sent) + 1
-    if cur:
-        base_chunks.append(" ".join(cur))
-
     # Preamble (empty header_stack) → plain chunking
     if not header_stack:
+        base_chunks = _group_sentences(all_sentences, max_chars)
         result.extend(base_chunks)
         return
 
     prefix = _build_section_prefix(header_stack)
+    use_overlap = CHUNK_STRATEGY in ("contextual", "hierarchical")
 
-    if CHUNK_STRATEGY == "contextual":
-        for c in base_chunks:
-            with_prefix = prefix + c
-            if len(with_prefix) <= max_chars:
-                result.append(with_prefix)
-            else:
-                result.append(with_prefix[:max_chars])
-    elif CHUNK_STRATEGY == "hierarchical":
-        _hierarchical_chunks(result, base_chunks, prefix, max_chars)
+    # When overlap is on, shrink base_chunks to leave room for prefix + overlap
+    effective_max = max_chars
+    if use_overlap:
+        effective_max = max_chars - len(prefix) - CHUNK_OVERLAP_CHARS - 2  # 2 for spaces
+        effective_max = max(effective_max, 100)  # floor at 100 chars
+
+    base_chunks = _group_sentences(all_sentences, effective_max)
+
+    if use_overlap:
+        _emit_chunks_with_overlap(result, base_chunks, prefix, max_chars)
     else:
         result.extend(base_chunks)
 
 
-def _hierarchical_chunks(
+def _group_sentences(sentences: list[str], max_len: int) -> list[str]:
+    """Group sentences into chunks up to max_len chars each."""
+    chunks: list[str] = []
+    cur: list[str] = []
+    cur_len = 0
+    for sent in sentences:
+        if cur and cur_len + len(sent) + 1 > max_len:
+            chunks.append(" ".join(cur))
+            cur, cur_len = [], 0
+        cur.append(sent)
+        cur_len += len(sent) + 1
+    if cur:
+        chunks.append(" ".join(cur))
+    return chunks
+
+
+CHUNK_OVERLAP_CHARS = 80  # chars of overlap between consecutive chunks
+
+
+def _emit_chunks_with_overlap(
     result: list[str],
     base_chunks: list[str],
     prefix: str,
     max_chars: int,
 ):
-    """Create parent-expanded chunks: child + surrounding context + header chain.
+    """Emit chunks with [Section: ...] prefix and 80-char overlap.
 
-    Each chunk wraps the "child" with:
-    - [Section: H2 > H3 ...] prefix (header chain context)
-    - 1-2 preceding sentences from the previous chunk
-    - 1-2 following sentences from the next chunk
+    Each chunk gets the section prefix. Consecutive base_chunks within
+    the same section overlap by CHUNK_OVERLAP_CHARS of the previous
+    chunk's tail, so facts near chunk boundaries get extracted twice.
+    Overlap does NOT cross section boundaries (per-section base_chunks).
     """
     for i, child in enumerate(base_chunks):
-        parent_parts = []
-
-        if prefix:
-            parent_parts.append(prefix.rstrip())
-
-        # Preceding context from previous chunk (last ~120 chars)
+        # Build overlap from previous base_chunk's tail (raw content, no prefix)
+        overlap = ""
         if i > 0:
-            prev = base_chunks[i - 1]
-            prev_context = prev[-120:].lstrip()
-            if prev_context:
-                parent_parts.append(f"(prev: {prev_context})")
+            prev_raw = base_chunks[i - 1]
+            if len(prev_raw) > CHUNK_OVERLAP_CHARS:
+                overlap = prev_raw[-CHUNK_OVERLAP_CHARS:].lstrip()
+            else:
+                overlap = prev_raw
 
-        # Core child chunk
-        parent_parts.append(f">>> {child}")
+        # Assemble: [prefix] overlap_seam child
+        parts = []
+        if prefix:
+            parts.append(prefix.rstrip())
+        if overlap:
+            parts.append(overlap)
+        parts.append(child)
 
-        # Following context from next chunk (first ~120 chars)
-        if i < len(base_chunks) - 1:
-            nxt = base_chunks[i + 1]
-            nxt_context = nxt[:120].rstrip()
-            if nxt_context:
-                parent_parts.append(f"(next: {nxt_context})")
-
-        parent_text = " ".join(parent_parts)
-        if len(parent_text) <= max_chars:
-            result.append(parent_text)
+        assembled = " ".join(parts)
+        if len(assembled) <= max_chars:
+            result.append(assembled)
         else:
-            result.append(child)
+            # Overlap doesn't fit → use prefix + child, truncated if needed
+            flat = (prefix + child) if prefix else child
+            result.append(flat[:max_chars])
 
 
 def _expand_compounds(text: str) -> str:
