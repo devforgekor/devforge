@@ -356,6 +356,8 @@ def _merge_section_paragraphs(paragraphs: list[str], max_chars: int) -> list[str
     return result
 
 
+CHUNK_STRATEGY = os.environ.get("CHUNK_STRATEGY", "plain")  # "plain" | "contextual" | "hierarchical"
+
 def _split_atomic(text: str, max_chars: int = 1600) -> list[str]:
     """Split text into chunks at sentence boundaries, up to max_chars.
 
@@ -364,6 +366,11 @@ def _split_atomic(text: str, max_chars: int = 1600) -> list[str]:
     Code blocks are never fragmented: internal blank lines are protected
     before paragraph splitting and restored in the final chunks.
     Cross-section merging is forbidden (fixes 63dd64b recall regression).
+
+    Strategy modes (configurable via CHUNK_STRATEGY env var):
+      - plain:        current behavior, no section context (default)
+      - contextual:   each content chunk prefixed with [Section: ...]
+      - hierarchical: contextual + parent-child expansion (surrounding context)
     """
     text = _split_dense_bullets(text)
     text = _expand_compounds(text)
@@ -372,6 +379,14 @@ def _split_atomic(text: str, max_chars: int = 1600) -> list[str]:
     paragraphs = re.split(r"\n\s*\n", text)
     paragraphs = _merge_section_paragraphs(paragraphs, max_chars)
 
+    if CHUNK_STRATEGY == "plain":
+        return _chunk_paragraphs_plain(paragraphs, max_chars)
+
+    return _chunk_paragraphs_sectioned(paragraphs, max_chars)
+
+
+def _chunk_paragraphs_plain(paragraphs: list[str], max_chars: int) -> list[str]:
+    """Original chunking: process all paragraphs flat, no section awareness."""
     chunks = []
     for para in paragraphs:
         para = para.strip()
@@ -389,6 +404,147 @@ def _split_atomic(text: str, max_chars: int = 1600) -> list[str]:
                 para_chunks.append(sent)
         chunks.extend(para_chunks)
     return chunks
+
+
+def _restore_markers(text: str) -> str:
+    """Restore @@DOT@@ and @@CBNL@@ placeholders in a single text."""
+    return text.replace('@@@DOT@@@', '.').replace('@@@CBNL@@@', '')
+
+
+def _chunk_paragraphs_sectioned(paragraphs: list[str], max_chars: int) -> list[str]:
+    """Section-aware chunking: group by ## section, apply context strategy.
+
+    Handles both cases:
+      - ## Header on its own paragraph (followed by content paragraphs)
+      - ## Header inline with content (e.g. "## Storage\\n- /opt/ai_data...")
+
+    Preamble (text before first ## header) is added as plain chunks
+    without section context.
+    """
+    result = []
+    current_section = ""
+    section_buffer: list[str] = []
+    preamble_processed = False
+
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        section_match = re.match(r'^##\s+([^ \n].*?)(?:\n|$)', para)
+        if section_match:
+            if not preamble_processed and section_buffer:
+                _flush_section_chunks(result, section_buffer, "", max_chars)
+                section_buffer.clear()
+                preamble_processed = True
+            _flush_section_chunks(result, section_buffer, current_section, max_chars)
+            current_section = section_match.group(1).strip()
+            section_buffer = []
+            result.append(_restore_markers(para))
+        else:
+            section_buffer.append(para)
+
+    _flush_section_chunks(result, section_buffer, current_section, max_chars)
+
+    return result
+
+
+def _flush_section_chunks(
+    result: list[str],
+    section_paragraphs: list[str],
+    section_name: str,
+    max_chars: int,
+):
+    """Chunk paragraphs within a section, optionally with context.
+
+    When section_name is empty (preamble before first ##), falls back to
+    plain chunking regardless of strategy.
+    """
+    if not section_paragraphs:
+        return
+
+    # Build section-level content sentences
+    all_sentences: list[str] = []
+    for para in section_paragraphs:
+        sents = re.split(r"(?<=[.!?])\s+", para)
+        for s in sents:
+            s = s.strip().replace('@@@DOT@@@', '.').replace('@@@CBNL@@@', '')
+            if s:
+                all_sentences.append(s)
+
+    # Group sentences into base chunks (up to max_chars)
+    base_chunks: list[str] = []
+    cur: list[str] = []
+    cur_len = 0
+    for sent in all_sentences:
+        if cur and cur_len + len(sent) + 1 > max_chars:
+            base_chunks.append(" ".join(cur))
+            cur, cur_len = [], 0
+        cur.append(sent)
+        cur_len += len(sent) + 1
+    if cur:
+        base_chunks.append(" ".join(cur))
+
+    # Preamble (empty section_name) → plain chunking
+    if not section_name:
+        result.extend(base_chunks)
+        return
+
+    if CHUNK_STRATEGY == "contextual":
+        prefix = f"[Section: {section_name}] "
+        for c in base_chunks:
+            if len(prefix) + len(c) <= max_chars:
+                result.append(prefix + c)
+            else:
+                result.append(c)
+    elif CHUNK_STRATEGY == "hierarchical":
+        _hierarchical_chunks(result, base_chunks, section_name, max_chars)
+    else:
+        result.extend(base_chunks)
+
+
+def _hierarchical_chunks(
+    result: list[str],
+    base_chunks: list[str],
+    section_name: str,
+    max_chars: int,
+):
+    """Create parent-expanded chunks: child + surrounding context + section header.
+
+    Each chunk is a "parent" that wraps the "child" (base chunk) with:
+    - [Section: ...] prefix (context augmentation)
+    - 1-2 preceding sentences from the previous chunk
+    - 1-2 following sentences from the next chunk
+    """
+    prefix = f"[Section: {section_name}] " if section_name else ""
+
+    for i, child in enumerate(base_chunks):
+        parent_parts = []
+
+        if prefix:
+            parent_parts.append(prefix.rstrip())
+
+        # Preceding context from previous chunk (last ~120 chars)
+        if i > 0:
+            prev = base_chunks[i - 1]
+            prev_context = prev[-120:].lstrip()
+            if prev_context:
+                parent_parts.append(f"(prev: {prev_context})")
+
+        # Core child chunk
+        parent_parts.append(f">>> {child}")
+
+        # Following context from next chunk (first ~120 chars)
+        if i < len(base_chunks) - 1:
+            nxt = base_chunks[i + 1]
+            nxt_context = nxt[:120].rstrip()
+            if nxt_context:
+                parent_parts.append(f"(next: {nxt_context})")
+
+        parent_text = " ".join(parent_parts)
+        if len(parent_text) <= max_chars:
+            result.append(parent_text)
+        else:
+            result.append(child)
 
 
 def _expand_compounds(text: str) -> str:

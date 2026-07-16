@@ -1163,6 +1163,9 @@ modules:
     test_arbiter_v6_7b9b.py:
       status: experimental
       purpose: 'Arbiter model comparison: 4B vs 7B/9B on identical V6 extraction pairs.'
+    test_chunk_strategies.py:
+      status: unknown
+      purpose: Test chunking strategies against infrastructure.md.
     test_chunk_verify.py:
       status: unknown
       purpose: "Test chunk-aware verification \u2014 creates synthetic long-source\
