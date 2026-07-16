@@ -411,33 +411,43 @@ def _restore_markers(text: str) -> str:
     return text.replace('@@@DOT@@@', '.').replace('@@@CBNL@@@', '')
 
 
-def _split_header_content(para: str) -> tuple[str, str]:
-    """Split '## Header\\ncontent...' into (header, content).
+def _parse_heading_level(text: str) -> tuple[int, str, str]:
+    """Detect markdown heading. Returns (level, heading_text, remaining_content).
 
-    Returns (header_text, remaining_content).
-    Header is just the ## line, content is everything after.
-    If no content after header, returns (para, '').
+    Level is number of # chars (1-6). heading_text is the name without #.
+    remaining_content is text after the heading line.
+    If not a heading, returns (0, '', text).
     """
-    m = re.match(r'^(##\s+[^\n]*?)(?:\n(.*))?$', para, re.DOTALL)
+    m = re.match(r'^(#+)\s+([^\n]*?)(?:\n(.*))?$', text, re.DOTALL)
     if m:
-        header = m.group(1).strip()
-        content = (m.group(2) or '').strip()
-        return (header, content)
-    return (para, '')
+        level = len(m.group(1))
+        heading = m.group(2).strip()
+        rest = (m.group(3) or '').strip()
+        return (level, heading, rest)
+    return (0, '', text)
+
+
+def _build_section_prefix(header_stack: list[tuple[int, str]]) -> str:
+    """Build '[Section: H2 > H3]' from header stack.
+
+    Only H2+ levels are included in the prefix (H1 is the document title).
+    """
+    names = [name for level, name in header_stack if level >= 2]
+    if not names:
+        return ""
+    return f"[Section: {' > '.join(names)}] "
 
 
 def _chunk_paragraphs_sectioned(paragraphs: list[str], max_chars: int) -> list[str]:
-    """Section-aware chunking: group by ## section, apply context strategy.
+    """Section-aware chunking: track full header hierarchy (H1-H6).
 
-    Handles both cases:
-      - ## Header on its own paragraph (followed by content paragraphs)
-      - ## Header inline with content (e.g. "## Storage\\n- /opt/ai_data...")
+    Maintains a header stack so each chunk gets the full context path,
+    e.g. [Section: Entry Points > Auto-Generated Docs]
 
-    Preamble (text before first ## header) is added as plain chunks
-    without section context.
+    Preamble (text before first heading) is added as plain chunks.
     """
     result = []
-    current_section = ""
+    header_stack: list[tuple[int, str]] = []
     section_buffer: list[str] = []
     preamble_processed = False
 
@@ -445,27 +455,32 @@ def _chunk_paragraphs_sectioned(paragraphs: list[str], max_chars: int) -> list[s
         para = para.strip()
         if not para:
             continue
-        section_match = re.match(r'^##\s+([^ \n].*?)(?:\n|$)', para)
-        if section_match:
+        level, heading, rest = _parse_heading_level(para)
+        if level > 0:
             if not preamble_processed and section_buffer:
-                _flush_section_chunks(result, section_buffer, "", max_chars)
+                _flush_section_chunks(result, section_buffer, header_stack, max_chars)
                 section_buffer.clear()
                 preamble_processed = True
-            _flush_section_chunks(result, section_buffer, current_section, max_chars)
+            _flush_section_chunks(result, section_buffer, header_stack, max_chars)
 
-            current_section = section_match.group(1).strip()
+            # Update header stack: pop entries at same or deeper level
+            while header_stack and header_stack[-1][0] >= level:
+                header_stack.pop()
+            header_stack.append((level, heading))
             section_buffer = []
 
-            # Split header+content paragraphs.
-            # Skip standalone header in contextual/hierarchical modes:
-            # the [Section: Name] prefix in content chunks is sufficient.
-            header_only, content = _split_header_content(para)
-            if content:
-                section_buffer.append(content)
+            # H2+ → skip (content chunks have [Section: ...] prefix)
+            # H1 (document title) stays as standalone chunk
+            if level == 1:
+                result.append(f"{'#' * level} {heading}")
+
+            # If heading has inline content, split and queue it
+            if rest:
+                section_buffer.append(rest)
         else:
             section_buffer.append(para)
 
-    _flush_section_chunks(result, section_buffer, current_section, max_chars)
+    _flush_section_chunks(result, section_buffer, header_stack, max_chars)
 
     return result
 
@@ -473,13 +488,12 @@ def _chunk_paragraphs_sectioned(paragraphs: list[str], max_chars: int) -> list[s
 def _flush_section_chunks(
     result: list[str],
     section_paragraphs: list[str],
-    section_name: str,
+    header_stack: list[tuple[int, str]],
     max_chars: int,
 ):
-    """Chunk paragraphs within a section, optionally with context.
+    """Chunk paragraphs with section-aware context.
 
-    When section_name is empty (preamble before first ##), falls back to
-    plain chunking regardless of strategy.
+    When header_stack is empty (preamble), falls back to plain chunking.
     """
     if not section_paragraphs:
         return
@@ -506,22 +520,22 @@ def _flush_section_chunks(
     if cur:
         base_chunks.append(" ".join(cur))
 
-    # Preamble (empty section_name) → plain chunking
-    if not section_name:
+    # Preamble (empty header_stack) → plain chunking
+    if not header_stack:
         result.extend(base_chunks)
         return
 
+    prefix = _build_section_prefix(header_stack)
+
     if CHUNK_STRATEGY == "contextual":
-        prefix = f"[Section: {section_name}] "
         for c in base_chunks:
             with_prefix = prefix + c
             if len(with_prefix) <= max_chars:
                 result.append(with_prefix)
             else:
-                # Prefix fits, truncate content to stay within max_chars
                 result.append(with_prefix[:max_chars])
     elif CHUNK_STRATEGY == "hierarchical":
-        _hierarchical_chunks(result, base_chunks, section_name, max_chars)
+        _hierarchical_chunks(result, base_chunks, prefix, max_chars)
     else:
         result.extend(base_chunks)
 
@@ -529,18 +543,16 @@ def _flush_section_chunks(
 def _hierarchical_chunks(
     result: list[str],
     base_chunks: list[str],
-    section_name: str,
+    prefix: str,
     max_chars: int,
 ):
-    """Create parent-expanded chunks: child + surrounding context + section header.
+    """Create parent-expanded chunks: child + surrounding context + header chain.
 
-    Each chunk is a "parent" that wraps the "child" (base chunk) with:
-    - [Section: ...] prefix (context augmentation)
+    Each chunk wraps the "child" with:
+    - [Section: H2 > H3 ...] prefix (header chain context)
     - 1-2 preceding sentences from the previous chunk
     - 1-2 following sentences from the next chunk
     """
-    prefix = f"[Section: {section_name}] " if section_name else ""
-
     for i, child in enumerate(base_chunks):
         parent_parts = []
 
