@@ -311,19 +311,66 @@ def _protect_code_blocks(text: str) -> str:
     return '\n'.join(result)
 
 
+def _merge_section_paragraphs(paragraphs: list[str], max_chars: int) -> list[str]:
+    """Within each ##-headed section, merge consecutive small paragraphs.
+
+    Section boundaries (## ) are never crossed — fixing the recall regression
+    from the old unconditional merge (63dd64b).  Only paragraphs under
+    MIN_MERGE_SIZE chars are merged into the preceding content paragraph,
+    up to max_chars.  Section headers stay as their own paragraph.
+    """
+    MIN_MERGE_SIZE = 200
+
+    groups = []
+    current = []
+    for p in paragraphs:
+        if p.startswith('## '):
+            if current:
+                groups.append(current)
+            current = [p]
+        else:
+            current.append(p)
+    if current:
+        groups.append(current)
+
+    result = []
+    for group in groups:
+        if not group:
+            continue
+        header = group[0] if group[0].startswith('## ') else None
+        content = group[1:] if header else group
+
+        merged = []
+        for para in content:
+            if not merged:
+                merged.append(para)
+            elif len(para) < MIN_MERGE_SIZE and len(merged[-1]) + len(para) + 1 <= max_chars:
+                merged[-1] += "\n" + para
+            else:
+                merged.append(para)
+
+        if header:
+            result.append(header)
+        result.extend(merged)
+
+    return result
+
+
 def _split_atomic(text: str, max_chars: int = 1600) -> list[str]:
     """Split text into chunks at sentence boundaries, up to max_chars.
 
-    Each paragraph (blank-line separated) stays independent — no cross-paragraph
-    merging.  Sentences within a paragraph are grouped up to max_chars.
-    Code blocks are never fragmented: internal blank lines are protected before
-    paragraph splitting and restored in the final chunks.
+    Paragraphs under the same ## section header are merged when small,
+    then split by sentence boundaries and re-grouped up to max_chars.
+    Code blocks are never fragmented: internal blank lines are protected
+    before paragraph splitting and restored in the final chunks.
+    Cross-section merging is forbidden (fixes 63dd64b recall regression).
     """
     text = _split_dense_bullets(text)
     text = _expand_compounds(text)
     text = re.sub(r'(?<=\d)\.(?=\d)', '@@@DOT@@@', text)
     text = _protect_code_blocks(text)
     paragraphs = re.split(r"\n\s*\n", text)
+    paragraphs = _merge_section_paragraphs(paragraphs, max_chars)
 
     chunks = []
     for para in paragraphs:
