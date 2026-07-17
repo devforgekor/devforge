@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-07-16'
+  updated: '2026-07-17'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -1165,7 +1165,7 @@ modules:
       purpose: 'Arbiter model comparison: 4B vs 7B/9B on identical V6 extraction pairs.'
     test_chunk_strategies.py:
       status: unknown
-      purpose: Test chunking strategies against infrastructure.md.
+      purpose: "Test chunking strategies \u2014 _split_atomic and its helper functions."
     test_chunk_verify.py:
       status: unknown
       purpose: "Test chunk-aware verification \u2014 creates synthetic long-source\
