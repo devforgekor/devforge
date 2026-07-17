@@ -30,11 +30,14 @@ _NLI_VERIFY_PROMPT = """You are verifying whether an EVIDENCE sentence is factua
 Follow these steps:
 1. Identify the key factual claim in the evidence.
 2. Check whether that claim is directly stated or clearly implied by the source.
-3. Output exactly one label.
+3. If the evidence contains a causal claim (caused/caused_by), verify the DIRECTION matches the source.
+4. If the evidence contains numerical values, verify they match EXACTLY (percentages, durations, counts).
+5. Output exactly one label.
 
 LABELS:
 - ENTAILMENT: The evidence is directly supported by the source.
 - CONTRADICTION: The evidence contradicts the source — they cannot both be true.
+  This includes: reversed causal direction, wrong numerical values, or incorrect entity attribution.
 - NEUTRAL: The evidence is related but not directly entailed by the source.
 
 Output EXACTLY one word: ENTAILMENT | CONTRADICTION | NEUTRAL

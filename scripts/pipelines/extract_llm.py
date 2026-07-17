@@ -173,10 +173,14 @@ CATEGORY (pick the best match):
 PREDICATE: Concise action verb phrase in snake_case (2-5 words). Always in English.
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
+  CAUSAL DIRECTION — critically important:
+    "caused": subject is CAUSE, object is EFFECT (e.g. "missing index → caused → slow query")
+    "caused_by": subject is EFFECT, object is CAUSE (e.g. "slow query → caused_by → missing index")
+    Check the source text carefully. Never reverse these.
 
 SUBJECT: Must be the EXACT entity name as written in the text — do not rename or normalize entities during extraction. Entity names may be in Korean (e.g. "시스템", "생성 속도"). Resolve pronouns ("it", "they", "this", "that" / "그", "이것") to the specific entity name they refer to; never output a pronoun as the subject.
 
-OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
+OBJECT: Extract the core value in normalized form. Include ALL numerical values: percentages ("12%"), durations ("6 hours"), baselines ("from 45 minutes to 3 hours"). Do NOT drop any number. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
 1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Extract ALL service statuses including "inactive" and "failed" — do not skip them. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
@@ -202,10 +206,14 @@ CATEGORY (pick the best match):
 PREDICATE: Concise action verb phrase in snake_case (2-5 words). Always in English.
   Preferred: "increases_to", "peaked_at", "resolved_via", "decreased_to", "disabled_during", "configured_to", "replaced_with"
   Action verbs capture the relationship more precisely than stative verbs.
+  CAUSAL DIRECTION — critically important:
+    "caused": subject is CAUSE, object is EFFECT (e.g. "missing index → caused → slow query")
+    "caused_by": subject is EFFECT, object is CAUSE (e.g. "slow query → caused_by → missing index")
+    Check the source text carefully. Never reverse these.
 
 SUBJECT: Must be a specific entity name explicitly mentioned in the text. Entity names may be in Korean (e.g. "시스템", "생성 속도"). Resolve pronouns ("it", "they", "this", "that" / "그", "이것") to the specific entity name they refer to; never output a pronoun as the subject.
 
-OBJECT: Extract the core value in normalized form. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
+OBJECT: Extract the core value in normalized form. Include ALL numerical values: percentages ("12%"), durations ("6 hours"), baselines ("from 45 minutes to 3 hours"). Do NOT drop any number. For numbers use digits ("30000" not "thirty thousand"). When the object contains a value with a qualifier (e.g. "503 errors for 12% of requests"), extract the core as object and add details as qualifiers.
 
 3 RULES:
 1. Prioritize explicitly stated facts — every concrete claim (versions, sizes, statuses, specs, configs) is worth extracting. Extract ALL service statuses including "inactive" and "failed" — do not skip them. Do NOT skip facts just because they seem merely descriptive or static. Skip only filler, greetings, reasoning traces.
