@@ -1340,9 +1340,86 @@ Output STRICT JSON:
 # ── JSON parser ─────────────────────────────────────────────────
 
 
+def _clean_extraction_json(raw: str) -> str:
+    """Fix common JSON formatting errors from the 8B Q8 extraction model.
+
+    The model produces several distinct failure patterns:
+      A. Extra closing brace before comma in array: ``'...}}}, {'`` → ``'...}}, {'``
+      B. Extra closing bracket at end of array: ``'}]]}'`` → ``'}]}'``
+      C. Multiple sequential ``{"extractions":[...]}`` objects separated by newlines
+         → merged into a single array
+      E. Quoted opening brace: ``, "{"evidence"`` → ``, {"evidence"``
+      F. Nested array wrapping: ``[{"evidence":...}], [{`` → ``, {``
+      G. Missing opening brace: ``}, "evidence"`` → ``}, {"evidence"``
+    """
+    if not raw:
+        return raw
+    raw = raw.strip()
+
+    # Pattern C: merge multiple sequential {"extractions":[...]} objects
+    # Use raw_decode to extract each valid top-level object, then merge arrays.
+    decoder = json.JSONDecoder()
+    idx = 0
+    all_items: list[dict] = []
+    count = 0
+    while idx < len(raw):
+        try:
+            obj, end = decoder.raw_decode(raw, idx)
+            if isinstance(obj, dict) and "extractions" in obj and isinstance(obj["extractions"], list):
+                for item in obj["extractions"]:
+                    if isinstance(item, dict):
+                        all_items.append(item)
+                count += 1
+            idx = end
+            while idx < len(raw) and raw[idx] in ' \n\r\t':
+                idx += 1
+        except (json.JSONDecodeError, ValueError):
+            break
+
+    if count > 1:
+        return json.dumps({"extractions": all_items}, ensure_ascii=False)
+
+    # Pattern E: remove extra quote before opening brace of a fact object
+    # e.g. ..., "{"evidence": -> , {"evidence":
+    raw = re.sub(r'''(,\s*)"(\s*\{)''', r'\1\2', raw)
+
+    # Pattern F: unwrap nested array wrapping
+    # e.g. }], [{ -> }, {  (model wraps individual facts in extra [] pairs)
+    raw = re.sub(r'\}\],\s*\[(\{)', r'}, \1', raw)
+
+    # Pattern G: add missing opening brace before known fact keys
+    # when it follows an object close, e.g. }, "evidence" -> }, {"evidence"
+    raw = re.sub(
+        r'\}\s*,\s*("(?:evidence|subject|predicate|object|category|source_context|qualifiers)")',
+        r'}, {\1',
+        raw,
+    )
+
+    # Pattern A: remove extra closing brace before comma in array
+    # e.g. }}}, -> }, 
+    raw = re.sub(r'}}},(\s*\{)', r'}},\1', raw)
+
+    # Pattern B: remove extra closing bracket at end of JSON
+    if raw.rstrip().endswith('}]]}'):
+        raw = raw.rstrip()[:-4] + '}]}'
+
+    return raw
+
+
 def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict[str, Any]]:
     cleaned = strip_think(raw)
+    cleaned = _clean_extraction_json(cleaned)
     result = parse_llm_json(cleaned)
+    if result is None:
+        # Fallback: try raw_decode — handles trailing garbage after valid JSON
+        if cleaned.strip():
+            try:
+                decoder = json.JSONDecoder()
+                obj, _ = decoder.raw_decode(cleaned.strip())
+                if isinstance(obj, dict):
+                    result = obj
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
     if result is None:
         save_dlq(
             raw, stage=f"extract_{label}", error="parse_llm_json returned None", attempt=attempt
