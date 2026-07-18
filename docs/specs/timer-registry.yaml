@@ -1,8 +1,8 @@
 # DevForge — Timer Registry
-# auto-generated from live systemd data at 2026-07-17 09:00 KST
+# auto-generated from live systemd data at 2026-07-18 09:00 KST
 ---
 metadata:
-  updated: 2026-07-17 09:00 KST
+  updated: 2026-07-18 09:00 KST
   source: live (systemctl list-timers)
 user_timers:
 - unit: devforge-backup-safety
@@ -32,7 +32,7 @@ user_timers:
 - unit: devforge-system-sync
   on_calendar: '*:0/30'
   last: ''
-  next: Fri 2026-07-17 00:00:23 GMT
+  next: Sat 2026-07-18 00:30:00 GMT
 - unit: devforge-weekly-enrich-rebuild
   on_calendar: Sun *-*-* 18:00:00
   last: ''
