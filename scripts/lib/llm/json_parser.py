@@ -25,7 +25,7 @@ def _dlq_path(stage: str = "unknown") -> str:
 
 def save_dlq(raw: str, stage: str = "unknown", model: str = "",
              error: str = "", attempt: int = 1,
-             checkpoint: str = "") -> None:
+             checkpoint: str = "", turn_id: str = "") -> None:
     """Append parse failure to DLQ for offline review.
 
     Args:
@@ -35,6 +35,7 @@ def save_dlq(raw: str, stage: str = "unknown", model: str = "",
         error:      Error message from the failed parse attempt.
         attempt:    Which retry attempt this was (1-based).
         checkpoint: Checkpoint or phase key for resubmission support.
+        turn_id:    UUID of the turn being processed (for recoverability).
     """
     entry = {
         "ts": time.time(),
@@ -43,11 +44,13 @@ def save_dlq(raw: str, stage: str = "unknown", model: str = "",
         "attempt": attempt,
         "error": error[:200],
         "raw_len": len(raw),
-        "raw_preview": raw[:2000],
+        "raw_preview": raw[:5000],
         "raw_sha256": hashlib.sha256(raw.encode()).hexdigest()[:16],
     }
     if checkpoint:
         entry["checkpoint"] = checkpoint
+    if turn_id:
+        entry["turn_id"] = turn_id
     path = _dlq_path(stage)
     with open(path, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")

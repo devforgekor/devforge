@@ -267,13 +267,15 @@ def _classify_short_intent(source: str) -> str:
     return "other"
 
 
-def _parse_json(raw: str, label: str = "enrich", attempt: int = 1) -> Optional[Dict[str, Any]]:
+def _parse_json(raw: str, label: str = "enrich", attempt: int = 1,
+                turn_id: str = "") -> Optional[Dict[str, Any]]:
     """Extract JSON from LLM output using shared parse_llm_json + DLQ."""
     cleaned = strip_think(raw)
     result = parse_llm_json(cleaned)
     if result is None:
         save_dlq(
-            raw, stage=f"enrich_{label}", error="parse_llm_json returned None", attempt=attempt
+            raw, stage=f"enrich_{label}", error="parse_llm_json returned None",
+            attempt=attempt, turn_id=turn_id,
         )
     return result
 

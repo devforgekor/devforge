@@ -1603,7 +1603,8 @@ def _clean_extraction_json(raw: str) -> str:
     return raw
 
 
-def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict[str, Any]]:
+def _parse_json(raw: str, label: str = "LLM", attempt: int = 1,
+                turn_id: str = "") -> Optional[Dict[str, Any]]:
     cleaned = strip_think(raw)
     cleaned = _clean_extraction_json(cleaned)
     result = parse_llm_json(cleaned)
@@ -1619,7 +1620,8 @@ def _parse_json(raw: str, label: str = "LLM", attempt: int = 1) -> Optional[Dict
                 pass
     if result is None:
         save_dlq(
-            raw, stage=f"extract_{label}", error="parse_llm_json returned None", attempt=attempt
+            raw, stage=f"extract_{label}", error="parse_llm_json returned None",
+            attempt=attempt, turn_id=turn_id,
         )
     return result
 
@@ -1889,7 +1891,8 @@ or
 {"same": "no", "reason": "why (≤10 words)"}"""
 
     # Section-major extraction with chunking — single model on 8082
-    def _strict_freeform(section_type: str, source_text: str) -> Optional[Dict]:
+    def _strict_freeform(section_type: str, source_text: str, *,
+                         turn_id: str = "") -> Optional[Dict]:
         if not source_text:
             return {"extractions": [], "usage": {}, "timings": {}, "elapsed_ms": 0}
         prompt = _SYSTEM_USER_EXTRACT_FREE_8B if section_type == "user" else _SYSTEM_TEXT_EXTRACT_FREE_8B
@@ -1916,7 +1919,7 @@ or
             print(f"  [extract] call failed: {e}", flush=True)
             return None
         raw = meta["content"]
-        parsed = _parse_json(raw, f"free_{section_type}")
+        parsed = _parse_json(raw, f"free_{section_type}", turn_id=turn_id)
         if parsed is None:
             return None
         ex = parsed.get("extractions", [])
@@ -1980,7 +1983,7 @@ or
             extractions: List[Dict] = []
 
             for ci, chunk in enumerate(chunks):
-                res = _strict_freeform(section_type, chunk)
+                res = _strict_freeform(section_type, chunk, turn_id=t["id"])
                 if res and res.get("extractions"):
                     extractions.extend(res["extractions"])
                     _merge_usage(turn_data[t["id"]]["total_usage"], res.get("usage", {}))
