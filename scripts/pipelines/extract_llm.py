@@ -1253,6 +1253,193 @@ def _dedup_post_norm(facts: list[dict]) -> list[dict]:
     return result
 
 
+# ── Quality Checks ──────────────────────────────────────────────
+
+
+def _parse_causal_evidence(evidence: str) -> tuple[Optional[str], Optional[str]]:
+    """Parse evidence for causal direction. Returns (cause, effect) or (None, None)."""
+    if not evidence:
+        return None, None
+
+    # "Y (was) caused by X" — check BEFORE active "caused" to avoid "caused by" false match
+    m = re.search(r'\b(\w[\w\s]*\w)\s+(?:was\s+)?caused\s+by\s+(\w[\w\s]*\w)\b', evidence, re.IGNORECASE)
+    if m:
+        return m.group(2).strip(), m.group(1).strip()  # cause=m2, effect=m1
+
+    # "X caused Y" (active, but NOT "caused by")
+    m = re.search(r'\b(\w[\w\s]+\w)\s+caused\s+(?!by\b)(\w[\w\s]*\w)\b', evidence, re.IGNORECASE)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+
+    # "X causing Y" (present participle)
+    m = re.search(r'\b(\w[\w\s]+\w)\s+causing\s+(\w[\w\s]*\w)\b', evidence, re.IGNORECASE)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+
+    # "X resulted in Y"
+    m = re.search(r'\b(\w[\w\s]+\w)\s+resulted\s+in\s+(\w[\w\s]*\w)\b', evidence, re.IGNORECASE)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+
+    # "X leading to Y"
+    m = re.search(r'\b(\w[\w\s]+\w)\s+leading\s+to\s+(\w[\w\s]*\w)\b', evidence, re.IGNORECASE)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+
+    return None, None
+
+
+def _fix_causal_direction(fact: dict) -> dict:
+    """Fix predicate for caused/caused_by based on parsed evidence direction."""
+    pred = fact.get("predicate", "").strip().lower()
+    if pred not in ("caused", "caused_by"):
+        return fact
+    evidence = fact.get("evidence", "")
+    cause, effect = _parse_causal_evidence(evidence)
+    if cause is None or effect is None:
+        return fact
+    subject = (fact.get("subject") or "").strip().lower()
+    cause_lower = cause.lower()
+    effect_lower = effect.lower()
+
+    def _subj_in(a: str, b: str) -> bool:
+        return a in b or b in a
+
+    subj_is_cause = _subj_in(subject, cause_lower)
+    subj_is_effect = _subj_in(subject, effect_lower)
+
+    if subj_is_cause and not subj_is_effect:
+        correct_pred = "caused"
+    elif subj_is_effect and not subj_is_cause:
+        correct_pred = "caused_by"
+    else:
+        return fact
+
+    if pred != correct_pred:
+        print(f"    [qc-causal] '{pred}' -> '{correct_pred}' (subj={'cause' if subj_is_cause else 'effect'})")
+        fact["predicate"] = correct_pred
+
+    return fact
+
+
+_NUM_RE = re.compile(r'\b(\d+(?:\.\d+)?\s*(?:%|hours?|minutes?|seconds?|GiB?|MiB?|KiB?|GB|MB|KB|G|M|K)?)', re.IGNORECASE)
+
+
+_NUM_UNIT_RE = re.compile(r'^(.*?)(%|hours?|minutes?|seconds?|GiB?|MiB?|KiB?|GB|MB|KB|G|M|K)$', re.IGNORECASE)
+
+
+def _has_numerical_unit(val: str) -> bool:
+    """Check if a numerical value has a meaningful unit suffix."""
+    return bool(_NUM_UNIT_RE.match(val.strip()))
+
+
+def _fix_numerical_completeness(fact: dict) -> dict:
+    """Append numerical values from evidence to object if missing.
+    
+    Only appends values with meaningful units (%, hours, Gi, etc.)
+    to avoid polluting objects with bare error codes or IDs.
+    """
+    evidence = fact.get("evidence", "")
+    obj = fact.get("object", "")
+    if not evidence or not obj:
+        return fact
+    ev_nums = _NUM_RE.findall(evidence)
+    if not ev_nums:
+        return fact
+    obj_lower = obj.lower()
+    missing = []
+    for n in ev_nums:
+        n_stripped = n.strip()
+        if not n_stripped:
+            continue
+        if n_stripped.lower() in obj_lower:
+            continue
+        # Only add numbers with clear units
+        if _has_numerical_unit(n_stripped):
+            missing.append(n_stripped)
+    if missing:
+        old_obj = obj
+        new_obj = obj.rstrip(".,")
+        for m in missing:
+            if m not in new_obj:
+                new_obj += f" {m}"
+        new_obj = new_obj.strip()
+        if new_obj != old_obj:
+            fact["object"] = new_obj
+            print(f"    [qc-num] +{missing}")
+    return fact
+
+
+def _fix_subject_object_tautology(fact: dict) -> dict:
+    """Fix subject==object tautology for resolved_via-type predicates."""
+    pred = fact.get("predicate", "").strip().lower()
+    if pred not in ("resolved_via", "resolved_by", "fixed_by"):
+        return fact
+    subject = (fact.get("subject") or "").strip()
+    obj = (fact.get("object") or "").strip()
+    if not subject or not obj or subject.lower() != obj.lower():
+        return fact
+    evidence = fact.get("evidence", "")
+    if not evidence:
+        fact["_qc_remove"] = True
+        print(f"    [qc-tauto] removed tautology: '{subject[:40]}'")
+        return fact
+
+    m = re.search(r'\b(\w[\w\s]+)\s+resolved\s+(\w[\w\s]*)\b', evidence, re.IGNORECASE)
+    if m:
+        solution = m.group(1).strip()
+        issue_word = m.group(2).strip()
+        if issue_word.lower() in ("it", "this", "the issue", "the problem"):
+            issue = subject
+        else:
+            issue = issue_word
+        fact["subject"] = issue
+        fact["object"] = solution
+        print(f"    [qc-tauto] fixed: subj='{issue[:30]}' obj='{solution[:30]}'")
+    else:
+        fact["_qc_remove"] = True
+        print(f"    [qc-tauto] removed unresolvable: '{subject[:40]}'")
+    return fact
+
+
+def _fix_subject_grounding(fact: dict, source_text: str) -> dict:
+    """Flag facts whose subject doesn't appear in source text."""
+    subject = (fact.get("subject") or "").strip()
+    source_lower = source_text.lower()
+    subj_lower = subject.lower()
+    if not subject or not source_text or subj_lower in source_lower:
+        return fact
+    words = subject.split()
+    if len(words) > 2:
+        word_matches = sum(1 for w in words if w.lower() in source_lower)
+        if word_matches / len(words) >= 0.6:
+            return fact
+    fact["_qc_low_confidence"] = True
+    print(f"    [qc-ground] low conf: '{subject[:40]}' not in source")
+    return fact
+
+
+def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]:
+    """Run all post-extraction quality checks."""
+    if not facts:
+        return facts
+    checked = []
+    for f in facts:
+        f = _fix_causal_direction(f)
+        f = _fix_subject_object_tautology(f)  # run BEFORE numerical to preserve subject/obj equality
+        f = _fix_numerical_completeness(f)
+        f = _fix_subject_grounding(f, source_text)
+        checked.append(f)
+    result = [f for f in checked if not f.get("_qc_remove")]
+    low_conf = sum(1 for f in checked if f.get("_qc_low_confidence"))
+    if low_conf:
+        print(f"    [qc] {low_conf} low-confidence fact(s)")
+    changed = len(facts) - len(result)
+    if changed:
+        print(f"    [qc] removed {changed} fact(s)")
+    return result
+
+
 def _normalize_freeform_pipeline(facts: list[dict], source_text: str = "") -> list[dict]:
     """Full EDC normalization pipeline: subject → predicate → post-process."""
     if not facts:
@@ -1261,6 +1448,8 @@ def _normalize_freeform_pipeline(facts: list[dict], source_text: str = "") -> li
 
     if source_text:
         facts = _fix_status_hallucination(facts, source_text)
+
+    facts = _quality_check_facts(facts, source_text)
 
     facts = _group_entities(facts, field="subject")
     facts = _group_entities(facts, field="object")

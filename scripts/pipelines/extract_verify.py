@@ -25,20 +25,41 @@ from lib.text_cleaner import get_cleaner
 
 # ── NLI Self-Verify Prompt ──────────────────────────────────────
 
-_NLI_VERIFY_PROMPT = """You are verifying whether an EVIDENCE sentence is factually supported by a SOURCE sentence.
+_NLI_VERIFY_PROMPT = """You are verifying whether an EVIDENCE sentence is factually supported by a SOURCE sentence. Be strict — reject errors you would have accepted before.
 
 Follow these steps:
-1. Identify the key factual claim in the evidence.
-2. Check whether that claim is directly stated or clearly implied by the source.
-3. If the evidence contains a causal claim (caused/caused_by), verify the DIRECTION matches the source.
-4. If the evidence contains numerical values, verify they match EXACTLY (percentages, durations, counts).
-5. Output exactly one label.
+1. Extract all entity names and numerical values from the evidence.
+2. Check each entity and number appears in the source with the SAME meaning.
+3. If evidence has a causal claim ("caused", "caused_by", "resulted in"), verify:
+   - The same cause→effect direction exists in the source.
+   - If source says "X caused Y" but evidence says "Y caused X" → CONTRADICTION.
+4. If evidence has numbers (percentages, durations, counts), verify they match EXACTLY.
+5. If evidence's subject or object is a verbal phrase not present as an entity in source → CONTRADICTION.
 
-LABELS:
-- ENTAILMENT: The evidence is directly supported by the source.
-- CONTRADICTION: The evidence contradicts the source — they cannot both be true.
-  This includes: reversed causal direction, wrong numerical values, or incorrect entity attribution.
-- NEUTRAL: The evidence is related but not directly entailed by the source.
+EXAMPLES:
+SOURCE: "A composite index resolved the slow query."
+EVIDENCE: "composite index → resolved_via → composite index"
+LABEL: CONTRADICTION (subject and object are the same entity — tautology)
+
+SOURCE: "SSL certificate renewal failed causing API errors for 6 hours."
+EVIDENCE: "SSL certificate renewal caused API errors"
+LABEL: ENTAILMENT (correct direction: renewal=cause, errors=effect)
+
+SOURCE: "SSL certificate renewal failed causing API errors."
+EVIDENCE: "API errors caused_by SSL certificate renewal"
+LABEL: ENTAILMENT (correct: subject=effect(API errors), object=cause(renewal))
+
+SOURCE: "SSL certificate renewal failed causing API errors."
+EVIDENCE: "SSL certificate renewal caused_by API errors"
+LABEL: CONTRADICTION (reversed: subject is cause but predicate is caused_by)
+
+SOURCE: "Traffic decreased by 12%."
+EVIDENCE: "traffic → decreased"
+LABEL: CONTRADICTION (evidence omits "12%")
+
+SOURCE: "Fix increased pool to 200 and added HikariCP."
+EVIDENCE: "pool and HikariCP → resolved_via → pool increased to 200"
+LABEL: CONTRADICTION (subject "pool and HikariCP" is not an entity in source)
 
 Output EXACTLY one word: ENTAILMENT | CONTRADICTION | NEUTRAL
 No punctuation. No explanation.
@@ -479,6 +500,63 @@ def _verify_extractions(
     return results
 
 
+# ── Deterministic NLI Fallback ──────────────────────────────────
+
+
+def _parse_causal_dir(text: str) -> list[tuple[str, str]]:
+    """Parse causal direction pairs from text. Returns [(cause, effect), ...]."""
+    results = []
+    m = re.finditer(r'\b(\w[\w\s]+\w)\s+(?:was\s+)?caused\s+by\s+(\w[\w\s]*\w)\b', text, re.IGNORECASE)
+    for match in m:
+        results.append((match.group(2).strip().lower(), match.group(1).strip().lower()))
+    m = re.finditer(r'\b(\w[\w\s]+\w)\s+caused\s+(?!by\b)(\w[\w\s]*\w)\b', text, re.IGNORECASE)
+    for match in m:
+        results.append((match.group(1).strip().lower(), match.group(2).strip().lower()))
+    m = re.finditer(r'\b(\w[\w\s]+\w)\s+causing\s+(\w[\w\s]*\w)\b', text, re.IGNORECASE)
+    for match in m:
+        results.append((match.group(1).strip().lower(), match.group(2).strip().lower()))
+    return results
+
+
+def _deterministic_nli_check(evidence: str, source: str) -> Optional[str]:
+    """Rule-based NLI check that catches errors the LLM might miss.
+    
+    Returns ENTAILMENT/CONTRADICTION/NEUTRAL or None if unsure.
+    """
+    if not evidence or not source:
+        return None
+
+    ev_lower = evidence.lower()
+    src_lower = source.lower()
+
+    # Check 1: numerical mismatch — evidence has numbers not in source
+    ev_nums = re.findall(r'\b(\d+(?:\.\d+)?\s*(?:%|hours?|minutes?|seconds?|GiB?|MiB?|KiB?|GB|MB|KB|G|M|K)?)\b', ev_lower)
+    if ev_nums:
+        src_nums = re.findall(r'\b(\d+(?:\.\d+)?\s*(?:%|hours?|minutes?|seconds?|GiB?|MiB?|KiB?|GB|MB|KB|G|M|K)?)\b', src_lower)
+        src_flat = ' '.join(n.strip() for n in src_nums)
+        for n in ev_nums:
+            n_stripped = n.strip()
+            if n_stripped and n_stripped not in src_flat:
+                return "CONTRADICTION"
+
+    # Check 2: causal direction mismatch
+    ev_causal = _parse_causal_dir(evidence)
+    src_causal = _parse_causal_dir(source)
+    if ev_causal and src_causal:
+        for ev_cause, ev_effect in ev_causal:
+            for src_cause, src_effect in src_causal:
+                if ev_cause in src_effect and ev_effect in src_cause:
+                    return "CONTRADICTION"
+
+    # Check 3: evidence subject entity not in source
+    ev_subjects = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', evidence)
+    for subj in ev_subjects:
+        if len(subj) > 3 and subj.lower() not in src_lower:
+            return "NEUTRAL"
+
+    return None
+
+
 # ── LLM NLI Self-Verify ─────────────────────────────────────────
 
 
@@ -490,6 +568,12 @@ def _calc_nli_timeout(source: str, evidence: str) -> int:
 def _llm_nli_check(evidence: str, source: str) -> str:
     if not evidence or not source:
         return "NEUTRAL"
+
+    # Run deterministic check first — overrides LLM on clear errors
+    deterministic = _deterministic_nli_check(evidence, source)
+    if deterministic == "CONTRADICTION":
+        print(f"    [nli-d] CONTRADICTION (deterministic): '{evidence[:60]}'", flush=True)
+        return "CONTRADICTION"
 
     prompt = _NLI_VERIFY_PROMPT.format(source=context_limit(source), evidence=evidence[:500])
     try:
