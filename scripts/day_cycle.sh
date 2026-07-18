@@ -1,6 +1,6 @@
 #!/bin/bash
 # day_cycle.sh — async pipeline (pipeline_state-driven)
-# pipeline_state flow: pending → batching → cleaned → scanned → verified → enriched → embedded
+# pipeline_state flow: pending → batching → cleaned → scanned → extracted+verified → enriched → embedded
 # Batch reservation at start: 10 pending → batching
 # Each phase queries pipeline_state, each script self-reports completion via UPDATE.
 # Light → Heavy execution order:
