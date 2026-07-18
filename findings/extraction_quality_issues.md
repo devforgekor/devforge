@@ -76,3 +76,37 @@ Despite enhanced NLI prompt with causal direction + numerical checks, ALL 12 fac
 3. **NLI verify enhancement**: Added steps for causal direction check and numerical value exact match
 
 **Result**: Partial improvement (6 hours added, subject fixed for #11) but core issues persist.
+
+---
+
+## Fixes Applied (2026-07-18)
+
+### `_quality_check_facts` in `extract_llm.py`
+Added 4 post-extraction quality check functions, called from `_normalize_freeform_pipeline` after `_fix_status_hallucination`:
+
+1. **`_fix_causal_direction`**: Parses evidence for causal patterns ("caused", "caused by", "causing", "resulted in", "leading to"), determines CAUSE and EFFECT roles, then fixes the predicate:
+   - subject matches CAUSE → predicate must be `caused`
+   - subject matches EFFECT → predicate must be `caused_by`
+   - Fixes: e.g., `"SSL renewal" caused_by "API errors"` → `"SSL renewal" caused "API errors"`
+
+2. **`_fix_numerical_completeness`**: Extracts numerical values with units (`%`, hours, GiB, etc.) from evidence, appends missing ones to object. Filters out bare numbers (error codes, IDs).
+
+3. **`_fix_subject_object_tautology`**: For `resolved_via`/`resolved_by`/`fixed_by` predicates, removes facts where subject == object. Tries to recover from evidence via "X resolved Y" pattern.
+
+4. **`_fix_subject_grounding`**: Flags facts whose subject doesn't appear in source text as `_qc_low_confidence`.
+
+### Enhanced NLI Verify in `extract_verify.py`
+
+5. **`_NLI_VERIFY_PROMPT`**: Replaced with strict version containing 6 concrete examples covering tautology, correct direction, reversed direction, numerical omission, and entity drift.
+
+6. **`_deterministic_nli_check`**: Added deterministic pre-check (runs before LLM NLI):
+   - Numerical mismatch: evidence numbers not in source → CONTRADICTION
+   - Causal direction: parses both evidence and source, flags reversal
+   - Entity grounding: flags subjects not present in source
+
+### Test Results
+- Unit tests on simulated fb4bcc06 facts: all 5 issues corrected or flagged
+- Causal direction: 2/2 fixes applied (`SSL` and `monitoring`)
+- Numerical completeness: `12%` appended to traffic/503 ratio objects
+- Tautologies: `composite index` and `pool and HikariCP` removed
+- Subject grounding: `ETL pipeline processing time`, `pool and HikariCP` flagged
