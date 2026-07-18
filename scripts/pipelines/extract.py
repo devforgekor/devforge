@@ -505,7 +505,7 @@ def extract_pipeline(
                 if not dry_run:
                     _insert_mark(turn_id_val, mark, used_model, is_final=True)
                     psql_ok(
-                        f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
+                        f"UPDATE turns SET pipeline_state = 'verified' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
                     )
                 failed += 1
                 _failures.append(
@@ -522,7 +522,7 @@ def extract_pipeline(
                 if not dry_run:
                     _insert_mark(turn_id_val, "추출 parse 실패", used_model, is_final=True)
                     psql_ok(
-                        f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
+                        f"UPDATE turns SET pipeline_state = 'verified' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
                     )
                 failed += 1
                 _failures.append(
@@ -636,7 +636,7 @@ def extract_pipeline(
                 if not dry_run:
                     _insert_mark(turn_id_val, mark or "추출 2회실패", used_model, is_final=True)
                     psql_ok(
-                        f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
+                        f"UPDATE turns SET pipeline_state = 'verified' WHERE id = '{esc_sql(turn_id_val)}'::uuid"
                     )
                 failed += 1
                 _failures.append(
@@ -756,7 +756,7 @@ def extract_pipeline(
             print(f"  [extract]   Stored {fi} facts", flush=True)
             if not dry_run:
                 psql_ok(
-                    f"UPDATE turns SET pipeline_state = 'extracted' WHERE id = '{esc_sql(tid)}'::uuid"
+                    f"UPDATE turns SET pipeline_state = 'verified' WHERE id = '{esc_sql(tid)}'::uuid"
                 )
                 _delete_checkpoint(tid)
             heartbeat("day_extract", f"turn {tid[:8]} stored {fi} facts")

@@ -1,6 +1,6 @@
 #!/bin/bash
 # day_cycle.sh — async pipeline (pipeline_state-driven)
-# pipeline_state flow: pending → batching → cleaned → scanned → extracted → verified → enriched → embedded
+# pipeline_state flow: pending → batching → cleaned → scanned → verified → enriched → embedded
 # Batch reservation at start: 10 pending → batching
 # Each phase queries pipeline_state, each script self-reports completion via UPDATE.
 # Light → Heavy execution order:
@@ -359,7 +359,7 @@ fi
 
 # ── Post-Extract Supplement (:8082, offline missing-fact LLM) ──
 NEED_SUPPLEMENT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT count(*)::int FROM turns t JOIN review_facts rf ON rf.turn_id = t.id WHERE t.pipeline_state = 'extracted' AND rf.source = 'extract_pipeline' AND rf.fact_action = 'extracted'" 2>/dev/null || echo "0")
+  "SELECT count(*)::int FROM turns t JOIN review_facts rf ON rf.turn_id = t.id WHERE t.pipeline_state = 'verified' AND rf.source = 'extract_pipeline' AND rf.fact_action = 'extracted'" 2>/dev/null || echo "0")
 NEED_SUPPLEMENT=${NEED_SUPPLEMENT:-0}
 if [ "$NEED_SUPPLEMENT" -gt 0 ]; then
     SUPP_BUDGET=$(BUDGET)
@@ -378,23 +378,7 @@ if [ "$NEED_SUPPLEMENT" -gt 0 ]; then
     fi
 fi
 
-# ── Day Verify (:8082) — predicate NLI before enrich ──
-NEED_VERIFY=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT count(*)::int FROM turns WHERE pipeline_state = 'extracted'" 2>/dev/null || echo "0")
-if [ "$NEED_VERIFY" -gt 0 ]; then
-    _budget_gate "extracted" 25 30 || { LOG "Budget insufficient for verify — deferring"; exit 0; }
-    LOG "=== Day Verify (:8082 Veritas-8B, ${NEED_VERIFY} extracted turns) ==="
-    ensure_inference "day-verifier" "day-verifier" false 300
-    python3 "$PIPELINE_DIR/day_verify.py" 2>&1
-    RC=$?
-    ELAPSED=$(( $(date +%s) - START_TS ))
-    BUDGET=$(BUDGET)
-    [ $RC -eq 124 ] && LOG "  Verify timed out" || LOG "  Verify exit=$RC"
-    LOG "Budget=${BUDGET}s"
-    [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
-fi
-
-# ── Day Enrich (:8082) — after verify, predicates have NLI verdicts ──
+# ── Day Enrich (:8082) — after extract, predicates have NLI verdicts ──
 NEED_ENRICH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM turns WHERE pipeline_state = 'verified'" 2>/dev/null || echo "0")
 if [ "$NEED_ENRICH" -gt 0 ]; then

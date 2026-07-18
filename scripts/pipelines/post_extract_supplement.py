@@ -3,7 +3,7 @@
 # Path: day_cycle.sh — Post-Extract Supplement (offline missing-fact LLM)
 """Post-extract supplement — offline LLM call to find missing facts.
 
-Runs after day_extract sets pipeline_state='extracted', before day_verify.
+Runs after day_extract sets pipeline_state='verified'.
 Calls LLM on 8082 to identify important facts missed by chunk-based extraction.
 New facts stored as 'extracted' with source='extract_pipeline' → pass through
 verify → enrich → embed pipeline normally (day_verify.py picks them up).
@@ -64,7 +64,7 @@ def _get_turns_with_facts(limit: int = BATCH_LIMIT) -> List[Dict]:
                t.id, t.user_turn, t.thinking, t.text, t.detected_lang
         FROM turns t
         JOIN review_facts rf ON rf.turn_id = t.id
-        WHERE t.pipeline_state = 'extracted'
+        WHERE t.pipeline_state = 'verified'
           AND rf.source = 'extract_pipeline'
           AND rf.fact_action = 'extracted'
         ORDER BY t.id, t.created_at ASC
