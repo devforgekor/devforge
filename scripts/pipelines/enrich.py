@@ -590,6 +590,7 @@ def _generate_enrich_fields(
     extractions: Optional[List[Dict]] = None,
     detected_lang: str = "",
     timeout: Optional[int] = None,
+    turn_id: str = "",
 ) -> Optional[Dict[str, Any]]:
     """Generate enrichment metadata fields (tldr, intent, entities, tags) via *model*.
 
@@ -664,7 +665,7 @@ def _generate_enrich_fields(
         chat_template_kwargs={"enable_thinking": False},
         return_meta=True,
     )
-    result = _parse_json(meta["content"], "enrich fields")
+    result = _parse_json(meta["content"], "enrich fields", turn_id=turn_id)
     if result:
         result["_meta"] = {
             "usage": meta["usage"],
@@ -1048,6 +1049,7 @@ def enrich_pipeline(
                     extractions=exts,
                     detected_lang=dl,
                     timeout=call_timeout,
+                    turn_id=tid,
                 )
                 fut_map[fut] = (ti, tid, ut, tx, m)
 
@@ -1082,6 +1084,7 @@ def enrich_pipeline(
                 extractions=exts,
                 detected_lang=dl,
                 timeout=call_timeout,
+                turn_id=tid,
             )
             ok = _store_result(ti, tid, ut, tx, result, dry_run)
             if ok:
