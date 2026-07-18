@@ -137,6 +137,33 @@ ensure_inference() {
     }
 }
 
+# ── Reranker launch: podman exec inside inference container ─────────
+_launch_reranker() {
+    LOG "  Launching reranker on :8080..."
+    podman exec -d devforge-inference \
+        taskset -c 0-3 \
+        /app/llama-server \
+        -m /models/Qwen3-Reranker-4B-Q8_0.gguf \
+        --host 0.0.0.0 --port 8080 \
+        --ctx-size 2048 --batch-size 256 --ubatch-size 256 \
+        --threads 4 --threads-batch 4 --no-mmap -lv 6 \
+        2>&1 || {
+        LOG "  reranker podman exec failed"
+        return 1
+    }
+    local waited=0
+    while [ "$waited" -lt 300 ]; do
+        if curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; then
+            LOG "  Reranker :8080 healthy (${waited}s)"
+            return 0
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+    LOG "  Reranker :8080 health timeout"
+    return 1
+}
+
 # ── Night window guard ───────────────────────────────────────────────
 if [ -f "/opt/ai_data/scripts/current-system-mode.env" ] && \
    grep -q "MODE=night" "/opt/ai_data/scripts/current-system-mode.env"; then
@@ -339,12 +366,13 @@ if [ "${NEUTRAL_AMB:-0}" -gt 0 ]; then
     exit 0
 fi
 
-# ── Reranker Recovery: re-score RERANKER_ERROR facts ──
+# ── Reranker Recovery: launch reranker → re-score RERANKER_ERROR facts ──
 NEED_RECOVER=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM review_facts WHERE faithful_method = 'reranker_err'" 2>/dev/null || echo "0")
 NEED_RECOVER=${NEED_RECOVER:-0}
 if [ "$NEED_RECOVER" -gt 0 ]; then
-    LOG "=== Reranker Recovery (${NEED_RECOVER} RERANKER_ERROR facts) ==="
+    LOG "=== Reranker Launch + Recovery (${NEED_RECOVER} RERANKER_ERROR facts) ==="
+    _launch_reranker
     python3 "$PIPELINE_DIR/reranker_recover.py" 2>&1
     RC=$?
     if [ $RC -eq 1 ]; then
