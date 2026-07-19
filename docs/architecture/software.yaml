@@ -1,13 +1,13 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-07-18 09:00 KST
+# auto-generated from live data at 2026-07-19 09:00 KST
 ---
 metadata:
-  updated: 2026-07-18 09:00 KST
+  updated: 2026-07-19 09:00 KST
   source: live (collect_structural + mode file)
 models:
 - name: devforge-inference
   container: devforge-inference
-  status: Up 8 hours
+  status: Up 12 hours
   ports: 127.0.0.1:8080-8084->8080-8084/tcp
 modes:
   current: day

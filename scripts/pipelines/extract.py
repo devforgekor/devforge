@@ -95,6 +95,7 @@ def _insert_fact(
     predicate: Optional[str] = None,
     object_: Optional[str] = None,
     qualifiers: Optional[dict] = None,
+    quality_checks: Optional[dict] = None,
 ) -> bool:
     cols = [
         "turn_id",
@@ -170,6 +171,11 @@ def _insert_fact(
         cols.append("qualifiers")
         vals.append(f"'{qjson}'::jsonb")
         set_clauses.append(f"qualifiers = '{qjson}'::jsonb")
+    if quality_checks:
+        qcjson = json.dumps(quality_checks).replace("'", "''")
+        cols.append("quality_checks")
+        vals.append(f"'{qcjson}'::jsonb")
+        set_clauses.append(f"quality_checks = '{qcjson}'::jsonb")
 
     sql = (
         f"INSERT INTO review_facts ({', '.join(cols)}) "
@@ -374,6 +380,7 @@ def extract_pipeline(
     print(f"{'=' * 60}")
 
     psql_ok("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm TEXT")
+    psql_ok("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS quality_checks JSONB")
 
     if not dry_run:
         _ensure_checkpoint_table()
@@ -747,6 +754,7 @@ def extract_pipeline(
                     predicate=ex.get("predicate"),
                     object_=ex.get("object"),
                     qualifiers=qualifiers,
+                    quality_checks=ex.get("_qc_checks"),
                 )
                 fi += 1
 

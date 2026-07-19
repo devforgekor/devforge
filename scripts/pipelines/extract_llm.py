@@ -1293,10 +1293,12 @@ def _fix_causal_direction(fact: dict) -> dict:
     """Fix predicate for caused/caused_by based on parsed evidence direction."""
     pred = fact.get("predicate", "").strip().lower()
     if pred not in ("caused", "caused_by"):
+        fact.setdefault("_qc_checks", {})["causal_direction"] = "n/a"
         return fact
     evidence = fact.get("evidence", "")
     cause, effect = _parse_causal_evidence(evidence)
     if cause is None or effect is None:
+        fact.setdefault("_qc_checks", {})["causal_direction"] = "unparseable"
         return fact
     subject = (fact.get("subject") or "").strip().lower()
     cause_lower = cause.lower()
@@ -1313,11 +1315,15 @@ def _fix_causal_direction(fact: dict) -> dict:
     elif subj_is_effect and not subj_is_cause:
         correct_pred = "caused_by"
     else:
+        fact.setdefault("_qc_checks", {})["causal_direction"] = "ambiguous"
         return fact
 
     if pred != correct_pred:
         print(f"    [qc-causal] '{pred}' -> '{correct_pred}' (subj={'cause' if subj_is_cause else 'effect'})")
         fact["predicate"] = correct_pred
+        fact.setdefault("_qc_checks", {})["causal_direction"] = "fixed"
+    else:
+        fact.setdefault("_qc_checks", {})["causal_direction"] = "passed"
 
     return fact
 
@@ -1342,9 +1348,11 @@ def _fix_numerical_completeness(fact: dict) -> dict:
     evidence = fact.get("evidence", "")
     obj = fact.get("object", "")
     if not evidence or not obj:
+        fact.setdefault("_qc_checks", {})["numerical"] = "n/a"
         return fact
     ev_nums = _NUM_RE.findall(evidence)
     if not ev_nums:
+        fact.setdefault("_qc_checks", {})["numerical"] = "passed"
         return fact
     obj_lower = obj.lower()
     missing = []
@@ -1366,7 +1374,12 @@ def _fix_numerical_completeness(fact: dict) -> dict:
         new_obj = new_obj.strip()
         if new_obj != old_obj:
             fact["object"] = new_obj
+            fact.setdefault("_qc_checks", {})["numerical"] = "fixed"
             print(f"    [qc-num] +{missing}")
+        else:
+            fact.setdefault("_qc_checks", {})["numerical"] = "passed"
+    else:
+        fact.setdefault("_qc_checks", {})["numerical"] = "passed"
     return fact
 
 
@@ -1374,14 +1387,17 @@ def _fix_subject_object_tautology(fact: dict) -> dict:
     """Fix subject==object tautology for resolved_via-type predicates."""
     pred = fact.get("predicate", "").strip().lower()
     if pred not in ("resolved_via", "resolved_by", "fixed_by"):
+        fact.setdefault("_qc_checks", {})["tautology"] = "n/a"
         return fact
     subject = (fact.get("subject") or "").strip()
     obj = (fact.get("object") or "").strip()
     if not subject or not obj or subject.lower() != obj.lower():
+        fact.setdefault("_qc_checks", {})["tautology"] = "passed"
         return fact
     evidence = fact.get("evidence", "")
     if not evidence:
         fact["_qc_remove"] = True
+        fact.setdefault("_qc_checks", {})["tautology"] = "removed"
         print(f"    [qc-tauto] removed tautology: '{subject[:40]}'")
         return fact
 
@@ -1395,9 +1411,11 @@ def _fix_subject_object_tautology(fact: dict) -> dict:
             issue = issue_word
         fact["subject"] = issue
         fact["object"] = solution
+        fact.setdefault("_qc_checks", {})["tautology"] = "fixed"
         print(f"    [qc-tauto] fixed: subj='{issue[:30]}' obj='{solution[:30]}'")
     else:
         fact["_qc_remove"] = True
+        fact.setdefault("_qc_checks", {})["tautology"] = "removed_unresolvable"
         print(f"    [qc-tauto] removed unresolvable: '{subject[:40]}'")
     return fact
 
@@ -1408,23 +1426,27 @@ def _fix_subject_grounding(fact: dict, source_text: str) -> dict:
     source_lower = source_text.lower()
     subj_lower = subject.lower()
     if not subject or not source_text or subj_lower in source_lower:
+        fact.setdefault("_qc_checks", {})["grounding"] = "passed"
         return fact
     words = subject.split()
     if len(words) > 2:
         word_matches = sum(1 for w in words if w.lower() in source_lower)
         if word_matches / len(words) >= 0.6:
+            fact.setdefault("_qc_checks", {})["grounding"] = "passed"
             return fact
     fact["_qc_low_confidence"] = True
+    fact.setdefault("_qc_checks", {})["grounding"] = "low_confidence"
     print(f"    [qc-ground] low conf: '{subject[:40]}' not in source")
     return fact
 
 
 def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]:
-    """Run all post-extraction quality checks."""
+    """Run all post-extraction quality checks. Annotates each fact with _qc_checks dict."""
     if not facts:
         return facts
     checked = []
     for f in facts:
+        f["_qc_checks"] = {}
         f = _fix_causal_direction(f)
         f = _fix_subject_object_tautology(f)  # run BEFORE numerical to preserve subject/obj equality
         f = _fix_numerical_completeness(f)
@@ -1437,6 +1459,10 @@ def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]
     changed = len(facts) - len(result)
     if changed:
         print(f"    [qc] removed {changed} fact(s)")
+    # strip meta keys from removed facts too (they won't be stored)
+    for f in checked:
+        f.pop("_qc_remove", None)
+        f.pop("_qc_low_confidence", None)
     return result
 
 
