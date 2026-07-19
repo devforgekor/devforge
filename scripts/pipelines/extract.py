@@ -707,6 +707,16 @@ def extract_pipeline(
                 extractions_by_turn[tid] = _fix_status_hallucination(
                     extractions_by_turn[tid], src_text
                 )
+            # Phase 2c-2c: Final quality checks (after all LLM processing)
+            source_text_qc = ""
+            for t in turns:
+                if t["id"] == tid:
+                    parts = [t.get("user_turn","") or "", t.get("thinking","") or "", t.get("text","") or ""]
+                    source_text_qc = " ".join(p for p in parts if p)
+                    break
+            extractions_by_turn[tid] = _quality_check_facts(
+                extractions_by_turn[tid], source_text_qc
+            )
 
     # ── Phase 2c-3: Store (sequential, DB writes) ──────────────
     for (
