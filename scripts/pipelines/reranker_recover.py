@@ -46,7 +46,8 @@ def recover_reranker_errors(limit: int = 50) -> int:
     rows = psql_json(
         f"SELECT rf.id::text, rf.evidence, "
         f"  left(rf.evidence, 60) AS evidence_preview, "
-        f"  t.user_turn, t.thinking, t.text, rf.fact_type "
+        f"  t.user_turn, t.thinking, t.text, rf.fact_type, "
+        f"  rf.subject, rf.predicate, rf.object "
         f"FROM review_facts rf "
         f"JOIN turns t ON t.id = rf.turn_id "
         f"WHERE rf.faithful_method = 'reranker_err' "
@@ -70,6 +71,20 @@ def recover_reranker_errors(limit: int = 50) -> int:
             # No source to compare — skip with a non-error fallback
             psql_ok(
                 f"UPDATE review_facts SET faithful_method = 'reranker_nosrc', "
+                f"nli_verdict = 'AMBIGUOUS', faithful_score = 0.0 "
+                f"WHERE id = '{esc_sql(r['id'])}'::uuid "
+                f"AND faithful_method = 'reranker_err'"
+            )
+            updated += 1
+            continue
+
+        subj = (r.get("subject") or "").strip()
+        pred = (r.get("predicate") or "").strip()
+        obj = (r.get("object") or "").strip()
+        if not subj and not pred and not obj:
+            # Information-free fact (empty triple) — skip recovery
+            psql_ok(
+                f"UPDATE review_facts SET faithful_method = 'reranker_empty', "
                 f"nli_verdict = 'AMBIGUOUS', faithful_score = 0.0 "
                 f"WHERE id = '{esc_sql(r['id'])}'::uuid "
                 f"AND faithful_method = 'reranker_err'"

@@ -177,7 +177,7 @@ MODEL_METADATA = {
         "port": 8082,
         "mode": "day",
         "model_name": "day-extractor",
-        "ctx": 4096,
+        "ctx": 8192,
         "threads": 4,
         "threads_batch": 4,
         "parallel": 2,

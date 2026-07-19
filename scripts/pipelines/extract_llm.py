@@ -1440,6 +1440,55 @@ def _fix_subject_grounding(fact: dict, source_text: str) -> dict:
     return fact
 
 
+def _fix_direction_swaps(facts: list[dict]) -> list[dict]:
+    """Cross-fact scan: detect reversed (subject, predicate, object) pairs.
+
+    For each pair of facts sharing the same predicate where subject/object
+    are swapped (Fact A: X-P-Y, Fact B: Y-P-X), flags the one whose
+    subject doesn't appear in the other's evidence as a suspected reversal.
+    """
+    if len(facts) < 2:
+        return facts
+    idx_by_key: dict[tuple[str, str, str], int] = {}
+    swap_pairs: list[tuple[int, int, str]] = []
+    for i, f in enumerate(facts):
+        subj = (f.get("subject") or "").strip().lower()
+        pred = (f.get("predicate") or "").strip().lower()
+        obj = (f.get("object") or "").strip().lower()
+        if not subj or not pred or not obj:
+            continue
+        if subj == obj:
+            continue
+        key = (subj, pred, obj)
+        idx_by_key[key] = i
+        rev_key = (obj, pred, subj)
+        j = idx_by_key.get(rev_key)
+        if j is not None:
+            swap_pairs.append((j, i, pred))
+    for j, i, pred in swap_pairs:
+        fj = facts[j]
+        fi = facts[i]
+        ev_j = (fj.get("evidence") or "").lower()
+        ev_i = (fi.get("evidence") or "").lower()
+        subj_j = (fj.get("subject") or "").strip().lower()
+        subj_i = (fi.get("subject") or "").strip().lower()
+        j_subj_in_ev_i = subj_j in ev_i
+        i_subj_in_ev_j = subj_i in ev_j
+        if i_subj_in_ev_j and not j_subj_in_ev_i:
+            facts[i].setdefault("_qc_checks", {})["direction_swap"] = "suspected_reversal"
+            facts[j].setdefault("_qc_checks", {})["direction_swap"] = "passed"
+            print(f"    [qc-dirswap] fact[{i}] suspected reversal vs fact[{j}] (pred='{pred}')")
+        elif j_subj_in_ev_i and not i_subj_in_ev_j:
+            facts[j].setdefault("_qc_checks", {})["direction_swap"] = "suspected_reversal"
+            facts[i].setdefault("_qc_checks", {})["direction_swap"] = "passed"
+            print(f"    [qc-dirswap] fact[{j}] suspected reversal vs fact[{i}] (pred='{pred}')")
+        else:
+            facts[j].setdefault("_qc_checks", {})["direction_swap"] = "ambiguous"
+            facts[i].setdefault("_qc_checks", {})["direction_swap"] = "ambiguous"
+            print(f"    [qc-dirswap] ambiguous pair fact[{j}] <-> fact[{i}] (pred='{pred}')")
+    return facts
+
+
 def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]:
     """Run all post-extraction quality checks. Annotates each fact with _qc_checks dict."""
     if not facts:
@@ -1452,6 +1501,7 @@ def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]
         f = _fix_numerical_completeness(f)
         f = _fix_subject_grounding(f, source_text)
         checked.append(f)
+    checked = _fix_direction_swaps(checked)
     result = [f for f in checked if not f.get("_qc_remove")]
     low_conf = sum(1 for f in checked if f.get("_qc_low_confidence"))
     if low_conf:
