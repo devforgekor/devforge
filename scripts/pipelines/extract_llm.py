@@ -1420,11 +1420,22 @@ def _fix_subject_object_tautology(fact: dict) -> dict:
     return fact
 
 
+_ENTITY_PREFIXES = ("Service ", "Pod ", "Container ")
+
+
+def _strip_known_prefix(name: str) -> str:
+    """Strip entity type prefixes that _expand_compounds prepends."""
+    for prefix in _ENTITY_PREFIXES:
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
 def _fix_subject_grounding(fact: dict, source_text: str) -> dict:
     """Flag facts whose subject doesn't appear in source text."""
     subject = (fact.get("subject") or "").strip()
     source_lower = source_text.lower()
-    subj_lower = subject.lower()
+    subj_lower = _strip_known_prefix(subject).lower()
     if not subject or not source_text or subj_lower in source_lower:
         fact.setdefault("_qc_checks", {})["grounding"] = "passed"
         return fact
@@ -1489,6 +1500,46 @@ def _fix_direction_swaps(facts: list[dict]) -> list[dict]:
     return facts
 
 
+_QC_WEIGHTS = {
+    "causal_direction": 0.15,
+    "tautology": 0.10,
+    "numerical": 0.10,
+    "grounding": 0.25,
+    "direction_swap": 0.15,
+    "faithful": 0.25,
+}
+
+
+def _compute_quality_score(fact: dict) -> float:
+    """Compute 0-100 composite quality score from QC checks + faithful_score."""
+    checks = fact.get("_qc_checks", {}) or {}
+
+    def _axis_score(key: str, pass_vals: tuple[str, ...], partial_vals: tuple[str, ...] = ()) -> float:
+        val = checks.get(key, "n/a")
+        if val in pass_vals or val == "n/a":
+            return 1.0
+        if val in partial_vals:
+            return 0.7
+        return 0.0
+
+    cd = _axis_score("causal_direction", ("passed", "fixed"), ("ambiguous",))
+    tt = _axis_score("tautology", ("passed", "n/a"), ("fixed",))
+    nu = _axis_score("numerical", ("passed", "n/a"), ("fixed",))
+    gr = _axis_score("grounding", ("passed",))
+    ds = _axis_score("direction_swap", ("passed", "n/a"), ("ambiguous",))
+
+    faithful = fact.get("faithful_score")
+    faithful = float(faithful) if faithful is not None else 1.0
+    faithful = max(0.0, min(1.0, faithful))
+
+    scores = [cd, tt, nu, gr, ds, faithful]
+    total = sum(w * s for w, s in zip(_QC_WEIGHTS.values(), scores))
+    return round(total * 100, 1)
+
+
+_QC_FILTER_THRESHOLD = 20.0
+
+
 def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]:
     """Run all post-extraction quality checks. Annotates each fact with _qc_checks dict."""
     if not facts:
@@ -1509,6 +1560,12 @@ def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]
             f = _fix_subject_grounding(f, source_text)
         checked.append(f)
     checked = _fix_direction_swaps(checked)
+    for f in checked:
+        score = _compute_quality_score(f)
+        f["_qc_checks"]["quality_score"] = score
+        if score < _QC_FILTER_THRESHOLD:
+            f["_qc_remove"] = True
+            f["_qc_checks"]["auto_filtered"] = f"score={score} < {_QC_FILTER_THRESHOLD}"
     result = [f for f in checked if not f.get("_qc_remove")]
     low_conf = sum(1 for f in checked if f.get("_qc_low_confidence"))
     if low_conf:
