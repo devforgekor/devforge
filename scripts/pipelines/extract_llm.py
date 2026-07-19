@@ -1496,10 +1496,17 @@ def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]
     checked = []
     for f in facts:
         f["_qc_checks"] = {}
-        f = _fix_causal_direction(f)
-        f = _fix_subject_object_tautology(f)  # run BEFORE numerical to preserve subject/obj equality
-        f = _fix_numerical_completeness(f)
-        f = _fix_subject_grounding(f, source_text)
+        subj = (f.get("subject") or "").strip()
+        pred = (f.get("predicate") or "").strip()
+        obj = (f.get("object") or "").strip()
+        if not subj and not pred and not obj:
+            f["_qc_remove"] = True
+            f["_qc_checks"]["empty_triple"] = "removed"
+        else:
+            f = _fix_causal_direction(f)
+            f = _fix_subject_object_tautology(f)  # run BEFORE numerical to preserve subject/obj equality
+            f = _fix_numerical_completeness(f)
+            f = _fix_subject_grounding(f, source_text)
         checked.append(f)
     checked = _fix_direction_swaps(checked)
     result = [f for f in checked if not f.get("_qc_remove")]

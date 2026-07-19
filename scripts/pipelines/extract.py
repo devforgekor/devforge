@@ -56,6 +56,7 @@ from extract_llm import (
 from extract_llm import (
     _extract_edcr_freeform as _extract_solo_section_major,
     _fix_status_hallucination,
+    _quality_check_facts,
 )
 from extract_verify import (
     _llm_nli_verify,
@@ -637,6 +638,10 @@ def extract_pipeline(
                     neutral.append(v)
             rerankered = _verify_extractions(neutral, user_turn, thinking, text) if neutral else []
             extractions = entail + rerankered
+
+            # Phase 2c-1.5: Post-extraction quality checks (annotates _qc_checks, may remove facts)
+            source_text = f"{user_turn} {thinking} {text}"
+            extractions = _quality_check_facts(extractions, source_text)
 
             if not extractions:
                 print("  [extract]   No faithful extractions — marking failure")

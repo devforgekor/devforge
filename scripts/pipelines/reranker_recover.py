@@ -85,7 +85,9 @@ def recover_reranker_errors(limit: int = 50) -> int:
             # Information-free fact (empty triple) — skip recovery
             psql_ok(
                 f"UPDATE review_facts SET faithful_method = 'reranker_empty', "
-                f"nli_verdict = 'AMBIGUOUS', faithful_score = 0.0 "
+                f"nli_verdict = 'AMBIGUOUS', faithful_score = 0.0, "
+                f"quality_checks = COALESCE(quality_checks, '{{}}'::jsonb) || "
+                f"'{{\"empty_triple\": \"removed\"}}'::jsonb "
                 f"WHERE id = '{esc_sql(r['id'])}'::uuid "
                 f"AND faithful_method = 'reranker_err'"
             )
