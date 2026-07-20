@@ -38,7 +38,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from lib.notify import Notifier
 from mcp_server import mcp
-from review_dashboard import router as review_router
+from devforge_fastapi.review_dashboard import router as review_router
+from fastmcp.utilities.lifespan import combine_lifespans
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("devforge-fastapi")
@@ -79,7 +80,12 @@ else:
 
 SLACK_SIGNING_SECRET = _SECRETS.get("SLACK_SIGNING_SECRET", "")
 SLACK_BOT_TOKEN = _SECRETS.get("SLACK_BOT_TOKEN", "")
-TG_BASE = f"https://api.telegram.org/bot{_SECRETS.get('TELEGRAM_TOKEN', '')}"
+_TG_TOKEN = _SECRETS.get("TELEGRAM_TOKEN", "")
+if not _TG_TOKEN:
+    logger.info("Telegram disabled (no TELEGRAM_TOKEN)")
+    TG_BASE = ""
+else:
+    TG_BASE = f"https://api.telegram.org/bot{_TG_TOKEN}"
 
 # Notifier: Apprise-based Telegram + Email, native Slack
 _notifier = Notifier(_SECRETS)
@@ -328,27 +334,26 @@ async def _watcher_task(stop_event):
 
 
 @asynccontextmanager
-async def lifespan(app_inst: FastAPI):
-    async with mcp_app.lifespan(app_inst):
-        tg_task = asyncio.create_task(_telegram_poll_loop())
-        blob_task = asyncio.create_task(_blob_server_task())
-        watcher_stop = threading.Event()
-        watcher_task = asyncio.create_task(_watcher_task(watcher_stop))
-        try:
-            yield
-        finally:
-            watcher_stop.set()
-            tg_task.cancel()
-            blob_task.cancel()
-            watcher_task.cancel()
-            for t in (tg_task, blob_task, watcher_task):
-                try:
-                    await t
-                except (asyncio.CancelledError, Exception):
-                    pass
+async def app_lifespan(app_inst: FastAPI):
+    tg_task = asyncio.create_task(_telegram_poll_loop())
+    blob_task = asyncio.create_task(_blob_server_task())
+    watcher_stop = threading.Event()
+    watcher_task = asyncio.create_task(_watcher_task(watcher_stop))
+    try:
+        yield
+    finally:
+        watcher_stop.set()
+        tg_task.cancel()
+        blob_task.cancel()
+        watcher_task.cancel()
+        for t in (tg_task, blob_task, watcher_task):
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
-app.router.lifespan_context = lifespan
+app.router.lifespan_context = combine_lifespans(app_lifespan, mcp_app.lifespan)
 
 
 # ── Health ────────────────────────────────────────────────────
