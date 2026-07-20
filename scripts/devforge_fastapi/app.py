@@ -38,6 +38,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from lib.notify import Notifier
 from mcp_server import mcp
+from review_dashboard import router as review_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("devforge-fastapi")
@@ -356,6 +357,10 @@ app.router.lifespan_context = lifespan
 @app.get("/health")
 async def health():
     return {"status": "ok", "server": "devforge-fastapi"}
+
+
+# ── Review dashboard ─────────────────────────────────────────
+app.include_router(review_router)
 
 
 # ── Slack routes ─────────────────────────────────────────────
