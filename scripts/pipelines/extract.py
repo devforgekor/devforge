@@ -60,6 +60,7 @@ from extract_llm import (
 )
 from extract_verify import (
     _llm_nli_verify,
+    _llm_nli_verify2,
     _post_process_extractions,
     _refine_batch,
     _verify_extractions,
@@ -90,6 +91,7 @@ def _insert_fact(
     faithful_method: Optional[str] = None,
     grounding: Optional[str] = None,
     nli_llm: Optional[str] = None,
+    nli_llm2: Optional[str] = None,
     source_file: Optional[str] = None,
     corrected_evidence: Optional[str] = None,
     subject: Optional[str] = None,
@@ -147,6 +149,10 @@ def _insert_fact(
         cols.append("nli_llm")
         vals.append(f"'{esc_sql(nli_llm)}'")
         set_clauses.append(f"nli_llm = '{esc_sql(nli_llm)}'")
+    if nli_llm2:
+        cols.append("nli_llm2")
+        vals.append(f"'{esc_sql(nli_llm2)}'")
+        set_clauses.append(f"nli_llm2 = '{esc_sql(nli_llm2)}'")
     if source_file:
         cols.append("source_file")
         vals.append(f"'{esc_sql(source_file)}'")
@@ -382,6 +388,7 @@ def extract_pipeline(
 
     psql_ok("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm TEXT")
     psql_ok("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS quality_checks JSONB")
+    psql_ok("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm2 TEXT")
 
     if not dry_run:
         _ensure_checkpoint_table()
@@ -639,6 +646,10 @@ def extract_pipeline(
             rerankered = _verify_extractions(neutral, user_turn, thinking, text) if neutral else []
             extractions = entail + rerankered
 
+            # Phase 2c-1.4: Verifier #2 — independent second-opinion LLM judge
+            if extractions:
+                extractions = _llm_nli_verify2(extractions, user_turn, thinking, text)
+
             # Phase 2c-1.5: Post-extraction quality checks (annotates _qc_checks, may remove facts)
             source_text = f"{user_turn} {thinking} {text}"
             extractions = _quality_check_facts(extractions, source_text)
@@ -751,6 +762,7 @@ def extract_pipeline(
                 evidence_span = ex.get("evidence_span")
                 if evidence_span:
                     qualifiers["evidence_span"] = evidence_span
+                ex.pop("_verifier2", None)  # meta key, not stored directly
                 _insert_fact(
                     tid,
                     fi,
@@ -764,6 +776,7 @@ def extract_pipeline(
                     faithful_method=ex.get("faithful_method"),
                     grounding=ex.get("grounding"),
                     nli_llm=ex.get("nli_llm"),
+                    nli_llm2=ex.get("nli_llm2"),
                     corrected_evidence=ex.get("corrected_evidence"),
                     subject=ex.get("subject"),
                     predicate=ex.get("predicate"),

@@ -1577,6 +1577,11 @@ def _quality_check_facts(facts: list[dict], source_text: str = "") -> list[dict]
     for f in checked:
         f.pop("_qc_remove", None)
         f.pop("_qc_low_confidence", None)
+    # Merge verifier #2 info into _qc_checks (don't pop — QC2 runs later)
+    for f in checked:
+        v2 = f.get("_verifier2")
+        if v2:
+            f["_qc_checks"]["verifier2"] = v2
     return result
 
 

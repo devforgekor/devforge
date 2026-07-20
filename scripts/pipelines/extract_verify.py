@@ -557,6 +557,93 @@ def _deterministic_nli_check(evidence: str, source: str) -> Optional[str]:
     return None
 
 
+# ── Verifier #2: Independent LLM judge (different prompt) ──────
+
+_VERIFIER2_PROMPT = """You are a second-opinion fact-checker. Given a source text and a fact extracted from it, determine if the fact is SUPPORTED or NOT_SUPPORTED by the source.
+
+Fact: {subject} -- {predicate} -> {object}
+Evidence: {evidence}
+Source: {source}
+
+A fact is SUPPORTED if the source text explicitly or implicitly confirms all three parts (subject, predicate, object) together.
+A fact is NOT_SUPPORTED if any part of the fact contradicts the source or is absent from it.
+If unsure, answer UNCERTAIN.
+
+Answer EXACTLY one word: SUPPORTED | NOT_SUPPORTED | UNCERTAIN
+No explanation."""
+
+
+def _llm_nli_verify2(
+    extractions: List[Dict[str, Any]],
+    user_turn: str,
+    thinking: str,
+    text: str,
+) -> List[Dict[str, Any]]:
+    """Second-opinion LLM verifier. Independent from the primary NLI check.
+    Annotates each extraction with:
+      - nli_llm2: SUPPORTED | NOT_SUPPORTED | UNCERTAIN
+      - _verifier2: dict with verdict and disagreement status
+    """
+    source_map = {"user": user_turn, "thinking": thinking, "text": text}
+
+    for ex in extractions:
+        evidence = ex.get("evidence", "")
+        source = source_map.get(ex.get("fact_type", ""), "")
+        subject = ex.get("subject", "")
+        predicate = ex.get("predicate", "")
+        object_ = ex.get("object", "")
+
+        if not evidence or not source or not subject:
+            ex["nli_llm2"] = "UNCERTAIN"
+            ex["_verifier2"] = {"verdict": "UNCERTAIN", "reason": "missing_fields"}
+            continue
+
+        prompt = _VERIFIER2_PROMPT.format(
+            subject=context_limit(subject[:300]),
+            predicate=context_limit(predicate[:300]),
+            object=context_limit(object_[:300]),
+            evidence=evidence[:500],
+            source=context_limit(source),
+        )
+        try:
+            meta = call_llm(
+                [{"role": "user", "content": prompt}],
+                model="day_extract",
+                max_tokens=64,
+                temperature=0.0,
+                timeout=_calc_nli_timeout(source, evidence),
+                return_meta=True,
+            )
+            raw = meta["content"].strip().upper()
+            verdict = "UNCERTAIN"
+            for tok in raw.replace("\n", " ").split():
+                tok = tok.strip(".,!?;:\"'()[]")
+                if tok in ("SUPPORTED", "NOT_SUPPORTED", "UNCERTAIN"):
+                    verdict = tok
+                    break
+            ex["nli_llm2"] = verdict
+
+            # Determine disagreement with primary verdict
+            primary = ex.get("nli_llm", "NEUTRAL")
+            disagreement = False
+            if verdict == "NOT_SUPPORTED" and primary == "ENTAILMENT":
+                disagreement = True
+            elif verdict == "SUPPORTED" and primary == "CONTRADICTION":
+                disagreement = True
+            elif verdict == "UNCERTAIN":
+                disagreement = True
+            ex["_verifier2"] = {
+                "verdict": verdict,
+                "disagreement": disagreement,
+                "primary_verdict": primary,
+            }
+        except Exception:
+            ex["nli_llm2"] = "UNCERTAIN"
+            ex["_verifier2"] = {"verdict": "UNCERTAIN", "disagreement": False, "error": True}
+
+    return extractions
+
+
 # ── LLM NLI Self-Verify ─────────────────────────────────────────
 
 
