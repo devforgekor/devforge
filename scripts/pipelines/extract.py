@@ -949,6 +949,68 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
     return {"processed": processed, "failed": failed, "ok": processed > 0}
 
 
+# ── Pre-flight Gate ────────────────────────────────────────────────────
+
+
+def _preflight_gate() -> None:
+    """Fast static checks before pipeline startup: model files, memory, DB.
+
+    Exits with code 1 on any failure.  Must run before model pod start and
+    preflight_checks() so the user gets immediate feedback on fatal issues.
+    """
+    models_dir = "/opt/ai_data/models/gguf"
+    required_models: list[tuple[str, str, str]] = [
+        ("day-extractor", "Qwen3-8B-Q8_0.gguf", "8.2GB"),
+        ("reranker", "Qwen3-Reranker-4B-Q8_0.gguf", "4.0GB"),
+    ]
+
+    errors: list[str] = []
+
+    # 1. Model file existence
+    for name, filename, size in required_models:
+        path = os.path.join(models_dir, filename)
+        if not os.path.exists(path):
+            errors.append(f"Model file not found: {name} ({size}) — {path}")
+        else:
+            print(f"  [preflight] model {name} ({size}): OK", flush=True)
+
+    # 2. Memory budget — combined model load ~12.2 GB, need ≥16 GB available
+    try:
+        mem_info: dict[str, int] = {}
+        with open("/proc/meminfo") as _mf:
+            for _line in _mf:
+                parts = _line.split()
+                if parts and parts[0].rstrip(":") in ("MemAvailable", "MemTotal"):
+                    mem_info[parts[0].rstrip(":")] = int(parts[1])
+        if "MemAvailable" in mem_info:
+            avail_gb = mem_info["MemAvailable"] / 1024 / 1024
+            total_gb = mem_info.get("MemTotal", 0) / 1024 / 1024
+            print(f"  [preflight] memory: {avail_gb:.1f}GB / {total_gb:.0f}GB available", flush=True)
+            if avail_gb < 4:
+                errors.append(f"Critically low memory: {avail_gb:.1f}GB available (need ≥4GB)")
+            elif avail_gb < 10:
+                errors.append(f"Insufficient memory for day-extractor: {avail_gb:.1f}GB available (need ≥10GB)")
+            elif avail_gb < 16:
+                print(f"  [preflight] memory: {avail_gb:.1f}GB — may be tight when both models load", flush=True)
+    except Exception as e:
+        errors.append(f"Memory check failed: {e}")
+
+    # 3. DB connectivity
+    from lib.db import psql_ok
+    if not psql_ok("SELECT 1", timeout=10):
+        errors.append("DB connectivity check failed — cannot reach PostgreSQL")
+    else:
+        print("  [preflight] DB connectivity: OK", flush=True)
+
+    if errors:
+        for err in errors:
+            print(f"  [preflight] FAIL: {err}", flush=True)
+        print("  [preflight] Gate BLOCKED — exiting", flush=True)
+        sys.exit(1)
+
+    print("  [preflight] Gate PASSED — all static checks ok", flush=True)
+
+
 # ── CLI ────────────────────────────────────────────────────────────────
 
 
@@ -987,9 +1049,13 @@ def _launch_reranker() -> bool:
 
 def main() -> None:
     signal.signal(signal.SIGTERM, _sigterm_handler)
+    # Phase 0: Pre-flight Gate — fast static checks before any work
+    _preflight_gate()
+    # Phase 0b: Stale process cleanup + port/memory logging (kill before start)
+    preflight_checks("extract.py", required_ports={8080, 8082})
+    # Phase 0c: Model pod start — day-extractor on :8082, reranker on :8080
     _ensure_model_pod("day-extractor", skip_if_healthy=False)
     _launch_reranker()
-    preflight_checks("extract.py")
     import argparse
 
     parser = argparse.ArgumentParser(
