@@ -2333,7 +2333,7 @@ or
                             model="day_extract",
                             max_tokens=16,
                             temperature=0.0,
-                            timeout=15,
+                            timeout=90,
                             json_mode=True,
                             return_meta=True,
                         )

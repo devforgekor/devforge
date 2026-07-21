@@ -551,6 +551,7 @@ def _launch_reranker() -> bool:
         "--threads-batch",
         str(reranker.get("threads_batch", 4)),
         "--no-mmap",
+        "--reranking",
         "-lv",
         "6",
     ]

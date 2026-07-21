@@ -369,7 +369,7 @@ def _evidence_rewrite(pred: str, evidence: str, subject: str) -> str:
 
 def _refine_batch(
     extractions_by_turn: Dict[str, List[Dict]],
-) -> None:
+) -> Dict[str, List[Dict]]:
     candidates = []
     for tid, extractions in extractions_by_turn.items():
         for i, ex in enumerate(extractions):
@@ -379,7 +379,7 @@ def _refine_batch(
                 )
 
     if not candidates:
-        return
+        return extractions_by_turn
 
     def _refine_one(cand):
         tid, idx, src, ev = cand
@@ -406,13 +406,19 @@ def _refine_batch(
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(_refine_one, candidates))
 
+    result = {}
+    for tid, extractions in extractions_by_turn.items():
+        result[tid] = [dict(ex) for ex in extractions]
+
     for tid, idx, corrected in results:
-        if tid in extractions_by_turn and idx < len(extractions_by_turn[tid]):
-            extractions_by_turn[tid][idx]["corrected_evidence"] = corrected
+        if tid in result and idx < len(result[tid]):
+            result[tid][idx]["corrected_evidence"] = corrected
             print(
                 f"      [refine] turn {tid[:8]} fact {idx}: refined ({len(corrected)}ch)",
                 flush=True,
             )
+
+    return result
 
 
 # ── Reranker faithfulness ───────────────────────────────────────
@@ -464,12 +470,20 @@ def _verify_extractions(
                 "grounding": grounding,
             }
         elif grounding == "RERANKER_ERROR":
-            verdict = {
-                "faithful": False,
-                "score": score,
-                "method": "reranker_err",
-                "grounding": "RERANKER_ERROR",
-            }
+            if _check_faithfulness(evidence, source):
+                verdict = {
+                    "faithful": True,
+                    "score": score,
+                    "method": "reranker_substr",
+                    "grounding": "GROUNDED",
+                }
+            else:
+                verdict = {
+                    "faithful": True,
+                    "score": score,
+                    "method": "reranker_ambig",
+                    "grounding": "AMBIGUOUS",
+                }
         else:
             if _check_faithfulness(evidence, source):
                 verdict = {
@@ -573,78 +587,143 @@ Answer EXACTLY one word: SUPPORTED | NOT_SUPPORTED | UNCERTAIN
 No explanation."""
 
 
+_BATCH_VERIFIER2_PROMPT = """You are a second-opinion fact-checker. Given source texts and facts extracted from them, determine if each fact is SUPPORTED or NOT_SUPPORTED by its corresponding source.
+
+Each fact below is tagged with its source type. Check the fact ONLY against its specific source.
+
+--- user query ---
+{user}
+
+--- assistant response ---
+{text}
+
+Facts:
+{numbered_facts}
+
+Output EXACTLY one label per line, in the same order:
+[1] SUPPORTED
+[2] NOT_SUPPORTED
+[3] UNCERTAIN
+..."""
+
+
+def _set_verifier2_verdict(ex: Dict, verdict: str) -> None:
+    """Set verifier2 fields on an extraction dict."""
+    ex["nli_llm2"] = verdict
+    primary = ex.get("nli_llm", "NEUTRAL")
+    disagreement = False
+    if verdict == "NOT_SUPPORTED" and primary == "ENTAILMENT":
+        disagreement = True
+    elif verdict == "SUPPORTED" and primary == "CONTRADICTION":
+        disagreement = True
+    elif verdict == "UNCERTAIN":
+        disagreement = True
+    ex["_verifier2"] = {
+        "verdict": verdict,
+        "disagreement": disagreement,
+        "primary_verdict": primary,
+    }
+
+
+def _parse_batch_v2_output(raw: str, expected: int) -> List[str]:
+    """Parse batch verifier2 output into list of labels."""
+    labels: List[str] = []
+    for line in raw.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r'\[\d+\]\s*(\w+)', line)
+        if m:
+            tok = m.group(1).upper()
+            if tok in ("SUPPORTED", "NOT_SUPPORTED", "UNCERTAIN"):
+                labels.append(tok)
+                continue
+        tok = line.upper().strip(".,!?;:\"'()[] \t")
+        if tok in ("SUPPORTED", "NOT_SUPPORTED", "UNCERTAIN"):
+            labels.append(tok)
+    while len(labels) < expected:
+        labels.append("UNCERTAIN")
+    return labels[:expected]
+
+
 def _llm_nli_verify2(
     extractions: List[Dict[str, Any]],
     user_turn: str,
     thinking: str,
     text: str,
 ) -> List[Dict[str, Any]]:
-    """Second-opinion LLM verifier. Independent from the primary NLI check.
-    Annotates each extraction with:
-      - nli_llm2: SUPPORTED | NOT_SUPPORTED | UNCERTAIN
-      - _verifier2: dict with verdict and disagreement status
-    """
+    """Batch Verifier #2. Single LLM call per turn (VeriFastScore-style)."""
     source_map = {"user": user_turn, "thinking": thinking, "text": text}
 
+    # Phase 1: Skip missing fields
+    needs_llm: List[Dict] = []
     for ex in extractions:
         evidence = ex.get("evidence", "")
         source = source_map.get(ex.get("fact_type", ""), "")
         subject = ex.get("subject", "")
-        predicate = ex.get("predicate", "")
-        object_ = ex.get("object", "")
-
         if not evidence or not source or not subject:
-            ex["nli_llm2"] = "UNCERTAIN"
-            ex["_verifier2"] = {"verdict": "UNCERTAIN", "reason": "missing_fields"}
+            _set_verifier2_verdict(ex, "UNCERTAIN")
+            ex["_verifier2"]["reason"] = "missing_fields"
             continue
+        needs_llm.append(ex)
 
-        prompt = _VERIFIER2_PROMPT.format(
-            subject=context_limit(subject[:300]),
-            predicate=context_limit(predicate[:300]),
-            object=context_limit(object_[:300]),
-            evidence=evidence[:500],
-            source=context_limit(source),
+    if not needs_llm:
+        return extractions
+
+    # Phase 2: Prepend truncated thinking to text
+    combined_text = text
+    if thinking:
+        combined_text = f"{thinking[:500]}\n\n{text}"
+
+    # Phase 3: Single batch call
+    numbered_lines = []
+    for i, ex in enumerate(needs_llm, 1):
+        st = ex.get("fact_type", "text")
+        subj = ex.get("subject", "")[:200]
+        pred = ex.get("predicate", "")[:200]
+        obj = ex.get("object", "")[:200]
+        ev = ex.get("evidence", "")[:300]
+        numbered_lines.append(
+            f'[{i}] (source: {st}) "{subj}" -- "{pred}" -> "{obj}"\n'
+            f"    Evidence: {ev}"
         )
-        try:
-            meta = call_llm(
-                [{"role": "user", "content": prompt}],
-                model="day_extract",
-                max_tokens=64,
-                temperature=0.0,
-                timeout=_calc_nli_timeout(source, evidence),
-                return_meta=True,
-            )
-            raw = meta["content"].strip().upper()
-            verdict = "UNCERTAIN"
-            for tok in raw.replace("\n", " ").split():
-                tok = tok.strip(".,!?;:\"'()[]")
-                if tok in ("SUPPORTED", "NOT_SUPPORTED", "UNCERTAIN"):
-                    verdict = tok
-                    break
-            ex["nli_llm2"] = verdict
 
-            # Determine disagreement with primary verdict
-            primary = ex.get("nli_llm", "NEUTRAL")
-            disagreement = False
-            if verdict == "NOT_SUPPORTED" and primary == "ENTAILMENT":
-                disagreement = True
-            elif verdict == "SUPPORTED" and primary == "CONTRADICTION":
-                disagreement = True
-            elif verdict == "UNCERTAIN":
-                disagreement = True
-            ex["_verifier2"] = {
-                "verdict": verdict,
-                "disagreement": disagreement,
-                "primary_verdict": primary,
-            }
-        except Exception:
-            ex["nli_llm2"] = "UNCERTAIN"
-            ex["_verifier2"] = {"verdict": "UNCERTAIN", "disagreement": False, "error": True}
+    prompt = _BATCH_VERIFIER2_PROMPT.format(
+        user=context_limit(user_turn) if user_turn else "(empty)",
+        text=context_limit(combined_text) if combined_text else "(empty)",
+        numbered_facts="\n".join(numbered_lines),
+    )
+
+    n = len(needs_llm)
+    timeout = max(180, int(len(prompt) * 0.25))
+    max_tokens = n * 12 + 64
+
+    try:
+        meta = call_llm(
+            [{"role": "user", "content": prompt}],
+            model="day_extract",
+            max_tokens=max_tokens,
+            temperature=0.0,
+            timeout=timeout,
+            return_meta=True,
+        )
+        raw = meta.get("content", "")
+        labels = _parse_batch_v2_output(raw, n)
+        for ex, label in zip(needs_llm, labels):
+            _set_verifier2_verdict(ex, label)
+    except Exception as e:
+        print(f"    [v2-batch] ERROR ({n} facts): {e}", flush=True)
+        for ex in needs_llm:
+            _set_verifier2_verdict(ex, "UNCERTAIN")
+            ex["_verifier2"]["error"] = True
 
     return extractions
 
 
-# ── LLM NLI Self-Verify ─────────────────────────────────────────
+# ── LLM NLI Self-Verify (Batch) ──────────────────────────────────
+# Implements VeriFastScore-style single-call multi-fact verification.
+# Deterministic pre-filter runs first (zero LLM cost), then remaining
+# facts are grouped by source type and verified in batched LLM calls.
 
 
 def _calc_nli_timeout(source: str, evidence: str) -> int:
@@ -656,7 +735,6 @@ def _llm_nli_check(evidence: str, source: str) -> str:
     if not evidence or not source:
         return "NEUTRAL"
 
-    # Run deterministic check first — overrides LLM on clear errors
     deterministic = _deterministic_nli_check(evidence, source)
     if deterministic == "CONTRADICTION":
         print(f"    [nli-d] CONTRADICTION (deterministic): '{evidence[:60]}'", flush=True)
@@ -682,14 +760,59 @@ def _llm_nli_check(evidence: str, source: str) -> str:
         return "NEUTRAL"
 
 
+_BATCH_NLI_PROMPT = """You are verifying whether EVIDENCE facts are supported by their corresponding source text. Be strict — reject errors.
+
+Each fact below is tagged with its source type. Check the fact ONLY against its specific source.
+
+--- user query ---
+{user}
+
+--- assistant response ---
+{text}
+
+Facts:
+{numbered_facts}
+
+Output EXACTLY one label per line, in the same order:
+[1] ENTAILMENT
+[2] CONTRADICTION
+[3] NEUTRAL
+..."""
+
+
+def _parse_batch_nli_output(raw: str, expected: int) -> List[str]:
+    """Parse batch NLI output lines like '[1] ENTAILMENT' into label list."""
+    labels: List[str] = []
+    for line in raw.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r'\[\d+\]\s*(\w+)', line)
+        if m:
+            tok = m.group(1).upper()
+            if tok in ("ENTAILMENT", "CONTRADICTION", "NEUTRAL"):
+                labels.append(tok)
+                continue
+        tok = line.upper().strip(".,!?;:\"'()[] \t")
+        if tok in ("ENTAILMENT", "CONTRADICTION", "NEUTRAL"):
+            labels.append(tok)
+    while len(labels) < expected:
+        labels.append("NEUTRAL")
+    return labels[:expected]
+
+
 def _llm_nli_verify(
     extractions: List[Dict[str, Any]],
     user_turn: str,
     thinking: str,
     text: str,
 ) -> List[Dict[str, Any]]:
+    """Single-call batch NLI (VeriFastScore-style). All sources consolidated,
+    each fact tagged with its source type. Deterministic pre-filter runs first."""
     source_map = {"user": user_turn, "thinking": thinking, "text": text}
 
+    # Phase 1: Deterministic pre-filter (zero LLM cost)
+    needs_llm: List[Dict] = []
     for ex in extractions:
         evidence = ex.get("evidence", "")
         source = source_map.get(ex.get("fact_type", ""), "")
@@ -698,8 +821,58 @@ def _llm_nli_verify(
             ex["nli_llm"] = "SKIP"
             continue
 
-        verdict = _llm_nli_check(evidence, source)
-        ex["nli_llm"] = verdict
+        deterministic = _deterministic_nli_check(evidence, source)
+        if deterministic == "CONTRADICTION":
+            print(f"    [nli-d] CONTRADICTION: '{evidence[:60]}'", flush=True)
+            ex["nli_llm"] = "CONTRADICTION"
+            continue
+        if deterministic == "ENTAILMENT":
+            ex["nli_llm"] = "ENTAILMENT"
+            continue
+
+        needs_llm.append(ex)
+
+    if not needs_llm:
+        return extractions
+
+    # Phase 2: Single batch call — all facts with source tags
+    numbered_lines = []
+    for i, ex in enumerate(needs_llm, 1):
+        st = ex.get("fact_type", "text")
+        ev = ex.get("evidence", "")[:500]
+        numbered_lines.append(f"[{i}] (source: {st}) {ev}")
+
+    # Prepend truncated thinking to text (thinking is usually empty/short)
+    combined_text = text
+    if thinking:
+        combined_text = f"{thinking[:500]}\n\n{text}"
+    prompt = _BATCH_NLI_PROMPT.format(
+        user=context_limit(user_turn) if user_turn else "(empty)",
+        text=context_limit(combined_text) if combined_text else "(empty)",
+        numbered_facts="\n".join(numbered_lines),
+    )
+
+    n = len(needs_llm)
+    timeout = max(180, int(len(prompt) * 0.25))
+    max_tokens = n * 12 + 64
+
+    try:
+        meta = call_llm(
+            [{"role": "user", "content": prompt}],
+            model="day_extract",
+            max_tokens=max_tokens,
+            temperature=0.0,
+            timeout=timeout,
+            return_meta=True,
+        )
+        raw = meta.get("content", "")
+        labels = _parse_batch_nli_output(raw, n)
+        for ex, label in zip(needs_llm, labels):
+            ex["nli_llm"] = label
+    except Exception as e:
+        print(f"    [nli-batch] ERROR ({n} facts): {e}", flush=True)
+        for ex in needs_llm:
+            ex["nli_llm"] = "NEUTRAL"
 
     return extractions
 

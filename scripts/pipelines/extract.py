@@ -17,13 +17,10 @@ Submodules:
   extract_verify.py — NLI verify, reranker, post-processing, fallback
 
 Flow:
-  Phase 1: SELECT unprocessed (NOT EXISTS review_facts WHERE source=extract_pipeline, limit 50)
-  Phase 2: Solo section-major extraction (user batch → text batch)
-  Phase 3: Post-process cleanup (dedup, short filter, markdown)
-  Phase 4: LLM NLI self-verify — ENTAILMENT=grounded, CONTRADICTION=drop, NEUTRAL→reranker
-  Phase 5: Reranker faithfulness check (inference :8080) — only NEUTRAL items
-  Phase 6: Handle failures — retry or mark
-  Phase 7: Store to review_facts + enqueue
+  Phase 1: Extract — SELECT unprocessed turns → LLM extraction → Post-process
+  Phase 2: Verify — NLI verify → Verifier2 → Classify+Reranker → QC1
+  Phase 3: Refine — Parallel refine → Status fix → QC2
+  Phase 4: Store — DB insert to review_facts
 
 Usage:
   python3 scripts/pipelines/extract.py                          # batch from state
@@ -75,7 +72,7 @@ BATCH_LIMIT = 50
 PARALLEL = 2
 
 
-# ── Phase 7 Store — review_facts INSERT / UPDATE ───────────────────────
+# ── _insert_fact: review_facts INSERT / UPDATE ────────────────────────
 
 
 def _insert_fact(
@@ -254,9 +251,10 @@ def _ensure_checkpoint_table() -> None:
 
 def _save_checkpoint(turn_id: str, extractions: List[Dict]) -> None:
     data_str = json.dumps(extractions, ensure_ascii=False)
+    safe_data = data_str.replace("'", "''")
     psql_ok(
         "INSERT INTO pipeline_checkpoints (pipeline, turn_id, data) "
-        f"VALUES ('extract', '{esc_sql(turn_id)}'::uuid, '{esc_sql(data_str)}'::jsonb) "
+        f"VALUES ('extract', '{esc_sql(turn_id)}'::uuid, '{safe_data}'::jsonb) "
         "ON CONFLICT (pipeline, turn_id) DO UPDATE "
         "SET data = EXCLUDED.data, created_at = NOW()"
     )
@@ -279,7 +277,7 @@ def _delete_checkpoint(turn_id: str) -> None:
     )
 
 
-# ── Phase 1: Select turns ──────────────────────────────────────────────
+# ── Phase 1: Extract — SELECT unprocessed turns ──────────────────────
 
 
 def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
@@ -393,7 +391,7 @@ def extract_pipeline(
     if not dry_run:
         _ensure_checkpoint_table()
 
-    # ── Phase 1: Select turns ─────────────────────────────────────
+    # ── Phase 1: Extract ──────────────────────────────────────────
     if turn_id:
         sql = (
             "SELECT t.id, t.user_turn, t.thinking, t.text, "
@@ -435,7 +433,7 @@ def extract_pipeline(
     _failures: list = []
     _noise: list = []
 
-    # ── Phase 1: Solo section-major extraction (KV cache batch) ─────
+    # Solo section-major extraction (KV cache batch) ────────────────
     print(f"[extract] Processing {len(turns)} turn(s) via solo section-major...", flush=True)
     turn_results: Dict[str, Tuple] = {}
     llm_t0 = time.monotonic()
@@ -468,7 +466,7 @@ def extract_pipeline(
 
     print(f"  [extract]   LLM calls: {time.monotonic() - llm_t0:.1f}s", flush=True)
 
-    # ── Phase 2a: Error/noise handling + post_process ────────────
+    # Post-process / noise handling ───────────────────────────────
     nli_tasks = []
 
     idx = 0
@@ -581,7 +579,7 @@ def extract_pipeline(
                 }
             )
 
-    # ── Phase 2b: Parallel LLM NLI verify ──────────────────────
+    # ── Phase 2: Verify ── NLI verify ─────────────────────────
     def _nli_worker(task):
         tid, verified, user_turn, thinking, text = task[0], task[1], task[2], task[3], task[4]
         try:
@@ -598,7 +596,7 @@ def extract_pipeline(
                 tid, result = f.result()
                 nli_verified[tid] = result
 
-    # ── Phase 2c: Classification + reranker ─────────────────────
+    # Classify + Reranker ────────────────────────────────────────
     extractions_by_turn = {}
     store_tasks = []
     store_idx = 0
@@ -646,11 +644,11 @@ def extract_pipeline(
             rerankered = _verify_extractions(neutral, user_turn, thinking, text) if neutral else []
             extractions = entail + rerankered
 
-            # Phase 2c-1.4: Verifier #2 — independent second-opinion LLM judge
+            # Verifier #2 (second-opinion LLM judge)
             if extractions:
                 extractions = _llm_nli_verify2(extractions, user_turn, thinking, text)
 
-            # Phase 2c-1.5: Post-extraction quality checks (annotates _qc_checks, may remove facts)
+            # QC1 (quality check + auto-filter)
             source_text = f"{user_turn} {thinking} {text}"
             extractions = _quality_check_facts(extractions, source_text)
 
@@ -699,37 +697,25 @@ def extract_pipeline(
                 }
             )
 
-    # ── Phase 2c-2: Parallel refine ─────────────────────────────
+    # ── Phase 3: Refine ── Parallel refine ──────────────────────
     if extractions_by_turn:
-        _refine_batch(extractions_by_turn)
+        extractions_by_turn = _refine_batch(extractions_by_turn)
 
-    # ── Phase 2c-2b: Fix status hallucination after refine ─────
-    # Refine re-extracts triples and Qwen3-8B hallucinates ALL
-    # services as status=active. Re-apply the status fix using the
-    # source text's services table.
+    # Status fix + QC2
     if extractions_by_turn:
         for tid in list(extractions_by_turn.keys()):
             src_text = ""
-            for t in turns:
-                if t["id"] == tid:
-                    src_text = t.get("user_turn", "") or t.get("text", "") or ""
-                    break
-            if src_text:
-                extractions_by_turn[tid] = _fix_status_hallucination(
-                    extractions_by_turn[tid], src_text
-                )
-            # Phase 2c-2c: Final quality checks (after all LLM processing)
             source_text_qc = ""
             for t in turns:
                 if t["id"] == tid:
+                    src_text = t.get("user_turn", "") or t.get("text", "") or ""
                     parts = [t.get("user_turn","") or "", t.get("thinking","") or "", t.get("text","") or ""]
                     source_text_qc = " ".join(p for p in parts if p)
                     break
-            extractions_by_turn[tid] = _quality_check_facts(
-                extractions_by_turn[tid], source_text_qc
-            )
+            fixed = _fix_status_hallucination(extractions_by_turn[tid], src_text) if src_text else extractions_by_turn[tid]
+            extractions_by_turn[tid] = _quality_check_facts(fixed, source_text_qc)
 
-    # ── Phase 2c-3: Store (sequential, DB writes) ──────────────
+    # ── Phase 4: Store ── sequential DB writes ─────────────────
     for (
         tid,
         extractions,
@@ -966,9 +952,43 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
 # ── CLI ────────────────────────────────────────────────────────────────
 
 
+def _launch_reranker() -> bool:
+    """Launch reranker (Qwen3-Reranker-4B-Q8_0.gguf) on :8080 via podman exec."""
+    from lib.model_registry import MODEL_METADATA
+    from lib.pod_manager import wait_health
+    import subprocess
+
+    reranker = MODEL_METADATA["reranker"]
+    cmd = [
+        "podman", "exec", "-d", "devforge-inference",
+        "taskset", "-c", "0-3",
+        "/app/llama-server",
+        "-m", f"/models/{reranker['file']}",
+        "--host", "0.0.0.0", "--port", "8080",
+        "--ctx-size", str(reranker.get("ctx", 2048)),
+        "--batch-size", str(reranker.get("batch_size", 256)),
+        "--ubatch-size", str(reranker.get("ubatch_size", 256)),
+        "--threads", str(reranker.get("threads", 4)),
+        "--threads-batch", str(reranker.get("threads_batch", 4)),
+        "--no-mmap", "--reranking", "-lv", "6",
+    ]
+    print("  [reranker] launching on :8080 via podman exec", flush=True)
+    r = subprocess.run(cmd, capture_output=True, timeout=30, text=True)
+    if r.returncode != 0:
+        print(f"  [reranker] launch failed (rc={r.returncode}): {r.stderr.strip()[:200]}", flush=True)
+        return False
+    ok = wait_health(8080, timeout=300)
+    if ok:
+        print("  [reranker] :8080 healthy", flush=True)
+    else:
+        print("  [reranker] :8080 health timeout", flush=True)
+    return ok
+
+
 def main() -> None:
     signal.signal(signal.SIGTERM, _sigterm_handler)
     _ensure_model_pod("day-extractor", skip_if_healthy=False)
+    _launch_reranker()
     preflight_checks("extract.py")
     import argparse
 
