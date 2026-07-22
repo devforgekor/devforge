@@ -2,17 +2,17 @@
 
 ## Executive Summary
 
-DevForge 서버에는 18개의 active bash 스크립트(~2,500줄)가 운영 중이다. 핵심 오케스트레이터(day_cycle.sh 429줄, night_cycle.sh 245줄, auto_mode.sh 271줄, model_ctl.sh 240줄)가 bash로 작성되어 있으며, python3 -c 인라인 코드 15회 이상 포함되어 유지보수와 디버깅이 어렵다. 본 문서는 이들 bash 스크립트를 단계적으로 Python으로 전환하는 설계를 제시한다.
+DevForge 서버에는 16개의 active bash 스크립트(~1,890줄, lib/model_ctl.sh 포함)가 운영 중이다. 핵심 오케스트레이터(day_cycle.sh 462줄, night_cycle.sh 245줄, auto_mode.sh 271줄, model_ctl.sh 240줄)가 bash로 작성되어 있으며, python3 -c 인라인 코드 15회 이상 포함되어 유지보수와 디버깅이 어렵다. 본 문서는 이들 bash 스크립트를 단계적으로 Python으로 전환하는 설계를 제시한다.
 
 **접근법**: 모듈별 1:1 Python 파일 교체 (점진적 전환, 각 파일 독립 교체 가능, systemd ExecStart만 변경)
 
 ## 1. Current State Analysis
 
-### 1.1 Active Bash Scripts (18 files, ~2,500 lines)
+### 1.1 Active Bash Scripts (16 files, ~1,890 lines)
 
 | # | Script | Lines | Category | Priority | Key Complexity |
 |---|--------|-------|----------|----------|----------------|
-| 1 | day_cycle.sh | 429 | Orchestrator | **P0** | pipeline_state 7단계 FSM, python3 -c inline 4회, 예산 계산, Slack alert |
+| 1 | day_cycle.sh | 462 | Orchestrator | **P0** | pipeline_state 6단계 FSM, python3 -c inline 4회, 예산 계산, Slack alert, reranker launch |
 | 2 | night_cycle.sh | 245 | Orchestrator | **P0** | mode 전환, debate/verify 오케스트레이션, retry 로직 |
 | 3 | auto_mode.sh | 271 | Batch Runner | **P0** | Markdown 파서(awk), Claude Code 실행기, 메모리 체크 |
 | 4 | lib/model_ctl.sh | 240 | Library | **P0** | inference 생애주기, python3 -c inline 3회, health/probe wait |
@@ -29,14 +29,13 @@ DevForge 서버에는 18개의 active bash 스크립트(~2,500줄)가 운영 중
 | 15 | worker-entrypoint.sh | 8 | Container | **Unchanged** | PID 1 |
 | 16 | fastapi-entrypoint.sh | 2 | Container | **Unchanged** | PID 1 |
 | 17 | mcp_entrypoint.sh | 3 | Container | **Unchanged** | PID 1 |
-| 18 | embed_runner.py | N/A | (기존 Python) | — | 이미 Python |
 
 ### 1.2 Pattern Analysis
 
 **4 anti-patterns identified:**
 
 1. **python3 -c inline** (15+ occurrences): Debugging impossible, syntax errors invisible until runtime, no import caching
-2. **bash FSM** (day_cycle.sh `pipeline_state`): 7-state transitions managed with if/elif chains and DB queries
+2. **bash FSM** (day_cycle.sh `pipeline_state`): 6-state transitions managed with if/elif chains and DB queries. Stages: `pending → batching → cleaned → scanned → extracted+verified → enriched → embedded`. Verify was merged into extract (removed standalone `day_verify.py` call, 2026-07-18).
 3. **env file state sharing** (MODE=night, MODEL_NAME=...): Race conditions, no atomic writes, grep/cut parsing
 4. **Markdown parser in awk** (auto_mode.sh): HTML comment skip + heading extraction + multiline body — 20 lines of awk
 
@@ -160,7 +159,7 @@ lib/pattern.py  (if created, else inline each module)
 
 **Objective**: Replace the two main pipeline orchestrators that manage pipeline_state FSM.
 
-#### Phase 1a: day_cycle.sh (429 lines) → scripts/day_cycle.py
+#### Phase 1a: day_cycle.sh (462 lines) → scripts/day_cycle.py
 
 **Architecture**:
 
@@ -180,8 +179,7 @@ day_cycle.py
 │   ├── Entity scan
 │   ├── Day extract
 │   ├── Noise marker handling
-│   ├── Reranker recovery
-│   ├── Day verify
+│   ├── Reranker launch + recovery
 │   ├── Day enrich
 │   └── Day embedding
 └── if __name__ == '__main__': main()
@@ -425,7 +423,7 @@ systemctl --user start devforge-day-cycle.service
 | Phase | Scripts | Lines | Est. Effort | Dependencies |
 |-------|---------|-------|-------------|--------------|
 | Phase 0 | `lib/model_ctl.sh` | 240 | 2-3h | None |
-| Phase 1a | `day_cycle.sh` | 429 | 4-6h | Phase 0 |
+| Phase 1a | `day_cycle.sh` | 462 | 4-6h | Phase 0 |
 | Phase 1b | `night_cycle.sh` | 245 | 3-4h | Phase 0 |
 | Phase 2a | `auto_mode.sh` | 271 | 3-4h | None |
 | Phase 2b | `run_baseline_monitor.sh` | 82 | 1h | None |
@@ -434,7 +432,7 @@ systemctl --user start devforge-day-cycle.service
 | Phase 3 | `claude_code_wrapper.sh` | 85 | 1h | None |
 | Phase 3 | `gemini_session_start.sh` | 99 | 1-2h | None |
 | Phase 3 | `weekly_enrich_rebuild.sh` | 56 | 0.5h | None |
-| **Total** | | **~1,700** | **~20h** | |
+| **Total** | | **~1,766** | **~20.5h** | |
 
 ## 9. Key Design Decisions
 
@@ -531,6 +529,14 @@ def run_cmd(
 
 ---
 
-*Document Version: 1.1*
+*Document Version: 1.2*
 *Author: Claude Code (Deep Dive)*
-*Date: 2026-07-04 (v1.1: 2026-07-05)*
+*Date: 2026-07-04 (v1.1: 2026-07-05, v1.2: 2026-07-22)*
+
+## Document History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-07-04 | Initial design |
+| 1.1 | 2026-07-05 | Web validation findings: `sys.exit(main())`, `subprocess.run(timeout=)`, plumbum rationale, `lib/pattern.py` |
+| 1.2 | 2026-07-22 | Sync with live code changes: pipeline_state 7→6 stages (`extracted+verified` merged), day_verify.py removed, `_launch_reranker()` added (+33 lines), line count updates |

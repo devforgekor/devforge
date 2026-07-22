@@ -604,7 +604,7 @@ def main() -> None:
         )
     else:  # q8 (default)
         preflight_checks("day_verify.py", required_ports={8082})
-        ensure_model("day-verifier")
+        ensure_model("day-verifier", skip_if_healthy=True)
         result = day_verify_pipeline(
             limit=args.limit,
             dry_run=args.dry_run,

@@ -294,7 +294,7 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
             WHERE id IN (
                 SELECT t.id
                 FROM turns t
-                WHERE t.text != ''
+                WHERE (t.text != '' OR t.user_turn != '')
                   AND NOT EXISTS (
                     SELECT 1 FROM review_facts rf
                     WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'
@@ -1087,7 +1087,7 @@ def main() -> None:
     # Phase 0b: Stale process cleanup + port/memory logging (kill before start)
     preflight_checks("extract.py", required_ports={8080, 8082})
     # Phase 0c: Model pod start — day-extractor on :8082, reranker on :8080
-    _ensure_model_pod("day-extractor", skip_if_healthy=False)
+    _ensure_model_pod("day-extractor", skip_if_healthy=True)
     _launch_reranker()
     import argparse
 
