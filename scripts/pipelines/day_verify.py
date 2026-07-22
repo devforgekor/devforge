@@ -583,9 +583,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Phase 0: Pre-flight — stale kill before model start
     if args.mode == "q4":
-        ensure_dual("day-verifier-q4", "day-verifier-q4-b")
         preflight_checks("day_verify.py", required_ports={8082, 8083})
+        ensure_dual("day-verifier-q4", "day-verifier-q4-b")
         result = day_verify_pipeline(
             limit=args.limit,
             dry_run=args.dry_run,
@@ -593,8 +594,8 @@ def main() -> None:
             model_keys=["day_verify_q4", "day_verify_q4_b"],
         )
     elif args.mode == "q8-dual":
-        ensure_dual("day-verifier-q8", "day-verifier-q8-b")
         preflight_checks("day_verify.py", required_ports={8082, 8083})
+        ensure_dual("day-verifier-q8", "day-verifier-q8-b")
         result = day_verify_pipeline(
             limit=args.limit,
             dry_run=args.dry_run,
@@ -602,8 +603,8 @@ def main() -> None:
             model_keys=["day_verify_q8", "day_verify_q8_b"],
         )
     else:  # q8 (default)
-        ensure_model("day-verifier")
         preflight_checks("day_verify.py", required_ports={8082})
+        ensure_model("day-verifier")
         result = day_verify_pipeline(
             limit=args.limit,
             dry_run=args.dry_run,

@@ -953,62 +953,95 @@ def describe_file_batch(dry_run: bool = False, limit: int = 20) -> Dict[str, Any
 
 
 def _preflight_gate() -> None:
-    """Fast static checks before pipeline startup: model files, memory, DB.
+    """K8s startupProbe-style preflight gate: check → auto-fix → fail.
 
-    Exits with code 1 on any failure.  Must run before model pod start and
-    preflight_checks() so the user gets immediate feedback on fatal issues.
+    복구 가능한 항목은 watchdog recovery + pod_manager로 자동 복구 후 재확인.
+    복구 불가능한 항목 (model file missing, DB down)은 즉시 sys.exit(1).
+    Must run before model pod start and preflight_checks().
     """
-    models_dir = "/opt/ai_data/models/gguf"
-    required_models: list[tuple[str, str, str]] = [
-        ("day-extractor", "Qwen3-8B-Q8_0.gguf", "8.2GB"),
-        ("reranker", "Qwen3-Reranker-4B-Q8_0.gguf", "4.0GB"),
-    ]
+    # ── Lazy imports (avoid circular at module level) ────────────────
+    import gc as _gc
+
+    from lib.watchdog.checker import check_health, check_model_file, check_memory_budget, check_postgres
+    from lib.pod_manager import ensure_model as _ensure_model
 
     errors: list[str] = []
+    warnings: list[str] = []
 
-    # 1. Model file existence
-    for name, filename, size in required_models:
-        path = os.path.join(models_dir, filename)
-        if not os.path.exists(path):
-            errors.append(f"Model file not found: {name} ({size}) — {path}")
+    def _log(msg: str) -> None:
+        print(f"  [preflight] {msg}", flush=True)
+
+    # ── 1. Model files (복구 불가) ───────────────────────────────────
+    for model_key in ("day-extractor", "reranker"):
+        ok, detail = check_model_file(model_key)
+        if ok:
+            _log(f"model {model_key}: {detail}")
         else:
-            print(f"  [preflight] model {name} ({size}): OK", flush=True)
+            errors.append(f"Model {model_key}: {detail}")
 
-    # 2. Memory budget — combined model load ~12.2 GB, need ≥16 GB available
-    try:
-        mem_info: dict[str, int] = {}
-        with open("/proc/meminfo") as _mf:
-            for _line in _mf:
-                parts = _line.split()
-                if parts and parts[0].rstrip(":") in ("MemAvailable", "MemTotal"):
-                    mem_info[parts[0].rstrip(":")] = int(parts[1])
-        if "MemAvailable" in mem_info:
-            avail_gb = mem_info["MemAvailable"] / 1024 / 1024
-            total_gb = mem_info.get("MemTotal", 0) / 1024 / 1024
-            print(f"  [preflight] memory: {avail_gb:.1f}GB / {total_gb:.0f}GB available", flush=True)
-            if avail_gb < 4:
-                errors.append(f"Critically low memory: {avail_gb:.1f}GB available (need ≥4GB)")
-            elif avail_gb < 10:
-                errors.append(f"Insufficient memory for day-extractor: {avail_gb:.1f}GB available (need ≥10GB)")
-            elif avail_gb < 16:
-                print(f"  [preflight] memory: {avail_gb:.1f}GB — may be tight when both models load", flush=True)
-    except Exception as e:
-        errors.append(f"Memory check failed: {e}")
-
-    # 3. DB connectivity
-    from lib.db import psql_ok
-    if not psql_ok("SELECT 1", timeout=10):
-        errors.append("DB connectivity check failed — cannot reach PostgreSQL")
+    # ── 2. Memory budget (복구: reclaim + GC) ────────────────────────
+    # day-extractor(8.2GB) + reranker(4.0GB) = ~12.2GB cold start.
+    # If :8082 is already healthy, only budget for reranker (4GB).
+    _port82_ok, _ = check_health(8082)
+    _need_gb = 4 if _port82_ok else 12
+    ok, detail = check_memory_budget(_need_gb)
+    if not ok:
+        _log(f"memory low ({detail}) — attempting reclaim")
+        from lib.pod_manager.container import _reclaim_memory as _reclaim
+        _reclaim()
+        _gc.collect()
+        ok, detail = check_memory_budget(_need_gb)
+        if ok:
+            _log(f"memory recovered: {detail}")
+        else:
+            errors.append(f"Insufficient memory after reclaim: {detail}")
     else:
-        print("  [preflight] DB connectivity: OK", flush=True)
+        _log(f"memory: {detail}")
+
+    # ── 3. Port 8082 — day-extractor (복구: ensure_model) ────────────
+    ok, detail = check_health(8082, "day-extractor")
+    if not ok:
+        _log(f":8082 {detail} — attempting restart")
+        _ensure_model("day-extractor", skip_if_healthy=False)
+        ok, detail = check_health(8082, "day-extractor")
+        if ok:
+            _log(f":8082 recovered")
+        else:
+            errors.append(f":8082 failed after restart: {detail}")
+    else:
+        _log(f":8082 health OK")
+
+    # ── 4. Port 8080 — reranker (복구: _launch_reranker, 실패 시 경고) ─
+    ok, detail = check_health(8080, "reranker")
+    if not ok:
+        _log(f":8080 {detail} — attempting launch")
+        _launch_reranker()
+        ok, detail = check_health(8080, "reranker")
+        if ok:
+            _log(f":8080 recovered")
+        else:
+            warnings.append(f":8080 unavailable after launch — reranker fallback active")
+    else:
+        _log(f":8080 health OK")
+
+    # ── 5. DB connectivity (복구 불가) ───────────────────────────────
+    ok, detail = check_postgres()
+    if ok:
+        _log(f"DB: {detail}")
+    else:
+        errors.append(f"DB: {detail}")
+
+    # ── Verdict ──────────────────────────────────────────────────────
+    for w in warnings:
+        _log(f"WARN: {w}")
 
     if errors:
-        for err in errors:
-            print(f"  [preflight] FAIL: {err}", flush=True)
-        print("  [preflight] Gate BLOCKED — exiting", flush=True)
+        for e in errors:
+            _log(f"FAIL: {e}")
+        _log("Gate BLOCKED — exiting")
         sys.exit(1)
 
-    print("  [preflight] Gate PASSED — all static checks ok", flush=True)
+    _log("Gate PASSED — all checks ok")
 
 
 # ── CLI ────────────────────────────────────────────────────────────────

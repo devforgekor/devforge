@@ -1111,10 +1111,10 @@ def enrich_pipeline(
 
 
 def main() -> None:
-    ensure_sequential_dual("day-enricher", "day-enricher-b")
     from lib.infra.preflight import preflight_checks
 
     preflight_checks("enrich.py")
+    ensure_sequential_dual("day-enricher", "day-enricher-b")
     import argparse
 
     parser = argparse.ArgumentParser(

@@ -9,6 +9,7 @@ LLM probe tiers (TensorRT-LLM RFC #4513):
 """
 
 import json
+import os
 import subprocess
 import time
 import urllib.request
@@ -156,6 +157,49 @@ def container_running(name: str) -> tuple[bool, str]:
         )
         names = r.stdout.strip().split("\n")
         return name in names, "running" if name in names else "not found"
+    except Exception as e:
+        return False, str(e)
+
+
+# ── PostgreSQL 실제 헬스체크 ────────────────────────────────────────
+
+
+# ── Model file 존재 확인 ────────────────────────────────────────────
+
+
+def check_model_file(model_key: str) -> tuple[bool, str]:
+    """GGUF model file 존재 확인. (ok, detail).
+
+    Args:
+        model_key: MODEL_METADATA key (e.g. 'day-extractor', 'reranker').
+    """
+    try:
+        from lib.model_registry import MODEL_METADATA
+
+        meta = MODEL_METADATA.get(model_key)
+        if not meta:
+            return False, f"unknown model key: {model_key}"
+        path = f"/opt/ai_data/models/gguf/{meta['file']}"
+        if os.path.exists(path):
+            return True, f"{meta['file']} ({meta.get('size', '?')})"
+        return False, f"not found: {path}"
+    except Exception as e:
+        return False, str(e)
+
+
+def check_memory_budget(required_gb: float) -> tuple[bool, str]:
+    """MemAvailable >= required_gb 확인. (ok, detail)."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                parts = line.split()
+                if parts and parts[0].rstrip(":") == "MemAvailable":
+                    avail_kb = int(parts[1])
+                    avail_gb = avail_kb / 1024 / 1024
+                    ok = avail_gb >= required_gb
+                    detail = f"{avail_gb:.1f}GB available, need {required_gb:.0f}GB"
+                    return ok, detail
+        return False, "MemAvailable not found in /proc/meminfo"
     except Exception as e:
         return False, str(e)
 
