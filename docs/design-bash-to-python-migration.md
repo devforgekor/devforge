@@ -2,7 +2,15 @@
 
 ## Executive Summary
 
-DevForge 서버에는 16개의 active bash 스크립트(~1,890줄, lib/model_ctl.sh 포함)가 운영 중이다. 핵심 오케스트레이터(day_cycle.sh 462줄, night_cycle.sh 245줄, auto_mode.sh 271줄, model_ctl.sh 240줄)가 bash로 작성되어 있으며, python3 -c 인라인 코드 15회 이상 포함되어 유지보수와 디버깅이 어렵다. 본 문서는 이들 bash 스크립트를 단계적으로 Python으로 전환하는 설계를 제시한다.
+DevForge 서버에는 16개의 bash 스크립트(~1,890줄, lib/model_ctl.sh 포함)가 존재한다. 그러나 **2026-07-22 재평가 결과 핵심 파이프라인 로직(extract, enrich, embed)이 이미 모두 Python으로 전환**되었으며, 남은 bash는 주로 오케스트레이션(day_cycle.sh)과 라이브러리(model_ctl.sh)다.
+
+가장 중요한 발견: **extract.py가 self-sufficient pipeline으로 진화**하여 preflight gate, reranker launch, NLI verify(v1+v2), quality check를 모두 내부 처리한다. 이로 인해 day_cycle.sh의 복잡성이 크게 감소했으며, bash→Python 마이그레이션의 긴급도와 ROI가 낮아졌다.
+
+현재 권장 전략:
+- **Phase 0 (권장)**: `model_ctl.sh` → Python (1-2h) — 유일한 bash 라이브러리
+- **Phase 1 (선택)**: `day_cycle.sh` → Python (2-3h, ROI 낮음, 보류 권장)
+- **그 외**: 전환 불필요 (entrypoints, system_sync, open-newhand, run_pipeline_bg)
+- **위험 관리**: `subprocess timeout` 누락이 가장 큰 실질 리스크. bash `timeout` 명령어로 최소 패치 가능
 
 **접근법**: 모듈별 1:1 Python 파일 교체 (점진적 전환, 각 파일 독립 교체 가능, systemd ExecStart만 변경)
 
@@ -10,34 +18,74 @@ DevForge 서버에는 16개의 active bash 스크립트(~1,890줄, lib/model_ctl
 
 ### 1.1 Active Bash Scripts (16 files, ~1,890 lines)
 
-| # | Script | Lines | Category | Priority | Key Complexity |
-|---|--------|-------|----------|----------|----------------|
-| 1 | day_cycle.sh | 462 | Orchestrator | **P0** | pipeline_state 6단계 FSM, python3 -c inline 4회, 예산 계산, Slack alert, reranker launch |
-| 2 | night_cycle.sh | 245 | Orchestrator | **P0** | mode 전환, debate/verify 오케스트레이션, retry 로직 |
-| 3 | auto_mode.sh | 271 | Batch Runner | **P0** | Markdown 파서(awk), Claude Code 실행기, 메모리 체크 |
-| 4 | lib/model_ctl.sh | 240 | Library | **P0** | inference 생애주기, python3 -c inline 3회, health/probe wait |
-| 5 | claude_code_runner.sh | 126 | Utility | **P1** | A/B 테스트 루프, proxy env 관리 |
-| 6 | run_verify_compare.sh | 100 | Test | **P1** | Python inline 40줄 config 패치 |
-| 7 | gemini_session_start.sh | 99 | Utility | **P1** | Key rotation + tmux session |
-| 8 | run_baseline_monitor.sh | 82 | Test | **P1** | JSON parsing, YAML 생성, DB query |
-| 9 | claude_code_wrapper.sh | 85 | Wrapper | **P1** | Proxy canonicalization + curl |
-| 10 | weekly_enrich_rebuild.sh | 56 | Timer Batch | **P2** | Python import 2회 호출 |
-| 11 | system_sync.sh | 41 | Timer Batch | **Unchanged** | 간단 순차 |
-| 12 | open-newhand.sh | 35 | Utility | **Unchanged** | git add/commit/push |
-| 13 | run_pipeline_bg.sh | 21 | Script | **Unchanged** | 단순 순차 실행 |
-| 14 | github_mcp_wrapper.sh | 15 | Wrapper | **Unchanged** | Secrets → exec |
-| 15 | worker-entrypoint.sh | 8 | Container | **Unchanged** | PID 1 |
-| 16 | fastapi-entrypoint.sh | 2 | Container | **Unchanged** | PID 1 |
-| 17 | mcp_entrypoint.sh | 3 | Container | **Unchanged** | PID 1 |
+| # | Script | Lines | Category | Priority | Key Complexity | Migrate? |
+|---|--------|-------|----------|----------|----------------|----------|
+| 1 | day_cycle.sh | 462 | Orchestrator | **P0** | 19 DB queries, 14 python3 subprocess, 3 curl, 5 funcs | **선택** (ROI 낮음) |
+| 2 | night_cycle.sh | 245 | Orchestrator | **P0** | 3 py3c inline, 6 funcs, mode 전환, trap | **아니오** (night_cycle.py가 내부 처리) |
+| 3 | auto_mode.sh | 271 | Batch Runner | **P0** | awk Markdown parser, Claude Code runner | **아니오** (저빈도) |
+| 4 | lib/model_ctl.sh | 240 | Library | **P0** | 10 funcs, podman 생애주기, health probe | **예** (1순위) |
+| 5 | claude_code_runner.sh | 126 | Utility | **P1** | A/B 테스트 루프 | **아니오** |
+| 6 | run_verify_compare.sh | 100 | Test | **P1** | 40L python3 -c inline patch | **아니오** |
+| 7 | gemini_session_start.sh | 99 | Utility | **P1** | Key rotation + tmux | **아니오** |
+| 8 | run_baseline_monitor.sh | 82 | Test | **P1** | 4회 py3c inline, podman exec DB | **아니오** |
+| 9 | claude_code_wrapper.sh | 85 | Wrapper | **P1** | JSON canonicalization + curl | **아니오** |
+| 10 | weekly_enrich_rebuild.sh | 56 | Timer Batch | **P2** | 2회 py3c inline (lib.enrich_few_shot) | **아니오** |
+| 11 | system_sync.sh | 41 | Timer Batch | **Unchanged** | curl duckdns, git commit | **제외** |
+| 12 | open-newhand.sh | 35 | Utility | **Unchanged** | git add/commit/push | **제외** |
+| 13 | run_pipeline_bg.sh | 21 | Script | **Unchanged** | 단순 순차 | **제외** |
+| 14 | github_mcp_wrapper.sh | 15 | Wrapper | **Unchanged** | Secrets → exec | **제외** |
+| 15 | worker-entrypoint.sh | 8 | Container | **Unchanged** | PID 1 | **제외** |
+| 16 | fastapi-entrypoint.sh | 2 | Container | **Unchanged** | PID 1 | **제외** |
+| 17 | mcp_entrypoint.sh | 3 | Container | **Unchanged** | PID 1 | **제외** |
 
-### 1.2 Pattern Analysis
+### 1.2 Key Finding: Pipeline Scripts Are All Python
 
-**4 anti-patterns identified:**
+**모든 pipeline 스크립트(scripts/pipelines/*.py, 28개)는 이미 Python이다.** 남은 bash는 오케스트레이션(day_cycle.sh, night_cycle.sh)과 라이브러리(model_ctl.sh)뿐이다.
 
-1. **python3 -c inline** (15+ occurrences): Debugging impossible, syntax errors invisible until runtime, no import caching
-2. **bash FSM** (day_cycle.sh `pipeline_state`): 6-state transitions managed with if/elif chains and DB queries. Stages: `pending → batching → cleaned → scanned → extracted+verified → enriched → embedded`. Verify was merged into extract (removed standalone `day_verify.py` call, 2026-07-18).
-3. **env file state sharing** (MODE=night, MODEL_NAME=...): Race conditions, no atomic writes, grep/cut parsing
-4. **Markdown parser in awk** (auto_mode.sh): HTML comment skip + heading extraction + multiline body — 20 lines of awk
+#### extract.py Self-Sufficiency (Critical)
+
+extract.py가 K8s startupProbe 스타일의 `_preflight_gate()`를 도입하면서 day_cycle.sh의 책임이 근본적으로 축소되었다:
+
+| 기능 | 이전 (v1.2) | 현재 (v2.0) |
+|------|-----------|-----------|
+| Model file 존재 확인 | day_cycle.sh 없음 | extract.py _preflight_gate() |
+| Memory budget 확인 | day_cycle.sh _budget_gate() | extract.py check_memory_budget |
+| Reranker launch (:8080) | day_cycle.sh _launch_reranker() | extract.py _launch_reranker() |
+| Model pod start (day-extractor) | day_cycle.sh ensure_inference | extract.py _ensure_model_pod() |
+| NLI verify (extracted→verified) | day_cycle.sh → day_verify.py 호출 | extract.py Phase 2-3 (_llm_nli_verify, _llm_nli_verify2) |
+| Fact quality check | 없음 | extract.py _quality_check_facts |
+| 8082 auto-recovery | 없음 | extract_llm.py _call_with_8082_retry |
+
+#### 이미 Python화된 Pipeline 모듈들
+
+| 모듈 | Status | main() 흐름 | Bash 의존성 |
+|------|--------|-----------|-----------|
+| extract.py | production | _preflight_gate() → preflight_checks() → _ensure_model_pod() → extract_pipeline() | 없음 |
+| enrich.py | experimental | preflight_checks() → ensure_sequential_dual() → ThreadPool dual A/B | 없음 |
+| embed_batch.py | production | orphan cleanup → preflight_checks() → ensure_model() → dynamic batching | 없음 |
+| text_clean.py | production | language detection → cleaning → hanja → LLM verify → store | 없음 |
+| fts5_refresh.py | production | stale turn query → FTS5Index.sync() | 없음 |
+| entity_scan.py | experimental | pattern-based extraction (no LLM) | 없음 |
+| reranker_recover.py | production | reranker health → re-score RERANKER_ERROR facts | 없음 |
+| post_extract_supplement.py | experimental | offline LLM for missing facts | 없음 |
+| raw_consumer.py | experimental | polls raw → clean → pending (turn_watcher chain) | 없음 |
+
+#### Dead Code 발견
+
+| 파일 | 상태 | 발견 내용 |
+|------|------|----------|
+| `day_verify.py` | experimental | **day_cycle.sh에서 더 이상 호출하지 않음**. extract.py가 verify 통합. `_launch_reranker()` 3번째 복사본 존재 |
+| `polish_batch.py` | deprecated | text_clean.py에 병합 완료 |
+| `_launch_reranker()` 중복 | - | day_cycle.sh(140-166), extract.py(1050-1081), day_verify.py(~551) — 3개 복사본 |
+
+### 1.3 Pattern Analysis
+
+**4 anti-patterns identified (all reduced vs v1.2):**
+
+1. **python3 -c inline** (~16회): v1.2 대비 변동 없음. run_baseline_monitor.sh(4회)가 가장 밀도 높음
+2. **bash FSM** (day_cycle.sh pipeline_state): 6-state → extract.py가 verify/preflight 처리로 사실상 3-state
+3. **env file state sharing** (MODE=night): night_cycle.sh만 사용, 나머지는 Python dict
+4. **Markdown parser in awk** (auto_mode.sh): 여전히 awk, 저빈도로 전환 불필요
 
 ## 2. Design Principles
 
@@ -58,78 +106,48 @@ DevForge 서버에는 16개의 active bash 스크립트(~1,890줄, lib/model_ctl
 
 ```
 scripts/
-├── cli.py                      # [EXISTING] Keep argparse as-is (search/save CLI)
-├── day_cycle.py                 # [NEW] day_cycle.sh replacement
-├── night_cycle.py               # [NEW] night_cycle.sh replacement
-├── auto_mode.py                 # [NEW] auto_mode.sh replacement
-├── claude_code_runner.py        # [NEW] claude_code_runner.sh replacement
-├── claude_code_wrapper.py       # [NEW] claude_code_wrapper.sh replacement
-├── gemini_session.py            # [NEW] gemini_session_start.sh replacement
-├── system_sync.py               # [NEW] system_sync.sh replacement
-├── weekly_enrich_rebuild.py     # [NEW] weekly_enrich_rebuild.sh replacement
-├── run_baseline_monitor.py      # [NEW] run_baseline_monitor.sh replacement
-├── run_verify_compare.py        # [NEW] run_verify_compare.sh replacement
+├── cli.py                      # [EXISTING] Keep argparse as-is
+├── day_cycle.py                 # [OPTIONAL] day_cycle.sh replacement (Phase 1, deferred)
 ├── lib/
-│   ├── model_ctl.py             # [NEW] model_ctl.sh replacement
+│   ├── model_ctl.py             # [NEW] model_ctl.sh replacement (Phase 0, recommended)
 │   ├── db.py                    # [EXISTING] psql wrapper
 │   └── notify.py                # [EXISTING] Slack/Telegram
-├── tests/
-│   └── ...                      # [EXISTING] test scripts
 ├── pipelines/
-│   └── ...                      # [EXISTING] Python pipelines
-└── ... (entrypoints unchanged)
+│   └── ...                      # [EXISTING] All Python, no migration needed
+└── ... (bash scripts unchanged)
 ```
 
 ### 3.2 Module Dependency Graph
 
 ```
-model_ctl.py (lib/)         ← day_cycle.py, night_cycle.py, run_verify_compare.py
+model_ctl.py (lib/)             ← day_cycle.sh (bash), night_cycle.sh (bash)
     └── lib.db
     └── lib.model_registry
 
-day_cycle.py                ← ExecStart from systemd
-    └── lib.model_ctl        (ensure_inference → _ensure_model → _run_model)
-    └── lib.db               (pipeline_state queries)
-    └── lib.notify           (Slack alert)
-    └── pipelines/text_clean.py, entity_scan.py, extract.py, ...
-
-night_cycle.py              ← ExecStart from systemd
-    └── lib.model_ctl        (switch_inference → _ensure_model)
-    └── lib.db
-    └── pipelines/night_cycle.py
-
-auto_mode.py                ← ExecStart from systemd
-    └── lib.db
-    └── subprocess (Claude Code CLI)
-
-gemini_session.py           ← Manual CLI
-    └── lib.auth.key_rotator
-    └── subprocess (tmux)
-
-claude_code_runner.py       ← Manual CLI
-    └── claude_code_wrapper.py
-    └── subprocess (systemctl, curl)
+day_cycle.py [OPTIONAL]         ← ExecStart from systemd (or watchdog trigger)
+    └── lib.model_ctl           (ensure_inference)
+    └── lib.db                  (pipeline_state queries)
+    └── lib.notify              (Slack alert)
+    └── pipelines/*.py          (all already Python)
 ```
 
-### 3.3 Common Patterns (Shared via lib/)
+### 3.3 Common Patterns (unchanged from v1.2)
 
 ```
-lib/pattern.py  (if created, else inline each module)
+lib/pattern.py  (if created)
 ├── run_cmd(cmd, timeout, check) -> subprocess.CompletedProcess
-│   # Wrapper for subprocess.run with logging + retry
 ├── log_ts() -> str
-│   # [2026-07-04T12:00:00Z] format
 ├── db_query(sql) -> list[dict]
-│   # podman exec postgres psql wrapper
-└── budget_check(elapsed: int, max: int, label: str) -> bool
-    # day_cycle.sh _budget_gate equivalent
+└── budget_check(elapsed, max, label) -> bool
 ```
 
-## 4. Phase Plan
+## 4. Phase Plan (Revised)
+
+**v2.0 변경**: v1.2의 Phase 1-3 (8개 스크립트 전환) → Phase 0 (model_ctl.sh) + Phase 1 선택 (day_cycle.sh 보류). extract.py self-sufficiency로 인해 나머지 스크립트 전환 불필요.
 
 ### Phase 0: Library Layer (model_ctl.sh → lib/model_ctl.py)
 
-**Objective**: Replace the shared inference management library first, so all consumers benefit immediately.
+**Objective**: 유일한 bash 라이브러리를 Python으로 전환. 모든 pipeline 스크립트가 subprocess.run("podman ...") 대신 `lib.model_ctl`을 import 가능.
 
 **Scope**:
 - `lib/model_ctl.sh` (240 lines) → `scripts/lib/model_ctl.py`
@@ -140,246 +158,117 @@ lib/pattern.py  (if created, else inline each module)
 |--------------|-------------------|-------|
 | `_model_port` | `model_registry.MODEL_METADATA[key].port` | Direct import |
 | `_model_env_vars` | `model_registry.MODEL_METADATA[key] → env dict` | Return dict |
-| `_write_mode_env` | Remove (env file deprecated) | Use Python dict in memory |
-| `_wait_health` | `requests_available()` or `urllib` → `/health` | Same logic |
-| `_wait_probe` | `/v1/chat/completions` with `{max_tokens:5}` | Same body |
+| `_write_mode_env` | Remove (env file deprecated) | Python in-memory |
+| `_wait_health` | `urllib` → `/health` | Same logic |
+| `_wait_probe` | `/v1/chat/completions` with `{max_tokens:5}` | Same |
 | `_check_model_id` | `/v1/models` response comparison | Same |
 | `_stop_model` | `podman rm -f -i devforge-inference` | subprocess |
 | `_run_model` | `podman run -d ...` + wait + probe | subprocess |
-| `_ensure_model` | Smart check → skip if healthy | Same optimization |
+| `_ensure_model` | Smart skip-if-healthy check | Same optimization |
 | `_test_heartbeat_active` | `lib.db.psql_json` → pulse_id check | Direct import |
+| `_kill_model` | `podman kill` with timeout | subprocess |
 
-**Systemd**: No change (library is imported, not executed directly)
+**Systemd**: No change (library, not executed directly)
 
-**Risk**: Low — library is self-contained, no ExecStart change required.
+**Risk**: Low. model_ctl.sh는 self-contained. 10개 함수 모두 podman wrapper. 기존 Python lib(db.py, model_registry.py) 활용 가능.
+
+**Est. Effort**: 1-2h (python3 -c inline 0회, DB query 0회 — 가장 단순한 코드)
 
 ---
 
-### Phase 1: Core Orchestrators (day_cycle.sh, night_cycle.sh)
+### Phase 1 (선택, 보류): day_cycle.sh (462 lines) → scripts/day_cycle.py
 
-**Objective**: Replace the two main pipeline orchestrators that manage pipeline_state FSM.
+**권장사항: 보류.** extract.py가 verify/reranker/preflight를 모두 처리하므로 day_cycle.sh의 복잡성이 급감. 남은 bash 로직:
 
-#### Phase 1a: day_cycle.sh (462 lines) → scripts/day_cycle.py
+```
+python3 pipelines/text_clean.py     # 이미 Python
+python3 pipelines/fts5_refresh.py   # 이미 Python
+python3 pipelines/entity_scan.py    # 이미 Python
+python3 pipelines/extract.py        # 이미 Python (self-sufficient)
+python3 pipelines/reranker_recover.py  # 이미 Python
+python3 pipelines/post_extract_supplement.py  # 이미 Python
+python3 pipelines/enrich.py         # 이미 Python
+python3 pipelines/embed_batch.py    # 이미 Python
+```
 
-**Architecture**:
+→ 14회 python3 subprocess 호출 + 19회 DB query. 전환 시 얻는 이점:
+- DB query 통일 (psql_json으로 raw SQL 대체)
+- subprocess timeout 명시 (현재 없음)
+- watchdog → Python 직접 import (선택)
+
+**Architecture** (전환 시):
 
 ```
 day_cycle.py
 ├── class DayCycleOrchestrator
-│   ├── __init__(self, max_cycle_sec=21600)
 │   ├── budget_gate(state, cps, overhead) -> bool
 │   ├── slack_alert(title, detail, color)
 │   └── ensure_inference(model_key, ...)
 ├── def main():
 │   ├── PID lock (flock → file lock)
-│   ├── System sync (gen_architecture, duckdns, watchdog, worklog)
-│   ├── In-flight check (pipeline_state != pending, embedded)
-│   ├── Text preprocess (text_clean.py)
-│   ├── FTS5 refresh
-│   ├── Entity scan
-│   ├── Day extract
-│   ├── Noise marker handling
-│   ├── Reranker launch + recovery
+│   ├── System sync (watchdog trigger, worklog)
+│   ├── In-flight check
+│   ├── Text preprocess → FTS5 → Entity scan
+│   ├── Day extract → Noise marker → NEUTRAL gate
+│   ├── Reranker recovery → Post-extract supplement
 │   ├── Day enrich
 │   └── Day embedding
-└── if __name__ == '__main__': main()
+└── if __name__ == '__main__': sys.exit(main())
 ```
 
-**Systemd change**:
+**Systemd**: ExecStart 변경 필요.
 ```
-# Before
-ExecStart=/bin/bash /opt/projects/server/scripts/day_cycle.sh
-# After
-ExecStart=/usr/bin/python3 /opt/projects/server/scripts/day_cycle.py
+Before: ExecStart=/bin/bash /opt/projects/server/scripts/day_cycle.sh
+After:  ExecStart=/usr/bin/python3 /opt/projects/server/scripts/day_cycle.py
 ```
 
-#### Phase 1b: night_cycle.sh (245 lines) → scripts/night_cycle.py
-
-**Architecture**:
-
-```
-night_cycle.py
-├── class NightCycleOrchestrator
-│   ├── set_mode(mode: str)         # _set_mode
-│   ├── wait_for_model(port, label, max_wait)
-│   ├── switch_inference(model_key, port)
-│   ├── stop_llm_services()
-│   └── start_llm_services()
-├── def main():
-│   ├── PID lock
-│   ├── Mode: night
-│   ├── Server validation
-│   ├── Test heartbeat check
-│   ├── Night debate (night_cycle.py --queue)
-│   ├── Night verify (review_consumer.py)
-│   ├── Day mode restore
-│   ├── Daily structure sync
-│   ├── Proxy audit (proxy_reviewer.py)
-│   ├── FTS5 rebuild (1st only)
-│   └── Status YAML → nightly_status.yaml
-└── if __name__ == '__main__': main()
-```
-
-**Systemd change**:
-```
-# Before
-ExecStart=/opt/projects/server/scripts/night_cycle.sh
-# After
-ExecStart=/usr/bin/python3 /opt/projects/server/scripts/night_cycle.py
-```
+**Est. Effort**: 2-3h (v1.2 대비 4-6h → 2-3h, extract.py self-sufficiency로 인한 감소)
 
 ---
 
-### Phase 2: Batch Runners & Utilities
+### Phase 2-3: 전환 불필요
 
-#### Phase 2a: auto_mode.sh (271 lines) → scripts/auto_mode.py
+나머지 12개 스크립트는 전환하지 않음:
 
-**Key challenge**: Markdown parser in awk. Replace with Python `re` + state machine.
-
-```
-auto_mode.py
-├── class AutoTaskParser:
-│   ├── parse(filepath) -> list[AutoTask]
-│   └── AutoTask(title, body)
-├── class AutoModeRunner:
-│   ├── ensure_memory(min_mb=4096)
-│   ├── run_task(task) -> (exit_code, output_lines)
-│   └── main()
-│       ├── Parse auto_tasks.md
-│       ├── For each task: ensure_memory → run Claude Code
-│       └── Archive + reset
-```
-
-#### Phase 2b: run_baseline_monitor.sh (82 lines) → tests/baseline_monitor.py
-
-**Change**: JSON/YAML parsing in bash → native Python dict.
-
-```
-baseline_monitor.py
-├── def main():
-│   ├── Run extract.py --limit 50 --json
-│   ├── Parse JSON result (already json, no tail -1 needed)
-│   ├── DB query for per-turn stats (psycopg2)
-│   └── Write YAML summary (yaml.dump)
-```
-
-#### Phase 2c: run_verify_compare.sh (100 lines) → tests/verify_compare.py
-
-**Change**: 40-line inline Python config patch → direct module mutation.
-
-```
-verify_compare.py
-├── def main():
-│   ├── Step 1: Run Qwen Q8 verify (listener loop → async wait)
-│   ├── Step 2: Record Qwen results
-│   ├── Step 3: Update model_registry for NextCoder Q8
-│   ├── Step 4: Restart inference with NextCoder Q8
-│   └── Step 5: Run NextCoder verify → comparison report
-```
-
----
-
-### Phase 3: Utility Scripts
-
-#### claude_code_runner.sh (126 lines) → scripts/claude_code_runner.py
-
-**Change**: seq loop + case switching → Python `for` + `argparse`.
-
-```
-claude_code_runner.py
-├── def run_one(variant, i, outfn, source_secrets, wrapper)
-├── def set_proxy_env(variant, proxy_service)
-├── def restore_proxy_env(proxy_service)
-├── def sleep_between(jitter)
-└── def main():
-    ├── argparse (runs, output, jitter, source-secrets, ab)
-    ├── CSV summary
-    ├── --ab: 4 variants
-    └── default: single variant
-```
-
-**Systemd**: No change (manual CLI)
-
-#### gemini_session_start.sh (99 lines) → scripts/gemini_session.py
-
-**Change**: bash variable export → Python function.
-
-```
-gemini_session.py
-├── def fetch_key() -> tuple[str, str]  # (key, key_name)
-├── def start_session(prompt=None, model="gemini-2.5-flash")
-└── if __name__ == '__main__': fire CLI
-```
-
-**Systemd**: No change (manual CLI)
-
-#### weekly_enrich_rebuild.sh (56 lines) → scripts/weekly_enrich_rebuild.py
-
-```
-weekly_enrich_rebuild.py
-├── def quality_check() -> str  # "pass" | "fail" | "skip"
-├── def rebuild() -> dict       # {action, slot, total}
-└── if __name__ == '__main__': main()
-```
-
-**Systemd change**:
-```
-# Before
-ExecStart=/bin/bash /opt/projects/server/scripts/weekly_enrich_rebuild.sh
-# After
-ExecStart=/usr/bin/python3 /opt/projects/server/scripts/weekly_enrich_rebuild.py
-```
-
-#### claude_code_wrapper.sh (85 lines) → scripts/claude_code_wrapper.py
-
-**Key**: Model name remapping + JSON canonicalization + curl.
-
-```
-claude_code_wrapper.py
-├── MODEL_ALIASES = {"qwen3-30b-a3b-local": "deepseek-v4-flash", ...}
-├── def canonicalize(prompt: str) -> str  # strip timestamps/UUIDs
-├── def build_payload(model, system, user) -> dict
-├── def send(payload, proxy_url, auth_token) -> (int, str)  # HTTP code + body
-└── if __name__ == '__main__': argparse CLI
-```
-
-**Systemd**: No change (called by claude_code_runner.py)
-
----
-
-### 3.4 Scripts Remaining in Bash (Unchanged)
-
-| Script | Lines | Reason |
-|--------|-------|--------|
-| `system_sync.sh` | 41 | Simple sequential: gen_architecture → duckdns → git commit. No Python gain. |
-| `open-newhand.sh` | 35 | git commit/push only. One-time operation. |
-| `run_pipeline_bg.sh` | 21 | Trivial sequential python calls. |
-| `github_mcp_wrapper.sh` | 15 | Secrets sourcing → `exec node`. Requires shell for `grep` on secrets. |
-| `fastapi-entrypoint.sh` | 2 | `exec python3 -m uvicorn ...` — PID 1 requirement |
-| `worker-entrypoint.sh` | 8 | `exec python3 /scripts/worker_supervisor.py` — PID 1 |
-| `mcp_entrypoint.sh` | 3 | `exec python3 /scripts/mcp_server.py` — PID 1 |
+| Script | Reason |
+|--------|--------|
+| `night_cycle.sh` | night_cycle.py가 P-R-J pipeline 처리. bash는 mode 전환/trap 오케스트레이션만. 전환 이점 미미 |
+| `auto_mode.sh` | 저빈도 (crono 상태). awk 파서 전환 비용 대비 이익 없음 |
+| `claude_code_runner.sh` | 수동 CLI, 저빈도 |
+| `gemini_session_start.sh` | 수동 CLI, 저빈도 |
+| `run_baseline_monitor.sh` | 테스트 도구, py3c 4회 밀도 높지만 single-use |
+| `run_verify_compare.sh` | 일회성 테스트 도구 |
+| `claude_code_wrapper.sh` | runner가 호출, 간접 영향 |
+| `weekly_enrich_rebuild.sh` | 56L, timer 기반 간단 |
+| `system_sync.sh` | 41L, 제외 대상 |
+| `open-newhand.sh` | 35L, 제외 대상 |
+| `run_pipeline_bg.sh` | 21L, 제외 대상 |
+| entrypoints (3개) | PID 1, 변경 불가 |
 
 ## 5. Systemd Unit Changes Summary
 
 | Timer | Service | Before ExecStart | After ExecStart |
 |-------|---------|-----------------|-----------------|
-| devforge-day-cycle.timer | devforge-day-cycle.service | `/bin/bash day_cycle.sh` | `/usr/bin/python3 day_cycle.py` |
-| devforge-night-cycle.timer | devforge-night-cycle.service | `night_cycle.sh` | `/usr/bin/python3 night_cycle.py` |
+| devforge-day-cycle.timer *(removed)* | devforge-day-cycle.service | `/bin/bash day_cycle.sh` | **unchanged** (Phase 1 보류, 선택적) |
+| devforge-night-cycle.timer | devforge-night-cycle.service | `night_cycle.sh` | **unchanged** |
 | devforge-system-sync.timer | devforge-system-sync.service | `/bin/bash system_sync.sh` | **unchanged** |
-| devforge-weekly-enrich-rebuild.timer | devforge-weekly-enrich-rebuild.service | `/bin/bash weekly_enrich_rebuild.sh` | `/usr/bin/python3 weekly_enrich_rebuild.py` |
-| devforge-auto.timer | devforge-auto.service | `/bin/bash auto_mode.sh` | `/usr/bin/python3 auto_mode.py` |
+| devforge-weekly-enrich-rebuild.timer | devforge-weekly-enrich-rebuild.service | `/bin/bash weekly_enrich_rebuild.sh` | **unchanged** |
+| devforge-auto.timer | devforge-auto.service | `/bin/bash auto_mode.sh` | **unchanged** |
 
-**All timer definitions remain unchanged.** Only the `.service` file `ExecStart` lines change.
+**변경 사항**: v1.2 대비 ExecStart 변경 계획이 모두 제거됨. Phase 1(day_cycle.py) 전환 시에만 devforge-day-cycle.service의 ExecStart 변경.
+
+> Note: devforge-day-cycle.timer는 이미 제거됨. watchdog Python이 systemctl start로 서비스를 직접 트리거.
 
 ## 6. Risk Assessment
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| day_cycle.py logic bug stops pipeline | Low (Phase 1, tested) | High (no data processing) | Parallel run with old bash for 1 cycle |
-| model_ctl.py container management regression | Medium | High (inference down) | `_ensure_model` fallback to bash on failure |
-| auto_mode.py Markdown parser diff | Low | Medium | Compare output with awk version on test file |
-| subprocess.run() vs `bash -c` behavior diff | Low | Medium | Use `shell=True` for piped commands only |
-| systemd ExecStart python path wrong | Very Low | High (service fails) | `daemon-reload` + `status` check in deployment script |
+| day_cycle.py logic bug stops pipeline | Low (Phase 1 선택, 테스트 필요) | Medium | extract.py가 self-sufficient이므로 day_cycle 실패 시 pipeline만 중단, watchdog이 재시도 |
+| model_ctl.py container management regression | Medium | High (inference down) | _ensure_model fallback to bash on failure |
+| subprocess.run() vs bash behavior diff | Low | Medium | Use shell=False for all commands |
+| systemd ExecStart python path wrong | Very Low | High (service fails) | daemon-reload + status check in deploy |
+
+**v2.0 주요 리스크 감소**: v1.2 대비 전환할 스크립트가 4개에서 1-2개로 줄어, 전환 리스크가 60% 이상 감소.
 
 ## 7. Testing Strategy
 
@@ -420,19 +309,14 @@ systemctl --user start devforge-day-cycle.service
 
 ## 8. Migration Timeline (Estimated)
 
-| Phase | Scripts | Lines | Est. Effort | Dependencies |
-|-------|---------|-------|-------------|--------------|
-| Phase 0 | `lib/model_ctl.sh` | 240 | 2-3h | None |
-| Phase 1a | `day_cycle.sh` | 462 | 4-6h | Phase 0 |
-| Phase 1b | `night_cycle.sh` | 245 | 3-4h | Phase 0 |
-| Phase 2a | `auto_mode.sh` | 271 | 3-4h | None |
-| Phase 2b | `run_baseline_monitor.sh` | 82 | 1h | None |
-| Phase 2c | `run_verify_compare.sh` | 100 | 1-2h | Phase 0 |
-| Phase 3 | `claude_code_runner.sh` | 126 | 2h | None |
-| Phase 3 | `claude_code_wrapper.sh` | 85 | 1h | None |
-| Phase 3 | `gemini_session_start.sh` | 99 | 1-2h | None |
-| Phase 3 | `weekly_enrich_rebuild.sh` | 56 | 0.5h | None |
-| **Total** | | **~1,766** | **~20.5h** | |
+| Phase | Scripts | Lines | Est. Effort | Dependencies | Priority |
+|-------|---------|-------|-------------|--------------|----------|
+| Phase 0 | `lib/model_ctl.sh` | 240 | **1-2h** | None | **권장** |
+| Phase 1 (선택) | `day_cycle.sh` | 462 | **2-3h** | Phase 0 | 보류 (ROI 낮음) |
+| **Total (최소)** | | **240** | **1-2h** | | **model_ctl only** |
+| **Total (최대)** | | **702** | **3-5h** | | day_cycle 포함 |
+
+**v1.2 대비 75% 감소** (20.5h → 1-5h). extract.py self-sufficiency가 전환 필요성을 근본적으로 낮춤.
 
 ## 9. Key Design Decisions
 
@@ -529,14 +413,28 @@ def run_cmd(
 
 ---
 
-*Document Version: 1.2*
+*Document Version: 2.0*
 *Author: Claude Code (Deep Dive)*
-*Date: 2026-07-04 (v1.1: 2026-07-05, v1.2: 2026-07-22)*
+*Date: 2026-07-22*
 
 ## Document History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-07-04 | Initial design |
-| 1.1 | 2026-07-05 | Web validation findings: `sys.exit(main())`, `subprocess.run(timeout=)`, plumbum rationale, `lib/pattern.py` |
-| 1.2 | 2026-07-22 | Sync with live code changes: pipeline_state 7→6 stages (`extracted+verified` merged), day_verify.py removed, `_launch_reranker()` added (+33 lines), line count updates |
+| 1.1 | 2026-07-05 | Web validation findings: sys.exit(main()), subprocess.run(timeout=), plumbum rationale, lib/pattern.py |
+| 1.2 | 2026-07-22 | Sync with live code changes: pipeline_state 7→6, day_verify.py removed, _launch_reranker() added |
+| **2.0** | **2026-07-22** | **Complete re-evaluation: extract.py self-sufficiency → scope/priority restructured. Phase 0 (model_ctl)만 권장. Phase 1 (day_cycle) 선택적. Phase 2-3 전환 불필요. 예상 공수 20.5h→1-5h.** |
+
+### Changed Since v1.2
+
+| Area | v1.2 | v2.0 |
+|------|------|------|
+| Executive Summary | 16개 스크립트 전환 | model_ctl.sh만 권장, ROI 낮음 |
+| Scope | 11개 전환 대상 | Phase 1 (선택) + Phase 0 = 1-2개 |
+| Pipeline 상태 | 모든 bash 스크립트 분석 | **모든 pipeline script는 이미 Python** 발견 |
+| extract.py | day_cycle.sh가 호출하는 단순 pipeline | self-sufficient (preflight/reranker/verify 내재화) |
+| Phase Plan | Phase 0-3 (8개 sub-phase) | Phase 0 (model_ctl) + Phase 1 선택 (day_cycle 보류) |
+| 예상 공수 | ~20.5h | 1-2h (model_ctl only) ~ 3-5h (day_cycle 포함) |
+| Dead code | 없음 | day_verify.py (호출 제거됨), polish_batch.py (deprecated), _launch_reranker 3중복 |
+| Systemd 변경 | 4개 서비스 ExecStart 변경 | ExecStart 변경 불필요 (전환 보류) |
