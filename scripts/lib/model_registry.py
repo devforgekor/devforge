@@ -40,8 +40,8 @@ MODEL_METADATA = {
         "ctx": 4096,
         "threads": 4,
         "threads_batch": 4,
-        "batch_size": 256,
-        "ubatch_size": 256,
+        "batch_size": 2048,
+        "ubatch_size": 2048,
     },
     "embed": {
         "file": "Qwen3-Embedding-8B-Q8_0.gguf",

@@ -1053,6 +1053,11 @@ def _launch_reranker() -> bool:
     from lib.pod_manager import wait_health
     import subprocess
 
+    subprocess.run(
+        ["podman", "exec", "devforge-inference", "pkill", "-f", "reranking.*8080"],
+        capture_output=True, timeout=15,
+    )
+
     reranker = MODEL_METADATA["reranker"]
     cmd = [
         "podman", "exec", "-d", "devforge-inference",

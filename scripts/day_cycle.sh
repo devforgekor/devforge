@@ -145,7 +145,7 @@ _launch_reranker() {
         /app/llama-server \
         -m /models/Qwen3-Reranker-4B-Q8_0.gguf \
         --host 0.0.0.0 --port 8080 \
-        --ctx-size 4096 --ubatch-size 768 \
+        --ctx-size 4096 --batch-size 512 --ubatch-size 512 \
         --threads 4 --threads-batch 4 --no-mmap -lv 6 \
         2>&1 || {
         LOG "  reranker podman exec failed"
