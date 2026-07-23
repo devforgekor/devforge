@@ -37,7 +37,7 @@ MODEL_METADATA = {
         "port": 8080,
         "mode": "rerank",
         "model_name": "reranker",
-        "ctx": 2048,
+        "ctx": 4096,
         "threads": 4,
         "threads_batch": 4,
         "batch_size": 256,

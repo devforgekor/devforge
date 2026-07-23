@@ -425,6 +425,8 @@ def _refine_batch(
 
 
 def _rerank_score(evidence: str, source: str) -> float:
+    evidence = evidence[:2000] if evidence else ""
+    source = source[:2000] if source else ""
     return reranker_score(evidence, source)
 
 
@@ -839,16 +841,16 @@ def _llm_nli_verify(
     numbered_lines = []
     for i, ex in enumerate(needs_llm, 1):
         st = ex.get("fact_type", "text")
-        ev = ex.get("evidence", "")[:500]
+        ev = ex.get("evidence", "")[:300]
         numbered_lines.append(f"[{i}] (source: {st}) {ev}")
 
     # Prepend truncated thinking to text (thinking is usually empty/short)
     combined_text = text
     if thinking:
-        combined_text = f"{thinking[:500]}\n\n{text}"
+        combined_text = f"{thinking[:300]}\n\n{text}"
     prompt = _BATCH_NLI_PROMPT.format(
-        user=context_limit(user_turn) if user_turn else "(empty)",
-        text=context_limit(combined_text) if combined_text else "(empty)",
+        user=context_limit(user_turn, 1000) if user_turn else "(empty)",
+        text=context_limit(combined_text, 1000) if combined_text else "(empty)",
         numbered_facts="\n".join(numbered_lines),
     )
 
