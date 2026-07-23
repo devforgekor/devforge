@@ -299,7 +299,7 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
                     SELECT 1 FROM review_facts rf
                     WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'
                   )
-                  AND t.pipeline_state = 'scanned'
+                  AND t.pipeline_state IN ('scanned', 'pending')
                 ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC
                 LIMIT {limit}
                 FOR UPDATE SKIP LOCKED
