@@ -1,9 +1,14 @@
 last_checkpoint:
-  time: '2026-07-06T08:23:29.806327+09:00'
-  summary: 'GitHub Copilot CLI 인증, OpenCode MCP Claude 기준 정리, OpenRouter 15RPM rate-limit proxy'
-  total_files: 5
+  time: '2026-07-24T17:30:00+00:00'
+  summary: 'Reranker HTTP 500 244→0 fix: batch-size 1024, ctx 4096, pkill+relaunch, 1500ch truncation. Batch NLI ctx overflow fix: evidence 500→300ch, source 2000→1000ch. --large-only CLI flag. pipeline_state scanned→pending. 40-turn regression: 0 reranker 500, 0 batch NLI errors, 612 total facts.'
+  total_files: 6
   recent_files:
-    source: []
+    source:
+      - scripts/lib/model_registry.py
+      - scripts/pipelines/extract_verify.py
+      - scripts/lib/llm_client/__init__.py
+      - scripts/pipelines/extract.py
+      - scripts/day_cycle.sh
     config: []
     docs: []
     data: []
@@ -11,264 +16,29 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 2 files changed, 53 insertions(+), 7 deletions(-)
+      unstaged: 0 files changed
       staged: (none)
       untracked_files: 0
   task: null
 decisions:
-- id: nd12-01
-  detail: 'Claude Code MCP 기준으로 OpenCode MCP 설정 통일 (enabled 상태 동기화). 토글 스크립트(opencode-deepdive)로 deepdive 모드 지원. token-savior/git/postgres/sequential-thinking 제외.'
+- id: nd13-01
+  detail: 'Reranker HTTP 500 root cause: llama.cpp --batch-size 256 too small. Embedding/reranker input tokens must fit within physical batch size. Error: "input (263 tokens) is too large to process. increase the physical batch size (current batch size: 256)". Fix: batch-size 256→1024 in model_registry.py (2048 caused OOM: reranker RSS 4.6→7.9GB on 22GB total). 1500ch truncation in _rerank_score() + reranker_score() as belt-and-suspenders (600tok, safely under 1024). 40-turn regression: 244→0 reranker 500.'
   status: open
-- id: nd12-02
-  detail: 'Fallback 모델: DeepSeek V4 Flash Free → Poolside Laguna XS 2.1 (free). OpenRouter 유료 키 사용 (cost $0).'
+- id: nd13-02
+  detail: 'Reranker launch bug: _launch_reranker() used podman exec -d without killing old process. Old process held port 8080 with stale config (ctx 2048, batch 256). Fix: add pkill -f "reranking.*8080" before launch. Also increased ctx-size 2048→4096 for headroom.'
   status: open
-- id: nd12-03
-  detail: 'OpenRouter 20RPM rate limit 대응: 15RPM token-bucket proxy (or-rate-limiter.service, systemd user, 자동 재시작). opencode.json baseURL → 127.0.0.1:4311.'
+- id: nd13-03
+  detail: 'Batch NLI HTTP 500 (60 facts): evidence 500ch×60=30Kch (7500tok) + source 2000ch (500tok) + max_tokens 796 = ~8800tok > ctx 8192. Fix: evidence 500→300ch, source 2000→1000ch via context_limit. Verified: 60-fact batch now ~6000tok, safe within 8192.'
   status: open
-- id: nd12-04
-  detail: 'GitHub Copilot CLI 1.0.68 설치/인증 완료. fine-grained PAT (github_pat_, Copilot Requests 권한) → COPILOT_GITHUB_TOKEN 환경변수. keychain 없는 환경에서 token 저장 안 되는 버그 존재 (plaintext fallback 미작동).'
+- id: nd13-04
+  detail: '_get_unprocessed_turns() filtered only pipeline_state=scanned, missing 5015 pending turns. Fix: IN (scanned, pending). Also added --large-only CLI flag (filters LENGTH(user_turn)>2000 OR LENGTH(text)>2000) for separating long identity docs.'
   status: open
-- id: nd01-01
-  detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta
-    사망 → Pod A :8080+8000 port forwarding 차단. disabled 상태였으나 존재만으로 systemctl --user start 가능. init.scope (systemd user instance
-    startup)에서 trigger 확인됨. watchdog/timer/의존성 아님.'
+- id: nd13-05
+  detail: '40-turn regression test (v3, 1500ch truncation): 0 reranker HTTP 500, 0 batch NLI errors. 18 turns processed, 32 facts stored (all ENTAILMENT, avg quality_score 99.5). ~2h 20min wall time. Cumulative: 612 total facts in DB.'
   status: open
-- id: nd01-02
-  detail: 'Legacy MCP 서비스 영구 제거: devforge-mcp.service → .service.disabled rename → rm 삭제. 재발 방지 완료.'
+- id: nd13-06
+  detail: 'Swap analysis: OCI Block Storage (SSD network-attached, not HDD), swappiness=10, 2.9/4GB used despite low swappiness → genuine RAM pressure. batch-size 2048 caused OOM risk (reranker RSS 7.9GB). batch-size 1024 is safe sweet spot (RSS 4.6GB, available >4GB after reclaim).'
   status: open
-- id: nd01-03
-  detail: 이전 cycle (Jun 23) 17 extracted → 49 verified turns는 NLI 미수행 상태로 force-pass. 49 day_verify facts 모두 nli_llm=NULL,
-    verdict=pending. source='day_verify'는 reranker_recover.py 기본 범위 아닐 수 있어 수동 처리 또는 SQL UPDATE 필요.
-  status: open
-- id: nd01-04
-  detail: 'Slack 봇 crash (ModuleNotFoundError: lib.llm_client)와 MCP 기동은 동시성 이벤트일 뿐 인과관계 없음. slack.py 내 MCP 호출 로직 없음.'
-  status: open
-- id: nd02-01
-  detail: 'OCI root 확장: /etc/fstab에서 /var/log, /var/tmp 항목 제거 완료. /var/log(4.4G) + /var/tmp(2.1G) → /opt/ai_data/expansion_bak/
-    백업 완료. LV 제거 blocked: tmux(4472) 및 활성 프로세스가 /var/tmp 점유, lazy umount 후에도 dmsetup/lvremove 실패. 최종 결정: 재부팅 → 싱글유저 모드에서 lv_tmp_new(3G)
-    + lv_logs(10G) + lv_tmp(10G, unmounted) 제거 → lvextend ocivolume/root -l +100%FREE → xfs_growfs / → mkdir /var/log /var/tmp
-    → 재부팅 → backup 복원 → 서비스 재시작.'
-  status: open
-- id: nd02-02
-  detail: Legacy devforge-mcp.service 제거 확인 완료. container-devforge-mcp.service (FastMCP Streamable HTTP, :8000) Quadlet 정상
-    기동 확인.
-  status: open
-- id: nd02-03
-  detail: Postgres container(data-pod)는 OCI root 확장 대상(/var/log, /var/tmp)과 무관 → 중단 불필요. /mnt/lv_db 정상 마운트 유지.
-  status: open
-- id: nd03-01
-  detail: 'gemini.py REPL에서 한글 입력 시 화면 echo 깨짐 (readline이 UTF-8 멀티바이트 문자 폭 계산 실패). 실제 입력값은 정상. 해결: readline.parse_and_bind
-    set input-meta on / set convert-meta off / set output-meta on 추가.'
-  status: open
-- id: nd05-01
-  detail: 'Slot deadlock auto-detection in watchdog: _check_slot_deadlocks() in __init__.py, SLOT_STUCK_THRESHOLD=3 in state.py,
-    recover_slot_deadlock() in recovery.py. llama-server PR #22083 (--slot-prompt-similarity 0) workaround in pod-b-entrypoint.sh.
-    watchdog restarts Pod B on ≥2 processing slots stuck for ≥3 cycles.'
-  status: open
-- id: nd05-04
-  detail: 'Stale model references cleanup: 5 files had outdated 14B/f16/Q4 comments. day-verifier was mistakenly changed to
-    9B Q8 → user caught it ("9b는 enricher 잖아") → reverted to Qwen2.5-Coder-7B Q8. Rule: port map comments in pod_manager.py
-    are SSOT, pod-b-entrypoint.sh comments are mirror.'
-  status: open
-- id: nd05-05
-  detail: 'PostgreSQL shared_buffers 4GB→512MB: restarted, verified effect. DB 668MB 기준 적정값. 동적 조정 불필요 확인 (PG가 자체 buffer 관리).'
-  status: open
-- id: nd05-06
-  detail: 'Aider Qwen wrapper: aider_qwen.py replaces gemini wrapper. Gemini SSL blocked (Oracle Cloud TLSV1_ALERT_INTERNAL_ERROR).
-    OpenRouter Qwen3 Coder 480B (:free) via QWEN_480B_API_KEY. Rule injection: infrastructure.md + llm-common-rule.md + llm-agent-rule.md
-    auto-attached via --read. alias aider=''python3 /opt/projects/server/scripts/aider_qwen.py'' in .bashrc.'
-  status: open
-- id: nd05-07
-  detail: 'Aider real-world test: generated pytest for analyze_exit_code() with 30 parametrized test cases, all passed. Path
-    handling correct (unlike DeepSeek direct mode). $0.0019 cost. Qwen3 Coder 480B is competent for code generation. Free
-    tier rate-limited but usable with pauses.'
-  status: open
-- id: nd06-01
-  detail: OpenCode 1.17.11 installed globally via npm. Node.js v24.15.0. Works with Anthropic proxy (DeepSeek V4 Flash via
-    ANTHROPIC_BASE_URL). read-only and tool-using tasks verified. MCP native support confirmed (opencode mcp add --url/--env).
-  status: open
-- id: nd06-02
-  detail: 'Gemini OpenAI-compatible proxy (gemini_openai.py): FastAPI on 127.0.0.1:4431. OpenAI /v1/chat/completions → Gemini
-    native protocol translation. KeyRotator integration with 6 keys from secrets.env (round-robin, auto-backoff on 429). Bypasses
-    /etc/hosts redirect via hardcoded Google IPs (same pattern as proxies/gemini.py). Independent state file (~/.cache/devforge/gemini_openai_rotator_state.json)
-    — does NOT interfere with gemini.py (port 4430). Verified: non-streaming, streaming SSE, /v1/models all pass. systemd
-    user service enabled (boot auto-start).'
-  status: open
-- id: nd06-03
-  detail: 'Extract LLM max_tokens D-approach (reverse-calc from CAP) finalization in extract_llm.py. _calc_max_tokens(text_len)
-    → ceil(300ch/fact) additive wanted vs CAP-reverse achievable → min(). TIMEOUT_PER_TOK=1.2, GEN_TIME_BUF=90, CAP=1800,
-    MIN_USEFUL_TOKENS=256, MAX_INPUT_CHARS_ADVERTISED=6500. Structured JSON logging (print+json.dumps) for 4 operational events:
-    max_tokens_overflow(2 subtypes), tokens_truncated, extract_skip_overflow. Concurrent prefill crash fixed (ThreadPoolExecutor
-    removed → sequential solo section-major). Long-turn truncation (118114e1, f1925ee3) root cause = hardcoded MAX_TOKENS_EXTRACT=512
-    — resolved by dynamic _calc_max_tokens. User sign-off obtained: 구조적 정합 + 운영 가시성 + 동시성 가정 명시. 3개 후속 항목(canary baseline,
-    idle timeout SSE, structured logging) 논의 완료. 배포 승인됨.'
-  status: open
-- id: nd06-04
-  detail: 'ChatML-style markers applied across all production prompt/context code (6 files). Convention: === SOURCE_xxx ===
-    (underscore) for factual/source data, --- REASONING_xxx --- (dash) for reasoning traces, === CONTEXT_xxx === (underscore)
-    for derived/context data. extract_llm.py: REASONING_THINKING + CONTEXT_ENTITIES. enrich.py: SOURCE_USER_TURN + REASONING_THINKING
-    + SOURCE_TEXT + CONTEXT_FACTS + verifier prompt (SOURCE_TURN + CONTEXT_MCP). prj/core.py: SOURCE_TURN + CONTEXT_FACTS
-    + CONTEXT_ENRICH + CONTEXT_REVIEW. verify/core.py: SOURCE_TURN + CONTEXT_FINDINGS. pipeline_common.py: CONTEXT_PIPELINE.
-    night_cycle.py: CONTEXT_NIGHT_DEBATE + CONTEXT_P_FINDINGS + CONTEXT_R_VERDICTS + CONTEXT_J_DECISION.'
-  status: open
-- gemini.py(4430) + gemini_pool.py 삭제, gemini_openai.py(4431)로 통합
-- 'newhand/open-newhand: 세션 종료 후 자동 git commit/push'
-- AGENTS.md 동기화 sync_gemini_rules.py로 자동화, GEMINI.md 제거
-- 'RPD 추적 + 429 분기: retryDelay >=300s는 daily quota, <300s는 rate limit'
-- 'opencode v1.17.11: mcpServers deprecated → mcp 키, type:local+command[] 배열 형식'
-- 'newhand/open-newhand 통일: /proc 체인으로 세션 감지, 터미널=실행/세션 내=commit/push'
-- newhand() 종료 후 자동 commit/push 제거
-- id: nd07-01
-  detail: open-newhand 함수 CWD 문제 + 상대 경로 버그 수정. opencode 호출 전 cd /opt/projects/server 누락으로 project-level .opencode.json 미인식
-    → handover instructions 미주입. 상대 경로 .opencode-handover.md를 절대 경로로 변경.
-  status: open
-- id: nd07-02
-  detail: 'open-newhand() 0바이트 .opencode.json 생성 버그: heredoc(cat > "$OC_CONFIG" << OCEND)이 빈 파일 생성 → opencode가 project-level
-    config를 읽지 못함. 근본 원인 불명(heredoc 자체 문제 또는 타이밍 이슈). 수정: (1) proc chain 루프에 || break 추가 — /proc 읽기 실패 시 무한루프 방지 (2) .opencode.json
-    파일 생성 대신 OPENCODE_CONFIG_CONTENT env var 사용 — printf로 JSON 생성, mktemp + trap으로 merged instructions 파일 관리 (3) heredoc 제거로
-    0바이트 config 생성 원천 차단 (4) handover 파일 크기 출력으로 사용자 확인 가능. newhand()에도 동일 || break 적용.'
-  status: open
-- id: nd07-03
-  detail: 'Pod B Quadlet → direct systemd service (devforge-pod-b.service) + symlink. Workaround for Podman 5.6 cgroup bug:
-    219/CGROUP crashloop because --cgroups=split + --sdnotify=conmon fail in rootless cgroup v2 (no CPU delegation). Type=exec
-    works. container-devforge-pod-b.service is now a symlink → devforge-pod-b.service. No changes needed in 34 calling files.'
-  status: open
-- id: nd07-04
-  detail: 'MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns (200-500c): was 512-612 max_tok, now 256-356. At 2 t/s,
-    halves generation time. T20 Turn 1: 524c→356max_tok, 530s elapsed. MIN_USEFUL_TOKENS=256 already exists.'
-  status: open
-- id: nd07-05
-  detail: mcp-trunc-proxy v0.2.2 installed (npm global). Wrapped 8/11 MCPs (filesystem, search-proxy, exa-search, fetch, github,
-    context7, yggdrasil, lsp) with 50-80KB thresholds, memory store. time/shrimp/devforge-mcp excluded (tiny output/HTTP).
-    90-98% token reduction on large responses. Requires Claude Code restart.
-  status: open
-- id: nd07-06
-  detail: 'token-savior-recall v4.4.1 installed (pip3.11). Profile: optimized (15 tools). Structural code nav + persistent
-    memory (SQLite FTS5) + Bash output compaction (34 patterns). tsbench: -80% tokens, 97.9% score. MCP entry added to mcp.json,
-    requires restart. Env: WORKSPACE_ROOTS=/opt/projects/server, TOKEN_SAVIOR_PROFILE=optimized.'
-  status: open
-- id: nd07-07
-  detail: T20 predicate extraction test (free-form + atomic, Pod B day mode Qwen3-8B-Q8_0). Turn 1 success (ec91527a, 524c,
-    530s), Turn 2 timeout (0d73684c, 258c, 568s). Interrupted by user. MAX_TOKENS_BASE 256 verified working. Need to restart
-    Pod B health (was down after cleanup) and day-cycle timer before full retest.
-  status: open
-- id: nd08-01
-  detail: 'Pattern 2+4 auto-fix system implemented. reflex_rules DDL (schema.sql), 5 PL/pgSQL functions (reflex_functions.sql:
-    detect_patterns, promote_rules, decay_rules, match_rule, daily_rule_report), lib/reflex_rules.py (CRUD + lifecycle), lib/auto_fix.py
-    (safe remediation catalog: raise_timeout, restart_container, notify, log_only), lib/observation.py (unified observation
-    API). cli.py reflex command group (list/show/add/approve/reject/match/detect/promote/decay/report). obs_remediate MCP
-    tool (confidence-based: >=0.7 auto-fix, >=0.3 notify, <0.3 log). auto_log PostToolUse hook.'
-  status: open
-- id: nd08-02
-  detail: 'Action queue bridge — MCP tool writes action to watchdog_pulses (category=action), watchdog _consume_actions()
-    executes safely per cycle. lib/action_queue.py: action_write, action_claim_pending (atomic PENDING->IN_PROGRESS), execute_action,
-    action_complete/action_fail (retry->escalation). 3 executors (systemctl, podman, cli) with shell=False, injection validation,
-    explicit timeouts. MCP tools: action_write, action_poll_results. watchdog __init__.py: _consume_actions() called every
-    cycle. 9/9 tests passed (mocked unit + real DB integration).'
-  status: open
-- id: nd08-03
-  detail: 'Web research validated architecture. AgentScope (Postgres row-level lock queue), ClawDaemon (SQLite event queue),
-    Cerebro/corvus (tokio::mpsc channel) all use same "MCP writes -> DB queue -> daemon executes" pattern. Security: mutex-induced
-    hang avoided (atomic DB queue, no channel mutex), RCE by design avoided (HTTP transport + shell=False), write access scope
-    limited to 3 deterministic action types. Conditional approval secured.'
-  status: open
-- id: nd09-01
-  detail: 'Bug fix: match_rule SQL function had hardcoded trigger_source IS NULL — source filtering dead. Added obs_source
-    param to SQL + Python rule_match() + remediate_observation() + obs_remediate MCP. DB redeployed.'
-  status: open
-- id: nd09-02
-  detail: 'Bug fix: auto_log.py _handle_bash marked denied/blocked commands as bash_executed=true. Added tool_output.error
-    early return — only executed commands get the tag.'
-  status: open
-- id: nd09-03
-  detail: 'All 3 hooks (pretool_bash_log, auto_log, ruff_lint) made fully silent. ruff_lint.py: removed hookSpecificOutput.
-    pretool_bash_log.py: removed stderr output.'
-  status: open
-- id: nd09-06
-  detail: 'UI conciseness: same-type tools collapsed, thought minimized, final only'
-  status: open
-- id: nd09-04
-  detail: 'Token savings measurement: proxy→DB, extract_llm→DB, reports/token-stats.py'
-  status: open
-- id: nd09-05
-  detail: 'mcp-trunc-proxy patch: proxy.mjs +1 line, JSONL stats, patches/ saved'
-  status: open
-- id: nd10-01
-  detail: 'Phase 1 — predicate extraction quality test: 3-phase plan (Deep Dive workflow). == Current State (2026-06-28) ==
-    - 30B MoE (Qwen3-Coder-30B-A3B-Q4_K_M, 18G, 8081): no-GS chunk2 FAIL (0/5, 503), with-GS full turn DONE (4/5 GOOD, 243s,
-    1533P+326C). Finish=stop. - 14B Q4 (Qwen3-14B-Q4_K_M, 8.4G, 8081): LOADED at 8081. Tests NOT RUN. - Pod B env: CTX_SIZE=4096,
-    CACHE_RAM=512, UBATCH=256, THREADS=4, FLASH_ATTN=1. MemoryMax=23G. - Pod A: UP (devforge-net bridge). Available for Phase
-    2 (4B parallel test). - Predicate Golden Set: scripts/docs/predicate-golden-set.yaml (16 entries). - Test scripts: /tmp/test_30b_golden.py
-    (30B GS test, working), /tmp/test_14b_feedback.py (14B with retry, NOT RUN). /tmp/test_14b_golden.py (14B simple version,
-    NOT RUN). == Phase 1 (NEXT) == Run 14B Q4 x 2 tests on the SAME 760-char turn (in /tmp/): A) WITHOUT Golden Set (baseline)
-    B) WITH Golden Set Expected: 80%+ GOOD with GS, clear GS vs no-GS gap (no-GS: ~50%). == Phase 2 (after Pod A recovery)
-    == 4B pre-filter x 2 models: - Qwen3.5-4B-Q8 (4B×4B, DeltaNet+Attention hybrid) - qwen3-4b-instruct-2507-q8 (4B×3B, dense
-    4B + Qwen2.5-0.5B verifier combo) Limit: 3 facts max. Verify with 30B or 14B. == Phase 3 == Top 2 model combos x 12 DB
-    samples (short 4 + medium 4 + long 4). Final comparison. == Execution Protocol == 1. cli.py status --json → check Pod
-    B mode/timer 2. systemctl --user stop devforge-day-cycle.{service,timer} 3. test_setup(name, desc) → heartbeat pulse 4.
-    ensure_model(key) or manual env swap + systemctl restart devforge-pod-b 5. Wait for model loaded (podman logs | grep "model
-    loaded") 6. test_heartbeat(detail) on each step 7. Test with retry loop: max 3 retries, 15s backoff, health check between
-    retries 8. test_complete() 9. systemctl --user start devforge-day-cycle.{service,timer} 10. Compare results, update handover
-    == MCP Tools for Deep Dive == - Yggdrasil: plan/structuring (session dp-20260628-extraction-test-series) - filesystem:
-    read/write test scripts - LSP: analyze extract.py blast_radius - context7: llama.cpp GBNF/json_schema docs - shrimp-task-manager:
-    step-by-step task execution - search-proxy/exa-search: research (golden set quality, model comparison) - devforge-mcp:
-    DB queries, custom tools - time: timestamps == Retry Feedback Loop == - 503/API error → wait 15-30s, recheck /health,
-    retry max 3 - JSON parse fail → log raw, return FAIL, retry - Health check before each attempt - Model D state: wait for
-    slot recovery, retry - All retries exhausted → declare test FAIL, continue next test '
-  status: open
-- id: nd10-02
-  detail: dev_pipeline.py — GitHub Issue → PR pipeline 모듈 생성. poll_issues(), claim_issue(), create_pr() 포함. gh CLI wrapper
-    기반, state JSON 파일로 중복 추적. cli.py dev 서브커맨드 (poll/claim/pr) 추가.
-  status: open
-- id: nd10-03
-  detail: 'Label tracking: claim_issue()에서 dev:in-progress label 추가, create_pr()에서 dev:pending-review로 전환. _label_issue()
-    helper — gh issue edit --add-label/--remove-label non-fatal wrapper.'
-  status: open
-- id: nd10-04
-  detail: 'Governance tier (auto-safe): poll_issues(auto_safe=True)로 auto-safe label이 있는 Issue만 필터. dev poll --auto-safe --claim
-    조합으로 timer와 연동.'
-  status: open
-- id: nd10-05
-  detail: 'systemd timer: devforge-dev-poll.service + timer. 10분 간격(*:0/10), cli.py dev poll --auto-safe --claim --once 실행.
-    활성화 완료.'
-  status: open
-- id: nd10-06
-  detail: 'Web 검증 결과: autonomous-dev-team(GitHub) ✅ 실제 README+코드 검증 완료. Baton ✅ 우리와 가장 유사한 아키텍처. sentinel-mcp ❌ GitHub Issue
-    자동화와 무관 (검증 실패).'
-  status: open
-- id: archive-dead-extract-logic-20260703
-  detail: Removed STRICT/XPLORE prompts, _extract_single, _extract_for_turn, _extract_dual_section_major, _observe_extract_usage,
-    _is_low_value, _load_entity_context, _backward_compat. SYSTEM_DAY_EXTRACT re-pointed to _SYSTEM_TEXT_EXTRACT_FREE. 2522→1632
-    lines. E2E all 5 PASS.
-  status: done
-- id: archive-dead-tests-20260703
-  detail: compare_extract_ab*.py (4 files importing _extract_for_turn) → _archive/tests/
-  status: done
-- id: fix-def-gen-timeout-20260701
-  detail: '_get_predicate_definition timeout increased. Root cause: Qwen3-4B-Q8 ~12-14s on 2 cores, not port contention.'
-  status: done
-- id: watchdog-codescanner-20260701
-  detail: 'DB-backed silent except Exception: pass auto-detection + auto-fix. Relifix regression detection. Experimental.'
-  status: open
-- id: edcr-pipeline-20260701
-  detail: '3-phase: OIE (8082+8083) → Canonicalize (8081 embed+judge) → Refinement (8083 re-extract). E2E all 5 checks PASS
-    ~390s.'
-  status: done
-- id: nd11-01
-  detail: 'context7_mcp.py query_docs fix: 3 bugs fixed. (1) type=json param missing → API returns markdown text → resp.json()
-    fails with ''Expecting value'' → all 4 keys appear exhausted → ''All Context7 API keys exhausted or API unavailable''.
-    (2) data["data"] assumed wrong response field — actual JSON has codeSnippets+infoSnippets. (3) _call_api unconditional
-    resp.json() → content-type detection added (JSON→resp.json(), text→resp.text wrapped as {data: text}). Also cleaned 2
-    orphaned context7 processes.'
-  status: closed
-- 'system_sync.sh (30분 주기)에 git auto-commit 추가 — 변경사항 있을 때만 git add -A && git commit -m "auto: sync YYYY-MM-DD"'
-- devforge-daily-structure.service (00:00 UTC=KST 09:00)에 git push 추가 — push할 게 없으면 skip
-- argcomplete 모듈 누락修复 — pip3 install --user argcomplete 로 해결
-- id: nd03-02
-  detail: 'opencode: Gemini provider 제거, 기본 모델 opencode/deepseek-v4-flash-free로 변경. opencode-model-fallback-chain 플러그인 설치.
-    fallback chain: opencode/deepseek-v4-flash-free → openrouter/deepseek/deepseek-v4-flash:free. DeepSeek 동일 모델 유지, 할당량 풀만
-    분리.'
-  status: closed
 known_issues:
 - id: nki12-01
   detail: 'copilot CLI 1.0.68: keychain 없는 Linux 환경에서 plaintext token 저장 fallback이 동작 안 함. Login succeeds but token not saved. 해결: COPILOT_GITHUB_TOKEN env var.'
@@ -332,7 +102,7 @@ known_issues:
     test scripts, not production code.
   resolved: false
 - text: 'Phase 1 test scripts: scripts/lib/test_runner.py (TestRunner framework) + scripts/tests/test_phase1_14b.py (14B Q4
-    GS comparison). /tmp/ scripts (test_14b_golden.py, test_14b_feedback.py, test_30b_golden.py) are legacy — not committed.'
+    GS comparison). /tmp/ scripts are legacy — not committed.'
   resolved: false
 - text: PostgreSQL shared_buffers 512MB — applied via restart. Ok.
   resolved: false
@@ -347,57 +117,7 @@ known_issues:
     predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음. max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도
     문제 발견 시 각 predicate 개별 호출로 분리 (latency N배 증가).'
   resolved: false
+- text: 'Reranker --batch-size 1024 on 22GB OCI ARM: RSS ~4.6GB, safe. Swap 73% used (2.9/4GB) despite swappiness=10, indicating genuine RAM pressure. Do not increase batch-size beyond 1024 without verifying free memory >6GB.'
+  resolved: false
 completed_log:
-- OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
-- PostgreSQL tuning (effective_io_concurrency=200, effective_cache_size=1GB, shared_buffers=512MB). day-cycle.timer removed
-  from 5 files. extract.py deadlock fixed (recover_8082 missing lock.release). Server perf analysis completed (no-mmap keep,
-  netdata fine, zram keep). systemctl kill stuck day_cycle. 48 scanned turns pending watchdog resume.
-- Slot deadlock watchdog auto-detection + recovery. Pod A slirp4netns. MCP --host 0.0.0.0. Stale model refs cleanup (14B→8B,
-  f16→Q8). PostgreSQL shared_buffers restart. --slot-prompt-similarity 0. Aider Qwen wrapper. Gemini SSL blocked.
-- OpenCode 1.17.11 npm install + verification (Anthropic proxy / DeepSeek V4 Flash). Gemini OpenAI-compatible proxy (gemini_openai.py)
-  built with FastAPI + raw SSL sockets + KeyRotator (6 keys round-robin). systemd service gemini-openai-proxy.service on port
-  4431. Verified non-streaming, streaming SSE, /v1/models. OpenCode config points to local proxy. Aider still available but
-  OpenCode tested as alternative.
-- OpenCode AGENTS.md rules research. MCP installation confirmed at /home/opc/.claude/mcp.json (13 servers). Added MCP Tools
-  usage table to llm-agent-rule.md (shared by Claude Code + OpenCode). brave-search simplified (no Claude/OpenCode divergence).
-- 'Extract LLM max_tokens D-approach finalization. Sequential prefill crash fix. Long-turn truncation resolved. Structured
-  JSON logging (4 events). 3-phase review 완료 → 배포 승인. extract_llm.py: _calc_max_tokens, _calc_timeout, MAX_INPUT_CHARS_ADVERTISED
-  추가. import logging 제거 → print+json.dumps로 복원.'
-- 'Extract max_tokens D-approach finalization (reverse-calc from CAP, structured JSON logging). ChatML-style markers migration
-  (6 files, 3-tier convention: INPUT/CONTEXT/DATA + REASONING <<< >>>, START/END restoration, 5-point review fix: ---→<<<
-  >>>, entities→entity, CONTEXT TODO). newhand script reviewed + patches (typ fix, instructions.md guard). DB reset (review_facts+embeddings
-  truncated, pipeline_state→pending). Watchdog restarted. 배포 승인됨.'
-- 'open-newhand 터미널 실행 안됨 수정: ~/.bashrc.d/opencode-aliases — cd 누락 + 상대 경로 절대 경로 변경'
-- 'open-newhand() 수정: open-newhand() 0바이트 .opencode.json 버그 수정 — printf + mktemp + OPENCODE_CONFIG_CONTENT'
-- open-newhand() 0바이트 config 버그 수정 — printf+mktemp+OPENCODE_CONFIG_CONTENT, newhand() proc chain || break
-- Pod B Quadlet → direct systemd service (devforge-pod-b.service + symlink). Podman 5.6 cgroup workaround for 219/CGROUP crashloop.
-- MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns halved generation time.
-- mcp-trunc-proxy v0.2.2 installed + 8/11 MCPs wrapped (90-98% token reduction on large responses).
-- token-savior-recall v4.4.1 installed (pip3.11, optimized profile). Structural nav + memory + Bash compaction.
-- 'T20 predicate extraction test: 1/10 completed, 1/10 timeout, user interrupted. MAX_TOKENS_BASE 256 verified.'
-- Slack MCP and postgres MCP removed (13→11 MCPs). .claudeignore created.
-- 'ui: 진행 표시 영어(간결), 요약=한글, 상세는 파일 저장. Token 절약 패턴 확립.'
-- 'Pattern 2+4 auto-fix system: reflex_rules DDL + 5 SQL functions + lib/reflex_rules.py + lib/auto_fix.py + lib/observation.py
-  + cli.py reflex command + obs_remediate MCP. Action queue bridge: lib/action_queue.py + MCP tools action_write/action_poll_results
-  + watchdog _consume_actions(). Security: shell=False, injection validation, timeouts. 9/9 tests passed. Commit 70d78b7 pushed
-  to main.'
-- 'extraction: Phase 1 test series init. Models available (30B MoE, 14B Q4, 4B Q8 x2, 0.5B Q8). Downloaded Qwen3.5-4B-Q8_0
-  (4.2G), Qwen3-14B-Q4_K_M (8.4G). Removed Qwen3-8B-Q8_0 (8.2G), Qwen3.5-9B-Q8.'
-- 'Qwen3-Coder-30B-A3B-Q4_K_M test: 30B MoE no-GS (0/5 GOOD on chunk2, 503 slot deadlock). 30B MoE with GS (4/5 GOOD, 243s,
-  1533P+326C). Remaining: equals appears once (PARALLEL=1). Memory fix: MemoryMax 22G->23G, ctx 8192->4096, cache-ram 1024->512,
-  ubatch 512->256. Fixed 30B slot deadlock.'
-- 'Predicate Golden Set YAML: 16 entries (11 GOOD + 5 BAD). Sources: DB review_facts + turns with evidence chains. English/Korean
-  mixed predicates. Created at scripts/docs/predicate-golden-set.yaml.'
-- 'MCP transport compatibility fix: exa_mcp.py + context7_mcp.py had legacy Content-Length header transport. Claude Code v2.1.158
-  uses JSON-line transport. Fixed _read_message() + _send_message() in both. 12/12 MCP servers connected.'
-- 'Pod B: 14B Q4 model loaded at 8081 (2min load, 8.4G). Ready for Phase 1 tests (no-GS + with-GS).'
-- 'Extraction test plan structured: 3-phase plan (Phase 1=model comparison, Phase 2=4B pre-filter, Phase 3=final). Yggdrasil
-  session dp-20260628-extraction-test-series.'
-- 'Phase 1 test completed: Devin-like TestRunner framework (scripts/lib/test_runner.py) + test_phase1_14b.py. 14B Q4 with/without
-  GS comparison. A) no-GS: GOOD, 5 facts, 216s, 499P+281C. B) with-GS: MIXED, 5 facts (1 dup), 257s, 1489P+316C. Verdict:
-  INCONCLUSIVE — GS adds 3x token cost without clear quality gain on this turn. Self-healing retry verified. LSP blast_radius
-  confirmed zero production impact. Pod B mode restored (review-p, :8081). Day-cycle restarted.'
-- pip3 install --user argcomplete (tracer bash-completion 오류 해결)
-- 'system_sync.sh: git auto-commit 로직 추가'
-- 'devforge-daily-structure.service: git commit + git push ExecStart 추가 (%% 이스케이프)'
-- systemd daemon-reload 완료, 실제 커밋 생성 확인 (5811f6e)
+- 'Reranker HTTP 500 244→0 fix: triple-layer (batch-size 1024, ctx 4096, pkill+relaunch, 1500ch truncation). Batch NLI overflow fix: evidence 500→300ch, source 2000→1000ch. --large-only CLI flag. pipeline_state scanned→pending. 40-turn regression verified: 0 errors, 612 total facts.'
