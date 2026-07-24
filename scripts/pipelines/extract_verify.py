@@ -425,8 +425,8 @@ def _refine_batch(
 
 
 def _rerank_score(evidence: str, source: str) -> float:
-    evidence = evidence[:2000] if evidence else ""
-    source = source[:2000] if source else ""
+    evidence = evidence[:1500] if evidence else ""
+    source = source[:1500] if source else ""
     return reranker_score(evidence, source)
 
 

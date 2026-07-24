@@ -280,7 +280,7 @@ def _delete_checkpoint(turn_id: str) -> None:
 # ── Phase 1: Extract — SELECT unprocessed turns ──────────────────────
 
 
-def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
+def _get_unprocessed_turns(limit: int = BATCH_LIMIT, large_only: bool = False) -> List[Dict[str, Any]]:
     """Atomically claim scanned turns via FOR UPDATE SKIP LOCKED,
     set pipeline_state='extracting', and return turn data.
     Prevents duplicate processing when multiple workers run concurrently.
@@ -300,6 +300,7 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT) -> List[Dict[str, Any]]:
                     WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'
                   )
                   AND t.pipeline_state IN ('scanned', 'pending')
+                  {'AND (LENGTH(t.user_turn) > 2000 OR LENGTH(t.text) > 2000)' if large_only else ''}
                 ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC
                 LIMIT {limit}
                 FOR UPDATE SKIP LOCKED
@@ -374,6 +375,7 @@ def extract_pipeline(
     limit: int = BATCH_LIMIT,
     dry_run: bool = False,
     pulse_context: Optional[str] = None,
+    large_only: bool = False,
 ) -> Dict[str, Any]:
     t_start = time.monotonic()
     heartbeat("day_extract", "pipeline_start")
@@ -418,7 +420,7 @@ def extract_pipeline(
             }
         ]
     else:
-        turns = _get_unprocessed_turns(limit)
+        turns = _get_unprocessed_turns(limit, large_only)
 
     if not turns:
         print("[extract] No unprocessed turns found")
@@ -1104,6 +1106,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--pulse-context", help="Inject Watchdog Pulse context")
+    parser.add_argument("--large-only", action="store_true", help="Only process turns with user_turn or text > 2000 chars")
     parser.add_argument(
         "--describe-files",
         action="store_true",
@@ -1130,6 +1133,7 @@ def main() -> None:
             limit=args.limit,
             dry_run=args.dry_run,
             pulse_context=args.pulse_context,
+            large_only=args.large_only,
         )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

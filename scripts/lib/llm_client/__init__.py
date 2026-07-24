@@ -153,8 +153,8 @@ def call_llm(
 
 
 def reranker_score(query: str, document: str) -> float:
-    query = query[:2000] if query else ""
-    document = document[:2000] if document else ""
+    query = query[:1500] if query else ""
+    document = document[:1500] if document else ""
     reranker_port = MODEL_REGISTRY["reranker"]["port"]
     body = json.dumps(
         {
