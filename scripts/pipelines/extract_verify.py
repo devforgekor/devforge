@@ -729,7 +729,7 @@ def _llm_nli_verify2(
 
 
 def _calc_nli_timeout(source: str, evidence: str) -> int:
-    total = len(context_limit(source)) + len(evidence[:500]) + 200
+    total = len(context_limit(source, 1000)) + len(evidence[:300]) + 200
     return min(max(30, int(total * 0.15)), 600)
 
 
@@ -742,7 +742,7 @@ def _llm_nli_check(evidence: str, source: str) -> str:
         print(f"    [nli-d] CONTRADICTION (deterministic): '{evidence[:60]}'", flush=True)
         return "CONTRADICTION"
 
-    prompt = _NLI_VERIFY_PROMPT.format(source=context_limit(source), evidence=evidence[:500])
+    prompt = _NLI_VERIFY_PROMPT.format(source=context_limit(source, 1000), evidence=evidence[:300])
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],

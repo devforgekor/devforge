@@ -140,6 +140,7 @@ ensure_inference() {
 # ── Reranker launch: podman exec inside inference container ─────────
 _launch_reranker() {
     LOG "  Launching reranker on :8080..."
+    podman exec devforge-inference sh -c 'pkill -f "reranking.*8080" 2>/dev/null; sleep 1' || true
     podman exec -d devforge-inference \
         taskset -c 0-3 \
         /app/llama-server \
