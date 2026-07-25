@@ -40,7 +40,7 @@ from lib.db import esc_sql, psql, psql_json, psql_ok
 from lib.enrich_few_shot import load_few_shot
 from lib.llm.json_parser import parse_llm_json, save_dlq
 from lib.llm_client import call_llm_with_retry, reranker_nli_verdict, reranker_score
-from lib.pod_manager import ensure_sequential_dual
+
 from lib.text_cleaner import get_cleaner
 from lib.token_budget import TokenBudget
 from lib.watchdog.messenger import heartbeat
@@ -1114,7 +1114,6 @@ def main() -> None:
     from lib.infra.preflight import preflight_checks
 
     preflight_checks("enrich.py")
-    ensure_sequential_dual("day-enricher", "day-enricher-b")
     import argparse
 
     parser = argparse.ArgumentParser(

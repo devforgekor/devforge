@@ -412,8 +412,8 @@ NEED_ENRICH=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM turns WHERE pipeline_state = 'verified'" 2>/dev/null || echo "0")
 if [ "$NEED_ENRICH" -gt 0 ]; then
     _budget_gate "verified" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
-    LOG "=== Day Enrich (:8082+:8083 dual, ${NEED_ENRICH} verified turns) ==="
-    # enrich.py handles model startup via ensure_dual (day-enricher + day-enricher-b)
+    LOG "=== Day Enrich (:8082, ${NEED_ENRICH} verified turns) ==="
+    ensure_inference "day-enrich" "$(_day_phase_model day_enrich)" false 1200
     python3 "$PIPELINE_DIR/enrich.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
