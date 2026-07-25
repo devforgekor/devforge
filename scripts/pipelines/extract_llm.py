@@ -1439,8 +1439,8 @@ def _fix_subject_grounding(fact: dict, source_text: str) -> dict:
     if not subject or not source_text or subj_lower in source_lower:
         fact.setdefault("_qc_checks", {})["grounding"] = "passed"
         return fact
-    words = subject.split()
-    if len(words) > 2:
+    words = [w for w in subject.replace("_", " ").split() if len(w) > 1]
+    if words:
         word_matches = sum(1 for w in words if w.lower() in source_lower)
         if word_matches / len(words) >= 0.6:
             fact.setdefault("_qc_checks", {})["grounding"] = "passed"
