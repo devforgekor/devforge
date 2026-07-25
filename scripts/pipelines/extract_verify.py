@@ -729,7 +729,7 @@ def _llm_nli_verify2(
 
 
 def _calc_nli_timeout(source: str, evidence: str) -> int:
-    total = len(context_limit(source, 1000)) + len(evidence[:300]) + 200
+    total = len(context_limit(source, 1000)) + len(context_limit(evidence, 400)) + 200
     return min(max(30, int(total * 0.15)), 600)
 
 
@@ -742,7 +742,7 @@ def _llm_nli_check(evidence: str, source: str) -> str:
         print(f"    [nli-d] CONTRADICTION (deterministic): '{evidence[:60]}'", flush=True)
         return "CONTRADICTION"
 
-    prompt = _NLI_VERIFY_PROMPT.format(source=context_limit(source, 1000), evidence=evidence[:300])
+    prompt = _NLI_VERIFY_PROMPT.format(source=context_limit(source, 1000), evidence=context_limit(evidence, 400))
     try:
         meta = call_llm(
             [{"role": "user", "content": prompt}],
@@ -837,44 +837,69 @@ def _llm_nli_verify(
     if not needs_llm:
         return extractions
 
-    # Phase 2: Single batch call — all facts with source tags
-    numbered_lines = []
-    for i, ex in enumerate(needs_llm, 1):
-        st = ex.get("fact_type", "text")
-        ev = ex.get("evidence", "")[:300]
-        numbered_lines.append(f"[{i}] (source: {st}) {ev}")
+    # Phase 2: Token-budget batch splitting (each fact is independent)
+    # Splits by estimated token cost to stay within llama.cpp 8192 ctx.
+    MAX_BUDGET = 7373  # 8192 * 0.9 (10% safety margin)
+    FIXED_OVERHEAD = 600
 
-    # Prepend truncated thinking to text (thinking is usually empty/short)
     combined_text = text
     if thinking:
         combined_text = f"{thinking[:300]}\n\n{text}"
-    prompt = _BATCH_NLI_PROMPT.format(
-        user=context_limit(user_turn, 1000) if user_turn else "(empty)",
-        text=context_limit(combined_text, 1000) if combined_text else "(empty)",
-        numbered_facts="\n".join(numbered_lines),
-    )
 
-    n = len(needs_llm)
-    timeout = max(180, int(len(prompt) * 0.25))
-    max_tokens = n * 12 + 64
+    batches = []
+    current = []
+    accum = FIXED_OVERHEAD
 
-    try:
-        meta = call_llm(
-            [{"role": "user", "content": prompt}],
-            model="day_extract",
-            max_tokens=max_tokens,
-            temperature=0.0,
-            timeout=timeout,
-            return_meta=True,
+    for ex in needs_llm:
+        ev = context_limit(ex.get("evidence", ""), 400)
+        est = len(ev) // 3 + 25
+        if accum + est > MAX_BUDGET and current:
+            batches.append(current)
+            current = []
+            accum = FIXED_OVERHEAD
+        current.append(ex)
+        accum += est
+
+    if current:
+        batches.append(current)
+
+    all_labels = []
+    for batch in batches:
+        numbered_lines = []
+        for i, ex in enumerate(batch, 1):
+            st = ex.get("fact_type", "text")
+            ev = context_limit(ex.get("evidence", ""), 400)
+            numbered_lines.append(f"[{i}] (source: {st}) {ev}")
+
+        prompt = _BATCH_NLI_PROMPT.format(
+            user=context_limit(user_turn, 1000) if user_turn else "(empty)",
+            text=context_limit(combined_text, 1000) if combined_text else "(empty)",
+            numbered_facts="\n".join(numbered_lines),
         )
-        raw = meta.get("content", "")
-        labels = _parse_batch_nli_output(raw, n)
-        for ex, label in zip(needs_llm, labels):
-            ex["nli_llm"] = label
-    except Exception as e:
-        print(f"    [nli-batch] ERROR ({n} facts): {e}", flush=True)
-        for ex in needs_llm:
-            ex["nli_llm"] = "NEUTRAL"
+
+        n = len(batch)
+        timeout = max(180, int(len(prompt) * 0.25))
+        max_tokens = n * 12 + 64
+
+        try:
+            meta = call_llm(
+                [{"role": "user", "content": prompt}],
+                model="day_extract",
+                max_tokens=max_tokens,
+                temperature=0.0,
+                timeout=timeout,
+                return_meta=True,
+            )
+            raw = meta.get("content", "")
+            labels = _parse_batch_nli_output(raw, n)
+            all_labels.extend(labels)
+        except Exception as e:
+            print(f"    [nli-batch] ERROR ({n} facts): {e}", flush=True)
+            for _ in batch:
+                all_labels.append("NEUTRAL")
+
+    for ex, label in zip(needs_llm, all_labels):
+        ex["nli_llm"] = label
 
     return extractions
 

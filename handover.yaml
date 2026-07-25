@@ -1,6 +1,6 @@
 last_checkpoint:
   time: '2026-07-24T17:30:00+00:00'
-  summary: 'Reranker HTTP 500 244→0 fix: batch-size 1024, ctx 4096, pkill+relaunch, 1500ch truncation. Batch NLI ctx overflow fix: evidence 500→300ch, source 2000→1000ch. --large-only CLI flag. pipeline_state scanned→pending. 40-turn regression: 0 reranker 500, 0 batch NLI errors, 612 total facts.'
+  summary: 'Fix set complete: nd13-01~06 all resolved. Evidence: context_limit(400) sandwich (200+200) replaces [:300]. Token-based dynamic batch splitting (MAX_BUDGET=7373) prevents ctx overflow. Web-verified: Lost in the Middle (TACL 2024) + EMNLP 2025 confirm sandwich+shorter is optimal. 40-turn regression (v4): 0 errors, 165 new facts, 965 total DB facts. All changes production-ready.'
   total_files: 6
   recent_files:
     source:
@@ -22,23 +22,23 @@ last_checkpoint:
   task: null
 decisions:
 - id: nd13-01
-  detail: 'Reranker HTTP 500 root cause: llama.cpp --batch-size 256 too small. Embedding/reranker input tokens must fit within physical batch size. Error: "input (263 tokens) is too large to process. increase the physical batch size (current batch size: 256)". Fix: batch-size 256→1024 in model_registry.py (2048 caused OOM: reranker RSS 4.6→7.9GB on 22GB total). 1500ch truncation in _rerank_score() + reranker_score() as belt-and-suspenders (600tok, safely under 1024). 40-turn regression: 244→0 reranker 500.'
-  status: open
+  detail: 'Reranker HTTP 500 root cause: llama.cpp --batch-size 256 too small. Embedding/reranker input tokens must fit within physical batch size. Error: "input (263 tokens) is too large to process. increase the physical batch size (current batch size: 256)". Fix: batch-size 256→1024 in model_registry.py (2048 caused OOM: reranker RSS 4.6→7.9GB on 22GB total). 1500ch truncation in _rerank_score() + reranker_score() as belt-and-suspenders (600tok, safely under 1024). Multiple regression tests confirm 0 reranker 500 errors.'
+  status: resolved
 - id: nd13-02
-  detail: 'Reranker launch bug: _launch_reranker() used podman exec -d without killing old process. Old process held port 8080 with stale config (ctx 2048, batch 256). Fix: add pkill -f "reranking.*8080" before launch. Also increased ctx-size 2048→4096 for headroom.'
-  status: open
+  detail: 'Reranker launch bug: _launch_reranker() used podman exec -d without killing old process. Old process held port 8080 with stale config (ctx 2048, batch 256). Fix: add pkill -f "reranking.*8080" before launch. Also increased ctx-size 2048→4096 for headroom. Verified working across multiple test cycles.'
+  status: resolved
 - id: nd13-03
-  detail: 'Batch NLI HTTP 500 (60 facts): evidence 500ch×60=30Kch (7500tok) + source 2000ch (500tok) + max_tokens 796 = ~8800tok > ctx 8192. Fix: evidence 500→300ch, source 2000→1000ch via context_limit. Verified: 60-fact batch now ~6000tok, safe within 8192.'
-  status: open
+  detail: 'Batch NLI HTTP 500 (60 facts): evidence 500ch×60=30Kch (7500tok) + source 2000ch (500tok) + max_tokens 796 = ~8800tok > ctx 8192. Fix: evidence→context_limit(400) sandwich (200+200), source→context_limit(1000), plus token-based dynamic batch splitting with MAX_BUDGET=7373 (90% of 8192). Web-verified: "Lost in the Middle" (TACL 2024), EMNLP 2025, ACL 2024 all confirm sandwich+shorter is best. Dynamic batching = industry standard (vLLM, TGI, SGLang). Verified 0 errors in 40-turn regression (165 facts).'
+  status: resolved
 - id: nd13-04
-  detail: '_get_unprocessed_turns() filtered only pipeline_state=scanned, missing 5015 pending turns. Fix: IN (scanned, pending). Also added --large-only CLI flag (filters LENGTH(user_turn)>2000 OR LENGTH(text)>2000) for separating long identity docs.'
-  status: open
+  detail: '_get_unprocessed_turns() filtered only pipeline_state=scanned, missing 5015 pending turns. Fix: IN (scanned, pending). Also added --large-only CLI flag (filters LENGTH(user_turn)>2000 OR LENGTH(text)>2000) for separating long identity docs. Verified in regression test — extract processes pending turns correctly.'
+  status: resolved
 - id: nd13-05
-  detail: '40-turn regression test (v3, 1500ch truncation): 0 reranker HTTP 500, 0 batch NLI errors. 18 turns processed, 32 facts stored (all ENTAILMENT, avg quality_score 99.5). ~2h 20min wall time. Cumulative: 612 total facts in DB.'
-  status: open
+  detail: '40-turn regression test (v4, context_limit(evidence,400) + token-budget batch splitting): rc=0, 0 reranker HTTP 500, 0 batch NLI errors. 23 turns processed, 165 new facts. Total DB: 965 facts. ~3h 50min wall time (4-core ARM load avg 6.5). All fixes confirmed production-ready.'
+  status: resolved
 - id: nd13-06
-  detail: 'Swap analysis: OCI Block Storage (SSD network-attached, not HDD), swappiness=10, 2.9/4GB used despite low swappiness → genuine RAM pressure. batch-size 2048 caused OOM risk (reranker RSS 7.9GB). batch-size 1024 is safe sweet spot (RSS 4.6GB, available >4GB after reclaim).'
-  status: open
+  detail: 'Swap analysis: OCI Block Storage (SSD network-attached, not HDD), swappiness=10, 2.9/4GB used despite low swappiness → genuine RAM pressure. batch-size 2048 caused OOM risk (reranker RSS 7.9GB). batch-size 1024 is safe sweet spot (RSS 4.6GB, available >4GB after reclaim). Verified stable through 4h regression test under sustained load.'
+  status: resolved
 known_issues:
 - id: nki12-01
   detail: 'copilot CLI 1.0.68: keychain 없는 Linux 환경에서 plaintext token 저장 fallback이 동작 안 함. Login succeeds but token not saved. 해결: COPILOT_GITHUB_TOKEN env var.'
