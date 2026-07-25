@@ -26,6 +26,8 @@ import threading
 import time
 import urllib.request
 from typing import Optional
+import re
+import unicodedata
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -71,30 +73,56 @@ def estimate_tokens(text: str) -> int:
     return get_cleaner().estimate_tokens(text)
 
 
-def chunk_text(text: str) -> list[tuple[str, int]]:
+def preprocess_for_embed(text: str) -> str:
+    """NFKC normalize + collapse whitespace before embedding."""
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _get_tail_sentences(sentences: list[str], overlap_tokens: int) -> list[str]:
+    """Return trailing sentences fitting within overlap_tokens budget (for chunk overlap)."""
+    if overlap_tokens <= 0:
+        return []
+    tail: list[str] = []
+    tok = 0
+    for sent in reversed(sentences):
+        st = estimate_tokens(sent)
+        if tok + st > overlap_tokens:
+            break
+        tail.insert(0, sent)
+        tok += st
+    return tail
+
+
+def chunk_text(text: str, overlap: int = 64) -> list[tuple[str, int]]:
     if len(text) < SHORT_TURN_CHARS:
         return [(text, 0)]
     sentences = split_sentences(text)
     chunks: list[tuple[str, int]] = []
     cur: list[str] = []
     cur_tok = 0
+    overlap_sentences: list[str] = []
     for sent in sentences:
         sent_tok = estimate_tokens(sent)
         if sent_tok > CHUNK_MAX_TOKENS:
             if cur:
-                chunks.append((" ".join(cur), len(chunks)))
+                chunks.append((" ".join(overlap_sentences + cur), len(chunks)))
+                overlap_sentences = _get_tail_sentences(cur, overlap)
                 cur, cur_tok = [], 0
             max_chars = CHUNK_MAX_TOKENS * 5 // 2
             chunks.append((sent[:max_chars].rstrip(), len(chunks)))
+            overlap_sentences = []
         elif cur_tok + sent_tok > CHUNK_MAX_TOKENS:
             if cur:
-                chunks.append((" ".join(cur), len(chunks)))
+                chunks.append((" ".join(overlap_sentences + cur), len(chunks)))
+            overlap_sentences = _get_tail_sentences(cur, overlap)
             cur, cur_tok = [sent], sent_tok
         else:
             cur.append(sent)
             cur_tok += sent_tok
     if cur:
-        chunks.append((" ".join(cur), len(chunks)))
+        chunks.append((" ".join(overlap_sentences + cur), len(chunks)))
     if not chunks:
         chunks = [(text[: CHUNK_MAX_TOKENS * 5 // 2], 0)]
     return chunks
@@ -347,11 +375,18 @@ def main():
         if not text:
             prepared.append(("skip", row, None, None))
         else:
+            text = preprocess_for_embed(text)
             if feedback_mode or facts_mode:
-                prepared.append(("embed", row, text[:8192], 0))
+                text = text[:8192]
+                if len(text) < 15:
+                    prepared.append(("skip", row, None, None))
+                else:
+                    prepared.append(("embed", row, text, 0))
             else:
-                chunks = chunk_text(text)
+                chunks = chunk_text(text, overlap=64)
                 for ct, ci in chunks:
+                    if len(ct) < 15:
+                        continue
                     prepared.append(("embed", row, ct[:8192], ci))
 
     emb_rows = [(t, p, c) for (s, t, p, c) in prepared if s == "embed"]
