@@ -246,10 +246,10 @@ def store_fact_embedding(fact_id: str, vector: list, embed_text: str):
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
     safe_text = embed_text[:8000].replace("'", "''")
     psql_ok(
-        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name) "
+        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name, chunk_index) "
         f"VALUES ('review_fact', '{esc_sql(fact_id)}'::uuid, '{safe_text}', "
-        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1') "
-        f"ON CONFLICT (source_type, source_id, model_name) DO UPDATE SET "
+        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1', 0) "
+        f"ON CONFLICT (source_type, source_id, model_name, chunk_index) DO UPDATE SET "
         f"  embedding = EXCLUDED.embedding, embed_text = EXCLUDED.embed_text, "
         f"  created_at = now()"
     )
@@ -275,10 +275,10 @@ def store_feedback_embedding(feedback_id: str, vector: list, embed_text: str):
     vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
     safe_text = embed_text[:8000].replace("'", "''")
     psql_ok(
-        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name) "
+        f"INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name, chunk_index) "
         f"VALUES ('feedback_example', '{esc_sql(feedback_id)}'::uuid, '{safe_text}', "
-        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1') "
-        f"ON CONFLICT (source_type, source_id, model_name) DO UPDATE SET "
+        f"  '{esc_sql(vec_str)}'::vector, 'qwen3-embedding-8b-v1', 0) "
+        f"ON CONFLICT (source_type, source_id, model_name, chunk_index) DO UPDATE SET "
         f"  embedding = EXCLUDED.embedding, embed_text = EXCLUDED.embed_text, "
         f"  created_at = now()"
     )
