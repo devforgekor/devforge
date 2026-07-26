@@ -1031,27 +1031,25 @@ def enrich_pipeline(
         else:
             failed += 1
 
-    # Normal turns via ThreadPool — dual model A/B round-robin
+    # Normal turns via ThreadPool — single model, parallel=2 on :8082
     if pool_items:
-        _models = [model, f"{model}_b"]
-        with ThreadPoolExecutor(max_workers=len(_models)) as pool:
+        with ThreadPoolExecutor(max_workers=2) as pool:
             fut_map = {}
             for idx, (ti, tid, ut, th, tx, exts, est_c, dl) in enumerate(pool_items):
                 total_chars = est_c
                 call_timeout = _calc_timeout(total_chars)
-                m = _models[idx % len(_models)]
                 fut = pool.submit(
                     _generate_enrich_fields,
                     ut,
                     th,
                     tx,
-                    model=m,
+                    model=model,
                     extractions=exts,
                     detected_lang=dl,
                     timeout=call_timeout,
                     turn_id=tid,
                 )
-                fut_map[fut] = (ti, tid, ut, tx, m)
+                fut_map[fut] = (ti, tid, ut, tx, model)
 
             for fut in as_completed(fut_map):
                 ti, tid, ut, tx, _m = fut_map[fut]
