@@ -1,14 +1,19 @@
 last_checkpoint:
-  time: '2026-07-27T05:08:43.419761+00:00'
+  time: '2026-07-27T15:59:51.300131+09:00'
   summary: no files
   total_files: 0
   recent_files:
-    data: []
-    docs: []
-    config: []
     source: []
+    config: []
+    docs: []
+    data: []
     generated: []
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 5 files changed, 262 insertions(+), 3203 deletions(-)
+      staged: (none)
+      untracked_files: 6
   task: null
 decisions:
 - id: nd01-01
@@ -286,6 +291,12 @@ decisions:
     → genuine RAM pressure. batch-size 2048 caused OOM risk (reranker RSS 7.9GB). batch-size 1024 is safe sweet spot (RSS
     4.6GB, available >4GB after reclaim). Verified stable through 4h regression test under sustained load.'
   status: resolved
+- id: nd14-01
+  detail: 'Phase 3: pipelines/extract_llm.py (2423 lines) split into lib/extract_llm/ package with 4 submodules (_core.py,
+    chunking.py, edc.py, parser.py). Original file rewritten as 45-line re-export facade. All 23 symbols re-exported. All
+    4 caller files import chains verified. 6/6 files compile. Lazy import (from extract) confirmed not eagerly resolved. Pyright:
+    10 false positives (type-checker limitations only). Runtime: import --help OK. No production impact.'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -424,3 +435,6 @@ completed_log:
 - 'Reranker HTTP 500 244→0 fix: triple-layer (batch-size 1024, ctx 4096, pkill+relaunch, 1500ch truncation). Batch NLI overflow
   fix: evidence 500→300ch, source 2000→1000ch. --large-only CLI flag. pipeline_state scanned→pending. 40-turn regression verified:
   0 errors, 612 total facts.'
+- 'Phase 3: pipelines/extract_llm.py (2423 lines) split into lib/extract_llm/ package (4 submodules: _core, chunking, edc,
+  parser). Re-export facade preserved for backward compat. All 6 files compile clean. All 4 callers import verified (extract.py,
+  enrich.py, extract_verify.py, post_extract_supplement.py). 23 symbols re-exported. extract.py --help preflight OK.'

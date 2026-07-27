@@ -166,11 +166,8 @@ def _get_resources() -> dict[str, Any]:
 
 
 def _get_experiments():
-
-    sql = (
-        "SELECT experiment_id, category, verdict, substring(rationale,1,100) as excerpt, created_at "
-        "FROM experiment_registry ORDER BY created_at DESC LIMIT 7"
-    )
+    """Query experiment_registry from DB."""
+    sql = "SELECT experiment_id, category, verdict, substring(rationale,1,100) as excerpt, created_at FROM experiment_registry ORDER BY created_at DESC LIMIT 7"
     out = _sql(sql)
     if not out:
         return []
@@ -185,10 +182,10 @@ def _get_experiments():
         exps.append(
             {
                 "id": parts[0].strip(),
-                "cat": parts[1].strip(),
+                "category": parts[1].strip(),
                 "verdict": parts[2].strip(),
-                "rationale": parts[3].strip(),
-                "at": parts[4].strip(),
+                "excerpt": parts[3].strip(),
+                "created_at": parts[4].strip(),
             }
         )
     return exps
@@ -241,53 +238,70 @@ def _get_tasks():
     return summary
 
 
-def _get_alerts(containers: dict, resources: dict) -> list:
+def _get_alerts(containers, resources):
+    """Derive alerts from thresholds."""
     alerts = []
-    for name, info in containers.items():
-        if (
-            "unhealthy" in info.get("status", "").lower()
-            or "exited" in info.get("status", "").lower()
-        ):
-            alerts.append(f"Container {name}: {info['status']}")
+    # container down
+    expected = ["postgres", "devforge-inference"]
+    for name in expected:
+        if name not in containers:
+            alerts.append(f"Container {name} is DOWN")
+    # disk > 90%
+    for mount, info in resources.get("disks", {}).items():
+        pct = info.get("use_pct", "0%").replace("%", "")
+        try:
+            if int(pct) > 90:
+                alerts.append(f"Disk {mount} at {pct}%")
+        except ValueError:
+            pass
+    # memory > 95%
     mem = resources.get("memory", {})
-    try:
-        used_val = float(str(mem.get("used", "0G")).replace("Gi", "").replace("G", ""))
-        total_val = float(str(mem.get("total", "1G")).replace("Gi", "").replace("G", ""))
-        if total_val > 0 and (used_val / total_val) > 0.90:
-            alerts.append(f"Memory: {mem.get('used', '?')}/{mem.get('total', '?')}")
-    except (ValueError, TypeError):
-        pass
-    swap = resources.get("swap", {})
-    try:
-        swap_used = float(str(swap.get("used", "0G")).replace("Gi", "").replace("G", ""))
-        swap_total = float(str(swap.get("total", "1G")).replace("Gi", "").replace("G", ""))
-        if swap_total > 0 and (swap_used / swap_total) > 0.80:
-            alerts.append(f"Swap: {swap.get('used', '?')}/{swap.get('total', '?')}")
-    except (ValueError, TypeError):
-        pass
+    if mem:
+        try:
+            import re
+
+            used = re.sub(r"[^0-9.]", "", mem.get("used", "0"))
+            total = re.sub(r"[^0-9.]", "", mem.get("total", "1"))
+            if float(used) / float(total) > 0.95:
+                alerts.append(f"Memory {used}/{total}")
+        except (ValueError, ZeroDivisionError):
+            pass
     return alerts
 
 
-def _get_rule_status() -> list:
-    return (
-        psql_json(
-            "SELECT status, count(*)::int AS cnt FROM reflex_rules GROUP BY status ORDER BY status"
-        )
-        or []
+def _get_rule_status():
+    """Run lint_rules and return summary + violation counts."""
+    from lint_rules import SCRIPTS_DIR as LINT_DIR
+    from lint_rules import find_python_files, run_all_checks
+
+    try:
+        result = run_all_checks(find_python_files(LINT_DIR))
+        return {
+            "passed": result["passed"],
+            "status": result["status"],
+            "files_checked": result["total_files"],
+            "violations": result["violations_by_severity"],
+            "p0_violations": [
+                {"file": v["file"], "line": v.get("line", ""), "message": v["message"]}
+                for v in result["violations"]
+                if v["severity"] == "P0"
+            ][:10],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _get_glossary():
+    """Return glossary terms with bounded context names."""
+    return psql_json(
+        "SELECT gt.term, gt.definition, bc.name as context "
+        "FROM glossary_terms gt LEFT JOIN bounded_contexts bc ON gt.bounded_context_id = bc.id "
+        "ORDER BY bc.id, gt.term"
     )
 
 
-def _get_glossary() -> list:
-    return (
-        psql_json("SELECT term, definition, category FROM glossary_terms ORDER BY term LIMIT 30")
-        or []
-    )
-
-
-def _get_references() -> list:
-    return (
-        psql_json(
-            "SELECT source, title, url, updated_at FROM references_registry ORDER BY updated_at DESC LIMIT 10"
-        )
-        or []
+def _get_references():
+    """Return static references grouped by category."""
+    return psql_json(
+        "SELECT category, name, url, description FROM static_references ORDER BY category, name"
     )

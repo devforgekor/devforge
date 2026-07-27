@@ -216,6 +216,9 @@ modules:
     cli_experiment.py:
       status: production
       purpose: "CLI experiment management \u2014 list, compare, active, adopt commands."
+    cli_fact.py:
+      status: production
+      purpose: "CLI fact commands \u2014 user feedback on NEUTRAL review_facts."
     cli_helpers.py:
       status: production
       purpose: "CLI helper functions \u2014 system queries used by cmd_status and\
@@ -390,6 +393,26 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
+- path: scripts/lib/extract_llm/
+  purpose: Extract Llm
+  files:
+    __init__.py:
+      status: production
+      purpose: "Extract LLM subpackage \u2014 re-exports from all submodules."
+    _core.py:
+      status: production
+      purpose: 'Core extraction functions: constants, prompts, 8082 recovery, embed
+        management, _extract_edcr_freeform.'
+    chunking.py:
+      status: production
+      purpose: Text chunking utilities for LLM fact extraction.
+    edc.py:
+      status: production
+      purpose: 'EDC normalization pipeline: predicate grouping, entity resolution,
+        quality checks.'
+    parser.py:
+      status: production
+      purpose: LLM extraction JSON parser with error recovery.
 - path: scripts/lib/feedback/
   purpose: Feedback
   files:
@@ -882,7 +905,7 @@ modules:
         \ anti-join."
     extract_llm.py:
       status: production
-      purpose: LLM extraction submodule for the Extract Pipeline.
+      purpose: "LLM extraction submodule \u2014 re-exports from lib/extract_llm package."
     extract_verify.py:
       status: production
       purpose: Verification submodule for the Extract Pipeline.

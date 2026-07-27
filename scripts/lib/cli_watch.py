@@ -7,137 +7,180 @@ from lib.watchdog.messenger import get_pulse, list_pulses, log_message, resolve_
 
 
 def cmd_watch_status(args):
-    """Server survival + pulse queue + events."""
+    """서버 생존 + pulse 큐 + 이벤트 한눈에."""
+    print("=" * 55)
+    print("   WATCH STATUS")
+    print("=" * 55)
+
+    # Pulse summary
+    pending = list_pulses("PENDING", 100)
+    in_progress = list_pulses("IN_PROGRESS", 100)
+    human = list_pulses("HUMAN_REQUIRED", 100)
+    print(
+        f"\n  Pulses: {len(pending)} pending | {len(in_progress)} in-progress | {len(human)} human-required"
+    )
+    for p in pending[:5]:
+        fid = p.get("target_file", "")
+        fstr = f" → {fid}" if fid else ""
+        print(f"    [{p['priority']}] {p['instruction'][:60]}{fstr}")
+
+    # Last 5 catchdog events
     rows = psql_json(
-        "SELECT pulse_id, priority, instruction, status, "
-        "created_at::text, retry_count, max_retries "
-        "FROM watchdog_pulses "
-        "WHERE status IN ('PENDING', 'IN_PROGRESS', 'HUMAN_REQUIRED') "
-        "ORDER BY "
-        "  CASE priority "
-        "    WHEN 'P0_HOT_FIX' THEN 1 "
-        "    WHEN 'P1_CONTEXT' THEN 2 "
-        "    WHEN 'HUMAN_REQUIRED' THEN 3 "
-        "    ELSE 4 END, "
-        "  created_at DESC"
+        "SELECT component, event_type, to_state, detail, created_at "
+        "FROM catchdog_events ORDER BY created_at DESC LIMIT 5"
     )
-    events = psql_json(
-        "SELECT event_type, detail, created_at::text "
-        "FROM watchdog_events "
-        "WHERE created_at > now() - interval '1 hour' "
-        "ORDER BY created_at DESC"
+    if rows:
+        print("\n  Recent Events:")
+        for r in rows:
+            raw_ts = r.get("created_at")
+            utc_timestamp = raw_ts[11:16] if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
+            print(
+                f"    [{utc_timestamp}] {r['component']}:{r['event_type']}"
+                f"{' → ' + r['to_state'] if r.get('to_state') else ''}"
+            )
+
+    # Alerts
+    alerts = psql_json(
+        "SELECT component, event_type, detail, created_at "
+        "FROM catchdog_events WHERE event_type IN ('down','delay','crit','fail','stopped') "
+        "ORDER BY created_at DESC LIMIT 5"
     )
-    print(f"{'Pulse ID':<45} {'Priority':<16} {'Status':<16} {'Instruction':<60} {'Retry'}")
-    print("-" * 140)
-    for r in rows or []:
-        print(
-            f"{(r['pulse_id'] or '')[:42]:<45} "
-            f"{r['priority']:<16} "
-            f"{r['status']:<16} "
-            f"{(r['instruction'] or '')[:58]:<60} "
-            f"{r['retry_count']}/{r['max_retries']}"
-        )
-    print(f"\nTotal pulses: {len(rows or [])}")
-    if events:
-        print(f"\nLast {len(events)} events (1h):")
-        for e in events:
-            print(f"  {e['created_at']} [{e['event_type']}] {e['detail'][:80]}")
-    else:
-        print("\nNo events in last hour")
+    if alerts:
+        print("\n  Alerts:")
+        for a in alerts:
+            raw_ts = a.get("created_at")
+            utc_timestamp = (
+                raw_ts[5:16].replace("T", " ")
+                if isinstance(raw_ts, str) and len(raw_ts) >= 16
+                else "?"
+            )
+            print(
+                f"    [{utc_timestamp}] {a['component']}: {a['event_type']} — {a.get('detail', '?')[:50]}"
+            )
+
+    print()
 
 
 def cmd_watch_alerts(args):
-    """List PENDING/HUMAN_REQUIRED pulses needing attention."""
+    """PENDING + HUMAN_REQUIRED pulse 목록."""
+    total = 0
     for status in ("PENDING", "HUMAN_REQUIRED"):
-        rows = list_pulses(status=status)
-        if rows:
-            print(f"── {status} ({len(rows)}) ──")
-            for r in rows:
-                print(f"  {r['pulse_id']}: [{r['priority']}] {r['instruction'][:80]}")
-                if r.get("retry_count", 0) > 0:
-                    print(f"    retry={r['retry_count']}/{r['max_retries']}")
-        else:
-            print(f"── {status} (0) ──")
+        pulses = list_pulses(status, 50)
+        total += len(pulses)
+        if pulses:
+            print(f"\n── {status} ({len(pulses)}) ──")
+            for p in pulses:
+                print(f"  {p['pulse_id']}")
+                print(f"    [{p['priority']}] {p['instruction'][:80]}")
+                if p.get("target_file"):
+                    print(f"    target: {p['target_file']}")
+                print(f"    retry: {p.get('retry_count', 0)}/{p.get('max_retries', 3)}")
+
+    db_alerts = psql_json(
+        "SELECT component, event_type, detail, created_at "
+        "FROM catchdog_events WHERE event_type IN ('down','fail','stopped') "
+        "AND created_at > now() - interval '24 hours' "
+        "ORDER BY created_at DESC LIMIT 10"
+    )
+    if db_alerts:
+        print(f"\n── Server Alerts (24h, {len(db_alerts)}) ──")
+        for a in db_alerts:
+            raw_ts = a.get("created_at")
+            utc_timestamp = (
+                raw_ts[5:16].replace("T", " ")
+                if isinstance(raw_ts, str) and len(raw_ts) >= 16
+                else "?"
+            )
+            print(
+                f"  [{utc_timestamp}] {a['component']}: {a['event_type']} — {a.get('detail', '?')[:60]}"
+            )
+
+    if total == 0 and not db_alerts:
+        print("  No active alerts")
+    print()
 
 
 def cmd_watch_pulses_list(args):
-    """List PENDING pulses."""
-    rows = list_pulses(limit=args.limit)
-    if not rows:
-        print("(no pending pulses)")
+    """PENDING pulses 목록."""
+    pulses = list_pulses("PENDING", args.limit)
+    if not pulses:
+        print("  No PENDING pulses")
         return
-    print(
-        f"{'ID':<42} {'Priority':<14} {'Category':<14} {'Instruction':<60} {'Retry':<8} {'Created'}"
-    )
-    print("-" * 150)
-    for r in rows:
-        print(
-            f"{(r['pulse_id'] or '')[:42]:<42} "
-            f"{r['priority']:<14} "
-            f"{(r.get('category') or ''):<14} "
-            f"{(r['instruction'] or '')[:58]:<60} "
-            f"{r['retry_count']}/{r['max_retries']:<5} "
-            f"{(r.get('created_at') or '')[:19]}"
+    print(f"\n  PENDING pulses ({len(pulses)}):\n")
+    for p in pulses:
+        raw_ts = p.get("created_at")
+        utc_timestamp = (
+            raw_ts[5:16].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 16 else "?"
         )
+        print(f"  [{utc_timestamp}] {p['pulse_id']}")
+        print(f"    [{p['priority']}] {p['instruction'][:80]}")
+        if p.get("target_file"):
+            print(f"    target: {p['target_file']}")
+        r, m = p.get("retry_count", 0), p.get("max_retries", 3)
+        print(f"    retry: {r}/{m}" if r > 0 else f"    retry: 0/{m}")
+        print()
 
 
 def cmd_watch_pulse_create(args):
-    """Create a new pulse."""
-    pulse_id = log_message(
+    """새 pulse 생성."""
+    pid = log_message(
         source="cli",
         target="operator",
-        type="alert",
+        type="manual",
         content=args.instruction,
-        category=args.category,
+        priority=args.priority,
         target_file=args.target_file,
         target_test=args.target_test,
-        priority=args.priority,
+        category=args.category,
     )
-    if pulse_id:
-        print(f"Created pulse: {pulse_id}")
+    if pid:
+        print(f"  Created: {pid}")
     else:
-        print("ERROR: pulse already exists (duplicate)")
+        print("  ERROR: Could not create pulse (duplicate or DB error)")
 
 
 def cmd_watch_pulse_resolve(args):
-    """Resolve or ignore a pulse."""
+    """pulse 완료 처리."""
     status = "IGNORED" if args.ignore else "RESOLVED"
-    if resolve_pulse(args.pulse_id, status=status):
-        print(f"Pulse {args.pulse_id}: {status}")
+    ok = resolve_pulse(args.pulse_id, status)
+    if ok:
+        print(f"  {status}: {args.pulse_id}")
     else:
-        print(f"ERROR: could not resolve {args.pulse_id}")
+        print(f"  ERROR: Could not resolve {args.pulse_id}")
 
 
 def cmd_watch_pulse_show(args):
-    """Show pulse details."""
-    r = get_pulse(args.pulse_id)
-    if not r:
-        print(f"ERROR: pulse {args.pulse_id} not found")
+    """pulse 상세 정보."""
+    p = get_pulse(args.pulse_id)
+    if not p:
+        print(f"  Pulse not found: {args.pulse_id}")
         return
-    for k, v in r.items():
-        print(f"  {k}: {v}")
+    for k, v in p.items():
+        if v:
+            print(f"  {k}: {v}")
 
 
 def cmd_watch_log(args):
-    """Recent watchdog events."""
-    components = ""
-    if args.component:
-        components = f"AND component = '{esc_sql(args.component)}'"
+    """catchdog_events 최근 로그."""
+    comp_filter = f"AND component = '{esc_sql(args.component)}'" if args.component else ""
     rows = psql_json(
-        f"SELECT event_type, component, detail, created_at::text "
-        f"FROM watchdog_events "
-        f"WHERE created_at > now() - interval '24 hours' {components} "
+        f"SELECT component, event_type, from_state, to_state, detail, fail_count, created_at "
+        f"FROM catchdog_events "
+        f"WHERE 1=1 {comp_filter} "
         f"ORDER BY created_at DESC LIMIT {args.limit}"
     )
     if not rows:
-        print("(no recent events)")
+        print("  No events logged")
         return
-    print(f"{'Time':<20} {'Type':<24} {'Component':<20} {'Detail'}")
-    print("-" * 130)
+    print(f"\n  Events ({len(rows)}):\n")
     for r in rows:
-        print(
-            f"{(r['created_at'] or '')[:19]:<20} "
-            f"{(r['event_type'] or '')[:22]:<24} "
-            f"{(r.get('component') or '')[:18]:<20} "
-            f"{(r['detail'] or '')[:70]}"
+        raw_ts = r.get("created_at")
+        utc_timestamp = (
+            raw_ts[5:19].replace("T", " ") if isinstance(raw_ts, str) and len(raw_ts) >= 19 else "?"
         )
+        fmt = f"  [{utc_timestamp}] {r['component']}:{r['event_type']}"
+        if r.get("to_state"):
+            fmt += f" → {r['to_state']}"
+        if r.get("detail"):
+            fmt += f" — {r['detail'][:80]}"
+        print(fmt)
