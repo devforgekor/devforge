@@ -1,6 +1,7 @@
 # Deep Dive: Pipeline Code Analysis
 
 > 2026-07-22 — All pipeline scripts (scripts/pipelines/) reviewed against current day_cycle.sh flow
+> Updated 2026-07-27: nd13 fixes, enrich 듀얼→단일, embed_batch overlap + 전처리
 
 ## 1. Pipeline File Inventory (28 scripts)
 
@@ -26,7 +27,7 @@
 
 | File | Lines | Path | Notes |
 |------|-------|------|-------|
-| `enrich.py` | ~1,200 | day_cycle.sh → subprocess | preflight → ensure_sequential_dual |
+| `enrich.py` | ~1,200 | day_cycle.sh → subprocess | preflight → (model: day_cycle.sh ensure_inference) |
 | `night_cycle.py` | ~400 | night_cycle.sh → subprocess | P-R-J debate pipeline |
 | `night_cycle_pipeline.py` | ~100 | n/a | Experimental night pipeline |
 | `day_verify.py` | ~640 | **NOT CALLED** | Dead code — no caller in day_cycle.sh |
@@ -68,8 +69,8 @@ turn_watcher (jsonl → DB, raw insert)
       ├─ post_extract_supplement.py (offline missing-fact LLM)
       ├─ enrich.py            (verified → enriched)
       │   ├─ preflight_checks()
-      │   ├─ ensure_sequential_dual()
-      │   ├─ ThreadPool dual model A/B round-robin
+      │   ├─ (model 기동: day_cycle.sh ensure_inference → 단일 day-enricher Q8_0)
+      │   ├─ ThreadPool 단일 모델 parallel=2
       │   ├─ TLDR NLI verify + entity grounding
       │   └─ DB store (review_facts + pipeline_state)
       └─ embed_batch.py       (enriched → embedded)
@@ -138,8 +139,8 @@ The bash layer around extract.py is **6 operations**, all of which are:
 |--------|--------|
 | Status | experimental |
 | Lines | ~1,200 |
-| Model start | `preflight_checks()` → `ensure_sequential_dual("day-enricher", "day-enricher-b")` |
-| LLM strategy | ThreadPool with dual model A/B round-robin |
+| Model start | **day_cycle.sh가 `ensure_inference("day-enrich", ...)`로 단일 Q8_0 모델 기동** (2026-07-24 변경: 듀얼 Q4_K_M → 단일 Q8_0) |
+| LLM strategy | ThreadPool 단일 모델, parallel=2 |
 | Short turn optimization | < SHORT_TURN_THRESHOLD → single-token intent classification (no LLM) |
 | Solo turns | > MAX_CHARS_SOLO (5000) → separate pool, longer timeout |
 | TLDR NLI | `_verify_tldr` → CONTRADICTION → `_fix_contradiction_tldr` retry → source fallback |
@@ -173,6 +174,17 @@ enrich.py is **fully independent** of bash:
 ### 5.2 Bash Independence
 
 Fully independent. Single call: `python3 embed_batch.py` (plus --facts, --feedback flags).
+
+### 5.3 Recent Changes (2026-07-24)
+
+| 항목 | 이전 | 이후 |
+|------|------|------|
+| 텍스트 전처리 | 없음 | NFKC 정규화 + 공백 축소 (`preprocess_for_embed()`) |
+| 청크 오버랩 | 없음 | 64토큰 오버랩 (`_get_tail_sentences()`) |
+| text_clean fallback | `COALESCE(t.text_clean, t.text_clean_polished)` | `+ t.text` (raw text fallback) |
+| 최소 길이 | IS NOT NULL | `LENGTH >= 15` |
+| 중복키 | `(source_type, source_id, model_name)` | `+ chunk_index` (청크 단위 upsert) |
+| 짧은 청크 (<15자) | skip 처리 없음 | 청크 생성 후 skip |
 
 ---
 
@@ -289,3 +301,61 @@ without full migration is to add `timeout` in bash:
 ```bash
 timeout 600 python3 "$PIPELINE_DIR/extract.py" 2>&1 || true
 ```
+
+---
+
+## 9. Post-v2.0 Changes (2026-07-24 ~ 2026-07-27)
+
+### 9.1 enrich.py: Dual Model → Single Q8_0
+
+| 항목 | 이전 | 이후 |
+|------|------|------|
+| 모델 구성 | day-enricher (Q4_K_M, 4.7GB) + day-enricher-b (Q4_K_M, 4.7GB) | day-enricher (Q8_0, **8.2GB**) **단일** |
+| threads/threads_batch | 2 | **4** |
+| CPU cores | 0-1 | **0-3** (전 코어) |
+| flash_attn | 없음 | 1 (활성화) |
+| 모델 기동 위치 | enrich.py 내부 `ensure_sequential_dual()` | **day_cycle.sh `ensure_inference()`** |
+| 종료 cleanup | `_cleanup_all_llms()` (전체 종료) | `_cleanup_all_llms(keep_8082=True)` (8082 유지) |
+| 영향 | 듀얼 모델 A/B round-robin 제거 | ThreadPool parallel=2 동일 모델 |
+
+### 9.2 embed_batch.py: Chunk Overlap + Preprocessing
+
+- **NFKC 정규화 + 공백 축소** (`preprocess_for_embed()`)
+- **64토큰 오버랩** 청킹 (`_get_tail_sentences()`)
+- `text_clean` → `text_clean_polished` → **raw `text` fallback** (3단계 폴백)
+- 중복키: `(source_type, source_id, model_name)` → **`+ chunk_index`** (청크 단위 upsert)
+- 최소 길이: `IS NOT NULL` → **`LENGTH >= 15`** (15자 미만 skip)
+
+### 9.3 extract_verify.py: Batch NLI Token-Budget Split
+
+nd13-03 fix — 60 facts HTTP 500 overflow 재발 방지:
+
+- **MAX_BUDGET=7373** (8192 ctx × 0.9) 기준 동적 배치 분할
+- 각 fact evidence: 500ch 고정 → `context_limit(400)` (샌드위치 200+200)
+- 각 fact 추정: `len(ev)//3 + 25`, 누적 시 분할
+- **출처 truncation**: 2000ch → 1000ch
+
+### 9.4 랭커/점수 truncation 2000→1500 일괄 변경
+
+| 함수 | 이전 | 이후 |
+|------|------|------|
+| `llm_client.reranker_score()` | query/document 2000 | 1500 |
+| `extract_verify._rerank_score()` | evidence/source 2000 | 1500 |
+
+### 9.5 extract.py --large-only 플래그
+
+- `_get_unprocessed_turns(large_only)` 파라미터 추가
+- SQL: `AND (LENGTH(user_turn) > 2000 OR LENGTH(text) > 2000)`
+- 용도: 대형 identity 문서 분리 처리
+- pipeline_state `IN (scanned, pending)` — nd13-04 fix
+
+### 9.6 Reranker 안정화 (nd13-01 ~ nd13-06)
+
+| ID | Fix | 영향 |
+|----|-----|-------|
+| nd13-01 | batch-size 256→1024, ctx 2048→4096 | Reranker HTTP 500 제거 |
+| nd13-02 | pkill+relaunch | Stale port config 방지 |
+| nd13-03 | MAX_BUDGET=7373 동적 분할 | Batch NLI overflow 방지 |
+| nd13-04 | pipeline_state IN (scanned, pending) | 5015 pending 누락 복구 |
+| nd13-05 | 40-turn regression v4 | 0 errors, 165 facts, ~3h 50m |
+| nd13-06 | Swap 분석, batch-size 1024 safe | OOM 리스크 없음 |

@@ -61,7 +61,7 @@ extract.py가 K8s startupProbe 스타일의 `_preflight_gate()`를 도입하면�
 | 모듈 | Status | main() 흐름 | Bash 의존성 |
 |------|--------|-----------|-----------|
 | extract.py | production | _preflight_gate() → preflight_checks() → _ensure_model_pod() → extract_pipeline() | 없음 |
-| enrich.py | experimental | preflight_checks() → ensure_sequential_dual() → ThreadPool dual A/B | 없음 |
+| enrich.py | experimental | preflight_checks() → (model: day_cycle.sh ensure_inference) → ThreadPool 단일 모델 parallel=2 | 없음 |
 | embed_batch.py | production | orphan cleanup → preflight_checks() → ensure_model() → dynamic batching | 없음 |
 | text_clean.py | production | language detection → cleaning → hanja → LLM verify → store | 없음 |
 | fts5_refresh.py | production | stale turn query → FTS5Index.sync() | 없음 |
@@ -195,6 +195,8 @@ python3 pipelines/embed_batch.py    # 이미 Python
 - DB query 통일 (psql_json으로 raw SQL 대체)
 - subprocess timeout 명시 (현재 없음)
 - watchdog → Python 직접 import (선택)
+
+**2026-07-24 변경 반영**: enrich.py 듀얼 모델(:8082+:8083 Q4_K_M) → 단일 모델(:8082 Q8_0, 전코어 0-3, flash_attn). 모델 기동이 enrich.py 내부(`ensure_sequential_dual`)에서 day_cycle.sh `ensure_inference`로 이동. enrich.py는 preflight_checks()만 수행.
 
 **Architecture** (전환 시):
 
@@ -413,9 +415,9 @@ def run_cmd(
 
 ---
 
-*Document Version: 2.0*
+*Document Version: 2.1*
 *Author: Claude Code (Deep Dive)*
-*Date: 2026-07-22*
+*Date: 2026-07-27*
 
 ## Document History
 
@@ -425,8 +427,9 @@ def run_cmd(
 | 1.1 | 2026-07-05 | Web validation findings: sys.exit(main()), subprocess.run(timeout=), plumbum rationale, lib/pattern.py |
 | 1.2 | 2026-07-22 | Sync with live code changes: pipeline_state 7→6, day_verify.py removed, _launch_reranker() added |
 | **2.0** | **2026-07-22** | **Complete re-evaluation: extract.py self-sufficiency → scope/priority restructured. Phase 0 (model_ctl)만 권장. Phase 1 (day_cycle) 선택적. Phase 2-3 전환 불필요. 예상 공수 20.5h→1-5h.** |
+| 2.1 | 2026-07-27 | nd13 reranker/batch NLI fixes 반영. enrich.py 듀얼→단일 Q8_0 변경. embed_batch.py overlap+전처리. extract.py --large-only. truncation 2000→1500 일괄 변경. |
 
-### Changed Since v1.2
+### Changed Since v2.0
 
 | Area | v1.2 | v2.0 |
 |------|------|------|
@@ -438,3 +441,16 @@ def run_cmd(
 | 예상 공수 | ~20.5h | 1-2h (model_ctl only) ~ 3-5h (day_cycle 포함) |
 | Dead code | 없음 | day_verify.py (호출 제거됨), polish_batch.py (deprecated), _launch_reranker 3중복 |
 | Systemd 변경 | 4개 서비스 ExecStart 변경 | ExecStart 변경 불필요 (전환 보류) |
+
+### Changed Since v2.0
+
+| Area | v2.0 (2026-07-22) | v2.1 (2026-07-27) |
+|------|--------|--------|
+| enrich.py 모델 구조 | `ensure_sequential_dual` — 듀얼 Q4_K_M (4.7GB×2) | **단일 Q8_0 (8.2GB, 전코어, flash_attn)**. 모델 기동→day_cycle.sh `ensure_inference` |
+| embed_batch.py | 단순 청크 분할 | NFKC 전처리 + 64토큰 오버랩 + raw text fallback + 중복키 chunk_index |
+| extract.py NLI batch | 단일 배치 호출 (HTTP 500 risk) | **MAX_BUDGET=7373 동적 분할** + evidence 샌드위치 200+200 + source 1000ch |
+| reranker truncation | 2000ch | **1500ch** (일괄 변경) |
+| extract.py pipeline_state | scanned만 처리 | **IN (scanned, pending)** + --large-only 플래그 |
+| Reranker launch | podman exec -d | **pkill + relaunch** (stale port fix) |
+| Reranker ctx | 2048 | **4096** |
+| batch-size | 256 | **1024** |
