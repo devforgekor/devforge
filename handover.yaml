@@ -1,19 +1,14 @@
 last_checkpoint:
-  time: '2026-07-27T15:59:51.300131+09:00'
+  time: '2026-07-27T06:59:51.720479+00:00'
   summary: no files
   total_files: 0
   recent_files:
-    source: []
-    config: []
-    docs: []
     data: []
+    docs: []
+    config: []
+    source: []
     generated: []
-  git:
-    server:
-      branch: main
-      unstaged: 5 files changed, 262 insertions(+), 3203 deletions(-)
-      staged: (none)
-      untracked_files: 6
+  git: {}
   task: null
 decisions:
 - id: nd01-01
