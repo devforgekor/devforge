@@ -249,6 +249,9 @@ modules:
     handover_db.py:
       status: production
       purpose: "handover_db.py \u2014 DB read/write operations for update_handover.py."
+    model_ctl.py:
+      status: production
+      purpose: CLI for inference container model management.
     model_ctl.sh:
       status: unknown
       purpose: "model_ctl.sh \u2014 DevForge inference container model management\
@@ -872,9 +875,6 @@ modules:
     __init__.py:
       status: production
       purpose: DevForge pipeline step implementations.
-    day_verify.py:
-      status: experimental
-      purpose: "Day Verify Pipeline \u2014 predicate NLI with Veritas-8B Fact Checker."
     embed_batch.py:
       status: production
       purpose: "Embed Batch Pipeline \u2014 text_clean \uAE30\uC900 embedding (unified\
@@ -911,9 +911,6 @@ modules:
     night_debate_pipeline.py:
       status: production
       purpose: night_debate_pipeline.py
-    polish_batch.py:
-      status: deprecated
-      purpose: "DEPRECATED \u2014 Merged into text_clean.py."
     post_extract_supplement.py:
       status: experimental
       purpose: "Post-extract supplement \u2014 offline LLM call to find missing facts."

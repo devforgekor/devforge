@@ -10,8 +10,7 @@
 #   FTS5 Refresh      — local_index refresh
 #   FTS5 Refresh      — local_index refresh
 #   Day Entity Scan   — entity_scan.py (cleaned → scanned, deterministic, regex+DB, no LLM)
-#   Day Extract       — extract.py (:8082, scanned → extracted)
-#   Day Verify        — day_verify.py (:8082, extracted → verified, Veritas-8B NLI)
+#   Day Extract       — extract.py (:8082, scanned → extracted+verified, with NLI self-verify)
 #   Day Enrich        — enrich.py (:8082, verified → enriched)
 #   Day Embedding     — embed_batch.py (:8081, enriched → embedded)
 # Each phase has its own budget check. Mid-cycle timeout carries forward in pipeline_state.
@@ -252,7 +251,7 @@ NEED_CLEAN=${NEED_CLEAN:-0}
 
 if [ "$NEED_CLEAN" -gt 0 ]; then
     LOG "=== Text Preprocess (${NEED_CLEAN} batching turns) ==="
-    python3 "$PIPELINE_DIR/text_clean.py" 2>&1
+    timeout 600 python3 "$PIPELINE_DIR/text_clean.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
@@ -276,14 +275,14 @@ podman exec postgres psql -U devforge -d devforge_app -c "
 
 # ── FTS5 Refresh (text_clean 기준) ─────────
 LOG "=== FTS5 Refresh ==="
-python3 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
+timeout 120 python3 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
 
 # ── Entity Scan (no LLM, no inference) ──
 NEED_SCAN=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM turns WHERE pipeline_state = 'cleaned'" 2>/dev/null || echo "0")
 if [ "$NEED_SCAN" -gt 0 ]; then
     LOG "=== Entity Scan (${NEED_SCAN} cleaned turns) ==="
-    python3 "$PIPELINE_DIR/entity_scan.py" 2>&1
+    timeout 300 python3 "$PIPELINE_DIR/entity_scan.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
@@ -299,7 +298,7 @@ if [ "$NEED_EXTRACT" -gt 0 ]; then
     _budget_gate "scanned" 15 120 || { LOG "Budget insufficient for extract — deferring"; exit 0; }
     LOG "=== Day Extract (:8082, ${NEED_EXTRACT} scanned turns) ==="
     ensure_inference "day-extract" "$(_day_phase_model day_extract)" false 1200
-    python3 "$PIPELINE_DIR/extract.py" 2>&1
+    timeout 1800 python3 "$PIPELINE_DIR/extract.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
@@ -374,7 +373,7 @@ NEED_RECOVER=${NEED_RECOVER:-0}
 if [ "$NEED_RECOVER" -gt 0 ]; then
     LOG "=== Reranker Launch + Recovery (${NEED_RECOVER} RERANKER_ERROR facts) ==="
     _launch_reranker
-    python3 "$PIPELINE_DIR/reranker_recover.py" 2>&1
+    timeout 600 python3 "$PIPELINE_DIR/reranker_recover.py" 2>&1
     RC=$?
     if [ $RC -eq 1 ]; then
         LOG "  Reranker recover skipped (inference unhealthy)"
@@ -396,7 +395,7 @@ if [ "$NEED_SUPPLEMENT" -gt 0 ]; then
         SUPP_LIMIT=5
         [ "$SUPP_BUDGET" -ge 2400 ] && SUPP_LIMIT=10
         LOG "=== Post-Extract Supplement (:8082, ${NEED_SUPPLEMENT} turns, limit=${SUPP_LIMIT}) ==="
-        python3 "$PIPELINE_DIR/post_extract_supplement.py" --limit "$SUPP_LIMIT" 2>&1
+        timeout 600 python3 "$PIPELINE_DIR/post_extract_supplement.py" --limit "$SUPP_LIMIT" 2>&1
         RC=$?
         ELAPSED=$(( $(date +%s) - START_TS ))
         BUDGET=$(BUDGET)
@@ -414,7 +413,7 @@ if [ "$NEED_ENRICH" -gt 0 ]; then
     _budget_gate "verified" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
     LOG "=== Day Enrich (:8082, ${NEED_ENRICH} verified turns) ==="
     ensure_inference "day-enrich" "$(_day_phase_model day_enrich)" false 1200
-    python3 "$PIPELINE_DIR/enrich.py" 2>&1
+    timeout 1800 python3 "$PIPELINE_DIR/enrich.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
@@ -438,7 +437,7 @@ if [ "$NEED_EMBED" -gt 0 ] || [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
 
     if [ "$NEED_EMBED" -gt 0 ]; then
         LOG "=== Day Embedding (${NEED_EMBED} enriched turns) ==="
-        python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
+        timeout 1200 python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
         RC=$?
         ELAPSED=$(( $(date +%s) - START_TS ))
         LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
@@ -448,7 +447,7 @@ if [ "$NEED_EMBED" -gt 0 ] || [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
     if [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
         _budget_gate "enriched" 20 30 || { LOG "Budget insufficient for feedback embed — deferring"; exit 0; }
         LOG "=== Feedback Embedding (${NEED_FEEDBACK_EMBED} unembedded feedback examples) ==="
-        python3 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
+        timeout 600 python3 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
         RC=$?
         ELAPSED=$(( $(date +%s) - START_TS ))
         LOG "  Feedback embed exit=$RC, elapsed=${ELAPSED}s"
