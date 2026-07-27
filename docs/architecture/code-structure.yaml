@@ -19,7 +19,7 @@ modules:
       status: production
       purpose: "activity_summarizer.py \u2014 Daily LLM summarization of activity_log\
         \ events."
-    aider_qwen.py:
+    aider.py:
       status: experimental
       purpose: "Aider wrapper \u2014 OpenRouter key (QWEN_480B_API_KEY) + rule injection."
     auto_commit_guard.py:
@@ -51,9 +51,6 @@ modules:
     day_cycle.sh:
       status: unknown
       purpose: "day_cycle.sh \u2014 async pipeline (pipeline_state-driven)"
-    deepseek_web.py:
-      status: experimental
-      purpose: "deepseek_web.py \u2014 DeepSeek web chat CLI via Playwright."
     exa_mcp.py:
       status: unknown
       purpose: "exa_mcp \u2014 MCP server for Exa Search with round-robin key rotation."
@@ -185,6 +182,9 @@ modules:
     watchdog.py:
       status: production
       purpose: "DevForge Watchdog \u2014 entry point."
+    web_chat.py:
+      status: experimental
+      purpose: "web_chat.py \u2014 DeepSeek web chat CLI via Playwright."
     weekly_enrich_rebuild.sh:
       status: unknown
       purpose: "weekly_enrich_rebuild.sh \u2014 Weekly enrich few-shot diversity rebuild"
@@ -260,10 +260,6 @@ modules:
       status: production
       purpose: "Model metadata registry \u2014 single source of truth for all model\
         \ definitions."
-    nli_server.py:
-      status: deprecated
-      purpose: "NLI Cross-Encoder Server \u2014 DeBERTa-v3-large (DEPRECATED, never\
-        \ deployed)."
     notify.py:
       status: experimental
       purpose: "Unified notification module \u2014 Apprise (Telegram, Email) + native\
@@ -386,12 +382,6 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
-    core.py:
-      status: deprecated
-      purpose: core.py
-    utils.py:
-      status: deprecated
-      purpose: utils.py
 - path: scripts/lib/feedback/
   purpose: Feedback
   files:
@@ -729,6 +719,9 @@ modules:
       status: production
       purpose: "DevForge Watchdog \u2014 \uD1B5\uD569 \uC11C\uBC84 \uBAA8\uB2C8\uD130\
         \uB9C1/\uC790\uB3D9\uBCF5\uAD6C \uB370\uBAAC."
+    _globals.py:
+      status: production
+      purpose: "Watchdog runtime state \u2014 module-level mutable singletons."
     checker.py:
       status: production
       purpose: "Health check runners \u2014 LLM 3-tier probe, timer, service, resource."
@@ -752,6 +745,10 @@ modules:
       status: production
       purpose: "Slack \uC54C\uB9BC \u2014 30\uBD84 heartbeat (Block Kit in-place)\
         \ + state change alert (colored)."
+    orchestrator.py:
+      status: production
+      purpose: "Watchdog orchestration \u2014 check runners, fix loops, action consumer,\
+        \ code scan."
     recovery.py:
       status: production
       purpose: "Graduated recovery \u2014 CrashLoopBackOff \uD328\uD134, OOM \uC804\
@@ -772,21 +769,6 @@ modules:
     utils.py:
       status: production
       purpose: utils.py
-- path: scripts/__old/
-  purpose: '  Old'
-  files:
-    prj_watchdog.py:
-      status: production
-      purpose: "P-R-J pipeline watchdog \u2014 \uC790\uB3D9 \uC624\uB958 \uAC10\uC9C0\
-        , \uC218\uC815, \uC7AC\uC2DC\uB3C4."
-    watchdog_pipeline.py:
-      status: experimental
-      purpose: "Pipeline watchdog \u2014 polls log, checks health, sends Slack on\
-        \ each phase/result."
-    watchdog_pipeline.sh:
-      status: unknown
-      purpose: "Watchdog for 5-phase pipeline \u2014 polls log, sends Slack on phase\
-        \ changes."
 - path: scripts/blob_explorer/
   purpose: Blob Explorer
   files:

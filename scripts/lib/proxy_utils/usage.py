@@ -69,7 +69,7 @@ _balance_cache: Dict[str, Any] = {"cny": None, "time": 0.0}
 _BALANCE_CACHE_TTL = 120
 
 
-def _fetch_deepseek_balance() -> Optional[str]:
+def _fetch_proxy_balance() -> Optional[str]:
     global _balance_cache
     now = time.time()
     if _balance_cache["cny"] is not None and now - _balance_cache["time"] < _BALANCE_CACHE_TTL:
@@ -147,7 +147,7 @@ def log_usage(body: Optional[bytes], data: Optional[bytes], resp_status: int) ->
             body_chars = len(body)
             COMPACT_BODY_LIMIT = int(os.environ.get("ANTHROPIC_PROXY_BAR_LIMIT", "870400"))
             context_bar = _format_context_bar(body_chars, COMPACT_BODY_LIMIT)
-            balance = _fetch_deepseek_balance()
+            balance = _fetch_proxy_balance()
             balance_str = f" ¥{balance}" if balance else ""
 
             if not _has_cache_stats(u):

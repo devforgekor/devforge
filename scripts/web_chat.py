@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: none — library
-"""deepseek_web.py — DeepSeek web chat CLI via Playwright.
+"""web_chat.py — DeepSeek web chat CLI via Playwright.
 
 This is an isolated experimental tool for using the DeepSeek web UI from a
 server. It is not wired into the existing session ingestion pipeline.
@@ -14,7 +14,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Tuple
-
 
 DEFAULT_URL = "https://chat.deepseek.com/"
 DEFAULT_TIMEOUT_MS = 120000
@@ -151,7 +150,9 @@ def _dump_artifacts(page, dump_dir: Path, label: str, reason: str) -> None:
     )
 
 
-def _wait_for_response(page, baseline: str, timeout_s: int, debug: bool, selectors: Iterable[str]) -> str:
+def _wait_for_response(
+    page, baseline: str, timeout_s: int, debug: bool, selectors: Iterable[str]
+) -> str:
     deadline = time.time() + timeout_s
     last_text = ""
 
@@ -179,7 +180,7 @@ def _wait_for_response(page, baseline: str, timeout_s: int, debug: bool, selecto
 
         main_text = _page_text(page, "main")
         if main_text and main_text != baseline and len(main_text) > len(baseline):
-            return main_text[len(baseline):].strip() or main_text.strip()
+            return main_text[len(baseline) :].strip() or main_text.strip()
 
         if debug:
             print("[debug] waiting for assistant response...", file=sys.stderr)
@@ -239,8 +240,7 @@ def run(cfg: CliConfig) -> str:
                 if cfg.dump_dir:
                     _dump_artifacts(page, cfg.dump_dir, "no_prompt_input", "prompt input not found")
                 raise SystemExit(
-                    "could not find a prompt input. "
-                    "Use --debug or override the selector flags."
+                    "could not find a prompt input. Use --debug or override the selector flags."
                 )
 
             baseline = _page_text(page, "main")
@@ -263,7 +263,9 @@ def run(cfg: CliConfig) -> str:
                 page.keyboard.press("Enter")
 
             try:
-                response = _wait_for_response(page, baseline, cfg.wait_s, cfg.debug, cfg.response_selectors)
+                response = _wait_for_response(
+                    page, baseline, cfg.wait_s, cfg.debug, cfg.response_selectors
+                )
             except Exception as exc:
                 if cfg.dump_dir:
                     _dump_artifacts(page, cfg.dump_dir, "response_timeout", str(exc))
@@ -323,7 +325,7 @@ def main() -> int:
     try:
         response = run(cfg)
     except Exception as exc:
-        print(f"deepseek_web error: {exc}", file=sys.stderr)
+        print(f"web_chat error: {exc}", file=sys.stderr)
         return 1
 
     print(response)

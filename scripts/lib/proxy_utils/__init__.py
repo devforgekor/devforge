@@ -12,32 +12,32 @@ Sub-modules:
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlsplit
 
-from lib.proxy_utils.sanitize import (
-    _flatten_text,
-    _strip_billing_header,
-    _strip_system_billing_header,
-    _flatten_system_blocks,
-    _sanitize_messages,
-)
 from lib.proxy_utils.cache import (
-    _get_cache_padding,
     _apply_cache_padding,
+    _get_cache_padding,
     _json_dumps_system_first,
     _strip_cache_control,
 )
+from lib.proxy_utils.sanitize import (
+    _flatten_system_blocks,
+    _flatten_text,
+    _sanitize_messages,
+    _strip_billing_header,
+    _strip_system_billing_header,
+)
 from lib.proxy_utils.tools import (
-    _fix_orphan_tool_results,
+    _cleanup,
     _collect_referenced_tool_use_ids,
     _collect_tool_use_ids_present,
-    _cleanup,
+    _fix_orphan_tool_results,
+    _message_has_nonempty_content,
     _prev_has_tool_use,
     _remove_adjacent_orphans,
     _strict_tool_adjacency_fix,
-    _message_has_nonempty_content,
 )
 from lib.proxy_utils.usage import (
     _extract_stream_usage,
-    _fetch_deepseek_balance,
+    _fetch_proxy_balance,
     _format_context_bar,
     _has_cache_stats,
     log_usage,

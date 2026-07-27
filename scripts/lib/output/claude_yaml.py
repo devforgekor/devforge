@@ -2,10 +2,10 @@
 # Status: production
 # Path: imported by — production scripts
 """CLAUDE.yaml auto-update — sync storage/services/network from live data."""
+
 import re
 from pathlib import Path
 
-from lib.infra.containers import query_llama_model
 from lib.infra.subprocess import run_lines
 from lib.output.memory_line import build_memory_line
 from lib.output.yaml_io import load_yaml, save_yaml
@@ -24,11 +24,13 @@ def update_claude_yaml(structural, claude_file: Path):
         vg = s["vg"]
         if vg not in vgs:
             vgs[vg] = {"lvs": [], "total_lv": 0.0}
-        vgs[vg]["lvs"].append({
-            "lv": s["lv"],
-            "size": s["size"],
-            "mount": s.get("mount") or "unmounted",
-        })
+        vgs[vg]["lvs"].append(
+            {
+                "lv": s["lv"],
+                "size": s["size"],
+                "mount": s.get("mount") or "unmounted",
+            }
+        )
         sz_str = s["size"].rstrip("G")
         vgs[vg]["total_lv"] += float(sz_str)
 
@@ -81,7 +83,7 @@ def update_claude_yaml(structural, claude_file: Path):
         if llm_c:
             port_match = re.search(r"(\d+)(?:-\d+)?->\d+", llm_c.get("ports", ""))
             llm_port = int(port_match.group(1)) if port_match else None
-            model_name = query_llama_model(llm_port) if llm_port else ""
+            model_name = query_inference_model(llm_port) if llm_port else ""
             old_containers["model"] = model_name or old_containers.get("model", "")
             old_containers["image"] = llm_c.get("image") or old_containers.get("image", "")
             if llm_c.get("flags"):
@@ -107,4 +109,3 @@ def update_claude_yaml(structural, claude_file: Path):
     claude["network"] = old_net
 
     save_yaml(claude_file, claude)
-

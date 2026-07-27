@@ -2,6 +2,7 @@
 # Status: production
 # Path: imported by — production scripts
 """Container and service discovery for state_collector."""
+
 import json
 import os
 import re
@@ -20,11 +21,15 @@ def discover_services() -> list:
 
     # Auto-discover user services: container pods + devforge-* services with timer
     timer_names = set()
-    for line in _run_lines(["systemctl", "--user", "list-unit-files", "--no-legend", "--type=timer"]):
+    for line in _run_lines(
+        ["systemctl", "--user", "list-unit-files", "--no-legend", "--type=timer"]
+    ):
         if line.strip():
             timer_names.add(line.strip().split()[0].replace(".timer", ""))
 
-    for line in _run_lines(["systemctl", "--user", "list-unit-files", "--no-legend", "--type=service"]):
+    for line in _run_lines(
+        ["systemctl", "--user", "list-unit-files", "--no-legend", "--type=service"]
+    ):
         if not line.strip():
             continue
         name = line.strip().split()[0].replace(".service", "")
@@ -48,8 +53,8 @@ def discover_services() -> list:
     return services
 
 
-def query_llama_model(port: int = 8081) -> str:
-    """Query running llama.cpp server for active model name. Returns empty string on failure."""
+def query_inference_model(port: int = 8081) -> str:
+    """Query running inference server for active model name. Returns empty string on failure."""
     try:
         req = urllib.request.Request(f"http://localhost:{port}/v1/models")
         resp = urllib.request.urlopen(req, timeout=5)
@@ -73,15 +78,17 @@ def collect_container_flags(name: str) -> str:
     if not unit_path:
         return ""
     content = Path(unit_path).read_text()
-    match = re.search(r"ExecStart=/usr/bin/podman run\s+(.+?)(?:^[A-Z]\S+=|\Z)", content, re.MULTILINE | re.DOTALL)
+    match = re.search(
+        r"ExecStart=/usr/bin/podman run\s+(.+?)(?:^[A-Z]\S+=|\Z)", content, re.MULTILINE | re.DOTALL
+    )
     if not match:
         return ""
     args_block = match.group(1)
     args_block = args_block.replace("\\\n", " ").replace("\n", " ").strip()
-    image_match = re.search(r'\S+\.io/\S+:\S+', args_block)
+    image_match = re.search(r"\S+\.io/\S+:\S+", args_block)
     if not image_match:
         return ""
-    server_args = args_block[image_match.end():].strip()
+    server_args = args_block[image_match.end() :].strip()
     flags = []
     try:
         tokens = shlex.split(server_args)
@@ -100,9 +107,9 @@ def collect_container_flags(name: str) -> str:
 
 def _run_lines(cmd, timeout=15):
     import subprocess
+
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return r.stdout.split("\n")
     except Exception:
         return []
-

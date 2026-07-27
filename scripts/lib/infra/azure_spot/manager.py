@@ -6,14 +6,16 @@ from __future__ import annotations
 
 import json
 import os
-import re
-import shlex
 import subprocess
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from lib.infra.azure_spot.config import (
-    LLAMA_SERVER_PORT, RESOURCE_GROUP, SSH_KEY_PATH, SSH_USER, SPOT_CONFIGS, SpotVMConfig,
+    LLAMA_SERVER_PORT,
+    RESOURCE_GROUP,
+    SSH_KEY_PATH,
+    SSH_USER,
+    SpotVMConfig,
 )
 
 
@@ -33,9 +35,18 @@ def _wait_for_ssh(ip: str, timeout: int = 180, interval: int = 10) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         r = subprocess.run(
-            ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
-             f"{SSH_USER}@{ip}", "echo ssh_ok"],
-            capture_output=True, text=True, timeout=10,
+            [
+                "ssh",
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "ConnectTimeout=5",
+                f"{SSH_USER}@{ip}",
+                "echo ssh_ok",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if r.returncode == 0 and "ssh_ok" in r.stdout:
             return True
@@ -43,13 +54,22 @@ def _wait_for_ssh(ip: str, timeout: int = 180, interval: int = 10) -> bool:
     return False
 
 
-def _wait_for_llama_server(ip: str, port: int = 8081, timeout: int = 300, interval: int = 15) -> bool:
+def _wait_for_inference_server(
+    ip: str, port: int = 8081, timeout: int = 300, interval: int = 15
+) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         r = subprocess.run(
-            ["ssh", "-o", "StrictHostKeyChecking=no", f"{SSH_USER}@{ip}",
-             f"curl -s http://localhost:{port}/health | head -c 200"],
-            capture_output=True, text=True, timeout=10,
+            [
+                "ssh",
+                "-o",
+                "StrictHostKeyChecking=no",
+                f"{SSH_USER}@{ip}",
+                f"curl -s http://localhost:{port}/health | head -c 200",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if "ok" in r.stdout.lower() or "healthy" in r.stdout.lower():
             return True
@@ -67,26 +87,46 @@ class SpotVMManager:
 
         print(f"  Creating spot VM '{name}' in {cfg.location}...")
         r = _az(
-            "vm", "create",
-            "--resource-group", RESOURCE_GROUP,
-            "--name", name,
-            "--image", cfg.image_id(),
-            "--size", cfg.vm_size,
-            "--location", cfg.location,
-            "--vnet-name", "spot-vnet",
-            "--subnet", "spot-subnet",
-            "--public-ip-sku", "Standard",
-            "--security-type", "Standard",
-            "--priority", "Spot",
-            "--eviction-policy", "Delete",
-            "--max-price", "0.05",
-            "--admin-username", SSH_USER,
-            "--ssh-key-values", os.path.expanduser(SSH_KEY_PATH),
-            "--nic-delete-option", "Delete",
-            "--os-disk-delete-option", "Delete",
-            "--data-disk-delete-option", "Delete",
-            "--storage-sku", "StandardSSD_LRS",
-            "--os-disk-size-gb", "64",
+            "vm",
+            "create",
+            "--resource-group",
+            RESOURCE_GROUP,
+            "--name",
+            name,
+            "--image",
+            cfg.image_id(),
+            "--size",
+            cfg.vm_size,
+            "--location",
+            cfg.location,
+            "--vnet-name",
+            "spot-vnet",
+            "--subnet",
+            "spot-subnet",
+            "--public-ip-sku",
+            "Standard",
+            "--security-type",
+            "Standard",
+            "--priority",
+            "Spot",
+            "--eviction-policy",
+            "Delete",
+            "--max-price",
+            "0.05",
+            "--admin-username",
+            SSH_USER,
+            "--ssh-key-values",
+            os.path.expanduser(SSH_KEY_PATH),
+            "--nic-delete-option",
+            "Delete",
+            "--os-disk-delete-option",
+            "Delete",
+            "--data-disk-delete-option",
+            "Delete",
+            "--storage-sku",
+            "StandardSSD_LRS",
+            "--os-disk-size-gb",
+            "64",
             subscription=cfg.subscription_id,
         )
         if r.returncode != 0:
@@ -99,9 +139,16 @@ class SpotVMManager:
 
     def _get_ip(self, vm_name: str) -> str:
         r = _az(
-            "vm", "show", "--resource-group", RESOURCE_GROUP,
-            "--name", vm_name, "--query", "publicIpAddress",
-            "--output", "tsv",
+            "vm",
+            "show",
+            "--resource-group",
+            RESOURCE_GROUP,
+            "--name",
+            vm_name,
+            "--query",
+            "publicIpAddress",
+            "--output",
+            "tsv",
             subscription=self.config.subscription_id,
         )
         return r.stdout.strip()
@@ -113,7 +160,7 @@ class SpotVMManager:
             return False
 
         print(f"  Waiting for llama-server on {ip}:{LLAMA_SERVER_PORT} (timeout={llm_timeout}s)...")
-        if not _wait_for_llama_server(ip, timeout=llm_timeout):
+        if not _wait_for_inference_server(ip, timeout=llm_timeout):
             print(f"  llama-server not ready on {ip} within {llm_timeout}s")
             return False
 
@@ -123,8 +170,13 @@ class SpotVMManager:
     def delete_vm(self, vm_name: str) -> bool:
         print(f"  Deleting spot VM '{vm_name}'...")
         r = _az(
-            "vm", "delete", "--resource-group", RESOURCE_GROUP,
-            "--name", vm_name, "--yes",
+            "vm",
+            "delete",
+            "--resource-group",
+            RESOURCE_GROUP,
+            "--name",
+            vm_name,
+            "--yes",
             subscription=self.config.subscription_id,
         )
         if r.returncode != 0:
@@ -135,9 +187,14 @@ class SpotVMManager:
 
     def list_spot_vms(self) -> List[Dict[str, str]]:
         r = _az(
-            "vm", "list", "--resource-group", RESOURCE_GROUP,
-            "--query", "[?priority=='Spot'].{name:name, vmId:id, powerState:powerState}",
-            "--output", "json",
+            "vm",
+            "list",
+            "--resource-group",
+            RESOURCE_GROUP,
+            "--query",
+            "[?priority=='Spot'].{name:name, vmId:id, powerState:powerState}",
+            "--output",
+            "json",
             subscription=self.config.subscription_id,
         )
         return json.loads(r.stdout) if r.stdout.strip() else []

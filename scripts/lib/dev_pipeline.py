@@ -193,7 +193,9 @@ def claim_issue(issue_number: int, repo: str = DEFAULT_REPO) -> bool:
     state["seen_issues"] = seen
     state["claimed"][str(issue_number)] = {
         "title": title,
-        "claimed_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "claimed_at": datetime.datetime.now(datetime.timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
     }
     _save_state(state)
 
@@ -271,7 +273,9 @@ def create_pr(issue_number: int, repo: str = DEFAULT_REPO) -> Optional[str]:
     pr_created = state.get("pr_created", {})
     pr_created[str(issue_number)] = {
         "url": pr_url,
-        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "created_at": datetime.datetime.now(datetime.timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
     }
     state["pr_created"] = pr_created
     _save_state(state)
