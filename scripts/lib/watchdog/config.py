@@ -81,10 +81,9 @@ HEARTBEAT_WORKERS: dict[str, int] = {
     "embed_batch": 1800,  # embed_batch.py batch loop
     "liveness_embed_batch": 1800,  # background liveness thread (embed_batch.py)
     "entity_scan": 1800,  # entity_scan.py — deterministic entity scan
-    "polish_batch": 1800,  # polish_batch.py — kiwi text polish
+    "text_clean": 1800,  # text_clean.py — unified text preprocessing
     "day_extract": 1800,  # extract.py — LLM extraction pipeline
     "day_enrich": 1800,  # enrich.py — LLM enrichment pipeline
-    "day_verify": 1800,  # day_verify.py — verification pipeline
 }  # worker_name → max_age_seconds. Only register workers that actually call heartbeat().
 
 # ── Pipeline intermediate state recovery ──────────────────────────
