@@ -600,6 +600,82 @@ def _consume_actions(dry_run: bool = False):
             _state.add_event(f"action:{action_type}", "failed", f"{pulse_id}: {msg[:100]}")
 
 
+# ── Heartbeat Summary ──────────────────────────────────────
+
+
+def build_heartbeat_summary(results: dict) -> dict:
+    """Build summary dict for 30min heartbeat."""
+    mode = read_mode()
+    experiment_active = is_experiment_active()
+    containers = []
+    for probe in results.get("probes", []):
+        ok = probe["t1_ok"] and probe["t2_ok"]
+        containers.append(
+            {
+                "name": probe["name"],
+                "port": probe["port"],
+                "mode": probe.get("name", "?"),
+                "ok": ok,
+                "uptime": probe.get("t2_detail", ""),
+            }
+        )
+    services = []
+    for svc in results.get("services", []):
+        services.append({"name": svc["name"], "detail": "OK" if svc["ok"] else "DOWN"})
+    timers = results.get("timers", [])
+    mem = results.get("memory", {})
+    if mem:
+        mem["swap_used_gb"] = round(mem.get("swap_used_mb", 0) / 1024, 1)
+        mem["swap_total_gb"] = round(mem.get("swap_total_mb", 0) / 1024, 1)
+    metrics = {}
+    slots = {}
+    for probe in results.get("probes", []):
+        port = probe["port"]
+        try:
+            metrics[str(port)] = check_llm_metrics(port)
+            slot_data = check_llm_slots(port)
+            slots[str(port)] = slot_data
+            _state.update_slots(str(port), slot_data)
+            _state.update_token_metrics(str(port), metrics[str(port)])
+        except Exception:
+            pass
+    slots_stuck = _state.check_slots_stuck()
+    if slots_stuck:
+        for ss in slots_stuck:
+            _state.add_event(
+                "slot_stuck",
+                "deadlock",
+                f":{ss['port']} slots[{ss['slots']}] all stuck {ss['min_stuck_checks']} checks",
+            )
+            log(
+                f"  [slot-deadlock] :{ss['port']} slots[{ss['slots']}] — deadlock detected ({ss['min_stuck_checks']} checks)"
+            )
+    test_pulses = _get_active_test_pulses()
+    test_progress = None
+    if test_pulses:
+        try:
+            test_progress = {"pulses": test_pulses, "db": _get_test_db_progress()}
+        except Exception:
+            pass
+    return {
+        "mode": mode,
+        "experiment_active": experiment_active,
+        "test_progress": test_progress,
+        "containers": containers,
+        "services": services,
+        "timers": timers,
+        "memory": mem,
+        "probes": results.get("probes", []),
+        "metrics": metrics,
+        "slots": slots,
+        "active_pulses": _get_active_pulses(),
+        "events_30m": _state.events_since(1800),
+        "disk_trend": results.get("disk_trend", {}),
+        "pipeline_stuck": results.get("pipeline_stuck", []),
+        "slots_stuck": slots_stuck,
+    }
+
+
 # ── Main Loop ───────────────────────────────────────────────────────
 
 
@@ -710,8 +786,6 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
 
         if _state.should_heartbeat(HEARTBEAT_INTERVAL):
             try:
-                from lib.watchdog.messenger import build_heartbeat_summary
-
                 summary = build_heartbeat_summary(
                     results,
                     _state,

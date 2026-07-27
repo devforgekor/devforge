@@ -216,6 +216,14 @@ modules:
     cli_experiment.py:
       status: production
       purpose: "CLI experiment management \u2014 list, compare, active, adopt commands."
+    cli_helpers.py:
+      status: production
+      purpose: "CLI helper functions \u2014 system queries used by cmd_status and\
+        \ others."
+    cli_watch.py:
+      status: production
+      purpose: "CLI watch commands \u2014 server status, alerts, pulse queue, event\
+        \ log."
     cli_worklog.py:
       status: production
       purpose: "CLI worklog management \u2014 add, recent, search commands."
@@ -717,8 +725,7 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "DevForge Watchdog \u2014 \uD1B5\uD569 \uC11C\uBC84 \uBAA8\uB2C8\uD130\
-        \uB9C1/\uC790\uB3D9\uBCF5\uAD6C \uB370\uBAAC."
+      purpose: "DevForge Watchdog \u2014 re-export only."
     _globals.py:
       status: production
       purpose: "Watchdog runtime state \u2014 module-level mutable singletons."
