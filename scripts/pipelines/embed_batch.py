@@ -185,7 +185,7 @@ def get_unembedded_turns(limit: int):
     rows = psql_json(
         f"SELECT t.id, "
         f"  COALESCE(t.user_turn_clean, t.user_turn_clean_polished) AS user_turn_clean, "
-        f"  COALESCE(t.text_clean, t.text_clean_polished) AS text_clean, "
+        f"  COALESCE(t.text_clean, t.text_clean_polished, t.text) AS text_clean, "
         f"  t.user_turn, t.text, t.created_at::text, t.est_chars, "
         f"  t.agent, t.meta->>'model' AS model "
         f"FROM turns t "
@@ -195,7 +195,7 @@ def get_unembedded_turns(limit: int):
         f"    AND e.model_name = 'qwen3-embedding-8b-v1'"
         f") "
         f"  AND t.pipeline_state = 'enriched'"
-        f"  AND COALESCE(t.text_clean, t.text_clean_polished) IS NOT NULL"
+        f"  AND LENGTH(COALESCE(t.text_clean, t.text_clean_polished, t.text)) >= 15"
         f"  AND (t.retry_count IS NULL OR t.retry_count < 3) "
         f"ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
         f"LIMIT {limit}"

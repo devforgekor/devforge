@@ -1142,7 +1142,7 @@ def main() -> None:
     # Kill all llama-server instances to free memory before next pipeline stage
     from pipelines.extract_llm import _cleanup_all_llms
 
-    _cleanup_all_llms()
+    _cleanup_all_llms(keep_8082=True)
     sys.exit(0 if result["ok"] else 1)
 
 
