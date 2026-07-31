@@ -243,7 +243,7 @@ def run_day_checks(dry_run: bool = False) -> dict:
         try:
             work = psql_json(
                 "SELECT count(*)::int AS cnt FROM turns "
-                "WHERE pipeline_state NOT IN ('verified', 'pending') "
+                "WHERE pipeline_state NOT IN ('embedded', 'pending') "
                 "AND text != ''",
                 timeout=5,
             )

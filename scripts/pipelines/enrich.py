@@ -901,6 +901,10 @@ def enrich_pipeline(
         try:
             if not enrich_result:
                 print(f"  [{ti}/{n}] {tid[:8]} — LLM returned None, skipping", flush=True)
+                if not dr:
+                    psql_ok(
+                        f"UPDATE turns SET pipeline_state = 'verified' WHERE id = '{esc_sql(tid)}'::uuid"
+                    )
                 return False
 
             # Phase 2: Post-processing
@@ -993,6 +997,12 @@ def enrich_pipeline(
             return True
         except Exception as e:
             print(f"  [{ti}/{n}] {tid[:8]} — ERROR: {type(e).__name__}: {e}", flush=True)
+            if not dr:
+                # Revert claim so this turn is retried on the next enrich pass
+                # instead of being stuck at 'enriching' forever.
+                psql_ok(
+                    f"UPDATE turns SET pipeline_state = 'verified' WHERE id = '{esc_sql(tid)}'::uuid"
+                )
             return False
 
     # ── Phase 1: LLM generation (pool first, then solo large turns) ──
