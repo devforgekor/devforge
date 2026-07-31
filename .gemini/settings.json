@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "devforge-mcp": {
-      "httpUrl": "http://127.0.0.1:8000/mcp",
+      "httpUrl": "http://127.0.0.1:8000/mcp/",
       "timeout": 60000
     },
     "filesystem": {

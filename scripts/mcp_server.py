@@ -931,11 +931,13 @@ def _create_app():
     from starlette.applications import Starlette
     from starlette.routing import Mount, Route
 
+    mcp_app = mcp.http_app(path="/")
     root = Starlette(
         routes=[
-            Mount("/mcp", app=mcp.http_app(path="/mcp")),
+            Mount("/mcp", app=mcp_app),
             Route("/health", health_endpoint, methods=["GET"]),
         ],
+        lifespan=mcp_app.lifespan,
     )
     return root
 
