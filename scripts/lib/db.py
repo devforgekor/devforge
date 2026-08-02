@@ -61,9 +61,11 @@ else:
 
 
 def psql(sql: str, timeout: int = 30) -> str:
-    """Execute SQL, return stripped stdout. Returns empty string on error."""
+    """Execute SQL via stdin (-f -), return stripped stdout. Empty on error."""
     try:
-        r = subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(
+            PSQL + ["-f", "-"], input=sql, capture_output=True, text=True, timeout=timeout
+        )
         if r.returncode != 0:
             print(f"  SQL ERROR: {r.stderr.strip()[:200]}")
         return r.stdout.strip() if r.returncode == 0 else ""
@@ -82,7 +84,9 @@ def psql_json(sql: str, timeout: int = 30) -> list[dict]:
 
     wrapped = f"SELECT row_to_json(r) FROM ({sql}) r"
     try:
-        r = subprocess.run(PSQL + ["-c", wrapped], capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(
+            PSQL + ["-f", "-"], input=wrapped, capture_output=True, text=True, timeout=timeout
+        )
         if r.returncode != 0:
             print(f"  SQL ERROR: {r.stderr.strip()[:200]}")
             return []
@@ -101,9 +105,11 @@ def psql_json(sql: str, timeout: int = 30) -> list[dict]:
 
 
 def psql_ok(sql: str, timeout: int = 30) -> bool:
-    """Execute SQL, return True if statement succeeded."""
+    """Execute SQL via stdin (-f -), return True if statement succeeded."""
     try:
-        r = subprocess.run(PSQL + ["-c", sql], capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(
+            PSQL + ["-f", "-"], input=sql, capture_output=True, text=True, timeout=timeout
+        )
         if r.returncode != 0:
             print(f"  SQL ERROR: {r.stderr.strip()[:200]}")
         return r.returncode == 0

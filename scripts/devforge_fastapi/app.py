@@ -24,7 +24,6 @@ import json
 import logging
 import os
 import sys
-import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -314,39 +313,16 @@ async def _blob_server_task():
     await loop.run_in_executor(None, server.serve_forever)
 
 
-async def _watcher_task(stop_event):
-    """Run turn_watcher scan loop in a background thread."""
-
-    from turn_watcher import POLL_INTERVAL, run_once
-
-    def _loop():
-        while not stop_event.is_set():
-            try:
-                n = run_once()
-                if n > 0:
-                    logger.info("turn_watcher: %d new turns", n)
-            except Exception as e:
-                logger.error("turn_watcher error: %s", e)
-            stop_event.wait(POLL_INTERVAL)
-
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _loop)
-
-
 @asynccontextmanager
 async def app_lifespan(app_inst: FastAPI):
     tg_task = asyncio.create_task(_telegram_poll_loop())
     blob_task = asyncio.create_task(_blob_server_task())
-    watcher_stop = threading.Event()
-    watcher_task = asyncio.create_task(_watcher_task(watcher_stop))
     try:
         yield
     finally:
-        watcher_stop.set()
         tg_task.cancel()
         blob_task.cancel()
-        watcher_task.cancel()
-        for t in (tg_task, blob_task, watcher_task):
+        for t in (tg_task, blob_task):
             try:
                 await t
             except (asyncio.CancelledError, Exception):

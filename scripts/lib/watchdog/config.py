@@ -31,7 +31,6 @@ MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"
 # Inference container serves all models across ports 8080-8084
 LLM_TARGETS = {
     "day-extract": {"port": 8082, "label": "day-extract", "day_model": "extractor"},
-    "day-verify": {"port": 8082, "label": "day-verify", "day_model": "judge"},
     # Night-only model: verifier on :8084
     "night-verify": {"port": 8084, "label": "night-verify", "day_model": None},
 }
@@ -89,11 +88,10 @@ HEARTBEAT_WORKERS: dict[str, int] = {
 # ── Pipeline intermediate state recovery ──────────────────────────
 # Stale intermediate states indicate worker crash mid-batch.
 # Threshold per state: max single LLM call time + safety margin.
-# extracting → scanned, enriching → extracted, verifying → enriched
+# extracting → scanned, enriching → verified
 PIPELINE_INTERMEDIATE_STATES: dict[str, dict] = {
     "extracting": {"to_state": "scanned", "stale_sec": 1800},  # 30 min
-    "enriching": {"to_state": "extracted", "stale_sec": 1800},  # 30 min
-    "verifying": {"to_state": "enriched", "stale_sec": 1800},  # 30 min
+    "enriching": {"to_state": "verified", "stale_sec": 1800},  # 30 min
 }
 
 # ── Token stagnation detection ────────────────────────────────────

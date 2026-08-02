@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: devforge-fastapi lifespan — turn_watcher scan loop
+# Path: systemd:devforge-turn-watcher.service (host), CLI: turn_watcher.py --once
 """turn_watcher.py — real-time session transcript → PostgreSQL (raw insert).
 
 Polls Claude Code / Copilot / Gemini / Aider jsonl files every few seconds.
@@ -148,6 +148,10 @@ def ensure_conversation(session_id: str, source: str, model: str = "", title: st
     )
 
 
+_INSERT_CHUNK = 300  # max rows per INSERT / IN query
+_INSERT_BYTES = 60000  # max SQL bytes per chunk (ARG_MAX / MAX_ARG_STRLEN safety)
+
+
 def insert_turns(
     conversation_id: str, source: str, model: str, new_turns: List[Dict], start_seq: int
 ) -> int:
@@ -155,23 +159,27 @@ def insert_turns(
     src = normalize_agent(source)
 
     # Pre-filter: skip turns whose source_message_id already exists in DB
-    msg_ids = [t.get("source_message_id") for t in new_turns if t.get("source_message_id")]
     existing_ids = set()
-    if msg_ids:
-        ids_sql = ",".join(f"'{esc_sql(m)}'" for m in msg_ids)
+    msg_ids = [t.get("source_message_id") for t in new_turns if t.get("source_message_id")]
+    for i in range(0, len(msg_ids), _INSERT_CHUNK):
+        chunk = msg_ids[i:i + _INSERT_CHUNK]
+        ids_sql = ",".join(f"'{esc_sql(m)}'" for m in chunk)
         rows = psql(f"SELECT source_message_id FROM turns WHERE source_message_id IN ({ids_sql})")
         if rows:
             for line in rows.strip().split("\n"):
                 if line.strip():
                     existing_ids.add(line.strip())
 
-    # Filter and build batch VALUES
+    # Filter and build VALUES rows (index i preserved for seq)
     rows_values = []
     filtered_turns = []
+    seen_smid = set(existing_ids)
     for i, turn in enumerate(new_turns):
         smid = turn.get("source_message_id", "")
-        if smid and smid in existing_ids:
+        if smid and smid in seen_smid:
             continue
+        if smid:
+            seen_smid.add(smid)
         filtered_turns.append((i, turn))
 
     if not filtered_turns:
@@ -200,7 +208,25 @@ def insert_turns(
     if not rows_values:
         return 0
 
-    # Single batch INSERT
+    # Chunked INSERT — cap rows AND total bytes to stay under ARG_MAX
+    inserted = 0
+    buf: List[str] = []
+    buf_bytes = 0
+    for rv in rows_values:
+        buf.append(rv)
+        buf_bytes += len(rv)
+        if len(buf) >= _INSERT_CHUNK or buf_bytes >= _INSERT_BYTES:
+            inserted += _insert_chunk(buf)
+            buf = []
+            buf_bytes = 0
+    if buf:
+        inserted += _insert_chunk(buf)
+
+    return inserted
+
+
+def _insert_chunk(rows_values: List[str]) -> int:
+    """Execute one chunked INSERT; return rows attempted."""
     values_sql = ",\n".join(rows_values)
     ok = psql_ok(
         f"INSERT INTO turns (conversation_id, seq, user_turn, thinking, text, "
@@ -208,8 +234,6 @@ def insert_turns(
         f"VALUES {values_sql} "
         f"ON CONFLICT (conversation_id, seq) DO NOTHING"
     )
-
-    # Count how many actually inserted (approximate: all non-duplicate rows)
     return len(rows_values) if ok else 0
 
 
