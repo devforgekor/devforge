@@ -298,11 +298,11 @@ if [ "$NEED_EXTRACT" -gt 0 ]; then
     _budget_gate "scanned" 15 120 || { LOG "Budget insufficient for extract — deferring"; exit 0; }
     LOG "=== Day Extract (:8082, ${NEED_EXTRACT} scanned turns) ==="
     ensure_inference "day-extract" "$(_day_phase_model day_extract)" false 1200
-    timeout 1800 python3 "$PIPELINE_DIR/extract.py" 2>&1
+    python3 "$PIPELINE_DIR/extract.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
-    [ $RC -eq 124 ] && LOG "  Extract timed out" || LOG "  Extract exit=$RC"
+    LOG "  Extract exit=$RC, elapsed=${ELAPSED}s"
     LOG "Budget=${BUDGET}s"
     [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 fi
