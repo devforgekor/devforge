@@ -413,11 +413,11 @@ if [ "$NEED_ENRICH" -gt 0 ]; then
     _budget_gate "verified" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
     LOG "=== Day Enrich (:8082, ${NEED_ENRICH} verified turns) ==="
     ensure_inference "day-enrich" "$(_day_phase_model day_enrich)" false 1200
-    timeout 1800 python3 "$PIPELINE_DIR/enrich.py" 2>&1
+    python3 "$PIPELINE_DIR/enrich.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
-    [ $RC -eq 124 ] && LOG "  Enrich timed out" || LOG "  Enrich exit=$RC"
+    LOG "  Enrich exit=$RC, elapsed=${ELAPSED}s"
     LOG "Budget=${BUDGET}s"
     [ $BUDGET -le 60 ] && LOG "Budget exhausted" && exit 0
 fi
@@ -437,7 +437,7 @@ if [ "$NEED_EMBED" -gt 0 ] || [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
 
     if [ "$NEED_EMBED" -gt 0 ]; then
         LOG "=== Day Embedding (${NEED_EMBED} enriched turns) ==="
-        timeout 1200 python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
+        python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
         RC=$?
         ELAPSED=$(( $(date +%s) - START_TS ))
         LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
