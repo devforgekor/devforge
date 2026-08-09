@@ -348,6 +348,13 @@ class TextCleaner:
         tokens = self.tokenize(text)
         return [t["form"] for t in tokens if t["tag"] == "NNP"]
 
+    def extract_terms(self, text: str) -> List[str]:
+        """Extract lexical terms (NNG/NNP/NNB/NR/...) via Kiwi tokenization."""
+        if not text.strip():
+            return []
+        tokens = tokenize(text)
+        return [t["form"] for t in tokens if t["tag"] in LEXICAL_TAGS]
+
     def process_document(self, text: str) -> Dict:
         """Full document processing: clean → tokenize → extract.
 
