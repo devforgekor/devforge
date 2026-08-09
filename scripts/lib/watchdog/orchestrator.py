@@ -405,7 +405,7 @@ def _code_quality_scan():
             f"/opt/projects/server/scripts/pipelines/{finding['file']}.\n"
             f"Fix by converting 'except Exception:' to "
             f"'except Exception as e:' and adding a "
-            f"print(f'  [{component}] {{e}}', flush=True) line with "
+            f"print(f'  [{{component}}] {{e}}', flush=True) line with "
             f"the appropriate component label based on context."
         )
         result = run_fix_loop(error_log, context, llm_port=8082, max_attempts=2)
@@ -699,7 +699,7 @@ def _code_quality_scan_wrapper():
             f"/opt/projects/server/scripts/pipelines/{finding['file']}.\n"
             f"Fix by converting 'except Exception:' to "
             f"'except Exception as e:' and adding a "
-            f"print(f'  [{component}] {{e}}', flush=True) line with "
+            f"print(f'  [{{component}}] {{e}}', flush=True) line with "
             f"the appropriate component label based on context."
         )
         result = run_fix_loop(error_log, context, llm_port=8082, max_attempts=2)
