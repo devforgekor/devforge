@@ -252,9 +252,9 @@ def run_day_checks(dry_run: bool = False) -> dict:
                 log(f"  day_cycle.sh not running, {in_flight} in-flight — resuming")
                 _state.add_event("day_cycle", "resume", f"{in_flight} in-flight")
                 subprocess.run(
-                    ["systemctl", "--user", "start", "devforge-day-cycle.service"],
+                    ["systemctl", "--user", "--no-block", "start", "devforge-day-cycle.service"],
                     capture_output=True,
-                    timeout=30,
+                    timeout=10,
                 )
             else:
                 pending_work = psql_json(
@@ -268,9 +268,9 @@ def run_day_checks(dry_run: bool = False) -> dict:
                     log(f"  day_cycle.sh not running, {pending_cnt} pending — starting first batch")
                     _state.add_event("day_cycle", "start", f"{pending_cnt} pending")
                     subprocess.run(
-                        ["systemctl", "--user", "start", "devforge-day-cycle.service"],
+                        ["systemctl", "--user", "--no-block", "start", "devforge-day-cycle.service"],
                         capture_output=True,
-                        timeout=30,
+                        timeout=10,
                     )
         except Exception as e:
             log(f"  day_cycle check error: {e}")
@@ -786,13 +786,7 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
 
         if _state.should_heartbeat(HEARTBEAT_INTERVAL):
             try:
-                summary = build_heartbeat_summary(
-                    results,
-                    _state,
-                    _get_active_pulses,
-                    _get_active_test_pulses,
-                    _get_test_db_progress,
-                )
+                summary = build_heartbeat_summary(results)
                 heartbeat(summary)
             except Exception as e:
                 log(f"heartbeat error: {e}")
