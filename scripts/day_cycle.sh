@@ -309,7 +309,7 @@ fi
 
 # ── Extract Fail Alert: failed/noise turns → Slack with classification buttons ──
 if [ -f /var/tmp/extract_fail_report.json ]; then
-    python3 -m lib.slack_interactive --send-extract-fail 2>&1 || true
+    timeout 60 python3 -m lib.slack_interactive --send-extract-fail 2>&1 || true
 fi
 
 # ── Noise Marker 처리: 사용자 확인된 건 처리, 미확인은 Telegram ───
@@ -335,7 +335,7 @@ NOISE_PENDING=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*) FROM review_facts WHERE fact_type='noise_marker' AND user_verdict IS NULL AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
 if [ "${NOISE_PENDING:-0}" -gt 0 ]; then
     LOG "  ${NOISE_PENDING} noise markers - sending Slack"
-    python3 -m lib.slack_interactive --send-noise-alert 2>&1 || true
+    timeout 60 python3 -m lib.slack_interactive --send-noise-alert 2>&1 || true
 fi
 
 # ── NEUTRAL Auto-Resolve: GROUNDED/UNGROUNDED는 시스템 처리 ───
@@ -362,7 +362,7 @@ NEUTRAL_AMB=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*) FROM review_facts WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND user_verdict IS NULL AND nli_verdict='AMBIGUOUS' AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
 if [ "${NEUTRAL_AMB:-0}" -gt 0 ]; then
     LOG "  ${NEUTRAL_AMB} NEUTRAL+AMBIGUOUS facts - Slack alert + exit"
-    python3 -m lib.slack_interactive --send-alert 2>&1 || true
+    timeout 60 python3 -m lib.slack_interactive --send-alert 2>&1 || true
     exit 0
 fi
 
