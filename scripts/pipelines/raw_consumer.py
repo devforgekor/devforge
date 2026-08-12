@@ -64,7 +64,8 @@ def process_raw_turns(backfill: bool = False) -> int:
         user_clean = cl.clean(raw_ut[:8000], lang=lang)
         text_clean_val = cl.clean((raw_tx or "")[:8000], lang=lang)
         think_clean = cl.clean((raw_th or "")[:4000], lang=lang)
-        est = estimate_tokens(user_clean)
+        full_len_input = " ".join(filter(None, [user_clean, text_clean_val, think_clean]))
+        est = estimate_tokens(full_len_input)
 
         # FTS5 terms + tokens from concatenated clean text
         full_clean = " ".join(filter(None, [user_clean, text_clean_val, think_clean]))
