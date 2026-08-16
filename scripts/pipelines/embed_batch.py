@@ -195,7 +195,14 @@ def get_unembedded_turns(limit: int):
         f"    AND e.model_name = 'qwen3-embedding-8b-v1'"
         f") "
         f"  AND t.pipeline_state = 'enriched'"
-        f"  AND LENGTH(COALESCE(t.text_clean, t.text_clean_polished, t.text)) >= 15"
+        # Length check must mirror the actual embed text built below
+        # (user_turn_clean + text_clean) — checking text_clean alone
+        # permanently starves turns with a short assistant reply but
+        # substantial user content.
+        f"  AND LENGTH(TRIM("
+        f"    COALESCE(t.user_turn_clean, t.user_turn_clean_polished, '') || ' ' ||"
+        f"    COALESCE(t.text_clean, t.text_clean_polished, t.text, '')"
+        f"  )) >= 15"
         f"  AND (t.retry_count IS NULL OR t.retry_count < 3) "
         f"ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC "
         f"LIMIT {limit}"
