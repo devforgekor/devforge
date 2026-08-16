@@ -35,7 +35,7 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS_DIR)
 
 from lib.common import log
-from lib.db import esc_sql, psql_json, psql_ok
+from lib.db import esc_sql, psql, psql_json, psql_ok
 from lib.infra.preflight import preflight_checks
 from lib.pod_manager import ensure_model
 from lib.text_cleaner import get_cleaner
@@ -178,6 +178,33 @@ def embed_batch(
     except (KeyError, TypeError) as e:
         log(f"  [error] parse failed: {e}")
         return None
+
+
+def _skip_unembeddable_turns() -> int:
+    """Dead-letter: turns stuck at 'enriched' whose combined content is too
+    short to ever pass the embed length gate get moved to 'embed_skipped'
+    immediately, at the point this pipeline determines they're unprocessable
+    — instead of silently starving forever and blocking day_cycle's
+    in-flight gate for every future cycle.
+
+    Note: uses plain psql() (top-level UPDATE ... RETURNING), not psql_json(),
+    since Postgres rejects a data-modifying WITH nested inside psql_json's
+    "SELECT row_to_json(r) FROM (...) r" wrapper ("WITH clause containing a
+    data-modifying statement must be at the top level").
+    """
+    raw = psql(
+        "UPDATE turns SET pipeline_state = 'embed_skipped', "
+        "  pipeline_state_reason = 'combined content < 15 chars after cleaning' "
+        "WHERE pipeline_state = 'enriched' "
+        "  AND LENGTH(TRIM("
+        "    COALESCE(user_turn_clean, user_turn_clean_polished, '') || ' ' ||"
+        "    COALESCE(text_clean, text_clean_polished, text, '')"
+        "  )) < 15 "
+        "RETURNING id"
+    )
+    if not raw:
+        return 0
+    return len([line for line in raw.splitlines() if line.strip()])
 
 
 def get_unembedded_turns(limit: int):
@@ -362,6 +389,9 @@ def main():
     elif facts_mode:
         rows = get_unembedded_facts(limit)
     else:
+        skipped = _skip_unembeddable_turns()
+        if skipped:
+            log(f"  [dead-letter] {skipped} turn(s) too short to embed — marked embed_skipped")
         rows = get_unembedded_turns(limit)
 
     if not rows:

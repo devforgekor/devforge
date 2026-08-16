@@ -218,7 +218,7 @@ LOG "System sync done in ${ELAPSED}s — remaining budget=${BUDGET}s"
 
 # ── In-flight check ─────────────────────────────────────────────────
 IN_FLIGHT=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
-  "SELECT count(*)::int FROM turns WHERE pipeline_state NOT IN ('pending', 'embedded')" 2>/dev/null || echo "0")
+  "SELECT count(*)::int FROM turns WHERE pipeline_state NOT IN ('pending', 'embedded', 'embed_skipped')" 2>/dev/null || echo "0")
 IN_FLIGHT=${IN_FLIGHT:-0}
 
 if [ "$IN_FLIGHT" -gt 0 ]; then
