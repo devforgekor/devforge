@@ -18,6 +18,7 @@ Usage:
 """
 
 import json
+import os
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -256,10 +257,76 @@ def _exec_cli(params: Dict[str, Any]) -> tuple:
         return False, f"cli {script}: {e}"
 
 
+def _exec_sandbox_verify(params: Dict[str, Any]) -> tuple:
+    """Run tests in a read-only podman sandbox. Returns (ok, result_summary).
+
+    Deep Dive 7단계 검증용. 프로젝트 디렉토리를 읽기 전용으로 마운트하고
+    --network none으로 격리 실행, non-root(nobody)로 실행. 실행 시간 초과는
+    SANDBOX_VERIFY_TIMEOUT. SANDBOX_IMAGE에는 pytest가 없고 네트워크가 없어
+    설치도 불가하므로 test_cmd는 stdlib unittest만 지원한다(1차 구현 범위).
+    """
+    from lib.watchdog.config import (
+        SANDBOX_IMAGE,
+        SANDBOX_VERIFY_ALLOWED_ROOT,
+        SANDBOX_VERIFY_MEM_LIMIT,
+        SANDBOX_VERIFY_TIMEOUT,
+    )
+
+    project_dir = params.get("project_dir", "")
+    test_cmd = params.get("test_cmd", "")
+    if not project_dir or not test_cmd:
+        return False, "sandbox_verify: project_dir and test_cmd required"
+    if not os.path.isdir(project_dir):
+        return False, f"sandbox_verify: project_dir not found: {project_dir}"
+
+    real_dir = os.path.realpath(project_dir)
+    real_root = os.path.realpath(SANDBOX_VERIFY_ALLOWED_ROOT)
+    if real_dir != real_root and not real_dir.startswith(real_root + os.sep):
+        return False, f"sandbox_verify: project_dir outside allowed root: {project_dir}"
+
+    if any(c in test_cmd for c in (";", "|", "&", "$", "`", "\n")):
+        return False, f"sandbox_verify: invalid test_cmd: {test_cmd}"
+
+    cmd = [
+        "podman",
+        "run",
+        "--rm",
+        "--memory",
+        SANDBOX_VERIFY_MEM_LIMIT,
+        "--pids-limit",
+        "256",
+        "--network",
+        "none",
+        "--read-only",
+        "--user",
+        "65534:65534",
+        "-v",
+        f"{real_dir}:/work:ro,z",
+        "--workdir",
+        "/work",
+        SANDBOX_IMAGE,
+        "sh",
+        "-c",
+        test_cmd,
+    ]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=SANDBOX_VERIFY_TIMEOUT)
+        stdout = r.stdout.strip()[-2000:]
+        stderr = r.stderr.strip()[-2000:]
+        if r.returncode == 0:
+            return True, f"sandbox_verify OK ({project_dir}): {stdout[:200]}"
+        return False, f"sandbox_verify FAIL (exit={r.returncode}): {stderr[:300]}"
+    except subprocess.TimeoutExpired:
+        return False, f"sandbox_verify TIMEOUT (>{SANDBOX_VERIFY_TIMEOUT}s): {project_dir}"
+    except Exception as e:
+        return False, f"sandbox_verify ERROR: {e}"
+
+
 ACTION_EXECUTORS = {
     "systemctl": _exec_systemctl,
     "podman": _exec_podman,
     "cli": _exec_cli,
+    "sandbox_verify": _exec_sandbox_verify,
 }
 
 

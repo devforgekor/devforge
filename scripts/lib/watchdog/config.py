@@ -105,3 +105,15 @@ TOKEN_STAGNATION_THRESHOLD = 5  # cycles (~5 min @ 60s)
 SANDBOX_IMAGE = "python:3.12-alpine"
 SANDBOX_TIMEOUT = 30  # seconds
 SANDBOX_MEM_LIMIT = "128m"
+
+# ── Deep Dive 7단계 sandbox 검증 (task #24) ─────────────────────────
+# fixloop의 compile()-only 검증과 별도로, 실제 test 실행용 상수.
+# --network none --read-only로 프로젝트 디렉토리만 읽기 마운트.
+# 주의: SANDBOX_IMAGE(python:3.12-alpine)에는 pytest가 없고 --network none이라
+# 설치도 불가 — 1차 구현은 stdlib unittest만 지원(예: "python -m unittest discover").
+SANDBOX_VERIFY_TIMEOUT = 120  # seconds
+SANDBOX_VERIFY_MEM_LIMIT = "256m"
+# project_dir이 이 경로 하위가 아니면 sandbox_verify를 거부한다.
+# host 임의 경로(예: secrets.env가 있는 디렉토리) 읽기전용 마운트로 인한
+# 정보 유출을 막기 위한 allowlist.
+SANDBOX_VERIFY_ALLOWED_ROOT = "/opt/projects/server"

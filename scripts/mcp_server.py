@@ -813,6 +813,73 @@ async def action_poll_results(pulse_id: str) -> str:
     return json.dumps({"pulse_id": pulse_id, "results": results}, ensure_ascii=False, default=str)
 
 
+@mcp.tool(name="deepdive_verify_sandbox")
+async def deepdive_verify_sandbox(
+    project_dir: str,
+    test_cmd: str,
+    affected_files: Optional[str] = None,
+) -> str:
+    """Deep Dive 7단계 검증을 podman 샌드박스에서 격리 실행합니다.
+
+    LLM이 수정한 코드가 host 파일시스템에 직접 영향을 주지 않도록,
+    프로젝트 디렉토리를 읽기 전용(-v :ro)으로 non-root(nobody)로 마운트하고
+    --network none으로 실행합니다. action_queue(sandbox_verify)를 통해
+    Watchdog이 비동기 실행하고, action_poll_results로 결과를 폴링합니다.
+
+    주의: SANDBOX_IMAGE(python:3.12-alpine)에는 pytest가 없고 --network none이라
+    설치도 불가하므로, 1차 구현에서 test_cmd는 stdlib unittest만 지원한다
+    (예: "python -m unittest discover -s ."). project_dir은 반드시
+    SANDBOX_VERIFY_ALLOWED_ROOT(/opt/projects/server) 하위여야 하며,
+    그 외 경로는 host 시크릿 유출 방지를 위해 거부된다.
+
+    Args:
+        project_dir: 검증할 프로젝트 디렉토리 (절대 경로, /opt/projects/server 하위만 허용)
+        test_cmd: 샌드박스 내 실행할 테스트 명령 (예: "python -m unittest discover -s .")
+        affected_files: 변경된 파일 목록 (쉼표 구분) — .md만 있으면 샌드박스 생략
+    """
+    import os
+
+    from lib.action_queue import action_write as _action_write
+    from lib.watchdog.config import SANDBOX_VERIFY_ALLOWED_ROOT
+
+    if not project_dir or not test_cmd:
+        return json.dumps(
+            {"ok": False, "error": "project_dir and test_cmd are required"}, ensure_ascii=False
+        )
+    if any(c in test_cmd for c in (";", "|", "&", "$", "`", "\n")):
+        return json.dumps({"ok": False, "error": "Invalid test_cmd"}, ensure_ascii=False)
+    real_root = os.path.realpath(SANDBOX_VERIFY_ALLOWED_ROOT)
+    real_dir = os.path.realpath(project_dir)
+    if real_dir != real_root and not real_dir.startswith(real_root + os.sep):
+        return json.dumps(
+            {"ok": False, "error": f"project_dir must be under {SANDBOX_VERIFY_ALLOWED_ROOT}"},
+            ensure_ascii=False,
+        )
+
+    if affected_files:
+        files = [f.strip() for f in affected_files.split(",") if f.strip()]
+        if files and all(f.endswith(".md") for f in files):
+            return json.dumps(
+                {
+                    "ok": False,
+                    "skipped": True,
+                    "reason": "doc-only changes — sandbox not required",
+                    "pulse_id": "",
+                },
+                ensure_ascii=False,
+            )
+
+    pid = _action_write(
+        instruction=f"Deep Dive sandbox verify: {project_dir} — {test_cmd}",
+        priority="P1_CONTEXT",
+        action_type="sandbox_verify",
+        action_params={"project_dir": project_dir, "test_cmd": test_cmd},
+    )
+    if pid:
+        return json.dumps({"ok": True, "pulse_id": pid}, ensure_ascii=False)
+    return json.dumps({"ok": False, "error": "Failed to queue sandbox_verify"}, ensure_ascii=False)
+
+
 # ── Aider sequential review tool ─────────────────────────────
 
 
