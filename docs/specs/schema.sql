@@ -325,6 +325,7 @@ CREATE TABLE IF NOT EXISTS deepdive_steps (
     last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     overrun_count   INT NOT NULL DEFAULT 0,
     status          TEXT NOT NULL DEFAULT 'ACTIVE',
+    affected_files  INT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(session_id, step),
     CONSTRAINT deepdive_steps_status_check CHECK (status IN ('ACTIVE', 'DONE', 'ABORTED'))
@@ -335,3 +336,4 @@ CREATE INDEX IF NOT EXISTS idx_deepdive_steps_session ON deepdive_steps(session_
 COMMENT ON TABLE deepdive_steps IS 'Deep Dive 단계 heartbeat — 단계별 진행/만료 추적, 실측 소요시간 기록';
 COMMENT ON COLUMN deepdive_steps.status IS 'ACTIVE:진행중|DONE:정상종료|ABORTED:3회 초과로 자동중단';
 COMMENT ON COLUMN deepdive_steps.overrun_count IS 'max_bound 초과 횟수 — 1·2회 경고, 3회 자동 ABORTED';
+COMMENT ON COLUMN deepdive_steps.affected_files IS 'Phase 2 — LSP blast_radius로 파악한 영향 파일 수. 지정 시 max_bound_sec을 base+affected_files*파일당마진으로 동적 재계산(min/max bound로 clamp), 미지정(NULL) 시 Phase 1 정적 max_bound_sec 유지';

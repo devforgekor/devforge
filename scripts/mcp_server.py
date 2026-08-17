@@ -923,9 +923,11 @@ async def review_sequential(task: str, paths: str) -> str:
     )
 
 
-# ── Deep Dive 단계 heartbeat (Phase 1) ────────────────────────
+# ── Deep Dive 단계 heartbeat (Phase 1 + Phase 2) ──────────────
 # 대화형 Deep Dive 세션 hang 감지용. 단계별 base timeout + min/max bound로
 # 만료 판정, 1·2회 초과는 경고만, 3회 연속 초과 시 세션 ABORTED + Slack.
+# Phase 2: affected_files(LSP blast_radius)가 주어지면 base+파일당마진 비례로
+# max_bound를 동적 재계산(min/max로 clamp). 미지정 시 Phase 1과 동일하게 정적 max 사용.
 
 DEEPDIVE_STEP_BUDGETS = {
     1: {"name": "yggdrasil_planning", "base": 180, "min": 60, "max": 600},
@@ -938,13 +940,34 @@ DEEPDIVE_STEP_BUDGETS = {
 }
 DEEPDIVE_CHECK_INTERVAL = 60
 DEEPDIVE_OVERRUN_LIMIT = 3
+DEEPDIVE_FILE_MARGIN_SEC = 120  # 영향 파일 1개당 추가 마진 (blast_radius 비례 연장)
+
+
+def _deepdive_effective_max(step: int, affected_files: Optional[int]) -> int:
+    """Phase 2 동적 max_bound 계산.
+
+    affected_files가 None이면 Phase 1 정적 max를 그대로 사용(하위호환).
+    지정되면 base + affected_files*DEEPDIVE_FILE_MARGIN_SEC을 min/max로 clamp.
+    음수 등 비정상값은 0으로 취급.
+    """
+    budget = DEEPDIVE_STEP_BUDGETS[step]
+    if affected_files is None:
+        return budget["max"]
+    n = max(0, affected_files)
+    raw = budget["base"] + n * DEEPDIVE_FILE_MARGIN_SEC
+    return min(max(raw, budget["min"]), budget["max"])
+
 
 # ── Deep Dive 단계 heartbeat 툴 ───────────────────────────────
 
 
 @mcp.tool(name="deepdive_step_enter")
 async def deepdive_step_enter(
-    session_id: str, step: int, step_name: str = "", force: bool = False
+    session_id: str,
+    step: int,
+    step_name: str = "",
+    force: bool = False,
+    affected_files: Optional[int] = None,
 ) -> str:
     """Deep Dive 단계 진입을 기록합니다. 세션 시작 시 각 단계 진입마다 호출.
 
@@ -953,16 +976,23 @@ async def deepdive_step_enter(
     기존 행이 ABORTED 상태면 재진입을 거부한다(circuit breaker 무력화 방지).
     force=True를 명시해야만 ABORTED 상태를 초기화하고 재시작할 수 있다.
 
+    Phase 2: affected_files(LSP blast_radius로 파악한 영향 파일 수)를 넘기면
+    max_bound를 base + affected_files*DEEPDIVE_FILE_MARGIN_SEC로 동적 재계산해
+    min/max bound 사이로 clamp한다. 생략(None)하면 Phase 1과 동일하게 정적
+    max_bound_sec을 사용한다(하위호환).
+
     Args:
         session_id: Deep Dive 세션 식별자 (예: conversation UUID)
         step: Deep Dive 단계 번호 (1~7)
         step_name: 단계 이름 (선택, 미지정 시 DEEPDIVE_STEP_BUDGETS 이름 사용)
         force: True면 ABORTED 상태여도 강제로 리셋 후 재진입 (기본 False)
+        affected_files: LSP blast_radius 영향 파일 수 (선택, 생략 시 정적 max 사용)
     """
     if step not in DEEPDIVE_STEP_BUDGETS:
         return json.dumps({"ok": False, "error": f"step {step} not in 1..7"}, ensure_ascii=False)
     budget = DEEPDIVE_STEP_BUDGETS[step]
     name = step_name.strip() or budget["name"]
+    effective_max = _deepdive_effective_max(step, affected_files)
 
     if not force:
         existing = await _fetch_json(
@@ -983,22 +1013,32 @@ async def deepdive_step_enter(
                 ensure_ascii=False,
             )
 
+    affected_files_sql = "NULL" if affected_files is None else str(max(0, affected_files))
     ok = await _execute(
         f"INSERT INTO deepdive_steps "
         f"(session_id, step, step_name, base_timeout_sec, min_bound_sec, max_bound_sec, "
-        f"status, started_at, ended_at, elapsed_sec, overrun_count, last_heartbeat_at) "
+        f"status, started_at, ended_at, elapsed_sec, overrun_count, last_heartbeat_at, affected_files) "
         f"VALUES ('{esc_sql(session_id[:200])}', {step}, '{esc_sql(name[:100])}', "
-        f"{budget['base']}, {budget['min']}, {budget['max']}, 'ACTIVE', NOW(), NULL, NULL, 0, NOW()) "
+        f"{budget['base']}, {budget['min']}, {effective_max}, 'ACTIVE', NOW(), NULL, NULL, 0, NOW(), "
+        f"{affected_files_sql}) "
         f"ON CONFLICT (session_id, step) DO UPDATE SET "
         f"step_name = EXCLUDED.step_name, "
         f"base_timeout_sec = EXCLUDED.base_timeout_sec, "
         f"min_bound_sec = EXCLUDED.min_bound_sec, "
         f"max_bound_sec = EXCLUDED.max_bound_sec, "
         f"status = 'ACTIVE', started_at = NOW(), ended_at = NULL, "
-        f"elapsed_sec = NULL, overrun_count = 0, last_heartbeat_at = NOW()"
+        f"elapsed_sec = NULL, overrun_count = 0, last_heartbeat_at = NOW(), "
+        f"affected_files = EXCLUDED.affected_files"
     )
     return json.dumps(
-        {"ok": ok, "session_id": session_id, "step": step, "step_name": name},
+        {
+            "ok": ok,
+            "session_id": session_id,
+            "step": step,
+            "step_name": name,
+            "effective_max_sec": effective_max,
+            "affected_files": affected_files,
+        },
         ensure_ascii=False,
     )
 
@@ -1067,7 +1107,7 @@ async def deepdive_session_status(session_id: str) -> str:
         session_id: Deep Dive 세션 식별자
     """
     rows = await _fetch_json(
-        f"SELECT step, step_name, status, overrun_count, "
+        f"SELECT step, step_name, status, overrun_count, max_bound_sec, affected_files, "
         f"EXTRACT(EPOCH FROM (NOW() - started_at))::int AS age_sec, elapsed_sec "
         f"FROM deepdive_steps WHERE session_id = '{esc_sql(session_id[:200])}' "
         f"ORDER BY step"
