@@ -304,3 +304,34 @@ COMMENT ON TABLE reflex_rules IS 'Pattern 2+4 auto-fix rules — mined from obse
 COMMENT ON COLUMN reflex_rules.status IS 'candidate:pattern found|approved:user confirmed|dormant:30d no match|archived:explicit archive';
 COMMENT ON COLUMN reflex_rules.confidence IS 'Statistical confidence based on observation match frequency';
 COMMENT ON COLUMN reflex_rules.supersedes IS 'Previous rule ID that this rule replaces (for contradiction resolution)';
+
+-- ============================================================
+-- 15. Deep Dive 세션 단계 heartbeat (Phase 1 — hang 감지)
+-- ============================================================
+-- 대화형 Deep Dive 세션(Copilot CLI 등)의 단계별 진행 상황을 기록.
+-- devforge-mcp가 deepdive_step_enter/exit/session_heartbeat 툴로 관리.
+-- elapsed_sec는 2주 축적 후 Phase 2 percentile 재교정에 사용.
+CREATE TABLE IF NOT EXISTS deepdive_steps (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id      TEXT NOT NULL,
+    step            INT NOT NULL CHECK (step >= 1 AND step <= 7),
+    step_name       TEXT NOT NULL,
+    base_timeout_sec INT NOT NULL,
+    min_bound_sec   INT NOT NULL,
+    max_bound_sec   INT NOT NULL,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ended_at        TIMESTAMPTZ,
+    elapsed_sec     INT,
+    last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    overrun_count   INT NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'ACTIVE',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(session_id, step),
+    CONSTRAINT deepdive_steps_status_check CHECK (status IN ('ACTIVE', 'DONE', 'ABORTED'))
+);
+CREATE INDEX IF NOT EXISTS idx_deepdive_steps_status ON deepdive_steps(status, started_at);
+CREATE INDEX IF NOT EXISTS idx_deepdive_steps_session ON deepdive_steps(session_id);
+
+COMMENT ON TABLE deepdive_steps IS 'Deep Dive 단계 heartbeat — 단계별 진행/만료 추적, 실측 소요시간 기록';
+COMMENT ON COLUMN deepdive_steps.status IS 'ACTIVE:진행중|DONE:정상종료|ABORTED:3회 초과로 자동중단';
+COMMENT ON COLUMN deepdive_steps.overrun_count IS 'max_bound 초과 횟수 — 1·2회 경고, 3회 자동 ABORTED';
