@@ -943,21 +943,45 @@ DEEPDIVE_OVERRUN_LIMIT = 3
 
 
 @mcp.tool(name="deepdive_step_enter")
-async def deepdive_step_enter(session_id: str, step: int, step_name: str = "") -> str:
+async def deepdive_step_enter(
+    session_id: str, step: int, step_name: str = "", force: bool = False
+) -> str:
     """Deep Dive 단계 진입을 기록합니다. 세션 시작 시 각 단계 진입마다 호출.
 
     hang 판정용 base/min/max bound는 DEEPDIVE_STEP_BUDGETS에서 단계별로 적용.
     기존 ACTIVE 행이 있으면 overrun_count를 0으로 리셋하고 재시작.
+    기존 행이 ABORTED 상태면 재진입을 거부한다(circuit breaker 무력화 방지).
+    force=True를 명시해야만 ABORTED 상태를 초기화하고 재시작할 수 있다.
 
     Args:
         session_id: Deep Dive 세션 식별자 (예: conversation UUID)
         step: Deep Dive 단계 번호 (1~7)
         step_name: 단계 이름 (선택, 미지정 시 DEEPDIVE_STEP_BUDGETS 이름 사용)
+        force: True면 ABORTED 상태여도 강제로 리셋 후 재진입 (기본 False)
     """
     if step not in DEEPDIVE_STEP_BUDGETS:
         return json.dumps({"ok": False, "error": f"step {step} not in 1..7"}, ensure_ascii=False)
     budget = DEEPDIVE_STEP_BUDGETS[step]
     name = step_name.strip() or budget["name"]
+
+    if not force:
+        existing = await _fetch_json(
+            f"SELECT status FROM deepdive_steps "
+            f"WHERE session_id = '{esc_sql(session_id[:200])}' AND step = {step}"
+        )
+        if existing and existing[0]["status"] == "ABORTED":
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": (
+                        "step previously ABORTED (반복 hang으로 자동 중단됨) — "
+                        "재시도하려면 원인을 먼저 확인하고 force=true로 재진입하세요"
+                    ),
+                    "session_id": session_id,
+                    "step": step,
+                },
+                ensure_ascii=False,
+            )
 
     ok = await _execute(
         f"INSERT INTO deepdive_steps "
@@ -1013,9 +1037,11 @@ async def deepdive_step_exit(session_id: str, step: int) -> str:
 async def deepdive_session_heartbeat(session_id: str, step: int) -> str:
     """Deep Dive 단계의 생존 신호를 갱신합니다. long-running 단계에서 주기 호출.
 
-    false positive 방지용 수동 연장 — started_at은 유지하고 last_heartbeat_at만 갱신.
-    만료 판정은 started_at 기준 max_bound 초과이므로, heartbeat만으로는 연장되지 않음.
-    (연장은 restart 후 재진입으로 처리)
+    false positive 방지용 — started_at은 유지하고 last_heartbeat_at만 갱신.
+    _deepdive_check_expired는 last_heartbeat_at 기준 staleness(base_timeout_sec 초과 시
+    dead man's switch 발동)와 started_at 기준 max_bound_sec(heartbeat와 무관한 절대
+    상한선)를 둘 다 검사한다. 즉 heartbeat를 주기적으로 호출하면 staleness 판정은
+    피할 수 있지만, max_bound_sec 절대 상한은 heartbeat로도 넘길 수 없다.
 
     Args:
         session_id: Deep Dive 세션 식별자
@@ -1027,6 +1053,36 @@ async def deepdive_session_heartbeat(session_id: str, step: int) -> str:
         f"AND status = 'ACTIVE'"
     )
     return json.dumps({"ok": ok, "session_id": session_id, "step": step}, ensure_ascii=False)
+
+
+@mcp.tool(name="deepdive_session_status")
+async def deepdive_session_status(session_id: str) -> str:
+    """Deep Dive 세션의 전체 단계 상태를 조회합니다.
+
+    인터랙티브 에이전트가 다음 단계로 넘어가기 전, 혹은 재시도 전에
+    직전 단계가 ABORTED되지 않았는지 확인하는 용도. Slack 알림을 놓쳤거나
+    에이전트가 직접 상태를 확인해야 할 때 사용.
+
+    Args:
+        session_id: Deep Dive 세션 식별자
+    """
+    rows = await _fetch_json(
+        f"SELECT step, step_name, status, overrun_count, "
+        f"EXTRACT(EPOCH FROM (NOW() - started_at))::int AS age_sec, elapsed_sec "
+        f"FROM deepdive_steps WHERE session_id = '{esc_sql(session_id[:200])}' "
+        f"ORDER BY step"
+    )
+    aborted = [r["step"] for r in rows if r["status"] == "ABORTED"]
+    return json.dumps(
+        {
+            "ok": True,
+            "session_id": session_id,
+            "steps": rows,
+            "has_aborted_step": bool(aborted),
+            "aborted_steps": aborted,
+        },
+        ensure_ascii=False,
+    )
 
 
 def _deepdive_send_alert(text: str) -> bool:
@@ -1050,18 +1106,35 @@ def _deepdive_send_alert(text: str) -> bool:
 
 
 async def _deepdive_check_expired() -> list[dict]:
-    """Scan ACTIVE deepdive_steps exceeding max_bound. Returns overrun rows."""
+    """Scan ACTIVE deepdive_steps that are overrun.
+
+    두 가지 독립적인 만료 사유를 모두 검사한다:
+      - max_bound_exceeded: started_at 기준 max_bound_sec 초과 — heartbeat와
+        무관한 절대 상한선(안전망).
+      - heartbeat_stale: base_timeout_sec은 지났는데 last_heartbeat_at도
+        base_timeout_sec 이상 갱신이 없음 — 진짜 dead man's switch 판정.
+        heartbeat를 주기적으로 호출하면 이 사유로는 걸리지 않는다.
+    """
     rows = await _fetch_json(
-        f"SELECT session_id, step, step_name, max_bound_sec, "
-        f"EXTRACT(EPOCH FROM (NOW() - started_at))::int AS age_sec, overrun_count "
+        f"SELECT session_id, step, step_name, base_timeout_sec, max_bound_sec, overrun_count, "
+        f"EXTRACT(EPOCH FROM (NOW() - started_at))::int AS age_sec, "
+        f"EXTRACT(EPOCH FROM (NOW() - last_heartbeat_at))::int AS heartbeat_stale_sec, "
+        f"CASE WHEN (NOW() - started_at) > (max_bound_sec || ' seconds')::interval "
+        f"THEN 'max_bound_exceeded' ELSE 'heartbeat_stale' END AS reason "
         f"FROM deepdive_steps WHERE status = 'ACTIVE' "
-        f"AND (NOW() - started_at) > (max_bound_sec || ' seconds')::interval"
+        f"AND ("
+        f"  (NOW() - started_at) > (max_bound_sec || ' seconds')::interval "
+        f"  OR ("
+        f"    (NOW() - started_at) > (base_timeout_sec || ' seconds')::interval "
+        f"    AND (NOW() - last_heartbeat_at) > (base_timeout_sec || ' seconds')::interval"
+        f"  )"
+        f")"
     )
     return rows
 
 
 async def _deepdive_expiry_loop() -> None:
-    """Background loop: every 60s escalate ACTIVE steps past max_bound.
+    """Background loop: every 60s escalate ACTIVE steps that are overrun.
 
     1·2회 초과 → Slack 경고만. 3회 연속 → status=ABORTED + Slack 에스컬레이션.
     """
@@ -1070,10 +1143,11 @@ async def _deepdive_expiry_loop() -> None:
             overrun_rows = await _deepdive_check_expired()
             for r in overrun_rows:
                 sid, step, name = r["session_id"], r["step"], r["step_name"]
+                reason = r["reason"]
                 overrun = r["overrun_count"] + 1
                 await _execute(
                     f"UPDATE deepdive_steps SET overrun_count = {overrun}, "
-                    f"last_heartbeat_at = NOW() "
+                    f"last_heartbeat_at = last_heartbeat_at "
                     f"WHERE session_id = '{esc_sql(sid)}' AND step = {step} AND status = 'ACTIVE'"
                 )
                 if overrun >= DEEPDIVE_OVERRUN_LIMIT:
@@ -1084,13 +1158,13 @@ async def _deepdive_expiry_loop() -> None:
                     await asyncio.to_thread(
                         _deepdive_send_alert,
                         f"[DeepDive] {sid} step {step}({name}) "
-                        f"{overrun}회 연속 max_bound 초과 — 세션 자동 중단 (ABORTED)",
+                        f"{overrun}회 연속 초과({reason}) — 세션 자동 중단 (ABORTED)",
                     )
                 else:
                     await asyncio.to_thread(
                         _deepdive_send_alert,
                         f"[DeepDive] {sid} step {step}({name}) {overrun}회차 "
-                        f"max_bound 초과 — 주의 (자동 중단은 3회부터)",
+                        f"초과({reason}) — 주의 (자동 중단은 3회부터)",
                     )
         except Exception as e:
             logger.warning("deepdive expiry loop error: %s", e)
