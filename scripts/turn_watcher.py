@@ -3,11 +3,11 @@
 # Path: systemd:devforge-turn-watcher.service (host), CLI: turn_watcher.py --once
 """turn_watcher.py — real-time session transcript → PostgreSQL (raw insert).
 
-Polls Claude Code / Copilot / Gemini / Aider jsonl files every few seconds.
-Inserts new turns with pipeline_state='raw' — text_clean is deferred to
-raw_consumer (Pass 2) in the devforge-worker container.
+Polls Claude Code / Copilot / Gemini / Aider jsonl files and the OpenCode
+sqlite DB every few seconds. Inserts new turns with pipeline_state='raw' —
+text_clean is deferred to raw_consumer (Pass 2) in the devforge-worker container.
 
-Pipe: turn_watcher (jsonl → DB raw) → raw_consumer (raw → pending) → day_cycle
+Pipe: turn_watcher (jsonl/DB → raw) → raw_consumer (raw → pending) → day_cycle
 """
 
 import json
@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from lib.db import esc_sql, psql, psql_ok
+from lib.parsers import opencode as opencode_parser
 from lib.parsers.aider import parse as parse_aider
 from lib.parsers.claude import parse as parse_claude
 from lib.parsers.copilot import parse as parse_copilot
@@ -48,6 +49,14 @@ SOURCES = {
         "parser": parse_aider,
         "dir": Path("/home/opc/.aider.chat.history.md"),
         "glob": None,  # single file
+    },
+    "opencode": {
+        "parser": opencode_parser.parse,
+        "dir": Path("/home/opc/.local/share/opencode/opencode.db"),
+        "glob": None,  # handled specially — sqlite DB with per-session rows
+        "mtime_fn": opencode_parser.session_mtime,  # (path, session_id) -> float sec
+        "sid_fn": lambda s: str(uuid.uuid5(uuid.NAMESPACE_DNS, f"opencode:{s}")),
+        "title_fn": opencode_parser.session_title,  # (path, session_id) -> str|None
     },
 }
 
@@ -124,6 +133,10 @@ def _list_session_files(source: str, config: Dict) -> List[tuple]:
         return paths
     elif source == "aider":
         return [(str(uuid.uuid5(uuid.NAMESPACE_DNS, "aider.devforge")), d)]
+    elif source == "opencode":
+        # One entry per session in the sqlite DB. Session ids stay raw here;
+        # process_session maps them to deterministic UUIDs via sid_fn.
+        return [(s["id"], d) for s in opencode_parser.list_sessions(d)]
     return []
 
 
@@ -237,22 +250,32 @@ def _insert_chunk(rows_values: List[str]) -> int:
     return len(rows_values) if ok else 0
 
 
-def process_session(source: str, session_id: str, path: Path, parser_fn, checkpoint: Dict) -> int:
+def process_session(
+    source: str, session_id: str, path: Path, parser_fn, checkpoint: Dict, config: Dict = None
+) -> int:
     """Parse session, insert new turns. Returns count of newly inserted turns."""
-    cp_entry = _cp_get(checkpoint, source, session_id)
+    config = config or {}
+    # opencode shares one DB file mtime across sessions → use per-session mtime_fn.
+    mtime_fn = config.get("mtime_fn", lambda p, s: p.stat().st_mtime)
+    # conversation id (deterministic UUID for non-UUID source ids like opencode)
+    sid_fn = config.get("sid_fn", lambda s: s)
+    conv_id = sid_fn(session_id)
+    title_fn = config.get("title_fn")
+
+    cp_entry = _cp_get(checkpoint, source, conv_id)
     prev_count = cp_entry["count"]
     prev_mtime = cp_entry["mtime"]
 
     # mtime-based skip: if file hasn't changed since last ingest, skip parsing entirely
-    current_mtime = path.stat().st_mtime
+    current_mtime = mtime_fn(path, session_id)
     if current_mtime == prev_mtime and prev_count > 0:
         return 0
 
-    parsed, model, is_active = parser_fn(path)
+    parsed, model, is_active = parser_fn(path, session_id=session_id)
 
     # Record empty sessions so we don't re-parse them every cycle
     if parsed is None or len(parsed) == 0:
-        checkpoint.setdefault(source, {})[session_id] = {
+        checkpoint.setdefault(source, {})[conv_id] = {
             "count": prev_count,
             "mtime": current_mtime,
         }
@@ -260,7 +283,7 @@ def process_session(source: str, session_id: str, path: Path, parser_fn, checkpo
 
     if len(parsed) <= prev_count:
         # mtime changed but no new turns (e.g., file touched). Update mtime only.
-        checkpoint.setdefault(source, {})[session_id] = {
+        checkpoint.setdefault(source, {})[conv_id] = {
             "count": prev_count,
             "mtime": current_mtime,
         }
@@ -270,10 +293,11 @@ def process_session(source: str, session_id: str, path: Path, parser_fn, checkpo
     if not new_turns:
         return 0
 
-    ensure_conversation(session_id, source, model or "")
-    inserted = insert_turns(session_id, source, model or "", new_turns, prev_count)
+    title = title_fn(path, session_id) if title_fn else ""
+    ensure_conversation(conv_id, source, model or "", title or "")
+    inserted = insert_turns(conv_id, source, model or "", new_turns, prev_count)
 
-    checkpoint.setdefault(source, {})[session_id] = {
+    checkpoint.setdefault(source, {})[conv_id] = {
         "count": prev_count + inserted,
         "mtime": current_mtime,
     }
@@ -300,7 +324,9 @@ def run_once() -> int:
 
         for session_id, path in sessions:
             try:
-                n = process_session(source, session_id, path, config["parser"], checkpoint)
+                n = process_session(
+                    source, session_id, path, config["parser"], checkpoint, config
+                )
                 total += n
             except Exception as e:
                 print(f"  ERROR {source}/{session_id[:8]}: {e}")

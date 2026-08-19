@@ -14,6 +14,7 @@ AGENT_MAP = {
     "deepseek": "deepseek",
     "aider": "aider",
     "cline": "cline",
+    "opencode": "opencode",
 }
 
 

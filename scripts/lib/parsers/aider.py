@@ -15,7 +15,7 @@ _THINKING_RE = re.compile(r"^<thinking-content-[^>]+>$", re.MULTILINE)
 _END_THINKING_RE = re.compile(r"^</thinking-content-[^>]+>$", re.MULTILINE)
 
 
-def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bool]:
+def parse(path: Path, session_id: Optional[str] = None) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bool]:
     """Parse an Aider chat history file.
 
     Returns (turns, model, is_active).

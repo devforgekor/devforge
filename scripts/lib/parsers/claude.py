@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 ACTIVE_THRESHOLD_S = 30
 
 
-def parse(path: Path) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bool]:
+def parse(path: Path, session_id: Optional[str] = None) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], bool]:
     """Parse a Claude Code session JSONL.
     Returns (turns, model, is_active).
     """
