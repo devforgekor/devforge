@@ -1,15 +1,21 @@
 last_checkpoint:
-  time: '2026-07-27T06:59:51.720479+00:00'
-  summary: no files
-  total_files: 0
+  time: '2026-08-26T11:46:16.311446+00:00'
+  summary: OCI onmydoc 인스턴스 접속정보 기록 + OCI 계정 검증(mesids) + OpenRouter 키 교체 + Claude 백엔드 전환 모드 시스템(claude-mode)
+  total_files: 6
   recent_files:
     data: []
-    docs: []
-    config: []
+    docs:
+    - ~/.claude/projects/-home-opc/memory/oci-onmydoc-instance.md (CREATE)
+    config:
+    - ~/.bashrc.d/claude-mode (CREATE)
+    - ~/.bashrc.d/claude-env (MODIFY)
+    - ~/.bashrc.d/claude-aliases (MODIFY)
+    - ~/.config/devforge/claude-mode.conf (CREATE)
+    - '~/.config/devforge/secrets.env (APPEND: OCI_INSTANCE_*, OCI_MESIDS_*, OPENROUTER key swap)'
     source: []
     generated: []
   git: {}
-  task: null
+  task: OpenRouter 전용 모드 생성 (claude-mode)
 decisions:
 - id: nd01-01
   detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta
@@ -292,6 +298,27 @@ decisions:
     4 caller files import chains verified. 6/6 files compile. Lazy import (from extract) confirmed not eagerly resolved. Pyright:
     10 false positives (type-checker limitations only). Runtime: import --help OK. No production impact.'
   status: open
+- id: nd15-01
+  detail: 'OCI onmydoc 인스턴스 (2026-08-23 생성, 28,074회 시도 끝에 성공). RUNNING, ap-tokyo-1 AD-1, VM.Standard.A1.Flex 2 OCPU/12GB,
+    Canonical Ubuntu 24.04 Minimal aarch64. Public IP 161.33.199.207, user ubuntu, SSH key ~/.ssh/id_ed25519.pub. 접속 정보를 시크릿
+    OCI_INSTANCE_NAME/OCID/IP/USER + 메모리(oci-onmydoc-instance.md)에 기록. 목적: DEVFORGE output 경로.'
+  status: open
+- id: nd15-02
+  detail: 'OCI 자격증명 검증: 사용자가 ''기존 OCI 키는 다른 계정''이라 주장했으나, tenancy OCID 해시 비교(instance compartment-id == ~/.oci/config tenancy
+    == secrets.env 기존 OCI 키 tenancy, 모두 6f43d2498328)로 로컬 자격증명이 곧 mesids 계정임을 확인. oci CLI로 onmydoc 관리 가능. 시크릿에 OCI_MESIDS_TENANCY_OCID/USER_OCID/API_KEY_FINGERPRINT/REGION/KEY_FILE
+    별칭 키로 저장. 잘못된 ''DIFFERENT OCI account'' 경고 주석 제거.'
+  status: open
+- id: nd15-03
+  detail: 'OpenRouter 키 교체: secrets.env의 OPENROUTER_DEEPSEEK_V4_FLASH_API_KEY가 401 User not found(무효)였음 → or_rate_limiter.py에
+    하드코딩된 유효 키($10 잔액, /api/v1/credits로 검증)로 교체. 백업 secrets.env.bak.20260826110941 생성. OpenRouter 유료 경로 정상 과금 확인(log cache=MISS,
+    $0.0066153→$0.0066179).'
+  status: open
+- id: nd15-04
+  detail: 'Claude 백엔드 전환 모드 시스템 구축: ~/.bashrc.d/claude-mode (SSOT, claude-mode status/set/list) + ~/.config/devforge/claude-mode.conf
+    (MODE=openrouter 기본). openrouter=:44778(OpenRouter 유료 DeepSeek V4 Flash, GMICloud pin+cache), deepseek=:44777(공식 직결).
+    claude-aliases의 claude()/newhand()가 :44777을 하드코딩해 claude-env의 OpenRouter 설정을 무시하던 것이 잔액 소진의 직접 원인 → 하드코딩 제거, mode env
+    상속. 검증 완료(모드 전환 왕복, HTTP 200, claude() 44777=0).'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -300,6 +327,12 @@ known_issues:
     at 23G + ctx 4096 + cache-ram 512. 14B Q4 is more stable alternative.'
   resolved: false
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
+  resolved: false
+- text: Claude Code Bash 툴의 셸 스냅샷(~/.claude/shell-snapshots/)은 세션 시작 시점의 claude-aliases를 캐시 — 파일 수정 후 type claude에 옛 정의가 보일
+    수 있음. 실사용 환경(새 로그인/인터랙티브 셸)은 파일을 다시 읽어 정상. 세션 재시작으로 해소.
+  resolved: false
+- text: 실행 중인 Claude Code 세션은 env를 이미 들고 있어 재시작 시에만 모드 반영. claude-mode set은 미래 세션/새 tmux 창에 적용됨. tmux setenv -g로 글로벌 env는
+    openrouter로 이미 동기화됨.
   resolved: false
 - text: 'CRITICAL: exa_mcp.py + context7_mcp.py _read_message()/_send_message() modified for JSON-line compat. If update_handover.py
     runs before session writes to handover.yaml, completed_log and decisions may get overwritten. Always check handover.yaml
@@ -318,28 +351,8 @@ known_issues:
 - text: 'extraction: equals predicate still appears 1/turn even with Golden Set (30B MoE, PARALLEL=1). May need stronger GBNF
     constraints or prompt refinement.'
   resolved: false
-- id: sys-day-extract-re-export
-  detail: Backward compat for nli_compare.py, extract_compare.py. Now FREE. These tests work but test different prompts than
-    before.
-  resolved: false
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
-  resolved: false
-- id: nki01-01
-  detail: 이전 cycle 49 day_verify facts NLI/reranker 없이 force-pass. reranker_recover.py 기본 조건에 source='day_verify' 포함 여부 확인
-    필요. 미포함 시 SQL 일괄 UPDATE 필요.
-  resolved: false
-- id: nki01-02
-  detail: cli.py status --json models.pod-a = ["?", "?", "?"]. Pod A /v1/models 응답 문제 지속. Pod A 기능상 정상 작동 중.
-  resolved: false
-- id: nki01-03
-  detail: turns 테이블에 updated_at 컬럼 없음. pipeline_state 변경 추적 어려움. (created_at만 존재)
-  resolved: false
-- id: nki01-04
-  detail: CONTRADICTION=0 미해결. 신규 GSAR COMPLEMENTARY 4-way NLI 첫 결과 확인 후 재평가 필요.
-  resolved: false
-- id: nki02-01
-  detail: OCI root 확장 미완료. /etc/fstab 정리 완료, 백업 완료. Pod A는 정상 기동 중 (devforge-net 브릿지), Pod B 복구 필요.
   resolved: false
 - text: OpenCode not yet fully tested in TUI mode (only headless opencode run verified). MCP server connection via opencode
     mcp add not tested with devforge-mcp container. OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
@@ -361,10 +374,6 @@ known_issues:
   resolved: false
 - text: 'Slot deadlock watchdog is reactive not preventive: --slot-prompt-similarity 0 reduces but doesn''t eliminate risk.
     If deadlock persists after Pod B restart, need different cache-reuse strategy (--cache-reuse 0 as last resort).'
-  resolved: false
-- id: strict-xplore-removed
-  detail: 3 experimental test files (*_7b_vs_9b*) import FREE variants as aliases. Body still uses old names. Verify prompt
-    equivalence.
   resolved: false
 - text: 'Veritas single-batch predicate 간섭 리스크: MiniCheck 원 설계는 (document, single_claim) → binary. _binary_nli_batch에서 모든
     predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음. max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도
@@ -433,3 +442,7 @@ completed_log:
 - 'Phase 3: pipelines/extract_llm.py (2423 lines) split into lib/extract_llm/ package (4 submodules: _core, chunking, edc,
   parser). Re-export facade preserved for backward compat. All 6 files compile clean. All 4 callers import verified (extract.py,
   enrich.py, extract_verify.py, post_extract_supplement.py). 23 symbols re-exported. extract.py --help preflight OK.'
+- OCI onmydoc 인스턴스 확인 (RUNNING) + 접속 정보를 시크릿 OCI_INSTANCE_*(4키)와 메모리에 기록.
+- 'OCI 계정 검증: 실측 tenancy 해시 비교로 로컬 creds=mesids 계정임을 확인, OCI_MESIDS_*(5키) 별칭 저장.'
+- 'OpenRouter 키 교체: 무효 키(401) → 유효 키($10) 승격, /api/v1/credits 검증, 과금 확인.'
+- 'Claude 백엔드 전환 모드 시스템 구축: claude-mode(openrouter/deepseek 전환) + claude-aliases :44777 하드코딩 제거. 기본 모드 openrouter. 검증 완료.'
