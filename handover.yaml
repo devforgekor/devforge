@@ -1,21 +1,20 @@
 last_checkpoint:
-  time: '2026-08-26T11:46:16.311446+00:00'
-  summary: OCI onmydoc 인스턴스 접속정보 기록 + OCI 계정 검증(mesids) + OpenRouter 키 교체 + Claude 백엔드 전환 모드 시스템(claude-mode)
-  total_files: 6
+  time: '2026-08-26T21:59:39.680765+09:00'
+  summary: no files
+  total_files: 0
   recent_files:
-    data: []
-    docs:
-    - ~/.claude/projects/-home-opc/memory/oci-onmydoc-instance.md (CREATE)
-    config:
-    - ~/.bashrc.d/claude-mode (CREATE)
-    - ~/.bashrc.d/claude-env (MODIFY)
-    - ~/.bashrc.d/claude-aliases (MODIFY)
-    - ~/.config/devforge/claude-mode.conf (CREATE)
-    - '~/.config/devforge/secrets.env (APPEND: OCI_INSTANCE_*, OCI_MESIDS_*, OPENROUTER key swap)'
     source: []
+    config: []
+    docs: []
+    data: []
     generated: []
-  git: {}
-  task: OpenRouter 전용 모드 생성 (claude-mode)
+  git:
+    server:
+      branch: main
+      unstaged: 3 files changed, 3 insertions(+), 3 deletions(-)
+      staged: (none)
+      untracked_files: 1
+  task: null
 decisions:
 - id: nd01-01
   detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta

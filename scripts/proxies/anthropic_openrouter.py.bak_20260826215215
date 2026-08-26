@@ -837,7 +837,7 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
 
     # ── Routing ────────────────────────────────────────────────────────────
     def _route(self) -> None:
-        path = urlsplit(self.path).path.rstrip("/")
+        path = self.path.rstrip("/")
         if path == "/v1/models" or path == "/models":
             self._handle_models()
             return
