@@ -17,8 +17,19 @@ import os
 import subprocess
 from typing import Optional
 
+# Support DATABASE_URL for external PostgreSQL (e.g., Neon)
+_db_url = os.environ.get("DATABASE_URL")
+if _db_url:
+    PSQL = [
+        "psql",
+        _db_url,
+        "--no-align",
+        "--tuples-only",
+        "--quiet",
+    ]
+    PSQL_CHECK = ["psql", _db_url, "-t"]
 # Container TCP mode: use psql -h 127.0.0.1 instead of podman exec
-if os.environ.get("DEVFORGE_DB_TCP"):
+elif os.environ.get("DEVFORGE_DB_TCP"):
     PSQL = [
         "psql",
         "-h",
