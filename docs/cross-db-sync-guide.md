@@ -178,6 +178,44 @@ podman exec postgres psql -U postgres -d devforge_app -c \
 
 ---
 
+## 4. 구현 완료: `_sync_to_neon()` 교체 (2026-08-29, 커밋 `9e91622`)
+
+**Before (pg_dump + DELETE + INSERT):**
+```python
+# pg_dump --column-inserts → temp file → psql -f
+# 위험: id 시퀀스 역주행, dedup FK 위반, embedding 전송 낭비
+```
+
+**After (psql COPY pipe + ON CONFLICT):**
+```python
+# collector.py:170-280
+# 1. podman exec psql COPY ... TO STDOUT (explicit columns)
+# 2. | psql NEON_URL -c "CREATE TEMP TABLE; COPY FROM STDIN; INSERT ... ON CONFLICT (url)"
+# 3. Prune 7-day retention
+```
+
+**동기화 컬럼 (16개):**
+```
+url, title, title_ko, source, language, category,
+published_at, collected_at, full_text, highlights, summary,
+concept_ids, summary_ko, highlights_ko, relevance_score, pipeline_state
+```
+
+**제외 컬럼 (4개):**
+- `id` — 시퀀스 역주행 방지
+- `embedding` — 1024차원 벡터, Vercel 미사용
+- `metadata` — 내부 메타데이터, Vercel 미사용
+- `dedup_group_id` — 자기참조 FK, id 차이로 FK 위반 위험
+
+**장점:**
+- 스트리밍 파이프 → 임시 파일 불필요, 메모리 효율
+- `ON CONFLICT (url)` → 진정한 업서트, 멱등성 보장
+- id 미전송 → 시퀀스 역주행 원천 차단
+- dedup_group_id 미전송 → FK 위반 원천 차단
+- embedding/metadata 미전송 → 대역폭 ~80% 절감
+
+---
+
 ## 5. 테스트 검증 — id 시퀀스 역주행 발생 조건
 
 | 시나리오 | delete-then-insert | 단순 INSERT |
@@ -213,4 +251,4 @@ podman exec postgres psql -U postgres -d devforge_app -c \
 ## 7. 추후 개선 방향 (스키마 변경 필요 시, 현재 아님)
 - Neon에 `embedding` 없이 `news_articles_web` View/테이블 분리
 - 동기화 전용 유틸 `sync-news.py` 스크립트화 (Shebang + `set -euo pipefail`)
-- `_sync_to_neon()`이 Vercel 리스트 API 미사용 컬럼 전송 중단
+- ~~`_sync_to_neon()`이 Vercel 리스트 API 미사용 컬럼 전송 중단~~ ✅ 완료 (2026-08-29)
