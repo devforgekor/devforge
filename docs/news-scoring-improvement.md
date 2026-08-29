@@ -2,7 +2,7 @@
 
 > 분석일: 2026-08-29
 > 비교 대상: clawdiard/clawler, boazjohn/feedrank, gmoigneu/signal, quentinjeon/telenews, Revi1337/bit-feed, newsnack 파이프라인
-> 상태: 검토 필요 (Proposed)
+> 상태: Phase 1-5 구현 완료 (2026-08-29, 커밋 `5214cfd`)
 
 ## 1. 현황 분석
 
@@ -125,7 +125,7 @@ score = base × recency × source_weight × severity × corroboration
 
 ARM Neoverse-N1 (4-core, 22Gi RAM) 제약을 고려한 우선순위.
 
-### Phase 1: Circuit Breaker (우선순위: 최상)
+### Phase 1: Circuit Breaker (우선순위: 최상) ✅ 구현 완료
 
 **목표:** 단일 소스 RSS 장애가 전체 파이프라인을 차단하지 않도록 함
 
@@ -140,7 +140,7 @@ ARM Neoverse-N1 (4-core, 22Gi RAM) 제약을 고려한 우선순위.
 
 **구현 난이도:** ⭐ (매우 쉬움)
 
-### Phase 2: 포토뉴스 필터링 (우선순위: 높음)
+### Phase 2: 포토뉴스 필터링 (우선순위: 높음) ✅ 구현 완료
 
 **목표:** 본문이 없는 기사(사진만 있는 기사)가 LLM 요약으로 전달되는 것을 방지
 
@@ -154,7 +154,7 @@ ARM Neoverse-N1 (4-core, 22Gi RAM) 제약을 고려한 우선순위.
 
 **구현 난이도:** ⭐ (매우 쉬움)
 
-### Phase 3: TF-IDF 클러스터링 (우선순위: 중간)
+### Phase 3: TF-IDF 클러스터링 (우선순위: 중간) ✅ 구현 완료
 
 **목표:** Jaccard bigram → TF-IDF 기반 클러스터링으로 중복 감지 정확도 향상
 
@@ -277,7 +277,7 @@ sklearn의 `TfidfVectorizer`는 모델 학습이 아닌 단순 **피처 변환**
 
 **구현 난이도:** ⭐⭐ (쉬움, 라이브러리 호출이 전부)
 
-### Phase 4: 소스 Tier DB화 (우선순위: 중간)
+### Phase 4: 소스 Tier DB화 (우선순위: 중간) ✅ 구현 완료
 
 **목표:** `scoring.py`에 하드코딩된 `SOURCE_TIERS`를 PostgreSQL로 이동
 
@@ -293,7 +293,7 @@ sklearn의 `TfidfVectorizer`는 모델 학습이 아닌 단순 **피처 변환**
 
 **구현 난이도:** ⭐⭐ (쉬움~중간)
 
-### Phase 5: Corroboration 점수 (우선순위: 낮음)
+### Phase 5: Corroboration 점수 (우선순위: 낮음) ✅ 구현 완료
 
 **목표:** 여러 소스가 동일 이슈를 보도할 때 중요도 가중치 상승
 
@@ -316,11 +316,11 @@ sklearn의 `TfidfVectorizer`는 모델 학습이 아닌 단순 **피처 변환**
 ## 5. 종합 로드맵
 
 ```
-Phase 1: Circuit Breaker       [collector.py]    ⭐   즉시 구현 가능
-Phase 2: 포토뉴스 필터         [collector.py]    ⭐   즉시 구현 가능
-Phase 3: TF-IDF 클러스터링     [dedup.py]        ⭐⭐⭐ sklearn 필요
-Phase 4: 소스 Tier DB화        [scoring.py]      ⭐⭐  DB 마이그레이션
-Phase 5: Corroboration 점수    [scoring.py]      ⭐⭐  dedup 연동 필요
+Phase 1: Circuit Breaker       [collector.py]    ⭐   ✅ 구현 완료
+Phase 2: 포토뉴스 필터         [collector.py]    ⭐   ✅ 구현 완료
+Phase 3: TF-IDF 클러스터링     [dedup.py]        ⭐⭐⭐ ✅ 구현 완료 (sklearn char_wb)
+Phase 4: 소스 Tier DB화        [scoring.py]      ⭐⭐  ✅ 구현 완료 (29개 소스)
+Phase 5: Corroboration 점수    [scoring.py]      ⭐⭐  ✅ 구현 완료
 ```
 
 **권장 진행 순서:** Phase 1 → Phase 2 → Phase 4 → Phase 3 → Phase 5
