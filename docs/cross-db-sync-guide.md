@@ -143,8 +143,13 @@ ON CONFLICT (url) DO UPDATE SET
 ## 4. 추천 안전 시나리오 (설계만)
 
 ```sql
--- 대상 컬럼 명시 (embedding, metadata, id, dedup_group_id 제외)
--- Neon 7일 이내 기사 대량 DELETE 후 재삽입 (delete-then-insert 유지)
+-- 아래 SQL은 설계 참고용 개념 코드입니다. 그대로 복사하면 실행되지 않습니다.
+-- - dblink(...) 는 미작성. 실제로는 별도 DB connection/파이프로 데이터를 전달해야 함
+-- - dblink 확장(extension)이 로컬/Neon 양쪽에 설치돼 있어야 함
+-- 실행 환경 구성 없이는 실패하므로, 반드시 "호스트 psql 파이프" 대안을 쓰세요.
+
+-- [개념] 대상 컬럼 명시 (embedding, metadata, id, dedup_group_id 제외)
+-- [개념] Neon 7일 이내 기사 대량 DELETE 후 재삽입 (delete-then-insert 유지)
 BEGIN;
 DELETE FROM news_articles WHERE collected_at > now() - interval '7 days';
 
@@ -153,7 +158,7 @@ INSERT INTO news_articles (url, title, title_ko, source, language, category,
                            relevance_score)
 SELECT url, title, title_ko, source, language, category,
        published_at, collected_at, summary_ko, highlights_ko, relevance_score
-FROM dblink(...) -- 또는 호스트단 psql 파이프
+FROM <원격데이터소스>  -- dblink 구성 또는 파이프에서 온 임시 테이블
 ON CONFLICT (url) DO UPDATE SET
   title = EXCLUDED.title, title_ko = EXCLUDED.title_ko,
   published_at = EXCLUDED.published_at, collected_at = EXCLUDED.collected_at,
@@ -177,7 +182,7 @@ podman exec postgres psql -U postgres -d devforge_app -c \
 
 | 시나리오 | delete-then-insert | 단순 INSERT |
 |---------|--------------------|-------------|
-| 같은 id가 이미 존재 | PK 충돌 (회피) | PK 충돌 |
+| 같은 id가 이미 존재 | 정상 (삭제 후 재삽입 → 충돌 회피) | PK 충돌 |
 | 신규 id < Neon 시퀀스 | 시퀀스 역주행 | 시퀀스 역주행 |
 | 신규 id > Neon 시퀀스 | 정상 | 정상 |
 | dedup FK 참조 대상 미삽입 | FK 위반 | FK 위반 |
