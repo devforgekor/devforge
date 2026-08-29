@@ -1,179 +1,211 @@
 # Cross-DB 데이터 동기화 가이드
 
-> 로컬 PostgreSQL ↔ 원격 NeonDB 간 데이터 이동 시 컬럼(UOM) 불일치 문제와 해법
+> 로컬 PostgreSQL ↔ 원격 NeonDB 간 `news_articles` 데이터 이동의 실제 구현 분석과 안전한 설계 원칙
 
-## 1. 문제: 두 DB의 스키마가 다를 수 있다
+**실측 기반 문서** — 2026-08-29 Deep Dive 분석으로 두 DB의 실제 스키마·데이터를 확인함.
 
-로컬 DevForge DB(컨테이너)와 NeonDB(클라우드)는 같은 `news_articles` 테이블을 갖고 있지만,
-컬럼 갯수·순서·타입이 다를 수 있다.
+---
+
+## 1. 실제 스키마 비교 (2026-08-29 실측)
+
+**결론: 두 DB는 스키마가 완전히 동일하다.** 22개 컬럼, 타입, DEFAULT, 제약조건이 모두 일치. 차이는 **데이터(id 시퀀스, dedup)** 뿐이다.
+
+| 컬럼 | 타입 | DEFAULT | 비고 |
+|------|------|---------|------|
+| id | integer | `nextval(id_seq)` | **PK, 시퀀스 생성** |
+| url | text | — | **UNIQUE 제약** |
+| title | text | — | |
+| source | text | — | |
+| published_at | timestamptz | — | |
+| collected_at | timestamptz | `now()` | |
+| language | text | `'ko'` | |
+| category | text | `'ai'` | |
+| full_text | text | — | |
+| highlights | jsonb | `'[]'` | |
+| summary | text | — | |
+| pipeline_state | text | `'raw'` | CHECK 제약 |
+| concept_ids | jsonb | `'[]'` | GIN 인덱스 |
+| relevance_score | real | `0.0` | |
+| embedding | vector(1024) | — | **pgvector** |
+| metadata | jsonb | `'{}'` | |
+| created_at | timestamptz | `now()` | |
+| updated_at | timestamptz | `now()` | |
+| title_ko | text | — | |
+| summary_ko | text | — | |
+| highlights_ko | jsonb | — | |
+| dedup_group_id | integer | — | **자기참조 FK** → id |
+
+### 유일한 스키마 차이
+- 로컬 DB에만 `idx_news_articles_collected_at` 인덱스가 존재 (Neon에는 없음) — 동기화에는 무관.
+
+### 실측 데이터 (2026-08-29)
+
+| 항목 | 로컬 | Neon |
+|------|------|------|
+| 기사 수 | 593 | 523 |
+| id 범위 | 1..2384 | 1..2340 |
+| id 시퀀스 last_value | 2387 | 2342 |
+| `dedup_group_id` 채워짐 | 76개 | 12개 |
+
+---
+
+## 2. 실제 `_sync_to_neon()` 동작 방식 (collector.py:170)
+
+현재 구현은 **pg_dump → delete-then-insert** 방식 이다:
 
 ```
-로컬 (localhost:5432)                  Neon (ep-round-hill.aws.neon.tech)
-─────────────────────────              ─────────────────────────
- url              text                  url              text
- title            text                  title            text
- published_at     timestamptz           published_at     timestamptz
- full_text        text                  full_text        text
- highlights       jsonb                 highlights       jsonb
- embedding        vector(768)  ← 없음   ← 없음
- metadata         jsonb       ← 없음   ← 없음
+1. 로컬 DB에서 최근 7일 기사 pg_dump (--column-inserts)
+2. Neon에서 같은 범위(collected_at > cutoff) DELETE   ← id 충돌 회피
+3. dump 파일을 Neon에 -f 로 적용
+4. 7일 retention 초과분 Prune (DELETE)
 ```
 
-**원인**: 로컬 DB는 DevForge 파이프라인(분류, 임베딩, 요약)에서 사용하는 추가 컬럼이 있고,
-NeonDB는 Vercel 웹앱용으로 최소 컬럼만 유지한다.
+```python
+# 핵심: pg_dump가 id 포함, PK 충돌은 delete-then-insert로 회피
+del_proc = psql neon_url DELETE FROM news_articles WHERE collected_at > cutoff
+apply     = psql neon_url -f /tmp/neon_sync.sql   # pg_dump INSERT들
+```
 
-## 2. 세 가지 원칙
+### ⚠️ 이 방식의 3가지 숨은 위험 (실측에서 드러남)
 
-### 원칙 1 — 명시적 컬럼 리스트(explicit column list)
+**위험 1 — id 시퀀스 역주행**
+로컬 max_id=2384, Neon max_id=2340. pg_dump `--column-inserts`가 id를 포함한 INSERT를 생성하면:
+- 같은 id가 이미 Neon에 있는 기사 → PK 충돌 (delete-then-insert로 완화)
+- **하지만 Neon의 `id_seq`가 여전히 낮은 값(last_value=2342)** → 다음 신규 삽입에 역주행 가능
+- `dedup_group_id` FK가 참조하는 id가 삭제되면 무결성 위반 가능
 
+**위험 2 — `dedup_group_id` 자기참조 FK 순서 문제**
+- pg_dump는 행을 id 순서로 내보내지만, 참조되는 id가 아직 삽입 안 된 상태면 FK 위반
+- 현재는 Neon에 dedup 12개(로컬 76개) 뿐이라 문제 미발견 → **로컬처럼 dedup이 늘면 발생**
+
+**위험 3 — 불필요한 컬럼 전송**
+- Vercel 리스트/검색 API(`/api/articles`, `/api/stats`)는 `embedding`, `metadata`, `highlights`, `summary`, `full_text` 미사용
+- 단, 상세 페이지(`/articles/[id]`)는 `SELECT *`로 전체 컬럼 사용 → `full_text`, `concept_ids` 등 실제 필요
+- 벡터 1024차원 전송은 리스트용 동기화에서만 불필요한 대역폭·용량 낭비
+
+### Vercel 실제 사용 컬럼
+
+**리스트/검색 API** (route.ts:43-48, page.tsx:43-49):
+```
+id, title, title_ko, source, language, category,
+summary_ko, highlights_ko, published_at, collected_at, url,
+relevance_score, dedup_group_id
+```
+
+**상세 페이지** ([id]/page.tsx):
+```
+SELECT * FROM news_articles WHERE id = $1  -- 전체 컬럼 사용
+```
+→ `full_text`, `concept_ids`, `embedding`, `metadata`, `highlights`, `summary` 도 상세 페이지에서 사용
+
+---
+
+## 3. 설계 원칙 (스키마 변경 없이 동기화를 견고하게)
+
+사용자 요청: **스키마/로직 변경 금지, 지식만.**
+
+### 원칙 1 — 동기화 컬럼을 명시적으로 제한하라
+`pg_dump` 대신 필요한 컬럼만 `SELECT`로 뽑아 오는 것이 안전:
 ```sql
--- ❌ 위험: 컬럼 순서(UOM)에 의존 → 데이터가 잘못 들어갈 수 있음
-INSERT INTO news_articles VALUES ('url', 'title', ...);
-
--- ✅ 안전: 이름 기준 매핑 → 순서가 달라도 OK
-INSERT INTO news_articles (url, title, source, published_at, ...)
-VALUES ('url', 'title', 'source', '2026-08-29', ...);
+-- Vercel 리스트/검색용 컬럼만 (embedding, metadata, id, dedup_group_id 제외)
+SELECT url, title, title_ko, source, language, category,
+       summary_ko, highlights_ko, published_at, collected_at, relevance_score
+FROM news_articles
+WHERE collected_at > ...;
 ```
+이렇게 하면 `id` 시퀀스 역주행, `embedding` 대역폭 낭비, `dedup_group_id` FK 문제를 **한 번에 회피**.
 
-**왜 명시적 리스트가 안전한가:**
+### 원칙 2 — id는 절대 전송하지 말 것
+- 로컬/Neon id 시퀀스가 다르므로 id를 옮기면 안 됨
+- url(UNIQUE)이 진짜 식별자. 동기화의 충돌 키는 **url이어야 함**.
 
-| 특징 | 설명 |
-|------|------|
-| 이름 기준 매핑 | 컬럼 순서가 달라도 자동 정렬 |
-| 스키마 변경 내성 | 대상 테이블에 컬럼 추가/삭제돼도 명시적 리스트만 수정 |
-| 조기 실패 | 오타·누락 시 쿼리 단계에서 즉시 에러 |
-| 가독성 | 어떤 컬럼에 어떤 값이 들어가는지一目瞭然 |
-
-### 원칙 2 — COPY는 "헤더 + 컬럼 목록"으로
-
-```bash
-# 로컬 CSV dump (헤더 포함)
-podman exec postgres psql -U postgres -d devforge_app -c \
-  "\COPY (SELECT url, title, source FROM news_articles WHERE ...) TO STDOUT WITH CSV HEADER"
-
-# Neon CSV 로드 (컬럼 리스트 + 헤더)
-psql "$NEON_URL" -c \
-  "\COPY news_articles (url, title, source) FROM STDIN WITH CSV HEADER"
-```
-
-**헤더가 중요한 이유:**
-- 어떤 컬럼이 오는지 명시 → 순서 오류를 즉시 탐지
-- 대상 컬럼 리스트와 함께 사용하면 양쪽 스키마 차이를 이름 기준으로 자동 대응
-
-### 원칙 3 — PK/UNIQUE 충돌 시 upsert로 안전하게
-
+### 원칙 3 — upsert는 `ON CONFLICT (url)` 사용
 ```sql
-INSERT INTO news_articles (url, title, full_text)
-VALUES ('https://...', 'title', 'body')
+INSERT INTO news_articles (url, title, title_ko, source, language, category,
+                           published_at, collected_at, summary_ko, highlights_ko,
+                           relevance_score)
+VALUES (...)
 ON CONFLICT (url) DO UPDATE SET
-  full_text = EXCLUDED.full_text,
-  title = EXCLUDED.title;
+  title = EXCLUDED.title, title_ko = EXCLUDED.title_ko,
+  published_at = EXCLUDED.published_at, collected_at = EXCLUDED.collected_at,
+  summary_ko = EXCLUDED.summary_ko, highlights_ko = EXCLUDED.highlights_ko,
+  relevance_score = EXCLUDED.relevance_score;
+```
+- `id`(PK) 대신 `url`(UNIQUE)을 키로 → 시퀀스 충돌 없음, 멱등
+- PostgreSQL 17 문서 확인: UNIQUE 제약조건으로 `ON CONFLICT` 정상 동작
+
+### 원칙 4 — dedup_group_id는 옮길 때 재매핑 필수
+로컬 id와 Neon id가 다르므로 dedup 참조를 그대로 옮기면 FK 위반.
+→ URL 기준으로 dedup_group_id 대상 url을 찾아 매핑하거나, 동기화 대상에서 제외.
+
+---
+
+## 4. 추천 안전 시나리오 (설계만)
+
+```sql
+-- 대상 컬럼 명시 (embedding, metadata, id, dedup_group_id 제외)
+-- Neon 7일 이내 기사 대량 DELETE 후 재삽입 (delete-then-insert 유지)
+BEGIN;
+DELETE FROM news_articles WHERE collected_at > now() - interval '7 days';
+
+INSERT INTO news_articles (url, title, title_ko, source, language, category,
+                           published_at, collected_at, summary_ko, highlights_ko,
+                           relevance_score)
+SELECT url, title, title_ko, source, language, category,
+       published_at, collected_at, summary_ko, highlights_ko, relevance_score
+FROM dblink(...) -- 또는 호스트단 psql 파이프
+ON CONFLICT (url) DO UPDATE SET
+  title = EXCLUDED.title, title_ko = EXCLUDED.title_ko,
+  published_at = EXCLUDED.published_at, collected_at = EXCLUDED.collected_at,
+  summary_ko = EXCLUDED.summary_ko, highlights_ko = EXCLUDED.highlights_ko,
+  relevance_score = EXCLUDED.relevance_score;
+COMMIT;
 ```
 
-- `id`는 SERIAL PRIMARY KEY이지만, `url`에 UNIQUE 제약조건이 있으므로 `ON CONFLICT (url)`로 중복 탐지 가능
-- 동일 URL이 이미 있으면 UPDATE로 덮어씀
-- `EXCLUDED`는 INSERT하려던 값에 대한 특별 참조
-- 중복 에러 없이 멱등(idempotent)하게 동작
-
-> **주의**: `ON CONFLICT (id)`를 쓰면 로컬과 Neon의 시퀀스가 다르기 때문에 의도치 않은 동작 발생 가능. `url`(UNIQUE)을 충돌 키로 사용해야 함.
-
-## 3. pg_dump를 사용한 안전한 동기화
-
-### pg_dump가 자동으로 해주는 것
-- 모든 컬럼을 **명시적 리스트**로 나열한 INSERT 문 생성
-- 문자열 내 따옴표·개행 문자를 **자동 이스케이프**
-- JSONB, 배열 등 복합 타입을 올바르게 직렬화
-
-### 컨테이너에서 --where 인자 전달 문제
-
+**현실적인 대안** — 호스트에서 두 클라이언트 psql 파이프:
 ```bash
-# ❌ 실패: 따옴표 중첩으로 인식 불가
-podman exec postgres pg_dump --where="collected_at > '2026-08-22'"
-
-# ✅ 해법 1: stdout 리디렉션 (가장 일반적)
-podman exec -i postgres pg_dump -U postgres -d devforge_app \
-  --table=news_articles --data-only --column-inserts \
-  > /tmp/neon_sync.sql
-
-# ✅ 해법 2: 히어도쿠멘트 (heredoc, 따옴표 중첩 회피)
-podman exec -i postgres bash <<'EOF'
-pg_dump -U postgres -d devforge_app \
-  --table=news_articles --data-only --column-inserts \
-  --where="collected_at > current_date - interval '7 days'"
-EOF
+# 로컬 → Neon, 컬럼 명시 + ON CONFLICT 적용
+podman exec postgres psql -U postgres -d devforge_app -c \
+  "COPY (SELECT ... ) TO STDOUT" \
+| psql "$NEON_URL" -c \
+  "CREATE TEMP TABLE ... ; COPY ... FROM STDIN; INSERT ... ON CONFLICT (url) ..."
 ```
 
-### 전체 파이프라인 (안전 버전)
+---
 
-```bash
-#!/bin/bash
-set -euo pipefail
+## 5. 테스트 검증 — id 시퀀스 역주행 발생 조건
 
-# 1. 로컬 DB에서 dump
-podman exec -i postgres pg_dump -U postgres -d devforge_app \
-  --table=news_articles --data-only --column-inserts \
-  > /tmp/neon_sync.sql
+| 시나리오 | delete-then-insert | 단순 INSERT |
+|---------|--------------------|-------------|
+| 같은 id가 이미 존재 | PK 충돌 (회피) | PK 충돌 |
+| 신규 id < Neon 시퀀스 | 시퀀스 역주행 | 시퀀스 역주행 |
+| 신규 id > Neon 시퀀스 | 정상 | 정상 |
+| dedup FK 참조 대상 미삽입 | FK 위반 | FK 위반 |
 
-# 2. Neon에 적용 (파일이므로 명령줄 이스케이프 문제 없음)
-psql "$NEON_URL" -f /tmp/neon_sync.sql
+**결론**: delete-then-insert도 id 임포트 시 시퀀스 역주행·FK 위반 리스크는 남음.
+**명시적 컬럼 리스트로 id·embedding·dedup_group_id를 제외하는 것이 최선.**
 
-# 3. 오래된 데이터 정리
-psql "$NEON_URL" -c "DELETE FROM news_articles WHERE collected_at < now() - interval '7 days'"
-```
-
-## 4. Shebang 파일로 실행
-
-```bash
-#!/bin/bash
-# ============================================
-# sync-neon.sh — lokal DB → NeonDB 동기화
-# ============================================
-set -euo pipefail
-
-NEON_URL="${NEON_DATABASE_URL:?NEON_DATABASE_URL not set}"
-
-# 연결 확인 (Neon 서버리스 특성상 cold start 시 시간 소요)
-echo "[sync] Checking Neon connection..."
-psql "$NEON_URL" -c "SELECT 1" || { echo "ERROR: Neon 연결 실패. URL과 네트워크를 확인하세요."; exit 1; }
-
-echo "[sync] Dumping local DB..."
-podman exec -i postgres pg_dump -U postgres -d devforge_app \
-  --table=news_articles --data-only --column-inserts \
-  > /tmp/neon_sync.sql
-
-ROW_COUNT=$(grep -c "^INSERT" /tmp/neon_sync.sql || echo "0")
-echo "[sync] Dumped ${ROW_COUNT} INSERT statements"
-
-echo "[sync] Applying to Neon..."
-psql "$NEON_URL" -f /tmp/neon_sync.sql
-
-echo "[sync] Pruning old data (7 days+)..."
-psql "$NEON_URL" -c "DELETE FROM news_articles WHERE collected_at < now() - interval '7 days'"
-
-echo "[sync] Done"
-```
-
-## 5. Blind Spot — 놓치기 쉬운 것들
-
-| Blind Spot | 설명 | 대책 |
-|-----------|------|------|
-| 타입 차이 | 로컬 `jsonb` ↔ Neon `text` → 캐스팅 실패 | `\d table`로 양쪽 타입 비교 |
-| 컬럼명 차이 | 로컬 `highlights_ko` ↔ Neon `highlights` → INSERT 시 컬럼 매핑 실패 | `pg_dump --column-inserts` 사용으로 컬럼명 명시적 지정 |
-| DEFAULT 값 | `created_at` DEFAULT now()가 Neon에만 있음 | 명시적 컬럼 리스트로 제어 |
-| 시퀀스/ID | 로컬 serial ID vs Neon serial ID 충돌 | `id` 컬럼은 동기화 대상에서 제외 |
-| PK vs UNIQUE | `id`(PK)는 시퀀스가 다르므로 충돌 키로 부적합 | `url`(UNIQUE)을 `ON CONFLICT` 키로 사용 |
-| 인덱스 | PK가 다르면 `ON CONFLICT`가 실패 | 양쪽 PK/UNIQUE 정의 확인 |
-| 타임존 | 로컬 timestamptz vs Neon timestamptz | 보통 문제 없으나 `AT TIME ZONE` 필요 시 |
-| 트랜잭션 | 대량 INSERT 실패 시 부분 적용 | `BEGIN ... COMMIT`으로 원자성 보장 |
+---
 
 ## 6. 핵심 요약
 
 ```
-명시적 컬럼 리스트 + COPY 헤더 + ON CONFLICT(UNIQUE) = 스키마 차이에 강한 동기화
+동기화할 때 id·embedding·dedup_group_id를 빼면:
+  - 시퀀스 역주행 ❌
+  - 대역폭 낭비 ❌
+  - FK 무결성 위반 ❌
+  - 멱등성은 url(UNIQUE) + ON CONFLICT로 보장 ✅
 ```
 
-1. **절대 `INSERT INTO table VALUES (...)`를 쓰지 말 것** — 항상 컬럼 리스트를 명시
-2. **절대 컬럼 순서(UOM)에 의존하지 말 것** — 이름 기준으로 매핑
-3. **pg_dump의 `--column-inserts`를 사용할 것** — 이스케이프와 컬럼 리스트를 자동 처리
-4. **COPY는 HEADER + 대상 컬럼 리스트를 함께 쓸 것** — 순서 불일치를 즉시 탐지
-5. **`ON CONFLICT (url)`로 멱등성을 보장할 것** — `id`(PK) 대신 `url`(UNIQUE)을 충돌 키로 사용
+1. **두 DB 스키마는 동일** — "컬럼 수·순서 다름"은 실제가 아님. 차이는 **데이터(id 시퀀스, dedup)**
+2. **절대 `id`를 동기화하지 말 것** — 시퀀스가 다름
+3. **url(UNIQUE)이 충돌 키** — `ON CONFLICT (url)` 사용 (PostgreSQL 17 UNIQUE 제약으로 검증됨)
+4. **embedding(1024차원)은 리스트 API가 안 씀** — 리스트용 동기화에서 제외로 효율화 (상세 페이지는 사용)
+5. **dedup_group_id는 옮기면 재매핑 필요** — 현재 FK 문제는 dedup 수 적어 잠복
+
+---
+
+## 7. 추후 개선 방향 (스키마 변경 필요 시, 현재 아님)
+- Neon에 `embedding` 없이 `news_articles_web` View/테이블 분리
+- 동기화 전용 유틸 `sync-news.py` 스크립트화 (Shebang + `set -euo pipefail`)
+- `_sync_to_neon()`이 Vercel 리스트 API 미사용 컬럼 전송 중단
