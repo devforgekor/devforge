@@ -38,6 +38,7 @@ from fastapi.responses import JSONResponse
 from lib.notify import Notifier
 from mcp_server import mcp
 from devforge_fastapi.review_dashboard import router as review_router
+from devforge_fastapi.calendar_sync import router as calendar_router
 from fastmcp.utilities.lifespan import combine_lifespans
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -342,6 +343,9 @@ async def health():
 
 # ── Review dashboard ─────────────────────────────────────────
 app.include_router(review_router)
+
+# ── Calendar sync ──────────────────────────────────────────────
+app.include_router(calendar_router)
 
 
 # ── Slack routes ─────────────────────────────────────────────
