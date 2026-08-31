@@ -2,17 +2,11 @@
 {% block content %}
 
 <div id="cashbook-root">
-  {# ============================================================ #}
-  {#  MAIN TABLE                                                  #}
-  {# ============================================================ #}
-  <table class="cashbook-table w-full border-collapse bg-white rounded-lg shadow-sm overflow-hidden">
+  <table class="cashbook-table w-full border-collapse bg-white rounded-lg shadow-sm overflow-hidden text-sm">
     <thead>
       <tr class="bg-gray-100 text-xs font-semibold text-gray-600 uppercase">
-        {# ── 입금 섹션 ── #}
         <th colspan="3" class="border px-3 py-2 text-center bg-blue-50">입금</th>
-        {# ── 출금 섹션 ── #}
         <th colspan="3" class="border px-3 py-2 text-center bg-red-50">출금</th>
-        {# ── 결산 섹션 ── #}
         <th colspan="3" class="border px-3 py-2 text-center bg-green-50">결산</th>
       </tr>
       <tr class="bg-gray-50 text-xs text-gray-500">
@@ -28,91 +22,60 @@
       </tr>
     </thead>
     <tbody>
-      {# ── 데이터 행 ── #}
       {% set max_rows = [deposits|length, withdrawals|length] | max %}
       {% for i in range(max_rows) %}
-      <tr class="border-b hover:bg-gray-50">
+      <tr class="border-b">
         {# ── 입금 ── #}
         {% if i < deposits|length %}
           {% set d = deposits[i] %}
-          <td class="border px-1 py-0">
-            <input type="text" value="{{ d.date }}"
-                   hx-put="/deposit/{{ d.id }}"
-                   hx-vals='{"date":"{{ d.date }}","amount":"{{ d.amount }}","notes":"{{ d.notes }}"}'
-                   hx-target="#cashbook-root" hx-swap="innerHTML"
-                   name="date"
-                   hx-trigger="keyup changed delay:500ms">
-          </td>
-          <td class="border px-1 py-0">
-            <input type="number" value="{{ d.amount }}" class="text-right"
-                   hx-put="/deposit/{{ d.id }}"
-                   hx-vals='{"date":"{{ d.date }}","amount":"{{ d.amount }}","notes":"{{ d.notes }}"}'
-                   hx-target="#cashbook-root" hx-swap="innerHTML"
-                   name="amount"
-                   hx-trigger="keyup changed delay:500ms">
-          </td>
-          <td class="border px-1 py-0 relative group">
-            <input type="text" value="{{ d.notes }}"
-                   hx-put="/deposit/{{ d.id }}"
-                   hx-vals='{"date":"{{ d.date }}","amount":"{{ d.amount }}","notes":"{{ d.notes }}"}'
-                   hx-target="#cashbook-root" hx-swap="innerHTML"
-                   name="notes"
-                   hx-trigger="keyup changed delay:500ms">
-            <button class="btn-icon absolute right-1 top-1 text-red-400 hover:text-red-600 text-xs"
-                    hx-delete="/deposit/{{ d.id }}"
-                    hx-target="#cashbook-root" hx-swap="innerHTML"
-                    hx-confirm="삭제하시겠습니까?"
-                    title="삭제">X</button>
+          <td class="border px-0 py-0" colspan="3">
+            <form hx-put="/deposit/{{ d.id }}" hx-target="#cashbook-root" hx-swap="innerHTML" hx-trigger="change"
+                  class="flex">
+              <input type="text" name="date" value="{{ d.date }}" class="edit-input w-24 border-r">
+              <input type="number" name="amount" value="{{ d.amount }}" class="edit-input w-24 text-right border-r">
+              <input type="text" name="notes" value="{{ d.notes }}" class="edit-input flex-1">
+              <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-1 self-center"
+                      hx-delete="/deposit/{{ d.id }}"
+                      hx-target="#cashbook-root" hx-swap="innerHTML"
+                      hx-confirm="삭제하시겠습니까?"
+                      hx-swap="delete closest tr"
+                      title="삭제">X</button>
+            </form>
           </td>
         {% else %}
-          <td class="border px-1 py-0"></td>
-          <td class="border px-1 py-0"></td>
-          <td class="border px-1 py-0"></td>
+          <td class="border px-1 py-2"></td>
+          <td class="border px-1 py-2"></td>
+          <td class="border px-1 py-2"></td>
         {% endif %}
 
         {# ── 출금 ── #}
         {% if i < withdrawals|length %}
           {% set w = withdrawals[i] %}
-          <td class="border px-1 py-0">
-            <input type="text" value="{{ w.date }}"
-                   hx-put="/withdrawal/{{ w.id }}"
-                   hx-vals='{"date":"{{ w.date }}","amount":"{{ w.amount }}","vendor":"{{ w.vendor }}"}'
-                   hx-target="#cashbook-root" hx-swap="innerHTML"
-                   name="date"
-                   hx-trigger="keyup changed delay:500ms">
-          </td>
-          <td class="border px-1 py-0">
-            <input type="number" value="{{ w.amount }}" class="text-right"
-                   hx-put="/withdrawal/{{ w.id }}"
-                   hx-vals='{"date":"{{ w.date }}","amount":"{{ w.amount }}","vendor":"{{ w.vendor }}"}'
-                   hx-target="#cashbook-root" hx-swap="innerHTML"
-                   name="amount"
-                   hx-trigger="keyup changed delay:500ms">
-          </td>
-          <td class="border px-1 py-0 relative group">
-            <input type="text" value="{{ w.vendor }}"
-                   hx-put="/withdrawal/{{ w.id }}"
-                   hx-vals='{"date":"{{ w.date }}","amount":"{{ w.amount }}","vendor":"{{ w.vendor }}"}'
-                   hx-target="#cashbook-root" hx-swap="innerHTML"
-                   name="vendor"
-                   hx-trigger="keyup changed delay:500ms">
-            <button class="btn-icon absolute right-1 top-1 text-red-400 hover:text-red-600 text-xs"
-                    hx-delete="/withdrawal/{{ w.id }}"
-                    hx-target="#cashbook-root" hx-swap="innerHTML"
-                    hx-confirm="삭제하시겠습니까?"
-                    title="삭제">X</button>
+          <td class="border px-0 py-0" colspan="3">
+            <form hx-put="/withdrawal/{{ w.id }}" hx-target="#cashbook-root" hx-swap="innerHTML" hx-trigger="change"
+                  class="flex">
+              <input type="text" name="date" value="{{ w.date }}" class="edit-input w-24 border-r">
+              <input type="number" name="amount" value="{{ w.amount }}" class="edit-input w-24 text-right border-r">
+              <input type="text" name="vendor" value="{{ w.vendor }}" class="edit-input flex-1">
+              <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-1 self-center"
+                      hx-delete="/withdrawal/{{ w.id }}"
+                      hx-target="#cashbook-root" hx-swap="innerHTML"
+                      hx-confirm="삭제하시겠습니까?"
+                      hx-swap="delete closest tr"
+                      title="삭제">X</button>
+            </form>
           </td>
         {% else %}
-          <td class="border px-1 py-0"></td>
-          <td class="border px-1 py-0"></td>
-          <td class="border px-1 py-0"></td>
+          <td class="border px-1 py-2"></td>
+          <td class="border px-1 py-2"></td>
+          <td class="border px-1 py-2"></td>
         {% endif %}
 
-        {# ── 결산 (첫 번째 행에만 표시) ── #}
+        {# ── 결산 ── #}
         {% if loop.first %}
-          <td class="border px-3 py-2 text-right text-green-700 settlement-row">₩{{ "{:,}".format(total_deposit) }}</td>
-          <td class="border px-3 py-2 text-right text-red-700 settlement-row">₩{{ "{:,}".format(total_withdrawal) }}</td>
-          <td class="border px-3 py-2 text-right settlement-row {% if balance >= 0 %}text-green-700{% else %}text-red-700{% endif %}">₩{{ "{:,}".format(balance) }}</td>
+          <td class="border px-3 py-2 text-right text-green-700 font-semibold bg-green-50/50">₩{{ "{:,}".format(total_deposit) }}</td>
+          <td class="border px-3 py-2 text-right text-red-700 font-semibold bg-green-50/50">₩{{ "{:,}".format(total_withdrawal) }}</td>
+          <td class="border px-3 py-2 text-right font-bold bg-green-50/50 {% if balance >= 0 %}text-green-700{% else %}text-red-700{% endif %}">₩{{ "{:,}".format(balance) }}</td>
         {% else %}
           <td class="border"></td>
           <td class="border"></td>
@@ -121,51 +84,33 @@
       </tr>
       {% endfor %}
 
-      {# 데이터가 없을 때 빈 행 #}
       {% if max_rows == 0 %}
       <tr>
-        <td class="border px-3 py-4 text-center text-gray-400" colspan="9">데이터가 없습니다. 아래 폼에서 추가하세요.</td>
+        <td class="border px-3 py-8 text-center text-gray-400" colspan="9">데이터가 없습니다. 아래 폼에서 추가하세요.</td>
       </tr>
       {% endif %}
 
-      {# ── 입금 추가 행 ── #}
-      <tr class="bg-blue-50/50">
-        <form hx-post="/deposit" hx-target="#cashbook-root" hx-swap="innerHTML"
-              hx-on::after-request="this.reset()">
-          <td class="border px-1 py-0">
-            <input type="text" name="date" placeholder="26.4.14." class="text-sm">
-          </td>
-          <td class="border px-1 py-0">
-            <input type="number" name="amount" placeholder="0" class="text-right text-sm">
-          </td>
-          <td class="border px-1 py-0">
-            <input type="text" name="notes" placeholder="비고" class="text-sm">
-          </td>
-          <td class="border px-1 py-0" colspan="3">
-            <button type="submit" class="w-full text-left px-2 py-1 text-blue-600 hover:text-blue-800 text-sm font-medium">+ 입금 추가</button>
-          </td>
-          <td class="border" colspan="3"></td>
-        </form>
-      </tr>
-
-      {# ── 출금 추가 행 ── #}
-      <tr class="bg-red-50/50">
+      {# ── 입금 추가 ── #}
+      <tr class="bg-blue-50/30">
+        <td class="border" colspan="3">
+          <form hx-post="/deposit" hx-target="#cashbook-root" hx-swap="innerHTML"
+                hx-on::after-request="this.reset()" class="flex">
+            <input type="text" name="date" placeholder="26.4.14." class="edit-input w-24 border-r">
+            <input type="number" name="amount" placeholder="0" class="edit-input w-24 text-right border-r">
+            <input type="text" name="notes" placeholder="비고" class="edit-input flex-1">
+            <button type="submit" class="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 self-center whitespace-nowrap">+ 입금</button>
+          </form>
+        </td>
+        <td class="border" colspan="3">
+          <form hx-post="/withdrawal" hx-target="#cashbook-root" hx-swap="innerHTML"
+                hx-on::after-request="this.reset()" class="flex">
+            <input type="text" name="date" placeholder="26.5.12." class="edit-input w-24 border-r">
+            <input type="number" name="amount" placeholder="0" class="edit-input w-24 text-right border-r">
+            <input type="text" name="vendor" placeholder="사용처" class="edit-input flex-1">
+            <button type="submit" class="text-red-600 hover:text-red-800 text-xs font-medium px-2 self-center whitespace-nowrap">+ 출금</button>
+          </form>
+        </td>
         <td class="border" colspan="3"></td>
-        <form hx-post="/withdrawal" hx-target="#cashbook-root" hx-swap="innerHTML"
-              hx-on::after-request="this.reset()">
-          <td class="border px-1 py-0">
-            <input type="text" name="date" placeholder="26.5.12." class="text-sm">
-          </td>
-          <td class="border px-1 py-0">
-            <input type="number" name="amount" placeholder="0" class="text-right text-sm">
-          </td>
-          <td class="border px-1 py-0">
-            <input type="text" name="vendor" placeholder="사용처" class="text-sm">
-          </td>
-          <td class="border px-1 py-0" colspan="3">
-            <button type="submit" class="w-full text-left px-2 py-1 text-red-600 hover:text-red-800 text-sm font-medium">+ 출금 추가</button>
-          </td>
-        </form>
       </tr>
     </tbody>
   </table>
