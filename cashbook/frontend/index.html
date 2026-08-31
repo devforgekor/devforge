@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>현금출납부</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Login -->
+  <div id="login-view" class="min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-sm">
+      <h1 class="text-xl font-bold text-center mb-6">현금출납부</h1>
+      <div id="login-error" class="text-red-500 text-sm text-center mb-4 hidden"></div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">서버 주소</label>
+          <input type="text" id="server-url" placeholder="https://devforge.152-69-229-246.nip.io/cashbook"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">API 키</label>
+          <input type="password" id="api-key" placeholder="API 키 (비밀번호)"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <button onclick="doLogin()"
+                class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition">
+          접속
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main app -->
+  <div id="app-view" class="hidden">
+    <nav class="bg-white shadow-sm border-b">
+      <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+        <span class="text-lg font-bold text-gray-800">현금출납부</span>
+        <button onclick="doLogout()" class="text-sm text-gray-500 hover:text-gray-700">로그아웃</button>
+      </div>
+    </nav>
+    <main class="max-w-6xl mx-auto px-4 py-6">
+      <div id="cashbook-root"></div>
+    </main>
+  </div>
+
+<script>
+const API = {
+  baseUrl: '',
+  apiKey: '',
+
+  async request(method, path, body) {
+    const url = `${this.baseUrl}${path}?key=${encodeURIComponent(this.apiKey)}`;
+    const opts = { method, headers: {} };
+    if (body) {
+      if (body instanceof FormData) {
+        opts.body = body;
+      } else {
+        opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        opts.body = new URLSearchParams(body).toString();
+      }
+    }
+    const res = await fetch(url, opts);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  getCashbook()       { return this.request('GET', '/api/cashbook'); },
+  addDeposit(d)       { return this.request('POST', '/api/deposit', d); },
+  editDeposit(id, d)  { return this.request('PUT', `/api/deposit/${id}`, d); },
+  delDeposit(id)      { return this.request('DELETE', `/api/deposit/${id}`); },
+  addWithdrawal(d)    { return this.request('POST', '/api/withdrawal', d); },
+  editWithdrawal(id, d){ return this.request('PUT', `/api/withdrawal/${id}`, d); },
+  delWithdrawal(id)   { return this.request('DELETE', `/api/withdrawal/${id}`); },
+};
+
+function doLogin() {
+  API.baseUrl = document.getElementById('server-url').value.replace(/\/+$/, '');
+  API.apiKey = document.getElementById('api-key').value;
+  localStorage.setItem('cb_url', API.baseUrl);
+  localStorage.setItem('cb_key', API.apiKey);
+  loadCashbook();
+}
+
+function doLogout() {
+  localStorage.removeItem('cb_url');
+  localStorage.removeItem('cb_key');
+  document.getElementById('app-view').classList.add('hidden');
+  document.getElementById('login-view').classList.remove('hidden');
+}
+
+function fmt(n) {
+  return '₩' + Number(n).toLocaleString();
+}
+
+function render(cb) {
+  const maxR = Math.max(cb.deposits.length, cb.withdrawals.length, 1);
+  let html = `<table class="w-full border-collapse bg-white rounded-lg shadow-sm overflow-hidden text-sm">
+    <thead>
+      <tr class="bg-gray-100 text-xs font-semibold text-gray-600 uppercase">
+        <th colspan="3" class="border px-3 py-2 text-center bg-blue-50">입금</th>
+        <th colspan="3" class="border px-3 py-2 text-center bg-red-50">출금</th>
+        <th colspan="3" class="border px-3 py-2 text-center bg-green-50">결산</th>
+      </tr>
+      <tr class="bg-gray-50 text-xs text-gray-500">
+        <th class="border px-3 py-1 w-28">일자</th>
+        <th class="border px-3 py-1 w-28">금액</th>
+        <th class="border px-3 py-1">비고</th>
+        <th class="border px-3 py-1 w-28">일자</th>
+        <th class="border px-3 py-1 w-28">금액</th>
+        <th class="border px-3 py-1">사용처</th>
+        <th class="border px-3 py-1 w-28">입금</th>
+        <th class="border px-3 py-1 w-28">출금</th>
+        <th class="border px-3 py-1 w-28">총액</th>
+      </tr>
+    </thead><tbody>`;
+
+  for (let i = 0; i < maxR; i++) {
+    html += '<tr class="border-b">';
+    // Deposit
+    if (i < cb.deposits.length) {
+      const d = cb.deposits[i];
+      html += `<td class="border px-0 py-0" colspan="3">
+        <form class="flex" onsubmit="return false">
+          <input type="text" value="${esc(d.date)}" class="edit-input w-24 border-r" data-field="date" data-id="${d.id}" data-type="deposit">
+          <input type="number" value="${d.amount}" class="edit-input w-24 text-right border-r" data-field="amount" data-id="${d.id}" data-type="deposit">
+          <input type="text" value="${esc(d.notes)}" class="edit-input flex-1" data-field="notes" data-id="${d.id}" data-type="deposit">
+          <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-1 self-center" onclick="delDeposit('${d.id}')">X</button>
+        </form></td>`;
+    } else {
+      html += '<td class="border" colspan="3"></td>';
+    }
+    // Withdrawal
+    if (i < cb.withdrawals.length) {
+      const w = cb.withdrawals[i];
+      html += `<td class="border px-0 py-0" colspan="3">
+        <form class="flex" onsubmit="return false">
+          <input type="text" value="${esc(w.date)}" class="edit-input w-24 border-r" data-field="date" data-id="${w.id}" data-type="withdrawal">
+          <input type="number" value="${w.amount}" class="edit-input w-24 text-right border-r" data-field="amount" data-id="${w.id}" data-type="withdrawal">
+          <input type="text" value="${esc(w.vendor)}" class="edit-input flex-1" data-field="vendor" data-id="${w.id}" data-type="withdrawal">
+          <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-1 self-center" onclick="delWithdrawal('${w.id}')">X</button>
+        </form></td>`;
+    } else {
+      html += '<td class="border" colspan="3"></td>';
+    }
+    // Settlement
+    if (i === 0) {
+      const balCls = cb.balance >= 0 ? 'text-green-700' : 'text-red-700';
+      html += `<td class="border px-3 py-2 text-right text-green-700 font-semibold bg-green-50/50">${fmt(cb.total_deposit)}</td>
+        <td class="border px-3 py-2 text-right text-red-700 font-semibold bg-green-50/50">${fmt(cb.total_withdrawal)}</td>
+        <td class="border px-3 py-2 text-right font-bold bg-green-50/50 ${balCls}">${fmt(cb.balance)}</td>`;
+    } else {
+      html += '<td class="border"></td><td class="border"></td><td class="border"></td>';
+    }
+    html += '</tr>';
+  }
+
+  if (maxR === 1 && cb.deposits.length === 0 && cb.withdrawals.length === 0) {
+    html += '<tr><td class="border px-3 py-8 text-center text-gray-400" colspan="9">데이터가 없습니다.</td></tr>';
+  }
+
+  // Add deposit row
+  html += `<tr class="bg-blue-50/30"><td class="border" colspan="3">
+    <form class="flex" onsubmit="addDeposit(); return false">
+      <input type="text" id="new-dep-date" placeholder="26.4.14." class="edit-input w-24 border-r">
+      <input type="number" id="new-dep-amount" placeholder="0" class="edit-input w-24 text-right border-r">
+      <input type="text" id="new-dep-notes" placeholder="비고" class="edit-input flex-1">
+      <button type="submit" class="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 self-center whitespace-nowrap">+ 입금</button>
+    </form></td>`;
+
+  // Add withdrawal row
+  html += `<td class="border" colspan="3">
+    <form class="flex" onsubmit="addWithdrawal(); return false">
+      <input type="text" id="new-wit-date" placeholder="26.5.12." class="edit-input w-24 border-r">
+      <input type="number" id="new-wit-amount" placeholder="0" class="edit-input w-24 text-right border-r">
+      <input type="text" id="new-wit-vendor" placeholder="사용처" class="edit-input flex-1">
+      <button type="submit" class="text-red-600 hover:text-red-800 text-xs font-medium px-2 self-center whitespace-nowrap">+ 출금</button>
+    </form></td>`;
+  html += '<td class="border" colspan="3"></td></tr>';
+
+  html += '</tbody></table>';
+  document.getElementById('cashbook-root').innerHTML = html;
+
+  // Attach change handlers
+  document.querySelectorAll('.edit-input[data-id]').forEach(el => {
+    el.addEventListener('change', () => handleEdit(el));
+  });
+}
+
+function esc(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+async function handleEdit(el) {
+  const { id, type, field } = el.dataset;
+  const row = el.closest('form');
+  const inputs = row.querySelectorAll('input');
+  const data = {};
+  inputs.forEach(i => { data[i.dataset.field || i.name] = i.value; });
+
+  try {
+    if (type === 'deposit') await API.editDeposit(id, data);
+    else await API.editWithdrawal(id, data);
+    await loadCashbook();
+  } catch (e) { alert('저장 실패: ' + e.message); }
+}
+
+async function addDeposit() {
+  const date = document.getElementById('new-dep-date').value;
+  const amount = document.getElementById('new-dep-amount').value;
+  const notes = document.getElementById('new-dep-notes').value;
+  if (!date && !amount) return;
+  await API.addDeposit({ date, amount: Number(amount), notes });
+  await loadCashbook();
+}
+
+async function addWithdrawal() {
+  const date = document.getElementById('new-wit-date').value;
+  const amount = document.getElementById('new-wit-amount').value;
+  const vendor = document.getElementById('new-wit-vendor').value;
+  if (!date && !amount) return;
+  await API.addWithdrawal({ date, amount: Number(amount), vendor });
+  await loadCashbook();
+}
+
+async function delDeposit(id) {
+  if (!confirm('삭제하시겠습니까?')) return;
+  await API.delDeposit(id);
+  await loadCashbook();
+}
+
+async function delWithdrawal(id) {
+  if (!confirm('삭제하시겠습니까?')) return;
+  await API.delWithdrawal(id);
+  await loadCashbook();
+}
+
+async function loadCashbook() {
+  try {
+    const cb = await API.getCashbook();
+    document.getElementById('login-view').classList.add('hidden');
+    document.getElementById('app-view').classList.remove('hidden');
+    render(cb);
+  } catch (e) {
+    document.getElementById('login-error').textContent = '접속 실패: ' + e.message;
+    document.getElementById('login-error').classList.remove('hidden');
+    document.getElementById('app-view').classList.add('hidden');
+    document.getElementById('login-view').classList.remove('hidden');
+  }
+}
+
+// Auto-login from localStorage
+window.addEventListener('DOMContentLoaded', () => {
+  const url = localStorage.getItem('cb_url');
+  const key = localStorage.getItem('cb_key');
+  if (url && key) {
+    document.getElementById('server-url').value = url;
+    document.getElementById('api-key').value = key;
+    API.baseUrl = url;
+    API.apiKey = key;
+    loadCashbook();
+  }
+});
+</script>
+</body>
+</html>

@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: systemd (run via uvicorn)
-"""FastAPI cashbook web application."""
+# Path: systemd (run via uvicorn), Caddy (/cashbook/*)
+"""FastAPI cashbook web application — HTML + JSON API."""
 
 from __future__ import annotations
 
-from typing import Annotated, Optional, Union
+import os
+from typing import Optional
 
-from fastapi import Cookie, FastAPI, Form, Header, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Cookie, FastAPI, Form, Header, HTTPException, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -16,9 +18,27 @@ import auth
 import storage
 from models import CashBook, Deposit, Withdrawal
 
+API_KEY = os.environ.get("CASHBOOK_API_KEY", "")
+
 app = FastAPI(title="Cashbook")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+
+def _verify_api_key(request: Request) -> None:
+    if not API_KEY:
+        return
+    key = request.headers.get("x-api-key", "")
+    if key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 # ---------------------------------------------------------------------------
@@ -191,3 +211,121 @@ def _cashbook_fragment(request: Request, cb: CashBook) -> HTMLResponse:
         "total_withdrawal": cb.total_withdrawal,
         "balance": cb.balance,
     })
+
+
+def _cashbook_json(cb: CashBook) -> dict:
+    return {
+        "deposits": [d.model_dump() for d in cb.deposits],
+        "withdrawals": [w.model_dump() for w in cb.withdrawals],
+        "total_deposit": cb.total_deposit,
+        "total_withdrawal": cb.total_withdrawal,
+        "balance": cb.balance,
+    }
+
+
+# ---------------------------------------------------------------------------
+# JSON API (for Vercel frontend)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/cashbook")
+async def api_get_cashbook(request: Request, key: str = Query("")):
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    cb = storage.load()
+    return _cashbook_json(cb)
+
+
+@app.post("/api/deposit")
+async def api_create_deposit(
+    request: Request,
+    key: str = Query(""),
+    date: str = Form(""),
+    amount: int = Form(0),
+    notes: str = Form(""),
+):
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    cb = storage.load()
+    cb.deposits.append(Deposit(date=date, amount=amount, notes=notes))
+    storage.save(cb)
+    return _cashbook_json(cb)
+
+
+@app.put("/api/deposit/{deposit_id}")
+async def api_update_deposit(
+    request: Request,
+    deposit_id: str,
+    key: str = Query(""),
+    date: str = Form(""),
+    amount: int = Form(0),
+    notes: str = Form(""),
+):
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    cb = storage.load()
+    for d in cb.deposits:
+        if d.id == deposit_id:
+            d.date = date
+            d.amount = amount
+            d.notes = notes
+            break
+    storage.save(cb)
+    return _cashbook_json(cb)
+
+
+@app.delete("/api/deposit/{deposit_id}")
+async def api_delete_deposit(request: Request, deposit_id: str, key: str = Query("")):
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    cb = storage.load()
+    cb.deposits = [d for d in cb.deposits if d.id != deposit_id]
+    storage.save(cb)
+    return _cashbook_json(cb)
+
+
+@app.post("/api/withdrawal")
+async def api_create_withdrawal(
+    request: Request,
+    key: str = Query(""),
+    date: str = Form(""),
+    amount: int = Form(0),
+    vendor: str = Form(""),
+):
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    cb = storage.load()
+    cb.withdrawals.append(Withdrawal(date=date, amount=amount, vendor=vendor))
+    storage.save(cb)
+    return _cashbook_json(cb)
+
+
+@app.put("/api/withdrawal/{withdrawal_id}")
+async def api_update_withdrawal(
+    request: Request,
+    withdrawal_id: str,
+    key: str = Query(""),
+    date: str = Form(""),
+    amount: int = Form(0),
+    vendor: str = Form(""),
+):
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    cb = storage.load()
+    for w in cb.withdrawals:
+        if w.id == withdrawal_id:
+            w.date = date
+            w.amount = amount
+            w.vendor = vendor
+            break
+    storage.save(cb)
+    return _cashbook_json(cb)
+
+
+@app.delete("/api/withdrawal/{withdrawal_id}")
+async def api_delete_withdrawal(request: Request, withdrawal_id: str, key: str = Query("")):
+    if API_KEY and key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    cb = storage.load()
+    cb.withdrawals = [w for w in cb.withdrawals if w.id != withdrawal_id]
+    storage.save(cb)
+    return _cashbook_json(cb)
