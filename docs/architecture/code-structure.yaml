@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-08-19'
+  updated: '2026-09-01'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -286,6 +286,10 @@ modules:
       status: production
       purpose: "queue_writer \u2014 enqueue items to activity_log for downstream review\
         \ pipeline."
+    rate_limiter.py:
+      status: production
+      purpose: "FlareSolverr \uC694\uCCAD \uC18D\uB3C4 \uC81C\uD55C \uC720\uD2F8\uB9AC\
+        \uD2F0."
     reflex_rules.py:
       status: production
       purpose: Reflex rule CRUD and lifecycle management.
