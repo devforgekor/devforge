@@ -1,0 +1,18 @@
+{
+  "deposits": [
+    {
+      "id": "d57de4beb9ef",
+      "date": "26.4.14.",
+      "amount": 920000,
+      "notes": "강동송파교육청"
+    }
+  ],
+  "withdrawals": [
+    {
+      "id": "73b872844127",
+      "date": "26.5.12.",
+      "amount": 30627,
+      "vendor": "딥시크 API"
+    }
+  ]
+}
