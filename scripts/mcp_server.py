@@ -1464,6 +1464,10 @@ async def flaresolverr_bypass(
     if max_response_len > 0 and len(response_text) > max_response_len:
         response_text = response_text[:max_response_len] + f"\n... (truncated at {max_response_len} chars)"
 
+    if rate_limit and url:
+        from lib.rate_limiter import record_request
+        record_request(url, status=sol.get("status"))
+
     return json.dumps(
         {
             "status": "ok",
