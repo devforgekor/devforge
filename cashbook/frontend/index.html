@@ -43,7 +43,7 @@
   </div>
 
 <script>
-let currentTab = 'deposit';
+let currentTab = 'settle';
 
 const API = {
   baseUrl: 'https://devforge.152-69-229-246.nip.io/cashbook',
@@ -205,16 +205,93 @@ function render(cb) {
 
   // Tabs
   let html = `<div class="flex border-b mb-4 bg-white rounded-t-lg overflow-hidden">
-    <button onclick="switchTab('deposit')" class="tab-btn ${currentTab === 'deposit' ? 'tab-active' : ''}" data-tab="deposit">
-      입금 <span class="text-xs text-gray-500">(${cb.deposits.length})</span>
+    <button onclick="switchTab('settle')" class="tab-btn ${currentTab === 'settle' ? 'tab-active' : ''}" data-tab="settle">
+      결산
     </button>
     <button onclick="switchTab('withdrawal')" class="tab-btn ${currentTab === 'withdrawal' ? 'tab-active' : ''}" data-tab="withdrawal">
       출금 <span class="text-xs text-gray-500">(${cb.withdrawals.length})</span>
     </button>
-    <button onclick="switchTab('settle')" class="tab-btn ${currentTab === 'settle' ? 'tab-active' : ''}" data-tab="settle">
-      결산
+    <button onclick="switchTab('deposit')" class="tab-btn ${currentTab === 'deposit' ? 'tab-active' : ''}" data-tab="deposit">
+      입금 <span class="text-xs text-gray-500">(${cb.deposits.length})</span>
     </button>
   </div>`;
+
+  // === 결산 탭 ===
+  html += `<div class="tab-content ${currentTab === 'settle' ? '' : 'hidden'}" id="tab-settle">
+    <div class="bg-white rounded-lg shadow-sm p-6">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
+        <div class="p-4 bg-green-50 rounded-lg">
+          <div class="text-sm text-gray-500 mb-1">총 입금</div>
+          <div class="text-2xl font-bold text-green-700">${fmt(cb.total_deposit)}</div>
+          <div class="text-xs text-gray-400 mt-1">${cb.deposits.length}건</div>
+        </div>
+        <div class="p-4 bg-red-50 rounded-lg">
+          <div class="text-sm text-gray-500 mb-1">총 출금</div>
+          <div class="text-2xl font-bold text-red-700">${fmt(cb.total_withdrawal)}</div>
+          <div class="text-xs text-gray-400 mt-1">${cb.withdrawals.length}건</div>
+        </div>
+        <div class="p-4 bg-gray-50 rounded-lg">
+          <div class="text-sm text-gray-500 mb-1">잔액</div>
+          <div class="text-2xl font-bold ${balCls}">${fmt(cb.balance)}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // === 출금 탭 ===
+  html += `<div class="tab-content ${currentTab === 'withdrawal' ? '' : 'hidden'}" id="tab-withdrawal">`;
+
+  html += `<table class="cashbook-table desktop-only"><thead>
+    <tr class="bg-gray-50 text-xs text-gray-500">
+      <th class="border px-2 py-1 col-date">일자</th>
+      <th class="border px-2 py-1 col-amount">금액</th>
+      <th class="border px-2 py-1 col-text">사용처</th>
+    </tr></thead><tbody>`;
+
+  cb.withdrawals.forEach(w => {
+    html += `<tr>
+      <td class="td-date border px-0 py-0">${dateHTML(w.id, w.date, 'withdrawal')}</td>
+      <td class="td-amount border px-0 py-0">${amountHTML(w.id, w.amount, 'withdrawal')}</td>
+      <td class="td-text border px-0 py-0"><div class="flex items-center">
+        <input type="text" value="${esc(w.vendor)}" class="edit-input flex-1" data-field="vendor" data-id="${w.id}" data-type="withdrawal">
+        <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-1" onclick="delWithdrawal('${w.id}')">X</button>
+      </div></td></tr>`;
+  });
+
+  html += `<tr class="bg-red-50/30">
+    <td class="td-date border px-0 py-0">${dateHTMLNew('new-wit-date')}</td>
+    <td class="td-amount border px-0 py-0"><div style="display:flex;align-items:center;height:34px;">
+      <span style="color:#9ca3af;padding-left:8px;font-size:0.875rem;">₩</span>
+      <input type="number" id="new-wit-amount" placeholder="0" class="edit-input text-right" style="width:calc(100% - 20px);">
+    </div></td>
+    <td class="td-text border px-0 py-0"><div class="flex items-center">
+      <input type="text" id="new-wit-vendor" placeholder="사용처" class="edit-input flex-1">
+      <button type="button" onclick="addWithdrawal()" class="text-red-600 hover:text-red-800 text-xs font-medium px-2 whitespace-nowrap">+ 출금</button>
+    </div></td></tr>`;
+  html += '</tbody></table>';
+
+  // Mobile cards
+  html += '<div class="mobile-only">';
+  cb.withdrawals.forEach(w => {
+    html += `<div class="bg-white rounded-lg shadow-sm p-3 mb-2">
+      <div class="flex justify-between items-start mb-2">
+        <div class="flex-1">${dateHTML(w.id, w.date, 'withdrawal')}</div>
+        <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-2 ml-2" onclick="delWithdrawal('${w.id}')">X</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-28">${amountHTML(w.id, w.amount, 'withdrawal')}</div>
+        <div class="flex-1"><input type="text" value="${esc(w.vendor)}" class="edit-input w-full" data-field="vendor" data-id="${w.id}" data-type="withdrawal" placeholder="사용처"></div>
+      </div></div>`;
+  });
+  html += `<div class="bg-red-50/50 rounded-lg p-3 mb-2">
+    <div class="flex gap-2 mb-2">${dateHTMLNew('mob-new-wit-date')}</div>
+    <div class="flex gap-2 items-center mb-2">
+      <div class="w-28"><div style="display:flex;align-items:center;height:34px;"><span style="color:#9ca3af;font-size:0.875rem;">₩</span><input type="number" id="mob-new-wit-amount" placeholder="0" class="edit-input text-right" style="width:calc(100% - 16px);"></div></div>
+      <div class="flex-1"><input type="text" id="mob-new-wit-vendor" placeholder="사용처" class="edit-input w-full"></div>
+    </div>
+    <button onclick="addWithdrawalMobile()" class="w-full bg-red-600 text-white py-2 rounded text-sm">+ 출금</button>
+  </div>`;
+  html += '</div></div>';
 
   // === 입금 탭 ===
   html += `<div class="tab-content ${currentTab === 'deposit' ? '' : 'hidden'}" id="tab-deposit">`;
@@ -272,83 +349,6 @@ function render(cb) {
     <button onclick="addDepositMobile()" class="w-full bg-blue-600 text-white py-2 rounded text-sm">+ 입금</button>
   </div>`;
   html += '</div></div>';
-
-  // === 출금 탭 ===
-  html += `<div class="tab-content ${currentTab === 'withdrawal' ? '' : 'hidden'}" id="tab-withdrawal">`;
-
-  html += `<table class="cashbook-table desktop-only"><thead>
-    <tr class="bg-gray-50 text-xs text-gray-500">
-      <th class="border px-2 py-1 col-date">일자</th>
-      <th class="border px-2 py-1 col-amount">금액</th>
-      <th class="border px-2 py-1 col-text">사용처</th>
-    </tr></thead><tbody>`;
-
-  cb.withdrawals.forEach(w => {
-    html += `<tr>
-      <td class="td-date border px-0 py-0">${dateHTML(w.id, w.date, 'withdrawal')}</td>
-      <td class="td-amount border px-0 py-0">${amountHTML(w.id, w.amount, 'withdrawal')}</td>
-      <td class="td-text border px-0 py-0"><div class="flex items-center">
-        <input type="text" value="${esc(w.vendor)}" class="edit-input flex-1" data-field="vendor" data-id="${w.id}" data-type="withdrawal">
-        <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-1" onclick="delWithdrawal('${w.id}')">X</button>
-      </div></td></tr>`;
-  });
-
-  html += `<tr class="bg-red-50/30">
-    <td class="td-date border px-0 py-0">${dateHTMLNew('new-wit-date')}</td>
-    <td class="td-amount border px-0 py-0"><div style="display:flex;align-items:center;height:34px;">
-      <span style="color:#9ca3af;padding-left:8px;font-size:0.875rem;">₩</span>
-      <input type="number" id="new-wit-amount" placeholder="0" class="edit-input text-right" style="width:calc(100% - 20px);">
-    </div></td>
-    <td class="td-text border px-0 py-0"><div class="flex items-center">
-      <input type="text" id="new-wit-vendor" placeholder="사용처" class="edit-input flex-1">
-      <button type="button" onclick="addWithdrawal()" class="text-red-600 hover:text-red-800 text-xs font-medium px-2 whitespace-nowrap">+ 출금</button>
-    </div></td></tr>`;
-  html += '</tbody></table>';
-
-  // Mobile cards
-  html += '<div class="mobile-only">';
-  cb.withdrawals.forEach(w => {
-    html += `<div class="bg-white rounded-lg shadow-sm p-3 mb-2">
-      <div class="flex justify-between items-start mb-2">
-        <div class="flex-1">${dateHTML(w.id, w.date, 'withdrawal')}</div>
-        <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-2 ml-2" onclick="delWithdrawal('${w.id}')">X</button>
-      </div>
-      <div class="flex items-center gap-2">
-        <div class="w-28">${amountHTML(w.id, w.amount, 'withdrawal')}</div>
-        <div class="flex-1"><input type="text" value="${esc(w.vendor)}" class="edit-input w-full" data-field="vendor" data-id="${w.id}" data-type="withdrawal" placeholder="사용처"></div>
-      </div></div>`;
-  });
-  html += `<div class="bg-red-50/50 rounded-lg p-3 mb-2">
-    <div class="flex gap-2 mb-2">${dateHTMLNew('mob-new-wit-date')}</div>
-    <div class="flex gap-2 items-center mb-2">
-      <div class="w-28"><div style="display:flex;align-items:center;height:34px;"><span style="color:#9ca3af;font-size:0.875rem;">₩</span><input type="number" id="mob-new-wit-amount" placeholder="0" class="edit-input text-right" style="width:calc(100% - 16px);"></div></div>
-      <div class="flex-1"><input type="text" id="mob-new-wit-vendor" placeholder="사용처" class="edit-input w-full"></div>
-    </div>
-    <button onclick="addWithdrawalMobile()" class="w-full bg-red-600 text-white py-2 rounded text-sm">+ 출금</button>
-  </div>`;
-  html += '</div></div>';
-
-  // === 결산 탭 ===
-  html += `<div class="tab-content ${currentTab === 'settle' ? '' : 'hidden'}" id="tab-settle">
-    <div class="bg-white rounded-lg shadow-sm p-6">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
-        <div class="p-4 bg-green-50 rounded-lg">
-          <div class="text-sm text-gray-500 mb-1">총 입금</div>
-          <div class="text-2xl font-bold text-green-700">${fmt(cb.total_deposit)}</div>
-          <div class="text-xs text-gray-400 mt-1">${cb.deposits.length}건</div>
-        </div>
-        <div class="p-4 bg-red-50 rounded-lg">
-          <div class="text-sm text-gray-500 mb-1">총 출금</div>
-          <div class="text-2xl font-bold text-red-700">${fmt(cb.total_withdrawal)}</div>
-          <div class="text-xs text-gray-400 mt-1">${cb.withdrawals.length}건</div>
-        </div>
-        <div class="p-4 bg-gray-50 rounded-lg">
-          <div class="text-sm text-gray-500 mb-1">잔액</div>
-          <div class="text-2xl font-bold ${balCls}">${fmt(cb.balance)}</div>
-        </div>
-      </div>
-    </div>
-  </div>`;
 
   document.getElementById('cashbook-root').innerHTML = html;
 
