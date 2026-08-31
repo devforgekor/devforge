@@ -29,6 +29,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.on_event("startup")
+def _startup_normalize_dates():
+    n = storage.normalize_all_dates()
+    if n:
+        print(f"Normalized {n} dates to YY.MM.DD. format")
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 

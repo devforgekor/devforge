@@ -88,25 +88,106 @@ function fmt(n) {
   return '₩' + Number(n).toLocaleString();
 }
 
+// Date format: YY.MM.DD.
+function toDisplayDate(dateStr) {
+  if (!dateStr) return '';
+  // Already in YY.MM.DD. format
+  if (/^\d{2}\.\d{2}\.\d{2}\.$/.test(dateStr)) return dateStr;
+  // Convert from YYYY-MM-DD or other formats
+  const m = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1].slice(2) + '.' + m[2] + '.' + m[3] + '.';
+  return dateStr;
+}
+
+function toISODate(displayDate) {
+  if (!displayDate) return '';
+  const m = displayDate.match(/(\d{2})\.(\d{2})\.(\d{2})\.?/);
+  if (m) return '20' + m[1] + '-' + m[2] + '-' + m[3];
+  return displayDate;
+}
+
+function formatDateInput(val) {
+  // Auto-format as user types: 260414 -> 26.04.14.
+  let v = val.replace(/[^\d]/g, '');
+  if (v.length > 6) v = v.slice(0, 6);
+  if (v.length >= 5) return v.slice(0,2) + '.' + v.slice(2,4) + '.' + v.slice(4) + (v.length === 6 ? '.' : '');
+  if (v.length >= 3) return v.slice(0,2) + '.' + v.slice(2);
+  return v;
+}
+
+function dateInputHTML(id, value, cls) {
+  const dispVal = toDisplayDate(value);
+  const isoVal = toISODate(dispVal);
+  return `<div class="date-cell">
+    <input type="text" value="${esc(dispVal)}" placeholder="YY.MM.DD."
+           class="edit-input flex-1 ${cls}" data-field="date" data-id="${id}" data-type=""
+           oninput="this.value=formatDateInput(this.value)">
+    <button type="button" class="date-btn" onclick="openDatePicker(this)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    </button>
+    <input type="date" class="hidden-date" value="${isoVal}"
+           onchange="onDatePicked(this)">
+  </div>`;
+}
+
+function dateInputHTMLNew(id, cls) {
+  return `<div class="date-cell">
+    <input type="text" value="" placeholder="YY.MM.DD."
+           class="edit-input flex-1 ${cls}" id="${id}">
+    <button type="button" class="date-btn" onclick="openDatePicker(this)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    </button>
+    <input type="date" class="hidden-date" onchange="onDatePickedNew(this, '${id}')">
+  </div>`;
+}
+
+function openDatePicker(btn) {
+  const hidden = btn.parentElement.querySelector('.hidden-date');
+  hidden.showPicker?.();
+}
+
+function onDatePicked(hiddenInput) {
+  const textInput = hiddenInput.parentElement.querySelector('input[type=text]');
+  if (hiddenInput.value) {
+    const parts = hiddenInput.value.split('-');
+    textInput.value = parts[0].slice(2) + '.' + parts[1] + '.' + parts[2] + '.';
+  }
+  textInput.dispatchEvent(new Event('change'));
+}
+
+function onDatePickedNew(hiddenInput, textId) {
+  const textInput = document.getElementById(textId);
+  if (hiddenInput.value) {
+    const parts = hiddenInput.value.split('-');
+    textInput.value = parts[0].slice(2) + '.' + parts[1] + '.' + parts[2] + '.';
+  }
+}
+
 function render(cb) {
   const maxR = Math.max(cb.deposits.length, cb.withdrawals.length, 1);
-  let html = `<table class="w-full border-collapse bg-white rounded-lg shadow-sm overflow-hidden text-sm">
+  let html = `<table class="cashbook-table">
     <thead>
       <tr class="bg-gray-100 text-xs font-semibold text-gray-600 uppercase">
-        <th colspan="3" class="border px-3 py-2 text-center bg-blue-50">입금</th>
-        <th colspan="3" class="border px-3 py-2 text-center bg-red-50">출금</th>
-        <th colspan="3" class="border px-3 py-2 text-center bg-green-50">결산</th>
+        <th colspan="3" class="border px-2 py-2 text-center bg-blue-50">입금</th>
+        <th colspan="3" class="border px-2 py-2 text-center bg-red-50">출금</th>
+        <th colspan="3" class="border px-2 py-2 text-center bg-green-50">결산</th>
       </tr>
       <tr class="bg-gray-50 text-xs text-gray-500">
-        <th class="border px-3 py-1 w-28">일자</th>
-        <th class="border px-3 py-1 w-28">금액</th>
-        <th class="border px-3 py-1">비고</th>
-        <th class="border px-3 py-1 w-28">일자</th>
-        <th class="border px-3 py-1 w-28">금액</th>
-        <th class="border px-3 py-1">사용처</th>
-        <th class="border px-3 py-1 w-28">입금</th>
-        <th class="border px-3 py-1 w-28">출금</th>
-        <th class="border px-3 py-1 w-28">총액</th>
+        <th class="border px-2 py-1 col-date">일자</th>
+        <th class="border px-2 py-1 col-amount">금액</th>
+        <th class="border px-2 py-1 col-text">비고</th>
+        <th class="border px-2 py-1 col-date">일자</th>
+        <th class="border px-2 py-1 col-amount">금액</th>
+        <th class="border px-2 py-1 col-text">사용처</th>
+        <th class="border px-2 py-1 col-settle">입금</th>
+        <th class="border px-2 py-1 col-settle">출금</th>
+        <th class="border px-2 py-1 col-settle">총액</th>
       </tr>
     </thead><tbody>`;
 
@@ -117,9 +198,9 @@ function render(cb) {
       const d = cb.deposits[i];
       html += `<td class="border px-0 py-0" colspan="3">
         <form class="flex" onsubmit="return false">
-          <input type="text" value="${esc(d.date)}" class="edit-input w-24 border-r" data-field="date" data-id="${d.id}" data-type="deposit">
-          <input type="number" value="${d.amount}" class="edit-input w-24 text-right border-r" data-field="amount" data-id="${d.id}" data-type="deposit">
-          <input type="text" value="${esc(d.notes)}" class="edit-input flex-1" data-field="notes" data-id="${d.id}" data-type="deposit">
+          ${dateInputHTML(d.id, d.date, '')}
+          <input type="number" value="${d.amount}" class="edit-input col-amount text-right border-r" data-field="amount" data-id="${d.id}" data-type="deposit">
+          <input type="text" value="${esc(d.notes)}" class="edit-input col-text border-r" data-field="notes" data-id="${d.id}" data-type="deposit">
           <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-1 self-center" onclick="delDeposit('${d.id}')">X</button>
         </form></td>`;
     } else {
@@ -130,9 +211,9 @@ function render(cb) {
       const w = cb.withdrawals[i];
       html += `<td class="border px-0 py-0" colspan="3">
         <form class="flex" onsubmit="return false">
-          <input type="text" value="${esc(w.date)}" class="edit-input w-24 border-r" data-field="date" data-id="${w.id}" data-type="withdrawal">
-          <input type="number" value="${w.amount}" class="edit-input w-24 text-right border-r" data-field="amount" data-id="${w.id}" data-type="withdrawal">
-          <input type="text" value="${esc(w.vendor)}" class="edit-input flex-1" data-field="vendor" data-id="${w.id}" data-type="withdrawal">
+          ${dateInputHTML(w.id, w.date, '')}
+          <input type="number" value="${w.amount}" class="edit-input col-amount text-right border-r" data-field="amount" data-id="${w.id}" data-type="withdrawal">
+          <input type="text" value="${esc(w.vendor)}" class="edit-input col-text border-r" data-field="vendor" data-id="${w.id}" data-type="withdrawal">
           <button type="button" class="btn-icon text-red-400 hover:text-red-600 text-xs px-1 self-center" onclick="delWithdrawal('${w.id}')">X</button>
         </form></td>`;
     } else {
@@ -141,11 +222,11 @@ function render(cb) {
     // Settlement
     if (i === 0) {
       const balCls = cb.balance >= 0 ? 'text-green-700' : 'text-red-700';
-      html += `<td class="border px-3 py-2 text-right text-green-700 font-semibold bg-green-50/50">${fmt(cb.total_deposit)}</td>
-        <td class="border px-3 py-2 text-right text-red-700 font-semibold bg-green-50/50">${fmt(cb.total_withdrawal)}</td>
-        <td class="border px-3 py-2 text-right font-bold bg-green-50/50 ${balCls}">${fmt(cb.balance)}</td>`;
+      html += `<td class="border px-2 py-2 text-right text-green-700 font-semibold bg-green-50/50 col-settle">${fmt(cb.total_deposit)}</td>
+        <td class="border px-2 py-2 text-right text-red-700 font-semibold bg-green-50/50 col-settle">${fmt(cb.total_withdrawal)}</td>
+        <td class="border px-2 py-2 text-right font-bold bg-green-50/50 ${balCls} col-settle">${fmt(cb.balance)}</td>`;
     } else {
-      html += '<td class="border"></td><td class="border"></td><td class="border"></td>';
+      html += '<td class="border col-settle"></td><td class="border col-settle"></td><td class="border col-settle"></td>';
     }
     html += '</tr>';
   }
@@ -155,20 +236,20 @@ function render(cb) {
   }
 
   // Add deposit row
-  html += `<tr class="bg-blue-50/30"><td class="border" colspan="3">
+  html += `<tr class="bg-blue-50/30"><td class="border px-0 py-0" colspan="3">
     <form class="flex" onsubmit="addDeposit(); return false">
-      <input type="text" id="new-dep-date" placeholder="26.4.14." class="edit-input w-24 border-r">
-      <input type="number" id="new-dep-amount" placeholder="0" class="edit-input w-24 text-right border-r">
-      <input type="text" id="new-dep-notes" placeholder="비고" class="edit-input flex-1">
+      ${dateInputHTMLNew('new-dep-date', '')}
+      <input type="number" id="new-dep-amount" placeholder="0" class="edit-input col-amount text-right border-r">
+      <input type="text" id="new-dep-notes" placeholder="비고" class="edit-input col-text border-r">
       <button type="submit" class="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 self-center whitespace-nowrap">+ 입금</button>
     </form></td>`;
 
   // Add withdrawal row
-  html += `<td class="border" colspan="3">
+  html += `<td class="border px-0 py-0" colspan="3">
     <form class="flex" onsubmit="addWithdrawal(); return false">
-      <input type="text" id="new-wit-date" placeholder="26.5.12." class="edit-input w-24 border-r">
-      <input type="number" id="new-wit-amount" placeholder="0" class="edit-input w-24 text-right border-r">
-      <input type="text" id="new-wit-vendor" placeholder="사용처" class="edit-input flex-1">
+      ${dateInputHTMLNew('new-wit-date', '')}
+      <input type="number" id="new-wit-amount" placeholder="0" class="edit-input col-amount text-right border-r">
+      <input type="text" id="new-wit-vendor" placeholder="사용처" class="edit-input col-text border-r">
       <button type="submit" class="text-red-600 hover:text-red-800 text-xs font-medium px-2 self-center whitespace-nowrap">+ 출금</button>
     </form></td>`;
   html += '<td class="border" colspan="3"></td></tr>';
@@ -189,7 +270,12 @@ async function handleEdit(el) {
   const row = el.closest('form');
   const inputs = row.querySelectorAll('input');
   const data = {};
-  inputs.forEach(i => { data[i.dataset.field || i.name] = i.value; });
+  inputs.forEach(i => {
+    const f = i.dataset.field || i.name;
+    if (f) data[f] = i.value;
+  });
+  // Format date before sending
+  if (data.date) data.date = toDisplayDate(data.date);
 
   try {
     if (type === 'deposit') await API.editDeposit(id, data);
@@ -203,7 +289,7 @@ async function addDeposit() {
   const amount = document.getElementById('new-dep-amount').value;
   const notes = document.getElementById('new-dep-notes').value;
   if (!date && !amount) return;
-  await API.addDeposit({ date, amount: Number(amount), notes });
+  await API.addDeposit({ date: toDisplayDate(date), amount: Number(amount), notes });
   await loadCashbook();
 }
 
@@ -212,7 +298,7 @@ async function addWithdrawal() {
   const amount = document.getElementById('new-wit-amount').value;
   const vendor = document.getElementById('new-wit-vendor').value;
   if (!date && !amount) return;
-  await API.addWithdrawal({ date, amount: Number(amount), vendor });
+  await API.addWithdrawal({ date: toDisplayDate(date), amount: Number(amount), vendor });
   await loadCashbook();
 }
 

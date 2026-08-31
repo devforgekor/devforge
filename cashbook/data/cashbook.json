@@ -2,95 +2,89 @@
   "deposits": [
     {
       "id": "452a3494d29a",
-      "date": "26.4.14.",
+      "date": "26.04.14.",
       "amount": 920000,
       "notes": "강동송파교육청"
     },
     {
       "id": "9e2e16b977c6",
-      "date": "26.2.20.",
+      "date": "26.02.20.",
       "amount": 136,
       "notes": "이자"
-    },
-    {
-      "id": "fb73256bb826",
-      "date": "26.9.1",
-      "amount": 100000,
-      "notes": "íì¤í¸"
     }
   ],
   "withdrawals": [
     {
       "id": "42a06fd314a6",
-      "date": "26.5.12.",
+      "date": "26.05.12.",
       "amount": 30627,
       "vendor": "딥시크 API(알리페이)"
     },
     {
       "id": "2d05ab8ccbaf",
-      "date": "26.5.21.",
+      "date": "26.05.21.",
       "amount": 30832,
       "vendor": "딥시크 API(알리페이)"
     },
     {
       "id": "229ec0db6a66",
-      "date": "26.5.25.",
+      "date": "26.05.25.",
       "amount": 31284,
       "vendor": "딥시크 API(알리페이)"
     },
     {
       "id": "b69df7b89f50",
-      "date": "26.5.29.",
+      "date": "26.05.29.",
       "amount": 31199,
       "vendor": "딥시크 API(알리페이)"
     },
     {
       "id": "f15e5b62ebdf",
-      "date": "26.6.2.",
+      "date": "26.06.02.",
       "amount": 31417,
       "vendor": "딥시크 API(알리페이)"
     },
     {
       "id": "37900ab38005",
-      "date": "26.6.6.",
+      "date": "26.06.06.",
       "amount": 32190,
       "vendor": "딥시크 API(알리페이)"
     },
     {
       "id": "75d940eaf5c0",
-      "date": "26.6.22.",
+      "date": "26.06.22.",
       "amount": 15100,
       "vendor": "yes24 도서구입"
     },
     {
       "id": "1dbb8c317b89",
-      "date": "26.6.22.",
+      "date": "26.06.22.",
       "amount": 45000,
       "vendor": "yes24 도서구입"
     },
     {
       "id": "46315c37d79a",
-      "date": "26.6.22.",
+      "date": "26.06.22.",
       "amount": 31736,
       "vendor": "딥시크 API(알리페이)"
     },
     {
       "id": "96982de876fa",
-      "date": "26.8.28.",
+      "date": "26.08.28.",
       "amount": 29700,
-      "vendor": "구독핀(구글 AI PRO 3개월)"
+      "vendor": "구독핀(구글 AI PRO, 이권준)"
     },
     {
       "id": "0cb863f6c1bb",
-      "date": "26.8.28.",
+      "date": "26.08.28.",
       "amount": 45600,
-      "vendor": "구독핀(듀오링고 1년)"
+      "vendor": "구독핀(듀오링고 1년, 윤지훈)"
     },
     {
       "id": "1bbf81e15ad0",
-      "date": "26.8.28.",
+      "date": "26.08.28.",
       "amount": 28215,
-      "vendor": "구독핀(구글 AI PRO 3개월)"
+      "vendor": "구독핀(구글 AI PRO, 정재호)"
     }
   ]
 }
