@@ -1343,5 +1343,95 @@ def main():
     )
 
 
+# ── FlareSolverr Cloudflare Bypass ───────────────────────────
+
+
+@mcp.tool(name="flaresolverr_bypass")
+async def flaresolverr_bypass(
+    url: str,
+    session: Optional[str] = None,
+    timeout: int = 60000,
+    create_session: bool = False,
+    destroy_session: bool = False,
+) -> str:
+    """Cloudflare 보호 페이지 우회하여 HTML/쿠키 반환.
+
+    Args:
+        url: 대상 URL
+        session: 기존 세션 ID (선택). 없으면 일회용 브라우저 사용
+        timeout: 최대 대기 시간(ms, 기본 60000)
+        create_session: True면 세션 생성 후 반환 (url 무시됨)
+        destroy_session: True면 세션 파괴 (url, session 필요)
+    """
+    import httpx
+
+    FLARESOLVERR_URL = "http://127.0.0.1:8191/v1"
+
+    if create_session:
+        payload = {"cmd": "sessions.create"}
+        if session:
+            payload["session"] = session
+    elif destroy_session:
+        if not session:
+            return json.dumps({"error": "session required for destroy"}, ensure_ascii=False)
+        payload = {"cmd": "sessions.destroy", "session": session}
+    else:
+        if not url:
+            return json.dumps({"error": "url required for request"}, ensure_ascii=False)
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": max(1000, min(timeout, 300000)),
+        }
+        if session:
+            payload["session"] = session
+
+    async with httpx.AsyncClient(timeout=timeout / 1000 + 10) as client:
+        try:
+            resp = await client.post(
+                FLARESOLVERR_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.TimeoutException:
+            return json.dumps({"error": f"FlareSolverr timeout after {timeout}ms"}, ensure_ascii=False)
+        except httpx.HTTPStatusError as e:
+            return json.dumps(
+                {"error": f"FlareSolverr HTTP {e.response.status_code}: {e.response.text[:200]}"},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            return json.dumps({"error": f"FlareSolverr error: {type(e).__name__}: {e}"}, ensure_ascii=False)
+
+    if data.get("status") != "ok":
+        return json.dumps(
+            {"error": data.get("message", "FlareSolverr returned non-ok status"), "raw": data},
+            ensure_ascii=False,
+        )
+
+    if create_session:
+        return json.dumps(
+            {"session": data.get("session"), "message": data.get("message")},
+            ensure_ascii=False,
+        )
+
+    if destroy_session:
+        return json.dumps({"message": data.get("message")}, ensure_ascii=False)
+
+    sol = data.get("solution", {})
+    return json.dumps(
+        {
+            "status": sol.get("status"),
+            "url": sol.get("url"),
+            "response": sol.get("response"),
+            "cookies": sol.get("cookies", []),
+            "userAgent": sol.get("userAgent"),
+            "turnstile_token": sol.get("turnstile_token"),
+        },
+        ensure_ascii=False,
+    )
+
 if __name__ == "__main__":
     main()
