@@ -334,6 +334,8 @@ if(e === "exe" || e === "explorer"){
 | `link-tab.json` | `resource/ebook/1/` | — | ✅ |
 | `app.config.json` | `resource/ebook/1/jjbundle/` | — | ✅ |
 | `favicon.ico` | `/favicon.ico` | — | ✅ |
+| `link-tab.json` | `resource/contents/1/lesson{01,03,05,06}/OPS/` (4) | — | ✅ (Fix #11) |
+| `app.config.json` | `resource/contents/1/lesson{01,03,05,06}/jjbundle/` (4) | — | ✅ (Fix #11) |
 
 ### 4.2. Key Patch Decision: Proxy vs Plain Object
 
@@ -485,3 +487,38 @@ The `render.app.min.js` and `binder_web.min.js` files are on the **bind mount** 
 2. **`link-tab.json` 404 (before Fix #10)**: The Angular viewer's `LinkTabService.loadJson()` fetches `link-tab.json` and logs "load LinkTab Data []" on 404. The empty array is handled gracefully, but the 404 was fixed by creating the file.
 
 3. **`app.config.json` 404 at contentUrl path (before Fix #10)**: The viewer tries to load `contentUrl + "/jjbundle/app.config.json"` first. On 404, it falls back to the default config. The fallback works, but the 404 was fixed by creating the config at the contentUrl path.
+
+---
+
+## 9. Fix #11: Missing Resource Files for Lesson Content Viewer (2026-09-02)
+
+**Verification method:** Playwright (chromium, headless) navigating the real `viewer/contents/index.html?contentInformationURL=...` flow (not jsdom), capturing `response`/`pageerror`/`console` events.
+
+**Problem:** Fix #10 (2026-08-31) only created `link-tab.json` and `jjbundle/app.config.json` under `resource/ebook/1/`. The equivalent files were never created for the 4 lesson content directories (`resource/contents/1/lesson{01,03,05,06}/`), which use the **`viewer/contents/index.html`** entry point, not `viewer/ebook/`. Reproduced live:
+
+```
+GET /resource/contents/1/lesson01/jjbundle/app.config.json  -> 404
+GET /resource/contents/1/lesson01/OPS/link-tab.json         -> 404
+```
+
+These 404s were also accompanied by a caught-exception console log (`[error] fE`, a minified error object) right before `LinkTabService` logged its empty-array fallback — same pattern as Known Issue #2, just previously unaddressed for the contents viewer.
+
+**Solution:** Created, for each of `lesson01`, `lesson03`, `lesson05`, `lesson06`:
+
+| File | Path | Content |
+|------|------|---------|
+| `link-tab.json` | `resource/contents/1/lesson{N}/OPS/link-tab.json` | `{"tabCustom":[],"pageTab":[]}` (identical to ebook's) |
+| `app.config.json` | `resource/contents/1/lesson{N}/jjbundle/app.config.json` | Copy of `resource/ebook/1/jjbundle/app.config.json` with `content.url` set to `../../resource/contents/1/lesson{N}/OPS`, and the `template` array's `"activated"` flags swapped so `"contents"` is `true` and `"ebook"` is `false` (matching the default `viewer/contents/jjbundle/app.config.json` template selection) |
+
+**Not fixed (intentionally):** `cdbook.xml` and `digitaltextbook.xml` also 404 at the lesson root (`resource/contents/1/lesson{N}/cdbook.xml`, `.../digitaltextbook.xml`). These are **not bugs** — the viewer probes multiple book-manifest formats (`cdbook.xml` → `digitaltextbook.xml` → EPUB3 `META-INF/container.xml`/`content.opf`) in order and falls back correctly. Lesson content directories are genuine EPUB3 packages (they already have a valid `META-INF/container.xml` + `OPS/content.opf`), so faking a `cdbook.xml` there would misrepresent the content format. Leaving these as expected fallback-probe 404s is consistent with how the ebook path's own `cdbook.xml` is the *real* manifest for that content type.
+
+**Verification (Playwright, real navigation, all 4 lessons):**
+```
+Before: 4 failed requests (app.config.json, cdbook.xml, digitaltextbook.xml, link-tab.json) + 1 console error per lesson
+After:  2 failed requests (cdbook.xml, digitaltextbook.xml — expected format probes) + 0 console errors per lesson
+No pageerror exceptions in any case (before or after).
+```
+
+Separately verified (does not require a fix): the `<a>`-tag-click mechanism from Fix #7/#9 was tested end-to-end inside the real nested iframe (`viewer/ebook` → `page-32.html`) using Playwright's `popup` event listener — a `window.top.document`-created `<a target="_blank">` click **does** open a real new tab from within the iframe, confirming the popup-blocker workaround functions correctly in an actual browser (not just jsdom).
+
+Also confirmed via file-existence audit: of 375 distinct `pathString` values referenced across all ebook `render-page-*.js` files, 329 (~88%) resolve to real files under `/data/etextbook/resource/data/...` when used as a literal root-relative URL — i.e. `window.jj._path.toURL()` (Fix #8) being a no-op in the web build (jj._path does not exist there) is harmless for the large majority of content, since these pathStrings are already stored as web-servable absolute paths. The remaining ~12% reference media files that are missing from the uploaded PE dataset entirely — a content/asset-upload gap, not a JS logic bug.
