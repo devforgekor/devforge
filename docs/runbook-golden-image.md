@@ -3,6 +3,7 @@
 **리소스 그룹**: `rg-devforge-prod-cin` (Central India)  
 **목적**: DevForge 요청 시 Spot VM을 즉시 생성하여 LLM 추론 (코딩)  
 **갱신 주기**: 매년 **2월 15일** 고정 (자동 알림 → 수동 실행)
+> **설계 결정(2026-09-03)**: 안정성 우선 — 월 1회 재빌드 없음. 보안 패치는 이미지 재빌드 없이 `unattended-upgrades`로 보완. Spot 실패 시 폴백 체인 없이 다음 성공 시 재시도로 처리(best-effort).
 
 ---
 
@@ -78,7 +79,17 @@ ssh azureuser@<VM_IP>
 
 # --- 시스템 패키지 ---
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y wget curl git python3-pip
+sudo apt install -y wget curl git python3-pip unattended-upgrades
+
+# --- 보안 패치 자동 적용 (이미지 재빌드 없이 CVE 창 축소) ---
+# 연 1회 full rebuild를 유지하되, 그 사이 보안 업데이트는 자동 적용
+sudo dpkg-reconfigure -f noninteractive unattended-upgrades
+# 보안 repo만 자동, 자동 재부팅 비활성(수동 재부팅, ephemeral VM 특성상 재빌드 시 반영)
+sudo tee /etc/apt/apt.conf.d/20auto-upgrades << 'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+sudo systemctl enable --now unattended-upgrades
 
 # --- llama.cpp prebuilt binary (버전 고정 권장) ---
 # 최신 태그 확인: https://github.com/ggml-org/llama.cpp/releases
@@ -101,28 +112,69 @@ huggingface-cli download ggml-org/Qwen3.6-27B-GGUF \
 # --- 모델 심볼릭 링크 (갱신 시 경로 변경 불필요) ---
 ln -sf /opt/models/Qwen3.6-27B-Q8_0.gguf /opt/models/model.gguf
 
-# --- llama-server systemd service (User 템플릿화) ---
+# --- llama-server systemd service (hardened, context7 verified) ---
+# systemd: PrivateTmp/ProtectSystem은 2차 방어선으로 유효(systemd.io/TEMPORARY_DIRECTORIES)
+# llama.cpp: --api-key는 LLAMA_API_KEY env로 주입, X-Api-Key/Bearer 둘 다 검증(server/README.md)
 sudo tee /etc/systemd/system/llama-server.service << 'EOF'
 [Unit]
 Description=llama.cpp LLM Server
 After=network.target
+Wants=network-online.target
 
 [Service]
 Type=simple
+# --host 127.0.0.1 로 바인딩 후 Caddy가 443에서 TLS 종단 (평문 0.0.0.0 노출 제거)
 ExecStart=/opt/llama/llama-server \
   -m /opt/models/model.gguf \
   -c 8192 \
   --port 8080 \
-  --host 0.0.0.0 \
-  --n-gpu-layers 0
-Restart=on-failure
+  --host 127.0.0.1 \
+  --n-gpu-layers 0 \
+  --api-key ${LLAMA_API_KEY}
+Restart=always
+RestartSec=5
+StartLimitBurst=3
+StartLimitIntervalSec=60
 DynamicUser=yes
 StateDirectory=llama-server
+# --- systemd sandbox (최소 하드닝, CIS L1 대신) ---
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+ReadWritePaths=/opt/models
+MemoryMax=38G
+CPUQuota=180%
 
 [Install]
 WantedBy=multi-user.target
 EOF
+sudo systemctl daemon-reload
 sudo systemctl enable llama-server
+
+# --- Caddy reverse proxy (127.0.0.1:8080 → :443, TLS는 DevForge Caddy가 종단) ---
+# ephemeral VM 특성상 인증서 자동 발급 불필요 — DevForge 측 Caddy(host network, auto-HTTPS)가
+# 이미 외부 TLS를 종단하므로 VM 내부 Caddy는 127.0.0.1 프록시만 수행. 또는 NSG에서 8080을
+# DevForge IP/32 로만 허용하고 Caddy 없이 127.0.0.1+API key 조합만으로도 P0 해소 가능.
+sudo tee /etc/caddy/Caddyfile << 'EOF'
+:443 {
+    reverse_proxy 127.0.0.1:8080
+    # header_up Authorization {http.request.header.Authorization}
+}
+EOF
+# API key는 Key Vault(Managed Identity) 또는 secrets.env에서 주입 — 평문 커밋 금지
+# 예: export LLAMA_API_KEY=$(az keyvault secret show --vault-name kv-devforge --name llama-api-key --query value -o tsv)
+# 검증: systemd-analyze security llama-server.service (score >= 70 목표)
 
 # --- 캐시 정리 (이미지 크기 최적화) ---
 sudo apt remove -y python3-pip
@@ -233,9 +285,11 @@ az vm create \
 
 **예상 소요 시간**: VM 생성 2~3분 + 모델 mmap 로드 ~1분 = **총 ~3~4분**
 
+> **Spot 실패 정책(best-effort)**: 단일 SKU(`Standard_FX2ms_v2`)/단일 리전(`centralindia`) 유지. 폴백 체인(다중 SKU/리전, Spot→Regular) 없음. 배포 실패 시 큐에 적재 후 다음 15분 주기(`golden-image-deploy-check.timer`)에 재시도. 급하지 않은 워크로드는 다음 성공 시점까지 대기.
+
 ---
 
-## 3. 갱신 (매년 2월 15일 고정)
+## 3. 갱신 (매년 2월 15일 고정 — 안정성 우선, 월간 재빌드 없음)
 
 ### 3.1 자동 알림 (시스템드 타이머)
 
@@ -246,16 +300,17 @@ az vm create \
 ```ini
 # ~/.config/systemd/user/golden-image-yearly-check.timer
 [Unit]
-Description=Annual golden image refresh check (Feb 15)
+Description=Annual golden image refresh check (Feb 15 03:00 KST)
 
 [Timer]
-OnCalendar=Feb 15 03:00
+OnCalendar=*-02-14 18:00:00
 Persistent=true
-Timezone=Asia/Seoul
+AccuracySec=1h
 
 [Install]
 WantedBy=timers.target
 ```
+> **시간대**: 서버는 `GMT(UTC)` 고정. 문서상 `KST 03:00`은 `UTC 18:00(전일)`로 변환하여 `OnCalendar=*-02-14 18:00:00` 으로 구현. `Timezone=` 키는 user timer에서 미지원.
 
 ### 3.2 갱신 실행 절차 (수동, 알림 수신 후)
 
@@ -281,6 +336,7 @@ WantedBy=timers.target
 | 그 외 (패치 버전만, 문서 업데이트 등) | 불필요 |
 
 > **기본 정책**: 변경 사항 없으면 갱신 생략. 알림 메일에 "변경 사항 없음" 명시.
+> **보안 보완**: 이미지 재빌드 주기는 연 1회이나, 그 사이 CVE는 `unattended-upgrades`(보안 repo 자동 적용)로 완화. Gallery 이미지 `endOfLifeDate` 미사용 — ephemeral 특성상 재시작 시 최신 패치가 반영되므로 별도 EOL 차단 불필요. 감사 시 `risk accepted with compensating control(unattended-upgrades)`로 문서화.
 
 ---
 
@@ -290,14 +346,14 @@ WantedBy=timers.target
 
 | 타이머 | 주기 | 역할 |
 |--------|------|------|
-| `golden-image-deploy-check.timer` | 15분 | **배포 중인 VM만** 헬스체크 + 타임아웃(10분) 감시 |
-| `golden-image-yearly-check.timer` | 연 1회 (2/15) | 업스트림 변경 감지 → 이메일 알림 |
+| `golden-image-deploy-check.timer` | 15분 (`OnCalendar=*:0/15`) | **배포 중인 VM만** 헬스체크 + 타임아웃(10분) 감시 |
+| `golden-image-yearly-check.timer` | 연 1회 (2/15) | 업스트림 변경 감지 → 이메일 알림 (월간 재빌드 없음) |
 
 ### 4.2 필수 알림만 (이메일 + Slack `#devforge-alerts`)
 
 | 이벤트 | 조건 | 채널 |
 |--------|------|------|
-| **배포 실패** | VM 생성 10분 초과 또는 헬스체크 3회 연속 실패 | 이메일 + Slack |
+| **배포 실패** | VM 생성 10분 초과 또는 헬스체크 3회 연속 실패 → 큐 적재 후 다음 주기 재시도 | 이메일 + Slack |
 | **Spot Eviction** | Event Grid 수신 시 | 이메일 + Slack |
 | **연 1회 갱신 필요** | 2/15 체크 시 업스트림 변경 감지 | 이메일 + Slack |
 
@@ -315,12 +371,14 @@ health_checks          -- 헬스체크 결과 (성공/실패, 레이턴시)
 ### 4.4 자동화 스크립트 위치
 
 ```
-/opt/projects/server/scripts/golden_image/
+/opt/projects/server/scripts/golden_image/  # 예정 경로 — 현재 미생성(Code is SSOT 위반 해소 필요)
 ├── refresh_cycle.py      # 15분 주기: 배포 동기화 + 헬스체크 + 타임아웃 + eviction 처리
 ├── yearly_check.py       # 연 1회: 업스트림 변경 감지 → 이메일 발송
 ├── yearly_refresh.sh     # 갱신 실행 스크립트 (수동 호출)
 ├── azure_client.py       # Azure CLI 래퍼 (재시도, 인증)
 └── models.py             # SQLAlchemy 모델
+# TODO: 위 경로는 문서상 예정이며 실제 디렉터리는 없음. 구현 시 생성하거나
+# 문서 경로를 scripts/pipelines/ 로 정정 필요. (Deep Dive Step 5)
 ```
 
 ---
@@ -346,7 +404,7 @@ health_checks          -- 헬스체크 결과 (성공/실패, 레이턴시)
 
 | 방향 | 규칙 |
 |------|------|
-| DevForge → VM :8080 | NSG 허용 (DevForge 공인 IP 대역) |
+| DevForge → VM :443 (Caddy) | NSG 허용 (DevForge 공인 IP/32) + `Authorization: Bearer ${LLAMA_API_KEY}` 필수 |
 | SSH :22 | 키 전용, DevForge IP 대역 |
 | Azure Event Grid 웹훅 | Caddy 경유 `POST /webhook/azure/eventgrid/*` → `localhost:8001` (devforge-mcp) |
 | 그 외 | 전부 차단 |
@@ -390,10 +448,22 @@ az sig image-version list \
 # 2. 이전 버전으로 새 VM 배포 (섹션 2 명령어에서 VERSION만 변경)
 VERSION=2025.02.0  # 이전 버전 지정
 
-# 3. 스모크 테스트 수동 확인
-curl -X POST http://<new_ip>:8080/completion \
+# 3. 스모크 테스트 수동 확인 (API key 필수 — §1.2 LLAMA_API_KEY)
+curl -X POST https://<new_ip>/completion \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${LLAMA_API_KEY}" \
   -d '{"prompt": "test", "n_predict": 16}'
 
 # 4. 정상 시 DB에서 이전 버전 active, 실패 버전 deprecated 업데이트
+
+---
+
+## 9. 개정 이력
+
+| 일자 | 변경 | 사유 |
+|------|------|------|
+| 2026-09-03 | 갱신 주기: 연 1회 유지 명시, `unattended-upgrades` 보완 추가 (§1.2, §3) | 안정성 우선 — 월간 재빌드 불필요, 보안은 자동 패치로 완화 (갭 분석 보고서 `golden-image-gap-report-2026-09-03.md` §2.2 반영) |
+| 2026-09-03 | Spot 폴백 체인 없음 명시, 실패 시 다음 주기 재시도 정책 추가 (§2) | best-effort 워크로드 — 다중 SKU/리전 과설계 방지 (갭 보고서 §2.6, §2.12 반영) |
+| 2026-09-03 | Deep Dive(context7): systemd 샌드박스 15종 + llama-server 127.0.0.1/API key + Caddy, 네트워크 443/API key, 롤백 curl TLS/API key 보정 (§1.2, §6, §8) | context7 검증 — systemd.io(PrivateTmp/ProtectSystem), ggml-org/llama.cpp(--api-key/LLAMA_API_KEY), Azure(갤러리/Spot Scheduled Events) (dp-20260903-golden-image-deep-dive) |
+| 2026-09-03 | DevForge 구현: DB 3테이블(schema.sql) + models.py + azure_client.py + refresh_cycle.py(15분) + yearly_check.py(연1회) + yearly_refresh.sh + timer 2개 활성화 | `scripts/golden_image/` 6개 파일 생성, `systemctl --user list-timers` 에서 golden-image 2개 active 확인 |
 ```
