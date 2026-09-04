@@ -42,7 +42,7 @@ DevForge ← 결과 수신
 | 리소스 | 이름 | 위치 | 비고 |
 |--------|------|------|------|
 | 리소스 그룹 | `rg-devforge-prod-cin` | Central India | 모든 리소스 통일 |
-| Compute Gallery | `NeuronGallery` | Central India | 최초 1회 생성 |
+| Compute Gallery | `gallery_devforge_prod_cin` | Central India | 최초 1회 생성 |
 | 이미지 정의 | `llm-qwen-27b-golden` | Gallery 내 | 최초 1회 생성 |
 | 이미지 버전 | `YYYY.MM.0` | Central India | 연 1회 증가 (예: 2026.02.0) |
 | 빌더 VM (임시) | `temp-golden-builder` | Central India | 빌드 후 삭제 |
@@ -60,12 +60,12 @@ az vm create \
   --resource-group rg-devforge-prod-cin \
   --name temp-golden-builder \
   --location centralindia \
-  --image UbuntuMinimal2604 \
+  --image Ubuntu2204 \
   --size Standard_FX2ms_v2 \
   --admin-username azureuser \
   --ssh-key-values ~/.ssh/id_rsa.pub \
   --os-disk-size-gb 64 \
-  --os-disk-type StandardSSD_LRS \
+  --storage-sku StandardSSD_LRS \
   --os-disk-delete-option Delete
 
 # 공용 IP 확인
@@ -217,13 +217,13 @@ az image create \
 # Gallery 생성 (최초 1회)
 az sig create \
   --resource-group rg-devforge-prod-cin \
-  --gallery-name NeuronGallery \
+  --gallery-name gallery_devforge_prod_cin \
   --location centralindia
 
 # 이미지 정의 생성 (최초 1회)
 az sig image-definition create \
   --resource-group rg-devforge-prod-cin \
-  --gallery-name NeuronGallery \
+  --gallery-name gallery_devforge_prod_cin \
   --gallery-image-definition llm-qwen-27b-golden \
   --publisher AxisPublisher \
   --offer AxisOffer \
@@ -235,7 +235,7 @@ VERSION=$(date +%Y.%m.0)  # 예: 2026.02.0
 SUB=$(az account show --query id -o tsv)
 az sig image-version create \
   --resource-group rg-devforge-prod-cin \
-  --gallery-name NeuronGallery \
+  --gallery-name gallery_devforge_prod_cin \
   --gallery-image-definition llm-qwen-27b-golden \
   --gallery-image-version ${VERSION} \
   --managed-image "/subscriptions/${SUB}/resourceGroups/rg-devforge-prod-cin/providers/Microsoft.Compute/images/axis-golden-image" \
@@ -264,7 +264,7 @@ az image delete \
 # 버전은 최신 active 버전 조회 후 사용
 VERSION=$(az sig image-version list \
   --resource-group rg-devforge-prod-cin \
-  --gallery-name NeuronGallery \
+  --gallery-name gallery_devforge_prod_cin \
   --gallery-image-definition llm-qwen-27b-golden \
   --query "sort_by(@, &name)[-1].name" -o tsv)
 
@@ -272,7 +272,7 @@ az vm create \
   --resource-group rg-devforge-prod-cin \
   --name llm-qwen-27b-$(date +%s) \
   --location centralindia \
-  --image "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-devforge-prod-cin/providers/Microsoft.Compute/galleries/NeuronGallery/images/llm-qwen-27b-golden/versions/${VERSION}" \
+  --image "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-devforge-prod-cin/providers/Microsoft.Compute/galleries/gallery_devforge_prod_cin/images/llm-qwen-27b-golden/versions/${VERSION}" \
   --size Standard_FX2ms_v2 \
   --admin-username azureuser \
   --ssh-key-values ~/.ssh/id_rsa.pub \
@@ -441,7 +441,7 @@ SLACK_WEBHOOK_URL=
 # 1. 이전 active 버전 확인
 az sig image-version list \
   --resource-group rg-devforge-prod-cin \
-  --gallery-name NeuronGallery \
+  --gallery-name gallery_devforge_prod_cin \
   --gallery-image-definition llm-qwen-27b-golden \
   --query "[?provisioningState=='Succeeded'].{Version:name}" -o table
 
