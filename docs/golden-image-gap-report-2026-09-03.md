@@ -365,3 +365,11 @@ syft /opt/llama -o spdx-json > /opt/llama/sbom.spdx.json
 - oneuptime / AskAresh / Experts Exchange — Packer+Terraform golden image pipeline
 
 > 본 보고서는 웹 검색 기반 교차 검증을 거쳤으며, 모든 권고는 `runbook-golden-image.md` 라인 단위로 추적 가능하다. 추가 검증이 필요한 항목은 `exa-search` 또는 `context7`로 2차 확인을 권장한다.
+
+---
+
+## 7. 개정 이력
+
+| 일자 | 변경 | 사유 |
+|------|------|------|
+| 2026-09-04 | 15분 타이머 복구 + orphan VM 강제 종료: `refresh_cycle.py`에 `_check_orphan_vms()` 추가, `azure_client.py`에 `list_vms_by_prefix()` 추가, symlink 생성, `claude-mode` 기본값 `deepseek` | service path 불일치로 타이머가 실행되지 않았음. VM 잔존 시 `az vm delete --force-deletion`으로 강제 종료하는 안전장치 구현 |

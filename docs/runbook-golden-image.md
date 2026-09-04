@@ -465,5 +465,5 @@ curl -X POST https://<new_ip>/completion \
 | 2026-09-03 | 갱신 주기: 연 1회 유지 명시, `unattended-upgrades` 보완 추가 (§1.2, §3) | 안정성 우선 — 월간 재빌드 불필요, 보안은 자동 패치로 완화 (갭 분석 보고서 `golden-image-gap-report-2026-09-03.md` §2.2 반영) |
 | 2026-09-03 | Spot 폴백 체인 없음 명시, 실패 시 다음 주기 재시도 정책 추가 (§2) | best-effort 워크로드 — 다중 SKU/리전 과설계 방지 (갭 보고서 §2.6, §2.12 반영) |
 | 2026-09-03 | Deep Dive(context7): systemd 샌드박스 15종 + llama-server 127.0.0.1/API key + Caddy, 네트워크 443/API key, 롤백 curl TLS/API key 보정 (§1.2, §6, §8) | context7 검증 — systemd.io(PrivateTmp/ProtectSystem), ggml-org/llama.cpp(--api-key/LLAMA_API_KEY), Azure(갤러리/Spot Scheduled Events) (dp-20260903-golden-image-deep-dive) |
-| 2026-09-03 | DevForge 구현: DB 3테이블(schema.sql) + models.py + azure_client.py + refresh_cycle.py(15분) + yearly_check.py(연1회) + yearly_refresh.sh + timer 2개 활성화 | `scripts/golden_image/` 6개 파일 생성, `systemctl --user list-timers` 에서 golden-image 2개 active 확인 |
+| 2026-09-04 | 15분 타이머 복구 + orphan VM 강제 종료 안전장치 추가: `_check_orphan_vms()` + `azure_client.list_vms_by_prefix()` + symlink 복구 + `claude-mode` 기본값 `deepseek` | `golden-image-deploy-check.service` 경로 불일치로 실행 안 됨. symlink 생성, VM 잔존 시 강제 삭제 로직 추가, 기본 모드 `deepseek`로 변경 |
 ```
