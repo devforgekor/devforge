@@ -8,9 +8,32 @@ import aiohttp
 from aiohttp import web
 
 OR_BASE = "https://openrouter.ai/api/v1"
-API_KEY = "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"
+
+def _load_openrouter_keys() -> list:
+    """Load all available OpenRouter API keys from env (round-robin pool)."""
+    keys = []
+    for env_var in (
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_MESIDS_API_KEY",
+        "OPENROUTER_MINIPARK4U_API_KEY",
+    ):
+        k = os.environ.get(env_var, "").strip()
+        if k and k not in keys:
+            keys.append(k)
+    return keys or []
+
+API_KEYS = _load_openrouter_keys()
+if not API_KEYS:
+    raise RuntimeError(
+        "No OpenRouter API key found. Set OPENROUTER_API_KEY / "
+        "OPENROUTER_MESIDS_API_KEY / OPENROUTER_MINIPARK4U_API_KEY"
+    )
+
 RPM = 15
 INTERVAL = 60.0 / RPM
+
+_key_idx = 0
+_key_lock = asyncio.Lock()
 
 log = logging.getLogger("or-proxy")
 
@@ -30,6 +53,14 @@ class RateLimiter:
 
 limiter = RateLimiter()
 
+async def _next_api_key() -> str:
+    """Round-robin across API key accounts to bypass per-key RPM limits."""
+    global _key_idx
+    async with _key_lock:
+        key = API_KEYS[_key_idx % len(API_KEYS)]
+        _key_idx += 1
+    return key
+
 async def proxy(request):
     path = request.match_info.get("path", "")
     path = path.removeprefix("v1/") if path.startswith("v1/") else path
@@ -43,7 +74,7 @@ async def proxy(request):
         k: v for k, v in request.headers.items()
         if k.lower() not in ("host", "content-length", "transfer-encoding")
     }
-    headers["Authorization"] = f"Bearer {API_KEY}"
+    headers["Authorization"] = f"Bearer {await _next_api_key()}"
 
     async with aiohttp.ClientSession() as sess:
         async with sess.request(
@@ -73,7 +104,7 @@ async def main():
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", port)
     await site.start()
-    log.info("OR proxy on 127.0.0.1:%d (%d RPM)", port, RPM)
+    log.info("OR proxy on 127.0.0.1:%d (%d RPM, %d accounts round-robin)", port, RPM, len(API_KEYS))
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
