@@ -55,7 +55,7 @@ STRIP_RESP_HEADERS = {
     "www-authenticate",
 }
 
-ANTHROPIC_API_KEY = os.environ.get("OPENROUTER_DEEPSEEK_V4_FLASH_API_KEY") or ""
+ANTHROPIC_API_KEY = os.environ.get("OPENROUTER_MESIDS_API_KEY") or ""
 
 
 def _flatten_text(content) -> str:
@@ -79,7 +79,7 @@ def _resolve_api_key() -> str:
     """Resolve OpenRouter API key from env (secrets.env sourced by systemd)."""
     key = ANTHROPIC_API_KEY
     if not key:
-        key = os.environ.get("OPENROUTER_DEEPSEEK_V4_FLASH_API_KEY", "")
+        key = os.environ.get("OPENROUTER_MESIDS_API_KEY", "")
     if not key:
         key = os.environ.get("OPENROUTER_API_KEY", "")
     return key
@@ -884,7 +884,7 @@ def main() -> None:
 
     if not _resolve_api_key():
         print(
-            "[openrouter-proxy] WARNING: OPENROUTER_DEEPSEEK_V4_FLASH_API_KEY not set",
+            "[openrouter-proxy] WARNING: OPENROUTER_MESIDS_API_KEY not set",
             file=sys.stderr,
         )
         print("[openrouter-proxy] Set it in ~/.config/devforge/secrets.env", file=sys.stderr)
