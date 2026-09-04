@@ -855,6 +855,31 @@ modules:
     tools_def.py:
       status: production
       purpose: Gemini function-calling tool definitions.
+- path: scripts/golden_image/
+  purpose: Golden Image
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    azure_client.py:
+      status: production
+      purpose: "Azure CLI wrapper \u2014 Managed Identity prior, SP fallback, retry."
+    models.py:
+      status: production
+      purpose: "Golden Image DB wrapper \u2014 lib/db.py psql pattern reuse, no ORM."
+    refresh_cycle.py:
+      status: production
+      purpose: "15\uBD84 \uC8FC\uAE30 \u2014 \uBC30\uD3EC \uB3D9\uAE30\uD654 + \uD5EC\
+        \uC2A4\uCCB4\uD06C + \uD0C0\uC784\uC544\uC6C3(10\uBD84) + \uC794\uC874 VM\
+        \ \uAC15\uC81C \uC885\uB8CC."
+    yearly_check.py:
+      status: production
+      purpose: "Yearly upstream change detection \u2014 Qwen/llama.cpp via GitHub\
+        \ API."
+    yearly_refresh.sh:
+      status: unknown
+      purpose: "yearly_refresh.sh \u2014 Golden Image \uAC31\uC2E0 (\uC218\uB3D9,\
+        \ \uB300\uD654\uD615 \uD655\uC778)"
 - path: scripts/hooks/
   purpose: Hooks
   files:
