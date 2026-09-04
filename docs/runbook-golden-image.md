@@ -208,7 +208,7 @@ az image create \
   --resource-group rg-devforge-prod-cin \
   --name axis-golden-image \
   --source temp-golden-builder \
-  --os-type Linux
+  --os-type Linux --hyper-v-generation V2
 ```
 
 ### 1.6 Compute Gallery 등록
@@ -228,7 +228,7 @@ az sig image-definition create \
   --publisher AxisPublisher \
   --offer AxisOffer \
   --sku AxisSku \
-  --os-type Linux
+  --os-type Linux --hyper-v-generation V2
 
 # 이미지 버전 생성 (연 1회: YYYY.MM.0 형식)
 VERSION=$(date +%Y.%m.0)  # 예: 2026.02.0
