@@ -41,6 +41,7 @@ DAY_PORTS = {8080, 8082}
 # ── 서비스 / 타이머 ─────────────────────────────────────────────────
 SERVICE_TARGETS = [
     "devforge-turn-watcher",
+    "ebook-watcher",
 ]
 
 # Alert-only targets (monitor only, no recovery)
