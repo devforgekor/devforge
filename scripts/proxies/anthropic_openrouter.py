@@ -57,6 +57,21 @@ STRIP_RESP_HEADERS = {
 
 ANTHROPIC_API_KEY = os.environ.get("OPENROUTER_MESIDS_API_KEY") or ""
 
+# Ordered list of OpenRouter API keys. Tried in order; on 401/402/403 (auth/credit)
+# the proxy retries with the next key. Non-retryable status codes (4xx other than
+# 401/402/403, all 2xx/3xx/5xx) are passed through unchanged.
+API_KEYS: List[str] = [
+    os.environ.get("OPENROUTER_MESIDS_API_KEY", ""),
+    os.environ.get("OPENROUTER_MINIPARK4U_API_KEY", ""),
+    os.environ.get("OPENROUTER_API_KEY", ""),
+]
+# Filter out empty entries while preserving order.
+API_KEYS = [k for k in API_KEYS if k]
+
+# Status codes that indicate the current key is bad (auth failure or no credit).
+# Trigger key rotation to the next entry in API_KEYS.
+RETRY_KEY_STATUSES = {401, 402, 403}
+
 
 def _flatten_text(content) -> str:
     """Flatten Anthropic content blocks or string to plain text."""
@@ -76,13 +91,8 @@ def _flatten_text(content) -> str:
 
 
 def _resolve_api_key() -> str:
-    """Resolve OpenRouter API key from env (secrets.env sourced by systemd)."""
-    key = ANTHROPIC_API_KEY
-    if not key:
-        key = os.environ.get("OPENROUTER_MESIDS_API_KEY", "")
-    if not key:
-        key = os.environ.get("OPENROUTER_API_KEY", "")
-    return key
+    """Resolve primary OpenRouter API key from env (secrets.env sourced by systemd)."""
+    return API_KEYS[0] if API_KEYS else ""
 
 
 def _anthropic_to_openai(anthropic_body: dict) -> dict:
@@ -674,58 +684,89 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
         is_stream = openai_req.get("stream", False)
         anthropic_model = anthropic_req.get("model", "claude")
 
-        # Forward to OpenRouter
-        conn = self._build_connection()
+        # Forward to OpenRouter, trying each API key in order.
+        # On 401/402/403 (auth/credit) → next key.
+        # On 5xx or connection error → fallback to DeepSeek proxy.
         openai_body = json.dumps(openai_req, ensure_ascii=False).encode("utf-8")
         path = "/api/v1/chat/completions"
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {_resolve_api_key()}",
-            "HTTP-Referer": "http://localhost",
-            "X-Title": "devforge-proxy",
-            "Accept": "text/event-stream" if is_stream else "application/json",
-            "User-Agent": "devforge-proxy/1.0",
-            "X-OpenRouter-Cache": "true",
-        }
+        for key_idx, api_key in enumerate(API_KEYS):
+            key_label = f"key[{key_idx}]"
+            conn = self._build_connection()
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "HTTP-Referer": "http://localhost",
+                "X-Title": "devforge-proxy",
+                "Accept": "text/event-stream" if is_stream else "application/json",
+                "User-Agent": "devforge-proxy/1.0",
+                "X-OpenRouter-Cache": "true",
+            }
 
-        try:
-            conn.request("POST", path, body=openai_body, headers=headers)
-            resp = conn.getresponse()
+            try:
+                conn.request("POST", path, body=openai_body, headers=headers)
+                resp = conn.getresponse()
+            except Exception as e:
+                print(
+                    f"[openrouter-proxy] {key_label} upstream connection failed: {e}",
+                    file=sys.stderr,
+                )
+                conn.close()
+                # Network failure → not a key problem, fall back to DeepSeek.
+                self._forward_to_deepseek(body, anthropic_model, is_stream)
+                return
+
             cache_state = resp.getheader("x-openrouter-cache-status", "UNKNOWN")
             cache_age = resp.getheader("x-openrouter-cache-age")
             if cache_age:
-                print(f"[openrouter-proxy] cache={cache_state} age={cache_age}s", file=sys.stderr)
+                print(f"[openrouter-proxy] {key_label} cache={cache_state} age={cache_age}s", file=sys.stderr)
             else:
-                print(f"[openrouter-proxy] cache={cache_state}", file=sys.stderr)
-        except Exception as e:
-            print(f"[openrouter-proxy] upstream connection failed: {e}", file=sys.stderr)
-            conn.close()
-            self._forward_to_deepseek(body, anthropic_model, is_stream)
+                print(f"[openrouter-proxy] {key_label} cache={cache_state}", file=sys.stderr)
+
+            # Key-level failure: rotate to next key if available.
+            if resp.status in RETRY_KEY_STATUSES:
+                err_body = resp.read()
+                conn.close()
+                has_next = key_idx + 1 < len(API_KEYS)
+                print(
+                    f"[openrouter-proxy] {key_label} OpenRouter {resp.status} "
+                    f"({err_body[:120]!r}), "
+                    + (f"rotating to key[{key_idx + 1}]" if has_next else "no more keys, falling back to DeepSeek"),
+                    file=sys.stderr,
+                )
+                if has_next:
+                    continue
+                # No more keys → fall back to DeepSeek.
+                self._forward_to_deepseek(body, anthropic_model, is_stream)
+                return
+
+            # OpenRouter 5xx → fallback to DeepSeek (not key-specific).
+            if resp.status >= 500:
+                raw = resp.read()
+                conn.close()
+                print(
+                    f"[openrouter-proxy] {key_label} OpenRouter {resp.status}, falling back to DeepSeek",
+                    file=sys.stderr,
+                )
+                self._forward_to_deepseek(body, anthropic_model, is_stream)
+                return
+
+            # Success path: stream or non-stream.
+            try:
+                if (
+                    is_stream
+                    and resp.getheader("transfer-encoding", "").lower() == "chunked"
+                    or is_stream
+                ):
+                    self._stream_response(resp, anthropic_model)
+                else:
+                    self._nonstream_response(resp, anthropic_model)
+            finally:
+                conn.close()
             return
 
-        # OpenRouter 5xx → fallback to DeepSeek
-        if resp.status >= 500:
-            raw = resp.read()
-            conn.close()
-            print(
-                f"[openrouter-proxy] OpenRouter {resp.status}, falling back to DeepSeek",
-                file=sys.stderr,
-            )
-            self._forward_to_deepseek(body, anthropic_model, is_stream)
-            return
-
-        try:
-            if (
-                is_stream
-                and resp.getheader("transfer-encoding", "").lower() == "chunked"
-                or is_stream
-            ):
-                self._stream_response(resp, anthropic_model)
-            else:
-                self._nonstream_response(resp, anthropic_model)
-        finally:
-            conn.close()
+        # All keys exhausted (shouldn't reach here — last iteration falls back to DeepSeek).
+        self._forward_to_deepseek(body, anthropic_model, is_stream)
 
     def _nonstream_response(self, resp: http.client.HTTPResponse, anthropic_model: str) -> None:
         """Handle non-streaming response: read full body, convert to Anthropic format."""
