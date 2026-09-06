@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-09-04'
+  updated: '2026-09-06'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -55,6 +55,9 @@ modules:
     day_cycle.sh:
       status: unknown
       purpose: "day_cycle.sh \u2014 async pipeline (pipeline_state-driven)"
+    droplr_upload.py:
+      status: production
+      purpose: Upload a file to Azure Blob, shorten with Droplr, print d.pr URL.
     exa_mcp.py:
       status: unknown
       purpose: "exa_mcp \u2014 MCP server for Exa Search with round-robin key rotation."
@@ -125,8 +128,8 @@ modules:
         \ \u2192 \uCEE4\uBC0B \u2192 \uD478\uC2DC"
     or_rate_limiter.py:
       status: experimental
-      purpose: "OpenRouter rate-limiting proxy (15 RPM \u2192 safe margin from 20\
-        \ RPM limit)."
+      purpose: OpenRouter rate-limiting proxy (15 RPM, multi-key round-robin + auto-retry
+        on 429/5xx).
     orchestrator.py:
       status: production
       purpose: "DevForge Orchestrator \u2014 LLM-based smart router to specialized\
