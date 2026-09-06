@@ -47,6 +47,158 @@ def _get_client():
     return _notion
 
 
+_VALID_LANGUAGES = frozenset(
+    {
+        "abap",
+        "abc",
+        "agda",
+        "arduino",
+        "ascii art",
+        "assembly",
+        "bash",
+        "basic",
+        "bnf",
+        "c",
+        "c#",
+        "c++",
+        "clojure",
+        "coffeescript",
+        "coq",
+        "css",
+        "dart",
+        "dhall",
+        "diff",
+        "docker",
+        "ebnf",
+        "elixir",
+        "elm",
+        "erlang",
+        "f#",
+        "flow",
+        "fortran",
+        "gherkin",
+        "glsl",
+        "go",
+        "graphql",
+        "groovy",
+        "haskell",
+        "hcl",
+        "html",
+        "idris",
+        "java",
+        "javascript",
+        "json",
+        "julia",
+        "kotlin",
+        "latex",
+        "less",
+        "lisp",
+        "livescript",
+        "llvm ir",
+        "lua",
+        "makefile",
+        "markdown",
+        "markup",
+        "matlab",
+        "mathematica",
+        "mermaid",
+        "nix",
+        "notion formula",
+        "objective-c",
+        "ocaml",
+        "pascal",
+        "perl",
+        "php",
+        "plain text",
+        "powershell",
+        "prolog",
+        "protobuf",
+        "purescript",
+        "python",
+        "r",
+        "racket",
+        "reason",
+        "ruby",
+        "rust",
+        "sass",
+        "scala",
+        "scheme",
+        "scss",
+        "shell",
+        "smalltalk",
+        "solidity",
+        "sql",
+        "swift",
+        "toml",
+        "typescript",
+        "vb.net",
+        "verilog",
+        "vhdl",
+        "visual basic",
+        "webassembly",
+        "xml",
+        "yaml",
+        "java/c/c++/c#",
+    }
+)
+
+_LANG_ALIASES = {
+    "js": "javascript",
+    "ts": "typescript",
+    "py": "python",
+    "rb": "ruby",
+    "rs": "rust",
+    "sh": "shell",
+    "zsh": "shell",
+    "bash": "shell",
+    "http": "plain text",
+    "text": "plain text",
+    "txt": "plain text",
+    "": "plain text",
+    "plain": "plain text",
+    "console": "shell",
+    "terminal": "shell",
+    "env": "plain text",
+    "dos": "plain text",
+    "ps1": "powershell",
+    "ps": "powershell",
+    "cmd": "plain text",
+    "gradle": "groovy",
+    "make": "makefile",
+    "dockerfile": "docker",
+    "yaml": "yaml",
+    "yml": "yaml",
+    "json5": "json",
+    "cjs": "javascript",
+    "mjs": "javascript",
+    "jsx": "javascript",
+    "tsx": "typescript",
+    "vue": "html",
+    "kt": "kotlin",
+    "kts": "kotlin",
+    "swift": "swift",
+    "m": "objective-c",
+    "mm": "objective-c",
+    "cmake": "plain text",
+    "patch": "diff",
+    "nginx": "plain text",
+    "apache": "plain text",
+    "sqlite": "sql",
+    "mysql": "sql",
+    "pgsql": "sql",
+    "redis": "plain text",
+}
+
+
+def _normalize_language(lang: str) -> str:
+    normalized = lang.strip().lower()
+    if normalized in _VALID_LANGUAGES:
+        return normalized
+    if normalized in _LANG_ALIASES:
+        return _LANG_ALIASES[normalized]
+    return "plain text"
+
+
 def _markdown_to_notion_blocks(md: str) -> list[dict]:
     """Convert markdown text to Notion block objects."""
     blocks = []
@@ -62,7 +214,8 @@ def _markdown_to_notion_blocks(md: str) -> list[dict]:
 
         # Code block (```)
         if line.startswith("```"):
-            lang = line[3:].strip() or "plain text"
+            raw_lang = line[3:].strip() or "plain text"
+            lang = _normalize_language(raw_lang)
             code_lines = []
             i += 1
             while i < len(lines) and not lines[i].startswith("```"):
@@ -337,7 +490,12 @@ def append_memo(markdown: str, title: Optional[str] = None) -> str:
         },
     ] + blocks
 
-    notion.blocks.children.append(block_id=MEMO_PAGE_ID, children=all_blocks)
+    # Notion API limits: max 100 blocks per request
+    CHUNK_SIZE = 100
+    for i in range(0, len(all_blocks), CHUNK_SIZE):
+        chunk = all_blocks[i : i + CHUNK_SIZE]
+        notion.blocks.children.append(block_id=MEMO_PAGE_ID, children=chunk)
+
     return f"https://notion.so/{MEMO_PAGE_ID.replace('-', '')}"
 
 

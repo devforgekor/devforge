@@ -26,11 +26,15 @@ def main():
     parser.add_argument("--title", "-t", default="", help="Memo title prefix")
     args = parser.parse_args()
 
-    # Read content: file > stdin > args
+    # Read content: args > file > stdin (priority order)
     content = ""
     title = args.title or ""
 
-    if args.file:
+    if args.text:
+        content = " ".join(args.text)
+        if not title:
+            title = content[:60]
+    elif args.file:
         if not args.file.exists():
             print(f"File not found: {args.file}", file=sys.stderr)
             sys.exit(1)
@@ -41,10 +45,6 @@ def main():
         content = sys.stdin.read()
         if not title:
             title = "stdin memo"
-    elif args.text:
-        content = " ".join(args.text)
-        if not title:
-            title = content[:60]
 
     if not content.strip():
         print("No content to send. Pipe text, pass as argument, or use --file.", file=sys.stderr)
