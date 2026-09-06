@@ -115,6 +115,11 @@ modules:
     night_cycle.sh:
       status: unknown
       purpose: "night_cycle.sh \u2014 DevForge nightly pipeline (KST 03:00 / UTC 18:00)"
+    notion_memo.py:
+      status: production
+      purpose: "Notion \uBA54\uBAA8 \uC804\uC1A1 CLI \u2014 stdin, \uD30C\uC77C, \uB610\
+        \uB294 \uC778\uC790\uB85C \uBC1B\uC740 \uD14D\uC2A4\uD2B8\uB97C Notion\uC5D0\
+        \ \uAE30\uB85D."
     observer.py:
       status: production
       purpose: "DevForge Observer Agent \u2014 interactive CLI agent with tool calling."
@@ -282,6 +287,11 @@ modules:
       status: experimental
       purpose: "Unified notification module \u2014 Apprise (Telegram, Email) + native\
         \ Slack."
+    notion_client.py:
+      status: production
+      purpose: "Notion \uBA54\uBAA8 \uD074\uB77C\uC774\uC5B8\uD2B8 \u2014 \uC11C\uBC84\
+        \ \uBB38\uC11C/\uBD84\uC11D \uACB0\uACFC\uB97C Notion \uD398\uC774\uC9C0\uB85C\
+        \ \uACF5\uC720."
     observation.py:
       status: production
       purpose: "Unified observation API \u2014 recording and querying the observations\
