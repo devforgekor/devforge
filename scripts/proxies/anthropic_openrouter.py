@@ -63,6 +63,7 @@ ANTHROPIC_API_KEY = os.environ.get("OPENROUTER_MESIDS_API_KEY") or ""
 API_KEYS: List[str] = [
     os.environ.get("OPENROUTER_MESIDS_API_KEY", ""),
     os.environ.get("OPENROUTER_MINIPARK4U_API_KEY", ""),
+    os.environ.get("OPENROUTER_HYEONMINPARK4U_API_KEY", ""),
     os.environ.get("OPENROUTER_API_KEY", ""),
 ]
 # Filter out empty entries while preserving order.
