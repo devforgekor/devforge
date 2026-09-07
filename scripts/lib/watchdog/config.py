@@ -41,7 +41,6 @@ DAY_PORTS = {8080, 8082}
 # ── 서비스 / 타이머 ─────────────────────────────────────────────────
 SERVICE_TARGETS = [
     "devforge-turn-watcher",
-    "ebook-watcher",
 ]
 
 # Alert-only targets (monitor only, no recovery)
@@ -51,6 +50,7 @@ ALERT_ONLY_TARGETS = [
 
 TIMER_TARGETS = {
     "devforge-night-cycle.timer": {"expected": "night_cycle", "max_idle": 90000},  # 25h
+    "ebook-watcher.timer": {"expected": "pipeline", "max_idle": 900},  # 15분
 }
 
 # ── 컨테이너 exclusion (절대 재시작 금지) ───────────────────────────
