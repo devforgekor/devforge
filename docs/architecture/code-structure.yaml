@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-09-06'
+  updated: '2026-09-08'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -1020,6 +1020,9 @@ modules:
     gemini_openai.py:
       status: experimental
       purpose: OpenAI-compatible reverse proxy for Google Gemini API with key rotation.
+    openrouter_rr_proxy.py:
+      status: experimental
+      purpose: OpenRouter API Key Round-Robin Proxy.
     search.py:
       status: production
       purpose: 'MCP search proxy: Brave + Tavily (Tier 1) with you.com (Tier 2 fallback).'

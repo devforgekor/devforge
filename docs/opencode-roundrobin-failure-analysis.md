@@ -2,7 +2,7 @@
 
 > 작성일: 2026-09-08
 > 대상: opencode v1.18.29, `experimental.modelFallbackChain`
-> 상태: 분석 완료 (원인 3건 확인, 해결 방안 3개 제시)
+> 상태: 원인 분석 완료 + 해결책 확정 (Naveenxyz/openrouterproxy, 검증 진행 중)
 
 ## 개요
 
@@ -125,47 +125,94 @@ OpenRouter의 rate limit 정책:
 | 2026-09-08 | 모든 free 모델 사망, Laguna S 2.1만 25회 연속 실패 |
 | 2026-09-08 | **opencode-ai/opencode 저장소 archived** (더 이상 개발 중단 확인) |
 
-## 해결 방안 — 3개
+## 해결 방안 — Naveenxyz/openrouterproxy 채택 (2026-09-08 확정)
 
-### 방안 A: 외부 라운드로빈 프록시 구축 (권장)
+### 요구사항 재정의
 
-opencode 설정을 단일 `openrouter` provider로 통일하고,
-3개 키를 요청마다 순환하는 프록시를 앞에 둔다.
+사용자와 협의 후 성공 기준을 명확히 함:
+
+| 항목 | 값 |
+|------|-----|
+| 회피 대상 | **분당 RPM**만 (OpenRouter: 크레딧 계정 기준 ~20 RPM) |
+| 일일 캡 | **계정당 1000건**, 3개 계정 = 일 3000건 total |
+| 전략 | 순차 라운드로빈 (key1 → key2 → key3 → key1 → ...) |
+| 평균 부하 | 일 3000건 ≈ 분당 ~2건 → 키당 분당 ~0.7건 → **RPM 한도에 크게 미달** |
+
+RPM만 회피하면 되는 구조라, cooldown 관리나 상태 추적이 없는
+**단순 라운드로빈 프록시**로 충분하다.
+
+### 후보 3개 비교
+
+| 비교 축 | **Aculeasis/openrouter-proxy** | **Naveenxyz/openrouterproxy** ⭐ | **NousResearch/hermes-agent** |
+|---------|-------------------------------|---------------------------------|-------------------------------|
+| 언어 | Python, FastAPI | Python 3.8+, FastAPI + httpx | Hermes Agent 클라이언트 내장 |
+| 라운드로빈 | ✅ round-robin (기본) | ✅ 순차 순환 | ✅ round_robin / least_used / fill_first / random |
+| 429 cooldown | ✅ 4시간 자동 (14400s) | ❌ 없음 (다음 키로만 이동) | ✅ 429→1회 재시도→rotation (1h) |
+| 배포 형태 | 프록시 (독립) | 프록시 (독립) | ❌ **클라이언트 완전 교체 필요** |
+| opencode 호환 | ✅ base_url만 변경 | ✅ base_url만 변경 | ❌ hermes-agent로 대체 |
+| 설정 | `config.yml` + 서비스 설치 스크립트 | `.env`에 `OPENROUTER_API_KEYS="k1,k2,k3"` | `hermes auth add` CLI |
+| 오버엔지니어링 | ⚠️ cooldown/free_only 등 과함 | ✅ 요구사항에 정확히 일치 | N/A |
+| 주의점 | 66 stars, 신생 | - `python-dotenv` 별도 설치 필요<br>- 429 걸린 키를 추적 안 함 | 키 전환 시 프롬프트 캐시 무효화 (계정별 캐시) |
+
+### 채택 이유: Naveenxyz/openrouterproxy
+
+1. **요구사항이 단순함** — RPM만 회피하면 되므로 Aculeasis의 cooldown/rate_delay/free_only는 불필요한 오버헤드
+2. **설정이 1줄** — `.env`에 키 3개 콤마 구분만 하면 끝
+3. **상태 추적 없음** — 버그 발생 여지가 적고, 거의 호출되지 않을 429 처리 로직이 단순
+4. **배포 간단** — Uvicorn/Podman/systemd user service 모두 적합
+5. hermes-agent는 opencode를 못 쓰게 되므로 탈락
+
+### 구축 계획
 
 ```
-opencode → 127.0.0.1:4311 (round-robin proxy)
-           → 요청마다 MESIDS / MINIPARK4U / HYEONMINPARK4U 키 순환
-           → OpenRouter API
+opencode ──> http://127.0.0.1:8000/v1 (Naveenxyz proxy)
+              ├─ 요청마다 key1 → key2 → key3 → key1 → ... 순환
+              ├─ 429 시 다음 키로 넘김 (다음 rotation에 다시 포함)
+              └─ 3개 키 = 분당 RPM 3배 확보
+
+opencode.json 변경:
+  provider.openrouter.options.baseURL → "http://127.0.0.1:8000/v1"
+  provider.openrouter.options.apiKey  → 로컬 배포용 임의 값 (프록시가 교체)
+  experimental.modelFallbackChain    → 단일 체인(선택 사항, 제거 가능)
 ```
 
-구현 예시 (Python 3.11 stdlib, ~50줄):
-```python
-class Handler(http.server.BaseHTTPRequestHandler):
-    counter = 0
-    def do_POST(self):
-        key = self.KEYS[self.counter % len(self.KEYS)]
-        self.counter += 1
-        # 요청 body + key로 OpenRouter에 포워딩
-```
+| 단계 | 작업 |
+|------|------|
+| 1 | `git clone https://github.com/Naveenxyz/openrouterproxy` |
+| 2 | venv 생성 + `pip install -r requirements.txt python-dotenv` |
+| 3 | `.env`: `OPENROUTER_API_KEYS="sk-or-v1-77ed...,sk-or-v1-1911...,sk-or-v1-7ab4..."` |
+| 4 | systemd user service 등록 (Uvicorn, 포트 8000) |
+| 5 | opencode.json baseURL 변경 |
+| 6 | 검증: 요청 3회 후 각 키의 요청 수 로그로 라운드로빈 확인 |
 
-**장점**: opencode 설정 변경 불필요, 어떤 LLM 클라이언트와도 호환.
-**단점**: 프록시 프로세스 유지 필요 (systemd user service).
+### 리스크 & 주의
 
-### 방안 B: 유료 모델로 전환
+- **일일 캡 초과 위험**: 일 3000건이 순수 분할이므로 어느 계정이 먼저 1000건에 도달할 수 있음.
+  → 단순 RR이 아닌 `least_used`(최소 사용 키 우선) 전략이 필요할 수 있음.
+  → Naveenxyz는 RR만 지원하므로, 일일 1000건 도달 시 해당 키를 잠정 배제하는
+    가드가 추가로 필요할 수 있음 (요구사항 확인 후 결정).
 
-`minimax/minimax-m3` (접미사 `:free` 제거) 사용.
-3개 계정에 \$10+ 크레딧이 있으므로 유료 사용에 문제없음.
+## 부록: 세 프로젝트 상세 조사
 
-**장점**: 안정적, 추가 인프라 불필요.
-**단점**: 크레딧 소모, 일일 유료 모델 사용량 관리 필요.
+### Aculeasis/openrouter-proxy (권장 후보였으나 보류)
 
-### 방안 C: 다른 Provider의 무료 모델 사용
+- `/api/v1/{path}` 전부 위임, `/api/v1/models`는 public endpoint 가능
+- `key_selection_opts`의 `same` 전략: 직전 성공 키 재사용 (세션 유지)
+- `global_rate_delay`: Google `RESOURCE_EXHAUSTED` 반복 방지용
+- 기본 4시간 cooldown, `service_install.sh`로 systemd 설치 지원
 
-OpenRouter 대신 Google AI Studio, Hugging Face 등 직접 API 사용.
-opencode에 새 provider로 등록.
+### Naveenxyz/openrouterproxy (채택)
 
-**장점**: 무료 유지 가능.
-**단점**: 모델 품질/중량 불확실, 각 서비스별 TOS 확인 필요.
+- `POST /v1/chat/completions` (stream 포함), `GET /v1/models`, `GET /` 헬스체크
+- `ALLOWED_AUTH_TOKENS` 미설정 시 인증 없이 공개됨 → 설정 권장 (127.0.0.1 바인딩으로 완화)
+- `.env` 필요: `OPENROUTER_API_KEYS` (필수), `HOST`, `PORT`
+
+### NousResearch/hermes-agent credential-pools (탈락)
+
+- 같은 provider 내 키 로테이션 (fallback provider와 구분됨)
+- 에러 복구: 429(1회 재시도→rotation), 402(즉시 rotation), 401(OAuth refresh→rotation)
+- 프로세스 간 OAuth refresh 파일락, 서브에이전트 풀 공유 등 정교함
+- **단, standalone 프록시가 아니므로 opencode 유지 불가** → 조건부 채택 불가
 
 ## 결론
 
@@ -173,9 +220,10 @@ opencode에 새 provider로 등록.
 선형 fallback이므로, **요청 간 키 분산이 불가능**하다. 여기에 (3) 대상 무료 모델들이
 전부 종료된 상태가 겹쳐 전체 실패로 귀결됐다.
 
-가장 실용적인 해결책은 **방안 A(외부 라운드로빈 프록시)** 이다.
-다만 이 방식도 같은 무료 모델을 여러 키로 호출하는 것의 rate limit 회피 효과가
-제한적일 수 있으므로, **방안 B(유료 전환)** 와 병행하는 것을 권장한다.
+해결책으로 **Naveenxyz/openrouterproxy**를 채택했다. RPM만 회피하면 되는 단순 요구사항에
+정확히 부합하며, 3개 키 순차 순환으로 분당 한도를 3배 확보한다.
+일일 계정별 1000건 캡은 순수 RR 분할 대비 편차가 생길 수 있어, 구축 후
+**키별 사용량 모니터링과 가드**를 추가하는 것으로 보완한다.
 
 ## 참고
 
