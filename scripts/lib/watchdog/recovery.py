@@ -232,3 +232,109 @@ def kill_stale_process(entry_name: str):
             log(f"  killed stale {entry_name} PID {pid}")
     except Exception:
         pass
+
+
+# ── Port conflict recovery ───────────────────────────────────────────
+
+
+def _free_port_8080() -> None:
+    """Kill llama-server host process bound to :8080 (stale reranker)."""
+    subprocess.run(
+        ["pkill", "-f", "llama-server.*--port 8080"],
+        capture_output=True,
+        timeout=10,
+    )
+    time.sleep(2)
+
+
+def recover_port_conflict() -> bool:
+    """Free port 8080 and restart inference container.
+
+    Called when port conflict ('bind: address already in use') is detected
+    in day_cycle journal. Cleans up stale host processes + stale container
+    and starts a fresh inference container.
+    """
+    if is_experiment_active():
+        log("  SKIP port conflict recovery — experiment active")
+        return False
+
+    log("  [port-conflict] recovering port 8080...")
+    try:
+        from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+
+        # 1. Kill stale host llama-server on :8080 (if any)
+        _free_port_8080()
+        # 2. Stop + remove stale inference container (releases rootlessport)
+        _podman_stop_inference()
+        subprocess.run(
+            ["podman", "rm", "-f", "devforge-inference"],
+            capture_output=True,
+            timeout=30,
+        )
+        time.sleep(3)  # let rootlessport release the port
+        # 3. Start fresh inference container
+        ok = _podman_start_inference()
+        if ok:
+            log("  [port-conflict] inference container restarted OK")
+            return True
+        log("  [port-conflict] inference still failed after cleanup")
+        return False
+    except Exception as e:
+        log(f"  [port-conflict] recovery error: {e}")
+        return False
+
+
+def recover_inference_cascade() -> bool:
+    """Cascading inference recovery: escalate cleanup levels until restart works.
+
+    Level 1: stop + restart inference container
+    Level 2: kill host llama-server processes + rm container + restart
+    Level 3: stop pod-a (release :8080 publish) + full cleanup + restart
+    """
+    if is_experiment_active():
+        log("  SKIP inference cascade recovery — experiment active")
+        return False
+
+    log("  [inference-cascade] escalating recovery...")
+    try:
+        from lib.pod_manager.container import _podman_start_inference, _podman_stop_inference
+
+        for level in (1, 2, 3):
+            log(f"  [inference-cascade] level {level}")
+            if level == 1:
+                _podman_stop_inference()
+                time.sleep(3)
+            elif level == 2:
+                _podman_stop_inference()
+                _free_port_8080()
+                subprocess.run(
+                    ["podman", "rm", "-f", "devforge-inference"],
+                    capture_output=True,
+                    timeout=30,
+                )
+                time.sleep(3)
+            elif level == 3:
+                subprocess.run(
+                    ["podman", "pod", "stop", "devforge-pod-a"],
+                    capture_output=True,
+                    timeout=30,
+                )
+                time.sleep(2)
+                _podman_stop_inference()
+                subprocess.run(
+                    ["podman", "rm", "-f", "devforge-inference"],
+                    capture_output=True,
+                    timeout=30,
+                )
+                time.sleep(3)
+
+            ok = _podman_start_inference()
+            if ok:
+                log(f"  [inference-cascade] recovered at level {level}")
+                return True
+            log(f"  [inference-cascade] level {level} restart failed, escalating")
+        log("  [inference-cascade] all levels failed")
+        return False
+    except Exception as e:
+        log(f"  [inference-cascade] recovery error: {e}")
+        return False

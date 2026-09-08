@@ -550,3 +550,87 @@ def check_llm_slots(port: int) -> list[dict]:
         return result
     except Exception:
         return []
+
+
+# ── Port conflict detection ──────────────────────────────────────────
+
+PORT_CONFLICT_PATTERNS = (
+    "bind: address already in use",
+    "address already in use",
+    "rootlessport listen",
+)
+
+
+def check_port_conflict(
+    service: str = "devforge-day-cycle", since_min: int = 15
+) -> tuple[bool, str]:
+    """Check recent day_cycle journal for port conflict patterns.
+
+    Returns:
+        (True, "no port conflict") or (False, "port conflict: <detail>").
+    """
+    try:
+        r = subprocess.run(
+            [
+                "journalctl",
+                "--user",
+                "-u",
+                service,
+                "--since",
+                f"{since_min} min ago",
+                "--no-pager",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        combined = r.stdout + r.stderr
+        for pat in PORT_CONFLICT_PATTERNS:
+            if pat in combined:
+                # Extract the most recent matching line for context
+                for line in combined.split("\n"):
+                    if pat in line:
+                        return False, line.strip()[-150:]
+                return False, f"port conflict detected: {pat}"
+        return True, "no port conflict"
+    except Exception as e:
+        return True, f"check failed: {e}"
+
+
+def check_inference_container() -> tuple[bool, str]:
+    """Check if inference container is running vs stuck (Created/Exited).
+
+    'Created' state means podman couldn't start the container (e.g. port
+    conflict after 'bind: address already in use').
+    """
+    try:
+        r = subprocess.run(
+            [
+                "podman",
+                "ps",
+                "-a",
+                "--format",
+                "{{.Names}}|{{.Status}}",
+                "--filter",
+                "name=devforge-inference",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        for line in r.stdout.strip().split("\n"):
+            if "devforge-inference" in line and "|" in line:
+                parts = line.split("|")
+                if len(parts) >= 2:
+                    name, status = parts[0], parts[1]
+                    if name == "devforge-inference":
+                        if "Up" in status:
+                            return True, status
+                        elif "Created" in status:
+                            return False, "stuck in Created state (start failed)"
+                        elif "Exited" in status:
+                            return False, f"exited: {status}"
+                        return False, f"unexpected: {status}"
+        return False, "container not found"
+    except Exception as e:
+        return False, f"check failed: {e}"

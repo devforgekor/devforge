@@ -407,9 +407,72 @@ def _fix_loop_common(pipe: str, llm_port: int):
 
 
 def day_fix_loop():
+    """3-Phase day recovery: infra → pipeline-stuck → LLM code fix.
+
+    Phase 1 — Infra diagnosis (returns on first broken layer):
+      1a. Port conflict in day_cycle journal → recover_port_conflict()
+      1b. Inference container stuck (Created/Exited) → recover_inference_cascade()
+      1c. LLM probe :8082 fails → recover_inference_cascade()
+
+    Phase 2 — Pipeline state stuck (3600s no change) → restart day_cycle.
+
+    Phase 3 — Only if infra+state healthy → LLM code fix loop (existing).
+    """
     if _test_active:
         log(f"  SKIP day fix loop — protection active ({_test_active})")
         return
+
+    # ── Phase 1a: port conflict ──
+    port_ok, port_detail = check_port_conflict()
+    if not port_ok:
+        log(f"  [watchdog] {port_detail}")
+        _state.add_event("infra", "port_conflict", port_detail)
+        if recover_port_conflict():
+            _state.add_event("infra", "port_conflict_recovered", "inference restarted")
+            send_recovery("infra:port_conflict", "inference restarted after port conflict")
+            return
+        _state.add_event("infra", "port_conflict_failed", "all recovery levels failed")
+        send_alert("infra:port_conflict", "DOWN", "cascade recovery failed")
+        return
+
+    # ── Phase 1b: inference container state ──
+    infer_ok, infer_detail = check_inference_container()
+    if not infer_ok:
+        log(f"  [watchdog] inference container issue: {infer_detail}")
+        _state.add_event("infra", "inference_down", infer_detail)
+        if recover_inference_cascade():
+            _state.add_event("infra", "inference_recovered", "cascade OK")
+            send_recovery("infra:inference", "inference container restarted")
+            return
+        _state.add_event("infra", "inference_failed", "cascade recovery failed")
+        send_alert("infra:inference", "DOWN", "cascade recovery failed")
+        return
+
+    # ── Phase 1c: LLM probe on :8082 (day-extractor) ──
+    probe_ok, probe_detail = check_llm_probe(8082, "day-extract")
+    if not probe_ok:
+        log(f"  [watchdog] LLM probe :8082 failed: {probe_detail}")
+        _state.add_event("infra", "llm_probe_failed", probe_detail)
+        if recover_inference_cascade():
+            _state.add_event("infra", "llm_probe_recovered", "inference restarted")
+            send_recovery("infra:llm_probe", "inference restarted after probe failure")
+        return
+
+    # ── Phase 2: pipeline state stuck ──
+    stuck = _state.check_pipeline_stuck()
+    if stuck:
+        for s in stuck:
+            log(f"  [watchdog] pipeline stuck: {s['state']} ({s['cnt']} turns, {s['stuck_sec']}s)")
+            _state.add_event("pipeline_stuck", s["state"], f"{s['cnt']} turns, {s['stuck_sec']}s")
+        log("  [watchdog] restarting day_cycle to unstick pipeline")
+        subprocess.run(
+            ["systemctl", "--user", "restart", "devforge-day-cycle.service"],
+            capture_output=True,
+            timeout=30,
+        )
+        return
+
+    # ── Phase 3: LLM code fix (only when infra + state healthy) ──
     for pipe in ("day_cycle",):
         _fix_loop_common(pipe, llm_port=8082)
 
