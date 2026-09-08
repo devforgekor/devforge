@@ -1,46 +1,274 @@
-# OpenRouter Free Model 라운드로빈 실패 분석
+# OpenRouter Free Model 시스템 — 운영 문서
 
-> 작성일: 2026-09-08
-> 대상: opencode v1.18.29, `experimental.modelFallbackChain`
-> 상태: 원인 분석 완료 + 해결책 확정 (Naveenxyz/openrouterproxy, 검증 진행 중)
+> 최종 갱신: 2026-09-08
+> 상태: 운영 중 (E2E 검증 완료)
 
-## 개요
+## 시스템 개요
 
-3개의 OpenRouter 계정(MESIDS, MINIPARK4U, HYEONMINPARK4U)에 각각 \$10+ 크레딧을 충전하고,
-`modelFallbackChain`을 통해 무료 모델(MiniMax M3:free, Laguna S 2.1:free)의 rate limit을
-회피하려는 시도가 실패한 원인을 분석한다.
-
-## 설정 구조
-
-### 의도한 구성
+3개의 OpenRouter 계정(MESIDS, MINIPARK4U, HYEONMINPARK4U)을 라운드로빈하여
+무료 모델의 분당 RPM 제한을 회피하고, 매일 자동으로 최신 무료 모델 Top 3를
+선정하여 opencode.json을 갱신한다.
 
 ```
-3개 API 키 (각각 $10+ 크레딧)
-  ├─ MESIDS        (sk-or-v1-77ed...)
-  ├─ MINIPARK4U    (sk-or-v1-1911...)
-  └─ HYEONMINPARK4U (sk-or-v1-7ab4...)
+                    매일 15:30 UTC (00:30 KST)
+                    ┌──────────────────────────────┐
+                    │  refresh_openrouter_free_    │
+                    │  models.py (oneshot)          │
+                    │  ├─ OpenRouter catalog fetch  │
+                    │  ├─ coding_index 기준 랭킹    │
+                    │  ├─ live-test (Top 15)        │
+                    │  └─ opencode.json 자동 갱신   │
+                    └──────┬───────────────────────┘
+                           │ writes
+                           ▼
+opencode.json ──> openrouter-rr-proxy.service (127.0.0.1:8451)
+                    ├─ 요청 → key[1] MESIDS
+                    ├─ 요청 → key[2] MINIPARK4U
+                    ├─ 요청 → key[3] HYEONMINPARK4U
+                    └─ 요청 → key[1] ... (순환)
 
-각 키로 MiniMax M3:free 요청
-→ rate limit 도달 시 다른 키로 fallback
-→ 3개 키가 라운드로빈 = 3배 처리량
+opencode ──> http://127.0.0.1:8451/v1 (1개 provider)
 ```
 
-### 실제 설정 (변경 전)
+## 컴포넌트
+
+### 1. RR 프록시 — `openrouter_rr_proxy.py`
+
+| 항목 | 값 |
+|------|------|
+| 경로 | `/opt/projects/server/scripts/proxies/openrouter_rr_proxy.py` |
+| 포트 | 8451 (127.0.0.1 전용) |
+| 언어 | Python 3.11, FastAPI + httpx |
+| 상태 | systemd user service, enabled, active |
+
+**엔드포인트:**
+
+| 경로 | 메서드 | 설명 |
+|------|--------|------|
+| `/v1/chat/completions` | POST | OpenAI 호환 채팅 (stream + non-stream) |
+| `/v1/models` | GET | OpenRouter 모델 목록 |
+| `/health` | GET | 헬스체크 |
+
+**키 로딩 순서:**
+1. `~/.config/devforge/secrets.env` 파일 직접 파싱
+2. (fallback) 환경변수 `OPENROUTER_MESIDS_API_KEY` 등
+
+**주요 특징:**
+- 요청마다 `_next_key()`로 3개 키 순환 (`asyncio.Lock` 불필요 — 단일 worker)
+- 429 시 다음 키로 fallback, 3개 키 모두 실패 시 502 반환
+- streaming 에러 시 `try/finally`로 연결 누수 방지
+- lifespan 이벤트로 httpx.AsyncClient 생명주기 관리
+
+### 2. 자동 갱신 — `refresh_openrouter_free_models.py`
+
+| 항목 | 값 |
+|------|------|
+| 경로 | `/opt/projects/server/scripts/proxies/refresh_openrouter_free_models.py` |
+| 실행 주기 | 매일 15:30 UTC (00:30 KST) |
+| 실행 방식 | systemd timer → oneshot service |
+| 캐시 | `~/.cache/devforge/openrouter_free_models.json` (24시간 TTL) |
+
+**처리 흐름:**
+
+```
+1. Fetch catalog (RR 프록시 통해 /v1/models)
+2. :free 모델 필터링 (11개 후보)
+3. 도메인 특화 모델 제외 (sante, fin, japanese, content-safety 등)
+4. coding_index + context_bonus 기준 스코어링
+   - benchmark 있음 → coding_index + context_bonus (30~60점)
+   - benchmark 없음 → 29.9점 이하로 캡 (검증된 모델 우선)
+5. Live-test: Top 15 모델을 프록시 통해 1회씩 호출 (0.3초 간격)
+6. 업스트림 org별 그룹화 (nvidia/cohere/liquid 등)
+   - 동일 org에서 최고 점수 1개만 선택
+7. 상위 3개 org의 모델을 opencode.json에 기록
+   - model: 1위 모델
+   - fallback chain: 3개 모델 (서로 다른 업스트림)
+   - provider.models: 3개 모델
+```
+
+**스코어링 상세:**
+
+| 조건 | 점수 | 예시 |
+|------|------|------|
+| coding_index = 36.5 + context 256K | 36.5 + 5 = 41.5 | cohere/north-mini-code |
+| coding_index = 26.8 + context 1M | 26.8 + 5 = 31.8 | nemotron-3.5-lightning |
+| benchmark 없음 (29.9 이하 캡) | min(25 + bonus, 29.9) | liquid/lfm-2.5-2.6b |
+
+### 3. systemd 유닛
+
+**openrouter-rr-proxy.service:**
+
+```ini
+[Unit]
+Description=OpenRouter Key Round-Robin Proxy
+After=default.target
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/devforge/secrets.env
+ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/proxies/openrouter_rr_proxy.py
+Restart=on-failure
+RestartSec=5
+```
+
+**devforge-openrouter-free-models.service:**
+
+```ini
+[Unit]
+Description=DevForge OpenRouter Free Model Refresh (매일 00:30 KST = 15:30 UTC)
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/opt/projects/server/scripts
+ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/proxies/refresh_openrouter_free_models.py
+WorkingDirectory=/opt/projects/server/scripts
+Nice=19
+IOSchedulingClass=idle
+```
+
+**devforge-openrouter-free-models.timer:**
+
+```ini
+[Unit]
+Description=DevForge OpenRouter Free Model Refresh Timer (매일 00:30 KST)
+
+[Timer]
+OnCalendar=*-*-* 15:30:00
+Persistent=true
+```
+
+## 파일 인벤토리
+
+| 파일 | 역할 | 유형 |
+|------|------|------|
+| `scripts/proxies/openrouter_rr_proxy.py` | 3키 RR 프록시 (FastAPI, port 8451) | 운영 |
+| `scripts/proxies/refresh_openrouter_free_models.py` | 매일 free 모델 자동 갱신 | 운영 |
+| `~/.config/systemd/user/openrouter-rr-proxy.service` | RR 프록시 서비스 | 운영 |
+| `~/.config/systemd/user/devforge-openrouter-free-models.service` | 갱신 oneshot 서비스 | 운영 |
+| `~/.config/systemd/user/devforge-openrouter-free-models.timer` | 갱신 타이머 (매일 15:30 UTC) | 운영 |
+| `~/.config/opencode/opencode.json` | opencode 설정 (자동 갱신 대상) | 운영 |
+| `~/.config/devforge/secrets.env` | 3개 OpenRouter API 키 | 시크릿 |
+| `~/.cache/devforge/openrouter_free_models.json` | 모델 캐시 (24h TTL) | 캐시 |
+| `docs/opencode-roundrobin-failure-analysis.md` | 본 문서 | 문서 |
+
+## 설정 파일 (opencode.json)
 
 ```json
-"chains": [
-  [
-    "openrouter/minimax/minimax-m3:free",       // MESIDS 키
-    "openrouter-minipark4u/minimax/m3:free",    // MINIPARK4U 키
-    "openrouter-hyeonminpark4u/minimax/m3:free",// HYEONMINPARK4U 키
-    "openrouter/poolside/laguna-s-2.1:free",    // MESIDS 키
-    "openrouter-minipark4u/poolside/...",       // MINIPARK4U 키
-    "openrouter-hyeonminpark4u/poolside/..."   // HYEONMINPARK4U 키
-  ]
-]
+{
+  "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+  "experimental": {
+    "modelFallbackChain": {
+      "timeoutMs": 60000,
+      "chains": [
+        [
+          "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+          "openrouter/cohere/north-mini-code:free",
+          "openrouter/liquid/lfm-2.5-2.6b:free"
+        ]
+      ]
+    }
+  },
+  "provider": {
+    "openrouter": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "OpenRouter (RR Proxy)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8451/v1",
+        "apiKey": "local-rr-proxy"
+      },
+      "models": {
+        "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "NVIDIA: Nemotron 3 Ultra 550B" },
+        "cohere/north-mini-code:free": { "name": "Cohere: North Mini Code" },
+        "liquid/lfm-2.5-2.6b:free": { "name": "LiquidAI: LFM2.5-2.6B" }
+      }
+    }
+  }
+}
 ```
 
-## 실패 원인 — 3건
+**변경 전후 비교:**
+
+| 항목 | 변경 전 (실패) | 변경 후 (운영) |
+|------|---------------|---------------|
+| provider 수 | 3개 (openrouter, -minipark4u, -hyeonminpark4u) | 1개 (openrouter) |
+| baseURL | https://openrouter.ai/api/v1 | http://127.0.0.1:8451/v1 |
+| apiKey | 3개 개별 키 (하드코딩) | local-rr-proxy (프록시가 교체) |
+| 모델 | 2개 (minimax, laguna) | 매일 자동 갱신 (3개, 서로 다른 업스트림) |
+| fallback 전략 | 1개 체인, 6개 동일 업스트림 | 1개 체인, 3개 다른 업스트림 |
+
+## 일일 운영 사이클
+
+```
+15:30 UTC (00:30 KST)
+  └─ devforge-openrouter-free-models.timer fires
+       └─ devforge-openrouter-free-models.service (oneshot)
+            ├─ OpenRouter 모델 카탈로그 fetch (~1s)
+            ├─ 11개 free 모델 스코어링 (~0.1s)
+            ├─ 15개 모델 live-test (~40s)
+            │   └─ 각 모델 1회 호출 → 0.3s 간격
+            └─ opencode.json 갱신 (~0.1s)
+                 └─ 다음 opencode 세션 시작 시 적용
+
+opencode 세션 중:
+  └─ http://127.0.0.1:8451/v1 (RR 프록시)
+       ├─ 요청마다 3개 키 순환
+       ├─ 429 시 다음 키로 fallback
+       └─ modelFallbackChain: 3개 모델 순차 시도
+```
+
+## 검증 결과
+
+### 단위 검증 (2026-09-08)
+
+| # | 검증 항목 | 결과 |
+|---|----------|------|
+| 1 | Health endpoint | ✅ `{"status":"ok","keys":3}` |
+| 2 | Models list | ✅ HTTP 200, 704KB |
+| 3 | Non-streaming chat | ✅ GPT-4o-mini, cost $4.95e-06 |
+| 4 | Streaming chat | ✅ SSE data: chunks |
+| 5 | Round-robin (6회 병렬) | ✅ key[1]→[2]→[3]→[1]→[2]→[3] |
+| 6 | Invalid model → fallback | ✅ 400 + 다음 키 시도 |
+| 7 | Invalid JSON body | ✅ 400 "Invalid JSON body" |
+| 8 | All keys 429 → 502 | ✅ 3개 키 전부 실패 시 502 |
+| 9 | opencode.json 설정 일치 | ✅ baseURL, model, chain 일치 |
+| 10 | OpenAI 클라이언트 호환 | ✅ Bearer auth + 전체 응답 |
+| 11 | Stress 10 concurrent | ✅ Race condition 없음, RR 유지 |
+| 12 | 메모리 | ✅ RSS 60MB |
+| 13 | 포트 바인딩 | ✅ 127.0.0.1:8451 (외부 차단) |
+
+### E2E 검증 (타이머 → 서비스 → 갱신)
+
+| # | 검증 항목 | 결과 |
+|---|----------|------|
+| 1 | 타이머 발동 시각 | ✅ 정확히 04:28:00 GMT |
+| 2 | Service 실행 | ✅ exit 0 / SUCCESS |
+| 3 | 소요 시간 | ✅ 38초 (live-test 12개) |
+| 4 | opencode.json mtime 변경 | ✅ 갱신 확인 |
+| 5 | 업스트림 다양성 | ✅ 3개 org (nvidia/cohere/liquid) |
+| 6 | 타이머 복원 | ✅ 15:30 UTC로 복원 |
+
+### 운영 모델 429 현황
+
+| 구분 | 429 발생 | 키 분산 |
+|------|---------|---------|
+| 운영 모델 (선정된 Top 3) | **0건** | ✅ 균등 (23/21/19) |
+| Live-test 모델 (탐색용) | 101건 (업스트림 공유 풀) | — |
+
+## 참고: OpenRouter Rate Limit 정책 (공식 문서)
+
+| 조건 | RPM | 일일 한도 |
+|------|-----|-----------|
+| 크레딧 < $10 | 20 RPM | 50 requests/day |
+| 크레딧 ≥ $10 (우리 상황) | 20 RPM | 1,000 requests/day |
+
+> "Making additional accounts or API keys **will not affect your rate limits**, as we govern capacity globally."
+> — OpenRouter 공식 문서
+
+**즉, 3개 키로 RPM을 3배 늘리는 건 공식 문서상 효과가 제한적이다.**
+그러나 운영 모델에서 429=0건인 것은 실제로 모델별 rate limit이 다르고,
+3개 키 분산이 부하를 낮추는 데 기여하기 때문으로 추정된다.
+
+## 부록 A: 실패 분석 이력
 
 ### 원인 1: `modelFallbackChain`은 Round-Robin이 아니다
 
@@ -54,23 +282,11 @@
          → model 5(Laguna, 다른 키) 실패
          → model 6(Laguna, 다른 키) 실패
          → 요청 #1 실패 ❌
-
-요청 #2 → 다시 model 1(Minimax M3)부터 ❌ (처음으로 돌아감)
-```
-
-**원하는 라운드로빈 동작:**
-```
-요청 #1 → MESIDS 키로 Minimax M3 시도 → 성공 ✓
-요청 #2 → MINIPARK4U 키로 Minimax M3 시도 → 성공 ✓
-요청 #3 → HYEONMINPARK4U 키로 Minimax M3 시도 → 성공 ✓
-요청 #4 → MESIDS 키로 Minimax M3 시도 → 성공 ✓
 ```
 
 ### 원인 2: `chains` 배열이 여러 개여도 `chains[0]`만 사용된다
 
-**`modelFallbackChain`은 공식 문서/스키마에 없는 비공개 실험(`experimental`) 기능이다.**
-
-증거 — opencode v1.18.29 바이너리에 내장된 config schema에서 `experimental` 섹션:
+opencode v1.18.29 내장 config schema에서 `experimental` 섹션:
 ```json
 "experimental": {
   "primary_tools": ["edit"],
@@ -80,18 +296,13 @@
 → `modelFallbackChain`은 이 스키마에 존재하지 않는다. 공식 지원 기능이 아니므로
   동작이 보장되지 않는다.
 
-**로그 증거** — 실제 동작 추적 (2026-09-08 00:09~00:30):
+**로그 증거 (2026-09-08 00:09~00:30):**
 ```
 00:09:31  model=minimax/minimax-m3:free  → "unavailable for free" ❌
 00:13:32  model=laguna-s-2.1:free        → "Provider returned error" ❌
 00:13:43  model=laguna-s-2.1:free        → 재시도 ❌
-00:13:59  model=laguna-s-2.1:free        → 재시도 ❌
-00:14:01  model=laguna-s-2.1:free        → 재시도 ❌
 ... (25회 이상 Laguna만 재시도, MiniMax로 돌아가지 않음)
 ```
-
-→ `chains[0]`만 사용. `chain[1]`(MINIPARK4U)과 `chain[2]`(HYEONMINPARK4U)는
-  **한 번도 호출되지 않음**. 여러 `chains`를 정의해도 효과 없음.
 
 ### 원인 3: 모든 Free 모델이 종료됨
 
@@ -101,19 +312,7 @@
 | `poolside/laguna-s-2.1:free` | "Provider returned error" | 무료 종료/에러 |
 | `mimo-v2.5-free` (opencode 내장) | "Endpoint is unavailable" / "Rate limit exceeded" | 불가 |
 
-## 부차적 문제
-
-### 3개 키로 같은 모델 호출 시 rate limit 회피 효과는 제한적
-
-OpenRouter의 rate limit 정책:
-- **무료 모델(`:free`)**: 모델 기준 rate limit (RPD 등). 키가 여러 개여도 같은 한도에 묶임.
-  로그: `Daily limit reached for minimax/minimax-m3:free via GMICloud. Credits don't affect this cap.`
-- **크레딧 보유 계정($10+)**: rate limit이 완화되지만, 같은 모델의 유효 한도는 공유됨.
-- 키별 처리량 차등 적용은 **유료 모델**에 한정.
-
-→ 같은 무료 모델을 3개 키로 호출해도 rate limit 회피 효과는 **제한적**이다.
-
-## 타임라인
+### 타임라인
 
 | 일자 | 이벤트 |
 |------|--------|
@@ -123,112 +322,62 @@ OpenRouter의 rate limit 정책:
 | 2026-09-06 | MiMo free → rate limit / MiniMax M3 daily limit 도달 |
 | 2026-09-07 | Gemini 3.8 Flash → 크레딧 부족 / MiniMax M3 free → 무료 종료 |
 | 2026-09-08 | 모든 free 모델 사망, Laguna S 2.1만 25회 연속 실패 |
-| 2026-09-08 | **opencode-ai/opencode 저장소 archived** (더 이상 개발 중단 확인) |
+| 2026-09-08 | **opencode-ai/opencode 저장소 archived** |
+| 2026-09-08 | **RR 프록시 + 자동 갱신 시스템 구축 완료** |
 
-## 해결 방안 — Naveenxyz/openrouterproxy 채택 (2026-09-08 확정)
+## 유지보수 가이드
 
-### 요구사항 재정의
+### 일상 점검
 
-사용자와 협의 후 성공 기준을 명확히 함:
+```bash
+# 프록시 상태 확인
+systemctl --user status openrouter-rr-proxy.service
 
-| 항목 | 값 |
-|------|-----|
-| 회피 대상 | **분당 RPM**만 (OpenRouter: 크레딧 계정 기준 ~20 RPM) |
-| 일일 캡 | **계정당 1000건**, 3개 계정 = 일 3000건 total |
-| 전략 | 순차 라운드로빈 (key1 → key2 → key3 → key1 → ...) |
-| 평균 부하 | 일 3000건 ≈ 분당 ~2건 → 키당 분당 ~0.7건 → **RPM 한도에 크게 미달** |
+# 타이머 상태 확인
+systemctl --user status devforge-openrouter-free-models.timer
 
-RPM만 회피하면 되는 구조라, cooldown 관리나 상태 추적이 없는
-**단순 라운드로빈 프록시**로 충분하다.
+# 다음 타이머 예정 시각
+systemctl --user list-timers | grep openrouter
 
-### 후보 3개 비교
+# 최근 갱신 로그
+journalctl --user -u devforge-openrouter-free-models.service --since "1 hour ago"
+
+# 현재 적용된 모델 확인
+python3 -c "import json; c=json.load(open('/home/opc/.config/opencode/opencode.json')); print(c['model']); print(c['experimental']['modelFallbackChain']['chains'][0])"
+```
+
+### 문제 해결
+
+| 증상 | 확인 사항 | 조치 |
+|------|----------|------|
+| 프록시 502 | `journalctl -u openrouter-rr-proxy` | 키 만료 확인, `secrets.env` 점검 |
+| 타이머 실행 안 됨 | `systemctl --user list-timers` | `systemctl --user enable --now devforge-openrouter-free-models.timer` |
+| 갱신 후 모델 전부 429 | refresh 스크립트 재실행 | `--force`로 캐시 무시, 수동으로 live-test 재시도 |
+| opencode 설정 안 됨 | opencode 세션 재시작 | `modelFallbackChain`은 세션 시작 시 읽힘 |
+
+### 수동 강제 갱신
+
+```bash
+cd /opt/projects/server/scripts
+PYTHONPATH=/opt/projects/server/scripts python3.11 -m proxies.refresh_openrouter_free_models --force
+```
+
+## 부록 B: 해결책 비교 (프로젝트 선정 사유)
 
 | 비교 축 | **Aculeasis/openrouter-proxy** | **Naveenxyz/openrouterproxy** ⭐ | **NousResearch/hermes-agent** |
 |---------|-------------------------------|---------------------------------|-------------------------------|
-| 언어 | Python, FastAPI | Python 3.8+, FastAPI + httpx | Hermes Agent 클라이언트 내장 |
-| 라운드로빈 | ✅ round-robin (기본) | ✅ 순차 순환 | ✅ round_robin / least_used / fill_first / random |
-| 429 cooldown | ✅ 4시간 자동 (14400s) | ❌ 없음 (다음 키로만 이동) | ✅ 429→1회 재시도→rotation (1h) |
-| 배포 형태 | 프록시 (독립) | 프록시 (독립) | ❌ **클라이언트 완전 교체 필요** |
+| 배포 형태 | 프록시 (독립) | 프록시 (독립) | ❌ 클라이언트 완전 교체 필요 |
 | opencode 호환 | ✅ base_url만 변경 | ✅ base_url만 변경 | ❌ hermes-agent로 대체 |
-| 설정 | `config.yml` + 서비스 설치 스크립트 | `.env`에 `OPENROUTER_API_KEYS="k1,k2,k3"` | `hermes auth add` CLI |
-| 오버엔지니어링 | ⚠️ cooldown/free_only 등 과함 | ✅ 요구사항에 정확히 일치 | N/A |
-| 주의점 | 66 stars, 신생 | - `python-dotenv` 별도 설치 필요<br>- 429 걸린 키를 추적 안 함 | 키 전환 시 프롬프트 캐시 무효화 (계정별 캐시) |
+| 429 cooldown | ✅ 4시간 자동 | ❌ 없음 | ✅ 1h |
+| 설정 복잡도 | config.yml + 설치 스크립트 | .env 파일 1줄 | CLI 명령어 |
+| 선정 사유 | 불필요한 오버헤드 | ⭐ 요구사항에 정확히 일치 | 탈락 (클라이언트 교체) |
 
-### 채택 이유: Naveenxyz/openrouterproxy
+## 참고 링크
 
-1. **요구사항이 단순함** — RPM만 회피하면 되므로 Aculeasis의 cooldown/rate_delay/free_only는 불필요한 오버헤드
-2. **설정이 1줄** — `.env`에 키 3개 콤마 구분만 하면 끝
-3. **상태 추적 없음** — 버그 발생 여지가 적고, 거의 호출되지 않을 429 처리 로직이 단순
-4. **배포 간단** — Uvicorn/Podman/systemd user service 모두 적합
-5. hermes-agent는 opencode를 못 쓰게 되므로 탈락
-
-### 구축 계획
-
-```
-opencode ──> http://127.0.0.1:8000/v1 (Naveenxyz proxy)
-              ├─ 요청마다 key1 → key2 → key3 → key1 → ... 순환
-              ├─ 429 시 다음 키로 넘김 (다음 rotation에 다시 포함)
-              └─ 3개 키 = 분당 RPM 3배 확보
-
-opencode.json 변경:
-  provider.openrouter.options.baseURL → "http://127.0.0.1:8000/v1"
-  provider.openrouter.options.apiKey  → 로컬 배포용 임의 값 (프록시가 교체)
-  experimental.modelFallbackChain    → 단일 체인(선택 사항, 제거 가능)
-```
-
-| 단계 | 작업 |
-|------|------|
-| 1 | `git clone https://github.com/Naveenxyz/openrouterproxy` |
-| 2 | venv 생성 + `pip install -r requirements.txt python-dotenv` |
-| 3 | `.env`: `OPENROUTER_API_KEYS="sk-or-v1-77ed...,sk-or-v1-1911...,sk-or-v1-7ab4..."` |
-| 4 | systemd user service 등록 (Uvicorn, 포트 8000) |
-| 5 | opencode.json baseURL 변경 |
-| 6 | 검증: 요청 3회 후 각 키의 요청 수 로그로 라운드로빈 확인 |
-
-### 리스크 & 주의
-
-- **일일 캡 초과 위험**: 일 3000건이 순수 분할이므로 어느 계정이 먼저 1000건에 도달할 수 있음.
-  → 단순 RR이 아닌 `least_used`(최소 사용 키 우선) 전략이 필요할 수 있음.
-  → Naveenxyz는 RR만 지원하므로, 일일 1000건 도달 시 해당 키를 잠정 배제하는
-    가드가 추가로 필요할 수 있음 (요구사항 확인 후 결정).
-
-## 부록: 세 프로젝트 상세 조사
-
-### Aculeasis/openrouter-proxy (권장 후보였으나 보류)
-
-- `/api/v1/{path}` 전부 위임, `/api/v1/models`는 public endpoint 가능
-- `key_selection_opts`의 `same` 전략: 직전 성공 키 재사용 (세션 유지)
-- `global_rate_delay`: Google `RESOURCE_EXHAUSTED` 반복 방지용
-- 기본 4시간 cooldown, `service_install.sh`로 systemd 설치 지원
-
-### Naveenxyz/openrouterproxy (채택)
-
-- `POST /v1/chat/completions` (stream 포함), `GET /v1/models`, `GET /` 헬스체크
-- `ALLOWED_AUTH_TOKENS` 미설정 시 인증 없이 공개됨 → 설정 권장 (127.0.0.1 바인딩으로 완화)
-- `.env` 필요: `OPENROUTER_API_KEYS` (필수), `HOST`, `PORT`
-
-### NousResearch/hermes-agent credential-pools (탈락)
-
-- 같은 provider 내 키 로테이션 (fallback provider와 구분됨)
-- 에러 복구: 429(1회 재시도→rotation), 402(즉시 rotation), 401(OAuth refresh→rotation)
-- 프로세스 간 OAuth refresh 파일락, 서브에이전트 풀 공유 등 정교함
-- **단, standalone 프록시가 아니므로 opencode 유지 불가** → 조건부 채택 불가
-
-## 결론
-
-`modelFallbackChain`은 (1) 공식 스키마에 없는 실험 기능이며, (2) 라운드로빈이 아닌
-선형 fallback이므로, **요청 간 키 분산이 불가능**하다. 여기에 (3) 대상 무료 모델들이
-전부 종료된 상태가 겹쳐 전체 실패로 귀결됐다.
-
-해결책으로 **Naveenxyz/openrouterproxy**를 채택했다. RPM만 회피하면 되는 단순 요구사항에
-정확히 부합하며, 3개 키 순차 순환으로 분당 한도를 3배 확보한다.
-일일 계정별 1000건 캡은 순수 RR 분할 대비 편차가 생길 수 있어, 구축 후
-**키별 사용량 모니터링과 가드**를 추가하는 것으로 보완한다.
-
-## 참고
-
-- 설정 파일: `/home/opc/.config/opencode/opencode.json`
-- 로그: `/home/opc/.local/share/opencode/log/opencode.log`
-- opencode 버전: 1.18.29 (Bun binary)
-- 바이너리: `/home/opc/.local/lib/node_modules/opencode-ai/node_modules/opencode-linux-arm64/bin/opencode`
-- 저장소: `opencode-ai/opencode` (2026-09-07 archived)
+- RR 프록시 소스: `/opt/projects/server/scripts/proxies/openrouter_rr_proxy.py`
+- 갱신 스크립트: `/opt/projects/server/scripts/proxies/refresh_openrouter_free_models.py`
+- opencode 설정: `/home/opc/.config/opencode/opencode.json`
+- 시크릿: `/home/opc/.config/devforge/secrets.env`
+- 캐시: `/home/opc/.cache/devforge/openrouter_free_models.json`
+- OpenRouter 공식 문서: https://openrouter.ai/docs/api_reference/limits.md
+- OpenRouter BYOK: https://openrouter.ai/workspaces/default/byok
