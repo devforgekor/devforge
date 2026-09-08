@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — exp_runner.py, prj_cycle.py, preflight.py, watchdog
+# Path: imported by — lib/infra/preflight.py, lib/watchdog
 """Experiment state file — 실험 중 watchdog과 pipeline 간 상태 공유.
 
 실험 시작 시 .experiment_state.json 생성, 종료 시 정리.
@@ -9,15 +9,14 @@ watchdog: 파일 존재 + PID alive → monitor-only mode (mode 변경/서비스
 
 import json
 import os
-import signal
-import subprocess
-import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 STATE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "..", "data", "experiment",
+    "..",
+    "data",
+    "experiment",
 )
 STATE_FILE = os.path.join(STATE_DIR, ".experiment_state.json")
 os.makedirs(STATE_DIR, exist_ok=True)
@@ -25,8 +24,6 @@ os.makedirs(STATE_DIR, exist_ok=True)
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 
 
 def read_state() -> Dict[str, Any]:
@@ -104,8 +101,6 @@ def _write_atomic(state: dict):
     with open(tmp, "w") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
     os.rename(tmp, STATE_FILE)
-
-
 
 
 class ExperimentState:

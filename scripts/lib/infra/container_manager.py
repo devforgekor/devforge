@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — pipelines/exp_runner.py, day_runner.py, night_runner.py
+# Path: imported by — lib/pod_manager/container.py (free_memory)
 """Container lifecycle management — stop, start, health, memory reclaim."""
 
 import os

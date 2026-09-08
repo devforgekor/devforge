@@ -158,18 +158,6 @@ def build_status():
     completed_phases = sorted(phases.keys())
     current_phase = completed_phases[-1] + 1 if completed_phases else 0
 
-    # Check prj_cycle (exp_runner internal)
-    prj_alive = False
-    prj_elapsed = "?"
-    try:
-        out = subprocess.check_output(["ps", "-eo", "pid,etime,args"], timeout=5, text=True)
-        for line in out.split("\n"):
-            if "prj_cycle.py" in line and "grep" not in line:
-                prj_alive = True
-                prj_elapsed = line.split(None, 2)[1]
-    except:
-        pass
-
     inference_cpu = get_llm_cpu()
     mem, swap = get_memory()
     recent_eval = check_phase0_progress()
@@ -204,7 +192,6 @@ def build_status():
     msg = (
         f"*[Experiment Monitor]* 진행 보고\n"
         f"• Runner: PID {pid}, {runner_elapsed} 경과\n"
-        f"• prj_cycle: {'ALIVE' if prj_alive else 'DEAD'} ({prj_elapsed})\n"
         f"• {phase_summary}\n"
         f"• Inference: {inference_cpu}% CPU\n"
         f"• Memory: {mem} | Swap: {swap}\n"

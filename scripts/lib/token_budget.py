@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — pipelines/prj_cycle.py
-"""Token budget manager for P-R-J pipeline context allocation."""
-
+# Path: imported by — pipelines/enrich.py, lib/pipeline_common, lib/verify/core
+"""Token budget manager for LLM context allocation."""
 
 CHARS_PER_TOKEN = 2.5
 
@@ -14,12 +13,12 @@ PHASE_BUDGET = {
     "handoff": 1500,
     "final_verify": 2000,
     # night.py v3.0 phases
-    "night_initial_verify": 1500,    # Phase 2: initial verification — findings summary
-    "rubric": 2000,              # Rubric evaluation — score context
-    "night_proposer": 3000,             # Phase 4 P: proposer (budget increased for richer context)
-    "night_reflector": 1200,             # Phase 4 R: per-finding refuter
-    "night_judge": 1500,             # Phase 4 J: judge
-    "night_final_verify": 2000,           # Phase 5: final verify
+    "night_initial_verify": 1500,  # Phase 2: initial verification — findings summary
+    "rubric": 2000,  # Rubric evaluation — score context
+    "night_proposer": 3000,  # Phase 4 P: proposer (budget increased for richer context)
+    "night_reflector": 1200,  # Phase 4 R: per-finding refuter
+    "night_judge": 1500,  # Phase 4 J: judge
+    "night_final_verify": 2000,  # Phase 5: final verify
     # Enrich pipelines
     "enrich": 4000,
     "enrich_verify": 2500,
@@ -47,10 +46,14 @@ class TokenBudget:
         if self.used + tok > self.soft_limit:
             allowed = max(0, self.limit - self.used - 10)
             if allowed > 80:
-                self.sections.append({
-                    "label": label, "tok": allowed + 10,
-                    "truncated": True, "original_tok": tok,
-                })
+                self.sections.append(
+                    {
+                        "label": label,
+                        "tok": allowed + 10,
+                        "truncated": True,
+                        "original_tok": tok,
+                    }
+                )
                 self.used = self.limit
                 self._over = True
                 return False
