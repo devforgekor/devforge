@@ -9,5 +9,4 @@ SSOT is lib.model_registry. All new code should import directly from there.
 from lib.model_registry import (  # noqa: F401 — re-export for backward compat
     DAY_PHASE_MODELS,
     MODEL_METADATA,
-    NIGHT_MODELS,
 )

@@ -10,7 +10,7 @@ import time
 import urllib.request
 from typing import Optional
 
-from lib.model_registry import DAY_PHASE_MODELS, MODEL_METADATA, NIGHT_MODELS
+from lib.model_registry import DAY_PHASE_MODELS, MODEL_METADATA
 from lib.pod_manager.container import (
     INFERENCE_CONTAINER,
     MODE_FILE,
@@ -102,13 +102,13 @@ def _start_and_wait(port, health_timeout, skip_probe, mode):
     return ok
 
 
-def start_inference(mode, port, night=False, dry_run=False, skip_probe=False, model_key=None):
+def start_inference(mode, port, dry_run=False, skip_probe=False, model_key=None):
     """Start inference container with the given model mode."""
     log(f"  INFERENCE -> {mode} (:{port})")
     _write_mode_env(mode, port, model_key=model_key)
     if not dry_run:
-        kill_all(night=night)
-    health_timeout = 1200 if night else 600
+        kill_all()
+    health_timeout = 600
     _write_mode_env(mode, port, model_key=model_key)
     ok = _start_and_wait(port, health_timeout, skip_probe, mode)
     if ok and model_key:
@@ -147,7 +147,6 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
     if not meta:
         log(f"  Unknown model: {physical_name}")
         return False
-    night = physical_name in NIGHT_MODELS
     if skip_if_healthy:
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{meta['port']}/health")
@@ -161,9 +160,7 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
                         log(f"  :{meta['port']} healthy but wrong model — restart needed")
         except Exception:
             pass
-    ok = start_inference(
-        meta["mode"], meta["port"], night=night, dry_run=dry_run, model_key=physical_name
-    )
+    ok = start_inference(meta["mode"], meta["port"], dry_run=dry_run, model_key=physical_name)
     if ok:
         return True
     log(f"  ensure_model({physical_name}) failed — retrying after GC + 10s")
@@ -172,9 +169,7 @@ def ensure_model(physical_name, skip_if_healthy=False, dry_run=False):
 
     _gc.collect()
     time.sleep(10)
-    return start_inference(
-        meta["mode"], meta["port"], night=night, dry_run=dry_run, model_key=physical_name
-    )
+    return start_inference(meta["mode"], meta["port"], dry_run=dry_run, model_key=physical_name)
 
 
 def ensure_dual(
@@ -197,8 +192,6 @@ def ensure_dual(
     if not meta_a or not meta_b:
         log(f"  Unknown model key(s): {model_key_a}/{model_key_b}")
         return False
-
-    night = model_key_a in NIGHT_MODELS or model_key_b in NIGHT_MODELS
 
     if skip_if_healthy:
         try:
@@ -224,7 +217,7 @@ def ensure_dual(
 
     log(f"  Ensure dual: {model_key_a}(:{meta_a['port']}) + {model_key_b}(:{meta_b['port']})")
     _write_dual_env(model_key_a, model_key_b)
-    kill_all(night=night)
+    kill_all()
     _reclaim_memory()
     if not _podman_start_inference():
         log("  dual start FAILED — inference container could not start")
