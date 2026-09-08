@@ -153,7 +153,7 @@ def preflight_checks(
         mode = Path(_mode_file).read_text().strip().replace("MODE=", "")
         if mode in _large_modes:
             log(f"  [preflight] WARNING: inference mode={mode} (large model) — may cause OOM")
-        if mode in _large_modes and entry_name in ("prj_cycle.py", "runner.py"):
+        if mode in _large_modes and entry_name in ("runner.py",):
             # In experiment mode, start in day mode; reset if stuck in large mode
             log(f"  [preflight] inference in {mode} mode — resetting to day")
             Path(_mode_file).write_text("MODE=day")

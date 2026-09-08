@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: sourced by — day_cycle.sh, night_cycle.sh (via model_ctl.sh delegation)
+# Path: sourced by — day_cycle.sh (via model_ctl.sh delegation)
 """CLI for inference container model management.
 
 Usage:

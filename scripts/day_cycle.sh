@@ -164,13 +164,6 @@ _launch_reranker() {
     return 1
 }
 
-# ── Night window guard ───────────────────────────────────────────────
-if [ -f "/opt/ai_data/scripts/current-system-mode.env" ] && \
-   grep -q "MODE=night" "/opt/ai_data/scripts/current-system-mode.env"; then
-    LOG "day_cycle skipped (MODE=night)"
-    exit 0
-fi
-
 # ── System Sync ────────────────────────────────────
 LOG "=== System: code-structure ==="
 if python3 "$SCRIPT_DIR/gen_architecture.py" --check-structure 2>&1; then

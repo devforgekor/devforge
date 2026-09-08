@@ -49,7 +49,6 @@ Caddy (host network)
 | backup | systemd user | inactive |
 | classify | systemd user | inactive |
 | daily structure | systemd user | activating |
-| night cycle | systemd user | inactive |
 | refresh reminder | systemd user | inactive |
 | restore test | systemd user | inactive |
 | caddy | systemd system (rootful podman) | active |

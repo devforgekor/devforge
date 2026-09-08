@@ -102,7 +102,6 @@ def get_memory():
 
 def check_phase0_progress():
     """Check if there are any intermediate output files indicating progress."""
-    # In Phase 0, exp_runner/prj_cycle creates eval files at various stages
     recent = []
     try:
         out = subprocess.check_output(
@@ -171,14 +170,6 @@ def build_status():
     except:
         pass
 
-    # Check night_cycle (Phase 3-4)
-    night_alive = False
-    try:
-        out = subprocess.check_output(["ps", "-eo", "args"], timeout=5, text=True)
-        night_alive = "night_cycle.py" in out
-    except:
-        pass
-
     inference_cpu = get_llm_cpu()
     mem, swap = get_memory()
     recent_eval = check_phase0_progress()
@@ -214,7 +205,6 @@ def build_status():
         f"*[Experiment Monitor]* 진행 보고\n"
         f"• Runner: PID {pid}, {runner_elapsed} 경과\n"
         f"• prj_cycle: {'ALIVE' if prj_alive else 'DEAD'} ({prj_elapsed})\n"
-        f"• night_cycle.py: {'ALIVE' if night_alive else 'N/A'}\n"
         f"• {phase_summary}\n"
         f"• Inference: {inference_cpu}% CPU\n"
         f"• Memory: {mem} | Swap: {swap}\n"

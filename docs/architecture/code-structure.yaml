@@ -151,10 +151,6 @@ modules:
     run_baseline_monitor.sh:
       status: unknown
       purpose: DevForge Baseline Monitor v1.0
-    run_pipeline_bg.sh:
-      status: unknown
-      purpose: "prj_cycle.py \u2192 bench_verify_optimization.py \uC21C\uCC28 \uC2E4\
-        \uD589"
     run_verify_compare.sh:
       status: unknown
       purpose: "Background verify runner: Qwen Q8 \u2192 NextCoder Q8"
@@ -617,18 +613,6 @@ modules:
       status: production
       purpose: "Model metadata \u2014 re-exported from lib.model_registry for backward\
         \ compat."
-- path: scripts/lib/prj/
-  purpose: Prj
-  files:
-    __init__.py:
-      status: unknown
-      purpose: __init__.py
-    core.py:
-      status: production
-      purpose: core.py
-    utils.py:
-      status: production
-      purpose: utils.py
 - path: scripts/lib/proxy_utils/
   purpose: Proxy Utils
   files:
@@ -659,18 +643,6 @@ modules:
     utils.py:
       status: production
       purpose: utils.py
-- path: scripts/lib/runner/
-  purpose: Runner
-  files:
-    __init__.py:
-      status: unknown
-      purpose: __init__.py
-    metrics.py:
-      status: production
-      purpose: Metrics extraction from pipeline stdout and Slack reporting.
-    snapshot.py:
-      status: production
-      purpose: Phase snapshot save/restore and code transformation for 5-phase experiments.
 - path: scripts/lib/search/
   purpose: Search
   files:
@@ -952,9 +924,6 @@ modules:
     post_extract_supplement.py:
       status: experimental
       purpose: "Post-extract supplement \u2014 offline LLM call to find missing facts."
-    prj_cycle.py:
-      status: production
-      purpose: prj_cycle.py
     raw_consumer.py:
       status: experimental
       purpose: "Consume raw turns from DB \u2014 apply text_clean, advance to pending."
@@ -1099,10 +1068,6 @@ modules:
     eval_comparison.py:
       status: experimental
       purpose: DeepSeek Pro evaluation of 12-run comparison test results.
-    exp_runner.py:
-      status: experimental
-      purpose: "5-Phase (2x2+baseline) Experiment Runner \u2014 \uBC31\uADF8\uB77C\
-        \uC6B4\uB4DC \uC790\uB3D9 \uC2E4\uD589."
     experiment_monitor.py:
       status: experimental
       purpose: experiment_monitor.py
@@ -1286,6 +1251,3 @@ modules:
       status: experimental
       purpose: "TLDR Verification Method Comparison \u2014 Reranker vs Embedding (NLI\
         \ :8085 removed)."
-    transform_prj.py:
-      status: experimental
-      purpose: Transform prj_cycle.py for experiment phases.

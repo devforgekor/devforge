@@ -18,7 +18,7 @@ def log(msg):
     print(f"[{t}] {msg}", flush=True)
 
 
-KEY_FILES = ["pipelines/prj_cycle.py", "pipelines/extract.py", "day_cycle.sh"]
+KEY_FILES = ["pipelines/extract.py", "day_cycle.sh"]
 
 
 def save_snapshot(phase):

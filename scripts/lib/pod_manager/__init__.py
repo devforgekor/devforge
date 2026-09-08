@@ -75,27 +75,14 @@ def wait_probe(port, model_name, timeout=300):
     return False
 
 
-def kill_all(night=False, dry_run=False):
-    """Stop inference container and optionally night cycle timers."""
+def kill_all(dry_run=False):
+    """Stop inference container."""
     if dry_run:
         log("  [DRY] kill_all() skipped")
         return
 
-    if night:
-        _podman_stop_inference()
-        for svc in (
-            "devforge-day-cycle.service",
-            "devforge-night-cycle.service",
-            "devforge-night-cycle.timer",
-        ):
-            subprocess.run(["systemctl", "--user", "stop", svc], capture_output=True, timeout=30)
-            subprocess.run(
-                ["systemctl", "--user", "reset-failed", svc], capture_output=True, timeout=10
-            )
-        _reclaim_memory()
-    else:
-        _podman_stop_inference()
-        _reclaim_memory()
+    _podman_stop_inference()
+    _reclaim_memory()
 
 
 def _start_and_wait(port, health_timeout, skip_probe, mode):
