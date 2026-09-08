@@ -15,13 +15,18 @@ from pathlib import Path
 
 
 def svc_active(unit: str) -> bool:
-    """Check if a systemd user unit is active."""
+    """Check if a systemd user unit is active (treat 'activating' as active)."""
     try:
         r = subprocess.run(
             ["systemctl", "--user", "is-active", unit],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
-        return r.returncode == 0 and "active" in r.stdout
+        # 'active' and 'activating' both count as running — only 'inactive',
+        # 'failed', 'deactivating', 'dead' are problems.
+        # is-active returns exit code 0 for 'active', 3 for 'activating'.
+        return "active" in r.stdout or "activating" in r.stdout
     except Exception:
         return False
 
@@ -31,7 +36,9 @@ def svc_enabled(unit: str) -> bool:
     try:
         r = subprocess.run(
             ["systemctl", "--user", "is-enabled", unit],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return r.returncode == 0
     except Exception:
@@ -43,7 +50,9 @@ def timer_active(timer: str) -> bool:
     try:
         r = subprocess.run(
             ["systemctl", "--user", "is-active", timer],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return r.returncode == 0
     except Exception:
@@ -55,7 +64,9 @@ def container_running(name: str) -> bool:
     try:
         r = subprocess.run(
             ["podman", "ps", "--format", "{{.Names}}"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return name in r.stdout.split("\n")
     except Exception:
@@ -64,4 +75,3 @@ def container_running(name: str) -> bool:
 
 def file_exists(path: str) -> bool:
     return Path(path).exists()
-

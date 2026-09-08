@@ -53,7 +53,7 @@ def analyze_exit_code(code: int) -> str:
 
 
 def recover_container(name: str) -> bool:
-    """Restart container. Inference container → podman rm+run, others → systemctl."""
+    """Restart container + health check. Inference → podman rm+run, others → systemctl."""
     if name in CONTAINER_EXCLUSION:
         log(f"  SKIP: {name} is excluded from restart")
         return False
@@ -74,7 +74,18 @@ def recover_container(name: str) -> bool:
                 timeout=30,
             )
         time.sleep(5)
-        return True
+        # Health check: confirm the service/container is actually active after restart
+        from lib.watchdog.checker import check_inference_container, check_service
+
+        if name == "devforge-inference":
+            ok, detail = check_inference_container()
+        else:
+            ok, detail = check_service(name)
+        if ok:
+            log(f"  container {name} healthy after restart")
+            return True
+        log(f"  container {name} restart OK but health check failed: {detail}")
+        return False
     except Exception as e:
         log(f"  restart failed: {e}")
         return False
