@@ -50,7 +50,6 @@ ALERT_ONLY_TARGETS = [
 ]
 
 TIMER_TARGETS = {
-    "devforge-night-cycle.timer": {"expected": "night_cycle", "max_idle": 90000},  # 25h
     "ebook-watcher.timer": {"expected": "pipeline", "max_idle": 900},  # 15분
     # free 모델 갱신 타이머 — 매일 15:30 UTC. 26h idle = 하루 넘게 안 돌면 알림.
     "devforge-openrouter-free-models.timer": {"expected": "free_models", "max_idle": 93600},

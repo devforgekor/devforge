@@ -117,8 +117,6 @@ def _run_services(results: dict, dry_run: bool):
 
 
 def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
-    night_timers = {"devforge-night-cycle.timer"}
-    day_timers = set()
     for timer in check_all_timers():
         tracker = _state.get(f"timer:{timer['name']}")
         if timer["ok"]:
@@ -132,13 +130,6 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
             if not dry_run and tracker.consecutive_fail >= 1:
                 if protected:
                     log(f"  SKIP kick {timer['name']} — protection active ({_test_active})")
-                elif (
-                    mode == "day"
-                    and timer["name"] in night_timers
-                    or mode == "night"
-                    and timer["name"] in day_timers
-                ):
-                    pass
                 else:
                     svc_name = timer["name"].replace(".timer", ".service")
                     log(f"  kicking {svc_name} (timer delayed {timer['detail']})")
@@ -268,7 +259,13 @@ def run_day_checks(dry_run: bool = False) -> dict:
                     log(f"  day_cycle.sh not running, {pending_cnt} pending — starting first batch")
                     _state.add_event("day_cycle", "start", f"{pending_cnt} pending")
                     subprocess.run(
-                        ["systemctl", "--user", "--no-block", "start", "devforge-day-cycle.service"],
+                        [
+                            "systemctl",
+                            "--user",
+                            "--no-block",
+                            "start",
+                            "devforge-day-cycle.service",
+                        ],
                         capture_output=True,
                         timeout=10,
                     )
@@ -276,51 +273,6 @@ def run_day_checks(dry_run: bool = False) -> dict:
             log(f"  day_cycle check error: {e}")
     results["pipeline_running"] = pipe_name
     _run_common_checks(results, dry_run, "day")
-    return results
-
-
-def run_night_checks(dry_run: bool = False) -> dict:
-    results = {
-        "containers": [],
-        "services": [],
-        "timers": [],
-        "probes": [],
-        "memory": {},
-        "pipeline_running": False,
-    }
-    for probe in check_all_llm():
-        name = probe["name"]
-        tracker = _state.get(f"llm:{name}")
-        ok = probe["t1_ok"] and probe["t2_ok"]
-        if ok:
-            tracker.record_success()
-        else:
-            if tracker.record_failure() and tracker.can_alert():
-                if not _test_active:
-                    send_alert(
-                        f"llm:{name}",
-                        tracker.state.value,
-                        f"T1={probe['t1_detail']} T2={probe['t2_detail']}",
-                    )
-                    _state.add_event(f"llm:{name}", "fail", probe["t2_detail"])
-        results["probes"].append(probe)
-    for phase_name, pattern in [
-        ("night_cycle", "night_cycle.py"),
-        ("review_consumer", "review_consumer.py"),
-        ("proxy_reviewer", "proxy_reviewer.py"),
-    ]:
-        running, pid = check_pipeline(pattern)
-        tracker = _state.get(f"pipeline:{phase_name}")
-        if running:
-            _state.add_event(f"pipeline:{phase_name}", "running", f"PID {pid}")
-            tracker.record_success()
-        else:
-            if tracker.record_failure() and tracker.can_alert():
-                if not _test_active:
-                    send_alert(f"pipeline:{phase_name}", "STOPPED", "no process found")
-                    _state.add_event(f"pipeline:{phase_name}", "stopped", "")
-        results["pipeline_running"] = results["pipeline_running"] or running
-    _run_common_checks(results, dry_run, "night")
     return results
 
 
@@ -460,14 +412,6 @@ def day_fix_loop():
         return
     for pipe in ("day_cycle",):
         _fix_loop_common(pipe, llm_port=8082)
-
-
-def night_fix_loop():
-    if _test_active:
-        log(f"  SKIP night fix loop — protection active ({_test_active})")
-        return
-    for pipe in ("night_cycle", "review_consumer", "proxy_reviewer"):
-        _fix_loop_common(pipe, llm_port=8081)
 
 
 # ── Slot deadlock / Token stagnation / Intermediate recovery ────────────
@@ -759,16 +703,10 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
                 log(f"[TO_OPERATOR] {m['type']}: {m['content']}")
 
         try:
-            if mode == "night":
-                results = run_night_checks(dry_run=dry_run)
-                log("night check done")
-                if not dry_run and not experiment_active:
-                    night_fix_loop()
-            else:
-                results = run_day_checks(dry_run=dry_run)
-                log("day check done")
-                if not dry_run and not experiment_active:
-                    day_fix_loop()
+            results = run_day_checks(dry_run=dry_run)
+            log("day check done")
+            if not dry_run and not experiment_active:
+                day_fix_loop()
         except Exception as e:
             log(f"Check cycle error: {e}")
             import traceback
