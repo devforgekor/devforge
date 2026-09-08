@@ -81,7 +81,7 @@ def recover_container(name: str) -> bool:
 
 
 def recover_service(name: str) -> bool:
-    """systemctl --user restart. Exclusion 체크."""
+    """systemctl --user restart + health check. Exclusion 체크."""
     if name in CONTAINER_EXCLUSION:
         log(f"  SKIP: {name} is excluded from restart")
         return False
@@ -95,7 +95,16 @@ def recover_service(name: str) -> bool:
             capture_output=True,
             timeout=30,
         )
-        return True
+        # Health check: confirm service is actually active after restart
+        time.sleep(5)
+        from lib.watchdog.checker import check_service
+
+        ok, detail = check_service(name)
+        if ok:
+            log(f"  service {name} healthy after restart")
+            return True
+        log(f"  service {name} restart OK but health check failed: {detail}")
+        return False
     except Exception:
         return False
 

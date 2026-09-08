@@ -33,10 +33,13 @@ from lib.watchdog.checker import (
     check_all_timers,
     check_disk,
     check_heartbeats,
+    check_inference_container,  # noqa: F401 — used in day_fix_loop
     check_llm_metrics,
+    check_llm_probe,  # noqa: F401 — used in day_fix_loop
     check_llm_slots,
     check_memory,
     check_pipeline,
+    check_port_conflict,  # noqa: F401 — used in day_fix_loop
     check_probe_latency,
     check_service,
     read_mode,
@@ -51,7 +54,9 @@ from lib.watchdog.notifier import heartbeat, send_alert, send_recovery
 from lib.watchdog.recovery import (
     graduated_recover,
     kill_stale_process,
+    recover_inference_cascade,  # noqa: F401 — used in day_fix_loop
     recover_oom,
+    recover_port_conflict,  # noqa: F401 — used in day_fix_loop
     recover_service,
     recover_slot_deadlock,
 )

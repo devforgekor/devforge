@@ -33,20 +33,39 @@ LLM_TARGETS = {
 DAY_PORTS = {8080, 8082}
 
 # ── 서비스 / 타이머 ─────────────────────────────────────────────────
+# 핵심 파이프라인 서비스 — 다운 시 자동 재시작
 SERVICE_TARGETS = [
     "devforge-turn-watcher",
     "openrouter-rr-proxy",
+    "devforge-day-cycle",  # day 파이프라인 (async)
+    "ebook-watcher",  # ebook 워처 (타이머와 쌍)
 ]
 
-# Alert-only targets (monitor only, no recovery)
+# Alert-only targets (monitor only, no recovery) — MCP/프록시/인프라
 ALERT_ONLY_TARGETS = [
-    "container-postgres",
+    "container-postgres",  # DB (exclusion, restart 금지)
+    "container-devforge-mcp",  # MCP 서버
+    "container-flaresolverr",  # Cloudflare 우회
+    "anthropic-openrouter-proxy",  # Anthropic→OpenRouter 변환
+    "anthropic-proxy",  # DeepSeek 역방향 프록시
+    "gemini-openai-proxy",  # Gemini 키 로테이션
+    "or-rate-limiter",  # OpenRouter rate limiter
 ]
 
+# 타이머 감시 — max_idle 초과 시 미발동으로 간주 (kick/alert)
 TIMER_TARGETS = {
     "ebook-watcher.timer": {"expected": "pipeline", "max_idle": 900},  # 15분
     # free 모델 갱신 타이머 — 매일 15:30 UTC. 26h idle = 하루 넘게 안 돌면 알림.
     "devforge-openrouter-free-models.timer": {"expected": "free_models", "max_idle": 93600},
+    "devforge-system-sync.timer": {"expected": "system_sync", "max_idle": 1800},  # 15분
+    "devforge-news.timer": {"expected": "news", "max_idle": 25200},  # 6시간
+    "devforge-daily-structure.timer": {"expected": "daily_structure", "max_idle": 90000},  # 25h
+    "devforge-weekly-enrich-rebuild.timer": {
+        "expected": "weekly_enrich",
+        "max_idle": 604800,
+    },  # 7일
+    "devforge-restore-test.timer": {"expected": "restore_test", "max_idle": 2592000},  # 30일
+    "reference-monitor.timer": {"expected": "reference", "max_idle": 604800},  # 7일
 }
 
 # ── 컨테이너 exclusion (절대 재시작 금지) ───────────────────────────
