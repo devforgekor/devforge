@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 
 import httpx
 import uvicorn
@@ -94,14 +95,19 @@ logger = logging.getLogger("openrouter-rr-proxy")
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="OpenRouter RR Proxy", version="1.0.0")
-client = httpx.AsyncClient(timeout=300.0)
+client: httpx.AsyncClient = None  # type: ignore[assignment]
 current_key_index = 0
 
 
-@app.on_event("shutdown")
-async def _shutdown() -> None:
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    global client
+    client = httpx.AsyncClient(timeout=300.0)
+    yield
     await client.aclose()
+
+
+app = FastAPI(title="OpenRouter RR Proxy", version="1.0.0", lifespan=_lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +172,9 @@ async def chat_completions(request: Request):
 
         logger.info("→ key[%d/%d] model=%s stream=%s", idx + 1, NUM_KEYS, model, is_stream)
 
+        if client is None:  # lifecycle guard: startup not complete
+            raise HTTPException(status_code=503, detail="Proxy not ready")
+
         try:
             if is_stream:
                 req = client.build_request("POST", CHAT_ENDPOINT, json=body, headers=headers)
@@ -182,18 +191,23 @@ async def chat_completions(request: Request):
                             if k.lower() in ("content-type", "content-encoding", "cache-control")
                         },
                     )
-                elif resp.status_code == 429:
-                    detail = "429 key[%d]: %s" % (idx + 1, await resp.aread())
+
+                # Non-2xx streaming response: read error body then ALWAYS release the
+                # connection (even if aread() raises), preventing pool leaks.
+                try:
+                    err_body = (await resp.aread()).decode(errors="replace")
+                finally:
+                    await resp.aclose()
+
+                if resp.status_code == 429:
+                    detail = f"429 key[{idx + 1}]: {err_body}"
                     logger.warning(detail)
-                    await resp.aclose()
                     last_error = detail
-                    continue
                 else:
-                    detail = "HTTP %d key[%d]: %s" % (resp.status_code, idx + 1, await resp.aread())
+                    detail = f"HTTP {resp.status_code} key[{idx + 1}]: {err_body}"
                     logger.error(detail)
-                    await resp.aclose()
                     last_error = detail
-                    continue
+                continue
 
             else:
                 resp = await client.post(CHAT_ENDPOINT, json=body, headers=headers)
@@ -201,16 +215,19 @@ async def chat_completions(request: Request):
                 if resp.status_code == 200:
                     logger.info("✓ key[%d] done", idx + 1)
                     return JSONResponse(content=resp.json(), status_code=200)
-                elif resp.status_code == 429:
-                    detail = f"429 key[{idx + 1}]: {resp.text}"
+
+                # Non-2xx: release the connection explicitly before retrying.
+                err_body = resp.text
+                await resp.aclose()
+
+                if resp.status_code == 429:
+                    detail = f"429 key[{idx + 1}]: {err_body}"
                     logger.warning(detail)
-                    last_error = detail
-                    continue
                 else:
-                    detail = f"HTTP {resp.status_code} key[{idx + 1}]: {resp.text}"
+                    detail = f"HTTP {resp.status_code} key[{idx + 1}]: {err_body}"
                     logger.error(detail)
-                    last_error = detail
-                    continue
+                last_error = detail
+                continue
 
         except httpx.RequestError as e:
             detail = f"RequestError key[{idx + 1}]: {e.__class__.__name__} - {e}"
@@ -225,6 +242,8 @@ async def chat_completions(request: Request):
 @app.get("/v1/models")
 async def list_models():
     """List models from OpenRouter (first key)."""
+    if client is None:
+        raise HTTPException(status_code=503, detail="Proxy not ready")
     headers = {
         "Authorization": f"Bearer {KEYS[0]}",
         "HTTP-Referer": YOUR_SITE_URL,
