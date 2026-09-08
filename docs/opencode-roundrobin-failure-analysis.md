@@ -325,15 +325,42 @@ opencode v1.18.29 내장 config schema에서 `experimental` 섹션:
 | 2026-09-08 | **opencode-ai/opencode 저장소 archived** |
 | 2026-09-08 | **RR 프록시 + 자동 갱신 시스템 구축 완료** |
 
+## 와치독 통합 (2026-09-08)
+
+RR 프록시와 갱신 타이머는 `devforge-watchdog`가 관리한다.
+
+| 타깃 | 종류 | 와치독 역할 | max_idle |
+|------|------|------------|----------|
+| `openrouter-rr-proxy` | **SERVICE_TARGETS** | 다운 시 자동 재시작 | — |
+| `devforge-openrouter-free-models.timer` | **TIMER_TARGETS** | 26h 안에 안 돌면 Slack 알림 | 93600s |
+
+**설정 위치**: `lib/watchdog/config.py`
+```python
+SERVICE_TARGETS = [
+    "devforge-turn-watcher",
+    "openrouter-rr-proxy",          # ← 추가 (자동 재시작)
+]
+
+TIMER_TARGETS = {
+    ...
+    "devforge-openrouter-free-models.timer": {"expected": "free_models", "max_idle": 93600},
+}
+```
+
+**config 반영**: 와치독은 SIGHUP으로 리로드 지원
+```bash
+kill -HUP $(systemctl --user show devforge-watchdog.service -p MainPID --value)
+```
+
 ## 유지보수 가이드
 
 ### 일상 점검
 
 ```bash
-# 프록시 상태 확인
+# 프록시 상태 확인 (와치독이 자동 재시작)
 systemctl --user status openrouter-rr-proxy.service
 
-# 타이머 상태 확인
+# 타이머 상태 확인 (와치독이 26h idle 시 Slack 알림)
 systemctl --user status devforge-openrouter-free-models.timer
 
 # 다음 타이머 예정 시각
@@ -341,6 +368,9 @@ systemctl --user list-timers | grep openrouter
 
 # 최근 갱신 로그
 journalctl --user -u devforge-openrouter-free-models.service --since "1 hour ago"
+
+# 와치독 감시 로그
+journalctl --user -u devforge-watchdog.service --since "1 hour ago" | grep -i "free\|rr-proxy"
 
 # 현재 적용된 모델 확인
 python3 -c "import json; c=json.load(open('/home/opc/.config/opencode/opencode.json')); print(c['model']); print(c['experimental']['modelFallbackChain']['chains'][0])"

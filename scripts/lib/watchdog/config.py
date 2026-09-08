@@ -41,6 +41,7 @@ DAY_PORTS = {8080, 8082}
 # ── 서비스 / 타이머 ─────────────────────────────────────────────────
 SERVICE_TARGETS = [
     "devforge-turn-watcher",
+    "openrouter-rr-proxy",
 ]
 
 # Alert-only targets (monitor only, no recovery)
@@ -51,6 +52,8 @@ ALERT_ONLY_TARGETS = [
 TIMER_TARGETS = {
     "devforge-night-cycle.timer": {"expected": "night_cycle", "max_idle": 90000},  # 25h
     "ebook-watcher.timer": {"expected": "pipeline", "max_idle": 900},  # 15분
+    # free 모델 갱신 타이머 — 매일 15:30 UTC. 26h idle = 하루 넘게 안 돌면 알림.
+    "devforge-openrouter-free-models.timer": {"expected": "free_models", "max_idle": 93600},
 }
 
 # ── 컨테이너 exclusion (절대 재시작 금지) ───────────────────────────
