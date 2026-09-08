@@ -1023,6 +1023,9 @@ modules:
     openrouter_rr_proxy.py:
       status: experimental
       purpose: OpenRouter API Key Round-Robin Proxy.
+    refresh_openrouter_free_models.py:
+      status: experimental
+      purpose: OpenRouter free model auto-refresh for opencode.
     search.py:
       status: production
       purpose: 'MCP search proxy: Brave + Tavily (Tier 1) with you.com (Tier 2 fallback).'
