@@ -153,11 +153,38 @@ def _write_opencode(config: dict) -> None:
     os.replace(tmp, OPCODE_CONFIG)
 
 
-def _apply_opencode(models: list[dict]) -> None:
-    """Set opencode.json model/chain/provider.models to top-N free models."""
-    top = models[:3]
+def _extract_org(model_id: str) -> str:
+    """Extract upstream org from model ID (e.g. 'google/gemma-4-31b:free' -> 'google')."""
+    base = model_id.split(":free")[0]
+    return base.split("/")[0] if "/" in base else base
+
+
+def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
+    """Set opencode.json model/chain/provider.models to diverse free models.
+
+    Prefers models from *different* upstream orgs so that if one provider's
+    shared pool is exhausted (upstream_provider_shared_pool 429), the fallback
+    chain still has working providers from other orgs.
+    """
+    # Group usable models by upstream org, keep best-scoring per org
+    by_org: dict[str, dict] = {}
+    for m in models:
+        org = _extract_org(m["id"])
+        if org not in by_org or m["_score"] > by_org[org]["_score"]:
+            by_org[org] = m
+
+    # Sort orgs by best score, then take top-N diverse orgs
+    diverse = sorted(by_org.values(), key=lambda m: m["_score"], reverse=True)
+    top = diverse[:3]
     if not top:
         print("✗ No top models to apply")
+        return
+
+    if dry_print:
+        selected_orgs = [(_extract_org(m["id"]), m["id"]) for m in top]
+        print("\n(selected top 3 — diverse orgs):")
+        for i, (org, mid) in enumerate(selected_orgs, 1):
+            print(f"  {i}. [{org}] {mid}")
         return
 
     config = _read_opencode()
@@ -175,12 +202,13 @@ def _apply_opencode(models: list[dict]) -> None:
     # Main model = best free
     config["model"] = f"openrouter/{top[0]['id']}"
 
-    # Fallback chain: top-3 in order
+    # Fallback chain: top-3 in order (diverse orgs)
     chain = [f"openrouter/{m['id']}" for m in top]
     config.setdefault("experimental", {}).setdefault("modelFallbackChain", {})["chains"] = [chain]
 
+    orgs = "/".join(_extract_org(m["id"]) for m in top)
     _write_opencode(config)
-    print(f"✓ opencode.json updated: primary={top[0]['id']}, chain={len(top)} models")
+    print(f"✓ opencode.json updated: primary={top[0]['id']} (orgs: {orgs})")
 
 
 # ---------------------------------------------------------------------------
@@ -249,20 +277,16 @@ def main() -> int:
             usable.append(m)
         time.sleep(0.3)  # avoid hammering RR proxy / OpenRouter
 
-    # 4. Pick top-N
-    selected = usable[: args.top]
-    print(f"\nSelected top {len(selected)}:")
-    for i, m in enumerate(selected, 1):
-        print(f"  {i}. {m['id']} (score {m['_score']:.1f})")
-
-    # 5. Apply
+    # 4. Apply — pass ALL usable models; _apply_opencode picks diverse orgs.
     if args.dry_run:
         print("\n(dry-run: opencode.json not modified)")
+        # still show what would be selected
+        _apply_opencode(usable, dry_print=True)
         return 0
-    if not selected:
+    if not usable:
         print("\n✗ No working free models found — opencode.json NOT modified")
         return 1
-    _apply_opencode(selected)
+    _apply_opencode(usable)
     return 0
 
 
