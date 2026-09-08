@@ -7,12 +7,6 @@ MODE=day (관찰형, 60s 주기):
   inference=day (:8082) extractor (day verify via model swap on :8082)
   day_cycle.sh — watchdog-managed async pipeline (embed → extract → enrich → verify)
   Fix loop: inference (:8080)가 수정 담당
-
-MODE=night (능동형, 60s 주기):
-  Night Debate (:8081 P → :8082 R → :8083 J, sequential)
-  Night Verify (:8084 V) → review_consumer.py
-  Proxy Audit → proxy_reviewer.py (DeepSeek Pro)
-  Fix loop: watchdog이 임시 podman 검증 후 feedback 문서 생성
 """
 
 import os

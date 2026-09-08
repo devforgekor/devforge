@@ -3,7 +3,10 @@
 # Path: imported by — pipelines/exp_runner.py
 """Phase snapshot save/restore and code transformation for 5-phase experiments."""
 
-import os, shutil, subprocess, sys
+import os
+import shutil
+import subprocess
+import sys
 from datetime import datetime, timezone
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,8 +18,7 @@ def log(msg):
     print(f"[{t}] {msg}", flush=True)
 
 
-KEY_FILES = ["pipelines/prj_cycle.py", "pipelines/extract.py",
-             "night_cycle.sh", "day_cycle.sh"]
+KEY_FILES = ["pipelines/prj_cycle.py", "pipelines/extract.py", "day_cycle.sh"]
 
 
 def save_snapshot(phase):

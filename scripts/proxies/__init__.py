@@ -1,5 +1,5 @@
 # Status: production
-# Path: imported by — proxy_reviewer.py, night_cycle.sh
+# Path: imported by — day_cycle.sh
 
 """LLM API proxy modules for external model endpoints.
 

@@ -1,5 +1,5 @@
 # Status: production
-# Path: imported by — day_cycle.sh, night_cycle.sh
+# Path: imported by — day_cycle.sh
 
 """DevForge pipeline step implementations.
 

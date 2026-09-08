@@ -567,16 +567,6 @@ def _switch_mode(mode: str) -> bool:
 
 def cmd_discussion(args):
     """Launch multi-agent LLM debate (DRAG or Tool-MAD)."""
-    # ── Night window guard ──────────────────────────────────
-    try:
-        content = open(SYSTEM_MODE_FILE).read().strip()
-        if "MODE=night" in content:
-            print("ERROR: nightly pipeline active (MODE=night) — discussion blocked")
-            print("  Inference container is managed by night_cycle.sh. Retry after KST 07:00.")
-            return
-    except FileNotFoundError:
-        pass
-
     method = args.method  # "drag" or "toolmad"
     question = getattr(args, "question", None)
     skip_drag = getattr(args, "skip_drag", False)
@@ -769,7 +759,7 @@ def _write_auto_tasks(tasks):
         AUTO_HEADER,
         "",
         AUTO_COMMENT,
-        " Tasks execute via night_cycle.sh (03:00 KST / 18:00 UTC).",
+        " Tasks execute via day cycle (03:00 KST / 18:00 UTC).",
         ' CLI: python3 cli.py auto add "title" "description"',
         " Each ## section = a separate Claude Code invocation.",
         " Full permissions granted. Results logged to auto_logs/.",
