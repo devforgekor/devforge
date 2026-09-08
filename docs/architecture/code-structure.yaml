@@ -88,10 +88,6 @@ modules:
     github_mcp_wrapper.sh:
       status: unknown
       purpose: github_mcp_wrapper.sh
-    link_turns.py:
-      status: production
-      purpose: "link_turns.py \u2014 nightly: match turns to worklog entries + deep\
-        \ review."
     mcp_entrypoint.sh:
       status: unknown
       purpose: "mcp_entrypoint.sh \u2014 Start FastMCP server on inference pod"
@@ -108,13 +104,6 @@ modules:
     migrate_yaml_to_db.py:
       status: unknown
       purpose: 'One-time migration: parse broken handover.yaml and import to DB.'
-    motd_gen.py:
-      status: production
-      purpose: "motd_gen.py \u2014 lightweight MOTD for SSH login. Reads state.yaml\
-        \ + live metrics."
-    night_cycle.sh:
-      status: unknown
-      purpose: "night_cycle.sh \u2014 DevForge nightly pipeline (KST 03:00 / UTC 18:00)"
     notion_memo.py:
       status: production
       purpose: "Notion \uBA54\uBAA8 \uC804\uC1A1 CLI \u2014 stdin, \uD30C\uC77C, \uB610\
@@ -203,9 +192,6 @@ modules:
     worker-entrypoint.sh:
       status: unknown
       purpose: "worker-entrypoint.sh \u2014 DevForge Worker supervisor runner"
-    worker_supervisor.py:
-      status: experimental
-      purpose: Worker container supervisor.
 - path: scripts/lib/
   purpose: Lib
   files:
@@ -963,25 +949,12 @@ modules:
       status: production
       purpose: "FTS5 Refresh \u2014 text_clean \uAE30\uC900 FTS5 \uC778\uB371\uC2A4\
         \ \uB3D9\uAE30\uD654."
-    night_cycle.py:
-      status: experimental
-      purpose: "Night Pipeline: DB handoff \uB85C\uB4DC \u2192 P-R-J(30B\u219214B\u2192\
-        N14B) \u2192 night_verify \u2192 DB \uC800\uC7A5."
-    night_cycle_pipeline.py:
-      status: experimental
-      purpose: 'Night Cycle V2: Driver for P-R-J pipeline with dry-run support.'
-    night_debate_pipeline.py:
-      status: production
-      purpose: night_debate_pipeline.py
     post_extract_supplement.py:
       status: experimental
       purpose: "Post-extract supplement \u2014 offline LLM call to find missing facts."
     prj_cycle.py:
       status: production
       purpose: prj_cycle.py
-    proxy_reviewer.py:
-      status: production
-      purpose: "proxy_reviewer.py \u2014 DeepSeek Pro verification of 27B verify reasoning."
     raw_consumer.py:
       status: experimental
       purpose: "Consume raw turns from DB \u2014 apply text_clean, advance to pending."
@@ -991,9 +964,6 @@ modules:
     review.py:
       status: production
       purpose: Step implementations for the 3-Model Review Pipeline.
-    review_consumer.py:
-      status: production
-      purpose: "review_consumer.py \u2014 27B production final verify."
     test_e2e_phases_1_2.py:
       status: unknown
       purpose: 'E2E pipeline test: Phase 1 (inline post-processing) + Phase 2 (offline

@@ -1,0 +1,8 @@
+[Unit]
+Description=DevForge nightly batch pipeline
+
+[Service]
+Type=oneshot
+ExecStart=/opt/projects/server/scripts/night_cycle.sh
+StandardOutput=journal
+StandardError=journal
