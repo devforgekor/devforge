@@ -227,3 +227,30 @@ def _check_token_stagnation(results, dry_run=False):
 | 🥈 | `recover_container()`에 health check 추가 | recovery.py | 5분 |
 | 🥉 | token stagnation 복구 추가 | orchestrator.py | 3분 |
 | 🥉 | container-postgres SERVICE_TARGETS로 격상 | config.py | 1분 |
+
+---
+
+## 6. 2026-09-09 업계 표준 개선 (완료)
+
+### 6.1 상태 영속화 (backoff/circuit 보존)
+- **문제**: `WatchdogState`가 메모리만 → watchdog 재시작 시 backoff 카운터/circuit breaker 초기화
+  → 재시작 직후 지속 실패 컴포넌트를 백오프 없이 매 60초마다 재시도 (restart storm)
+- **수정**: `ComponentTracker.to_dict()/from_dict()`, `WatchdogState.save_state()/load_state()` 추가
+  - `STATE_FILE=/opt/ai_data/scripts/watchdog_state.json`, 5분 주기 저장
+  - watchdog 시작 시 `load_state()`로 복원
+- **검증**: 실패 상태(UNHEALTHY, consec=4, circuit_open) 저장 → 복원 후 동일 유지
+
+### 6.2 ebook-watcher 복구 후 readiness 확인
+- **문제**: `recover_service`가 `svc_active`(systemd active)만 확인 → `Type=notify`+`WatchdogSec`
+  서비스는 `READY=1` 수신 전 `activating` 상태라 healthy로 오판 가능
+- **수정**: `recover_ebook_watcher()` 추가 — restart 후 `check_ebook_pipeline()`
+  (프로세스 존재 + 로그 활동 20분)으로 **진짜 준비** 확인 (최대 6회×5초 대기)
+- `_run_services`에서 ebook-watcher만 이 전용 복구 사용
+
+### 6.3 백오프 jitter
+- **문제**: `BACKOFF_SCHEDULE` 고정값 → 여러 컴포넌트 동시 실패 시 동시 재시작 (retry storm)
+- **수정**: `backoff_sec()`에 ±10% jitter 적용 (`base * uniform(0.9, 1.1)`)
+- **검증**: 실패 6회 → 270~326s 분포 (base 300 ±10%)
+
+### 커밋
+- `f875134` — state persistence, ebook readiness recovery, backoff jitter
