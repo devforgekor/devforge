@@ -147,6 +147,67 @@ def check_service(name: str) -> tuple[bool, str]:
     return ok, "active" if ok else "inactive"
 
 
+# ── Ebook Pipeline 전용 체크 ────────────────────────────────────────
+# ebook-watcher.service는 상시 loop (5분 간격). 프로세스 존재뿐 아니라
+# 마지막 로그 활동(cycle/collect) 시간으로 hang을 감지한다.
+EBOOK_WATCHER_SVC = "ebook-watcher"
+EBOOK_HANG_STALE_SEC = 1200  # 20분 이상 활동 없으면 hang 판정
+
+
+def check_ebook_pipeline() -> tuple[bool, str]:
+    """ebook-watcher 파이프라인 liveness 체크.
+
+    Returns:
+        (ok, detail) — ok=False면 hang 또는 프로세스 죽음.
+    """
+    # 1) systemd 서비스 active 여부
+    if not svc_active(EBOOK_WATCHER_SVC):
+        return False, f"{EBOOK_WATCHER_SVC} inactive"
+
+    # 2) loop 프로세스 존재
+    try:
+        r = subprocess.run(
+            ["pgrep", "-f", "pipeline.py loop"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if not r.stdout.strip():
+            return False, "pipeline.py loop 프로세스 없음"
+    except Exception as e:
+        return False, f"pgrep 실패: {e}"
+
+    # 3) 마지막 로그 활동 (journal) — hang 감지
+    try:
+        r = subprocess.run(
+            ["journalctl", "--user", "-u", EBOOK_WATCHER_SVC, "--no-pager", "-n", "200"],
+            capture_output=True, text=True, timeout=8,
+        )
+        # 로그에서 최근 활동 시각 추출 (Cycle 또는 collect/저장 로그)
+        lines = [ln for ln in r.stdout.splitlines()
+                 if "Cycle" in ln or "collect 완료" in ln or "저장 완료" in ln]
+        if not lines:
+            return False, "활동 로그 없음 (hang 가능)"
+        # 마지막 활동 라인의 타임스탬프 파싱 (journal: "Sep 09 02:16:43 ...")
+        last_line = lines[-1]
+        ts_str = last_line.split(" devforge")[0].strip()
+        try:
+            from datetime import datetime as _dt
+            last_dt = _dt.strptime(ts_str, "%b %d %H:%M:%S")
+            # 연도 보정 (현재 연도)
+            now = _dt.now()
+            last_dt = last_dt.replace(year=now.year)
+            if last_dt > now:
+                last_dt = last_dt.replace(year=now.year - 1)
+            idle = (now - last_dt).total_seconds()
+            if idle > EBOOK_HANG_STALE_SEC:
+                return False, f"hang 감지: {int(idle)}s 활동 없음"
+            return True, f"활동 정상 ({int(idle)}s 전)"
+        except Exception as e:
+            # 타임스탬프 파싱 실패 시 프로세스 존재만으로 판단
+            return True, "로그 활동 (타임스탬프 파싱 불가)"
+    except Exception as e:
+        return False, f"journal 조회 실패: {e}"
+
+
 def container_running(name: str) -> tuple[bool, str]:
     try:
         r = subprocess.run(
@@ -463,7 +524,11 @@ def check_all_llm() -> list[dict]:
 def check_all_services() -> list[dict]:
     results = []
     for name in SERVICE_TARGETS:
-        ok, detail = check_service(name)
+        if name == EBOOK_WATCHER_SVC:
+            # ebook-watcher는 프로세스 존재 + 로그 활동(hang)까지 확인
+            ok, detail = check_ebook_pipeline()
+        else:
+            ok, detail = check_service(name)
         results.append({"name": name, "ok": ok, "detail": detail})
     return results
 

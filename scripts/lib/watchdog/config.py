@@ -54,7 +54,6 @@ ALERT_ONLY_TARGETS = [
 
 # 타이머 감시 — max_idle 초과 시 미발동으로 간주 (kick/alert)
 TIMER_TARGETS = {
-    "ebook-watcher.timer": {"expected": "pipeline", "max_idle": 900},  # 15분
     # free 모델 갱신 타이머 — 매일 15:30 UTC. 26h idle = 하루 넘게 안 돌면 알림.
     "devforge-openrouter-free-models.timer": {"expected": "free_models", "max_idle": 93600},
     "devforge-system-sync.timer": {"expected": "system_sync", "max_idle": 1800},  # 15분
