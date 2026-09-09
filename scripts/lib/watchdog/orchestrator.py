@@ -27,6 +27,7 @@ from lib.experiment_state import (
 from lib.experiment_state import (
     update_state as update_exp_state,
 )
+from lib.infra.health_checks import svc_active
 from lib.watchdog.checker import (
     check_all_llm,
     check_all_services,
@@ -48,6 +49,8 @@ from lib.watchdog.config import (
     ALERT_ONLY_TARGETS,
     CHECK_INTERVAL,
     HEARTBEAT_INTERVAL,
+    STALE_HEARTBEAT_KICKS,
+    STALE_KICK_COOLDOWN_SEC,
 )
 from lib.watchdog.messenger import get_undelivered, resolve_pulse
 from lib.watchdog.notifier import heartbeat, send_alert, send_recovery
@@ -64,6 +67,10 @@ from lib.watchdog.recovery import (
 
 from ._globals import CODE_SCAN_INTERVAL as _CODE_SCAN_INTERVAL
 from ._globals import _code_scan_counter, _running, _start_time, _state, _test_active
+
+# Last kick timestamp per stale-heartbeat worker (monotonic). Guards the
+# one-shot self-heal kick so it never becomes a per-cycle restart storm.
+_stale_kick_ts: dict[str, float] = {}
 
 
 def log(msg: str) -> None:
@@ -738,6 +745,47 @@ def _code_quality_scan_wrapper():
             )
 
 
+def _handle_stale_heartbeats(stale_beats: list) -> None:
+    """Handle stale worker heartbeats.
+
+    Default workers → log + event + auto-resolve (existing behavior).
+    Workers in STALE_HEARTBEAT_KICKS (one-shot scheduled jobs like the news
+    collector) are kept IN_PROGRESS so staleness stays detectable, and the
+    mapped service is kicked at most once per STALE_KICK_COOLDOWN_SEC. This
+    self-heals a run that fired but never completed, without a restart storm.
+    """
+    for sb in stale_beats:
+        worker = sb["worker"]
+        pulse = f"heartbeat_{worker}"
+        log(f"  HEARTBEAT STALE: {worker} — last beat {sb['age_sec']} ago")
+
+        svc = STALE_HEARTBEAT_KICKS.get(worker)
+        if not svc:
+            _state.add_event("heartbeat", f"stale:{worker}",
+                             f"age={sb['age_sec']} last={sb['last_beat']}")
+            resolve_pulse(pulse)
+            log(f"  Auto-resolved stale pulse {pulse}")
+            continue
+
+        now = time.monotonic()
+        if now - _stale_kick_ts.get(worker, 0.0) < STALE_KICK_COOLDOWN_SEC:
+            log(f"  {worker} stale — kick throttled (cooldown {STALE_KICK_COOLDOWN_SEC}s)")
+            continue
+
+        _stale_kick_ts[worker] = now
+        _state.add_event("heartbeat", f"stale:{worker}",
+                         f"age={sb['age_sec']} last={sb['last_beat']}")
+        if _test_active or is_experiment_active():
+            log(f"  {worker} stale — protection active ({_test_active}), kick skipped")
+            continue
+        if svc_active(svc):
+            log(f"  {svc} already active — kick skipped")
+            continue
+        log(f"  kicking {svc} (completion heartbeat stale)")
+        subprocess.run(["systemctl", "--user", "--no-block", "start", svc],
+                       capture_output=True, timeout=10)
+
+
 def main_loop(one_shot: bool = False, dry_run: bool = False):
     signal.signal(signal.SIGTERM, sigterm_handler)
     signal.signal(signal.SIGINT, sigterm_handler)
@@ -798,13 +846,7 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
             traceback.print_exc()
 
         stale_beats = check_heartbeats()
-        for sb in stale_beats:
-            log(f"  HEARTBEAT STALE: {sb['worker']} — last beat {sb['age_sec']} ago")
-            _state.add_event(
-                "heartbeat", f"stale:{sb['worker']}", f"age={sb['age_sec']} last={sb['last_beat']}"
-            )
-            resolve_pulse(f"heartbeat_{sb['worker']}")
-            log(f"  Auto-resolved stale pulse heartbeat_{sb['worker']}")
+        _handle_stale_heartbeats(stale_beats)
 
         if _state.should_heartbeat(HEARTBEAT_INTERVAL):
             try:

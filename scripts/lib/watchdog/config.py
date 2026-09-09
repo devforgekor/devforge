@@ -103,7 +103,17 @@ HEARTBEAT_WORKERS: dict[str, int] = {
     "text_clean": 1800,  # text_clean.py — unified text preprocessing
     "day_extract": 1800,  # extract.py — LLM extraction pipeline
     "day_enrich": 1800,  # enrich.py — LLM enrichment pipeline
+    "news_collector": 25200,  # news collector (6h timer) — completion heartbeat only
 }  # worker_name → max_age_seconds. Only register workers that actually call heartbeat().
+
+# Stale completion-heartbeat workers that should be kicked once (with cooldown)
+# instead of auto-resolved. One-shot scheduled jobs (news) fit this model:
+# the timer firing is not proof the run completed, so on stale heartbeat we
+# re-start the service to self-heal, guarded to avoid restart storms.
+STALE_HEARTBEAT_KICKS: dict[str, str] = {
+    "news_collector": "devforge-news.service",
+}
+STALE_KICK_COOLDOWN_SEC = 900  # min gap between kicks per worker
 
 # ── Pipeline intermediate state recovery ──────────────────────────
 # Stale intermediate states indicate worker crash mid-batch.
