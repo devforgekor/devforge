@@ -6,9 +6,8 @@ OpenRouter free model auto-refresh for opencode.
 
 Fetches the OpenRouter model catalog, filters :free, scores by coding ability
 (Artificial Analysis coding_index, plus fallback heuristics), live-tests the
-top candidates, and writes the top 3 usable ones into opencode-rr.json
-(base model + fallback chain). The default opencode.json (opencode-go) is
-never touched.
+top candidates, and writes the top 3 usable ones into opencode.json
+(base model + fallback chain).
 
 Usage:
   refresh_openrouter_free_models.py            # normal run
@@ -29,9 +28,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 PROXY_URL = "http://127.0.0.1:8451/v1/models"
-# auto-router target: the opencode-rr profile (RR proxy free models).
-# The default (global) opencode.json stays pinned to opencode-go/deepseek-v4-flash.
-OPCODE_CONFIG = Path.home() / ".config/opencode/opencode-rr.json"
+OPCODE_CONFIG = Path.home() / ".config/opencode/opencode.json"
 CACHE_FILE = Path.home() / ".cache/devforge/openrouter_free_models.json"
 CACHE_TTL_SEC = 24 * 60 * 60  # 1 day
 
@@ -163,7 +160,7 @@ def _extract_org(model_id: str) -> str:
 
 
 def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
-    """Set opencode-rr.json model/chain/provider.models to diverse free models.
+    """Set opencode.json model/chain/provider.models to diverse free models.
 
     Prefers models from *different* upstream orgs so that if one provider's
     shared pool is exhausted (upstream_provider_shared_pool 429), the fallback
@@ -211,7 +208,7 @@ def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
 
     orgs = "/".join(_extract_org(m["id"]) for m in top)
     _write_opencode(config)
-    print(f"✓ opencode-rr.json updated: primary={top[0]['id']} (orgs: {orgs})")
+    print(f"✓ opencode.json updated: primary={top[0]['id']} (orgs: {orgs})")
 
 
 # ---------------------------------------------------------------------------
@@ -282,12 +279,12 @@ def main() -> int:
 
     # 4. Apply — pass ALL usable models; _apply_opencode picks diverse orgs.
     if args.dry_run:
-        print("\n(dry-run: opencode-rr.json not modified)")
+        print("\n(dry-run: opencode.json not modified)")
         # still show what would be selected
         _apply_opencode(usable, dry_print=True)
         return 0
     if not usable:
-        print("\n✗ No working free models found — opencode-rr.json NOT modified")
+        print("\n✗ No working free models found — opencode.json NOT modified")
         return 1
     _apply_opencode(usable)
     return 0
