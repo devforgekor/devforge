@@ -466,4 +466,5 @@ curl -X POST https://<new_ip>/completion \
 | 2026-09-03 | Spot 폴백 체인 없음 명시, 실패 시 다음 주기 재시도 정책 추가 (§2) | best-effort 워크로드 — 다중 SKU/리전 과설계 방지 (갭 보고서 §2.6, §2.12 반영) |
 | 2026-09-03 | Deep Dive(context7): systemd 샌드박스 15종 + llama-server 127.0.0.1/API key + Caddy, 네트워크 443/API key, 롤백 curl TLS/API key 보정 (§1.2, §6, §8) | context7 검증 — systemd.io(PrivateTmp/ProtectSystem), ggml-org/llama.cpp(--api-key/LLAMA_API_KEY), Azure(갤러리/Spot Scheduled Events) (dp-20260903-golden-image-deep-dive) |
 | 2026-09-04 | 15분 타이머 복구 + orphan VM 강제 종료 안전장치 추가: `_check_orphan_vms()` + `azure_client.list_vms_by_prefix()` + symlink 복구 + `claude-mode` 기본값 `deepseek` | `golden-image-deploy-check.service` 경로 불일치로 실행 안 됨. symlink 생성, VM 잔존 시 강제 삭제 로직 추가, 기본 모드 `deepseek`로 변경 |
+| 2026-09-09 | `azure_client.list_vms_by_prefix()`에 `--show-details` 추가 (`publicIps`/`powerState` 필드 보정) | orphan 감지 쿼리가 `--show-details` 없이 조회해 실제 VM 존재 시 IP/상태가 누락됨. `claude-mode`(`.bashrc.d/claude-mode:28`)와 패리티 유지 — 강제 종료는 정상이나 로그 정확도 개선 |
 ```

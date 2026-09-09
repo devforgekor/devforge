@@ -373,3 +373,4 @@ syft /opt/llama -o spdx-json > /opt/llama/sbom.spdx.json
 | 일자 | 변경 | 사유 |
 |------|------|------|
 | 2026-09-04 | 15분 타이머 복구 + orphan VM 강제 종료: `refresh_cycle.py`에 `_check_orphan_vms()` 추가, `azure_client.py`에 `list_vms_by_prefix()` 추가, symlink 생성, `claude-mode` 기본값 `deepseek` | service path 불일치로 타이머가 실행되지 않았음. VM 잔존 시 `az vm delete --force-deletion`으로 강제 종료하는 안전장치 구현 |
+| 2026-09-09 | `list_vms_by_prefix()`에 `--show-details` 추가 (`publicIps`/`powerState` 보정) | `az vm list` 기본 조회에는 `publicIps`/`powerState`가 없어 orphan 감지 시 IP/상태 로그가 누락됨. `claude-mode`와 패리티 유지 |
