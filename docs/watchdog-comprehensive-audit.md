@@ -230,7 +230,19 @@ def _check_token_stagnation(results, dry_run=False):
 
 ---
 
-## 6. 2026-09-09 업계 표준 개선 (완료)
+## 6. 2026-09-09 패치 기록 (완료)
+
+### 6.0 ebook-watcher 전용 감시 도입 (이전 패치)
+- **문제**: `check_service(name)` = `svc_active`(systemd active)만 확인 → loop이
+  멈춰도(hang) 감지 못함. 15분 `ebook-watcher.timer`가 유일한 health check였음
+- **수정**: `check_ebook_pipeline()` 추가 (`checker.py`)
+  - ① systemd 서비스 active 여부
+  - ② `pipeline.py loop` 프로세스 존재 (pgrep)
+  - ③ journal 마지막 Cycle/collect 로그 시간 → 20분 초과 시 hang 판정
+  - `check_all_services()`에서 ebook-watcher만 이 전용 체크 사용
+- **`ebook-watcher.timer` 제거**: config.py TIMER_TARGETS에서 삭제 + systemd timer 비활성화
+  → watchdog이 메인으로 ebook 파이프라인을 감시/관리
+- **커밋**: `39913d2`
 
 ### 6.1 상태 영속화 (backoff/circuit 보존)
 - **문제**: `WatchdogState`가 메모리만 → watchdog 재시작 시 backoff 카운터/circuit breaker 초기화
@@ -252,5 +264,24 @@ def _check_token_stagnation(results, dry_run=False):
 - **수정**: `backoff_sec()`에 ±10% jitter 적용 (`base * uniform(0.9, 1.1)`)
 - **검증**: 실패 6회 → 270~326s 분포 (base 300 ±10%)
 
-### 커밋
-- `f875134` — state persistence, ebook readiness recovery, backoff jitter
+### 6.4 커밋 요약
+
+| 커밋 | 내용 | 파일 |
+|------|------|------|
+| `39913d2` | ebook-watcher 전용 체크(`check_ebook_pipeline`) + 15분 timer 제거 | checker.py, config.py |
+| `f875134` | 상태 영속화 + ebook readiness 복구 + backoff jitter | state.py, recovery.py, orchestrator.py, config.py |
+| `23fe63f` | 문서 기록 (watchdog audit) | watchdog-comprehensive-audit.md |
+| `044974b` | 문서 기록 (timer 제거 반영) | watchdog-comprehensive-audit.md |
+
+### 6.5 관련 ebooklib 패치 (병행)
+
+ebook 파이프라인 쪽도 함께 hardening 되었다 (`/opt/workspace/ebooklib`):
+
+| 커밋 | 내용 |
+|------|------|
+| `6cdda03` | systemd WatchdogSec + queue 락 + DLQ + 적응형 딜레이 |
+| `5cdd0c4` | collect 락 / queue 락 분리 (flock 무력화 버그 수정) |
+| `d44a7e6` | 문서 업데이트 |
+
+> ebook-watcher.service: `Type=notify`, `WatchdogSec=600`, `Restart=on-watchdog`
+> → watchdog의 `check_ebook_pipeline`(로그 기반)과 **이중 감시** 구조
