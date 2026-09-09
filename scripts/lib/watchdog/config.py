@@ -21,6 +21,11 @@ LATENCY_CHECK_INTERVAL = 300  # 5min between T3 latency checks
 MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
 MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"
 
+# ── Watchdog 상태 영속화 ───────────────────────────────────────────
+# 재시작 시 backoff 카운터/circuit breaker를 보존 (업계 표준: 상태 비휘발)
+STATE_FILE = "/opt/ai_data/scripts/watchdog_state.json"
+STATE_SAVE_INTERVAL = 300  # 5분마다 저장
+
 # ── 포트 / 라벨 ─────────────────────────────────────────────────────
 # Inference container serves all models across ports 8080-8084
 LLM_TARGETS = {

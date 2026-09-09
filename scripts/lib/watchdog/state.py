@@ -8,9 +8,13 @@ Circuit breaker pattern (pyresilience, pybreaker):
   HALF_OPEN → 성공 → CLOSED / 실패 → OPEN
 """
 
+import json
+import os
+import random
 import time
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 
@@ -154,10 +158,17 @@ class ComponentTracker:
             self.last_state_change = time.monotonic()
 
     def backoff_sec(self) -> int:
-        """Return current backoff delay based on attempt count (CrashLoopBackOff)."""
+        """Return current backoff delay based on attempt count (CrashLoopBackOff).
+
+        업계 표준: 고정 백오프 + jitter(±10%)로 동시 재시작(retry storm) 방지.
+        """
         from lib.watchdog.config import BACKOFF_SCHEDULE
         idx = min(self.consecutive_fail, len(BACKOFF_SCHEDULE) - 1)
-        return BACKOFF_SCHEDULE[idx]
+        base = BACKOFF_SCHEDULE[idx]
+        if base == 0:
+            return 0
+        # ±10% jitter
+        return int(base * random.uniform(0.9, 1.1))
 
     def summary(self) -> dict:
         return {
@@ -167,6 +178,37 @@ class ComponentTracker:
             "consecutive_fail": self.consecutive_fail,
             "circuit_open": self.circuit_open_until > time.monotonic(),
         }
+
+    def to_dict(self) -> dict:
+        """상태 직렬화 (영속화용). timestamps는 monotonic 절대값."""
+        return {
+            "name": self.name,
+            "state": self.state.value,
+            "fail_count": self.fail_count,
+            "consecutive_fail": self.consecutive_fail,
+            "last_state_change": self.last_state_change,
+            "last_alert_ts": self.last_alert_ts,
+            "last_success_ts": self.last_success_ts,
+            "last_fail_ts": self.last_fail_ts,
+            "circuit_open_until": self.circuit_open_until,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ComponentTracker":
+        """직렬화된 상태로 복원 (watchdog 재시작 후 backoff/circuit 유지)."""
+        t = cls(data.get("name", "unknown"))
+        try:
+            t.state = ComponentState(data.get("state", "HEALTHY"))
+        except ValueError:
+            t.state = ComponentState.HEALTHY
+        t.fail_count = data.get("fail_count", 0)
+        t.consecutive_fail = data.get("consecutive_fail", 0)
+        t.last_state_change = data.get("last_state_change", 0.0)
+        t.last_alert_ts = data.get("last_alert_ts", 0.0)
+        t.last_success_ts = data.get("last_success_ts", time.monotonic())
+        t.last_fail_ts = data.get("last_fail_ts", 0.0)
+        t.circuit_open_until = data.get("circuit_open_until", 0.0)
+        return t
 
 
 class WatchdogState:
@@ -244,6 +286,54 @@ class WatchdogState:
 
     def degraded_count(self) -> int:
         return sum(1 for t in self._components.values() if t.is_degraded())
+
+    def save_state(self, path: Optional[str] = None) -> bool:
+        """ComponentTracker 상태를 JSON으로 영속화.
+
+        재시작 시 backoff 카운터 / circuit breaker / alert dedup을 보존해
+        restart storm을 방지한다. best-effort (저장 실패는 치명적이지 않음).
+        """
+        try:
+            from lib.watchdog.config import STATE_FILE
+            p = Path(path or STATE_FILE)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "components": [t.to_dict() for t in self._components.values()],
+                "last_heartbeat_ts": self._last_heartbeat_ts,
+                "mode": self._mode,
+            }
+            # atomic write
+            tmp = p.with_suffix(".json.tmp")
+            with open(tmp, "w") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, p)
+            return True
+        except Exception:
+            return False
+
+    def load_state(self, path: Optional[str] = None) -> None:
+        """영속화된 상태 복원. 재시작 후 backoff/circuit을 이어받는다."""
+        try:
+            from lib.watchdog.config import STATE_FILE
+            p = Path(path or STATE_FILE)
+            if not p.exists():
+                return
+            with open(p) as f:
+                data = json.load(f)
+            for cd in data.get("components", []):
+                try:
+                    tracker = ComponentTracker.from_dict(cd)
+                    self._components[tracker.name] = tracker
+                except Exception:
+                    continue
+            self._last_heartbeat_ts = data.get("last_heartbeat_ts", 0.0)
+            mode = data.get("mode")
+            if mode:
+                self._mode = mode
+        except Exception:
+            pass  # 복원 실패는 초기 상태로 시작
 
     def update_liveness(self) -> None:
         """Update watchdog_main liveness timestamp in DB (dead man's switch)."""

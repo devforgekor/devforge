@@ -54,6 +54,7 @@ from lib.watchdog.notifier import heartbeat, send_alert, send_recovery
 from lib.watchdog.recovery import (
     graduated_recover,
     kill_stale_process,
+    recover_ebook_watcher,
     recover_inference_cascade,  # noqa: F401 — used in day_fix_loop
     recover_oom,
     recover_port_conflict,  # noqa: F401 — used in day_fix_loop
@@ -105,11 +106,19 @@ def _run_services(results: dict, dry_run: bool):
         if svc["ok"]:
             tracker.record_success()
         elif not dry_run and not is_experiment_active():
-            graduated_recover(
-                svc["name"],
-                tracker,
-                lambda n=svc["name"]: recover_service(n),
-            )
+            if svc["name"] == "ebook-watcher":
+                # ebook-watcher: restart 후 readiness(프로세스+로그활동)까지 확인
+                graduated_recover(
+                    svc["name"],
+                    tracker,
+                    recover_ebook_watcher,
+                )
+            else:
+                graduated_recover(
+                    svc["name"],
+                    tracker,
+                    lambda n=svc["name"]: recover_service(n),
+                )
             if not _test_active and tracker.is_degraded() and tracker.can_alert():
                 send_alert(f"svc:{svc['name']}", tracker.state.value, svc["detail"])
                 _state.add_event(f"svc:{svc['name']}", "down", svc["detail"])
@@ -742,8 +751,15 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
     )
     log(f"Initial mode: {read_mode()}")
 
+    # 영속화된 상태 복원 (재시작 후 backoff/circuit 보존)
+    _state.load_state()
+    n_restored = len(_state.all_summaries())
+    if n_restored:
+        log(f"Restored {n_restored} component states from persistence")
+
     _state.set_mode(read_mode())
 
+    last_state_save = 0.0
     while _running:
         loop_start = time.monotonic()
         mode = read_mode()
@@ -815,6 +831,15 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
 
         if one_shot:
             break
+
+        # 상태 주기적 영속화 (업계 표준: 재시작에도 backoff/circuit 유지)
+        try:
+            from lib.watchdog.config import STATE_SAVE_INTERVAL
+            if time.monotonic() - last_state_save >= STATE_SAVE_INTERVAL:
+                _state.save_state()
+                last_state_save = time.monotonic()
+        except Exception:
+            pass
 
         elapsed = time.monotonic() - loop_start
         sleep_sec = max(1, CHECK_INTERVAL - int(elapsed))

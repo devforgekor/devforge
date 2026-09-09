@@ -120,6 +120,39 @@ def recover_service(name: str) -> bool:
         return False
 
 
+def recover_ebook_watcher() -> bool:
+    """ebook-watcher 전용 복구 — restart 후 readiness까지 확인.
+
+    Type=notify + WatchdogSec 서비스는 READY=1 수신 전까지 'activating' 상태라
+    svc_active만으로는 오판할 수 있다. 프로세스 + 로그 활동(20분)까지 확인해
+    진짜 준비 상태를 검증한다 (업계 표준: readiness probe).
+    """
+    if is_experiment_active():
+        log("  SKIP ebook-watcher restart — experiment active")
+        return False
+    log("  restart ebook-watcher (readiness check)...")
+    try:
+        subprocess.run(
+            ["systemctl", "--user", "restart", "ebook-watcher"],
+            capture_output=True,
+            timeout=30,
+        )
+        # readiness: 프로세스 존재 + 로그 활동 확인 (최대 ~30초 대기)
+        from lib.watchdog.checker import check_ebook_pipeline
+
+        for attempt in range(6):
+            time.sleep(5)
+            ok, detail = check_ebook_pipeline()
+            if ok:
+                log(f"  ebook-watcher ready: {detail}")
+                return True
+            log(f"  ebook-watcher not ready yet (attempt {attempt + 1}/6): {detail}")
+        log("  ebook-watcher readiness timeout")
+        return False
+    except Exception:
+        return False
+
+
 def recover_oom() -> bool:
     """OOM kill_all + restore mode.
 
