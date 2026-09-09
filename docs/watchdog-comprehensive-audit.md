@@ -26,8 +26,12 @@
 
 | 대상 | 감시 | 복구 |
 |------|------|------|
-| `ebook-watcher.timer` | ✅ idle 체크 | ✅ kick |
+| `ebook-watcher.service` | ✅ `check_ebook_pipeline()` 전용 체크 (프로세스+로그 활동) | ✅ 재시작 |
 | `devforge-openrouter-free-models.timer` | ✅ idle 체크 | ✅ kick |
+
+> **ebook-watcher 개선 (2026-09-09)**: 기존 15분 `ebook-watcher.timer`는 제거.
+> watchdog이 60초마다 `check_ebook_pipeline()`으로 프로세스 존재 + 마지막 로그 활동(20분)을
+> 확인해 hang/죽음을 감지하고 재시작한다. (systemd WatchdogSec과 이중 감시)
 | 그 외 **11개 타이머** | ❌ | ❌ |
 
 ### 1.4 LLM 감시 (LLM_TARGETS + 포트 체크)
@@ -147,7 +151,7 @@ SERVICE_TARGETS = [
     "devforge-turn-watcher",
     "openrouter-rr-proxy",
     "devforge-day-cycle",       # ← 추가
-    "ebook-watcher",            # ← 추가 (타이머만 있던 것)
+    "ebook-watcher",            # ← 전용 체크(check_ebook_pipeline) 사용
 ]
 
 ALERT_ONLY_TARGETS = [
@@ -159,7 +163,7 @@ ALERT_ONLY_TARGETS = [
 ]
 
 TIMER_TARGETS = {
-    "ebook-watcher.timer": {"max_idle": 900},
+    # ebook-watcher.timer 제거됨 (2026-09-09) — watchdog이 check_ebook_pipeline으로 직접 감시
     "devforge-openrouter-free-models.timer": {"max_idle": 93600},
     "devforge-system-sync.timer": {"max_idle": 1800},      # ← 추가 (15분)
     "devforge-news.timer": {"max_idle": 25200},              # ← 추가 (6시간)
