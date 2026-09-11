@@ -86,3 +86,8 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
 **교정 사항(이번 Deep Dive)**: VM 크기 A100→`Standard_FX2mds_v2`, 추론 포트 8081→**8080**, 터널 대역 8085→**18085**(8085에 podman rootlessport), `_az`의 `--subscription`을 인자 **끝**으로(앞에 두면 `vm create` 거부), SSH `TimeoutExpired` 처리, 터널 정리를 **tracked-pid** 기반(무관 프로세스 오살 방지), **PublicIpAddress 쿼터(구독당 3)** 대응해 destroy가 **PIP까지 삭제**.
 
 **남은 블로커**: 없음(에이전트가 이 엔드포인트로 Deep Dive 구동 시 opencode provider 등록 + 서버 `--jinja` 필요 — §1·§2).
+
+**Qwen Deep Dive 준비 상태 (2026-09-11, 실측)**:
+- 골든 이미지 유닛 = **`/etc/systemd/system/llm.service`** (name `llm`); 기본 ExecStart에 `--jinja` **없음** → 모듈이 SSH 후 **`ensure_tool_calling()`으로 `--jinja` 자동 적용**(stop→sed→reload→start) 확인.
+- **툴콜(OpenAI function calling) 검증은 보류**: `FX2mds_v2`(2 vCPU)에서 `qwen3.6-27b-q8_0` 추론이 **너무 느려** `/v1/chat/completions` 프로브가 **HTTP 000(타임아웃)**. 모델/서버 문제가 아니라 **연산 성능 문제**.
+- **권고**: ①`--jinja`를 **골든 이미지에 베이킹**(런타임 패치 대신), ②실제 구동은 **GPU/더 큰 사양 또는 소형 모델**, ③그 후 opencode provider(baseURL) 등록 + 툴콜 재검증.

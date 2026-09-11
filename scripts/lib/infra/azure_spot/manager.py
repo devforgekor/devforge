@@ -180,6 +180,15 @@ class SpotVMManager:
             capture_output=True, text=True, timeout=timeout,
         )
 
+    def wait_ready_with_tools(self, ip: str, ssh_timeout: int = 180, llm_timeout: int = 300) -> dict:
+        """SSH up → enable --jinja → health up → tool-calling check."""
+        if not _wait_for_ssh(ip, timeout=ssh_timeout):
+            return {"ssh": False, "health": False, "tools": False}
+        self.ensure_tool_calling(ip)
+        if not _wait_for_inference_server(ip, timeout=llm_timeout):
+            return {"ssh": True, "health": False, "tools": False}
+        return {"ssh": True, "health": True, "tools": self.check_tool_calling(ip)}
+
     def ensure_tool_calling(self, ip: str, timeout: int = 180) -> bool:
         """Enable --jinja on the llama-server unit (idempotent) so tool-calling works."""
         import base64
