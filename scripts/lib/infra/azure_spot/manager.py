@@ -151,6 +151,7 @@ class SpotVMManager:
             "--os-disk-size-gb",
             "64",
             subscription=cfg.subscription_id,
+            timeout=600,
         )
         if r.returncode != 0:
             raise RuntimeError(f"Failed to create VM '{name}': {r.stderr}")
@@ -171,6 +172,52 @@ class SpotVMManager:
         ip = self._get_ip(self.config.vm_name)
         self.config.public_ip = ip
         return ip
+
+    def _ssh(self, ip: str, cmd: str, timeout: int = 60) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
+             f"{SSH_USER}@{ip}", cmd],
+            capture_output=True, text=True, timeout=timeout,
+        )
+
+    def ensure_tool_calling(self, ip: str, timeout: int = 180) -> bool:
+        """Enable --jinja on the llama-server unit (idempotent) so tool-calling works."""
+        import base64
+        script = (
+            "U=$(grep -rl /usr/local/bin/llama-server /etc/systemd/system | head -1); "
+            "grep -q -- '--jinja' \"$U\" && { echo ALREADY; exit 0; }; "
+            "S=$(basename \"$U\" .service); "
+            "sudo systemctl stop \"$S\" 2>/dev/null || true; "
+            "sudo sed -i 's#--port#--jinja --port#' \"$U\"; "
+            "sudo systemctl daemon-reload; sudo systemctl start \"$S\"; echo DONE"
+        )
+        b64 = base64.b64encode(script.encode()).decode()
+        try:
+            r = self._ssh(ip, f"echo {b64} | base64 -d | bash", timeout=timeout)
+            return r.returncode == 0 and ("DONE" in r.stdout or "ALREADY" in r.stdout)
+        except subprocess.TimeoutExpired:
+            return False
+
+    def check_tool_calling(self, ip: str, port: int | None = None, timeout: int = 150) -> bool:
+        """Return True iff the server emits OpenAI-style tool_calls for a probe."""
+        import base64
+        port = port or LLAMA_SERVER_PORT
+        payload = json.dumps({
+            "messages": [{"role": "user", "content": "Call the ping tool."}],
+            "tools": [{"type": "function", "function": {"name": "ping",
+                       "parameters": {"type": "object", "properties": {}, "required": []}}}],
+            "tool_choice": "auto", "max_tokens": 64,
+        })
+        b64 = base64.b64encode(payload.encode()).decode()
+        cmd = (f"echo {b64} | base64 -d > /tmp/tc.json; "
+               f"curl -s -m 90 http://127.0.0.1:{port}/v1/chat/completions "
+               f"-H 'Content-Type: application/json' -d @/tmp/tc.json")
+        try:
+            r = self._ssh(ip, cmd, timeout=timeout)
+            return "tool_calls" in r.stdout
+        except subprocess.TimeoutExpired:
+            return False
+
 
     def _get_ip(self, vm_name: str) -> str:
         r = _az(

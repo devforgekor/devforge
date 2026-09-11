@@ -47,9 +47,15 @@ class SpotOrchestrator:
                 continue
             self.vms[cfg.label] = vm
 
+            print("  Ensuring tool-calling (--jinja)...")
+            mgr.ensure_tool_calling(vm["ip"])
+
             if not mgr.poll_until_ready(vm["ip"], ssh_timeout, llm_timeout):
                 results[cfg.label] = "unhealthy"
                 continue
+
+            tools_ok = mgr.check_tool_calling(vm["ip"])
+            print(f"  tool-calling: {'OK' if tools_ok else 'NOT available'}")
 
             local_port = TUNNEL_PORT_BASE + len(self.tunnels)
             proc = open_spot_tunnel(cfg.label, vm["ip"], LLAMA_SERVER_PORT, local_port)
