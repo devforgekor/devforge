@@ -60,11 +60,12 @@ class SpotOrchestrator:
         return results
 
     def close_all_tunnels(self):
-        from lib.infra.azure_spot.tunnel import close_spot_tunnel
+        from lib.infra.azure_spot.tunnel import close_spot_tunnel, close_spot_tunnels
         for label, info in self.tunnels.items():
             print(f"  Closing tunnel for {label}")
             close_spot_tunnel(info["port"])
         self.tunnels.clear()
+        close_spot_tunnels(TUNNEL_PORT_BASE, count=8)  # sweep tunnels from other processes
 
     def delete_all_vms(self):
         for label, vm in self.vms.items():

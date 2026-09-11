@@ -18,8 +18,8 @@ LOCATION = "centralindia"
 PUBLIC_IP_SKU = "Standard"
 VM_SIZE = "Standard_FX2mds_v2"  # 2 vCPU / 42 GiB — fits LowPriorityCores (3)
 SSH_USER = "azureuser"
-LLAMA_SERVER_PORT = 8081
-TUNNEL_PORT_BASE = 8085  # local tunnel ports start here (avoid 8081 embedder collision)
+LLAMA_SERVER_PORT = 8080  # golden image: llama-server --port 8080 (127.0.0.1)
+TUNNEL_PORT_BASE = 18085  # dedicated local tunnel range (8085 has podman rootlessport)
 SSH_KEY_PATH = "~/.ssh/id_rsa.pub"
 
 

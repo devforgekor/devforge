@@ -75,15 +75,14 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
 | nemotron3-nano | account2 | `rg-devforge-llm-prod-cin` | `gallery_devforge_llm_prod_cin` / (이미지 없음) | `vm-devforge-llm-prod-cin-vnet` |
 | gemma-4-26b | account3 | `rg-devforge-llm-judge-cin` | `gallery_devforge_llm_judge_cin` / (이미지 없음) | `vm-gemma-4-26b-spotVNET` |
 
-**검증**:
-- **읽기 라이브**: 3계정 `list_spot_vms`/`sweep --dry-run` 정상(에러 0, VM 0개).
-- **쓰기 검증(`az vm create --validate`, 생성 없음)**: 템플릿 **유효**; 단 **QuotaExceeded** — `LowPriorityCores`(spot) 한도 **3**, A100(`NC24ads`, 24코어) 필요 **24**. → **쿼터 상향 필요**.
+> **활성 = `qwen3-30b` 단일 계정(account1).** nemotron/gemma은 **폐기**(계정/SP 정보는 유지). VM 크기 = **`Standard_FX2mds_v2`**(2 vCPU/42GiB). 추론 포트 = **8080**, 터널 대역 = **18085**. `--max-price`는 config `max_price`(기본 `-1`).
 
-> **활성 = `qwen3-30b` 단일 계정(account1).** nemotron/gemma은 **폐기**(계정/SP 정보는 유지). Spot `LowPriorityCores` 한도(3 core)로 **1대만 운용 → 다음 생성 전 삭제 필요**. `--max-price`는 config `max_price`(기본 `-1`=온디맨드가까지) 사용.
+**검증(라이브, 최종)**:
+- **읽기**: 3계정 `list_spot_vms`/`sweep --dry-run` 정상.
+- **전체 라이프사이클 성공**: `launch → destroy → verify`
+  - 생성(`Standard_FX2mds_v2` spot) → SSH → **llama-server ready(:8080)** → **터널 `localhost:18085 → VM:8080`** → `destroy`(VM+NIC+PublicIP+터널 삭제, `verified=True remaining=0`) → `verify=CLEAN`, 터널 잔여 0.
+- **쿼터**: `Standard_FX2mds_v2`(2 vCPU)는 **`LowPriorityCores`(3) 안 → 상향 불필요**.
 
-**남은 블로커**:
-1. **LowPriorityCores 쿼터 상향**(≥24, CentralIndia) — 상향 후 `launch` 라이브 가능.
-2. nemotron/gemma 갤러리 **이미지 생성/업로드**(현재 비어 있음).
-3. A100 할당 쿼터(`StandardNCADSA100v4Family`)도 0 → 상향 필요.
+**교정 사항(이번 Deep Dive)**: VM 크기 A100→`Standard_FX2mds_v2`, 추론 포트 8081→**8080**, 터널 대역 8085→**18085**(8085에 podman rootlessport), `_az`의 `--subscription`을 인자 **끝**으로(앞에 두면 `vm create` 거부), SSH `TimeoutExpired` 처리, 터널 정리를 **tracked-pid** 기반(무관 프로세스 오살 방지), **PublicIpAddress 쿼터(구독당 3)** 대응해 destroy가 **PIP까지 삭제**.
 
-> 쿼터 요청 링크는 `az vm create --validate` 에러 메시지에 포함됨.
+**남은 블로커**: 없음(에이전트가 이 엔드포인트로 Deep Dive 구동 시 opencode provider 등록 + 서버 `--jinja` 필요 — §1·§2).

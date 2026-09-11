@@ -46,20 +46,24 @@ def _vm_age_sec(name: str, now: float | None = None) -> int | None:
 def _wait_for_ssh(ip: str, timeout: int = 180, interval: int = 10) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        r = subprocess.run(
-            [
-                "ssh",
-                "-o",
-                "StrictHostKeyChecking=no",
-                "-o",
-                "ConnectTimeout=5",
-                f"{SSH_USER}@{ip}",
-                "echo ssh_ok",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        try:
+            r = subprocess.run(
+                [
+                    "ssh",
+                    "-o",
+                    "StrictHostKeyChecking=no",
+                    "-o",
+                    "ConnectTimeout=5",
+                    f"{SSH_USER}@{ip}",
+                    "echo ssh_ok",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            time.sleep(interval)
+            continue
         if r.returncode == 0 and "ssh_ok" in r.stdout:
             return True
         time.sleep(interval)
@@ -67,22 +71,26 @@ def _wait_for_ssh(ip: str, timeout: int = 180, interval: int = 10) -> bool:
 
 
 def _wait_for_inference_server(
-    ip: str, port: int = 8081, timeout: int = 300, interval: int = 15
+    ip: str, port: int = 8080, timeout: int = 300, interval: int = 15
 ) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        r = subprocess.run(
-            [
-                "ssh",
-                "-o",
-                "StrictHostKeyChecking=no",
-                f"{SSH_USER}@{ip}",
-                f"curl -s http://localhost:{port}/health | head -c 200",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        try:
+            r = subprocess.run(
+                [
+                    "ssh",
+                    "-o",
+                    "StrictHostKeyChecking=no",
+                    f"{SSH_USER}@{ip}",
+                    f"curl -s http://localhost:{port}/health | head -c 200",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            time.sleep(interval)
+            continue
         if "ok" in r.stdout.lower() or "healthy" in r.stdout.lower():
             return True
         time.sleep(interval)
@@ -244,9 +252,17 @@ class SpotVMManager:
             time.sleep(interval)
         return False
 
+    def _delete_net_resources(self, vm_name: str) -> None:
+        """Best-effort delete the NIC/PublicIP created for vm_name (az vm create naming)."""
+        rg = self.config.resource_group
+        sub = self.config.subscription_id
+        _az("network", "nic", "delete", "--resource-group", rg, "--name", f"{vm_name}VMNic", subscription=sub, timeout=60)
+        _az("network", "public-ip", "delete", "--resource-group", rg, "--name", f"{vm_name}PublicIP", subscription=sub, timeout=60)
+
     def delete_vm_verified(self, vm_name: str, timeout: int = 180) -> bool:
-        """Delete the VM and confirm it is gone (so the next spot create can proceed)."""
+        """Delete the VM plus its leftover NIC/PublicIP, then confirm removal (frees quota)."""
         self.delete_vm(vm_name)
+        self._delete_net_resources(vm_name)
         return self.wait_until_deleted(vm_name, timeout=timeout)
 
     def sweep_orphans(self, ttl_sec: int = 7200, dry_run: bool = False) -> List[str]:
