@@ -1,208 +1,227 @@
 # DevForge 시스템 전체 구조
 
-> ebook 파이프라인 + watchdog + 데이터 흐름의 통합 구조 문서.
-> 최종 갱신: 2026-09-09
+> 서버 전체 런타임·데이터 흐름·스토리지의 통합 구조 문서.
+> 최종 갱신: 2026-09-11 (이전 2026-09-09 버전을 전면 갱신 — OCI 스토리지 계층 추가)
+> 자동 생성 문서(`docs/architecture/*`)와 달리 이 문서는 **수동 관리**다.
 
 ---
 
 ## 1. 시스템 개요
 
-**DevForge** 서버(Oracle Cloud, 한국 리전)에서 운영되는 웹소설 수집·변환·감시 통합 시스템.
+**DevForge**는 Oracle Cloud(OCI, `ap-tokyo-1`, ARM Ampere A1) 단일 서버에서 운영되는
+LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
+
+- Host: DEVFORGE (ARM Neoverse-N1 4-core, 22Gi + zram + swap)
+- OS: Oracle Linux Server 9.7 (aarch64)
+- Runtime: Podman (rootless, user `opc`) / Caddy(rootful, host network)
+- DB: PostgreSQL 16 (pod `svc`, `devforge_app`)
+- Entry point: `CLAUDE.yaml` → `cli.py status --json`(라이브 상태) + `devforge_app.worklog_entries`(DB)
+
+---
+
+## 2. 계층 구조
 
 ```
-[사용자 브라우저] ── HTTPS ──▶ [Vercel CDN] ── 프록시 ──▶ [DevForge 서버]
-                                     │                        │
-                            Next.js (miniebook.vercel.app)   FastAPI (:8089)
-                                     │                        │
-                                     └───── 데이터 ──────────▶ 로컬 JSON DB
+[사용자 / 외부]
+   │ HTTPS
+   ▼
+┌──────────────────────────────────────────────────────────────┐
+│ EDGE — Caddy (rootful, host net, /etc/caddy/Caddyfile)         │
+│  /docs/* · /cashbook/* · /news/* · /api/* (ebook)              │
+│  /send*, /receive* (파일 교환) · /devforge/tg-webhook*          │
+│  /netdata* · (legacy) /webhooks/slack* · /slack/actions*        │
+└───────────────┬──────────────────────────────────────────────┘
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│ APPS                                                          │
+│  FastAPI hub :8002  (Slack/Telegram/email + MCP mount)         │
+│    └─ Blob Explorer :8085 (in-process HTTP, /send·/receive)    │
+│  MCP server  :8000  (FastMCP Streamable HTTP)                  │
+│  ebook-api   :8089  · cashbook :8100 · news :8091              │
+│  tg_webhook  :8001  · review_dashboard :9002                   │
+│  proxies: anthropic :44777 · anthropic_openrouter :44778        │
+│           gemini_openai :4431 · openrouter_rr :8451            │
+│           or_rate_limiter :4311                                │
+└───────────────┬──────────────────────────────────────────────┘
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│ CORE — Podman pods                                            │
+│  pod svc    : postgres :5432 · devforge-worker · flaresolverr  │
+│               · devforge-mcp · (devforge-inference, 동적)       │
+│  pod data   : data-pod-infra (legacy)                          │
+│  systemd --user services/timers (watchdog, day-cycle, backup…) │
+└───────────────┬──────────────────────────────────────────────┘
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│ STORAGE                                                       │
+│  LVM: /opt/ai_data(100G) · /mnt/lv_db(30G) · /opt/projects(10G)│
+│       · /opt/workspace(6G) · /(44.5G)                          │
+│  DB  : postgres data → /mnt/lv_db (bind)                       │
+│  Files: /opt/ai_data (models, novels, search.db, backups)      │
+│  Remote: OCI Object Storage (backups + file exchange)          │
+│  External: Azure Blob(현행 교환) · Droplr(단축) · Notion(메모)   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. 전체 아키텍처 다이어그램
+## 3. 런타임 인벤토리
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        사용자 브라우저                                 │
-│            https://miniebook.vercel.app (Vercel CDN)                │
-│  - 라이브러리 / 소설 상세 / 회차 읽기 / EPUB 다운로드 / Admin          │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │ HTTPS (Vercel catch-all 프록시)
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Vercel CDN (Next.js ISR)                         │
-│  /            → 정적 HTML (5분 ISR)                                 │
-│  /novel/[id]  → 소설 상세 + 회차 (ISR)                              │
-│  /admin       → 파이프라인 관리 (URL 입력 → discover)               │
-│  /api/*       → catch-all 프록시 → devforge FastAPI                 │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │ HTTPS (Caddy → nip.io)
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    DevForge 서버 (Oracle Cloud)                      │
-│                                                                     │
-│  [Caddy] reverse proxy                                              │
-│   └─ FastAPI (:8089) — ebook 백엔드                                │
-│       ├─ routers/pipeline.py   : /api/pipeline/start, /status       │
-│       ├─ routers/novels.py     : /api/novels/*                      │
-│       ├─ routers/chapters.py   : /api/chapters/{wr_id}              │
-│       └─ routers/metadata.py   : /api/metadata/*                    │
-│                                                                     │
-│  [ebook-watcher.service]  (systemd, Type=notify)                    │
-│   └─ pipeline.py loop --source bookto31  (5분 간격)                 │
-│                                                                     │
-│  [devforge-watchdog.service]  (60초 루프)                           │
-│   └─ lib/watchdog/ — 서비스/타이머/컨테이너/heartbeat 감시          │
-│                                                                     │
-│  [FlareSolverr] (:8191) — Cloudflare 우회 (bookto31)               │
-│  [Playwright] — toki31 AES-GCM 복호화                               │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │ 파일 읽기/쓰기
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              로컬 데이터 스토리지 (/opt/ai_data/)                    │
-│  /opt/ai_data/flaresolverr/novels/{소설명}/                         │
-│      ├── meta.json              (소설 메타데이터)                    │
-│      ├── {wr_id}.json           (챕터별 본문)                        │
-│      └── _chapters_index.json   (회차 인덱스 캐시)                   │
-│  /opt/ai_data/flaresolverr/ebook_watcher/                           │
-│      ├── queue.json             (수집 큐 — fcntl 락 보호)            │
-│      ├── failed.json            (DLQ — 실패 챕터 보존)               │
-│      ├── status.json            (진행 상황)                          │
-│      └── *.lock                 (동시성 락 파일)                     │
-│  /opt/ai_data/scripts/watchdog_state.json (watchdog 상태 영속화)     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+### 3.1 컨테이너 (Podman)
+
+| Name | Pod | Purpose |
+|---|---|---|
+| `postgres` | svc | PostgreSQL 16, `devforge_app` (data bind `/mnt/lv_db`) |
+| `devforge-worker` | svc | `worker_supervisor.py` — raw_consumer Pass 2/3 |
+| `flaresolverr` | svc | Cloudflare 우회 (:8191/:8192), ebook bookto31 |
+| `devforge-mcp` | svc | FastMCP 서버 (:8000), `mcp_server.py` |
+| `devforge-inference` | (동적) | llama.cpp server :8080-8084 (mode별 모델) |
+| `data-pod-infra` | data-pod | legacy pod infra |
+| `caddy` (rootful) | — | reverse proxy, host net |
+
+> 서비스 발견/상태는 `cli.py status --json`이 SSOT. 컨테이너는 quadlet
+> (`~/.config/containers/systemd/`)로 관리.
+
+### 3.2 systemd --user 서비스 (대표)
+
+| 서비스 | 실행 | 역할 |
+|---|---|---|
+| `devforge-watchdog` | `scripts/watchdog.py` | 서비스/타이머/컨테이너/디스크 감시·복구 |
+| `devforge-turn-watcher` | `scripts/turn_watcher.py` | 대화 로그 → turns(raw) 수집 |
+| `devforge-day-cycle` | `scripts/day_cycle.sh` | 일일 파이프라인 체인 |
+| `devforge-system-sync` | `scripts/system_sync.sh` | 아키텍처 문서 갱신 + DuckDNS + autocommit |
+| `devforge-backup` | `scripts/osync_backup.py all` | OCI 백업(DB+앱) |
+| `devforge-restore-test` | `scripts/osync_restore_test.py` | 월간 복원 검증 |
+| `ebook-watcher` / `ebook-api` | ebooklib | ebook 수집/서빙 |
+| `devforge-news*` | `/opt/workspace/news/*` | 뉴스 수집/digest/API |
+| `cashbook` | uvicorn:8100 | 가계부 웹앱 |
+| `anthropic-proxy` 등 | `scripts/proxies/*` | LLM API 호환 프록시 |
+| `golden-image-*` | `scripts/golden_image/*` | 골든 이미지 배포/연간 점검 |
+
+### 3.3 타이머 (요약)
+
+- 매일: `backup-safety`(23:00 UTC), `daily-structure`(00:00), `activity-summarizer`(00:00), `news-digest`(23:30)
+- 주기: `system-sync`(30분), `dev-poll`(10분), `golden-image-deploy-check`(15분), `workspace-autocommit`(30분)
+- 주/월: `weekly-enrich-rebuild`(일 18:00), `restore-test`(1일 20:30), `reference-monitor`(월 16:00)
+- 전체 목록: `systemctl --user list-timers` / `docs/specs/timer-registry.yaml`
+
+### 3.4 Caddy 라우트 (live `/etc/caddy/Caddyfile`)
+
+| Path | Backend |
+|---|---|
+| `/docs/*` | file_server `/data/docs` |
+| `/send*`, `/receive*` | `127.0.0.1:8085` (Blob Explorer) |
+| `/api/*` | `host.containers.internal:8089` (ebook) |
+| `/news/*` | `127.0.0.1:8091` |
+| `/cashbook/*` | `host.containers.internal:8100` |
+| `/devforge/tg-webhook*` | `127.0.0.1:8001` |
+| `/netdata*` | `10.89.0.1:19999` (basic auth) |
+| `/webhooks/slack*`, `/slack/actions*` | `127.0.0.1:8084`/`:8087` (legacy, 리스너 없음) |
 
 ---
 
-## 3. ebook 파이프라인 구조
+## 4. 데이터 흐름
 
-### 3.1 파이프라인 단계
+### 4.1 LLM 추론
+`scripts/lib/pod_manager/`가 mode+model을 `current-mode-inference.env`에 쓰고
+`llama.cpp:server` 컨테이너 `devforge-inference`를 띄운다.
+포트: 8080 reranker · 8081 embed · 8082 extract/enrich · 8083 verify · 8084 27B verifier.
 
+### 4.2 turn / observation 파이프라인
 ```
-[1] discover ──▶ [2] collect ──▶ [3] enrich ──▶ [4] index ──▶ [5] revalidate
-  회차 목록        source별 fetch     namu.wiki      인덱스 재구축     Vercel ISR
-  (epage+spage)    → JSON 저장        메타데이터                     캐시 갱신
+turn_watcher → turns(raw) → raw_consumer(worker) → pending
+  → day_cycle: batching → cleaned → scanned → extracted+verified → enriched → embedded
 ```
+결과는 DB(`turns`, `review_facts`, `observations`, `embeddings`)에 저장되고
+MCP(`fact_*`, `obs_*`, `search_*`, `mem_*`)로 노출된다.
 
-### 3.2 실행 경로
+### 4.3 ebook 파이프라인
+`ebook-watcher`(5분 loop): discover → collect(FlareSolverr/Playwright) → enrich → index → revalidate.
+`ebook-api`(:8089)가 서빙, Caddy `/api/*` 경유.
 
-| 경로 | 트리거 | 설명 |
-|------|--------|------|
-| **Admin URL 제출** | `/api/pipeline/start` | URL → source/ID 분기 → discover(전체 회차) → loop 시작 |
-| **상시 루프** | `ebook-watcher.service` | 5분 간격 collect → index → revalidate |
-| **월 1회 자동 discover** | `loop` 내 날짜 체크 | 매월 1일 연재작 새 회차 감지 (max_pages 200) |
+### 4.4 watchdog
+`devforge-watchdog`(60초) → 서비스/타이머/컨테이너/디스크/heartbeat 감시 →
+`graduated_recover`(backoff + circuit breaker) + Slack/Opsgenie 알림.
 
-### 3.3 수집기 (source 분기)
+### 4.5 알림
+`scripts/lib/notify.py Notifier` — Apprise(Telegram + Gmail SMTP) + Slack.
+FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 
-| source | collector | 방식 | 속도 |
-|--------|-----------|------|------|
-| `bookto31` | `_collect_bookto31` | FlareSolverr + HTML 파싱 | 적응형 (최소 5분) |
-| `toki31`/`newtoki` | `_collect_newtoki` | Playwright + AES-GCM | 적응형 (5~60초) |
-
-### 3.4 안전 장치
-
-| 장치 | 설명 |
-|------|------|
-| **systemd WatchdogSec(600s)** | loop이 5분마다 sd_notify → 10분 미수신 시 hang 판정 |
-| **queue 파일 락** | `queue.lock` + `queue.collect.lock` 분리 (flock 무력화 방지) |
-| **atomic write** | tmp 파일 + os.replace → JSON 손상 불가 |
-| **DLQ** | 3회 실패 → failed.json 보존 |
-| **적응형 딜레이** | 10×fetch 시간 (bookto31 최소 5분 / toki31 5~60초) |
-| **월 1회 discover** | 연재작 전체 회차 정확히 확인 (max_pages 200) |
+### 4.6 백업 / 복원
+`devforge-backup`(DB daily + app weekly) → OCI `devforge-standard/backups/`.
+`devforge-restore-test`(월간) → scratch DB 복원 검증. 상세: [object-storage.md](./object-storage.md).
 
 ---
 
-## 4. watchdog 구조
+## 5. 스토리지 계층
 
-### 4.1 계층 구조
+| 위치 | 크기 | 내용 |
+|---|---|---|
+| `/opt/ai_data` | 100G | models/gguf, flaresolverr(novels/epub), search.db, backups(스테이징), containers |
+| `/mnt/lv_db` | 30G | PostgreSQL data (bind) |
+| `/opt/projects` | 10G | server repo |
+| `/opt/workspace` | 6G | ebooklib, news, common-lib |
+| `/` | 44.5G | OS |
 
-```
-devforge-watchdog.service (60초 루프)
-  └─ lib/watchdog/
-      ├─ orchestrator.py   : main_loop, 복구 조율
-      ├─ checker.py        : check_service / check_ebook_pipeline / check_timer
-      ├─ recovery.py       : recover_service / recover_ebook_watcher / graduated_recover
-      ├─ state.py          : WatchdogState (영속화) / ComponentTracker (backoff+circuit)
-      ├─ config.py         : SERVICE_TARGETS / TIMER_TARGETS / BACKOFF_SCHEDULE
-      ├─ messenger.py      : heartbeat (PostgreSQL 기반 dead-man's switch)
-      └─ notifier.py       : Slack/Opsgenie 알림
-```
-
-### 4.2 감시 대상
-
-| 대상 | 체크 방식 | 복구 |
-|------|-----------|------|
-| `devforge-turn-watcher` | svc_active | recover_service |
-| `openrouter-rr-proxy` | svc_active | recover_service |
-| `devforge-day-cycle` | svc_active | recover_service |
-| `ebook-watcher` | **check_ebook_pipeline** (프로세스+로그활동) | **recover_ebook_watcher** (readiness) |
-| 컨테이너 5종 | podman ps | alert-only (재시작 금지) |
-| 타이머 7종 | LastTrigger idle | kick |
-
-### 4.3 이중 감시 구조 (ebook-watcher)
-
-```
-1차: systemd WatchdogSec (Type=notify)
-  loop이 5분마다 WATCHDOG=1 → 10분 내 미수신 → on-watchdog 재시작
-
-2차: devforge-watchdog (60초)
-  check_ebook_pipeline → 프로세스 존재 + 로그 활동(20분) → recover_ebook_watcher
-```
-
-### 4.4 복구 로직 (graduated_recover)
-
-```
-실패 감지 → backoff 대기 (0→10→20→40→80→120→300, ±10% jitter)
-         → recover (restart)
-         → readiness 확인 (ebook은 프로세스+로그활동)
-         → circuit breaker (3회 연속 실패 → OPEN 120초 → HALF_OPEN)
-```
-
-### 4.5 상태 영속화
-
-- 상태 파일: `/opt/ai_data/scripts/watchdog_state.json` (5분 주기 저장)
-- watchdog 재시작 시 `load_state()`로 backoff/circuit breaker 보존
-- **효과**: restart storm 방지
+- 원격: **OCI Object Storage** (`devforge-standard`, `devforge-archive`).
+- 파일 교환(현행): Azure Blob `stshareddevforgeprodkrc/devforge` (SAS).
+- 단축: **Droplr** (`drplr` CLI).
 
 ---
 
-## 5. 데이터 흐름 (챕터 기준)
+## 6. 외부 연동
 
-```
-1. discover (URL 제출 or 월 1회)
-   → 전체 회차 wr_id 추출 → queue.json 등록 (락 보호)
-2. loop collect (5분 간격)
-   → queue에서 1개 fetch (source별 collector)
-   → JSON 저장 (novels/{소설}/{wr_id}.json)
-   → 실패 시 3회 재시도 → DLQ(failed.json)
-3. index → _chapters_index.json 재구축
-4. revalidate → Vercel ISR 캐시 갱신
-5. 사용자 열람
-   → /api/novels/{id}/chapters (인덱스 캐시) → CDN
-```
+| 대상 | 용도 | 코드 |
+|---|---|---|
+| OCI Object Storage | 백업/교환 | `scripts/osync_backup.py`, (예정) `lib/oci_storage.py` |
+| Azure Blob | 파일 교환(현행) | `scripts/blob_explorer/`, `lib/blob_uploader.py` |
+| Droplr | 최종 단축 주소 | `scripts/droplr_upload.py`, `lib/blob_uploader._shorten_with_droplr` |
+| Notion | 메모/리뷰 기록 | `lib/notion_client.py` |
+| Slack/Telegram/Gmail | 알림 | `lib/notify.py` |
 
 ---
 
-## 6. 현재 데이터 현황 (2026-09-09)
+## 7. 문서 생성 파이프라인
 
-| 작품 | 소스 | 저장 회차 | 상태 |
-|------|------|----------|------|
-| 아포칼립스의 고인물 | toki31 | 287 | 수집 완료 |
-| 하남자의 탑 공략법 | bookto31 | 557 | 완결 |
-| 오늘만 사는 기사 | bookto31 | 363 | 연재 중 |
-| 화산귀환 | bookto31 | 34 | 수집 중 (queue 1888) |
-| 게임 속 바바리안으로 살아남기 | bookto31 | 31 | 수집 중 (queue 210) |
+- 생성기: `scripts/gen_architecture.py` (입력: `collect_structural()` 라이브 + `CLAUDE.yaml` 정적)
+- 산출물(자동, 수동 편집 금지):
+  - `docs/architecture/infrastructure.md` (서버 정체성)
+  - `docs/architecture/software.yaml` (모델/모드/파이프라인)
+  - `docs/architecture/code-structure.yaml` (파일 레이아웃 SSOT, 30분 hash-guard)
+  - `docs/specs/timer-registry.yaml` (타이머)
+- 실행: `devforge-system-sync.timer`(30분, `--check-structure`) + `devforge-daily-structure.timer`(매일 전체 + git push)
+- 수동 편집 문서: 이 문서, `docs/object-storage.md`, 각종 design/audit/runbook
 
 ---
 
-## 7. 관련 문서
+## 8. 알려진 이슈 / 불일치 (2026-09-11 조사)
 
-| 문서 | 위치 | 내용 |
-|------|------|------|
-| ebook 아키텍처 | `/opt/workspace/ebooklib/docs/00-ARCHITECTURE.md` | ebook 파이프라인 상세 |
-| 데이터 파이프라인 | `/opt/workspace/ebooklib/docs/01-DATA-PIPELINE.md` | 데이터 흐름 |
-| 자동화 시스템 | `/opt/workspace/ebooklib/docs/07-AUTOMATION.md` | systemd + watchdog |
-| 유지보수 | `/opt/workspace/ebooklib/docs/06-MAINTENANCE.md` | 운영 가이드 |
-| watchdog 종합 감사 | `/opt/projects/server/docs/watchdog-comprehensive-audit.md` | watchdog 패치 이력 |
+| 항목 | 상태 | 설명 |
+|---|---|---|
+| `container-devforge-fastapi` | 🔴 crash-loop | `jinja2` 미설치(`calendar_sync/router.py`) → :8002 hub + :8085 Blob Explorer + Caddy `/send`,`/receive` 모두 down |
+| Caddy 사용자 사본 | 🟡 stale | `/home/opc/.config/caddy/Caddyfile`는 옛 버전. live는 `/etc/caddy/Caddyfile`(rootful) |
+| `container-devforge-caddy` | 🔴 failed | quadlet 사용 안 함(실제는 rootful `caddy.service`) |
+| `devforge-worker` | 🟡 | 실행 중 프로세스가 `worker_supervisor.py`(현재 worktree엔 `_archive/`에만 존재) 참조 |
+| `devforge-nli`, `gemini-proxy` | 🔴 | ExecStart 대상 파일이 worktree에 없음 |
+| `devforge-daily-structure` | 🔴 failed | 문서 생성 + git push 실패 → `software.yaml`(2026-07-27) stale |
+| `CLAUDE.yaml#storage` | 🟡 | 옛 LV(`lv_logs`/`lv_meta`/`lv_tmp`) 표기 — 실제 LVM과 불일치 |
+| legacy backup | 🟡 | `/usr/local/bin/dump_postgres.sh`(→`/mnt/secure_meta`)는 폐기, osync가 대체 |
+
+---
+
+## 9. 관련 문서
+
+| 문서 | 경로 | 내용 |
+|---|---|---|
+| OCI 스토리지/파일교환 | `docs/object-storage.md` | 버킷·백업·PAR·Droplr·통합 이점 |
+| 서버 정체성(자동) | `docs/architecture/infrastructure.md` | 라이브 상태 |
+| 코드 구조 SSOT | `docs/architecture/code-structure.yaml` | 파일 레이아웃 |
+| watchdog 감사 | `docs/watchdog-comprehensive-audit.md` | watchdog 패치 이력 |
+| golden image runbook | `docs/runbook-golden-image.md` | 이미지 배포 |
+| ebook 아키텍처 | `/opt/workspace/ebooklib/docs/00-ARCHITECTURE.md` | ebook 상세 |
+| 통합 제어 | `CLAUDE.yaml` | 진입점/엔트리포인트 목록 |
+
+### 이전 산출물 참고
+- `_archive/server-specs-and-llm-architecture.md` (2026-05-25) — 구 아키텍처
+- `docs/_archive/specs/system-design.yaml` (2026-06-06) — 구 시스템 설계
+- `scripts/blob_explorer.py` — 현 `blob_explorer/` 패키지의 전신(현재 git history에만 존재)

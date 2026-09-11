@@ -183,7 +183,7 @@ def _build_software(structural: dict, claude: dict) -> str:
     now = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 
     # Models from live containers — query /v1/models for running model name
-    from lib.infra.containers import query_llama_model
+    from lib.infra.containers import query_inference_model
 
     models = []
     for c in structural.get("containers", []):
