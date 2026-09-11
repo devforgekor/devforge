@@ -66,3 +66,19 @@
 - **뷰어 범위 = 통합 index + 상태 대시보드 + 뉴스 + 도서관 확장** (4종 전부).
 - 인증: 공개 읽기 기본, 민감 항목만 `PORTAL_TOKEN`(후속).
 - 도메인: 보류(생기면 Vercel 커스텀 도메인만 연결).
+
+## 8. 진행 결과 (2026-09-11 완료)
+
+**구현**
+- Phase 1: devforge `devforge_fastapi/portal.py` `/api/portal/{health,summary,incidents,backups}` (+Caddy `/api/portal/*`) — summary가 최신 뉴스 3건 포함.
+- Phase 2: Caddy `/api/news/* → :8091`(strip) — `/api/news/{health,dates,articles,stats}`.
+- Phase 3: 프론트 `ebooklib/apps/frontend` — 포털 홈(`/`, A안) + `/status` + `/news`(+`/news/[date]` SSG) + `/library` 이동 + 상단 nav.
+- Phase 4: **프로덕션 배포** → https://miniebook.vercel.app (Vercel `miniebook` 프로젝트; 배포는 레포 루트 `/opt/workspace/ebooklib`에서 `VERCEL_PROJECT_ID=miniebook` 오버라이드).
+
+**반응속도 최적화 (웜 TTFB)**
+- `/` 0.72–0.85 → **0.16–0.36s**, `/status` 0.62 → **0.15–0.35s**, `/news` 0.41–1.10 → **0.15s** (`/news` ISR + `/news/[date]` SSG + news_api 기본 최신날짜). 오리진 API 20–150ms.
+
+**프론트 정리 (lint 0)**
+- dead code 제거: `ChapterClient` `goPrev/goNext`, `lib/api.ts` 미사용 fetch 함수 6종·`fetchJson`·미사용 타입 → `lib/api.ts` 타입 전용.
+- `setState-in-effect` 2건 해결(admin=`useSyncExternalStore` 외부 스토어, NovelClient=`ref+jumpNonce`), `<img>` 규칙 scoped disable (`next/image`는 임의 원격 호스트라 부적합).
+- `eslint` **0 problems**. 파일교환은 devforge 유지(Vercel 미경유).

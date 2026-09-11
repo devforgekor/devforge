@@ -1,14 +1,14 @@
 # DevForge — Timer Registry
-# auto-generated from live systemd data at 2026-09-11 20:10 KST
+# auto-generated from live systemd data at 2026-09-11 22:27 KST
 ---
 metadata:
-  updated: 2026-09-11 20:10 KST
+  updated: 2026-09-11 22:27 KST
   source: live (systemctl list-timers)
 user_timers:
 - unit: devforge-backup-safety
   on_calendar: '*-*-* 23:00:00'
   last: ''
-  next: Fri 2026-09-11 23:01:39 GMT
+  next: Fri 2026-09-11 23:01:48 GMT
 - unit: devforge-daily-structure
   on_calendar: 00:00
   last: ''
@@ -16,15 +16,15 @@ user_timers:
 - unit: devforge-dev-poll
   on_calendar: '*:0/10'
   last: ''
-  next: Fri 2026-09-11 11:20:00 GMT
+  next: Fri 2026-09-11 13:30:00 GMT
 - unit: devforge-news-digest
   on_calendar: '23:30'
   last: ''
-  next: Fri 2026-09-11 23:30:28 GMT
+  next: Fri 2026-09-11 23:30:33 GMT
 - unit: devforge-news
   on_calendar: '*-*-* 00,06,12,18:00:00'
   last: ''
-  next: Fri 2026-09-11 12:00:43 GMT
+  next: Fri 2026-09-11 18:03:09 GMT
 - unit: devforge-openrouter-free-models
   on_calendar: '*-*-* 15:30:00'
   last: ''
@@ -36,7 +36,7 @@ user_timers:
 - unit: devforge-restore-test
   on_calendar: '*-*-01 20:30:00 UTC'
   last: ''
-  next: Thu 2026-10-01 20:33:02 GMT
+  next: Thu 2026-10-01 20:32:05 GMT
 - unit: devforge-summary-retry
   on_calendar: ''
   last: ''
@@ -44,15 +44,15 @@ user_timers:
 - unit: devforge-system-sync
   on_calendar: '*:0/30'
   last: ''
-  next: Fri 2026-09-11 11:30:12 GMT
+  next: Fri 2026-09-11 13:30:01 GMT
 - unit: devforge-watchdog-liveness
   on_calendar: '*:0/5'
   last: ''
-  next: Fri 2026-09-11 11:15:00 GMT
+  next: Fri 2026-09-11 13:30:00 GMT
 - unit: devforge-weekly-enrich-rebuild
   on_calendar: Sun *-*-* 18:00:00
   last: ''
-  next: Sun 2026-09-13 18:04:43 GMT
+  next: Sun 2026-09-13 18:03:30 GMT
 - unit: grub-boot-success
   on_calendar: ''
   last: ''
@@ -60,5 +60,5 @@ user_timers:
 - unit: reference-monitor
   on_calendar: Mon *-*-* 16:00:00
   last: ''
-  next: Mon 2026-09-14 16:00:54 GMT
+  next: Mon 2026-09-14 16:04:34 GMT
 system_timers: []

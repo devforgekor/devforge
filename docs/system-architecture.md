@@ -114,6 +114,8 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 | `/presign*` | `127.0.0.1:8085` (write-PAR 발급) |
 | `/calendar*` | `127.0.0.1:8002` (calendar_sync) |
 | `/auth/google/callback*` | `127.0.0.1:8002` (rewrite → `/calendar/auth/google/callback`) |
+| `/api/portal/*` | `127.0.0.1:8002` (portal read API — `/api/*`보다 우선) |
+| `/api/news/*` | `127.0.0.1:8091` (rewrite: `/api` strip → news API) |
 | `/api/*` | `host.containers.internal:8089` (ebook) |
 | `/news/*` | `127.0.0.1:8091` |
 | `/cashbook/*` | `host.containers.internal:8100` |
@@ -186,6 +188,9 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | Droplr | 최종 단축 주소 | `lib/droplr.py` (HTTP API), `scripts/droplr_upload.py` |
 | Notion | 메모/리뷰 기록 | `lib/notion_client.py` |
 | Slack/Telegram/Gmail | 알림 | `lib/notify.py` |
+| Vercel (miniebook) | **최종 뷰어**(포털 홈/상태/뉴스/도서관) | `/opt/workspace/ebooklib/apps/frontend` (Next.js, 서버측 `NEXT_PUBLIC_API_URL`=nip.io) |
+
+> **뷰어 = 표시 전용(Vercel)**: 로직·데이터는 devforge에서 완성, Vercel은 ISR 캐시로 표시만. 파일 교환은 devforge(`/send`,`/receive`) 직접 — Vercel 미경유. (계획: `docs/plans/vercel-viewer-plan.md`)
 
 ---
 
