@@ -58,6 +58,20 @@ def backups(limit: int = 10):
         return {"items": [], "error": str(e)}
 
 
+def _latest_news(limit: int = 3) -> list[dict]:
+    from lib.db import psql_json
+
+    return psql_json(
+        "SELECT id, title, title_ko, source, "
+        "to_char(DATE(collected_at AT TIME ZONE 'Asia/Seoul'),'YYYY-MM-DD') AS date "
+        "FROM news_articles WHERE title != 'Test Article' "
+        "AND DATE(collected_at AT TIME ZONE 'Asia/Seoul') = "
+        "(SELECT MAX(DATE(collected_at AT TIME ZONE 'Asia/Seoul')) FROM news_articles "
+        " WHERE title != 'Test Article') "
+        f"ORDER BY published_at DESC NULLS LAST LIMIT {int(limit)}"
+    )
+
+
 @router.get("/summary")
 def summary():
     open_n = 0
@@ -73,4 +87,15 @@ def summary():
         last = items[0] if items else None
     except Exception:
         pass
-    return {"status": "ok", "time": _now(), "open_incidents": open_n, "last_backup": last}
+    news: list[dict] = []
+    try:
+        news = _latest_news(3)
+    except Exception:
+        pass
+    return {
+        "status": "ok",
+        "time": _now(),
+        "open_incidents": open_n,
+        "last_backup": last,
+        "news": news,
+    }
