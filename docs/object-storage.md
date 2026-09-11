@@ -2,7 +2,7 @@
 
 > 최종 갱신: 2026-09-11
 > 관련: [system-architecture.md](./system-architecture.md) · [../CLAUDE.yaml](../CLAUDE.yaml)
-> 상태: 백업 파이프라인 운영 중 / 파일 교환(Exchange) OCI 전환 설계 단계
+> 상태: 백업 파이프라인 운영 중 / 파일 교환(Exchange) OCI 전환 **완료** (Droplr 단축)
 
 ---
 
@@ -108,7 +108,7 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 
 ---
 
-## 5. 파일 교환 (Exchange) — Azure → OCI 전환 설계
+## 5. 파일 교환 (Exchange) — OCI 구현 완료
 
 ### 5.1 현재 구조 (Azure)
 ```
@@ -119,7 +119,7 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 - `scripts/lib/blob_uploader.py` — 파이프라인 산출물 업로드 + **7일 SAS** 링크
 - 다운로드는 Azure SAS(1~168시간), 최종 단축은 Droplr
 
-### 5.2 목표 구조 (OCI)
+### 5.2 구현 구조 (OCI)
 ```
 브라우저 ── /send, /receive ──▶ Caddy ──▶ FastAPI(:8002) / Exchange
                                               ├─ 목록/업로드: OCI SDK (서버측)
@@ -136,6 +136,25 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 - 기존 자산 재사용: `scripts/lib/blob_uploader._shorten_with_droplr()`, `scripts/droplr_upload.py`
   (`drplr link --porcelain`, 자격증명은 `~/.config/devforge/secrets.env`의 `DRPLR_*`)
 - 파이프라인 산출물(review bundle)도 `releases/` 업로드 후 Droplr 단축 → Notion 메모로 공유.
+
+---
+
+### 5.4 구현 내역 (2026-09-11)
+
+| 항목 | 변경 |
+|---|---|
+| 신규 | `scripts/lib/oci_storage.py` — list / put / delete / PAR 생성 |
+| 신규 | `scripts/lib/droplr.py` — Droplr HTTP API(Basic) 단축, Node CLI 불필요 |
+| 교체 | `scripts/blob_explorer/blob.py` — Azure → OCI (`_list_blobs`/`_upload_blob`/`_generate_sas`/`_share_url`) |
+| 수정 | `scripts/blob_explorer/handler.py` — 업로드 완료 시 `_share_url`(PAR→Droplr) 표시 |
+| 이미지 | `containers/fastapi/Containerfile` — `jinja2`, `oci` 추가 (재빌드) |
+| quadlet | `container-devforge-fastapi.container` — `BLOB_EXPLORER_LISTEN=0.0.0.0:8085`, `~/.oci:/root/.oci:ro` 마운트 |
+| pod | `svc.pod` — `PublishPort=127.0.0.1:8085:8085` (Caddy `/send`,`/receive` 도달) |
+| 동작 | `POST /send` → `uploads/{images|documents}/<ts>_<file>` 업로드 후 **`https://d.pr/...`** 반환 |
+| 미적용 | write-PAR(브라우저 직접 업로드)는 향후 개선. 현재는 서버측 put. |
+
+> 참고: `lib/blob_uploader.py`(파이프라인 산출물)는 아직 Azure Blob을 사용한다.
+> Azure 완전 제거 시 `releases/` + PAR + `lib.droplr.shorten`으로 이관.
 
 ---
 
@@ -180,8 +199,9 @@ systemctl --user list-timers | grep -E "backup|restore"
 |---|---|
 | 백업 | `scripts/osync_backup.py`, `scripts/osync_restore_test.py` |
 | 타이머/서비스 | `~/.config/systemd/user/devforge-backup.service`, `devforge-backup-safety.timer`, `devforge-restore-test.service`, `devforge-restore-test.timer` |
-| 파일 교환(현행) | `scripts/blob_explorer/` (blob.py, handler.py), `scripts/lib/blob_uploader.py` |
-| 단축 | `scripts/droplr_upload.py`, `scripts/lib/blob_uploader._shorten_with_droplr` |
+| 파일 교환(OCI) | `scripts/blob_explorer/` (blob.py, handler.py), `scripts/lib/oci_storage.py` |
+| 단축(Droplr) | `scripts/lib/droplr.py` (HTTP API), `scripts/droplr_upload.py`, `scripts/lib/blob_uploader._shorten_with_droplr` |
+| 파이프라인 산출물(현행 Azure) | `scripts/lib/blob_uploader.py` |
 | 로컬 스테이징 | `/opt/ai_data/backups/` |
 
 ### 출처 (Oracle 공식)

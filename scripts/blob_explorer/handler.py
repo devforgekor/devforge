@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 from blob_explorer.blob import (
-    _list_blobs, _virtual_tree, _generate_sas, _upload_blob,
+    _list_blobs, _virtual_tree, _generate_sas, _share_url, _upload_blob,
     SAS_HOURS,
 )
 
@@ -180,12 +180,12 @@ fileInput.addEventListener('change', function() {{
 
 
 def _page_send_done(filename: str, blob_name: str, size: int) -> str:
-    sas = _generate_sas(blob_name)
+    sas = _share_url(blob_name)
     body = f"""<div class="result">
   <p class="ok">\u2705 \uc5c5\ub85c\ub4dc \uc644\ub8cc</p>
   <p>\ud30c\uc77c: <b>{html.escape(filename)}</b> ({_size_fmt(size)})</p>
   <code>{html.escape(blob_name)}</code>
-  <p style="margin-top:12px;"><a href="{sas}" style="color:#7ee787;">\U0001f4e5 \ub2e4\uc6b4\ub85c\ub4dc (SAS)</a></p>
+  <p style="margin-top:12px;"><a href="{sas}" style="color:#7ee787;">\U0001f4e5 \ub2e4\uc6b4\ub85c\ub4dc \ub9c1\ud06c</a></p>
   <p style="margin-top:12px;"><a href="/send" class="btn" style="text-decoration:none;display:inline-block;">\ucd94\uac00 \uc5c5\ub85c\ub4dc</a></p>
 </div>"""
     return _page("\uc5c5\ub85c\ub4dc \uc644\ub8cc", body, "send", f"SAS valid for {SAS_HOURS}h")

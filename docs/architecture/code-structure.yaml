@@ -195,6 +195,9 @@ modules:
     worker-entrypoint.sh:
       status: unknown
       purpose: "worker-entrypoint.sh \u2014 DevForge Worker supervisor runner"
+    worker_supervisor.py:
+      status: experimental
+      purpose: Worker container supervisor.
 - path: scripts/lib/
   purpose: Lib
   files:
@@ -212,8 +215,8 @@ modules:
       purpose: "Safe remediation catalog \u2014 Pattern 2 \"Safe First\" engine."
     blob_uploader.py:
       status: production
-      purpose: "Azure Blob uploader \u2014 single shared utility for all pipeline\
-        \ outputs."
+      purpose: "Review-bundle uploader \u2014 OCI Object Storage + optional Droplr\
+        \ short link."
     cli_experiment.py:
       status: production
       purpose: "CLI experiment management \u2014 list, compare, active, adopt commands."
@@ -240,6 +243,10 @@ modules:
     dev_pipeline.py:
       status: production
       purpose: GitHub Issue -> PR pipeline (DevForge Devin-like).
+    droplr.py:
+      status: production
+      purpose: "Droplr link shortener via HTTP API (Basic auth) \u2014 no Node CLI\
+        \ dependency."
     enrich_consumer.py:
       status: production
       purpose: "enrich_consumer \u2014 read enrichment metadata from review_facts\
@@ -285,6 +292,9 @@ modules:
       status: production
       purpose: "Unified observation API \u2014 recording and querying the observations\
         \ table."
+    oci_storage.py:
+      status: production
+      purpose: "OCI Object Storage helper \u2014 list / put / delete / PAR for DevForge."
     protection.py:
       status: production
       purpose: "Protection context manager \u2014 file-based dead man's switch."
@@ -800,7 +810,7 @@ modules:
       purpose: Entry point for python3 -m blob_explorer.
     blob.py:
       status: production
-      purpose: Azure Blob storage operations.
+      purpose: OCI Object Storage backend for the file-exchange UI (send + receive).
     handler.py:
       status: production
       purpose: HTTP handler + HTML UI for Blob Explorer.

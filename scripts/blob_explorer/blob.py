@@ -1,62 +1,50 @@
 #!/usr/bin/env python3
 # Status: production
-"""Azure Blob storage operations."""
+# Path: imported by — blob_explorer/handler.py
+"""OCI Object Storage backend for the file-exchange UI (send + receive).
+
+Replaces the former Azure Blob backend. All names handled here are RELATIVE to
+OCI_EXCHANGE_ROOT (default "uploads/"), e.g. "documents/20260911_x.md".
+
+Exports (interface consumed by handler.py):
+  _list_blobs, _virtual_tree, _generate_sas, _share_url, _upload_blob, SAS_HOURS
+"""
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Union
 
-from azure.storage.blob import BlobSasPermissions, BlobServiceClient, generate_blob_sas
+from lib.oci_storage import create_par, list_objects, put_object
 
-ACCOUNT_NAME = "stshareddevforgeprodkrc"
-CONTAINER = "devforge"
-SAS_HOURS = int(os.environ.get("BLOB_EXPLORER_SAS_HOURS", "1"))
-UPLOAD_PREFIX = "uploads/"
+ROOT = os.environ.get("OCI_EXCHANGE_ROOT", "uploads").strip("/")
+SAS_HOURS = int(os.environ.get("BLOB_EXPLORER_PAR_HOURS", os.environ.get("BLOB_EXPLORER_SAS_HOURS", "1")))
+SHORTEN = os.environ.get("BLOB_EXPLORER_SHORTEN", "1") == "1"
 
-_account_key: Optional[str] = None
-
-
-def _get_account_key() -> str:
-    global _account_key
-    if _account_key:
-        return _account_key
-    sf = Path.home() / ".config/devforge/secrets.env"
-    if sf.exists():
-        with open(sf) as f:
-            for line in f:
-                if line.startswith("AZURE_STORAGE_ACCOUNT_KEY="):
-                    _account_key = line.strip().split("=", 1)[1].strip("'\"")
-                    break
-    if not _account_key:
-        _account_key = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY", "")
-    if not _account_key:
-        raise RuntimeError("AZURE_STORAGE_ACCOUNT_KEY not found")
-    return _account_key
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".bmp"}
 
 
-def _blob_service():
-    return BlobServiceClient(
-        account_url=f"https://{ACCOUNT_NAME}.blob.core.windows.net",
-        credential=_get_account_key(),
-    )
+def _physical(rel: str) -> str:
+    rel = rel.lstrip("/")
+    return f"{ROOT}/{rel}" if rel else f"{ROOT}/"
+
+
+def _rel(full: str) -> str:
+    prefix = f"{ROOT}/"
+    return full[len(prefix):] if full.startswith(prefix) else full
 
 
 def _list_blobs(prefix: str) -> list[dict]:
-    svc = _blob_service()
-    cc = svc.get_container_client(CONTAINER)
+    """List objects under a path relative to ROOT, returning ROOT-relative names."""
     results = []
-    for blob in cc.list_blobs(name_starts_with=prefix):
-        if blob.name == prefix:
+    for o in list_objects(_physical(prefix)):
+        name = o["name"]
+        if name.endswith("/"):  # folder placeholder marker
             continue
-        results.append(
-            {
-                "name": blob.name,
-                "size": blob.size or 0,
-                "updated": blob.last_modified.isoformat() if blob.last_modified else "",
-            }
-        )
-    results.sort(key=lambda b: (0 if "/" in b["name"][len(prefix) :] else 1, b["name"]))
+        if name == f"{ROOT}/":
+            continue
+        results.append({"name": _rel(name), "size": o["size"], "updated": o.get("updated", "")})
+    results.sort(key=lambda b: (0 if "/" in b["name"][len(prefix):] else 1, b["name"]))
     return results
 
 
@@ -77,23 +65,28 @@ def _virtual_tree(prefix: str, blobs: list[dict]) -> dict:
     return {"dirs": sorted(dirs.values(), key=lambda d: d["name"]), "files": files}
 
 
-def _generate_sas(blob_name: str) -> str:
-    key = _get_account_key()
-    sas = generate_blob_sas(
-        account_name=ACCOUNT_NAME,
-        container_name=CONTAINER,
-        blob_name=blob_name,
-        account_key=key,
-        permission=BlobSasPermissions(read=True),
-        expiry=datetime.now(timezone.utc) + timedelta(hours=SAS_HOURS),
-    )
-    return f"https://{ACCOUNT_NAME}.blob.core.windows.net/{CONTAINER}/{blob_name}?{sas}"
+def _generate_sas(rel_name: str) -> str:
+    """Return a time-limited OCI PAR download URL for a ROOT-relative object."""
+    return create_par(_physical(rel_name), access_type="ObjectRead", hours=SAS_HOURS)
 
 
-def _upload_blob(filename: str, data: bytes) -> str:
-    svc = _blob_service()
-    cc = svc.get_container_client(CONTAINER)
+def _share_url(rel_name: str) -> str:
+    """Download PAR, optionally shortened via Droplr for the final share link."""
+    url = _generate_sas(rel_name)
+    if not SHORTEN:
+        return url
+    try:
+        from lib.droplr import shorten  # HTTP Basic, no Node CLI needed
+
+        return shorten(url) or url
+    except Exception:
+        return url
+
+
+def _upload_blob(filename: str, data: Union[str, bytes]) -> str:
+    """Upload to uploads/{images|documents}/ and return the ROOT-relative name."""
     utc_ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    blob_name = f"{UPLOAD_PREFIX}{utc_ts}_{filename}"
-    cc.upload_blob(blob_name, data, overwrite=True)
-    return blob_name
+    sub = "images" if Path(filename).suffix.lower() in IMAGE_EXTS else "documents"
+    rel_name = f"{sub}/{utc_ts}_{filename}"
+    put_object(_physical(rel_name), data)
+    return rel_name

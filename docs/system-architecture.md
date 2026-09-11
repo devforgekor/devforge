@@ -35,7 +35,7 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 ┌──────────────────────────────────────────────────────────────┐
 │ APPS                                                          │
 │  FastAPI hub :8002  (Slack/Telegram/email + MCP mount)         │
-│    └─ Blob Explorer :8085 (in-process HTTP, /send·/receive)    │
+│    └─ Blob Explorer :8085 (OCI 백엔드 + Droplr, /send·/receive)    │
 │  MCP server  :8000  (FastMCP Streamable HTTP)                  │
 │  ebook-api   :8089  · cashbook :8100 · news :8091              │
 │  tg_webhook  :8001  · review_dashboard :9002                   │
@@ -164,7 +164,7 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | `/` | 44.5G | OS |
 
 - 원격: **OCI Object Storage** (`devforge-standard`, `devforge-archive`).
-- 파일 교환(현행): Azure Blob `stshareddevforgeprodkrc/devforge` (SAS).
+- 파일 교환: OCI Object Storage (`uploads/*`, PAR → Droplr). 파이프라인 산출물은 Azure Blob(현행).
 - 단축: **Droplr** (`drplr` CLI).
 
 ---
@@ -173,9 +173,9 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 
 | 대상 | 용도 | 코드 |
 |---|---|---|
-| OCI Object Storage | 백업/교환 | `scripts/osync_backup.py`, (예정) `lib/oci_storage.py` |
-| Azure Blob | 파일 교환(현행) | `scripts/blob_explorer/`, `lib/blob_uploader.py` |
-| Droplr | 최종 단축 주소 | `scripts/droplr_upload.py`, `lib/blob_uploader._shorten_with_droplr` |
+| OCI Object Storage | 백업 + 파일 교환 | `scripts/osync_backup.py`, `lib/oci_storage.py`, `blob_explorer/` |
+| Azure Blob | 파이프라인 산출물(현행) | `lib/blob_uploader.py` |
+| Droplr | 최종 단축 주소 | `lib/droplr.py` (HTTP API), `scripts/droplr_upload.py` |
 | Notion | 메모/리뷰 기록 | `lib/notion_client.py` |
 | Slack/Telegram/Gmail | 알림 | `lib/notify.py` |
 
@@ -198,10 +198,11 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 
 | 항목 | 상태 | 설명 |
 |---|---|---|
-| `container-devforge-fastapi` | 🔴 crash-loop | `jinja2` 미설치(`calendar_sync/router.py`) → :8002 hub + :8085 Blob Explorer + Caddy `/send`,`/receive` 모두 down |
+| `container-devforge-fastapi` | ✅ resolved (2026-09-11) | 이미지에 `jinja2`+`oci` 추가, `calendar_sync`는 선택적 import로 변경(google-* 없어도 허브 정상). :8002/:8085 정상, `svc.pod`가 8085 publish |
+| `calendar_sync` (Google) | 🟡 비활성 | `google-*` 미설치 → 라우터 skip(허브는 정상). 필요 시 이미지에 google-auth 등 추가 |
 | Caddy 사용자 사본 | 🟡 stale | `/home/opc/.config/caddy/Caddyfile`는 옛 버전. live는 `/etc/caddy/Caddyfile`(rootful) |
 | `container-devforge-caddy` | 🔴 failed | quadlet 사용 안 함(실제는 rootful `caddy.service`) |
-| `devforge-worker` | 🟡 | 실행 중 프로세스가 `worker_supervisor.py`(현재 worktree엔 `_archive/`에만 존재) 참조 |
+| `devforge-worker` | ✅ resolved (2026-09-11) | `worker_supervisor.py`를 `_archive/`에서 복원 → 정상 기동(Pass 2 raw→pending 동작) |
 | `devforge-nli`, `gemini-proxy` | 🔴 | ExecStart 대상 파일이 worktree에 없음 |
 | `devforge-daily-structure` | 🔴 failed | 문서 생성 + git push 실패 → `software.yaml`(2026-07-27) stale |
 | `CLAUDE.yaml#storage` | 🟡 | 옛 LV(`lv_logs`/`lv_meta`/`lv_tmp`) 표기 — 실제 LVM과 불일치 |

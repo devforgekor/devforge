@@ -194,7 +194,7 @@ def _build_software(structural: dict, claude: dict) -> str:
         m = re.search(r"(\d+)(?:-\d+)?->\d+", ports)
         if m:
             port = int(m.group(1))
-        model_name = c.get("model") or (query_llama_model(port) if port else "")
+        model_name = c.get("model") or (query_inference_model(port) if port else "")
         models.append(
             {
                 "name": model_name or c.get("name", "?"),
