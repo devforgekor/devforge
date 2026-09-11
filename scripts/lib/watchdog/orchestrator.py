@@ -289,16 +289,30 @@ def _write_liveness() -> None:
 
 
 def _ping_external() -> None:
-    """외부 dead-man's switch 핑 (WATCHDOG_PING_URL 설정 시)."""
+    """외부 dead-man's switch 핑. HTTP(WATCHDOG_PING_URL) 또는 SSH(WATCHDOG_PING_SSH)."""
+    global _last_ssh_ping
     url = os.environ.get("WATCHDOG_PING_URL", "")
-    if not url:
-        return
-    try:
-        import urllib.request
+    if url:
+        try:
+            import urllib.request
 
-        urllib.request.urlopen(url, timeout=5).read()
-    except Exception:
-        pass
+            urllib.request.urlopen(url, timeout=5).read()
+        except Exception:
+            pass
+    host = os.environ.get("WATCHDOG_PING_SSH", "")
+    if host and time.time() - _last_ssh_ping >= 300:  # 5분에 1회만(SSH 부하 제한)
+        try:
+            subprocess.run(
+                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host,
+                 "python3 ~/wd_monitor/wdpulse.py record"],
+                capture_output=True, timeout=20,
+            )
+            _last_ssh_ping = time.time()
+        except Exception:
+            pass
+
+
+_last_ssh_ping = 0.0
 
 
 def _run_common_checks(results: dict, dry_run: bool, mode: str = "day"):

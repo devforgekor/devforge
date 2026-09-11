@@ -148,7 +148,7 @@ MCP(`fact_*`, `obs_*`, `search_*`, `mem_*`)로 노출된다.
 - 추가 감시(2026-09-11): 컨테이너 `devforge-fastapi`/`devforge-worker`(**자동 재시작**), 타이머 `devforge-backup-safety`(kick), **one-shot 결과**(`ActiveState/Result`: daily-structure·backup·restore-test·system-sync, 실패 시 **자동 재실행** + backoff/circuit, 반복 실패 시에만 알림).
 - **incident 기록(2026-09-11)**: 감지 시 **재시작 전** 로그/상태 캡처(시크릿 마스킹·8KB) → 조치 → `watchdog_incidents` 테이블에 감사 기록(open/resolved, dedup_key, fail/reopen 카운트). 7일 내 3회+ 반복 → DB `tasks`에 수정 티켓 자동 생성. 조회 `cli.py watch incidents [--open]·watch incident <id>`. 보존: events 90일 / incidents 180일.
 - 감시 확장(2026-09-11 후속): 웹앱 `ebook-api`/`devforge-news-api`/`cashbook`(**자동 재시작**), **system 스코프** `caddy`/`netdata`(alert-only, rootful), 타이머 `dev-poll`/`news-digest`/`kuhwa-schedule`/`workspace-autopush` 추가. `ebook-watcher` `enable`(재부팅 생존). `system-sync` max_idle 1800→2700(30분 주기 경계 오탐 보정).
-- **watchdog 자기 복구(2026-09-11)**: 유닛 `Type=notify` + `WatchdogSec=900` — 매 사이클 `sd_notify(WATCHDOG=1)`, **hang 시 systemd가 kill+restart**. `OnFailure=devforge-watchdog-failed.service` — 크래시루프(60s 내 5회) 시 **Slack 알림**. **dead-man's switch**: 매 사이클 `/var/tmp/watchdog_last_cycle_ts` 기록 + `devforge-watchdog-liveness.timer`(5분마다)가 stale(>900s) 시 알림. **외부 감시**: `WATCHDOG_PING_URL`(secrets.env) 설정 시 매 사이클 외부 모니터로 ping.
+- **watchdog 자기 복구(2026-09-11)**: 유닛 `Type=notify` + `WatchdogSec=900` — 매 사이클 `sd_notify(WATCHDOG=1)`, **hang 시 systemd가 kill+restart**. `OnFailure=devforge-watchdog-failed.service` — 크래시루프(60s 내 5회) 시 **Slack 알림**. **dead-man's switch**: 매 사이클 `/var/tmp/watchdog_last_cycle_ts` 기록 + `devforge-watchdog-liveness.timer`(5분마다)가 stale(>900s) 시 알림. **외부 감시**: `WATCHDOG_PING_SSH=onmydoc`(secrets.env) → 5분마다 onmydoc(161.33.199.207)으로 SSH push(`~/wd_monitor/wdpulse.py record`). onmydoc의 `wd-check.timer`(5분)가 30분+ stale이면 **minipark4u@gmail.com 메일**(6h cooldown, 평소 무음). HTTP 방식 `WATCHDOG_PING_URL`도 지원.
 - **incident → 자동 수정 루프(2026-09-11)**: 반복 incident(3회+/7일) → DB `tasks` + **GitHub Issue 자동 생성**(라벨 `watchdog,auto-safe`, 멱등) → `cli.py dev poll --auto-safe --claim`(dev-poll 타이머)이 claim → `lib/dev_pipeline`이 PR. (부수 수정: `poll_issues`가 gh의 `state="OPEN"`(대문자)을 소문자 비교로 모두 걸러내던 버그 → case-insensitive로 수정)
 
 ### 4.5 알림
@@ -213,7 +213,7 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | `devforge-daily-structure` | ✅ resolved(코드) | `gen_architecture` import 버그 수정 → 다음 00:00 UTC 실행 시 git push(그 전 미push backlog 자동 반영) |
 | `CLAUDE.yaml#storage` | ✅ resolved | 실제 LVM으로 수정(root 44.5G / ai_data 100G / db 30G / projects 10G / swap 4G / workspace 6G) |
 | watchdog 자기복구 | ✅ 강화 | `Type=notify`+`WatchdogSec`(hang) + `OnFailure`(크래시루프) + liveness 타이머 + 외부핑 (§4.4) |
-| `container-devforge-caddy` (quadlet) | 🟢 무해 | 미사용(실제는 rootful `caddy.service`) — 정리 후보 |
+| `container-devforge-caddy` (quadlet) | ✅ 정리 | 미사용 crash-loop → 비활성 + `_disabled/` 보관. live는 rootful `caddy.service`(reload 정상, exit 0) |
 | Caddy 사용자 사본 | 🟢 표기 | `/home/opc/.config/caddy/Caddyfile`는 stale 표기(실제는 `/etc/caddy/Caddyfile`) |
 | legacy backup | ℹ️ | `/usr/local/bin/dump_postgres.sh`(→`/mnt/secure_meta`) 폐기, osync가 대체 |
 
