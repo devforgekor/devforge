@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
+# Path: imported by — lib.infra.azure_spot.__init__, orchestrator, cli
 """SSH tunnel management for Azure Spot VMs."""
 
 from __future__ import annotations

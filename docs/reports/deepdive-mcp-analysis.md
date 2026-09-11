@@ -1,5 +1,6 @@
 # Deep Dive 분석 보고서 — MCP 의존 구조와 서버측 전환 타당성
 
+> Status: record · Date: 2026-09-11 · Owner: devforge · Related: `docs/reports/mcp-cost-baseline.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
 > 작성: 2026-09-11 · 대상: Deep Dive 워크플로우(`llm-agent-rule.md`) · 목적: MCP 의존의 실제 비용/정확도 분석 + 대안 타당성 검증
 > 짝 문서: `개선 계획서` = `docs/plans/mcp-consolidation-server-side.md`
 > 관련: `docs/reports/control-plane-registry-research.md`, `~/.claude/mcp.json`, `~/.config/opencode/opencode.json`

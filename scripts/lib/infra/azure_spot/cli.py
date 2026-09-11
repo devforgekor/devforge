@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: azure_spot CLI entry (lib.infra.azure_spot.cli:main)
 """CLI entry point for Azure Spot VM lifecycle management."""
 
 from __future__ import annotations
@@ -58,7 +60,13 @@ def main():
         return 0
 
     elif args.command == "list-tunnels":
-        print("  (implement via lsof or process list)")
+        import subprocess
+        try:
+            r = subprocess.run(["ss", "-ltnp"], capture_output=True, text=True, timeout=5)
+            lines = [ln for ln in r.stdout.splitlines() if "ssh" in ln]
+            print("\n".join(lines) if lines else "  (no active ssh tunnels)")
+        except Exception as e:
+            print(f"  list-tunnels error: {e}")
         return 0
 
     parser.print_help()

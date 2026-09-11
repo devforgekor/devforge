@@ -1,6 +1,6 @@
 # MCP 통합 패치 기록 (적용/미적용)
 
-> 작성: 2026-09-11 · 계획: `docs/plans/mcp-consolidation-server-side.md` (v3) · 데이터: `docs/reports/mcp-cost-baseline.md`
+> Status: record · Date: 2026-09-11 · Owner: devforge · Related: `docs/plans/mcp-consolidation-server-side.md`, `docs/reports/mcp-cost-baseline.md`
 > 원칙: 순차·검증 우선. 각 변경은 백업 → 적용 → 검증 → 기록.
 
 ---

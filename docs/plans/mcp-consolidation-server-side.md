@@ -1,6 +1,7 @@
 # 개선 계획서 v3 (실측 기반, 상세) — MCP 스키마 예산 & 리서치 서버측화
 
-> 작성: 2026-09-11 (v2 대체) · 상태: **proposed**
+> Status: superseded · Date: 2026-09-11 · Owner: devforge · Related: `docs/reports/mcp-consolidation-applied-20260911.md` (실행 기록)
+> 작성: 2026-09-11 (v2 대체)
 > 데이터: `docs/reports/mcp-cost-baseline.md` + 본 문서 §1 실측 · 분석: `docs/reports/deepdive-mcp-analysis.md`
 > 웹 검증: Anthropic prompt caching(툴 스키마 캐시됨·cache read 0.1x·툴 정의 변경 시 전체 무효화), opencode `tools` glob 네이티브 필터, Qwen3-Reranker=질의-문서 관련성 모델
 > **v2→v3 핵심 변화**: ①비용 프레이밍 정정(캐시) ②**opencode 네이티브 툴 필터 발견**(프록시 불필요) ③무위험 제거 **선행** ④lsp allowlist **per-tool 실측**(11툴=2,936tok) ⑤4단계는 **실행됨**(툴 이탈 문제) ⑥3b 조건부 ⑦목표 **≤12k** ⑧리서치 **CLI-only 확정** ⑨`candidate_k`/`top_k` 분리.

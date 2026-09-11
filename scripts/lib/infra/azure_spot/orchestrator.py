@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # Status: experimental
-"""Azure Spot VM orchestrator — coordinates VM lifecycle for debate rounds."""
+# Path: imported by — lib.infra.azure_spot.__init__, cli, lib.debate.cooperative_debate
+"""Azure Spot VM orchestrator — coordinates VM lifecycle (endpoint provider)."""
 
 from __future__ import annotations
 
 import time
 from typing import Any, Dict, List, Optional
 
-from lib.infra.azure_spot.config import SPOT_CONFIGS, SpotVMConfig
+from lib.infra.azure_spot.config import (
+    LLAMA_SERVER_PORT,
+    SPOT_CONFIGS,
+    TUNNEL_PORT_BASE,
+    SpotVMConfig,
+)
 from lib.infra.azure_spot.manager import SpotVMManager
 from lib.infra.azure_spot.tunnel import open_spot_tunnel
 
@@ -17,11 +23,22 @@ class SpotOrchestrator:
         self.configs = configs or list(SPOT_CONFIGS.values())
         self.vms: Dict[str, Dict[str, Any]] = {}
         self.tunnels: Dict[str, Any] = {}
+        self.managers: Dict[str, SpotVMManager] = {c.label: SpotVMManager(c) for c in self.configs}
+
+    def add(self, label: str, cfg: SpotVMConfig) -> None:
+        """Register an additional VM config under a logical label (consumer API)."""
+        self.configs.append(cfg)
+        self.managers[label] = SpotVMManager(cfg)
+
+    def provision_all(self, ssh_timeout: int = 180, llm_timeout: int = 300) -> bool:
+        """Consumer API: provision all and return True iff none failed/unhealthy."""
+        results = self.launch_all(ssh_timeout=ssh_timeout, llm_timeout=llm_timeout)
+        return bool(results) and all(v not in ("failed", "unhealthy") for v in results.values())
 
     def launch_all(self, ssh_timeout: int = 180, llm_timeout: int = 300) -> Dict[str, str]:
         results: Dict[str, str] = {}
         for cfg in self.configs:
-            mgr = SpotVMManager(cfg)
+            mgr = self.managers.get(cfg.label) or SpotVMManager(cfg)
             try:
                 vm = mgr.create_vm()
             except RuntimeError as e:
@@ -34,8 +51,8 @@ class SpotOrchestrator:
                 results[cfg.label] = "unhealthy"
                 continue
 
-            local_port = 8081 + len(self.tunnels)
-            proc = open_spot_tunnel(cfg.label, vm["ip"], 8081, local_port)
+            local_port = TUNNEL_PORT_BASE + len(self.tunnels)
+            proc = open_spot_tunnel(cfg.label, vm["ip"], LLAMA_SERVER_PORT, local_port)
             if proc:
                 self.tunnels[cfg.label] = {"proc": proc, "port": local_port, "ip": vm["ip"]}
             results[cfg.label] = vm["ip"]
@@ -47,12 +64,18 @@ class SpotOrchestrator:
         for label, info in self.tunnels.items():
             print(f"  Closing tunnel for {label}")
             close_spot_tunnel(info["port"])
+        self.tunnels.clear()
 
     def delete_all_vms(self):
         for label, vm in self.vms.items():
-            cfg = SPOT_CONFIGS.get(label)
-            if cfg:
-                SpotVMManager(cfg).delete_vm(vm["name"])
+            mgr = self.managers.get(label)
+            if mgr:
+                mgr.delete_vm(vm["name"])
+        self.vms.clear()
+
+    def terminate_all(self):
+        """Consumer API: close tunnels + delete VMs."""
+        self.cleanup_all()
 
     def cleanup_all(self):
         self.close_all_tunnels()

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
+# Path: imported by — lib.infra.azure_spot.__init__, orchestrator, cli
 """Azure Spot VM manager — create, poll, delete spot VMs."""
 
 from __future__ import annotations
@@ -12,19 +13,22 @@ from typing import Any, Dict, List
 
 from lib.infra.azure_spot.config import (
     LLAMA_SERVER_PORT,
+    PUBLIC_IP_SKU,
     RESOURCE_GROUP,
     SSH_KEY_PATH,
     SSH_USER,
+    SUBNET_NAME,
+    VNET_NAME,
     SpotVMConfig,
 )
 
 
-def _az(*args: str, subscription: str = "") -> subprocess.CompletedProcess:
+def _az(*args: str, subscription: str = "", timeout: int = 120) -> subprocess.CompletedProcess:
     cmd = ["az"]
     if subscription:
         cmd += ["--subscription", subscription]
     cmd += list(args)
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
 def _vm_name(label: str) -> str:
@@ -80,6 +84,9 @@ def _wait_for_inference_server(
 class SpotVMManager:
     def __init__(self, config: SpotVMConfig):
         self.config = config
+        self.cfg = config  # consumer compatibility alias (cooperative_debate uses mgr.cfg)
+        self._nic_name = ""
+        self._pip_name = ""
 
     def create_vm(self, vm_name: str | None = None) -> Dict[str, Any]:
         cfg = self.config
@@ -100,11 +107,11 @@ class SpotVMManager:
             "--location",
             cfg.location,
             "--vnet-name",
-            "spot-vnet",
+            VNET_NAME,
             "--subnet",
-            "spot-subnet",
+            SUBNET_NAME,
             "--public-ip-sku",
-            "Standard",
+            PUBLIC_IP_SKU,
             "--security-type",
             "Standard",
             "--priority",
@@ -134,8 +141,20 @@ class SpotVMManager:
 
         vm_info = json.loads(r.stdout)
         ip = vm_info.get("publicIpAddress") or self._get_ip(name)
+        self.config.vm_name = name
+        self.config.public_ip = ip
         print(f"  VM '{name}' created, IP={ip}")
         return {"name": name, "ip": ip}
+
+    def _az_with_sub(self, args: list, timeout: int = 120) -> subprocess.CompletedProcess:
+        """Run `az` with this config's subscription (consumer compatibility API)."""
+        return _az(*args, subscription=self.config.subscription_id, timeout=timeout)
+
+    def _get_public_ip(self) -> str:
+        """Return the public IP of this config's vm_name (consumer compatibility API)."""
+        ip = self._get_ip(self.config.vm_name)
+        self.config.public_ip = ip
+        return ip
 
     def _get_ip(self, vm_name: str) -> str:
         r = _az(
@@ -189,6 +208,7 @@ class SpotVMManager:
         r = _az(
             "vm",
             "list",
+            "-d",
             "--resource-group",
             RESOURCE_GROUP,
             "--query",

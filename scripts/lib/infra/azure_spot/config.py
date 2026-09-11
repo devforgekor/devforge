@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Status: experimental
+# Path: imported by — lib.infra.azure_spot.__init__, manager, orchestrator, cli
 """Azure Spot VM configuration."""
 
 from __future__ import annotations
@@ -22,8 +23,8 @@ PUBLIC_IP_SKU = "Standard"
 VM_SIZE = "Standard_NC24ads_A100_v4"
 SSH_USER = "azureuser"
 LLAMA_SERVER_PORT = 8081
+TUNNEL_PORT_BASE = 8085  # local tunnel ports start here (avoid 8081 embedder collision)
 SSH_KEY_PATH = "~/.ssh/id_rsa.pub"
-LLAMA_SERVER_PORT = 8081
 
 
 @dataclass
@@ -34,6 +35,9 @@ class SpotVMConfig:
     location: str = LOCATION
     vm_size: str = VM_SIZE
     account: str = ""
+    resource_group: str = RESOURCE_GROUP
+    vm_name: str = ""
+    public_ip: str = ""
 
     def image_id(self) -> str:
         return (

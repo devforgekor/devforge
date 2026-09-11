@@ -1,7 +1,8 @@
 # P7 설계 조사 보고서 — shrimp 게이팅 대체 방식
 
+> Status: record · Date: 2026-09-11 · Owner: devforge · Related: `docs/reports/mcp-consolidation-applied-20260911.md`
 > 작성: 2026-09-11 · 목적: `shrimp-task-manager` 제거(P7) 시 **step-gating 대체 설계** 결정
-> 관련: `docs/plans/mcp-consolidation-server-side.md`(P7), `docs/plans/mcp-consolidation-patch.md`
+> 관련: `docs/plans/mcp-consolidation-server-side.md`(P7), `docs/reports/mcp-consolidation-applied-20260911.md`
 > 데이터: opencode 실사용 77콜(execute_task 24·verify_task 22·split_tasks 7·plan/analyze/reflect 각 6)
 
 ---

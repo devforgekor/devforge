@@ -1335,7 +1335,10 @@ def cmd_lint(args):
     from lint_rules import SCRIPTS_DIR, find_python_files, run_all_checks
 
     if args.files:
-        files = [Path(f) for f in args.files]
+        files = []
+        for f in args.files:
+            p = Path(f)
+            files.append((SCRIPTS_DIR / p).resolve() if not p.is_absolute() else p.resolve())
     else:
         files = find_python_files(SCRIPTS_DIR)
 

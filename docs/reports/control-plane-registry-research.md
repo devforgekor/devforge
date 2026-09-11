@@ -1,6 +1,8 @@
 # 보고서 — 서버 컴포넌트 레지스트리 / 컨트롤 플레인 설계 조사
 
+> Status: record · Date: 2026-09-11 · Owner: devforge · Related: `docs/plans/control-plane-roadmap.md`
 > 작성: 2026-09-11 · 목적: "watchdog이 전체를 컨트롤"이라는 원 의도를 어떻게 구현하는 것이 표준인지 웹 조사·검증.
+> 후속 로드맵: `docs/plans/control-plane-roadmap.md` (Stage 1 하이브리드 → Stage 2 컨트롤 플레인, 최소 조건·구현 계획).
 > 관련: `docs/watchdog-comprehensive-audit.md`(원 계획), `docs/system-architecture.md` §4, `lib/watchdog/*`
 
 ---

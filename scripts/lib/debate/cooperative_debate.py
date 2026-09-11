@@ -74,7 +74,7 @@ class CooperativeDebate(LocalDebate):
             return True
 
         try:
-            orch = SpotOrchestrator(self.session_id)
+            orch = SpotOrchestrator()
             orch.add("qwen", QWEN_SPOT_CONFIG)
             orch.add("nemotron", NEMOTRON_SPOT_CONFIG)
             if not orch.provision_all():
@@ -147,7 +147,7 @@ class CooperativeDebate(LocalDebate):
             return True
 
         try:
-            orch = SpotOrchestrator(self.session_id)
+            orch = SpotOrchestrator()
             orch.add("qwen", QWEN_SPOT_CONFIG)
             orch.add("nemotron", NEMOTRON_SPOT_CONFIG)
 

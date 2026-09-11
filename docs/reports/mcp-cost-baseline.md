@@ -1,5 +1,6 @@
 # MCP 비용 베이스라인 (실측)
 
+> Status: record · Date: 2026-09-11 · Owner: devforge · Related: `docs/reports/mcp-consolidation-applied-20260911.md`
 > 작성: 2026-09-11 · 목적: MCP 통합/축소 계획의 **데이터 근거** 확보
 > 방법: MCP `tools/list` JSON-RPC 핸드셰이크로 툴 스키마 수집 → 직렬화 문자수 → `tok_est ≈ chars/4`(추정)
 > 사용빈도: `~/.claude/projects/-home-opc/*.jsonl` 13개 세션의 `tool_use` 집계

@@ -6,8 +6,9 @@ import re
 
 # Files where model names in identifiers are legitimate
 MODEL_NAME_OK_FILES = {
+    "scripts/lint_rules/data.py",  # rule data defines the brand/size patterns
     "scripts/lib/debate/debate_data.py",
-    "scripts/lib/infra/azure_spot.py",
+    "scripts/lib/infra/azure_spot/config.py",
     "scripts/lib/llm_client.py",
     "scripts/lint_rules.py",
     "scripts/lib/tracking/agent_names.py",
