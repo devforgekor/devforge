@@ -40,12 +40,18 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
    ```bash
    opencode run -m azureqwen/qwen3-30b "<딥다이브 대상>"
    ```
-6. **정리**(비용/누수 방지):
+6. **작업 완료 시 즉시 삭제 + 검증**(비용 0, 다음 생성 가능):
    ```bash
-   python3.11 -m lib.infra.azure_spot.cli status
-   python3.11 -m lib.infra.azure_spot.cli delete <label> <vm-name>
-   # 또는 orchestrator.cleanup_all()
+   python3.11 -m lib.infra.azure_spot.cli destroy    # 삭제 + 삭제확인(remaining=0)
+   python3.11 -m lib.infra.azure_spot.cli verify     # CLEAN 확인
    ```
+   - 스크립트형(생성→실행→**항상** 삭제): `run` 래퍼 사용(예외가 나도 finally에서 teardown).
+     ```bash
+     python3.11 -m lib.infra.azure_spot.cli run --label qwen3-30b -- <실행할 명령>
+     ```
+   - **삭제 확인 로직**: `destroy`/`run`은 `wait_until_deleted`로 **실제 제거를 확인**(remaining=0) → 그래야 Spot 쿼터가 풀려 다음 생성이 즉시 됨.
+   - **사전 정리**: `launch`는 **preflight_clean**으로 잔여 VM을 먼저 삭제.
+   - **백스톱**: 프로세스가 비정상 종료되면 `sweep --ttl`를 타이머로 돌려 orphan 정리.
 
 ## 3. 검증
 - `/v1/models` 응답.
@@ -57,6 +63,27 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
 - 터널/VM 정리 실패 시 `status` → orphan 식별 → `delete`.
 
 ## 5. 주의
-- Azure Spot은 **회수 위험** + **비용 누수**(TTL 없음). **미구현(후속)**: VM **TTL/자동 정리(태그+정리 잡)** — 필요.
+- Azure Spot은 **회수 위험** + **비용 누수**. **TTL/자동정리 구현됨**: `cli sweep --ttl <sec>` (VM명의 epoch로 age 산출, 초과분 삭제). 운영은 타이머(cron/systemd)로 `sweep` 주기 실행 권장.
 - 포트: `TUNNEL_PORT_BASE=8085`부터. 로컬 8081(embedder) 등과 충돌 금지.
 - bespoke 원격 클라이언트를 만들지 말 것(표류) → **동일 하네스 + provider만 교체**.
+
+## 6. 현황 / 블로커 (2026-09-11, 실측)
+**config 정합 완료**(`lib/infra/azure_spot/config.py`):
+| label | SP | RG | 갤러리 / 이미지 | VNet / subnet |
+|---|---|---|---|---|
+| qwen3-30b | account1 | `rg-devforge-prod-cin` | `gallery_devforge_prod_cin` / **`llm-qwen-27b`** (v2026.09.2) | `vm-devforge-prod-cin-vnet` / `default` |
+| nemotron3-nano | account2 | `rg-devforge-llm-prod-cin` | `gallery_devforge_llm_prod_cin` / (이미지 없음) | `vm-devforge-llm-prod-cin-vnet` |
+| gemma-4-26b | account3 | `rg-devforge-llm-judge-cin` | `gallery_devforge_llm_judge_cin` / (이미지 없음) | `vm-gemma-4-26b-spotVNET` |
+
+**검증**:
+- **읽기 라이브**: 3계정 `list_spot_vms`/`sweep --dry-run` 정상(에러 0, VM 0개).
+- **쓰기 검증(`az vm create --validate`, 생성 없음)**: 템플릿 **유효**; 단 **QuotaExceeded** — `LowPriorityCores`(spot) 한도 **3**, A100(`NC24ads`, 24코어) 필요 **24**. → **쿼터 상향 필요**.
+
+> **활성 = `qwen3-30b` 단일 계정(account1).** nemotron/gemma은 **폐기**(계정/SP 정보는 유지). Spot `LowPriorityCores` 한도(3 core)로 **1대만 운용 → 다음 생성 전 삭제 필요**. `--max-price`는 config `max_price`(기본 `-1`=온디맨드가까지) 사용.
+
+**남은 블로커**:
+1. **LowPriorityCores 쿼터 상향**(≥24, CentralIndia) — 상향 후 `launch` 라이브 가능.
+2. nemotron/gemma 갤러리 **이미지 생성/업로드**(현재 비어 있음).
+3. A100 할당 쿼터(`StandardNCADSA100v4Family`)도 0 → 상향 필요.
+
+> 쿼터 요청 링크는 `az vm create --validate` 에러 메시지에 포함됨.

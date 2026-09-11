@@ -77,6 +77,38 @@ class SpotOrchestrator:
         """Consumer API: close tunnels + delete VMs."""
         self.cleanup_all()
 
+    def sweep_orphans(self, ttl_sec: int = 7200, dry_run: bool = False) -> Dict[str, list]:
+        """Delete orphan spot VMs older than ttl_sec across all configs."""
+        return {label: mgr.sweep_orphans(ttl_sec=ttl_sec, dry_run=dry_run)
+                for label, mgr in self.managers.items()}
+
+    def teardown(self, verify_timeout: int = 180) -> Dict[str, Any]:
+        """Discover existing spot VMs, delete them, and VERIFY removal (frees quota)."""
+        self.close_all_tunnels()
+        out: Dict[str, Any] = {}
+        for label, mgr in self.managers.items():
+            names = [v["name"] for v in mgr.list_spot_vms()]
+            verified = True
+            for n in names:
+                verified = mgr.delete_vm_verified(n, timeout=verify_timeout) and verified
+            out[label] = {"deleted": names, "verified": verified,
+                          "remaining": len(mgr.list_spot_vms())}
+        self.vms.clear()
+        return out
+
+    def verify_clean(self) -> Dict[str, int]:
+        """Remaining spot VM count per config (0 = clean, next create will succeed)."""
+        return {label: len(mgr.list_spot_vms()) for label, mgr in self.managers.items()}
+
+    def preflight_clean(self, verify_timeout: int = 180) -> list:
+        """Before launch: delete leftover spot VMs so Spot quota is free."""
+        removed: list = []
+        for _label, mgr in self.managers.items():
+            for v in mgr.list_spot_vms():
+                if mgr.delete_vm_verified(v["name"], timeout=verify_timeout):
+                    removed.append(v["name"])
+        return removed
+
     def cleanup_all(self):
         self.close_all_tunnels()
         self.delete_all_vms()

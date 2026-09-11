@@ -12,7 +12,7 @@ Sub-modules:
 """
 
 from lib.infra.azure_spot.config import (
-    SUBSCRIPTIONS, RESOURCE_GROUP, LOCATION, VM_SIZE, SSH_USER, LLAMA_SERVER_PORT,
+    SUBSCRIPTIONS, LOCATION, VM_SIZE, SSH_USER, LLAMA_SERVER_PORT,
     SpotVMConfig, QWEN_SPOT_CONFIG, NEMOTRON_SPOT_CONFIG, GEMMA_SPOT_CONFIG, SPOT_CONFIGS,
 )
 from lib.infra.azure_spot.manager import SpotVMManager

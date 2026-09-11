@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 from typing import Any, Dict, List
@@ -14,25 +15,32 @@ from typing import Any, Dict, List
 from lib.infra.azure_spot.config import (
     LLAMA_SERVER_PORT,
     PUBLIC_IP_SKU,
-    RESOURCE_GROUP,
     SSH_KEY_PATH,
     SSH_USER,
-    SUBNET_NAME,
-    VNET_NAME,
     SpotVMConfig,
 )
 
 
 def _az(*args: str, subscription: str = "", timeout: int = 120) -> subprocess.CompletedProcess:
-    cmd = ["az"]
+    cmd = ["az"] + list(args)
     if subscription:
         cmd += ["--subscription", subscription]
-    cmd += list(args)
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
 def _vm_name(label: str) -> str:
     return f"spot-{label}-{int(time.time())}"
+
+
+_NAME_TS_RE = re.compile(r"-(\d{9,})$")
+
+
+def _vm_age_sec(name: str, now: float | None = None) -> int | None:
+    """Age in seconds from the epoch suffix encoded in a spot VM name, or None."""
+    m = _NAME_TS_RE.search(name or "")
+    if not m:
+        return None
+    return int((now if now is not None else time.time()) - int(m.group(1)))
 
 
 def _wait_for_ssh(ip: str, timeout: int = 180, interval: int = 10) -> bool:
@@ -97,7 +105,7 @@ class SpotVMManager:
             "vm",
             "create",
             "--resource-group",
-            RESOURCE_GROUP,
+            self.config.resource_group,
             "--name",
             name,
             "--image",
@@ -107,9 +115,9 @@ class SpotVMManager:
             "--location",
             cfg.location,
             "--vnet-name",
-            VNET_NAME,
+            cfg.vnet_name,
             "--subnet",
-            SUBNET_NAME,
+            cfg.subnet_name,
             "--public-ip-sku",
             PUBLIC_IP_SKU,
             "--security-type",
@@ -119,7 +127,7 @@ class SpotVMManager:
             "--eviction-policy",
             "Delete",
             "--max-price",
-            "0.05",
+            str(cfg.max_price),
             "--admin-username",
             SSH_USER,
             "--ssh-key-values",
@@ -161,7 +169,7 @@ class SpotVMManager:
             "vm",
             "show",
             "--resource-group",
-            RESOURCE_GROUP,
+            self.config.resource_group,
             "--name",
             vm_name,
             "--query",
@@ -192,7 +200,7 @@ class SpotVMManager:
             "vm",
             "delete",
             "--resource-group",
-            RESOURCE_GROUP,
+            self.config.resource_group,
             "--name",
             vm_name,
             "--yes",
@@ -210,7 +218,7 @@ class SpotVMManager:
             "list",
             "-d",
             "--resource-group",
-            RESOURCE_GROUP,
+            self.config.resource_group,
             "--query",
             "[?priority=='Spot'].{name:name, vmId:id, powerState:powerState}",
             "--output",
@@ -218,3 +226,41 @@ class SpotVMManager:
             subscription=self.config.subscription_id,
         )
         return json.loads(r.stdout) if r.stdout.strip() else []
+
+    def wait_until_deleted(self, vm_name: str, timeout: int = 180, interval: int = 10) -> bool:
+        """Poll until the VM no longer exists. True when removal is confirmed (quota freed)."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            r = _az(
+                "vm", "show", "--resource-group", self.config.resource_group,
+                "--name", vm_name, "--query", "id", "--output", "tsv",
+                subscription=self.config.subscription_id,
+            )
+            err = (r.stderr or "").lower()
+            if r.returncode != 0 and ("notfound" in err or "not found" in err):
+                return True
+            if r.returncode == 0 and not r.stdout.strip():
+                return True
+            time.sleep(interval)
+        return False
+
+    def delete_vm_verified(self, vm_name: str, timeout: int = 180) -> bool:
+        """Delete the VM and confirm it is gone (so the next spot create can proceed)."""
+        self.delete_vm(vm_name)
+        return self.wait_until_deleted(vm_name, timeout=timeout)
+
+    def sweep_orphans(self, ttl_sec: int = 7200, dry_run: bool = False) -> List[str]:
+        """Delete spot VMs older than ttl_sec (age from name epoch). Returns names acted on."""
+        acted: List[str] = []
+        for vm in self.list_spot_vms():
+            name = vm.get("name", "")
+            age = _vm_age_sec(name)
+            if age is None or age < ttl_sec:
+                continue
+            if dry_run:
+                print(f"  [dry-run] would delete {name} (age={age}s > ttl={ttl_sec}s)")
+            else:
+                print(f"  orphan {name} (age={age}s > ttl={ttl_sec}s) — deleting")
+                self.delete_vm(name)
+            acted.append(name)
+        return acted
