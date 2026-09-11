@@ -1328,11 +1328,11 @@ async def main():
     parser = argparse.ArgumentParser(description="DevForge CLI")
     sub = parser.add_subparsers(dest="command")
 
-    p_search = sub.add_parser("search", help="Search memories")
-    p_search.add_argument("query")
-    p_search.add_argument("--source", "-s", help="Filter by source (e.g., claude, copilot, gemini)")
-    p_search.add_argument("--limit", "-n", type=int, default=20)
-    p_search.add_argument("--json", "-j", action="store_true")
+    p_mem_search = sub.add_parser("mem-search", help="Search memories")
+    p_mem_search.add_argument("query")
+    p_mem_search.add_argument("--source", "-s", help="Filter by source (e.g., claude, copilot, gemini)")
+    p_mem_search.add_argument("--limit", "-n", type=int, default=20)
+    p_mem_search.add_argument("--json", "-j", action="store_true")
 
     p_save = sub.add_parser("save", help="Save a memory")
     p_save.add_argument("--source", "-s", required=True)
@@ -1718,6 +1718,8 @@ async def main():
             cmd_search_hybrid(args)
         else:
             p_search.print_help()
+    elif args.command == "mem-search":
+        await cmd_search(args)
     elif args.command == "save":
         await cmd_save(args)
     elif args.command == "recent":
@@ -1860,7 +1862,7 @@ async def main():
     else:
         parser.print_help()
 
-    if args.command in ("save", "recent"):
+    if args.command in ("save", "recent", "mem-search"):
         from api.async_pg import close_pool
 
         await close_pool()

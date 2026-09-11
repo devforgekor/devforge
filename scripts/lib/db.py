@@ -98,7 +98,13 @@ def psql_json(sql: str, timeout: int = 30) -> list[dict]:
     """
     import json as _json
 
-    wrapped = f"SELECT row_to_json(r) FROM ({sql}) r"
+    head = sql.lstrip()[:10].upper()
+    if head.startswith(("SELECT", "WITH", "TABLE", "VALUES")):
+        wrapped = f"SELECT row_to_json(r) FROM ({sql}) r"
+    elif "RETURNING" in sql.upper():
+        wrapped = f"WITH __q AS ({sql}) SELECT row_to_json(__q) FROM __q"
+    else:
+        wrapped = sql
     try:
         r = subprocess.run(
             PSQL + ["-f", "-"], input=_stdin_sql(wrapped), capture_output=True, text=True, timeout=timeout
