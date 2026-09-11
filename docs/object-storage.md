@@ -151,10 +151,11 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 | quadlet | `container-devforge-fastapi.container` — `BLOB_EXPLORER_LISTEN=0.0.0.0:8085`, `~/.oci:/root/.oci:ro` 마운트 |
 | pod | `svc.pod` — `PublishPort=127.0.0.1:8085:8085` (Caddy `/send`,`/receive` 도달) |
 | 동작 | `POST /send` → `uploads/{images|documents}/<ts>_<file>` 업로드 후 **`https://d.pr/...`** 반환 |
-| 미적용 | write-PAR(브라우저 직접 업로드)는 향후 개선. 현재는 서버측 put. |
+| write-PAR | `GET /presign?name=FILE` → `{object_name, upload_url, download_url}`. **브라우저 직접 업로드 구현**(`/send` JS → PUT, 실패 시 서버 경유 자동 fallback) |
+| CORS | OCI는 버킷 CORS 설정 기능이 없지만 **PAR 응답에 `Access-Control-Allow-Origin: *` + PUT 허용을 자동 반환** → 별도 설정 불필요(검증됨) |
 
-> 참고: `lib/blob_uploader.py`(파이프라인 산출물)는 아직 Azure Blob을 사용한다.
-> Azure 완전 제거 시 `releases/` + PAR + `lib.droplr.shorten`으로 이관.
+> 파이프라인 산출물(`lib/blob_uploader.py`)도 OCI `releases/` + PAR + Droplr로 이관 완료(2026-09-11).
+> 이미지에서 `azure-storage-blob` 제거 → Azure 스토리지 의존 0.
 
 ---
 
@@ -201,7 +202,7 @@ systemctl --user list-timers | grep -E "backup|restore"
 | 타이머/서비스 | `~/.config/systemd/user/devforge-backup.service`, `devforge-backup-safety.timer`, `devforge-restore-test.service`, `devforge-restore-test.timer` |
 | 파일 교환(OCI) | `scripts/blob_explorer/` (blob.py, handler.py), `scripts/lib/oci_storage.py` |
 | 단축(Droplr) | `scripts/lib/droplr.py` (HTTP API), `scripts/droplr_upload.py`, `scripts/lib/blob_uploader._shorten_with_droplr` |
-| 파이프라인 산출물(현행 Azure) | `scripts/lib/blob_uploader.py` |
+| 파이프라인 산출물 | `scripts/lib/blob_uploader.py` (OCI `releases/` + PAR + Droplr) |
 | 로컬 스테이징 | `/opt/ai_data/backups/` |
 
 ### 출처 (Oracle 공식)

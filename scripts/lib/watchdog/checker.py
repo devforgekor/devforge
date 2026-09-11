@@ -26,6 +26,7 @@ from lib.watchdog.config import (
     MEM_CRIT_PCT,
     MEM_WARN_PCT,
     MODE_FILE,
+    ONESHOT_RESULT_TARGETS,
     SERVICE_TARGETS,
     SWAP_CRIT_MB,
     TIMER_TARGETS,
@@ -539,6 +540,39 @@ def check_all_timers() -> list[dict]:
         ok, detail = check_timer(name, cfg["max_idle"])
         results.append({"name": name, "ok": ok, "detail": detail})
     return results
+
+
+def check_oneshot_result(name: str) -> tuple[bool, str]:
+    """One-shot 서비스의 '마지막 실행 결과'를 확인.
+
+    타이머 LastTrigger는 서비스가 실패해도 갱신되므로, ActiveState/Result로
+    실패를 감지한다. (예: daily-structure 실패 → git push 백로그 누적)
+    """
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "show", name,
+             "--property=ActiveState", "--property=Result"],
+            capture_output=True, text=True, timeout=5,
+        )
+        d = {}
+        for line in r.stdout.strip().splitlines():
+            if "=" in line:
+                k, _, v = line.partition("=")
+                d[k.strip()] = v.strip()
+        active = d.get("ActiveState", "")
+        result = d.get("Result", "")
+        if active == "failed" or result not in ("", "success"):
+            return False, f"ActiveState={active} Result={result}"
+        return True, f"ActiveState={active} Result={result or 'success'}"
+    except Exception as e:
+        return False, str(e)
+
+
+def check_all_oneshot_results() -> list[dict]:
+    return [
+        {"name": n, **(lambda t: {"ok": t[0], "detail": t[1]})(check_oneshot_result(n))}
+        for n in ONESHOT_RESULT_TARGETS
+    ]
 
 
 # ── LLM Metrics (/metrics) ────────────────────────────────────────

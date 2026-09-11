@@ -55,6 +55,8 @@ ALERT_ONLY_TARGETS = [
     "anthropic-proxy",  # DeepSeek 역방향 프록시
     "gemini-openai-proxy",  # Gemini 키 로테이션
     "or-rate-limiter",  # OpenRouter rate limiter
+    "container-devforge-fastapi",  # 알림 허브 + Blob Explorer(파일 교환)
+    "container-devforge-worker",  # raw_consumer Pass 2/3
 ]
 
 # 타이머 감시 — max_idle 초과 시 미발동으로 간주 (kick/alert)
@@ -69,8 +71,19 @@ TIMER_TARGETS = {
         "max_idle": 604800,
     },  # 7일
     "devforge-restore-test.timer": {"expected": "restore_test", "max_idle": 2592000},  # 30일
+    "devforge-backup-safety.timer": {"expected": "backup", "max_idle": 97200},  # 27h (OCI 백업)
     "reference-monitor.timer": {"expected": "reference", "max_idle": 604800},  # 7일
 }
+
+# One-shot 서비스 결과 감시 (alert-only, 재시작 안 함).
+# 타이머가 떠도 서비스가 실패하면 LastTrigger만으로는 감지 못 함 →
+# ActiveState/Result로 실패를 잡는다 (daily-structure 실패→git 백로그 사례).
+ONESHOT_RESULT_TARGETS = [
+    "devforge-daily-structure.service",  # 문서 생성 + git push
+    "devforge-backup.service",  # OCI 백업 (DB + app)
+    "devforge-restore-test.service",  # 월간 복원 검증
+    "devforge-system-sync.service",  # 30분 아키텍처/동기화
+]
 
 # ── 컨테이너 exclusion (절대 재시작 금지) ───────────────────────────
 CONTAINER_EXCLUSION = {"data-pod-infra", "postgres", "container-postgres"}

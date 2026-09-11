@@ -14,7 +14,7 @@ from pathlib import Path
 
 from blob_explorer.blob import (
     _list_blobs, _virtual_tree, _generate_sas, _share_url, _upload_blob,
-    SAS_HOURS,
+    presign_upload, SAS_HOURS,
 )
 
 
@@ -175,6 +175,24 @@ fileInput.addEventListener('change', function() {{
         }}
     }}
 }});
+
+const uploadForm = document.getElementById('uploadForm');
+uploadForm.addEventListener('submit', async function(e) {{
+    if (uploadForm.dataset.fallback === '1') return;
+    e.preventDefault();
+    const f = fileInput.files[0];
+    if (!f) return;
+    uploadBtn.disabled = true;
+    try {{
+        const pr = await fetch('/presign?name=' + encodeURIComponent(f.name)).then(function(r) {{ if (!r.ok) throw new Error('presign'); return r.json(); }});
+        const put = await fetch(pr.upload_url, {{ method: 'PUT', body: f, headers: {{ 'Content-Type': f.type || 'application/octet-stream' }} }});
+        if (!put.ok) throw new Error('put ' + put.status);
+        document.body.innerHTML = '<div class="result"><p class="ok">\u2705 \uc5c5\ub85c\ub4dc \uc644\ub8cc (\uc9c1\uc811 \uc5c5\ub85c\ub4dc)</p><p>\ud30c\uc77c: <b>' + f.name + '</b> (' + (f.size/1024).toFixed(1) + ' KB)</p><code>' + pr.object_name + '</code><p style="margin-top:12px;"><a href="' + pr.download_url + '" style="color:#7ee787;">\U0001f4e5 \ub2e4\uc6b4\ub85c\ub4dc \ub9c1\ud06c</a></p><p style="margin-top:12px;"><a href="/send" class="btn" style="text-decoration:none;display:inline-block;">\ucd94\uac00 \uc5c5\ub85c\ub4dc</a></p></div>';
+    }} catch (err) {{
+        uploadForm.dataset.fallback = '1';
+        uploadForm.submit();
+    }}
+}});
 </script>"""
     return _page("\ubcf4\ub0b4\uae30", body, "send", f"SAS links valid for {SAS_HOURS}h")
 
@@ -234,6 +252,17 @@ class BlobHandler(BaseHTTPRequestHandler):
         if path.startswith("/receive/"):
             self._html(_page_receive(path[len("/receive/"):]))
             return
+        if path == "/presign":
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            name = (qs.get("name", [""])[0]).strip()
+            if not name:
+                self._json(400, {"error": "missing name"})
+                return
+            try:
+                self._json(200, presign_upload(Path(name).name))
+            except Exception as e:
+                self._json(500, {"error": str(e)})
+            return
         self._text(404, "Not Found")
 
     def do_POST(self):
@@ -270,6 +299,9 @@ class BlobHandler(BaseHTTPRequestHandler):
 
     def _text(self, status: int, body: str):
         self._respond(status, body, "text/plain; charset=utf-8")
+
+    def _json(self, status: int, obj: dict):
+        self._respond(status, json.dumps(obj, ensure_ascii=False), "application/json; charset=utf-8")
 
     def _respond(self, status: int, body: str, content_type: str):
         data = body.encode("utf-8")

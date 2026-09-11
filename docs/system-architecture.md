@@ -111,6 +111,9 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 |---|---|
 | `/docs/*` | file_server `/data/docs` |
 | `/send*`, `/receive*` | `127.0.0.1:8085` (Blob Explorer) |
+| `/presign*` | `127.0.0.1:8085` (write-PAR 발급) |
+| `/calendar*` | `127.0.0.1:8002` (calendar_sync) |
+| `/auth/google/callback*` | `127.0.0.1:8002` (rewrite → `/calendar/auth/google/callback`) |
 | `/api/*` | `host.containers.internal:8089` (ebook) |
 | `/news/*` | `127.0.0.1:8091` |
 | `/cashbook/*` | `host.containers.internal:8100` |
@@ -174,7 +177,7 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | 대상 | 용도 | 코드 |
 |---|---|---|
 | OCI Object Storage | 백업 + 파일 교환 | `scripts/osync_backup.py`, `lib/oci_storage.py`, `blob_explorer/` |
-| Azure Blob | 파이프라인 산출물(현행) | `lib/blob_uploader.py` |
+| Azure Blob | (제거됨 2026-09-11) | 이관 완료 → OCI + Droplr |
 | Droplr | 최종 단축 주소 | `lib/droplr.py` (HTTP API), `scripts/droplr_upload.py` |
 | Notion | 메모/리뷰 기록 | `lib/notion_client.py` |
 | Slack/Telegram/Gmail | 알림 | `lib/notify.py` |
@@ -199,7 +202,7 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | 항목 | 상태 | 설명 |
 |---|---|---|
 | `container-devforge-fastapi` | ✅ resolved (2026-09-11) | 이미지에 `jinja2`+`oci` 추가, `calendar_sync`는 선택적 import로 변경(google-* 없어도 허브 정상). :8002/:8085 정상, `svc.pod`가 8085 publish |
-| `calendar_sync` (Google) | 🟡 비활성 | `google-*` 미설치 → 라우터 skip(허브는 정상). 필요 시 이미지에 google-auth 등 추가 |
+| `calendar_sync` (Google) | ✅ resolved (2026-09-11) | 이미지 deps(google/pandas)+import 수정+`TemplateResponse` 호환+pod 8002 publish+Caddy `/calendar`,`/auth/google/callback` 라우트. redirect_uri가 Google 등록값과 일치 |
 | Caddy 사용자 사본 | 🟡 stale | `/home/opc/.config/caddy/Caddyfile`는 옛 버전. live는 `/etc/caddy/Caddyfile`(rootful) |
 | `container-devforge-caddy` | 🔴 failed | quadlet 사용 안 함(실제는 rootful `caddy.service`) |
 | `devforge-worker` | ✅ resolved (2026-09-11) | `worker_supervisor.py`를 `_archive/`에서 복원 → 정상 기동(Pass 2 raw→pending 동작) |

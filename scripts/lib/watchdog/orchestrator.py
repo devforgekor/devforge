@@ -30,6 +30,7 @@ from lib.experiment_state import (
 from lib.infra.health_checks import svc_active
 from lib.watchdog.checker import (
     check_all_llm,
+    check_all_oneshot_results,
     check_all_services,
     check_all_timers,
     check_disk,
@@ -213,11 +214,27 @@ def _run_alert_only(dry_run: bool, results: dict):
         results.setdefault("services", []).append({"name": name, "ok": ok, "detail": detail})
 
 
+def _run_oneshot_results(dry_run: bool, results: dict):
+    """One-shot 서비스 실패 결과 감시 (alert-only, 재시작 안 함)."""
+    for item in check_all_oneshot_results():
+        name = item["name"]
+        tracker = _state.get(f"oneshot:{name}")
+        if item["ok"]:
+            tracker.record_success()
+        else:
+            if tracker.record_failure() and tracker.can_alert():
+                if not _test_active:
+                    send_alert(f"oneshot:{name}", tracker.state.value, item["detail"])
+                    _state.add_event(f"oneshot:{name}", "failed", item["detail"])
+        results.setdefault("services", []).append(item)
+
+
 def _run_common_checks(results: dict, dry_run: bool, mode: str = "day"):
     _run_services(results, dry_run)
     _run_timers(results, dry_run, mode)
     _run_memory_check(results, dry_run)
     _run_alert_only(dry_run, results)
+    _run_oneshot_results(dry_run, results)
 
 
 # ── Day checks ──────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-09-11 18:00 KST
+# auto-generated from live data at 2026-09-11 18:55 KST
 ---
 metadata:
-  updated: 2026-09-11 18:00 KST
+  updated: 2026-09-11 18:55 KST
   source: live (collect_structural + mode file)
 models:
 - note: No running LLM containers detected

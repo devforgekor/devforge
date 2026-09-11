@@ -90,3 +90,21 @@ def _upload_blob(filename: str, data: Union[str, bytes]) -> str:
     rel_name = f"{sub}/{utc_ts}_{filename}"
     put_object(_physical(rel_name), data)
     return rel_name
+
+
+def presign_upload(filename: str) -> dict:
+    """Create a write-PAR so a client can PUT directly to OCI (bypassing the server).
+
+    Returns {object_name, upload_url, download_url}. Browser use additionally
+    requires bucket CORS (not configurable with OCI SDK 2.180/CLI 3.88); scripts
+    and CLI clients can PUT without CORS.
+    """
+    utc_ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    sub = "images" if Path(filename).suffix.lower() in IMAGE_EXTS else "documents"
+    rel_name = f"{sub}/{utc_ts}_{filename}"
+    upload_url = create_par(_physical(rel_name), access_type="ObjectWrite", hours=SAS_HOURS)
+    return {
+        "object_name": rel_name,
+        "upload_url": upload_url,
+        "download_url": _share_url(rel_name),
+    }

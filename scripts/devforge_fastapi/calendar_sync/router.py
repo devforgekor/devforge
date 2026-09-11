@@ -32,6 +32,12 @@ from .sheets_parser import SheetsParser
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
+
+def render(name: str, context: dict):
+    """Compat wrapper for Starlette>=0.29: old (name, context) -> (request, name, context)."""
+    request = context.get("request") if isinstance(context, dict) else None
+    return templates.TemplateResponse(request, name, context)
+
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 # OAuth service (initialized per request with dynamic redirect_uri)
@@ -140,7 +146,7 @@ async def google_callback(request: Request, code: str = None, state: str = None,
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: str = None):
     """Show login page."""
-    return templates.TemplateResponse(
+    return render(
         "login.html",
         {"request": request, "error": error},
     )
@@ -153,7 +159,7 @@ async def upload_page(request: Request):
     if not session or not session.get("user_id"):
         return RedirectResponse(url="/calendar/login")
 
-    return templates.TemplateResponse(
+    return render(
         "upload.html",
         {"request": request, "user": session},
     )
@@ -183,7 +189,7 @@ async def upload_excel(
     events = parser.parse_excel(content)
 
     if parser.errors:
-        return templates.TemplateResponse(
+        return render(
             "result.html",
             {
                 "request": request,
@@ -195,7 +201,7 @@ async def upload_excel(
         )
 
     if not events:
-        return templates.TemplateResponse(
+        return render(
             "result.html",
             {
                 "request": request,
@@ -221,7 +227,7 @@ async def upload_excel(
     calendar = CalendarService(credentials, config.calendar_id)
     result = calendar.sync_events(events, config)
 
-    return templates.TemplateResponse(
+    return render(
         "result.html",
         {
             "request": request,
@@ -262,7 +268,7 @@ async def upload_sheets(
     events = parser.parse_sheets_url(sheets_url, credentials.token)
 
     if parser.errors:
-        return templates.TemplateResponse(
+        return render(
             "result.html",
             {
                 "request": request,
@@ -274,7 +280,7 @@ async def upload_sheets(
         )
 
     if not events:
-        return templates.TemplateResponse(
+        return render(
             "result.html",
             {
                 "request": request,
@@ -295,7 +301,7 @@ async def upload_sheets(
     calendar = CalendarService(credentials, config.calendar_id)
     result = calendar.sync_events(events, config)
 
-    return templates.TemplateResponse(
+    return render(
         "result.html",
         {
             "request": request,
@@ -318,7 +324,7 @@ async def status_page(request: Request):
     oauth = get_oauth_service(request)
     token_data = oauth.get_stored_tokens(session["user_id"])
 
-    return templates.TemplateResponse(
+    return render(
         "status.html",
         {"request": request, "user": session, "token": token_data},
     )
