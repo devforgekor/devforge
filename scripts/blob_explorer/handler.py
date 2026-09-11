@@ -5,7 +5,6 @@
 import cgi
 import html
 import json
-import os
 import sys
 import urllib.parse
 from datetime import datetime, timezone

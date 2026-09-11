@@ -184,3 +184,48 @@ def cmd_watch_log(args):
         if r.get("detail"):
             fmt += f" — {r['detail'][:80]}"
         print(fmt)
+
+
+def cmd_watch_incidents(args):
+    """watchdog incident 목록 (감지→조치→결과)."""
+    from lib.watchdog import incidents as _inc
+
+    rows = _inc.list_incidents(
+        open_only=getattr(args, "open", False),
+        since=getattr(args, "since", None),
+        limit=getattr(args, "limit", 20),
+    )
+    if not rows:
+        print("  No incidents logged")
+        return
+    print(f"\n  Incidents ({len(rows)}):\n")
+    for r in rows:
+        ts = (r.get("detected_at") or "?")[5:19].replace("T", " ")
+        flag = "OPEN" if r.get("status") == "open" else "done"
+        print(f"  [{ts}] #{r['id']} {flag:4s} {r['component']} — {(r.get('symptom') or '')[:70]}")
+        extra = []
+        if r.get("action"):
+            extra.append(f"action={r['action']}({r.get('action_result') or '?'})")
+        if int(r.get("fail_count") or 0) > 1:
+            extra.append(f"fails={r['fail_count']}")
+        if int(r.get("reopen_count") or 0) > 0:
+            extra.append(f"reopens={r['reopen_count']}")
+        if extra:
+            print("        " + "  ".join(extra))
+
+
+def cmd_watch_incident_show(args):
+    """incident 상세 (컨텍스트/조치 포함)."""
+    from lib.watchdog import incidents as _inc
+
+    r = _inc.get_incident(args.incident_id)
+    if not r:
+        print(f"  Incident not found: {args.incident_id}")
+        return
+    for k in ("id", "status", "component", "symptom", "action", "action_result",
+              "fail_count", "reopen_count", "detected_at", "resolved_at"):
+        if r.get(k) not in (None, ""):
+            print(f"  {k}: {r[k]}")
+    if r.get("context"):
+        print("\n  --- context (masked) ---")
+        print("  " + (r["context"] or "").replace("\n", "\n  "))

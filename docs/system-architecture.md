@@ -145,7 +145,8 @@ MCP(`fact_*`, `obs_*`, `search_*`, `mem_*`)로 노출된다.
 ### 4.4 watchdog
 `devforge-watchdog`(60초) → 서비스/타이머/컨테이너/디스크/heartbeat 감시 →
 `graduated_recover`(backoff + circuit breaker) + Slack/Opsgenie 알림.
-- 추가 감시(2026-09-11): 컨테이너 `devforge-fastapi`/`devforge-worker`(alert-only), 타이머 `devforge-backup-safety`, **one-shot 결과**(`ActiveState/Result`: daily-structure·backup·restore-test·system-sync, alert-only).
+- 추가 감시(2026-09-11): 컨테이너 `devforge-fastapi`/`devforge-worker`(**자동 재시작**), 타이머 `devforge-backup-safety`(kick), **one-shot 결과**(`ActiveState/Result`: daily-structure·backup·restore-test·system-sync, 실패 시 **자동 재실행** + backoff/circuit, 반복 실패 시에만 알림).
+- **incident 기록(2026-09-11)**: 감지 시 **재시작 전** 로그/상태 캡처(시크릿 마스킹·8KB) → 조치 → `watchdog_incidents` 테이블에 감사 기록(open/resolved, dedup_key, fail/reopen 카운트). 7일 내 3회+ 반복 → DB `tasks`에 수정 티켓 자동 생성. 조회 `cli.py watch incidents [--open]·watch incident <id>`. 보존: events 90일 / incidents 180일.
 
 ### 4.5 알림
 `scripts/lib/notify.py Notifier` — Apprise(Telegram + Gmail SMTP) + Slack.

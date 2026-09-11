@@ -37,6 +37,8 @@ from lib.cli_helpers import (
 )
 from lib.cli_watch import (
     cmd_watch_alerts,
+    cmd_watch_incident_show,
+    cmd_watch_incidents,
     cmd_watch_log,
     cmd_watch_pulse_create,
     cmd_watch_pulse_resolve,
@@ -1709,6 +1711,13 @@ async def main():
     p_wlog.add_argument("--limit", "-n", type=int, default=20)
     p_wlog.add_argument("--component", "-c", default="", help="특정 컴포넌트 필터")
 
+    p_winc = watch_sub.add_parser("incidents", help="watchdog incident 목록 (감지→조치→결과)")
+    p_winc.add_argument("--open", action="store_true", help="미해결만")
+    p_winc.add_argument("--since", help="기간 (예: '24 hours', '7 days')")
+    p_winc.add_argument("--limit", "-n", type=int, default=20)
+    p_wishow = watch_sub.add_parser("incident", help="incident 상세 (컨텍스트 포함)")
+    p_wishow.add_argument("incident_id", type=int)
+
     args = parser.parse_args()
 
     if args.command == "search":
@@ -1848,6 +1857,10 @@ async def main():
             cmd_watch_status(args)
         elif args.watch_command == "log":
             cmd_watch_log(args)
+        elif args.watch_command == "incidents":
+            cmd_watch_incidents(args)
+        elif args.watch_command == "incident":
+            cmd_watch_incident_show(args)
         else:
             p_watch.print_help()
     elif args.command == "dev":

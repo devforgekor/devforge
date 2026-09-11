@@ -55,6 +55,7 @@ from lib.watchdog.config import (
 )
 from lib.watchdog.messenger import get_undelivered, resolve_pulse
 from lib.watchdog.notifier import heartbeat, send_alert, send_recovery
+from lib.watchdog import incidents
 from lib.watchdog.recovery import (
     graduated_recover,
     kill_stale_process,
@@ -111,56 +112,57 @@ def sigusr1_handler(signum, frame):
 def _run_services(results: dict, dry_run: bool):
     global _test_active
     for svc in check_all_services():
-        tracker = _state.get(f"svc:{svc['name']}")
+        name = svc["name"]
+        tracker = _state.get(f"svc:{name}")
         if svc["ok"]:
             tracker.record_success()
+            incidents.resolve_if_open(f"svc:{name}")
         elif not dry_run and not is_experiment_active():
-            if svc["name"] == "ebook-watcher":
+            inc_id = incidents.record_detect(f"svc:{name}", "down", svc["detail"], unit=name)
+            if name == "ebook-watcher":
                 # ebook-watcher: restart 후 readiness(프로세스+로그활동)까지 확인
-                graduated_recover(
-                    svc["name"],
-                    tracker,
-                    recover_ebook_watcher,
-                )
+                ok = graduated_recover(name, tracker, recover_ebook_watcher)
             else:
-                graduated_recover(
-                    svc["name"],
-                    tracker,
-                    lambda n=svc["name"]: recover_service(n),
-                )
+                ok = graduated_recover(name, tracker, lambda n=name: recover_service(n))
+            incidents.record_action(inc_id, "restart", bool(ok))
             if not _test_active and tracker.is_degraded() and tracker.can_alert():
-                send_alert(f"svc:{svc['name']}", tracker.state.value, svc["detail"])
-                _state.add_event(f"svc:{svc['name']}", "down", svc["detail"])
+                send_alert(f"svc:{name}", tracker.state.value, svc["detail"])
+                _state.add_event(f"svc:{name}", "down", svc["detail"])
         else:
+            incidents.record_detect(f"svc:{name}", "down", svc["detail"], unit=name)
             if tracker.record_failure() and tracker.can_alert():
                 if not _test_active:
-                    send_alert(f"svc:{svc['name']}", tracker.state.value, svc["detail"])
-                    _state.add_event(f"svc:{svc['name']}", "down", svc["detail"])
+                    send_alert(f"svc:{name}", tracker.state.value, svc["detail"])
+                    _state.add_event(f"svc:{name}", "down", svc["detail"])
         results["services"].append(svc)
 
 
 def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
     for timer in check_all_timers():
-        tracker = _state.get(f"timer:{timer['name']}")
+        name = timer["name"]
+        tracker = _state.get(f"timer:{name}")
         if timer["ok"]:
             tracker.record_success()
+            incidents.resolve_if_open(f"timer:{name}")
         else:
             protected = _test_active
+            svc_name = name.replace(".timer", ".service")
+            inc_id = incidents.record_detect(f"timer:{name}", "delay", timer["detail"], unit=svc_name)
             if not protected:
                 if tracker.record_failure() and tracker.can_alert():
-                    send_alert(f"timer:{timer['name']}", "DELAY", timer["detail"])
-                    _state.add_event(f"timer:{timer['name']}", "delay", timer["detail"])
+                    send_alert(f"timer:{name}", "DELAY", timer["detail"])
+                    _state.add_event(f"timer:{name}", "delay", timer["detail"])
             if not dry_run and tracker.consecutive_fail >= 1:
                 if protected:
-                    log(f"  SKIP kick {timer['name']} — protection active ({_test_active})")
+                    log(f"  SKIP kick {name} — protection active ({_test_active})")
                 else:
-                    svc_name = timer["name"].replace(".timer", ".service")
                     log(f"  kicking {svc_name} (timer delayed {timer['detail']})")
-                    subprocess.run(
+                    r = subprocess.run(
                         ["systemctl", "--user", "start", svc_name],
                         capture_output=True,
                         timeout=10,
                     )
+                    incidents.record_action(inc_id, "kick", r.returncode == 0)
         results["timers"].append(timer)
 
 
@@ -207,7 +209,9 @@ def _run_alert_only(dry_run: bool, results: dict):
         tracker = _state.get(f"svc:{name}")
         if ok:
             tracker.record_success()
+            incidents.resolve_if_open(f"svc:{name}")
         else:
+            incidents.record_detect(f"svc:{name}", "down", detail, unit=name)
             if tracker.record_failure() and tracker.can_alert():
                 if not _test_active:
                     send_alert(f"svc:{name}", tracker.state.value, detail)
@@ -222,9 +226,12 @@ def _run_oneshot_results(dry_run: bool, results: dict):
         tracker = _state.get(f"oneshot:{name}")
         if item["ok"]:
             tracker.record_success()
+            incidents.resolve_if_open(f"oneshot:{name}")
         elif not dry_run and not is_experiment_active():
+            inc_id = incidents.record_detect(f"oneshot:{name}", "failed", item["detail"], unit=name)
             log(f"  oneshot {name} failed ({item['detail']}) — self-heal (re-run)")
-            graduated_recover(name, tracker, lambda n=name: recover_oneshot(n))
+            ok = graduated_recover(name, tracker, lambda n=name: recover_oneshot(n))
+            incidents.record_action(inc_id, "re-run", bool(ok))
             if not _test_active and tracker.is_degraded() and tracker.can_alert():
                 send_alert(f"oneshot:{name}", tracker.state.value, item["detail"])
                 _state.add_event(f"oneshot:{name}", "failed", item["detail"])
@@ -236,12 +243,28 @@ def _run_oneshot_results(dry_run: bool, results: dict):
         results.setdefault("services", []).append(item)
 
 
+_last_prune_ts = 0.0
+
+
+def _maybe_prune() -> None:
+    """Retention 회전 — 하루 1회만 실행."""
+    global _last_prune_ts
+    if time.time() - _last_prune_ts < 86400:
+        return
+    try:
+        incidents.prune()
+        _last_prune_ts = time.time()
+    except Exception:
+        pass
+
+
 def _run_common_checks(results: dict, dry_run: bool, mode: str = "day"):
     _run_services(results, dry_run)
     _run_timers(results, dry_run, mode)
     _run_memory_check(results, dry_run)
     _run_alert_only(dry_run, results)
     _run_oneshot_results(dry_run, results)
+    _maybe_prune()
 
 
 # ── Day checks ──────────────────────────────────────────────────────

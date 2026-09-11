@@ -337,3 +337,28 @@ COMMENT ON TABLE deepdive_steps IS 'Deep Dive 단계 heartbeat — 단계별 진
 COMMENT ON COLUMN deepdive_steps.status IS 'ACTIVE:진행중|DONE:정상종료|ABORTED:3회 초과로 자동중단';
 COMMENT ON COLUMN deepdive_steps.overrun_count IS 'max_bound 초과 횟수 — 1·2회 경고, 3회 자동 ABORTED';
 COMMENT ON COLUMN deepdive_steps.affected_files IS 'Phase 2 — LSP blast_radius로 파악한 영향 파일 수. 지정 시 max_bound_sec을 base+affected_files*파일당마진으로 동적 재계산(min/max bound로 clamp), 미지정(NULL) 시 Phase 1 정적 max_bound_sec 유지';
+
+-- ═══════════════════════════════════════════════════════════════════
+-- watchdog_incidents — watchdog 오류 감지→캡처→조치→기록 감사 로그
+-- ═══════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS watchdog_incidents (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    dedup_key     TEXT NOT NULL,
+    component     TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'open',
+    symptom       TEXT,
+    context       TEXT,
+    detected_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    action        TEXT,
+    action_result TEXT,
+    action_at     TIMESTAMPTZ,
+    resolved_at   TIMESTAMPTZ,
+    fail_count    INT NOT NULL DEFAULT 1,
+    reopen_count  INT NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_watchdog_incidents_open ON watchdog_incidents(status, dedup_key);
+CREATE INDEX IF NOT EXISTS idx_watchdog_incidents_created ON watchdog_incidents(detected_at DESC);
+COMMENT ON TABLE watchdog_incidents IS 'watchdog incident — 감지/원인 캡처/조치/결과 감사 기록. 기록을 보고 근본원인 수정(ITIL problem mgmt)';
+COMMENT ON COLUMN watchdog_incidents.context IS '재시작 전 캡처한 로그/상태(시크릿 마스킹, 최대 8KB)';
+COMMENT ON COLUMN watchdog_incidents.action_result IS 'success|fail — 조치 결과';

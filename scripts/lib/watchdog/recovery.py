@@ -18,6 +18,7 @@ from typing import Callable, Optional
 from lib.experiment_state import is_experiment_active
 from lib.watchdog.config import (
     CONTAINER_EXCLUSION,
+    MODE_FILE_INFERENCE,
 )
 from lib.watchdog.state import ComponentTracker
 

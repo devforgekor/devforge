@@ -101,7 +101,7 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 - **sentinel**: DB 하루 1회, app ISO 주 1회 중복 방지 (`.db_done_*`, `.app_done_*`)
 - **secrets 제외**: 앱 tar에서 `.env`/`.pem`/`secret`/`credential` 미포함
 - 수동 실행: `python3.11 /opt/projects/server/scripts/osync_backup.py all [--force]`
-- 감시: watchdog이 `devforge-backup-safety.timer`(stale)와 `devforge-backup.service` 실행결과(`ActiveState/Result`)를 감시(alert-only).
+- 감시: watchdog이 `devforge-backup-safety.timer`(stale→kick)와 `devforge-backup.service` 실행결과(`ActiveState/Result`)를 감시하고, 실패 시 **자동 재실행**(self-heal, backoff/circuit)합니다.
 - 검증: 복원 테스트 결과 `48 tables OK` (2026-09-11)
 
 > 레거시: `/usr/local/bin/dump_postgres.sh` → `/mnt/secure_meta/snapshots`(현재 빈 디렉터리)는
