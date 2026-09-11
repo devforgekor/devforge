@@ -114,7 +114,7 @@ def poll_issues(
     unassigned = [
         i
         for i in all_issues
-        if i.get("state") == "open"
+        if (i.get("state") or "").lower() == "open"
         and not i.get("assignees")
         and i["number"] not in seen
         and (not auto_safe or any(lb.get("name") == "auto-safe" for lb in i.get("labels", [])))

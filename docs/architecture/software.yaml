@@ -1,8 +1,8 @@
 # DevForge — Software Architecture
-# auto-generated from live data at 2026-09-11 18:55 KST
+# auto-generated from live data at 2026-09-11 20:10 KST
 ---
 metadata:
-  updated: 2026-09-11 18:55 KST
+  updated: 2026-09-11 20:10 KST
   source: live (collect_structural + mode file)
 models:
 - note: No running LLM containers detected
@@ -12,4 +12,4 @@ modes:
     day: 'Inference container(:8080 reranker | :8081 embed | :8082 swap: extract/enrich/verify)'
     night: Nightly review pipeline (verify + debate)
 pipelines:
-  daily structure: failed
+  daily structure: inactive

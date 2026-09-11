@@ -14,6 +14,8 @@ Industry mapping: SRE incident timeline + ITIL problem management + audit trail.
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -139,6 +141,65 @@ def _maybe_create_task(dedup: str) -> None:
         f"watchdog_incidents 참고해 근본원인 수정.', "
         f"'{{watchdog,incident}}') ON CONFLICT (title) DO NOTHING"
     )
+    _maybe_create_github_issue(dedup)
+
+
+# ── GitHub Issue → (dev-poll auto-safe claim → dev_pipeline PR) ──────
+GH_REPO = os.environ.get("WATCHDOG_GH_REPO", "devforgekor/devforge")
+GH_LABELS = os.environ.get("WATCHDOG_GH_LABELS", "watchdog,auto-safe")
+_GH_SECRETS = os.path.expanduser("~/.config/devforge/secrets.env")
+
+
+def _gh_env() -> dict:
+    env = {**os.environ}
+    try:
+        for line in open(_GH_SECRETS):
+            if line.startswith("GITHUB_TOKEN="):
+                env["GH_TOKEN"] = line.split("=", 1)[1].strip().strip('"').strip("'")
+                break
+    except OSError:
+        pass
+    return env
+
+
+def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
+    return subprocess.run(["gh", *args], capture_output=True, text=True, timeout=timeout, env=_gh_env())
+
+
+def _maybe_create_github_issue(dedup: str) -> None:
+    """반복 incident를 GitHub 이슈로 생성(멱등). auto-safe 라벨로 dev-poll이 자동 claim."""
+    if os.environ.get("WATCHDOG_GH_ISSUES", "1") != "1":
+        return
+    title = f"[watchdog] 반복 실패: {dedup}"
+    try:
+        r = _gh(["issue", "list", "--repo", GH_REPO, "--state", "open",
+                 "--json", "number,title", "--limit", "200"])
+        if r.returncode == 0:
+            for it in json.loads(r.stdout or "[]"):
+                if it.get("title") == title:
+                    return  # already open
+        for lb in [x.strip() for x in GH_LABELS.split(",") if x.strip()]:
+            _gh(["label", "create", lb, "--repo", GH_REPO, "--force"])
+        inc = psql_json(
+            f"SELECT symptom, fail_count, action, action_result, context "
+            f"FROM watchdog_incidents WHERE dedup_key='{esc_sql(dedup)}' ORDER BY id DESC LIMIT 1"
+        )
+        row = inc[0] if inc else {}
+        ctx = (row.get("context") or "").replace("```", "'''")[:2000]
+        body = (
+            "## watchdog 반복 incident (자동 생성)\n\n"
+            f"- dedup: `{dedup}`\n"
+            f"- symptom: {row.get('symptom') or '-'}\n"
+            f"- fail_count: {row.get('fail_count') or '-'}\n"
+            f"- recent action: {row.get('action') or '-'} ({row.get('action_result') or '-'})\n\n"
+            "근본원인을 수정하고 테스트 후 PR 하세요. (watchdog_incidents 테이블 참고)\n\n"
+            "### context (masked)\n```\n" + ctx + "\n```\n"
+        )
+        r = _gh(["issue", "create", "--repo", GH_REPO, "--title", title, "--body", body,
+                 "--label", GH_LABELS])
+        print(f"[incidents] github issue: {r.stdout.strip()[:120] or r.stderr.strip()[:120]}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[incidents] github issue create failed: {e}", flush=True)
 
 
 def record_detect(component: str, event_type: str, detail: str, unit: Optional[str] = None) -> Optional[int]:

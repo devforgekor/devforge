@@ -149,6 +149,7 @@ MCP(`fact_*`, `obs_*`, `search_*`, `mem_*`)로 노출된다.
 - **incident 기록(2026-09-11)**: 감지 시 **재시작 전** 로그/상태 캡처(시크릿 마스킹·8KB) → 조치 → `watchdog_incidents` 테이블에 감사 기록(open/resolved, dedup_key, fail/reopen 카운트). 7일 내 3회+ 반복 → DB `tasks`에 수정 티켓 자동 생성. 조회 `cli.py watch incidents [--open]·watch incident <id>`. 보존: events 90일 / incidents 180일.
 - 감시 확장(2026-09-11 후속): 웹앱 `ebook-api`/`devforge-news-api`/`cashbook`(**자동 재시작**), **system 스코프** `caddy`/`netdata`(alert-only, rootful), 타이머 `dev-poll`/`news-digest`/`kuhwa-schedule`/`workspace-autopush` 추가. `ebook-watcher` `enable`(재부팅 생존). `system-sync` max_idle 1800→2700(30분 주기 경계 오탐 보정).
 - **watchdog 자기 복구(2026-09-11)**: 유닛 `Type=notify` + `WatchdogSec=900` — 매 사이클 `sd_notify(WATCHDOG=1)`, **hang 시 systemd가 kill+restart**. `OnFailure=devforge-watchdog-failed.service` — 크래시루프(60s 내 5회) 시 **Slack 알림**. **dead-man's switch**: 매 사이클 `/var/tmp/watchdog_last_cycle_ts` 기록 + `devforge-watchdog-liveness.timer`(5분마다)가 stale(>900s) 시 알림. **외부 감시**: `WATCHDOG_PING_URL`(secrets.env) 설정 시 매 사이클 외부 모니터로 ping.
+- **incident → 자동 수정 루프(2026-09-11)**: 반복 incident(3회+/7일) → DB `tasks` + **GitHub Issue 자동 생성**(라벨 `watchdog,auto-safe`, 멱등) → `cli.py dev poll --auto-safe --claim`(dev-poll 타이머)이 claim → `lib/dev_pipeline`이 PR. (부수 수정: `poll_issues`가 gh의 `state="OPEN"`(대문자)을 소문자 비교로 모두 걸러내던 버그 → case-insensitive로 수정)
 
 ### 4.5 알림
 `scripts/lib/notify.py Notifier` — Apprise(Telegram + Gmail SMTP) + Slack.
@@ -201,19 +202,20 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 
 ---
 
-## 8. 알려진 이슈 / 불일치 (2026-09-11 조사)
+## 8. 알려진 이슈 / 불일치 (2026-09-11 갱신)
 
 | 항목 | 상태 | 설명 |
 |---|---|---|
-| `container-devforge-fastapi` | ✅ resolved (2026-09-11) | 이미지에 `jinja2`+`oci` 추가, `calendar_sync`는 선택적 import로 변경(google-* 없어도 허브 정상). :8002/:8085 정상, `svc.pod`가 8085 publish |
-| `calendar_sync` (Google) | ✅ resolved (2026-09-11) | 이미지 deps(google/pandas)+import 수정+`TemplateResponse` 호환+pod 8002 publish+Caddy `/calendar`,`/auth/google/callback` 라우트. redirect_uri가 Google 등록값과 일치 |
-| Caddy 사용자 사본 | 🟡 stale | `/home/opc/.config/caddy/Caddyfile`는 옛 버전. live는 `/etc/caddy/Caddyfile`(rootful) |
-| `container-devforge-caddy` | 🔴 failed | quadlet 사용 안 함(실제는 rootful `caddy.service`) |
-| `devforge-worker` | ✅ resolved (2026-09-11) | `worker_supervisor.py`를 `_archive/`에서 복원 → 정상 기동(Pass 2 raw→pending 동작) |
-| `devforge-nli`, `gemini-proxy` | 🔴 | ExecStart 대상 파일이 worktree에 없음 |
-| `devforge-daily-structure` | 🔴 failed | 문서 생성 + git push 실패 → `software.yaml`(2026-07-27) stale |
-| `CLAUDE.yaml#storage` | 🟡 | 옛 LV(`lv_logs`/`lv_meta`/`lv_tmp`) 표기 — 실제 LVM과 불일치 |
-| legacy backup | 🟡 | `/usr/local/bin/dump_postgres.sh`(→`/mnt/secure_meta`)는 폐기, osync가 대체 |
+| `container-devforge-fastapi` | ✅ resolved | 이미지 `jinja2`+`oci`, `calendar_sync` 선택적 import. :8002/:8085 정상, `svc.pod` 8085 publish |
+| `calendar_sync` (Google) | ✅ resolved | deps+import+`TemplateResponse` 호환+pod 8002+Caddy `/calendar`,`/auth/google/callback`. redirect_uri 등록값 일치 |
+| `devforge-worker` | ✅ resolved | `worker_supervisor.py` 복원 → Pass 2 정상 |
+| `devforge-nli`, `gemini-proxy` | ✅ 정리 | 비활성 + `_disabled/` 보관 |
+| `devforge-daily-structure` | ✅ resolved(코드) | `gen_architecture` import 버그 수정 → 다음 00:00 UTC 실행 시 git push(그 전 미push backlog 자동 반영) |
+| `CLAUDE.yaml#storage` | ✅ resolved | 실제 LVM으로 수정(root 44.5G / ai_data 100G / db 30G / projects 10G / swap 4G / workspace 6G) |
+| watchdog 자기복구 | ✅ 강화 | `Type=notify`+`WatchdogSec`(hang) + `OnFailure`(크래시루프) + liveness 타이머 + 외부핑 (§4.4) |
+| `container-devforge-caddy` (quadlet) | 🟢 무해 | 미사용(실제는 rootful `caddy.service`) — 정리 후보 |
+| Caddy 사용자 사본 | 🟢 표기 | `/home/opc/.config/caddy/Caddyfile`는 stale 표기(실제는 `/etc/caddy/Caddyfile`) |
+| legacy backup | ℹ️ | `/usr/local/bin/dump_postgres.sh`(→`/mnt/secure_meta`) 폐기, osync가 대체 |
 
 ---
 
