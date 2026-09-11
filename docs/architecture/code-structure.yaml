@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-09-11'
+  updated: '2026-09-12'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -49,9 +49,8 @@ modules:
       purpose: "bookto31.com \uD558\uB0A8\uC790\uC758 \uD0D1 \uACF5\uB7B5\uBC95 \uC804\
         \uCCB4 \uD68C\uCC28 \uC218\uC9D1."
     context7_mcp.py:
-      status: unknown
-      purpose: "context7_mcp \u2014 MCP server for Context7 documentation with round-robin\
-        \ key rotation."
+      status: production
+      purpose: context7_mcp (thin wrapper). Core logic lives in lib.research.context7.
     day_cycle.sh:
       status: unknown
       purpose: "day_cycle.sh \u2014 async pipeline (pipeline_state-driven)"
@@ -59,8 +58,8 @@ modules:
       status: production
       purpose: Upload a file to Azure Blob, shorten with Droplr, print d.pr URL.
     exa_mcp.py:
-      status: unknown
-      purpose: "exa_mcp \u2014 MCP server for Exa Search with round-robin key rotation."
+      status: production
+      purpose: exa_mcp (thin wrapper). Core logic lives in lib.research.exa.
     fastapi-entrypoint.sh:
       status: unknown
       purpose: fastapi-entrypoint.sh
@@ -648,6 +647,32 @@ modules:
     usage.py:
       status: production
       purpose: Usage tracking, streaming parsing, and balance helpers for proxy.
+- path: scripts/lib/research/
+  purpose: Research
+  files:
+    __init__.py:
+      status: production
+      purpose: "Research facade \u2014 one entry point over web/exa/context7/fetch\
+        \ providers."
+    _keys.py:
+      status: production
+      purpose: Shared encrypted-key loader for research providers (exa, context7).
+    context7.py:
+      status: production
+      purpose: "Context7 docs core \u2014 library resolve + docs query (extracted\
+        \ from context7_mcp.py)."
+    exa.py:
+      status: production
+      purpose: "Exa search core \u2014 semantic web search + contents (extracted from\
+        \ exa_mcp.py)."
+    fetch.py:
+      status: production
+      purpose: "URL fetch core \u2014 retrieve page text (extracted capability; replaces\
+        \ fetch MCP)."
+    web.py:
+      status: production
+      purpose: "Web search core \u2014 Brave \u2192 Tavily \u2192 you.com rotation\
+        \ (extracted from proxies/search.py)."
 - path: scripts/lib/rubric/
   purpose: Rubric
   files:
@@ -991,7 +1016,7 @@ modules:
       purpose: OpenRouter free model auto-refresh for opencode.
     search.py:
       status: production
-      purpose: 'MCP search proxy: Brave + Tavily (Tier 1) with you.com (Tier 2 fallback).'
+      purpose: MCP search proxy (thin wrapper). Core logic lives in lib.research.web.
 - path: scripts/state_collector/
   purpose: State Collector
   files:

@@ -197,7 +197,7 @@ def cmd_obs_search(args):
         return
 
     for r in rows:
-        ts = (r.get("created_at") or "")[:19]
+        utc_timestamp = (r.get("created_at") or "")[:19]
         cat = r.get("category", "") or ""
         obs = (r.get("observation") or "")[:120]
         ctx = r.get("context") or "{}"
@@ -216,7 +216,7 @@ def cmd_obs_search(args):
                     flat.extend(f"{k}={item}" for item in v[:2])
             if flat:
                 tags_str = f" ({', '.join(flat)})"
-        print(f"  [{ts}] {cat:14s} {obs}{extra}{tags_str}")
+        print(f"  [{utc_timestamp}] {cat:14s} {obs}{extra}{tags_str}")
 
     if getattr(args, "json", False):
         print(_json.dumps(rows, ensure_ascii=False, indent=2, default=str))
@@ -518,6 +518,54 @@ def cmd_search_hybrid(args):
         if txt:
             print(f"       {txt}")
         print()
+
+
+def cmd_research_search(args):
+    from lib.research import research
+    try:
+        r = research(args.query, mode=args.mode, candidate_k=args.candidate_k,
+                     top_k=args.top_k, rerank=not args.no_rerank)
+    except Exception as e:
+        print(f"research error: {e}", file=sys.stderr)
+        return
+    if args.json:
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+        return
+    for i, item in enumerate(r["results"], 1):
+        print(f"{i}. {item.get('title', '')}\n   {item.get('url', '')}\n   {item.get('snippet', '')[:200]}")
+    print(f"\n[{r['meta']}]")
+
+
+def cmd_research_docs(args):
+    from lib.research import docs
+    try:
+        r = docs(args.library, args.question, top_k=args.top_k)
+    except ValueError as e:
+        print(f"docs error: {e}", file=sys.stderr)
+        return
+    if args.json:
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+        return
+    if not r["results"]:
+        print(f"No docs found for '{args.library}'.")
+        return
+    print(r["results"][0].get("snippet", ""))
+
+
+def cmd_research_fetch(args):
+    from lib.research import fetch_page
+    try:
+        r = fetch_page(args.url, max_chars=args.max_chars)
+    except ValueError as e:
+        print(f"fetch error: {e}", file=sys.stderr)
+        return
+    if args.json:
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+        return
+    if r.get("error"):
+        print(f"fetch error: {r['error']}", file=sys.stderr)
+        return
+    print(r.get("text", ""))
 
 
 MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"
@@ -969,10 +1017,11 @@ def cmd_task_add(args):
     from lib.db import psql as _sql
 
     title = esc_sql(args.title)
-    priority = args.priority or ""
+    priority = args.priority
+    priority_sql = f"'{esc_sql(priority)}'" if priority else "NULL"
     desc = esc_sql(args.description or "")
     result = _sql(f"""INSERT INTO tasks (title, priority, description)
-    VALUES ('{title}', '{priority}', '{desc}') RETURNING id""")
+    VALUES ('{title}', {priority_sql}, '{desc}') RETURNING id""")
     if result and result.strip():
         print(f"Task created: id={result.strip()} - {args.title[:60]}")
 
@@ -1527,6 +1576,28 @@ async def main():
         "--no-short-circuit", action="store_true", help="BM25 dominant여도 항상 Dense 실행"
     )
 
+    p_research = sub.add_parser("research", help="서버측 리서치 (web/exa/docs/fetch) — MCP 대체")
+    res_sub = p_research.add_subparsers(dest="research_command")
+
+    r_search = res_sub.add_parser("search", help="웹/시맨틱 검색")
+    r_search.add_argument("query")
+    r_search.add_argument("--mode", default="auto", choices=["auto", "web", "exa"])
+    r_search.add_argument("--candidate-k", type=int, default=30, help="수집 후보 수")
+    r_search.add_argument("--top-k", type=int, default=5, help="최종 결과 수")
+    r_search.add_argument("--no-rerank", action="store_true", help="리랭크 비활성(P5a: 기본 비활성)")
+    r_search.add_argument("--json", action="store_true")
+
+    r_docs = res_sub.add_parser("docs", help="Context7 문서 조회")
+    r_docs.add_argument("library", help="라이브러리명 (예: FastAPI)")
+    r_docs.add_argument("question", help="질문")
+    r_docs.add_argument("--top-k", type=int, default=5)
+    r_docs.add_argument("--json", action="store_true")
+
+    r_fetch = res_sub.add_parser("fetch", help="URL 본문 추출")
+    r_fetch.add_argument("url")
+    r_fetch.add_argument("--max-chars", type=int, default=50000)
+    r_fetch.add_argument("--json", action="store_true")
+
     p_status = sub.add_parser(
         "status", help="Live system status — containers, models, timers, tasks, resources"
     )
@@ -1724,6 +1795,15 @@ async def main():
             cmd_search_hybrid(args)
         else:
             p_search.print_help()
+    elif args.command == "research":
+        if args.research_command == "search":
+            cmd_research_search(args)
+        elif args.research_command == "docs":
+            cmd_research_docs(args)
+        elif args.research_command == "fetch":
+            cmd_research_fetch(args)
+        else:
+            p_research.print_help()
     elif args.command == "mem-search":
         await cmd_search(args)
     elif args.command == "save":
