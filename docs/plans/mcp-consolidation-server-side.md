@@ -1,9 +1,17 @@
-# 계획 — Deep Dive 외부기능의 서버측 구현 (MCP 통합/축소)
+# 개선 계획서 — Deep Dive 외부기능의 서버측 구현 (MCP 통합/축소)
 
 > 작성: 2026-09-11 · 상태: **proposed** (사용자 승인 대기)
+> 짝 문서: `Deep Dive 분석 보고서` = `docs/reports/deepdive-mcp-analysis.md`
 > 전제: "MCP는 전송 계층일 뿐" — 능력은 이미 `/opt/projects/server/scripts/`의 서버 코드다. 전송을 줄이고, 정확도는 캐시·리랭크·인용으로 확보한다.
-> 근거: `docs/reports/control-plane-registry-research.md` §부록(웹 검증), MCP 공식 아키텍처, Anthropic code-execution-with-MCP, NVIDIA/Pinecone 리랭크 벤치, arXiv 2605.24660(툴 과다 시 선택 정확도 하락).
+> 근거: MCP 공식 아키텍처, Anthropic code-execution-with-MCP, NVIDIA/Pinecone 리랭크 벤치, arXiv 2605.24660(툴 과다 시 선택 정확도 하락).
 > 관련 규칙: `llm-agent-rule.md` Deep Dive, `AGENTS.md` MCP Tools / Shrimp+LSP.
+
+## 0. 요약
+- **무엇**: Deep Dive의 MCP 의존을 **4종+shrimp → 2종(`devforge-mcp`·`lsp`)** 으로 축소.
+- **어떻게**: 검색·문서·URL을 `lib/research/` + `cli.py research`로 흡수(전송·스키마 제거), 태스크는 `tasks` DB로 단일화.
+- **정확도**: `research_cache`(Postgres) + 기존 reranker(:8080) + 출처 인용.
+- **안전**: 전환기 `enabled:false` + `RESEARCH_BACKEND=cli|mcp` 토글로 즉시 롤백.
+- **단계**: Phase 0(기준선) → 1(코어 이관) → 2(캐시/리랭크) → 3(CLI) → 4(규칙) → 5(MCP 제거) → 6(태스크/계획, 선택) → 7(검증).
 
 ---
 
