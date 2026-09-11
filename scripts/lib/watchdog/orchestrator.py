@@ -8,6 +8,7 @@ longer imports from orchestrator.
 """
 
 import importlib
+import os
 import signal
 import subprocess
 import sys
@@ -32,6 +33,7 @@ from lib.watchdog.checker import (
     check_all_llm,
     check_all_oneshot_results,
     check_all_services,
+    check_all_system_services,
     check_all_timers,
     check_disk,
     check_heartbeats,
@@ -50,11 +52,13 @@ from lib.watchdog.config import (
     ALERT_ONLY_TARGETS,
     CHECK_INTERVAL,
     HEARTBEAT_INTERVAL,
+    LIVENESS_STALE_SEC,
     STALE_HEARTBEAT_KICKS,
     STALE_KICK_COOLDOWN_SEC,
+    WATCHDOG_LIVENESS_FILE,
 )
 from lib.watchdog.messenger import get_undelivered, resolve_pulse
-from lib.watchdog.notifier import heartbeat, send_alert, send_recovery
+from lib.watchdog.notifier import heartbeat, send_alert, send_recovery, sd_notify
 from lib.watchdog import incidents
 from lib.watchdog.recovery import (
     graduated_recover,
@@ -243,6 +247,23 @@ def _run_oneshot_results(dry_run: bool, results: dict):
         results.setdefault("services", []).append(item)
 
 
+def _run_system_services(dry_run: bool, results: dict):
+    """system 스코프(rootful) 서비스 — alert-only (caddy/netdata)."""
+    for item in check_all_system_services():
+        name = item["name"]
+        tracker = _state.get(f"syssvc:{name}")
+        if item["ok"]:
+            tracker.record_success()
+            incidents.resolve_if_open(f"syssvc:{name}")
+        else:
+            incidents.record_detect(f"syssvc:{name}", "down", item["detail"], unit=f"system:{name}")
+            if tracker.record_failure() and tracker.can_alert():
+                if not _test_active:
+                    send_alert(f"syssvc:{name}", tracker.state.value, item["detail"])
+                    _state.add_event(f"syssvc:{name}", "down", item["detail"])
+        results.setdefault("services", []).append(item)
+
+
 _last_prune_ts = 0.0
 
 
@@ -258,12 +279,35 @@ def _maybe_prune() -> None:
         pass
 
 
+def _write_liveness() -> None:
+    """watchdog 자체 생존 신호 기록 (외부/타이머가 검사)."""
+    try:
+        with open(WATCHDOG_LIVENESS_FILE, "w") as f:
+            f.write(str(time.time()))
+    except OSError:
+        pass
+
+
+def _ping_external() -> None:
+    """외부 dead-man's switch 핑 (WATCHDOG_PING_URL 설정 시)."""
+    url = os.environ.get("WATCHDOG_PING_URL", "")
+    if not url:
+        return
+    try:
+        import urllib.request
+
+        urllib.request.urlopen(url, timeout=5).read()
+    except Exception:
+        pass
+
+
 def _run_common_checks(results: dict, dry_run: bool, mode: str = "day"):
     _run_services(results, dry_run)
     _run_timers(results, dry_run, mode)
     _run_memory_check(results, dry_run)
     _run_alert_only(dry_run, results)
     _run_oneshot_results(dry_run, results)
+    _run_system_services(dry_run, results)
     _maybe_prune()
 
 
@@ -845,6 +889,7 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
         f"Watchdog started (interval={_state._check_interval if hasattr(_state, '_check_interval') else CHECK_INTERVAL}s, dry_run={dry_run})"
     )
     log(f"Initial mode: {read_mode()}")
+    sd_notify("READY=1")
 
     # 영속화된 상태 복원 (재시작 후 backoff/circuit 보존)
     _state.load_state()
@@ -860,6 +905,9 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
         mode = read_mode()
         _state.set_mode(mode)
         _state.update_liveness()
+        sd_notify("WATCHDOG=1")
+        _write_liveness()
+        _ping_external()
 
         test_pulses = _get_active_test_pulses()
         _test_active = bool(test_pulses)
@@ -944,5 +992,37 @@ def main():
     parser = argparse.ArgumentParser(description="DevForge Watchdog")
     parser.add_argument("--one-shot", action="store_true", help="Run one cycle and exit")
     parser.add_argument("--dry-run", action="store_true", help="Check only, no recovery")
+    parser.add_argument(
+        "--liveness-check", action="store_true",
+        help="Check watchdog liveness file; alert+exit1 if stale (timer)",
+    )
+    parser.add_argument(
+        "--notify-failure", action="store_true", help="Send failure alert (OnFailure unit)",
+    )
     args = parser.parse_args()
+
+    if args.notify_failure:
+        log("watchdog OnFailure: service entered failed state")
+        try:
+            send_alert("watchdog:failed", "DOWN", "watchdog service entered failed state (OnFailure)")
+        except Exception as e:
+            log(f"notify-failure error: {e}")
+        return
+
+    if args.liveness_check:
+        try:
+            age = time.time() - float(open(WATCHDOG_LIVENESS_FILE).read().strip())
+        except Exception:
+            age = None
+        if age is None or age > LIVENESS_STALE_SEC:
+            msg = f"watchdog liveness stale: {'missing' if age is None else str(int(age)) + 's'} (limit {LIVENESS_STALE_SEC}s)"
+            log(msg)
+            try:
+                send_alert("watchdog:liveness", "DOWN", msg)
+            except Exception:
+                pass
+            sys.exit(1)
+        log(f"watchdog liveness OK ({int(age)}s ago)")
+        return
+
     main_loop(one_shot=args.one_shot, dry_run=args.dry_run)

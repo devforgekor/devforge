@@ -83,22 +83,26 @@ def _run(cmd: list[str], timeout: int = CAPTURE_TIMEOUT) -> str:
 
 
 def capture_context(unit: Optional[str]) -> str:
-    """Grab bounded, masked diagnostic context for a component's unit."""
+    """Grab bounded, masked diagnostic context for a component's unit.
+
+    unit may be 'system:<name>' to target a rootful system service.
+    """
     if not unit:
         return ""
+    system_scope = unit.startswith("system:")
+    real = unit.split(":", 1)[1] if system_scope else unit
+    scope = [] if system_scope else ["--user"]
     parts: list[str] = []
-    if unit.startswith("container-"):
-        cname = unit.removeprefix("container-")
+    if real.startswith("container-"):
+        cname = real.removeprefix("container-")
         parts.append("$ podman logs --tail 40 " + cname)
         parts.append(_run(["podman", "logs", "--tail", "40", cname]))
-    parts.append(f"$ systemctl --user show {unit} -p Result,ExecMainStatus,NRestarts")
-    parts.append(
-        _run(["systemctl", "--user", "show", unit,
-              "-p", "Result,ExecMainStatus,NRestarts"])
-    )
-    if not unit.startswith("container-"):
-        parts.append(f"$ journalctl --user -u {unit} -n 40")
-        parts.append(_run(["journalctl", "--user", "-u", unit, "-n", "40", "--no-pager"]))
+    label = " ".join(["systemctl", *scope, "show", real, "-p", "Result,ExecMainStatus,NRestarts"])
+    parts.append("$ " + label)
+    parts.append(_run(["systemctl", *scope, "show", real, "-p", "Result,ExecMainStatus,NRestarts"]))
+    if not real.startswith("container-"):
+        parts.append("$ " + " ".join(["journalctl", *scope, "-u", real, "-n", "40"]))
+        parts.append(_run(["journalctl", *scope, "-u", real, "-n", "40", "--no-pager"]))
     ctx = mask_secrets("\n".join(parts))
     return ctx[:CONTEXT_MAX]
 

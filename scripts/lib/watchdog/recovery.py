@@ -254,7 +254,7 @@ def graduated_recover(
     if ok:
         tracker.record_success()
     else:
-        changed = tracker.record_failure()
+        tracker.record_failure()
         log(f"  {name} -> {tracker.state.value} (fail #{tracker.consecutive_fail})")
 
     return ok

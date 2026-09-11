@@ -29,6 +29,7 @@ from lib.watchdog.config import (
     ONESHOT_RESULT_TARGETS,
     SERVICE_TARGETS,
     SWAP_CRIT_MB,
+    SYSTEM_SERVICE_TARGETS,
     TIMER_TARGETS,
 )
 from lib.watchdog.messenger import check_heartbeat
@@ -572,6 +573,23 @@ def check_all_oneshot_results() -> list[dict]:
     return [
         {"name": n, **(lambda t: {"ok": t[0], "detail": t[1]})(check_oneshot_result(n))}
         for n in ONESHOT_RESULT_TARGETS
+    ]
+
+
+def check_system_service(name: str) -> tuple[bool, str]:
+    """system 스코프(rootful) 서비스 active 확인."""
+    try:
+        r = subprocess.run(["systemctl", "is-active", name], capture_output=True, text=True, timeout=5)
+        st = r.stdout.strip()
+        return st == "active", st
+    except Exception as e:
+        return False, str(e)
+
+
+def check_all_system_services() -> list[dict]:
+    return [
+        {"name": n, **(lambda t: {"ok": t[0], "detail": t[1]})(check_system_service(n))}
+        for n in SYSTEM_SERVICE_TARGETS
     ]
 
 

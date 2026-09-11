@@ -440,7 +440,6 @@ def cmd_search_hybrid(args):
     # Preprocess query through Kiwi for BM25
     cl = get_cleaner()
     query_terms = " ".join(cl.extract_terms(args.query))
-    query_for_embed = args.query
 
     # --- Phase 1: BM25 ---
     t0 = time.monotonic()
@@ -512,7 +511,6 @@ def cmd_search_hybrid(args):
             label = f" B{r['bm25_rank']} D{r['dense_rank']}"
         elif r.get("dense_rank") is None:
             label = f" B{r.get('bm25_rank', '?')}"
-        score_str = f"rrf={r.get('rrf_score', 0):.4f}" if r.get("rrf_score") else ""
         print(
             f"  [{r.get('rrf_score', r.get('bm25_score', 0)):.2f}{label}] {r.get('agent', '?')} {r.get('created_at', '')[:19]}"
         )
@@ -573,7 +571,6 @@ def cmd_discussion(args):
     question = getattr(args, "question", None)
     skip_drag = getattr(args, "skip_drag", False)
     dry_run = getattr(args, "dry_run", False)
-    with_api = getattr(args, "with_api", False)
 
     # Ensure container is in review mode for DRAG + verification
     if not _container_in_review_mode():
@@ -821,7 +818,7 @@ def cmd_dev_poll(args):
                 claimed += 1
         print(f"\n{claimed}/{len(issues)} issues claimed.")
     elif not args.once:
-        state_path = os.path.join(SCRIPTS_DIR, "data", "dev_pipeline_state.json")
+        state_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dev_pipeline_state.json")
         if os.path.isfile(state_path):
             with open(state_path) as f:
                 state = json.load(f)
@@ -1430,9 +1427,9 @@ async def main():
     auto_add.add_argument("title", help="Task title (## heading)")
     auto_add.add_argument("description", help="Task description / prompt for Claude Code")
 
-    auto_list = auto_sub.add_parser("list", help="List scheduled auto tasks")
+    auto_sub.add_parser("list", help="List scheduled auto tasks")
 
-    auto_clear = auto_sub.add_parser("clear", help="Clear all auto tasks")
+    auto_sub.add_parser("clear", help="Clear all auto tasks")
 
     p_dev = sub.add_parser("dev", help="Dev(Devin-like) — GitHub Issue → PR pipeline")
     dev_sub = p_dev.add_subparsers(dest="dev_command")
@@ -1461,7 +1458,7 @@ async def main():
     exp_compare = exp_sub.add_parser("compare", help="Compare experiments")
     exp_compare.add_argument("experiment_ids", nargs="+", help="Experiment IDs to compare")
 
-    exp_active = exp_sub.add_parser("active", help="Show active config")
+    exp_sub.add_parser("active", help="Show active config")
 
     exp_adopt = exp_sub.add_parser("adopt", help="Adopt experiment as active config")
     exp_adopt.add_argument("experiment_id", help="Experiment ID to adopt")
@@ -1507,7 +1504,7 @@ async def main():
     act_recent.add_argument("--limit", "-n", type=int, default=10)
     act_recent.add_argument("--today", action="store_true", help="Today only")
 
-    act_stats = act_sub.add_parser("stats", help="Activity log statistics")
+    act_sub.add_parser("stats", help="Activity log statistics")
 
     act_add = act_sub.add_parser("add", help="Add a manual activity entry")
     act_add.add_argument("title", help="Entry title")
@@ -1546,7 +1543,7 @@ async def main():
 
     p_glossary = sub.add_parser("glossary", help="Glossary (SSOT: docs/domain-glossary.yaml)")
     gl_sub = p_glossary.add_subparsers(dest="gl_command")
-    gl_sync = gl_sub.add_parser("sync", help="Sync YAML → DB (idempotent upsert)")
+    gl_sub.add_parser("sync", help="Sync YAML → DB (idempotent upsert)")
 
     # File management
     p_file = sub.add_parser("file", help="File management (file_registry)")
@@ -1661,9 +1658,9 @@ async def main():
         "--min-occurrences", type=int, default=3, help="Min occurrences (default 3)"
     )
 
-    ref_promote = ref_sub.add_parser("promote", help="Auto-promote candidate rules to approved")
-    ref_decay = ref_sub.add_parser("decay", help="Decay unused rules to dormant")
-    ref_report = ref_sub.add_parser("report", help="Daily rule activity summary")
+    ref_sub.add_parser("promote", help="Auto-promote candidate rules to approved")
+    ref_sub.add_parser("decay", help="Decay unused rules to dormant")
+    ref_sub.add_parser("report", help="Daily rule activity summary")
 
     # ── Fact (user feedback on NEUTRAL facts) ───────────────────────
     p_fact = sub.add_parser("fact", help="Manage review_facts — user feedback on NEUTRAL facts")
@@ -1685,8 +1682,8 @@ async def main():
     p_watch = sub.add_parser("watch", help="서버 감시 — 상태, 알람, pulse 큐, 이벤트 로그")
     watch_sub = p_watch.add_subparsers(dest="watch_command")
 
-    p_ws = watch_sub.add_parser("status", help="서버 생존 + pulse 큐 + 이벤트 한눈에")
-    p_wa = watch_sub.add_parser("alerts", help="현재 PENDING/HUMAN_REQUIRED pulse 목록")
+    watch_sub.add_parser("status", help="서버 생존 + pulse 큐 + 이벤트 한눈에")
+    watch_sub.add_parser("alerts", help="현재 PENDING/HUMAN_REQUIRED pulse 목록")
     p_wp = watch_sub.add_parser("pulses", help="pulse 큐 관리")
     wdp_sub = p_wp.add_subparsers(dest="pulse_command")
     wp_list = wdp_sub.add_parser("list", help="PENDING pulse 목록")

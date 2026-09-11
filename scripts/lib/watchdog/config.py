@@ -15,6 +15,7 @@ import os
 CHECK_INTERVAL = 60  # seconds between check cycles
 HEARTBEAT_INTERVAL = 1800  # 30min Slack heartbeat (aligned to :15 / :45)
 LIVENESS_STALE_SEC = 900  # 15min — watchdog dead man's switch threshold
+WATCHDOG_LIVENESS_FILE = "/var/tmp/watchdog_last_cycle_ts"  # watchdog self heartbeat (checked by liveness timer / external)
 LATENCY_CHECK_INTERVAL = 300  # 5min between T3 latency checks
 
 # ── MODE ────────────────────────────────────────────────────────────
@@ -46,6 +47,15 @@ SERVICE_TARGETS = [
     "ebook-watcher",  # ebook 워처 (타이머와 쌍)
     "container-devforge-fastapi",  # 알림 허브 + Blob Explorer → 다운 시 자동 재시작
     "container-devforge-worker",  # raw_consumer → 다운 시 자동 재시작
+    "ebook-api",  # ebook 백엔드 (:8089, Caddy /api)
+    "devforge-news-api",  # news API (:8091, Caddy /news)
+    "cashbook",  # 가계부 (:8100, Caddy /cashbook)
+]
+
+# system 스코프(rootful) 서비스 — alert-only (재시작은 root 필요).
+SYSTEM_SERVICE_TARGETS = [
+    "caddy",  # 공개 리버스 프록시 (rootful, 80/443)
+    "netdata",  # 모니터링 대시보드
 ]
 
 # Alert-only targets (monitor only, no recovery) — MCP/프록시/인프라
@@ -63,7 +73,7 @@ ALERT_ONLY_TARGETS = [
 TIMER_TARGETS = {
     # free 모델 갱신 타이머 — 매일 15:30 UTC. 26h idle = 하루 넘게 안 돌면 알림.
     "devforge-openrouter-free-models.timer": {"expected": "free_models", "max_idle": 93600},
-    "devforge-system-sync.timer": {"expected": "system_sync", "max_idle": 1800},  # 15분
+    "devforge-system-sync.timer": {"expected": "system_sync", "max_idle": 2700},  # 45분 (30분 주기+delay 여유)
     "devforge-news.timer": {"expected": "news", "max_idle": 25200},  # 6시간
     "devforge-daily-structure.timer": {"expected": "daily_structure", "max_idle": 90000},  # 25h
     "devforge-weekly-enrich-rebuild.timer": {
@@ -72,6 +82,10 @@ TIMER_TARGETS = {
     },  # 7일
     "devforge-restore-test.timer": {"expected": "restore_test", "max_idle": 2592000},  # 30일
     "devforge-backup-safety.timer": {"expected": "backup", "max_idle": 97200},  # 27h (OCI 백업)
+    "devforge-dev-poll.timer": {"expected": "dev_poll", "max_idle": 1800},  # 10분
+    "devforge-news-digest.timer": {"expected": "news_digest", "max_idle": 90000},  # 25h
+    "kuhwa-schedule.timer": {"expected": "kuhwa", "max_idle": 90000},  # 25h
+    "workspace-autopush.timer": {"expected": "workspace_autopush", "max_idle": 90000},  # 25h
     "reference-monitor.timer": {"expected": "reference", "max_idle": 604800},  # 7일
 }
 

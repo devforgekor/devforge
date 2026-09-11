@@ -24,6 +24,27 @@ from .messenger import log_message
 
 KST = timezone(timedelta(hours=9))
 
+
+def sd_notify(state: str) -> bool:
+    """systemd notification (READY=1 / WATCHDOG=1). No-op if NOTIFY_SOCKET unset.
+
+    Enables Type=notify + WatchdogSec hang detection without any dependency.
+    """
+    import socket
+
+    addr = os.environ.get("NOTIFY_SOCKET")
+    if not addr:
+        return False
+    if addr.startswith("@"):
+        addr = "\x00" + addr[1:]
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+            s.connect(addr)
+            s.sendall(state.encode())
+        return True
+    except OSError:
+        return False
+
 # Secrets cache
 _SECRETS: dict[str, str] = {}
 _SF = Path(SLACK_SECRETS)
