@@ -61,6 +61,7 @@ from lib.watchdog.recovery import (
     recover_ebook_watcher,
     recover_inference_cascade,  # noqa: F401 — used in day_fix_loop
     recover_oom,
+    recover_oneshot,
     recover_port_conflict,  # noqa: F401 — used in day_fix_loop
     recover_service,
     recover_slot_deadlock,
@@ -215,12 +216,18 @@ def _run_alert_only(dry_run: bool, results: dict):
 
 
 def _run_oneshot_results(dry_run: bool, results: dict):
-    """One-shot 서비스 실패 결과 감시 (alert-only, 재시작 안 함)."""
+    """One-shot 서비스 self-heal — 실패 시 재실행(backoff+circuit), 반복 실패 시 알림."""
     for item in check_all_oneshot_results():
         name = item["name"]
         tracker = _state.get(f"oneshot:{name}")
         if item["ok"]:
             tracker.record_success()
+        elif not dry_run and not is_experiment_active():
+            log(f"  oneshot {name} failed ({item['detail']}) — self-heal (re-run)")
+            graduated_recover(name, tracker, lambda n=name: recover_oneshot(n))
+            if not _test_active and tracker.is_degraded() and tracker.can_alert():
+                send_alert(f"oneshot:{name}", tracker.state.value, item["detail"])
+                _state.add_event(f"oneshot:{name}", "failed", item["detail"])
         else:
             if tracker.record_failure() and tracker.can_alert():
                 if not _test_active:

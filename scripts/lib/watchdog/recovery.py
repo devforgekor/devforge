@@ -120,6 +120,39 @@ def recover_service(name: str) -> bool:
         return False
 
 
+def recover_oneshot(name: str) -> bool:
+    """One-shot 서비스 실패 시 재실행 (self-heal).
+
+    systemd는 실패한 oneshot을 자동 재시도하지 않으므로 watchdog이 대신
+    reset-failed → start 한다. 결과는 ActiveState/Result로 확인하며,
+    아직 실행 중이면 성공 취급(다음 사이클에서 최종 결과 재확인).
+    """
+    if is_experiment_active():
+        log(f"  SKIP oneshot re-run {name} — experiment active")
+        return False
+    log(f"  re-run oneshot {name}...")
+    try:
+        subprocess.run(["systemctl", "--user", "reset-failed", name], capture_output=True, timeout=10)
+        subprocess.run(["systemctl", "--user", "start", name], capture_output=True, timeout=30)
+        from lib.watchdog.checker import check_oneshot_result
+
+        for _ in range(9):  # ~45s
+            time.sleep(5)
+            ok, detail = check_oneshot_result(name)
+            if ok:
+                log(f"  oneshot {name} OK/running: {detail}")
+                return True
+            if "ActiveState=failed" in detail:
+                log(f"  oneshot {name} failed: {detail}")
+                return False
+        ok, detail = check_oneshot_result(name)
+        log(f"  oneshot {name} timeout: {detail}")
+        return ok
+    except Exception as e:
+        log(f"  oneshot re-run failed: {e}")
+        return False
+
+
 def recover_ebook_watcher() -> bool:
     """ebook-watcher 전용 복구 — restart 후 readiness까지 확인.
 

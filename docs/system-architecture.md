@@ -145,6 +145,7 @@ MCP(`fact_*`, `obs_*`, `search_*`, `mem_*`)로 노출된다.
 ### 4.4 watchdog
 `devforge-watchdog`(60초) → 서비스/타이머/컨테이너/디스크/heartbeat 감시 →
 `graduated_recover`(backoff + circuit breaker) + Slack/Opsgenie 알림.
+- 추가 감시(2026-09-11): 컨테이너 `devforge-fastapi`/`devforge-worker`(alert-only), 타이머 `devforge-backup-safety`, **one-shot 결과**(`ActiveState/Result`: daily-structure·backup·restore-test·system-sync, alert-only).
 
 ### 4.5 알림
 `scripts/lib/notify.py Notifier` — Apprise(Telegram + Gmail SMTP) + Slack.

@@ -44,6 +44,8 @@ SERVICE_TARGETS = [
     "openrouter-rr-proxy",
     "devforge-day-cycle",  # day 파이프라인 (async)
     "ebook-watcher",  # ebook 워처 (타이머와 쌍)
+    "container-devforge-fastapi",  # 알림 허브 + Blob Explorer → 다운 시 자동 재시작
+    "container-devforge-worker",  # raw_consumer → 다운 시 자동 재시작
 ]
 
 # Alert-only targets (monitor only, no recovery) — MCP/프록시/인프라
@@ -55,8 +57,6 @@ ALERT_ONLY_TARGETS = [
     "anthropic-proxy",  # DeepSeek 역방향 프록시
     "gemini-openai-proxy",  # Gemini 키 로테이션
     "or-rate-limiter",  # OpenRouter rate limiter
-    "container-devforge-fastapi",  # 알림 허브 + Blob Explorer(파일 교환)
-    "container-devforge-worker",  # raw_consumer Pass 2/3
 ]
 
 # 타이머 감시 — max_idle 초과 시 미발동으로 간주 (kick/alert)
