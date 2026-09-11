@@ -1,182 +1,228 @@
-# 개선 계획서 — Deep Dive 외부기능의 서버측 구현 (MCP 통합/축소)
+# 개선 계획서 v3 (실측 기반, 상세) — MCP 스키마 예산 & 리서치 서버측화
 
-> 작성: 2026-09-11 · 상태: **proposed** (사용자 승인 대기)
-> 짝 문서: `Deep Dive 분석 보고서` = `docs/reports/deepdive-mcp-analysis.md`
-> 전제: "MCP는 전송 계층일 뿐" — 능력은 이미 `/opt/projects/server/scripts/`의 서버 코드다. 전송을 줄이고, 정확도는 캐시·리랭크·인용으로 확보한다.
-> 근거: MCP 공식 아키텍처, Anthropic code-execution-with-MCP, NVIDIA/Pinecone 리랭크 벤치, arXiv 2605.24660(툴 과다 시 선택 정확도 하락).
-> 관련 규칙: `llm-agent-rule.md` Deep Dive, `AGENTS.md` MCP Tools / Shrimp+LSP.
-
-## 0. 요약
-- **무엇**: Deep Dive의 MCP 의존을 **4종+shrimp → 2종(`devforge-mcp`·`lsp`)** 으로 축소.
-- **어떻게**: 검색·문서·URL을 `lib/research/` + `cli.py research`로 흡수(전송·스키마 제거), 태스크는 `tasks` DB로 단일화.
-- **정확도**: `research_cache`(Postgres) + 기존 reranker(:8080) + 출처 인용.
-- **안전**: 전환기 `enabled:false` + `RESEARCH_BACKEND=cli|mcp` 토글로 즉시 롤백.
-- **단계**: Phase 0(기준선) → 1(코어 이관) → 2(캐시/리랭크) → 3(CLI) → 4(규칙) → 5(MCP 제거) → 6(태스크/계획, 선택) → 7(검증).
+> 작성: 2026-09-11 (v2 대체) · 상태: **proposed**
+> 데이터: `docs/reports/mcp-cost-baseline.md` + 본 문서 §1 실측 · 분석: `docs/reports/deepdive-mcp-analysis.md`
+> 웹 검증: Anthropic prompt caching(툴 스키마 캐시됨·cache read 0.1x·툴 정의 변경 시 전체 무효화), opencode `tools` glob 네이티브 필터, Qwen3-Reranker=질의-문서 관련성 모델
+> **v2→v3 핵심 변화**: ①비용 프레이밍 정정(캐시) ②**opencode 네이티브 툴 필터 발견**(프록시 불필요) ③무위험 제거 **선행** ④lsp allowlist **per-tool 실측**(11툴=2,936tok) ⑤4단계는 **실행됨**(툴 이탈 문제) ⑥3b 조건부 ⑦목표 **≤12k** ⑧리서치 **CLI-only 확정** ⑨`candidate_k`/`top_k` 분리.
 
 ---
 
-## 1. 목표 / 비목표
-**목표**
-- Deep Dive가 의존하는 MCP를 **4종(yggdrasil·filesystem·lsp·context7/exa)+shrimp → 2종(devforge-mcp·lsp)** 으로 축소.
-- 검색/문서/URL 조회를 **서버측 `lib/research/` + CLI**로 일원화 → 전송·스키마 오버헤드 제거.
-- 결과를 **Postgres 캐시 + cross-encoder 리랭크 + 인용**으로 정규화 → 재현성·정확도 확보.
-- 태스크는 기존 `tasks` DB(`cli.py task`)로 단일화(SSOT).
+## 0. 요약
+- 활성 MCP 스키마 **36,672 tok/turn**(+shrimp ~2.5k ≈ 39.2k). `lsp` 단일 **16,333(44.7%)**.
+- **무위험 제거**(github·filesystem·fetch·context7·time) = **10,354 tok / 0.3d / 신규코드 0**.
+- **lsp 필터** core 11툴 = **2,936** → 절감 **13,397 tok / 0d(opencode 네이티브)**.
+- **목표 ≤12k**(여유), 달성 시 실측 예상 **~6k**.
+- 리서치 고도화(캐시·리랭크)는 **3b 조건부**: 4단계 호출 회복 시에만.
 
-**비목표**
-- LSP 제거(대체 불가, 유지).
-- 외부 API 자체 교체(Exa/Brave/Context7 소스는 유지 — 정확도의 원천).
-- Deep Dive 7단계 구조 변경(스텝 내용만 대체).
+## 1. 실측 데이터
 
-## 2. 방향 (Before → After)
+### 1.1 서버별 스키마 비용 (per-turn)
+| MCP | 툴 | tok_est | 활성 |
+|---|---:|---:|:--:|
+| **lsp** | 68 | **16,333** | Y |
+| github | 29 | 4,740 | Y |
+| devforge-mcp | 25 | 4,700 | Y |
+| filesystem | 17 | 3,712 | Y |
+| yggdrasil | 9 | 3,421 | Y |
+| exa-search | 5 | 1,127 | Y |
+| context7 | 5 | 798 | Y |
+| fetch | 4 | 788 | Y |
+| search-proxy | 5 | 677 | Y |
+| time | 2 | 316 | Y |
+| shrimp | 15 | ~2,500* | Y |
+| **합계** | | **~39,172** | |
 
-```
-[Before]  Deep Dive ─ MCP ─┬─ search-proxy   (stdio, Brave/Tavily/youcom)
-                           ├─ exa-search      (stdio, Exa)
-                           ├─ context7        (stdio, Context7)
-                           ├─ fetch           (stdio, uvx)
-                           ├─ filesystem      (stdio)
-                           ├─ shrimp          (stdio, Node)  ← tasks DB와 중복
-                           └─ yggdrasil       (stdio)        ← 스캐폴드
+### 1.2 lsp 툴별 비용 (per-tool 실측)
+| 순위 | 툴 | tok |
+|---|---|---:|
+| 1 | `start_lsp` | 500 |
+| 2 | `preview_edit` | 466 |
+| 3 | `rename_symbol` | 383 |
+| 4 | `get_inlay_hints` | 366 |
+| 5 | `get_cross_repo_references` | 347 |
+| … | (장기 꼬리) | … |
+| | **core 11툴 합** | **2,936** |
 
-[After]   Deep Dive ─┬─ devforge-mcp (HTTP 1개; research/lsp-intel/obs/action/deepdive)
-                     └─ lsp
-          검색·문서·URL ──▶ cli.py research … ──▶ lib/research/ ──▶ 캐시/리랭크
-          태스크        ──▶ cli.py task …    (기존 tasks DB)
-          계획          ──▶ docs/plans/ + DB (yggdrasil 대체는 Phase 6, 선택)
-```
+→ **유지 툴이 오히려 비쌈**(start/preview/rename 상위). 균일추정(11,813)보다 **실제 절감 13,397**.
 
-## 3. 신규 / 변경 컴포넌트
+### 1.3 Deep Dive 실행률 (`deepdive_steps`, 17세션)
+| step | 세션 | DONE | ABORTED |
+|---|---:|---:|---:|
+| 1 | 12 | 5 | 7 |
+| 2 | 12 | 9 | 3 |
+| 3 | 9 | 7 | 2 |
+| **4** | **8** | **7** | **1** |
+| 5 | 7 | 6 | 1 |
+| 6 | 6 | 5 | 1 |
+| 7 | 6 | 6 | 0 |
 
-### 3.1 신규 `scripts/lib/research/` (핵심)
-기존 MCP 래퍼의 **코어를 이동**(신규 작성 최소). 기존 파일은 전환기 동안 얇은 래퍼로 유지.
+→ **4단계는 죽지 않음**: 8세션 진입(94% 완료). **문제는 "규정 도구(context7/exa)" 대신 WebSearch(8)·WebFetch(7)·search-proxy(11)로 이탈**.
 
-| 파일 | 이관 원본 | 공개 함수 |
+### 1.4 사용 빈도 (13 claude 세션)
+devforge 59 · yggdrasil 32 · search-proxy 11 · lsp 3 · filesystem 3 · shrimp 3 · exa 2 · time 1 · github 0 · context7 0 · fetch 0. 내장 Bash 1,118.
+
+## 2. 정정 (v2 오류)
+| 항목 | v2 | v3 |
 |---|---|---|
-| `lib/research/web.py` | `proxies/search.py::SearchProxy._search_provider/_call_api` | `web_search(query, max_results=5) -> list[dict]` |
-| `lib/research/exa.py` | `exa_mcp.py::_call_exa_api/_handle_exa_search/_handle_exa_get_contents` | `exa_search(query, num=10)`, `exa_contents(urls)` |
-| `lib/research/context7.py` | `context7_mcp.py::_call_api/_handle_resolve_library_id/_handle_query_docs` | `resolve_library_id(name)`, `query_docs(library_id, query)` |
-| `lib/research/fetch.py` | `flaresolverr_bypass` / `mcp-server-fetch` 로직 | `fetch_url(url, max_chars=50000)` |
-| `lib/research/cache.py` | 신규 | `make_key()`, `get()`, `put()`, `purge()` |
-| `lib/research/rank.py` | `lib/llm_client.reranker_score` 재사용 | `rerank(query, items, top_k)`, `to_citations(items)` |
-| `lib/research/__init__.py` | 신규(오케스트레이터) | `research(query, mode, limit, rerank, use_cache, ttl_sec)` |
+| 활성 합계 | 37,200 | **36,672**(shrimp 별도) |
+| lsp 비중 | 44%/41% 혼용 | **44.7%**(shrimp 제외) / 41.8%(포함) — 분모 명시 |
+| 비용 프레이밍 | "매 턴 39.7k 과금" | **캐시 prefix라 read 0.1x**. 실제 피해 = **컨텍스트 점유 + 툴선택 희석 + 초기화 지연** |
+| 4단계 | (v2 침묵) | **실행됨(8/17)** — 툴 이탈이 문제 |
 
-**재사용(변경 없음)**: `lib/auth/key_rotator.KeyRotator`, `lib/auth/api_key_cipher`, `lib/db.{esc_sql,psql_json,psql_ok}`, `lib/llm_client.reranker_score`, `lib/search/hybrid.py`(RERANKER_URL=`http://127.0.0.1:8080/v1/rerank`).
+## 3. 비용의 정확한 의미 (검증 반영)
+- Anthropic: 프롬프트 캐싱은 `tools → system → messages` 순 전체 prefix를 캐시. **툴 스키마도 캐시 대상**, cache read **0.1x**. → **과금 관점 2턴 이후 저렴**.
+- 그러나 (a) **캐시 토큰도 컨텍스트 창을 점유**, (b) **툴 정의를 바꾸면 전체 캐시 무효화**, (c) 초기화 비용.
+- 따라서 v3의 성공 지표는 "과금 절감"이 아니라 **"컨텍스트 점유율 축소 + 툴 선택 정확도 + 로딩 지연"**. (컨텍스트 창 미실측 → P0에서 확인)
 
-### 3.2 DB — `research_cache`
-```sql
-CREATE TABLE IF NOT EXISTS research_cache (
-  id          BIGSERIAL PRIMARY KEY,
-  query_hash  TEXT        NOT NULL,
-  provider    TEXT        NOT NULL,
-  query       TEXT        NOT NULL,
-  results     JSONB       NOT NULL,
-  fetched_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at  TIMESTAMPTZ NOT NULL,
-  hit_count   INT         NOT NULL DEFAULT 0,
-  UNIQUE (query_hash, provider)
-);
-CREATE INDEX IF NOT EXISTS idx_research_cache_hash ON research_cache (query_hash);
-```
-- DDL은 `docs/specs/schema.sql`에 동기화. TTL 기본: `docs` 7d, `web`/`exa` 1d. 조회 시 `hit_count++`.
+## 4. 목표
+- **1차 목표: 활성 MCP 스키마 ≤ 12,000 tok/turn** (달성 예상 ~6,000).
+- 2차: 컨텍스트 점유율(모델 창 대비) 실측·명시.
+- 비목표: lsp **능력** 제거, 외부 벤더 교체, Deep Dive 7단계 구조 변경.
 
-### 3.3 CLI — `cli.py research`
-기존 `cmd_*` + `add_parser` 패턴 준수(`cli.py` 내 `sub = ...`).
-```
-cli.py research search "질문" [--mode auto|web|exa|docs] [--limit N] [--no-rerank] [--no-cache] [--json]
-cli.py research docs "library" "질문" [--json]
-cli.py research fetch <url> [--max-chars N] [--json]
-cli.py research cache stats|purge [--older-than D]
-```
+## 5. 작업 항목 (상세)
 
-### 3.4 MCP(선택, 최소) — devforge-mcp에 **단일 툴**
-CLI-first를 기본으로 하되, 구조화 호출이 필요하면 `mcp_server.py`에 툴 **1개만** 추가(스키마 비용 최소).
-```python
-@mcp.tool(name="research")
-async def research_tool(query: str, mode: str = "auto", limit: int = 5, rerank: bool = True) -> str: ...
-```
+### A. 제거 — **2단계로 분할** (P0가 정정)
+P0(실측)에서 "무위험 5종"은 **대체 준비도**가 달라 분할한다.
 
-## 4. 인터페이스 (시그니처)
+**P1a — 대체수단 즉시 존재 (0.2d)** ⭐먼저
+- `filesystem`(내장 Read/Edit/Glob/Grep) · `github`(`gh` CLI) · `time`(`date`).
+- 절감 **8,768** tok. 위험 낮음(대체 즉시). → **2026-09-11 opencode 적용 완료**.
+
+**P1b — 대체수단 준비 후 (P5a 뒤, 0.2d)**
+- `fetch` · `context7` — opencode 실사용 각 **87·47회**(claude-only 데이터의 "0회"는 **표본 편향**이었음). 대체수단(`lib/research` + `webfetch`) 준비 전 제거 금지.
+- 절감 1,586 tok. **P5a에 종속.**
+
+### B. lsp 필터 (P2) — opencode 네이티브, 프록시 불필요
+- **opencode**: `tools`에서 `"lsp_*": false` 후 core만 enable:
+  ```jsonc
+  "tools": { "lsp_*": false,
+    "lsp_blast_radius": true, "lsp_find_references": true, "lsp_find_symbol": true,
+    "lsp_inspect_symbol": true, "lsp_get_symbol_source": true, "lsp_get_diagnostics": true,
+    "lsp_rename_symbol": true, "lsp_suggest_fixes": true,
+    "lsp_proxy_artifact_get": true, "lsp_proxy_artifact_info": true, "lsp_proxy_artifact_list": true }
+  ```
+  (per-agent 또는 global. 접두어는 서버명 `_`.)
+- **Claude Code**: 네이티브 per-tool 필터가 불확실(#7328 closed, #12863). `claude --allowedTools` 실험 1회 → 불가 시 **`mcp-trunc-proxy`에 `--allow` 플래그 추가**(신규 프록시 금지). **자기 툴 `proxy_artifact_*` 3종은 allowlist에 자동 포함**(누락 시 잘린 응답 회수 불가).
+- Acceptance: lsp 노출 11툴, `blast_radius`/`find_references`/`rename_symbol`/`get_diagnostics` 정상, `proxy_artifact_get` 정상, 절감 ≥13k.
+
+### C. devforge/yggdrasil 트림 (P3, 0.5d)
+- 변경 후 **devforge-mcp가 최대 서버**(4,700). 실사용 92%가 4툴(`search_turns`25·`deepdive_step_enter`14·`deepdive_step_exit`9·`obs_search`6) → **25→8~10툴**.
+- yggdrasil 9→4(`deep_planning`·`sequential_thinking`·`list_plans`·`get_plan`; 사용 94%가 2툴).
+- 절감 ~5,100.
+
+### D. 4단계 원인 진단 (P4, 0.3d) — 결정 분기
+- **사실: 4단계는 8/17세션 실행됨.** 원인은 미실행이 아니라 **도구 이탈**.
+- 진단: 4단계 진입 세션에서 실제 호출 도구 대조(로그). 예상: WebSearch/WebFetch/search-proxy 우세.
+- 분기:
+  - (a) 규칙-현실 불일치 → **`cli.py research` 하나로 규정**(가벼운 CLI가 준수율↑) → 3a 진행.
+  - (b) 호출 절대량 부족 → 캐시는 무의미 → **3b 보류**.
+- Acceptance: 세션별 4단계 도구 분포 표 산출.
+
+### E. 리서치 흡수 (P5a 선행 / P5b 조건부)
+- **P5a (0.5d)**: `proxies/search.py`·`exa_mcp.py`·`context7_mcp.py` 코어 → `lib/research/{web,exa,context7,fetch}.py`(기존 파일은 얇은 래퍼). **`cli.py research`**. 캐시/리랭크 **제외**. → `fetch`/`context7` 기능 회복 + 1,804 절감.
+- **P5b (1d, 조건부)**: `research_cache` + 리랭크 + **`candidate_k`/`top_k`** + 골든셋. **착수 조건 = 4단계 호출 ≥3회/세션**. 근거: 리랭크는 후보군 있어야 유효(5→5=0).
+- **CLI-only 확정**(MCP 툴 미추가): 내장/Bash 1,437회 vs MCP 114회. `--json` 엄격 계약.
+
+### F. shrimp → tasks DB (P7, 1d)
+- `shrimp_data/` → `tasks` DB(`cli.py task`). `deepdive_step_*` 게이팅 패턴 재사용. 절감 ~2,500.
+
+## 6. lsp allowlist (확정, 11툴 / 2,936tok)
+`blast_radius`, `find_references`, `find_symbol`, `inspect_symbol`, `get_symbol_source`, `get_diagnostics`, `rename_symbol`, `suggest_fixes` + **필수** `proxy_artifact_get/info/list`.
+- 제외: `start_lsp`(500, **라이프사이클** — 클라이언트/프록시 자동화 대상), `preview_edit`/`apply_edit`/`replace_symbol_body`(내장 Edit 143회로 대체 가능), `run_tests`/`run_build`(Bash 1,118), `*_simulation`(7), `get_*`(tokens/hints/…), `format_*`, `*_cache`, `type_hierarchy`, `go_to_*` 변형.
+- **확인 필요**: `blast_radius`가 `get_cross_repo_references`에 의존하는지(제거 시 조용한 축소 방지). 정리 단계의 `safe_delete_symbol` 사용 시 별도 취급.
+
+## 7. 단계 (P0~P7)
+| P | 내용 | 절감 | 공수 | Acceptance |
+|---|---|---:|---|---|
+| **P0** | 백업 + **툴별 char** + **opencode 로그** + shrimp 프로브 + 컨텍스트창 확인 | — | 0.5d | 기준선 재현 |
+| **P1a** | 대체가능 3종 제거(filesystem·github·time) | 8,768 | 0.2d | ≤28k, 세션 정상 |
+| **P1b** | fetch·context7 제거 (**P5a 종속**) | 1,586 | 0.2d | CLI 대체 후 |
+| **P2** | opencode 네이티브 lsp 필터(+11툴) / Claude Code 플래그·trunc-proxy `--allow` | 13,397 | 0.2–0.5d | lsp 11툴, ≥13k |
+| **P3** | devforge 25→8, yggdrasil 9→4 | ~5,100 | 0.5d | 툴 축소, 필수 동작 |
+| **P4** | 4단계 진단 | — | 0.3d | 도구 분포표 |
+| **P5a** | `lib/research/` + `cli.py research`(캐시X) | 1,804 | 0.5d | CLI JSON 계약 |
+| **P6** | 규칙 전환(`llm-agent-rule.md`/`AGENTS.md`) | — | 0.5d | 4단계=CLI 명시 |
+| **P5b** | 캐시+리랭크+`candidate_k/top_k`+골든셋 | — | 1d | **조건부** |
+| **P7** | shrimp → tasks | 2,500 | 1d | SSOT 단일 |
+| **P8** | 검증·정리·Deep Dive 1회 | — | 0.5d | §9 통과 |
+
+## 8. 인터페이스
 ```python
 # lib/research/__init__.py
-def research(query: str, mode: str = "auto", limit: int = 5,
-             rerank: bool = True, use_cache: bool = True,
-             ttl_sec: int | None = None) -> dict:
-    """mode: auto|web|exa|docs. 반환:
-    {"query","mode","results":[{"title","url","snippet","source","score"}],
-     "meta":{"cache_hit":bool,"reranked":bool,"provider":str,"count":int}}"""
-
-# CLI JSON 계약은 위 dict를 그대로 출력(머신리더블).
+def research(query, mode="auto", candidate_k=30, top_k=5,
+             rerank=True, use_cache=True, ttl_sec=None) -> dict
+# results:[{title,url,snippet,source,score}] + meta:{cache_hit,reranked,provider,candidate_k,top_k}
+```
+```
+cli.py research search "질의" [--mode auto|web|exa|docs] [--candidate-k 30] [--top-k 5] [--no-rerank] [--no-cache] [--json]
+cli.py research docs "lib" "질의" [--json]
+cli.py research fetch <url> [--json]
 ```
 
-## 5. 단계 (Phase)
+## 9. 검증 기준 (개선 증거)
+- 활성 MCP 스키마: **39.2k → ≤12k** (측정 스크립트 재실행).
+- lsp 노출: 68 → 11.
+- 리랭크 on/off **정렬 변화**(동작 아닌 **개선** 증거) + 골든셋 nDCG/precision.
+- 캐시: 반복쿼리 히트 > 0 (**단, P5b 조건부**).
+- 4단계 도구 준수율: 규정(CLI/context7/exa) 비율 상승.
+- 롤백: 설정 원복·`RESEARCH_BACKEND`.
 
-각 단계는 독립 롤백 가능. Acceptance 통과 시 다음 단계.
+## 10. 리스크
+- **reranker 도메인**: Qwen3-Reranker는 질의-문서 관련성 모델 → 리스크 **낮음**(검증). 실제 제약은 **후보군 부족**과 4B로 30~50건 채점 지연.
+- **allowlist 누락**: `proxy_artifact_*`·`start_lsp` 등 → 워크플로우 필요 툴 보수적 포함.
+- **캐시 무효화**: 툴 정의 변경은 전체 캐시 무효화 → 필터는 **세션 시작 시 1회**.
+- **표본 편향**: lsp 사용 logs가 Claude 위주 → **opencode 로그 선행**(P0).
+- **KeyRotator 동시접근**: MCP 래퍼+CLI → 전환기 단일 경로.
 
-**Phase 0 — 기준선/롤백 (0.5d)**
-- MCP 설정 백업: `cp ~/.claude/mcp.json{,.bak}` 및 `~/.config/opencode/opencode.json{,.bak}`.
-- 현재 툴 스키마 토큰 측정(서버별) 기록 → 이후 비교 기준.
-- Acceptance: 백업 존재 + 기준 토큰 수 기록.
+## 11. 미결
+- yggdrasil 유지(권장) vs `cli.py plan` 대체.
+- Claude Code per-tool 필터 네이티브 여부(실험 1회).
+- 컨텍스트 창(모델별) → 점유율 확정.
 
-**Phase 1 — 코어 이관 (1d)**
-- `proxies/search.py`·`exa_mcp.py`·`context7_mcp.py`에서 **API 호출 코어를 `lib/research/`로 이동**.
-- 기존 MCP 파일은 `lib/research/*`를 호출하는 **얇은 래퍼**로 변경(동작 불변 → 무중단).
-- Acceptance: `python3.11 -c "from lib.research import web"`, 기존 MCP `web_search`/`exa_search`/`query_docs` 응답 불변.
+## 부록 A. 진단 쿼리
+```sql
+-- Deep Dive 단계 실행률
+SELECT step, count(distinct session_id) AS sessions,
+       sum((status='DONE')::int) AS done, sum((status='ABORTED')::int) AS aborted
+FROM deepdive_steps GROUP BY step ORDER BY step;
+-- 4단계 진입 세션 목록 (로그 대조용)
+SELECT session_id, started_at, status FROM deepdive_steps WHERE step=4 ORDER BY started_at DESC;
+```
+## 부록 B. 측정 스크립트
+- MCP 스키마 프로브: `probe_mcp.py`(tools/list 핸드셰이크) — 서버별/툴별 tok_est 산출. P0·P1·P2 재측정에 사용.
 
-**Phase 2 — 캐시 + 리랭크 + 인용 (1d)**
-- `research_cache` 마이그레이션, `cache.py`/`rank.py` 구현.
-- `research()`에 캐시조회→없으면 검색→리랭크→저장. 인용 정규화.
-- Acceptance: 동일 쿼리 2회 → 2회차 `meta.cache_hit=true`, `hit_count` 증가, API 미호출. 리랭크로 상위 결과 재정렬 확인.
+---
 
-**Phase 3 — CLI (0.5d)**
-- `cli.py research ...` 추가. `--json` 계약 안정.
-- Acceptance: `cli.py research search "python asyncio" --json` 이 스키마대로 출력, 문서 모드(`--mode docs`) 동작.
+## 12. P0 실행 로그 (2026-09-11)
 
-**Phase 4 — Deep Dive 규칙 전환 (0.5d)**
-- `llm-agent-rule.md`·`AGENTS.md` 4단계를 `cli.py research`로 교체(새 선택 기준 유지: API/버전→`--mode docs`, 개념/사례→`--mode web|exa`).
-- Acceptance: 규칙 문서에 MCP(context7/exa/search-proxy) 의존 서술 제거, CLI 예시 반영.
+### 12.1 opencode 실사용 (authoritative, 130세션·23,591 툴콜)
+| MCP | opencode 호출 | claude 호출 | 비고 |
+|---|---:|---:|---|
+| search-proxy | 207 | 11 | 고사용 |
+| devforge-mcp | 183 | 59 | 고사용 |
+| yggdrasil | 123 | 32 | 고사용 |
+| time | 110 | 1 | **claude 편향** |
+| filesystem | 109 | 3 | **claude 편향** |
+| fetch | 87 | 0 | **claude 편향** |
+| shrimp | 77 | 3 | |
+| github | 67 | 0 | **claude 편향** |
+| exa-search | 58 | 2 | |
+| lsp | 48 | 3 | |
+| context7 | 47 | 0 | **claude 편향** |
 
-**Phase 5 — MCP 등록 제거 (0.5d)**
-- `~/.claude/mcp.json`·`~/.config/opencode/opencode.json`에서 `search-proxy`·`exa-search`·`context7`·`fetch`·`filesystem` 제거(전환기 동안 `enabled:false` → 확인 후 삭제).
-- `devforge-mcp`에 `research` 툴(선택) 추가 여부 결정.
-- Acceptance: 세션 초기화 정상, 툴 목록에서 해당 서버 사라짐, 토큰 오버헤드 감소 측정.
+→ **claude-only 집계는 opencode의 결정을 대표하지 못함.** 모든 제거 판단은 opencode 기준으로 재평가.
 
-**Phase 6 — 태스크/계획 단일화 (1d, 선택)**
-- 태스크: 규칙의 `shrimp` 워크플로우를 `cli.py task` DB로 대체. shrimp 유지 시에도 **SSOT는 tasks DB**로 명시.
-- 계획: `yggdrasil` 대체 여부 결정 — 기본은 **유지**(플랜 파일/아카이브 툴링 가치), 대체 시 `cli.py plan`(docs/plans + DB)로 이관.
-- Acceptance: 태스크가 `tasks` 단일 소스, 규칙 문서 갱신. (yggdrasil 유지 시 변경 없음)
+### 12.2 lsp 실사용 (opencode, 48콜)
+`blast_radius` 19 · `get_diagnostics` 13 · **`start_lsp` 11** · `open_document` 2 · `detect_lsp_servers` 2 · `find_references` 1.
+→ allowlist는 **blast_radius·get_diagnostics·start_lsp·find_references**를 반드시 포함. `find_symbol`/`inspect_symbol`/`rename_symbol`/`suggest_fixes`는 opencode 사용 **0** → 축소 검토.
 
-**Phase 7 — 정리/검증 (0.5d)**
-- 사용처 없음 확인 후 래퍼 스크립트/`mcp-trunc-proxy` 항목 정리(`safe_delete_symbol`/`grep` 근거).
-- `pytest -x --tb=short` 및 CLI 스모크. Deep Dive 1회 실전 검증.
-- Acceptance: §7 검증 기준 전부 통과.
+### 12.3 컨텍스트 실측 (opencode 21,470 메시지)
+avg 신규 input **5,820** · avg **cache_read 155,417** tok/메시지 · 합계 cache_read 33.4억.
+→ 툴 스키마(~36k)는 컨텍스트의 **약 20%+** 점유. **과금이 아니라 컨텍스트 예산**이 핵심 근거(§3 확증).
 
-## 6. 정확도 설계 (핵심)
-1. **캐시(SSOT)**: `research_cache`에 (query, provider) 해시 저장 → 재현성, 중복 API 호출 제거, 세션 간 공유.
-2. **리랭크**: web+exa 후보를 병합 후 `reranker_score(query, doc)`로 재정렬(기존 Qwen3-Reranker-4B). 근거: 리랭크 +25~40% 정확도.
-3. **인용 정규화**: 모든 결과에 `{title,url,source,fetched_at}` 부착 → Deep Dive 검증(출처 추적)에 사용.
-4. **프로비넌스**: 최종 결과를 `obs_write`/worklog에 요약 기록 → 감사 추적.
+### 12.4 적용 완료
+- 백업: `~/.claude/mcp.json.bak_20260911_144514`, `~/.config/opencode/opencode.json.bak_20260911_144514`.
+- **opencode P1a 적용**: `filesystem`·`github`·`time` `enabled:false` (절감 8,768). JSON 유효.
+- 대체: filesystem→내장, github→`gh`, time→`date`(즉시 가용).
+- **미적용(다음 단계)**: Claude Code `~/.claude/mcp.json`(파일별 enabled 없음 → 항목 제거 방식), lsp 필터, fetch/context7 제거(P5a 종속).
 
-## 7. 검증 기준 (Acceptance 종합)
-- `cli.py research search "…" --json` 정상, 필수 필드(title/url/snippet/source/score) 포함.
-- 반복 쿼리 캐시 히트(API 미호출) 확인.
-- 리랭크 on/off 시 상위 정렬 차이 확인.
-- MCP 툴 스키마 토큰 **감소** 측정(Phase 0 대비).
-- 기존 MCP 호환(전환기) 또는 제거 후 세션 정상.
-- Deep Dive 4단계가 CLI로 완료되고 출처 인용 포함.
-
-## 8. 롤백
-- 전환기: 각 MCP를 `enabled:false`로만 두고 CLI 병행 → 문제 시 재활성.
-- 데이터: `research_cache`는 신규 테이블(기존 영향 없음) → `DROP` 가능.
-- 코드: Phase 1은 "이동 + 얇은 래퍼"라 원복 시 래퍼만 원본 호출로 되돌림.
-- env 토글: `RESEARCH_BACKEND=cli|mcp`(기본 `cli`, 문제 시 `mcp`).
-
-## 9. 미결 / 추후 결정
-- yggdrasil 유지 vs `cli.py plan` 대체 (Phase 6에서 결정).
-- shrimp 완전 제거 vs 규칙만 tasks DB로 정렬.
-- devforge-mcp에 `research` 툴 포함 여부(CLI-only 대비 스키마 비용).
-- `fetch` 대체: `flaresolverr_bypass`(이미 MCP) 재사용 vs `lib/research/fetch.py` 신규.
-
-## 10. 범위 밖 (Out of scope)
-- LSP 통합/축소(유지).
-- watchdog/컴포넌트 레지스트리(`docs/reports/control-plane-registry-research.md`) — 별도 계획.
-- 외부 검색 벤더 교체.
