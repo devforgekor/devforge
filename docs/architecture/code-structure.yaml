@@ -825,6 +825,9 @@ modules:
       status: experimental
       purpose: "DevForge FastAPI \u2014 notification hub (Slack + Telegram + Email)\
         \ + Blob Explorer."
+    portal.py:
+      status: experimental
+      purpose: "Portal read API for the Vercel viewer \u2014 display-only JSON."
     review_dashboard.py:
       status: experimental
       purpose: "HITL Review Dashboard \u2014 web UI for fact CONFIRM/REJECT."

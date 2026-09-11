@@ -38,6 +38,7 @@ from fastapi.responses import JSONResponse
 from lib.notify import Notifier
 from mcp_server import mcp
 from devforge_fastapi.review_dashboard import router as review_router
+from devforge_fastapi.portal import router as portal_router
 from fastmcp.utilities.lifespan import combine_lifespans
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -349,6 +350,9 @@ async def health():
 
 # ── Review dashboard ─────────────────────────────────────────
 app.include_router(review_router)
+
+# ── Portal read API (Vercel viewer) ──────────────────────────
+app.include_router(portal_router)
 
 # ── Calendar sync (optional — skipped if google-* deps unavailable) ──
 if calendar_router is not None:

@@ -55,7 +55,8 @@ def list_objects(prefix: str, bucket: str = DEFAULT_BUCKET) -> list[dict]:
     out: list[dict] = []
     start = None
     while True:
-        resp = c.list_objects(ns, bucket, prefix=prefix, start=start, limit=1000)
+        resp = c.list_objects(ns, bucket, prefix=prefix, start=start, limit=1000,
+                              fields="name,size,timeCreated")
         data = resp.data
         for o in data.objects:
             out.append(
