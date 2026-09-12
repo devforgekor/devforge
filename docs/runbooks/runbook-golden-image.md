@@ -5,6 +5,15 @@
 **갱신 주기**: 매년 **2월 15일** 고정 (자동 알림 → 수동 실행)
 > **설계 결정(2026-09-03)**: 안정성 우선 — 월 1회 재빌드 없음. 보안 패치는 이미지 재빌드 없이 `unattended-upgrades`로 보완. Spot 실패 시 폴백 체인 없이 다음 성공 시 재시도로 처리(best-effort).
 
+> **⚠️ 필수 주석 — FX2ms_v2 부팅 호환 (2026-09-11 확정, 과거 세션 근거)**
+> - **이미지 정의에 `DiskControllerTypes=SCSI,NVMe` 필수.** `az sig image-definition create`에 이 feature가 없거나 **NVMe만**이면 **FX2ms_v2 배포 시 부팅 실패**:
+>   `InvalidParameter: cannot boot with OS image or disk. DiskControllerTypes supported: NVMe`
+>   (직접 마켓플레이스 `Ubuntu2204` 이미지는 FX에서 부팅되나, **갤러리 캡처 이미지는 부팅 불가** — 2026-09-04 세션에서 확인)
+> - **해결**: 이미지 정의 features에 **`SCSI, NVMe` 둘 다** 지정(현 `llm-qwen-27b` 정의에 반영됨). 확인: `az sig image-definition show -g rg-devforge-prod-cin --gallery-name gallery_devforge_prod_cin --gallery-image-definition llm-qwen-27b --query features`.
+> - **과거 `Standard_E4s_v3` 기억**: 현재 이 구독에서 **`NotAvailableForSubscription`** → 사용 불가. 빌더·배포는 **`Standard_FX2ms_v2` 단일 SKU** 유지(§2 정책과 동일).
+> - **현 배포 이미지 실제값**(게시 2026-09-04 07:09 UTC, `llm-qwen-27b:2026.09.2`): 서비스명 **`llm.service`**, 바이너리 **`/usr/local/bin/llama-server`**, 모델 **`/opt/models/qwen3.6-27b-q8_0.gguf`**, 포트 `8080`, `--n-gpu-layers 0`. → **2026-09-11 §1.2 recipe를 실제값으로 정합 완료**.
+> - **`--jinja`**: 툴콜(function calling)에 필요(골든 이미지 기본 ExecStart엔 없음, 모듈이 런타임 자동 적용). 재빌드 시 baked-in 권장.
+
 ---
 
 ## 전체 아키텍처
@@ -21,8 +30,8 @@ DevForge (on-prem)
 │  │ llama-server :8080            │  │
 │  │   ↕ systemd auto-start        │  │
 │  ├────────────────────────────────┤  │
-│  │ /opt/models/qwen-27b-q8_0.gguf│  │  ← 이미지 baked-in
-│  │ /opt/llama/llama-server       │  │  ← 이미지 baked-in
+│  │ /opt/models/qwen3.6-27b-q8_0.gguf│ ← 이미지 baked-in
+│  │ /usr/local/bin/llama-server      │ ← 이미지 baked-in
 │  ├────────────────────────────────┤  │
 │  │ Standard SSD 64GB             │  │
 │  │ 42GB RAM (모델 ~28.6GB)       │  │
@@ -43,7 +52,7 @@ DevForge ← 결과 수신
 |--------|------|------|------|
 | 리소스 그룹 | `rg-devforge-prod-cin` | Central India | 모든 리소스 통일 |
 | Compute Gallery | `gallery_devforge_prod_cin` | Central India | 최초 1회 생성 |
-| 이미지 정의 | `llm-qwen-27b-golden` | Gallery 내 | 최초 1회 생성 |
+| 이미지 정의 | `llm-qwen-27b` | Gallery 내 | 최초 1회 생성 |
 | 이미지 버전 | `YYYY.MM.0` | Central India | 연 1회 증가 (예: 2026.02.0) |
 | 빌더 VM (임시) | `temp-golden-builder` | Central India | 빌드 후 삭제 |
 | Managed Image (임시) | `axis-golden-image` | Central India | Gallery 등록 후 삭제 |
@@ -99,6 +108,9 @@ wget -O /tmp/llama.tar.gz \
   "https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_VER}/llama-server-linux-x64.tar.gz"
 sudo tar -xzf /tmp/llama.tar.gz -C /opt/llama/
 sudo chmod +x /opt/llama/llama-server /opt/llama/llama-cli
+# 실제 이미지와 정합: 바이너리를 /usr/local/bin 에 배치 (모듈 ensure_tool_calling이 /usr/local/bin/llama-server 탐색)
+sudo install -m 0755 /opt/llama/llama-server /usr/local/bin/llama-server
+sudo install -m 0755 /opt/llama/llama-cli /usr/local/bin/llama-cli
 rm /tmp/llama.tar.gz
 
 # --- Qwen 3.6 27B Q8_0 GGUF ---
@@ -109,13 +121,13 @@ huggingface-cli download ggml-org/Qwen3.6-27B-GGUF \
   --include "Qwen3.6-27B-Q8_0.gguf" \
   --local-dir /opt/models
 
-# --- 모델 심볼릭 링크 (갱신 시 경로 변경 불필요) ---
-ln -sf /opt/models/Qwen3.6-27B-Q8_0.gguf /opt/models/model.gguf
+# --- 실제 이미지와 정합: 파일명을 소문자 경로로 정규화 ---
+mv /opt/models/Qwen3.6-27B-Q8_0.gguf /opt/models/qwen3.6-27b-q8_0.gguf
 
 # --- llama-server systemd service (hardened, context7 verified) ---
 # systemd: PrivateTmp/ProtectSystem은 2차 방어선으로 유효(systemd.io/TEMPORARY_DIRECTORIES)
 # llama.cpp: --api-key는 LLAMA_API_KEY env로 주입, X-Api-Key/Bearer 둘 다 검증(server/README.md)
-sudo tee /etc/systemd/system/llama-server.service << 'EOF'
+sudo tee /etc/systemd/system/llm.service << 'EOF'
 [Unit]
 Description=llama.cpp LLM Server
 After=network.target
@@ -124,19 +136,20 @@ Wants=network-online.target
 [Service]
 Type=simple
 # --host 127.0.0.1 로 바인딩 후 Caddy가 443에서 TLS 종단 (평문 0.0.0.0 노출 제거)
-ExecStart=/opt/llama/llama-server \
-  -m /opt/models/model.gguf \
+ExecStart=/usr/local/bin/llama-server \
+  -m /opt/models/qwen3.6-27b-q8_0.gguf \
   -c 8192 \
   --port 8080 \
   --host 127.0.0.1 \
   --n-gpu-layers 0 \
+  --jinja \
   --api-key ${LLAMA_API_KEY}
 Restart=always
 RestartSec=5
 StartLimitBurst=3
 StartLimitIntervalSec=60
 DynamicUser=yes
-StateDirectory=llama-server
+StateDirectory=llm
 # --- systemd sandbox (최소 하드닝, CIS L1 대신) ---
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -160,7 +173,7 @@ CPUQuota=180%
 WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload
-sudo systemctl enable llama-server
+sudo systemctl enable llm
 
 # --- Caddy reverse proxy (127.0.0.1:8080 → :443, TLS는 DevForge Caddy가 종단) ---
 # ephemeral VM 특성상 인증서 자동 발급 불필요 — DevForge 측 Caddy(host network, auto-HTTPS)가
@@ -174,7 +187,7 @@ sudo tee /etc/caddy/Caddyfile << 'EOF'
 EOF
 # API key는 Key Vault(Managed Identity) 또는 secrets.env에서 주입 — 평문 커밋 금지
 # 예: export LLAMA_API_KEY=$(az keyvault secret show --vault-name kv-devforge --name llama-api-key --query value -o tsv)
-# 검증: systemd-analyze security llama-server.service (score >= 70 목표)
+# 검증: systemd-analyze security llm.service (score >= 70 목표)
 
 # --- 캐시 정리 (이미지 크기 최적화) ---
 sudo apt remove -y python3-pip
@@ -224,11 +237,12 @@ az sig create \
 az sig image-definition create \
   --resource-group rg-devforge-prod-cin \
   --gallery-name gallery_devforge_prod_cin \
-  --gallery-image-definition llm-qwen-27b-golden \
+  --gallery-image-definition llm-qwen-27b \
   --publisher AxisPublisher \
   --offer AxisOffer \
   --sku AxisSku \
-  --os-type Linux --hyper-v-generation V2
+  --os-type Linux --hyper-v-generation V2 \
+  --features "DiskControllerTypes=SCSI,NVMe"
 
 # 이미지 버전 생성 (연 1회: YYYY.MM.0 형식)
 VERSION=$(date +%Y.%m.0)  # 예: 2026.02.0
@@ -236,7 +250,7 @@ SUB=$(az account show --query id -o tsv)
 az sig image-version create \
   --resource-group rg-devforge-prod-cin \
   --gallery-name gallery_devforge_prod_cin \
-  --gallery-image-definition llm-qwen-27b-golden \
+  --gallery-image-definition llm-qwen-27b \
   --gallery-image-version ${VERSION} \
   --managed-image "/subscriptions/${SUB}/resourceGroups/rg-devforge-prod-cin/providers/Microsoft.Compute/images/axis-golden-image" \
   --target-regions centralindia \
@@ -265,14 +279,14 @@ az image delete \
 VERSION=$(az sig image-version list \
   --resource-group rg-devforge-prod-cin \
   --gallery-name gallery_devforge_prod_cin \
-  --gallery-image-definition llm-qwen-27b-golden \
+  --gallery-image-definition llm-qwen-27b \
   --query "sort_by(@, &name)[-1].name" -o tsv)
 
 az vm create \
   --resource-group rg-devforge-prod-cin \
   --name llm-qwen-27b-$(date +%s) \
   --location centralindia \
-  --image "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-devforge-prod-cin/providers/Microsoft.Compute/galleries/gallery_devforge_prod_cin/images/llm-qwen-27b-golden/versions/${VERSION}" \
+  --image "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-devforge-prod-cin/providers/Microsoft.Compute/galleries/gallery_devforge_prod_cin/images/llm-qwen-27b/versions/${VERSION}" \
   --size Standard_FX2ms_v2 \
   --admin-username azureuser \
   --ssh-key-values ~/.ssh/id_rsa.pub \
@@ -442,7 +456,7 @@ SLACK_WEBHOOK_URL=
 az sig image-version list \
   --resource-group rg-devforge-prod-cin \
   --gallery-name gallery_devforge_prod_cin \
-  --gallery-image-definition llm-qwen-27b-golden \
+  --gallery-image-definition llm-qwen-27b \
   --query "[?provisioningState=='Succeeded'].{Version:name}" -o table
 
 # 2. 이전 버전으로 새 VM 배포 (섹션 2 명령어에서 VERSION만 변경)
@@ -467,4 +481,5 @@ curl -X POST https://<new_ip>/completion \
 | 2026-09-03 | Deep Dive(context7): systemd 샌드박스 15종 + llama-server 127.0.0.1/API key + Caddy, 네트워크 443/API key, 롤백 curl TLS/API key 보정 (§1.2, §6, §8) | context7 검증 — systemd.io(PrivateTmp/ProtectSystem), ggml-org/llama.cpp(--api-key/LLAMA_API_KEY), Azure(갤러리/Spot Scheduled Events) (dp-20260903-golden-image-deep-dive) |
 | 2026-09-04 | 15분 타이머 복구 + orphan VM 강제 종료 안전장치 추가: `_check_orphan_vms()` + `azure_client.list_vms_by_prefix()` + symlink 복구 + `claude-mode` 기본값 `deepseek` | `golden-image-deploy-check.service` 경로 불일치로 실행 안 됨. symlink 생성, VM 잔존 시 강제 삭제 로직 추가, 기본 모드 `deepseek`로 변경 |
 | 2026-09-09 | `azure_client.list_vms_by_prefix()`에 `--show-details` 추가 (`publicIps`/`powerState` 필드 보정) | orphan 감지 쿼리가 `--show-details` 없이 조회해 실제 VM 존재 시 IP/상태가 누락됨. `claude-mode`(`.bashrc.d/claude-mode:28`)와 패리티 유지 — 강제 종료는 정상이나 로그 정확도 개선 |
+| 2026-09-11 | **FX2ms_v2 부팅 호환 주석 추가 + 이미지 정의에 `--features "DiskControllerTypes=SCSI,NVMe"` 추가 + ExecStart `--jinja` + 이미지 정의명·§1.2 recipe 실제값 정합** | 과거 세션(2026-09-04) "FX 호환성 불일치": 갤러리 캡처 이미지(NVMe)가 FX2ms_v2에서 `cannot boot ... DiskControllerTypes supported: NVMe`로 부팅 실패 → `SCSI, NVMe` 병기로 해결(현 이미지 반영). `E4s_v3`는 현재 `NotAvailableForSubscription`. `--jinja`=툴콜 필수. §1.2를 실제 이미지와 정합(서비스 `llm.service`, 바이너리 `/usr/local/bin/llama-server`, 모델 `/opt/models/qwen3.6-27b-q8_0.gguf`) |
 ```
