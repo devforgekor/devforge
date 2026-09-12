@@ -19,6 +19,7 @@ from lib.experiment_state import is_experiment_active
 from lib.watchdog.config import (
     CONTAINER_EXCLUSION,
     MODE_FILE_INFERENCE,
+    SVCPOD_UNIT,
 )
 from lib.watchdog.state import ComponentTracker
 
@@ -118,6 +119,41 @@ def recover_service(name: str) -> bool:
         log(f"  service {name} restart OK but health check failed: {detail}")
         return False
     except Exception:
+        return False
+
+
+def recover_svcpod_forwarding() -> bool:
+    """svc-pod.service 재기동으로 rootlessport 호스트 포워딩을 복구.
+
+    published port가 호스트에서 도달 불가일 때(컨테이너는 healthy) svc pod를
+    재기동해 rootlessport를 재생성한다. 컨테이너는 BindsTo=svc-pod로 함께
+    재시작되며, postgres 데이터는 볼륨(/mnt/lv_db)이라 안전하다. 재기동 후
+    각 published port의 도달성을 재검사한다.
+    """
+    if is_experiment_active():
+        log("  SKIP svc-pod forwarding recovery — experiment active")
+        return False
+    log(f"  [svcpod] restarting {SVCPOD_UNIT} to restore port forwarding...")
+    try:
+        subprocess.run(
+            ["systemctl", "--user", "restart", SVCPOD_UNIT],
+            capture_output=True,
+            timeout=150,
+        )
+        from lib.watchdog.checker import check_svcpod_ports
+
+        # rootlessport 재생성 대기 (최대 ~30s)
+        detail = ""
+        for _ in range(6):
+            time.sleep(5)
+            ok, detail = check_svcpod_ports()
+            if ok:
+                log("  [svcpod] port forwarding restored")
+                return True
+        log(f"  [svcpod] ports still down after restart: {detail}")
+        return False
+    except Exception as e:
+        log(f"  [svcpod] recovery error: {e}")
         return False
 
 

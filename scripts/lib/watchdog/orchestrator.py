@@ -46,6 +46,7 @@ from lib.watchdog.checker import (
     check_port_conflict,  # noqa: F401 — used in day_fix_loop
     check_probe_latency,
     check_service,
+    check_svcpod_ports,
     read_mode,
 )
 from lib.watchdog.config import (
@@ -70,6 +71,7 @@ from lib.watchdog.recovery import (
     recover_port_conflict,  # noqa: F401 — used in day_fix_loop
     recover_service,
     recover_slot_deadlock,
+    recover_svcpod_forwarding,
 )
 
 from ._globals import CODE_SCAN_INTERVAL as _CODE_SCAN_INTERVAL
@@ -223,6 +225,37 @@ def _run_alert_only(dry_run: bool, results: dict):
         results.setdefault("services", []).append({"name": name, "ok": ok, "detail": detail})
 
 
+def _run_svcpod_forwarding(results: dict, dry_run: bool):
+    """svc pod published port의 호스트 포워딩(rootlessport) 감시 + 자동 복구.
+
+    컨테이너는 healthy여도 rootlessport가 죽으면 호스트에서 도달 불가가 된다.
+    미포워딩 감지 시 incident 기록 후 svc-pod.service 재기동(graduated)으로 복구.
+    """
+    ok, detail = check_svcpod_ports()
+    tracker = _state.get("svc:svc-pod-forwarding")
+    if ok:
+        tracker.record_success()
+        incidents.resolve_if_open("svc:svc-pod-forwarding")
+    elif not dry_run and not is_experiment_active():
+        inc_id = incidents.record_detect(
+            "svc:svc-pod-forwarding", "down", detail, unit="svc-pod.service"
+        )
+        rec_ok = graduated_recover("svc-pod-forwarding", tracker, recover_svcpod_forwarding)
+        incidents.record_action(inc_id, "restart", bool(rec_ok))
+        if not _test_active and tracker.is_degraded() and tracker.can_alert():
+            send_alert("svc:svc-pod-forwarding", tracker.state.value, detail)
+            _state.add_event("svc:svc-pod-forwarding", "down", detail)
+    else:
+        incidents.record_detect("svc:svc-pod-forwarding", "down", detail, unit="svc-pod.service")
+        if tracker.record_failure() and tracker.can_alert():
+            if not _test_active:
+                send_alert("svc:svc-pod-forwarding", tracker.state.value, detail)
+                _state.add_event("svc:svc-pod-forwarding", "down", detail)
+    results.setdefault("services", []).append(
+        {"name": "svc-pod-forwarding", "ok": ok, "detail": detail}
+    )
+
+
 def _run_oneshot_results(dry_run: bool, results: dict):
     """One-shot 서비스 self-heal — 실패 시 재실행(backoff+circuit), 반복 실패 시 알림."""
     for item in check_all_oneshot_results():
@@ -320,6 +353,7 @@ def _run_common_checks(results: dict, dry_run: bool, mode: str = "day"):
     _run_timers(results, dry_run, mode)
     _run_memory_check(results, dry_run)
     _run_alert_only(dry_run, results)
+    _run_svcpod_forwarding(results, dry_run)
     _run_oneshot_results(dry_run, results)
     _run_system_services(dry_run, results)
     _maybe_prune()

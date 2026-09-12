@@ -123,7 +123,7 @@ def mark_parse_failed(event_ids: list):
     """Mark rows as parse_failed. Next run retries with shorter prompt."""
     if not event_ids:
         return
-    ids = ",".join(str(int(i)) for i in event_ids if i.isdigit() or (i.startswith("-") and i[1:].isdigit()))
+    ids = ",".join(str(int(i)) for i in event_ids if str(i).lstrip("-").isdigit())
     if not ids:
         return
     psql_ok(f"UPDATE activity_log SET summary_status='parse_failed' WHERE id IN ({ids})")
@@ -151,7 +151,7 @@ def mark_summarized(event_ids: list):
     """Mark source rows as summarized."""
     if not event_ids:
         return
-    ids = ",".join(str(int(i)) for i in event_ids if i.isdigit() or (i.startswith("-") and i[1:].isdigit()))
+    ids = ",".join(str(int(i)) for i in event_ids if str(i).lstrip("-").isdigit())
     if not ids:
         return
     ok = psql_ok(f"""UPDATE activity_log SET summary_status='summarized'

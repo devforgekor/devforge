@@ -69,6 +69,19 @@ ALERT_ONLY_TARGETS = [
     "or-rate-limiter",  # OpenRouter rate limiter
 ]
 
+# ── svc pod 호스트 포트 포워딩 감시 ─────────────────────────────────
+# rootless bridge에서는 published port가 rootlessport(userspace proxy)로
+# 포워딩된다. 프로세스가 죽으면 컨테이너는 healthy여도 호스트에서 도달
+# 불가가 된다(2026-09-12 사고). SSOT: ~/.config/containers/systemd/svc.pod
+# 의 PublishPort (변경 시 동기화).
+SVCPOD_UNIT = "svc-pod.service"
+SVCPOD_PUBLISHED_PORTS = {
+    8000: "devforge-mcp",
+    8002: "devforge-fastapi",
+    8085: "blob-explorer",
+    8191: "flaresolverr",
+}
+
 # 타이머 감시 — max_idle 초과 시 미발동으로 간주 (kick/alert)
 TIMER_TARGETS = {
     # free 모델 갱신 타이머 — 매일 15:30 UTC. 26h idle = 하루 넘게 안 돌면 알림.

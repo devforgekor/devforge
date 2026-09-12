@@ -28,6 +28,7 @@ from .orchestrator import (
     _run_common_checks,
     _run_memory_check,
     _run_services,
+    _run_svcpod_forwarding,
     _run_timers,
     build_heartbeat_summary,
     day_fix_loop,

@@ -10,6 +10,7 @@ LLM probe tiers (TensorRT-LLM RFC #4513):
 
 import json
 import os
+import socket
 import subprocess
 import time
 import urllib.request
@@ -28,6 +29,7 @@ from lib.watchdog.config import (
     MODE_FILE,
     ONESHOT_RESULT_TARGETS,
     SERVICE_TARGETS,
+    SVCPOD_PUBLISHED_PORTS,
     SWAP_CRIT_MB,
     SYSTEM_SERVICE_TARGETS,
     TIMER_TARGETS,
@@ -667,6 +669,33 @@ def check_llm_slots(port: int) -> list[dict]:
         return result
     except Exception:
         return []
+
+
+# ── svc pod host port forwarding ─────────────────────────────────────
+
+
+def check_svcpod_ports(timeout: float = 1.0) -> tuple[bool, str]:
+    """svc pod published port의 호스트 도달성을 TCP connect로 검사.
+
+    rootless bridge에서 published port는 rootlessport(userspace proxy)가
+    포워딩한다. 이 프로세스가 죽으면 컨테이너는 healthy여도 호스트에서
+    도달 불가가 되므로(2026-09-12 사고), 실제 연결로 검증한다.
+
+    Returns:
+        (True, "<n> ports forwarded") 또는 (False, "svc pod 포트 미포워딩: ...").
+    """
+    down = []
+    for port, label in SVCPOD_PUBLISHED_PORTS.items():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        try:
+            if sock.connect_ex(("127.0.0.1", port)) != 0:
+                down.append(f"{port}({label})")
+        finally:
+            sock.close()
+    if down:
+        return False, "svc pod 포트 미포워딩: " + ", ".join(down)
+    return True, f"{len(SVCPOD_PUBLISHED_PORTS)} ports forwarded"
 
 
 # ── Port conflict detection ──────────────────────────────────────────
