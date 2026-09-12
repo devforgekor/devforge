@@ -1,34 +1,34 @@
 # DevForge — Timer Registry
-# auto-generated from live systemd data at 2026-09-11 22:27 KST
+# auto-generated from live systemd data at 2026-09-12 09:00 KST
 ---
 metadata:
-  updated: 2026-09-11 22:27 KST
+  updated: 2026-09-12 09:00 KST
   source: live (systemctl list-timers)
 user_timers:
 - unit: devforge-backup-safety
   on_calendar: '*-*-* 23:00:00'
   last: ''
-  next: Fri 2026-09-11 23:01:48 GMT
+  next: Sat 2026-09-12 23:01:49 GMT
 - unit: devforge-daily-structure
   on_calendar: 00:00
   last: ''
-  next: Sat 2026-09-12 00:00:00 GMT
+  next: ''
 - unit: devforge-dev-poll
   on_calendar: '*:0/10'
   last: ''
-  next: Fri 2026-09-11 13:30:00 GMT
+  next: Sat 2026-09-12 00:10:00 GMT
 - unit: devforge-news-digest
   on_calendar: '23:30'
   last: ''
-  next: Fri 2026-09-11 23:30:33 GMT
+  next: Sat 2026-09-12 23:30:18 GMT
 - unit: devforge-news
   on_calendar: '*-*-* 00,06,12,18:00:00'
   last: ''
-  next: Fri 2026-09-11 18:03:09 GMT
+  next: Sat 2026-09-12 00:02:00 GMT
 - unit: devforge-openrouter-free-models
   on_calendar: '*-*-* 15:30:00'
   last: ''
-  next: Fri 2026-09-11 15:30:00 GMT
+  next: Sat 2026-09-12 15:30:00 GMT
 - unit: devforge-refresh-reminder
   on_calendar: '*-12-15 18:00:00'
   last: ''
@@ -44,11 +44,11 @@ user_timers:
 - unit: devforge-system-sync
   on_calendar: '*:0/30'
   last: ''
-  next: Fri 2026-09-11 13:30:01 GMT
+  next: Sat 2026-09-12 00:00:23 GMT
 - unit: devforge-watchdog-liveness
   on_calendar: '*:0/5'
   last: ''
-  next: Fri 2026-09-11 13:30:00 GMT
+  next: Sat 2026-09-12 00:05:00 GMT
 - unit: devforge-weekly-enrich-rebuild
   on_calendar: Sun *-*-* 18:00:00
   last: ''

@@ -499,21 +499,22 @@ modules:
       status: experimental
       purpose: Azure Spot VM lifecycle management.
     cli.py:
-      status: unknown
+      status: experimental
       purpose: CLI entry point for Azure Spot VM lifecycle management.
     config.py:
       status: experimental
-      purpose: Azure Spot VM configuration.
+      purpose: Azure Spot VM configuration (aligned to real Azure infra, 2026-09-11).
     manager.py:
       status: experimental
       purpose: "Azure Spot VM manager \u2014 create, poll, delete spot VMs."
     orchestrator.py:
       status: experimental
-      purpose: "Azure Spot VM orchestrator \u2014 coordinates VM lifecycle for debate\
-        \ rounds."
+      purpose: "Azure Spot VM orchestrator \u2014 coordinates VM lifecycle (endpoint\
+        \ provider)."
     tunnel.py:
       status: experimental
-      purpose: SSH tunnel management for Azure Spot VMs.
+      purpose: SSH tunnel management for Azure Spot VMs (tracked-pid based, cross-process
+        safe).
 - path: scripts/lib/llm/
   purpose: Llm
   files:
