@@ -1,4 +1,4 @@
-# Golden Image — Qwen 3.6 27B + Spot VM Runbook
+# Golden Image — Qwen3-30B-A3B (MoE) + Spot VM Runbook
 
 **리소스 그룹**: `rg-devforge-prod-cin` (Central India)  
 **목적**: DevForge 요청 시 Spot VM을 즉시 생성하여 LLM 추론 (코딩)  
@@ -13,6 +13,7 @@
 > - **과거 `Standard_E4s_v3` 기억**: 현재 이 구독에서 **`NotAvailableForSubscription`** → 사용 불가. 빌더·배포는 **`Standard_FX2ms_v2` 단일 SKU** 유지(§2 정책과 동일).
 > - **현 배포 이미지 실제값**(게시 2026-09-04 07:09 UTC, `llm-qwen-27b:2026.09.2`): 서비스명 **`llm.service`**, 바이너리 **`/usr/local/bin/llama-server`**, 모델 **`/opt/models/qwen3.6-27b-q8_0.gguf`**, 포트 `8080`, `--n-gpu-layers 0`. → **2026-09-11 §1.2 recipe를 실제값으로 정합 완료**.
 > - **`--jinja`**: 툴콜(function calling)에 필요(골든 이미지 기본 ExecStart엔 없음, 모듈이 런타임 자동 적용). 재빌드 시 baked-in 권장.
+> - **차기 골든 이미지 모델 (2026-09-11 확정)**: **`Qwen3-30B-A3B-Q4_K_M`** (18.56GB, MoE·3B active) + `--jinja` + `--chat-template-kwargs '{"enable_thinking":false}'`. FX2ms_v2에서 **툴콜 정상**, 생성 **~6 tok/s**(Q6_K는 25GB·~3.3 tok/s, Q8_0은 ~2.2 tok/s로 비권장).
 
 ---
 
@@ -30,11 +31,11 @@ DevForge (on-prem)
 │  │ llama-server :8080            │  │
 │  │   ↕ systemd auto-start        │  │
 │  ├────────────────────────────────┤  │
-│  │ /opt/models/qwen3.6-27b-q8_0.gguf│ ← 이미지 baked-in
+│  │ /opt/models/qwen3-30b-a3b-q4_k_m.gguf│ ← 이미지 baked-in
 │  │ /usr/local/bin/llama-server      │ ← 이미지 baked-in
 │  ├────────────────────────────────┤  │
 │  │ Standard SSD 64GB             │  │
-│  │ 42GB RAM (모델 ~28.6GB)       │  │
+│  │ 42GB RAM (모델 ~18.6GB)       │  │
 │  └────────────────────────────────┘  │
 │                                      │
 │  Spot Eviction → 자동 Delete         │
@@ -113,16 +114,16 @@ sudo install -m 0755 /opt/llama/llama-server /usr/local/bin/llama-server
 sudo install -m 0755 /opt/llama/llama-cli /usr/local/bin/llama-cli
 rm /tmp/llama.tar.gz
 
-# --- Qwen 3.6 27B Q8_0 GGUF ---
+# --- Qwen3-30B-A3B Q4_K_M GGUF (MoE, 3B active — 2 vCPU에서 툴콜 검증됨) ---
 sudo mkdir -p /opt/models
 pip3 install huggingface-hub -q
 # 비공개 모델일 경우 HUGGINGFACE_HUB_TOKEN 환경변수 필요
-huggingface-cli download ggml-org/Qwen3.6-27B-GGUF \
-  --include "Qwen3.6-27B-Q8_0.gguf" \
+huggingface-cli download Qwen/Qwen3-30B-A3B-GGUF \
+  --include "Qwen3-30B-A3B-Q4_K_M.gguf" \
   --local-dir /opt/models
 
 # --- 실제 이미지와 정합: 파일명을 소문자 경로로 정규화 ---
-mv /opt/models/Qwen3.6-27B-Q8_0.gguf /opt/models/qwen3.6-27b-q8_0.gguf
+mv /opt/models/Qwen3-30B-A3B-Q4_K_M.gguf /opt/models/qwen3-30b-a3b-q4_k_m.gguf
 
 # --- llama-server systemd service (hardened, context7 verified) ---
 # systemd: PrivateTmp/ProtectSystem은 2차 방어선으로 유효(systemd.io/TEMPORARY_DIRECTORIES)
@@ -137,12 +138,13 @@ Wants=network-online.target
 Type=simple
 # --host 127.0.0.1 로 바인딩 후 Caddy가 443에서 TLS 종단 (평문 0.0.0.0 노출 제거)
 ExecStart=/usr/local/bin/llama-server \
-  -m /opt/models/qwen3.6-27b-q8_0.gguf \
+  -m /opt/models/qwen3-30b-a3b-q4_k_m.gguf \
   -c 8192 \
   --port 8080 \
   --host 127.0.0.1 \
   --n-gpu-layers 0 \
   --jinja \
+  --chat-template-kwargs '{"enable_thinking":false}' \
   --api-key ${LLAMA_API_KEY}
 Restart=always
 RestartSec=5
@@ -403,7 +405,7 @@ health_checks          -- 헬스체크 결과 (성공/실패, 레이턴시)
 
 | 항목 | 산식 | 금액 |
 |------|------|------|
-| 모델 + OS (32.7 GB) | 32.7 GB × $0.05/GB | **~$1.63/월** |
+| 모델 + OS (~24 GB) | ~24 GB × $0.05/GB | **~$1.2/월** |
 
 ### 실행 비용
 
@@ -482,4 +484,5 @@ curl -X POST https://<new_ip>/completion \
 | 2026-09-04 | 15분 타이머 복구 + orphan VM 강제 종료 안전장치 추가: `_check_orphan_vms()` + `azure_client.list_vms_by_prefix()` + symlink 복구 + `claude-mode` 기본값 `deepseek` | `golden-image-deploy-check.service` 경로 불일치로 실행 안 됨. symlink 생성, VM 잔존 시 강제 삭제 로직 추가, 기본 모드 `deepseek`로 변경 |
 | 2026-09-09 | `azure_client.list_vms_by_prefix()`에 `--show-details` 추가 (`publicIps`/`powerState` 필드 보정) | orphan 감지 쿼리가 `--show-details` 없이 조회해 실제 VM 존재 시 IP/상태가 누락됨. `claude-mode`(`.bashrc.d/claude-mode:28`)와 패리티 유지 — 강제 종료는 정상이나 로그 정확도 개선 |
 | 2026-09-11 | **FX2ms_v2 부팅 호환 주석 추가 + 이미지 정의에 `--features "DiskControllerTypes=SCSI,NVMe"` 추가 + ExecStart `--jinja` + 이미지 정의명·§1.2 recipe 실제값 정합** | 과거 세션(2026-09-04) "FX 호환성 불일치": 갤러리 캡처 이미지(NVMe)가 FX2ms_v2에서 `cannot boot ... DiskControllerTypes supported: NVMe`로 부팅 실패 → `SCSI, NVMe` 병기로 해결(현 이미지 반영). `E4s_v3`는 현재 `NotAvailableForSubscription`. `--jinja`=툴콜 필수. §1.2를 실제 이미지와 정합(서비스 `llm.service`, 바이너리 `/usr/local/bin/llama-server`, 모델 `/opt/models/qwen3.6-27b-q8_0.gguf`) |
+| 2026-09-11 | 모델 확정: `Qwen3.6-27B-Q8_0` → **`Qwen3-30B-A3B-Q4_K_M`(MoE)** + `--chat-template-kwargs '{"enable_thinking":false}'` (§1.2·ExecStart·아키텍처) | 2 vCPU spot에서 27B dense는 툴콜 타임아웃. **MoE(3B active)는 툴콜 정상·~6 tok/s**로 검증(Q4 18.56GB > Q6 25GB·3.3tok/s > Q8 비권장). 차기 이미지 재빌드에 반영 |
 ```

@@ -1,6 +1,6 @@
 last_checkpoint:
-  time: '2026-09-06T03:51:12.056045+00:00'
-  summary: no files
+  time: '2026-09-12T01:52:53.753872+00:00'
+  summary: 'Azure Golden Image 재빌드 핸드오버: 모델 Qwen3-30B-A3B-Q4_K_M(MoE) 확정, FX2ms_v2 툴콜 검증(~6 tok/s), 런북 정합(DiskControllerTypes/llm.service/--jinja/enable_thinking).'
   total_files: 0
   recent_files:
     data: []
@@ -313,6 +313,10 @@ decisions:
     claude-aliases의 claude()/newhand()가 :44777을 하드코딩해 claude-env의 OpenRouter 설정을 무시하던 것이 잔액 소진의 직접 원인 → 하드코딩 제거, mode env
     상속. 검증 완료(모드 전환 왕복, HTTP 200, claude() 44777=0).'
   status: open
+- id: az-gi-01
+  detail: '골든 이미지 모델 확정: Qwen3.6-27B-Q8_0 → Qwen3-30B-A3B-Q4_K_M(MoE,3B active). 2 vCPU FX2ms_v2에서 툴콜 정상·~6 tok/s(Q6 3.3,
+    Q8 비권장). 필수 플래그 --jinja + chat-template-kwargs enable_thinking=false. 다음 세션에 이미지 재빌드.'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -373,8 +377,8 @@ known_issues:
     predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음. max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도
     문제 발견 시 각 predicate 개별 호출로 분리 (latency N배 증가).'
   resolved: false
-- id: nki12-02
-  detail: OpenRouter free model (:free)은 유료 키($10+)로 호출해도 cost=$0이지만 RPM 20 제한은 키 등급과 무관하게 동일. 15RPM proxy로 대응.
+- id: az-gi-k1
+  detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
   resolved: false
 completed_log:
 - OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
@@ -440,3 +444,5 @@ completed_log:
 - 'OCI 계정 검증: 실측 tenancy 해시 비교로 로컬 creds=mesids 계정임을 확인, OCI_MESIDS_*(5키) 별칭 저장.'
 - 'OpenRouter 키 교체: 무효 키(401) → 유효 키($10) 승격, /api/v1/credits 검증, 과금 확인.'
 - 'Claude 백엔드 전환 모드 시스템 구축: claude-mode(openrouter/deepseek 전환) + claude-aliases :44777 하드코딩 제거. 기본 모드 openrouter. 검증 완료.'
+- '2026-09-12'', ''text'': ''azure_spot 정합+엔드포인트화+삭제검증+TTL, 라이브 전경로 검증, MoE(Q4) 툴콜 검증. 런북(Q4·DiskController·llm.service·--jinja)
+  정합.'

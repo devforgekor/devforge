@@ -64,7 +64,7 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
 
 ## 5. 주의
 - Azure Spot은 **회수 위험** + **비용 누수**. **TTL/자동정리 구현됨**: `cli sweep --ttl <sec>` (VM명의 epoch로 age 산출, 초과분 삭제). 운영은 타이머(cron/systemd)로 `sweep` 주기 실행 권장.
-- 포트: `TUNNEL_PORT_BASE=8085`부터. 로컬 8081(embedder) 등과 충돌 금지.
+- 포트: `TUNNEL_PORT_BASE=18085`부터(8085는 podman rootlessport 점유). 로컬 8081(embedder) 등과 충돌 금지.
 - bespoke 원격 클라이언트를 만들지 말 것(표류) → **동일 하네스 + provider만 교체**.
 
 ## 6. 현황 / 블로커 (2026-09-11, 실측)
@@ -87,7 +87,14 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
 
 **남은 블로커**: 없음(에이전트가 이 엔드포인트로 Deep Dive 구동 시 opencode provider 등록 + 서버 `--jinja` 필요 — §1·§2).
 
-**Qwen Deep Dive 준비 상태 (2026-09-11, 실측)**:
-- 골든 이미지 유닛 = **`/etc/systemd/system/llm.service`** (name `llm`); 기본 ExecStart에 `--jinja` **없음** → 모듈이 SSH 후 **`ensure_tool_calling()`으로 `--jinja` 자동 적용**(stop→sed→reload→start) 확인.
-- **툴콜(OpenAI function calling) 검증은 보류**: `FX2mds_v2`(2 vCPU)에서 `qwen3.6-27b-q8_0` 추론이 **너무 느려** `/v1/chat/completions` 프로브가 **HTTP 000(타임아웃)**. 모델/서버 문제가 아니라 **연산 성능 문제**.
-- **권고**: ①`--jinja`를 **골든 이미지에 베이킹**(런타임 패치 대신), ②실제 구동은 **GPU/더 큰 사양 또는 소형 모델**, ③그 후 opencode provider(baseURL) 등록 + 툴콜 재검증.
+**Qwen Deep Dive 준비 상태 (2026-09-11, 실측·확정)**:
+- 골든 이미지 유닛 = **`/etc/systemd/system/llm.service`**(name `llm`). 모듈 **`ensure_tool_calling()`** 이 SSH 후 `--jinja` 자동 적용(stop→sed→reload→start).
+- **모델 확정 = `Qwen3-30B-A3B-Q4_K_M`**(MoE·3B active, 18.56GB). FX2ms_v2에서 **툴콜 정상**(`finish_reason:"tool_calls"`), 생성 **~6 tok/s**. (Q6_K 25GB·~3.3 tok/s, Q8 ~2.2 tok/s → 비권장)
+- **필수 플래그**: `--jinja` + `--chat-template-kwargs '{"enable_thinking":false}'`.
+- **모듈 코드 기준**(`lib/infra/azure_spot/`):
+  - `config.py`: VM_SIZE `Standard_FX2mds_v2`, `LLAMA_SERVER_PORT=8080`, `TUNNEL_PORT_BASE=18085`, `max_price=-1.0`, 활성 config 1개(qwen).
+  - `manager.py`: `create_vm` / `poll_until_ready` / `ensure_tool_calling` / `check_tool_calling` / `wait_until_deleted` / `delete_vm_verified`(NIC+PIP 포함) / `sweep_orphans`.
+  - `orchestrator.py`: `launch_all` / `teardown` / `verify_clean` / `preflight_clean` + 소비자 호환 `add`·`provision_all`·`managers`·`terminate_all`.
+  - `tunnel.py`: **tracked-pid**(state file, ssh 검증) 기반 close.
+  - `cli.py`: `launch` / `status` / `delete` / `sweep` / `destroy` / `verify` / `run`.
+- **차기(다음 세션)**: 골든 이미지 재빌드에 MoE baked-in(`runbook-golden-image.md`) → 배포 검증(툴콜 스모크) → opencode provider(baseURL `http://127.0.0.1:18085/v1`) 등록 → Deep Dive 7단계 검증.
