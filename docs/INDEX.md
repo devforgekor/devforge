@@ -49,6 +49,8 @@
 | Azure Golden Image(런북) | `runbooks/runbook-golden-image.md` | active |
 | Azure Qwen 엔드포인트 | `runbooks/azure-qwen-deepdive-endpoint.md` | active |
 | Azure 재빌드 핸드오버 | `plans/azure-golden-image-rebuild-handover.md` | active |
+| DataImpulse 대시보드 모니터(계약) | `specs/dataimpulse-monitor.yaml` | active |
+| DataImpulse 대시보드 모니터(런북) | `runbooks/dataimpulse-monitor.md` | active |
 
 ### 4) 뷰어 / 프론트
 | 문서 | 상태 |
@@ -70,6 +72,7 @@
 ## 최근 변경 (2026-09-12)
 - svc pod 호스트 포트포워딩(rootlessport) 장애 복구 + **watchdog 재발방지**(`check_svcpod_ports`/`recover_svcpod_forwarding`, task#32) — [`reports/svcpod-portforwarding-recovery-20260912.md`](./reports/svcpod-portforwarding-recovery-20260912.md).
 - Quadlet stub(`container-flaresolverr.container`) 제거, `activity_summarizer`/`checker`/`handover_db` 버그 수정.
+- DataImpulse 모니터 IP Whitelist 모드 추가·버그 수정 — [`specs/dataimpulse-monitor.yaml`](./specs/dataimpulse-monitor.yaml), [`runbooks/dataimpulse-monitor.md`](./runbooks/dataimpulse-monitor.md).
 
 ## 최근 변경 (2026-09-11)
 - MCP 통합 완료: 활성 MCP 4종, 스키마 36,672→8,416 tok/turn(−77%).

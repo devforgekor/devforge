@@ -1,0 +1,138 @@
+# Language: English only — machine-readable per docs/CONVENTIONS.md §4
+# ═══════════════════════════════════════════════════════════════════
+# DevForge DataImpulse Monitor — Contract & Schema
+# ═══════════════════════════════════════════════════════════════════
+# SSOT: /opt/workspace/ebooklib/apps/backend/lib/dataimpulse_monitor.py
+# Owner: devforge · Updated: 2026-09-12
+# ═══════════════════════════════════════════════════════════════════
+
+metadata:
+  updated: "2026-09-12"
+  service: dataimpulse-monitor
+  source: "ebooklib/apps/backend/lib/dataimpulse_monitor.py"
+  caller: "ebooklib/apps/backend/lib/pipeline.py (every 10 chapters)"
+  dashboard_url: "https://app.dataimpulse.com/dashboard"
+  signin_url: "https://app.dataimpulse.com/sign-in"
+  proxy_host_default: "gw.dataimpulse.com"
+  proxy_port_default: 823
+
+contract:
+  # ── Input (environment variables) ──────────────────────────────────
+  env:
+    DATAIMPULSE_IP_WHITELIST:
+      type: boolean
+      default: false
+      accepted_values: ["1", "true", "yes"]
+      description: "Enable IP whitelist mode. When set, proxy authentication is skipped."
+    DATAIMPULSE_USER:
+      type: string
+      default: ""
+      description: "Proxy username (takes precedence over .env.local)."
+    DATAIMPULSE_PASS:
+      type: string
+      default: ""
+      description: "Proxy password (takes precedence over .env.local)."
+    DATAIMPULSE_HOST:
+      type: string
+      default: "gw.dataimpulse.com"
+      description: "Proxy hostname. Overrides .env.local if set."
+    DATAIMPULSE_PORT:
+      type: integer
+      default: 823
+      description: "Proxy port. Overrides .env.local if set."
+    EBOOK_DAILY_TRAFFIC_LIMIT_MB:
+      type: integer
+      default: 200
+      description: "Daily traffic limit in MB (used by traffic_guard.py)."
+
+  # ── Output contract (dict returned by check_dataimpulse_usage / sync) ─
+  output:
+    success: boolean
+    used_gb: float | null
+    remaining_gb: float | null
+    tracked_used_mb: integer
+    tracked_chapters: integer
+    message: string
+
+  # ── Mode selection ─────────────────────────────────────────────────
+  modes:
+    whitelist:
+      trigger: "DATAIMPULSE_IP_WHITELIST in (1, true, yes)"
+      proxy_config:
+        server: "http://{DATAIMPULSE_HOST}:{DATAIMPULSE_PORT}"
+      credentials: none
+      requires_dashboard_registration: true
+      registration: "Register server IP (161.33.199.207) at DataImpulse dashboard > Manage Whitelist IPs"
+    auth:
+      trigger: "not whitelist"
+      proxy_config:
+        server: "http://{DATAIMPULSE_USER}:{DATAIMPULSE_PASS}@{DATAIMPULSE_HOST}:{DATAIMPULSE_PORT}"
+        username: "{DATAIMPULSE_USER}"
+        password: "{DATAIMPULSE_PASS}"
+      credentials: required
+      requires_dashboard_registration: false
+
+  # ── Flow ───────────────────────────────────────────────────────────
+  flow:
+    - step: 1
+      name: "load_credentials"
+      endpoint: "dataimpulse_monitor.py::_load_proxy_credentials"
+      detail: "Load .env.local defaults, then override with environment variables (env wins)."
+    - step: 2
+      name: "build_proxy_config"
+      endpoint: "dataimpulse_monitor.py::_build_proxy_config"
+      detail: "Return proxy config dict + mode description string."
+    - step: 3
+      name: "connect_dashboard"
+      endpoint: "dataimpulse_monitor.py::_access_dashboard"
+      detail: "Playwright headless browser via proxy. networkidle timeout 30000ms; fallback domcontentloaded."
+    - step: 4
+      name: "parse_usage"
+      endpoint: "dataimpulse_monitor.py::_parse_usage"
+      detail: "Parse used_gb and remaining_gb from page text. Directional words: left/used. Fallback: last GB number = used_gb."
+    - step: 5
+      name: "compare_with_tracking"
+      endpoint: "dataimpulse_monitor.py::_log_comparison"
+      detail: "Compare dashboard usage with traffic_guard.py local tracking. Warn if |diff_pct| > 50."
+    - step: 6
+      name: "fallback"
+      endpoint: "dataimpulse_monitor.py::_log_fallback_status"
+      detail: "On login redirect/parse failure: log message, continue local tracking, return success=false."
+
+  # ── Data model ─────────────────────────────────────────────────────
+  data_model:
+    traffic_state:
+      path: "/opt/ai_data/flaresolverr/ebook_watcher/traffic_state.json"
+      fields:
+        date: string (YYYY-MM-DD)
+        bytes: integer (cumulative bytes, reset at midnight)
+        chapters: integer (chapters collected today)
+        last_exceeded_at: string|null (ISO timestamp when limit exceeded)
+
+  # ── Error codes / messages ─────────────────────────────────────────
+  errors:
+    missing_credentials: "DataImpulse 크레덴셜 없음 — 대시보드 확인 스킵"
+    login_redirect: "로그인 필요 — {mode_message}"
+    parse_failure: "사용량 데이터 파싱 실패"
+    exception: "대시보드 확인 실패: {error}"
+
+  # ── Verification (2026-09-12) ──────────────────────────────────────
+  verification:
+    - "py_compile: PASS"
+    - "parse_usage forward (used): PASS (2.0 GB used -> used=2.0, rem=None)"
+    - "parse_usage backward (remaining): PASS (0.5 GB left -> used=None, rem=0.5)"
+    - "parse_usage fallback (no directional word): PASS (1.5 GB -> used=1.5, rem=None)"
+    - "parse_usage none: PASS (no GB -> None, None)"
+    - "mode whitelist: PASS (no credentials needed)"
+    - "mode auth: PASS (credentials in server URL)"
+    - "env precedence: PASS (DATAIMPULSE_* overrides .env.local)"
+
+  # ── Change history ─────────────────────────────────────────────────
+  change_history:
+    - version: "2026-09-12"
+      changes:
+        - "Added IP whitelist mode (DATAIMPULSE_IP_WHITELIST)"
+        - "Fixed env vars precedence (.env.local overridden by env vars)"
+        - "Fixed _parse_usage remaining_gb overwrite bug"
+        - "Fixed operator precedence in credentials check"
+        - "Added bidirectional verification (forward/backward)"
