@@ -1,7 +1,15 @@
-# 핸드오버 — Azure Golden Image 재빌드 (다음 세션)
+# 핸드오버 — Azure Golden Image 재빌드 (완료)
 
-> Status: active · Date: 2026-09-12 (09-11본 갱신) · Owner: devforge · Related: `docs/runbooks/runbook-golden-image.md`, `docs/runbooks/azure-qwen-deepdive-endpoint.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
-> **다음 세션의 첫 작업 = 골든 이미지 재빌드(Qwen3-30B-A3B MoE baked-in).** 이 문서만 보면 이어서 진행 가능.
+> Status: completed · Date: 2026-09-12 (09-11본 갱신, 동일자 완료) · Owner: devforge · Related: `docs/runbooks/runbook-golden-image.md`, `docs/runbooks/azure-qwen-deepdive-endpoint.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
+> **완료(2026-09-12):** 골든 이미지 재빌드(Qwen3-30B-A3B-Q4_K_M MoE baked-in) → `llm-qwen-27b:2026.09.3` 등록 → 배포 툴콜 검증(`finish_reason:"tool_calls"`) → 임시 리소스 정리 CLEAN. opencode provider `azureqwen`(baseURL `127.0.0.1:18085/v1`) 등록. **남은 것**: opencode 재시작 후 provider로 Deep Dive 1회 실행 검증.
+
+## 0-0. 완료 요약 (2026-09-12 실행분)
+- **이미지**: `gallery_devforge_prod_cin/llm-qwen-27b:2026.09.3` (`Succeeded`, `DiskControllerTypes=SCSI, NVMe`).
+- **baked-in**: `/opt/models/qwen3-30b-a3b-q4_k_m.gguf`(18G, MoE) + `/opt/llama/llama-server`(llama.cpp **b10919**, `libgomp1`) + `/usr/local/bin/llama-server` 심볼릭 + `llm.service`(enabled, `--jinja` + `enable_thinking=false`).
+- **검증**: 모듈 `launch` 툴콜 OK → 터널 18085 경유 `/v1/chat/completions` `finish_reason:"tool_calls"` → `destroy` `CLEAN`(잔여 0).
+- **DB**: `golden_image_versions` 2026.09.3 active / 2026.09.2 deprecated.
+- **수정**: `azure:20137133/scripts/golden_image/yearly_refresh.sh`(runbook 정합: Spot 빌더, b10919 자산명, `libgomp1`, llm.service) — commit `44a177b`.
+- **신규 사실(중요)**: 이 구독 Regular `StandardFXmsv2Family`/`StandardFXmdsv2Family` quota=0 → **빌더는 Spot 필수**(`lowPriorityCores=3`, eviction-policy Deallocate). `runbook-golden-image.md` §1.1 반영.
 
 ---
 
@@ -38,14 +46,15 @@ Deep Dive 백엔드(devforge-mcp HTTP)가 죽어 있던 원인을 정비했다. 
 | 서비스 | `llm.service`, 바이너리 `/usr/local/bin/llama-server` |
 | 필수 플래그 | **`--jinja`** + **`--chat-template-kwargs '{"enable_thinking":false}'`** |
 
-## 3. 다음 세션 작업 순서
-0. **사전 확인(필수)**: 새 opencode 세션에서 `deepdive_step_*` 툴이 보이는지 = devforge-mcp 정상. 안 보이면 `curl -s http://127.0.0.1:8000/health` 확인 → 죽어 있으면 watchdog 복구를 기다리거나 `systemctl --user restart svc-pod.service`. (`cli.py status --json`도 정상 확인)
-1. **골든 이미지 재빌드** (`docs/runbooks/runbook-golden-image.md` 최신본 그대로):
+## 3. 작업 순서 (2026-09-12 실행: 1·2·4 완료, 3 provider 등록 완료·검증만 재시작 대기)
+0. **사전 확인(필수)**: 새 opencode 세션에서 `deepdive_step_*` 툴이 보이는지 = devforge-mcp 정상. 안 보이면 `curl -s http://127.0.0.1:8000/health` 확인 → 죽어 있으면 watchdog 복구를 기다리거나 `systemctl --user restart svc-pod.service`. (`cli.py status --json`도 정상 확인) — **완료(이번 세션 정상).**
+1. **골든 이미지 재빌드** (`docs/runbooks/runbook-golden-image.md` 최신본 그대로): — **완료 (`2026.09.3`)**
    - §1.1 빌더 VM(=`Standard_FX2ms_v2`, Ubuntu2204) → §1.2 설정(모델 Q4 MoE + `llm.service` + `--jinja` + enable_thinking=false) → 일반화 → 캡처 → **§1.6 이미지 정의에 `--features "DiskControllerTypes=SCSI,NVMe"`** → 새 버전(예: `2026.09.3`) 등록.
    - 다운로드 18.56GB는 **`curl --retry --retry-all-errors -C -`** 로(중간 stall 재현됨).
-2. **배포 검증**: `azure-qwen`/§2로 새 버전 배포 → `/v1/chat/completions` 툴콜 스모크(모델 `finish_reason:"tool_calls"` 확인).
-3. **opencode provider 등록**: baseURL `http://127.0.0.1:18085/v1` (모듈 `run`/터널). Deep Dive 7단계 1회 실행 검증.
-4. **모듈 정합 확인**: `ensure_tool_calling()`이 `llm.service`를 찾도록(현재 `/usr/local/bin/llama-server` grep) 유지.
+   - **주의**: Regular FX quota=0 → 빌더 `--priority Spot --eviction-policy Deallocate` 필수, `libgomp1` 필수.
+2. **배포 검증**: `azure-qwen`/§2로 새 버전 배포 → `/v1/chat/completions` 툴콜 스모크(모델 `finish_reason:"tool_calls"` 확인). **완료**(모듈 launch + 터널 18085 경유, `get_weather` → `tool_calls`).
+3. **opencode provider 등록**: baseURL `http://127.0.0.1:18085/v1` (모듈 `run`/터널). Deep Dive 7단계 1회 실행 검증. **provider `azureqwen` 등록 완료** — 단, opencode config는 재시작 시 반영 → **재시작 후 Deep Dive 1회 실행 검증만 남음**(VM을 `launch`로 띄운 상태에서).
+4. **모듈 정합 확인**: `ensure_tool_calling()`이 `llm.service`를 찾도록(현재 `/usr/local/bin/llama-server` grep) 유지. **완료**(baked-in `--jinja` → `ALREADY`, `check_tool_calling` OK).
 
 ## 4. 함정 / 주의 (이번에 겪은 것)
 - **DiskControllerTypes**: `SCSI, NVMe` 병기 아니면 FX2ms_v2에서 `cannot boot ... DiskControllerTypes supported: NVMe`로 **부팅 실패**. (E4s_v3는 현재 `NotAvailableForSubscription`.)
@@ -56,6 +65,12 @@ Deep Dive 백엔드(devforge-mcp HTTP)가 죽어 있던 원인을 정비했다. 
 - **재빌드는 비쌈**: 검증된 설정만 굽기(이번에 MoE+jinja+enable_thinking 검증 완료).
 
 ## 5. 변경 파일 (참고)
+**(2026-09-12, 골든 이미지 재빌드 완료)**
+- `azure:20137133/scripts/golden_image/yearly_refresh.sh` (Spot 빌더 + b10919 자산명 + `libgomp1` + `llm.service` 정합, commit `44a177b`)
+- `docs/runbooks/runbook-golden-image.md` (§1.1 Spot 필수, §1.2 b10919/libgomp1/심볼릭, §9 개정)
+- `docs/runbooks/azure-qwen-deepdive-endpoint.md` (8085→18085, v2026.09.3)
+- `~/.config/opencode/opencode.json` (`azureqwen` provider 추가)
+- DB: `golden_image_versions` 2026.09.3 active
 **(2026-09-12, 인프라 정비)**
 - `scripts/lib/watchdog/{config,checker,recovery,orchestrator,__init__}.py` (svc-pod 포트포워딩 감지·복구)
 - `scripts/activity_summarizer.py` (isdigit 버그), `~/.config/containers/systemd/_disabled/container-flaresolverr.container.disabled`

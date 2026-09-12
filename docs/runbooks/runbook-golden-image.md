@@ -11,9 +11,9 @@
 >   (직접 마켓플레이스 `Ubuntu2204` 이미지는 FX에서 부팅되나, **갤러리 캡처 이미지는 부팅 불가** — 2026-09-04 세션에서 확인)
 > - **해결**: 이미지 정의 features에 **`SCSI, NVMe` 둘 다** 지정(현 `llm-qwen-27b` 정의에 반영됨). 확인: `az sig image-definition show -g rg-devforge-prod-cin --gallery-name gallery_devforge_prod_cin --gallery-image-definition llm-qwen-27b --query features`.
 > - **과거 `Standard_E4s_v3` 기억**: 현재 이 구독에서 **`NotAvailableForSubscription`** → 사용 불가. 빌더·배포는 **`Standard_FX2ms_v2` 단일 SKU** 유지(§2 정책과 동일).
-> - **현 배포 이미지 실제값**(게시 2026-09-04 07:09 UTC, `llm-qwen-27b:2026.09.2`): 서비스명 **`llm.service`**, 바이너리 **`/usr/local/bin/llama-server`**, 모델 **`/opt/models/qwen3.6-27b-q8_0.gguf`**, 포트 `8080`, `--n-gpu-layers 0`. → **2026-09-11 §1.2 recipe를 실제값으로 정합 완료**.
+> - **현 배포 이미지 실제값**(게시 2026-09-12, `llm-qwen-27b:2026.09.3`): 서비스명 **`llm.service`**, 바이너리 **`/usr/local/bin/llama-server`**(→ `/opt/llama/llama-server` 심볼릭, llama.cpp **b10919**), 모델 **`/opt/models/qwen3-30b-a3b-q4_k_m.gguf`**(MoE), 포트 `8080`, `--n-gpu-layers 0`, `--jinja`, `--chat-template-kwargs '{"enable_thinking":false}'`. (직전 `2026.09.2`는 27B dense `/opt/models/qwen3.6-27b-q8_0.gguf`.)
 > - **`--jinja`**: 툴콜(function calling)에 필요(골든 이미지 기본 ExecStart엔 없음, 모듈이 런타임 자동 적용). 재빌드 시 baked-in 권장.
-> - **차기 골든 이미지 모델 (2026-09-11 확정)**: **`Qwen3-30B-A3B-Q4_K_M`** (18.56GB, MoE·3B active) + `--jinja` + `--chat-template-kwargs '{"enable_thinking":false}'`. FX2ms_v2에서 **툴콜 정상**, 생성 **~6 tok/s**(Q6_K는 25GB·~3.3 tok/s, Q8_0은 ~2.2 tok/s로 비권장).
+> - **현행 골든 이미지 모델 (2026-09-12 baked-in)**: **`Qwen3-30B-A3B-Q4_K_M`** (18.56GB, MoE·3B active) + `--jinja` + `--chat-template-kwargs '{"enable_thinking":false}'`. FX2ms_v2에서 **툴콜 정상**, 생성 **~6 tok/s**(Q6_K는 25GB·~3.3 tok/s, Q8_0은 ~2.2 tok/s로 비권장).
 
 ---
 
@@ -65,6 +65,8 @@ DevForge ← 결과 수신
 
 ### 1.1 임시 VM 생성
 
+> **⚠️ 빌더는 Spot 필수 (2026-09-12 확정)**: 이 구독에서 Regular `StandardFXmsv2Family`/`StandardFXmdsv2Family` quota = **0** → `--priority Spot` 없이 생성하면 `QuotaExceeded`로 실패. Spot은 `lowPriorityCores`(3) 안에 들어가며(2 vCPU), `--eviction-policy Deallocate`로 회수 시에도 OS 디스크/진행분이 보존된다.
+
 ```bash
 az vm create \
   --resource-group rg-devforge-prod-cin \
@@ -76,7 +78,12 @@ az vm create \
   --ssh-key-values ~/.ssh/id_rsa.pub \
   --os-disk-size-gb 64 \
   --storage-sku StandardSSD_LRS \
-  --os-disk-delete-option Delete
+  --os-disk-delete-option Delete \
+  --zone 2 \
+  --security-type Standard \
+  --priority Spot \
+  --eviction-policy Deallocate \
+  --max-price -1
 
 # 공용 IP 확인
 az vm show -d -g rg-devforge-prod-cin -n temp-golden-builder --query publicIps -o tsv
@@ -89,7 +96,7 @@ ssh azureuser@<VM_IP>
 
 # --- 시스템 패키지 ---
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y wget curl git python3-pip unattended-upgrades
+sudo apt install -y wget curl git python3-pip unattended-upgrades libgomp1
 
 # --- 보안 패치 자동 적용 (이미지 재빌드 없이 CVE 창 축소) ---
 # 연 1회 full rebuild를 유지하되, 그 사이 보안 업데이트는 자동 적용
@@ -102,28 +109,32 @@ EOF
 sudo systemctl enable --now unattended-upgrades
 
 # --- llama.cpp prebuilt binary (버전 고정 권장) ---
-# 최신 태그 확인: https://github.com/ggml-org/llama.cpp/releases
-LLAMA_VER="b4432"  # 갱신 시 최신 stable로 변경
+# 최신 태그 확인: https://api.github.com/repos/ggml-org/llama.cpp/releases (bNNNNN nightly)
+# 주의(2026-09-12): 자산명이 `llama-<ver>-bin-ubuntu-x64.tar.gz`로 변경됨(구 `llama-server-linux-x64.tar.gz`는 더 이상 없음).
+#                   또한 최신 우분투 빌드는 공유 라이브러리($ORIGIN RUNPATH)를 동봉 → 디렉터리째 추출하고 /usr/local/bin은 심볼릭 링크로 둔다.
+#                   `libgomp1`(OpenMP) 필수 (없으면 status=127: libgomp.so.1 not found).
+LLAMA_VER="b10919"  # 갱신 시 최신 bNNNNN으로 변경
 sudo mkdir -p /opt/llama
-wget -O /tmp/llama.tar.gz \
-  "https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_VER}/llama-server-linux-x64.tar.gz"
-sudo tar -xzf /tmp/llama.tar.gz -C /opt/llama/
+curl -fL --retry 5 --retry-all-errors -C - \
+  -o /tmp/llama.tar.gz \
+  "https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_VER}/llama-${LLAMA_VER}-bin-ubuntu-x64.tar.gz"
+sudo tar -xzf /tmp/llama.tar.gz -C /opt/llama --strip-components=1
 sudo chmod +x /opt/llama/llama-server /opt/llama/llama-cli
-# 실제 이미지와 정합: 바이너리를 /usr/local/bin 에 배치 (모듈 ensure_tool_calling이 /usr/local/bin/llama-server 탐색)
-sudo install -m 0755 /opt/llama/llama-server /usr/local/bin/llama-server
-sudo install -m 0755 /opt/llama/llama-cli /usr/local/bin/llama-cli
+# 실제 이미지와 정합: /usr/local/bin 에 심볼릭 링크 (모듈 ensure_tool_calling이 /usr/local/bin/llama-server 탐색)
+sudo ln -sf /opt/llama/llama-server /usr/local/bin/llama-server
+sudo ln -sf /opt/llama/llama-cli /usr/local/bin/llama-cli
+/usr/local/bin/llama-server --version 2>&1 | head -1
 rm /tmp/llama.tar.gz
 
 # --- Qwen3-30B-A3B Q4_K_M GGUF (MoE, 3B active — 2 vCPU에서 툴콜 검증됨) ---
 sudo mkdir -p /opt/models
-pip3 install huggingface-hub -q
-# 비공개 모델일 경우 HUGGINGFACE_HUB_TOKEN 환경변수 필요
-huggingface-cli download Qwen/Qwen3-30B-A3B-GGUF \
-  --include "Qwen3-30B-A3B-Q4_K_M.gguf" \
-  --local-dir /opt/models
-
-# --- 실제 이미지와 정합: 파일명을 소문자 경로로 정규화 ---
-mv /opt/models/Qwen3-30B-A3B-Q4_K_M.gguf /opt/models/qwen3-30b-a3b-q4_k_m.gguf
+# 다운로드 stall 재현됨 → curl 이어받기(-C -) + --retry-all-errors 사용 (18.56GB)
+curl -fL --retry 20 --retry-all-errors --retry-delay 10 -C - \
+  -o /tmp/qwen3-30b-a3b-q4_k_m.gguf \
+  "https://huggingface.co/Qwen/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf?download=true"
+sudo mv /tmp/qwen3-30b-a3b-q4_k_m.gguf /opt/models/qwen3-30b-a3b-q4_k_m.gguf
+sudo chown root:root /opt/models/qwen3-30b-a3b-q4_k_m.gguf
+sudo chmod 644 /opt/models/qwen3-30b-a3b-q4_k_m.gguf
 
 # --- llama-server systemd service (hardened, context7 verified) ---
 # systemd: PrivateTmp/ProtectSystem은 2차 방어선으로 유효(systemd.io/TEMPORARY_DIRECTORIES)
@@ -485,4 +496,5 @@ curl -X POST https://<new_ip>/completion \
 | 2026-09-09 | `azure_client.list_vms_by_prefix()`에 `--show-details` 추가 (`publicIps`/`powerState` 필드 보정) | orphan 감지 쿼리가 `--show-details` 없이 조회해 실제 VM 존재 시 IP/상태가 누락됨. `claude-mode`(`.bashrc.d/claude-mode:28`)와 패리티 유지 — 강제 종료는 정상이나 로그 정확도 개선 |
 | 2026-09-11 | **FX2ms_v2 부팅 호환 주석 추가 + 이미지 정의에 `--features "DiskControllerTypes=SCSI,NVMe"` 추가 + ExecStart `--jinja` + 이미지 정의명·§1.2 recipe 실제값 정합** | 과거 세션(2026-09-04) "FX 호환성 불일치": 갤러리 캡처 이미지(NVMe)가 FX2ms_v2에서 `cannot boot ... DiskControllerTypes supported: NVMe`로 부팅 실패 → `SCSI, NVMe` 병기로 해결(현 이미지 반영). `E4s_v3`는 현재 `NotAvailableForSubscription`. `--jinja`=툴콜 필수. §1.2를 실제 이미지와 정합(서비스 `llm.service`, 바이너리 `/usr/local/bin/llama-server`, 모델 `/opt/models/qwen3.6-27b-q8_0.gguf`) |
 | 2026-09-11 | 모델 확정: `Qwen3.6-27B-Q8_0` → **`Qwen3-30B-A3B-Q4_K_M`(MoE)** + `--chat-template-kwargs '{"enable_thinking":false}'` (§1.2·ExecStart·아키텍처) | 2 vCPU spot에서 27B dense는 툴콜 타임아웃. **MoE(3B active)는 툴콜 정상·~6 tok/s**로 검증(Q4 18.56GB > Q6 25GB·3.3tok/s > Q8 비권장). 차기 이미지 재빌드에 반영 |
+| 2026-09-12 | **MoE baked-in 재빌드 실행 + runbook 정합**: §1.1 빌더 **Spot 필수**(Regular FX quota=0), §1.2 llama.cpp 자산명 `llama-<ver>-bin-ubuntu-x64.tar.gz`·`libgomp1`·`$ORIGIN` 심볼릭 레이아웃, 모델 curl 이어받기 | 실제 재빌드에서 `QuotaExceeded`(regular FX=0)·`libgomp.so.1 not found`(status=127)·구 자산명 404 재현 → recipe 정정. 결과 `llm-qwen-27b:2026.09.3` 등록, 배포 툴콜 검증(`finish_reason:"tool_calls"`) |
 ```

@@ -1,22 +1,17 @@
 last_checkpoint:
-  time: '2026-09-12T02:51:58.85168+00:00'
-  summary: '2026-09-12 인프라 정비: svc pod 호스트 포트포워딩(rootlessport) 복구 + 재발방지(watchdog svc-pod 포트 감지·자동복구, task#32) + Quadlet stub
-    제거 + activity_summarizer/checker 버그 수정. 다음 세션=Azure 골든 이미지 재빌드(Qwen3-30B-A3B MoE) Deep Dive.'
-  total_files: 7
+  time: '2026-09-12T04:10:59.698957+00:00'
+  summary: '2026-09-12 Azure Golden Image MoE 재빌드 완료: gallery llm-qwen-27b:2026.09.3 등록(MoE Qwen3-30B-A3B-Q4_K_M 18.56GB +
+    llama.cpp b10919 + llm.service --jinja/enable_thinking=false + libgomp1), 배포 툴콜 검증 finish_reason=tool_calls + destroy
+    CLEAN, yearly_refresh.sh/runbook/endpoint doc 정합, opencode azureqwen provider 등록. 남은것=opencode 재시작 후 Deep Dive 1회 검증.'
+  total_files: 0
   recent_files:
-    docs:
-    - server/docs/plans/azure-golden-image-rebuild-handover.md
-    config:
-    - ~/.config/containers/systemd/_disabled/container-flaresolverr.container.disabled
-    source:
-    - server/scripts/lib/watchdog/config.py
-    - server/scripts/lib/watchdog/checker.py
-    - server/scripts/lib/watchdog/recovery.py
-    - server/scripts/lib/watchdog/orchestrator.py
-    - server/scripts/lib/watchdog/__init__.py
-    - server/scripts/activity_summarizer.py
+    data: []
+    docs: []
+    config: []
+    source: []
+    generated: []
   git: {}
-  task: Azure 골든 이미지 재빌드 (Qwen3-30B-A3B MoE baked-in)
+  task: Azure Golden Image MoE 재빌드 (완료)
 decisions:
 - id: nd01-01
   detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta
@@ -333,6 +328,27 @@ decisions:
   detail: Quadlet 디렉터리의 주석뿐인 .container stub은 podman-user-generator 전체를 실패시킨다('no Image or Rootfs key specified'). 비활성화는 .container.disabled로
     rename해야 함. container-flaresolverr.container → _disabled/container-flaresolverr.container.disabled (실제 구동은 손으로 쓴 container-flaresolverr.service).
   status: resolved
+- id: agi12-01
+  detail: '2026-09-12 Azure Golden Image MoE 재빌드 완료: gallery llm-qwen-27b:2026.09.3 등록(MoE Qwen3-30B-A3B-Q4_K_M 18.56GB baked-in
+    + llama.cpp b10919 + llm.service --jinja + enable_thinking=false + libgomp1). 배포 툴콜 검증 finish_reason:"tool_calls", destroy
+    CLEAN(잔여 0). DB golden_image_versions 2026.09.3 active/.2 deprecated.'
+  status: open
+- id: agi12-02
+  detail: 이 구독 Regular StandardFXmsv2Family/StandardFXmdsv2Family quota=0 → 골든 이미지 빌더는 Spot 필수(--priority Spot --eviction-policy
+    Deallocate --max-price -1; lowPriorityCores=3). Regular로 생성하면 QuotaExceeded. runbook-golden-image.md §1.1 반영.
+  status: open
+- id: agi12-03
+  detail: 'llama.cpp 릴리스 자산명 변경: llama-<ver>-bin-ubuntu-x64.tar.gz (구 llama-server-linux-x64.tar.gz 무효). 최신 우분투 빌드는 $ORIGIN
+    RUNPATH 공유 라이브러리 동봉 → /opt/llama 디렉터리째 추출 후 /usr/local/bin/llama-server 심볼릭. libgomp1(OpenMP) 필수(없으면 status=127).'
+  status: open
+- id: agi12-04
+  detail: 'opencode provider azureqwen 등록(~/.config/opencode/opencode.json): npm @ai-sdk/openai-compatible, baseURL http://127.0.0.1:18085/v1,
+    model qwen3-30b. config는 opencode 재시작 시 반영.'
+  status: open
+- id: agi12-05
+  detail: 'yearly_refresh.sh를 runbook에 정합(Spot 빌더, b10919 자산명, libgomp1, llm.service). 실경로는 심볼릭: /opt/projects/server/scripts/golden_image
+    → /opt/workspace/azure/20137133/scripts/golden_image (azure repo commit 44a177b).'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -341,6 +357,12 @@ known_issues:
     at 23G + ctx 4096 + cache-ram 512. 14B Q4 is more stable alternative.'
   resolved: false
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
+  resolved: false
+- text: 'Azure Qwen Deep Dive 검증 미완: azureqwen provider로 Deep Dive 1회 실행은 opencode 재시작 필요(config 핫리로드 안 됨) + launch로 VM/터널
+    유지 상태여야 함. 엔드포인트 자체는 curl로 finish_reason:"tool_calls" 검증 완료.'
+  resolved: false
+- text: azure_spot 모듈 config VM_SIZE=Standard_FX2mds_v2 vs runbook/azure-qwen=Standard_FX2ms_v2 (둘 다 2vCPU/42GiB, 모듈 배포는 mds로
+    검증). 필요 시 통일.
   resolved: false
 - text: Claude Code Bash 툴의 셸 스냅샷(~/.claude/shell-snapshots/)은 세션 시작 시점의 claude-aliases를 캐시 — 파일 수정 후 type claude에 옛 정의가 보일
     수 있음. 실사용 환경(새 로그인/인터랙티브 셸)은 파일을 다시 읽어 정상. 세션 재시작으로 해소.
@@ -476,3 +498,6 @@ completed_log:
 - '2026-09-12: activity_summarizer.py mark_parse_failed/mark_summarized의 int.isdigit() AttributeError 수정 → Result=success.'
 - '2026-09-12: watchdog checker.py MODE_FILE_INFERENCE import 누락 수정 → _current_inference_port()=8082(기존 None), check_all_llm()이
   활성 포트만 probe.'
+- '2026-09-12: Azure Golden Image MoE 재빌드 — llm-qwen-27b:2026.09.3 등록(MoE Qwen3-30B-A3B-Q4_K_M + llama.cpp b10919 + llm.service
+  --jinja), 배포 툴콜 검증(finish_reason:tool_calls), 임시 리소스 CLEAN. yearly_refresh.sh/runbook/endpoint doc 정합, opencode azureqwen
+  provider 등록.'

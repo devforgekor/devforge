@@ -1,6 +1,6 @@
 # 런북 — Azure Qwen을 devforge Deep Dive 추론 엔진으로 사용
 
-> Status: proposed · Date: 2026-09-11 · Owner: devforge · Related: `docs/reports/control-plane-roadmap.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
+> Status: active · Date: 2026-09-12 (09-11본 갱신) · Owner: devforge · Related: `docs/reports/control-plane-roadmap.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
 > 원칙: **로직·툴·상태는 devforge, Azure는 추론만.** Azure에 에이전트 로직/repo/DB를 두지 않는다.
 
 ---
@@ -12,28 +12,28 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
 1. **Tool-calling**: `llama-server`가 **`--jinja`** 로 기동돼야 OpenAI식 function calling 지원(검증: llama.cpp `docs/function-calling.md`). Deep Dive는 툴 사용이 필수 → **미지원이면 불가**.
 2. 모델: Qwen3 계열. tool-calling 안정성 이슈 보고 있음 → **1회 스모크 필수**.
 3. SSH 키(`~/.ssh/vm-azure-*-key.pem` 등)와 구독/리소스그룹(`lib/infra/azure_spot/config.py`).
-4. devforge 로컬 서비스와 **포트 비충돌**(터널 로컬 포트는 `TUNNEL_PORT_BASE=8085`부터).
+4. devforge 로컬 서비스와 **포트 비충돌**(터널 로컬 포트는 `TUNNEL_PORT_BASE=18085`부터; `8085`는 podman rootlessport 점유).
 
 ## 2. 절차
 1. **VM 생성 + 터널**:
    ```bash
    cd /opt/projects/server/scripts
    python3.11 -m lib.infra.azure_spot.cli launch --label qwen3-30b
-   # → VM 생성 → SSH/헬스 대기 → 터널 localhost:8085 → VM:8081
+   # → VM 생성 → SSH/헬스 대기 → 터널 localhost:18085 → VM:8080
    ```
-2. **모델 서버가 `--jinja`인지 확인**(골든 이미지/스타트업에 반영돼 있어야 함):
+2. **모델 서버가 `--jinja`인지 확인**(골든 이미지 `llm.service`에 baked-in `--jinja` 반영됨):
    ```bash
-   ssh azureqwen 'systemctl cat llama-server | grep -i jinja'
+   ssh azureqwen 'systemctl cat llm | grep -i jinja'
    ```
 3. **엔드포인트 확인**:
    ```bash
-   curl -s http://127.0.0.1:8085/v1/models
+   curl -s http://127.0.0.1:18085/v1/models
    ```
 4. **opencode provider 등록**(devforge 설정) — OpenAI 호환:
    ```jsonc
    // ~/.config/opencode/opencode.json (providers 예시)
    { "provider": { "azureqwen": { "npm": "@ai-sdk/openai-compatible",
-       "options": { "baseURL": "http://127.0.0.1:8085/v1" },
+       "options": { "baseURL": "http://127.0.0.1:18085/v1" },
        "models": { "qwen3-30b": {} } } } }
    ```
 5. **Deep Dive 실행**(로직/툴은 devforge, 모델만 Azure):
@@ -71,11 +71,11 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
 **config 정합 완료**(`lib/infra/azure_spot/config.py`):
 | label | SP | RG | 갤러리 / 이미지 | VNet / subnet |
 |---|---|---|---|---|
-| qwen3-30b | account1 | `rg-devforge-prod-cin` | `gallery_devforge_prod_cin` / **`llm-qwen-27b`** (v2026.09.2) | `vm-devforge-prod-cin-vnet` / `default` |
+| qwen3-30b | account1 | `rg-devforge-prod-cin` | `gallery_devforge_prod_cin` / **`llm-qwen-27b`** (v2026.09.3, MoE baked-in) | `vm-devforge-prod-cin-vnet` / `default` |
 | nemotron3-nano | account2 | `rg-devforge-llm-prod-cin` | `gallery_devforge_llm_prod_cin` / (이미지 없음) | `vm-devforge-llm-prod-cin-vnet` |
 | gemma-4-26b | account3 | `rg-devforge-llm-judge-cin` | `gallery_devforge_llm_judge_cin` / (이미지 없음) | `vm-gemma-4-26b-spotVNET` |
 
-> **활성 = `qwen3-30b` 단일 계정(account1).** nemotron/gemma은 **폐기**(계정/SP 정보는 유지). VM 크기 = **`Standard_FX2mds_v2`**(2 vCPU/42GiB). 추론 포트 = **8080**, 터널 대역 = **18085**. `--max-price`는 config `max_price`(기본 `-1`).
+> **활성 = `qwen3-30b` 단일 계정(account1).** nemotron/gemma은 **폐기**(계정/SP 정보는 유지). VM 크기 = **`Standard_FX2mds_v2`**(모듈 배포, 2 vCPU/42GiB; 2026.09.3 빌더는 `Standard_FX2ms_v2` — 동일 2 vCPU/42GiB·Regular FX quota=0이라 빌더는 Spot 필수). 추론 포트 = **8080**, 터널 대역 = **18085**. `--max-price`는 config `max_price`(기본 `-1`).
 
 **검증(라이브, 최종)**:
 - **읽기**: 3계정 `list_spot_vms`/`sweep --dry-run` 정상.
@@ -97,4 +97,4 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
   - `orchestrator.py`: `launch_all` / `teardown` / `verify_clean` / `preflight_clean` + 소비자 호환 `add`·`provision_all`·`managers`·`terminate_all`.
   - `tunnel.py`: **tracked-pid**(state file, ssh 검증) 기반 close.
   - `cli.py`: `launch` / `status` / `delete` / `sweep` / `destroy` / `verify` / `run`.
-- **차기(다음 세션)**: 골든 이미지 재빌드에 MoE baked-in(`runbook-golden-image.md`) → 배포 검증(툴콜 스모크) → opencode provider(baseURL `http://127.0.0.1:18085/v1`) 등록 → Deep Dive 7단계 검증.
+- **완료(2026-09-12)**: 골든 이미지 재빌드에 MoE baked-in(`runbook-golden-image.md`) → 갤러리 **`llm-qwen-27b:2026.09.3`** 등록 → 배포 검증(`launch`, `check_tool_calling` OK) → 터널 `18085` 경유 `/v1/chat/completions` **`finish_reason:"tool_calls"`** → `destroy` CLEAN. opencode provider **`azureqwen`**(baseURL `http://127.0.0.1:18085/v1`) 등록. **남은 것**: opencode 재시작 후 provider로 Deep Dive 1회 실행 검증(런타임 config는 재시작 시 반영).
