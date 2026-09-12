@@ -1,0 +1,109 @@
+# Language: English only — machine-readable per docs/CONVENTIONS.md §4
+# ═══════════════════════════════════════════════════════════════════
+# DevForge EXA Direct Usage — Contract & Schema
+# ═══════════════════════════════════════════════════════════════════
+# SSOT: /opt/projects/server/scripts/lib/research/exa.py
+# Owner: devforge · Updated: 2026-09-12
+# ═══════════════════════════════════════════════════════════════════
+
+metadata:
+  updated: "2026-09-12"
+  service: exa-direct-usage
+  source: "scripts/lib/research/exa.py"
+  mcp_wrapper: "scripts/exa_mcp.py (disabled as of 2026-09-12)"
+  mcp_config: "/home/opc/.config/opencode/opencode.json"
+  api_base: "https://api.exa.ai"
+  secrets_env: "~/.config/devforge/secrets.env"
+  secret_key: "EXA_API_KEYS"
+  keys_count: 4
+  key_rotation: round-robin (per-call, on 429)
+
+contract:
+  # ── Direct Import (no MCP) ─────────────────────────────────────────
+  import_path: "scripts/lib/research/exa.py"
+  sys_path: "/opt/projects/server/scripts"
+
+  # ── Public Functions ───────────────────────────────────────────────
+  functions:
+    - name: exa_search
+      signature: "exa_search(query: str, type: str = 'auto', num_results: int = 10, include_domains: list[str] | None = None, exclude_domains: list[str] | None = None, category: str | None = None, start_published_date: str | None = None, end_published_date: str | None = None, text: bool = False, highlights: bool = True, summary: bool = False) -> list[dict]"
+      description: "Semantic web search via Exa API. Returns raw result dicts."
+      raises: "RuntimeError if all keys rate-limited"
+      timeout: 30.0 (httpx)
+
+    - name: exa_contents
+      signature: "exa_contents(urls: list[str], text: bool = True, highlights: bool = True) -> list[dict]"
+      description: "Extract full text contents from URLs via Exa API. Max 10 URLs per call."
+      raises: "RuntimeError if all keys rate-limited"
+      max_chars: 5000 (text)
+
+    - name: exa_search_text
+      signature: "exa_search_text(query: str, **opts) -> str"
+      description: "Search + format as human-readable text. MCP parity helper."
+
+    - name: exa_contents_text
+      signature: "exa_contents_text(urls: list[str], **opts) -> str"
+      description: "Contents extraction + format as text. MCP parity helper."
+
+    - name: available
+      signature: "available() -> bool"
+      description: "Check if any Exa API keys are configured."
+
+    - name: format_search_text
+      signature: "format_search_text(query: str, results: list[dict], payload_type: str = 'auto') -> str"
+
+    - name: format_contents_text
+      signature: "format_contents_text(results: list[dict]) -> str"
+
+  # ── Environment Variables ──────────────────────────────────────────
+  env:
+    EXA_API_KEYS:
+      type: string (encrypted, comma-separated key:value pairs)
+      default: ""
+      description: "4 Exa API keys in secrets.env (encrypted). Round-robin rotation on 429."
+
+  # ── MCP Status ────────────────────────────────────────────────────
+  mcp_status:
+    exa-search:
+      enabled: false
+      reason: "MCP overhead too high; direct import is faster and uses fewer tools"
+      disabled_date: "2026-09-12"
+      fallback: "Use lib.research.exa directly via Python import"
+
+  # ── Usage Patterns ─────────────────────────────────────────────────
+  usage:
+    pattern_1_search:
+      code: |
+        import sys
+        sys.path.insert(0, '/opt/projects/server/scripts')
+        from lib.research.exa import exa_search
+        results = exa_search("query", num_results=5, highlights=True)
+        for r in results: print(r['title'], r['url'])
+
+    pattern_2_text:
+      code: |
+        from lib.research.exa import exa_search_text
+        text = exa_search_text("query", num_results=3)
+        print(text)
+
+    pattern_3_contents:
+      code: |
+        from lib.research.exa import exa_contents_text
+        text = exa_contents_text(["https://example.com"])
+        print(text)
+
+  # ── Verification (2026-09-12) ──────────────────────────────────────
+  verification:
+    - "exa_search: PASS (3 results for 'DataImpulse 대시보드 IP 화이트리스트')"
+    - "exa_search_text: PASS (formatted output works)"
+    - "exa_contents_text: PASS (function available, needs valid URLs)"
+    - "available(): PASS (4 keys configured)"
+    - "MCP disabled: PASS (exa-search.enabled = false)"
+
+  # ── Change History ─────────────────────────────────────────────────
+  change_history:
+    - version: "2026-09-12"
+      changes:
+        - "Disabled exa-search MCP (enabled=true → false)"
+        - "Added direct usage documentation"
+        - "Verified direct import works without MCP"

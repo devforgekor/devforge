@@ -30,6 +30,7 @@
 | P7 게이팅 조사 | `reports/p7-gating-design-research.md` | record |
 | 런북(Claude 정리) | `runbooks/claude-code-mcp-cleanup.md` | proposed |
 | 규칙 | `/home/opc/llm-agent-rule.md` → `AGENTS.md`(자동) | active |
+| EXA 직접 사용 (MCP 비활성) | `specs/exa-direct-usage.yaml`, `runbooks/exa-direct-usage.md` | active |
 
 ### 2) 컨트롤 플레인 / watchdog
 | 구분 | 문서 | 상태 |
@@ -73,6 +74,7 @@
 - svc pod 호스트 포트포워딩(rootlessport) 장애 복구 + **watchdog 재발방지**(`check_svcpod_ports`/`recover_svcpod_forwarding`, task#32) — [`reports/svcpod-portforwarding-recovery-20260912.md`](./reports/svcpod-portforwarding-recovery-20260912.md).
 - Quadlet stub(`container-flaresolverr.container`) 제거, `activity_summarizer`/`checker`/`handover_db` 버그 수정.
 - DataImpulse 모니터 IP Whitelist 모드 추가·버그 수정 — [`specs/dataimpulse-monitor.yaml`](./specs/dataimpulse-monitor.yaml), [`runbooks/dataimpulse-monitor.md`](./runbooks/dataimpulse-monitor.md).
+- EXA MCP 비활성화 및 직접 사용 문서화 — [`specs/exa-direct-usage.yaml`](./specs/exa-direct-usage.yaml), [`runbooks/exa-direct-usage.md`](./runbooks/exa-direct-usage.md).
 
 ## 최근 변경 (2026-09-11)
 - MCP 통합 완료: 활성 MCP 4종, 스키마 36,672→8,416 tok/turn(−77%).
