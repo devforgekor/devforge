@@ -358,8 +358,15 @@ known_issues:
   resolved: false
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
   resolved: false
-- text: 'Azure Qwen Deep Dive 검증 미완: azureqwen provider로 Deep Dive 1회 실행은 opencode 재시작 필요(config 핫리로드 안 됨) + launch로 VM/터널
-    유지 상태여야 함. 엔드포인트 자체는 curl로 finish_reason:"tool_calls" 검증 완료.'
+- text: 'Azure Qwen Deep Dive 검증 완료(2026-09-12): opencode azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2) 실제 호출 → deepdive_steps
+    DB DONE. 엔드포인트 curl finish_reason:"tool_calls" 정상.'
+  resolved: true
+- text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. 검증은 VM에서
+    -c 32768로 임시 상향. 골든 이미지 재빌드 시 -c 32768 bake 필요(MemoryMax=38G, KV 포함 RES ~34.5GB). runbook-golden-image.md §1.2
+    + yearly_refresh.sh 갱신 필요.'
+  resolved: false
+- text: 'Azure 2 vCPU Spot 추론 성능: prefill ~6.7 tok/s(16.5k tok=41분), generation ~0.5 tok/s. top load avg 1.0(스레드 1개 의심,
+    -t 점검 필요). 인터랙티브 Deep Dive 백엔드로는 부적합.'
   resolved: false
 - text: azure_spot 모듈 config VM_SIZE=Standard_FX2mds_v2 vs runbook/azure-qwen=Standard_FX2ms_v2 (둘 다 2vCPU/42GiB, 모듈 배포는 mds로
     검증). 필요 시 통일.

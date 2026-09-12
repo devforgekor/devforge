@@ -1,7 +1,8 @@
 # 핸드오버 — Azure Golden Image 재빌드 (완료)
 
 > Status: completed · Date: 2026-09-12 (09-11본 갱신, 동일자 완료) · Owner: devforge · Related: `docs/runbooks/runbook-golden-image.md`, `docs/runbooks/azure-qwen-deepdive-endpoint.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
-> **완료(2026-09-12):** 골든 이미지 재빌드(Qwen3-30B-A3B-Q4_K_M MoE baked-in) → `llm-qwen-27b:2026.09.3` 등록 → 배포 툴콜 검증(`finish_reason:"tool_calls"`) → 임시 리소스 정리 CLEAN. opencode provider `azureqwen`(baseURL `127.0.0.1:18085/v1`) 등록. **남은 것**: opencode 재시작 후 provider로 Deep Dive 1회 실행 검증.
+> **완료(2026-09-12):** 골든 이미지 재빌드(Qwen3-30B-A3B-Q4_K_M MoE baked-in) → `llm-qwen-27b:2026.09.3` 등록 → 배포 툴콜 검증(`finish_reason:"tool_calls"`) → 임시 리소스 정리 CLEAN. opencode provider `azureqwen`(baseURL `127.0.0.1:18085/v1`) 등록.
+> **E2E 검증(2026-09-12):** `opencode run -m azureqwen/qwen3-30b` → `deepdive_step_enter/exit`(step1·2) 실제 호출 → `deepdive_steps` DB `DONE`. provider·툴콜·DB 전경로 확인. **단, 골든 이미지 `-c 8192` < opencode 요청 ~16.7k tokens** (검증 시 VM만 `-c 32768`로 임시 상향) + prefill ~6.7 tok/s·gen ~0.5 tok/s로 인터랙티브 부적합 → **다음 작업: 이미지 ctx 상향 + 스레드(`-t`) 점검**.
 
 ## 0-0. 완료 요약 (2026-09-12 실행분)
 - **이미지**: `gallery_devforge_prod_cin/llm-qwen-27b:2026.09.3` (`Succeeded`, `DiskControllerTypes=SCSI, NVMe`).
@@ -53,7 +54,7 @@ Deep Dive 백엔드(devforge-mcp HTTP)가 죽어 있던 원인을 정비했다. 
    - 다운로드 18.56GB는 **`curl --retry --retry-all-errors -C -`** 로(중간 stall 재현됨).
    - **주의**: Regular FX quota=0 → 빌더 `--priority Spot --eviction-policy Deallocate` 필수, `libgomp1` 필수.
 2. **배포 검증**: `azure-qwen`/§2로 새 버전 배포 → `/v1/chat/completions` 툴콜 스모크(모델 `finish_reason:"tool_calls"` 확인). **완료**(모듈 launch + 터널 18085 경유, `get_weather` → `tool_calls`).
-3. **opencode provider 등록**: baseURL `http://127.0.0.1:18085/v1` (모듈 `run`/터널). Deep Dive 7단계 1회 실행 검증. **provider `azureqwen` 등록 완료** — 단, opencode config는 재시작 시 반영 → **재시작 후 Deep Dive 1회 실행 검증만 남음**(VM을 `launch`로 띄운 상태에서).
+3. **opencode provider 등록**: baseURL `http://127.0.0.1:18085/v1` (모듈 `run`/터널). Deep Dive 7단계 1회 실행 검증. **완료** — provider `azureqwen` 등록 + `opencode run -m azureqwen/qwen3-30b`로 `deepdive_step_enter/exit`(step1·2) 호출 확인(DB `deepdive_steps` DONE). **주의**: opencode 요청 ~16.7k tokens > 이미지 `-c 8192`라 VM에서 `-c 32768` 임시 상향 필요했음(이미지 반영 필요).
 4. **모듈 정합 확인**: `ensure_tool_calling()`이 `llm.service`를 찾도록(현재 `/usr/local/bin/llama-server` grep) 유지. **완료**(baked-in `--jinja` → `ALREADY`, `check_tool_calling` OK).
 
 ## 4. 함정 / 주의 (이번에 겪은 것)

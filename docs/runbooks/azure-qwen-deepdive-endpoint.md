@@ -97,4 +97,11 @@ Azure Spot VM의 `llama-server`(Qwen)를 **OpenAI 호환 추론 엔드포인트*
   - `orchestrator.py`: `launch_all` / `teardown` / `verify_clean` / `preflight_clean` + 소비자 호환 `add`·`provision_all`·`managers`·`terminate_all`.
   - `tunnel.py`: **tracked-pid**(state file, ssh 검증) 기반 close.
   - `cli.py`: `launch` / `status` / `delete` / `sweep` / `destroy` / `verify` / `run`.
-- **완료(2026-09-12)**: 골든 이미지 재빌드에 MoE baked-in(`runbook-golden-image.md`) → 갤러리 **`llm-qwen-27b:2026.09.3`** 등록 → 배포 검증(`launch`, `check_tool_calling` OK) → 터널 `18085` 경유 `/v1/chat/completions` **`finish_reason:"tool_calls"`** → `destroy` CLEAN. opencode provider **`azureqwen`**(baseURL `http://127.0.0.1:18085/v1`) 등록. **남은 것**: opencode 재시작 후 provider로 Deep Dive 1회 실행 검증(런타임 config는 재시작 시 반영).
+- **완료(2026-09-12)**: 골든 이미지 재빌드에 MoE baked-in(`runbook-golden-image.md`) → 갤러리 **`llm-qwen-27b:2026.09.3`** 등록 → 배포 검증(`launch`, `check_tool_calling` OK) → 터널 `18085` 경유 `/v1/chat/completions` **`finish_reason:"tool_calls"`** → `destroy` CLEAN. opencode provider **`azureqwen`**(baseURL `http://127.0.0.1:18085/v1`) 등록.
+
+**opencode Deep Dive E2E 검증 (2026-09-12, 완료)**:
+- **성공**: `opencode run -m azureqwen/qwen3-30b` → 모델이 **`deepdive_step_enter`/`deepdive_step_exit`(step 1·2)를 실제 호출** → `deepdive_steps` DB에 `DONE` 기록. provider 배선·툴콜·DB 연동 전경로 확인. `destroy` CLEAN(remaining=0).
+- **블로커 1 — ctx 부족**: opencode 기본 요청 = **~16,699 tokens**인데 골든 이미지 `llm.service`는 **`-c 8192`** → `request exceeds the available context size`. 검증을 위해 VM에서만 **`-c 32768`로 임시 상향**(이미지 재빌드 시 반영 필요; `MemoryMax=38G`에서 KV 포함 RES ~34.5GB로 동작은 하나 여유 적음).
+- **블로커 2 — 속도**: 2 vCPU Spot에서 **prefill ~6.7 tok/s**(16,464 tok 프리필에 **41분**), **generation ~0.5 tok/s**. 첫 턴만 41분 → **인터랙티브 Deep Dive 부적합**. `top` load avg 1.0(스레드 1개 의심) → `-t`/`--threads` 점검 필요.
+- **기타**: 모델이 "다른 툴 호출 금지"를 무시하고 다음 step으로 루프(대형 system prompt에서 지시 준수 약함).
+- **결론**: 엔드포인트는 "추론만" 용도로 유효(단발 curl 툴콜 OK). opencode 풀 에이전트 백엔드로는 **ctx 상향 + 성능 개선 전까지 비권장**.
