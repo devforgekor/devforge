@@ -1,7 +1,19 @@
 # 핸드오버 — Azure Golden Image 재빌드 (다음 세션)
 
-> Status: active · Date: 2026-09-11 · Owner: devforge · Related: `docs/runbooks/runbook-golden-image.md`, `docs/runbooks/azure-qwen-deepdive-endpoint.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
+> Status: active · Date: 2026-09-12 (09-11본 갱신) · Owner: devforge · Related: `docs/runbooks/runbook-golden-image.md`, `docs/runbooks/azure-qwen-deepdive-endpoint.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
 > **다음 세션의 첫 작업 = 골든 이미지 재빌드(Qwen3-30B-A3B MoE baked-in).** 이 문서만 보면 이어서 진행 가능.
+
+---
+
+## 0. 2026-09-12 세션 정비 (인프라 — 착수 전 필독)
+Deep Dive 백엔드(devforge-mcp HTTP)가 죽어 있던 원인을 정비했다. **다음 세션 시작 시 devforge-mcp가 정상이어야 `deepdive_step_*` 툴이 로드된다.**
+- **svc pod 포트포워딩 복구**: 호스트 `127.0.0.1:8000/8002/8085/8191`(rootlessport) 전면 다운 → `systemctl --user restart svc-pod.service`로 복구. devforge-mcp 25툴/FlareSolverr 8191 정상.
+- **재발방지 구현(task#32, Deep Dive `dp-20260912-watchdog-svcpod-portforwarding`)**: watchdog에 `check_svcpod_ports`(TCP connect) + `recover_svcpod_forwarding`(svc-pod.service restart) + `_run_svcpod_forwarding` 통합(60s 주기 자동 감지·복구). 실장애 주입 검증(rootlessport kill→복구 ~26s True).
+- **Quadlet generator 실패 제거**: `container-flaresolverr.container`(주석 stub) → `_disabled/*.disabled`. generator rc=0.
+- **버그 수정**: `activity_summarizer.py` int.isdigit() AttributeError, `watchdog/checker.py` MODE_FILE_INFERENCE import 누락.
+- DB: `handover.yaml` cp#104 · obs 4건 · task#32 completed.
+
+> ⚠️ 세션 시작 시 devforge-mcp 로드가 실패하면 그 세션은 재연결하지 않아 `deepdive_step_*`를 못 쓴다 → **opencode 세션을 새로 시작**해야 한다. 포트포워딩은 이제 watchdog이 자동 복구한다.
 
 ---
 
@@ -10,6 +22,7 @@
 - **azure_spot 모듈** 정합·엔드포인트화·삭제검증·TTL 완료. **라이브 전경로 검증 성공**.
 - **모델 확정**: `Qwen3-30B-A3B-Q4_K_M`(MoE, 3B active, 18.56GB). 2 vCPU에서 **툴콜 정상·~6 tok/s** 검증.
 - 골든 이미지(`llm-qwen-27b:2026.09.2`)는 **아직 27B dense** → 재빌드로 MoE 교체 필요.
+- **(2026-09-12)** devforge-mcp/svc pod 정상화 + watchdog 포트포워딩 자동복구 가동 → Deep Dive 툴 사용 가능.
 
 ## 2. 확정된 값 (SSOT)
 | 항목 | 값 |
@@ -26,6 +39,7 @@
 | 필수 플래그 | **`--jinja`** + **`--chat-template-kwargs '{"enable_thinking":false}'`** |
 
 ## 3. 다음 세션 작업 순서
+0. **사전 확인(필수)**: 새 opencode 세션에서 `deepdive_step_*` 툴이 보이는지 = devforge-mcp 정상. 안 보이면 `curl -s http://127.0.0.1:8000/health` 확인 → 죽어 있으면 watchdog 복구를 기다리거나 `systemctl --user restart svc-pod.service`. (`cli.py status --json`도 정상 확인)
 1. **골든 이미지 재빌드** (`docs/runbooks/runbook-golden-image.md` 최신본 그대로):
    - §1.1 빌더 VM(=`Standard_FX2ms_v2`, Ubuntu2204) → §1.2 설정(모델 Q4 MoE + `llm.service` + `--jinja` + enable_thinking=false) → 일반화 → 캡처 → **§1.6 이미지 정의에 `--features "DiskControllerTypes=SCSI,NVMe"`** → 새 버전(예: `2026.09.3`) 등록.
    - 다운로드 18.56GB는 **`curl --retry --retry-all-errors -C -`** 로(중간 stall 재현됨).
@@ -41,7 +55,11 @@
 - **터널 정리**: tracked-pid(state file). 무관 프로세스 오살 금지(8085 rootlessport 사례).
 - **재빌드는 비쌈**: 검증된 설정만 굽기(이번에 MoE+jinja+enable_thinking 검증 완료).
 
-## 5. 이번 세션 변경 파일 (참고)
+## 5. 변경 파일 (참고)
+**(2026-09-12, 인프라 정비)**
+- `scripts/lib/watchdog/{config,checker,recovery,orchestrator,__init__}.py` (svc-pod 포트포워딩 감지·복구)
+- `scripts/activity_summarizer.py` (isdigit 버그), `~/.config/containers/systemd/_disabled/container-flaresolverr.container.disabled`
+**(2026-09-11, MCP/Azure)**
 - `scripts/lib/infra/azure_spot/{config,manager,orchestrator,tunnel,cli,__init__}.py`
 - `scripts/lib/debate/cooperative_debate.py`, `scripts/lint_rules/data.py`
 - `docs/runbooks/runbook-golden-image.md`, `docs/runbooks/azure-qwen-deepdive-endpoint.md`

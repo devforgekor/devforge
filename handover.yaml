@@ -1,15 +1,22 @@
 last_checkpoint:
-  time: '2026-09-12T01:52:53.753872+00:00'
-  summary: 'Azure Golden Image 재빌드 핸드오버: 모델 Qwen3-30B-A3B-Q4_K_M(MoE) 확정, FX2ms_v2 툴콜 검증(~6 tok/s), 런북 정합(DiskControllerTypes/llm.service/--jinja/enable_thinking).'
-  total_files: 0
+  time: '2026-09-12T02:51:58.85168+00:00'
+  summary: '2026-09-12 인프라 정비: svc pod 호스트 포트포워딩(rootlessport) 복구 + 재발방지(watchdog svc-pod 포트 감지·자동복구, task#32) + Quadlet stub
+    제거 + activity_summarizer/checker 버그 수정. 다음 세션=Azure 골든 이미지 재빌드(Qwen3-30B-A3B MoE) Deep Dive.'
+  total_files: 7
   recent_files:
-    data: []
-    docs: []
-    config: []
-    source: []
-    generated: []
+    docs:
+    - server/docs/plans/azure-golden-image-rebuild-handover.md
+    config:
+    - ~/.config/containers/systemd/_disabled/container-flaresolverr.container.disabled
+    source:
+    - server/scripts/lib/watchdog/config.py
+    - server/scripts/lib/watchdog/checker.py
+    - server/scripts/lib/watchdog/recovery.py
+    - server/scripts/lib/watchdog/orchestrator.py
+    - server/scripts/lib/watchdog/__init__.py
+    - server/scripts/activity_summarizer.py
   git: {}
-  task: null
+  task: Azure 골든 이미지 재빌드 (Qwen3-30B-A3B MoE baked-in)
 decisions:
 - id: nd01-01
   detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta
@@ -317,6 +324,15 @@ decisions:
   detail: '골든 이미지 모델 확정: Qwen3.6-27B-Q8_0 → Qwen3-30B-A3B-Q4_K_M(MoE,3B active). 2 vCPU FX2ms_v2에서 툴콜 정상·~6 tok/s(Q6 3.3,
     Q8 비권장). 필수 플래그 --jinja + chat-template-kwargs enable_thinking=false. 다음 세션에 이미지 재빌드.'
   status: open
+- id: svcpod-01
+  detail: 'svc pod 호스트 포트포워딩(rootlessport) 장애는 컨테이너 healthcheck(내부 127.0.0.1)로 감지 불가. 감지=호스트 127.0.0.1 publish 포트 TCP connect,
+    복구=systemctl --user restart svc-pod.service. watchdog 반영: check_svcpod_ports/recover_svcpod_forwarding/_run_svcpod_forwarding
+    (task#32, Deep Dive dp-20260912-watchdog-svcpod-portforwarding). 실증: rootlessport kill→4포트 down→복구 ~26s True.'
+  status: resolved
+- id: svcpod-02
+  detail: Quadlet 디렉터리의 주석뿐인 .container stub은 podman-user-generator 전체를 실패시킨다('no Image or Rootfs key specified'). 비활성화는 .container.disabled로
+    rename해야 함. container-flaresolverr.container → _disabled/container-flaresolverr.container.disabled (실제 구동은 손으로 쓴 container-flaresolverr.service).
+  status: resolved
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -352,6 +368,9 @@ known_issues:
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
   resolved: false
+- text: OpenCode 세션 시작 시 devforge-mcp(HTTP :8000) 로드가 실패하면 그 세션에서는 재연결하지 않아 deepdive_step_* 툴을 쓸 수 없다(복구해도 새 세션 필요). 해당 세션은
+    cli.py task/obs로 기록.
+  resolved: false
 - text: OpenCode not yet fully tested in TUI mode (only headless opencode run verified). MCP server connection via opencode
     mcp add not tested with devforge-mcp container. OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
     pointing to local proxy.
@@ -376,6 +395,8 @@ known_issues:
 - text: 'Veritas single-batch predicate 간섭 리스크: MiniCheck 원 설계는 (document, single_claim) → binary. _binary_nli_batch에서 모든
     predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음. max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도
     문제 발견 시 각 predicate 개별 호출로 분리 (latency N배 증가).'
+  resolved: false
+- text: watchdog 코드에 ruff SIM102/F401 등 기존 스타일 경고 다수 + checker.py 타입 경고 존재. 단, cli.py lint는 위반 0. 기능 영향 없음, 정리 시 일괄 처리.
   resolved: false
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
@@ -446,3 +467,12 @@ completed_log:
 - 'Claude 백엔드 전환 모드 시스템 구축: claude-mode(openrouter/deepseek 전환) + claude-aliases :44777 하드코딩 제거. 기본 모드 openrouter. 검증 완료.'
 - '2026-09-12'', ''text'': ''azure_spot 정합+엔드포인트화+삭제검증+TTL, 라이브 전경로 검증, MoE(Q4) 툴콜 검증. 런북(Q4·DiskController·llm.service·--jinja)
   정합.'
+- '2026-09-12: svc pod 포트포워딩 복구(systemctl restart svc-pod.service) → rootlessport 재생성, 8000/8002/8085/8191 4/4, devforge-mcp
+  25툴/FlareSolverr 8191 정상.'
+- '2026-09-12: watchdog 재발방지 구현(task#32): config(SVCPOD_UNIT/PUBLISHED_PORTS) + checker.check_svcpod_ports + recovery.recover_svcpod_forwarding
+  + orchestrator._run_svcpod_forwarding. 실장애 주입 검증 완료.'
+- '2026-09-12: Quadlet generator 실패 제거: container-flaresolverr.container(주석 stub) → _disabled/*.disabled, daemon-reload 후
+  generator rc=0.'
+- '2026-09-12: activity_summarizer.py mark_parse_failed/mark_summarized의 int.isdigit() AttributeError 수정 → Result=success.'
+- '2026-09-12: watchdog checker.py MODE_FILE_INFERENCE import 누락 수정 → _current_inference_port()=8082(기존 None), check_all_llm()이
+  활성 포트만 probe.'

@@ -3,6 +3,7 @@
 > 산출: 2026-09-08 14:00 KST
 > 방식: Deep Dive (코드 분석 → context7 검증 → 설계)
 > 상태: 설계 완료
+> 관련 후속(2026-09-12): svc pod 호스트 포트포워딩(rootlessport) 감지·복구 구현 — `reports/svcpod-portforwarding-recovery-20260912.md` (본 문서의 포트 충돌 감지와 별개 계층)
 
 ---
 

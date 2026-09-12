@@ -38,6 +38,12 @@ def clean_log_text(text: str) -> str:
     return text
 
 
+def _cp_sql(cp_id: Optional[int]) -> str:
+    """SQL literal for checkpoint_id — None must render as NULL, not Python 'None'
+    (which Postgres parses as an identifier and rejects)."""
+    return "NULL" if cp_id is None else str(int(cp_id))
+
+
 def db_write_checkpoint(checkpoint: dict, data: dict, skip_checkpoint: bool = False):
     """Write handover checkpoint data to DB tables, then regenerate YAML.
     If skip_checkpoint=True, only write decisions/issues/logs without creating a new checkpoint row."""
@@ -78,7 +84,7 @@ def _write_decisions(decisions: list, cp_id: Optional[int]):
             if not exists:
                 _psql(
                     f"INSERT INTO decisions (checkpoint_id, decision_id, detail, status) "
-                    f"VALUES ({cp_id}, '{did}', '{dtl}', '{st}')"
+                    f"VALUES ({_cp_sql(cp_id)}, '{did}', '{dtl}', '{st}')"
                 )
         else:
             txt = str(dec)
@@ -91,13 +97,13 @@ def _write_decisions(decisions: list, cp_id: Optional[int]):
                 if not exists:
                     _psql(
                         f"INSERT INTO decisions (checkpoint_id, decision_id, detail, status) "
-                        f"VALUES ({cp_id}, '{did}', '{dtl}', '{st}')"
+                        f"VALUES ({_cp_sql(cp_id)}, '{did}', '{dtl}', '{st}')"
                     )
             else:
                 dt = esc_sql(txt)
                 exists = _pj(f"SELECT 1 FROM decisions WHERE decision_text = '{dt}' LIMIT 1")
                 if not exists:
-                    _psql(f"INSERT INTO decisions (checkpoint_id, decision_text) VALUES ({cp_id}, '{dt}')")
+                    _psql(f"INSERT INTO decisions (checkpoint_id, decision_text) VALUES ({_cp_sql(cp_id)}, '{dt}')")
 
 
 def _write_known_issues(issues: list, cp_id: Optional[int]):
@@ -114,12 +120,12 @@ def _write_known_issues(issues: list, cp_id: Optional[int]):
                 if iid:
                     _psql(
                         f"INSERT INTO known_issues (checkpoint_id, issue_id, detail, resolved) "
-                        f"VALUES ({cp_id}, '{iid}', '{dtl}', {resolved})"
+                        f"VALUES ({_cp_sql(cp_id)}, '{iid}', '{dtl}', {resolved})"
                     )
                 else:
                     _psql(
                         f"INSERT INTO known_issues (checkpoint_id, issue_text, resolved) "
-                        f"VALUES ({cp_id}, '{dtl}', {resolved})"
+                        f"VALUES ({_cp_sql(cp_id)}, '{dtl}', {resolved})"
                     )
         else:
             txt = str(iss)
@@ -133,15 +139,15 @@ def _write_known_issues(issues: list, cp_id: Optional[int]):
                     if iid:
                         _psql(
                             f"INSERT INTO known_issues (checkpoint_id, issue_id, detail, resolved) "
-                            f"VALUES ({cp_id}, '{iid}', '{dtl}', {resolved})"
+                            f"VALUES ({_cp_sql(cp_id)}, '{iid}', '{dtl}', {resolved})"
                         )
                     else:
-                        _psql(f"INSERT INTO known_issues (checkpoint_id, issue_text) VALUES ({cp_id}, '{dtl}')")
+                        _psql(f"INSERT INTO known_issues (checkpoint_id, issue_text) VALUES ({_cp_sql(cp_id)}, '{dtl}')")
             else:
                 it = esc_sql(txt)
                 exists = _pj(f"SELECT 1 FROM known_issues WHERE issue_text = '{it}' LIMIT 1")
                 if not exists:
-                    _psql(f"INSERT INTO known_issues (checkpoint_id, issue_text) VALUES ({cp_id}, '{it}')")
+                    _psql(f"INSERT INTO known_issues (checkpoint_id, issue_text) VALUES ({_cp_sql(cp_id)}, '{it}')")
 
 
 def _write_completed_log(log_entries: list, cp_id: Optional[int]):
@@ -150,7 +156,7 @@ def _write_completed_log(log_entries: list, cp_id: Optional[int]):
         lt = esc_sql(clean)
         exists = _pj(f"SELECT 1 FROM completed_log WHERE log_text = '{lt}' LIMIT 1")
         if not exists:
-            _psql(f"INSERT INTO completed_log (checkpoint_id, log_text) VALUES ({cp_id}, '{lt}')")
+            _psql(f"INSERT INTO completed_log (checkpoint_id, log_text) VALUES ({_cp_sql(cp_id)}, '{lt}')")
 
 
 def regenerate_handover_yaml():

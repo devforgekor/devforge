@@ -27,6 +27,7 @@ from lib.watchdog.config import (
     MEM_CRIT_PCT,
     MEM_WARN_PCT,
     MODE_FILE,
+    MODE_FILE_INFERENCE,
     ONESHOT_RESULT_TARGETS,
     SERVICE_TARGETS,
     SVCPOD_PUBLISHED_PORTS,

@@ -80,7 +80,10 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 | `caddy` (rootful) | — | reverse proxy, host net |
 
 > 서비스 발견/상태는 `cli.py status --json`이 SSOT. 컨테이너는 quadlet
-> (`~/.config/containers/systemd/`)로 관리.
+> (`~/.config/containers/systemd/`)로 관리. 비활성 quadlet은 반드시
+> `*.container.disabled`로 rename(주석 stub을 `.container`로 남기면 generator 실패).
+> rootless bridge의 발행 포트는 `rootlessport`(userspace proxy)가 포워딩 —
+> 컨테이너 healthcheck와 별개로 **호스트 도달성**을 watchdog이 감시(§4.4, 2026-09-12).
 
 ### 3.2 systemd --user 서비스 (대표)
 
@@ -152,6 +155,7 @@ MCP(`fact_*`, `obs_*`, `search_*`, `mem_*`)로 노출된다.
 - 감시 확장(2026-09-11 후속): 웹앱 `ebook-api`/`devforge-news-api`/`cashbook`(**자동 재시작**), **system 스코프** `caddy`/`netdata`(alert-only, rootful), 타이머 `dev-poll`/`news-digest`/`kuhwa-schedule`/`workspace-autopush` 추가. `ebook-watcher` `enable`(재부팅 생존). `system-sync` max_idle 1800→2700(30분 주기 경계 오탐 보정).
 - **watchdog 자기 복구(2026-09-11)**: 유닛 `Type=notify` + `WatchdogSec=900` — 매 사이클 `sd_notify(WATCHDOG=1)`, **hang 시 systemd가 kill+restart**. `OnFailure=devforge-watchdog-failed.service` — 크래시루프(60s 내 5회) 시 **Slack 알림**. **dead-man's switch**: 매 사이클 `/var/tmp/watchdog_last_cycle_ts` 기록 + `devforge-watchdog-liveness.timer`(5분마다)가 stale(>900s) 시 알림. **외부 감시**: `WATCHDOG_PING_SSH=onmydoc`(secrets.env) → 5분마다 onmydoc(161.33.199.207)으로 SSH push(`~/wd_monitor/wdpulse.py record`). onmydoc의 `wd-check.timer`(5분)가 30분+ stale이면 **minipark4u@gmail.com 메일**(6h cooldown, 평소 무음). HTTP 방식 `WATCHDOG_PING_URL`도 지원.
 - **incident → 자동 수정 루프(2026-09-11)**: 반복 incident(3회+/7일) → DB `tasks` + **GitHub Issue 자동 생성**(라벨 `watchdog,auto-safe`, 멱등) → `cli.py dev poll --auto-safe --claim`(dev-poll 타이머)이 claim → `lib/dev_pipeline`이 PR. (부수 수정: `poll_issues`가 gh의 `state="OPEN"`(대문자)을 소문자 비교로 모두 걸러내던 버그 → case-insensitive로 수정)
+- **svc pod 포트포워딩 감시(2026-09-12)**: 컨테이너는 healthy여도 `rootlessport`(userspace proxy)가 죽으면 호스트 `127.0.0.1:8000/8002/8085/8191` 도달 불가 → devforge-mcp/FlareSolverr 불통. `check_svcpod_ports`(TCP connect)로 감지 후 `recover_svcpod_forwarding`(`svc-pod.service` 재기동, postgres 볼륨 유지)으로 자동 복구(60s 주기, backoff/circuit). task#32 · [`reports/svcpod-portforwarding-recovery-20260912.md`](./reports/svcpod-portforwarding-recovery-20260912.md).
 
 ### 4.5 알림
 `scripts/lib/notify.py Notifier` — Apprise(Telegram + Gmail SMTP) + Slack.
