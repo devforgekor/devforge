@@ -1,0 +1,112 @@
+/opt/projects/server/scripts/gen_architecture.py:177:MODE_FILE = Path("/opt/ai_data/scripts/current-system-mode.env")
+/opt/projects/server/scripts/lib/extract_llm/_core.py:159:You are a system architect reviewing a message. Extract all concrete, explicitly stated facts about the infrastructure described. The message may be in Korean or English. Look for facts about: system status, model assignments, resource consumption (RAM, disk), performance metrics, configuration settings, and dependencies. File paths (e.g. /opt/ai_data, /mnt/lv_db) and mount points are valid subjects — extract their size and purpose.
+/opt/projects/server/scripts/lib/extract_llm/_core.py:194:You are a precise fact extractor. Extract factual (subject, predicate, object) triples from the text. The text may be in Korean or English. File paths (e.g. /opt/ai_data, /mnt/lv_db) and mount points are valid subjects — extract their size and purpose.
+/opt/projects/server/scripts/lib/rate_limiter.py:18:_DB_PATH = Path("/opt/ai_data/flaresolverr/rate_limiter.db")
+/opt/projects/server/scripts/lib/rubric/utils.py:8:MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/lib/cli_helpers.py:129:            "/opt/ai_data",
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:74:        "Mode switching": lambda: file_exists("/opt/ai_data/scripts/current-mode-inference.env"),
+/opt/projects/server/scripts/lib/infra/preflight.py:51:    protect_dir = "/opt/ai_data/scripts"
+/opt/projects/server/scripts/lib/infra/preflight.py:150:    _mode_file = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/lib/search/local_index.py:11:  - DB at /opt/ai_data/search/search.db (on ai_data partition)
+/opt/projects/server/scripts/lib/search/local_index.py:30:SEARCH_DIR = Path("/opt/ai_data/search")
+/opt/projects/server/scripts/lib/protection.py:11:Protection files are JSON at ``/opt/ai_data/scripts/.protect_{context}``
+/opt/projects/server/scripts/lib/protection.py:25:PROTECT_DIR = "/opt/ai_data/scripts"
+/opt/projects/server/scripts/lib/pod_manager/container.py:32:    "/opt/ai_data/models/gguf:/models:Z",
+/opt/projects/server/scripts/lib/pod_manager/container.py:34:    "/opt/ai_data/scripts/inference-entrypoint.sh:/entrypoint.d/inference-entrypoint.sh:Z",
+/opt/projects/server/scripts/lib/pod_manager/container.py:36:    "/opt/ai_data/scripts/current-mode-inference.env:/entrypoint.d/current-mode.env:Z",
+/opt/projects/server/scripts/lib/pod_manager/container.py:74:MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/lib/pod_manager/container.py:75:_cached_entrypoint = "/opt/ai_data/scripts/inference-entrypoint.sh"
+/opt/projects/server/scripts/lib/model_ctl.py:33:MODEL_MODE_ENV = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/lib/model_ctl.py:50:    "/opt/ai_data/models/gguf:/models:Z",
+/opt/projects/server/scripts/lib/model_ctl.py:52:    "/opt/ai_data/scripts/inference-entrypoint.sh:/entrypoint.d/inference-entrypoint.sh:Z",
+/opt/projects/server/scripts/lib/model_ctl.py:54:    "/opt/ai_data/scripts/current-mode-inference.env:/entrypoint.d/current-mode.env:Z",
+/opt/projects/server/scripts/lib/debate/debate_data.py:9:SWITCH_FILE = "/opt/ai_data/debate/switch/model-switch.json"
+/opt/projects/server/scripts/lib/debate/debate_data.py:10:SESSIONS_DIR = Path("/opt/ai_data/debate_sessions")
+/opt/projects/server/scripts/lib/watchdog/checker.py:248:        path = f"/opt/ai_data/models/gguf/{meta['file']}"
+/opt/projects/server/scripts/lib/watchdog/config.py:22:MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
+/opt/projects/server/scripts/lib/watchdog/config.py:23:MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/lib/watchdog/config.py:27:STATE_FILE = "/opt/ai_data/scripts/watchdog_state.json"
+/opt/projects/server/scripts/lib/hybrid/utils.py:13:    mode_file = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/lib/file_registry.py:26:UPLOADS_DIR = Path("/opt/ai_data/uploads")
+/opt/projects/server/scripts/collect_novel.py:21:OUTPUT_DIR = Path("/opt/ai_data/flaresolverr/novels/하남자의_탑_공략법")
+/opt/projects/server/scripts/pipelines/worklog_generator.py:237:METRICS_FILE = "/opt/ai_data/worklog_metrics.jsonl"
+/opt/projects/server/scripts/tests/rubric.py:34:MODE_FILE_B = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/test_pipeline_e2e.py:69:SAMPLES_PATH = "/opt/ai_data/test_pipeline_10samples.json"
+/opt/projects/server/scripts/tests/test_gt_recovery.py:84:           "-v", "/opt/ai_data/models/gguf:/models:Z",
+/opt/projects/server/scripts/tests/test_fact5_comparison.py:61:INFERENCE_ENV = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/day_cycle_pipeline.py:211:    report_path = "/opt/ai_data/day_cycle_test_report.json"
+/opt/projects/server/scripts/tests/day_model_test.py:22:NLI = MiniCheck(model_name="flan-t5-large", cache_dir="/opt/ai_data/models")
+/opt/projects/server/scripts/tests/day_model_test.py:84:            "/opt/ai_data disk at 92%",
+/opt/projects/server/scripts/tests/day_model_test.py:144:    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
+/opt/projects/server/scripts/tests/day_model_test.py:305:    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
+/opt/projects/server/scripts/tests/day_model_test_direct.py:21:ENV = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/day_model_test_direct.py:51:        "/opt/ai_data/models/gguf:/models:Z",
+/opt/projects/server/scripts/tests/day_model_test_direct.py:53:        "/opt/ai_data/scripts/inference-entrypoint.sh:/entrypoint.d/inference-entrypoint.sh:Z",
+/opt/projects/server/scripts/tests/day_model_test_direct.py:55:        "/opt/ai_data/scripts/lib/memory_guard.sh:/entrypoint.d/lib/memory_guard.sh:Z",
+/opt/projects/server/scripts/tests/day_model_test_direct.py:57:        "/opt/ai_data/scripts/current-mode-inference.env:/entrypoint.d/current-mode.env:Z",
+/opt/projects/server/scripts/tests/day_verify_compare.py:185:    env_file = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/day_verify_compare.py:209:    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
+/opt/projects/server/scripts/tests/day_verify_retry.py:90:    env_file = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/day_verify_retry.py:114:    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
+/opt/projects/server/scripts/tests/embed_bench.py:11:Output: JSON report at /opt/ai_data/embed_bench_report.json
+/opt/projects/server/scripts/tests/embed_bench.py:28:BENCH_DATA = "/opt/ai_data/embed_bench_pairs.json"
+/opt/projects/server/scripts/tests/embed_bench.py:29:REPORT_OUT = "/opt/ai_data/embed_bench_report.json"
+/opt/projects/server/scripts/tests/embed_bench.py:30:GGUF_DIR = "/opt/ai_data/models/gguf"
+/opt/projects/server/scripts/tests/embed_bench.py:31:CACHE_DIR = "/opt/ai_data/models"
+/opt/projects/server/scripts/tests/eval_comparison.py:24:DEBATE_DIR = Path("/opt/ai_data/debate_sessions")
+/opt/projects/server/scripts/tests/extract_compare.py:19:NLI = MiniCheck(model_name='flan-t5-large', cache_dir='/opt/ai_data/models')
+/opt/projects/server/scripts/tests/model_comparison_test.py:45:NLI = MiniCheck(model_name="roberta-large", cache_dir="/opt/ai_data/models")
+/opt/projects/server/scripts/tests/model_comparison_test.py:269:        "text": "서버 상태 점검 결과입니다:\n- 메모리: 22Gi 중 12Gi 사용 (55%), 10Gi 여유\n- 스왑: 8Gi 중 508Mi 사용 (6%)\n- 부하: 1min=2.55, 5min=2.46, 15min=4.02\n\nOOM 위험은 현재 낮습니다. 메모리 여유가 충분하고 스왑 사용률도 정상입니다.\n\n다만 /opt/ai_data 디스크가 92% (77G/100G)로 임계치에 근접했습니다. 모델 파일 정리가 필요합니다. 디스크 부족이 현재 더 시급한 이슈입니다.",
+/opt/projects/server/scripts/tests/model_comparison_test.py:284:                "evidence": "/opt/ai_data disk at 92% (77G/100G) — model file cleanup needed",
+/opt/projects/server/scripts/tests/model_comparison_test.py:288:            "tldr": "Server health check: OOM risk low, but /opt/ai_data disk at 92% needs cleanup",
+/opt/projects/server/scripts/tests/model_comparison_test.py:291:                "files": ["/opt/ai_data"],
+/opt/projects/server/scripts/tests/model_comparison_test.py:410:ENV_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/neutral_improve.py:27:MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/nli_compare.py:27:NLI = MiniCheck(model_name="flan-t5-large", cache_dir="/opt/ai_data/models")
+/opt/projects/server/scripts/tests/nli_compare_14b.py:32:MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/pipeline_preverify_test.py:74:        _sl_conn = _sl3.connect("file:///opt/ai_data/search/search.db?immutable=1", uri=True)
+/opt/projects/server/scripts/tests/pipeline_verify_compare.py:654:    env_file = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:21:NLI = MiniCheck(model_name="flan-t5-large", cache_dir="/opt/ai_data/models")
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:99:        "text": "서버 상태: 메모리 22GB 중 12GB 사용, 10GB 여유. 스왑 8GB 중 508MB 사용. 부하 2.55/2.46/4.02. OOM 위험 낮음. /opt/ai_data 디스크 92% — 모델 파일 정리 필요.",
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:104:            "/opt/ai_data disk at 92% — needs cleanup",
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:179:    ENV = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:380:    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:402:    if not os.path.exists(f"/opt/ai_data/models/gguf/{P_MODEL}"):
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:412:    if not os.path.exists(f"/opt/ai_data/models/gguf/{R_MODEL}"):
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:422:    if not os.path.exists(f"/opt/ai_data/models/gguf/{J_MODEL}"):
+/opt/projects/server/scripts/tests/prj_model_test.py:188:    env_file = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/prj_model_test.py:215:    with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
+/opt/projects/server/scripts/tests/prj_model_test.py:291:    model_path = f"/opt/ai_data/models/gguf/{model_file}"
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:84:Input (hallucination overstatement): Memory 12/22GB used, swap 508MB/8GB, load 2.55, /opt/ai_data disk 92%
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:86:Output: {"verdicts": [{"id": "F01", "verdict": "reject", "reason": "12/22GB is only 55% usage with ample swap (508MB/8GB) and healthy load (2.55) — not OOM-critical. Finding overstates evidence. The real issue is /opt/ai_data disk at 92%."}]}
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:188:        "text": "서버 상태: 메모리 22GB 중 12GB 사용, 10GB 여유. 스왑 8GB 중 508MB 사용. 부하 2.55/2.46/4.02. OOM 위험 낮음. /opt/ai_data 디스크 92% — 모델 파일 정리 필요.",
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:193:            "/opt/ai_data disk at 92% — needs cleanup",
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:255:    env_path = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:343:        env_file = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:362:        env = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:688:        with open("/opt/ai_data/scripts/current-mode-inference.env", "w") as f:
+/opt/projects/server/scripts/tests/test_r_role_dsv2.sh:8:MODE_FILE_B="/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/test_r_role_dsv2.sh:49:  -v /opt/ai_data/models/gguf:/models:Z \
+/opt/projects/server/scripts/tests/test_r_role_dsv2.sh:50:  -v /opt/ai_data/scripts/inference-entrypoint.sh:/entrypoint.d/inference-entrypoint.sh:Z \
+/opt/projects/server/scripts/tests/test_r_role_dsv2.sh:51:  -v /opt/ai_data/scripts/current-mode-inference.env:/entrypoint.d/current-mode.env:Z \
+/opt/projects/server/scripts/tests/test_phase2_3.py:118:ENV_PATH = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/test_phase2_3.py:120:MODEL_DIR = "/opt/ai_data/models/gguf"
+/opt/projects/server/scripts/tests/test_v5_arbiter_fallback.py:92:        env_path = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/test_v5_arbiter_fallback.py:96:        env_path = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/tests/test_arbiter_dual_7b9b.py:37:INFERENCE_ENV = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/pdf_reader_mcp.py:48:    allowed = ["/opt/ai_data", "/opt/projects/server", "/tmp"]
+/opt/projects/server/scripts/pdf_reader_mcp.py:194:        base = args.get("directory", "/opt/ai_data/pdf")
+/opt/projects/server/scripts/pdf_reader_mcp.py:278:                "directory": {"type": "string", "description": "Directory to scan (default /opt/ai_data/pdf)", "default": "/opt/ai_data/pdf"}
+/opt/projects/server/scripts/review_pipeline_3model.py:92:MODE_FILE = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/osync_backup.py:34:STAGE = Path("/opt/ai_data/backups")
+/opt/projects/server/scripts/notice/lib/bot_processor.py:105:        ("Inference", Path("/opt/ai_data/scripts/current-mode-inference.env")),
+/opt/projects/server/scripts/notice/lib/bot_processor.py:165:    mf = Path("/opt/ai_data/scripts/current-mode-inference.env")
+/opt/projects/server/scripts/osync_restore_test.py:6:Reads the newest /opt/ai_data/backups/db/devforge_*.dump (pg_dump -Fc),
+/opt/projects/server/scripts/osync_restore_test.py:19:DUMP_GLOB = "/opt/ai_data/backups/db/devforge_*.dump"
+/opt/projects/server/scripts/osync_restore_test.py:20:LOG = "/opt/ai_data/backups/osync.log"
+/opt/projects/server/scripts/cli.py:571:MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"
+/opt/projects/server/scripts/cli.py:572:SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
+/opt/projects/server/scripts/cli.py:661:        print(f"\nReport: /opt/ai_data/debate_sessions/{session.session_id}/final_report.md")
+/opt/projects/server/scripts/cli.py:756:            f"/opt/ai_data/debate_sessions/{session_id}/final_report.md",
+/opt/projects/server/scripts/cli.py:762:            f"/opt/ai_data/extractions/{session_id}/report.json",
+/opt/projects/server/scripts/day_cycle.sh:113:MODE_ENV="/opt/ai_data/scripts/current-mode-inference.env"

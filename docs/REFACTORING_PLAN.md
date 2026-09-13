@@ -1,26 +1,21 @@
-# DevForge 서버 리팩토링 종합 계획서 v1.3
+# DevForge 서버 리팩토링 종합 계획서 v1.4
 
-> **작성일**: 2026-09-13  
-> **버전**: 1.3  
-> **작성자**: DevForge Team  
-> **상태**: Final Draft — v1.2 리뷰(DeepSeek) 반영  
-> **Changelog**: v1.2 → v1.3  
->   - Track B(LLM 공급자)를 일정에서 분리 (별도 문서)  
->   - 리스크 표 6→10행 복원 (삭제된 Critical 2건 재추가)  
->   - Phase 5/7 시간 재조정 (5→14주)  
->   - "무중단" 표현 수정  
->   - API 키 테스트 문구 수정  
->   - 팀 규모 명시  
->   - §3.4 계약 오류 수정 (BaseModel → BaseSettings, cloudahq 오류)
+> **버전**: 1.4 (최종)
+> **상태**: Final — 모든 리뷰 반영, 실행 준비 완료
+> **Changelog**: v1.0→v1.1: 12주→14주, 특성화 테스트 | v1.1→v1.2: Track B 분리, 섀도 DB | v1.2→v1.3: 리스크 복원, 팀규모 | v1.3→v1.4: 일정/표현 정합성 수정
 
 ---
 
-## 0. 리뷰 반영 요약
+## 0. 리뷰 반영 이력
 
-| 리뷰어 | 등급 | 핵심 지적 | v1.3 대응 |
-|--------|------|-----------|-----------|
-| **DeepSeek v1.2 검토** | A− → A | 리스크 축소 과장, Track B 일정 모순, "무중단" 잔존, 1인 팀 전제 미명시, §3.4 계약 오류 | **Track B 분리, 리스크 복원, 표현 수정, 팀규모 명시, 계약 수정** |
-| **통합** | A | 동일 키 가정 오류, 용어 오류, 이름 충돌 미해결 | API 키 수정, 용어 정정, 이름 충돌 해결 |
+| 버전 | 리뷰어 | 핵심 지적 | 대응 |
+|------|--------|-----------|------|
+| v1.0→v1.1 | DeepSeek | 일정 낙관, 테스트 공수 0, podman-py 리스크, 설정 마이그레이션 미흡 | 12주→14주, Phase 0.5 특성화 테스트 |
+| v1.1→v1.2 | Claude #2 | architecture 위반(domain에 adapter), 이름 충돌, 테스트 공수 0 | ports/adapters 분리, pipelines 개명 |
+| v1.2→v1.3 | DeepSeek | 리스크 과장, Track B 일정 모순, "무중단" 잔존, 팀규모 미명시 | Track B 분리, 리스크 복원, 표현 수정 |
+| v1.3→v1.4 | Claude #2 | 일정 합계 불일치, Phase 5/7 밀도, 롤백 시간 단위 | **총 16주 명시**, **Phase 8 승격**, **<5분 통일** |
+
+> **v1.4는 최종 검토를 거친 실행 계획서입니다.** 이력은 위 표에만 기록되며 본문은 단일 버전으로 유지합니다.
 
 ---
 
@@ -29,8 +24,8 @@
 ### 1.1 목적
 현재 `scripts/` 루트에 평평하게 배치된 50+ 진입점 스크립트와 28개 서브모듈로 구성된 `scripts/lib/`을 **업계 표준 Python 패키지 구조(src-layout + Domain-Driven Design + Ports & Adapters)**로 재구성하여, AI 에이전트와 사람이 모두 탐색하기 쉬운 코드베이스를 만든다.
 
-**Track A (핵심 리팩토링)**: 구조 정비·안전막·기존 동작 보존 (12주)  
-**Track B (LLM 공급자 추상화)**: OpenAI/Anthropic/다중 공급자 라우팅 — **`docs/LLM_PROVIDER_PLAN.md`로 별도 문서화**, v1.3 시점에 일정에서 분리
+**Track A (핵심 리팩토링)**: 구조 정비·안전막·기존 동작 보존 (14주)  
+**Track B (LLM 공급자 추상화)**: OpenAI/Anthropic/다중 공급자 라우팅 — **`docs/LLM_PROVIDER_PLAN.md`로 별도 문서화**
 
 ### 1.2 배경
 - **현재 문제**: 진입점 분산(5개), 설정 파일 5개 분산, Shell/Python 혼재, 하드코딩 경로 40+ 곳, 순환 참조 위험, 중복/백업 파일 10개+, 심볼릭 링크(golden_image), **LLM 호출이 로컬 포트에만 의존하며 공급자 추상화 불가**
@@ -42,7 +37,7 @@
 |------|------|
 | **대상** | `/opt/projects/server/scripts/` (코드), `/opt/projects/server/docs/` (문서) |
 | **제외** | `_archive/` 과거 산출물, `/opt/workspace/` 외부 워크스페이스 |
-| **일정** | **14주 (Phase −1 ~ Phase 7 + 안정화 2주)** |
+| **일정** | **총 16주 (Phase −1 ~ Phase 8)** (Phase −1~7: 14주, Phase 8 안정화: 2주) |
 | **팀 규모** | **2인 팀 (Tech Lead + Backend Engineer)** — 1인 팀 가정 시 20주 이상 필요 |
 | **podman-py** | **비도입** — rootless 포트 포워딩 제어 불가 |
 | **LLM 공급자** | Track A에서 **포트 인터페이스만 정의**, 구현은 LocalProvider. Track B는 별도 문서(`LLM_PROVIDER_PLAN.md`)로 분리 |
@@ -204,14 +199,16 @@ AI Agents → turn_watcher (3s poll) → turns.raw
 │       │   ├── __init__.py
 │       │   ├── driven/
 │       │   │   ├── __init__.py
-│       │   │   ├── llm/            # LLM 공급자 어댑터
-│       │   │   │   ├── local.py    # 로컬 포트 (8080-8084) — Track A 기본
-│       │   │   │   ├── __init__.py
-│       │   │   └── factory.py       # ProviderFactory (Track A: Local only)
-│       │   │   ├── container/      # Podman subprocess 구현
-│       │   │   ├── storage/        # OCI Object Storage
-│       │   │   ├── notification/   # Slack, Telegram, Apprise
-│       │   │   └── research/       # exa, context7
+│       │   ├── llm/            # LLM 공급자 어댑터
+│       │   │   ├── __init__.py
+│       │   │   ├── local.py    # 로컬 포트 (8080-8084) — Track A 기본
+│       │   │   └── factory.py  # ProviderFactory (Track A: Local only)
+│       │   ├── container/      # Podman subprocess 구현
+│       │   ├── storage/        # OCI Object Storage
+│       │   ├── file_exchange/  # blob_explorer
+│       │   ├── notification/   # Slack, Telegram, Apprise
+│       │   ├── research/       # exa, context7
+│       │   └── proxy_utils/    # 게이트웨이 (OpenRouter 등)
 │       │   └── driving/
 │       │       ├── __init__.py
 │       │       ├── mcp/            # FastMCP + Tools (8개 네임스페이스)
@@ -306,7 +303,7 @@ class PipelineOrchestrator:
 **수정 내역**:
 1. `BaseModel` → `BaseSettings` (Pydantic Settings가 맞는 API)
 2. `get_provider()` → `resolve_provider_name()` (core가 adapter를 반환하면 순환 참조 위반)
-3. `cloudahq` 오타 수정 (Track B는 별도 문서화)
+3. "cloudahq" 오타 수정 → Track B는 별도 문서화로 분리
 4. `BudgetManager` 복원 (v1.1에서 지적당 항목)
 
 ---
@@ -390,7 +387,7 @@ class PipelineOrchestrator:
 | **섀도 day_cycle 시작** (devforge_shadow DB + replay) | 프로덕션 DB에 쓰지 않음 |
 | **구/신 상태 대조 (2주, 최소 14 사이클)** | - 결정론적 단계: diff = 0<br>- 확률적 단계: 분포 검정 (p < 0.05) |
 | Track A LLM Provider 검증 (Local + replay) | 응답 시간 < 10s, 품질 동일 (fixture 대조) |
-| 롤백 테스트 (Quadlet digest 고정) | 5분 내 롤백 성공 |
+| 롤백 테스트 (Quadlet digest 고정) | **5분 이내** 롤백 성공 |
 
 **Week 8-9 할당 이유**: day_cycle은 일 1회이므로 2주야 `n ≥ 14` 샘플 확보 가능. 1주(Review에서 지적)면 n≈7으로 통계 검정 불가.
 
@@ -403,19 +400,16 @@ class PipelineOrchestrator:
 | `AgentInterface` 추상화 | `application/agent_interface.py` | Web/CLI/Scheduled 공통 인터페이스 |
 | 배치 리뷰 시스템 | `application/issue_collector.py` + tools | P0/P1 자동 수집 → 주간 리포트 |
 
-### Phase 5: 잔여 도메인 + 인터페이스 (Week 11-12)
+### Phase 5: 잔여 도메인 + 인터페이스 (Week 11)
 
-| 주차 | 작업 | 산출물 |
-|------|------|--------|
-| **Week 11** | `storage/` (OCI SDK, FileRegistry) | `adapters/driven/storage/` |
-| | `notification/` (Slack/Telegram/Apprise) | `adapters/driven/notification/` |
-| | `file_exchange/` (blob_explorer) | `adapters/driven/` |
-| **Week 12** | `research/` (exa/context7/web) | `adapters/driven/research/` |
-| | `proxy_utils/` (게이트웨이) | `adapters/driven/proxy_utils/` |
+| 작업 | 산출물 | 검증 |
+|------|--------|------|
+| `storage/` (OCI SDK + FileRegistry) | `adapters/driven/storage/` | OCI 업로드/목록 조회 성공 |
+| `file_exchange/` (blob_explorer) | `adapters/driven/file_exchange/` | FastAPI 라우터 분리 |
 
-**조정**: Track B(LLM Provider) 제외 → 4개 도메인을 2주로 재배치
+**조정**: `notification/`, `research/`, `proxy_utils/`는 **Phase 8(안정화)**로 이동 → Week 11에 2개 도메인만 처리
 
-### Phase 6: 컨테이너화 + CI/CD (Week 13)
+### Phase 6: 컨테이너화 + CI/CD (Week 12-13)
 
 | 작업 | 산출물 |
 |------|--------|
@@ -427,18 +421,27 @@ class PipelineOrchestrator:
 | `docs/ADR/0001-config-priority.md` | ConfigRegistry 우선순위 |
 | `docs/ADR/0002-llm-provider-flag.md` | Provider 추상화 결정 (Track B는 별도) |
 
-### Phase 7: 안정화 + 롤백 + 정리 (Week 14)
+### Phase 7: Final Cutover (Week 14)
 
 | 작업 | 검증 |
 |------|------|
 | 기존 `scripts/` 임포트 루트 제거 | `python -c "import lib"` → ImportError |
 | 첫 주간 리포트 (collected_issues) | 리포트 생성 테스트 |
 | 문서 동기화 (ARCHITECTURE, API_REFERENCE) | 최신 구조 반영 |
-| 롤백 훈련 (Quadlet digest 고정) | 5분 내 롤백 검증 |
+| 롤백 훈련 (Quadlet digest 고정) | **5분 이내** 롤백 검증 |
 | `day_cycle.sh` → `devforge pipeline orchestrate` | 래퍼 10줄 검증 |
-| **안정화 (2주)** | Bug triage, team 적응 |
 
-> **안정화 기간 (14주 이후, 2주)**: 리팩토링 후버그 수정, 팀 온보딩, 문서 보강. **KPI 측정 시작**.
+### Phase 8: Stabilization (Week 15-16)
+
+| 작업 | 검증 |
+|------|------|
+| `notification/` (Slack/Telegram/Apprise) | `adapters/driven/notification/` | 알림 API 호출 테스트 |
+| `research/` (exa/context7/web) | `adapters/driven/research/` | ResearchFacade 동작 |
+| `proxy_utils/` (게이트웨이) | `adapters/driven/proxy_utils/` | 게이트웨이 라우팅 |
+| Bug triage | GitHub 이슈 0건 (Critical) |
+| 팀 적응 | Onboarding 완료 (2일 목표) |
+
+> **안정화 기간**: 리팩토링 후 버그 수정, 잔여 도메인 마무리, 팀 온보딩. **KPI 측정 시작**.
 
 ---
 
@@ -467,7 +470,7 @@ class PipelineOrchestrator:
 
 **API 키**: OpenAI와 Anthropic은 **별도 키**가 필요합니다. 동일 키를 사용하는 것은 OpenRouter/LiteLLM 같은 게이트웨이를 거쳤을 때 가능하며, 이는 `docs/LLM_PROVIDER_PLAN.md`(Track B 별도 문서)에서 논의 예정입니다.
 
-> **Track B(Cloud 공급자)**는 별도 문서(`docs/LLM_PROVIDER_PLAN.md`)에서 계획 및 검토 예정입니다. v1.3 시점에서는 Track A의 LocalProvider 인터페이스만 확정하고 구현합니다.
+> **Track B(Cloud 공급자)**는 별도 문서(`docs/LLM_PROVIDER_PLAN.md`)에서 계획 및 검토 예정입니다. v1.4 시점에서는 Track A의 LocalProvider 인터페이스만 확정하고 구현합니다.
 
 ### 5.3 테스트 전략
 | 테스트 종류 | 목적 | 도구 |
@@ -512,7 +515,7 @@ class PipelineOrchestrator:
 | AI 에이전트 진입점 탐색 시간 | >5분 (50개 파일 중 추측) | <10초 (`devforge --help`) | **측정 프로토콜**: Claude Code 세션 3회, 프롬프트 "이 프로젝트에서 파이프라인 실행 파일을 찾아줘", 10초 이내 파일 1개 특정 |
 | LSP 심볼 해결 성공률 | ~60% (순환 참조) | >95% | `pyright --outputjson` + import-linter 0 violations |
 | 컨테이너 빌드 시간 | ~3분 (스크립트 복사) | <1분 (wheel 캐시) | CI 로그 |
-| 롤백 시간 | 30분 (수동) | **<10분 (Quadlet digest 고정)** | 리졸루션: "무중단"에서 "5분 내 롤백 가능"으로 수정 |
+| 롤백 시간 | 30분 (수동) | **<5분 (Quadlet digest 고정)** | Quadlet `Image=`에 digest 고정 → 재시작 실패 시 자동 롤백 |
 | 테스트 커버리지 (신규) | 0% | >80% (unit + integration + characterization) | `pytest --cov` (신규 코드 기준) |
 | 타입 힌트 커버리지 | ~20% | >90% | `mypy --strict` |
 | 하드코딩 경로 | 40+ | 0 | `grep "/opt/" src/` → 0 (`core/paths.py` 예외) |
@@ -524,7 +527,7 @@ class PipelineOrchestrator:
 
 | 문서 | 시점 |
 |------|------|
-| `REFACTORING_PLAN.md` (v1.3) | ✅ 작성 완료 |
+| `REFACTORING_PLAN.md` (v1.4) | ✅ 작성 완료 |
 | `ARCHITECTURE.md` | Phase 1 완료 |
 | `MIGRATION_GUIDE.md` | Phase 3 완료 |
 | `LLM_PROVIDERS.md` | Track B 문서화 시 (별도) |

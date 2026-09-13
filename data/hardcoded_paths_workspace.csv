@@ -1,0 +1,2 @@
+/opt/projects/server/scripts/gen_architecture.py:96:        if mount == "/opt/workspace":
+/opt/projects/server/scripts/gen_architecture.py:101:        "- `/opt/workspace` (6GB) — out of scope (consolidated into `/opt/projects/server/`)"

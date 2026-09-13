@@ -1,0 +1,160 @@
+/opt/projects/server/scripts/droplr_upload.py:18:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/lint_rules/__init__.py:15:SCRIPTS_DIR = Path("/opt/projects/server/scripts")
+/opt/projects/server/scripts/gen_architecture.py:25:CLAUDE_YAML = Path("/opt/projects/server/CLAUDE.yaml")
+/opt/projects/server/scripts/gen_architecture.py:26:CODE_STRUCTURE_YAML = Path("/opt/projects/server/docs/architecture/code-structure.yaml")
+/opt/projects/server/scripts/gen_architecture.py:27:SCRIPTS_DIR = Path("/opt/projects/server/scripts")
+/opt/projects/server/scripts/gen_architecture.py:29:ARCH_INFRA_OUTPUT = Path("/opt/projects/server/docs/architecture/infrastructure.md")
+/opt/projects/server/scripts/gen_architecture.py:30:SOFTWARE_OUTPUT = Path("/opt/projects/server/docs/architecture/software.yaml")
+/opt/projects/server/scripts/gen_architecture.py:31:TIMER_REGISTRY_OUTPUT = Path("/opt/projects/server/docs/specs/timer-registry.yaml")
+/opt/projects/server/scripts/gen_architecture.py:101:        "- `/opt/workspace` (6GB) — out of scope (consolidated into `/opt/projects/server/`)"
+/opt/projects/server/scripts/gen_architecture.py:137:        "- `/opt/projects/server/docs/` — design, phases, glossary, specs",
+/opt/projects/server/scripts/mcp_server.py:832:    SANDBOX_VERIFY_ALLOWED_ROOT(/opt/projects/server) 하위여야 하며,
+/opt/projects/server/scripts/mcp_server.py:836:        project_dir: 검증할 프로젝트 디렉토리 (절대 경로, /opt/projects/server 하위만 허용)
+/opt/projects/server/scripts/lib/enrich/utils.py:62:def find_symbol(symbol: str, project_root: str = "/opt/projects/server") -> bool:
+/opt/projects/server/scripts/lib/enrich/utils.py:76:                     project_root: str = "/opt/projects/server") -> Dict:
+/opt/projects/server/scripts/lib/model_ctl.sh:8:#   source /opt/projects/server/scripts/lib/model_ctl.sh
+/opt/projects/server/scripts/lib/model_ctl.sh:22:MODEL_CTL_SCRIPT_DIR="/opt/projects/server/scripts"
+/opt/projects/server/scripts/lib/tracking/dependency_tracker.py:19:REF_ROOT = Path("/opt/projects/server")
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:35:REF_ROOT = Path("/opt/projects/server")
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:51:        "cli": lambda: file_exists("/opt/projects/server/scripts/cli.py"),
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:52:        "stats": lambda: file_exists("/opt/projects/server/scripts/state_collector/main.py"),
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:61:            "/opt/projects/server/scripts/auto_commit_guard.py"
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:64:            "/opt/projects/server/scripts/hooks/session_context.py"
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:67:        "link_turns": lambda: file_exists("/opt/projects/server/scripts/link_turns.py"),
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:76:            "/opt/projects/server/scripts/pipelines/code_mod.py"
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:79:            "/opt/projects/server/scripts/pipelines/code_mod.py"
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:82:        "Reference tracking": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:83:        "lib/refs": lambda: file_exists("/opt/projects/server/scripts/lib/refs.py"),
+/opt/projects/server/scripts/lib/tracking/phase_tracker.py:116:            or file_exists("/opt/projects/server/scripts/embed_turns.py")
+/opt/projects/server/scripts/lib/state/changelog.py:6:Extracted from gen_server_state.py. Paths default to /opt/projects/server/.
+/opt/projects/server/scripts/lib/state/changelog.py:15:SERVER_DIR = Path("/opt/projects/server")
+/opt/projects/server/scripts/lib/code_mod/shared.py:13:SERVER_DIR = Path("/opt/projects/server")
+/opt/projects/server/scripts/lib/action_queue.py:248:    cmd = ["python3", f"/opt/projects/server/scripts/{script}"] + list(args_list)
+/opt/projects/server/scripts/lib/worklog.py:15:SERVER = Path("/opt/projects/server")
+/opt/projects/server/scripts/lib/model_ctl.py:32:SCRIPT_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/lib/debate/debate_llm.py:146:        alt = Path("/opt/projects/server") / file_path.lstrip("/")
+/opt/projects/server/scripts/lib/watchdog/config.py:189:SANDBOX_VERIFY_ALLOWED_ROOT = "/opt/projects/server"
+/opt/projects/server/scripts/lib/watchdog/fixloop.py:30:FIX_SCRIPT_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/lib/watchdog/recovery.py:248:                    "import sys; sys.path.insert(0, '/opt/projects/server/scripts'); "
+/opt/projects/server/scripts/lib/watchdog/codescanner.py:163:        abs_path = os.path.join("/opt/projects/server/scripts", fpath_str)
+/opt/projects/server/scripts/lib/watchdog/codescanner.py:312:def run_scan(scripts_dir: str = "/opt/projects/server/scripts") -> list[dict]:
+/opt/projects/server/scripts/lib/watchdog/orchestrator.py:517:            f"/opt/projects/server/scripts/pipelines/{finding['file']}.\n"
+/opt/projects/server/scripts/lib/watchdog/orchestrator.py:866:            f"/opt/projects/server/scripts/pipelines/{finding['file']}.\n"
+/opt/projects/server/scripts/lib/handover_db.py:15:SERVER_DIR = Path("/opt/projects/server")
+/opt/projects/server/scripts/turn_watcher.py:30:CHECKPOINT_FILE = Path("/opt/projects/server/collect_checkpoint.json")
+/opt/projects/server/scripts/weekly_enrich_rebuild.sh:14:SCRIPT_DIR="/opt/projects/server/scripts"
+/opt/projects/server/scripts/gemini_mcp.py:13:    "args": ["/opt/projects/server/scripts/gemini_mcp.py"]
+/opt/projects/server/scripts/tests/test_3t_full_pipeline.py:5:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_pipeline_e2e.py:22:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_7b_vs_9b_text_extract.py:18:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/tests/test_action_queue.py:90:        assert args == ["python3", "/opt/projects/server/scripts/cli.py", "task", "update", "test"]
+/opt/projects/server/scripts/tests/test_phase3_rerun.py:6:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/tests/test_fact5_comparison.py:21:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_9b_review.py:8:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/tests/test_review_9b.py:8:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/tests/test_dual_extract_7b_vs_9b.py:11:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/tests/test_4b_dual_review_7b_vs_9b.py:15:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/tests/compare_e2e_baseline.py:5:BASE = json.load(open("/opt/projects/server/data/eval/pipeline_e2e_test_20260621_150238.json"))
+/opt/projects/server/scripts/tests/compare_e2e_baseline.py:6:CURR = json.load(open("/opt/projects/server/scripts/data/eval/pipeline_e2e_test_20260621_113359.json"))
+/opt/projects/server/scripts/tests/compare_e2e_baseline.py:107:out = "/opt/projects/server/data/eval/comparison_report_20260621.md"
+/opt/projects/server/scripts/tests/test_chunk_verify.py:114:            "/opt/projects/server/scripts/pipelines/day_verify.py",
+/opt/projects/server/scripts/tests/compare_extract_approaches.py:9:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/compare_extract_long_B.py:5:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/compare_extract_missing.py:5:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/day_model_test.py:13:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/day_model_test_direct.py:12:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/day_verify_compare.py:10:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/day_verify_retry.py:7:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/e2e_20turns_full.sh:5:cd /opt/projects/server/scripts || exit 1
+/opt/projects/server/scripts/tests/e2e_extract_section_split.py:9:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/e2e_extract_section_split.sh:6:cd /opt/projects/server/scripts || exit 1
+/opt/projects/server/scripts/tests/embed_runner.sh:5:EMBED_PY="/opt/projects/server/scripts/pipelines/embed_batch.py"
+/opt/projects/server/scripts/tests/embed_runner.sh:7:cd /opt/projects/server
+/opt/projects/server/scripts/tests/embed_runner.sh:10:cd /opt/projects/server/scripts
+/opt/projects/server/scripts/tests/embed_runner.sh:12:cd /opt/projects/server
+/opt/projects/server/scripts/tests/embed_runner.sh:14:trap "echo '[embed-runner] Stopped'; cd /opt/projects/server/scripts && python3 -c \"from lib.watchdog.messenger import resolve_pulse; resolve_pulse('heartbeat_embed_runner_sh')\" 2>/dev/null; cd /opt/projects/server; exit 0" TERM INT
+/opt/projects/server/scripts/tests/embed_runner.sh:35:        cd /opt/projects/server/scripts && python3 -c "from lib.watchdog.messenger import resolve_pulse; resolve_pulse('heartbeat_embed_runner_sh')" 2>/dev/null; cd /opt/projects/server
+/opt/projects/server/scripts/tests/embed_runner.sh:67:        cd /opt/projects/server/scripts && python3 -c "
+/opt/projects/server/scripts/tests/embed_runner.sh:70:" || echo "[embed-runner] Slack send failed"; cd /opt/projects/server
+/opt/projects/server/scripts/tests/experiment_monitor.py:14:SERVER_DIR = "/opt/projects/server"
+/opt/projects/server/scripts/tests/experiment_monitor.py:110:                "/opt/projects/server/data/eval",
+/opt/projects/server/scripts/tests/finalize_pipeline.py:6:sys.path.insert(0, '/opt/projects/server/scripts')
+/opt/projects/server/scripts/tests/finalize_pipeline.py:12:EXPER_DIR = '/opt/projects/server/data/experiment'
+/opt/projects/server/scripts/tests/model_comparison_test.py:20:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/pipeline_e2e_10turns.py:5:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/pipeline_preverify_test.py:31:EVAL_DIR = "/opt/projects/server/data/eval"
+/opt/projects/server/scripts/tests/prj_ground_truth_test.py:11:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/prj_model_test.py:8:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/run_extract_13.py:4:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_extract_strategies.py:8:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_night_prj_eval.py:18:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_r_role_dsv2.sh:5:P_EXP="/opt/projects/server/data/experiment/exp_p_rot1_r1_norubric_r1_norubric.json"
+/opt/projects/server/scripts/tests/test_r_role_dsv2.sh:6:R_EXP_Q14="/opt/projects/server/data/experiment/exp_r_rot1_r1_norubric_r1_norubric.json"
+/opt/projects/server/scripts/tests/test_r_role_dsv2.sh:7:EXPER_DIR="/opt/projects/server/data/experiment"
+/opt/projects/server/scripts/tests/test_r_role_dsv2.sh:87:sys.path.insert(0, '/opt/projects/server/scripts')
+/opt/projects/server/scripts/tests/test_dual_4b.py:13:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/tests/test_v5_arbiter_fallback.py:24:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_v6_quality_filters.py:20:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_arbiter_v6_7b9b.py:20:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_arbiter_dual_7b9b.py:20:SCRIPTS_DIR = "/opt/projects/server/scripts"
+/opt/projects/server/scripts/tests/test_review_7b.py:8:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/tests/test_taxonomy_trap_fix.py:28:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/notion_memo.py:18:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/gemini_session_start.sh:7:#   /opt/projects/server/scripts/gemini_session_start.sh          # start (tmux: gemini)
+/opt/projects/server/scripts/gemini_session_start.sh:8:#   /opt/projects/server/scripts/gemini_session_start.sh --prompt "..."  # headless run (no tmux)
+/opt/projects/server/scripts/gemini_session_start.sh:23:sys.path.insert(0, '/opt/projects/server/scripts')
+/opt/projects/server/scripts/observer.py:192:    sf = "/opt/projects/server/data/nightly_status.yaml"
+/opt/projects/server/scripts/observer.py:283:    sf = "/opt/projects/server/data/nightly_status.yaml"
+/opt/projects/server/scripts/sync_gemini_rules.py:10:    python3 /opt/projects/server/scripts/sync_gemini_rules.py
+/opt/projects/server/scripts/pdf_reader_mcp.py:13:    "args": ["/opt/projects/server/scripts/pdf_reader_mcp.py"]
+/opt/projects/server/scripts/pdf_reader_mcp.py:48:    allowed = ["/opt/ai_data", "/opt/projects/server", "/tmp"]
+/opt/projects/server/scripts/state_collector/main.py:30:SERVER_DIR = Path("/opt/projects/server")
+/opt/projects/server/scripts/state_collector/main.py:34:MOTD_FILE = Path("/opt/projects/server/data/motd_daily.txt")
+/opt/projects/server/scripts/auto_mode.sh:13:TASK_FILE="/opt/projects/server/data/auto_tasks.md"
+/opt/projects/server/scripts/auto_mode.sh:14:LOG_DIR="/opt/projects/server/data/auto_logs"
+/opt/projects/server/scripts/auto_mode.sh:17:STATUS_FILE="/opt/projects/server/data/auto_status.yaml"
+/opt/projects/server/scripts/migrate_yaml_to_db.py:15:HANDOVER = Path("/opt/projects/server/handover.yaml")
+/opt/projects/server/scripts/migrate_yaml_to_db.py:246:    Path("/opt/projects/server/handover.yaml").write_text(
+/opt/projects/server/scripts/sqlite_mcp.py:14:      "args": ["/opt/projects/server/scripts/sqlite_mcp.py"]
+/opt/projects/server/scripts/golden_image/yearly_check.py:8:sys.path.insert(0, "/opt/projects/server/scripts")
+/opt/projects/server/scripts/golden_image/yearly_check.py:96:        body += "\n\n조치: /opt/projects/server/scripts/golden_image/yearly_refresh.sh 수동 실행 검토."
+/opt/projects/server/scripts/run_baseline_monitor.sh:6:BASE="/opt/projects/server"
+/opt/projects/server/scripts/system_sync.sh:8:SCRIPT_DIR="/opt/projects/server/scripts"
+/opt/projects/server/scripts/system_sync.sh:32:cd /opt/projects/server 2>/dev/null || exit 1
+/opt/projects/server/scripts/run_verify_compare.sh:30:cd /opt/projects/server/scripts
+/opt/projects/server/scripts/run_verify_compare.sh:75:sys.path.insert(0, '/opt/projects/server/scripts')
+/opt/projects/server/scripts/run_verify_compare.sh:83:cd /opt/projects/server/scripts/pipelines
+/opt/projects/server/scripts/update_handover.py:26:SERVER_DIR = Path("/opt/projects/server")
+/opt/projects/server/scripts/update_handover.py:30:    Path("/opt/projects/server"),
+/opt/projects/server/scripts/hooks/session_context.py:13:COLLECT_STATUS = Path("/opt/projects/server/data/collect_status.yaml")
+/opt/projects/server/scripts/hooks/session_context.py:14:REPORT_FILE = Path("/opt/projects/server/data/consistency_report.yaml")
+/opt/projects/server/scripts/hooks/session_context.py:15:LINK_REVIEW = Path("/opt/projects/server/data/link_review.yaml")
+/opt/projects/server/scripts/hooks/session_context.py:16:SERVER_DIR = Path("/opt/projects/server")
+/opt/projects/server/scripts/hooks/session_context.py:171:    lines.append("Entry point → /opt/projects/server/CLAUDE.yaml (rules, entry_points, handover)")
+/opt/projects/server/scripts/hooks/auto_log.py:72:        "/opt/projects/server/scripts/pipelines/",
+/opt/projects/server/scripts/hooks/auto_log.py:73:        "/opt/projects/server/scripts/hooks/",
+/opt/projects/server/scripts/hooks/auto_log.py:74:        "/opt/projects/server/scripts/tests/",
+/opt/projects/server/scripts/hooks/auto_log.py:75:        "/opt/projects/server/scripts/lib/",
+/opt/projects/server/scripts/hooks/auto_log.py:76:        "/opt/projects/server/scripts/proxies/",
+/opt/projects/server/scripts/hooks/ruff_lint.py:17:        and file_path.startswith("/opt/projects/server")
+/opt/projects/server/scripts/gemini_core/tools_def.py:59:                "description": "Read file contents. Only works within /opt/projects/server/.",
+/opt/projects/server/scripts/gemini_core/tools_def.py:63:                        "path": {"type": "string", "description": "File path under /opt/projects/server/"},
+/opt/projects/server/scripts/gemini_core/tools_def.py:72:                "description": "Replace text in a file. old_string must be unique. Only works within /opt/projects/server/.",
+/opt/projects/server/scripts/gemini_core/tools_def.py:85:                "description": "Create or overwrite a file. Only works within /opt/projects/server/.",
+/opt/projects/server/scripts/gemini_core/execute.py:16:    "python3 /opt/projects/server/scripts/cli.py",
+/opt/projects/server/scripts/gemini_core/execute.py:18:SAFE_DIR = "/opt/projects/server"
+/opt/projects/server/scripts/gemini_core/execute.py:59:            ["python3", "/opt/projects/server/scripts/cli.py", "status", "--json"],
+/opt/projects/server/scripts/gemini_core/execute.py:77:            ["python3", "/opt/projects/server/scripts/cli.py", "task", "list"],
+/opt/projects/server/scripts/osync_backup.py:47:    ("/opt/projects/server/scripts", "scripts"),
+/opt/projects/server/scripts/osync_backup.py:48:    ("/opt/projects/server/docs", "docs"),
+/opt/projects/server/scripts/notice/lib/bot_processor.py:43:PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", "/opt/projects/server"))
+/opt/projects/server/scripts/auto_commit_guard.py:12:SERVER = Path("/opt/projects/server")
+/opt/projects/server/scripts/pg_mcp.py:18:    "args": ["/opt/projects/server/scripts/pg_mcp.py"]
+/opt/projects/server/scripts/open-newhand.sh:6:HANDOVER="/opt/projects/server/handover.yaml"
+/opt/projects/server/scripts/open-newhand.sh:7:PROJECT_DIR="/opt/projects/server"
+/opt/projects/server/scripts/claude_code_runner.sh:49:WRAPPER="/opt/projects/server/scripts/claude_code_wrapper.sh"
+/opt/projects/server/scripts/cli.py:774:AUTO_TASKS_FILE = "/opt/projects/server/data/auto_tasks.md"
+/opt/projects/server/scripts/cli.py:1189:    yaml_path = Path("/opt/projects/server/docs/domain-glossary.yaml")
+/opt/projects/server/scripts/day_cycle.sh:21:MODEL_CTL="/opt/projects/server/scripts/lib/model_ctl.sh"
+/opt/projects/server/scripts/day_cycle.sh:111:SCRIPT_DIR="/opt/projects/server/scripts"
+/opt/projects/server/scripts/day_cycle.sh:122:import sys; sys.path.insert(0, '/opt/projects/server/scripts')
