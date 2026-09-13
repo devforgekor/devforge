@@ -41,16 +41,7 @@ class Vector(TypeDecorator):
     def __create_vector(dimensions: int) -> str:
         return f"vector({dimensions})"
 
-metadata_obj = MetaData(
-    schema="public",
-    naming_convention={
-        "ix": "ix_%(table_name)s_%(column_names)s",
-        "uq": "uq_%(table_name)s_%(column_names)s",
-        "ck": "ck_%(table_name)s_%(constraint_name)s",
-        "fk": "fk_%(table_name)s_%(referred_table_name)s",
-        "pk": "pk_%(table_name)s",
-    },
-)
+metadata_obj = MetaData(schema="public")
 
 
 class Base(DeclarativeBase):
@@ -87,6 +78,8 @@ class Turn(Base):
     agent = Column(Text)
     source_message_id = Column(Text)
     embedding = Column(Vector(768))  # pgvector, 768-dim
+    pipeline_state = Column(Text, nullable=False, server_default=sql_text("'scanned'"))
+    source = Column(Text, server_default=sql_text("'unknown'"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
@@ -96,6 +89,7 @@ class Turn(Base):
         Index("idx_turns_search", sql_text("(COALESCE(user_turn, '') || ' ' || COALESCE(text, '') || ' ' || COALESCE(thinking, '')) gin_trgm_ops"),
               postgresql_using="gin"),
         Index("idx_turns_meta_type", sql_text("(meta->>'type')")),
+        Index("idx_turns_pipeline_state", "pipeline_state"),
     )
 
 
@@ -120,7 +114,50 @@ class Observation(Base):
     )
 
 
-# ── 4. ObsDec (관찰 기반 결정) ──
+# ── 4. Review Facts ──
+
+class ReviewFact(Base):
+    """Extracted facts stored per turn — the SSOT for the extract pipeline.
+
+    Mirrors the review_facts table used by extract.py / extract_verify.py.
+    """
+    __tablename__ = "review_facts"
+
+    id: Any = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    turn_id = Column(PG_UUID(as_uuid=True), ForeignKey("turns.id", ondelete="CASCADE"), nullable=False)
+    fact_index = Column(Integer, nullable=False)
+    fact_type = Column(Text, nullable=False)
+    evidence = Column(Text, nullable=False)
+    extract_model = Column(Text, nullable=False)
+    verdict = Column(Text, server_default=sql_text("'passed'"))
+    source = Column(Text, nullable=False)
+    fact_action = Column(Text, server_default=sql_text("'extracted'"))
+    prompt_tokens = Column(Integer)
+    gen_tokens = Column(Integer)
+    elapsed_ms = Column(Float)
+    faithful_score = Column(Float)
+    faithful_method = Column(Text)
+    nli_verdict = Column(Text)
+    nli_llm = Column(Text)
+    nli_llm2 = Column(Text)
+    source_file = Column(Text)
+    corrected_evidence = Column(Text)
+    subject = Column(Text)
+    predicate = Column(Text)
+    object_ = Column("object", Text)
+    qualifiers = Column(JSONB, server_default=sql_text("'{}'"))
+    quality_checks = Column(JSONB, server_default=sql_text("'{}'"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_review_turn", "turn_id"),
+        Index("idx_review_type", "fact_type"),
+        Index("idx_review_verdict", "verdict"),
+        Index("idx_review_source", "source"),
+    )
+
+
+# ── 5. ObsDec (관찰 기반 결정) ──
 
 class ObsDec(Base):
     __tablename__ = "obs_dec"
@@ -326,7 +363,7 @@ class DeepDiveStep(Base):
     __table_args__ = (
         Index("idx_deepdive_steps_status", "status", "started_at"),
         Index("idx_deepdive_steps_session", "session_id"),
-        {"unique_session_step": Index("uq_deepdive_session_step", "session_id", "step", unique=True)},
+        Index("uq_deepdive_session_step", "session_id", "step", unique=True),
     )
 
 

@@ -111,10 +111,10 @@ def set_gateway(gateway: DatabaseGateway) -> None:
 
 def get_gateway() -> DatabaseGateway:
     """Get the global DatabaseGateway instance."""
+    global _gateway
     if _gateway is None:
         from devforge.core.config import get_config
         config = get_config()
-        global _gateway
         _gateway = DatabaseGateway.from_config(config)
     return _gateway
 

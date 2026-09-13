@@ -130,15 +130,14 @@ addopts = [
     "--tb=short",
     "-q",
     "--strict-markers",
-    "--strict-config",
 ]
 asyncio_mode = "auto"
-
-[tool.pytest.ini_options.markers]
-unit = "unit tests"
-integration = "integration tests"
-characterization = "characterization tests (behavior capture)"
-shadow = "shadow execution tests (production comparison)"
+markers = [
+    "unit: unit tests",
+    "integration: integration tests",
+    "characterization: characterization tests (behavior capture)",
+    "shadow: shadow execution tests (production comparison)",
+]
 
 # ─────────────────── import-linter ───────────────────
 
