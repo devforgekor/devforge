@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from typing import Any
 
 import typer
 
@@ -17,7 +18,7 @@ app = typer.Typer(name="status", help="Show server component status")
 logger = get_logger(__name__)
 
 
-def _run_cmd(cmd: list[str], timeout: int = 10) -> dict:
+def _run_cmd(cmd: list[str], timeout: int = 10) -> dict[str, Any]:
     """Run a shell command and return result dict."""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
@@ -30,7 +31,7 @@ def _run_cmd(cmd: list[str], timeout: int = 10) -> dict:
         return {"returncode": -1, "stdout": "", "stderr": str(e)}
 
 
-def _get_podman_status() -> dict:
+def _get_podman_status() -> dict[str, Any]:
     """Check container status via podman."""
     result = _run_cmd(["podman", "ps", "--format=json"])
     if result["returncode"] != 0:
@@ -54,7 +55,7 @@ def _get_podman_status() -> dict:
     return {"status": "ok", "containers": container_summary}
 
 
-def _get_model_status() -> dict:
+def _get_model_status() -> dict[str, Any]:
     """Check LLM model availability via runtime env."""
     config = get_config()
     runtime = config.runtime
@@ -68,7 +69,7 @@ def _get_model_status() -> dict:
     }
 
 
-def _get_systemd_services() -> dict:
+def _get_systemd_services() -> dict[str, Any]:
     """Check systemd user service status."""
     units = [
         "devforge-mcp.service",
@@ -86,7 +87,7 @@ def _get_systemd_services() -> dict:
     return {"services": services}
 
 
-def _get_filesystem_status() -> dict:
+def _get_filesystem_status() -> dict[str, Any]:
     """Check disk usage on key mount points."""
     mounts = ["/opt/ai_data", "/opt/projects", "/"]
     usage = []

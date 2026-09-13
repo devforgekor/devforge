@@ -17,7 +17,10 @@ import sys
 from typing import Optional
 
 import structlog
+from structlog.processors import JSONRenderer as _JSONRenderer
 from structlog.stdlib import ProcessorFormatter
+
+_JSON_RENDERER = _JSONRenderer
 
 
 def setup_logging(
@@ -46,7 +49,7 @@ def setup_logging(
                 structlog.processors.TimeStamper(fmt="iso"),
             ],
             processors=[
-                structlog.json.JSONRenderer(),
+                _JSON_RENDERER(),
             ],
         )
     else:
@@ -74,7 +77,7 @@ def setup_logging(
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
-            structlog.dev.ConsoleRenderer() if not format_json else structlog.json.JSONRenderer(),
+            structlog.dev.ConsoleRenderer() if not format_json else _JSON_RENDERER(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
         context_class=dict,
@@ -93,7 +96,7 @@ def get_logger(name: Optional[str] = None) -> structlog.BoundLogger:
     """
     if name is None:
         name = "devforge"
-    return structlog.get_logger(name)
+    return structlog.get_logger(name)  # type: ignore[no-any-return]
 
 
 # ── Re-export for convenience ──

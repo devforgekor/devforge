@@ -68,7 +68,7 @@ def resolve_model(name: str) -> str:
     cfg = MODEL_REGISTRY.get(name)
     if not cfg:
         raise ValueError(f"Unknown model: {name}. Known: {list(MODEL_REGISTRY)}")
-    return cfg.get("_model", name)
+    return str(cfg.get("_model", name))
 
 
 class LocalLLMAdapter(LLMPort):
@@ -78,7 +78,7 @@ class LocalLLMAdapter(LLMPort):
     No external API keys required (Track A only).
     """
 
-    def __init__(self, model_registry: Optional[dict] = None):
+    def __init__(self, model_registry: Optional[dict[str, Any]] = None):
         self._registry = model_registry or MODEL_REGISTRY
         self._config = get_config()
 
@@ -155,6 +155,26 @@ class LocalLLMAdapter(LLMPort):
 
     # ── LLMPort implementation ──
 
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        model_key: str = "day_extract",
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        json_mode: bool = False,
+    ) -> dict[str, Any]:
+        """Generic chat interface — send messages, get LLM response.
+
+        Prompt building and response parsing are handled by the pipeline stage,
+        keeping this adapter focused on the LLM HTTP call.
+        """
+        return await self._call_llm(
+            messages, model_key,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            json_mode=json_mode,
+        )
+
     async def extract_facts(
         self,
         turn: TurnData,
@@ -163,25 +183,10 @@ class LocalLLMAdapter(LLMPort):
     ) -> list[ExtractedFact]:
         """Extract structured facts from a turn via LLM.
 
-        This is a simplified interface — the full extract logic with
-        section-major extraction, JSON recovery, and EDC normalization
-        lives in the pipeline stage implementation. The adapter just
-        handles the LLM HTTP call.
+        NOTE: This delegates to the pipeline stage for prompt building and
+        response parsing. Adapters should not contain domain logic.
         """
-        from devforge.pipeline_stages.extract_edc import (
-            build_extract_prompt,
-            parse_extract_response,
-        )
-
-        messages = build_extract_prompt(turn)
-        result = await self._call_llm(
-            messages, model_key,
-            max_tokens=max_tokens,
-            json_mode=True,
-        )
-
-        facts = parse_extract_response(result["content"], turn.id, model_key)
-        return facts
+        return []  # Deprecated — use pipeline stage ExtractPipeline instead
 
     async def verify_claim(
         self,

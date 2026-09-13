@@ -96,23 +96,25 @@ def get_tools() -> list[dict[str, Any]]:
 async def knowledge_search(params: KnowledgeSearchParams) -> dict[str, Any]:
     """Search conversation turns via pg_trgm full-text search."""
     config = get_config()
+    from sqlalchemy import text
+
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
 
     gateway = DatabaseGateway.from_config(config)
 
     async with gateway.session() as db:
         # Use pg_trgm search
-        stmt = """
+        stmt = text("""
             SELECT t.id, t.conversation_id, t.seq, t.user_turn, t.text,
                    t.pipeline_state, t.created_at
             FROM turns t
             WHERE to_tsvector('english', COALESCE(t.user_turn, '') || ' ' || COALESCE(t.text, ''))
                   @@ plainto_tsquery('english', :query)
-        """
+        """)
         if params.pipeline_state:
-            stmt += " AND pipeline_state = :pipeline_state"
+            stmt = text(stmt.text + " AND pipeline_state = :pipeline_state")
 
-        stmt += f" ORDER BY t.created_at DESC LIMIT {params.limit}"
+        stmt = text(stmt.text + f" ORDER BY t.created_at DESC LIMIT {params.limit}")
 
         result = await db.execute(stmt, {
             "query": params.query,
@@ -175,7 +177,7 @@ async def pipeline_status(params: PipelineStatusParams) -> dict[str, Any]:
         "mode": runtime.MODE,
         "model_name": runtime.MODEL_NAME,
         "port": runtime.PORT,
-        "model_file": runtime.MODE_FILE,
+        "model_file": runtime.MODEL_FILE,
         "ctx_size": runtime.CTX_SIZE,
     }
 
@@ -278,7 +280,7 @@ async def deepdive(params: DeepDiveParams) -> dict[str, Any]:
                 .where(DeepDiveStep.id == existing.id)
                 .values(last_heartbeat_at=sql_func.now())
             )
-            result = {
+            result: dict[str, Any] = {
                 "action": "heartbeat",
                 "step": existing.step,
                 "step_name": existing.step_name,
@@ -389,7 +391,7 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None):
 
     try:
         validated = schemas[tool_name](**params)
-        result = await tool_funcs[tool_name](validated)
+        result = await tool_funcs[tool_name](validated)  # type: ignore[operator]
         return JSONResponse(content={"result": result})
     except Exception as e:
         logger.error("mcp_tool_error", tool=tool_name, error=str(e))

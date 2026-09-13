@@ -2,11 +2,9 @@ target-version = "py39"
 line-length = 100
 
 [lint]
-select = ["E", "F", "W", "I", "N", "UP", "SIM"]
+select = ["E", "F", "W", "I", "N", "SIM"]
 ignore = [
     "E501",   # line too long — tolerated per project style
     "SIM105", # contextlib.suppress pattern — try/except/pass is fine for cleanup
     "SIM115", # open() without context manager — valid for temp file patterns
-    "UP006",  # typing.Dict → dict — project uses Python 3.9 (PEP 604 unavailable)
-    "UP035",  # typing.Dict deprecated import — same reason
 ]

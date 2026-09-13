@@ -37,7 +37,7 @@ from sqlalchemy.orm import DeclarativeBase
 # ── pgvector type (minimal — registered with PostgreSQL for runtime) ──
 # We use a simple Text column for schema generation; the actual type
 # will be VECTOR(n) in PostgreSQL (requires the vector extension).
-class Vector(TypeDecorator):
+class Vector(TypeDecorator[Any]):
     """Minimal pgvector support for Alembic autogenerate."""
     impl = Text
     cache_ok = True

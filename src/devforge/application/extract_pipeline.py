@@ -48,7 +48,7 @@ class ExtractResult:
     success: bool
     facts_extracted: int = 0
     facts_verified: int = 0
-    errors: list[str] = None
+    errors: Optional[list[str]] = None
     elapsed_ms: float = 0.0
 
     def __post_init__(self):
@@ -130,7 +130,13 @@ class ExtractPipeline:
             if self._replay_mode:
                 facts = await self._replay_extract(turn)
             else:
-                facts = await self._llm.extract_facts(turn, model_key="day_extract")
+                from devforge.pipeline_stages.extract.edc import (
+                    build_extract_prompt,
+                    parse_extract_response,
+                )
+                messages = build_extract_prompt(turn)
+                result = await self._llm.chat(messages, model_key="day_extract", json_mode=True)
+                facts = parse_extract_response(result["content"], turn.id, "day_extract")
 
             logger.info("extract_facts", turn_id=str(turn.id), count=len(facts))
 
@@ -256,7 +262,7 @@ class ExtractPipeline:
         """Ensure DB schema has required columns (idempotent ALTER)."""
         # These ALTERs are idempotent in PostgreSQL
         from sqlalchemy import text as sql_text
-        async with self._db._gateway.session() as db:
+        async with self._db._gateway.session() as db:  # type: ignore[attr-defined]
             await db.execute(sql_text(
                 "ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm TEXT"
             ))

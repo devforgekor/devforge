@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from typing import Any
 
 import typer
 
@@ -13,7 +14,7 @@ app = typer.Typer(name="inference", help="Inference model management")
 logger = get_logger(__name__)
 
 
-def _run_cmd(cmd: list[str], timeout: int = 30) -> dict:
+def _run_cmd(cmd: list[str], timeout: int = 30) -> dict[str, Any]:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return {

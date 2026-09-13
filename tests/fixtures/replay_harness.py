@@ -51,7 +51,7 @@ def _request_hash(messages: list[dict], model: str, **kwargs) -> str:
 
 class LLMRecorder:
     """Records and replays LLM API calls.
-    
+
     RECORD: Captures request/response pairs to fixture files
     REPLAY: Returns pre-captured response for matching requests
     PASSTHROUGH: Direct LLM call (production mode)
@@ -103,7 +103,7 @@ class LLMRecorder:
     def replay(self, filename: str, messages: list[dict], model: str,
                **kwargs) -> Optional[dict]:
         """Replay a recorded response for matching request.
-        
+
         Returns: Response dict if found, None if not found.
         """
         if not REPLAY_MODE:
@@ -151,7 +151,7 @@ def get_recorder() -> LLMRecorder:
 # ── Decorator for wrapping call_llm ──
 def record_or_replay(filename: str):
     """Decorator to add record/replay capability to call_llm.
-    
+
     Usage:
         @record_or_replay("extract_llm.json")
         def call_llm(messages, model="day_extract", ...):
@@ -183,7 +183,7 @@ def record_or_replay(filename: str):
 # ── Capture functions for Phase −1 ──
 def capture_llm_responses():
     """Capture representative LLM responses from current production system.
-    
+
     This function should be run BEFORE refactoring starts, against the
     existing scripts/ code. It captures:
     1. extract.py LLM calls (10 samples)
@@ -222,7 +222,7 @@ def capture_llm_responses():
     print("Capturing text_clean.py LLM response...")
     cleaner = TextCleaner()
     test_text = "한국어 테스트 텍스트입니다. This is a mixed text sample."
-    cleaned = cleaner.clean(test_text)
+    cleaner.clean(test_text)
 
     # 3. Capture enrich LLM calls
     print("Capturing enrich.py LLM responses...")

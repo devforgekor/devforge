@@ -40,6 +40,11 @@ class FakeLLMPort(LLMPort):
         self._replay_mode = replay_mode
         self.calls: list[dict] = []
 
+    async def chat(self, messages, model_key: str = "day_extract", max_tokens: int = None,
+                   temperature: float = None, json_mode: bool = False) -> dict:
+        self.calls.append({"method": "chat", "model_key": model_key})
+        return {"content": '[{"evidence": "test fact"}]', "usage": {}}
+
     async def extract_facts(self, turn: TurnData, model_key: str = "day_extract", max_tokens: int = None) -> list[ExtractedFact]:
         self.calls.append({"method": "extract_facts", "turn_id": str(turn.id)})
         # Return synthetic facts
@@ -134,7 +139,7 @@ class TestExtractPipelineIntegration:
         assert result.success is True
         assert result.facts_extracted > 0
         assert len(llm.calls) > 0
-        assert llm.calls[0]["method"] == "extract_facts"
+        assert llm.calls[0]["method"] == "chat"
 
     @pytest.mark.characterization
     @pytest.mark.asyncio
@@ -143,10 +148,10 @@ class TestExtractPipelineIntegration:
         llm = FakeLLMPort()
         db = FakeExtractPort()
 
-        # Override extract_facts to raise
-        async def fail_extract(*args, **kwargs):
+        # Override chat to raise
+        async def fail_chat(*args, **kwargs):
             raise RuntimeError("LLM unavailable")
-        llm.extract_facts = fail_extract
+        llm.chat = fail_chat
 
         pipeline = ExtractPipeline(llm=llm, db=db, dry_run=False)
 

@@ -63,13 +63,31 @@ class LLMPort(ABC):
     """
 
     @abstractmethod
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        model_key: str = "day_extract",
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        json_mode: bool = False,
+    ) -> dict[str, Any]:
+        """Generic chat interface — send messages, get LLM response.
+
+        Prompt building and response parsing are handled by the caller,
+        keeping the adapter focused on the LLM HTTP call.
+        """
+        ...
+
+    @abstractmethod
     async def extract_facts(
         self,
         turn: TurnData,
         model_key: str = "day_extract",
         max_tokens: Optional[int] = None,
     ) -> list[ExtractedFact]:
-        """Extract structured facts from a turn via LLM."""
+        """Extract structured facts from a turn via LLM.
+        .. deprecated:: Use chat() with build_extract_prompt() instead.
+        """
         ...
 
     @abstractmethod

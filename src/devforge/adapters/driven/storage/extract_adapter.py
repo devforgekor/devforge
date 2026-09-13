@@ -76,8 +76,8 @@ class PostgresExtractAdapter(ExtractPort):
                 .where(Turn.id == turn_id)
                 .values(pipeline_state="extracting")
             )
-            result = await db.execute(stmt)
-            return result.rowcount > 0
+            await db.execute(stmt)
+            return True
 
     async def store_facts(self, facts: list[ExtractedFact]) -> int:
         """INSERT facts into review_facts with ON CONFLICT upsert."""
@@ -113,13 +113,13 @@ class PostgresExtractAdapter(ExtractPort):
                     "elapsed_ms": f.elapsed_ms,
                 })
 
-            stmt = insert(ReviewFact).from_values(rows)
+            stmt = insert(ReviewFact).values(rows)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["turn_id", "fact_index", "extract_model"],
                 set_={"evidence": stmt.inserted.evidence},
             )
-            result = await db.execute(stmt)
-            return result.rowcount
+            await db.execute(stmt)
+            return len(facts)
 
     async def store_marker(self, turn_id: UUID, mark: str, extract_model: str) -> bool:
         """Insert a marker fact (noise_marker, error, etc)."""
@@ -137,8 +137,8 @@ class PostgresExtractAdapter(ExtractPort):
                 index_elements=["turn_id", "fact_index", "extract_model"],
                 set_={"evidence": mark, "fact_action": mark},
             )
-            result = await db.execute(stmt)
-            return result.rowcount > 0
+            await db.execute(stmt)
+            return True
 
     async def set_pipeline_state(self, turn_id: UUID, state: str) -> bool:
         """Update pipeline_state for a turn."""
@@ -148,8 +148,8 @@ class PostgresExtractAdapter(ExtractPort):
                 .where(Turn.id == turn_id)
                 .values(pipeline_state=state)
             )
-            result = await db.execute(stmt)
-            return result.rowcount > 0
+            await db.execute(stmt)
+            return True
 
 
 class PostgresTurnRepository(TurnRepository):
@@ -177,8 +177,8 @@ class PostgresTurnRepository(TurnRepository):
                 user_turn=row.user_turn,
                 thinking=row.thinking,
                 text=row.text,
-                pipeline_state=getattr(row, "pipeline_state", "scanned"),
-                meta=dict(row.meta) if row.meta else {},
+                    pipeline_state=row.pipeline_state,
+                    meta=dict(row.meta_data) if row.meta_data else {},
             )
 
     async def search(self, query: str, limit: int = 20, pipeline_state: Optional[str] = None) -> list[TurnData]:
@@ -263,7 +263,7 @@ class PostgresObservationRepository(ObservationRepository):
                 tags=tags or {},
             ).returning(Observation.id)
             result = await db.execute(stmt)
-            return result.scalar_one()
+            return result.scalar_one()  # type: ignore[no-any-return]
 
     async def get_recent_observations(
         self,

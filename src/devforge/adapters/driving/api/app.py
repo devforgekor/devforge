@@ -14,7 +14,7 @@ Usage:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, Optional
 
 import uvicorn
 from fastapi import FastAPI
@@ -136,8 +136,8 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         observation: str,
         category: str = "general",
         source: str = "qwen_worker",
-        context: Optional[dict] = None,
-        tags: Optional[dict] = None,
+        context: Optional[dict[str, Any]] = None,
+        tags: Optional[dict[str, Any]] = None,
     ):
         """Save a worker observation for reflex rule mining."""
         from devforge.adapters.driven.storage.extract_adapter import PostgresObservationRepository

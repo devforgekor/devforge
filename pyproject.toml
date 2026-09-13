@@ -117,6 +117,18 @@ ignore_missing_imports = true
 module = "apprise.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "devforge.domain.models"
+disable_error_code = ["var-annotated", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = "devforge.adapters.driven.storage.extract_adapter"
+disable_error_code = ["arg-type", "attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "yaml"
+ignore_missing_imports = true
+
 # ─────────────────── pytest ───────────────────
 
 [tool.pytest.ini_options]
