@@ -56,12 +56,15 @@ def parse_extract_response(
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
-        # Use legacy JSON recovery
-        try:
-            from scripts.lib.extract_llm.parser import _clean_extraction_json
-            cleaned = _clean_extraction_json(content)
-            data = json.loads(cleaned)
-        except Exception:
+        # Fallback: simple JSON extraction
+        import re
+        match = re.search(r'\[.*\]', content, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(0))
+            except json.JSONDecodeError:
+                data = {"facts": []}
+        else:
             data = {"facts": []}
 
     facts = []

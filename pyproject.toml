@@ -42,6 +42,10 @@ dependencies = [
     "apprise>=1.0,<2.0",
     # CLI
     "typer>=0.9,<1.0",
+    # Settings
+    "pydantic-settings>=2.0,<3.0",
+    # MCP SSE
+    "sse-starlette>=3.0,<4.0",
 ]
 
 [project.optional-dependencies]
@@ -56,8 +60,6 @@ dev = [
     "mypy>=1.10,<2.0",
     # Architecture
     "import-linter>=0.6,<1.0",
-    # Type-safe settings
-    "pydantic-settings>=2.0,<3.0",
 ]
 track_b = [
     # Track B: LLM 공급자 추상화 (별도 문서화, Phase 0.5+에서 선택적 설치)

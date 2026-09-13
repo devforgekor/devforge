@@ -1,0 +1,25 @@
+[Unit]
+Description=DevForge MCP Server (podman)
+After=podman.service
+Wants=postgres.service
+
+[Container]
+ContainerName=devforge-mcp
+Image=ghcr.io/opencontainers/docker.io/python:3.11-slim
+ContainerOS=docker
+Volume=/opt/projects/server:/app:ro,Z
+Volume=/opt/ai_data:/data:Z
+Volume=/home/opc/.config/devforge:/config:ro,Z
+Volume=/tmp/opencode:/tmp/opencode:Z
+WorkingDir=/app
+User=opc
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/app/src
+EnvironmentFile=/home/opc/.config/devforge/secrets.env
+Exec=pip install -e ".[dev]" && python -m pytest tests/test_characterization.py tests/test_integration.py -q && python -m uvicorn devforge.adapters.driving.mcp.server:app --host 0.0.0.0 --port 8100
+Notify=false
+Restart=always
+RestartSecs=10
+
+[Install]
+WantedBy=multi-user.target
