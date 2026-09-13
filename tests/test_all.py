@@ -14,7 +14,8 @@ Usage:
   python3 tests/test_all.py          # interactive menu
 """
 
-import os, sys
+import os
+import sys
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(TESTS_DIR, "..", "scripts"))

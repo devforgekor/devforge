@@ -2,7 +2,13 @@
 # Status: experimental
 # Path: tests/test_extract_quantized.py — pytest
 """3B Q8_0 vs Q4_K_M — extract faithfulness 비교 테스트"""
-import csv, http.client, io, json, re, subprocess, sys, time
+import csv
+import http.client
+import io
+import json
+import re
+import subprocess
+import time
 
 API = "http://127.0.0.1:8080/v1/chat/completions"
 EXPER_DIR = "/opt/projects/server/data/experiment"
@@ -67,7 +73,7 @@ def get_turns(limit=5):
 turns = get_turns(5)
 print(f"Turns fetched: {len(turns)}")
 print(f"{'='*60}")
-print(f"3B Q8_0 Extract Faithfulness Test")
+print("3B Q8_0 Extract Faithfulness Test")
 print(f"{'='*60}")
 print(f"Baseline (Q4_K_M): {BASELINE['faithfulness']}% faithful, {BASELINE['avg_per_turn']}/turn, {BASELINE['speed']}s/turn\n")
 
@@ -125,15 +131,15 @@ for turn in turns:
             try:
                 data = json.loads(m.group(0))
             except Exception:
-                print(f"    JSON parse failed, skipping")
+                print("    JSON parse failed, skipping")
                 continue
         else:
-            print(f"    No JSON found, skipping")
+            print("    No JSON found, skipping")
             continue
 
     extractions = data.get("extractions", [])
     if not extractions:
-        print(f"    No extractions")
+        print("    No extractions")
         all_results.append({"turn": tid, "extractions": 0, "faithful": 0, "speed": elapsed})
         continue
 
@@ -159,7 +165,7 @@ for turn in turns:
 
 # Summary
 print(f"\n{'='*60}")
-print(f"결과: 3B Q8_0 vs Q4_K_M Extract")
+print("결과: 3B Q8_0 vs Q4_K_M Extract")
 print(f"{'='*60}")
 print(f"\n{'':<30} {'Q4_K_M':<15} {'Q8_0':<15}")
 print(f"{'-'*60}")
@@ -182,7 +188,7 @@ print(f"{'Faithfulness':<30} {BASELINE['faithfulness']:<15.1f}% {overall_pct:<15
 print(f"{'Speed (s/turn)':<30} {BASELINE['speed']:<15.1f} {avg_speed:<15.1f}")
 print(f"{'Faithful/total':<30} {'54/65':<15} {total_faithful}/{total_ex}")
 
-print(f"\nPer-turn detail:")
+print("\nPer-turn detail:")
 for r in all_results:
     pct = r["faithful"] / r["extractions"] * 100 if r["extractions"] else 0
     print(f"  {r['turn'][:8]}... ext={r['extractions']} faith={r['faithful']}/{r['unfaithful']} ({pct:.0f}%) {r['speed']:.0f}s")

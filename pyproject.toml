@@ -83,13 +83,12 @@ line-length = 100
 src = ["src"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "SIM"]
+select = ["E", "F", "W", "I", "N", "SIM"]
 ignore = [
     "E501",   # line too long — tolerated per project style
     "SIM105", # contextlib.suppress pattern — try/except/pass is fine for cleanup
     "SIM115", # open() without context manager — valid for temp file patterns
-    "UP006",  # typing.Dict → dict — project uses Python 3.9 (PEP 604 unavailable)
-    "UP035",  # typing.Dict deprecated import — same reason
+    "UP",     # pyupgrade — all UP rules disabled for Python 3.9 compatibility
 ]
 
 [tool.ruff.lint.isort]
@@ -140,30 +139,38 @@ markers = [
 ]
 
 # ─────────────────── import-linter ───────────────────
-
-[tool.import-linter]
 # Architecture contracts — enforced in CI
-fail_on_error = true
-allow_indep_layers = false
+# https://github.com/seddq/import-linter
+#
+# Layer ordering (high to low): higher layers CAN import lower layers.
+#   application      → depends on everything (highest level)
+#   pipeline_stages  → depends on adapters, ports, core, domain
+#   adapters          → depends on ports, core, domain
+#   domain            → depends on core (for types)
+#   core              → config + logging (standalone)
+#   ports             → interfaces (lowest level, no deps)
 
-[tool.import-linter.contracts]
-[tool.import-linter.contracts.domain]
-name = "domain"
+[tool.importlinter]
+fail_on_error = true
+root_package = "devforge"
+
+[[tool.importlinter.contracts]]
+name = "layering"
 type = "layers"
 layers = [
-    "devforge.core",
-    "devforge.ports",
-    "devforge.domain",
-    "devforge.adapters",
     "devforge.application",
     "devforge.pipeline_stages",
+    "devforge.adapters",
+    "devforge.domain",
+    "devforge.core",
+    "devforge.ports",
 ]
 
-[tool.import-linter.contracts.ports_adapters]
+[[tool.importlinter.contracts]]
 name = "hexagonal"
 type = "layers"
 layers = [
-    "devforge.ports",
     "devforge.adapters",
+    "devforge.ports",
 ]
 

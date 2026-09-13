@@ -7,12 +7,14 @@ containerized environment.
 """
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import (
-    AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine,
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
 )
 from sqlalchemy.pool import NullPool
 
@@ -62,7 +64,7 @@ class DatabaseGateway:
         )
 
     @classmethod
-    def from_config(cls, config: ConfigRegistry, echo: bool = False) -> "DatabaseGateway":
+    def from_config(cls, config: ConfigRegistry, echo: bool = False) -> DatabaseGateway:
         """Create gateway from ConfigRegistry."""
         return cls(config.db_url, echo=echo)
 
@@ -77,7 +79,7 @@ class DatabaseGateway:
     @asynccontextmanager
     async def session(self) -> AsyncGenerator[AsyncSession, None]:
         """Context manager yielding an async session.
-        
+
         Usage:
             async with gateway.session() as db:
                 await db.execute(...)
@@ -121,7 +123,7 @@ def get_gateway() -> DatabaseGateway:
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency that yields a database session.
-    
+
     Usage in routes:
         @router.get("/turns/{turn_id}")
         async def get_turn(turn_id: UUID, db: AsyncSession = Depends(get_db)):

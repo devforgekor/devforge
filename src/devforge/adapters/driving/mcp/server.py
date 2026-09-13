@@ -25,13 +25,13 @@ import json
 from typing import Any, Optional
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
-from fastapi.responses import JSONResponse
 
 from devforge.core.config import get_config
 from devforge.core.logging import get_logger
-from devforge.ports.extract import LLMPort, PipelineStatusParams, TurnRepository
+from devforge.ports.extract import PipelineStatusParams
 
 logger = get_logger(__name__)
 
@@ -48,11 +48,6 @@ class KnowledgeSearchParams(BaseModel):
     query: str
     limit: int = 20
     pipeline_state: Optional[str] = None
-
-
-class PipelineStatusParams(BaseModel):
-    action: str = "status"
-    model_key: Optional[str] = None
 
 
 class ExtractTurnParams(BaseModel):
@@ -101,15 +96,13 @@ def get_tools() -> list[dict[str, Any]]:
 async def knowledge_search(params: KnowledgeSearchParams) -> dict[str, Any]:
     """Search conversation turns via pg_trgm full-text search."""
     config = get_config()
-    from devforge.adapters.driven.storage.extract_adapter import PostgresTurnRepository
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
 
     gateway = DatabaseGateway.from_config(config)
-    repo = PostgresTurnRepository.from_config(config)
 
     async with gateway.session() as db:
         # Use pg_trgm search
-        stmt = f"""
+        stmt = """
             SELECT t.id, t.conversation_id, t.seq, t.user_turn, t.text,
                    t.pipeline_state, t.created_at
             FROM turns t
@@ -158,7 +151,9 @@ async def pipeline_status(params: PipelineStatusParams) -> dict[str, Any]:
 
     async with gateway.session() as db:
         # Pipeline state distribution
-        from sqlalchemy import func as sql_func, select, text
+        from sqlalchemy import func as sql_func
+        from sqlalchemy import select
+
         from devforge.domain.models import Turn
         stmt = select(
             Turn.pipeline_state,
@@ -208,21 +203,33 @@ register_tool(
 )
 
 
+_pipeline_factory: Any = None
+
+
+def set_pipeline_factory(factory: Any) -> None:
+    """Set the pipeline factory function (called by app bootstrap in cli.py)."""
+    global _pipeline_factory
+    _pipeline_factory = factory
+
+
+def get_pipeline():
+    """Get an ExtractPipeline instance via factory.
+
+    The factory must be set by the application layer during app startup
+    to avoid circular imports between adapters and application.
+    """
+    if _pipeline_factory is not None:
+        return _pipeline_factory()
+    raise RuntimeError(
+        "Pipeline factory not set. Call set_pipeline_factory() during startup."
+    )
+
+
 async def extract_turn(params: ExtractTurnParams) -> dict[str, Any]:
     """Extract facts from a single turn using the specified model."""
     from uuid import UUID
-    from devforge.application.extract_pipeline import ExtractPipeline
-    from devforge.adapters.driven.llm.local_adapter import LocalLLMAdapter
-    from devforge.adapters.driven.storage.extract_adapter import PostgresExtractAdapter, PostgresTurnRepository
-    from devforge.ports.extract import TurnData
 
-    config = get_config()
-    pipeline = ExtractPipeline(
-        llm=LocalLLMAdapter(),
-        db=PostgresExtractAdapter.from_config(config),
-        turn_repo=PostgresTurnRepository.from_config(config),
-    )
-
+    pipeline = get_pipeline()
     turn_id = UUID(params.turn_id)
     result = await pipeline.run_single(turn_id)
 
@@ -250,7 +257,9 @@ async def deepdive(params: DeepDiveParams) -> dict[str, Any]:
     gateway = DatabaseGateway.from_config(config)
 
     async with gateway.session() as db:
-        from sqlalchemy import select, insert, update, func as sql_func
+        from sqlalchemy import func as sql_func
+        from sqlalchemy import insert, select, update
+
         from devforge.domain.models import DeepDiveStep
 
         # Check existing ACTIVE step
@@ -267,7 +276,7 @@ async def deepdive(params: DeepDiveParams) -> dict[str, Any]:
             await db.execute(
                 update(DeepDiveStep)
                 .where(DeepDiveStep.id == existing.id)
-                .values(last_heartbeat_at=func.now())
+                .values(last_heartbeat_at=sql_func.now())
             )
             result = {
                 "action": "heartbeat",
@@ -279,7 +288,7 @@ async def deepdive(params: DeepDiveParams) -> dict[str, Any]:
             }
         else:
             # Enter new step
-            row = await db.execute(
+            await db.execute(
                 insert(DeepDiveStep).values(
                     session_id=params.session_id,
                     step=params.step,
@@ -288,7 +297,7 @@ async def deepdive(params: DeepDiveParams) -> dict[str, Any]:
                     min_bound_sec=int(params.base_timeout_sec * 0.5),
                     max_bound_sec=params.base_timeout_sec * 10,
                     affected_files=params.affected_files,
-                ).returning(DeepDiveStep.id)
+                )
             )
             result = {
                 "action": "enter",

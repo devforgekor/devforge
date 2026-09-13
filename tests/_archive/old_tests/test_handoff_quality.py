@@ -24,8 +24,8 @@ OUT_DIR = os.path.join(EXPER_DIR, "handoff_comparison")
 os.makedirs(OUT_DIR, exist_ok=True)
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.llm_client import call_llm, MODEL_REGISTRY
 from lib.llm.json_parser import parse_llm_json
+from lib.llm_client import MODEL_REGISTRY, call_llm
 
 TIMEOUT = 600
 

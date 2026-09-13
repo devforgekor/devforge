@@ -6,10 +6,10 @@ import csv
 import http.client as hc
 import io
 import json
+import re
+import subprocess as sp
 import sys
 import time
-import subprocess as sp
-import re
 
 EXTRACT_3B_SYSTEM = """\
 You are a fact extractor for a developer-assistant conversation turn.
@@ -214,10 +214,10 @@ def test_turn(ti):
 def main():
     turns = fetch_turns(20)
     print("# =============================================")
-    print(f"# Qwen3-4B Extraction Faithfulness Test")
+    print("# Qwen3-4B Extraction Faithfulness Test")
     print(f"# Turns: {len(turns)}")
-    print(f"# Short(100-500ch), Med(500-1200ch), Long(1200+ch), User(has user_turn)")
-    print(f"# =============================================\n")
+    print("# Short(100-500ch), Med(500-1200ch), Long(1200+ch), User(has user_turn)")
+    print("# =============================================\n")
 
     results = []
     for i, ti in enumerate(turns):

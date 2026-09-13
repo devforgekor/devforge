@@ -421,7 +421,7 @@ def main():
         llama_acc = (all_results["llama"]["mode_correct"] / all_results["llama"]["total"] * 100
                       if all_results["llama"]["total"] else 0)
 
-        log(f"\n  Verdict: ", end="")
+        log("\n  Verdict: ", end="")
         if abs(qwen_acc - llama_acc) < 5:
             log(f"TOO CLOSE (Δ={abs(qwen_acc-llama_acc):.0f}%) → prefer Qwen3-1.7B (smaller)")
         elif qwen_acc > llama_acc:

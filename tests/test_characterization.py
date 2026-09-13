@@ -15,11 +15,11 @@ fixtures — no live LLM calls required.
 from __future__ import annotations
 
 import json
-import pytest
 from pathlib import Path
 
-from devforge.core.config import ConfigRegistry, get_config
-from devforge.core.logging import get_logger
+import pytest
+
+from devforge.core.config import get_config
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "llm_recordings"
 
@@ -84,10 +84,10 @@ class TestPipelineState:
         golden_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "golden_master.json"
         if not golden_path.exists():
             pytest.skip("golden_master.json not found")
-        
+
         with open(golden_path) as f:
             golden = json.load(f)
-        
+
         dist = golden["pipeline_state_dist"]
         states = [d["state"] for d in dist]
         # Expected states from golden image
@@ -146,10 +146,10 @@ class TestExtractPipeline:
         enrich_path = FIXTURES_DIR / "enrich_llm.json"
         if not enrich_path.exists():
             pytest.skip("enrich_llm.json not found")
-        
+
         with open(enrich_path) as f:
             entries = json.load(f)
-        
+
         assert len(entries) == 5
         for e in entries:
             assert e["model"] == "day_enricher"
@@ -162,10 +162,10 @@ class TestExtractPipeline:
         nli_path = FIXTURES_DIR / "nli_result.json"
         if not nli_path.exists():
             pytest.skip("nli_result.json not found")
-        
+
         with open(nli_path) as f:
             entries = json.load(f)
-        
+
         for e in entries:
             assert e["model"] == "nli_server"
             verdict = e.get("response", {}).get("verdict", e.get("verdict"))
@@ -179,10 +179,10 @@ class TestExtractPipeline:
         rerank_path = FIXTURES_DIR / "rerank_score.json"
         if not rerank_path.exists():
             pytest.skip("rerank_score.json not found")
-        
+
         with open(rerank_path) as f:
             entries = json.load(f)
-        
+
         assert len(entries) == 3
         for e in entries:
             assert e["model"] == "reranker"
@@ -220,10 +220,10 @@ class TestGoldenMasterCounts:
         golden_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "golden_master.json"
         if not golden_path.exists():
             pytest.skip("golden_master.json not found")
-        
+
         with open(golden_path) as f:
             golden = json.load(f)
-        
+
         assert golden["counts"]["total_turns"] > 0
 
     @pytest.mark.characterization
@@ -232,10 +232,10 @@ class TestGoldenMasterCounts:
         golden_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "golden_master.json"
         if not golden_path.exists():
             pytest.skip("golden_master.json not found")
-        
+
         with open(golden_path) as f:
             golden = json.load(f)
-        
+
         total = golden["counts"]["total_turns"]
         sum_states = sum(d["count"] for d in golden["pipeline_state_dist"])
         assert sum_states <= total  # Some may be in transition
@@ -246,10 +246,10 @@ class TestGoldenMasterCounts:
         golden_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "golden_master.json"
         if not golden_path.exists():
             pytest.skip("golden_master.json not found")
-        
+
         with open(golden_path) as f:
             golden = json.load(f)
-        
+
         fact_dist = golden.get("review_facts_dist", [])
         total_facts = sum(d["count"] for d in fact_dist)
         assert total_facts > 0

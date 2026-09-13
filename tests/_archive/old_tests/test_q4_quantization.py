@@ -11,11 +11,24 @@ Steps:
 
 Usage: python3 test_q4_quantization.py"""
 
-import json, os, sys, time, subprocess
+import json
+import os
+import subprocess
+import sys
+import time
+
 sys.path.insert(0, '/opt/projects/server/scripts')
 
-from lib.llm_client import call_llm, MODEL_REGISTRY
-from pipelines.prj_cycle import kill_all, wait_health, wait_probe, PROPOSER_SYSTEM_PROMPT, MODE_FILE_B, RUBRIC, log as plog
+from lib.llm_client import MODEL_REGISTRY, call_llm
+from pipelines.prj_cycle import (
+    MODE_FILE_B,
+    PROPOSER_SYSTEM_PROMPT,
+    RUBRIC,
+    kill_all,
+    wait_health,
+    wait_probe,
+)
+from pipelines.prj_cycle import log as plog
 
 EXPER_DIR = '/opt/projects/server/data/experiment'
 
@@ -53,7 +66,7 @@ print(f'  Severity: {severity_dist}')
 
 # Build context (same format as prj_cycle build_context("prj_p"))
 context_parts = [
-    f"=== PIPELINE CONTEXT ===\n",
+    "=== PIPELINE CONTEXT ===\n",
     f"Total findings: {len(input_findings)}",
     f"Severity distribution: {severity_dist}",
     f"\n=== FINDINGS ({len(input_findings)}) ===",
@@ -106,10 +119,10 @@ print(f'Exists: {os.path.exists(f"/opt/ai_data/models/gguf/{Q4_FILE}")}')
 
 model_path = f'/opt/ai_data/models/gguf/{Q4_FILE}'
 if not os.path.exists(model_path):
-    print(f'\n⚠️  Q4 file not found. Script prepared but cannot run.')
-    print(f'   Download: hugggingface-cli download byteshape/... or')
+    print('\n⚠️  Q4 file not found. Script prepared but cannot run.')
+    print('   Download: hugggingface-cli download byteshape/... or')
     print(f'   curl -Lo {model_path} <url>')
-    print(f'\nWhen ready, re-run: python3 test_q4_quantization.py')
+    print('\nWhen ready, re-run: python3 test_q4_quantization.py')
     sys.exit(0)
 
 if not start_model():

@@ -7,10 +7,22 @@ Starts 30B Q4_K_S, runs P role with same input as Q3_K_M baseline,
 compares findings count/quality/timing.
 
 Usage: python3 test_proposer_quantization.py"""
-import json, os, sys, time, subprocess
+import json
+import subprocess
+import sys
+import time
+
 sys.path.insert(0, '/opt/projects/server/scripts')
-from lib.llm_client import call_llm, MODEL_REGISTRY
-from pipelines.prj_cycle import kill_all, wait_health, wait_probe, PROPOSER_SYSTEM_PROMPT, RUBRIC, MODE_FILE_B, log as plog
+from lib.llm_client import MODEL_REGISTRY, call_llm
+from pipelines.prj_cycle import (
+    MODE_FILE_B,
+    PROPOSER_SYSTEM_PROMPT,
+    RUBRIC,
+    kill_all,
+    wait_health,
+    wait_probe,
+)
+from pipelines.prj_cycle import log as plog
 
 EXPER_DIR = '/opt/projects/server/data/experiment'
 PORT = 8080
@@ -35,7 +47,7 @@ def build_context():
     for issue in pv.get('issues', []):
         lines.append(f"  [{issue.get('severity','?')}] {issue.get('description','')[:150]}")
 
-    lines.append(f"\n=== 30B VERIFY ===")
+    lines.append("\n=== 30B VERIFY ===")
     lines.append(f"  Verdict: {tv.get('final_verdict','?')}")
     lines.append(f"  Confidence: {tv.get('confidence','?')}")
     lines.append(f"  Action: {tv.get('action','?')}")
@@ -58,7 +70,7 @@ def start_model():
     if ok:
         plog(f"  :{PORT} ready")
     else:
-        plog(f"  Failed to start review-p-q4ks")
+        plog("  Failed to start review-p-q4ks")
     return ok
 
 
@@ -127,20 +139,20 @@ if start_model():
         print(f'\n  Q4_K_S: ERROR — {q4ks["error"]}')
     else:
         q_findings = q4ks["findings"]
-        print(f'\n--- Q3_K_M (baseline) ---')
+        print('\n--- Q3_K_M (baseline) ---')
         print(f'  Findings: {len(b_findings)}')
         print(f'  Time: {b_elapsed:.0f}s ({b_timing.get("predicted_per_second",0):.1f} t/s)')
         print(f'  Prompt: {b_timing.get("prompt_n",0)} tokens → '
               f'{b_timing.get("prompt_ms",0)/1000:.0f}s ({b_timing.get("prompt_per_second",0):.1f} t/s)')
 
-        print(f'\n--- Q4_K_S (test) ---')
+        print('\n--- Q4_K_S (test) ---')
         print(f'  Findings: {len(q_findings)}')
         print(f'  Time: {q4ks["elapsed_s"]:.0f}s ({q4ks["timings"].get("predicted_per_second",0):.1f} t/s)')
         print(f'  Prompt: {q4ks["timings"].get("prompt_n",0)} tokens → '
               f'{q4ks["timings"].get("prompt_ms",0)/1000:.0f}s ({q4ks["timings"].get("prompt_per_second",0):.1f} t/s)')
 
         # Compare severity distribution
-        print(f'\n--- Severity Distribution ---')
+        print('\n--- Severity Distribution ---')
         def sev_dist(fs):
             d = {}
             for f in fs:
@@ -156,13 +168,13 @@ if start_model():
         common = b_ids & q_ids
         only_b = b_ids - q_ids
         only_q = q_ids - b_ids
-        print(f'\n--- Overlap ---')
+        print('\n--- Overlap ---')
         print(f'  Common: {len(common)}')
         print(f'  Only in Q3_K_M: {len(only_b)} {sorted(only_b)[:5]}')
         print(f'  Only in Q4_K_S: {len(only_q)} {sorted(only_q)[:5]}')
 
         # Sample findings
-        print(f'\n--- Q4_K_S Findings (first 3) ---')
+        print('\n--- Q4_K_S Findings (first 3) ---')
         for f in q_findings[:3]:
             print(f'  {f.get("id")} [{f.get("severity")}/{f.get("category")}]: {f.get("description","")[:120]}')
 

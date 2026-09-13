@@ -7,7 +7,16 @@ Usage:  python3 -m pytest tests/test_day_pipeline.py -v
         python3 tests/test_day_pipeline.py
 """
 
-import csv, http.client, io, json, os, re, subprocess, sys, time, urllib.request
+import csv
+import http.client
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 
 
@@ -150,7 +159,7 @@ def test_extract_quantized():
     avg_speed = sum(r["elapsed"] for r in all_results) / total_turns if total_turns else 0
     overall_pct = total_faithful / total_ex * 100 if total_ex else 0
 
-    log(f"\n3B Q8_0 extract vs Q4_K_M baseline:")
+    log("\n3B Q8_0 extract vs Q4_K_M baseline:")
     log(f"  Faithfulness: Q4={BASELINE['faithfulness']}% | Q8={overall_pct:.1f}%")
     log(f"  Speed: Q4={BASELINE['speed']}s/turn | Q8={avg_speed:.1f}s/turn")
 

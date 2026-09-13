@@ -24,16 +24,15 @@ Usage:
   export DEVFORGE_LLM_REPLAY=1
   python3 pipeline_stages/extract.py --replay-mode
 """
+import hashlib
 import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Optional
-
-import hashlib
+from typing import Optional
 
 # ── Configuration ──
-FIXTURE_DIR = Path(os.environ.get("DEVFORGE_FIXTURE_DIR", 
+FIXTURE_DIR = Path(os.environ.get("DEVFORGE_FIXTURE_DIR",
     "/opt/projects/server/tests/fixtures/llm_recordings"))
 RECORD_MODE = bool(os.environ.get("DEVFORGE_LLM_RECORD"))
 REPLAY_MODE = bool(os.environ.get("DEVFORGE_LLM_REPLAY"))
@@ -41,7 +40,6 @@ REPLAY_MODE = bool(os.environ.get("DEVFORGE_LLM_REPLAY"))
 # ── Hash function for request deduplication ──
 def _request_hash(messages: list[dict], model: str, **kwargs) -> str:
     """Generate deterministic hash for a request (for deduplication)."""
-    import hashlib
     payload = json.dumps({
         "messages": messages,
         "model": model,
@@ -58,28 +56,28 @@ class LLMRecorder:
     REPLAY: Returns pre-captured response for matching requests
     PASSTHROUGH: Direct LLM call (production mode)
     """
-    
+
     def __init__(self, fixture_dir: Path = FIXTURE_DIR):
         self.fixture_dir = fixture_dir
         self.fixture_dir.mkdir(parents=True, exist_ok=True)
-        
-    def record(self, filename: str, messages: list[dict], 
+
+    def record(self, filename: str, messages: list[dict],
                model: str, response: dict, **kwargs):
         """Record a request/response pair to fixture file."""
         if not RECORD_MODE:
             return
-            
+
         fixture_path = self.fixture_dir / filename
         entries = []
-        
+
         if fixture_path.exists():
             try:
                 entries = json.loads(fixture_path.read_text())
             except json.JSONDecodeError:
                 entries = []
-        
+
         req_hash = _request_hash(messages, model, **kwargs)
-        
+
         entry = {
             "hash": req_hash,
             "timestamp": time.time(),
@@ -94,15 +92,15 @@ class LLMRecorder:
             },
             "response": response,
         }
-        
+
         # Avoid duplicate recordings of identical request
         if not any(e.get("hash") == req_hash for e in entries):
             entries.append(entry)
-            fixture_path.write_text(json.dumps(entries, indent=2, 
+            fixture_path.write_text(json.dumps(entries, indent=2,
                                               ensure_ascii=False))
             print(f"[replay] Recorded: {filename} (hash: {req_hash})")
-    
-    def replay(self, filename: str, messages: list[dict], model: str, 
+
+    def replay(self, filename: str, messages: list[dict], model: str,
                **kwargs) -> Optional[dict]:
         """Replay a recorded response for matching request.
         
@@ -110,32 +108,32 @@ class LLMRecorder:
         """
         if not REPLAY_MODE:
             return None
-            
+
         fixture_path = self.fixture_dir / filename
         if not fixture_path.exists():
             print(f"[replay] WARNING: No fixture found: {filename}")
             return None
-        
+
         try:
             entries = json.loads(fixture_path.read_text())
         except json.JSONDecodeError:
             print(f"[replay] WARNING: Corrupt fixture: {filename}")
             return None
-        
+
         req_hash = _request_hash(messages, model, **kwargs)
-        
+
         # Exact hash match (deterministic)
         for entry in entries:
             if entry.get("hash") == req_hash:
                 print(f"[replay] Matched: {filename} (hash: {req_hash})")
                 return entry["response"]
-        
+
         # Fuzzy match (same model, first entry as fallback)
         for entry in entries:
             if entry.get("model") == model:
                 print(f"[replay] Fuzzy matched: {filename} (model: {model})")
                 return entry["response"]
-        
+
         print(f"[replay] No match in {filename} for model={model}")
         return None
 
@@ -162,21 +160,21 @@ def record_or_replay(filename: str):
     def decorator(func):
         def wrapper(messages, model="default", **kwargs):
             recorder = get_recorder()
-            
+
             # Try replay first
             if REPLAY_MODE:
                 cached = recorder.replay(filename, messages, model, **kwargs)
                 if cached is not None:
                     return cached
-            
+
             # Actual call
             result = func(messages, model=model, **kwargs)
-            
+
             # Record if in record mode
             if RECORD_MODE:
                 response = result if isinstance(result, dict) else {"content": result}
                 recorder.record(filename, messages, model, response, **kwargs)
-            
+
             return result
         return wrapper
     return decorator
@@ -195,14 +193,11 @@ def capture_llm_responses():
     5. NLI server responses (5 samples)
     6. Reranker scores (3 samples)
     """
-    from lib.llm_client import call_llm, call_llm_json, _call_nli_server, reranker_score
+    from lib.llm_client import _call_nli_server, call_llm, reranker_score
     from lib.text_cleaner import TextCleaner
-    from pipelines.extract import extract_pipeline
-    from pipelines.enrich import enrich_pipeline
-    from pipelines.worklog_generator import generate_worklog
-    
+
     recorder = get_recorder()
-    
+
     # 1. Capture extract LLM calls
     print("Capturing extract.py LLM responses...")
     # Get 10 sample turns from DB
@@ -213,26 +208,26 @@ def capture_llm_responses():
         WHERE t.pipeline_state = 'scanned'
         LIMIT 10
     """)
-    
+
     for turn in sample_turns:
         messages = [
             {"role": "system", "content": "...extract system prompt..."},
             {"role": "user", "content": turn["user_turn"][:2000]}
         ]
         response = call_llm(messages, model="day_extract", max_tokens=2048)
-        recorder.record("extract_llm.json", messages, "day_extract", 
+        recorder.record("extract_llm.json", messages, "day_extract",
                        {"content": response}, max_tokens=2048, temperature=0.12)
-    
+
     # 2. Capture text_clean LLM calls
     print("Capturing text_clean.py LLM response...")
     cleaner = TextCleaner()
     test_text = "한국어 테스트 텍스트입니다. This is a mixed text sample."
     cleaned = cleaner.clean(test_text)
-    
+
     # 3. Capture enrich LLM calls
     print("Capturing enrich.py LLM responses...")
     # ... similar pattern for enrich
-    
+
     # 4. Capture NLI responses
     print("Capturing NLI responses...")
     nli_samples = [
@@ -244,11 +239,11 @@ def capture_llm_responses():
     ]
     for source, evidence in nli_samples:
         result = _call_nli_server(source, evidence, timeout=30)
-        recorder.record("nli_result.json", 
+        recorder.record("nli_result.json",
                        [{"source": source, "evidence": evidence}],
                        "nli_server",
                        {"verdict": result}, timeout=30)
-    
+
     # 5. Capture reranker scores
     print("Capturing reranker scores...")
     rerank_samples = [
@@ -262,7 +257,7 @@ def capture_llm_responses():
                        [{"query": query, "document": document}],
                        "reranker",
                        {"score": score}, timeout=120)
-    
+
     print("✅ All LLM fixtures captured to:", FIXTURE_DIR)
 
 

@@ -6,15 +6,13 @@ domain-focused interface.
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from devforge.ports.extract import ExtractedFact, TurnData
 
-
 # ── System prompts ──
-SYSTEM_TEXT_EXTRACT = """You are a meticulous fact extractor. 
-Extract facts from the provided conversation turn. 
+SYSTEM_TEXT_EXTRACT = """You are a meticulous fact extractor.
+Extract facts from the provided conversation turn.
 Return JSON with a list of extracted facts."""
 
 SYSTEM_USER_EXTRACT = """Extract facts from this user turn:

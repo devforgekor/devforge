@@ -21,8 +21,6 @@ Qwen3.6-27B 최적화 검증 테스트 (Standalone)
 import argparse
 import json
 import os
-import random
-import statistics
 import subprocess
 import sys
 import textwrap
@@ -357,7 +355,7 @@ class TestResult:
         failed = total - passed
         lines = [
             f"\n{'='*60}",
-            f"  Qwen3.6-27B 최적화 검증 결과",
+            "  Qwen3.6-27B 최적화 검증 결과",
             f"  {passed}/{total} passed, {failed} failed",
             f"{'='*60}",
         ]
@@ -397,8 +395,8 @@ def test_quantization(result: TestResult):
 def test_inference(result: TestResult):
     """Test 2: Basic inference — model responds correctly at various context sizes."""
     log("\n[Test 2] 실행 설정: 기본 추론")
-    log(f"  Prompt sizes: small(~5tok) → medium(~20tok) → reasoning(~40tok)"
-        f" → large(~2Ktok) → very_large(~8Ktok)")
+    log("  Prompt sizes: small(~5tok) → medium(~20tok) → reasoning(~40tok)"
+        " → large(~2Ktok) → very_large(~8Ktok)")
 
     # ── Small/medium prompts (inline) ──
     for tp in TEST_PROMPTS:
@@ -694,7 +692,7 @@ def main():
     result = TestResult()
     log("=" * 60)
     log("  Qwen3.6-27B 최적화 검증 테스트")
-    log(f"  Server: OCI ARM (4 core, 24GB)")
+    log("  Server: OCI ARM (4 core, 24GB)")
     log(f"  Model: {MODEL_FILE}")
     log(f"  Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     log(f"  Mode: {'quick' if args.quick else 'full'}")
@@ -705,7 +703,7 @@ def main():
     used, avail, total = get_mem_gb()
     log(f"  Memory: used={used:.1f}G, avail={avail:.1f}G, total={total:.1f}G")
     if avail < 4:
-        log(f"  ⚠ Low memory — model may swap or OOM")
+        log("  ⚠ Low memory — model may swap or OOM")
 
     # Phase 2: Mode switch
     log("\n--- Mode Switch ---")

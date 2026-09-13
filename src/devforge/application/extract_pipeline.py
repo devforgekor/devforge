@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 from uuid import UUID
 
 from devforge.core.logging import get_logger
@@ -199,7 +199,6 @@ class ExtractPipeline:
         """Use recorded LLM fixture for deterministic testing."""
         import json
         from pathlib import Path
-        from uuid import UUID as UUIDType
 
         fixtures_dir = Path(os.environ.get(
             "DEVFORGE_FIXTURE_DIR",
@@ -229,7 +228,6 @@ class ExtractPipeline:
 
     def _synthetic_facts(self, turn: TurnData) -> list[ExtractedFact]:
         """Generate synthetic facts for fixture-based testing."""
-        from uuid import uuid4
 
         text = turn.text or turn.user_turn
         if not text.strip():

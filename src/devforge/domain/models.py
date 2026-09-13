@@ -9,16 +9,29 @@ Schema version: v1.0 (Phase 1) + v1.3 extensions (activity_log, deepdive_steps, 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, date
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import (
-    Index, ForeignKey, Computed, Enum, text as sql_text, Column, Integer, Text, Boolean,
-    DateTime, Date, ARRAY, Float, String, func,
-    MetaData, TypeDecorator,
+    ARRAY,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    Text,
+    TypeDecorator,
+    func,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import (
+    text as sql_text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import DeclarativeBase
 
 
 # ── pgvector type (minimal — registered with PostgreSQL for runtime) ──

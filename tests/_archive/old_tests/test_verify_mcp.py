@@ -2,7 +2,11 @@
 # Status: experimental
 # Path: tests/test_verify_mcp.py — pytest
 """DSV2 Lite vs 30B — MCP extract verify 비교"""
-import json, sys, os, time, urllib.request, urllib.error
+import json
+import os
+import sys
+import time
+
 sys.path.insert(0, "/opt/projects/server/scripts")
 from lib.llm_client import call_llm
 
@@ -104,6 +108,7 @@ print(f"[DSV2] Response: {len(content)} chars, {elapsed:.1f}s")
 
 # Parse JSON
 import re
+
 json_match = re.search(r'(\{.*\})', content, re.DOTALL)
 if json_match:
     try:
@@ -114,7 +119,7 @@ if json_match:
 else:
     dsv2_out = {"_raw": content[:500]}
 
-print(f"\n=== DSV2 Lite VERDICT ===")
+print("\n=== DSV2 Lite VERDICT ===")
 print(f"  Verdict: {dsv2_out.get('summary',{}).get('verdict','?')}")
 print(f"  Confidence: {dsv2_out.get('summary',{}).get('confidence','?')}")
 mcp_acc = dsv2_out.get('mcp_field_accuracy', {})
@@ -131,17 +136,17 @@ for f in dsv2_findings:
 
 # ── COMPARE with 30B ──
 print(f"\n{'='*60}")
-print(f"COMPARISON: DSV2 Lite vs 30B")
+print("COMPARISON: DSV2 Lite vs 30B")
 print(f"{'='*60}")
 
-print(f"\n-- 30B Verify Results --")
-print(f"  Verdict: approved_with_conditions (confidence=85)")
-print(f"  Findings: 7개 (3 high, 2 medium, 2 low)")
+print("\n-- 30B Verify Results --")
+print("  Verdict: approved_with_conditions (confidence=85)")
+print("  Findings: 7개 (3 high, 2 medium, 2 low)")
 v30_findings = v30.get('findings', [])
 for f in v30_findings:
     print(f"    {f['id']} [{f['severity']}] {f['component']}: {f['evidence'][:60]}")
 
-print(f"\n-- DSV2 Lite Results --")
+print("\n-- DSV2 Lite Results --")
 print(f"  Verdict: {dsv2_out.get('summary',{}).get('verdict','?')} (confidence={dsv2_out.get('summary',{}).get('confidence','?')})")
 print(f"  Findings: {len(dsv2_findings)}개")
 for f in dsv2_findings:
@@ -149,7 +154,7 @@ for f in dsv2_findings:
 
 # Timing comparison
 v30_elapsed = 485742.633 / 1000  # from exp_30b result
-print(f"\n-- Performance --")
+print("\n-- Performance --")
 print(f"  30B:     {v30_elapsed:.1f}s (Qwen30B, 16GB)")
 print(f"  DSV2:    {elapsed:.1f}s (DeepSeek-Coder-V2-Lite Q8, 16GB)")
 print(f"  Ratio:   {v30_elapsed/elapsed:.1f}x")

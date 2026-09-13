@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pydantic import BaseModel
 from typing import Any, Optional
 from uuid import UUID
+
+from pydantic import BaseModel
 
 
 @dataclass

@@ -8,18 +8,17 @@ from __future__ import annotations
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, insert, update, func, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, insert, select, update
 
 from devforge.core.config import ConfigRegistry
 from devforge.core.logging import get_logger
-from devforge.domain.models import Turn, ReviewFact
+from devforge.domain.models import ReviewFact, Turn
 from devforge.ports.extract import (
     ExtractedFact,
     ExtractPort,
+    ObservationRepository,
     TurnData,
     TurnRepository,
-    ObservationRepository,
 )
 
 logger = get_logger(__name__)
@@ -37,7 +36,7 @@ class PostgresExtractAdapter(ExtractPort):
         self._gateway = DatabaseGateway(db_url)
 
     @classmethod
-    def from_config(cls, config: ConfigRegistry) -> "PostgresExtractAdapter":
+    def from_config(cls, config: ConfigRegistry) -> PostgresExtractAdapter:
         return cls(config.db_url)
 
     async def get_unprocessed_turns(self, limit: int = 50) -> list[TurnData]:
@@ -161,7 +160,7 @@ class PostgresTurnRepository(TurnRepository):
         self._gateway = DatabaseGateway(db_url)
 
     @classmethod
-    def from_config(cls, config: ConfigRegistry) -> "PostgresTurnRepository":
+    def from_config(cls, config: ConfigRegistry) -> PostgresTurnRepository:
         return cls(config.db_url)
 
     async def get_by_id(self, turn_id: UUID) -> Optional[TurnData]:
@@ -240,7 +239,7 @@ class PostgresObservationRepository(ObservationRepository):
         self._gateway = DatabaseGateway(db_url)
 
     @classmethod
-    def from_config(cls, config: ConfigRegistry) -> "PostgresObservationRepository":
+    def from_config(cls, config: ConfigRegistry) -> PostgresObservationRepository:
         return cls(config.db_url)
 
     async def save_observation(
@@ -252,6 +251,7 @@ class PostgresObservationRepository(ObservationRepository):
         tags: Optional[dict[str, Any]] = None,
     ) -> UUID:
         from sqlalchemy import insert
+
         from devforge.domain.models import Observation
 
         async with self._gateway.session() as db:

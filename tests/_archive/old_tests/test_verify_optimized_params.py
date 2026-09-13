@@ -5,10 +5,17 @@
 
 Tests: 27B as verifier with handoff-only context. Compares to old 27B run (6000tok full context).
 Usage: python3 test_verify_optimized_params.py"""
-import json, os, sys, time, subprocess
+import json
+import os
+import subprocess
+import sys
+import time
+
 sys.path.insert(0, '/opt/projects/server/scripts')
-from lib.llm_client import call_llm, MODEL_REGISTRY
-from pipelines.prj_cycle import kill_all, wait_health, wait_probe, VERIFIER_SYSTEM_PROMPT as PRJ_VERIFY, RUBRIC, MODE_FILE_A, MODE_FILE_B, log as plog
+from lib.llm_client import MODEL_REGISTRY, call_llm
+from pipelines.prj_cycle import MODE_FILE_B, RUBRIC, kill_all, wait_health, wait_probe
+from pipelines.prj_cycle import VERIFIER_SYSTEM_PROMPT as PRJ_VERIFY
+from pipelines.prj_cycle import log as plog
 
 EXPER_DIR = '/opt/projects/server/data/experiment'
 PORT = 8081
@@ -38,7 +45,7 @@ def start_model():
     if ok:
         plog(f"  :{PORT} ready")
     else:
-        plog(f"  Failed to start verify mode")
+        plog("  Failed to start verify mode")
     return ok
 
 def run_verify():
@@ -91,7 +98,7 @@ if start_model():
         print(f'\n  Optimized: ERROR — {res["error"]}')
     else:
         r = res["result"]
-        print(f'\n--- Original (6000tok full context) ---')
+        print('\n--- Original (6000tok full context) ---')
         if old:
             print(f'  verdict={old_r.get("final_verdict","?")} confidence={old_r.get("confidence","?")}')
             print(f'  action={old_r.get("action","?")}')
@@ -100,7 +107,7 @@ if start_model():
                   f'pred={old_t.get("predicted_per_second",0):.1f} t/s)')
             print(f'  prompt_tokens={old_t.get("prompt_n","?")} pred_tokens={old_t.get("predicted_n","?")}')
 
-        print(f'\n--- Optimized (2000tok handoff only) ---')
+        print('\n--- Optimized (2000tok handoff only) ---')
         print(f'  verdict={r.get("final_verdict","?")} confidence={r.get("confidence","?")}')
         print(f'  action={r.get("action","?")}')
         t = res["timings"]
@@ -109,11 +116,11 @@ if start_model():
               f'pred={t.get("predicted_per_second",0):.1f} t/s)')
         print(f'  prompt_tokens={t.get("prompt_n","?")} pred_tokens={t.get("predicted_n","?")}')
 
-        print(f'\n--- Verification Items ---')
+        print('\n--- Verification Items ---')
         for item in r.get("verification_items", []):
             print(f'  [{item.get("result","?"):>5}] {item.get("check","")[:120]}')
 
-        print(f'\n--- Feedback ---')
+        print('\n--- Feedback ---')
         for k, fb in r.get("feedback", {}).items():
             print(f'  {k}: score={fb.get("score","?")} | {", ".join(fb.get("improvements",[]) or [])}')
 

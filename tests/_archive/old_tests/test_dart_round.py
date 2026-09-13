@@ -2,7 +2,13 @@
 # Status: experimental
 # Path: tests/test_dart_round.py — pytest
 """Single DART round live test — Proposer → Refuter → Judge."""
-import json, time, urllib.request, os, sys, re, random
+import json
+import os
+import random
+import re
+import sys
+import time
+import urllib.request
 
 SWITCH_FILE = "/opt/ai_data/debate/switch/model-switch.json"
 HEALTH_URL = "http://127.0.0.1:8081/health"
@@ -52,7 +58,7 @@ def switch_and_wait(model_id, cfg):
         except Exception:
             pass
         time.sleep(3)
-    log(f"  TIMEOUT")
+    log("  TIMEOUT")
     return False
 
 def call_llm(model_id, cfg, messages, label=""):
@@ -188,7 +194,7 @@ log(f"DART Round 1 Complete — total: {total_elapsed/60:.1f} min")
 log(f"{'='*60}")
 
 if judge_json:
-    log(f"\n═══ JUDGE VERDICT ═══")
+    log("\n═══ JUDGE VERDICT ═══")
     log(f"  Consensus Score: {judge_json.get('consensus_score')}%")
     winner_label = judge_json.get('winner', '?')
     log(f"  Winner (label): {winner_label}")
@@ -197,10 +203,10 @@ if judge_json:
     elif winner_label == "beta":
         log(f"  Winner (model): {beta_label}")
     else:
-        log(f"  Winner (model): TIE")
+        log("  Winner (model): TIE")
     log(f"  Search Query: {judge_json.get('suggested_search_query')}")
     log(f"  Disagreement: {judge_json.get('disagreement_analysis')}")
-    log(f"\n  Jury Opinions:")
+    log("\n  Jury Opinions:")
     for juror, opinion in judge_json.get("jury_opinions", {}).items():
         log(f"    [{juror}] {opinion[:120]}...")
 
@@ -221,7 +227,7 @@ if judge_json:
     os.makedirs("/opt/ai_data/debate_sessions/test_results", exist_ok=True)
     with open("/opt/ai_data/debate_sessions/test_results/dart_round1.json", "w") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
-    log(f"\n  Results saved to /opt/ai_data/debate_sessions/test_results/dart_round1.json")
+    log("\n  Results saved to /opt/ai_data/debate_sessions/test_results/dart_round1.json")
 else:
     log(f"\n  Judge RAW ({len(judge_raw)} chars):")
     log(judge_raw[:600])

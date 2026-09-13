@@ -6,7 +6,10 @@
 Usage:  python3 tests/test_experiment.py
 """
 
-import json, os, re, sys, time, urllib.request
+import json
+import re
+import time
+import urllib.request
 
 SWITCH_FILE = "/opt/ai_data/debate/switch/model-switch.json"
 HEALTH_URL = "http://127.0.0.1:8081/health"

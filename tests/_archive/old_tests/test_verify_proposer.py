@@ -2,7 +2,10 @@
 # Status: experimental
 # Path: tests/test_verify_proposer.py — pytest
 """7B Q8_0 → 30B verify 동일 input으로 비교 테스트"""
-import json, time, requests, sys, os
+import json
+import time
+
+import requests
 
 API = "http://127.0.0.1:8080/v1/chat/completions"
 EXPER_DIR = "/opt/projects/server/data/experiment"
@@ -134,7 +137,7 @@ result = json.loads(stripped)
 # ── 5. Compare with 30B ──
 v30_res = v30
 print(f"\n{'='*60}")
-print(f"비교: 30B vs 7B Q8_0")
+print("비교: 30B vs 7B Q8_0")
 print(f"{'='*60}")
 print(f"\n{'항목':<30} {'30B':<25} {'7B Q8_0':<25}")
 print(f"{'-'*80}")

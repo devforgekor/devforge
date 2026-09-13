@@ -3,7 +3,6 @@
 # Path: tests/conftest.py — shared pytest fixtures for all test_*.py files
 """Shared pytest fixtures for DevForge server tests."""
 
-import os
 import subprocess
 import sys
 from pathlib import Path

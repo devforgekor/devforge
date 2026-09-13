@@ -5,7 +5,11 @@
 
 동일한 P findings (12개)를 Q8_0 모델에 투입, Q4_K_M 결과와 비교.
 """
-import json, time, os, sys, requests
+import json
+import sys
+import time
+
+import requests
 
 API_URL = "http://127.0.0.1:8080/v1/chat/completions"
 EXPER_DIR = "/opt/projects/server/data/experiment"

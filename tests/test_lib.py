@@ -7,7 +7,10 @@ Usage:  python3 -m pytest tests/test_lib.py -v
         python3 tests/test_lib.py
 """
 
-import json, os, sys, time, re, urllib.request
+import json
+import os
+import sys
+import urllib.request
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"

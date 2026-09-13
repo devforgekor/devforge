@@ -2,7 +2,10 @@
 # Status: experimental
 # Path: tests/test_small_verify.py — pytest
 """Qwen2.5-Coder-3B 30B verify 역할 테스트 — 동일 프롬프트로 3B vs 30B 비교."""
-import json, sys, os
+import json
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'scripts'))
 from lib.llm_client import call_llm
 
@@ -109,7 +112,7 @@ messages = [
 ]
 
 print(f"[3B] User message: ~{len(user_msg)} chars, {len(findings)} findings")
-print(f"[3B] Calling Qwen2.5-Coder-3B on :8082...")
+print("[3B] Calling Qwen2.5-Coder-3B on :8082...")
 
 result = call_llm(messages, model="operator", max_tokens=2048, timeout=600, return_meta=True)
 
@@ -126,13 +129,14 @@ print(f"[3B] Tokens: {result.get('usage',{}).get('total_tokens','?')}")
 
 # Try to extract JSON
 import re
+
 json_match = re.search(r'(\{.*\})', content, re.DOTALL)
 if json_match:
     try:
         parsed = json.loads(json_match.group(1))
         v = parsed.get("final_verdict", "?")
         c = parsed.get("confidence", "?")
-        print(f"\n=== 3B VERDICT ===")
+        print("\n=== 3B VERDICT ===")
         print(f"  Verdict: {v}")
         print(f"  Confidence: {c}")
         print(f"  Summary: {parsed.get('summary','')[:100]}")
@@ -145,7 +149,7 @@ if json_match:
 
 # Also extract 30B result for comparison
 primary_result = exp_primary.get("result", {})
-print(f"\n=== PRIMARY VERDICT (from exp_primary) ===")
+print("\n=== PRIMARY VERDICT (from exp_primary) ===")
 print(f"  Verdict: {primary_result.get('final_verdict','?')}")
 print(f"  Confidence: {primary_result.get('confidence','?')}")
 print(f"  Summary: {primary_result.get('summary','')[:100]}")

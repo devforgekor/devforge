@@ -267,10 +267,10 @@ if unfaithful:
 total = len(extractions)
 pct = (len(faithful) / total * 100) if total else 0
 print(f"{'=' * 60}")
-print(f"EXTRACTION FAITHFULNESS TEST RESULTS")
+print("EXTRACTION FAITHFULNESS TEST RESULTS")
 print(f"{'=' * 60}")
-print(f"Model:             Qwen3-4B (port 8082)")
-print(f"Model ID:          Qwen3-4B-Instruct-2507.Q4_K_M.gguf")
+print("Model:             Qwen3-4B (port 8082)")
+print("Model ID:          Qwen3-4B-Instruct-2507.Q4_K_M.gguf")
 print(f"Turn ID:           {turn_id}")
 print(f"Source fields:     user_turn={'empty' if not user_turn else 'present'}, "
       f"thinking={'empty' if not thinking else 'present'}, "

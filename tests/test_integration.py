@@ -12,22 +12,20 @@ LLM calls) and verify the complete data flow:
 """
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
 from devforge.application.extract_pipeline import ExtractPipeline, ExtractResult
-from devforge.core.config import ConfigRegistry, get_config
+from devforge.core.config import get_config
 from devforge.ports.extract import (
     ExtractedFact,
     ExtractPort,
     LLMPort,
     TurnData,
-    TurnRepository,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "llm_recordings"

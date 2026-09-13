@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import socket
-import time
 from typing import Any, Optional
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -69,7 +68,7 @@ def resolve_model(name: str) -> str:
     cfg = MODEL_REGISTRY.get(name)
     if not cfg:
         raise ValueError(f"Unknown model: {name}. Known: {list(MODEL_REGISTRY)}")
-    return cfg["_model"] if "_model" in cfg else name
+    return cfg.get("_model", name)
 
 
 class LocalLLMAdapter(LLMPort):
@@ -169,7 +168,10 @@ class LocalLLMAdapter(LLMPort):
         lives in the pipeline stage implementation. The adapter just
         handles the LLM HTTP call.
         """
-        from devforge.pipeline_stages.extract_edc import build_extract_prompt, parse_extract_response
+        from devforge.pipeline_stages.extract_edc import (
+            build_extract_prompt,
+            parse_extract_response,
+        )
 
         messages = build_extract_prompt(turn)
         result = await self._call_llm(

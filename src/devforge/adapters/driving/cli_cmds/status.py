@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
-from pathlib import Path
 
 import typer
 
@@ -45,11 +43,12 @@ def _get_podman_status() -> dict:
 
     container_summary = []
     for c in containers:
+        ports = c.get("Ports") or []
         container_summary.append({
             "name": c.get("Names", [c.get("Id", "unknown")[:12]][0]),
             "image": c.get("Image", ""),
             "status": "running" if c.get("State") == "running" else c.get("State", "unknown"),
-            "ports": [p.get("HostPort", "") for p in c.get("Ports", []) if p.get("HostPort")],
+            "ports": [p.get("HostPort", "") for p in ports if p.get("HostPort")],
         })
 
     return {"status": "ok", "containers": container_summary}

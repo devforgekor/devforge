@@ -10,12 +10,15 @@ SYS_V27 프롬프트로 handoff 문서 3개 전달 → final_verdict 산출 확�
   python3 test_verify_pipeline.py
 """
 
-import json, sys, time, os
+import json
+import os
+import sys
+import time
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS_DIR)
-from lib.llm_client import call_llm
 from lib.llm.json_parser import parse_llm_json
+from lib.llm_client import call_llm
 
 # VERIFIER_SYSTEM_PROMPT (from prj_cycle.py SYS_VERIFY)
 VERIFIER_SYSTEM_PROMPT = """You are a final verifier. Review all findings and P-R-J results.
@@ -167,7 +170,7 @@ def main():
         print(f"    Reason: {hc.get('reason','')[:200]}", flush=True)
 
         fb = result.get("feedback", {})
-        print(f"\n  Feedback:", flush=True)
+        print("\n  Feedback:", flush=True)
         for role_key, role_fb in fb.items():
             print(f"    {role_key}: score={role_fb.get('score','?')}", flush=True)
             for s in role_fb.get("strengths", []):
