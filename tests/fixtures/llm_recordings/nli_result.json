@@ -1,0 +1,47 @@
+[
+  {
+    "timestamp": "2026-09-13T11:34:23.660057+00:00",
+    "input": {
+      "source": "extract_pipeline",
+      "evidence": "진행해"
+    },
+    "expected_verdict": "GROUNDED",
+    "actual_verdict": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-09-13T11:34:23.665121+00:00",
+    "input": {
+      "source": "extract_pipeline",
+      "evidence": "진행해"
+    },
+    "expected_verdict": "GROUNDED",
+    "actual_verdict": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-09-13T11:34:23.670011+00:00",
+    "input": {
+      "source": "extract_pipeline",
+      "evidence": "진행해"
+    },
+    "expected_verdict": "GROUNDED",
+    "actual_verdict": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-09-13T11:34:23.674232+00:00",
+    "input": {
+      "source": "extract_pipeline",
+      "evidence": "진행해"
+    },
+    "expected_verdict": "GROUNDED",
+    "actual_verdict": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-09-13T11:34:23.677508+00:00",
+    "input": {
+      "source": "extract_pipeline",
+      "evidence": "진행해"
+    },
+    "expected_verdict": "GROUNDED",
+    "actual_verdict": "NEUTRAL"
+  }
+]

@@ -1,0 +1,124 @@
+{
+  "snapshot_time": "2026-09-13T11:32:28.311313+00:00",
+  "database": "devforge_app",
+  "counts": {
+    "total_turns": 7028
+  },
+  "pipeline_state_dist": [
+    {
+      "state": "verified",
+      "count": 2276
+    },
+    {
+      "state": "embedded",
+      "count": 3192
+    },
+    {
+      "state": "pending",
+      "count": 1483
+    },
+    {
+      "state": "embed_skipped",
+      "count": 77
+    }
+  ],
+  "in_flight": [
+    {
+      "state": "verified",
+      "count": 2276
+    }
+  ],
+  "review_facts_dist": [
+    {
+      "fact_type": "marker",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 5120
+    },
+    {
+      "fact_type": "enrich_meta",
+      "nli_verdict": null,
+      "source": "enrich",
+      "count": 3269
+    },
+    {
+      "fact_type": "text",
+      "nli_verdict": "GROUNDED",
+      "source": "extract_pipeline",
+      "count": 864
+    },
+    {
+      "fact_type": "user",
+      "nli_verdict": "GROUNDED",
+      "source": "extract_pipeline",
+      "count": 196
+    },
+    {
+      "fact_type": "text",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 161
+    },
+    {
+      "fact_type": "entity_scan",
+      "nli_verdict": null,
+      "source": "entity_scan",
+      "count": 100
+    },
+    {
+      "fact_type": "code",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 44
+    },
+    {
+      "fact_type": "explanation",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 22
+    },
+    {
+      "fact_type": "decision",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 8
+    },
+    {
+      "fact_type": "action",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 5
+    },
+    {
+      "fact_type": "requirement",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 3
+    },
+    {
+      "fact_type": "output",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 1
+    },
+    {
+      "fact_type": "instruction",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 1
+    },
+    {
+      "fact_type": "user_interaction",
+      "nli_verdict": null,
+      "source": "extract_pipeline",
+      "count": 1
+    }
+  ],
+  "embedding_stats": {
+    "total": 3550,
+    "by_model": {
+      "qwen3-embedding-8b-v1": 3550
+    }
+  },
+  "model_status": []
+}

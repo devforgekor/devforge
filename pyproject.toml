@@ -1,0 +1,170 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devforge"
+version = "1.4.0"
+description = "DevForge: AI agent workflow pipeline server (refactored)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [
+    { name = "DevForge Team" }
+]
+keywords = [
+    "ai-agent", "llm-pipeline", "podman", "postgres", "mcp",
+    "extraction", "embedding", "enrichment", "refactoring",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# ── Runtime dependencies (core) ──
+dependencies = [
+    # Web framework (Track A)
+    "fastapi>=0.110,<1.0",
+    "uvicorn[standard]>=0.27,<1.0",
+    # LLM / data
+    "pydantic>=2.5,<3.0",
+    # Database
+    "asyncpg>=0.29,<1.0",
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    # Cloud
+    "oci>=2.140,<3.0",
+    "apprise>=1.0,<2.0",
+    # CLI
+    "typer>=0.9,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.23,<1.0",
+    "pytest-cov>=4.0,<8.0",
+    "pytest-xdist>=3.0,<4.0",
+    # Linting & type checking
+    "ruff>=0.5,<1.0",
+    "mypy>=1.10,<2.0",
+    # Architecture
+    "import-linter>=0.6,<1.0",
+    # Type-safe settings
+    "pydantic-settings>=2.0,<3.0",
+]
+track_b = [
+    # Track B: LLM 공급자 추상화 (별도 문서화, Phase 0.5+에서 선택적 설치)
+    "openai>=1.40,<2.0",
+    "anthropic>=0.30,<1.0",
+    "litellm>=1.40,<2.0",  # Optional: for unified provider routing
+]
+
+[project.scripts]
+devforge = "devforge.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+# ─────────────────── ruff ───────────────────
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "SIM"]
+ignore = [
+    "E501",   # line too long — tolerated per project style
+    "SIM105", # contextlib.suppress pattern — try/except/pass is fine for cleanup
+    "SIM115", # open() without context manager — valid for temp file patterns
+    "UP006",  # typing.Dict → dict — project uses Python 3.9 (PEP 604 unavailable)
+    "UP035",  # typing.Dict deprecated import — same reason
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["devforge"]
+
+# ─────────────────── mypy ───────────────────
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+
+[[tool.mypy.overrides]]
+module = "oci.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "apprise.*"
+ignore_missing_imports = true
+
+# ─────────────────── pytest ───────────────────
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-x",  # stop on first failure
+    "--tb=short",
+    "-q",
+    "--strict-markers",
+    "--strict-config",
+]
+asyncio_mode = "auto"
+
+[tool.pytest.ini_options.markers]
+unit = "unit tests"
+integration = "integration tests"
+characterization = "characterization tests (behavior capture)"
+shadow = "shadow execution tests (production comparison)"
+
+# ─────────────────── import-linter ───────────────────
+
+[tool.import-linter]
+# Architecture contracts — enforced in CI
+fail_on_error = true
+allow_indep_layers = false
+
+[tool.import-linter.contracts]
+[tool.import-linter.contracts.domain]
+name = "domain"
+type = "layers"
+layers = [
+    "devforge.core",
+    "devforge.ports",
+    "devforge.domain",
+    "devforge.adapters",
+    "devforge.application",
+    "devforge.pipeline_stages",
+]
+
+[tool.import-linter.contracts.ports_adapters]
+name = "hexagonal"
+type = "layers"
+layers = [
+    "devforge.ports",
+    "devforge.adapters",
+]
+
