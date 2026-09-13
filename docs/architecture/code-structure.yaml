@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-09-12'
+  updated: '2026-09-13'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -899,8 +899,8 @@ modules:
         \ API."
     yearly_refresh.sh:
       status: unknown
-      purpose: "yearly_refresh.sh \u2014 Golden Image \uAC31\uC2E0 (\uC218\uB3D9,\
-        \ \uB300\uD654\uD615 \uD655\uC778)"
+      purpose: "yearly_refresh.sh \u2014 Golden Image \uAC31\uC2E0 (\uC218\uB3D9/\uC790\
+        \uB3D9)"
 - path: scripts/hooks/
   purpose: Hooks
   files:
