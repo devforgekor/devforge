@@ -1,0 +1,12 @@
+{
+  "seen_issues": [
+    8
+  ],
+  "claimed": {
+    "8": {
+      "title": "[watchdog] \ubc18\ubcf5 \uc2e4\ud328: syssvc:netdata:down",
+      "claimed_at": "2026-09-14T03:20:13.446378Z"
+    }
+  },
+  "pr_created": {}
+}
