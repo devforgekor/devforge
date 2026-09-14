@@ -14,12 +14,15 @@ docs/
 ├─ specs/               # 계약·스키마(DDL, registry, references)
 ├─ plans/               # 앞을 향한 계획·로드맵·설계 (proposed|active)
 ├─ reports/             # 시점 기록·조사·검증 (record, superseded 가능)
-├─ runbooks/            # 실행 절차 (operational)
+├─ runbooks/           # 실행 절차 (operational)
 ├─ _archive/            # 폐기·일회성
-└─ (루트)               # 최상위 SSOT 참조만: domain-glossary.yaml, system-architecture.md, object-storage.md
+└─ (루트)               # 최상위 SSOT 참조 + 리팩토링 정본
 ```
 - `architecture/`의 `infrastructure.md`·`software.yaml`·`code-structure.yaml`은 **자동 생성** — 손대지 않는다.
-- 루트에는 **최상위 SSOT 참조 문서만** 둔다(코드가 경로를 참조). 나머지는 성격별 폴더로.
+- 루트에는 **최상위 SSOT 참조 + 코드/설정이 경로를 참조하는 정본**만 둔다: `INDEX.md`, `CONVENTIONS.md`,
+  `domain-glossary.yaml`, `system-architecture.md`, `object-storage.md`, 그리고 리팩토링 정본군
+  (`REFACTORING_PLAN.md`, `ARCHITECTURE.md`, `MIGRATION_GUIDE.md`, `LLM_PROVIDER_PLAN.md`,
+  `API_REFERENCE.md`, `OPERATIONS_GUIDE.md`). 나머지는 성격별 폴더로.
 
 ## 2. 문서 타입별 템플릿
 | 타입 | 위치 | 필수 섹션 |
@@ -46,7 +49,11 @@ docs/
 
 ## 4. 언어·길이
 - **human-facing(reports/runbooks/roadmap/plans) = 한국어**, **machine-readable(specs/DDL/식별자/프롬프트) = 영어**.
-- 문서 **≤400줄**, 넘으면 분할(파일명에 `-2` 등).
+- 문서 **≤400줄** 권장. 초과 시 분할(파일명에 `-2` 등). 단, 기존 장문 문서는 **다음 대개정 시** 분할하며
+  2026-09-14 기준 예외를 인정한다: `plans/day-night-split-handoff-plan.md`(814), `REFACTORING_PLAN.md`(564),
+  `plans/slack-chatops-design.md`(559), `reports/etextbook-patch-analysis.md`(523), `runbooks/runbook-golden-image.md`(503),
+  `plans/design-bash-to-python-migration.md`(456), `reports/opencode-roundrobin-failure-analysis.md`(444),
+  `plans/etextbook-docker-deployment-plan.md`(433).
 - 코드 블록 내 식별자·경로·명령은 영어.
 
 ## 5. SSOT·링크 규칙

@@ -9,7 +9,8 @@ from __future__ import annotations
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from devforge.core.config import ConfigRegistry
 from devforge.core.logging import get_logger
@@ -117,10 +118,10 @@ class PostgresExtractAdapter(ExtractPort):
                     }
                 )
 
-            stmt = insert(ReviewFact).values(rows)
+            stmt = pg_insert(ReviewFact).values(rows)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["turn_id", "fact_index", "extract_model"],
-                set_={"evidence": stmt.inserted.evidence},
+                set_={"evidence": stmt.excluded.evidence},
             )
             await db.execute(stmt)
             return len(facts)
@@ -129,7 +130,7 @@ class PostgresExtractAdapter(ExtractPort):
         """Insert a marker fact (noise_marker, error, etc)."""
         async with self._gateway.session() as db:
             stmt = (
-                insert(ReviewFact)
+                pg_insert(ReviewFact)
                 .values(
                     turn_id=str(turn_id),
                     fact_index=-1,

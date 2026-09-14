@@ -1,5 +1,8 @@
 # DevForge API Reference
 
+> Status: active · Date: 2026-09-14 · Owner: devforge · Related: `docs/OPERATIONS_GUIDE.md`, `docs/ARCHITECTURE.md`
+> 리팩토링 패키지(`src/devforge`) 기준. 포트/서버 구현은 레거시 라이브 런타임과 다르다 — `system-architecture.md` §2.
+
 ## CLI
 
 ```
@@ -20,7 +23,7 @@ devforge --help
 
 ## HTTP API (FastAPI)
 
-Base URL: `http://localhost:8000`
+Base URL: `http://localhost:8000`  <!-- 리팩토링 기본값. 레거시 라이브 hub는 :8002 -->
 
 ### Endpoints
 
@@ -34,6 +37,9 @@ Base URL: `http://localhost:8000`
 | POST | `/api/v1/pipeline/extract` | Trigger extract pipeline |
 
 ### MCP SSE Server (port 8100)
+
+> 패키지 구현은 자체 SSE 서버(`devforge.adapters.driving.mcp.server`, `devforge mcp serve`).
+> 레거시 라이브 MCP는 FastMCP Streamable HTTP(`scripts/mcp_server.py`, :8000)다.
 
 Base URL: `http://localhost:8100`
 

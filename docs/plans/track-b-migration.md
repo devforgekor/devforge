@@ -1,5 +1,9 @@
 # Track B Migration — Implementation Plan
 
+> Status: record · Date: 2026-06-30 · Owner: devforge
+> **용어 주의**: 이 문서의 "Track B"는 **svc.pod 컨테이너 이관**(완료)을 뜻한다.
+> `REFACTORING_PLAN.md`의 "Track B"는 **LLM 공급자 추상화**(별도, `docs/LLM_PROVIDER_PLAN.md`)로 다른 주제다.
+
 ## Reference
 - **Web 검증 보고서**: `docs/reports/architecture-validation.md` (2026-06-10)
 - **검증 환경**: Oracle Linux 9, ARM Neoverse-N1 4-core, rootless podman, ip_unprivileged_port_start=80

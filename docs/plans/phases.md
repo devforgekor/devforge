@@ -1,5 +1,9 @@
 # DevForge Server — Status & Plan
 
+> Status: superseded · Date: 2026-09-14 (내용은 2026-05-24 스냅샷) · Owner: devforge · Related: `docs/REFACTORING_PLAN.md`, see `blueprint.yaml`
+> 주의: 이 문서의 Phase 1~3 진행률은 2026-05 기준 스냅샷이다. **현재 코드/아키텍처 정본은
+> `docs/REFACTORING_PLAN.md`(+`docs/ARCHITECTURE.md`), phase 추적은 루트 `blueprint.yaml`**이다.
+
 ## Phase 1: Basic Infrastructure + MCP Server (Complete, 2026-05-14)
 
 - [x] Podman Quadlet containers (devforge-api, devforge-swap, devforge-qwen, postgres)

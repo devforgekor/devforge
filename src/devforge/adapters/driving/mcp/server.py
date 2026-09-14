@@ -238,12 +238,16 @@ def set_pipeline_factory(factory: Any) -> None:
 def get_pipeline() -> Any:
     """Get an ExtractPipeline instance via factory.
 
-    The factory must be set by the application layer during app startup
-    to avoid circular imports between adapters and application.
+    The factory is set by the composition root (`devforge.cli`), which is the
+    entry point for `devforge mcp serve`. Adapters never import the application
+    layer directly (enforced by import-linter).
     """
     if _pipeline_factory is not None:
         return _pipeline_factory()
-    raise RuntimeError("Pipeline factory not set. Call set_pipeline_factory() during startup.")
+    raise RuntimeError(
+        "Pipeline factory not set. Run the MCP server via `devforge mcp serve` "
+        "(or call set_pipeline_factory() during startup)."
+    )
 
 
 async def extract_turn(params: ExtractTurnParams) -> dict[str, Any]:

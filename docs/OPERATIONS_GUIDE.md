@@ -1,5 +1,7 @@
 # DevForge Operations Guide
 
+> Status: active · Date: 2026-09-14 · Owner: devforge · Related: `docs/API_REFERENCE.md`, `docs/MIGRATION_GUIDE.md`
+
 ## Quick Start
 
 ### Installation
@@ -9,15 +11,15 @@ pip install -e ".[dev]"
 
 ### Running the Server
 ```bash
-# API server (port 8000)
-devforge mcp serve
-
-# Or via uvicorn directly
+# HTTP API server (FastAPI, port 8000)
 uvicorn devforge.adapters.driving.api.app:app --host 0.0.0.0 --port 8000
 
-# MCP server (port 8100)
-devforge mcp serve --port 8100
+# MCP SSE server (port 8100)
+devforge mcp serve --host 0.0.0.0 --port 8100
 ```
+
+> 포트는 **리팩토링 패키지 기본값**이다. 레거시 라이브 런타임은 FastAPI hub `:8002`,
+> MCP `:8000`(`scripts/mcp_server.py`, FastMCP Streamable HTTP)이다 — `system-architecture.md` §2 참조.
 
 ### Running the Pipeline
 ```bash
@@ -89,7 +91,7 @@ pytest tests/test_characterization.py tests/test_integration.py -v
 ```
 
 ### Test Categories
-- **Characterization** (18 tests): Verify existing behavior preserved
+- **Characterization** (17 tests): Verify existing behavior preserved
 - **Integration** (12 tests): Pipeline + DB integration
 
 ### Replay Mode (for deterministic LLM testing)

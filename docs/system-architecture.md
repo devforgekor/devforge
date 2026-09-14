@@ -1,5 +1,6 @@
 # DevForge 시스템 전체 구조
 
+> Status: active · Date: 2026-09-14 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/REFACTORING_PLAN.md`
 > 서버 전체 런타임·데이터 흐름·스토리지의 통합 구조 문서.
 > 최종 갱신: 2026-09-14 (리팩토링 코드 레이어 §3.5 추가 — 이전 2026-09-11 버전은 OCI 스토리지 계층 추가)
 > 자동 생성 문서(`docs/architecture/*`)와 달리 이 문서는 **수동 관리**다.

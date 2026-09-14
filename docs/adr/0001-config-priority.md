@@ -25,5 +25,5 @@ Implemented in `src/devforge/core/config.py`.
 ## Consequences
 - Single `get_config()` entry point
 - Hardcoded paths abstracted via `ConfigRegistry.paths`
-- `HardcodedPathResolver` maps 253 hardcoded paths to config values
+- `HardcodedPathResolver` maps 40+ hardcoded paths to config values
 - Secrets never exposed via API endpoints

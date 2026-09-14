@@ -13,10 +13,13 @@ Usage:
 
 from __future__ import annotations
 
+from typing import Any
+
 import typer
 
 from devforge.adapters.driving.cli_cmds import inference as inference_cmds
 from devforge.adapters.driving.cli_cmds import mcp as mcp_cmds
+from devforge.adapters.driving.mcp.server import set_pipeline_factory
 from devforge.core.logging import setup_logging
 
 setup_logging(level="INFO", component="cli")
@@ -35,6 +38,32 @@ pipeline_app = typer.Typer(name="pipeline", help="Pipeline management")
 app.add_typer(pipeline_app, name="pipeline")
 app.add_typer(inference_cmds.app, name="inference")
 app.add_typer(mcp_cmds.app, name="mcp")
+
+
+def _default_pipeline_factory() -> Any:
+    """Build the production ExtractPipeline (composition-root wiring).
+
+    Defined here (not in an adapter) so the MCP driving adapter never imports
+    the application layer directly.
+    """
+    from devforge.adapters.driven.llm.local_adapter import LocalLLMAdapter
+    from devforge.adapters.driven.storage.extract_adapter import (
+        PostgresExtractAdapter,
+        PostgresTurnRepository,
+    )
+    from devforge.application.extract_pipeline import ExtractPipeline
+    from devforge.core.config import get_config
+
+    config = get_config()
+    return ExtractPipeline(
+        llm=LocalLLMAdapter(),
+        db=PostgresExtractAdapter.from_config(config),
+        turn_repo=PostgresTurnRepository.from_config(config),
+    )
+
+
+# Register at import time so `devforge mcp serve` has the factory wired.
+set_pipeline_factory(_default_pipeline_factory)
 
 
 @app.command()

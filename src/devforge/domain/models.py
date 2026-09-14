@@ -99,7 +99,6 @@ class Turn(Base):
     room = Column(Text)
     agent = Column(Text)
     source_message_id = Column(Text)
-    embedding = Column(Vector(768))  # pgvector, 768-dim
     pipeline_state = Column(Text, nullable=False, server_default=sql_text("'scanned'"))
     source = Column(Text, server_default=sql_text("'unknown'"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

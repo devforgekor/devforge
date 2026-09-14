@@ -1,5 +1,7 @@
 # DevForge 서버 리팩토링 종합 계획서 v1.4
 
+> Status: active · Date: 2026-09-14 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/adr/`
+
 > **버전**: 1.4 (최종)
 > **상태**: Final — 모든 리뷰 반영, 실행 준비 완료
 > **Changelog**: v1.0→v1.1: 12주→14주, 특성화 테스트 | v1.1→v1.2: Track B 분리, 섀도 DB | v1.2→v1.3: 리스크 복원, 팀규모 | v1.3→v1.4: 일정/표현 정합성 수정
@@ -486,7 +488,7 @@ class ExtractPipeline:
 
 | 리스크 | 가능성 | 영향 | 완화 | Status |
 |--------|--------|------|------|--------|
-| **프로덕션 DB 경합** | High | Critical | **섀도 DB 분리 (Phase 1.5)** + replay 하네스 | Mitigated (Phase 1.5) |
+| **프로덕션 DB 경합** | High | Critical | **섀도 DB 분리 (Phase 1.5)** + replay 하네스 | Partial — replay 적용, 섀도 DB 미구현 |
 | **LLM 응답 비재현성** | High | High | **record/replay 하네스 (Phase −1)** | Mitigated (Phase −1) |
 | **day_cycle.sh 로직 누락 (455줄)** | Medium | High | **행위 명세 (Phase −1)** + 2주 병렬 검증 | In Progress (Phase 3.5) |
 | **데이터 손실 (pipeline_state)** | Low | Critical | **Alembic + expand/contract** (ADR로 규정) | To Do (Phase 0) |
@@ -499,7 +501,7 @@ class ExtractPipeline:
 | **팀 학습 곡선** | High | Medium | **문서화 + 페어 프로그래밍 + 2인 팀** | Monitoring (전체) |
 
 > **v1.1에서 삭제된 Critical/High 리스크 4건 재추가**:
-> - 프로덕션 DB 경합 → **섀도 DB + replay**으로 해결됨 (Status: Mitigated)
+> - 프로덕션 DB 경합 → **replay 하네스**는 적용, **섀도 DB는 미구현** (Status: Partial)
 > - 데이터 손실 → **Alembic + expand/contract**으로 부분 해결 (Status: To Do)
 > - 기존 시스템 중단 → **Feature flag**으로 완화 (Status: Partial)
 > - 순환 참조 → **import-linter**으로 해결 (Status: Mitigated)
@@ -543,7 +545,7 @@ class ExtractPipeline:
 | 용어 | 정의 |
 |------|------|
 | **Ports & Adapters** | 핵심 로직(Port = Protocol)과 외부 기술(Adapter) 분리 — Cockburn (2005) |
-| **Track A / Track B** | Track A: 리팩토링 (핵심), Track B: LLM 공급자 (별도 문서화) |
+| **Track A / Track B** | Track A: 리팩토링 (핵심), Track B: LLM 공급자 (별도 문서화). 주의: `plans/track-b-migration.md`의 "Track B"는 svc.pod 이관으로 무관 |
 | **Characterization Test** | 리팩토링 전 기존 동작 고정 — Feathers, *Working Effectively with Legacy Code* |
 | **Shadow DB** | 프로덕션 DB와 분리된 검증 전용 스키마 |
 | **record/replay 하네스** | LLM 응답 캡처 → 재생으로 결정론화 |

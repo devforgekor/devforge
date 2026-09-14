@@ -451,6 +451,21 @@ known_issues:
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
     placement.'
   resolved: false
+- text: 'Alembic NOT initialized on live DB (no alembic_version table) → `alembic upgrade head` would fail (initial
+    create_table collides with existing tables). Baseline before migrations. 2026-09-14: applied additive DDL
+    `turns.source` (backup /opt/ai_data/backups/pre_source_alter_20260914T052218Z.dump); refactored ORM Turn.embedding
+    removed (not present in live DB). E2E verified inside svc pod: `devforge pipeline status` (7122 turns) and
+    `pipeline orchestrate --dry-run` replay (5/5, 5 facts).'
+  resolved: false
+- text: 'devforge image does not ship tests/ → in-container `DEVFORGE_LLM_REPLAY=1` needs fixtures mounted
+    (DEVFORGE_FIXTURE_DIR + -v .../tests/fixtures/llm_recordings:/fixtures:ro), else replay finds no fixture (0 facts).
+    Also structlog logs are double-emitted (from_structlog) — logger configured twice.'
+  resolved: false
+- text: 'WRITE-PATH E2E (2026-09-14) fixed 2 real bugs in adapters/driven/storage/extract_adapter.py: (1) used generic
+    `sqlalchemy.insert` instead of `dialects.postgresql.insert` → `on_conflict_do_update` AttributeError; (2) upsert used
+    `stmt.inserted` instead of `stmt.excluded`. Verified with a throwaway conversation/turn + replay: store_facts wrote 2
+    facts (extract_model=day_extract) and pipeline_state→embedded; test data cleaned up. DB state valid.'
+  resolved: true
 completed_log:
 - OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
 - PostgreSQL tuning (effective_io_concurrency=200, effective_cache_size=1GB, shared_buffers=512MB). day-cycle.timer removed

@@ -12,10 +12,11 @@ DevForge의 원격 오브젝트 스토리지는 **OCI Object Storage**를 사용
 용도는 두 가지다.
 
 1. **백업 저장소** — PostgreSQL 덤프 + 애플리케이션 코드/설정 (운영 중)
-2. **파일 교환(Exchange)** — 사용자 ↔ 서버 간 임시 파일 송수신 (설계·전환 단계)
+2. **파일 교환(Exchange)** — 사용자 ↔ 서버 간 임시 파일 송수신 (OCI 운영 중)
 
-현재 파일 교환의 백엔드는 **Azure Blob**(`stshareddevforgeprodkrc/devforge`)이며,
-이를 OCI로 통합하는 것이 목표다. 최종 공유 주소는 **Droplr 단축 URL**로 통일한다.
+파일 교환 백엔드는 **OCI Object Storage**(`devforge-standard/uploads/*`)이며,
+이전 Azure Blob(`stshareddevforgeprodkrc/devforge`)은 **2026-09-11 제거**됐다.
+최종 공유 주소는 **Droplr 단축 URL**로 통일한다.
 
 - 리전: `ap-tokyo-1` · Namespace: `nrhe1zafhd0v` · 컴파트먼트: 테넌시 루트
 - 인증: 서버의 OCI CLI 프로파일 `~/.oci/config` (user opc)
@@ -111,7 +112,7 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 
 ## 5. 파일 교환 (Exchange) — OCI 구현 완료
 
-### 5.1 현재 구조 (Azure)
+### 5.1 (구) Azure 구조 — 참고용 (2026-09-11 이전)
 ```
 브라우저 ── /send, /receive ──▶ Caddy ──▶ 127.0.0.1:8085 (Blob Explorer)
                                               └─ Azure Blob stshareddevforgeprodkrc/devforge
