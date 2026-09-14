@@ -95,3 +95,39 @@
 | 볼륨 | `/opt/projects/server/src:/src:Z` 추가 |
 
 > Phase A 컷오버 상세: `docs/ops/cutover-phase-a.md`
+
+## 양방향 검증 (2026-09-14)
+
+### Forward (리팩토링 → 정상 동작)
+
+| 도구 | 결과 | 비고 |
+|---|---|---|
+| pipeline_status | ✅ | DB 조회, 상태 분포 반환 |
+| knowledge_search | ✅ | pg_trgm 검색, 3건 결과 |
+| get_conversation | ✅ | 존재하지 않음 → 에러 메시지 |
+| obs_search | ✅ | pg_trgm 검색, 2건 결과 |
+| ingest | ✅ | 입력 검증 동작 (seq, user_turn 필수) |
+| extract_turn | ✅ | UUID 유효성 검증 동작 |
+
+### Backward (레거시 → 롤백 가능)
+
+| 항목 | 결과 |
+|---|---|
+| 레거시 MCP | ✅ `{"status":"ok","server":"devforge-mcp"}` HTTP 200 |
+| 컨테이너 전환 | ✅ mcp_refactored_entrypoint → mcp_entrypoint 전환 성공 |
+| 롤백 시간 | < 10초 (restart + pip install 생략) |
+
+### 수정된 버그 (10개)
+
+| 파일 | 수정 내용 |
+|---|---|
+| `ports/extract.py` | `search_observations` 추상메서드 추가 (관계 정의 누락) |
+| `driven/storage/extract_adapter.py` | `search_observations` 구현 추가 (pg_trgm) + `text` import 추가 |
+| `driving/mcp/server.py:590` | `obs_search` → `search_observations` 메서드 호출 수정 |
+| `driving/mcp/server.py:732` | `get_conversation` tuple 반환 → dict 반환 수정 |
+| `driving/mcp/server.py:734` | `select` 미정의 → `from sqlalchemy import select` 추가 |
+| `driving/mcp/server.py:886` | HTTP tool_funcs에 get_conversation, obs_search, ingest 추가 |
+| `driving/mcp/server.py:908` | HTTP schemas에 GetConversationParams, ObsSearchParams, IngestParams 추가 |
+| `driving/mcp/server.py:504` | import 순서 정렬 (ruff I001) |
+| `driving/api/app.py:180` | import 순서 정렬 (ruff I001) |
+| `secrets.env` | `DEVFORGE_DATABASE_URL`: data-pod → postgres (DB 호스트 변경) |
