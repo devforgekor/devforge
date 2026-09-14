@@ -48,9 +48,15 @@
 ### 2. day_cycle 서비스 상태 — ✅ 해결 (2026-09-14)
 - **원인**: `devforge-inference` 컨테이너가 `--no-mmap` 인자로 기동 실패 (llama.cpp b10920+에서 플래그 제거됨) → heavy phase(extract/enrich/embed) 진행 불가
 - **수정**: `--no-mmap` → `--load-mode none` (2곳: `scripts/lib/pod_manager/__init__.py`, `/opt/ai_data/scripts/inference-entrypoint.sh`)
-- **결과**: inference 8080-8084 정상 기동, day_cycle이 LLM 호출(`[call_llm] extractor:8082`)로 진행 중
+- **결과**: inference 8080-8084 정상 기동, day_cycle이 LLM 호출(`[call_llm] extractor:8082`)로 진행
 - **설계 확인**: day_cycle은 타이머가 아니라 **watchdog 이벤트 기반** (pending turns 감지 시 `systemctl start`). D1의 "timer inactive"는 정상.
 - watchdog.service: active (enabled)
+
+### 2b. ⚠️ 잔여 이슈 — enrich LLM 연결 재설정
+- enrich 단계에서 llama-server(:8082)가 다수 LLM 호출 중 `RemoteDisconnected`/`ConnectionResetError` 반복
+- `Done: 0 enriched, 50 failed (LLM: 529.8s)` — 50건 전부 실패
+- **추정 원인**: 4코어 ARM CPU + 8B Q8 모델(~6GB) + KV cache(1024MB) 메모리 압박 → 서버 불안정. watchdocg 재시작과 in-flight 호출 충돌 가능성.
+- **영향**: day_cycle 활성화는 되었으나 enrich 완료까지는 추가 튜닝 필요 (이전 보고서 `architecture-validation.md`와 일치하는 ARM 한계).
 
 ### 3. hook overhead — ⚠️ 최초 측정 무효, live 재측정 완료
 - **최초 D1**: 0.0004ms (safe mock) — **무효**. 측정 스크립트가 `tool_input={}`을 전달해 `_handle_bash`가 early-return 경로만 측정함.
