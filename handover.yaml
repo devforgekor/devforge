@@ -440,6 +440,10 @@ decisions:
     Co-authored-by: opencode <opencode@devforge'
   status: closed
 known_issues:
+- text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중
+    RemoteDisconnected/ConnectionResetError 반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB)
+    메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'
+  resolved: false
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
   resolved: false
