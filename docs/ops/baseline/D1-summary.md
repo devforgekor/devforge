@@ -79,4 +79,19 @@
 | Gate 3: 경보 발동 | ⏸ | baseline 기반 임계값 확정 후 |
 | Gate 4: 롤백 리허설 | ⏸ | Gate 3 이후 |
 | Gate 5: 수치·용어 정합 | ⏸ | turns.source 정정 포함 |
-| Gate 6: provenance | ❌ 실패 | 7160/7160 unknown (W2 목표) |
+| Gate 6: provenance | ✅ PASS | 마커 적용(legacy:pre-2026-09) + 코드 고침 + 배포, unknown=0/7173 |
+
+---
+
+## Phase A 컷오버 완료 (2026-09-14)
+
+| 항목 | 결과 |
+|---|---|
+| container-devforge-mcp | refactored MCP 전환 완료 |
+| MCP tools | 18개 (12 계약 + 6 추가) |
+| Health check | `{"status":"healthy","tools_count":18}` HTTP 200 |
+| V1-V8 pre-cutover verification | 9/9 PASS |
+| 엔트리포인트 | `/scripts/mcp_refactored_entrypoint.sh` |
+| 볼륨 | `/opt/projects/server/src:/src:Z` 추가 |
+
+> Phase A 컷오버 상세: `docs/ops/cutover-phase-a.md`
