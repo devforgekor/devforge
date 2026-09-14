@@ -1,0 +1,44 @@
+{
+  "date": "2026-09-14",
+  "mode": "daily",
+  "turns_24h": "146",
+  "turns_total": "7160",
+  "turns_source": {
+    "unknown": "7160"
+  },
+  "turns_age_days": "118.3",
+  "observations_24h": "1",
+  "observations_7d": "529",
+  "pipeline_state": {
+    "embedded": "3192",
+    "embed_skipped": "77",
+    "pending": "1615",
+    "verified": "2276"
+  },
+  "services": {
+    "devforge-turn-watcher.timer": "inactive",
+    "devforge-turn-watcher.service": "active",
+    "devforge-day-cycle.timer": "inactive",
+    "devforge-day-cycle.service": "activating",
+    "devforge-worker.timer": "inactive",
+    "devforge-worker.service": "inactive",
+    "devforge-fastapi.timer": "inactive",
+    "devforge-fastapi.service": "inactive",
+    "devforge-mcp.timer": "inactive",
+    "devforge-mcp.service": "inactive",
+    "devforge-watchdog.timer": "inactive",
+    "devforge-watchdog.service": "active"
+  },
+  "netdata": "active",
+  "hook_overhead": {
+    "iterations": 100,
+    "avg_ms": 0.0004,
+    "p50_ms": 0.0004,
+    "p95_ms": 0.0004,
+    "p99_ms": 0.0021,
+    "min_ms": 0.0003,
+    "max_ms": 0.0021,
+    "mode": "safe(mock)"
+  },
+  "mcp_health": "{\"status\":\"ok\",\"server\":\"devforge-mcp\"}"
+}

@@ -106,12 +106,30 @@ if __name__ == "__main__":
 
 | 날짜 | 단계 | 활동 | 산출물 |
 |---|---|---|---|
-| **W1 D1** | D1 | MCP contract 최종 확인 (gate 1 통과 확인) | gate-1-result.json |
-| **W1 D1-2** | D1-2 | hook overhead 측정 시작, day_cycle 패턴 초기 관찰 | baseline D1, D2 |
+| **W1 D1** | D1 | Gate 1 통과 확인 + D1 측정 | ✅ gate-1-pass, `2026-09-14.json`, `D1-summary.md` |
+| **W1 D2** | D2 | D2 측정 + 하루 일일 패턴 기록 | `2026-09-15.json` |
 | **W1 D3-7** | D3-7 | **공유 baseline 측정**: turns율·MCP p95·훅 오버헤드·day_cycle 단계 | baseline D3-D7 |
 | **W1 D3-5** | D3-5 | 백업 복원 속도 테스트 | backup-restore-result.json |
 | **W1 D7** | D7 | W1 종합 리포트 | docs/ops/baseline/W1-summary.md |
 | **W2 D1-2** | D1-2 | **임계값·허용오차·RTO/RPO 확정** | gate-2-result.json |
+
+### D1 실측 결과 (2026-09-14)
+
+| 지표 | 측정값 | 판정 | 비고 |
+|---|---|---|---|
+| Gate 1 | allowlist diff=0 | ✅ PASS | 12툴 정확히 일치 |
+| turns/24h | 146건 | 기록 | avg ~82/일, 주말 감소 |
+| turns.source | unknown: 7160/7160 | ❌ Gate 6 우려 | provenance 0% |
+| observations/24h | 1건 | 기록 | headless에서 auto_log 미발동 |
+| day_cycle.timer | inactive | ⚠️ 확인 | worker 내부 동작 확인 필요 |
+| netdata | active | ✅ PASS | Observability infra 정상 |
+| hook overhead (mock) | avg 0.0004ms | 기록 | live 측정은 실제 사용 시에만 |
+| MCP 서버 | /health 200 | ✅ PASS | FastMCP Streamable HTTP |
+
+### D1 발견 이슈
+1. **turns.source 100% unknown** → Gate 6 위협, W2 백필 계획 필요
+2. **day_cycle.timer 미발견** → worker 내부 동작 확인 필요
+3. **auto_log 활용도 극히 낮음** → live 측정 시 확보 필요
 
 ---
 
