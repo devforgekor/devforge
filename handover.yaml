@@ -1,6 +1,7 @@
 last_checkpoint:
-  time: '2026-09-14T02:55:00.000000+00:00'
-  summary: '2026-09-14 opencode-rr ORP 모델명 설정 완료: opencode-rr.json에 ORP-1(free)/ORP-2(free)/ORP-3(free) 적용(ling→ORP-1, nemotron→ORP-2, north→ORP-3), refresh_openrouter_free_models.py에 ORP 자동할당 로직 확인, 핸드오버 YAML 갱신, opencode-structure.md 불일치 3곳 수정(날짜/모델할당/기본모델). RR 프록시 /health 정상, timer enabled/active.'
+  time: '2026-09-14T09:01:09.951965+00:00'
+  summary: '2026-09-14 opencode: 서버 리팩토링 검토·정비 — docs SSOT 정합(컷오버/ADR/표준대조/MCP감사), 신규 패키지 결함 수정, DB 정비(Alembic baseline·ORM↔live·schema.sql·shadow
+    DB·turns.source), CI/Docker/로그 정비, 은퇴(gen_architecture·Gemini 세션), 최종 계획 통합(final-plan)+의사결정 D1~D9, 외부 검토 브리프·Droplr'
   total_files: 0
   recent_files:
     data: []
@@ -9,7 +10,7 @@ last_checkpoint:
     source: []
     generated: []
   git: {}
-  task: Azure Golden Image MoE 재빌드 (완료)
+  task: null
 decisions:
 - id: nd01-01
   detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta
@@ -348,54 +349,54 @@ decisions:
     → /opt/workspace/azure/20137133/scripts/golden_image (azure repo commit 44a177b).'
   status: open
 - id: agi12-06
-  detail: 'opencode-rr 모델 표시명 ORP 방식 확정: opencode-rr.json에 ORP-1(free)/ORP-2(free)/ORP-3(free) 적용(모델: inclusionai/ling-3.0-flash-vl→ORP-1, nvidia/nemotron-3-ultra-550b-a55b→ORP-2, cohere/north-mini-code→ORP-3). refresh_openrouter_free_models.py 자동할당 로직 확인(line 239). docs/reports/opencode-structure.md 불일치 3곳 수정(날짜 2026-09-09→14, 모델할당, 기본모델).     RR 프록시 health 정상, timer enabled/active.'
+  detail: 'opencode-rr 모델 표시명 ORP 방식 확정: opencode-rr.json에 ORP-1(free)/ORP-2(free)/ORP-3(free) 적용(모델: inclusionai/ling-3.0-flash-vl→ORP-1,
+    nvidia/nemotron-3-ultra-550b-a55b→ORP-2, cohere/north-mini-code→ORP-3). refresh_openrouter_free_models.py 자동할당 로직 확인(line
+    239). docs/reports/opencode-structure.md 불일치 3곳 수정(날짜 2026-09-09→14, 모델할당, 기본모델).     RR 프록시 health 정상, timer enabled/active.'
   status: open
 - id: rf-ssot-01
   detail: 'Server refactor baseline landed as src/devforge package (src-layout + Ports & Adapters). devforge CLI (pyproject
     [project.scripts]) works: status / pipeline orchestrate|status / mcp serve / inference switch|status|ensure. Fixed blocking
     defects: domain/models.py missing TypeDecorator import (whole package import failed), cli.py IndentationError:75, duplicated
-    CLI in cli_cmds. Canonical docs: REFACTORING_PLAN.md v1.4 + adr/0001-0004 + API_REFERENCE.md + OPERATIONS_GUIDE.md +
-    ARCHITECTURE.md. SSOT synced: architecture/code-structure.yaml scans scripts/ + src/devforge/, system-architecture.md
-    §3.5, specs/schema.sql regenerated to match ORM (16 tables). Cutover PENDING: systemd/Quadlet still ExecStart scripts/*.'
+    CLI in cli_cmds. Canonical docs: REFACTORING_PLAN.md v1.4 + adr/0001-0004 + API_REFERENCE.md + OPERATIONS_GUIDE.md + ARCHITECTURE.md.
+    SSOT synced: architecture/code-structure.yaml scans scripts/ + src/devforge/, system-architecture.md §3.5, specs/schema.sql
+    regenerated to match ORM (16 tables). Cutover PENDING: systemd/Quadlet still ExecStart scripts/*.'
   status: open
 - id: rf-cutover-01
-  detail: '최종 통합 계획 수립: docs/plans/final-plan.md (active) = 컷오버(A~I) + MCP 툴 최적화(검토안 A~E) + 의사결정(D1~D9).
-    구 plans/cutover-remaining-plan.md·plans/open-decisions.md → docs/_archive/plans/ 로 superseded. 라이브는 systemd 유닛 22개 +
-    Quadlet 컨테이너 3개가 scripts/* 의존. devforge는 extract 파이프라인/CLI/api/mcp(부분)/config/logging/llm/storage만
-    구현, domain(watchdog/turn_collection/pipeline/model_management)·adapters(notification/research/proxy_utils)=0줄 stub.
-    공통 원칙 비파괴/병렬검증/1개씩. 전면 cutover는 도메인 구현 후.'
+  detail: '최종 통합 계획 수립: docs/plans/final-plan.md (active) = 컷오버(A~I) + MCP 툴 최적화(검토안 A~E) + 의사결정(D1~D9). 구 plans/cutover-remaining-plan.md·plans/open-decisions.md
+    → docs/_archive/plans/ 로 superseded. 라이브는 systemd 유닛 22개 + Quadlet 컨테이너 3개가 scripts/* 의존. devforge는 extract 파이프라인/CLI/api/mcp(부분)/config/logging/llm/storage만
+    구현, domain(watchdog/turn_collection/pipeline/model_management)·adapters(notification/research/proxy_utils)=0줄 stub. 공통
+    원칙 비파괴/병렬검증/1개씩. 전면 cutover는 도메인 구현 후.'
   status: open
 - id: rf-cutover-02
-  detail: '사용자 결정 반영(2026-09-14): (2) shadow DB 라이브 적용 완료(devforge_shadow schema + turns_shadow view +
-    review_facts_shadow). (4) gen_architecture.py 은퇴→_archive/ (호출 제거: system_sync.sh/day_cycle.sh/daily-structure.service),
-    docs/architecture/* 동결·수동 관리. Gemini 에이전트 세션 로직 은퇴→_archive/gemini-agent/ (gemini.py/gemini_core/gemini_mcp/
-    gemini_mon/gemini_quota/gemini_session_start.sh), gemini-session.service disable. gemini 모델 프록시(proxies/gemini_openai)와
-    세션로그 파서(lib/parsers/gemini.py)는 유지. (1 MCP전략, 3 worker 이관, 5 일정/인력)은 보류.'
+  detail: '사용자 결정 반영(2026-09-14): (2) shadow DB 라이브 적용 완료(devforge_shadow schema + turns_shadow view + review_facts_shadow).
+    (4) gen_architecture.py 은퇴→_archive/ (호출 제거: system_sync.sh/day_cycle.sh/daily-structure.service), docs/architecture/*
+    동결·수동 관리. Gemini 에이전트 세션 로직 은퇴→_archive/gemini-agent/ (gemini.py/gemini_core/gemini_mcp/ gemini_mon/gemini_quota/gemini_session_start.sh),
+    gemini-session.service disable. gemini 모델 프록시(proxies/gemini_openai)와 세션로그 파서(lib/parsers/gemini.py)는 유지. (1 MCP전략, 3
+    worker 이관, 5 일정/인력)은 보류.'
   status: open
 - id: rf-standard-01
-  detail: '업계 표준 대조 문서화(2026-09-14): docs/reports/industry-standard-comparison-20260914.md (5계층 프레임:
-    Capture/Transport/Ingestion/Storage·Retrieval/Extraction·Serving). 진단 3대 이탈점 — (a) 웹 수집(chrome-web) 파이프라인
-    미연결, (b) 리팩토링 MCP 계약 불일치(5 vs opencode 허용 12 — 툴 스프롤은 opencode tools allowlist로 이미 해소,
-    서버 노출 devforge 25·lsp 65 → 로드 devforge 12·lsp 13·yggdrasil 4 ≈ 33), (c) 로컬 8B 배치 추출(day_cycle, CPU-bound). 권고:
-    deterministic→소형로컬(grammar)→클라우드 escalation, 추출을 후보정/비동기로, MCP search_tools+ingest 복원+provenance.
-    결정 기록 adr/0005-extraction-routing.md·adr/0006-mcp-tool-surface.md (proposed). final-plan(§4 MCP 최적화, §5 Phase A~I, §7 D1~D9)에 통합.'
+  detail: '업계 표준 대조 문서화(2026-09-14): docs/reports/industry-standard-comparison-20260914.md (5계층 프레임: Capture/Transport/Ingestion/Storage·Retrieval/Extraction·Serving).
+    진단 3대 이탈점 — (a) 웹 수집(chrome-web) 파이프라인 미연결, (b) 리팩토링 MCP 계약 불일치(5 vs opencode 허용 12 — 툴 스프롤은 opencode tools allowlist로
+    이미 해소, 서버 노출 devforge 25·lsp 65 → 로드 devforge 12·lsp 13·yggdrasil 4 ≈ 33), (c) 로컬 8B 배치 추출(day_cycle, CPU-bound). 권고:
+    deterministic→소형로컬(grammar)→클라우드 escalation, 추출을 후보정/비동기로, MCP search_tools+ingest 복원+provenance. 결정 기록 adr/0005-extraction-routing.md·adr/0006-mcp-tool-surface.md
+    (proposed). final-plan(§4 MCP 최적화, §5 Phase A~I, §7 D1~D9)에 통합.'
   status: open
 - id: rf-mcp-audit-01
-  detail: 'MCP 툴 사용 감사(30일, opencode.db part): 로드 33툴 중 0회 9개. 판정 → Remove(lsp proxy_artifact_get/info/list,
-    find_symbol, inspect_symbol, get_symbol_source, detect_lsp_servers, yggdrasil list_plans; 후보 suggest_fixes/rename_symbol/start_lsp),
+  detail: 'MCP 툴 사용 감사(30일, opencode.db part): 로드 33툴 중 0회 9개. 판정 → Remove(lsp proxy_artifact_get/info/list, find_symbol,
+    inspect_symbol, get_symbol_source, detect_lsp_servers, yggdrasil list_plans; 후보 suggest_fixes/rename_symbol/start_lsp),
     Merge(deepdive_step_enter/exit/heartbeat/status→1툴 action; mem_*+obs_*→memory(action,kind); search_turns+search_similarity→mode;
     opencode-db list_tables+schema→1; yggdrasil deep_planning+sequential_thinking 검토). 목표 33→~16. 문서: reports/mcp-tool-audit-20260914.md.
     즉시 적용 가능(저위험): opencode.json tools에서 proxy_artifact_*(3)·list_plans·detect_lsp_servers false. (적용 보류 — 사용자 승인 대기)'
   status: open
 - id: rf-final-plan-01
-  detail: '최종 계획서 통합(2026-09-14): docs/plans/final-plan.md 단일 정본(MCP 툴 최적화 검토안 A~E, 툴 매핑 33→~12, Phase M0~M4,
-    컷오버 Phase A~I, 통합 의사결정 D1~D9). 구 cutover-remaining-plan.md·open-decisions.md → docs/_archive/plans/ (superseded).
-    참조 갱신(INDEX/REFACTORING_PLAN/리포트 2종/specs/ingest-provenance). 다음: D7~D9 선택 + M0(allowlist 컷) 착수.'
+  detail: '최종 계획서 통합(2026-09-14): docs/plans/final-plan.md 단일 정본(MCP 툴 최적화 검토안 A~E, 툴 매핑 33→~12, Phase M0~M4, 컷오버 Phase A~I,
+    통합 의사결정 D1~D9). 구 cutover-remaining-plan.md·open-decisions.md → docs/_archive/plans/ (superseded). 참조 갱신(INDEX/REFACTORING_PLAN/리포트
+    2종/specs/ingest-provenance). 다음: D7~D9 선택 + M0(allowlist 컷) 착수.'
   status: open
 - id: rf-review-01
-  detail: '외부 검토용 산출물(2026-09-14): docs/reports/review-brief-20260914.md (자가완결 — 구조·변화·근거·리뷰질문·용어집·붙여넣기 프롬프트).
-    Droplr(HTML) — 리뷰 브리프: https://d.pr/IFoWKE , 최종계획: https://d.pr/14w4o6 , 근거부록(업계표준+MCP감사): https://d.pr/KXEiPa .
-    검토 대상 = final-plan; 브리프가 컨텍스트 제공.'
+  detail: '외부 검토용 산출물(2026-09-14): docs/reports/review-brief-20260914.md (자가완결 — 구조·변화·근거·리뷰질문·용어집·붙여넣기 프롬프트). Droplr(HTML)
+    — 리뷰 브리프: https://d.pr/IFoWKE , 최종계획: https://d.pr/14w4o6 , 근거부록(업계표준+MCP감사): https://d.pr/KXEiPa . 검토 대상 = final-plan;
+    브리프가 컨텍스트 제공.'
   status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
@@ -406,16 +407,12 @@ known_issues:
   resolved: false
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
   resolved: false
-- text: 'Azure Qwen Deep Dive 검증 완료(2026-09-12): opencode azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2) 실제 호출 → deepdive_steps
-    DB DONE. 엔드포인트 curl finish_reason:"tool_calls" 정상.'
-  resolved: true
-- text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. SSOT
-    (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 →
-    차기 이미지 재빌드 시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
-  resolved: false
 - text: 'Azure 2 vCPU(FX2ms_v2 = 1 physical core/2 SMT threads) Spot 성능 실측: llama.cpp n_threads=1(물리 core 기준), -t 2 무효(prefill
-    14.28→14.36 tok/s, memory-bound). 실측 prefill ~14 tok/s(신규), 장시간/장문맥에서 6.7로 감소, generation ~2-4.5 tok/s(장문맥 0.5).
-    ctx 32768 RES ~33.5GB < MemoryMax 38G. SSOT(-c 32768) 반영 완료. 인터랙티브 Deep Dive 백엔드로는 부적합.'
+    14.28→14.36 tok/s, memory-bound). 실측 prefill ~14 tok/s(신규), 장시간/장문맥에서 6.7로 감소, generation ~2-4.5 tok/s(장문맥 0.5). ctx 32768
+    RES ~33.5GB < MemoryMax 38G. SSOT(-c 32768) 반영 완료. 인터랙티브 Deep Dive 백엔드로는 부적합.'
+  resolved: false
+- text: 'Azure Qwen Deep Dive 검증 미완: azureqwen provider로 Deep Dive 1회 실행은 opencode 재시작 필요(config 핫리로드 안 됨) + launch로 VM/터널
+    유지 상태여야 함. 엔드포인트 자체는 curl로 finish_reason:"tool_calls" 검증 완료.'
   resolved: false
 - text: azure_spot 모듈 config VM_SIZE=Standard_FX2mds_v2 vs runbook/azure-qwen=Standard_FX2ms_v2 (둘 다 2vCPU/42GiB, 모듈 배포는 mds로
     검증). 필요 시 통일.
@@ -430,6 +427,10 @@ known_issues:
     runs before session writes to handover.yaml, completed_log and decisions may get overwritten. Always check handover.yaml
     after session start.'
   resolved: false
+- text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. SSOT
+    (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
+    시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
+  resolved: false
 - text: 'day-verifier-b (qwen2.5-coder-7b Q4_K_M, :8083): 등록만 되어 있고 day_verify.py에서 실제 호출 없음 (single model port 8082만 사용).
     Legacy dead config. 제거해도 무방하지만 유지해도 무해. 문제 생기면 llm_client/__init__.py, model_registry.py에서 제거.'
   resolved: false
@@ -437,14 +438,25 @@ known_issues:
     uses raw SSL sockets with hardcoded IPs (bypasses /etc/hosts and any DNS-level blocks). Native Gemini protocol (proxies/gemini.py)
     also works independently. Reference: original issue nki05-01 now resolved for both proxies.'
   resolved: false
+- text: devforge image does not ship tests/ → in-container `DEVFORGE_LLM_REPLAY=1` needs fixtures mounted (DEVFORGE_FIXTURE_DIR
+    + -v .../tests/fixtures/llm_recordings:/fixtures:ro), else replay finds no fixture (0 facts).
+  resolved: false
 - text: 'devforge-mcp MCP tools (action_write, action_poll_results) require container restart for FastMCP tool registry update.
     Does not auto-reload on file change. Restart command: systemctl --user restart container-devforge-mcp.'
+  resolved: false
+- text: 'Docs still inconsistent (P2 backlog): OPERATIONS_GUIDE `mcp serve` port role; API_REFERENCE vs system-architecture
+    ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
+    placement.'
   resolved: false
 - text: 'extraction: equals predicate still appears 1/turn even with Golden Set (30B MoE, PARALLEL=1). May need stronger GBNF
     constraints or prompt refinement.'
   resolved: false
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
+  resolved: false
+- text: 'OPEN(2026-09-14): 최종 계획(D1~D9) 결정 대기. 저위험 M0(0회 MCP 툴 allowlist false: lsp proxy_artifact_{get,info,list}· detect_lsp_servers·yggdrasil
+    list_plans) 미적용(사용자 승인 대기). 컷오버 도메인(watchdog/turn_collection/pipeline/ model_management)+웹수집/ingest+추출 라우팅(ADR-0005) 미구현
+    — live는 여전히 scripts/*.'
   resolved: false
 - text: OpenCode 세션 시작 시 devforge-mcp(HTTP :8000) 로드가 실패하면 그 세션에서는 재연결하지 않아 deepdive_step_* 툴을 쓸 수 없다(복구해도 새 세션 필요). 해당 세션은
     cli.py task/obs로 기록.
@@ -464,6 +476,9 @@ known_issues:
   resolved: false
 - text: PostgreSQL shared_buffers 512MB — applied via restart. Ok.
   resolved: false
+- text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
+    functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
+  resolved: false
 - text: 'Reranker --batch-size 1024 on 22GB OCI ARM: RSS ~4.6GB, safe. Swap 73% used (2.9/4GB) despite swappiness=10, indicating
     genuine RAM pressure. Do not increase batch-size beyond 1024 without verifying free memory >6GB.'
   resolved: false
@@ -479,41 +494,6 @@ known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
   resolved: false
-- text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed
-    and functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
-  resolved: false
-- text: 'CI (2026-09-14): ruff check/format, mypy src/ (strict), import-linter pass locally. Added README.md (referenced
-    by pyproject but missing) + rebuilt Dockerfile (non-editable wheel) + declared structlog/pyyaml (imported but undeclared
-    → container runtime ModuleNotFoundError). Image builds; `devforge --help` runs in container.'
-  resolved: true
-- text: 'Docs still inconsistent (P2 backlog): OPERATIONS_GUIDE `mcp serve` port role; API_REFERENCE vs system-architecture
-    ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
-    placement.'
-  resolved: false
-- text: 'Alembic: live DB had no alembic_version. env.py fixed (asyncpg async engine + correct src path + additive-only
-    include_object filter); `upgrade head --sql` validated (16 tables); live baselined via `alembic stamp head`
-    (2026-09-14) → alembic current = 20260914_fix_initial_schema. Also applied additive DDL `turns.source` (backup
-    /opt/ai_data/backups/pre_source_alter_20260914T052218Z.dump); ORM Turn.embedding removed (not in live).
-    E2E verified in svc pod: pipeline status (7122 turns), orchestrate dry-run replay (5/5, 5 facts), write path
-    (throwaway turn → 2 facts + state embedded, cleaned up).'
-  resolved: true
-- text: 'ORM↔live reconciliation DONE (2026-09-14): aligned domain/models.py to live —
-    BIGINT identity PKs, REAL floats, live nullability, FK ondelete semantics, index/unique names & gin opclasses,
-    removed phantom FK (file_registry.turn_id), changed MetaData(schema="public")→MetaData(), and fixed alembic
-    include_object (do not filter reflected FKs). `alembic check` = "No new upgrade operations detected."
-    schema.sql regenerated + validated. E2E re-verified (pipeline status 7126 turns; dry-run replay 3/3).'
-  resolved: true
-- text: 'devforge image does not ship tests/ → in-container `DEVFORGE_LLM_REPLAY=1` needs fixtures mounted
-    (DEVFORGE_FIXTURE_DIR + -v .../tests/fixtures/llm_recordings:/fixtures:ro), else replay finds no fixture (0 facts).'
-  resolved: false
-- text: 'structlog double output fixed (2026-09-14): core/logging.py uses wrap_for_formatter + ProcessorFormatter
-    (remove_processors_meta); console & JSON modes emit exactly once, no _from_structlog noise.'
-  resolved: true
-- text: 'WRITE-PATH E2E (2026-09-14) fixed 2 real bugs in adapters/driven/storage/extract_adapter.py: (1) used generic
-    `sqlalchemy.insert` instead of `dialects.postgresql.insert` → `on_conflict_do_update` AttributeError; (2) upsert used
-    `stmt.inserted` instead of `stmt.excluded`. Verified with a throwaway conversation/turn + replay: store_facts wrote 2
-    facts (extract_model=day_extract) and pipeline_state→embedded; test data cleaned up. DB state valid.'
-  resolved: true
 completed_log:
 - OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
 - PostgreSQL tuning (effective_io_concurrency=200, effective_cache_size=1GB, shared_buffers=512MB). day-cycle.timer removed
@@ -592,6 +572,11 @@ completed_log:
 - '2026-09-12: Azure Golden Image MoE 재빌드 — llm-qwen-27b:2026.09.3 등록(MoE Qwen3-30B-A3B-Q4_K_M + llama.cpp b10919 + llm.service
   --jinja), 배포 툴콜 검증(finish_reason:tool_calls), 임시 리소스 CLEAN. yearly_refresh.sh/runbook/endpoint doc 정합, opencode azureqwen
   provider 등록.'
-- '2026-09-14: Azure azureqwen Deep Dive E2E 검증 성공 — opencode run -m azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2) →
-  deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
+- (2026-09-14, opencode) 서버 대규모 리팩토링 검토·정비 — docs 전수 검토→SSOT 정합(컷오버 단계, ADR 0001~0006, 업계표준 대조, MCP 30일 감사). 신규 패키지 결함 수정(domain/models
+  TypeDecorator 누락, cli.py IndentationError, on_conflict pg_insert/excluded). DB 정비(Alembic baseline·ORM↔live 재정합·schema.sql
+  16테이블 재생성·shadow DB(devforge_shadow) 적용·turns.source 추가). CI/빌드(README·Dockerfile·structlog/pyyaml 의존성) green, structlog
+  이중 출력 제거. 은퇴(gen_architecture.py·Gemini 에이전트 세션→_archive). 계획 단일 통합(docs/plans/final-plan.md) + 의사결정 D1~D9, 외부 검토 브리프 작성·Droplr
+  제공.
+- '2026-09-14: Azure azureqwen Deep Dive E2E 검증 성공 — opencode run -m azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2)
+  → deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
   -t 2 무효(1 physical core/SMT, memory-bound). report docs/reports/azure-deepdive-e2e-verification-20260914.md.'
