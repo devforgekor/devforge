@@ -14,6 +14,8 @@ from typing import Any
 
 from sqlalchemy import (
     ARRAY,
+    REAL,
+    BigInteger,
     Boolean,
     Column,
     Date,
@@ -59,7 +61,7 @@ class Vector(TypeDecorator[Any]):
         return f"vector({dimensions})"
 
 
-metadata_obj = MetaData(schema="public")
+metadata_obj = MetaData()
 
 
 class Base(DeclarativeBase):
@@ -87,9 +89,7 @@ class Turn(Base):
     __tablename__ = "turns"
 
     id: Any = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(
-        PG_UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
-    )
+    conversation_id = Column(PG_UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False)
     seq = Column(Integer, nullable=False)
     user_turn = Column(Text, nullable=False)
     thinking = Column(Text)
@@ -99,8 +99,8 @@ class Turn(Base):
     room = Column(Text)
     agent = Column(Text)
     source_message_id = Column(Text)
-    pipeline_state = Column(Text, nullable=False, server_default=sql_text("'scanned'"))
-    source = Column(Text, server_default=sql_text("'unknown'"))
+    pipeline_state = Column(Text, nullable=True, server_default=sql_text("'scanned'"))
+    source = Column(Text, nullable=False, server_default=sql_text("'unknown'"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
@@ -120,7 +120,11 @@ class Turn(Base):
             postgresql_using="gin",
         ),
         Index("idx_turns_meta_type", sql_text("(meta->>'type')")),
-        Index("idx_turns_pipeline_state", "pipeline_state"),
+        Index(
+            "idx_turns_pipeline_state",
+            "pipeline_state",
+            postgresql_where=sql_text("pipeline_state IS NOT NULL"),
+        ),
     )
 
 
@@ -141,7 +145,12 @@ class Observation(Base):
     __table_args__ = (
         Index("idx_observations_created", sql_text("created_at DESC")),
         Index("idx_observations_category", "category"),
-        Index("idx_observations_tags", postgresql_using="gin", postgresql_with={}),
+        Index(
+            "idx_observations_tags",
+            "tags",
+            postgresql_using="gin",
+            postgresql_ops={"tags": "jsonb_path_ops"},
+        ),
         Index(
             "idx_observations_trgm", sql_text("observation gin_trgm_ops"), postgresql_using="gin"
         ),
@@ -164,15 +173,15 @@ class ReviewFact(Base):
         PG_UUID(as_uuid=True), ForeignKey("turns.id", ondelete="CASCADE"), nullable=False
     )
     fact_index = Column(Integer, nullable=False)
-    fact_type = Column(Text, nullable=False)
-    evidence = Column(Text, nullable=False)
-    extract_model = Column(Text, nullable=False)
-    verdict = Column(Text, server_default=sql_text("'passed'"))
-    source = Column(Text, nullable=False)
+    fact_type = Column(Text, nullable=True)
+    evidence = Column(Text, nullable=True)
+    extract_model = Column(Text, nullable=True)
+    verdict = Column(Text, nullable=False, server_default=sql_text("'pending'"))
+    source = Column(Text, nullable=True)
     fact_action = Column(Text, server_default=sql_text("'extracted'"))
     prompt_tokens = Column(Integer)
     gen_tokens = Column(Integer)
-    elapsed_ms = Column(Float)
+    elapsed_ms = Column(REAL)
     faithful_score = Column(Float)
     faithful_method = Column(Text)
     nli_verdict = Column(Text)
@@ -188,15 +197,14 @@ class ReviewFact(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
-        Index("idx_review_turn", "turn_id"),
-        Index("idx_review_type", "fact_type"),
-        Index("idx_review_verdict", "verdict"),
-        Index("idx_review_source", "source"),
+        Index("idx_review_facts_turn", "turn_id"),
+        Index("idx_review_facts_created", sql_text("created_at DESC")),
+        Index("idx_review_facts_subject_predicate", "subject", "predicate"),
         UniqueConstraint(
             "turn_id",
             "fact_index",
             "extract_model",
-            name="uq_review_facts_turn_fact_model",
+            name="review_facts_turn_id_fact_index_extract_model_key",
         ),
     )
 
@@ -228,11 +236,11 @@ class MCPDec(Base):
 
     id: Any = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(
-        PG_UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE")
+        PG_UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="SET NULL")
     )
-    summary = Column(Text)
+    summary = Column(Text, nullable=False)
     detail = Column(Text)
-    turn_ids = Column(ARRAY(PG_UUID(as_uuid=True)), server_default=sql_text("'{}'"))
+    turn_ids = Column(ARRAY(PG_UUID(as_uuid=True)), nullable=False, server_default=sql_text("'{}'"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
@@ -253,13 +261,12 @@ class Embedding(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
-        Index(
-            "idx_embeddings_unique",
+        UniqueConstraint(
             "source_type",
             "source_id",
             "model_name",
             "chunk_index",
-            unique=True,
+            name="embeddings_source_type_source_id_model_name_chunk_index_key",
         ),
         Index("idx_embeddings_source", "source_type", "source_id"),
         Index("idx_embeddings_source_chunk", "source_type", "source_id", "chunk_index"),
@@ -272,7 +279,7 @@ class Embedding(Base):
 class WorklogEntry(Base):
     __tablename__ = "worklog_entries"
 
-    id: Any = Column(Integer, primary_key=True, autoincrement=True)
+    id: Any = Column(BigInteger, primary_key=True, autoincrement=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     date = Column(Date, nullable=False)
     title = Column(Text, nullable=False)
@@ -288,7 +295,7 @@ class WorklogEntry(Base):
 
     __table_args__ = (
         Index("idx_worklog_date", sql_text("date DESC")),
-        Index("idx_worklog_tags", postgresql_using="gin"),
+        Index("idx_worklog_tags", "tags", postgresql_using="gin"),
         Index("idx_worklog_unique", "date", "title", unique=True),
         Index(
             "idx_worklog_one_in_progress",
@@ -305,7 +312,7 @@ class WorklogEntry(Base):
 class ActivityLog(Base):
     __tablename__ = "activity_log"
 
-    id: Any = Column(Integer, primary_key=True, autoincrement=True)
+    id: Any = Column(BigInteger, primary_key=True, autoincrement=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     type = Column(Text, nullable=False)
     source = Column(Text, nullable=False)
@@ -318,7 +325,7 @@ class ActivityLog(Base):
     git_commit_hash = Column(Text)
     run_id = Column(Text)
     trace_id = Column(Text)
-    parent_id = Column(Integer)
+    parent_id = Column(BigInteger)
     turn_ids = Column(ARRAY(PG_UUID(as_uuid=True)), server_default=sql_text("'{}'"))
     summary_status = Column(Text, nullable=False, server_default=sql_text("'raw'"))
     queue_status = Column(Text, nullable=False, server_default=sql_text("'unprocessed'"))
@@ -328,8 +335,8 @@ class ActivityLog(Base):
         Index("idx_activity_created", sql_text("created_at DESC")),
         Index("idx_activity_type", "type"),
         Index("idx_activity_source", "source"),
-        Index("idx_activity_tags", postgresql_using="gin"),
-        Index("idx_activity_body_gin", postgresql_using="gin"),
+        Index("idx_activity_tags", "tags", postgresql_using="gin"),
+        Index("idx_activity_body_gin", "body", postgresql_using="gin"),
         Index(
             "idx_activity_commit",
             "git_commit_hash",
@@ -374,19 +381,19 @@ class FileRegistry(Base):
     id: Any = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     filename = Column(Text, nullable=False)
     path = Column(Text, nullable=False)
-    size = Column(Integer)
+    size = Column(BigInteger)
     hash = Column(Text)
     mime_type = Column(Text)
     source = Column(Text, nullable=False)
     description = Column(Text)
     tags = Column(ARRAY(Text), server_default=sql_text("'{}'"))
-    turn_id = Column(PG_UUID(as_uuid=True), ForeignKey("turns.id"))
+    turn_id = Column(PG_UUID(as_uuid=True))
     blob_url = Column(Text)
     sender = Column(Text)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
-        Index("idx_file_registry_tags", postgresql_using="gin"),
+        Index("idx_file_registry_tags", "tags", postgresql_using="gin"),
         Index("idx_file_registry_source", "source"),
         Index(
             "idx_file_registry_desc_trgm",
@@ -419,7 +426,7 @@ class ReflexRule(Base):
     action_type = Column(Text, nullable=False)
     action_params = Column(JSONB, server_default=sql_text("'{}'"))
 
-    confidence = Column(Float, server_default=sql_text("0.0"))
+    confidence = Column(REAL, server_default=sql_text("0.0"))
     status = Column(Text, nullable=False, server_default=sql_text("'candidate'"))
 
     description = Column(Text)
@@ -441,7 +448,12 @@ class ReflexRule(Base):
             sql_text("trigger_pattern gin_trgm_ops"),
             postgresql_using="gin",
         ),
-        Index("idx_reflex_rules_tags", postgresql_using="gin"),
+        Index(
+            "idx_reflex_rules_tags",
+            "trigger_tags",
+            postgresql_using="gin",
+            postgresql_ops={"trigger_tags": "jsonb_path_ops"},
+        ),
         Index("idx_reflex_rules_updated", sql_text("updated_at DESC")),
     )
 
@@ -471,7 +483,7 @@ class DeepDiveStep(Base):
     __table_args__ = (
         Index("idx_deepdive_steps_status", "status", "started_at"),
         Index("idx_deepdive_steps_session", "session_id"),
-        Index("uq_deepdive_session_step", "session_id", "step", unique=True),
+        UniqueConstraint("session_id", "step", name="deepdive_steps_session_id_step_key"),
     )
 
 
@@ -481,7 +493,7 @@ class DeepDiveStep(Base):
 class WatchdogIncident(Base):
     __tablename__ = "watchdog_incidents"
 
-    id: Any = Column(Integer, primary_key=True, autoincrement=True)
+    id: Any = Column(BigInteger, primary_key=True, autoincrement=True)
     dedup_key = Column(Text, nullable=False)
     component = Column(Text, nullable=False)
     status = Column(Text, nullable=False, server_default=sql_text("'open'"))
@@ -508,7 +520,7 @@ class WatchdogIncident(Base):
 class GoldenImageVersion(Base):
     __tablename__ = "golden_image_versions"
 
-    id: Any = Column(Integer, primary_key=True, autoincrement=True)
+    id: Any = Column(BigInteger, primary_key=True, autoincrement=True)
     version = Column(Text, nullable=False, unique=True)
     image_id = Column(Text)
     status = Column(Text, nullable=False, server_default=sql_text("'active'"))
@@ -524,7 +536,7 @@ class GoldenImageVersion(Base):
 class DeploymentLog(Base):
     __tablename__ = "deployment_logs"
 
-    id: Any = Column(Integer, primary_key=True, autoincrement=True)
+    id: Any = Column(BigInteger, primary_key=True, autoincrement=True)
     vm_name = Column(Text, nullable=False)
     version = Column(Text, ForeignKey("golden_image_versions.version"))
     status = Column(Text, nullable=False)
@@ -542,8 +554,8 @@ class DeploymentLog(Base):
 class HealthCheck(Base):
     __tablename__ = "health_checks"
 
-    id: Any = Column(Integer, primary_key=True, autoincrement=True)
-    deployment_id = Column(Integer, ForeignKey("deployment_logs.id", ondelete="CASCADE"))
+    id: Any = Column(BigInteger, primary_key=True, autoincrement=True)
+    deployment_id = Column(BigInteger, ForeignKey("deployment_logs.id", ondelete="CASCADE"))
     success = Column(Boolean, nullable=False)
     latency_ms = Column(Integer)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

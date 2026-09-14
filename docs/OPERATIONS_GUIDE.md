@@ -68,20 +68,20 @@ export DEVFORGE_SYSTEM_MODE=day  # or night
 
 ### Alembic Migrations
 ```bash
-# Check current version
+# Run where the DB is reachable (e.g. inside the svc pod / container)
 alembic current
-
-# Upgrade to latest
 alembic upgrade head
-
-# Downgrade (rollback)
 alembic downgrade -1
+alembic revision --autogenerate -m "description"   # review before applying
 ```
+> Live DB baselined 2026-09-14 via `alembic stamp head`; ORM reconciled to live so
+> `alembic check` is clean. Autogenerate is additive-only (no destructive drops) and
+> needs review. See `docs/adr/0004-alembic-migrate.md`.
 
 ### Schema
-- 16 tables defined in `docs/specs/schema.sql`
+- 16 app tables defined in `docs/specs/schema.sql`
 - Migrations in `alembic/versions/`
-- Source of truth: `docs/specs/schema.sql`
+- ORM (app schema): `src/devforge/domain/models.py`
 
 ## Testing
 

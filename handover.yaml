@@ -358,6 +358,12 @@ decisions:
     ARCHITECTURE.md. SSOT synced: architecture/code-structure.yaml scans scripts/ + src/devforge/, system-architecture.md
     §3.5, specs/schema.sql regenerated to match ORM (16 tables). Cutover PENDING: systemd/Quadlet still ExecStart scripts/*.'
   status: open
+- id: rf-cutover-01
+  detail: 'Cutover 잔여 계획 수립: docs/plans/cutover-remaining-plan.md (proposed). 라이브는 systemd 유닛 22개 +
+    Quadlet 컨테이너 3개가 scripts/* 의존. devforge는 extract 파이프라인/CLI/api/mcp(부분)/config/logging/llm/storage만
+    구현, domain(watchdog/turn_collection/pipeline/model_management)·adapters(notification/research/proxy_utils)=0줄 stub.
+    전환 단계 A~I(구현→수락→스위치→롤백), 공통 원칙 비파괴/병렬검증/1개씩. 전면 cutover는 도메인 구현 후.'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -451,16 +457,25 @@ known_issues:
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
     placement.'
   resolved: false
-- text: 'Alembic NOT initialized on live DB (no alembic_version table) → `alembic upgrade head` would fail (initial
-    create_table collides with existing tables). Baseline before migrations. 2026-09-14: applied additive DDL
-    `turns.source` (backup /opt/ai_data/backups/pre_source_alter_20260914T052218Z.dump); refactored ORM Turn.embedding
-    removed (not present in live DB). E2E verified inside svc pod: `devforge pipeline status` (7122 turns) and
-    `pipeline orchestrate --dry-run` replay (5/5, 5 facts).'
-  resolved: false
+- text: 'Alembic: live DB had no alembic_version. env.py fixed (asyncpg async engine + correct src path + additive-only
+    include_object filter); `upgrade head --sql` validated (16 tables); live baselined via `alembic stamp head`
+    (2026-09-14) → alembic current = 20260914_fix_initial_schema. Also applied additive DDL `turns.source` (backup
+    /opt/ai_data/backups/pre_source_alter_20260914T052218Z.dump); ORM Turn.embedding removed (not in live).
+    E2E verified in svc pod: pipeline status (7122 turns), orchestrate dry-run replay (5/5, 5 facts), write path
+    (throwaway turn → 2 facts + state embedded, cleaned up).'
+  resolved: true
+- text: 'ORM↔live reconciliation DONE (2026-09-14): aligned domain/models.py to live —
+    BIGINT identity PKs, REAL floats, live nullability, FK ondelete semantics, index/unique names & gin opclasses,
+    removed phantom FK (file_registry.turn_id), changed MetaData(schema="public")→MetaData(), and fixed alembic
+    include_object (do not filter reflected FKs). `alembic check` = "No new upgrade operations detected."
+    schema.sql regenerated + validated. E2E re-verified (pipeline status 7126 turns; dry-run replay 3/3).'
+  resolved: true
 - text: 'devforge image does not ship tests/ → in-container `DEVFORGE_LLM_REPLAY=1` needs fixtures mounted
-    (DEVFORGE_FIXTURE_DIR + -v .../tests/fixtures/llm_recordings:/fixtures:ro), else replay finds no fixture (0 facts).
-    Also structlog logs are double-emitted (from_structlog) — logger configured twice.'
+    (DEVFORGE_FIXTURE_DIR + -v .../tests/fixtures/llm_recordings:/fixtures:ro), else replay finds no fixture (0 facts).'
   resolved: false
+- text: 'structlog double output fixed (2026-09-14): core/logging.py uses wrap_for_formatter + ProcessorFormatter
+    (remove_processors_meta); console & JSON modes emit exactly once, no _from_structlog noise.'
+  resolved: true
 - text: 'WRITE-PATH E2E (2026-09-14) fixed 2 real bugs in adapters/driven/storage/extract_adapter.py: (1) used generic
     `sqlalchemy.insert` instead of `dialects.postgresql.insert` → `on_conflict_do_update` AttributeError; (2) upsert used
     `stmt.inserted` instead of `stmt.excluded`. Verified with a throwaway conversation/turn + replay: store_facts wrote 2

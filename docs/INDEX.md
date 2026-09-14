@@ -82,9 +82,11 @@
 | 운영 가이드 | `OPERATIONS_GUIDE.md` | active |
 | 설계 결정 기록(ADR) | `adr/0001-config-priority.md` ~ `adr/0004-alembic-migrate.md` | record |
 | 시스템 전체 구조 | `system-architecture.md` (§3.5 코드 레이어) | active |
+| **Cutover 잔여 계획** | `plans/cutover-remaining-plan.md` | proposed |
 | 이전 구조 정리(완료) | `plans/code-size-refactoring.md`, `reports/handover-refactoring.md` | record |
 
 ## 최근 변경 (2026-09-14)
+- **Cutover 잔여 계획 수립**: `scripts/*` → `devforge` 전환을 단계(A~I)·수락기준·롤백까지 정의 — [`plans/cutover-remaining-plan.md`](./plans/cutover-remaining-plan.md). (현재 라이브 유닛 22개+컨테이너 3개 의존, 다수 도메인 미구현)
 - **SSOT 동기화**: `architecture/code-structure.yaml`이 신규 `src/devforge/` 패키지를 포함하도록 생성기(`gen_architecture.py`) 확장(62 그룹/377 파일). `system-architecture.md`에 §3.5 코드 레이어 추가(컷오버 미완료 명시). 리팩토링 문서(REFACTORING_PLAN/ARCHITECTURE/MIGRATION_GUIDE/LLM_PROVIDER_PLAN/API_REFERENCE/OPERATIONS_GUIDE/adr)를 INDEX에 등록. `CLAUDE.yaml`·`blueprint.yaml`·`handover.yaml`에 리팩토링 기준 반영. `docs/specs/schema.sql`을 ORM과 일치하도록 재생성(16 테이블).
 - Azure `azureqwen` Deep Dive **E2E 검증 성공**(opencode → `deepdive_step_enter/exit` → DB `DONE`) — [`reports/azure-deepdive-e2e-verification-20260914.md`](./reports/azure-deepdive-e2e-verification-20260914.md).
 - 골든 이미지 ctx 결함(8192 < opencode ~16.7k) 발견 → **SSOT `-c 32768`** 정정([`runbooks/runbook-golden-image.md`](./runbooks/runbook-golden-image.md), `azure:20137133/.../yearly_refresh.sh`). `-t 2` 무효(1 core/SMT, memory-bound).

@@ -2,8 +2,11 @@
 
 Provides:
   - get_logger(): returns a pre-configured structlog logger
-  - LoggingConfig: Pydantic-settings-based config
   - setup_logging(): call once at app startup
+
+Uses the canonical structlog + stdlib integration: events are wrapped with
+``ProcessorFormatter.wrap_for_formatter`` and rendered exactly ONCE by the
+stdlib ``ProcessorFormatter`` (avoids double emission / ``_from_structlog`` noise).
 
 Usage:
     from devforge.core.logging import get_logger
@@ -15,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 from structlog.processors import JSONRenderer as _JSONRenderer
@@ -29,7 +32,7 @@ def setup_logging(
     format_json: bool = False,
     component: str = "devforge",
 ) -> structlog.BoundLogger:
-    """Configure structlog and return a logger instance.
+    """Configure structlog + stdlib logging and return a logger.
 
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR)
@@ -38,54 +41,36 @@ def setup_logging(
     """
     numeric_level = getattr(logging, level.upper(), logging.INFO)
 
-    # Configure stdlib logging
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(numeric_level)
+    shared_processors: list[Any] = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+    ]
 
-    if format_json:
-        formatter = ProcessorFormatter(
-            foreign_pre_chain=[
-                structlog.contextvars.merge_contextvars,
-                structlog.processors.add_log_level,
-                structlog.processors.TimeStamper(fmt="iso"),
-            ],
-            processors=[
-                _JSON_RENDERER(),
-            ],
-        )
-    else:
-        formatter = ProcessorFormatter(
-            foreign_pre_chain=[
-                structlog.contextvars.merge_contextvars,
-                structlog.processors.add_log_level,
-                structlog.processors.TimeStamper(fmt="iso"),
-            ],
-            processors=[
-                structlog.dev.ConsoleRenderer(),
-            ],
-        )
-
-    handler.setFormatter(formatter)
-    logging.basicConfig(
-        level=numeric_level,
-        handlers=[handler],
-        force=True,
-    )
-
-    # Configure structlog
+    # structlog → stdlib: wrap so the ProcessorFormatter renders the event once.
     structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.StackInfoRenderer(),
-            structlog.dev.ConsoleRenderer() if not format_json else _JSON_RENDERER(),
-        ],
+        processors=[*shared_processors, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
         wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
+    renderer: Any = _JSON_RENDERER() if format_json else structlog.dev.ConsoleRenderer()
+    formatter = ProcessorFormatter(
+        foreign_pre_chain=shared_processors,
+        processors=[
+            ProcessorFormatter.remove_processors_meta,
+            renderer,
+        ],
+    )
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+
+    logging.basicConfig(level=numeric_level, handlers=[handler], force=True)
 
     return get_logger(component)
 
