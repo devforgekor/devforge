@@ -310,8 +310,6 @@ class PostgresObservationRepository(ObservationRepository):
         query: str,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        from devforge.domain.models import Observation
-
         async with self._gateway.session() as db:
             stmt = text("""
                 SELECT o.id, o.observation, o.category, o.source,
