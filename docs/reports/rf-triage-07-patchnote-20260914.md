@@ -204,7 +204,7 @@
 | turns.source | 0 unknown — legacy:pre-2026-09 7,163 + opencode 17 |
 | observations/24h | 1 |
 | pipeline | pending:1630, verified:2276, embedded:3192, embed_skipped:77 |
-| hook overhead | avg 0.0004ms (mock) |
+| hook overhead | avg **458.76ms** (live) — 최초 mock 0.0004ms는 측정 버그로 무효 |
 | MCP health | healthy (18 tools) |
 
 > turns 수치는 매일 증가 (W1 측정 기간 중 계속 유입)
@@ -212,6 +212,30 @@
 ### 자동 측정
 - `baseline-daily.timer`: 매일 00:00 UTC, D2~D7 자동 측정
 - 출력: `docs/ops/baseline/2026-09-XX.json`
+
+---
+
+## 9b. day_cycle 활성화 + hook 재측정 (2026-09-14)
+
+### day_cycle 활성화
+
+| 항목 | 내용 |
+|---|---|
+| 근본 원인 | `devforge-inference`가 `--no-mmap` 인자로 기동 실패 (llama.cpp b10920+에서 플래그 제거) |
+| 수정 | `--no-mmap` → `--load-mode none` (2곳: `scripts/lib/pod_manager/__init__.py`, `/opt/ai_data/scripts/inference-entrypoint.sh`) |
+| 결과 | inference 8080-8084 정상 기동, day_cycle LLM 호출 진행 |
+| 설계 | day_cycle은 타이머 아님 — **watchdog 이벤트 기반** (pending 감지 시 기동) |
+| 잔여 | enrich에서 llama-server 연결 재설정 반복 (ARM CPU 메모리 압박) |
+
+### hook overhead 재측정
+
+| 항목 | 내용 |
+|---|---|
+| 최초 (무효) | avg 0.0004ms (safe mock) — 측정 스크립트가 `tool_input={}` 전달 → early-return만 측정 |
+| 수정 | `measure-hook-overhead.py`가 실제 command(`pytest scripts/tests/`) 전달 |
+| live 실측 | avg **458.76ms**, p50 440.79ms, p95 636.29ms, p99 1313.18ms |
+| 원인 | `_handle_bash`가 psql 서브프로세스 2회 호출 (pretool UPDATE + observe INSERT) |
+| 정리 | test observations 100건 삭제 |
 
 ---
 

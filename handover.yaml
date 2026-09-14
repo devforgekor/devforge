@@ -435,6 +435,8 @@ decisions:
     (8) 양방향 검증: Forward(리팩토링 — 6/6 도구 + ingest E2E auto-create/idempotency/HTTP surface) + Backward(레거시 롤백 <10초). V1-V8 9/9 PASS.
     (9) 컨테이너 최적화: pip cache(/opt/ai_data/pip-cache, 17 wheels, --no-index --find-links), 기동 ~2초 (was 10-30초).
     (10) SSOT 문서: docs/reports/rf-triage-07-patchnote-20260914.md (D7 후 참조).
+    (11) day_cycle 활성화: inference `--no-mmap`(llama.cpp b10920+ 제거) → `--load-mode none` (pod_manager/__init__.py + /opt/ai_data/scripts/inference-entrypoint.sh). watchdog 이벤트 기반 기동 확인. 잔여: enrich LLM 연결 재설정 (ARM 메모리 압박).
+    (12) hook overhead 재측정: 최초 mock 0.0004ms 무효(measure 스크립트 tool_input 버그) → live avg 458.76ms/p95 636ms/p99 1313ms. test obs 100건 정리.
     Co-authored-by: opencode <opencode@devforge'
   status: closed
 known_issues:

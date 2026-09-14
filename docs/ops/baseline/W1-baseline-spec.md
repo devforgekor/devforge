@@ -121,9 +121,9 @@ if __name__ == "__main__":
 | turns/24h | 146건 | 기록 | avg ~82/일, 주말 감소 |
 | turns.source | unknown: 7160/7160 | ❌ Gate 6 우려 | provenance 0% |
 | observations/24h | 1건 | 기록 | headless에서 auto_log 미발동 |
-| day_cycle.timer | inactive | ⚠️ 확인 | worker 내부 동작 확인 필요 |
+| day_cycle | 활성 (watchdog 기동) | ✅ 정상 | 타이머 아님 — watchdog 이벤트 기반 |
 | netdata | active | ✅ PASS | Observability infra 정상 |
-| hook overhead (mock) | avg 0.0004ms | 기록 | live 측정은 실제 사용 시에만 |
+| hook overhead (live) | avg 458.76ms | ⚠️ 재측정 | 최초 mock 0.0004ms는 측정 버그로 무효 |
 | MCP 서버 | /health 200 | ✅ PASS | FastMCP Streamable HTTP |
 
 ### D1 발견 이슈
@@ -133,8 +133,9 @@ if __name__ == "__main__":
    - **기존 turns**: 변경 불가 → `legacy:pre-2026-09` 마커 필요
    - **신규 turns**: source 정상 기록 → Gate 6 통과 가능 (D2-D7 확인)
    - 상세: `docs/ops/provenance-analysis.md`
-2. **day_cycle.timer 미발견** → devforge-day-cycle.service activating (worker 내부 동작 확인 필요)
-3. **auto_log 활용도 극히 낮음** → observations 24h: 1건 (headless 세션) → live 측정 시 확보 필요
+2. **day_cycle 기동 실패** → ✅ 해결 (2026-09-14): inference `--no-mmap` → `--load-mode none`. watchdog 이벤트 기반 정상 기동. 잔여: enrich 연결 재설정 (ARM 메모리).
+3. **hook overhead 측정 버그** → ✅ 해결 (2026-09-14): mock 0.0004ms 무효 → live avg 458.76ms 재측정.
+4. **auto_log 활용도 극히 낮음** → observations 24h: 1건 (headless 세션)
 
 ---
 
