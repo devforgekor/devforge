@@ -1,8 +1,6 @@
 last_checkpoint:
-  time: '2026-09-12T04:10:59.698957+00:00'
-  summary: '2026-09-12 Azure Golden Image MoE 재빌드 완료: gallery llm-qwen-27b:2026.09.3 등록(MoE Qwen3-30B-A3B-Q4_K_M 18.56GB +
-    llama.cpp b10919 + llm.service --jinja/enable_thinking=false + libgomp1), 배포 툴콜 검증 finish_reason=tool_calls + destroy
-    CLEAN, yearly_refresh.sh/runbook/endpoint doc 정합, opencode azureqwen provider 등록. 남은것=opencode 재시작 후 Deep Dive 1회 검증.'
+  time: '2026-09-14T02:55:00.000000+00:00'
+  summary: '2026-09-14 opencode-rr ORP 모델명 설정 완료: opencode-rr.json에 ORP-1(free)/ORP-2(free)/ORP-3(free) 적용(ling→ORP-1, nemotron→ORP-2, north→ORP-3), refresh_openrouter_free_models.py에 ORP 자동할당 로직 확인, 핸드오버 YAML 갱신, opencode-structure.md 불일치 3곳 수정(날짜/모델할당/기본모델). RR 프록시 /health 정상, timer enabled/active.'
   total_files: 0
   recent_files:
     data: []
@@ -348,6 +346,9 @@ decisions:
 - id: agi12-05
   detail: 'yearly_refresh.sh를 runbook에 정합(Spot 빌더, b10919 자산명, libgomp1, llm.service). 실경로는 심볼릭: /opt/projects/server/scripts/golden_image
     → /opt/workspace/azure/20137133/scripts/golden_image (azure repo commit 44a177b).'
+  status: open
+- id: agi12-06
+  detail: 'opencode-rr 모델 표시명 ORP 방식 확정: opencode-rr.json에 ORP-1(free)/ORP-2(free)/ORP-3(free) 적용(모델: inclusionai/ling-3.0-flash-vl→ORP-1, nvidia/nemotron-3-ultra-550b-a55b→ORP-2, cohere/north-mini-code→ORP-3). refresh_openrouter_free_models.py 자동할당 로직 확인(line 239). docs/reports/opencode-structure.md 불일치 3곳 수정(날짜 2026-09-09→14, 모델할당, 기본모델). RR 프록시 health 정상, timer enabled/active.'
   status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.

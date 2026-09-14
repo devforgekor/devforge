@@ -1,6 +1,6 @@
 # OpenCode — 실행 구조 & 업데이트 이력
 
-> 최종 갱신: 2026-09-09
+> 최종 갱신: 2026-09-14
 > 대상: `~/.config/opencode/`, `~/.local/bin/opencode*`, `~/.bashrc.d/`
 > 관련 문서: `opencode-roundrobin-failure-analysis.md` (RR 프록시/자동 갱신), `system-architecture.md`
 
@@ -137,14 +137,14 @@ exec opencode "$@"
   "options": { "baseURL": "http://127.0.0.1:8451/v1",
                "apiKey": "local-rr-proxy" },
   "models": {
-    "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "ORP-1(free)" },
-    "google/gemma-4-26b-a4b-it:free":         { "name": "ORP-2(free)" },
+    "inclusionai/ling-3.0-flash-vl:free":  { "name": "ORP-1(free)" },
+    "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "ORP-2(free)" },
     "cohere/north-mini-code:free":            { "name": "ORP-3(free)" }
   }
 }}
 ```
-- `model` = `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free` (시드, 타이머가 갱신)
-- `experimental.modelFallbackChain.chains[0]` = `[nemotron-3-ultra, gemma-4-26b, north-mini-code]`
+- `model` = `openrouter/inclusionai/ling-3.0-flash-vl:free` (시드, 타이머가 갱신)
+- `experimental.modelFallbackChain.chains[0]` = `[ling-3.0-flash-vl, nemotron-3-ultra, north-mini-code]`
 - **모델→계정 고정**: `provider.openrouter.models`의 **순서**대로 프록시가 계정에 1:1 배정
   (`models[0]`→MESIDS, `models[1]`→MINIPARK4U, `models[2]`→HYEONMINPARK4U).
   분당 제한은 OpenRouter가 전역 관리라 회피 불가 → 각 모델의 **일일 쿼터를 한 계정에
