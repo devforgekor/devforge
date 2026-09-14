@@ -26,13 +26,17 @@ DEFAULT_UPSTREAM = "https://api.gudokpin.com/v1"
 # Map Anthropic model names → Gudokpin model IDs (from GET /v1/models).
 # GPT/Gemini/Grok 등도 Gudokpin에서 동일하게 접근 가능하므로 identity 매핑 추가.
 MODEL_MAP = {
-    "claude": "DeepSeek-V4-Flash-0731",
-    "claude-pro": "deepseek-v4-pro-0813",
+    # Claude Code가 에이전트(tool call)로 동작하려면 tool_call 지원 모델 필요.
+    # Gudokpin 실측: claude-sonnet-5/claude-opus-5만 tool_call+streaming OK.
+    "claude": "claude-sonnet-5",
+    "claude-pro": "claude-opus-5",
     "claude-sonnet-4-20250514": "claude-sonnet-5",
     "claude-sonnet-4-6": "claude-sonnet-5",
     "claude-opus-4-8": "claude-opus-5",
     "claude-haiku": "claude-fable-5",
     "claude-fable": "claude-fable-5",
+    # cheap text-only (tool_call 미지원 — 비에이전트 용도)
+    "claude-fast": "DeepSeek-V4-Flash-0731",
     # ChatGPT / GPT 모델 (Gudokpin identity) — claude --model <id> 로 선택
     "gpt-5.6-luna": "gpt-5.6-luna",
     "gpt-5.6-sol": "gpt-5.6-sol",
