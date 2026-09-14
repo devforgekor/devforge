@@ -8,11 +8,14 @@ Usage:
     devforge mcp serve
     devforge inference switch day
     devforge inference status
+    devforge inference ensure day_extract
 """
 from __future__ import annotations
 
 import typer
 
+from devforge.adapters.driving.cli_cmds import inference as inference_cmds
+from devforge.adapters.driving.cli_cmds import mcp as mcp_cmds
 from devforge.core.logging import setup_logging
 
 setup_logging(level="INFO", component="cli")
@@ -24,13 +27,13 @@ app = typer.Typer(
 )
 
 # ── Sub-apps ──
+# Pipeline commands are defined here (the CLI is the composition root and is
+# allowed to import the application layer); mcp/inference are driving adapters.
 pipeline_app = typer.Typer(name="pipeline", help="Pipeline management")
-mcp_app = typer.Typer(name="mcp", help="MCP server management")
-inference_app = typer.Typer(name="inference", help="Inference model management")
 
 app.add_typer(pipeline_app, name="pipeline")
-app.add_typer(mcp_app, name="mcp")
-app.add_typer(inference_app, name="inference")
+app.add_typer(inference_cmds.app, name="inference")
+app.add_typer(mcp_cmds.app, name="mcp")
 
 
 @app.command()
@@ -72,12 +75,12 @@ def pipeline_orchestrate(
     from devforge.core.config import get_config
 
     config = get_config()
-        pipeline = ExtractPipeline(
-            llm=LocalLLMAdapter(),
-            db=PostgresExtractAdapter.from_config(config),
-            turn_repo=PostgresTurnRepository.from_config(config),
-            dry_run=dry_run,
-        )
+    pipeline = ExtractPipeline(
+        llm=LocalLLMAdapter(),
+        db=PostgresExtractAdapter.from_config(config),
+        turn_repo=PostgresTurnRepository.from_config(config),
+        dry_run=dry_run,
+    )
 
     async def run():
         if turn_id:
@@ -121,102 +124,6 @@ def pipeline_status_cmd():
             }, indent=2))
 
     asyncio.run(run())
-
-
-@mcp_app.command("serve")
-def mcp_serve(
-    host: str = typer.Option("0.0.0.0", "--host", "-h"),
-    port: int = typer.Option(8100, "--port", "-p"),
-):
-    """Start the MCP SSE server."""
-    import uvicorn
-
-    from devforge.adapters.driving.api.app import create_app
-    app = create_app()
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level="info",
-    )
-
-
-@inference_app.command("switch")
-def inference_switch(
-    mode: str = typer.Argument(..., help="Mode: day or night"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-):
-    """Switch inference mode (day/night) and restart model pods."""
-    import subprocess
-
-    from devforge.core.config import get_config
-
-    config = get_config()
-    if mode not in ("day", "night"):
-        typer.echo(f"Error: mode must be 'day' or 'night', got '{mode}'", err=True)
-        raise typer.Exit(1)
-
-    system_env = config.paths.current_system_mode_env
-    if dry_run:
-        typer.echo(f"[dry-run] Would write MODE={mode} to {system_env}")
-        return
-
-    system_env.write_text(f"MODE={mode}\n")
-    typer.echo(f"Switched to {mode} mode (wrote {system_env})")
-
-    result = subprocess.run(["pkill", "-USR1", "-f", "day_cycle.sh"], capture_output=True)
-    if result.returncode == 0:
-        typer.echo("Sent USR1 signal to day_cycle.sh")
-    else:
-        typer.echo("Warning: could not signal day_cycle.sh (may not be running)", err=True)
-
-
-@inference_app.command("status")
-def inference_status():
-    """Show current inference model status."""
-    import json as json_module
-
-    from devforge.core.config import get_config
-    config = get_config()
-    status = {
-        "system_mode": config.system_mode,
-        "inference_mode": config.inference_mode,
-        "model_name": config.model_name,
-        "port": config.model_port,
-    }
-    typer.echo(json_module.dumps(status, indent=2))
-
-
-@inference_app.command("ensure")
-def inference_ensure(
-    model_key: str = typer.Argument(..., help="Model key (e.g., day_extract, day_enricher)"),
-):
-    """Ensure the model pod is running for the given model key."""
-    import socket
-
-    from devforge.adapters.driven.llm.local_adapter import MODEL_REGISTRY
-
-    if model_key not in MODEL_REGISTRY:
-        typer.echo(f"Error: unknown model '{model_key}'", err=True)
-        typer.echo(f"Available: {list(MODEL_REGISTRY)}", err=True)
-        raise typer.Exit(1)
-
-    cfg = MODEL_REGISTRY[model_key]
-    model_name = cfg.get("_model", model_key)
-    if model_name != model_key:
-        cfg = MODEL_REGISTRY[model_name]
-    port = cfg["port"]
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(1)
-    result = sock.connect_ex(("127.0.0.1", port))
-    sock.close()
-
-    if result == 0:
-        typer.echo(f"✓ Model '{model_name}' is ready on port {port}")
-    else:
-        typer.echo(f"✗ Model '{model_name}' not responding on port {port}", err=True)
-        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
