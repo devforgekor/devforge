@@ -32,13 +32,19 @@
   "netdata": "active",
   "hook_overhead": {
     "iterations": 100,
-    "avg_ms": 0.0004,
-    "p50_ms": 0.0004,
-    "p95_ms": 0.0004,
-    "p99_ms": 0.0029,
-    "min_ms": 0.0003,
-    "max_ms": 0.0029,
-    "mode": "safe(mock)"
+    "avg_ms": 458.7643,
+    "p50_ms": 440.792,
+    "p95_ms": 636.289,
+    "p99_ms": 1313.1754,
+    "min_ms": 278.005,
+    "max_ms": 1313.1754,
+    "mode": "live"
+  },
+  "hook_overhead_correction": {
+    "note": "D1 최초 측정(0.0004ms, safe mock)은 측정 스크립트 버그로 무효. tool_input={}을 전달해 _handle_bash가 early-return 경로만 측정했음. 수정 후 live 실측: avg 458.76ms.",
+    "invalid_mock": {"avg_ms": 0.0004, "mode": "safe(mock)"},
+    "fixed_at": "2026-09-14",
+    "measurement": "docs/ops/baseline/hook-overhead-initial.json"
   },
   "mcp_health": "{\"status\":\"ok\",\"server\":\"devforge-mcp\"}"
 }

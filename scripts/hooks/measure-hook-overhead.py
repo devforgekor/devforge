@@ -30,7 +30,14 @@ import auto_log
 
 
 def measure(iterations: int = 100) -> dict:
-    test_input = {"command": "echo test", "tool_name": "Bash", "tool_input": {}, "tool_output": {}}
+    # tool_input must contain a real command so _handle_bash does its work
+    # (pretool UPDATE + observe for test commands). Using a test command
+    # exercises the full path including the observe() DB write.
+    test_input = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "pytest scripts/tests/"},
+        "tool_output": {"exitCode": 0},
+    }
     times = []
     for _ in range(iterations):
         start = time.perf_counter()
