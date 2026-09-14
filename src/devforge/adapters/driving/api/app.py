@@ -154,6 +154,105 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         )
         return {"observation_id": str(obs_id), "saved": True}
 
+    @app.post("/api/v1/ingest")
+    async def ingest_endpoint(payload: dict[str, Any]) -> Any:
+        """Batch conversation ingestion (HTTP surface).
+
+        Per spec: POST /api/v1/ingest, auth: loopback-only OR bearer token.
+        """
+        if "source" not in payload:
+            return {"error": "source is required"}, 400
+        if "conversation_id" not in payload:
+            return {"error": "conversation_id is required"}, 400
+        if "turns" not in payload:
+            return {"error": "turns is required"}, 400
+
+        source = str(payload["source"])[:50]
+        agent = str(payload.get("agent") or source)[:50]
+        title = str(payload.get("title", "HTTP Ingest"))[:200]
+        model = str(payload.get("model", ""))[:100]
+        conversation_id = payload.get("conversation_id")
+        turns_data = payload.get("turns", [])
+
+        if not turns_data:
+            return {"error": "turns array is required"}, 400
+
+        from uuid import uuid4, UUID
+        from sqlalchemy import select
+
+        from devforge.adapters.driven.storage.database_gateway import get_gateway
+        from devforge.domain.models import Conversation, Turn
+
+        gateway = get_gateway()
+        async with gateway.session() as db:
+            if conversation_id:
+                conv_id = UUID(str(conversation_id))
+                conv = await db.get(Conversation, conv_id)
+                if conv is None:
+                    return {"error": f"Conversation not found: {conv_id}"}, 404
+            else:
+                conv = Conversation(
+                    id=uuid4(), title=title, source=source, model=model
+                )
+                db.add(conv)
+                await db.flush()
+                conv_id = conv.id
+
+            seq_row = await db.execute(
+                select(Turn.seq)
+                .where(Turn.conversation_id == conv_id)
+                .order_by(Turn.seq.desc())
+                .limit(1)
+            )
+            seq = (seq_row.scalar() or 0) + 1
+
+            inserted = 0
+            skipped = 0
+            seen = set()
+
+            for turn in turns_data:
+                smid = turn.get("source_message_id")
+                if smid and smid in seen:
+                    skipped += 1
+                    continue
+                if smid:
+                    seen.add(smid)
+
+                if smid:
+                    existing = await db.execute(
+                        select(Turn.id).where(
+                            Turn.conversation_id == conv_id,
+                            Turn.source_message_id == smid,
+                            Turn.source_message_id.is_not(None),
+                        )
+                    )
+                    if existing.scalar() is not None:
+                        skipped += 1
+                        continue
+
+                db.add(Turn(
+                    id=uuid4(),
+                    conversation_id=conv_id,
+                    seq=seq,
+                    user_turn=str(turn.get("user_turn", ""))[:4000],
+                    thinking=str(turn.get("thinking", ""))[:4000] if turn.get("thinking") else None,
+                    text=str(turn.get("text", ""))[:8000] if turn.get("text") else None,
+                    meta=turn.get("meta") if isinstance(turn.get("meta"), dict) else {},
+                    source_message_id=smid,
+                    agent=agent,
+                    source=source,
+                ))
+                await db.flush()
+                inserted += 1
+                seq += 1
+
+            await db.commit()
+            return {
+                "conversation_id": str(conv_id),
+                "inserted": inserted,
+                "skipped": skipped,
+            }
+
     @app.post("/api/v1/pipeline/extract")
     async def trigger_extract(
         turn_id: Optional[str] = None, limit: int = 50, dry_run: bool = False

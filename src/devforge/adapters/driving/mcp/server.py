@@ -67,6 +67,24 @@ class DeepDiveParams(BaseModel):
     affected_files: Optional[int] = None
 
 
+class IngestTurnParams(BaseModel):
+    seq: int
+    user_turn: str
+    thinking: Optional[str] = None
+    text: Optional[str] = None
+    meta: Optional[dict[str, Any]] = None
+    source_message_id: Optional[str] = None
+
+
+class IngestParams(BaseModel):
+    source: str
+    agent: Optional[str] = None
+    title: Optional[str] = None
+    model: Optional[str] = None
+    conversation_id: str
+    turns: list[IngestTurnParams]
+
+
 class StoreObservationParams(BaseModel):
     observation: str
     category: str = "general"
@@ -364,6 +382,101 @@ register_tool(
     "Save an observation to the database for reflex rule mining. "
     "Observations are used to detect patterns and trigger auto-fix rules.",
     StoreObservationParams,
+)
+
+
+async def ingest(params: IngestParams) -> dict[str, Any]:
+    """Batch conversation ingestion — local agent transcripts + web-LLM capture."""
+    config = get_config()
+    from uuid import uuid4, UUID
+
+    from sqlalchemy import insert, select, update
+    from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import Conversation, Turn
+
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        source = (params.source or "mcp_ingest")[:50]
+        agent = (params.agent or source)[:50]
+        title = (params.title or "MCP Ingest")[:200]
+        model = (params.model or "")[:100]
+
+        if not params.turns:
+            return {"error": "turns array is required"}
+
+        if params.conversation_id:
+            conv_id = UUID(params.conversation_id)
+            conv = await db.get(Conversation, conv_id)
+            if conv is None:
+                return {"error": f"Conversation not found: {conv_id}"}
+        else:
+            conv = Conversation(
+                id=uuid4(), title=title, source=source, model=model
+            )
+            db.add(conv)
+            await db.flush()
+            conv_id = conv.id
+
+        seq_row = await db.execute(
+            select(Turn.seq).where(Turn.conversation_id == conv_id).order_by(Turn.seq.desc()).limit(1)
+        )
+        seq = (seq_row.scalar() or 0) + 1
+
+        inserted = 0
+        skipped = 0
+        seen_message_ids = set()
+
+        for turn in params.turns:
+            source_message_id = turn.source_message_id
+            if source_message_id and source_message_id in seen_message_ids:
+                skipped += 1
+                continue
+            if source_message_id:
+                seen_message_ids.add(source_message_id)
+
+            existing = await db.execute(
+                select(Turn.id).where(
+                    Turn.conversation_id == conv_id,
+                    Turn.source_message_id == source_message_id,
+                    Turn.source_message_id.is_not(None),
+                )
+            )
+            if existing.scalar() is not None:
+                skipped += 1
+                continue
+
+            turn_obj = Turn(
+                id=uuid4(),
+                conversation_id=conv_id,
+                seq=seq,
+                user_turn=(turn.user_turn or "")[:4000],
+                thinking=(turn.thinking or "")[:4000] if turn.thinking else None,
+                text=(turn.text or "")[:8000] if turn.text else None,
+                meta=turn.meta if turn.meta else {},
+                source_message_id=source_message_id,
+                agent=agent,
+                source=source,
+            )
+            db.add(turn_obj)
+            await db.flush()
+            inserted += 1
+            seq += 1
+
+        await db.commit()
+        return {
+            "conversation_id": str(conv_id),
+            "inserted": inserted,
+            "skipped": skipped,
+        }
+
+
+register_tool(
+    "ingest",
+    "Batch conversation ingestion — local agent transcripts + web-LLM capture. "
+    "Per spec: POST /api/v1/ingest + MCP ingest dual surfaces.",
+    IngestParams,
 )
 
 
