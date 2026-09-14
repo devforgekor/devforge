@@ -1,20 +1,13 @@
 #!/bin/bash
 # system_sync.sh — 30min system maintenance (no inference, no pipeline)
 # Called by devforge-system-sync.timer
-# Tasks: gen_architecture, duckdns, lightweight housekeeping
+# Tasks: duckdns, lightweight housekeeping (gen_architecture retired 2026-09-14)
 
 LOG_TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 LOG() { echo "[$(LOG_TS)] $*"; }
 SCRIPT_DIR="/opt/projects/server/scripts"
 
 LOG "system_sync start"
-
-# ── code-structure (hash-guarded, lightweight) ──
-if python3 "$SCRIPT_DIR/gen_architecture.py" --check-structure 2>&1; then
-    LOG "  code-structure OK"
-else
-    LOG "  code-structure FAILED (non-fatal)" >&2
-fi
 
 # ── duckdns ──
 SECRETS="$HOME/.config/devforge/secrets.env"

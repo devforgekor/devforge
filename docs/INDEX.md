@@ -86,6 +86,7 @@
 | 이전 구조 정리(완료) | `plans/code-size-refactoring.md`, `reports/handover-refactoring.md` | record |
 
 ## 최근 변경 (2026-09-14)
+- **은퇴/적용(2026-09-14)**: Shadow DB(`devforge_shadow`) 라이브 적용. 문서생성기 `gen_architecture.py` 은퇴 → `_archive/` (호출부 `system_sync.sh`·`day_cycle.sh`·`daily-structure.service` 제거; `architecture/*`는 수동/동결). Gemini 에이전트 세션 로직 은퇴 → `_archive/gemini-agent/` (`gemini-session.service` disable).
 - **Cutover 잔여 계획 수립**: `scripts/*` → `devforge` 전환을 단계(A~I)·수락기준·롤백까지 정의 — [`plans/cutover-remaining-plan.md`](./plans/cutover-remaining-plan.md). (현재 라이브 유닛 22개+컨테이너 3개 의존, 다수 도메인 미구현)
 - **SSOT 동기화**: `architecture/code-structure.yaml`이 신규 `src/devforge/` 패키지를 포함하도록 생성기(`gen_architecture.py`) 확장(62 그룹/377 파일). `system-architecture.md`에 §3.5 코드 레이어 추가(컷오버 미완료 명시). 리팩토링 문서(REFACTORING_PLAN/ARCHITECTURE/MIGRATION_GUIDE/LLM_PROVIDER_PLAN/API_REFERENCE/OPERATIONS_GUIDE/adr)를 INDEX에 등록. `CLAUDE.yaml`·`blueprint.yaml`·`handover.yaml`에 리팩토링 기준 반영. `docs/specs/schema.sql`을 ORM과 일치하도록 재생성(16 테이블).
 - Azure `azureqwen` Deep Dive **E2E 검증 성공**(opencode → `deepdive_step_enter/exit` → DB `DONE`) — [`reports/azure-deepdive-e2e-verification-20260914.md`](./reports/azure-deepdive-e2e-verification-20260914.md).

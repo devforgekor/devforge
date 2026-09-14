@@ -10,7 +10,7 @@
 docs/
 ├─ INDEX.md            # 전체 지도(진입점)
 ├─ CONVENTIONS.md       # 이 문서(규칙 SSOT)
-├─ architecture/        # [AUTO] 구조 SSOT — 직접 편집 금지
+├─ architecture/        # 구조 SSOT (동결 — 수동 관리)
 ├─ specs/               # 계약·스키마(DDL, registry, references)
 ├─ plans/               # 앞을 향한 계획·로드맵·설계 (proposed|active)
 ├─ reports/             # 시점 기록·조사·검증 (record, superseded 가능)
@@ -18,7 +18,7 @@ docs/
 ├─ _archive/            # 폐기·일회성
 └─ (루트)               # 최상위 SSOT 참조 + 리팩토링 정본
 ```
-- `architecture/`의 `infrastructure.md`·`software.yaml`·`code-structure.yaml`은 **자동 생성** — 손대지 않는다.
+- `architecture/`의 `infrastructure.md`·`software.yaml`·`code-structure.yaml`은 생성기(`gen_architecture.py`) **은퇴(2026-09-14)** 로 동결 — 이제 **수동 관리**한다(불필요 시 `_archive/`).
 - 루트에는 **최상위 SSOT 참조 + 코드/설정이 경로를 참조하는 정본**만 둔다: `INDEX.md`, `CONVENTIONS.md`,
   `domain-glossary.yaml`, `system-architecture.md`, `object-storage.md`, 그리고 리팩토링 정본군
   (`REFACTORING_PLAN.md`, `ARCHITECTURE.md`, `MIGRATION_GUIDE.md`, `LLM_PROVIDER_PLAN.md`,
@@ -65,4 +65,4 @@ docs/
 1. **참조 선확인**: `grep -rnE "docs/<경로>" --include=*.py --include=*.yaml --include=*.md`로 참조 확인.
 2. 이동은 `git mv`(이력 보존). 개명은 kebab-case.
 3. 이동 후 **참조 갱신 + 재확인**(`CLAUDE.yaml entry_points`, 코드의 docs 경로).
-4. 자동생성 문서(`architecture/*`)와 코드 참조 경로(`domain-glossary.yaml`, `specs/*`)는 **이동 금지**.
+4. 구조 SSOT(`architecture/*`, 동결)와 코드 참조 경로(`domain-glossary.yaml`, `specs/*`)는 **이동 금지**.

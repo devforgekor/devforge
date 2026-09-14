@@ -26,7 +26,7 @@
 | `devforge-watchdog`(+`-liveness`,`-failed`) | `scripts/watchdog.py` | `domain/watchdog` | 미구현(0줄) |
 | inference 관리(quadlet, `model_ctl.sh`) | `scripts/lib/pod_manager` | `domain/model_management`+CLI | 부분(CLI wrapper만) |
 | `devforge-backup`,`-restore-test` | `osync_backup.py`,`osync_restore_test.py` | `adapters/driven/storage` | 미구현 |
-| `devforge-system-sync`,`-daily-structure` | `system_sync.sh`,`gen_architecture.py` | ops(유지/이관) | 범위 밖(유지) |
+| `devforge-system-sync`,`-daily-structure` | `system_sync.sh` | ops(DuckDNS+autocommit 유지) | 범위 밖(문서생성기 제거됨) |
 | `devforge-dev-poll` | `cli.py dev poll` | `application/issue_collector` | 미구현 |
 | `devforge-tg-webhook`,`activity-summarizer` | `lib/tg_webhook.py`,`activity_summarizer.py` | `adapters/driven/notification` | 미구현(0줄) |
 | proxies 5종(anthropic/openrouter/gemini/rate-limiter/free-models) | `scripts/proxies/*`,`or_rate_limiter.py` | `adapters/driven/proxy_utils` | 미구현(0줄) |
@@ -45,7 +45,8 @@
 ## 3. 범위
 
 **포함**: 라이브 22 유닛/3 컨테이너의 `devforge` 전환(구현 → 병렬 검증 → 스위치 → 롤백).
-**비목표(유지)**: `gen_architecture.py`/`system_sync.sh`(문서 생성기, `scripts/` 유지), `golden_image/*`(Azure 별도 repo),
+**비목표(유지)**: `system_sync.sh`(DuckDNS+autocommit), `golden_image/*`(Azure 별도 repo).
+**제거(2026-09-14)**: `gen_architecture.py`(문서생성기, 신뢰 불가) 및 Gemini 에이전트 세션 로직(`gemini_session_start.sh`+`gemini_core/` 등) — `_archive/`로 이동.
 `gemini_session_start.sh`(운영 래퍼). Track B(클라우드 공급자)는 `docs/LLM_PROVIDER_PLAN.md`로 분리.
 
 ## 4. 공통 전환 원칙
@@ -102,7 +103,7 @@
 - **구현**: `adapters/driven/storage`에 OCI 백업/복원(`osync_backup`/`osync_restore_test`) 이관 + watchdog 연계.
 - **수락**: 일일 백업 + 월간 복원 검증 통과. `devforge-backup`,`-restore-test` 전환.
 - **롤백**: 스크립트 유닛 복원.
-- (참고) `gen_architecture`/`system_sync`는 **범위 밖(유지)**.
+- (참고) `gen_architecture`는 **2026-09-14 제거됨**, `system_sync`는 유지(DuckDNS+autocommit).
 
 ### Phase H — 컨테이너/이미지 최종화
 - **구현**: 단일 `localhost/devforge:latest`(멀티 진입점) + Quadlet digest 고정.
@@ -149,7 +150,7 @@ G(ops/backup) ────────┘
 1. **MCP 전략**: `adapters/driving/mcp`에서 FastMCP를 채택할지(라이브 정합) vs 자체 SSE 유지 후 클라이언트 이관.
 2. **shadow DB 적용**: `sql/shadow_schema.sql`을 라이브에 적용할지(현재 artifact만).
 3. **worker_supervisor 이관 범위**: `container-devforge-worker`를 application 계층으로 흡수 vs 별도 어댑터.
-4. **golden-image/gen_architecture**: 본 컷오버 범위 밖 확정 vs 이관.
+4. **golden-image/gen_architecture**: 골든 이미지=범위 밖 유지, gen_architecture=**제거됨(2026-09-14)**. Gemini 에이전트 세션=**제거됨**.
 5. **일정/인력**: `REFACTORING_PLAN` v1.4(2인·14주) 가정과 실제 인력 정합.
 
 ## 10. 근거

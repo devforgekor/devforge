@@ -364,6 +364,13 @@ decisions:
     구현, domain(watchdog/turn_collection/pipeline/model_management)·adapters(notification/research/proxy_utils)=0줄 stub.
     전환 단계 A~I(구현→수락→스위치→롤백), 공통 원칙 비파괴/병렬검증/1개씩. 전면 cutover는 도메인 구현 후.'
   status: open
+- id: rf-cutover-02
+  detail: '사용자 결정 반영(2026-09-14): (2) shadow DB 라이브 적용 완료(devforge_shadow schema + turns_shadow view +
+    review_facts_shadow). (4) gen_architecture.py 은퇴→_archive/ (호출 제거: system_sync.sh/day_cycle.sh/daily-structure.service),
+    docs/architecture/* 동결·수동 관리. Gemini 에이전트 세션 로직 은퇴→_archive/gemini-agent/ (gemini.py/gemini_core/gemini_mcp/
+    gemini_mon/gemini_quota/gemini_session_start.sh), gemini-session.service disable. gemini 모델 프록시(proxies/gemini_openai)와
+    세션로그 파서(lib/parsers/gemini.py)는 유지. (1 MCP전략, 3 worker 이관, 5 일정/인력)은 보류.'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.

@@ -165,13 +165,6 @@ _launch_reranker() {
 }
 
 # ── System Sync ────────────────────────────────────
-LOG "=== System: code-structure ==="
-if python3 "$SCRIPT_DIR/gen_architecture.py" --check-structure 2>&1; then
-    LOG "  code-structure OK"
-else
-    LOG "  code-structure FAILED" >&2
-fi
-
 LOG "=== System: duckdns ==="
 if curl -s -o /dev/null -w "%{http_code}" \
     "https://www.duckdns.org/update?domains=devforgekor&token=${DUCKDNS_TOKEN:-MISSING}&ip=&verbose=true" \

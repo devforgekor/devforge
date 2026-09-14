@@ -146,3 +146,20 @@
 - **보관 사유**: 번역 품질 분석 — 주기적 생성 중단. 결과는 코드(`lib/text_quality.py`)에 반영됨.
 - **대체 위치**: `lib/text_quality.py`
 - **삭제 조건**: 즉시 삭제 가능
+
+---
+
+## gen_architecture.py (2026-09-14)
+
+- **보관 사유**: 자동 문서 생성기가 실제로 신뢰할 수 없음(라이브 `collect_structural()` 의존, 산출물 drift). 문서 구조 SSOT는 **수동 관리**로 전환.
+- **대체 위치**: `docs/architecture/*`(동결/수동), `docs/specs/timer-registry.yaml`(동결), 라이브 상태는 `scripts/cli.py status --json`
+- **삭제 조건**: 즉시 삭제 가능
+- **주의**: `system_sync.sh`·`day_cycle.sh`·`devforge-daily-structure.service`에서 호출 제거됨(2026-09-14).
+
+## gemini-agent/ (2026-09-14)
+
+- **보관 사유**: Gemini를 더 이상 에이전트로 운영하지 않음 — 대화형/에이전트 세션 도구 일체 제거.
+- **포함**: `gemini.py`(agentic CLI), `gemini_core/`(api/execute/keys/tools_def), `gemini_mcp.py`, `gemini_mon.py`, `gemini_quota.py`, `gemini_session_start.sh`
+- **대체 위치**: 없음 (에이전트 미운영)
+- **삭제 조건**: 즉시 삭제 가능
+- **주의**: `gemini-session.service` disable됨. 모델 API 프록시(`scripts/proxies/gemini_openai.py`, `gemini-openai-proxy.service`)와 세션 로그 파서(`scripts/lib/parsers/gemini.py`)는 **유지**(에이전트와 무관).

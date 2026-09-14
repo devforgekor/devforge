@@ -97,7 +97,7 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 | `devforge-watchdog` | `scripts/watchdog.py` | 서비스/타이머/컨테이너/디스크 감시·복구 |
 | `devforge-turn-watcher` | `scripts/turn_watcher.py` | 대화 로그 → turns(raw) 수집 |
 | `devforge-day-cycle` | `scripts/day_cycle.sh` | 일일 파이프라인 체인 |
-| `devforge-system-sync` | `scripts/system_sync.sh` | 아키텍처 문서 갱신 + DuckDNS + autocommit |
+| `devforge-system-sync` | `scripts/system_sync.sh` | DuckDNS + autocommit (문서생성 은퇴 2026-09-14) |
 | `devforge-backup` | `scripts/osync_backup.py all` | OCI 백업(DB+앱) |
 | `devforge-restore-test` | `scripts/osync_restore_test.py` | 월간 복원 검증 |
 | `ebook-watcher` / `ebook-api` | ebooklib | ebook 수집/서빙 |
@@ -227,14 +227,13 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 
 ## 7. 문서 생성 파이프라인
 
-- 생성기: `scripts/gen_architecture.py` (입력: `collect_structural()` 라이브 + `CLAUDE.yaml` 정적)
-- 산출물(자동, 수동 편집 금지):
-  - `docs/architecture/infrastructure.md` (서버 정체성)
-  - `docs/architecture/software.yaml` (모델/모드/파이프라인)
-  - `docs/architecture/code-structure.yaml` (파일 레이아웃 SSOT, 30분 hash-guard) — 레거시 `scripts/`와 신규 `src/devforge/`를 함께 스캔(2026-09-14)
-  - `docs/specs/timer-registry.yaml` (타이머)
-- 실행: `devforge-system-sync.timer`(30분, `--check-structure`) + `devforge-daily-structure.timer`(매일 전체 + git push)
-- 수동 편집 문서: 이 문서, `docs/object-storage.md`, 각종 design/audit/runbook
+> **2026-09-14: 자동 생성기 은퇴.** `gen_architecture.py`가 실제로 신뢰할 수 없어 제거됨
+> (`_archive/gen_architecture.py`). `docs/architecture/*`·`docs/specs/timer-registry.yaml`은
+> **동결(frozen)/수동 관리**로 전환 — 코드 구조 SSOT는 `src/devforge/` + `docs/architecture/code-structure.yaml`(수동).
+> `devforge-system-sync`/`daily-structure` 유닛은 문서생성 호출을 제거하고 DuckDNS + git autocommit/push만 유지한다.
+
+- 수동 관리 문서: `docs/architecture/*`, `docs/specs/timer-registry.yaml`, 이 문서, `docs/object-storage.md`, 각종 design/audit/runbook
+- 라이브 상태 정본: `scripts/cli.py status --json` (컨테이너/모델/타이머/서비스/resources)
 
 ---
 

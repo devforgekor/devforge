@@ -5,6 +5,7 @@
 # 🔴 If unsure where a change belongs, check here first. Ask user if still unclear.
 # 🔴 Do NOT create new files under `scripts/` without user approval.
 # 🔴 New code belongs under `src/devforge/` (refactored src-layout); `scripts/` is legacy.
+# 🔴 MANUALLY MAINTAINED since 2026-09-14 (auto-generator `gen_architecture.py` retired — it was unreliable).
 #
 # Rule priority: code-structure.yaml > llm-common-rule.md > agent's judgment
 # If this file says a module has `no_subprocess: true`, do NOT add subprocess calls there.
@@ -64,27 +65,6 @@ modules:
     fastapi-entrypoint.sh:
       status: unknown
       purpose: fastapi-entrypoint.sh
-    gemini.py:
-      status: production
-      purpose: "gemini \u2014 Agentic Gemini CLI with function calling + tool execution."
-    gemini_mcp.py:
-      status: experimental
-      purpose: "gemini_mcp \u2014 MCP server exposing DevForge tools via Gemini API."
-    gemini_mon.py:
-      status: unknown
-      purpose: "Compact Gemini key monitor \u2014 shows the most recently used key,\
-        \ refreshes 5s."
-    gemini_quota.py:
-      status: unknown
-      purpose: Display Gemini API daily quota status.
-    gemini_session_start.sh:
-      status: unknown
-      purpose: Launch Gemini CLI in a persistent tmux session with per-request key
-        rotation.
-    gen_architecture.py:
-      status: experimental
-      purpose: Generate infrastructure.md, software.yaml, code-structure.yaml, and
-        timer-registry.yaml
     github_mcp_wrapper.sh:
       status: unknown
       purpose: github_mcp_wrapper.sh
@@ -858,25 +838,6 @@ modules:
     review_dashboard.py:
       status: experimental
       purpose: "HITL Review Dashboard \u2014 web UI for fact CONFIRM/REJECT."
-- path: scripts/gemini_core/
-  purpose: Gemini Core
-  files:
-    __init__.py:
-      status: production
-      purpose: "Core engine: keys, API calls, tool implementations \u2014 split from\
-        \ gemini_core.py."
-    api.py:
-      status: production
-      purpose: Gemini API call wrapper.
-    execute.py:
-      status: production
-      purpose: 'Tool execution: run_shell, read_file, edit_file, web_search, etc.'
-    keys.py:
-      status: production
-      purpose: Key loading / rotation for Gemini and Brave APIs.
-    tools_def.py:
-      status: production
-      purpose: Gemini function-calling tool definitions.
 - path: scripts/golden_image/
   purpose: Golden Image
   files:
