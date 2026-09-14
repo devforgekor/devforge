@@ -4,9 +4,9 @@
   "turns_24h": "143",
   "turns_total": "7163",
   "turns_source": {
-    "unknown": "7163"
+    "legacy:pre-2026-09": "7163"
   },
-  "turns_age_days": "118.3",
+  "turns_age_days": "118.4",
   "observations_24h": "1",
   "observations_7d": "529",
   "pipeline_state": {
@@ -35,9 +35,9 @@
     "avg_ms": 0.0004,
     "p50_ms": 0.0004,
     "p95_ms": 0.0004,
-    "p99_ms": 0.0022,
+    "p99_ms": 0.0029,
     "min_ms": 0.0003,
-    "max_ms": 0.0022,
+    "max_ms": 0.0029,
     "mode": "safe(mock)"
   },
   "mcp_health": "{\"status\":\"ok\",\"server\":\"devforge-mcp\"}"
