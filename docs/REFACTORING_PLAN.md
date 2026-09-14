@@ -443,7 +443,7 @@ class ExtractPipeline:
 
 > **안정화 기간**: 리팩토링 후 버그 수정, 잔여 도메인 마무리, 팀 온보딩. **KPI 측정 시작**.
 >
-> **실제 컷오버(라이브 전환) 상세 계획**: [`docs/plans/cutover-remaining-plan.md`](./plans/cutover-remaining-plan.md) — 라이브 systemd 유닛 22개/Quadlet 3개의 `scripts/*` → `devforge` 전환을 단계(A~I)·수락기준·롤백까지 정의.
+> **최종 통합 계획(컷오버 + MCP 최적화 + 의사결정)**: [`docs/plans/final-plan.md`](./plans/final-plan.md) — 라이브 systemd 유닛 22개/Quadlet 3개의 `scripts/*` → `devforge` 전환 + MCP 툴 최적화 + 결정 D1~D9.
 
 ---
 

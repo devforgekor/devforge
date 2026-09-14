@@ -19,7 +19,9 @@ ingestion pipeline. The only batch-ingestion surface is the MCP `ingest` tool in
 legacy `scripts/mcp_server.py`; the refactored MCP has no `ingest`, and `POST /ingest`
 is unimplemented. `turns.source` is `unknown` for all rows (no provenance).
 
-Evidence: `docs/reports/industry-standard-comparison-20260914.md`.
+Evidence: `docs/reports/industry-standard-comparison-20260914.md`,
+`docs/reports/mcp-tool-audit-20260914.md` (30-day usage: 9 of 33 loaded tools had 0 calls;
+target 33→~16 via remove+merge).
 
 ## Decision
 1. **Preserve the contract (not expand)**: the refactored MCP must reproduce the

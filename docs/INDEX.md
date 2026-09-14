@@ -82,16 +82,20 @@
 | 운영 가이드 | `OPERATIONS_GUIDE.md` | active |
 | 설계 결정 기록(ADR) | `adr/0001-config-priority.md` ~ `adr/0006-mcp-tool-surface.md` | record |
 | 시스템 전체 구조 | `system-architecture.md` (§3.5 코드 레이어) | active |
-| **Cutover 잔여 계획** | `plans/cutover-remaining-plan.md` | proposed |
-| **의사결정 대기 목록** | `plans/open-decisions.md` | active |
+| **최종 통합 계획(Cutover+MCP+결정)** | `plans/final-plan.md` | active |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
+| MCP 툴 사용 감사(30일) | `reports/mcp-tool-audit-20260914.md` | record |
+| 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |
 | Ingest/Provenance 계약 | `specs/ingest-provenance.yaml` | proposed |
 | 이전 구조 정리(완료) | `plans/code-size-refactoring.md`, `reports/handover-refactoring.md` | record |
 
 ## 최근 변경 (2026-09-14)
-- **업계 표준 대조 문서화(2026-09-14)**: 웹 조사(5계층)와 서버 실측 대조 → `reports/industry-standard-comparison-20260914.md`. 결정 기록 `adr/0005-extraction-routing.md`(추출 하이브리드 라우팅·후보정)·`adr/0006-mcp-tool-surface.md`(계약 보존·ingest·provenance; 점진공개 옵션) 추가. 계약 스펙 `specs/ingest-provenance.yaml`. 의사결정 대기 목록 `plans/open-decisions.md`(D1~D6). `plans/cutover-remaining-plan.md` Phase A/B/C 세분화.
+- **MCP 툴 사용 감사(2026-09-14)**: opencode `part` DB 30일 실사용 분석 → 로드 33툴 중 **0회 9개**. keep/merge/remove 확정(`reports/mcp-tool-audit-20260914.md`): Remove(lsp proxy_artifact 3·detect_lsp_servers·find_symbol·inspect_symbol·get_symbol_source·list_plans 등), Merge(deepdive 4→1, mem+obs→2, search 2→1, list_tables+schema→1), 목표 33→약 16.
+- **외부 검토 브리프(2026-09-14)**: 서버 무지(無知) 에이전트의 리뷰용 자가완결 브리프 작성 — `reports/review-brief-20260914.md` (구조·변화·근거·리뷰질문·용어집). Droplr: 브리프 `d.pr/IFoWKE`, 최종계획 `d.pr/14w4o6`, 근거부록 `d.pr/KXEiPa`.
+- **최종 계획서 통합(2026-09-14)**: 컷오버 계획 + MCP 툴 최적화 + 의사결정(D1~D9)을 [`plans/final-plan.md`](./plans/final-plan.md)로 통합. 구 `plans/cutover-remaining-plan.md`·`plans/open-decisions.md`는 `docs/_archive/plans/`로 superseded.
+- **업계 표준 대조 문서화(2026-09-14)**: 웹 조사(5계층)와 서버 실측 대조 → `reports/industry-standard-comparison-20260914.md`. 결정 기록 `adr/0005-extraction-routing.md`(추출 하이브리드 라우팅·후보정)·`adr/0006-mcp-tool-surface.md`(계약 보존·ingest·provenance; 점진공개 옵션). 계약 스펙 `specs/ingest-provenance.yaml`.
 - **은퇴/적용(2026-09-14)**: Shadow DB(`devforge_shadow`) 라이브 적용. 문서생성기 `gen_architecture.py` 은퇴 → `_archive/` (호출부 `system_sync.sh`·`day_cycle.sh`·`daily-structure.service` 제거; `architecture/*`는 수동/동결). Gemini 에이전트 세션 로직 은퇴 → `_archive/gemini-agent/` (`gemini-session.service` disable).
-- **Cutover 잔여 계획 수립**: `scripts/*` → `devforge` 전환을 단계(A~I)·수락기준·롤백까지 정의 — [`plans/cutover-remaining-plan.md`](./plans/cutover-remaining-plan.md). (현재 라이브 유닛 22개+컨테이너 3개 의존, 다수 도메인 미구현)
+- **Cutover 계획**: `scripts/*` → `devforge` 전환(단계 A~I)·MCP 최적화·의사결정을 [`plans/final-plan.md`](./plans/final-plan.md)에 통합. (라이브 유닛 22개+컨테이너 3개 의존, 다수 도메인 미구현)
 - **SSOT 동기화**: `architecture/code-structure.yaml`이 신규 `src/devforge/` 패키지를 포함하도록 생성기(`gen_architecture.py`) 확장(62 그룹/377 파일). `system-architecture.md`에 §3.5 코드 레이어 추가(컷오버 미완료 명시). 리팩토링 문서(REFACTORING_PLAN/ARCHITECTURE/MIGRATION_GUIDE/LLM_PROVIDER_PLAN/API_REFERENCE/OPERATIONS_GUIDE/adr)를 INDEX에 등록. `CLAUDE.yaml`·`blueprint.yaml`·`handover.yaml`에 리팩토링 기준 반영. `docs/specs/schema.sql`을 ORM과 일치하도록 재생성(16 테이블).
 - Azure `azureqwen` Deep Dive **E2E 검증 성공**(opencode → `deepdive_step_enter/exit` → DB `DONE`) — [`reports/azure-deepdive-e2e-verification-20260914.md`](./reports/azure-deepdive-e2e-verification-20260914.md).
 - 골든 이미지 ctx 결함(8192 < opencode ~16.7k) 발견 → **SSOT `-c 32768`** 정정([`runbooks/runbook-golden-image.md`](./runbooks/runbook-golden-image.md), `azure:20137133/.../yearly_refresh.sh`). `-t 2` 무효(1 core/SMT, memory-bound).

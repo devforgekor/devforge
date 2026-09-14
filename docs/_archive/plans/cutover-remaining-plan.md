@@ -1,6 +1,8 @@
 # Cutover 잔여 계획서 — `scripts/*` → `devforge` 전환
 
-> Status: proposed · Date: 2026-09-14 · Owner: devforge · Related: `docs/REFACTORING_PLAN.md`, `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/reports/industry-standard-comparison-20260914.md`
+> Status: superseded · Date: 2026-09-14 · Owner: devforge · Superseded-by: `docs/plans/final-plan.md`
+> ⚠️ **superseded(2026-09-14)**: `docs/plans/final-plan.md`(통합 최종 계획서)로 통합됨. 이 문서는 이력 보존용.
+> Related: `docs/REFACTORING_PLAN.md`, `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/reports/industry-standard-comparison-20260914.md`
 > 목적: 리팩토링된 `src/devforge` 패키지로 **라이브 서비스를 실제 전환**하기 위한 잔여 작업을 단계·수락기준·롤백까지 정의한다.
 > 업계 표준 대조·근거: `docs/reports/industry-standard-comparison-20260914.md` (ADR-0005/0006).
 

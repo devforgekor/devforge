@@ -22,6 +22,8 @@ Archived docs — superseded by code/DB as SSOT.
 | `master-plan.md` | 2026-06-06 | Stale (May 2026), code + infra.md are SSOT | Code + `infrastructure.md` |
 | `migration-insights.md` | 2026-06-06 | Migration completed, code is current | Code |
 | `implementation-notes.md` | 2026-06-06 | Pending plan, never implemented | N/A (abandoned) |
+| `cutover-remaining-plan.md` | 2026-09-14 | 통합 최종 계획서로 대체됨(superseded) | `docs/plans/final-plan.md` |
+| `open-decisions.md` | 2026-09-14 | 결정 항목(D1~D9) 통합됨(superseded) | `docs/plans/final-plan.md` §7 |
 
 ### specs/
 | File | Archived | Why | Replaced By |

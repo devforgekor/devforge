@@ -1,6 +1,8 @@
 # 의사결정 대기 목록 (Open Decisions)
 
-> Status: active · Date: 2026-09-14 · Owner: devforge · Related: `docs/plans/cutover-remaining-plan.md`, `docs/adr/0005-extraction-routing.md`, `docs/adr/0006-mcp-tool-surface.md`, `docs/specs/ingest-provenance.yaml`
+> Status: superseded · Date: 2026-09-14 · Owner: devforge · Superseded-by: `docs/plans/final-plan.md`
+> ⚠️ **superseded(2026-09-14)**: 결정 항목(D1~D9)이 `docs/plans/final-plan.md` §7로 통합됨. 이 문서는 이력 보존용.
+> Related: `docs/adr/0005-extraction-routing.md`, `docs/adr/0006-mcp-tool-surface.md`, `docs/specs/ingest-provenance.yaml`
 > 목적: 컷오버/리팩토링 진행을 막는 **사용자(오너) 결정 사항**을 배경·선택지·영향·권장과 함께 고정한다.
 > 사용법: 각 항목의 `결정:` 칸에 선택지를 적으면, 아래 §4의 실행 매핑대로 착수한다. 상태: `대기 → 승인/보류`.
 
@@ -36,6 +38,7 @@
 ## D2. MCP 전략 승인 (`ADR-0006`)
 
 - **배경**: 활성 MCP 서버 4개. 서버 노출은 `devforge-mcp` **25**, `lsp` **65**지만, **opencode `tools` allowlist가 `devforge 12 / lsp 13 / yggdrasil 4 (+opencode-db 무필터)** ≈ **33개로 프루닝** → 서버별 10~20 충족, **opencode에선 이미 해소**. 잔여 리스크: (a) allowlist 없는 클라이언트(예: Claude Code)는 25/65 전량 로드, (b) 리팩토링 MCP(`adapters/driving/mcp`=**5툴**)가 **허용 12툴 계약** 미보존 시 컷오버 기능 소실, (c) `ingest` 미복원.
+- **실측(30일 감사)**: 로드 33툴 중 **0회 9개**(lsp proxy_artifact 3·find_symbol·inspect_symbol·get_symbol_source·detect_lsp_servers, yggdrasil list_plans 등). 권장 컷 **33→약 16**(Remove 9~11 + Merge −6). 상세·근거: `docs/reports/mcp-tool-audit-20260914.md`.
 - **선택지**
   - (a) **승인**: FastMCP Streamable HTTP 정합 + 네임스페이스 8종. **opencode 허용 12툴 계약 보존**(전체 25 기본노출 금지) + `ingest`(HTTP+MCP) 복원. 점진공개(`search_tools`)는 무필터 클라이언트 대비 **옵션**. 툴 description에 사용/비사용 경계 명시.
   - (b) **조정**: always-on 집합·네임스페이스 경계를 사용자가 지정.

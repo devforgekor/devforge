@@ -1,6 +1,6 @@
 # 업계 표준 대비 시스템 진단 — 캡처·기억·추출·MCP
 
-> Status: record · Date: 2026-09-14 · Owner: devforge · Related: `docs/plans/cutover-remaining-plan.md`, `docs/adr/0005-extraction-routing.md`, `docs/adr/0006-mcp-tool-surface.md`
+> Status: record · Date: 2026-09-14 · Owner: devforge · Related: `docs/plans/final-plan.md`, `docs/adr/0005-extraction-routing.md`, `docs/adr/0006-mcp-tool-surface.md`
 > web 조사(2026-09-14)와 서버 실측을 대조하여, 리팩토링/컷오버 방향을 업계 표준에 정렬하기 위한 근거 문서.
 
 ---

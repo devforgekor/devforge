@@ -359,10 +359,11 @@ decisions:
     §3.5, specs/schema.sql regenerated to match ORM (16 tables). Cutover PENDING: systemd/Quadlet still ExecStart scripts/*.'
   status: open
 - id: rf-cutover-01
-  detail: 'Cutover 잔여 계획 수립: docs/plans/cutover-remaining-plan.md (proposed). 라이브는 systemd 유닛 22개 +
+  detail: '최종 통합 계획 수립: docs/plans/final-plan.md (active) = 컷오버(A~I) + MCP 툴 최적화(검토안 A~E) + 의사결정(D1~D9).
+    구 plans/cutover-remaining-plan.md·plans/open-decisions.md → docs/_archive/plans/ 로 superseded. 라이브는 systemd 유닛 22개 +
     Quadlet 컨테이너 3개가 scripts/* 의존. devforge는 extract 파이프라인/CLI/api/mcp(부분)/config/logging/llm/storage만
     구현, domain(watchdog/turn_collection/pipeline/model_management)·adapters(notification/research/proxy_utils)=0줄 stub.
-    전환 단계 A~I(구현→수락→스위치→롤백), 공통 원칙 비파괴/병렬검증/1개씩. 전면 cutover는 도메인 구현 후.'
+    공통 원칙 비파괴/병렬검증/1개씩. 전면 cutover는 도메인 구현 후.'
   status: open
 - id: rf-cutover-02
   detail: '사용자 결정 반영(2026-09-14): (2) shadow DB 라이브 적용 완료(devforge_shadow schema + turns_shadow view +
@@ -377,7 +378,24 @@ decisions:
     미연결, (b) 리팩토링 MCP 계약 불일치(5 vs opencode 허용 12 — 툴 스프롤은 opencode tools allowlist로 이미 해소,
     서버 노출 devforge 25·lsp 65 → 로드 devforge 12·lsp 13·yggdrasil 4 ≈ 33), (c) 로컬 8B 배치 추출(day_cycle, CPU-bound). 권고:
     deterministic→소형로컬(grammar)→클라우드 escalation, 추출을 후보정/비동기로, MCP search_tools+ingest 복원+provenance.
-    결정 기록 adr/0005-extraction-routing.md·adr/0006-mcp-tool-surface.md (proposed). cutover-remaining-plan Phase A/B/C 세분화.'
+    결정 기록 adr/0005-extraction-routing.md·adr/0006-mcp-tool-surface.md (proposed). final-plan(§4 MCP 최적화, §5 Phase A~I, §7 D1~D9)에 통합.'
+  status: open
+- id: rf-mcp-audit-01
+  detail: 'MCP 툴 사용 감사(30일, opencode.db part): 로드 33툴 중 0회 9개. 판정 → Remove(lsp proxy_artifact_get/info/list,
+    find_symbol, inspect_symbol, get_symbol_source, detect_lsp_servers, yggdrasil list_plans; 후보 suggest_fixes/rename_symbol/start_lsp),
+    Merge(deepdive_step_enter/exit/heartbeat/status→1툴 action; mem_*+obs_*→memory(action,kind); search_turns+search_similarity→mode;
+    opencode-db list_tables+schema→1; yggdrasil deep_planning+sequential_thinking 검토). 목표 33→~16. 문서: reports/mcp-tool-audit-20260914.md.
+    즉시 적용 가능(저위험): opencode.json tools에서 proxy_artifact_*(3)·list_plans·detect_lsp_servers false. (적용 보류 — 사용자 승인 대기)'
+  status: open
+- id: rf-final-plan-01
+  detail: '최종 계획서 통합(2026-09-14): docs/plans/final-plan.md 단일 정본(MCP 툴 최적화 검토안 A~E, 툴 매핑 33→~12, Phase M0~M4,
+    컷오버 Phase A~I, 통합 의사결정 D1~D9). 구 cutover-remaining-plan.md·open-decisions.md → docs/_archive/plans/ (superseded).
+    참조 갱신(INDEX/REFACTORING_PLAN/리포트 2종/specs/ingest-provenance). 다음: D7~D9 선택 + M0(allowlist 컷) 착수.'
+  status: open
+- id: rf-review-01
+  detail: '외부 검토용 산출물(2026-09-14): docs/reports/review-brief-20260914.md (자가완결 — 구조·변화·근거·리뷰질문·용어집·붙여넣기 프롬프트).
+    Droplr(HTML) — 리뷰 브리프: https://d.pr/IFoWKE , 최종계획: https://d.pr/14w4o6 , 근거부록(업계표준+MCP감사): https://d.pr/KXEiPa .
+    검토 대상 = final-plan; 브리프가 컨텍스트 제공.'
   status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.

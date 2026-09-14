@@ -1,6 +1,6 @@
 # DevForge — Ingest & Provenance Contract
 # Status: proposed (2026-09-14) · Owner: devforge
-# Related: docs/adr/0006-mcp-tool-surface.md, docs/plans/cutover-remaining-plan.md
+# Related: docs/adr/0006-mcp-tool-surface.md, docs/plans/final-plan.md
 # 계약 고정용 스펙(구현 전). machine-readable — English only.
 ---
 version: 1
@@ -82,4 +82,4 @@ provenance:
 notes:
   - "현재 DB의 turns.source는 전량 'unknown' (provenance 미기록). 본 계약 적용 시 신규 유입부터 기록한다."
   - "웹 수집(chrome-web)은 ADR-0006에 따라 확장+relay → ingest 표면으로 전달한다."
-  - "phase: cutover-remaining-plan Phase A(MCP/ingest)·B(웹수집/provenance)에서 구현."
+  - "phase: final-plan Phase A(MCP/ingest)·B(웹수집/provenance)에서 구현."
