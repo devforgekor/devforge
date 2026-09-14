@@ -13,9 +13,8 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
@@ -81,19 +80,18 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    """Run migrations in 'online' mode using async engine."""
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section),
-        prefix="sqlalchemy.",
+    """Run migrations in 'online' mode using a sync engine."""
+    connectable = create_engine(
+        get_url(),
         poolclass=pool.NullPool,
         pool_pre_ping=True,
-        url=get_url(),  # Use our config-based URL
+        future=True,
     )
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    with connectable.connect() as connection:
+        do_run_migrations(connection)
 
-    await connectable.dispose()
+    connectable.dispose()
 
 
 if context.is_offline_mode():

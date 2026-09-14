@@ -41,6 +41,10 @@ PIPELINE_STATES = {
 }
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass
 class ExtractResult:
     """Result of extract pipeline for a single turn."""
@@ -83,10 +87,10 @@ class ExtractPipeline:
         self._db = db
         self._turn_repo = turn_repo
         self._batch_limit = batch_limit
-        self._dry_run = dry_run
+        self.dry_run = dry_run
 
         # Use recorded fixtures if in replay mode
-        self._replay_mode = bool(os.environ.get("DEVFORGE_LLM_REPLAY"))
+        self._replay_mode = _env_flag("DEVFORGE_LLM_REPLAY")
         if self._replay_mode:
             logger.info("extract_pipeline_replay_mode", message="Using recorded LLM fixtures")
 
@@ -95,7 +99,7 @@ class ExtractPipeline:
 
         Returns list of per-turn results.
         """
-        logger.info("extract_batch_start", limit=limit, dry_run=self._dry_run)
+        logger.info("extract_batch_start", limit=limit, dry_run=self.dry_run)
 
         # Phase 0: Ensure DB schema
         await self._ensure_schema()
@@ -123,7 +127,7 @@ class ExtractPipeline:
 
         try:
             # Phase 1: Mark as extracting
-            if not self._dry_run:
+            if not self.dry_run:
                 await self._db.mark_extracting(turn.id)
 
             # Phase 2: LLM extraction
@@ -148,7 +152,7 @@ class ExtractPipeline:
                 verified_count += 1
 
                 # Phase 3a: NLI verify
-                if not self._dry_run and len(fact.evidence) > 50:
+                if not self.dry_run and len(fact.evidence) > 50:
                     try:
                         verification = await self._llm.verify_claim(
                             claim=fact.evidence[:500],
@@ -163,14 +167,14 @@ class ExtractPipeline:
             logger.info("facts_verified", turn_id=str(turn.id), count=verified_count)
 
             # Phase 4: Store to review_facts
-            if not self._dry_run and facts:
+            if not self.dry_run and facts:
                 stored = await self._db.store_facts(facts)
                 logger.info("facts_stored", turn_id=str(turn.id), count=stored)
-            elif self._dry_run:
+            elif self.dry_run:
                 logger.info("dry_run_skip_store", turn_id=str(turn.id))
 
             # Phase 5: Advance pipeline state
-            if not self._dry_run:
+            if not self.dry_run:
                 new_state = "embedded" if facts else "embed_skipped"
                 await self._db.set_pipeline_state(turn.id, new_state)
 
@@ -187,7 +191,7 @@ class ExtractPipeline:
             logger.error("process_turn_error", turn_id=str(turn.id), error=str(e))
 
             # Store error marker
-            if not self._dry_run:
+            if not self.dry_run:
                 try:
                     await self._db.store_marker(turn.id, f"error: {str(e)[:100]}", "day_extract")
                 except Exception:
@@ -206,6 +210,8 @@ class ExtractPipeline:
         import json
         from pathlib import Path
 
+        from devforge.pipeline_stages.extract.edc import parse_extract_response
+
         fixtures_dir = Path(os.environ.get(
             "DEVFORGE_FIXTURE_DIR",
             "/opt/projects/server/tests/fixtures/llm_recordings"
@@ -222,15 +228,20 @@ class ExtractPipeline:
         if not entries:
             return []
 
-        # Use first entry as fixture
         entry = entries[0]
         response = entry.get("response") or entry.get("response_placeholder")
 
         if response == "REPLAY_NEEDED":
-            # Generate synthetic facts for testing
             return self._synthetic_facts(turn)
 
-        return self._synthetic_facts(turn)
+        if isinstance(response, dict):
+            response = json.dumps(response, ensure_ascii=False)
+        elif isinstance(response, list):
+            response = json.dumps({"facts": response}, ensure_ascii=False)
+        elif not isinstance(response, str):
+            return self._synthetic_facts(turn)
+
+        return parse_extract_response(response, turn.id, "day_extract")
 
     def _synthetic_facts(self, turn: TurnData) -> list[ExtractedFact]:
         """Generate synthetic facts for fixture-based testing."""
@@ -260,9 +271,15 @@ class ExtractPipeline:
 
     async def _ensure_schema(self) -> None:
         """Ensure DB schema has required columns (idempotent ALTER)."""
-        # These ALTERs are idempotent in PostgreSQL
+        gateway = getattr(self._db, "_gateway", None)
+        if gateway is None:
+            return
+
         from sqlalchemy import text as sql_text
-        async with self._db._gateway.session() as db:  # type: ignore[attr-defined]
+        async with gateway.session() as db:
+            await db.execute(sql_text(
+                "ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_verdict TEXT"
+            ))
             await db.execute(sql_text(
                 "ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm TEXT"
             ))

@@ -196,7 +196,7 @@ class LocalLLMAdapter(LLMPort):
     ) -> dict[str, Any]:
         """NLI verification — check if claim is grounded by evidence."""
         model_name, cfg = self._resolve(model_key)
-        port = cfg.get("nli_port", 8085)
+        port = cfg.get("port", 8082)
 
         body = json.dumps({
             "source": claim[:4000],

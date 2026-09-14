@@ -68,6 +68,7 @@ def setup_logging(
     logging.basicConfig(
         level=numeric_level,
         handlers=[handler],
+        force=True,
     )
 
     # Configure structlog
@@ -81,7 +82,7 @@ def setup_logging(
         ],
         wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 

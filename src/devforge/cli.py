@@ -72,12 +72,12 @@ def pipeline_orchestrate(
     from devforge.core.config import get_config
 
     config = get_config()
-    pipeline = ExtractPipeline(
-        llm=LocalLLMAdapter(),
-        db=PostgresExtractAdapter.from_config(config),
-        turn_repo=PostgresTurnRepository.from_config(config),
-    )
-    pipeline._dry_run = dry_run
+        pipeline = ExtractPipeline(
+            llm=LocalLLMAdapter(),
+            db=PostgresExtractAdapter.from_config(config),
+            turn_repo=PostgresTurnRepository.from_config(config),
+            dry_run=dry_run,
+        )
 
     async def run():
         if turn_id:

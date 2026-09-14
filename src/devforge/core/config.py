@@ -82,7 +82,7 @@ class HardcodedPathResolver:
 
     @property
     def pipelines_dir(self) -> Path:
-        return self._server_dir / "pipelines"
+        return self._server_dir / "src" / "devforge" / "pipeline_stages"
 
     @property
     def containers_dir(self) -> Path:
@@ -269,6 +269,10 @@ class ConfigRegistry:
         return self.runtime.MODE
 
     @property
+    def llm_provider(self) -> str:
+        return os.environ.get("DEVFORGE_LLM_PROVIDER", self.providers.default_provider)
+
+    @property
     def model_name(self) -> str:
         return self.runtime.MODEL_NAME
 
@@ -278,7 +282,7 @@ class ConfigRegistry:
 
     @property
     def system_mode(self) -> str:
-        return self.system.MODE
+        return os.environ.get("DEVFORGE_SYSTEM_MODE", self.system.MODE)
 
     @property
     def duckdns_token(self) -> str:

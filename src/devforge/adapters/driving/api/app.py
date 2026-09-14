@@ -173,8 +173,8 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
             llm=LocalLLMAdapter(),
             db=PostgresExtractAdapter.from_config(config),
             turn_repo=PostgresTurnRepository.from_config(config),
+            dry_run=dry_run,
         )
-        pipeline._dry_run = dry_run
 
         if turn_id:
             result = await pipeline.run_single(UUID(turn_id))
