@@ -66,17 +66,30 @@
 
 ## 4. 대응 방안 (우선순위)
 
-### 즉시 (W1 내)
-1. **원본 로그 보존 여부 확인**
-   - `/home/opc/` 하위 agent log 검색: `find /home/opc -name "*.jsonl" -o -name "*turn*" 2>/dev/null`
-   - turn_watcher 소스코드 확인: `src/devforge/` 또는 `scripts/` 내 parser
-   - 보존된 로그가 있으면 → **백필 가능** (7160건)
-   - 보존된 로그가 없으면 → **`legacy:pre-2026-09` 마커 + 수락기준 재정의** (v2 A5 판정)
+### 즉시 (W1 내) — 코드 수정 완료 (rf-triage-07)
+**provenance 코드 고침: 4개 파일 INSERT에 `source` 컬럼 추가**
 
-2. **향후 turns에 source 기록 보장** — 코드 수정 완료 (rf-triage-07)
-   - 4개 파일 INSERT에 `source` 컬럼 추가 완료
-   - 신규 turns: `turns.source`에 원본 출처 기록 (claude/copilot/gemini/aider/opencode/mcp_ingest 등)
-   - 기존 7160건: 변경 불가 (DEFAULT 'unknown') → `legacy:pre-2026-09` 마커 필요
+| 파일 | 변경 | source 값 |
+|---|---|---|
+| `scripts/turn_watcher.py` | INSERT 컬럼 + VALUES | `esc_sql(source)` — 원본 세션 source |
+| `scripts/mcp_server.py:mem_save` | INSERT 컬럼 + VALUES | `esc_sql(tag)` — 세션 출처 태그 |
+| `scripts/mcp_server.py:ingest` | INSERT 컬럼 + VALUES | `esc_sql(source)` — JSON payload 추출 |
+| `scripts/mcp_server_sse.py` | INSERT 컬럼 + VALUES | `esc_sql(tag)` — 세션 출처 태그 |
+
+**배포 필요**: `systemctl --user restart devforge-turn-watcher` + `devforge-mcp` 컨테이너 재시작
+
+### 즉시 (W1 내) — 기존 turns 처리 (3가지 옵션)
+
+| 옵션 | 설명 | Gate 6 | 결정 |
+|---|---|---|---|
+| **A** (권장) | `legacy:pre-2026-09` 마커 UPDATE | 통과 | **아래 결정 필요** |
+| **B** | 원본 로그에서 백필 | 통과 | 원본 로그 확인 필요 |
+| **C** | 변경 없음 | 불통과 | 불가 |
+
+### W2
+- 신규 turns source ≠ unknown 확인 (100건 샘플)
+- 기존 turns 마커 확인 (옵션 A 적용 시)
+- 상세: `docs/ops/provenance-marker-sql.md`
 
 ### W2
 3. **provenance 100% 검증**
