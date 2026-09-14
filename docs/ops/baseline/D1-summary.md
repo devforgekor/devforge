@@ -173,4 +173,15 @@
 | `mcp/server.py` | HTTP `POST /api/v1/ingest` 라우트 추가 (dual surface) |
 | `docs/specs/ingest-provenance.yaml` | auto-create 동작 스펙 반영 |
 
+### Claude Code 백엔드 변경 (2026-09-14)
+
+| 항목 | 내용 |
+|---|---|
+| gudokpin 프록시 | `scripts/proxies/anthropic_gudokpin.py` (:44779) — Anthropic→OpenAI 변환 |
+| 기본 모델 | `claude` → **claude-sonnet-5** (tool call + streaming 지원) |
+| claude-gpt | Gudokpin GPT/Gemini/Grok 모델 선택 (gpt-6-astra 등) |
+| 데이터 유입 | claude 세션 → turn_watcher(turns `source='claude'`) + 훅(observations) 정상 |
+
+> **영향**: Claude Code 사용 시에도 turns/observations 수집 가능 (opencode와 동일).
+
 > SSOT (7일 후): `docs/reports/rf-triage-07-patchnote-20260914.md`
