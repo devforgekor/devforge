@@ -1,0 +1,85 @@
+# DevForge — Ingest & Provenance Contract
+# Status: proposed (2026-09-14) · Owner: devforge
+# Related: docs/adr/0006-mcp-tool-surface.md, docs/plans/cutover-remaining-plan.md
+# 계약 고정용 스펙(구현 전). machine-readable — English only.
+---
+version: 1
+change_log:
+  - "2026-09-14: v1 proposed (ADR-0006). HTTP+MCP ingest 계약 정의, provenance source taxonomy 고정."
+
+ingest:
+  purpose: "Batch conversation ingestion — local agent transcripts + web-LLM capture."
+  surfaces:
+    http:
+      method: POST
+      path: /api/v1/ingest
+      auth: "loopback-only (127.0.0.1) OR bearer token from secrets.env"
+    mcp:
+      tool: ingest
+      transport: streamable-http
+  request:
+    type: object
+    required: [source, conversation_id, turns]
+    properties:
+      source: {type: string, description: "provenance source id (see provenance.source)"}
+      agent: {type: string, nullable: true}
+      title: {type: string, nullable: true}
+      model: {type: string, nullable: true}
+      conversation_id: {type: string, format: uuid}
+      turns:
+        type: array
+        items:
+          type: object
+          required: [seq, user_turn]
+          properties:
+            seq: {type: integer}
+            user_turn: {type: string}
+            thinking: {type: string, nullable: true}
+            text: {type: string, nullable: true}
+            meta: {type: object}
+            source_message_id: {type: string, nullable: true}
+  response:
+    type: object
+    properties:
+      conversation_id: {type: string}
+      inserted: {type: integer}
+      skipped: {type: integer}
+  idempotency: "unique(source_message_id) — fallback unique(conversation_id, seq)"
+  errors:
+    - {code: 400, when: "schema violation (missing source/conversation_id/turns)"}
+    - {code: 409, when: "duplicate turns (all skipped)"}
+    - {code: 413, when: "payload too large"}
+
+provenance:
+  source:
+    format: "<origin>[:<provider>]"
+    values:
+      - claude-code
+      - copilot
+      - aider
+      - opencode
+      - gemini-cli
+      - mcp_ingest            # MCP ingest 기본값(origin 미상 시)
+      - "chrome:chatgpt"
+      - "chrome:claude"
+      - "chrome:gemini"
+      - "chrome:deepseek"
+      - "chrome:aistudio"
+      - "chrome:qwen"
+    default: unknown
+    storage_column: turns.source    # NOT NULL DEFAULT 'unknown'
+  agent:
+    description: "client/harness identifier (예: opencode, claude-code)"
+    storage_column: turns.agent
+    default: null
+  confidence:
+    type: number
+    minimum: 0
+    maximum: 1
+    nullable: true
+    note: "추출/후보정 신뢰도. 미산출 시 null."
+
+notes:
+  - "현재 DB의 turns.source는 전량 'unknown' (provenance 미기록). 본 계약 적용 시 신규 유입부터 기록한다."
+  - "웹 수집(chrome-web)은 ADR-0006에 따라 확장+relay → ingest 표면으로 전달한다."
+  - "phase: cutover-remaining-plan Phase A(MCP/ingest)·B(웹수집/provenance)에서 구현."

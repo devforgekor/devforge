@@ -371,6 +371,13 @@ decisions:
     gemini_mon/gemini_quota/gemini_session_start.sh), gemini-session.service disable. gemini 모델 프록시(proxies/gemini_openai)와
     세션로그 파서(lib/parsers/gemini.py)는 유지. (1 MCP전략, 3 worker 이관, 5 일정/인력)은 보류.'
   status: open
+- id: rf-standard-01
+  detail: '업계 표준 대조 문서화(2026-09-14): docs/reports/industry-standard-comparison-20260914.md (5계층 프레임:
+    Capture/Transport/Ingestion/Storage·Retrieval/Extraction·Serving). 진단 3대 이탈점 — (a) 웹 수집(chrome-web) 파이프라인
+    미연결, (b) devforge-mcp 25+ 툴 과다(표준 10~20 + 진행공개), (c) 로컬 8B 배치 추출(day_cycle, CPU-bound). 권고:
+    deterministic→소형로컬(grammar)→클라우드 escalation, 추출을 후보정/비동기로, MCP search_tools+ingest 복원+provenance.
+    결정 기록 adr/0005-extraction-routing.md·adr/0006-mcp-tool-surface.md (proposed). cutover-remaining-plan Phase A/B/C 세분화.'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.

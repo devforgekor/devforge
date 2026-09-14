@@ -1,7 +1,8 @@
 # Cutover 잔여 계획서 — `scripts/*` → `devforge` 전환
 
-> Status: proposed · Date: 2026-09-14 · Owner: devforge · Related: `docs/REFACTORING_PLAN.md`, `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`
+> Status: proposed · Date: 2026-09-14 · Owner: devforge · Related: `docs/REFACTORING_PLAN.md`, `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/reports/industry-standard-comparison-20260914.md`
 > 목적: 리팩토링된 `src/devforge` 패키지로 **라이브 서비스를 실제 전환**하기 위한 잔여 작업을 단계·수락기준·롤백까지 정의한다.
+> 업계 표준 대조·근거: `docs/reports/industry-standard-comparison-20260914.md` (ADR-0005/0006).
 
 ---
 
@@ -62,23 +63,32 @@
 각 단계: **구현(모듈) → 수락기준 → 전환 절차 → 롤백**.
 
 ### Phase A — MCP 정합/전환 (선행 필수)
-- **구현**: `adapters/driving/mcp`를 라이브와 동일 계약으로 정합 — FastMCP Streamable HTTP 프로토콜 + 툴 8 네임스페이스
-  (knowledge/pipeline/inference/actions/watchdog/deepdive). `mcp/server.py`의 자체 SSE는 제거하거나 어댑터로 흡수.
-- **수락**: 기존 에이전트 MCP 클라이언트 설정(`url`) **변경 없이** 툴 목록/호출 동작. `deepdive_step_*` E2E 재현.
-- **전환**: `container-devforge-mcp` 이미지를 `localhost/devforge:latest`로 교체(`Exec=devforge mcp serve`). 이전 이미지 digest 보존.
+- **구현**: `adapters/driving/mcp`를 라이브와 동일 계약으로 정합 — FastMCP Streamable HTTP + **네임스페이스 8종**
+  (knowledge/memory/pipeline/inference/actions/watchdog/deepdive). `mcp/server.py` 자체 SSE 흡수.
+- **툴 표면(ADR-0006)**: 항상-로딩(always-on) **10~20 툴**로 제한, **`search_tools` 점진공개**로 long-tail 노출.
+  현 `devforge-mcp` 25+ 툴 → 네임스페이스 분할. 툴 description에 **"사용 조건/비사용 조건(경계)"** 명시.
+- **`ingest` 복원(ADR-0006)**: 배치 대화 수신을 **MCP `ingest` + `POST /api/v1/ingest`** 양쪽 제공. `source`/`agent` provenance 기록.
+- **수락**: 기존 에이전트 MCP 클라이언트 설정 **무변경** 동작. `deepdive_step_*` E2E 재현. 툴 정의 토큰 < 컨텍스트 5%.
+- **전환**: `container-devforge-mcp` 이미지 → `localhost/devforge:latest`(`Exec=devforge mcp serve`). 이전 이미지 digest 보존.
 - **롤백**: 이전 이미지 태그로 `systemctl --user restart container-devforge-mcp`.
 
-### Phase B — turn_collection 전환
-- **구현**: `domain/turn_collection`(파서 5종 + watcher + checkpoint) 포팅. `scripts/lib/parsers/*` 로직 이관.
-- **수락**: 3초 폴링, `turns`(raw) 삽입, `collect_checkpoint.json` 호환. 24h 무중단/중복 0.
+### Phase B — turn_collection + 웹 수집(ingest) 전환
+- **구현(로컬)**: `domain/turn_collection`(파서 5종 + watcher + checkpoint) 포팅. `scripts/lib/parsers/*` 이관.
+- **구현(웹, ADR-0006)**: Chrome 확장 + Native Messaging + loopback relay(chrome-web-llm) → `ingest` 수신 경로 편입.
+  `POST /api/v1/ingest`(정본) / MCP `ingest`(호환) 중 택1 정본화.
+- **provenance**: `turns.source`/`agent` 표준화(`chrome:qwen`, `chrome:deepseek`, `claude-code`, `opencode` …). 현재 전량 `unknown` 해소.
+- **수락**: 3초 폴링, `turns`(raw) 삽입, `collect_checkpoint.json` 호환, 웹 대화 유입 E2E, 24h 무중단/중복 0, provenance 100%.
 - **전환**: `devforge-turn-watcher.service` ExecStart → `devforge turn-watch`(신규 CLI). 구 유닛 `.disabled`.
 - **롤백**: 구 유닛 re-enable.
 
 ### Phase C — pipeline 도메인 + 오케스트레이터 (day_cycle)
 - **구현**: `pipeline_stages/{text_clean,entity_scan,extract,verify,enrich,embed}` + `application/orchestrator.py`
-  (`day_cycle.sh`의 상태머신·예산·순서 이관) + `raw_consumer`.
-- **수락**: `devforge pipeline orchestrate`가 배치→cleaned→scanned→verified→enriched→embedded 전 단계 수행.
-  shadow DB + replay로 구/신 대조(결정론 단계 diff=0). `day_cycle.sh`와 2주 병렬.
+  (`day_cycle.sh` 상태머신·예산·순서 이관) + `raw_consumer`.
+- **추출 라우팅(ADR-0005)**: `deterministic prefilter → 소형 로컬(constrained decoding) → hard만 클라우드 escalation`.
+  구조화(strict schema)+evidence binding+confidence gate+`1회 재시도 후 quarantine`. heavy 추출은 **비동기 batch tier**로.
+  서버는 **검증/후보정**(NLI grounding/dedup/entity resolution) 중심으로 재배치.
+- **수락**: `devforge pipeline orchestrate`가 전 단계 수행. shadow DB + replay로 구/신 대조(결정론 diff=0).
+  field-level precision/recall + **escalation rate** 측정, 골든셋 드리프트 감지. `day_cycle.sh`와 2주 병렬.
 - **전환**: `devforge-day-cycle.service` ExecStart → `devforge pipeline day-cycle`; `container-devforge-worker` 이미지 교체.
 - **롤백**: `day_cycle.sh` 유닛 re-enable + worker 이전 이미지.
 
@@ -147,15 +157,18 @@ G(ops/backup) ────────┘
 
 ## 9. 미결 (Open questions)
 
-1. **MCP 전략**: `adapters/driving/mcp`에서 FastMCP를 채택할지(라이브 정합) vs 자체 SSE 유지 후 클라이언트 이관.
-2. **shadow DB 적용**: `sql/shadow_schema.sql`을 라이브에 적용할지(현재 artifact만).
-3. **worker_supervisor 이관 범위**: `container-devforge-worker`를 application 계층으로 흡수 vs 별도 어댑터.
-4. **golden-image/gen_architecture**: 골든 이미지=범위 밖 유지, gen_architecture=**제거됨(2026-09-14)**. Gemini 에이전트 세션=**제거됨**.
-5. **일정/인력**: `REFACTORING_PLAN` v1.4(2인·14주) 가정과 실제 인력 정합.
+1. **MCP 전략**: FastMCP 채택(라이브 정합) + **툴 10~20 + `search_tools` 점진공개**(ADR-0006, proposed). SSE 유지안은 폐기.
+2. **shadow DB 적용**: ✅ **적용 완료**(2026-09-14, `devforge_shadow` + `turns_shadow` 뷰 + `review_facts_shadow`).
+3. **worker_supervisor 이관 범위**: `container-devforge-worker`를 application 계층으로 흡수(예정).
+4. **범위 확정**: 골든 이미지=범위 밖 유지. `gen_architecture`=**제거됨**. Gemini 에이전트 세션=**제거됨**.
+5. **일정/인력**: `REFACTORING_PLAN` v1.4(2인·14주) 가정과 실제 인력 정합(보류).
+6. **웹 수집(chrome-web) 편입**: 확장+relay → `ingest` 수신 경로 편입 + provenance 표준(ADR-0006, proposed).
 
 ## 10. 근거
 
 - `docs/REFACTORING_PLAN.md` v1.4 (Phase 0~8 정의)
+- `docs/reports/industry-standard-comparison-20260914.md` (업계 표준 5계층 대조)
+- `docs/adr/0005-extraction-routing.md`, `docs/adr/0006-mcp-tool-surface.md`
 - `docs/ARCHITECTURE.md` (패키지/계층), `docs/system-architecture.md` §3.5 (컷오버 미완 상태)
 - 라이브 인벤토리: `systemctl --user list-units`/`~/.config/containers/systemd/*.container`
 - `handover.yaml` known_issues (cutover pending, Alembic baseline, ORM reconcile)
