@@ -77,7 +77,8 @@ def main():
             try:
                 choice = input("Select (1-5, 0=exit): ").strip()
             except (EOFError, KeyboardInterrupt):
-                print(); return
+                print()
+                return
             if choice == "0":
                 return
             if choice == "1":
@@ -97,7 +98,8 @@ def main():
     # ── CLI ──
     targets = _cli_targets()
     if not targets:
-        print(__doc__); return
+        print(__doc__)
+        return
     for mod in targets:
         print(f"\n═══ {mod} ═══")
         _run(mod)

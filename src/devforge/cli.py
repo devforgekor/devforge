@@ -10,6 +10,7 @@ Usage:
     devforge inference status
     devforge inference ensure day_extract
 """
+
 from __future__ import annotations
 
 import typer
@@ -39,13 +40,15 @@ app.add_typer(mcp_cmds.app, name="mcp")
 @app.command()
 def status(
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
-):
+) -> None:
     """Show current server status (containers, models, timers, services)."""
     from devforge.core.config import get_config
+
     config = get_config()
 
     if json_output:
         from devforge.adapters.driving.cli_cmds.status import get_system_status
+
         typer.echo(get_system_status())
     else:
         typer.secho("DevForge Server Status", fg="cyan", bold=True)
@@ -60,7 +63,7 @@ def pipeline_orchestrate(
     limit: int = typer.Option(50, "--limit", "-n", help="Max turns to process"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Simulate without writing"),
     turn_id: str = typer.Option(None, "--turn-id", help="Process single turn"),
-):
+) -> None:
     """Run the extract pipeline on unprocessed turns."""
     import asyncio
     import json as json_module
@@ -82,14 +85,19 @@ def pipeline_orchestrate(
         dry_run=dry_run,
     )
 
-    async def run():
+    async def run() -> None:
         if turn_id:
             result = await pipeline.run_single(UUID(turn_id))
-            typer.echo(json_module.dumps({
-                "success": result.success,
-                "facts_extracted": result.facts_extracted,
-                "errors": result.errors,
-            }, indent=2))
+            typer.echo(
+                json_module.dumps(
+                    {
+                        "success": result.success,
+                        "facts_extracted": result.facts_extracted,
+                        "errors": result.errors,
+                    },
+                    indent=2,
+                )
+            )
         else:
             results = await pipeline.run_batch(limit=limit)
             summary = {
@@ -105,7 +113,7 @@ def pipeline_orchestrate(
 
 
 @pipeline_app.command("status")
-def pipeline_status_cmd():
+def pipeline_status_cmd() -> None:
     """Show pipeline state distribution."""
     import asyncio
     import json as json_module
@@ -113,15 +121,20 @@ def pipeline_status_cmd():
     from devforge.adapters.driving.mcp.server import pipeline_status as pipeline_status_fn
     from devforge.ports.extract import PipelineStatusParams
 
-    async def run():
+    async def run() -> None:
         try:
             result = await pipeline_status_fn(PipelineStatusParams())
             typer.echo(json_module.dumps(result, indent=2, default=str))
         except Exception as e:
-            typer.echo(json_module.dumps({
-                "error": f"Cannot connect to database: {e}",
-                "use": "devforge pipeline orchestrate --dry-run for simulation",
-            }, indent=2))
+            typer.echo(
+                json_module.dumps(
+                    {
+                        "error": f"Cannot connect to database: {e}",
+                        "use": "devforge pipeline orchestrate --dry-run for simulation",
+                    },
+                    indent=2,
+                )
+            )
 
     asyncio.run(run())
 

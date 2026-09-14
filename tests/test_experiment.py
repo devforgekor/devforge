@@ -51,7 +51,8 @@ def switch_and_wait(model_id, cfg):
 
 def call_llm(model_id, cfg, messages, label=""):
     body = {"messages": messages, "temperature": cfg["temperature"], "max_tokens": cfg["max_tokens"]}
-    if "top_p" in cfg: body["top_p"] = cfg["top_p"]
+    if "top_p" in cfg:
+        body["top_p"] = cfg["top_p"]
     log(f"  [{label}] Calling {model_id}...")
     t0 = time.monotonic()
     req = urllib.request.Request(LLM_URL, data=json.dumps(body).encode(),
@@ -64,20 +65,24 @@ def call_llm(model_id, cfg, messages, label=""):
     return content
 
 def parse_json(raw):
-    try: return json.loads(raw.strip())
-    except json.JSONDecodeError: pass
+    try:
+        return json.loads(raw.strip())
+    except json.JSONDecodeError:
+        pass
     for m in re.finditer(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", raw, re.DOTALL):
-        try: return json.loads(m.group(0))
-        except json.JSONDecodeError: continue
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            continue
     return None
 
 
 def test_dart_round():
     """Single DART round: Proposer → Refuter → Judge."""
-    QUESTION = "How should we handle database connection pooling in a FastAPI async application?"
+    question = "How should we handle database connection pooling in a FastAPI async application?"
     log("=" * 60)
     log("DART Round: P-R-J live test")
-    log(f"Q: {QUESTION}")
+    log(f"Q: {question}")
     log("=" * 60)
     total_start = time.monotonic()
 
@@ -87,7 +92,7 @@ def test_dart_round():
         return False
     proposer_raw = call_llm("qwen25", MODELS["qwen25"], [
         {"role": "system", "content": "You are a solution PROPOSER. Respond with STRICT JSON only."},
-        {"role": "user", "content": f"Topic: {QUESTION}\n\nPropose a concrete solution with code.\nOutput JSON: {{\"logic_summary\":\"...\",\"code_snippet\":\"...\",\"confidence_score\":0-100}}"}
+        {"role": "user", "content": f"Topic: {question}\n\nPropose a concrete solution with code.\nOutput JSON: {{\"logic_summary\":\"...\",\"code_snippet\":\"...\",\"confidence_score\":0-100}}"}
     ], "PROPOSER")
     proposer_json = parse_json(proposer_raw)
     log(f"  Proposer JSON: {proposer_json is not None}")
@@ -97,7 +102,7 @@ def test_dart_round():
     if not switch_and_wait("deepcoder", MODELS["deepcoder"]):
         return False
     refuter_raw = call_llm("deepcoder", MODELS["deepcoder"], [
-        {"role": "user", "content": f"[ROLE: CRITICAL REFUTER]\nTopic: {QUESTION}\nProposer: {proposer_raw}\nFind weaknesses, propose alternatives.\nOutput JSON: {{\"logic_summary\":\"...\",\"code_snippet\":\"...\",\"confidence_score\":0-100}}"}
+        {"role": "user", "content": f"[ROLE: CRITICAL REFUTER]\nTopic: {question}\nProposer: {proposer_raw}\nFind weaknesses, propose alternatives.\nOutput JSON: {{\"logic_summary\":\"...\",\"code_snippet\":\"...\",\"confidence_score\":0-100}}"}
     ], "REFUTER")
 
     # C: Judge (Phi-4-14B)
@@ -116,7 +121,7 @@ def test_dart_round():
 
     judge_raw = call_llm("phi4", MODELS["phi4"], [
         {"role": "system", "content": "You are a 3-person jury (security, perf, readability). Judge ANONYMIZED drafts."},
-        {"role": "user", "content": f"Topic: {QUESTION}\nAlpha:\n{alpha_raw[:2000]}\nBeta:\n{beta_raw[:2000]}\nOutput JSON: {{\"consensus_score\":0-100,\"winner\":\"alpha|beta|tie\"}}"}
+        {"role": "user", "content": f"Topic: {question}\nAlpha:\n{alpha_raw[:2000]}\nBeta:\n{beta_raw[:2000]}\nOutput JSON: {{\"consensus_score\":0-100,\"winner\":\"alpha|beta|tie\"}}"}
     ], "JUDGE")
     judge_json = parse_json(judge_raw)
 

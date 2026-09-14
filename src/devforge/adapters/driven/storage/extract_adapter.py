@@ -3,6 +3,7 @@
 Implements ExtractPort and TurnRepository using async SQLAlchemy
 sessions backed by the production devforge_app database.
 """
+
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -33,6 +34,7 @@ class PostgresExtractAdapter(ExtractPort):
 
     def __init__(self, db_url: str):
         from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+
         self._gateway = DatabaseGateway(db_url)
 
     @classmethod
@@ -44,13 +46,17 @@ class PostgresExtractAdapter(ExtractPort):
         AND NOT EXISTS in review_facts with matching extract_model."""
         async with self._gateway.session() as db:
             # NOT EXISTS anti-join: turns not yet extracted by day_extract
-            stmt = select(Turn).where(
-                Turn.pipeline_state.in_(["scanned", "pending"]),
-                ~select(ReviewFact.turn_id)
-                .where(ReviewFact.turn_id == Turn.id)
-                .where(ReviewFact.extract_model == "day_extract")
-                .exists(),
-            ).limit(limit)
+            stmt = (
+                select(Turn)
+                .where(
+                    Turn.pipeline_state.in_(["scanned", "pending"]),
+                    ~select(ReviewFact.turn_id)
+                    .where(ReviewFact.turn_id == Turn.id)
+                    .where(ReviewFact.extract_model == "day_extract")
+                    .exists(),
+                )
+                .limit(limit)
+            )
             result = await db.execute(stmt)
             rows = result.scalars().all()
 
@@ -71,11 +77,7 @@ class PostgresExtractAdapter(ExtractPort):
     async def mark_extracting(self, turn_id: UUID) -> bool:
         """Set pipeline_state='extracting' for a turn."""
         async with self._gateway.session() as db:
-            stmt = (
-                update(Turn)
-                .where(Turn.id == turn_id)
-                .values(pipeline_state="extracting")
-            )
+            stmt = update(Turn).where(Turn.id == turn_id).values(pipeline_state="extracting")
             await db.execute(stmt)
             return True
 
@@ -87,31 +89,33 @@ class PostgresExtractAdapter(ExtractPort):
         async with self._gateway.session() as db:
             rows = []
             for f in facts:
-                rows.append({
-                    "turn_id": str(f.turn_id),
-                    "fact_index": f.fact_index,
-                    "fact_type": f.fact_type,
-                    "evidence": f.evidence,
-                    "extract_model": f.extract_model,
-                    "source": "extract_pipeline",
-                    "fact_action": "extracted",
-                    "verdict": "passed",
-                    "subject": f.subject,
-                    "predicate": f.predicate,
-                    "object_": f.object_,
-                    "qualifiers": f.qualifiers,
-                    "faithful_score": f.faithful_score,
-                    "faithful_method": f.faithful_method,
-                    "nli_verdict": f.grounding,
-                    "nli_llm": f.nli_llm,
-                    "nli_llm2": f.nli_llm2,
-                    "source_file": f.source_file,
-                    "corrected_evidence": f.corrected_evidence,
-                    "quality_checks": f.quality_checks,
-                    "prompt_tokens": f.prompt_tokens,
-                    "gen_tokens": f.gen_tokens,
-                    "elapsed_ms": f.elapsed_ms,
-                })
+                rows.append(
+                    {
+                        "turn_id": str(f.turn_id),
+                        "fact_index": f.fact_index,
+                        "fact_type": f.fact_type,
+                        "evidence": f.evidence,
+                        "extract_model": f.extract_model,
+                        "source": "extract_pipeline",
+                        "fact_action": "extracted",
+                        "verdict": "passed",
+                        "subject": f.subject,
+                        "predicate": f.predicate,
+                        "object_": f.object_,
+                        "qualifiers": f.qualifiers,
+                        "faithful_score": f.faithful_score,
+                        "faithful_method": f.faithful_method,
+                        "nli_verdict": f.grounding,
+                        "nli_llm": f.nli_llm,
+                        "nli_llm2": f.nli_llm2,
+                        "source_file": f.source_file,
+                        "corrected_evidence": f.corrected_evidence,
+                        "quality_checks": f.quality_checks,
+                        "prompt_tokens": f.prompt_tokens,
+                        "gen_tokens": f.gen_tokens,
+                        "elapsed_ms": f.elapsed_ms,
+                    }
+                )
 
             stmt = insert(ReviewFact).values(rows)
             stmt = stmt.on_conflict_do_update(
@@ -124,18 +128,22 @@ class PostgresExtractAdapter(ExtractPort):
     async def store_marker(self, turn_id: UUID, mark: str, extract_model: str) -> bool:
         """Insert a marker fact (noise_marker, error, etc)."""
         async with self._gateway.session() as db:
-            stmt = insert(ReviewFact).values(
-                turn_id=str(turn_id),
-                fact_index=-1,
-                fact_type="marker",
-                evidence=mark,
-                extract_model=extract_model,
-                source="extract_pipeline",
-                fact_action=mark,
-                verdict="passed",
-            ).on_conflict_do_update(
-                index_elements=["turn_id", "fact_index", "extract_model"],
-                set_={"evidence": mark, "fact_action": mark},
+            stmt = (
+                insert(ReviewFact)
+                .values(
+                    turn_id=str(turn_id),
+                    fact_index=-1,
+                    fact_type="marker",
+                    evidence=mark,
+                    extract_model=extract_model,
+                    source="extract_pipeline",
+                    fact_action=mark,
+                    verdict="passed",
+                )
+                .on_conflict_do_update(
+                    index_elements=["turn_id", "fact_index", "extract_model"],
+                    set_={"evidence": mark, "fact_action": mark},
+                )
             )
             await db.execute(stmt)
             return True
@@ -143,11 +151,7 @@ class PostgresExtractAdapter(ExtractPort):
     async def set_pipeline_state(self, turn_id: UUID, state: str) -> bool:
         """Update pipeline_state for a turn."""
         async with self._gateway.session() as db:
-            stmt = (
-                update(Turn)
-                .where(Turn.id == turn_id)
-                .values(pipeline_state=state)
-            )
+            stmt = update(Turn).where(Turn.id == turn_id).values(pipeline_state=state)
             await db.execute(stmt)
             return True
 
@@ -157,6 +161,7 @@ class PostgresTurnRepository(TurnRepository):
 
     def __init__(self, db_url: str):
         from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+
         self._gateway = DatabaseGateway(db_url)
 
     @classmethod
@@ -177,11 +182,13 @@ class PostgresTurnRepository(TurnRepository):
                 user_turn=row.user_turn,
                 thinking=row.thinking,
                 text=row.text,
-                    pipeline_state=row.pipeline_state,
-                    meta=dict(row.meta_data) if row.meta_data else {},
+                pipeline_state=row.pipeline_state,
+                meta=dict(row.meta_data) if row.meta_data else {},
             )
 
-    async def search(self, query: str, limit: int = 20, pipeline_state: Optional[str] = None) -> list[TurnData]:
+    async def search(
+        self, query: str, limit: int = 20, pipeline_state: Optional[str] = None
+    ) -> list[TurnData]:
         """Full-text search using pg_trgm GIN index on turns."""
         async with self._gateway.session() as db:
             ts_query = func.plainto_tsquery("english", query)
@@ -236,6 +243,7 @@ class PostgresObservationRepository(ObservationRepository):
 
     def __init__(self, db_url: str):
         from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+
         self._gateway = DatabaseGateway(db_url)
 
     @classmethod
@@ -255,13 +263,17 @@ class PostgresObservationRepository(ObservationRepository):
         from devforge.domain.models import Observation
 
         async with self._gateway.session() as db:
-            stmt = insert(Observation).values(
-                observation=observation,
-                category=category,
-                source=source,
-                context=context or {},
-                tags=tags or {},
-            ).returning(Observation.id)
+            stmt = (
+                insert(Observation)
+                .values(
+                    observation=observation,
+                    category=category,
+                    source=source,
+                    context=context or {},
+                    tags=tags or {},
+                )
+                .returning(Observation.id)
+            )
             result = await db.execute(stmt)
             return result.scalar_one()  # type: ignore[no-any-return]
 

@@ -526,15 +526,15 @@ class ExtractPipeline:
 | 문서 | 시점 |
 |------|------|
 | `REFACTORING_PLAN.md` (v1.4) | ✅ 작성 완료 |
-| `ARCHITECTURE.md` | Phase 1 완료 |
-| `MIGRATION_GUIDE.md` | Phase 3 완료 |
-| `LLM_PROVIDERS.md` | Track B 문서화 시 (별도) |
+| `ARCHITECTURE.md` | ✅ 작성 (2026-09-14) |
+| `MIGRATION_GUIDE.md` | ✅ 작성 (2026-09-14) |
+| `LLM_PROVIDER_PLAN.md` | ✅ 작성 (Track B 계획, proposed) |
 | `API_REFERENCE.md` | Phase 4 완료 |
 | `OPERATIONS_GUIDE.md` | Phase 6 완료 |
-| `adr/0001-config-priority.md` | Phase 0 완료 |
-| `adr/0002-llm-provider-flag.md` | Phase 1 완료 |
-| `adr/0003-shadow-db.md` | Phase 1.5 완료 |
-| `adr/0004-alembic-migrate.md` | Phase 0 완료 |
+| `adr/0001-config-priority.md` | Phase 0 완료 (Accepted) |
+| `adr/0002-llm-provider-flag.md` | Phase 1 완료 (Accepted) |
+| `adr/0003-shadow-db.md` | Phase 1.5 (Proposed) |
+| `adr/0004-alembic-migrate.md` | Phase 0 완료 (Accepted) |
 
 ---
 

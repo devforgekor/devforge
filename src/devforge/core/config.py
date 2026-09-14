@@ -11,6 +11,7 @@ while maintaining physical file separation:
 
 Priority: env vars > secrets.env > providers.yaml > current-*.env > state.yaml > defaults
 """
+
 from __future__ import annotations
 
 import os
@@ -28,9 +29,15 @@ CONFIG_DIR = Path(os.environ.get("DEVFORGE_CONFIG_DIR", str(Path.home() / ".conf
 
 # File locations (overridable via env for testing)
 SECRETS_FILE = Path(os.environ.get("DEVFORGE_SECRETS_FILE", str(CONFIG_DIR / "secrets.env")))
-PROVIDERS_FILE = Path(os.environ.get("DEVFORGE_PROVIDERS_FILE", str(SERVER_DIR / "config" / "providers.yaml")))
-RUNTIME_ENV_FILE = Path(os.environ.get("DEVFORGE_RUNTIME_ENV", str(DATA_DIR / "scripts" / "current-mode-inference.env")))
-SYSTEM_ENV_FILE = Path(os.environ.get("DEVFORGE_SYSTEM_ENV", str(DATA_DIR / "scripts" / "current-system-mode.env")))
+PROVIDERS_FILE = Path(
+    os.environ.get("DEVFORGE_PROVIDERS_FILE", str(SERVER_DIR / "config" / "providers.yaml"))
+)
+RUNTIME_ENV_FILE = Path(
+    os.environ.get("DEVFORGE_RUNTIME_ENV", str(DATA_DIR / "scripts" / "current-mode-inference.env"))
+)
+SYSTEM_ENV_FILE = Path(
+    os.environ.get("DEVFORGE_SYSTEM_ENV", str(DATA_DIR / "scripts" / "current-system-mode.env"))
+)
 STATE_YAML_FILE = SERVER_DIR / "state.yaml"
 CLAUDE_YAML_FILE = SERVER_DIR / "CLAUDE.yaml"
 
@@ -100,8 +107,10 @@ class HardcodedPathResolver:
 
 # ── Configuration Models ──
 
+
 class SecretsConfig(BaseSettings):
     """Secrets from secrets.env — no defaults, fail if missing in production."""
+
     model_config = SettingsConfigDict(
         env_file=SECRETS_FILE,
         env_file_encoding="utf-8",
@@ -139,6 +148,7 @@ class SecretsConfig(BaseSettings):
 
 class ProviderConfig(BaseModel):
     """Single LLM provider configuration."""
+
     type: str  # "local", "openai", "anthropic"
     api_key: str = ""
     base_url: str = ""
@@ -150,6 +160,7 @@ class ModelProvidersConfig(BaseModel):
 
     Track A에서는 local provider만 사용. Track B에서 OpenAI/Anthropic 추가.
     """
+
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     default_provider: str = "local"
 
@@ -162,6 +173,7 @@ class ModelProvidersConfig(BaseModel):
 
 class RuntimeConfig(BaseSettings):
     """Runtime inference configuration from current-mode-inference.env."""
+
     model_config = SettingsConfigDict(
         env_file=RUNTIME_ENV_FILE,
         env_file_encoding="utf-8",
@@ -183,6 +195,7 @@ class RuntimeConfig(BaseSettings):
 
 class SystemConfig(BaseSettings):
     """System mode configuration from current-system-mode.env."""
+
     model_config = SettingsConfigDict(
         env_file=SYSTEM_ENV_FILE,
         env_file_encoding="utf-8",
@@ -207,8 +220,9 @@ class PersistentConfig(BaseModel):
     network: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
-    def load(cls, state_path: Path = STATE_YAML_FILE,
-             claude_path: Path = CLAUDE_YAML_FILE) -> PersistentConfig:
+    def load(
+        cls, state_path: Path = STATE_YAML_FILE, claude_path: Path = CLAUDE_YAML_FILE
+    ) -> PersistentConfig:
         """Load from both YAML files."""
         config = cls()
 
@@ -222,7 +236,11 @@ class PersistentConfig(BaseModel):
             with open(claude_path) as f:
                 claude = yaml.safe_load(f) or {}
             for key in ("overview", "services", "network"):
-                setattr(config, key, claude.get(key, {} if isinstance(getattr(config, key), dict) else []))
+                setattr(
+                    config,
+                    key,
+                    claude.get(key, {} if isinstance(getattr(config, key), dict) else []),
+                )
 
         return config
 
@@ -234,7 +252,7 @@ class ConfigRegistry:
     env vars > secrets.env > providers.yaml > current-*.env > state.yaml > defaults
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.secrets = SecretsConfig()
         self.runtime = RuntimeConfig()
         self.system = SystemConfig()
@@ -299,6 +317,7 @@ class ConfigRegistry:
 
 # ── Singleton ──
 _config: Optional[ConfigRegistry] = None
+
 
 def get_config() -> ConfigRegistry:
     """Get the global ConfigRegistry instance."""

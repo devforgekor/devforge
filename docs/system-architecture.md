@@ -1,7 +1,7 @@
 # DevForge 시스템 전체 구조
 
 > 서버 전체 런타임·데이터 흐름·스토리지의 통합 구조 문서.
-> 최종 갱신: 2026-09-11 (이전 2026-09-09 버전을 전면 갱신 — OCI 스토리지 계층 추가)
+> 최종 갱신: 2026-09-14 (리팩토링 코드 레이어 §3.5 추가 — 이전 2026-09-11 버전은 OCI 스토리지 계층 추가)
 > 자동 생성 문서(`docs/architecture/*`)와 달리 이 문서는 **수동 관리**다.
 
 ---
@@ -84,6 +84,10 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 > `*.container.disabled`로 rename(주석 stub을 `.container`로 남기면 generator 실패).
 > rootless bridge의 발행 포트는 `rootlessport`(userspace proxy)가 포워딩 —
 > 컨테이너 healthcheck와 별개로 **호스트 도달성**을 watchdog이 감시(§4.4, 2026-09-12).
+>
+> **코드 레이어 주의(2026-09-14)**: 위 서비스/컨테이너의 `ExecStart`는 아직 레거시
+> `scripts/*`를 가리킨다. 리팩토링 최종본은 `src/devforge/` 패키지(§3.5)이며
+> **컷오버는 미완료**다 — `devforge` CLI는 설치·동작하지만 라이브 서비스는 미사용.
 
 ### 3.2 systemd --user 서비스 (대표)
 
@@ -125,6 +129,28 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 | `/devforge/tg-webhook*` | `127.0.0.1:8001` |
 | `/netdata*` | `10.89.0.1:19999` (basic auth) |
 | `/webhooks/slack*`, `/slack/actions*` | `127.0.0.1:8084`/`:8087` (legacy, 리스너 없음) |
+
+### 3.5 코드 레이어 — `devforge` 패키지 (리팩토링 최종본)
+
+`pip install -e .`로 설치되는 src-layout 패키지. Ports & Adapters 구조이며 정본은
+[`docs/REFACTORING_PLAN.md`](./REFACTORING_PLAN.md)(v1.4) + [`docs/adr/`](./adr/)다.
+
+| 계층 | 경로 | 역할 |
+|---|---|---|
+| CLI (진입점) | `src/devforge/cli.py` | `devforge` Typer 단일 진입점 (`pyproject.toml [project.scripts]`) |
+| core | `src/devforge/core/{config,logging}.py` | `ConfigRegistry`(5개 소스 통합), 구조화 로깅 |
+| ports | `src/devforge/ports/extract.py` | `LLMPort`/`ExtractPort`/`TurnRepository` (Protocol) |
+| domain | `src/devforge/domain/models.py` | SQLAlchemy 모델 (`docs/specs/schema.sql` 대응) |
+| adapters/driven | `.../llm/local_adapter.py`, `.../storage/*` | 로컬 llama.cpp(:8080-8085), PostgreSQL(`DatabaseGateway`) |
+| adapters/driving | `.../{api,mcp,cli_cmds}/` | FastAPI(:8000), MCP SSE(:8100), CLI 서브커맨드 |
+| application | `src/devforge/application/extract_pipeline.py` | extract 파이프라인 서비스 |
+
+주요 명령(정본: [`docs/API_REFERENCE.md`](./API_REFERENCE.md)): `devforge status [--json]`,
+`devforge pipeline orchestrate|status`, `devforge mcp serve`, `devforge inference switch|status|ensure`.
+
+> **컷오버 전**: systemd 유닛/Quadlet은 레거시 `scripts/`(§3.2)를 계속 사용하며,
+> `devforge` CLI·패키지는 **병행 설치만** 되어 있다. 운영 절차는
+> [`docs/OPERATIONS_GUIDE.md`](./OPERATIONS_GUIDE.md) 참조.
 
 ---
 
@@ -204,7 +230,7 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 - 산출물(자동, 수동 편집 금지):
   - `docs/architecture/infrastructure.md` (서버 정체성)
   - `docs/architecture/software.yaml` (모델/모드/파이프라인)
-  - `docs/architecture/code-structure.yaml` (파일 레이아웃 SSOT, 30분 hash-guard)
+  - `docs/architecture/code-structure.yaml` (파일 레이아웃 SSOT, 30분 hash-guard) — 레거시 `scripts/`와 신규 `src/devforge/`를 함께 스캔(2026-09-14)
   - `docs/specs/timer-registry.yaml` (타이머)
 - 실행: `devforge-system-sync.timer`(30분, `--check-structure`) + `devforge-daily-structure.timer`(매일 전체 + git push)
 - 수동 편집 문서: 이 문서, `docs/object-storage.md`, 각종 design/audit/runbook
@@ -235,10 +261,17 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | OCI 스토리지/파일교환 | `docs/object-storage.md` | 버킷·백업·PAR·Droplr·통합 이점 |
 | 서버 정체성(자동) | `docs/architecture/infrastructure.md` | 라이브 상태 |
 | 코드 구조 SSOT | `docs/architecture/code-structure.yaml` | 파일 레이아웃 |
-| watchdog 감사 | `docs/watchdog-comprehensive-audit.md` | watchdog 패치 이력 |
-| golden image runbook | `docs/runbook-golden-image.md` | 이미지 배포 |
+| watchdog 감사 | `docs/reports/watchdog-comprehensive-audit.md` | watchdog 패치 이력 |
+| golden image runbook | `docs/runbooks/runbook-golden-image.md` | 이미지 배포 |
 | ebook 아키텍처 | `/opt/workspace/ebooklib/docs/00-ARCHITECTURE.md` | ebook 상세 |
 | 통합 제어 | `CLAUDE.yaml` | 진입점/엔트리포인트 목록 |
+| 리팩토링 계획(정본) | `docs/REFACTORING_PLAN.md` | src-layout + Ports&Adapters 전환 계획(v1.4) |
+| 코드 아키텍처 | `docs/ARCHITECTURE.md` | 패키지 레이아웃·의존성 규칙(import-linter) |
+| 온보딩/전환 | `docs/MIGRATION_GUIDE.md` | 설치·실행·레거시 매핑·트러블슈팅 |
+| Track B 계획 | `docs/LLM_PROVIDER_PLAN.md` | 클라우드 LLM 공급자 추상화(proposed) |
+| CLI/HTTP API | `docs/API_REFERENCE.md` | `devforge` 서브커맨드 + FastAPI/MCP 엔드포인트 |
+| 운영 가이드 | `docs/OPERATIONS_GUIDE.md` | 설치·실행·마이그레이션·트러블슈팅 |
+| 설계 결정 기록 | `docs/adr/` | config priority / LLM provider / shadow DB / Alembic |
 
 ### 이전 산출물 참고
 - `_archive/server-specs-and-llm-architecture.md` (2026-05-25) — 구 아키텍처

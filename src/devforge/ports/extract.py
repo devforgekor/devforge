@@ -4,6 +4,7 @@ These interfaces define what the domain layer requires from adapters,
 keeping domain logic independent of specific LLM backends, storage
 details, or container orchestration.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -20,6 +21,7 @@ class ExtractedFact:
 
     Schema mirrors review_facts table columns used by extract_pipeline.py.
     """
+
     turn_id: UUID
     fact_index: int
     fact_type: str
@@ -45,6 +47,7 @@ class ExtractedFact:
 @dataclass
 class TurnData:
     """Raw data for a single conversation turn."""
+
     id: UUID
     conversation_id: UUID
     seq: int
@@ -211,7 +214,9 @@ class ObservationRepository(ABC):
 
 # ── Parameter models (shared by MCP server and CLI) ──
 
+
 class PipelineStatusParams(BaseModel):
     """Parameters for pipeline status tool."""
+
     action: str = "status"
     model_key: Optional[str] = None

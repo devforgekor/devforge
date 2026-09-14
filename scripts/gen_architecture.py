@@ -25,6 +25,8 @@ import yaml
 CLAUDE_YAML = Path("/opt/projects/server/CLAUDE.yaml")
 CODE_STRUCTURE_YAML = Path("/opt/projects/server/docs/architecture/code-structure.yaml")
 SCRIPTS_DIR = Path("/opt/projects/server/scripts")
+SRC_DIR = Path("/opt/projects/server/src")
+SRC_DEVFORGE = SRC_DIR / "devforge"
 INFRA_OUTPUT = Path("/home/opc/infrastructure.md")
 ARCH_INFRA_OUTPUT = Path("/opt/projects/server/docs/architecture/infrastructure.md")
 SOFTWARE_OUTPUT = Path("/opt/projects/server/docs/architecture/software.yaml")
@@ -248,6 +250,7 @@ CODE_STRUCTURE_HEADER = """# ═════════════════
 # 🔴 CRITICAL: LLM MUST read this before creating, moving, or modifying any file.
 # 🔴 If unsure where a change belongs, check here first. Ask user if still unclear.
 # 🔴 Do NOT create new files under `scripts/` without user approval.
+# 🔴 New code belongs under `src/devforge/` (refactored src-layout); `scripts/` is legacy.
 #
 # Rule priority: code-structure.yaml > llm-common-rule.md > agent's judgment
 # If this file says a module has `no_subprocess: true`, do NOT add subprocess calls there.
@@ -262,7 +265,12 @@ SCRIPTS_LIB = SCRIPTS_DIR / "lib"
 
 
 def _discover_dirs() -> list[Path]:
-    """Discover all subdirectories under scripts/ that contain .py or .sh files."""
+    """Discover all directories that contain .py or .sh files.
+
+    Two roots are scanned:
+      - scripts/ (legacy layout: entry points, services, lib/)
+      - src/devforge/ (refactored src-layout package)
+    """
     dirs = [SCRIPTS_DIR]
     # Explicitly add scripts/lib/
     dirs.append(SCRIPTS_LIB)
@@ -277,11 +285,24 @@ def _discover_dirs() -> list[Path]:
         if sub == SCRIPTS_LIB:
             continue  # already handled above
         dirs.append(sub)
+
+    # Refactored src-layout package: src/devforge/**
+    if SRC_DEVFORGE.exists():
+        dirs.append(SRC_DEVFORGE)
+        for sub in sorted(SRC_DEVFORGE.rglob("*")):
+            if sub.is_dir() and sub.name not in IGNORE_DIRS and "_archive" not in sub.parts:
+                dirs.append(sub)
     return dirs
 
 
 def _infer_group_purpose(path: Path) -> str:
     """Infer a human-readable purpose from directory path."""
+    if path == SRC_DEVFORGE or SRC_DEVFORGE in path.parents:
+        rel = path.relative_to(SRC_DEVFORGE)
+        if rel == Path("."):
+            return "devforge package root (refactored src-layout)"
+        return "src/devforge/" + rel.as_posix()
+
     rel = path.relative_to(SCRIPTS_DIR)
     parts = rel.parts
 
@@ -297,9 +318,8 @@ def _files_in_dir(path: Path) -> list[str]:
     """List .py and .sh files in a directory (non-recursive)."""
     files = []
     for p in sorted(path.iterdir()):
-        if p.suffix in (".py", ".sh") and p.suffix not in IGNORE_SUFFIXES:
-            if "_archive" not in p.parts:
-                files.append(p.name)
+        if p.suffix in (".py", ".sh") and p.suffix not in IGNORE_SUFFIXES and "_archive" not in p.parts:
+            files.append(p.name)
     return files
 
 
@@ -347,6 +367,8 @@ def _extract_file_info(fname: str, parent: Path) -> dict:
 
 def _config_key(dir_path: Path) -> str:
     """Normalised key for group matching (no trailing slash)."""
+    if dir_path == SRC_DEVFORGE or SRC_DEVFORGE in dir_path.parents:
+        return "src/" + dir_path.relative_to(SRC_DIR).as_posix()
     rel = dir_path.relative_to(SCRIPTS_DIR)
     if rel == Path("."):
         return "scripts"
@@ -354,12 +376,12 @@ def _config_key(dir_path: Path) -> str:
 
 
 def _scripts_hash() -> str:
-    """Quick hash of scripts/ directory structure (files exist/removed, not content)."""
+    """Quick hash of tracked directory structure (files exist/removed, not content)."""
     import hashlib
 
     hasher = hashlib.md5()
     for d in sorted(_discover_dirs()):
-        hasher.update(d.relative_to(SCRIPTS_DIR).as_posix().encode())
+        hasher.update(_config_key(d).encode())
         for f in sorted(_files_in_dir(d)):
             hasher.update(f.encode())
     return hasher.hexdigest()

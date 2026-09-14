@@ -9,6 +9,7 @@ Usage:
     devforge pipeline status
     devforge pipeline extract <turn-id>
 """
+
 from __future__ import annotations
 
 # Note: Pipeline commands are now handled directly in devforge/cli.py

@@ -12,6 +12,7 @@ This service implementation uses the hexagonal port/adapter architecture:
 
 When DEVFORGE_LLM_REPLAY is set, uses recorded fixtures instead of live LLM calls.
 """
+
 from __future__ import annotations
 
 import os
@@ -48,6 +49,7 @@ def _env_flag(name: str) -> bool:
 @dataclass
 class ExtractResult:
     """Result of extract pipeline for a single turn."""
+
     turn_id: UUID
     success: bool
     facts_extracted: int = 0
@@ -55,7 +57,7 @@ class ExtractResult:
     errors: Optional[list[str]] = None
     elapsed_ms: float = 0.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.errors is None:
             self.errors = []
 
@@ -101,8 +103,9 @@ class ExtractPipeline:
         """
         logger.info("extract_batch_start", limit=limit, dry_run=self.dry_run)
 
-        # Phase 0: Ensure DB schema
-        await self._ensure_schema()
+        # Phase 0: Ensure DB schema (read/write DDL — skipped in dry-run)
+        if not self.dry_run:
+            await self._ensure_schema()
 
         # Phase 1: Get unprocessed turns
         turns = await self._db.get_unprocessed_turns(limit=limit or self._batch_limit)
@@ -113,14 +116,17 @@ class ExtractPipeline:
             result = await self.process_turn(turn)
             results.append(result)
 
-        logger.info("extract_batch_done",
-                     success=sum(1 for r in results if r.success),
-                     failed=sum(1 for r in results if not r.success))
+        logger.info(
+            "extract_batch_done",
+            success=sum(1 for r in results if r.success),
+            failed=sum(1 for r in results if not r.success),
+        )
         return results
 
     async def process_turn(self, turn: TurnData) -> ExtractResult:
         """Process a single turn through the extract pipeline."""
         import time
+
         start = time.monotonic()
 
         logger.info("process_turn_start", turn_id=str(turn.id), user_turn_len=len(turn.user_turn))
@@ -138,6 +144,7 @@ class ExtractPipeline:
                     build_extract_prompt,
                     parse_extract_response,
                 )
+
                 messages = build_extract_prompt(turn)
                 result = await self._llm.chat(messages, model_key="day_extract", json_mode=True)
                 facts = parse_extract_response(result["content"], turn.id, "day_extract")
@@ -158,7 +165,9 @@ class ExtractPipeline:
                             claim=fact.evidence[:500],
                             evidence=turn.user_turn[:500],
                         )
-                        fact.faithful_score = 0.8 if verification.get("verdict") == "GROUNDED" else 0.3
+                        fact.faithful_score = (
+                            0.8 if verification.get("verdict") == "GROUNDED" else 0.3
+                        )
                         fact.faithful_method = "nli"
                         fact.grounding = verification.get("verdict", "NEUTRAL")
                     except Exception as e:
@@ -212,10 +221,11 @@ class ExtractPipeline:
 
         from devforge.pipeline_stages.extract.edc import parse_extract_response
 
-        fixtures_dir = Path(os.environ.get(
-            "DEVFORGE_FIXTURE_DIR",
-            "/opt/projects/server/tests/fixtures/llm_recordings"
-        ))
+        fixtures_dir = Path(
+            os.environ.get(
+                "DEVFORGE_FIXTURE_DIR", "/opt/projects/server/tests/fixtures/llm_recordings"
+            )
+        )
 
         fixture_file = fixtures_dir / "extract_llm.json"
         if not fixture_file.exists():
@@ -251,21 +261,23 @@ class ExtractPipeline:
             return []
 
         # Simple fact extraction: split into paragraphs, one fact per paragraph
-        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
         facts = []
 
         for idx, para in enumerate(paragraphs[:5]):  # Max 5 facts per turn
-            facts.append(ExtractedFact(
-                turn_id=turn.id,
-                fact_index=idx,
-                fact_type="text",
-                evidence=para[:2000],
-                extract_model="day_extract",
-                subject=None,
-                predicate=None,
-                object_=None,
-                qualifiers=None,
-            ))
+            facts.append(
+                ExtractedFact(
+                    turn_id=turn.id,
+                    fact_index=idx,
+                    fact_type="text",
+                    evidence=para[:2000],
+                    extract_model="day_extract",
+                    subject=None,
+                    predicate=None,
+                    object_=None,
+                    qualifiers=None,
+                )
+            )
 
         return facts
 
@@ -276,31 +288,35 @@ class ExtractPipeline:
             return
 
         from sqlalchemy import text as sql_text
+
         async with gateway.session() as db:
-            await db.execute(sql_text(
-                "ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_verdict TEXT"
-            ))
-            await db.execute(sql_text(
-                "ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm TEXT"
-            ))
-            await db.execute(sql_text(
-                "ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS quality_checks JSONB"
-            ))
-            await db.execute(sql_text(
-                "ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm2 TEXT"
-            ))
-            await db.execute(sql_text(
-                "ALTER TABLE turns ADD COLUMN IF NOT EXISTS pipeline_state TEXT DEFAULT 'scanned'"
-            ))
-            await db.execute(sql_text(
-                "ALTER TABLE turns ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'unknown'"
-            ))
+            await db.execute(
+                sql_text("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_verdict TEXT")
+            )
+            await db.execute(
+                sql_text("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm TEXT")
+            )
+            await db.execute(
+                sql_text("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS quality_checks JSONB")
+            )
+            await db.execute(
+                sql_text("ALTER TABLE review_facts ADD COLUMN IF NOT EXISTS nli_llm2 TEXT")
+            )
+            await db.execute(
+                sql_text(
+                    "ALTER TABLE turns ADD COLUMN IF NOT EXISTS pipeline_state TEXT DEFAULT 'scanned'"
+                )
+            )
+            await db.execute(
+                sql_text("ALTER TABLE turns ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'unknown'")
+            )
 
     async def run_single(self, turn_id: UUID) -> ExtractResult:
         """Process a single turn by ID (for debugging)."""
         if self._turn_repo is None:
             from devforge.adapters.driven.storage.extract_adapter import PostgresTurnRepository
             from devforge.core.config import get_config
+
             self._turn_repo = PostgresTurnRepository.from_config(get_config())
 
         turn = await self._turn_repo.get_by_id(turn_id)

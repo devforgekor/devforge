@@ -1,4 +1,5 @@
 """CLI subcommand for MCP server management."""
+
 from __future__ import annotations
 
 import typer
@@ -13,7 +14,7 @@ logger = get_logger(__name__)
 def serve(
     host: str = typer.Option("0.0.0.0", "--host", "-h"),
     port: int = typer.Option(8100, "--port", "-p"),
-):
+) -> None:
     """Start the MCP SSE server."""
     import uvicorn
 

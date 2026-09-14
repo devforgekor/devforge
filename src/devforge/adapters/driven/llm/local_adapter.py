@@ -6,6 +6,7 @@ This is the PRODUCTION adapter for the current single-server setup.
 Track B (cloud provider support) would add a separate adapter that
 implements the same LLMPort interface using OpenAI/Anthropic SDKs.
 """
+
 from __future__ import annotations
 
 import json
@@ -123,11 +124,17 @@ class LocalLLMAdapter(LLMPort):
         req = Request(url, data=data, headers={"Content-Type": "application/json"})
         http_timeout = min(timeout or cfg.get("timeout", 300), 1800)
 
-        logger.debug("llm_call", model=model_name, port=port,
-                      max_tokens=body["max_tokens"], timeout=http_timeout)
+        logger.debug(
+            "llm_call",
+            model=model_name,
+            port=port,
+            max_tokens=body["max_tokens"],
+            timeout=http_timeout,
+        )
 
         try:
             import asyncio
+
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
                 None,
@@ -169,7 +176,8 @@ class LocalLLMAdapter(LLMPort):
         keeping this adapter focused on the LLM HTTP call.
         """
         return await self._call_llm(
-            messages, model_key,
+            messages,
+            model_key,
             max_tokens=max_tokens,
             temperature=temperature,
             json_mode=json_mode,
@@ -198,18 +206,20 @@ class LocalLLMAdapter(LLMPort):
         model_name, cfg = self._resolve(model_key)
         port = cfg.get("port", 8082)
 
-        body = json.dumps({
-            "source": claim[:4000],
-            "evidence": evidence[:1000],
-            "strict": False,
-        }).encode()
+        body = json.dumps(
+            {
+                "source": claim[:4000],
+                "evidence": evidence[:1000],
+                "strict": False,
+            }
+        ).encode()
 
         url = f"http://127.0.0.1:{port}/nli"
-        req = Request(url, data=body,
-                      headers={"Content-Type": "application/json"}, method="POST")
+        req = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
 
         try:
             import asyncio
+
             loop = asyncio.get_event_loop()
             data = await loop.run_in_executor(
                 None,
@@ -236,7 +246,8 @@ class LocalLLMAdapter(LLMPort):
         ]
 
         result = await self._call_llm(
-            messages, model_key,
+            messages,
+            model_key,
             max_tokens=max_tokens or 512,
             temperature=0.1,
         )
@@ -257,19 +268,21 @@ class LocalLLMAdapter(LLMPort):
         cfg = MODEL_REGISTRY["reranker"]
         port = cfg["port"]
 
-        body = json.dumps({
-            "model": "reranker",
-            "query": query[:1500],
-            "documents": [c[:1500] for c in candidates],
-            "top_n": len(candidates),
-        }).encode()
+        body = json.dumps(
+            {
+                "model": "reranker",
+                "query": query[:1500],
+                "documents": [c[:1500] for c in candidates],
+                "top_n": len(candidates),
+            }
+        ).encode()
 
         url = f"http://127.0.0.1:{port}/v1/rerank"
-        req = Request(url, data=body,
-                      headers={"Content-Type": "application/json"}, method="POST")
+        req = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
 
         try:
             import asyncio
+
             loop = asyncio.get_event_loop()
             data = await loop.run_in_executor(
                 None,

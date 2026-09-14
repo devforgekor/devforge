@@ -7,6 +7,8 @@ alembic<2.0,>=1.13
 oci<3.0,>=2.140
 apprise<2.0,>=1.0
 typer<1.0,>=0.9
+pydantic-settings<3.0,>=2.0
+sse-starlette<4.0,>=3.0
 
 [dev]
 pytest<9.0,>=8.0
@@ -16,7 +18,6 @@ pytest-xdist<4.0,>=3.0
 ruff<1.0,>=0.5
 mypy<2.0,>=1.10
 import-linter<1.0,>=0.6
-pydantic-settings<3.0,>=2.0
 
 [track_b]
 openai<2.0,>=1.40

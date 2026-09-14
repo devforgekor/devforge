@@ -1,6 +1,6 @@
 # 런북 — Azure Qwen을 devforge Deep Dive 추론 엔진으로 사용
 
-> Status: active · Date: 2026-09-12 (09-11본 갱신) · Owner: devforge · Related: `docs/reports/control-plane-roadmap.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
+> Status: active · Date: 2026-09-12 (09-11본 갱신) · Owner: devforge · Related: `docs/plans/control-plane-roadmap.md`, `docs/reports/mcp-consolidation-applied-20260911.md`
 > 원칙: **로직·툴·상태는 devforge, Azure는 추론만.** Azure에 에이전트 로직/repo/DB를 두지 않는다.
 
 ---

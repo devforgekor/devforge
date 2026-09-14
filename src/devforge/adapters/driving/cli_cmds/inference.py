@@ -1,4 +1,5 @@
 """CLI subcommand for inference model management."""
+
 from __future__ import annotations
 
 import json
@@ -30,7 +31,7 @@ def _run_cmd(cmd: list[str], timeout: int = 30) -> dict[str, Any]:
 def switch_mode(
     mode: str = typer.Argument(..., help="Mode: day or night"),
     dry_run: bool = typer.Option(False, "--dry-run"),
-):
+) -> None:
     """Switch inference mode (day/night) and restart model pods."""
     config = get_config()
     current = config.system_mode
@@ -62,7 +63,7 @@ def switch_mode(
 
 
 @app.command("status")
-def inference_status():
+def inference_status() -> None:
     """Show current inference model status."""
     config = get_config()
     status = {
@@ -80,7 +81,7 @@ def inference_status():
 def ensure_model(
     model_key: str = typer.Argument(..., help="Model key (e.g., day_extract, day_enricher)"),
     dry_run: bool = typer.Option(False, "--dry-run"),
-):
+) -> None:
     """Ensure the model pod is running for the given model key."""
     from devforge.adapters.driven.llm.local_adapter import MODEL_REGISTRY
 
@@ -103,6 +104,7 @@ def ensure_model(
 
     # Check if port is listening
     import socket
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(1)
     result = sock.connect_ex(("127.0.0.1", port))

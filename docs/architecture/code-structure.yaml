@@ -4,6 +4,7 @@
 # 🔴 CRITICAL: LLM MUST read this before creating, moving, or modifying any file.
 # 🔴 If unsure where a change belongs, check here first. Ask user if still unclear.
 # 🔴 Do NOT create new files under `scripts/` without user approval.
+# 🔴 New code belongs under `src/devforge/` (refactored src-layout); `scripts/` is legacy.
 #
 # Rule priority: code-structure.yaml > llm-common-rule.md > agent's judgment
 # If this file says a module has `no_subprocess: true`, do NOT add subprocess calls there.
@@ -1301,3 +1302,188 @@ modules:
       status: experimental
       purpose: "TLDR Verification Method Comparison \u2014 Reranker vs Embedding (NLI\
         \ :8085 removed)."
+- path: src/devforge/
+  purpose: devforge package root (refactored src-layout)
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    cli.py:
+      status: unknown
+      purpose: "DevForge CLI \u2014 single entry point for all server operations."
+- path: src/devforge/adapters/
+  purpose: src/devforge/adapters
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/adapters/driven/
+  purpose: src/devforge/adapters/driven
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/adapters/driven/llm/
+  purpose: src/devforge/adapters/driven/llm
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    local_adapter.py:
+      status: unknown
+      purpose: "Local LLM adapter \u2014 Track A (llama.cpp HTTP servers only)."
+- path: src/devforge/adapters/driven/notification/
+  purpose: src/devforge/adapters/driven/notification
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/adapters/driven/proxy_utils/
+  purpose: src/devforge/adapters/driven/proxy_utils
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/adapters/driven/research/
+  purpose: src/devforge/adapters/driven/research
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/adapters/driven/storage/
+  purpose: src/devforge/adapters/driven/storage
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    database_gateway.py:
+      status: unknown
+      purpose: "Database gateway \u2014 async SQLAlchemy session management."
+    extract_adapter.py:
+      status: unknown
+      purpose: PostgreSQL adapter for extract pipeline ports.
+- path: src/devforge/adapters/driving/
+  purpose: src/devforge/adapters/driving
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/adapters/driving/api/
+  purpose: src/devforge/adapters/driving/api
+  files:
+    app.py:
+      status: unknown
+      purpose: FastAPI application factory for DevForge server.
+- path: src/devforge/adapters/driving/cli_cmds/
+  purpose: src/devforge/adapters/driving/cli_cmds
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    inference.py:
+      status: unknown
+      purpose: CLI subcommand for inference model management.
+    mcp.py:
+      status: unknown
+      purpose: CLI subcommand for MCP server management.
+    pipeline.py:
+      status: unknown
+      purpose: CLI subcommands for pipeline operations.
+    status.py:
+      status: unknown
+      purpose: CLI subcommands for status inspection.
+- path: src/devforge/adapters/driving/mcp/
+  purpose: src/devforge/adapters/driving/mcp
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    server.py:
+      status: unknown
+      purpose: MCP (Model Context Protocol) server for DevForge.
+- path: src/devforge/application/
+  purpose: src/devforge/application
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    extract_pipeline.py:
+      status: unknown
+      purpose: "Extract pipeline service \u2014 orchestrates the extract phase."
+- path: src/devforge/core/
+  purpose: src/devforge/core
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    config.py:
+      status: unknown
+      purpose: "Configuration registry \u2014 single entry point for all DevForge\
+        \ settings."
+    logging.py:
+      status: unknown
+      purpose: "Structured logging via structlog \u2014 centralized configuration."
+- path: src/devforge/domain/
+  purpose: src/devforge/domain
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    models.py:
+      status: unknown
+      purpose: "SQLAlchemy models for DevForge \u2014 mirrors docs/specs/schema.sql."
+- path: src/devforge/domain/model_management/
+  purpose: src/devforge/domain/model_management
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/domain/pipeline/
+  purpose: src/devforge/domain/pipeline
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/domain/pipeline/stages/
+  purpose: src/devforge/domain/pipeline/stages
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/domain/turn_collection/
+  purpose: src/devforge/domain/turn_collection
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/domain/watchdog/
+  purpose: src/devforge/domain/watchdog
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/pipeline_stages/
+  purpose: src/devforge/pipeline_stages
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+- path: src/devforge/pipeline_stages/extract/
+  purpose: src/devforge/pipeline_stages/extract
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    edc.py:
+      status: unknown
+      purpose: "Extract EDC (Extract, Describe, Classify) \u2014 prompt building and\
+        \ response parsing."
+- path: src/devforge/ports/
+  purpose: src/devforge/ports
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    extract.py:
+      status: unknown
+      purpose: "Extract pipeline ports \u2014 hexagonal architecture interfaces."

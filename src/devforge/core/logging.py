@@ -10,6 +10,7 @@ Usage:
     log = get_logger()
     log.info("event_name", key="value")
 """
+
 from __future__ import annotations
 
 import logging

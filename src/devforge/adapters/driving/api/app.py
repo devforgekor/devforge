@@ -11,8 +11,10 @@ Usage:
     app = create_app()
     uvicorn app:app --reload
 """
+
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
@@ -36,7 +38,7 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
     setup_logging(level="INFO", component="api")
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Initialize DB gateway on startup
         gateway = DatabaseGateway.from_config(config)
         set_gateway(gateway)
@@ -70,7 +72,7 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
     # ── Routes ──
 
     @app.get("/health")
-    async def health():
+    async def health() -> Any:
         return {
             "status": "healthy",
             "mode": config.system_mode,
@@ -79,7 +81,7 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         }
 
     @app.get("/api/v1/config")
-    async def get_config_endpoint():
+    async def get_config_endpoint() -> Any:
         """Return non-sensitive config info."""
         return {
             "system_mode": config.system_mode,
@@ -91,7 +93,7 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         }
 
     @app.get("/api/v1/turns/{turn_id}")
-    async def get_turn(turn_id: str):
+    async def get_turn(turn_id: str) -> Any:
         """Get a single turn by UUID."""
         from uuid import UUID
 
@@ -111,7 +113,7 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         }
 
     @app.get("/api/v1/search")
-    async def search_turns(q: str, limit: int = 20, state: Optional[str] = None):
+    async def search_turns(q: str, limit: int = 20, state: Optional[str] = None) -> Any:
         """Search turns via pg_trgm full-text search."""
         from devforge.adapters.driven.storage.extract_adapter import PostgresTurnRepository
 
@@ -138,7 +140,7 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         source: str = "qwen_worker",
         context: Optional[dict[str, Any]] = None,
         tags: Optional[dict[str, Any]] = None,
-    ):
+    ) -> Any:
         """Save a worker observation for reflex rule mining."""
         from devforge.adapters.driven.storage.extract_adapter import PostgresObservationRepository
 
@@ -153,7 +155,9 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         return {"observation_id": str(obs_id), "saved": True}
 
     @app.post("/api/v1/pipeline/extract")
-    async def trigger_extract(turn_id: Optional[str] = None, limit: int = 50, dry_run: bool = False):
+    async def trigger_extract(
+        turn_id: Optional[str] = None, limit: int = 50, dry_run: bool = False
+    ) -> Any:
         """Trigger the extract pipeline.
 
         - If turn_id is provided, process a single turn.
@@ -178,21 +182,25 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
 
         if turn_id:
             result = await pipeline.run_single(UUID(turn_id))
-            return {"result": {
-                "success": result.success,
-                "facts_extracted": result.facts_extracted,
-                "errors": result.errors,
-            }}
+            return {
+                "result": {
+                    "success": result.success,
+                    "facts_extracted": result.facts_extracted,
+                    "errors": result.errors,
+                }
+            }
         else:
             results = await pipeline.run_batch(limit=limit)
-            return {"results": [
-                {
-                    "turn_id": str(r.turn_id),
-                    "success": r.success,
-                    "facts_extracted": r.facts_extracted,
-                }
-                for r in results
-            ]}
+            return {
+                "results": [
+                    {
+                        "turn_id": str(r.turn_id),
+                        "success": r.success,
+                        "facts_extracted": r.facts_extracted,
+                    }
+                    for r in results
+                ]
+            }
 
     # ── Include MCP server routes (SSE) ──
     from devforge.adapters.driving.mcp.server import app as mcp_app
@@ -206,7 +214,7 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
 app = create_app()
 
 
-def main():
+def main() -> None:
     """Run the FastAPI server."""
     uvicorn.run(
         app,

@@ -1,0 +1,14 @@
+[
+  {
+    "hash": "replay-needed-placeholder",
+    "timestamp": 0,
+    "model": "worklog_generator",
+    "note": "No live LLM capture was available when the refactor was finalized. Placeholder kept so the record/replay harness (tests/fixtures/replay_harness.py) fixture contract is complete; no refactored code reads this file yet.",
+    "request": {
+      "messages": [],
+      "max_tokens": 1024,
+      "temperature": 0.1
+    },
+    "response": "REPLAY_NEEDED"
+  }
+]

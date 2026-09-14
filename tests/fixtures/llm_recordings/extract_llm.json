@@ -1,0 +1,14 @@
+[
+  {
+    "hash": "replay-needed-placeholder",
+    "timestamp": 0,
+    "model": "day_extract",
+    "note": "No live LLM capture was available when the refactor was finalized. extract_pipeline._replay_extract() handles the REPLAY_NEEDED sentinel by generating deterministic synthetic facts from the turn text, so replay mode stays deterministic and non-empty.",
+    "request": {
+      "messages": [],
+      "max_tokens": 2048,
+      "temperature": 0.12
+    },
+    "response": "REPLAY_NEEDED"
+  }
+]

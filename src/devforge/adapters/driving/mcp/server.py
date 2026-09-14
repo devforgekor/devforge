@@ -19,9 +19,11 @@ Usage:
 In Claude Code:
   "mcpServers": {"devforge": {"url": "http://localhost:8100/sse"}}
 """
+
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from typing import Any, Optional
 
 from fastapi import FastAPI
@@ -43,6 +45,7 @@ app = FastAPI(
 
 
 # ── Tool schemas ──
+
 
 class KnowledgeSearchParams(BaseModel):
     query: str
@@ -77,13 +80,15 @@ class StoreObservationParams(BaseModel):
 _TOOLS: list[dict[str, Any]] = []
 
 
-def register_tool(name: str, description: str, params_cls: type[BaseModel]):
+def register_tool(name: str, description: str, params_cls: type[BaseModel]) -> None:
     """Register a tool for discovery."""
-    _TOOLS.append({
-        "name": name,
-        "description": description,
-        "inputSchema": params_cls.model_json_schema(),
-    })
+    _TOOLS.append(
+        {
+            "name": name,
+            "description": description,
+            "inputSchema": params_cls.model_json_schema(),
+        }
+    )
 
 
 def get_tools() -> list[dict[str, Any]]:
@@ -92,6 +97,7 @@ def get_tools() -> list[dict[str, Any]]:
 
 
 # ── Tool implementations ──
+
 
 async def knowledge_search(params: KnowledgeSearchParams) -> dict[str, Any]:
     """Search conversation turns via pg_trgm full-text search."""
@@ -116,22 +122,27 @@ async def knowledge_search(params: KnowledgeSearchParams) -> dict[str, Any]:
 
         stmt = text(stmt.text + f" ORDER BY t.created_at DESC LIMIT {params.limit}")
 
-        result = await db.execute(stmt, {
-            "query": params.query,
-            "pipeline_state": params.pipeline_state,
-        })
+        result = await db.execute(
+            stmt,
+            {
+                "query": params.query,
+                "pipeline_state": params.pipeline_state,
+            },
+        )
 
         turns = []
         for row in result:
-            turns.append({
-                "id": str(row.id),
-                "conversation_id": str(row.conversation_id),
-                "seq": row.seq,
-                "user_turn": row.user_turn[:500],
-                "text": row.text[:500],
-                "pipeline_state": row.pipeline_state,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-            })
+            turns.append(
+                {
+                    "id": str(row.id),
+                    "conversation_id": str(row.conversation_id),
+                    "seq": row.seq,
+                    "user_turn": row.user_turn[:500],
+                    "text": row.text[:500],
+                    "pipeline_state": row.pipeline_state,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+            )
 
     return {"query": params.query, "results": turns, "count": len(turns)}
 
@@ -157,14 +168,23 @@ async def pipeline_status(params: PipelineStatusParams) -> dict[str, Any]:
         from sqlalchemy import select
 
         from devforge.domain.models import Turn
-        stmt = select(
-            Turn.pipeline_state,
-            sql_func.count().label("count"),
-            sql_func.sum(sql_func.length(Turn.text)).label("total_chars"),
-        ).group_by(Turn.pipeline_state).order_by(sql_func.count().desc())
+
+        stmt = (
+            select(
+                Turn.pipeline_state,
+                sql_func.count().label("count"),
+                sql_func.sum(sql_func.length(Turn.text)).label("total_chars"),
+            )
+            .group_by(Turn.pipeline_state)
+            .order_by(sql_func.count().desc())
+        )
         result = await db.execute(stmt)
         states = [
-            {"state": row.pipeline_state, "count": row.count, "chars": int(row.total_chars) if row.total_chars else 0}
+            {
+                "state": row.pipeline_state,
+                "count": row.count,
+                "chars": int(row.total_chars) if row.total_chars else 0,
+            }
             for row in result
         ]
 
@@ -186,6 +206,7 @@ async def pipeline_status(params: PipelineStatusParams) -> dict[str, Any]:
     embed_stats = None
     if golden_path.exists():
         import json
+
         with open(golden_path) as f:
             golden = json.load(f)
         embed_stats = golden.get("embedding_stats", {})
@@ -214,7 +235,7 @@ def set_pipeline_factory(factory: Any) -> None:
     _pipeline_factory = factory
 
 
-def get_pipeline():
+def get_pipeline() -> Any:
     """Get an ExtractPipeline instance via factory.
 
     The factory must be set by the application layer during app startup
@@ -222,9 +243,7 @@ def get_pipeline():
     """
     if _pipeline_factory is not None:
         return _pipeline_factory()
-    raise RuntimeError(
-        "Pipeline factory not set. Call set_pipeline_factory() during startup."
-    )
+    raise RuntimeError("Pipeline factory not set. Call set_pipeline_factory() during startup.")
 
 
 async def extract_turn(params: ExtractTurnParams) -> dict[str, Any]:
@@ -346,14 +365,17 @@ register_tool(
 
 # ── FastAPI routes ──
 
+
 @app.get("/sse")
-async def sse_endpoint():
+async def sse_endpoint() -> Any:
     """MCP protocol: SSE endpoint for tool discovery."""
-    async def event_generator():
+
+    async def event_generator() -> AsyncIterator[str]:
         # Send tool list as initial message
         yield f"data: {json.dumps({'type': 'tools', 'tools': get_tools()})}\n\n"
         # Keep connection open
         import asyncio
+
         while True:
             await asyncio.sleep(30)
             yield "data: \n\n"
@@ -362,7 +384,7 @@ async def sse_endpoint():
 
 
 @app.post("/tools/{tool_name}")
-async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None):
+async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> Any:
     """MCP protocol: Call a specific tool with parameters."""
     params = params or {}
 
@@ -402,22 +424,25 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None):
 
 
 @app.get("/health")
-async def health():
+async def health() -> Any:
     """Health check endpoint."""
     return {"status": "healthy", "tools_count": len(_TOOLS)}
 
 
 # ── CLI entry ──
 
-def main():
+
+def main() -> None:
     """Run MCP server via uvicorn."""
     import argparse
+
     parser = argparse.ArgumentParser(description="DevForge MCP Server")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8100)
     args = parser.parse_args()
 
     import uvicorn
+
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 

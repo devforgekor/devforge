@@ -1,6 +1,6 @@
 # Golden Image Runbook — 업계 표준 대비 갭 분석 보고서
 
-**대상 문서**: `/opt/projects/server/docs/runbook-golden-image.md` (399 lines, 2026-09-03 기준)  
+**대상 문서**: `/opt/projects/server/docs/runbooks/runbook-golden-image.md` (399 lines, 2026-09-03 기준)  
 **분석 일자**: 2026-09-03  
 **분석 모델**: Muse Spark 1.2 (web search 검증 병행)  
 **방법론**: Azure Compute Gallery / Spot VM / CIS Benchmark / systemd hardening / LLM serving 보안 문헌 32건 교차 검증

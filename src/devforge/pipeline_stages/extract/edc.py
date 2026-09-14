@@ -4,6 +4,7 @@ Re-exports from the pipeline_stages layer, keeping compatibility with
 the legacy scripts/lib/extract_llm package while providing a clean
 domain-focused interface.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -58,7 +59,8 @@ def parse_extract_response(
     except json.JSONDecodeError:
         # Fallback: simple JSON extraction
         import re
-        match = re.search(r'\[.*\]', content, re.DOTALL)
+
+        match = re.search(r"\[.*\]", content, re.DOTALL)
         if match:
             try:
                 data = json.loads(match.group(0))
@@ -69,16 +71,18 @@ def parse_extract_response(
 
     facts = []
     for idx, f in enumerate(data.get("facts", []) if isinstance(data, dict) else data):
-        facts.append(ExtractedFact(
-            turn_id=turn_id if isinstance(turn_id, UUID) else UUID(str(turn_id)),
-            fact_index=idx,
-            fact_type=f.get("fact_type", "text"),
-            evidence=f.get("evidence", ""),
-            extract_model=extract_model,
-            subject=f.get("subject"),
-            predicate=f.get("predicate"),
-            object_=f.get("object"),
-            qualifiers=f.get("qualifiers"),
-        ))
+        facts.append(
+            ExtractedFact(
+                turn_id=turn_id if isinstance(turn_id, UUID) else UUID(str(turn_id)),
+                fact_index=idx,
+                fact_type=f.get("fact_type", "text"),
+                evidence=f.get("evidence", ""),
+                extract_model=extract_model,
+                subject=f.get("subject"),
+                predicate=f.get("predicate"),
+                object_=f.get("object"),
+                qualifiers=f.get("qualifiers"),
+            )
+        )
 
     return facts

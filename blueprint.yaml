@@ -3,7 +3,7 @@
 # AI-maintained: updated as phases progress, items complete, or architecture decisions change.
 # Human reads for context; AI writes to keep current.
 # Phase status: planned → active → complete
-# Last updated: 2026-06-02 (auto — phase_tracker)
+# Last updated: 2026-09-14 (opencode) — canonical code plan: docs/REFACTORING_PLAN.md
 
 phases:
 - phase: 1
@@ -51,13 +51,13 @@ phases:
     - Language pipeline guardrails — lib/text_quality.py (script purity, token budget, think-tag detection)
     - update_handover.py quality-score-based context selection — prioritize high-fidelity turns
     - 'Translation quality measurement infrastructure — source_lang column + lib/translation_quality.py (cosine similarity
-      based, no new model calls). Ref: docs/translation-quality-feedback-loop.md, docs/translation-quality-report.md'
+      based, no new model calls). Ref: _archive/translation-quality-feedback-loop.md, _archive/translation-quality-report.md'
   - name: Tier 2 — Vector Intelligence
     timeline: 2-4 weeks
     status: planned
     refs:
-    - docs/translation-quality-report.md (model-radar lessons → DevForge)
-    - docs/translation-quality-feedback-loop.md (TEaR + xCOMET + LaBSE feedback architecture)
+    - _archive/translation-quality-report.md (model-radar lessons → DevForge)
+    - _archive/translation-quality-feedback-loop.md (TEaR + xCOMET + LaBSE feedback architecture)
     items:
     - embed_turns.py complete remaining 3165/4180 turns (Gemini embedding-embedding-001, 768-dim)
     - Cross-lingual Wikipedia anchor corpus — ko↔en Q-item vector mapping for translation quality estimation
@@ -85,8 +85,19 @@ phases:
   - Multi-LLM routing (additional models)
   - User decision rationale tracking — structured decision logging with evidence chain
   - Back-translation fidelity check — when fast translation API available
+refactoring:
+  plan: docs/REFACTORING_PLAN.md (v1.4, canonical)
+  status: partial — package scaffolded; live services still run scripts/* (cutover pending)
+  package: src/devforge/ (pip install -e ., single `devforge` CLI)
+  structure: src-layout + DDD bounded contexts + Ports & Adapters (hexagonal)
+  docs:
+  - docs/ARCHITECTURE.md
+  - docs/API_REFERENCE.md
+  - docs/OPERATIONS_GUIDE.md
+  - docs/adr/
+  cutover_note: systemd units / Quadlet ExecStart still point at scripts/ — see docs/system-architecture.md §3.5
 target:
-  architecture: 2-Container + Gemini Proxy (current, 2026-05-24)
+  architecture: src/devforge package (Ports & Adapters) — legacy scripts/* retained until cutover
   external:
   - name: azure-qwen
     role: Azure Spot VM — Qwen3-30B-A3B MoE on :400
@@ -101,7 +112,7 @@ target:
     version: 0.0.1
     image_capture_date: '2026-05-25'
     ssh: azureqwen (~/.ssh/vm-azure-qwen-30B-A3B-key.pem)
-    doc: docs/azure-qwen-setup.md
+    doc: docs/runbooks/azure-qwen-deepdive-endpoint.md
     setup_date: '2026-05-25'
   containers:
   - name: devforge-pod-a
@@ -156,10 +167,10 @@ target:
     table: turns.embedding vector(768) + HNSW index (vector_cosine_ops)
 research_docs:
   translation_quality:
-  - path: docs/translation-quality-report.md
+  - path: _archive/translation-quality-report.md
     what: model-radar#5 10 lessons + Interfaze/CLM/MDCure research → DevForge language pipeline mapping
     when_to_read: When planning language pipeline improvements or translation quality guardrails
-  - path: docs/translation-quality-feedback-loop.md
+  - path: _archive/translation-quality-feedback-loop.md
     what: TEaR (NAACL 2025) + xCOMET (Unbabel) + DCSQE (NJUNLP) self-improving feedback loop architecture
     when_to_read: When designing the measure→diagnose→correct feedback loop for Korean→English translation quality
   llm_testing:

@@ -3,6 +3,7 @@
 Usage:
     devforge status
 """
+
 from __future__ import annotations
 
 import json
@@ -45,12 +46,14 @@ def _get_podman_status() -> dict[str, Any]:
     container_summary = []
     for c in containers:
         ports = c.get("Ports") or []
-        container_summary.append({
-            "name": c.get("Names", [c.get("Id", "unknown")[:12]][0]),
-            "image": c.get("Image", ""),
-            "status": "running" if c.get("State") == "running" else c.get("State", "unknown"),
-            "ports": [p.get("HostPort", "") for p in ports if p.get("HostPort")],
-        })
+        container_summary.append(
+            {
+                "name": c.get("Names", [c.get("Id", "unknown")[:12]][0]),
+                "image": c.get("Image", ""),
+                "status": "running" if c.get("State") == "running" else c.get("State", "unknown"),
+                "ports": [p.get("HostPort", "") for p in ports if p.get("HostPort")],
+            }
+        )
 
     return {"status": "ok", "containers": container_summary}
 
@@ -79,11 +82,13 @@ def _get_systemd_services() -> dict[str, Any]:
     services = []
     for unit in units:
         result = _run_cmd(["systemctl", "--user", "is-active", unit])
-        services.append({
-            "unit": unit,
-            "active": result["stdout"] == "active",
-            "status": result["stdout"],
-        })
+        services.append(
+            {
+                "unit": unit,
+                "active": result["stdout"] == "active",
+                "status": result["stdout"],
+            }
+        )
     return {"services": services}
 
 
@@ -96,13 +101,15 @@ def _get_filesystem_status() -> dict[str, Any]:
         if result["returncode"] == 0:
             parts = result["stdout"].split()
             if len(parts) >= 6:
-                usage.append({
-                    "mount": mount,
-                    "size": parts[1],
-                    "used": parts[2],
-                    "avail": parts[3],
-                    "use_percent": parts[4],
-                })
+                usage.append(
+                    {
+                        "mount": mount,
+                        "size": parts[1],
+                        "used": parts[2],
+                        "avail": parts[3],
+                        "use_percent": parts[4],
+                    }
+                )
     return {"disk_usage": usage}
 
 
@@ -120,7 +127,7 @@ def get_system_status() -> str:
 @app.command()
 def status_json(
     format: str = "json",
-):
+) -> None:
     """Show system status as JSON."""
     typer.echo(get_system_status())
 
@@ -129,7 +136,7 @@ def status_json(
 def status_main(
     ctx: typer.Context,
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
-):
+) -> None:
     """Show current server status."""
     if ctx.invoked_subcommand:
         return
@@ -141,7 +148,9 @@ def status_main(
         typer.secho("DevForge Server Status", fg="cyan", bold=True)
         typer.echo(f"  Mode: {config.system_mode} (inference: {config.inference_mode})")
         typer.echo(f"  Model: {config.model_name} on port {config.model_port}")
-        typer.echo(f"  DB URL: {config.db_url.replace(config.secrets.POSTGRES_PASSWORD, '***') if config.secrets.POSTGRES_PASSWORD else config.db_url}")
+        typer.echo(
+            f"  DB URL: {config.db_url.replace(config.secrets.POSTGRES_PASSWORD, '***') if config.secrets.POSTGRES_PASSWORD else config.db_url}"
+        )
 
         # Container status
         containers = _get_podman_status()

@@ -3,56 +3,55 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# Install build dependencies
+# Build dependencies for native wheels (asyncpg, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
-    postgresql-server-dev \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry for dependency resolution (falls back to pip)
-COPY pyproject.toml ./
+# Copy package sources + metadata (README is referenced by pyproject.toml)
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+COPY alembic/ ./alembic/
 
-# Build wheel cache
-RUN pip wheel --no-cache-dir --wheel-dir /wheels -e ".[dev]" 2>/dev/null || \
-    pip wheel --no-cache-dir --wheel-dir /wheels -e .
+# Build a portable (non-editable) wheel + resolve runtime deps into /wheels
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip wheel --no-cache-dir --wheel-dir /wheels .
 
 # ── Stage 2: Runtime ──
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Runtime libraries only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy wheels and install only runtime deps
+# Install the application wheel and its dependencies
 COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/* 2>/dev/null; \
-    pip install --no-cache-dir fastapi uvicorn sse-starlette
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir /wheels/* && \
+    rm -rf /wheels
 
-# Copy source
-COPY src/ ./src/
+# Alembic migration assets (kept alongside the installed package)
 COPY alembic/ ./alembic/
-COPY pyproject.toml ./
+COPY alembic.ini ./alembic.ini
 
-# Install in editable mode (for CLI entry point)
-RUN pip install --no-cache-dir -e .
-
-# Create non-root user
+# Non-root user
 RUN useradd -m -u 1000 opc && \
     mkdir -p /app/data && \
     chown -R opc:opc /app
 
 USER opc
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 EXPOSE 8000 8100
 
-# Default command — can be overridden to run MCP server on port 8100
+# Default: FastAPI HTTP API. Override to run MCP server (port 8100):
+#   devforge mcp serve --port 8100
 CMD ["uvicorn", "devforge.adapters.driving.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

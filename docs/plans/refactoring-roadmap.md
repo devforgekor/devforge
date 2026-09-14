@@ -4,7 +4,7 @@
 **Date**: 2026-06-03
 **Status**: ACTIVE
 **Language**: English (machine-readable). User-facing text remains Korean per llm-common-rule.md.
-**Reference**: `docs/domain-glossary.yaml`, `_archive/agent-architecture.yaml` (v3.0.1), `docs/plans/master-plan.md` (v2.0)
+**Reference**: `docs/domain-glossary.yaml`, `_archive/agent-architecture.yaml` (v3.0.1), `docs/_archive/plans/master-plan.md` (v2.0)
 
 ---
 

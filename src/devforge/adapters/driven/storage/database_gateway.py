@@ -5,10 +5,11 @@ manager for standalone scripts. Connection pool is configured via
 the asyncpg dialect with sensible defaults for the production
 containerized environment.
 """
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -93,7 +94,7 @@ class DatabaseGateway:
                 await session.rollback()
                 raise
 
-    async def execute(self, stmt, *args, **kwargs):
+    async def execute(self, stmt: Any, *args: Any, **kwargs: Any) -> Any:
         """Convenience: execute a statement within a session."""
         async with self.session() as db:
             result = await db.execute(stmt, *args, **kwargs)
@@ -116,6 +117,7 @@ def get_gateway() -> DatabaseGateway:
     global _gateway
     if _gateway is None:
         from devforge.core.config import get_config
+
         config = get_config()
         _gateway = DatabaseGateway.from_config(config)
     return _gateway

@@ -158,7 +158,7 @@ Persistent=true
 | `~/.config/opencode/opencode-rr.json` | opencode 설정 (자동 갱신 대상, 모드명 `ORP`) | 운영 |
 | `~/.config/devforge/secrets.env` | 3개 OpenRouter API 키 | 시크릿 |
 | `~/.cache/devforge/openrouter_free_models.json` | 모델 캐시 (24h TTL) | 캐시 |
-| `docs/opencode-roundrobin-failure-analysis.md` | 본 문서 | 문서 |
+| `docs/reports/opencode-roundrobin-failure-analysis.md` | 본 문서 | 문서 |
 
 ## 설정 파일 (opencode-rr.json)
 
