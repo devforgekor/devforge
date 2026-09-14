@@ -13,9 +13,9 @@
 | **turns 삽입/시간** | 146건/24h | 일별 패턴 기록 | 기록 | 총 7160건, 2026-05-19~09-14 |
 | **turns.source** | unknown: 7160/7160 | 100% unknown | ⚠️ 증거 불가 | provenance 0%. Gate 6 위협 |
 | **MCP 호출 (24h)** | observations: 1건 | 기준 미정 | 기록 | headless 세션에서 auto_log 미발동 |
-| **day_cycle 타이머** | inactive | 운영 중 예상 | ⚠️ 확인 필요 | 일별 패턴 측정 불가. 수동 실측 필요 |
+| **day_cycle** | 활성 (watchdog 기동) | 운영 중 | ✅ 정상 | 타이머 아님 — watchdog이 pending 감지 시 기동 |
 | **netdata** | active | active | ✅ PASS | Observability 기본 infra 확인 |
-| **훅 오버헤드** | avg 0.0004ms | baseline 대비 +20% 이내 | mock 측정 | live 측정은 실제 사용 시에만 가능 |
+| **훅 오버헤드** | avg 458.76ms (live) | baseline 대비 +20% 이내 | ⚠️ 재측정 | 최초 mock 0.0004ms는 측정 버그로 무효 |
 | **MCP 서버** | /health 200 OK | 정상 | ✅ PASS | FastMCP Streamable HTTP |
 
 ---
@@ -45,14 +45,24 @@
 - embed_skipped: 77
 - **turns.watcher 운영 중**, day_cycle 수동 실행 확인 필요
 
-### 2. day_cycle 서비스 상태
-- devforge-day-cycle.timer: inactive, devforge-day-cycle.service: activating
-- worker 내부 동작 확인 필요 (일별 패턴 측정 불가)
+### 2. day_cycle 서비스 상태 — ✅ 해결 (2026-09-14)
+- **원인**: `devforge-inference` 컨테이너가 `--no-mmap` 인자로 기동 실패 (llama.cpp b10920+에서 플래그 제거됨) → heavy phase(extract/enrich/embed) 진행 불가
+- **수정**: `--no-mmap` → `--load-mode none` (2곳: `scripts/lib/pod_manager/__init__.py`, `/opt/ai_data/scripts/inference-entrypoint.sh`)
+- **결과**: inference 8080-8084 정상 기동, day_cycle이 LLM 호출(`[call_llm] extractor:8082`)로 진행 중
+- **설계 확인**: day_cycle은 타이머가 아니라 **watchdog 이벤트 기반** (pending turns 감지 시 `systemctl start`). D1의 "timer inactive"는 정상.
+- watchdog.service: active (enabled)
 
-### 3. observations 24h: 1건 (auto_log 활용도 극히 낮음)
+### 3. hook overhead — ⚠️ 최초 측정 무효, live 재측정 완료
+- **최초 D1**: 0.0004ms (safe mock) — **무효**. 측정 스크립트가 `tool_input={}`을 전달해 `_handle_bash`가 early-return 경로만 측정함.
+- **수정**: `measure-hook-overhead.py`가 실제 command(`pytest scripts/tests/`)를 전달하도록 수정.
+- **live 실측 (2026-09-14)**: avg **458.76ms**, p50 440.79ms, p95 636.29ms, p99 1313.18ms
+- **원인**: `_handle_bash`가 psql 서브프로세스(podman exec)를 2회 호출(pretool UPDATE + observe INSERT) → 서브프로세스 생성 비용 지배.
+- **의의**: 실제 훅 오버헤드는 ~460ms로, mock 0.0004ms와 5자릿수 차이. W1 임계값 판정에 중요.
+- **측정 노이즈 정리**: test observations 100건 삭제 완료.
+
+### 4. observations 24h: 1건 (auto_log 활용도 극히 낮음)
 - headless 세션에서 PostToolUse 훅이 거의 발동되지 않음.
-- **영향**: 훅 오버헤드 측정은 실제 대화형 세션에서만 의미 있음.
-- **대응**: W1 기간 중 대화형 세션 1회 이상 확보하여 live 측정 필요.
+- **대응**: hook overhead는 `measure-hook-overhead.py --live`로 직접 측정 완료 (위 #3).
 
 ### 4. provenance 코드 레벨 확인
 - **원인 규명 완료** (4/4 INSERT 경로 누락): turn_watcher.py:217/245, mcp_server.py:173·530, mcp_server_sse.py:222
@@ -65,10 +75,11 @@
 
 ## 다음 D2 체크리스트
 
-- [ ] day_cycle 서비스 동작 확인 (worker 내부 동작)
-- [ ] 대화형 세션에서 hook overhead live 측정
-- [ ] turns.source INSERT 경로 수정 (4개 파일)
+- [x] day_cycle 서비스 동작 확인 (inference `--no-mmap` 수정 → 정상)
+- [x] hook overhead live 측정 (avg 458.76ms)
+- [x] turns.source INSERT 경로 수정 (4개 파일)
 - [ ] observations 24h count 재측정
+- [ ] day_cycle stage timing 로그 확인 (D2 이후)
 
 ## D1 측정 요약
 
