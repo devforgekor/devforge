@@ -63,7 +63,7 @@ class PostgresExtractAdapter(ExtractPort):
                     thinking=row.thinking,
                     text=row.text,
                     pipeline_state=getattr(row, "pipeline_state", "scanned"),
-                    meta=dict(row.meta) if row.meta else {},
+                    meta=dict(row.meta_data) if row.meta_data else {},
                 )
                 for row in rows
             ]
@@ -102,7 +102,7 @@ class PostgresExtractAdapter(ExtractPort):
                     "qualifiers": f.qualifiers,
                     "faithful_score": f.faithful_score,
                     "faithful_method": f.faithful_method,
-                    "grounding": f.grounding,
+                    "nli_verdict": f.grounding,
                     "nli_llm": f.nli_llm,
                     "nli_llm2": f.nli_llm2,
                     "source_file": f.source_file,
@@ -203,7 +203,7 @@ class PostgresTurnRepository(TurnRepository):
                     thinking=row.thinking,
                     text=row.text,
                     pipeline_state=getattr(row, "pipeline_state", "scanned"),
-                    meta=dict(row.meta) if row.meta else {},
+                    meta=dict(row.meta_data) if row.meta_data else {},
                 )
                 for row in rows
             ]
@@ -225,7 +225,7 @@ class PostgresTurnRepository(TurnRepository):
                     thinking=row.thinking,
                     text=row.text,
                     pipeline_state=getattr(row, "pipeline_state", "scanned"),
-                    meta=dict(row.meta) if row.meta else {},
+                    meta=dict(row.meta_data) if row.meta_data else {},
                 )
                 for row in rows
             ]

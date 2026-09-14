@@ -13,8 +13,8 @@
 
 - **기본 `opencode`**: `opencode-go` provider(`~/.local/share/opencode/auth.json`,
   type=api)의 **`deepseek-v4-flash` 고정 모델**을 사용하는 안정 경로.
-- **`opencode-rr`**: 로컬 **RR 프록시(:8451, OpenRouter 3개 키 라운드로빈)**를 경유하고,
-  기본 모델은 매일 자동 갱신되는 **최고 무료 모델**을 사용하는 경로.
+- **`opencode-rr`**: 로컬 **RR 프록시(:8451, 모델별 계정 고정 + 미지정 모델 라운드로빈)**를
+  경유하고, 기본 모델은 매일 자동 갱신되는 **최고 무료 모델**을 사용하는 경로.
 
 ```
 opencode (기본·고정)                opencode-rr (자동·무료)
@@ -22,7 +22,7 @@ opencode (기본·고정)                opencode-rr (자동·무료)
        ▼                                  ▼
  opencode-go provider                 local RR 프록시
  (auth.json, deepseek-v4-flash)       http://127.0.0.1:8451/v1
-       │                                  │ (3개 키 라운드로빈)
+       │                                  │ (모델별 1계정 고정)
        ▼                                  │ + 매일 free 모델 자동 갱신
    [opencode-go]                          ▼
                                      [OpenRouter]
@@ -78,7 +78,7 @@ exec opencode "$@"
   "provider": {
     "openrouter": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "OpenRouter (RR Proxy)",
+      "name": "ORP",
       "options": {
         "baseURL": "http://127.0.0.1:8451/v1",
         "apiKey": "local-rr-proxy"
@@ -102,7 +102,7 @@ exec opencode "$@"
 | 파일 | 역할 | 유형 |
 |---|---|---|
 | `~/.config/opencode/opencode.json` | 기본(고정) 모델(`opencode-go/deepseek-v4-flash`) + MCP 15개 | 운영 |
-| `~/.config/opencode/opencode-rr.json` | RR 프록시 provider + 기본 model/fallback (타이머 자동 갱신) | 운영 |
+| `~/.config/opencode/opencode-rr.json` | RR 프록시 provider + 기본 model/fallback + **모델→계정 고정 순서** (타이머 자동 갱신) | 운영 |
 | `~/.config/opencode/opencode.jsonc` | global 최소($schema만) | 뼈대 |
 | `~/.config/opencode/opencode.json.bak_*` | 변경 전 백업 (복원용) | 백업 |
 | `~/.config/opencode/opencode-rr.json.bak_*` | 변경 전 백업 (복원용) | 백업 |
@@ -127,23 +127,28 @@ exec opencode "$@"
 - provider `opencode-go`는 `~/.local/share/opencode/auth.json`(type=api)로 인증.
 - openrouter(Direct) provider 블록은 제거됨 → rr용 openrouter는 아래 4.2에만 존재.
 
-### 4.2 프록시 — openrouter (RR Proxy)
+### 4.2 프록시 — openrouter (ORP)
 `~/.config/opencode/opencode-rr.json`:
 ```json
 "provider": { "openrouter": {
   "npm": "@ai-sdk/openai-compatible",
-  "name": "OpenRouter (RR Proxy)",
+  "name": "ORP",
   "options": { "baseURL": "http://127.0.0.1:8451/v1",
                "apiKey": "local-rr-proxy" },
   "models": {
-    "nvidia/nemotron-3-super-120b-a12b:free": { "name": "NVIDIA: Nemotron 3 Super" },
-    "cohere/north-mini-code:free":            { "name": "Cohere: North Mini Code" },
-    "google/gemma-4-26b-a4b-it:free":         { "name": "Google: Gemma 4 26B A4B" }
+    "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "NVIDIA: Nemotron 3 Ultra" },
+    "google/gemma-4-26b-a4b-it:free":         { "name": "Google: Gemma 4 26B A4B" },
+    "cohere/north-mini-code:free":            { "name": "Cohere: North Mini Code" }
   }
 }}
 ```
-- `model` = `openrouter/nvidia/nemotron-3-super-120b-a12b:free` (시드, 타이머가 갱신)
-- `experimental.modelFallbackChain.chains[0]` = `[nemotron-3-super, cohere/north-mini-code, gemma-4-26b]`
+- `model` = `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free` (시드, 타이머가 갱신)
+- `experimental.modelFallbackChain.chains[0]` = `[nemotron-3-ultra, gemma-4-26b, north-mini-code]`
+- **모델→계정 고정**: `provider.openrouter.models`의 **순서**대로 프록시가 계정에 1:1 배정
+  (`models[0]`→MESIDS, `models[1]`→MINIPARK4U, `models[2]`→HYEONMINPARK4U).
+  분당 제한은 OpenRouter가 전역 관리라 회피 불가 → 각 모델의 **일일 쿼터를 한 계정에
+  고정**해 fallback 체인(모델 A→B→C)이 서로 다른 계정의 쿼터를 사용하게 한다.
+  프록시는 mtime으로 이 파일을 재로드하므로 타이머 갱신 시 자동 반영 (재시작 불필요).
 - **자동 갱신**: `provider.openrouter.models`/`model`/`chain`은 매일 00:30 KST
   `devforge-openrouter-free-models` 타이머가 라이브테스트 후 top-3로 덮어쓴다
   (`refresh_openrouter_free_models.py`의 `OPCODE_CONFIG` = `opencode-rr.json`).

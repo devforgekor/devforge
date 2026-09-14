@@ -55,7 +55,13 @@ EXCLUDE_KEYWORDS = [
     "vision",
     "omni",
     "embed",
+    # Google free models: frequent upstream API errors → unreliable calls.
+    "google",
 ]
+
+# Final verification: retry a dummy "hello" call a few times before selecting.
+FINAL_VERIFY_RETRIES = 3
+FINAL_VERIFY_DELAY = 1.0  # seconds between retries (avoid hammering the proxy)
 
 # ---------------------------------------------------------------------------
 # Fetch catalog
@@ -137,6 +143,23 @@ def _test_model(model_id: str, key_idx: int = 0) -> tuple[bool, str]:
     return False, "no choices"
 
 
+def _verify_model(model_id: str, key_idx: int = 0) -> tuple[bool, str]:
+    """Final-gate verification: send a dummy 'hello' call with retries.
+
+    Free upstreams are flaky, so a single failure doesn't disqualify a model —
+    only a model that fails every retry is rejected before final selection.
+    """
+    last = "no attempts"
+    for attempt in range(1, FINAL_VERIFY_RETRIES + 1):
+        ok, detail = _test_model(model_id, key_idx)
+        if ok:
+            return True, detail
+        last = detail
+        if attempt < FINAL_VERIFY_RETRIES:
+            time.sleep(FINAL_VERIFY_DELAY)
+    return False, f"failed {FINAL_VERIFY_RETRIES}x (last: {last})"
+
+
 # ---------------------------------------------------------------------------
 # opencode.json write
 # ---------------------------------------------------------------------------
@@ -168,6 +191,10 @@ def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
     Prefers models from *different* upstream orgs so that if one provider's
     shared pool is exhausted (upstream_provider_shared_pool 429), the fallback
     chain still has working providers from other orgs.
+
+    Before final selection, each candidate is verified with a dummy "hello"
+    call (with retries) through the RR proxy — only models that actually
+    respond are selected.
     """
     # Group usable models by upstream org, keep best-scoring per org
     by_org: dict[str, dict] = {}
@@ -176,16 +203,27 @@ def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
         if org not in by_org or m["_score"] > by_org[org]["_score"]:
             by_org[org] = m
 
-    # Sort orgs by best score, then take top-N diverse orgs
+    # Sort orgs by best score, then verify candidates (with retries) and keep
+    # only models that respond to a dummy call, up to top-3 diverse orgs.
     diverse = sorted(by_org.values(), key=lambda m: m["_score"], reverse=True)
-    top = diverse[:3]
+    top: list[dict] = []
+    print("\n(final verification — dummy hello call, up to 3 retries):")
+    for m in diverse:
+        if len(top) >= 3:
+            break
+        ok, detail = _verify_model(m["id"])
+        status = "✓" if ok else "✗"
+        print(f"  {status} {m['id']:50s} test={detail}")
+        if ok:
+            top.append(m)
+
     if not top:
-        print("✗ No top models to apply")
+        print("✗ No models passed final verification")
         return
 
     if dry_print:
         selected_orgs = [(_extract_org(m["id"]), m["id"]) for m in top]
-        print("\n(selected top 3 — diverse orgs):")
+        print("\n(selected top-3 verified — diverse orgs):")
         for i, (org, mid) in enumerate(selected_orgs, 1):
             print(f"  {i}. [{org}] {mid}")
         return

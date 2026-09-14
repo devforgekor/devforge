@@ -171,7 +171,7 @@ Persistent=true
   "provider": {
     "openrouter": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "OpenRouter (RR Proxy)",
+      "name": "ORP",
       "options": {
         "baseURL": "http://127.0.0.1:8451/v1",
         "apiKey": "local-rr-proxy"

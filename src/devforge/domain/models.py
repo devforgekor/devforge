@@ -23,7 +23,7 @@ from sqlalchemy import (
     Integer,
     MetaData,
     Text,
-    TypeDecorator,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy import (
@@ -167,6 +167,12 @@ class ReviewFact(Base):
         Index("idx_review_type", "fact_type"),
         Index("idx_review_verdict", "verdict"),
         Index("idx_review_source", "source"),
+        UniqueConstraint(
+            "turn_id",
+            "fact_index",
+            "extract_model",
+            name="uq_review_facts_turn_fact_model",
+        ),
     )
 
 

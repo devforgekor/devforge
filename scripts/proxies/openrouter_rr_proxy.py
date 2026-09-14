@@ -4,13 +4,24 @@
 """
 OpenRouter API Key Round-Robin Proxy.
 
-Rotates through 3 OpenRouter API keys per request (round-robin).
-Minimal, stateless proxy — only RPM avoidance, no cooldown/state tracking.
+Distributes requests across 3 OpenRouter accounts. Two routing modes:
+
+1. **Pinned models** — each model configured in opencode-rr.json
+   (provider.openrouter.models, in order) is dedicated to ONE account
+   (model[0]→MESIDS, model[1]→MINIPARK4U, model[2]→HYEONMINPARK4U).
+   Per-minute limits cannot be bypassed anyway (OpenRouter governs RPM
+   globally), so pinning isolates each model's DAILY quota to a single
+   account — the fallback chain (model A→B→C) lands on distinct accounts.
+   A pinned request that fails does NOT fall back to other accounts; the
+   error is returned as-is so opencode's modelFallbackChain advances.
+
+2. **Round-robin** — unpinned/unknown models rotate through all keys
+   per request (original RPM-avoidance behavior kept as fallback).
 
 Endpoints:
   POST /v1/chat/completions  — OpenAI-compatible chat (stream + non-stream)
   GET  /v1/models            — list models from OpenRouter
-  GET  /health               — health check
+  GET  /health               — health check (incl. pinned model→account map)
 """
 
 import json
@@ -30,6 +41,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 LISTEN_HOST = "127.0.0.1"
 LISTEN_PORT = int(os.environ.get("OPENROUTER_RR_PROXY_PORT", "8451"))
+
+# Pinned model source: the RR profile opencode reads (daily auto-refresh
+# rewrites its provider.openrouter.models — proxy picks the new mapping up via
+# mtime check, no restart needed).
+OPCODE_CONFIG = os.path.expanduser("~/.config/opencode/opencode-rr.json")
 
 SECRETS_FILE = os.path.expanduser("~/.config/devforge/secrets.env")
 
@@ -98,6 +114,13 @@ logger = logging.getLogger("openrouter-rr-proxy")
 client: httpx.AsyncClient = None  # type: ignore[assignment]
 current_key_index = 0
 
+# Account labels aligned with KEYS order (secrets.env parse order).
+ACCOUNT_LABELS = ["MESIDS", "MINIPARK4U", "HYEONMINPARK4U"]
+
+# model_id -> key index, loaded from opencode-rr.json (mtime-cached).
+_pinned_map: dict[str, int] = {}
+_pinned_mtime: float = -1.0
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
@@ -111,8 +134,13 @@ app = FastAPI(title="OpenRouter RR Proxy", version="1.0.0", lifespan=_lifespan)
 
 
 # ---------------------------------------------------------------------------
-# Round-robin
+# Round-robin / pinning
 # ---------------------------------------------------------------------------
+
+
+def _account_label(idx: int) -> str:
+    """Human-readable account name for a key index."""
+    return ACCOUNT_LABELS[idx] if idx < len(ACCOUNT_LABELS) else f"key{idx + 1}"
 
 
 def _next_key() -> tuple[int, str]:
@@ -121,6 +149,44 @@ def _next_key() -> tuple[int, str]:
     idx = current_key_index
     current_key_index = (current_key_index + 1) % NUM_KEYS
     return idx, KEYS[idx]
+
+
+def _load_pinned_map() -> dict[str, int]:
+    """Map opencode-rr.json provider.openrouter.models (in order) to key indices.
+
+    Each configured model is pinned to ONE account: model[0]→MESIDS,
+    model[1]→MINIPARK4U, model[2]→HYEONMINPARK4U. The daily auto-refresh
+    rewrites opencode-rr.json; mtime check picks the change up without restart.
+    """
+    mapping: dict[str, int] = {}
+    try:
+        with open(OPCODE_CONFIG) as f:
+            cfg = json.load(f)
+        models = cfg.get("provider", {}).get("openrouter", {}).get("models", {})
+        for i, model_id in enumerate(models.keys()):
+            if i < NUM_KEYS:
+                mapping[model_id] = i
+    except Exception as e:
+        logger.error("Failed to load pinned model map from %s: %s", OPCODE_CONFIG, e)
+    return mapping
+
+
+def _pinned_key(model: str) -> int | None:
+    """Return the pinned key index for a model, reloading config on change."""
+    global _pinned_map, _pinned_mtime
+    try:
+        mtime = os.path.getmtime(OPCODE_CONFIG)
+    except OSError:
+        mtime = -1.0
+    if mtime != _pinned_mtime:
+        _pinned_map = _load_pinned_map()
+        _pinned_mtime = mtime
+        if _pinned_map:
+            logger.info(
+                "Pinned model→account: %s",
+                {m: _account_label(i) for m, i in _pinned_map.items()},
+            )
+    return _pinned_map.get(model)
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +210,80 @@ async def _stream_chunks(response: httpx.Response):
 # ---------------------------------------------------------------------------
 
 
+async def _forward_key(idx: int, body: dict, is_stream: bool, model: str):
+    """Send the request via one key. Returns a Response on success or raises
+    HTTPException on failure (429/other). Caller decides fallback policy."""
+    api_key = KEYS[idx]
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": YOUR_SITE_URL,
+        "X-Title": YOUR_APP_NAME,
+    }
+
+    logger.info("→ key[%d/%d] %s model=%s stream=%s", idx + 1, NUM_KEYS, _account_label(idx), model, is_stream)
+
+    if client is None:  # lifecycle guard: startup not complete
+        raise HTTPException(status_code=503, detail="Proxy not ready")
+
+    try:
+        if is_stream:
+            req = client.build_request("POST", CHAT_ENDPOINT, json=body, headers=headers)
+            resp = await client.send(req, stream=True)
+
+            if resp.status_code == 200:
+                logger.info("✓ key[%d] %s streaming", idx + 1, _account_label(idx))
+                return StreamingResponse(
+                    _stream_chunks(resp),
+                    media_type="text/event-stream",
+                    headers={
+                        k: v
+                        for k, v in resp.headers.items()
+                        if k.lower() in ("content-type", "content-encoding", "cache-control")
+                    },
+                )
+
+            # Non-2xx streaming response: read error body then ALWAYS release the
+            # connection (even if aread() raises), preventing pool leaks.
+            try:
+                err_body = (await resp.aread()).decode(errors="replace")
+            finally:
+                await resp.aclose()
+            raise HTTPException(status_code=resp.status_code, detail=f"key[{idx + 1}] {_account_label(idx)}: {err_body}")
+
+        else:
+            resp = await client.post(CHAT_ENDPOINT, json=body, headers=headers)
+
+            if resp.status_code == 200:
+                logger.info("✓ key[%d] %s done", idx + 1, _account_label(idx))
+                return JSONResponse(content=resp.json(), status_code=200)
+
+            # Non-2xx: release the connection explicitly before retrying.
+            err_body = resp.text
+            await resp.aclose()
+            raise HTTPException(status_code=resp.status_code, detail=f"key[{idx + 1}] {_account_label(idx)}: {err_body}")
+
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"RequestError key[{idx + 1}] {_account_label(idx)}: {e.__class__.__name__} - {e}",
+        )
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
-    """OpenAI-compatible chat completions with round-robin key rotation."""
+    """OpenAI-compatible chat completions.
+
+    Pinned models (registered in opencode-rr.json, one per account) are sent
+    ONLY to their dedicated account — no cross-account fallback. If the pinned
+    account fails (e.g. daily limit 429), the error is returned as-is so
+    opencode's modelFallbackChain advances to the next model, which is pinned
+    to a different account with a fresh daily quota. Per-minute limits cannot
+    be avoided regardless (OpenRouter governs RPM globally), so this pins each
+    model's daily quota to a single account instead.
+    Unpinned/unknown models keep the original round-robin + 429 retry.
+    """
     try:
         body = await request.json()
     except json.JSONDecodeError:
@@ -155,84 +292,31 @@ async def chat_completions(request: Request):
     is_stream = body.get("stream", False)
     model = body.get("model", "unknown")
 
-    # Try each key in round-robin order
+    pinned_idx = _pinned_key(model)
+    if pinned_idx is not None:
+        # Pinned: single dedicated account, no fallback.
+        try:
+            return await _forward_key(pinned_idx, body, is_stream, model)
+        except HTTPException as e:
+            logger.warning(
+                "✗ pinned account %s failed for %s (status %d): %s",
+                _account_label(pinned_idx),
+                model,
+                e.status_code,
+                e.detail,
+            )
+            raise
+
+    # Unpinned: try each key in round-robin order (original behavior).
     start_idx, _ = _next_key()
     last_error = "All API keys failed."
 
     for offset in range(NUM_KEYS):
         idx = (start_idx + offset) % NUM_KEYS
-        api_key = KEYS[idx]
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": YOUR_SITE_URL,
-            "X-Title": YOUR_APP_NAME,
-        }
-
-        logger.info("→ key[%d/%d] model=%s stream=%s", idx + 1, NUM_KEYS, model, is_stream)
-
-        if client is None:  # lifecycle guard: startup not complete
-            raise HTTPException(status_code=503, detail="Proxy not ready")
-
         try:
-            if is_stream:
-                req = client.build_request("POST", CHAT_ENDPOINT, json=body, headers=headers)
-                resp = await client.send(req, stream=True)
-
-                if resp.status_code == 200:
-                    logger.info("✓ key[%d] streaming", idx + 1)
-                    return StreamingResponse(
-                        _stream_chunks(resp),
-                        media_type="text/event-stream",
-                        headers={
-                            k: v
-                            for k, v in resp.headers.items()
-                            if k.lower() in ("content-type", "content-encoding", "cache-control")
-                        },
-                    )
-
-                # Non-2xx streaming response: read error body then ALWAYS release the
-                # connection (even if aread() raises), preventing pool leaks.
-                try:
-                    err_body = (await resp.aread()).decode(errors="replace")
-                finally:
-                    await resp.aclose()
-
-                if resp.status_code == 429:
-                    detail = f"429 key[{idx + 1}]: {err_body}"
-                    logger.warning(detail)
-                    last_error = detail
-                else:
-                    detail = f"HTTP {resp.status_code} key[{idx + 1}]: {err_body}"
-                    logger.error(detail)
-                    last_error = detail
-                continue
-
-            else:
-                resp = await client.post(CHAT_ENDPOINT, json=body, headers=headers)
-
-                if resp.status_code == 200:
-                    logger.info("✓ key[%d] done", idx + 1)
-                    return JSONResponse(content=resp.json(), status_code=200)
-
-                # Non-2xx: release the connection explicitly before retrying.
-                err_body = resp.text
-                await resp.aclose()
-
-                if resp.status_code == 429:
-                    detail = f"429 key[{idx + 1}]: {err_body}"
-                    logger.warning(detail)
-                else:
-                    detail = f"HTTP {resp.status_code} key[{idx + 1}]: {err_body}"
-                    logger.error(detail)
-                last_error = detail
-                continue
-
-        except httpx.RequestError as e:
-            detail = f"RequestError key[{idx + 1}]: {e.__class__.__name__} - {e}"
-            logger.error(detail)
-            last_error = detail
+            return await _forward_key(idx, body, is_stream, model)
+        except HTTPException as e:
+            last_error = e.detail
             continue
 
     logger.error("✗ All %d keys failed: %s", NUM_KEYS, last_error)
@@ -261,7 +345,8 @@ async def list_models():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "keys": NUM_KEYS}
+    pinned = {m: _account_label(i) for m, i in _pinned_map.items()}
+    return {"status": "ok", "keys": NUM_KEYS, "pinned": pinned}
 
 
 # ---------------------------------------------------------------------------
