@@ -186,7 +186,7 @@ AI Agents → turn_watcher (3s poll) → turns.raw
 │       │   └── exceptions.py
 │       ├── ports/                  # 인터페이스 정의 (Protocols)
 │       │   ├── __init__.py
-│       │   ├── inference.py        # LLMProvider Protocol
+│       │   ├── extract.py          # LLMPort / ExtractPort / TurnRepository (Protocols)
 │       │   ├── storage.py          # StoragePort Protocol
 │       │   └── container.py        # ContainerManager Protocol
 │       ├── domain/                 # 비즈니스 도메인 (Bounded Contexts)
@@ -197,23 +197,20 @@ AI Agents → turn_watcher (3s poll) → turns.raw
 │       │   └── model_management/   # 모델 메타데이터 (GGUF)
 │       ├── adapters/               # 외부 기술 구현체
 │       │   ├── __init__.py
-│       │   ├── driven/
+│       │   ├── driven/             # 주도(호출) 어댑터
 │       │   │   ├── __init__.py
-│       │   ├── llm/            # LLM 공급자 어댑터
-│       │   │   ├── __init__.py
-│       │   │   ├── local.py    # 로컬 포트 (8080-8084) — Track A 기본
-│       │   │   └── factory.py  # ProviderFactory (Track A: Local only)
-│       │   ├── container/      # Podman subprocess 구현
-│       │   ├── storage/        # OCI Object Storage
-│       │   ├── file_exchange/  # blob_explorer
-│       │   ├── notification/   # Slack, Telegram, Apprise
-│       │   ├── research/       # exa, context7
-│       │   └── proxy_utils/    # 게이트웨이 (OpenRouter 등)
-│       │   └── driving/
+│       │   │   ├── llm/
+│       │   │   │   ├── __init__.py
+│       │   │   │   └── local_adapter.py  # 로컬 포트 (8080-8085) — Track A 기본
+│       │   │   ├── storage/        # DatabaseGateway + extract/turn/observation 어댑터
+│       │   │   ├── notification/   # Slack, Telegram, Apprise   (Phase 8)
+│       │   │   ├── research/       # exa, context7              (Phase 8)
+│       │   │   └── proxy_utils/    # 게이트웨이                  (Phase 8)
+│       │   └── driving/            # 구동(피호출) 어댑터
 │       │       ├── __init__.py
-│       │       ├── mcp/            # FastMCP + Tools (8개 네임스페이스)
-│       │       ├── cli_cmds/       # CLI 서브커맨드
-│       │       └── proxies/        # LLM API 프록시
+│       │       ├── api/            # FastAPI HTTP API
+│       │       ├── mcp/            # MCP 서버 + Tools
+│       │       └── cli_cmds/       # CLI 서브커맨드
 │       ├── application/            # 애플리케이션 서비스 / 오케스트레이션
 │       │   ├── __init__.py
 │       │   ├── orchestrator.py     # PipelineOrchestrator (BudgetManager 포함)
@@ -270,41 +267,42 @@ class ModelProvidersConfig(BaseSettings):  # FIXED: BaseModel → BaseSettings
         """model_key에 매핑된 provider 이름 반환. Track A에서는 항상 'local'."""
         return self.default_provider  # Track B에서만 다중 provider로 확장
 
-# src/devforge/ports/inference.py
-from typing import Protocol
+# src/devforge/ports/extract.py
+from abc import ABC, abstractmethod
 
-class LLMProvider(Protocol):
+class LLMPort(ABC):
     provider_name: str
     api_base: str
-    
-    async def chat(self, messages: list[dict], **kwargs) -> LLMResult: ...
-    async def embeddings(self, texts: list[str]) -> list[list[float]]: ...
 
-# src/devforge/adapters/driven/llm/local.py (Track A — 기존 기능 보존)
-class LocalLLMProvider:
+    @abstractmethod
+    async def chat(self, messages: list[dict], model_key: str = "day_extract",
+                   json_mode: bool = False, **kwargs) -> dict[str, Any]: ...
+    @abstractmethod
+    async def verify_claim(self, claim: str, evidence: str, **kwargs) -> dict[str, Any]: ...
+
+# src/devforge/adapters/driven/llm/local_adapter.py (Track A — 기존 기능 보존)
+class LocalLLMAdapter(LLMPort):
     """현재 MODEL_REGISTRY 기반 포트 호출. Track A 유일하게 사용."""
-    def __init__(self, port: int, model_name: str): ...
+    def __init__(self, model_registry: dict | None = None): ...
 
-# src/devforge/adapters/driven/llm/factory.py
-def create_llm_provider(provider_name: str, config: ModelProvidersConfig) -> LLMProvider:
-    """Track A: local만 반환. Track B: openai/anthropic 추가 (별도 문서화)."""
-    if provider_name == "local":
-        return LocalLLMProvider(...)
-    # Track B 구현은 docs/LLM_PROVIDER_PLAN.md 참조
-    raise NotImplementedError(f"Provider '{provider_name}' not implemented in Track A")
+# Provider 선택: src/devforge/core/config.py 의 config.llm_provider
+#   (DEVFORGE_LLM_PROVIDER env로 오버라이드, Track A 기본 'local')
+# factory는 Track B에서 도입 — docs/LLM_PROVIDER_PLAN.md (미착수)
 
-# src/devforge/application/orchestrator.py
-class PipelineOrchestrator:
-    def __init__(self, llm_provider: LLMProvider, budget_seconds: int = 21600):
-        self.llm = llm_provider
-        self.budget = BudgetManager(budget_seconds)  # BudgetManager 복원
+# src/devforge/application/extract_pipeline.py  (Phase 1 구현체; PipelineOrchestrator는 Phase 3 예정)
+class ExtractPipeline:
+    def __init__(self, llm: LLMPort, db: ExtractPort,
+                 turn_repo: TurnRepository | None = None,
+                 batch_limit: int = 50, dry_run: bool = False):
+        self.llm = llm
+        ...
 ```
 
 **수정 내역**:
 1. `BaseModel` → `BaseSettings` (Pydantic Settings가 맞는 API)
 2. `get_provider()` → `resolve_provider_name()` (core가 adapter를 반환하면 순환 참조 위반)
 3. "cloudahq" 오타 수정 → Track B는 별도 문서화로 분리
-4. `BudgetManager` 복원 (v1.1에서 지적당 항목)
+4. `LLMProvider`/`ports/inference.py` → `LLMPort`/`ports/extract.py` 명칭·경로 정정 (ADR-0002와 일치), `LocalLLMAdapter`/`local_adapter.py` 반영
 
 ---
 
@@ -343,7 +341,7 @@ class PipelineOrchestrator:
 |------|------|--------|------|
 | **Week 3** | `InferenceContainerManager` 포트 + `SubprocessImpl` | `ports/container.py` | 컨테이너 기동/정지/헬스체크 성공 |
 | | `ModelRegistry` 도메인화 | `domain/model_management/registry.py` | `MODEL_METADATA` 조회 성공 |
-| | **`LLMProvider` 포트 정의** + `LocalLLMProvider` 구현 | `ports/inference.py` + `adapters/driven/llm/local.py` | 로컬 포트 호출 성공 (DI 통해 주입) |
+| | **`LLMPort` 포트 정의** + `LocalLLMAdapter` 구현 | `ports/extract.py` + `adapters/driven/llm/local_adapter.py` | 로컬 포트 호출 성공 (DI 통해 주입) |
 | | `cli.py` 내 inference 서브커맨드 이전 | `adapters/driving/cli_cmds/inference.py` | `devforge inference switch day` 동작 |
 | **Week 4** | `PipelineOrchestrator` 스케치 (BudgetManager 포함) | `application/orchestrator.py` | `budget_gate()` 동작 |
 | | 하드코딩 경로 40곳 검증 | `core/paths.py` | `Paths.data_dir` 오버라이드 가능 |
@@ -418,8 +416,8 @@ class PipelineOrchestrator:
 | GitHub Actions CI (ruff, mypy, pytest, import-linter) | PR 검증 |
 | `docs/ARCHITECTURE.md` | 새 구조 반영 |
 | `docs/MIGRATION_GUIDE.md` | 팀 온보딩용 |
-| `docs/ADR/0001-config-priority.md` | ConfigRegistry 우선순위 |
-| `docs/ADR/0002-llm-provider-flag.md` | Provider 추상화 결정 (Track B는 별도) |
+| `docs/adr/0001-config-priority.md` | ConfigRegistry 우선순위 |
+| `docs/adr/0002-llm-provider-flag.md` | Provider 추상화 결정 (Track B는 별도) |
 
 ### Phase 7: Final Cutover (Week 14)
 
@@ -462,11 +460,11 @@ class PipelineOrchestrator:
 
 | 패턴 | 구현 |
 |------|------|
-| **Protocol** | `LLMProvider` (ports/inference.py) — `chat()`, `embeddings()` |
-| **Local** | `LocalLLMProvider` (adapters/driven/llm/local.py) — 포트 기반 |
-| **Factory** | `create_llm_provider()` (adapters/driven/llm/factory.py) — Track A: local only |
-| **Feature Flag** | `DEVFORGE_LLM_PROVIDER` env var (추후 Track B 추가) |
-| **DI** | `PipelineOrchestrator(llm_provider=...)` | 설정 → Provider 생성 → 주입 |
+| **Protocol** | `LLMPort` (ports/extract.py) — `chat()`, `verify_claim()`, `enrich_fact()`, `rerank()` |
+| **Local** | `LocalLLMAdapter` (adapters/driven/llm/local_adapter.py) — 포트 기반 |
+| **Factory** | 미구현 — `DEVFORGE_LLM_PROVIDER` 선택으로 대체 (Track B에서 factory 도입 예정) |
+| **Feature Flag** | `DEVFORGE_LLM_PROVIDER` env var (Track A: `local`) |
+| **DI** | `ExtractPipeline(llm=...)` | 설정 → Adapter 생성 → 주입 |
 
 **API 키**: OpenAI와 Anthropic은 **별도 키**가 필요합니다. 동일 키를 사용하는 것은 OpenRouter/LiteLLM 같은 게이트웨이를 거쳤을 때 가능하며, 이는 `docs/LLM_PROVIDER_PLAN.md`(Track B 별도 문서)에서 논의 예정입니다.
 
@@ -533,10 +531,10 @@ class PipelineOrchestrator:
 | `LLM_PROVIDERS.md` | Track B 문서화 시 (별도) |
 | `API_REFERENCE.md` | Phase 4 완료 |
 | `OPERATIONS_GUIDE.md` | Phase 6 완료 |
-| `ADR/0001-config-priority.md` | Phase 0 완료 |
-| `ADR/0002-llm-provider-flag.md` | Phase 1 완료 |
-| `ADR/0003-shadow-db.md` | Phase 1.5 완료 |
-| `ADR/0004-alembic-migrate.md` | Phase 0 완료 |
+| `adr/0001-config-priority.md` | Phase 0 완료 |
+| `adr/0002-llm-provider-flag.md` | Phase 1 완료 |
+| `adr/0003-shadow-db.md` | Phase 1.5 완료 |
+| `adr/0004-alembic-migrate.md` | Phase 0 완료 |
 
 ---
 
