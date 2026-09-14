@@ -211,6 +211,15 @@ class ObservationRepository(ABC):
         """Retrieve recent observations, optionally filtered by category."""
         ...
 
+    @abstractmethod
+    async def search_observations(
+        self,
+        query: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Search observations by text query (pg_trgm similarity)."""
+        ...
+
 
 # ── Parameter models (shared by MCP server and CLI) ──
 

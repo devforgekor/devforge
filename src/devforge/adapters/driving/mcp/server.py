@@ -501,8 +501,9 @@ register_tool(
 
 async def deepdive_session_status(params: DeepDiveSessionStatusParams) -> dict[str, Any]:
     config = get_config()
-    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from sqlalchemy import select
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
 
     gateway = DatabaseGateway.from_config(config)
     async with gateway.session() as db:
@@ -534,8 +535,9 @@ register_tool(
 
 async def deepdive_verify_sandbox(params: DeepDiveVerifySandboxParams) -> dict[str, Any]:
     config = get_config()
-    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from sqlalchemy import select
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
 
     gateway = DatabaseGateway.from_config(config)
     async with gateway.session() as db:
@@ -615,8 +617,9 @@ register_tool(
 
 async def search_similarity(params: SearchSimilarityParams) -> dict[str, Any]:
     config = get_config()
-    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from sqlalchemy import text
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
 
     gateway = DatabaseGateway.from_config(config)
     async with gateway.session() as db:
@@ -652,7 +655,6 @@ register_tool(
 async def mem_save(params: MemSaveParams) -> dict[str, Any]:
     config = get_config()
     from uuid import uuid4
-    from sqlalchemy import insert
 
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from devforge.domain.models import Conversation, Turn
@@ -684,8 +686,9 @@ register_tool(
 
 async def mem_search(params: MemSearchParams) -> dict[str, Any]:
     config = get_config()
-    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from sqlalchemy import text
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
 
     gateway = DatabaseGateway.from_config(config)
     async with gateway.session() as db:
@@ -721,6 +724,8 @@ async def get_conversation(params: GetConversationParams) -> dict[str, Any]:
     config = get_config()
     from uuid import UUID
 
+    from sqlalchemy import select
+
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from devforge.domain.models import Conversation, Turn
 
@@ -729,7 +734,7 @@ async def get_conversation(params: GetConversationParams) -> dict[str, Any]:
         conv_id = UUID(params.conversation_id)
         conv = await db.get(Conversation, conv_id)
         if conv is None:
-            return {"error": f"Conversation not found: {conv_id}"}, 404
+            return {"error": f"Conversation not found: {conv_id}"}
         result = await db.execute(
             select(Turn).where(Turn.conversation_id == conv_id).order_by(Turn.seq)
         )
@@ -760,10 +765,9 @@ register_tool(
 async def ingest(params: IngestParams) -> dict[str, Any]:
     """Batch conversation ingestion — local agent transcripts + web-LLM capture."""
     config = get_config()
-    from uuid import uuid4, UUID
+    from uuid import UUID, uuid4
 
-    from sqlalchemy import insert, select, update
-    from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+    from sqlalchemy import select
 
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from devforge.domain.models import Conversation, Turn

@@ -177,7 +177,8 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         if not turns_data:
             return {"error": "turns array is required"}, 400
 
-        from uuid import uuid4, UUID
+        from uuid import UUID, uuid4
+
         from sqlalchemy import select
 
         from devforge.adapters.driven.storage.database_gateway import get_gateway

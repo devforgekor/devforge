@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from devforge.core.config import ConfigRegistry
@@ -291,6 +291,39 @@ class PostgresObservationRepository(ObservationRepository):
                 stmt = stmt.where(Observation.category == category)
             result = await db.execute(stmt)
             rows = result.scalars().all()
+
+            return [
+                {
+                    "id": str(row.id),
+                    "observation": row.observation,
+                    "category": row.category,
+                    "source": row.source,
+                    "context": dict(row.context) if row.context else {},
+                    "tags": dict(row.tags) if row.tags else {},
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in rows
+            ]
+
+    async def search_observations(
+        self,
+        query: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        from devforge.domain.models import Observation
+
+        async with self._gateway.session() as db:
+            stmt = text("""
+                SELECT o.id, o.observation, o.category, o.source,
+                       o.context, o.tags, o.created_at
+                FROM observations o
+                WHERE to_tsvector('english', COALESCE(o.observation, ''))
+                      @@ plainto_tsquery('english', :query)
+                ORDER BY o.created_at DESC
+                LIMIT :limit
+            """)
+            result = await db.execute(stmt, {"query": query, "limit": limit})
+            rows = result.fetchall()
 
             return [
                 {
