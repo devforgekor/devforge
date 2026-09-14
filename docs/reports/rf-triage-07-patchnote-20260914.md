@@ -126,23 +126,45 @@
 | 9 | `driving/api/app.py:180` | import 순서 정렬 (ruff I001) |
 | 10 | `secrets.env` | `DEVFORGE_DATABASE_URL`: data-pod → postgres |
 
+### 2차 검증에서 추가 수정 (2026-09-14, Forward E2E 중 발견)
+
+| # | 파일 | 수정 내용 |
+|---|---|---|
+| 11 | `driven/storage/extract_adapter.py:313` | 미사용 `Observation` import 제거 (ruff F401) |
+| 12 | `driving/mcp/server.py` / `api/app.py` | ingest: 없는 UUID conversation → **자동 생성** (기존 404/에러) |
+| 13 | `driving/mcp/server.py` / `api/app.py` | ingest: `conversation_id` UUID 형식 검증 (non-UUID → 명시적 400) |
+| 14 | `driving/mcp/server.py` / `api/app.py` | ingest: `Turn(meta=)` → `Turn(meta_data=)` (속성명 불일치 TypeError) |
+| 15 | `driving/mcp/server.py` / `api/app.py` | ingest: `text` nullable=False인데 None 전달 → `""` 기본값 |
+| 16 | `driving/mcp/server.py` | HTTP `POST /api/v1/ingest` 라우트 추가 (스펙: HTTP+MCP dual surface) |
+| 17 | `docs/specs/ingest-provenance.yaml` | conversation_id auto-create 동작 스펙 반영 |
+
 ### 검증
 - `ruff check`: All passed
-- `mypy`: Success (9 source files)
+- `mypy`: Success (38 source files)
+- V1-V8 pre-cutover: 9/9 PASS
 
 ---
 
 ## 7. 양방향 검증
 
 ### Forward (리팩토링 → 정상 동작)
-| 도구 | HTTP | 결과 |
+| 도구 | 서피스 | 결과 |
 |---|---|---|
-| `pipeline_status` | ✅ | DB 조회, 상태 분포 반환 (7,175 turns) |
-| `knowledge_search` | ✅ | pg_trgm 검색, 다건 결과 |
-| `get_conversation` | ✅ | 존재하지 않음 → 에러 메시지 반환 |
-| `obs_search` | ✅ | pg_trgm 검색, 다건 결과 |
-| `ingest` | ✅ | 입력 검증 동작 (IngestTurnParams: seq, user_turn 필수) |
-| `extract_turn` | ✅ | UUID 유효성 검증 동작 |
+| `pipeline_status` | HTTP `/tools/` | ✅ DB 조회, 상태 분포 반환 |
+| `knowledge_search` | HTTP `/tools/` | ✅ pg_trgm 검색, 다건 결과 |
+| `get_conversation` | HTTP `/tools/` | ✅ 존재하지 않음 → 에러 메시지 반환 |
+| `obs_search` | HTTP `/tools/` | ✅ pg_trgm 검색, 다건 결과 |
+| `ingest` | MCP `/tools/ingest` + **HTTP `/api/v1/ingest`** | ✅ 입력 검증 (seq, user_turn 필수) |
+| `extract_turn` | HTTP `/tools/` | ✅ UUID 유효성 검증 동작 |
+
+### Ingest E2E (2차 검증)
+| 시나리오 | 결과 |
+|---|---|
+| 신규 UUID conversation auto-create | ✅ 2건 inserted |
+| 비어있는 conversation_id (uuid4 자동 생성) | ✅ 1건 inserted |
+| idempotency (동일 `source_message_id` 재전송) | ✅ 1 inserted / 1 skipped |
+| non-UUID conversation_id | ✅ 명시적 에러 ("must be UUID") |
+| HTTP `/api/v1/ingest` (port 8000) | ✅ 1 inserted, DB 반영 확인 |
 
 ### Backward (레거시 → 롤백 가능)
 | 항목 | 결과 |
@@ -209,6 +231,8 @@
 ## 11. 커밋 이력 (main, 전체)
 
 ```
+d3b1569  rf-triage-07: ingest 버그 수정 + HTTP surface 노출 (양방향 검증)
+eb6cbde  rf-triage-07: 패치 노트 + 핸드오버 검증·정정
 2852a6e  docs: D1 요약에 SSOT 참조 추가
 9b9946e  docs: INDEX.md에 rf-triage-07 패치 노트 추가
 856ef21  rf-triage-07: 패치 노트 문서 추가 (SSOT용)
@@ -236,7 +260,7 @@ f2b2a78  rf-triage-07: Phase A-1 ingest 구현 (MCP + HTTP)
 d9f6fe7  rf-triage-07: D1 수동 검증 — provenance 코드 레벨 확인
 ```
 
-> rf-triage-07 전체 커밋 24개 (2026-09-14)
+> rf-triage-07 전체 커밋 26개 (2026-09-14)
 
 ---
 

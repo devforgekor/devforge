@@ -127,7 +127,9 @@
 | 컨테이너 전환 | ✅ mcp_refactored_entrypoint → mcp_entrypoint 전환 성공 |
 | 롤백 시간 | < 10초 (restart + pip install 생략) |
 
-### 수정된 버그 (10개)
+### 수정된 버그 (17개)
+
+#### 1차 검증 (10개)
 
 | 파일 | 수정 내용 |
 |---|---|
@@ -141,5 +143,17 @@
 | `driving/mcp/server.py:504` | import 순서 정렬 (ruff I001) |
 | `driving/api/app.py:180` | import 순서 정렬 (ruff I001) |
 | `secrets.env` | `DEVFORGE_DATABASE_URL`: data-pod → postgres (DB 호스트 변경) |
+
+#### 2차 검증 — Ingest E2E 중 발견 (7개)
+
+| 파일 | 수정 내용 |
+|---|---|
+| `extract_adapter.py` | 미사용 `Observation` import 제거 (ruff F401) |
+| `mcp/server.py` + `api/app.py` | ingest: 없는 UUID conversation → 자동 생성 |
+| `mcp/server.py` + `api/app.py` | ingest: conversation_id UUID 형식 검증 (non-UUID → 400) |
+| `mcp/server.py` + `api/app.py` | ingest: `Turn(meta=)` → `Turn(meta_data=)` (TypeError) |
+| `mcp/server.py` + `api/app.py` | ingest: text nullable=False → `""` 기본값 |
+| `mcp/server.py` | HTTP `POST /api/v1/ingest` 라우트 추가 (dual surface) |
+| `docs/specs/ingest-provenance.yaml` | auto-create 동작 스펙 반영 |
 
 > SSOT (7일 후): `docs/reports/rf-triage-07-patchnote-20260914.md`
