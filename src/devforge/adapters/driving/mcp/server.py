@@ -889,6 +889,7 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> 
         "store_observation": store_observation,
         "get_conversation": get_conversation,
         "obs_search": obs_search,
+        "ingest": ingest,
     }
 
     if tool_name not in tool_funcs:
@@ -906,6 +907,7 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> 
         "store_observation": StoreObservationParams,
         "get_conversation": GetConversationParams,
         "obs_search": ObsSearchParams,
+        "ingest": IngestParams,
     }
 
     try:
