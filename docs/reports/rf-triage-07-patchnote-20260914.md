@@ -349,6 +349,29 @@ claude-gpt gemini-3.8-flash # Gemini
 - Anthropic `/v1/messages` non-stream/stream 변환 동작
 - 모드 파일: `MODE=gudokpin` (기본 백엔드)
 
+### tool call 검증 (2026-09-14) — 중요
+Gudokpin 실측: **tool_call 지원 모델만 Claude Code 에이전트 동작 가능**
+
+| 모델 | tool call | streaming | Claude Code |
+|---|---|---|---|
+| claude-sonnet-5 | ✅ | ✅ | ✅ |
+| claude-opus-5 | ✅ | ✅ | ✅ |
+| DeepSeek-V4-Flash-0731 | ❌ | ✅ | ❌ (텍스트 전용) |
+| gpt-6-astra | ❌ | ✅ | ❌ |
+
+→ 기본 모델 `claude`→`claude-sonnet-5`로 변경 (tool call + streaming 지원).
+`claude-fast`→`DeepSeek-V4-Flash-0731` (저렴 텍스트 전용).
+
+### 데이터 유입 검증 (claude → DevForge)
+- turn_watcher가 claude 세션 수집: `source='claude'` turns ✅
+- PreToolUse 훅 발동: `pretool:bash` observations ✅
+- PostToolUse 훅: test 명령(pytest 등) 시 관찰 기록
+
+### 3차 양방향 검증 (2026-09-14)
+- Forward: MCP 9/9 PASS, gudokpin tool call OK, claude→claude-sonnet-5 tool 실행, 데이터 유입 확인
+- Backward: 레거시 MCP 롤백 OK, 복귀 OK
+- ruff 수정: gudokpin 프록시 3건 (SIM212, F841×2)
+
 > 참고: 스트리밍 중 Broken pipe는 클라이언트 조기 종료 시 정상. gpt-5.6-luna/sol은 Gudokpin streaming 미지원 → Claude Code에서 미사용 (직접 API/opencode용).
 
 ---
