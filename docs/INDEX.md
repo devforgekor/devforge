@@ -1,6 +1,6 @@
 # 문서 인덱스 (INDEX)
 
-> Status: active · Date: 2026-09-12 · Owner: devforge · Related: `docs/CONVENTIONS.md`
+> Status: active · Date: 2026-09-14 · Owner: devforge · Related: `docs/CONVENTIONS.md`
 > `docs/`의 진입점. 워크스트림별 **정본(canonical)·기록·런북·스펙**을 등록한다. 폴더 자체가 전체 목록이다.
 
 ---
@@ -50,6 +50,7 @@
 | Azure Golden Image(런북) | `runbooks/runbook-golden-image.md` | active |
 | Azure Qwen 엔드포인트 | `runbooks/azure-qwen-deepdive-endpoint.md` | active |
 | Azure 재빌드 핸드오버 | `plans/azure-golden-image-rebuild-handover.md` | active |
+| Azure Deep Dive E2E 검증 | `reports/azure-deepdive-e2e-verification-20260914.md` | record |
 | DataImpulse 대시보드 모니터(계약) | `specs/dataimpulse-monitor.yaml` | active |
 | DataImpulse 대시보드 모니터(런북) | `runbooks/dataimpulse-monitor.md` | active |
 
@@ -69,6 +70,10 @@
 ### 6) 기타
 - 이동된 과거 문서는 `reports/`(기록) 또는 `runbooks/`(절차)에 있다.
 - 폐기/일회성은 `_archive/`.
+
+## 최근 변경 (2026-09-14)
+- Azure `azureqwen` Deep Dive **E2E 검증 성공**(opencode → `deepdive_step_enter/exit` → DB `DONE`) — [`reports/azure-deepdive-e2e-verification-20260914.md`](./reports/azure-deepdive-e2e-verification-20260914.md).
+- 골든 이미지 ctx 결함(8192 < opencode ~16.7k) 발견 → **SSOT `-c 32768`** 정정([`runbooks/runbook-golden-image.md`](./runbooks/runbook-golden-image.md), `azure:20137133/.../yearly_refresh.sh`). `-t 2` 무효(1 core/SMT, memory-bound).
 
 ## 최근 변경 (2026-09-12)
 - svc pod 호스트 포트포워딩(rootlessport) 장애 복구 + **watchdog 재발방지**(`check_svcpod_ports`/`recover_svcpod_forwarding`, task#32) — [`reports/svcpod-portforwarding-recovery-20260912.md`](./reports/svcpod-portforwarding-recovery-20260912.md).

@@ -509,3 +509,6 @@ completed_log:
 - '2026-09-12: Azure Golden Image MoE 재빌드 — llm-qwen-27b:2026.09.3 등록(MoE Qwen3-30B-A3B-Q4_K_M + llama.cpp b10919 + llm.service
   --jinja), 배포 툴콜 검증(finish_reason:tool_calls), 임시 리소스 CLEAN. yearly_refresh.sh/runbook/endpoint doc 정합, opencode azureqwen
   provider 등록.'
+- '2026-09-14: Azure azureqwen Deep Dive E2E 검증 성공 — opencode run -m azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2) →
+  deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
+  -t 2 무효(1 physical core/SMT, memory-bound). report docs/reports/azure-deepdive-e2e-verification-20260914.md.'
