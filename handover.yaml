@@ -424,17 +424,13 @@ decisions:
     대칭 지표, 게이트6 로프홀 제거, baseline 단일화(W1 공유). 리뷰 루프 종결 선언. https://d.pr/waa3yN'
   status: open
 - id: rf-triage-07
-  detail: '최종 판정(2026-09-14): Phase 0 실행 승인. rf-triage-07 완료 — (1) specs/mcp-contract.json 초안 작성 완료,
-    (2) ADR-0006 Accepted 전환+12툴 목록 열거, (3) W1 baseline 1주 측정 시작(docs/ops/baseline/W1-baseline-spec.md).
-    → 게이트 6개 통과 후 Phase A/MCP 착수.
-    상세: (1) mcp-contract.json 12툴 JSON Schema 작성 (v5 §2.2). (2) ADR-0006 Accepted + 12툴 열거표 추가.
-    (3) D1 측정 실행: turns 143/24h, 7163 total, all source=unknown.
-    (4) D1 수동 검증: provenance 100% unknown 원인 = 4개 INSERT 경로 누락 (turn_watcher, mcp_server×2, mcp_server_sse).
-    (5) 코드 고침: 4개 파일 INSERT에 source 컬럼 추가 (turn_watcher.py, mcp_server.py:173/530, mcp_server_sse.py).
-    (6) provenance 마커 적용: 7163건 UPDATE source=unknown→legacy:pre-2026-09 (backup: turns_source_backup_20260914).
-    (7) 서비스 재시작: devforge-turn-watcher + devforge-mcp (bind mount으로 코드 반영 확인).
-    (8) Gate 6 통과: 기존=legacy 마커, 신규 turns=코드 수정으로 source 기록.
-    (9) 일일 측정 타이머 설정: baseline-daily.timer (daily, Persistent).
+  detail: '최종 판정(2026-09-14): rf-triage-07 완료 — Phase 0~A 전체 수행.
+    (1) Provenance: 원인 규명(4 INSERT 경로 누락) → 코드 고침(turn_watcher, mcp_server×2, mcp_server_sse) → 마커(7163건 legacy:pre-2026-09) → 배포 → 검증(unknown=0/7173). backup: turns_source_backup_20260914.
+    (2) W1 baseline: D1 측정(143 turns/24h) → 일일 자동 측정(baseline-daily.timer, daily).
+    (3) Phase A-1: ingest 구현 — MCP ingest tool(IngestParams: source, agent, title, model, conversation_id, turns required) + HTTP POST /api/v1/ingest(required: source, conversation_id, turns; idempotency via source_message_id; provenance source/agent 기록).
+    (4) Phase A-2: 12-tool 계약 매칭 — 18개 툴 등록(12 계약 + 6 추가), deepdive 5종/obs_write/obs_search/search_turns/search_similarity/mem_save/mem_search/get_conversation.
+    (5) Phase A-3: 컷오버 시나리오(docs/ops/cutover-phase-a.md) — 수락기준 6, 사전준비 6, 검증 V1-V8, 롤백 4.
+    (6) Phase A 컷오버 실행: container-devforge-mcp → refactored MCP, /src volume mount, mcp_refactored_entrypoint.sh, 건강확인 healthy+18 tools, V1-V8 9/9 PASS.
     Co-authored-by: opencode <opencode@devforge'
   status: closed
 known_issues:
