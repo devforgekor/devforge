@@ -186,9 +186,9 @@ Persistent=true
         "apiKey": "local-rr-proxy"
       },
       "models": {
-        "inclusionai/ling-3.0-flash-vl:free": { "name": "inclusionAI: Ling 3.0 Flash VL" },
-        "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "NVIDIA: Nemotron 3 Ultra" },
-        "cohere/north-mini-code:free": { "name": "Cohere: North Mini Code" }
+        "inclusionai/ling-3.0-flash-vl:free": { "name": "ORP-1(free)" },
+        "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "ORP-2(free)" },
+        "cohere/north-mini-code:free": { "name": "ORP-3(free)" }
       }
     }
   }

@@ -137,9 +137,9 @@ exec opencode "$@"
   "options": { "baseURL": "http://127.0.0.1:8451/v1",
                "apiKey": "local-rr-proxy" },
   "models": {
-    "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "NVIDIA: Nemotron 3 Ultra" },
-    "google/gemma-4-26b-a4b-it:free":         { "name": "Google: Gemma 4 26B A4B" },
-    "cohere/north-mini-code:free":            { "name": "Cohere: North Mini Code" }
+    "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "ORP-1(free)" },
+    "google/gemma-4-26b-a4b-it:free":         { "name": "ORP-2(free)" },
+    "cohere/north-mini-code:free":            { "name": "ORP-3(free)" }
   }
 }}
 ```
