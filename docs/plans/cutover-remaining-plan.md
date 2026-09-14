@@ -157,6 +157,8 @@ G(ops/backup) ────────┘
 
 ## 9. 미결 (Open questions)
 
+> 상세·선택지·영향·권장·결정란은 **[`docs/plans/open-decisions.md`](./open-decisions.md)** (D1~D6) 참조.
+
 1. **MCP 전략**: FastMCP 채택(라이브 정합) + **툴 10~20 + `search_tools` 점진공개**(ADR-0006, proposed). SSE 유지안은 폐기.
 2. **shadow DB 적용**: ✅ **적용 완료**(2026-09-14, `devforge_shadow` + `turns_shadow` 뷰 + `review_facts_shadow`).
 3. **worker_supervisor 이관 범위**: `container-devforge-worker`를 application 계층으로 흡수(예정).

@@ -49,7 +49,7 @@
 | Ingestion | hook→queue→importer | `turn_watcher`→raw→`raw_consumer` | ⚠️ 폴링/별도 worker |
 | Storage/Retrieval | FTS+vector+RRF, KG, L0~L3 | Postgres+pgvector+FTS5+RRF | ✅ 일치(계층 일부 부재) |
 | Extraction | deterministic→LLM, 구조화강제, evidence, hybrid | 로컬 8B **배치**(day_cycle) | ❌ 이탈 |
-| Serving(MCP) | 10~20 툴 + 점진공개 | `devforge-mcp` **25+** 전량 선로딩 / 리팩토링본 5 | ❌ 과다/불일치 |
+| Serving(MCP) | 10~20 툴/서버 | 서버 4개. 노출 devforge 25·lsp 65 / **opencode 로드(allowlist) devforge 12·lsp 13·yggdrasil 4 + db ≈ 33** | ✅ 서버당 충족 / ⚠️ 무필터 클라이언트 |
 | provenance | source/confidence | `turns.source` 전부 `unknown` | ❌ 미기록 |
 
 ## 5. 세부 진단
@@ -59,9 +59,11 @@
 - 수신 표면: 레거시 `scripts/mcp_server.py`의 MCP `ingest` 툴만 존재, `POST /ingest`는 미구현, 리팩토링 MCP에는 **`ingest` 없음**.
 - 결과: 웹 대화가 `turns`로 유입되지 않고, 유입돼도 provenance(`source`)가 안 남음(`turns.source` 7,131건 전부 `unknown`).
 
-### 5.2 MCP 툴 표면 — 과다
-- `devforge-mcp` = **25+ 툴**(knowledge/memory/obs/action/deepdive/review/ingest/telegram/flaresolverr) 전량 선로딩 → 표준(10~20) 초과.
-- 리팩토링 MCP(`adapters/driving/mcp`)는 **5툴**로 반대편 불일치 → 컷오버 시 기능 소실 위험.
+### 5.2 MCP 툴 표면 — 서버 노출 vs 클라이언트 로드
+- **활성 MCP 서버 4개**: `devforge-mcp`(:8000), `yggdrasil`, `lsp`, `opencode-db`.
+- **서버 노출 툴**: `devforge-mcp` **25**, `lsp`(agent-lsp 0.15.0, `tools/list` 실측) **65**, `yggdrasil` 4, `opencode-db` ≈4.
+- **실제 로드(핵심)**: opencode는 `tools` allowlist로 프루닝 → **devforge 12 / lsp 13 / yggdrasil 4 + opencode-db(무필터)** ≈ **33개**. 즉 **opencode에서는 툴 스프롤이 이미 해소**됐고 서버별 10~20 가이드도 충족.
+- **잔여 리스크(클라이언트 의존)**: (a) allowlist 없는 클라이언트(예: Claude Code 등)에서는 25/65가 그대로 로드될 수 있음, (b) `ingest` 미복원, (c) 리팩토링 MCP(`adapters/driving/mcp`)가 **5툴**뿐이라 컷오버 시 **허용된 12툴 계약**을 보존해야 함.
 
 ### 5.3 추출/day_cycle — 로컬 8B 배치
 - 4코어 ARM CPU-only에서 로컬 8B 추론은 **memory-bandwidth-bound** → 본질적으로 느림(`reports/architecture-validation.md`와 일치).
@@ -85,7 +87,8 @@
 - heavy 추출을 **비동기 batch tier**로 이동(크리티컬 패스 제거). 서버의 1차 역할은 **검증/후보정(NLI grounding, dedup, entity resolution)**.
 
 ### 6.4 MCP
-- `devforge-mcp`를 **네임스페이스 분할 + 10~20 활성 툴**로 재편, 초과분은 **`search_tools`(progressive discovery)**.
+- **계약 보존 우선**: 리팩토링 MCP(`adapters/driving/mcp`)가 opencode가 허용한 **12툴 계약**을 재현(전체 25툴 기본 노출 금지). `ingest` 복원.
+- **점진공개(`search_tools`)는 옵션**: opencode는 allowlist로 이미 프루닝(≈33툴)되어 급하지 않음. allowlist 없는 클라이언트(예: Claude Code)를 지원할 때만 도입.
 - 툴 description에 **"언제 쓰고 언제 쓰지 말지(경계)"** 명시.
 
 ## 7. 검증/측정 지표
@@ -95,8 +98,8 @@
 
 ## 8. 결론
 - 이 시스템의 계보(웹 LLM 캡처 → 통합 기억 → MCP)는 업계 표준과 동일한 방향이다.
-- 이탈점은 **(a) 웹 수집 미연결**, **(b) MCP 툴 과다**, **(c) 로컬 8B 배치 추출** 세 가지이며, 모두 표준 패턴으로 교정 가능하다.
-- 우선순위: **MCP 툴 표면·ingest 복원 → 웹 수집 편입·provenance → 추출 라우팅 재설계**.
+- 이탈점은 **(a) 웹 수집 미연결**, **(b) 리팩토링 MCP의 계약 불일치(5 vs 허용 12)**, **(c) 로컬 8B 배치 추출** 세 가지이며, 모두 표준 패턴으로 교정 가능하다. *(opencode의 툴 스프롤은 allowlist로 이미 해소됨 — 문제 아님.)*
+- 우선순위: **`ingest` 복원 + 12툴 계약 보존 → 웹 수집 편입·provenance → 추출 라우팅 재설계**.
 
 ## 9. 출처
 - MCP 공식 Client Best Practices (progressive discovery) — https://modelcontextprotocol.io/docs/2026-07-28/develop/clients/client-best-practices

@@ -374,7 +374,8 @@ decisions:
 - id: rf-standard-01
   detail: '업계 표준 대조 문서화(2026-09-14): docs/reports/industry-standard-comparison-20260914.md (5계층 프레임:
     Capture/Transport/Ingestion/Storage·Retrieval/Extraction·Serving). 진단 3대 이탈점 — (a) 웹 수집(chrome-web) 파이프라인
-    미연결, (b) devforge-mcp 25+ 툴 과다(표준 10~20 + 진행공개), (c) 로컬 8B 배치 추출(day_cycle, CPU-bound). 권고:
+    미연결, (b) 리팩토링 MCP 계약 불일치(5 vs opencode 허용 12 — 툴 스프롤은 opencode tools allowlist로 이미 해소,
+    서버 노출 devforge 25·lsp 65 → 로드 devforge 12·lsp 13·yggdrasil 4 ≈ 33), (c) 로컬 8B 배치 추출(day_cycle, CPU-bound). 권고:
     deterministic→소형로컬(grammar)→클라우드 escalation, 추출을 후보정/비동기로, MCP search_tools+ingest 복원+provenance.
     결정 기록 adr/0005-extraction-routing.md·adr/0006-mcp-tool-surface.md (proposed). cutover-remaining-plan Phase A/B/C 세분화.'
   status: open

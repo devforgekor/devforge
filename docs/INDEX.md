@@ -83,12 +83,13 @@
 | 설계 결정 기록(ADR) | `adr/0001-config-priority.md` ~ `adr/0006-mcp-tool-surface.md` | record |
 | 시스템 전체 구조 | `system-architecture.md` (§3.5 코드 레이어) | active |
 | **Cutover 잔여 계획** | `plans/cutover-remaining-plan.md` | proposed |
+| **의사결정 대기 목록** | `plans/open-decisions.md` | active |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
 | Ingest/Provenance 계약 | `specs/ingest-provenance.yaml` | proposed |
 | 이전 구조 정리(완료) | `plans/code-size-refactoring.md`, `reports/handover-refactoring.md` | record |
 
 ## 최근 변경 (2026-09-14)
-- **업계 표준 대조 문서화(2026-09-14)**: 웹 조사(5계층)와 서버 실측 대조 → `reports/industry-standard-comparison-20260914.md`. 결정 기록 `adr/0005-extraction-routing.md`(추출 하이브리드 라우팅·후보정)·`adr/0006-mcp-tool-surface.md`(툴 10~20·점진공개·ingest·provenance) 추가. 계약 스펙 `specs/ingest-provenance.yaml`. `plans/cutover-remaining-plan.md` Phase A/B/C 세분화.
+- **업계 표준 대조 문서화(2026-09-14)**: 웹 조사(5계층)와 서버 실측 대조 → `reports/industry-standard-comparison-20260914.md`. 결정 기록 `adr/0005-extraction-routing.md`(추출 하이브리드 라우팅·후보정)·`adr/0006-mcp-tool-surface.md`(계약 보존·ingest·provenance; 점진공개 옵션) 추가. 계약 스펙 `specs/ingest-provenance.yaml`. 의사결정 대기 목록 `plans/open-decisions.md`(D1~D6). `plans/cutover-remaining-plan.md` Phase A/B/C 세분화.
 - **은퇴/적용(2026-09-14)**: Shadow DB(`devforge_shadow`) 라이브 적용. 문서생성기 `gen_architecture.py` 은퇴 → `_archive/` (호출부 `system_sync.sh`·`day_cycle.sh`·`daily-structure.service` 제거; `architecture/*`는 수동/동결). Gemini 에이전트 세션 로직 은퇴 → `_archive/gemini-agent/` (`gemini-session.service` disable).
 - **Cutover 잔여 계획 수립**: `scripts/*` → `devforge` 전환을 단계(A~I)·수락기준·롤백까지 정의 — [`plans/cutover-remaining-plan.md`](./plans/cutover-remaining-plan.md). (현재 라이브 유닛 22개+컨테이너 3개 의존, 다수 도메인 미구현)
 - **SSOT 동기화**: `architecture/code-structure.yaml`이 신규 `src/devforge/` 패키지를 포함하도록 생성기(`gen_architecture.py`) 확장(62 그룹/377 파일). `system-architecture.md`에 §3.5 코드 레이어 추가(컷오버 미완료 명시). 리팩토링 문서(REFACTORING_PLAN/ARCHITECTURE/MIGRATION_GUIDE/LLM_PROVIDER_PLAN/API_REFERENCE/OPERATIONS_GUIDE/adr)를 INDEX에 등록. `CLAUDE.yaml`·`blueprint.yaml`·`handover.yaml`에 리팩토링 기준 반영. `docs/specs/schema.sql`을 ORM과 일치하도록 재생성(16 테이블).
