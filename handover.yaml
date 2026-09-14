@@ -424,16 +424,17 @@ decisions:
     대칭 지표, 게이트6 로프홀 제거, baseline 단일화(W1 공유). 리뷰 루프 종결 선언. https://d.pr/waa3yN'
   status: open
 - id: rf-triage-07
-  detail: '최종 판정(2026-09-14): Phase 0 실행 승인. 다음 행동 — specs/mcp-contract.json 초안(스키마는 review-triage-v5 §2.2) → ADR-0006에 12툴
-    목록 반영·Accepted 전환 → W1 baseline 1주 측정 → 게이트 6개 통과 후 Phase A/MCP 착수.'
-  status: open
+  detail: '최종 판정(2026-09-14): Phase 0 실행 승인. rf-triage-07 완료 — (1) specs/mcp-contract.json 초안 작성 완료,
+    (2) ADR-0006 Accepted 전환+12툴 목록 열거, (3) W1 baseline 1주 측정 시작(docs/ops/baseline/W1-baseline-spec.md).
+    → 게이트 6개 통과 후 Phase A/MCP 착수.'
+  status: closed
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
   resolved: false
 - text: '리뷰 패키지 원본 수치 미정정(2026-09-14): final-plan §4.2/§4.3 "33→약12"(정정치 로드 32·목표 ≈15·merge −8), review-brief "0회 9개" 리스트
-    오류, mcp-tool-audit 감사표 deep_planning 중복(합계 587 vs 475), day_cycle 455(실측 448), turns.source 7151(실측 7152). v5 후속으로 문서
-    일괄 정정 필요.'
+    오류, mcp-tool-audit 감사표 deep_planning 중복(합계 587 vs 475), day_cycle 455(실측 448), turns.source 실측값 문서 불일치(v5:7152→실측:7159,
+    최초:v5 참조 전:7151). v5 후속으로 문서 일괄 정정 필요. W1 baseline 측정 후 Gate 5에서 정합 확인.'
   resolved: false
 - text: '30B MoE (Qwen3-Coder-30B-A3B-Q4_K_M, 18G) slot deadlock after first request: cause is MemoryMax 22G too tight. Fixed
     at 23G + ctx 4096 + cache-ram 512. 14B Q4 is more stable alternative.'
@@ -498,8 +499,9 @@ known_issues:
     mcp add not tested with devforge-mcp container. OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
     pointing to local proxy.
   resolved: false
-- text: 'Phase 0 미착수(2026-09-14): specs/mcp-contract.json 미작성, ADR-0006 12툴 목록 미열거(Proposed), baseline 미측정. rf-triage-07의
-    다음 행동에 해당.'
+- text: 'Phase 0 진행 중(2026-09-14): specs/mcp-contract.json 초안 작성 완료(draft), ADR-0006 Accepted(12툴 열거 완료),
+    W1 baseline 1주 측정 진행 중(docs/ops/baseline/W1-baseline-spec.md). Gate 1 통과 확인 필요(allowlist diff=0 검증).
+    rf-triage-07 완료.'
   resolved: false
 - text: Phase 1 test scripts in /tmp/ (test_30b_golden.py, test_14b_golden.py, test_14b_feedback.py) — not committed. One-shot
     test scripts, not production code.
@@ -617,7 +619,8 @@ completed_log:
   → deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
   -t 2 무효(1 physical core/SMT, memory-bound). report docs/reports/azure-deepdive-e2e-verification-20260914.md.'
 - '(2026-09-14, opencode) 리뷰 트리아지 v1~v5 — 최종계획/리뷰브리프/근거부록(OCI HTML)에 대한 외부 리뷰 3종(deepseek·qwen1·qwen2) + 자체 실측 13항목(F1~F13:
-  opencode.json 로드 32툴, 리팩토링 MCP 5툴, day_cycle 448줄, turns.source 7152/7152 unknown, ingest는 레거시에만, shadow DB, auto_log PostToolUse
-  훅 운영, Linger=yes, netdata active, ADR-0006 Proposed, 감사표 중복) 대조 → 수용/부분/미수용 판정. R3·R4·R7 부분수용, contract-first 채택, Phase
-  0 산출물 6종 + 12툴 계약 열거 + mcp-contract.json JSON Schema + 게이트 6개 선형 체인+예외 경로. 5차 교차검증 후 리뷰 루프 종결, 최종=Phase 0 실행 승인. 산출물: docs/reports/review-triage{-package,-v2,-v3,-v4,-v5}-20260914.md,
-  Droplr v1 https://d.pr/97DxrE · v2 https://d.pr/ihZ81J · v3 https://d.pr/koCTH7 · v4 https://d.pr/RZygjB · v5 https://d.pr/waa3yN'
+    opencode.json 로드 32툴, 리팩토링 MCP 5툴, day_cycle 448줄, turns.source 실측 7159 unknown, ingest는 레거시에만, shadow DB, auto_log PostToolUse
+    훅 운영, Linger=yes, netdata active, ADR-0006 Proposed→Accepted, 감사표 중복) 대조 → 수용/부분/미수용 판정. R3·R4·R7 부분수용, contract-first 채택, Phase
+    0 산출물 6종 + 12툴 계약 열거 + mcp-contract.json JSON Schema + 게이트 6개 선형 체인+예외 경로. 5차 교차검증 후 리뷰 루프 종결, 최종=Phase 0 실행 승인. rf-triage-07:
+    (1) specs/mcp-contract.json 초안 작성, (2) ADR-0006 Accepted 전환, (3) W1 baseline 측정 시작. 산출물: docs/reports/review-triage{-package,-v2,-v3,-v4,-v5}-20260914.md,
+    Droplr v1 https://d.pr/97DxrE · v2 https://d.pr/ihZ81J · v3 https://d.pr/koCTH7 · v4 https://d.pr/RZygjB · v5 https://d.pr/waa3yN'

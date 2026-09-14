@@ -1,7 +1,10 @@
 # MCP Tool Surface & Web Capture Ingestion Decision Record (ADR-0006)
 
 ## Status
-Proposed (2026-09-14) — recommendation; not yet implemented.
+Accepted (2026-09-14) — 12-tool contract enumerated per rf-triage-07; effective at cutover.
+
+> 이전 상태: Proposed (2026-09-14). rf-triage-05에서 "12툴 목록 미열거" 판정 → rf-triage-07에서 수용.
+> 본 ADR의 12툴 목록은 `specs/mcp-contract.json`과 일치. 이후 변경은 supersede 신규 ADR.
 
 ## Context
 There are only **4 active MCP servers** (`devforge-mcp`, `yggdrasil`, `lsp`, `opencode-db`).
@@ -29,6 +32,25 @@ target 33→~16 via remove+merge).
    expose the full 25 by default. Adopt **progressive discovery** (`search_tools`) only when
    a client loads the full catalog (no allowlist) — optional, not urgent. Tool descriptions
    must encode the decision boundary ("use when … / do NOT use when …").
+
+   **계약 툴 12개 (Enumerated Contract)** — `specs/mcp-contract.json`과 일치:
+
+   | # | 툴 | disposition | lifecycle | merge_target |
+   |---|---|---|---|---|
+   | 1 | `deepdive_step_enter` | hook | active → hook@M1 → removed@M0 | — |
+   | 2 | `deepdive_step_exit` | hook | active → hook@M1 → removed@M0 | — |
+   | 3 | `deepdive_session_heartbeat` | internalize | active → deprecated@M1 → removed@M0 | — |
+   | 4 | `deepdive_session_status` | internalize | active → deprecated@M1 → removed@M0 | — |
+   | 5 | `deepdive_verify_sandbox` | keep | active | — |
+   | 6 | `obs_write` | merge | active → merged@M3(M2) → removed@M0 | memory(action=save,kind=obs) |
+   | 7 | `obs_search` | merge | active → merged@M3 → removed@M0 | memory(action=search,kind=obs) |
+   | 8 | `search_turns` | merge | active → merged@M3 → removed@M0 | search_turns(mode=fts) |
+   | 9 | `search_similarity` | merge | active → merged@M3 → removed@M0 | search_turns(mode=hybrid) |
+   | 10 | `mem_save` | merge | active → merged@M3 → removed@M0 | memory(action=save,kind=mem) |
+   | 11 | `mem_search` | merge | active → merged@M3 → removed@M0 | memory(action=search,kind=mem) |
+   | 12 | `get_conversation` | keep | active | — |
+
+   검증: `specs/mcp-contract.json` JSON Schema 검증 + `opencode.json` allowlist 이름 diff=0 + annotation 4종(`readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint`) 외 필드 금지.
 2. **`ingest` contract**: provide batch conversation ingestion on **both** surfaces —
    `POST /api/v1/ingest` (HTTP) and the MCP `ingest` tool — in the refactored package.
 3. **Web capture**: adopt **Chrome extension + Native Messaging + loopback relay** as the
