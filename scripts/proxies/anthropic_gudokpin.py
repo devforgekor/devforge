@@ -78,7 +78,7 @@ STRIP_RESP_HEADERS = {
 ANTHROPIC_API_KEY = os.environ.get("GUDOKPIN_API") or ""
 
 # Gudokpin uses a single API key (GUDOKPIN_API in secrets.env).
-API_KEYS: List[str] = [os.environ.get("GUDOKPIN_API", "") if not ANTHROPIC_API_KEY else ANTHROPIC_API_KEY]
+API_KEYS: List[str] = [ANTHROPIC_API_KEY if ANTHROPIC_API_KEY else os.environ.get("GUDOKPIN_API", "")]
 # Filter out empty entries while preserving order.
 API_KEYS = [k for k in API_KEYS if k]
 
@@ -493,7 +493,6 @@ class _StreamConverter:
 
         # Handle tool_calls
         tc_deltas = delta.get("tool_calls", [])
-        needs_text_close = False
 
         if tc_deltas:
             for tc in tc_deltas:
@@ -747,9 +746,9 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
                 self._forward_to_deepseek(body, anthropic_model, is_stream)
                 return
 
-            # OpenRouter 5xx → fallback to DeepSeek (not key-specific).
+            # 5xx → fallback to DeepSeek (not key-specific).
             if resp.status >= 500:
-                raw = resp.read()
+                resp.read()
                 conn.close()
                 print(
                     f"[gudokpin-proxy] {key_label} OpenRouter {resp.status}, falling back to DeepSeek",
