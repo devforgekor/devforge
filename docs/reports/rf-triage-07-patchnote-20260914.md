@@ -47,7 +47,9 @@
 | 항목 | 결과 |
 |---|---|
 | 기존 turns | 7,163건 → `legacy:pre-2026-09` |
-| 신규 turns | `opencode` (세션별 source 기록) |
+| 신규 turns | `opencode` (세션별 source 기록, 본 문서 작성 시점 17건) |
+| 검증 시점 unknown | 0/7,173 |
+| 현재 unknown | 0/7,180 |
 | Gate 6 | ✅ 통과 |
 
 ---
@@ -59,9 +61,8 @@
 - **Input** (`IngestParams`): `source`(필수), `agent`, `title`, `model`, `conversation_id`(필수), `turns`(필수)
 - **동작**: batch conversation ingestion, idempotency via `source_message_id` 중복 skip
 - **Provenance**: `source`/`agent` 기록
-- **DB**: `POST /api/v1/ingest` (HTTP, loopback auth, required field validation)
 
-### HTTP `/api/v1/ingest`
+### HTTP `POST /api/v1/ingest`
 - **모듈**: `src/devforge/adapters/driving/api/app.py`
 - **Auth**: loopback OR bearer token
 - **Required**: `source`, `conversation_id`, `turns`
@@ -72,17 +73,21 @@
 ## 4. Phase A-2: 12-tool Contract Matching
 
 ### 결과
-| 구분 | 수 |
-|---|---|
-| 계약 도구 | 12개 (전부 매칭) |
-| 추가 도구 | 6개 (ingest, deepdive_step, knowledge_search, extract_turn, store_observation, pipeline_status) |
-| 총 도구 | 18개 |
+| 구분 | 수 | 도구 |
+|---|---|---|
+| 계약 도구 | 12개 (전부 매칭) | deepdive_* 5종 + obs_* 2종 + search_* 2종 + mem_* 2종 + get_conversation |
+| 추가 도구 | 6개 | ingest, deepdive_step, knowledge_search, extract_turn, store_observation, pipeline_status |
+| 총 도구 | 18개 | (서버 `tools_count:18` 확인) |
 
-### DeepDive 5종
-`deepdive_step_enter`, `deepdive_step_exit`, `deepdive_session_heartbeat`, `deepdive_session_status`, `deepdive_verify_sandbox`
+### 계약 도구 12종 (mcp-contract.json)
+- **DeepDive 5종**: `deepdive_step_enter`, `deepdive_step_exit`, `deepdive_session_heartbeat`, `deepdive_session_status`, `deepdive_verify_sandbox`
+- **Observation 2종**: `obs_write`, `obs_search`
+- **Search 2종**: `search_turns`, `search_similarity`
+- **Memory 2종**: `mem_save`, `mem_search`
+- **기타 1종**: `get_conversation`
 
-### 기타 추가 도구
-`obs_write`, `obs_search`, `search_turns`, `search_similarity`, `mem_save`, `mem_search`, `get_conversation`
+### 추가 도구 6종 (계약 외)
+`ingest`, `deepdive_step`(aggregate wrapper), `knowledge_search`, `extract_turn`, `store_observation`, `pipeline_status`
 
 ---
 
@@ -106,15 +111,17 @@
 
 ## 6. 리팩토링 오류/버그 수정
 
+> 라인 번호는 **수정 전** 파일 기준. (ruff import 정렬 후 라인 이동 발생)
+
 | # | 파일 | 수정 내용 |
 |---|---|---|
 | 1 | `ports/extract.py` | `search_observations` 추상메서드 추가 |
 | 2 | `driven/storage/extract_adapter.py` | `search_observations` 구현 (pg_trgm), `text` import |
-| 3 | `driving/mcp/server.py:590` | `obs_search` → `search_observations` 호출 |
-| 4 | `driving/mcp/server.py:732` | `get_conversation` tuple 반환 → dict 반환 |
-| 5 | `driving/mcp/server.py:734` | `select` 미정의 → `from sqlalchemy import select` 추가 |
-| 6 | `driving/mcp/server.py:886` | HTTP tool_funcs에 get_conversation, obs_search, ingest 추가 |
-| 7 | `driving/mcp/server.py:908` | HTTP schemas에 GetConversationParams, ObsSearchParams, IngestParams 추가 |
+| 3 | `driving/mcp/server.py:590` | `obs_search` → `search_observations` 호출 (현재:592) |
+| 4 | `driving/mcp/server.py:732` | `get_conversation` tuple 반환 → dict 반환 (현재:730) |
+| 5 | `driving/mcp/server.py:734` | `select` 미정의 → `from sqlalchemy import select` 추가 (현재:727) |
+| 6 | `driving/mcp/server.py:886` | HTTP tool_funcs에 get_conversation, obs_search, ingest 추가 (현재:884) |
+| 7 | `driving/mcp/server.py:908` | HTTP schemas에 GetConversationParams, ObsSearchParams, IngestParams 추가 (현재:902) |
 | 8 | `driving/mcp/server.py:504` | import 순서 정렬 (ruff I001) |
 | 9 | `driving/api/app.py:180` | import 순서 정렬 (ruff I001) |
 | 10 | `secrets.env` | `DEVFORGE_DATABASE_URL`: data-pod → postgres |
@@ -167,16 +174,18 @@
 
 ## 9. W1 Baseline 측정
 
-### D1 측정 결과 (2026-09-14)
+### D1 측정 결과 (2026-09-14, 스냅샷)
 | 지표 | 값 |
 |---|---|
 | turns/24h | 143 |
-| turns total | 7,175 |
-| turns.source | 0 unknown (legacy:pre-2026-09) |
+| turns total | 7,163 (마커 시점) → 7,175 (D1) → **7,180 (본 문서 작성 시점)** |
+| turns.source | 0 unknown — legacy:pre-2026-09 7,163 + opencode 17 |
 | observations/24h | 1 |
 | pipeline | pending:1630, verified:2276, embedded:3192, embed_skipped:77 |
 | hook overhead | avg 0.0004ms (mock) |
 | MCP health | healthy (18 tools) |
+
+> turns 수치는 매일 증가 (W1 측정 기간 중 계속 유입)
 
 ### 자동 측정
 - `baseline-daily.timer`: 매일 00:00 UTC, D2~D7 자동 측정
@@ -197,15 +206,19 @@
 
 ---
 
-## 11. 커밋 이력 (main)
+## 11. 커밋 이력 (main, 전체)
 
 ```
+2852a6e  docs: D1 요약에 SSOT 참조 추가
+9b9946e  docs: INDEX.md에 rf-triage-07 패치 노트 추가
+856ef21  rf-triage-07: 패치 노트 문서 추가 (SSOT용)
 7a60961  rf-triage-07: D1 요약에 pip cache 정보 추가
+d10dea9  rf-triage-07: pip cache for container startup
 efbd935  rf-triage-07: D1 요약에 양방향 검증 결과 추가
 594dec4  rf-triage-07: ingest HTTP tool 추가 (양방향 검증 완료)
 ce3fb6d  rf-triage-07: HTTP tool_funcs/schemas 완성
 767c83c  rf-triage-07: 리팩토링 오류/버그 수정
-f28f9d8  auto: sync
+f28f9d8  auto: sync 2026-09-14
 c44fd72  rf-triage-07: D1 요약에 Phase A 컷오버 결과 추가
 c5c03db  rf-triage-07: handover.yaml 업데이트 (Phase 0~A 완료)
 7f15600  rf-triage-07: Phase A 컷오버 — container-devforge-mcp 전환
@@ -213,7 +226,17 @@ e5d4584  rf-triage-07: Phase A 사전 검증 스크립트 + 컷오버 시나리�
 c0ceef8  rf-triage-07: Phase A 컷오버 시나리오 문서화
 74f439c  rf-triage-07: Phase A-2 12툴 계약 매칭 완료
 f2b2a78  rf-triage-07: Phase A-1 ingest 구현 (MCP + HTTP)
+64937fe  auto: sync 2026-09-14
+42004cb  rf-triage-07: handover.yaml 업데이트 + provenance 검증 스크립트
+865b4fe  rf-triage-07: W1 daily baseline timer documentation
+42d04a7  rf-triage-07: D1 baseline 측정 데이터 최종
+5e9eb7f  rf-triage-07: provenance 마커 적용 완료 (7163건 legacy:pre-2026-09)
+9c2337f  rf-triage-07: provenance 마커 정책 결정 (옵션 A: legacy 마커)
+5db8c56  rf-triage-07: provenance 코드 고침 — turns.source INSERT 수정 (4개 파일)
+d9f6fe7  rf-triage-07: D1 수동 검증 — provenance 코드 레벨 확인
 ```
+
+> rf-triage-07 전체 커밋 24개 (2026-09-14)
 
 ---
 

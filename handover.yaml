@@ -425,12 +425,16 @@ decisions:
   status: open
 - id: rf-triage-07
   detail: '최종 판정(2026-09-14): rf-triage-07 완료 — Phase 0~A 전체 수행.
-    (1) Provenance: 원인 규명(4 INSERT 경로 누락) → 코드 고침(turn_watcher, mcp_server×2, mcp_server_sse) → 마커(7163건 legacy:pre-2026-09) → 배포 → 검증(unknown=0/7173). backup: turns_source_backup_20260914.
+    (1) Provenance: 원인 규명(4 INSERT 경로 누락) → 코드 고침(turn_watcher, mcp_server×2, mcp_server_sse) → 마커(7163건 legacy:pre-2026-09) → 배포 → 검증(unknown=0/7173, 현재 0/7180). backup: turns_source_backup_20260914.
     (2) W1 baseline: D1 측정(143 turns/24h) → 일일 자동 측정(baseline-daily.timer, daily).
     (3) Phase A-1: ingest 구현 — MCP ingest tool(IngestParams: source, agent, title, model, conversation_id, turns required) + HTTP POST /api/v1/ingest(required: source, conversation_id, turns; idempotency via source_message_id; provenance source/agent 기록).
     (4) Phase A-2: 12-tool 계약 매칭 — 18개 툴 등록(12 계약 + 6 추가), deepdive 5종/obs_write/obs_search/search_turns/search_similarity/mem_save/mem_search/get_conversation.
     (5) Phase A-3: 컷오버 시나리오(docs/ops/cutover-phase-a.md) — 수락기준 6, 사전준비 6, 검증 V1-V8, 롤백 4.
     (6) Phase A 컷오버 실행: container-devforge-mcp → refactored MCP, /src volume mount, mcp_refactored_entrypoint.sh, 건강확인 healthy+18 tools, V1-V8 9/9 PASS.
+    (7) 리팩토링 오류/버그 수정 10건: search_observations 메서드 누락, get_conversation tuple 반환, select 미정의, HTTP tool_funcs/schemas 누락, import 정렬, DB host data-pod→postgres 등. ruff/mypy clean.
+    (8) 양방향 검증: Forward(리팩토링 — pipeline_status/knowledge_search/get_conversation/obs_search/ingest HTTP 동작) + Backward(레거시 롤백 <10초).
+    (9) 컨테이너 최적화: pip cache(/opt/ai_data/pip-cache, 17 wheels, --no-index --find-links), 기동 ~2초 (was 10-30초).
+    (10) SSOT 문서: docs/reports/rf-triage-07-patchnote-20260914.md (D7 후 참조).
     Co-authored-by: opencode <opencode@devforge'
   status: closed
 known_issues:
