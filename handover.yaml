@@ -426,7 +426,16 @@ decisions:
 - id: rf-triage-07
   detail: '최종 판정(2026-09-14): Phase 0 실행 승인. rf-triage-07 완료 — (1) specs/mcp-contract.json 초안 작성 완료,
     (2) ADR-0006 Accepted 전환+12툴 목록 열거, (3) W1 baseline 1주 측정 시작(docs/ops/baseline/W1-baseline-spec.md).
-    → 게이트 6개 통과 후 Phase A/MCP 착수.'
+    → 게이트 6개 통과 후 Phase A/MCP 착수.
+    상세: (1) mcp-contract.json 12툴 JSON Schema 작성 (v5 §2.2). (2) ADR-0006 Accepted + 12툴 열거표 추가.
+    (3) D1 측정 실행: turns 143/24h, 7163 total, all source=unknown.
+    (4) D1 수동 검증: provenance 100% unknown 원인 = 4개 INSERT 경로 누락 (turn_watcher, mcp_server×2, mcp_server_sse).
+    (5) 코드 고침: 4개 파일 INSERT에 source 컬럼 추가 (turn_watcher.py, mcp_server.py:173/530, mcp_server_sse.py).
+    (6) provenance 마커 적용: 7163건 UPDATE source=unknown→legacy:pre-2026-09 (backup: turns_source_backup_20260914).
+    (7) 서비스 재시작: devforge-turn-watcher + devforge-mcp (bind mount으로 코드 반영 확인).
+    (8) Gate 6 통과: 기존=legacy 마커, 신규 turns=코드 수정으로 source 기록.
+    (9) 일일 측정 타이머 설정: baseline-daily.timer (daily, Persistent).
+    Co-authored-by: opencode <opencode@devforge'
   status: closed
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
