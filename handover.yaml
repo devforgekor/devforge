@@ -361,12 +361,13 @@ known_issues:
 - text: 'Azure Qwen Deep Dive 검증 완료(2026-09-12): opencode azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2) 실제 호출 → deepdive_steps
     DB DONE. 엔드포인트 curl finish_reason:"tool_calls" 정상.'
   resolved: true
-- text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. 검증은 VM에서
-    -c 32768로 임시 상향. 골든 이미지 재빌드 시 -c 32768 bake 필요(MemoryMax=38G, KV 포함 RES ~34.5GB). runbook-golden-image.md §1.2
-    + yearly_refresh.sh 갱신 필요.'
+- text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. SSOT
+    (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 →
+    차기 이미지 재빌드 시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
   resolved: false
-- text: 'Azure 2 vCPU Spot 추론 성능: prefill ~6.7 tok/s(16.5k tok=41분), generation ~0.5 tok/s. top load avg 1.0(스레드 1개 의심,
-    -t 점검 필요). 인터랙티브 Deep Dive 백엔드로는 부적합.'
+- text: 'Azure 2 vCPU(FX2ms_v2 = 1 physical core/2 SMT threads) Spot 성능 실측: llama.cpp n_threads=1(물리 core 기준), -t 2 무효(prefill
+    14.28→14.36 tok/s, memory-bound). 실측 prefill ~14 tok/s(신규), 장시간/장문맥에서 6.7로 감소, generation ~2-4.5 tok/s(장문맥 0.5).
+    ctx 32768 RES ~33.5GB < MemoryMax 38G. SSOT(-c 32768) 반영 완료. 인터랙티브 Deep Dive 백엔드로는 부적합.'
   resolved: false
 - text: azure_spot 모듈 config VM_SIZE=Standard_FX2mds_v2 vs runbook/azure-qwen=Standard_FX2ms_v2 (둘 다 2vCPU/42GiB, 모듈 배포는 mds로
     검증). 필요 시 통일.

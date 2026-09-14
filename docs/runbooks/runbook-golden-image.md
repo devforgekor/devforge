@@ -14,6 +14,7 @@
 > - **현 배포 이미지 실제값**(게시 2026-09-12, `llm-qwen-27b:2026.09.3`): 서비스명 **`llm.service`**, 바이너리 **`/usr/local/bin/llama-server`**(→ `/opt/llama/llama-server` 심볼릭, llama.cpp **b10919**), 모델 **`/opt/models/qwen3-30b-a3b-q4_k_m.gguf`**(MoE), 포트 `8080`, `--n-gpu-layers 0`, `--jinja`, `--chat-template-kwargs '{"enable_thinking":false}'`. (직전 `2026.09.2`는 27B dense `/opt/models/qwen3.6-27b-q8_0.gguf`.)
 > - **`--jinja`**: 툴콜(function calling)에 필요(골든 이미지 기본 ExecStart엔 없음, 모듈이 런타임 자동 적용). 재빌드 시 baked-in 권장.
 > - **현행 골든 이미지 모델 (2026-09-12 baked-in)**: **`Qwen3-30B-A3B-Q4_K_M`** (18.56GB, MoE·3B active) + `--jinja` + `--chat-template-kwargs '{"enable_thinking":false}'`. FX2ms_v2에서 **툴콜 정상**, 생성 **~6 tok/s**(Q6_K는 25GB·~3.3 tok/s, Q8_0은 ~2.2 tok/s로 비권장).
+> - **`-c` (context) — 2026-09-14 E2E 검증**: 2026.09.3 배포본은 **`-c 8192`**이나 opencode Deep Dive baseline 요청이 **~16.7k tokens**라 **컨텍스트 초과**. **레시피/차기 빌드는 `-c 32768`**(§1.2 반영). ctx 32768에서 RES ~33.5GB < `MemoryMax=38G`. **`-t 2`(SMT)는 이 SKU에서 효과 없음**(1 physical core/2 threads, memory-bound — prefill 14.28→14.36 tok/s).
 
 ---
 
@@ -148,9 +149,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 # --host 127.0.0.1 로 바인딩 후 Caddy가 443에서 TLS 종단 (평문 0.0.0.0 노출 제거)
+# -c 32768: opencode Deep Dive baseline 요청 ~16.7k tokens 수용(2026-09-14 E2E 검증; 8192는 초과). RES ~33.5GB < MemoryMax 38G.
 ExecStart=/usr/local/bin/llama-server \
   -m /opt/models/qwen3-30b-a3b-q4_k_m.gguf \
-  -c 8192 \
+  -c 32768 \
   --port 8080 \
   --host 127.0.0.1 \
   --n-gpu-layers 0 \
@@ -497,4 +499,5 @@ curl -X POST https://<new_ip>/completion \
 | 2026-09-11 | **FX2ms_v2 부팅 호환 주석 추가 + 이미지 정의에 `--features "DiskControllerTypes=SCSI,NVMe"` 추가 + ExecStart `--jinja` + 이미지 정의명·§1.2 recipe 실제값 정합** | 과거 세션(2026-09-04) "FX 호환성 불일치": 갤러리 캡처 이미지(NVMe)가 FX2ms_v2에서 `cannot boot ... DiskControllerTypes supported: NVMe`로 부팅 실패 → `SCSI, NVMe` 병기로 해결(현 이미지 반영). `E4s_v3`는 현재 `NotAvailableForSubscription`. `--jinja`=툴콜 필수. §1.2를 실제 이미지와 정합(서비스 `llm.service`, 바이너리 `/usr/local/bin/llama-server`, 모델 `/opt/models/qwen3.6-27b-q8_0.gguf`) |
 | 2026-09-11 | 모델 확정: `Qwen3.6-27B-Q8_0` → **`Qwen3-30B-A3B-Q4_K_M`(MoE)** + `--chat-template-kwargs '{"enable_thinking":false}'` (§1.2·ExecStart·아키텍처) | 2 vCPU spot에서 27B dense는 툴콜 타임아웃. **MoE(3B active)는 툴콜 정상·~6 tok/s**로 검증(Q4 18.56GB > Q6 25GB·3.3tok/s > Q8 비권장). 차기 이미지 재빌드에 반영 |
 | 2026-09-12 | **MoE baked-in 재빌드 실행 + runbook 정합**: §1.1 빌더 **Spot 필수**(Regular FX quota=0), §1.2 llama.cpp 자산명 `llama-<ver>-bin-ubuntu-x64.tar.gz`·`libgomp1`·`$ORIGIN` 심볼릭 레이아웃, 모델 curl 이어받기 | 실제 재빌드에서 `QuotaExceeded`(regular FX=0)·`libgomp.so.1 not found`(status=127)·구 자산명 404 재현 → recipe 정정. 결과 `llm-qwen-27b:2026.09.3` 등록, 배포 툴콜 검증(`finish_reason:"tool_calls"`) |
+| 2026-09-14 | **ExecStart `-c 8192` → `-c 32768`** (§1.2 + `yearly_refresh.sh`) + ctx/성능 주석 추가 | opencode Deep Dive E2E 검증: baseline 요청 ~16.7k tokens가 8192 초과 → VM에서 32768로 임시 상향해 `deepdive_step_enter/exit` 툴콜 성공. ctx 32768 RES ~33.5GB < 38G. `-t 2`(SMT)는 무효(1 physical core, memory-bound). 차기 재빌드 반영 |
 ```
