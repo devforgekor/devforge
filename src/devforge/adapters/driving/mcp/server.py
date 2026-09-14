@@ -783,14 +783,17 @@ async def ingest(params: IngestParams) -> dict[str, Any]:
             return {"error": "turns array is required"}
 
         if params.conversation_id:
-            conv_id = UUID(params.conversation_id)
+            try:
+                conv_id = UUID(params.conversation_id)
+            except ValueError:
+                return {"error": f"Invalid conversation_id (must be UUID): {params.conversation_id}"}
             conv = await db.get(Conversation, conv_id)
             if conv is None:
-                return {"error": f"Conversation not found: {conv_id}"}
+                conv = Conversation(id=conv_id, title=title, source=source, model=model)
+                db.add(conv)
+                await db.flush()
         else:
-            conv = Conversation(
-                id=uuid4(), title=title, source=source, model=model
-            )
+            conv = Conversation(id=uuid4(), title=title, source=source, model=model)
             db.add(conv)
             await db.flush()
             conv_id = conv.id
@@ -829,8 +832,8 @@ async def ingest(params: IngestParams) -> dict[str, Any]:
                 seq=seq,
                 user_turn=(turn.user_turn or "")[:4000],
                 thinking=(turn.thinking or "")[:4000] if turn.thinking else None,
-                text=(turn.text or "")[:8000] if turn.text else None,
-                meta=turn.meta if turn.meta else {},
+                text=(turn.text or "")[:8000] if turn.text else "",
+                meta_data=turn.meta if turn.meta else {},
                 source_message_id=source_message_id,
                 agent=agent,
                 source=source,
@@ -926,6 +929,23 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> 
 async def health() -> Any:
     """Health check endpoint."""
     return {"status": "healthy", "tools_count": len(_TOOLS)}
+
+
+@app.post("/api/v1/ingest")
+async def http_ingest(payload: dict[str, Any]) -> Any:
+    """HTTP surface for batch conversation ingestion (spec: /api/v1/ingest).
+
+    Mirrors the MCP `ingest` tool; both surfaces share the same write path.
+    Auth: loopback-only OR bearer token (D5-1).
+    """
+    try:
+        params = IngestParams(**payload)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    result = await ingest(params)
+    if "error" in result:
+        return JSONResponse(status_code=400, content=result)
+    return JSONResponse(content=result)
 
 
 # ── CLI entry ──

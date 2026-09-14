@@ -187,10 +187,15 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
         gateway = get_gateway()
         async with gateway.session() as db:
             if conversation_id:
-                conv_id = UUID(str(conversation_id))
+                try:
+                    conv_id = UUID(str(conversation_id))
+                except ValueError:
+                    return {"error": f"Invalid conversation_id (must be UUID): {conversation_id}"}, 400
                 conv = await db.get(Conversation, conv_id)
                 if conv is None:
-                    return {"error": f"Conversation not found: {conv_id}"}, 404
+                    conv = Conversation(id=conv_id, title=title, source=source, model=model)
+                    db.add(conv)
+                    await db.flush()
             else:
                 conv = Conversation(
                     id=uuid4(), title=title, source=source, model=model
@@ -237,8 +242,8 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
                     seq=seq,
                     user_turn=str(turn.get("user_turn", ""))[:4000],
                     thinking=str(turn.get("thinking", ""))[:4000] if turn.get("thinking") else None,
-                    text=str(turn.get("text", ""))[:8000] if turn.get("text") else None,
-                    meta=turn.get("meta") if isinstance(turn.get("meta"), dict) else {},
+                    text=str(turn.get("text", ""))[:8000] if turn.get("text") else "",
+                    meta_data=turn.get("meta") if isinstance(turn.get("meta"), dict) else {},
                     source_message_id=smid,
                     agent=agent,
                     source=source,

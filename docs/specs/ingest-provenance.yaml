@@ -25,7 +25,10 @@ ingest:
       agent: {type: string, nullable: true}
       title: {type: string, nullable: true}
       model: {type: string, nullable: true}
-      conversation_id: {type: string, format: uuid}
+      conversation_id:
+        type: string
+        format: uuid
+        description: "기존 conversation에 추가하려면 해당 UUID. 비어있거나 없는 UUID면 새 conversation 자동 생성 (id=uuid4 또는 제공 UUID)."
       turns:
         type: array
         items:
@@ -47,6 +50,7 @@ ingest:
   idempotency: "unique(source_message_id) — fallback unique(conversation_id, seq)"
   errors:
     - {code: 400, when: "schema violation (missing source/conversation_id/turns)"}
+    - {code: 400, when: "conversation_id가 UUID 형식이 아닐 때"}
     - {code: 409, when: "duplicate turns (all skipped)"}
     - {code: 413, when: "payload too large"}
 
