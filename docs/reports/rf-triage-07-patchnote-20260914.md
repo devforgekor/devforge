@@ -316,13 +316,14 @@ d9f6fe7  rf-triage-07: D1 수동 검증 — provenance 코드 레벨 확인
 | 모드 | `claude-mode set gudokpin` → `ANTHROPIC_BASE_URL=http://127.0.0.1:44779` |
 
 ### MODEL_MAP (Claude → Gudokpin)
-| Claude 모델 | Gudokpin 모델 |
-|---|---|
-| claude | DeepSeek-V4-Flash-0731 |
-| claude-pro | deepseek-v4-pro-0813 |
-| claude-sonnet-4-* | claude-sonnet-5 |
-| claude-opus-4-8 | claude-opus-5 |
-| claude-haiku / claude-fable | claude-fable-5 |
+| Claude 모델 | Gudokpin 모델 | 비고 |
+|---|---|---|
+| claude | claude-sonnet-5 | **기본** — tool call + streaming |
+| claude-pro | claude-opus-5 | tool call + streaming |
+| claude-sonnet-4-* | claude-sonnet-5 | |
+| claude-opus-4-8 | claude-opus-5 | |
+| claude-haiku / claude-fable | claude-fable-5 | |
+| claude-fast | DeepSeek-V4-Flash-0731 | 저렴 텍스트 전용 (tool call ❌) |
 
 ### GPT/Gemini/Grok 모델 (identity 매핑)
 `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-sol-reasoning`, `gpt-5.6-terra`, `gpt-6-astra`, `gpt-6-astra-reasoning`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.1-pro-preview`, `grok-4.6`, `glm-5.3`, `glm-5.3-flash`, `kimi-k3`
