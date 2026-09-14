@@ -299,4 +299,38 @@ d9f6fe7  rf-triage-07: D1 수동 검증 — provenance 코드 레벨 확인
 
 ---
 
+## 13. Gudokpin API → Claude Code 연동 (2026-09-14)
+
+### 목적
+- `GUDOKPIN_API`(secrets.env)를 Claude Code 백엔드로 연결
+- Gudokpin = GPT & Claude 통합 게이트웨이 (OpenAI 호환)
+
+### 구현
+
+| 항목 | 내용 |
+|---|---|
+| 프록시 | `scripts/proxies/anthropic_gudokpin.py` (Anthropic→OpenAI 변환, :44779) |
+| 시스템드 | `anthropic-gudokpin-proxy.service` (enabled, running) |
+| 업스트림 | `https://api.gudokpin.com/v1` |
+| 키 | `GUDOKPIN_API` (secrets.env) |
+| 모드 | `claude-mode set gudokpin` → `ANTHROPIC_BASE_URL=http://127.0.0.1:44779` |
+
+### MODEL_MAP (Claude → Gudokpin)
+| Claude 모델 | Gudokpin 모델 |
+|---|---|
+| claude | DeepSeek-V4-Flash-0731 |
+| claude-pro | deepseek-v4-pro-0813 |
+| claude-sonnet-4-* | claude-sonnet-5 |
+| claude-opus-4-8 | claude-opus-5 |
+| claude-haiku / claude-fable | claude-fable-5 |
+
+### 검증
+- `claude -p "Reply with exactly: GUDOKPIN_OK"` → **GUDOKPIN_OK** 응답
+- Anthropic `/v1/messages` non-stream/stream 변환 동작
+- 모드 파일: `MODE=gudokpin` (기본 백엔드)
+
+> 참고: 스트리밍 중 Broken pipe는 클라이언트 조기 종료 시 정상.
+
+---
+
 > 이 문서는 2026-09-14 시작 W1 기간 동안의 모든 작업을 기록합니다. D7 종료(2026-09-21 00:00 UTC) 후 SSOT로 사용됩니다.

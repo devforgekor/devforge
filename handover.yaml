@@ -437,6 +437,7 @@ decisions:
     (10) SSOT 문서: docs/reports/rf-triage-07-patchnote-20260914.md (D7 후 참조).
     (11) day_cycle 활성화: inference `--no-mmap`(llama.cpp b10920+ 제거) → `--load-mode none` (pod_manager/__init__.py + /opt/ai_data/scripts/inference-entrypoint.sh). watchdog 이벤트 기반 기동 확인. 잔여: enrich LLM 연결 재설정 (ARM 메모리 압박).
     (12) hook overhead 재측정: 최초 mock 0.0004ms 무효(measure 스크립트 tool_input 버그) → live avg 458.76ms/p95 636ms/p99 1313ms. test obs 100건 정리.
+    (13) Gudokpin API → Claude Code 연동: anthropic_gudokpin.py 프록시(:44779, api.gudokpin.com/v1) + systemd 서비스 + claude-mode gudokpin 모드. claude -p 검증 통과(GUDOKPIN_OK). 기본 모드로 설정.
     Co-authored-by: opencode <opencode@devforge'
   status: closed
 known_issues:
