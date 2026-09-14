@@ -234,10 +234,9 @@ def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
 
     # Rebuild models dict preserving existing names where possible
     new_models = {}
-    for m in top:
+    for i, m in enumerate(top):
         mid = m["id"]
-        name = (m.get("name") or mid).split("(")[0].strip()
-        new_models[mid] = {"name": name[:40]}
+        new_models[mid] = {"name": f"ORP-{i+1}(free)"}
     provider["models"] = new_models
 
     # Main model = best free
