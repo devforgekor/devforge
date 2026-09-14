@@ -24,6 +24,7 @@
 | 구분 | 문서 | 상태 |
 |---|---|---|
 | 적용 기록(정본) | `reports/mcp-consolidation-applied-20260911.md` | record |
+| rf-triage-07 패치 노트 | `reports/rf-triage-07-patchnote-20260914.md` | record |
 | 계획(v1~v3) | `plans/mcp-consolidation-server-side.md` | superseded |
 | 분석 | `reports/deepdive-mcp-analysis.md` | record |
 | 비용 실측 | `reports/mcp-cost-baseline.md` | record |
