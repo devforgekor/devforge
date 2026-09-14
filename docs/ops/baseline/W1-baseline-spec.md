@@ -147,7 +147,7 @@ if __name__ == "__main__":
 | Gate 3: 경보 발동 | baseline 기반 임계값에서 1건 발동 | gate 2 이후 |
 | Gate 4: 롤백 리허설 | 정규화 diff(허용오차 내) + health 10분 | gate 3 이후 |
 | Gate 5: 수치·용어 정합 | 32/12/25/≈15/9/−8/448/7152 전 문서 | 병행 |
-| Gate 6: provenance 동작 | 신규 100%(코드 수정) + `legacy:pre-2026-09` no-op | gate 4 이후 |
+| Gate 6: provenance 동작 | ✅ 기존 7163건 `legacy:pre-2026-09` + 신규 turns 코드 수정 | gate 4 이후 |
 
 ---
 

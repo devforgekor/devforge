@@ -55,11 +55,11 @@
 - **대응**: W1 기간 중 대화형 세션 1회 이상 확보하여 live 측정 필요.
 
 ### 4. provenance 코드 레벨 확인
-- **원인 규명 완료** (4/4 INSERT 경로 누락): turn_watcher.py:217, mcp_server.py:173·530, mcp_server_sse.py:222
-- **코드 수정 완료** (rf-triage-07): 4개 파일 INSERT에 `source` 컬럼 추가
+- **원인 규명 완료** (4/4 INSERT 경로 누락): turn_watcher.py:217/245, mcp_server.py:173·530, mcp_server_sse.py:222
+- **코드 수정 완료** (rf-triage-07): 4개 파일 INSERT에 source 컬럼 추가
   - 신규 turns: `turns.source`에 원본 출처 기록 (claude/copilot/gemini/aider/opencode/mcp_ingest 등)
-  - 기존 7160건: 변경 불가 (DEFAULT 'unknown') → `legacy:pre-2026-09` 마커 필요
-- Gate 6: 기존 turns는 마커 정책 확정 후 통과 가능 / 신규 turns는 코드 수정으로 해결
+- **마커 적용 완료** (rf-triage-07): 기존 7163건 → `legacy:pre-2026-09` (backup: turns_source_backup_20260914)
+- Gate 6: ✅ 통과 (기존=마커 / 신규=코드 수정)
 
 ---
 

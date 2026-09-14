@@ -1,10 +1,10 @@
 {
   "date": "2026-09-14",
   "mode": "daily",
-  "turns_24h": "146",
-  "turns_total": "7160",
+  "turns_24h": "143",
+  "turns_total": "7163",
   "turns_source": {
-    "unknown": "7160"
+    "unknown": "7163"
   },
   "turns_age_days": "118.3",
   "observations_24h": "1",
@@ -12,7 +12,7 @@
   "pipeline_state": {
     "embedded": "3192",
     "embed_skipped": "77",
-    "pending": "1615",
+    "pending": "1618",
     "verified": "2276"
   },
   "services": {
@@ -35,9 +35,9 @@
     "avg_ms": 0.0004,
     "p50_ms": 0.0004,
     "p95_ms": 0.0004,
-    "p99_ms": 0.0021,
+    "p99_ms": 0.0022,
     "min_ms": 0.0003,
-    "max_ms": 0.0021,
+    "max_ms": 0.0022,
     "mode": "safe(mock)"
   },
   "mcp_health": "{\"status\":\"ok\",\"server\":\"devforge-mcp\"}"
