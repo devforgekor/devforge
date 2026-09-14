@@ -141,3 +141,5 @@
 | `driving/mcp/server.py:504` | import 순서 정렬 (ruff I001) |
 | `driving/api/app.py:180` | import 순서 정렬 (ruff I001) |
 | `secrets.env` | `DEVFORGE_DATABASE_URL`: data-pod → postgres (DB 호스트 변경) |
+
+> SSOT (7일 후): `docs/reports/rf-triage-07-patchnote-20260914.md`
