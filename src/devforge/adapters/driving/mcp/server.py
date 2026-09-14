@@ -887,6 +887,7 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> 
         "extract_turn": extract_turn,
         "deepdive_step": deepdive,
         "store_observation": store_observation,
+        "get_conversation": get_conversation,
     }
 
     if tool_name not in tool_funcs:
