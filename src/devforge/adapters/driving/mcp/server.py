@@ -888,6 +888,7 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> 
         "deepdive_step": deepdive,
         "store_observation": store_observation,
         "get_conversation": get_conversation,
+        "obs_search": obs_search,
     }
 
     if tool_name not in tool_funcs:
@@ -903,6 +904,8 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> 
         "extract_turn": ExtractTurnParams,
         "deepdive_step": DeepDiveParams,
         "store_observation": StoreObservationParams,
+        "get_conversation": GetConversationParams,
+        "obs_search": ObsSearchParams,
     }
 
     try:
