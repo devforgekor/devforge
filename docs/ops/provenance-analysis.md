@@ -73,9 +73,10 @@
    - 보존된 로그가 있으면 → **백필 가능** (7160건)
    - 보존된 로그가 없으면 → **`legacy:pre-2026-09` 마커 + 수락기준 재정의** (v2 A5 판정)
 
-2. **향후 turns에 source 기록 보장**
-   - turn_watcher 또는 MCP ingress에서 `source` 컬럼에 정보 기록 확인
-   - 없으면 → provenance 백필 파이프라인 구현 또는 마커 정책 확정
+2. **향후 turns에 source 기록 보장** — 코드 수정 완료 (rf-triage-07)
+   - 4개 파일 INSERT에 `source` 컬럼 추가 완료
+   - 신규 turns: `turns.source`에 원본 출처 기록 (claude/copilot/gemini/aider/opencode/mcp_ingest 등)
+   - 기존 7160건: 변경 불가 (DEFAULT 'unknown') → `legacy:pre-2026-09` 마커 필요
 
 ### W2
 3. **provenance 100% 검증**
@@ -90,7 +91,7 @@
 |---|---|---|
 | 원본 로그 보존됨 | **무해** | 백필 완료, source 기록 정상화 |
 | 원본 로그 미보존 | **주의** | `legacy:pre-2026-09` 마커 + 수동 검증 |
-| 향후 turns source 미기록 | **차단** | provenance 파이프라인 구현 필수 |
+| 향후 turns source 미기록 | **해결** | 코드 수정 완료 (4개 파일 INSERT) |
 
 ---
 

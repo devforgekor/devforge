@@ -127,10 +127,11 @@ if __name__ == "__main__":
 | MCP 서버 | /health 200 | ✅ PASS | FastMCP Streamable HTTP |
 
 ### D1 발견 이슈
-1. **turns.source 100% unknown** → Gate 6 위협
-   - **코드 레벨 원인**: 4개 INSERT 경로 모두 source 컬럼 미포함 (turn_watcher.py:245, mcp_server.py:173·530, mcp_server_sse.py:222)
-   - **스키마**: `source text NOT NULL DEFAULT 'unknown'`
-   - **대응**: 기존 turns는 `legacy:pre-2026-09` 마커 + 수락기준 재정의 / 향후 turns: INSERT에 source 컬럼 추가
+1. **turns.source 100% unknown** → Gate 6 위협 (코드 수정 완료)
+   - **원인**: 4개 INSERT 경로 모두 source 컬럼 미포함 (turn_watcher.py:217/245, mcp_server.py:173·530, mcp_server_sse.py:222)
+   - **수정**: rf-triage-07에서 4개 파일 INSERT에 source 컬럼 추가 완료
+   - **기존 turns**: 변경 불가 → `legacy:pre-2026-09` 마커 필요
+   - **신규 turns**: source 정상 기록 → Gate 6 통과 가능 (D2-D7 확인)
    - 상세: `docs/ops/provenance-analysis.md`
 2. **day_cycle.timer 미발견** → devforge-day-cycle.service activating (worker 내부 동작 확인 필요)
 3. **auto_log 활용도 극히 낮음** → observations 24h: 1건 (headless 세션) → live 측정 시 확보 필요
@@ -146,7 +147,7 @@ if __name__ == "__main__":
 | Gate 3: 경보 발동 | baseline 기반 임계값에서 1건 발동 | gate 2 이후 |
 | Gate 4: 롤백 리허설 | 정규화 diff(허용오차 내) + health 10분 | gate 3 이후 |
 | Gate 5: 수치·용어 정합 | 32/12/25/≈15/9/−8/448/7152 전 문서 | 병행 |
-| Gate 6: provenance 동작 | 신규 100% + `legacy:pre-2026-09` no-op | gate 4 이후 |
+| Gate 6: provenance 동작 | 신규 100%(코드 수정) + `legacy:pre-2026-09` no-op | gate 4 이후 |
 
 ---
 

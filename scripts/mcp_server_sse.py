@@ -219,11 +219,11 @@ async def _tool_mem_save(tag: str, summary: str, detail: str,
     seq = seq_row[0]["next_seq"] if seq_row else 1
 
     turn_id = await _fetch_json(
-        f"INSERT INTO turns (conversation_id, seq, user_turn, text, thinking, agent) "
+        f"INSERT INTO turns (conversation_id, seq, user_turn, text, thinking, agent, source) "
         f"VALUES ("
         f"  '{esc_sql(conversation_id)}'::uuid, {seq}, "
         f"  '{esc_sql(user_query)}', '{esc_sql(assistant_answer)}', "
-        f"  '{esc_sql(reasoning)}', '{esc_sql(tag)}'"
+        f"  '{esc_sql(reasoning)}', '{esc_sql(tag)}', '{esc_sql(tag)}'"
         f") RETURNING id"
     )
     tid = turn_id[0]["id"] if turn_id else None

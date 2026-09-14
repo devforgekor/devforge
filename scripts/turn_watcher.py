@@ -214,7 +214,7 @@ def insert_turns(
 
         rows_values.append(
             f"('{conversation_id}', {seq}, '{user_turn}', '{thinking}', "
-            f"'{text}', {msg_id_col}, '{agent}', '{meta_esc}', "
+            f"'{text}', {msg_id_col}, '{agent}', '{esc_sql(source)}', '{meta_esc}', "
             f"'{created_at}'::timestamptz, 'raw')"
         )
 
@@ -243,7 +243,7 @@ def _insert_chunk(rows_values: List[str]) -> int:
     values_sql = ",\n".join(rows_values)
     ok = psql_ok(
         f"INSERT INTO turns (conversation_id, seq, user_turn, thinking, text, "
-        f"  source_message_id, agent, meta, created_at, pipeline_state) "
+        f"  source_message_id, agent, source, meta, created_at, pipeline_state) "
         f"VALUES {values_sql} "
         f"ON CONFLICT (conversation_id, seq) DO NOTHING"
     )

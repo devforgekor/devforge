@@ -170,10 +170,10 @@ async def mem_save(tag: str, summary: str, detail: str, model: Optional[str] = N
     seq = seq_row[0]["next_seq"] if seq_row else 1
 
     turn_id = await _fetch_json(
-        f"INSERT INTO turns (conversation_id, seq, user_turn, text, thinking, agent) "
+        f"INSERT INTO turns (conversation_id, seq, user_turn, text, thinking, agent, source) "
         f"VALUES ('{esc_sql(conversation_id)}'::uuid, {seq}, "
         f"'{esc_sql(user_query)}', '{esc_sql(assistant_answer)}', "
-        f"'{esc_sql(reasoning)}', '{esc_sql(tag)}') RETURNING id"
+        f"'{esc_sql(reasoning)}', '{esc_sql(tag)}', '{esc_sql(tag)}') RETURNING id"
     )
     tid = str(turn_id[0]["id"]) if turn_id else None
 
@@ -527,10 +527,10 @@ async def ingest(conversation_json: str) -> str:
         agent = (turn.get("agent") or source)[:50]
 
         ok = await _execute(
-            f"INSERT INTO turns (conversation_id, seq, user_turn, text, thinking, agent) "
+            f"INSERT INTO turns (conversation_id, seq, user_turn, text, thinking, agent, source) "
             f"VALUES ('{esc_sql(conversation_id)}'::uuid, {seq}, "
             f"'{esc_sql(user_turn)}', '{esc_sql(text)}', "
-            f"'{esc_sql(thinking)}', '{esc_sql(agent)}')"
+            f"'{esc_sql(thinking)}', '{esc_sql(agent)}', '{esc_sql(source)}')"
         )
         if ok:
             inserted += 1

@@ -55,13 +55,11 @@
 - **대응**: W1 기간 중 대화형 세션 1회 이상 확보하여 live 측정 필요.
 
 ### 4. provenance 코드 레벨 확인
-- **turns.source는 모든 삽입 경로에서 미설정** (4/4 경로 누락):
-  - turn_watcher.py:245, mcp_server.py:173·530, mcp_server_sse.py:222
-  - 스키마 DEFAULT `'unknown'` → 7160/7160 = 100% unknown
-- **Gate 6 통과 불가** (현재 상태). W2 D1-2까지:
-  1. 기존 turns: `legacy:pre-2026-09` 마커 + 수락기준 재정의
-  2. 향후 turns: 모든 INSERT에 `source` 컬럼 추가 필요
-- 상세: `docs/ops/provenance-analysis.md`
+- **원인 규명 완료** (4/4 INSERT 경로 누락): turn_watcher.py:217, mcp_server.py:173·530, mcp_server_sse.py:222
+- **코드 수정 완료** (rf-triage-07): 4개 파일 INSERT에 `source` 컬럼 추가
+  - 신규 turns: `turns.source`에 원본 출처 기록 (claude/copilot/gemini/aider/opencode/mcp_ingest 등)
+  - 기존 7160건: 변경 불가 (DEFAULT 'unknown') → `legacy:pre-2026-09` 마커 필요
+- Gate 6: 기존 turns는 마커 정책 확정 후 통과 가능 / 신규 turns는 코드 수정으로 해결
 
 ---
 
