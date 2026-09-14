@@ -324,12 +324,32 @@ d9f6fe7  rf-triage-07: D1 수동 검증 — provenance 코드 레벨 확인
 | claude-opus-4-8 | claude-opus-5 |
 | claude-haiku / claude-fable | claude-fable-5 |
 
+### GPT/Gemini/Grok 모델 (identity 매핑)
+`gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-sol-reasoning`, `gpt-5.6-terra`, `gpt-6-astra`, `gpt-6-astra-reasoning`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.1-pro-preview`, `grok-4.6`, `glm-5.3`, `glm-5.3-flash`, `kimi-k3`
+
+### streaming 지원 확인 (Gudokpin 실측)
+| 모델 | streaming | Claude Code 사용 |
+|---|---|---|
+| DeepSeek-V4-Flash-0731 | ✅ | ✅ |
+| claude-sonnet-5 / claude-opus-5 / claude-fable-5 | ✅ | ✅ |
+| gpt-6-astra | ✅ (느림) | ✅ |
+| gpt-5.6-luna / gpt-5.6-sol | ❌ (ping만) | ❌ (non-stream 전용) |
+
+### 사용법
+```bash
+claude-gpt                  # gpt-6-astra (streaming)
+claude-gpt gpt-6-astra      # GPT 6 Astra
+claude-gpt claude-sonnet-5  # Claude 모델
+claude-gpt gemini-3.8-flash # Gemini
+```
+
 ### 검증
-- `claude -p "Reply with exactly: GUDOKPIN_OK"` → **GUDOKPIN_OK** 응답
+- `claude -p "Reply with exactly: GUDOKPIN_OK"` → **GUDOKPIN_OK** (claude→DeepSeek)
+- `claude-gpt gpt-6-astra -p "..."` → **ASTRA_OK** (GPT streaming)
 - Anthropic `/v1/messages` non-stream/stream 변환 동작
 - 모드 파일: `MODE=gudokpin` (기본 백엔드)
 
-> 참고: 스트리밍 중 Broken pipe는 클라이언트 조기 종료 시 정상.
+> 참고: 스트리밍 중 Broken pipe는 클라이언트 조기 종료 시 정상. gpt-5.6-luna/sol은 Gudokpin streaming 미지원 → Claude Code에서 미사용 (직접 API/opencode용).
 
 ---
 

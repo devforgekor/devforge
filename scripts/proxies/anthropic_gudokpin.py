@@ -24,6 +24,7 @@ DEFAULT_LISTEN = "127.0.0.1:44779"
 DEFAULT_UPSTREAM = "https://api.gudokpin.com/v1"
 
 # Map Anthropic model names → Gudokpin model IDs (from GET /v1/models).
+# GPT/Gemini/Grok 등도 Gudokpin에서 동일하게 접근 가능하므로 identity 매핑 추가.
 MODEL_MAP = {
     "claude": "DeepSeek-V4-Flash-0731",
     "claude-pro": "deepseek-v4-pro-0813",
@@ -32,6 +33,22 @@ MODEL_MAP = {
     "claude-opus-4-8": "claude-opus-5",
     "claude-haiku": "claude-fable-5",
     "claude-fable": "claude-fable-5",
+    # ChatGPT / GPT 모델 (Gudokpin identity) — claude --model <id> 로 선택
+    "gpt-5.6-luna": "gpt-5.6-luna",
+    "gpt-5.6-sol": "gpt-5.6-sol",
+    "gpt-5.6-sol-reasoning": "gpt-5.6-sol-reasoning",
+    "gpt-5.6-terra": "gpt-5.6-terra",
+    "gpt-6-astra": "gpt-6-astra",
+    "gpt-6-astra-reasoning": "gpt-6-astra-reasoning",
+    # Gemini
+    "gemini-3.8-flash": "gemini-3.8-flash",
+    "gemini-3.7-flash": "gemini-3.7-flash",
+    "gemini-3.1-pro-preview": "gemini-3.1-pro-preview",
+    # 기타 (Gudokpin 노출 모델)
+    "grok-4.6": "grok-4.6",
+    "glm-5.3": "glm-5.3",
+    "glm-5.3-flash": "glm-5.3-flash",
+    "kimi-k3": "kimi-k3",
 }
 # Reverse map for response model field
 _OPENAI_TO_ANTHROPIC_MODEL = {v: k for k, v in MODEL_MAP.items()}
