@@ -96,6 +96,16 @@
 
 > Phase A 컷오버 상세: `docs/ops/cutover-phase-a.md`
 
+### 컨테이너 기동 최적화 (pip cache)
+
+| 항목 | 기존 | 최적화 후 |
+|---|---|---|
+| 기동 시간 | ~10-30초 (pip 네트워크 다운로드) | ~2초 (로컬 wheel cache) |
+| cache 위치 | — | `/opt/ai_data/pip-cache/` (17 wheels) |
+| requirements | — | `scripts/mcp-requirements.txt` |
+| 엔트리포인트 | `pip install` | `pip install --no-index --find-links=/pip-cache` |
+| 네트워크 의존 | 있음 | 없음 (offline install) |
+
 ## 양방향 검증 (2026-09-14)
 
 ### Forward (리팩토링 → 정상 동작)
