@@ -127,9 +127,13 @@ if __name__ == "__main__":
 | MCP 서버 | /health 200 | ✅ PASS | FastMCP Streamable HTTP |
 
 ### D1 발견 이슈
-1. **turns.source 100% unknown** → Gate 6 위협, W2 백필 계획 필요
-2. **day_cycle.timer 미발견** → worker 내부 동작 확인 필요
-3. **auto_log 활용도 극히 낮음** → live 측정 시 확보 필요
+1. **turns.source 100% unknown** → Gate 6 위협
+   - **코드 레벨 원인**: 4개 INSERT 경로 모두 source 컬럼 미포함 (turn_watcher.py:245, mcp_server.py:173·530, mcp_server_sse.py:222)
+   - **스키마**: `source text NOT NULL DEFAULT 'unknown'`
+   - **대응**: 기존 turns는 `legacy:pre-2026-09` 마커 + 수락기준 재정의 / 향후 turns: INSERT에 source 컬럼 추가
+   - 상세: `docs/ops/provenance-analysis.md`
+2. **day_cycle.timer 미발견** → devforge-day-cycle.service activating (worker 내부 동작 확인 필요)
+3. **auto_log 활용도 극히 낮음** → observations 24h: 1건 (headless 세션) → live 측정 시 확보 필요
 
 ---
 

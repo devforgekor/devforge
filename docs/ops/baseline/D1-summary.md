@@ -45,23 +45,32 @@
 - embed_skipped: 77
 - **turns.watcher 운영 중**, day_cycle 수동 실행 확인 필요
 
-### 2. day_cycle.timer inactive
-- devforge-day-cycle.timer가 inactive 상태. day_cycle 단계별 시간 측정 불가.
-- **확인 필요**: 수동 실행 여부 확인 또는 자동화 여부 확인
+### 2. day_cycle 서비스 상태
+- devforge-day-cycle.timer: inactive, devforge-day-cycle.service: activating
+- worker 내부 동작 확인 필요 (일별 패턴 측정 불가)
 
 ### 3. observations 24h: 1건 (auto_log 활용도 극히 낮음)
 - headless 세션에서 PostToolUse 훅이 거의 발동되지 않음.
 - **영향**: 훅 오버헤드 측정은 실제 대화형 세션에서만 의미 있음.
 - **대응**: W1 기간 중 대화형 세션 1회 이상 확보하여 live 측정 필요.
 
+### 4. provenance 코드 레벨 확인
+- **turns.source는 모든 삽입 경로에서 미설정** (4/4 경로 누락):
+  - turn_watcher.py:245, mcp_server.py:173·530, mcp_server_sse.py:222
+  - 스키마 DEFAULT `'unknown'` → 7160/7160 = 100% unknown
+- **Gate 6 통과 불가** (현재 상태). W2 D1-2까지:
+  1. 기존 turns: `legacy:pre-2026-09` 마커 + 수락기준 재정의
+  2. 향후 turns: 모든 INSERT에 `source` 컬럼 추가 필요
+- 상세: `docs/ops/provenance-analysis.md`
+
 ---
 
 ## 다음 D2 체크리스트
 
-- [ ] day_cycle 실행 확인 (timer 미발견, worker 내부 동작 확인)
+- [ ] day_cycle 서비스 동작 확인 (worker 내부 동작)
 - [ ] 대화형 세션에서 hook overhead live 측정
-- [ ] turns.source 0건 발생 시 provenance 백필 테스트
-- [ ] observations 24h count 재측정 (이상치 확인)
+- [ ] turns.source INSERT 경로 수정 (4개 파일)
+- [ ] observations 24h count 재측정
 
 ## D1 측정 요약
 
