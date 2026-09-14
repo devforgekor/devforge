@@ -93,6 +93,70 @@ class StoreObservationParams(BaseModel):
     tags: Optional[dict[str, Any]] = None
 
 
+class DeepDiveStepEnterParams(BaseModel):
+    session_id: str
+    step_name: str = "enter"
+    base_timeout_sec: int = 300
+    affected_files: Optional[int] = None
+
+
+class DeepDiveStepExitParams(BaseModel):
+    session_id: str
+    step_name: str = "exit"
+
+
+class DeepDiveSessionHeartbeatParams(BaseModel):
+    session_id: str
+    step: int = 1
+
+
+class DeepDiveSessionStatusParams(BaseModel):
+    session_id: str
+
+
+class DeepDiveVerifySandboxParams(BaseModel):
+    session_id: str
+
+
+class ObsWriteParams(BaseModel):
+    observation: str
+    source: str = "qwen_worker"
+    context: Optional[dict[str, Any]] = None
+    tags: Optional[dict[str, Any]] = None
+
+
+class ObsSearchParams(BaseModel):
+    query: str
+    source: Optional[str] = None
+    limit: int = 20
+
+
+class SearchTurnsParams(BaseModel):
+    query: str
+    limit: int = 20
+    pipeline_state: Optional[str] = None
+
+
+class SearchSimilarityParams(BaseModel):
+    query: str
+    limit: int = 20
+
+
+class MemSaveParams(BaseModel):
+    user_turn: str
+    source: str = "claude-code"
+    meta: Optional[dict[str, Any]] = None
+
+
+class MemSearchParams(BaseModel):
+    query: str
+    limit: int = 20
+
+
+class GetConversationParams(BaseModel):
+    conversation_id: str
+
+
 # ── Tool registry ──
 
 _TOOLS: list[dict[str, Any]] = []
@@ -382,6 +446,314 @@ register_tool(
     "Save an observation to the database for reflex rule mining. "
     "Observations are used to detect patterns and trigger auto-fix rules.",
     StoreObservationParams,
+)
+
+
+# ── Contract tool wrappers (12-tool contract compliance) ──
+
+
+async def deepdive_step_enter(params: DeepDiveStepEnterParams) -> dict[str, Any]:
+    return await deepdive(DeepDiveParams(
+        session_id=params.session_id,
+        step=1,
+        step_name="enter",
+        base_timeout_sec=params.base_timeout_sec,
+        affected_files=params.affected_files,
+    ))
+
+
+register_tool(
+    "deepdive_step_enter",
+    "[contract] Enter a deep-dive session step.",
+    DeepDiveStepEnterParams,
+)
+
+
+async def deepdive_step_exit(params: DeepDiveStepExitParams) -> dict[str, Any]:
+    return await deepdive(DeepDiveParams(
+        session_id=params.session_id,
+        step=1,
+        step_name="exit",
+    ))
+
+
+register_tool(
+    "deepdive_step_exit",
+    "[contract] Exit a deep-dive session step.",
+    DeepDiveStepExitParams,
+)
+
+
+async def deepdive_session_heartbeat(params: DeepDiveSessionHeartbeatParams) -> dict[str, Any]:
+    return await deepdive(DeepDiveParams(
+        session_id=params.session_id,
+        step=params.step,
+        step_name="heartbeat",
+    ))
+
+
+register_tool(
+    "deepdive_session_heartbeat",
+    "[contract] Update deep-dive session heartbeat.",
+    DeepDiveSessionHeartbeatParams,
+)
+
+
+async def deepdive_session_status(params: DeepDiveSessionStatusParams) -> dict[str, Any]:
+    config = get_config()
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from sqlalchemy import select
+
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        from devforge.domain.models import DeepDiveStep
+        result = await db.execute(
+            select(DeepDiveStep).where(
+                DeepDiveStep.session_id == params.session_id,
+                DeepDiveStep.status == "ACTIVE",
+            ).order_by(DeepDiveStep.started_at.desc()).limit(1)
+        )
+        step = result.scalar_one_or_none()
+        if step is None:
+            return {"session_id": params.session_id, "status": "NONE"}
+        return {
+            "session_id": step.session_id,
+            "step": step.step,
+            "step_name": step.step_name,
+            "status": step.status,
+            "elapsed_sec": step.elapsed_sec,
+        }
+
+
+register_tool(
+    "deepdive_session_status",
+    "[contract] Check deep-dive session status.",
+    DeepDiveSessionStatusParams,
+)
+
+
+async def deepdive_verify_sandbox(params: DeepDiveVerifySandboxParams) -> dict[str, Any]:
+    config = get_config()
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from sqlalchemy import select
+
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        from devforge.domain.models import DeepDiveStep
+        result = await db.execute(
+            select(DeepDiveStep).where(
+                DeepDiveStep.session_id == params.session_id,
+            ).order_by(DeepDiveStep.started_at.desc()).limit(1)
+        )
+        step = result.scalar_one_or_none()
+        if step is None:
+            return {"session_id": params.session_id, "verified": False, "reason": "session_not_found"}
+        if step.status != "ACTIVE":
+            return {"session_id": params.session_id, "verified": False, "reason": f"status={step.status}"}
+        return {
+            "session_id": params.session_id,
+            "verified": True,
+            "step": step.step,
+            "affected_files": step.affected_files,
+        }
+
+
+register_tool(
+    "deepdive_verify_sandbox",
+    "[contract] Verify deep-dive sandbox state.",
+    DeepDiveVerifySandboxParams,
+)
+
+
+async def obs_write(params: ObsWriteParams) -> dict[str, Any]:
+    return await store_observation(StoreObservationParams(
+        observation=params.observation,
+        category="general",
+        source=params.source,
+        context=params.context,
+        tags=params.tags,
+    ))
+
+
+register_tool(
+    "obs_write",
+    "[contract] Write an observation (merge target: memory(action=save,kind=obs)).",
+    ObsWriteParams,
+)
+
+
+async def obs_search(params: ObsSearchParams) -> dict[str, Any]:
+    config = get_config()
+    from devforge.adapters.driven.storage.extract_adapter import PostgresObservationRepository
+
+    repo = PostgresObservationRepository.from_config(config)
+    results = await repo.search_observations(params.query, limit=params.limit)
+    return {"query": params.query, "count": len(results), "results": results}
+
+
+register_tool(
+    "obs_search",
+    "[contract] Search observations (merge target: memory(action=search,kind=obs)).",
+    ObsSearchParams,
+)
+
+
+async def search_turns(params: SearchTurnsParams) -> dict[str, Any]:
+    return await knowledge_search(KnowledgeSearchParams(
+        query=params.query,
+        limit=params.limit,
+        pipeline_state=params.pipeline_state,
+    ))
+
+
+register_tool(
+    "search_turns",
+    "[contract] Search conversation turns via pg_trgm.",
+    SearchTurnsParams,
+)
+
+
+async def search_similarity(params: SearchSimilarityParams) -> dict[str, Any]:
+    config = get_config()
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from sqlalchemy import text
+
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        stmt = text("""
+            SELECT t.id, t.conversation_id, t.seq, t.user_turn, t.text,
+                   t.pipeline_state, t.created_at,
+                    1 - (t.user_turn <-> :query) AS similarity
+            FROM turns t
+            WHERE t.user_turn <-> :query < 0.5
+            ORDER BY similarity ASC
+            LIMIT :limit
+        """)
+        result = await db.execute(stmt, {"query": params.query, "limit": params.limit})
+        turns = []
+        for row in result:
+            turns.append({
+                "id": str(row.id),
+                "conversation_id": str(row.conversation_id),
+                "seq": row.seq,
+                "user_turn": row.user_turn[:500],
+                "similarity": float(row.similarity) if row.similarity else 0.0,
+            })
+    return {"query": params.query, "count": len(turns), "results": turns}
+
+
+register_tool(
+    "search_similarity",
+    "[contract] Search similar turns via pgvector cosine similarity.",
+    SearchSimilarityParams,
+)
+
+
+async def mem_save(params: MemSaveParams) -> dict[str, Any]:
+    config = get_config()
+    from uuid import uuid4
+    from sqlalchemy import insert
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import Conversation, Turn
+
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        conv = Conversation(id=uuid4(), title=f"Memory: {params.source}", source=params.source)
+        db.add(conv)
+        await db.flush()
+        turn = Turn(
+            id=uuid4(),
+            conversation_id=conv.id,
+            seq=1,
+            user_turn=params.user_turn[:4000],
+            source=params.source,
+            meta=params.meta if params.meta else {},
+        )
+        db.add(turn)
+        await db.commit()
+    return {"conversation_id": str(conv.id), "turn_id": str(turn.id), "saved": True}
+
+
+register_tool(
+    "mem_save",
+    "[contract] Save a memory turn (merge target: memory(action=save,kind=mem)).",
+    MemSaveParams,
+)
+
+
+async def mem_search(params: MemSearchParams) -> dict[str, Any]:
+    config = get_config()
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from sqlalchemy import text
+
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        stmt = text("""
+            SELECT t.id, t.conversation_id, t.seq, t.user_turn, t.source, t.created_at
+            FROM turns t
+            WHERE to_tsvector('english', COALESCE(t.user_turn, ''))
+                  @@ plainto_tsquery('english', :query)
+            ORDER BY t.created_at DESC
+            LIMIT :limit
+        """)
+        result = await db.execute(stmt, {"query": params.query, "limit": params.limit})
+        turns = []
+        for row in result:
+            turns.append({
+                "id": str(row.id),
+                "conversation_id": str(row.conversation_id),
+                "seq": row.seq,
+                "user_turn": row.user_turn[:500],
+                "source": row.source,
+            })
+    return {"query": params.query, "count": len(turns), "results": turns}
+
+
+register_tool(
+    "mem_search",
+    "[contract] Search memory turns.",
+    MemSearchParams,
+)
+
+
+async def get_conversation(params: GetConversationParams) -> dict[str, Any]:
+    config = get_config()
+    from uuid import UUID
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import Conversation, Turn
+
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        conv_id = UUID(params.conversation_id)
+        conv = await db.get(Conversation, conv_id)
+        if conv is None:
+            return {"error": f"Conversation not found: {conv_id}"}, 404
+        result = await db.execute(
+            select(Turn).where(Turn.conversation_id == conv_id).order_by(Turn.seq)
+        )
+        turns = []
+        for row in result:
+            turns.append({
+                "seq": row.seq,
+                "user_turn": row.user_turn[:500],
+                "text": (row.text or "")[:500],
+                "source": row.source,
+            })
+    return {
+        "conversation_id": str(conv.id),
+        "title": conv.title,
+        "source": conv.source,
+        "model": conv.model,
+        "turns": turns,
+    }
+
+
+register_tool(
+    "get_conversation",
+    "[contract] Get conversation with all turns.",
+    GetConversationParams,
 )
 
 
