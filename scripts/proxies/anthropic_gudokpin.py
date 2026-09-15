@@ -45,9 +45,7 @@ MODEL_MAP = {
     "gpt-6-astra": "gpt-6-astra",
     "gpt-6-astra-reasoning": "gpt-6-astra-reasoning",
     # Gemini
-    "gemini-3.8-flash": "gemini-3.8-flash",
-    "gemini-3.7-flash": "gemini-3.7-flash",
-    "gemini-3.1-pro-preview": "gemini-3.1-pro-preview",
+
     # 기타 (Gudokpin 노출 모델)
     "grok-4.6": "grok-4.6",
     "glm-5.3": "glm-5.3",

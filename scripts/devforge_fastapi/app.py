@@ -44,13 +44,6 @@ from fastmcp.utilities.lifespan import combine_lifespans
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("devforge-fastapi")
 
-# calendar_sync is optional (requires google-* deps). Never let it crash the hub.
-try:
-    from devforge_fastapi.calendar_sync.router import router as calendar_router
-except Exception as _e:  # noqa: BLE001
-    calendar_router = None
-    logging.getLogger("devforge-fastapi").warning("calendar_sync disabled: %s", _e)
-
 app = FastAPI(title="DevForge FastAPI")
 
 # Mount FastMCP at /mcp using the official http_app pattern.

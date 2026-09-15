@@ -3,7 +3,7 @@
 
 """LLM API proxy modules for external model endpoints.
 
-Modules: anthropic.py, gemini_openai.py, search.py, and shared
+Modules: anthropic.py, search.py, and shared
 utilities (auth, key rotation, cipher).
 Accessed by proxy_reviewer.py during the nightly DeepSeek audit phase.
 """

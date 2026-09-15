@@ -59,7 +59,7 @@ phases:
     - _archive/translation-quality-report.md (model-radar lessons → DevForge)
     - _archive/translation-quality-feedback-loop.md (TEaR + xCOMET + LaBSE feedback architecture)
     items:
-    - embed_turns.py complete remaining 3165/4180 turns (Gemini embedding-embedding-001, 768-dim)
+    -     embed_turns.py complete remaining 3165/4180 turns (local embedding model, 768-dim)
     - Cross-lingual Wikipedia anchor corpus — ko↔en Q-item vector mapping for translation quality estimation
     - Translation quality scoring — cosine_similarity(embed_ko, embed_en) with Wikipedia ground truth
     - embed_turns.py cost optimization — embed decisions/observations only (skip trivial turns)
@@ -149,18 +149,16 @@ target:
   - name: postgres
     role: PostgreSQL 16 :5432 (pgvector 0.8.2, 10 tables, 4180 turns)
     type: systemd user / Quadlet container
-  - name: gemini-proxy
-    role: Gemini API key rotation proxy :9099
-    type: systemd user service (native Python)
+  - name: devforge-inference
+    role: llama.cpp local inference :8080
+    type: systemd user service (Quadlet)
   services:
   - name: caddy
     role: Reverse proxy (host network, auto-HTTPS)
   - name: netdata
     role: System monitoring :19999
-  - name: gemini-proxy
-    role: API key rotation + model auto-routing for Gemini free tier
   embedding:
-    engine: gemini-embedding-001
+    engine: local-embedding
     dim: 768
     indexed: 1015
     remaining: 3165
