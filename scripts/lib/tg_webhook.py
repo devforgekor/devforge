@@ -24,7 +24,7 @@ def _load_token() -> str:
     if sf.exists():
         for line in sf.read_text().split("\n"):
             line = line.strip()
-            if line.startswith("TELEGRAM_TOKEN="):
+            if line.startswith("TELEGRAM_TOKEN_KEY="):
                 return line.split("=", 1)[1].strip().strip("\"'")
     return ""
 

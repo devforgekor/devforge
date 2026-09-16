@@ -64,25 +64,25 @@ if _SF.exists():
 else:
     # Container runtime: env vars injected via EnvironmentFile=
     _KEYS = [
-        "SLACK_SIGNING_SECRET",
-        "SLACK_BOT_TOKEN",
-        "TELEGRAM_TOKEN",
+        "SLACK_SIGNING_SECRET_KEY",
+        "SLACK_BOT_TOKEN_KEY",
+        "TELEGRAM_TOKEN_KEY",
         "TELEGRAM_CHAT_ID",
         "SMTP_HOST",
         "SMTP_PORT",
         "SMTP_USER",
-        "SMTP_PASSWORD",
+        "MINIPARK4U_SMTP_PASSWORD",
     ]
     for _k in _KEYS:
         _v = os.environ.get(_k, "")
         if _v:
             _SECRETS[_k] = _v
 
-SLACK_SIGNING_SECRET = _SECRETS.get("SLACK_SIGNING_SECRET", "")
-SLACK_BOT_TOKEN = _SECRETS.get("SLACK_BOT_TOKEN", "")
-_TG_TOKEN = _SECRETS.get("TELEGRAM_TOKEN", "")
+SLACK_SIGNING_SECRET = _SECRETS.get("SLACK_SIGNING_SECRET_KEY", "")
+SLACK_BOT_TOKEN = _SECRETS.get("SLACK_BOT_TOKEN_KEY", "")
+_TG_TOKEN = _SECRETS.get("TELEGRAM_TOKEN_KEY", "")
 if not _TG_TOKEN:
-    logger.info("Telegram disabled (no TELEGRAM_TOKEN)")
+    logger.info("Telegram disabled (no TELEGRAM_TOKEN_KEY)")
     TG_BASE = ""
 else:
     TG_BASE = f"https://api.telegram.org/bot{_TG_TOKEN}"
@@ -96,7 +96,7 @@ _notifier = Notifier(_SECRETS)
 
 def _verify_slack_signature(body: bytes, timestamp: str, signature: str) -> bool:
     if not SLACK_SIGNING_SECRET:
-        logger.warning("No SLACK_SIGNING_SECRET configured, skipping verification")
+        logger.warning("No SLACK_SIGNING_SECRET_KEY configured, skipping verification")
         return True
     basestring = f"v0:{timestamp}:".encode() + body
     expected = (
@@ -228,7 +228,7 @@ async def _telegram_poll_loop():
 
     _http = httpx.AsyncClient(timeout=35)
     offset = 0
-    tg_token = _SECRETS.get("TELEGRAM_TOKEN", "")
+    tg_token = _SECRETS.get("TELEGRAM_TOKEN_KEY", "")
     tg_chat = _SECRETS.get("TELEGRAM_CHAT_ID", "")
 
     # Delete any existing webhook — polling and webhook can't coexist

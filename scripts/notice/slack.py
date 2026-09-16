@@ -46,8 +46,8 @@ if _SF.exists():
             _k, _, _v = _line.partition("=")
             SECRETS[_k.strip()] = _v.strip().strip('"').strip("'")
 
-SLACK_SIGNING_SECRET = SECRETS.get("SLACK_SIGNING_SECRET", "")
-SLACK_BOT_TOKEN = SECRETS.get("SLACK_BOT_TOKEN", "")
+SLACK_SIGNING_SECRET = SECRETS.get("SLACK_SIGNING_SECRET_KEY", "")
+SLACK_BOT_TOKEN = SECRETS.get("SLACK_BOT_TOKEN_KEY", "")
 LISTEN_ADDR = os.environ.get("SLACK_LISTEN", "127.0.0.1:8084")
 
 
@@ -55,7 +55,7 @@ def _verify_slack_signature(body: bytes, timestamp: str, signature: str) -> bool
     """Verify Slack request signature (HMAC-SHA256)."""
     if not SLACK_SIGNING_SECRET:
         print(
-            "[slack] WARNING: no SLACK_SIGNING_SECRET configured, skipping verification",
+            "[slack] WARNING: no SLACK_SIGNING_SECRET_KEY configured, skipping verification",
             file=sys.stderr,
             flush=True,
         )
@@ -70,7 +70,7 @@ def _verify_slack_signature(body: bytes, timestamp: str, signature: str) -> bool
 def _slack_post(channel: str, text: str) -> bool:
     """Send a message to Slack via chat.postMessage."""
     if not SLACK_BOT_TOKEN:
-        print("[slack] no SLACK_BOT_TOKEN, cannot reply", file=sys.stderr, flush=True)
+        print("[slack] no SLACK_BOT_TOKEN_KEY, cannot reply", file=sys.stderr, flush=True)
         return False
     payload = json.dumps({"channel": channel, "text": text, "mrkdwn": True}).encode()
     req = urllib.request.Request(

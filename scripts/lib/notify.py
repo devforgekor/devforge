@@ -42,7 +42,7 @@ class Notifier:
         a_obj = apprise.Apprise()
 
         # Telegram
-        tg_token = self._secrets.get("TELEGRAM_TOKEN", "")
+        tg_token = self._secrets.get("TELEGRAM_TOKEN_KEY", "")
         tg_chat = self._secrets.get("TELEGRAM_CHAT_ID", "")
         if tg_token and tg_chat:
             a_obj.add(f"tgram://{tg_token}/{tg_chat}")
@@ -50,7 +50,7 @@ class Notifier:
 
         # Email (Gmail SMTP via SSL)
         smtp_user = self._secrets.get("SMTP_USER", "")
-        smtp_pass = self._secrets.get("SMTP_PASSWORD", "").replace(" ", "%20")
+        smtp_pass = self._secrets.get("MINIPARK4U_SMTP_PASSWORD", "").replace(" ", "%20")
         if smtp_user and smtp_pass:
             a_obj.add(
                 f"mailto://{smtp_user}:{smtp_pass}@smtp.gmail.com:465?from={smtp_user}&mode=ssl"
@@ -76,9 +76,9 @@ class Notifier:
             channel: Slack channel/user ID or "chat.update" for update.
             text_or_data: Plain text string or dict payload for chat.update.
         """
-        bot_token = self._secrets.get("SLACK_BOT_TOKEN", "")
+        bot_token = self._secrets.get("SLACK_BOT_TOKEN_KEY", "")
         if not bot_token:
-            logger.error("No SLACK_BOT_TOKEN, cannot send Slack")
+            logger.error("No SLACK_BOT_TOKEN_KEY, cannot send Slack")
             return False
 
         if isinstance(text_or_data, str):

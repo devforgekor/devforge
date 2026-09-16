@@ -68,7 +68,7 @@ def _slack_channel() -> str:
 
 def _slack_api(method: str, payload: dict, timeout: int = 10) -> dict:
     """Call Slack Web API with urllib (no external deps)."""
-    token = _SECRETS.get("SLACK_BOT_TOKEN", "")
+    token = _SECRETS.get("SLACK_BOT_TOKEN_KEY", "")
     if not token:
         return {"ok": False}
     payload.setdefault("channel", _slack_channel())
@@ -322,7 +322,7 @@ def heartbeat(state_summary: dict) -> None:
 # ── Telegram ───────────────────────────────────────────────────────
 
 def _telegram_send(text: str) -> bool:
-    token = _SECRETS.get("TELEGRAM_TOKEN", "")
+    token = _SECRETS.get("TELEGRAM_TOKEN_KEY", "")
     chat_id = _SECRETS.get("TELEGRAM_CHAT_ID", "")
     if not token or not chat_id:
         return False

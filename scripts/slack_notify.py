@@ -42,9 +42,9 @@ if _SF.exists():
 
 
 def _slack_send(text: str) -> bool:
-    token = _SECRETS.get("SLACK_BOT_TOKEN", "")
+    token = _SECRETS.get("SLACK_BOT_TOKEN_KEY", "")
     if not token:
-        print("  SLACK_BOT_TOKEN not configured", file=sys.stderr)
+        print("  SLACK_BOT_TOKEN_KEY not configured", file=sys.stderr)
         return False
     channel = _SECRETS.get("SLACK_CHANNEL", "U0APJGD8CBW")
     payload = json.dumps({"channel": channel, "text": text, "mrkdwn": True}).encode()

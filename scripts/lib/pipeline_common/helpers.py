@@ -18,7 +18,7 @@ if _SF.exists():
         _line = _line.strip()
         if _line and not _line.startswith("#") and "=" in _line:
             _k, _, _v = _line.partition("=")
-            if _k.strip() == "SLACK_BOT_TOKEN":
+            if _k.strip() == "SLACK_BOT_TOKEN_KEY":
                 _SLACK_TOKEN = _v.strip().strip('"').strip("'")
             elif _k.strip() == "SLACK_CHANNEL":
                 _SLACK_CHANNEL = _v.strip().strip('"').strip("'")

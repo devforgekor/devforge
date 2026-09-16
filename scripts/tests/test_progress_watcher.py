@@ -20,7 +20,7 @@ if os.path.exists(sf):
             continue
         k, _, v = line.partition("=")
         v = v.strip().strip('"').strip("'")
-        if k.strip() == "SLACK_BOT_TOKEN":
+        if k.strip() == "SLACK_BOT_TOKEN_KEY":
             SLACK_TOKEN = v
         elif k.strip() == "SLACK_CHANNEL":
             SLACK_CHANNEL = v

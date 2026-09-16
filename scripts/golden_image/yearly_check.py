@@ -19,7 +19,7 @@ GITHUB_LLAMA = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
 def _fetch_json(url):
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "devforge-yearly-check"})
-        token = os.environ.get("GITHUB_TOKEN", "")
+        token = os.environ.get("MY_GITHUB_TOKEN_KEY", "")
         if token:
             req.add_header("Authorization", f"Bearer {token}")
         with urllib.request.urlopen(req, timeout=10) as resp:

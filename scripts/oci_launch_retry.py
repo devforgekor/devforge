@@ -33,7 +33,7 @@ def get_secret(key):
 
 
 def send_telegram(text):
-    token = get_secret("TELEGRAM_TOKEN")
+    token = get_secret("TELEGRAM_TOKEN_KEY")
     chat_id = get_secret("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
         log("TELEGRAM: no token/chat_id configured")

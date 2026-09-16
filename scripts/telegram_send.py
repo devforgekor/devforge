@@ -33,7 +33,7 @@ def _load_secrets() -> dict:
 
 
 SECRETS = _load_secrets()
-TOKEN = SECRETS.get("TELEGRAM_TOKEN", "")
+TOKEN = SECRETS.get("TELEGRAM_TOKEN_KEY", "")
 CHAT_ID = SECRETS.get("TELEGRAM_CHAT_ID", "")
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
@@ -155,7 +155,7 @@ def _parse_args(argv: list[str]) -> tuple:
 
 def main():
     if not TOKEN or not CHAT_ID:
-        print("ERROR: TELEGRAM_TOKEN or TELEGRAM_CHAT_ID not set in secrets.env", file=sys.stderr)
+        print("ERROR: TELEGRAM_TOKEN_KEY or TELEGRAM_CHAT_ID not set in secrets.env", file=sys.stderr)
         sys.exit(1)
 
     filepath, text_arg = _parse_args(sys.argv)

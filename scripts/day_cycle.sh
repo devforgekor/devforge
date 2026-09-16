@@ -81,7 +81,7 @@ _slack_alert() {
     local secrets_file="$HOME/.config/devforge/secrets.env"
     local token=""; local channel=""
     [ -f "$secrets_file" ] && . "$secrets_file"
-    token="${SLACK_BOT_TOKEN:-}"; channel="${SLACK_CHANNEL:-U0APJGD8CBW}"
+    token="${SLACK_BOT_TOKEN_KEY:-}"; channel="${SLACK_CHANNEL:-U0APJGD8CBW}"
     [ -z "$token" ] && return 1
     local kst_now
     kst_now=$(TZ=Asia/Seoul date '+%m/%d %H:%M')

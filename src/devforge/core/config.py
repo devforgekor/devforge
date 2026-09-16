@@ -119,9 +119,9 @@ class SecretsConfig(BaseSettings):
 
     POSTGRES_PASSWORD: str = ""
     DEVFORGE_DATABASE_URL: str = ""
-    SLACK_BOT_TOKEN: str = ""
-    SLACK_SIGNING_SECRET: str = ""
-    TELEGRAM_TOKEN: str = ""
+    SLACK_BOT_TOKEN_KEY: str = ""
+    SLACK_SIGNING_SECRET_KEY: str = ""
+    TELEGRAM_TOKEN_KEY: str = ""
     TELEGRAM_CHAT_ID: str = ""
     DUCKDNS_TOKEN: str = ""
     ENCRYPTION_PASSPHRASE: str = ""
@@ -143,7 +143,8 @@ class SecretsConfig(BaseSettings):
     OCI_API_KEY_FINGERPRINT: str = ""
 
     # GitHub
-    GITHUB_TOKEN: str = ""
+    MY_GITHUB_TOKEN_KEY: str = ""
+    MY_COPILOT_GITHUB_TOKEN_KEY: str = ""
 
 
 class ProviderConfig(BaseModel):

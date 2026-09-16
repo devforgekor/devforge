@@ -43,7 +43,7 @@ def _load_secrets():
     return secrets
 
 SECRETS = _load_secrets()
-TOKEN = SECRETS.get("TELEGRAM_TOKEN", "")
+TOKEN = SECRETS.get("TELEGRAM_TOKEN_KEY", "")
 CHAT_ID = SECRETS.get("TELEGRAM_CHAT_ID", "")
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 OFFSET_FILE = Path("/var/tmp/telegram_bot_offset.txt")

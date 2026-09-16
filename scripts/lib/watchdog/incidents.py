@@ -154,7 +154,7 @@ def _gh_env() -> dict:
     env = {**os.environ}
     try:
         for line in open(_GH_SECRETS):
-            if line.startswith("GITHUB_TOKEN="):
+            if line.startswith("MY_GITHUB_TOKEN_KEY="):
                 env["GH_TOKEN"] = line.split("=", 1)[1].strip().strip('"').strip("'")
                 break
     except OSError:

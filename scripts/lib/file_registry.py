@@ -308,11 +308,11 @@ def receive_telegram_file(file_id: str, sender: str = "", filename: str = "") ->
     if secrets_path.exists():
         for line in secrets_path.read_text().split("\n"):
             line = line.strip()
-            if line.startswith("TELEGRAM_TOKEN="):
+            if line.startswith("TELEGRAM_TOKEN_KEY="):
                 token = line.split("=", 1)[1].strip().strip('"').strip("'")
                 break
     if not token:
-        print("  [file_registry] TELEGRAM_TOKEN not found", flush=True)
+        print("  [file_registry] TELEGRAM_TOKEN_KEY not found", flush=True)
         return None
 
     import urllib.request as _ur

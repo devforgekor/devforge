@@ -3,12 +3,12 @@ set -euo pipefail
 
 SECRETS="$HOME/.config/devforge/secrets.env"
 if [ -f "$SECRETS" ]; then
-    key_line=$(grep "^GITHUB_TOKEN=" "$SECRETS" | head -1)
+    key_line=$(grep "^MY_GITHUB_TOKEN_KEY=" "$SECRETS" | head -1)
     if [ -n "$key_line" ]; then
         raw="${key_line#*=}"
         raw="${raw%\"*}"
         raw="${raw%\'*}"
-        export GITHUB_TOKEN="$raw"
+        export MY_GITHUB_TOKEN_KEY="$raw"
     fi
 fi
 

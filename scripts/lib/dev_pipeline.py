@@ -17,7 +17,7 @@ DEFAULT_REPO = "devforgekor/devforge"
 
 
 def _read_token() -> Optional[str]:
-    """Extract GITHUB_TOKEN from secrets.env (handles optional quotes)."""
+    """Extract MY_GITHUB_TOKEN_KEY from secrets.env (handles optional quotes)."""
     if not os.path.isfile(SECRETS_PATH):
         return None
     import re
@@ -25,7 +25,7 @@ def _read_token() -> Optional[str]:
     with open(SECRETS_PATH) as f:
         for line in f:
             line = line.strip()
-            m = re.match(r"^GITHUB_TOKEN=(.*)$", line)
+            m = re.match(r"^MY_GITHUB_TOKEN_KEY=(.*)$", line)
             if m:
                 raw = m.group(1)
                 raw = raw.strip('"').strip("'").strip()

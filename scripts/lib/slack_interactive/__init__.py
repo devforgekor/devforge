@@ -14,8 +14,8 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 PORT = 8087
 
-_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
-_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
+_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET_KEY", "")
+_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
 _SLACK_CHANNEL = os.environ.get("SLACK_CHANNEL", "U0APJGD8CBW")
 
 init(_SIGNING_SECRET, _BOT_TOKEN, _SLACK_CHANNEL)
