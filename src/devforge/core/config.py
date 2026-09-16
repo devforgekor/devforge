@@ -134,7 +134,7 @@ class SecretsConfig(BaseSettings):
     BRAVE_API_KEYS: str = ""
 
     # Gudokpin API (GPT & Claude unified)
-    GUDOKPIN_API: str = ""
+    GUDOKPIN_API_KEY: str = ""
 
     # OCI
     OCI_USER_OCID: str = ""

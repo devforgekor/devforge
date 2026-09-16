@@ -38,11 +38,11 @@ def _get_client():
     token = None
     with open(sf) as f:
         for line in f:
-            if line.strip().startswith("NOTION_TOKEN="):
+            if line.strip().startswith("NOTION_TOKEN_KEY="):
                 token = line.strip().split("=", 1)[1].strip("'\"").strip("'")
                 break
     if not token:
-        raise RuntimeError("NOTION_TOKEN not found in secrets.env")
+        raise RuntimeError("NOTION_TOKEN_KEY not found in secrets.env")
     _notion = Client(auth=token)
     return _notion
 

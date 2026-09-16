@@ -73,10 +73,10 @@ STRIP_RESP_HEADERS = {
     "www-authenticate",
 }
 
-ANTHROPIC_API_KEY = os.environ.get("GUDOKPIN_API") or ""
+ANTHROPIC_API_KEY = os.environ.get("GUDOKPIN_API_KEY") or ""
 
-# Gudokpin uses a single API key (GUDOKPIN_API in secrets.env).
-API_KEYS: List[str] = [ANTHROPIC_API_KEY if ANTHROPIC_API_KEY else os.environ.get("GUDOKPIN_API", "")]
+# Gudokpin uses a single API key (GUDOKPIN_API_KEY in secrets.env).
+    API_KEYS: List[str] = [ANTHROPIC_API_KEY if ANTHROPIC_API_KEY else os.environ.get("GUDOKPIN_API_KEY", "")]
 # Filter out empty entries while preserving order.
 API_KEYS = [k for k in API_KEYS if k]
 
@@ -929,7 +929,7 @@ def main() -> None:
 
     if not _resolve_api_key():
         print(
-            "[gudokpin-proxy] WARNING: GUDOKPIN_API not set",
+            "[gudokpin-proxy] WARNING: GUDOKPIN_API_KEY not set",
             file=sys.stderr,
         )
         print("[gudokpin-proxy] Set it in ~/.config/devforge/secrets.env", file=sys.stderr)

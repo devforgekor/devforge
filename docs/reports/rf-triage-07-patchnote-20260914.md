@@ -302,7 +302,7 @@ d9f6fe7  rf-triage-07: D1 수동 검증 — provenance 코드 레벨 확인
 ## 13. Gudokpin API → Claude Code 연동 (2026-09-14)
 
 ### 목적
-- `GUDOKPIN_API`(secrets.env)를 Claude Code 백엔드로 연결
+- `GUDOKPIN_API_KEY`(secrets.env)를 Claude Code 백엔드로 연결
 - Gudokpin = GPT & Claude 통합 게이트웨이 (OpenAI 호환)
 
 ### 구현
@@ -312,7 +312,7 @@ d9f6fe7  rf-triage-07: D1 수동 검증 — provenance 코드 레벨 확인
 | 프록시 | `scripts/proxies/anthropic_gudokpin.py` (Anthropic→OpenAI 변환, :44779) |
 | 시스템드 | `anthropic-gudokpin-proxy.service` (enabled, running) |
 | 업스트림 | `https://api.gudokpin.com/v1` |
-| 키 | `GUDOKPIN_API` (secrets.env) |
+| 키 | `GUDOKPIN_API_KEY` (secrets.env) |
 | 모드 | `claude-mode set gudokpin` → `ANTHROPIC_BASE_URL=http://127.0.0.1:44779` |
 
 ### MODEL_MAP (Claude → Gudokpin)

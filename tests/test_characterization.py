@@ -70,8 +70,8 @@ class TestConfigRegistry:
     def test_gudokpin_api_key_loaded(self):
         """Gudokpin API key should be available for Track B (if present)."""
         config = get_config()
-        # GUDOKPIN_API is in secrets.env; may be empty in test env
-        assert hasattr(config.secrets, "GUDOKPIN_API")
+        # GUDOKPIN_API_KEY is in secrets.env; may be empty in test env
+        assert hasattr(config.secrets, "GUDOKPIN_API_KEY")
 
 
 # ── 2. Pipeline State Consistency ──
