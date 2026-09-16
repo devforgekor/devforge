@@ -33,7 +33,7 @@ class TestConfigRegistry:
     def test_secrets_env_loaded(self):
         """Secret env vars should be loaded from ~/.config/devforge/secrets.env."""
         config = get_config()
-        if not config.secrets.POSTGRES_PASSWORD:
+        if not config.secrets.DEVFORGE_POSTGRES_PASSWORD:
             pytest.skip("secrets.env not available in this environment")
         assert "postgresql" in config.secrets.DEVFORGE_DATABASE_URL
 

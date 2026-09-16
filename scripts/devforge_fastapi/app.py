@@ -71,7 +71,7 @@ else:
         "SMTP_HOST",
         "SMTP_PORT",
         "SMTP_USER",
-        "MINIPARK4U_SMTP_PASSWORD",
+        "GMAIL_SMTP_MINIPARK4U",
     ]
     for _k in _KEYS:
         _v = os.environ.get(_k, "")

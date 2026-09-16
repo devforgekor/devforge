@@ -15,7 +15,7 @@
 #   Day Embedding     — embed_batch.py (:8081, enriched → embedded)
 # Each phase has its own budget check. Mid-cycle timeout carries forward in pipeline_state.
 #
-# Secrets: DUCKDNS_TOKEN in ~/.config/devforge/secrets.env
+# Secrets: DUCKDNS_TOKEN_KEY in ~/.config/devforge/secrets.env
 # Server philosophy: Slow but complete. Single inference container handles all ports.
 
 MODEL_CTL="/opt/projects/server/scripts/lib/model_ctl.sh"
@@ -167,7 +167,7 @@ _launch_reranker() {
 # ── System Sync ────────────────────────────────────
 LOG "=== System: duckdns ==="
 if curl -s -o /dev/null -w "%{http_code}" \
-    "https://www.duckdns.org/update?domains=devforgekor&token=${DUCKDNS_TOKEN:-MISSING}&ip=&verbose=true" \
+    "https://www.duckdns.org/update?domains=devforgekor&token=${DUCKDNS_TOKEN_KEY:-MISSING}&ip=&verbose=true" \
     2>/dev/null | grep -q 200; then
     LOG "  duckdns OK"
 else

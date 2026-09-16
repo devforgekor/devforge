@@ -117,14 +117,14 @@ class SecretsConfig(BaseSettings):
         extra="ignore",
     )
 
-    POSTGRES_PASSWORD: str = ""
+    DEVFORGE_POSTGRES_PASSWORD: str = ""
     DEVFORGE_DATABASE_URL: str = ""
     SLACK_BOT_TOKEN_KEY: str = ""
     SLACK_SIGNING_SECRET_KEY: str = ""
     TELEGRAM_TOKEN_KEY: str = ""
     TELEGRAM_CHAT_ID: str = ""
-    DUCKDNS_TOKEN: str = ""
-    ENCRYPTION_PASSPHRASE: str = ""
+    DUCKDNS_TOKEN_KEY: str = ""
+    DEVFORGE_ENCRYPTION_PASSPHRASE: str = ""
 
     # API Keys (for Track B)
     OPENAI_API_KEY: str = ""
@@ -305,7 +305,7 @@ class ConfigRegistry:
 
     @property
     def duckdns_token(self) -> str:
-        return self.secrets.DUCKDNS_TOKEN
+        return self.secrets.DUCKDNS_TOKEN_KEY
 
     def reload(self) -> None:
         """Reload all config from files (for runtime config changes)."""

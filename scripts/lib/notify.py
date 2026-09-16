@@ -50,7 +50,7 @@ class Notifier:
 
         # Email (Gmail SMTP via SSL)
         smtp_user = self._secrets.get("SMTP_USER", "")
-        smtp_pass = self._secrets.get("MINIPARK4U_SMTP_PASSWORD", "").replace(" ", "%20")
+        smtp_pass = self._secrets.get("GMAIL_SMTP_MINIPARK4U", "").replace(" ", "%20")
         if smtp_user and smtp_pass:
             a_obj.add(
                 f"mailto://{smtp_user}:{smtp_pass}@smtp.gmail.com:465?from={smtp_user}&mode=ssl"

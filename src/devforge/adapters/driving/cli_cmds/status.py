@@ -149,7 +149,7 @@ def status_main(
         typer.echo(f"  Mode: {config.system_mode} (inference: {config.inference_mode})")
         typer.echo(f"  Model: {config.model_name} on port {config.model_port}")
         typer.echo(
-            f"  DB URL: {config.db_url.replace(config.secrets.POSTGRES_PASSWORD, '***') if config.secrets.POSTGRES_PASSWORD else config.db_url}"
+            f"  DB URL: {config.db_url.replace(config.secrets.DEVFORGE_POSTGRES_PASSWORD, '***') if config.secrets.DEVFORGE_POSTGRES_PASSWORD else config.db_url}"
         )
 
         # Container status

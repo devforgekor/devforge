@@ -3,7 +3,7 @@
 # Path: imported by — production scripts
 """
 AES-256-GCM encryption for API keys and secrets.
-PBKDF2-HMAC-SHA256 key derivation from ENCRYPTION_PASSPHRASE.
+PBKDF2-HMAC-SHA256 key derivation from DEVFORGE_ENCRYPTION_PASSPHRASE.
 
 Usage:
     from lib.auth.api_key_cipher import encrypt_data, decrypt_data
@@ -24,9 +24,9 @@ def _get_encryption_key() -> bytes:
     if _ENCRYPTION_KEY is not None:
         return _ENCRYPTION_KEY
 
-    passphrase = os.getenv("ENCRYPTION_PASSPHRASE", "")
+    passphrase = os.getenv("DEVFORGE_ENCRYPTION_PASSPHRASE", "")
     if not passphrase:
-        raise RuntimeError("ENCRYPTION_PASSPHRASE not set")
+        raise RuntimeError("DEVFORGE_ENCRYPTION_PASSPHRASE not set")
 
     salt = b"devforge-aes-256-gcm"  # fixed per-project salt
     key = hashlib.pbkdf2_hmac("sha256", passphrase.encode(), salt, 100_000, dklen=32)
