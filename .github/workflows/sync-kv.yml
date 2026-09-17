@@ -9,12 +9,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_MESIDS_CLIENT_SECRET_ID }}
-          tenant-id: ${{ secrets.AZURE_MESIDS_TENANT_ID }}
-          client-secret: ${{ secrets.AZURE_MESIDS_CLIENT_SECRET_VALUE }}
+      - name: Azure Login via az CLI
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_MESIDS_CLIENT_SECRET_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_MESIDS_CLIENT_SECRET_VALUE }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_MESIDS_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_MESIDS_SUBSCRIPTION_ID }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID" >/dev/null 2>&1
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          echo "✅ Azure login success"
+          az account show --query "{sub:name, id:id}" -o tsv
 
       - name: Push secrets to Key Vault
         env:
@@ -61,7 +69,6 @@ jobs:
           VERCEL_REVALIDATE_TOKEN_KEY: ${{ secrets.VERCEL_REVALIDATE_TOKEN_KEY }}
         run: |
           set -e
-          # Extract vault name from URL: https://<name>.vault.azure.net
           VAULT=$(echo "$KEYVAULT_URL" | sed -E 's|https://([^.]+)\..*|\1|')
           echo "Vault: $VAULT"
           for key in BRAVE_API_KEYS CONTEXT7_API_KEYS EXA_API_KEYS GEMINI_API_KEYS TRAVILY_API_KEYS YOUCOM_API_KEYS OPENROUTER_MESIDS_API_KEY OPENROUTER_MINIPARK4U_API_KEY OPENROUTER_HYEONMINPARK4U_API_KEY DEVFORGE_DATABASE_URL LITELLM_DATABASE_URL NEON_DATABASE_URL DEVFORGE_ENCRYPTION_PASSPHRASE DEVFORGE_LITELLM_MASTER_KEY DEVFORGE_POSTGRES_PASSWORD TELEGRAM_TOKEN_KEY TELEGRAM_TEST_TOKEN_KEY TELEGRAM_CHAT_ID SLACK_BOT_TOKEN_KEY SLACK_SIGNING_SECRET_KEY SLACK_CHANNEL DEEPSEEK_API_KEY GUDOKPIN_API_KEY NOTION_TOKEN_KEY MASKPROXY_API_KEY DUCKDNS_TOKEN_KEY DATAIMPULSE_PROXY_KEY MASKPROXY_PROXY_KEY GMAIL_SMTP_MINIPARK4U HUGGINGFACE_API_KEY MY_GITHUB_TOKEN_KEY MY_COPILOT_GITHUB_TOKEN_KEY NEIS_API_KEY DROPLR_USER DROPLR_PASS ZIGHT_API_KEY CAPSOLVER_API_KEY VERCEL_ORG_ID VERCEL_TOKEN_KEY VERCEL_REVALIDATE_TOKEN_KEY; do
