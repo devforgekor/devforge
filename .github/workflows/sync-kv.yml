@@ -9,18 +9,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure Login via az CLI
+      - name: Get access token
+        id: token
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_MESIDS_CLIENT_SECRET_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_MESIDS_CLIENT_SECRET_VALUE }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_MESIDS_TENANT_ID }}
         run: |
-          az login --service-principal \
-            --username "$AZURE_CLIENT_ID" \
-            --password "$AZURE_CLIENT_SECRET" \
-            --tenant "$AZURE_TENANT_ID" 2>&1 | grep -v "^$"
-          echo "✅ Azure login success"
-          az account show --query "{id:id}" -o tsv
+          TOKEN=$(curl -s -X POST \
+            "https://login.microsoftonline.com/$AZURE_TENANT_ID/oauth2/v2.0/token" \
+            -d "grant_type=client_credentials" \
+            -d "client_id=$AZURE_CLIENT_ID" \
+            -d "client_secret=$AZURE_CLIENT_SECRET" \
+            -d "scope=https://vault.azure.net/.default" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
+          if [ -z "$TOKEN" ]; then
+            echo "❌ Failed to get token"
+            curl -s -X POST \
+              "https://login.microsoftonline.com/$AZURE_TENANT_ID/oauth2/v2.0/token" \
+              -d "grant_type=client_credentials" \
+              -d "client_id=$AZURE_CLIENT_ID" \
+              -d "client_secret=$AZURE_CLIENT_SECRET" \
+              -d "scope=https://vault.azure.net/.default" | head -c 500
+            exit 1
+          fi
+          echo "✅ Token acquired"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
       - name: Push secrets to Key Vault
         env:
@@ -67,13 +80,29 @@ jobs:
           VERCEL_REVALIDATE_TOKEN_KEY: ${{ secrets.VERCEL_REVALIDATE_TOKEN_KEY }}
         run: |
           set -e
-          VAULT=$(echo "$KEYVAULT_URL" | sed -E 's|https://([^.]+)\..*|\1|')
-          echo "Vault: $VAULT"
+          TOKEN="${{ steps.token.outputs.token }}"
+          VAULT_URL="$KEYVAULT_URL"
+          echo "Vault URL: $VAULT_URL"
           for key in BRAVE_API_KEYS CONTEXT7_API_KEYS EXA_API_KEYS GEMINI_API_KEYS TRAVILY_API_KEYS YOUCOM_API_KEYS OPENROUTER_MESIDS_API_KEY OPENROUTER_MINIPARK4U_API_KEY OPENROUTER_HYEONMINPARK4U_API_KEY DEVFORGE_DATABASE_URL LITELLM_DATABASE_URL NEON_DATABASE_URL DEVFORGE_ENCRYPTION_PASSPHRASE DEVFORGE_LITELLM_MASTER_KEY DEVFORGE_POSTGRES_PASSWORD TELEGRAM_TOKEN_KEY TELEGRAM_TEST_TOKEN_KEY TELEGRAM_CHAT_ID SLACK_BOT_TOKEN_KEY SLACK_SIGNING_SECRET_KEY SLACK_CHANNEL DEEPSEEK_API_KEY GUDOKPIN_API_KEY NOTION_TOKEN_KEY MASKPROXY_API_KEY DUCKDNS_TOKEN_KEY DATAIMPULSE_PROXY_KEY MASKPROXY_PROXY_KEY GMAIL_SMTP_MINIPARK4U HUGGINGFACE_API_KEY MY_GITHUB_TOKEN_KEY MY_COPILOT_GITHUB_TOKEN_KEY NEIS_API_KEY DROPLR_USER DROPLR_PASS ZIGHT_API_KEY CAPSOLVER_API_KEY VERCEL_ORG_ID VERCEL_TOKEN_KEY VERCEL_REVALIDATE_TOKEN_KEY; do
             value="${!key}"
             if [ -n "$value" ]; then
-              az keyvault secret set --vault-name "$VAULT" --name "$key" --value "$value" -o none
-              echo "  ✓ $key"
+              payload=$(python3 -c "import json,sys; print(json.dumps({'value': sys.argv[1]}))" "$value")
+              code=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+                "${VAULT_URL}secrets/${key}?api-version=7.4" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "$payload")
+              if [ "$code" = "200" ] || [ "$code" = "201" ]; then
+                echo "  ✓ $key"
+              else
+                echo "  ✗ $key (HTTP $code)"
+                curl -s -X PUT "${VAULT_URL}secrets/${key}?api-version=7.4" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d "$payload" | head -c 300
+                echo ""
+                exit 1
+              fi
             else
               echo "  - $key (empty, skipped)"
             fi
