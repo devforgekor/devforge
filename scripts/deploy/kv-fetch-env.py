@@ -246,8 +246,26 @@ def get_secret_value(token, name):
 def main():
     if len(sys.argv) < 2:
         print("사용법: kv-fetch-env.py <command> [args...]", file=sys.stderr)
+        print("       kv-fetch-env.py env  # stdout에 KEY=VALUE 출력", file=sys.stderr)
         sys.exit(1)
 
+    # env 서브커맨드: stdout에 KEY=VALUE 형식으로 출력
+    if sys.argv[1] == "env":
+        token = get_token()
+        secrets = list_secrets(token)
+
+        for kv_name in secrets:
+            env_name = kv_name.replace("-", "_")
+            value = get_secret_value(token, kv_name)
+            if value:
+                # shell eval 안전: 값을 single quote로 감싸고 내부 ' 이스케이프
+                safe_value = value.replace("'", "'\\''")
+                print(f"{env_name}='{safe_value}'")
+
+        print(f"✅ Key Vault 시크릿 출력 완료: {len(secrets)}개", file=sys.stderr)
+        sys.exit(0)
+
+    # 기존 동작: 환경변수 주입 후 명령 실행
     token = get_token()
     secrets = list_secrets(token)
 

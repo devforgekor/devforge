@@ -88,12 +88,16 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 | `anthropic-gudokpin-proxy.service` | 2026-09-18 | Phase 1 |
 | `anthropic-openrouter-proxy.service` | 2026-09-18 | Phase 1 |
 | `gemini-openai-proxy.service` | 2026-09-18 | Phase 1 |
+| `anthropic-proxy.service` | 2026-09-18 | Phase 2 (메인 프록시) |
+| `devforge-watchdog.service` | 2026-09-18 | Phase 2 |
+
+**전환 보류:**
+| 서비스 | 사유 |
+|--------|------|
+| `ebook-watcher.service` | 경로 문제 (`/opt/workspace/ebooklib` 존재하지 않음, 별도 조사 필요) |
 
 **아직 secrets.env 사용 (전환 대기):**
 ```
-anthropic-proxy.service
-devforge-watchdog.service
-ebook-watcher.service
 container-devforge-fastapi
 container-devforge-mcp
 container-devforge-worker
