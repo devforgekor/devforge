@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 
@@ -26,6 +27,8 @@ KEEP_DAYS = int(os.environ.get("KV_BACKUP_KEEP_DAYS", "60"))
 PUBLIC_KEY_FILE = os.path.join(HOME, ".config/devforge/backup-public-key.asc")
 MAX_RETRIES = 3
 RETRY_BACKOFF = [1, 2, 4]  # exponential backoff (seconds)
+TOKEN_CACHE_FILE = f"/run/user/{os.getuid()}/kv-token-cache.json"
+TOKEN_CACHE_MARGIN = 300  # 5분 여유
 
 
 def run(cmd, **kw):
@@ -42,7 +45,51 @@ def is_retryable_error(status_code, curl_exit):
     return False
 
 
+def load_cached_token():
+    """캐시된 토큰 로드 (만료되지 않은 경우)"""
+    if not os.path.exists(TOKEN_CACHE_FILE):
+        return None
+
+    try:
+        with open(TOKEN_CACHE_FILE, "r") as f:
+            cache = json.load(f)
+
+        # 만료 시간 체크 (5분 여유)
+        if time.time() < cache.get("expires_at", 0) - TOKEN_CACHE_MARGIN:
+            return cache.get("access_token")
+    except (json.JSONDecodeError, IOError, KeyError):
+        pass
+
+    return None
+
+
+def save_token_cache(token, expires_in):
+    """토큰 캐시 저장 (expires_in: 초 단위)"""
+    try:
+        cache_dir = os.path.dirname(TOKEN_CACHE_FILE)
+        os.makedirs(cache_dir, exist_ok=True)
+
+        cache = {
+            "access_token": token,
+            "expires_at": time.time() + expires_in,
+            "cached_at": time.time(),
+        }
+
+        with open(TOKEN_CACHE_FILE, "w") as f:
+            json.dump(cache, f)
+        os.chmod(TOKEN_CACHE_FILE, 0o600)
+    except (IOError, OSError) as e:
+        # 캐시 실패는 치명적이지 않음 (경고만)
+        print(f"⚠️  토큰 캐시 저장 실패: {e}", file=sys.stderr)
+
+
 def get_token():
+    # 캐시 확인
+    cached = load_cached_token()
+    if cached:
+        print("✅ 캐시된 Azure 토큰 사용")
+        return cached
+
     if not os.path.exists(SECRET_FILE):
         print("❌ client secret 파일 없음:", SECRET_FILE, file=sys.stderr)
         sys.exit(1)
@@ -95,7 +142,15 @@ def get_token():
             sys.exit(1)
 
         try:
-            return json.loads(body)["access_token"]
+            token_response = json.loads(body)
+            access_token = token_response["access_token"]
+            expires_in = token_response.get("expires_in", 3600)  # 기본 1시간
+
+            # 캐시 저장
+            save_token_cache(access_token, expires_in)
+            print(f"✅ 새 Azure 토큰 획득 (유효 시간: {expires_in}초)")
+
+            return access_token
         except (json.JSONDecodeError, KeyError) as e:
             print(f"❌ 토큰 응답 파싱 실패: {e}\n{body[:300]}", file=sys.stderr)
             sys.exit(1)
