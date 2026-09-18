@@ -33,13 +33,20 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 import httpx
 import uvicorn
+from devforge_fastapi.portal import router as portal_router
+from devforge_fastapi.review_dashboard import router as review_router
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastmcp.utilities.lifespan import combine_lifespans
 from lib.notify import Notifier
 from mcp_server import mcp
-from devforge_fastapi.review_dashboard import router as review_router
-from devforge_fastapi.portal import router as portal_router
-from fastmcp.utilities.lifespan import combine_lifespans
+
+# calendar_sync is optional (requires google-* deps). Never let it crash the hub.
+try:
+    from devforge_fastapi.calendar_sync import router as calendar_router
+except Exception as _e:  # noqa: BLE001
+    calendar_router = None
+    logging.getLogger("devforge-fastapi").warning("calendar_sync disabled: %s", _e)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("devforge-fastapi")
