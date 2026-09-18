@@ -62,9 +62,28 @@ YOUR_APP_NAME = os.environ.get("YOUR_APP_NAME", "DevForge OpenRouter RR Proxy")
 
 
 def _load_keys() -> list[str]:
-    """Load OpenRouter API keys from secrets.env."""
+    """Load OpenRouter API keys from environment variables.
+
+    Priority:
+    1. Environment variables (from Key Vault via kv-fetch-env.py)
+    2. Fallback: secrets.env file (deprecated, for backward compatibility)
+
+    Supports 3-account rotation: MESIDS, MINIPARK4U, HYEONMINPARK4U
+    """
     keys: list[str] = []
-    if os.path.exists(SECRETS_FILE):
+
+    # 1. 환경변수 우선 조회 (Key Vault)
+    for env_var in (
+        "OPENROUTER_MESIDS_API_KEY",
+        "OPENROUTER_MINIPARK4U_API_KEY",
+        "OPENROUTER_HYEONMINPARK4U_API_KEY",
+    ):
+        val = os.environ.get(env_var)
+        if val and val not in keys:
+            keys.append(val)
+
+    # 2. Fallback: secrets.env 파일 (호환성 유지)
+    if not keys and os.path.exists(SECRETS_FILE):
         with open(SECRETS_FILE) as f:
             for line in f:
                 line = line.strip()
@@ -74,15 +93,7 @@ def _load_keys() -> list[str]:
                     or line.startswith("OPENROUTER_HYEONMINPARK4U_API_KEY=")
                 ):
                     keys.append(line.split("=", 1)[1].strip().strip("\"'"))
-    # Fallback: env vars
-    for env_var in (
-        "OPENROUTER_MESIDS_API_KEY",
-        "OPENROUTER_MINIPARK4U_API_KEY",
-        "OPENROUTER_HYEONMINPARK4U_API_KEY",
-    ):
-        val = os.environ.get(env_var)
-        if val and val not in keys:
-            keys.append(val)
+
     return keys
 
 
@@ -222,7 +233,14 @@ async def _forward_key(idx: int, body: dict, is_stream: bool, model: str):
         "X-Title": YOUR_APP_NAME,
     }
 
-    logger.info("→ key[%d/%d] %s model=%s stream=%s", idx + 1, NUM_KEYS, _account_label(idx), model, is_stream)
+    logger.info(
+        "→ key[%d/%d] %s model=%s stream=%s",
+        idx + 1,
+        NUM_KEYS,
+        _account_label(idx),
+        model,
+        is_stream,
+    )
 
     if client is None:  # lifecycle guard: startup not complete
         raise HTTPException(status_code=503, detail="Proxy not ready")
@@ -250,7 +268,10 @@ async def _forward_key(idx: int, body: dict, is_stream: bool, model: str):
                 err_body = (await resp.aread()).decode(errors="replace")
             finally:
                 await resp.aclose()
-            raise HTTPException(status_code=resp.status_code, detail=f"key[{idx + 1}] {_account_label(idx)}: {err_body}")
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail=f"key[{idx + 1}] {_account_label(idx)}: {err_body}",
+            )
 
         else:
             resp = await client.post(CHAT_ENDPOINT, json=body, headers=headers)
@@ -262,7 +283,10 @@ async def _forward_key(idx: int, body: dict, is_stream: bool, model: str):
             # Non-2xx: release the connection explicitly before retrying.
             err_body = resp.text
             await resp.aclose()
-            raise HTTPException(status_code=resp.status_code, detail=f"key[{idx + 1}] {_account_label(idx)}: {err_body}")
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail=f"key[{idx + 1}] {_account_label(idx)}: {err_body}",
+            )
 
     except httpx.RequestError as e:
         raise HTTPException(

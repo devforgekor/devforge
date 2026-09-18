@@ -14,15 +14,15 @@ import json
 import os
 import re
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 
 _SCRIPTS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
-from lib.auth.key_rotator import KeyRotator
 from lib.auth.api_key_cipher import decrypt_data
+from lib.auth.key_rotator import KeyRotator
 
 PROVIDERS = {
     "brave": {
@@ -34,7 +34,7 @@ PROVIDERS = {
         "params": lambda q, n: {"q": q, "count": str(n)},
     },
     "tavily": {
-        "prefix": "TRAVILY",
+        "prefix": "TAVILY",
         "search_url": "https://api.tavily.com/search",
         "auth_key_field": "api_key",
         "max_results": 10,
@@ -64,24 +64,56 @@ def _log(msg: str):
 
 
 def _load_keys_for(service: str) -> list[tuple[str, str]]:
-    """Load API keys for a single provider from secrets.env."""
+    """Load API keys for a single provider from environment variables.
+
+    Priority:
+    1. Environment variables (from Key Vault via kv-fetch-env.py)
+       - Consolidated format: PREFIX_API_KEYS="key1,key2" or "name1:cipher1,name2:cipher2"
+       - Individual format: PREFIX_ACCOUNT_API_KEY (auto-collected)
+    2. Fallback: secrets.env file (deprecated, for backward compatibility)
+    """
     cfg = PROVIDERS.get(service)
     if not cfg:
         return []
-    secrets_path = os.path.expanduser("~/.config/devforge/secrets.env")
-    if not os.path.exists(secrets_path):
-        return []
 
-    env_name = f"{cfg['prefix']}_API_KEYS"
+    prefix = cfg["prefix"]
     keys_str = ""
-    with open(secrets_path) as f:
-        for line in f:
-            if line.startswith(f"{env_name}="):
-                keys_str = line.split("=", 1)[1].strip().strip('"').strip("'")
-                break
+
+    # 1-1. 통합 환경변수 조회 (PREFIX_API_KEYS)
+    env_name = f"{prefix}_API_KEYS"
+    keys_str = os.environ.get(env_name, "")
+
+    # 1-2. 개별 환경변수 자동 수집 (PREFIX_*_API_KEY 패턴)
+    if not keys_str:
+        individual_keys = []
+        for env_key, env_val in os.environ.items():
+            # PREFIX_로 시작하고 _API_KEY로 끝나는 패턴 매칭
+            if env_key.startswith(f"{prefix}_") and env_key.endswith("_API_KEY"):
+                # PREFIX_ACCOUNT_API_KEY에서 ACCOUNT 추출
+                account = env_key[len(prefix) + 1 : -8]  # "_API_KEY" = 8자
+                if account:  # PREFIX_API_KEY는 제외 (account가 빈 문자열)
+                    individual_keys.append((account.lower(), env_val.strip()))
+
+        if individual_keys:
+            # 알파벳 순으로 정렬하여 일관성 유지
+            individual_keys.sort(key=lambda x: x[0])
+            keys = [(f"{service}:{name}", key) for name, key in individual_keys]
+            return keys
+
+    # 2. Fallback: secrets.env 파일 (호환성 유지)
+    if not keys_str:
+        secrets_path = os.path.expanduser("~/.config/devforge/secrets.env")
+        if os.path.exists(secrets_path):
+            with open(secrets_path) as f:
+                for line in f:
+                    if line.startswith(f"{env_name}="):
+                        keys_str = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        break
+
     if not keys_str:
         return []
 
+    # 통합 포맷 파싱 (쉼표 구분, 옵션: name:cipher)
     keys = []
     for item in keys_str.split(","):
         item = item.strip()
@@ -141,7 +173,9 @@ class SearchProxy:
         elif "auth_header" in cfg:
             headers[cfg["auth_header"]] = key
             headers.update(cfg.get("headers", {}))
-            body_str = cfg.get("body", lambda q, n: None)(query, max_results) if "body" in cfg else None
+            body_str = (
+                cfg.get("body", lambda q, n: None)(query, max_results) if "body" in cfg else None
+            )
         else:
             body_str = None
 
@@ -188,7 +222,7 @@ class SearchProxy:
                 rotator._save_state()
                 continue
             else:
-                _log(f"{full_name} → {resp['status']}: {resp.get('error','?')[:100]}")
+                _log(f"{full_name} → {resp['status']}: {resp.get('error', '?')[:100]}")
                 rotator.rate_limited(idx, 30)
                 rotator._save_state()
                 continue
@@ -202,7 +236,7 @@ class SearchProxy:
             if result and not result[0].startswith("error:"):
                 if provider == "youcom":
                     _log("you.com fallback activated")
-                    result = ["(you.com fallback — budget provider)" ] + result
+                    result = ["(you.com fallback — budget provider)"] + result
                 return result
         return ["error: All search providers exhausted"]
 
@@ -251,17 +285,32 @@ class SearchProxy:
         c = self._clean_text
         formatted = []
         if provider == "brave":
-            for r in (data.get("web", {}).get("results", []) or []):
-                formatted.append({"title": c(r.get("title", "")), "url": r.get("url", ""),
-                                  "description": c(r.get("description", ""))})
+            for r in data.get("web", {}).get("results", []) or []:
+                formatted.append(
+                    {
+                        "title": c(r.get("title", "")),
+                        "url": r.get("url", ""),
+                        "description": c(r.get("description", "")),
+                    }
+                )
         elif provider == "tavily":
             for r in data.get("results", []) or []:
-                formatted.append({"title": c(r.get("title", "")), "url": r.get("url", ""),
-                                  "description": c(r.get("content", ""))})
+                formatted.append(
+                    {
+                        "title": c(r.get("title", "")),
+                        "url": r.get("url", ""),
+                        "description": c(r.get("content", "")),
+                    }
+                )
         elif provider == "youcom":
             for r in data.get("results", []) or data.get("hits", []) or []:
-                formatted.append({"title": c(r.get("title", "")), "url": r.get("url", ""),
-                                  "description": c(r.get("description", "") or r.get("snippet", ""))})
+                formatted.append(
+                    {
+                        "title": c(r.get("title", "")),
+                        "url": r.get("url", ""),
+                        "description": c(r.get("description", "") or r.get("snippet", "")),
+                    }
+                )
         return formatted
 
     def _format_text(self, provider: str, key_name: str, data: dict) -> list[str]:
@@ -269,13 +318,14 @@ class SearchProxy:
         for r in self._format_results(provider, data):
             title, url, desc = r.get("title", ""), r.get("url", ""), r.get("description", "")
             if len(desc) > self.DESC_MAX_LEN:
-                desc = desc[:self.DESC_MAX_LEN] + "..."
+                desc = desc[: self.DESC_MAX_LEN] + "..."
             lines.append(f"{title} | {url} | {desc or '-'}")
         return ["\n".join(lines)]
 
     def stats(self) -> str:
-        return json.dumps({name: rot.stats() for name, rot in self._rotators.items()},
-                          ensure_ascii=False)
+        return json.dumps(
+            {name: rot.stats() for name, rot in self._rotators.items()}, ensure_ascii=False
+        )
 
 
 _proxy: SearchProxy | None = None
