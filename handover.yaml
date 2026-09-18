@@ -1,14 +1,19 @@
 last_checkpoint:
-  time: '2026-09-14T09:52:33.716498+00:00'
-  summary: '2026-09-14 opencode: 리뷰 트리아지 v1~v5 — 최종계획/브리프/근거부록 외부 리뷰 3종 + 실측(F1~F13) 대조, contract-first, Phase 0 스펙(산출물 6종·12툴 계약·mcp-contract.json 스키마·게이트 6개) 확정, 리뷰 루프 종결·실행 승인'
+  time: '2026-09-18T14:29:54.469997+09:00'
+  summary: no files
   total_files: 0
   recent_files:
-    data: []
-    docs: []
-    config: []
     source: []
+    config: []
+    docs: []
+    data: []
     generated: []
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 1 file changed, 0 insertions(+), 0 deletions(-)
+      staged: (none)
+      untracked_files: 0
   task: null
 decisions:
 - id: nd01-01
@@ -424,27 +429,29 @@ decisions:
     대칭 지표, 게이트6 로프홀 제거, baseline 단일화(W1 공유). 리뷰 루프 종결 선언. https://d.pr/waa3yN'
   status: open
 - id: rf-triage-07
-  detail: '최종 판정(2026-09-14): rf-triage-07 완료 — Phase 0~A 전체 수행.
-    (1) Provenance: 원인 규명(4 INSERT 경로 누락) → 코드 고침(turn_watcher, mcp_server×2, mcp_server_sse) → 마커(7163건 legacy:pre-2026-09) → 배포 → 검증(unknown=0/7173, 현재 0/7180). backup: turns_source_backup_20260914.
-    (2) W1 baseline: D1 측정(143 turns/24h) → 일일 자동 측정(baseline-daily.timer, daily).
-    (3) Phase A-1: ingest 구현 — MCP ingest tool(IngestParams: source, agent, title, model, conversation_id, turns required) + HTTP POST /api/v1/ingest(required: source, conversation_id, turns; idempotency via source_message_id; provenance source/agent 기록).
-    (4) Phase A-2: 12-tool 계약 매칭 — 18개 툴 등록(12 계약 + 6 추가), deepdive 5종/obs_write/obs_search/search_turns/search_similarity/mem_save/mem_search/get_conversation.
-    (5) Phase A-3: 컷오버 시나리오(docs/ops/cutover-phase-a.md) — 수락기준 6, 사전준비 6, 검증 V1-V8, 롤백 4.
-    (6) Phase A 컷오버 실행: container-devforge-mcp → refactored MCP, /src volume mount, mcp_refactored_entrypoint.sh, 건강확인 healthy+18 tools, V1-V8 9/9 PASS.
-    (7) 리팩토링 오류/버그 수정 17건: 1차(10건 — search_observations 누락, get_conversation tuple, select 미정의, HTTP tool_funcs/schemas, import 정렬, DB host) + 2차(7건 — ingest auto-create, UUID 검증, meta_data, text 기본값, HTTP /api/v1/ingest 라우트, 미사용 import, 스펙 반영). ruff/mypy clean.
-    (8) 양방향 검증: Forward(리팩토링 — 6/6 도구 + ingest E2E auto-create/idempotency/HTTP surface) + Backward(레거시 롤백 <10초). V1-V8 9/9 PASS.
-    (9) 컨테이너 최적화: pip cache(/opt/ai_data/pip-cache, 17 wheels, --no-index --find-links), 기동 ~2초 (was 10-30초).
-    (10) SSOT 문서: docs/reports/rf-triage-07-patchnote-20260914.md (D7 후 참조).
-    (11) day_cycle 활성화: inference `--no-mmap`(llama.cpp b10920+ 제거) → `--load-mode none` (pod_manager/__init__.py + /opt/ai_data/scripts/inference-entrypoint.sh). watchdog 이벤트 기반 기동 확인. 잔여: enrich LLM 연결 재설정 (ARM 메모리 압박).
-    (12) hook overhead 재측정: 최초 mock 0.0004ms 무효(measure 스크립트 tool_input 버그) → live avg 458.76ms/p95 636ms/p99 1313ms. test obs 100건 정리.
-    (13) Gudokpin API → Claude Code 연동: anthropic_gudokpin.py 프록시(:44779, api.gudokpin.com/v1) + systemd 서비스 + claude-mode gudokpin 모드. claude -p 검증 통과(GUDOKPIN_OK). 기본 모드로 설정. tool_call 실측: claude-sonnet-5/opus-5만 지원 → 기본 claude→claude-sonnet-5 변경. claude-gpt 별칭(GPT/Gemini 등).
-    (14) 3차 양방향 검증: Forward(MCP 9/9, gudokpin tool call, claude→claude-sonnet-5 tool 실행, 데이터 유입 turns+훅) + Backward(레거시 롤백). gudokpin 프록시 ruff 3건 수정(SIM212, F841×2).
-    Co-authored-by: opencode <opencode@devforge'
+  detail: '최종 판정(2026-09-14): rf-triage-07 완료 — Phase 0~A 전체 수행. (1) Provenance: 원인 규명(4 INSERT 경로 누락) → 코드 고침(turn_watcher,
+    mcp_server×2, mcp_server_sse) → 마커(7163건 legacy:pre-2026-09) → 배포 → 검증(unknown=0/7173, 현재 0/7180). backup: turns_source_backup_20260914.
+    (2) W1 baseline: D1 측정(143 turns/24h) → 일일 자동 측정(baseline-daily.timer, daily). (3) Phase A-1: ingest 구현 — MCP ingest tool(IngestParams:
+    source, agent, title, model, conversation_id, turns required) + HTTP POST /api/v1/ingest(required: source, conversation_id,
+    turns; idempotency via source_message_id; provenance source/agent 기록). (4) Phase A-2: 12-tool 계약 매칭 — 18개 툴 등록(12 계약 +
+    6 추가), deepdive 5종/obs_write/obs_search/search_turns/search_similarity/mem_save/mem_search/get_conversation. (5) Phase
+    A-3: 컷오버 시나리오(docs/ops/cutover-phase-a.md) — 수락기준 6, 사전준비 6, 검증 V1-V8, 롤백 4. (6) Phase A 컷오버 실행: container-devforge-mcp
+    → refactored MCP, /src volume mount, mcp_refactored_entrypoint.sh, 건강확인 healthy+18 tools, V1-V8 9/9 PASS. (7) 리팩토링 오류/버그
+    수정 17건: 1차(10건 — search_observations 누락, get_conversation tuple, select 미정의, HTTP tool_funcs/schemas, import 정렬, DB host)
+    + 2차(7건 — ingest auto-create, UUID 검증, meta_data, text 기본값, HTTP /api/v1/ingest 라우트, 미사용 import, 스펙 반영). ruff/mypy clean.
+    (8) 양방향 검증: Forward(리팩토링 — 6/6 도구 + ingest E2E auto-create/idempotency/HTTP surface) + Backward(레거시 롤백 <10초). V1-V8 9/9
+    PASS. (9) 컨테이너 최적화: pip cache(/opt/ai_data/pip-cache, 17 wheels, --no-index --find-links), 기동 ~2초 (was 10-30초). (10) SSOT
+    문서: docs/reports/rf-triage-07-patchnote-20260914.md (D7 후 참조). (11) day_cycle 활성화: inference `--no-mmap`(llama.cpp b10920+
+    제거) → `--load-mode none` (pod_manager/__init__.py + /opt/ai_data/scripts/inference-entrypoint.sh). watchdog 이벤트 기반 기동
+    확인. 잔여: enrich LLM 연결 재설정 (ARM 메모리 압박). (12) hook overhead 재측정: 최초 mock 0.0004ms 무효(measure 스크립트 tool_input 버그) → live
+    avg 458.76ms/p95 636ms/p99 1313ms. test obs 100건 정리. (13) Gudokpin API → Claude Code 연동: anthropic_gudokpin.py 프록시(:44779,
+    api.gudokpin.com/v1) + systemd 서비스 + claude-mode gudokpin 모드. claude -p 검증 통과(GUDOKPIN_OK). 기본 모드로 설정. tool_call 실측: claude-sonnet-5/opus-5만
+    지원 → 기본 claude→claude-sonnet-5 변경. claude-gpt 별칭(GPT/Gemini 등). (14) 3차 양방향 검증: Forward(MCP 9/9, gudokpin tool call, claude→claude-sonnet-5
+    tool 실행, 데이터 유입 turns+훅) + Backward(레거시 롤백). gudokpin 프록시 ruff 3건 수정(SIM212, F841×2). Co-authored-by: opencode <opencode@devforge'
   status: closed
 known_issues:
-- text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중
-    RemoteDisconnected/ConnectionResetError 반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB)
-    메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'
+- text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중 RemoteDisconnected/ConnectionResetError
+    반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB) 메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'
   resolved: false
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -516,9 +523,8 @@ known_issues:
     mcp add not tested with devforge-mcp container. OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
     pointing to local proxy.
   resolved: false
-- text: 'Phase 0 진행 중(2026-09-14): specs/mcp-contract.json 초안 작성 완료(draft), ADR-0006 Accepted(12툴 열거 완료),
-    W1 baseline 1주 측정 진행 중(docs/ops/baseline/W1-baseline-spec.md). Gate 1 통과 확인 필요(allowlist diff=0 검증).
-    rf-triage-07 완료.'
+- text: 'Phase 0 진행 중(2026-09-14): specs/mcp-contract.json 초안 작성 완료(draft), ADR-0006 Accepted(12툴 열거 완료), W1 baseline 1주 측정
+    진행 중(docs/ops/baseline/W1-baseline-spec.md). Gate 1 통과 확인 필요(allowlist diff=0 검증). rf-triage-07 완료.'
   resolved: false
 - text: Phase 1 test scripts in /tmp/ (test_30b_golden.py, test_14b_golden.py, test_14b_feedback.py) — not committed. One-shot
     test scripts, not production code.
@@ -633,18 +639,16 @@ completed_log:
   이중 출력 제거. 은퇴(gen_architecture.py·Gemini 에이전트 세션→_archive). 계획 단일 통합(docs/plans/final-plan.md) + 의사결정 D1~D9, 외부 검토 브리프 작성·Droplr
   제공.
 - '2026-09-14: Azure azureqwen Deep Dive E2E 검증 성공 — opencode run -m azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2)
-    → deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
-    -t 2 무효(1 physical core/SMT, memory-bound). report docs/reports/azure-deepdive-e2e-verification-20260914.md.'
-- '2026-09-18: Claude Code 401 (api key ****b06e invalid) 재발 원인 수정 — 실행 중 Claude 세션이 Sep 6 tmux 세션 시작
-    시점의 옛 환경을 그대로 물려받아 DeepSeek 프록시(:44777) + 만료 키(sk-221d35…b06e)로 요청 중이었음. tmux global env가
-    gudokpin(:44779, 새 키 sk-78f4…)으로 이미 갱신돼 있었으나 기존 bash(19588)는 옛 값을 유지. 수정: devforge tmux 세션의
-    bash에서 `source ~/.bashrc.d/claude-env` 재실행 → claude 재시작 → 새 프로세스가 gudokpin(:44779) + 새 키로 연결 확인.
-    tmux global CLAUDE_MODE=deepseek 불일치 → gudokpin으로 정리. 추가로 ~/.config/aichat/config.yaml의 만료된 DeepSeek
-    키(sk-221d35…b06e)를 새 키(sk-78f4359234df48d7b5b717999b6f228c)로 교체. 참고: 실행 중인 Claude 세션 env는 재시작
-    시에만 반영되므로, claude-mode 변경 후에는 세션 재시작 필수.'
+  → deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
+  -t 2 무효(1 physical core/SMT, memory-bound). report docs/reports/azure-deepdive-e2e-verification-20260914.md.'
+- '2026-09-18: Claude Code 401 (api key ****b06e invalid) 재발 원인 수정 — 실행 중 Claude 세션이 Sep 6 tmux 세션 시작 시점의 옛 환경을 그대로 물려받아 DeepSeek
+  프록시(:44777) + 만료 키(sk-221d35…b06e)로 요청 중이었음. tmux global env가 gudokpin(:44779, 새 키 sk-78f4…)으로 이미 갱신돼 있었으나 기존 bash(19588)는
+  옛 값을 유지. 수정: devforge tmux 세션의 bash에서 `source ~/.bashrc.d/claude-env` 재실행 → claude 재시작 → 새 프로세스가 gudokpin(:44779) + 새 키로
+  연결 확인. tmux global CLAUDE_MODE=deepseek 불일치 → gudokpin으로 정리. 추가로 ~/.config/aichat/config.yaml의 만료된 DeepSeek 키(sk-221d35…b06e)를
+  새 키(sk-78f4359234df48d7b5b717999b6f228c)로 교체. 참고: 실행 중인 Claude 세션 env는 재시작 시에만 반영되므로, claude-mode 변경 후에는 세션 재시작 필수.'
 - '(2026-09-14, opencode) 리뷰 트리아지 v1~v5 — 최종계획/리뷰브리프/근거부록(OCI HTML)에 대한 외부 리뷰 3종(deepseek·qwen1·qwen2) + 자체 실측 13항목(F1~F13:
-    opencode.json 로드 32툴, 리팩토링 MCP 5툴, day_cycle 448줄, turns.source 실측 7159 unknown, ingest는 레거시에만, shadow DB, auto_log PostToolUse
-    훅 운영, Linger=yes, netdata active, ADR-0006 Proposed→Accepted, 감사표 중복) 대조 → 수용/부분/미수용 판정. R3·R4·R7 부분수용, contract-first 채택, Phase
-    0 산출물 6종 + 12툴 계약 열거 + mcp-contract.json JSON Schema + 게이트 6개 선형 체인+예외 경로. 5차 교차검증 후 리뷰 루프 종결, 최종=Phase 0 실행 승인. rf-triage-07:
-    (1) specs/mcp-contract.json 초안 작성, (2) ADR-0006 Accepted 전환, (3) W1 baseline 측정 시작. 산출물: docs/reports/review-triage{-package,-v2,-v3,-v4,-v5}-20260914.md,
-    Droplr v1 https://d.pr/97DxrE · v2 https://d.pr/ihZ81J · v3 https://d.pr/koCTH7 · v4 https://d.pr/RZygjB · v5 https://d.pr/waa3yN'
+  opencode.json 로드 32툴, 리팩토링 MCP 5툴, day_cycle 448줄, turns.source 실측 7159 unknown, ingest는 레거시에만, shadow DB, auto_log PostToolUse
+  훅 운영, Linger=yes, netdata active, ADR-0006 Proposed→Accepted, 감사표 중복) 대조 → 수용/부분/미수용 판정. R3·R4·R7 부분수용, contract-first 채택,
+  Phase 0 산출물 6종 + 12툴 계약 열거 + mcp-contract.json JSON Schema + 게이트 6개 선형 체인+예외 경로. 5차 교차검증 후 리뷰 루프 종결, 최종=Phase 0 실행 승인. rf-triage-07:
+  (1) specs/mcp-contract.json 초안 작성, (2) ADR-0006 Accepted 전환, (3) W1 baseline 측정 시작. 산출물: docs/reports/review-triage{-package,-v2,-v3,-v4,-v5}-20260914.md,
+  Droplr v1 https://d.pr/97DxrE · v2 https://d.pr/ihZ81J · v3 https://d.pr/koCTH7 · v4 https://d.pr/RZygjB · v5 https://d.pr/waa3yN'
