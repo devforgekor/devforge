@@ -81,22 +81,23 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 ### 4.2 systemd 서비스
 
 **전환 완료 (Key Vault 기반):**
-| 서비스 | 변경 내용 |
-|--------|----------|
-| `openrouter-rr-proxy.service` | `EnvironmentFile` 제거 → `kv-fetch-env.py` 경유 |
-| `or-rate-limiter.service` | 동일 |
+| 서비스 | 변경 일자 | 비고 |
+|--------|----------|------|
+| `openrouter-rr-proxy.service` | 2026-09-17 | 첫 전환 (검증 완료) |
+| `or-rate-limiter.service` | 2026-09-17 | 첫 전환 (검증 완료) |
+| `anthropic-gudokpin-proxy.service` | 2026-09-18 | Phase 1 |
+| `anthropic-openrouter-proxy.service` | 2026-09-18 | Phase 1 |
+| `gemini-openai-proxy.service` | 2026-09-18 | Phase 1 |
 
 **아직 secrets.env 사용 (전환 대기):**
 ```
 anthropic-proxy.service
-anthropic-openrouter-proxy.service
-anthropic-gudokpin-proxy.service
-devforge-news.service
-devforge-summary-retry.service
 devforge-watchdog.service
 ebook-watcher.service
-gemini-openai-proxy.service
-gemini-session.service
+container-devforge-fastapi
+container-devforge-mcp
+container-devforge-worker
+container-postgres
 ```
 
 ### 4.3 GPG 백업

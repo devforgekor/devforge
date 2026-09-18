@@ -76,7 +76,7 @@ STRIP_RESP_HEADERS = {
 ANTHROPIC_API_KEY = os.environ.get("GUDOKPIN_API_KEY") or ""
 
 # Gudokpin uses a single API key (GUDOKPIN_API_KEY in secrets.env).
-    API_KEYS: List[str] = [ANTHROPIC_API_KEY if ANTHROPIC_API_KEY else os.environ.get("GUDOKPIN_API_KEY", "")]
+API_KEYS: List[str] = [ANTHROPIC_API_KEY if ANTHROPIC_API_KEY else os.environ.get("GUDOKPIN_API_KEY", "")]
 # Filter out empty entries while preserving order.
 API_KEYS = [k for k in API_KEYS if k]
 
