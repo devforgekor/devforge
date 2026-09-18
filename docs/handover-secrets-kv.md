@@ -1,8 +1,9 @@
 # DevForge 시크릿 관리 전환 핸드오버
 
 작성일: 2026-09-18
+최종 업데이트: 2026-09-18
 작성자: opencode 세션
-상태: 진행 중 (프록시 2개 전환 완료)
+상태: 진행 중 (프록시 2개 전환 완료 + 백업 구축 완료)
 
 ---
 
@@ -150,7 +151,7 @@ gemini-session.service
 | `AZURE_MESIDS_CLIENT_SECRET_VALUE` | Client Secret 값 |
 | `AZURE_MESIDS_TENANT_ID` | `b08cd1bf-7952-489c-8fbb-aa907bb74709` |
 | `AZURE_MESIDS_KEYVAULT_URL` | `https://kv-devforge-prod-krc.vault.azure.net` |
-| `AZURE_MESIDS_SUBSCRIPTION_ID` | `d4077db7-e7ad-4787-8849-d4bfd3c7b9f6` (⚠️ 검증 필요) |
+| `AZURE_MESIDS_SUBSCRIPTION_ID` | `d4077db7-e7ad-4787-8849-d4bfd3c7b9f6` (⚠️ 이 값은 개체 ID — 실제 구독은 `e71711e2...` 또는 `d0a7db48...`. 검증 필요) |
 
 ### ⚠️ 서버 로컬 파일 (GitHub 외)
 - `~/.config/devforge/azure-client-secret` — Client Secret 값 (chmod 600)
@@ -162,6 +163,17 @@ gemini-session.service
 
 ### 우선순위 1: 나머지 systemd 서비스 전환
 - 9개 서비스의 `EnvironmentFile=secrets.env` 제거 → `kv-fetch-env.py` 경유로 변경
+  ```
+  anthropic-proxy.service
+  anthropic-openrouter-proxy.service
+  anthropic-gudokpin-proxy.service
+  devforge-news.service
+  devforge-summary-retry.service
+  devforge-watchdog.service
+  ebook-watcher.service
+  gemini-openai-proxy.service
+  gemini-session.service
+  ```
 - 각 서비스별 스크립트가 `os.environ`으로 읽는지, secrets.env 직접 파싱인지 확인 필요
 - `anthropic_gudokpin.py`, `anthropic_openrouter.py`는 secrets.env 직접 파싱 → 환경변수 우선으로 수정 필요
 
@@ -179,7 +191,31 @@ gemini-session.service
 
 ---
 
-## 9. 복원 절차 (DR)
+## 9. Git 상태
+
+### 관련 파일 (커밋됨)
+| 파일 | 커밋 |
+|------|------|
+| `scripts/deploy/kv-fetch-env.py` | `f1160f1` |
+| `scripts/deploy/kv-backup.py` | `40dc5d8` |
+| `docs/handover-secrets-kv.md` | `f1160f1` |
+| `.github/workflows/sync-kv.yml` | `1bde988` (이전) |
+| `.github/workflows/sync-secrets.yml` | 수정 다수 (이전) |
+
+### 미푸시 커밋 (2026-09-18 기준)
+```
+f1160f1 docs: 시크릿 관리 전환 핸드오버 + kv-fetch-env 래퍼
+36bddfe auto: sync 2026-09-18
+40dc5d8 feat: Azure Key Vault → GPG 암호화 백업 스크립트 (주 1회 systemd 타이머)
+```
+
+### ⚠️ 미커밋/미푸시 상태
+- `_archive/seedling`, `collect_checkpoint.json` — 로컬 변경 있음 (무관)
+- origin에 푸시 여부: 위 3개 커밋은 origin보다 앞섬 → `git push` 필요
+
+---
+
+## 10. 복원 절차 (DR)
 
 ### Key Vault 분실/삭제 시
 1. 로컬 PC에서 GPG 백업 복호화
@@ -199,7 +235,7 @@ gemini-session.service
 
 ---
 
-## 10. 보안 노트
+## 11. 보안 노트
 
 - 개인키는 **로컬 PC에서만** 보관 (서버/이메일/클라우드 저장 금지)
 - `azure-client-secret`은 서버에서만, chmod 600
