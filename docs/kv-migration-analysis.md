@@ -3,7 +3,7 @@
 작성일: 2026-09-18
 분석자: Claude Code
 목적: secrets.env 의존성 제거를 위한 전환 전략 수립
-**상태: Phase 1~3 완료 (9개 서비스 전환)**
+**상태: Phase 1~4 완료 (9개 서비스 전환 + secrets.env 제거 + 코드 레벨 리팩토링 완료)**
 
 ---
 
@@ -50,6 +50,96 @@
    - `/run/user/{uid}/kv-token-cache.json`에 토큰 캐싱
    - TTL 55분 (Azure AD 토큰 3599초 - 5분 여유)
    - 캐시 히트 시 토큰 API 호출 건너뛰기 (4~5초 절약)
+
+---
+
+## Phase 4: 코드 레벨 리팩토링 (2026-09-18 완료)
+
+### 목표
+secrets.env 파일 직접 파싱 로직 제거 → 환경변수 우선 패턴으로 전환
+
+### 수정된 파일
+
+#### 1. News App (minihome/apps/news)
+
+**exa_extractor.py** (Multi-Engine Search)
+- `_load_keys_from_secrets()`: 개별 계정 키 자동 수집 (`{PREFIX}_{ACCOUNT}_API_KEY` 패턴)
+- EXA, BRAVE, TAVILY 3개 엔진 모두 환경변수 우선 → secrets.env fallback
+- **버그 수정**: `TRAVILY` → `TAVILY` prefix 오타 수정
+```python
+# Before: TRAVILY_API_KEYS 환경변수 불일치
+# After: TAVILY_API_KEYS (Key Vault 실제 값과 일치)
+```
+
+**translator.py**
+- `_load_secret()`: 환경변수 우선 → secrets.env fallback
+- `_get_openrouter_keys()`: 환경변수 우선 체크 추가
+
+**digest.py**
+- `_load_secrets()`: OPENROUTER_, TELEGRAM_, GEMINI_, DEEPSEEK_ prefix 환경변수 우선
+
+**multilingual_processor.py**
+- `_load_tavily_keys()`: 환경변수 우선, 암호화/평문 키 파싱 유지
+
+#### 2. Timetable App (minihome/apps/timetable)
+
+**main.py**
+- GOOGLE_, CLIENT_, CALENDAR_ prefix 환경변수 우선
+
+**calendar_sync/oauth_service.py**
+- 이미 환경변수 우선 패턴 구현 (변경 불필요)
+
+#### 3. Server Scripts (projects/server/scripts)
+
+**proxies/openrouter_rr_proxy.py**
+- `_load_keys()`: 환경변수 우선 → secrets.env fallback
+- 개별 계정 키 자동 수집 (`OPENROUTER_{ACCOUNT}_API_KEY`)
+
+**lib/research/web.py**
+- `_load_keys_for()`: Brave, Tavily, Youcom 개별 계정 키 자동 수집
+- **버그 수정**: `TRAVILY` → `TAVILY` prefix 수정
+
+### 검증 결과
+
+✅ **구문 검증 통과**
+- exa_extractor.py
+- openrouter_rr_proxy.py
+- web.py
+
+✅ **통합 테스트 통과** (Key Vault 환경변수 로드 테스트)
+```
+News App:
+  exa: 4개 ✓
+  brave: 4개 ✓
+  tavily: 4개 ✓
+
+OpenRouter RR Proxy:
+  openrouter: 3개 ✓
+
+Search Proxy (web.py):
+  brave: 4개 ✓
+  tavily: 4개 ✓
+  youcom: 4개 ✓
+```
+
+### secrets.env 제거
+
+✅ **백업 생성**
+```bash
+~/.config/devforge/secrets.env.backup.20260918 (6.9K)
+```
+
+✅ **파일 제거 완료**
+```bash
+rm ~/.config/devforge/secrets.env
+```
+
+### 남은 작업 (TODO)
+
+1. **파일명 변경 (보류)**
+   - `exa_extractor.py` → `multi_engine_search.py` (또는 `mes.py`)
+   - 이유: Exa, Brave, Tavily 3개 엔진 통합이지만 파일명이 단일 제공자처럼 보임
+   - 일정: 추후 결정
 
 ---
 
@@ -240,9 +330,10 @@ ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py \
 - FastAPI 엔드포인트 확인
 
 ### Phase 4: 정리 (1시간)
-- `~/.config/devforge/secrets.env` 백업 → 삭제
-- 로컬 전용 변수 (DATAIMPULSE_HOST 등) → 별도 파일로 분리
-- 2주 안정화 기간 후 GitHub org 시크릿 정리
+- ✅ `~/.config/devforge/secrets.env` 백업 → 삭제 (2026-09-18)
+- ✅ 코드 레벨 리팩토링: 환경변수 우선 패턴 전환 (News, Timetable, Server 프록시)
+- ⏭️ 로컬 전용 변수 (DATAIMPULSE_HOST 등) → 별도 파일로 분리 (필요시)
+- ⏭️ 2주 안정화 기간 후 GitHub org 시크릿 정리
 
 ---
 
