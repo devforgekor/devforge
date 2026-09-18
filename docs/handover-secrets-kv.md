@@ -31,7 +31,7 @@ Azure Key Vault (kv-devforge-prod-krc) — 단일 소스 (56개 시크릿)
 |------|-----|
 | Key Vault URL | `https://kv-devforge-prod-krc.vault.azure.net` |
 | Key Vault 이름 | `kv-devforge-prod-krc` |
-| 시크릿 수 | 56개 (이름: 밑줄 `_` → 하이픈 `-` 변환됨) |
+| 시크릿 수 | 81개 (이름: 밑줄 `_` → 하이픈 `-` 변환됨) |
 | 테넌트 ID | `b08cd1bf-7952-489c-8fbb-aa907bb74709` |
 | 구독 ID | `e71711e2-5df5-4259-bd0d-4bd58fd1ca67` (또는 d0a7db48) |
 | Service Principal | 이름: `kv-app-devforge-prod-krc` |
