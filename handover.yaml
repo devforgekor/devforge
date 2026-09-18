@@ -633,8 +633,15 @@ completed_log:
   이중 출력 제거. 은퇴(gen_architecture.py·Gemini 에이전트 세션→_archive). 계획 단일 통합(docs/plans/final-plan.md) + 의사결정 D1~D9, 외부 검토 브리프 작성·Droplr
   제공.
 - '2026-09-14: Azure azureqwen Deep Dive E2E 검증 성공 — opencode run -m azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2)
-  → deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
-  -t 2 무효(1 physical core/SMT, memory-bound). report docs/reports/azure-deepdive-e2e-verification-20260914.md.'
+    → deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
+    -t 2 무효(1 physical core/SMT, memory-bound). report docs/reports/azure-deepdive-e2e-verification-20260914.md.'
+- '2026-09-18: Claude Code 401 (api key ****b06e invalid) 재발 원인 수정 — 실행 중 Claude 세션이 Sep 6 tmux 세션 시작
+    시점의 옛 환경을 그대로 물려받아 DeepSeek 프록시(:44777) + 만료 키(sk-221d35…b06e)로 요청 중이었음. tmux global env가
+    gudokpin(:44779, 새 키 sk-78f4…)으로 이미 갱신돼 있었으나 기존 bash(19588)는 옛 값을 유지. 수정: devforge tmux 세션의
+    bash에서 `source ~/.bashrc.d/claude-env` 재실행 → claude 재시작 → 새 프로세스가 gudokpin(:44779) + 새 키로 연결 확인.
+    tmux global CLAUDE_MODE=deepseek 불일치 → gudokpin으로 정리. 추가로 ~/.config/aichat/config.yaml의 만료된 DeepSeek
+    키(sk-221d35…b06e)를 새 키(sk-78f4359234df48d7b5b717999b6f228c)로 교체. 참고: 실행 중인 Claude 세션 env는 재시작
+    시에만 반영되므로, claude-mode 변경 후에는 세션 재시작 필수.'
 - '(2026-09-14, opencode) 리뷰 트리아지 v1~v5 — 최종계획/리뷰브리프/근거부록(OCI HTML)에 대한 외부 리뷰 3종(deepseek·qwen1·qwen2) + 자체 실측 13항목(F1~F13:
     opencode.json 로드 32툴, 리팩토링 MCP 5툴, day_cycle 448줄, turns.source 실측 7159 unknown, ingest는 레거시에만, shadow DB, auto_log PostToolUse
     훅 운영, Linger=yes, netdata active, ADR-0006 Proposed→Accepted, 감사표 중복) 대조 → 수용/부분/미수용 판정. R3·R4·R7 부분수용, contract-first 채택, Phase
