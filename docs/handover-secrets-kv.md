@@ -80,7 +80,7 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 
 ### 4.2 systemd 서비스 & 컨테이너
 
-**전환 완료 (Key Vault 기반, 9개):**
+**전환 완료 (Key Vault 기반, 10개):**
 | 서비스 | Phase | 변경 일자 | 비고 |
 |--------|-------|----------|------|
 | `openrouter-rr-proxy.service` | Pre-Phase | 2026-09-17 | 첫 전환 (검증 완료) |
@@ -92,16 +92,16 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 | `devforge-watchdog.service` | Phase 2 | 2026-09-18 | Slack 알림 |
 | `container-postgres.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
 | `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
+| `ebook-api.service` | Phase 4 | 2026-09-18 | ebooklib 프록시 인증 |
 
 **전환 불필요 (1개):**
 | 서비스 | 사유 |
 |--------|------|
 | `container-devforge-worker.container` | 환경변수 미사용 |
 
-**전환 보류 (2개):**
+**전환 보류 (1개):**
 | 서비스 | 사유 | 우선순위 |
 |--------|------|---------|
-| `ebook-watcher.service` | 경로 문제 (`/opt/workspace/ebooklib` 존재하지 않음) | P3 |
 | `container-devforge-fastapi.container` | 기존 코드 버그 (`calendar_router` undefined), Key Vault 전환 무관 | P3 |
 
 ### 4.3 GPG 백업
@@ -126,6 +126,12 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 
 ## 5. 이전 진행 과정 (GitHub → Key Vault)
 
+### GitHub 조직 정보
+- **조직명**: `devforgekor` (https://github.com/devforgekor)
+- **저장소**: 8개 (devforge, kuhwa, timetable, cashbook, ebook, azure, pdf-converter, oci-arm-grabber)
+- **위치**: Korea, South
+
+### 이전 과정
 1. GitHub org 시크릿에 있는 시크릿 값들 → 서버 `github-secrets.env` 파일로 동기화 (기존 sync-secrets 워크플로우)
 2. 서버에서 `kv-backup.py` 로직으로 56개 시크릿 조회 → REST API로 Key Vault에 등록
 3. Key Vault 시크릿 이름 변환: `_` → `-`
@@ -171,7 +177,25 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 
 ## 8. 남은 작업 (다음 세션)
 
-### ✅ 완료: P0+P1 개선 (2026-09-18)
+### ✅ 완료: 2026-09-18 세션 2
+1. **평문 시크릿 제거 완료**
+   - `~/.config/devforge/secrets.env` 삭제 (백업: `secrets.env.backup.20260918`)
+   - `/opt/workspace/minihome/apps/news/.env.local` 삭제 (백업: `.env.local.backup.20260918`)
+   
+2. **코드 리팩터링 완료 (6개 파일)**
+   - News 프로젝트: `translator.py`, `digest.py`, `exa_extractor.py`, `multilingual_processor.py`
+   - Timetable 프로젝트: `main.py`, `calendar_sync/oauth_service.py`
+   - 패턴: 환경변수 우선 → secrets.env fallback 제거
+   
+3. **kuhwa 워크플로우 수정**
+   - `.github/workflows/kuhwa.yaml`: `secrets.env` 참조 제거
+   - 환경변수 직접 주입 방식으로 변경
+   
+4. **ebook-api.service 전환**
+   - Key Vault 통합 (kv-fetch-env.py 래퍼)
+   - WorkingDirectory 경로 문제 수정 중
+
+### ✅ 완료: P0+P1 개선 (2026-09-18 세션 1)
 - #2 에러 처리 강화 (P0) ✅
 - #4 Retry 로직 (P1) ✅
 - #5 임시 파일 보안 (P1) ✅
@@ -183,24 +207,13 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 - **#7 동시 실행 보호 (P3)**: PID 파일 lock (systemd timer는 중복 방지 내장)
 
 ### 우선순위 1: 나머지 systemd 서비스 전환
-- 9개 서비스의 `EnvironmentFile=secrets.env` 제거 → `kv-fetch-env.py` 경유로 변경
-  ```
-  anthropic-proxy.service
-  anthropic-openrouter-proxy.service
-  anthropic-gudokpin-proxy.service
-  devforge-news.service
-  devforge-summary-retry.service
-  devforge-watchdog.service
-  ebook-watcher.service
-  gemini-openai-proxy.service
-  gemini-session.service
-  ```
-- 각 서비스별 스크립트가 `os.environ`으로 읽는지, secrets.env 직접 파싱인지 확인 필요
-- `anthropic_gudokpin.py`, `anthropic_openrouter.py`는 secrets.env 직접 파싱 → 환경변수 우선으로 수정 필요
+- **완료**: 10개 서비스 전환 완료 (2026-09-18)
+- **남은 작업**: `container-devforge-fastapi.container` (기존 버그로 인해 보류)
 
 ### 우선순위 2: secrets.env 파일 제거
-- 모든 서비스 전환 완료 후 `~/.config/devforge/secrets.env` 삭제
-- 단, **로컬 전용 값** (DATAIMPULSE_HOST 등 비밀 아님)은 어디로 보관할지 결정 필요
+- **완료**: `~/.config/devforge/secrets.env` 삭제 완료 (2026-09-18)
+- **완료**: `/opt/workspace/minihome/apps/news/.env.local` 삭제 완료 (2026-09-18)
+- **완료**: 백업 생성 (`*.backup.20260918`)
 
 ### 우선순위 3: GitHub 시크릿 정리
 - 안정 확인 후 (2주) GitHub org 시크릿에서 시크릿 값 삭제

@@ -52,6 +52,8 @@
 | Azure Qwen 엔드포인트 | `runbooks/azure-qwen-deepdive-endpoint.md` | active |
 | Azure 재빌드 핸드오버 | `plans/azure-golden-image-rebuild-handover.md` | active |
 | Azure Deep Dive E2E 검증 | `reports/azure-deepdive-e2e-verification-20260914.md` | record |
+| **Azure Key Vault 시크릿 전환(핸드오버)** | `handover-secrets-kv.md` | **done** |
+| **Key Vault 마이그레이션 분석** | `kv-migration-analysis.md` | record |
 | DataImpulse 대시보드 모니터(계약) | `specs/dataimpulse-monitor.yaml` | active |
 | DataImpulse 대시보드 모니터(런북) | `runbooks/dataimpulse-monitor.md` | active |
 
@@ -89,6 +91,10 @@
 | 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |
 | Ingest/Provenance 계약 | `specs/ingest-provenance.yaml` | proposed |
 | 이전 구조 정리(완료) | `plans/code-size-refactoring.md`, `reports/handover-refactoring.md` | record |
+
+## 최근 변경 (2026-09-18)
+- **Azure Key Vault 시크릿 전환 완료**: 평문 시크릿 제거 완료 (`secrets.env` + `.env.local` 삭제), 10개 systemd 서비스 Key Vault 전환, 6개 Python 파일 리팩터링 (환경변수 우선 패턴), kuhwa 워크플로우 수정. `handover-secrets-kv.md` 완료.
+- **GitHub 조직**: devforgekor (https://github.com/devforgekor) — 8개 저장소 (devforge, kuhwa, timetable, cashbook, ebook, azure, pdf-converter, oci-arm-grabber).
 
 ## 최근 변경 (2026-09-14)
 - **MCP 툴 사용 감사(2026-09-14)**: opencode `part` DB 30일 실사용 분석 → 로드 33툴 중 **0회 9개**. keep/merge/remove 확정(`reports/mcp-tool-audit-20260914.md`): Remove(lsp proxy_artifact 3·detect_lsp_servers·find_symbol·inspect_symbol·get_symbol_source·list_plans 등), Merge(deepdive 4→1, mem+obs→2, search 2→1, list_tables+schema→1), 목표 33→약 16.
