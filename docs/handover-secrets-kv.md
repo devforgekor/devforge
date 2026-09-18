@@ -3,7 +3,7 @@
 작성일: 2026-09-18
 최종 업데이트: 2026-09-18
 작성자: opencode 세션
-상태: 진행 중 (프록시 2개 전환 완료 + 백업 구축 완료)
+상태: 진행 중 (프록시 2개 전환 완료 + 백업 구축 완료 + P0+P1 개선 완료)
 
 ---
 
@@ -66,12 +66,17 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 
 ### 4.1 서버 스크립트 (git 커밋됨)
 
-| 파일 | 역할 |
-|------|------|
-| `scripts/deploy/kv-fetch-env.py` | Key Vault → 환경변수 주입 → 명령 실행 래퍼 |
-| `scripts/deploy/kv-backup.py` | Key Vault → GPG 암호화 백업 |
-| `.github/workflows/sync-kv.yml` | GitHub → Key Vault 이전 워크플로우 (수동) |
-| `.github/workflows/sync-secrets.yml` | GitHub Secrets → 서버 동기화 (기존, 유지) |
+| 파일 | 역할 | 최근 개선 (2026-09-18) |
+|------|------|----------------------|
+| `scripts/deploy/kv-fetch-env.py` | Key Vault → 환경변수 주입 → 명령 실행 래퍼 | P0+P1: 에러 처리 강화, retry 로직 (최대 3회, exponential backoff) |
+| `scripts/deploy/kv-backup.py` | Key Vault → GPG 암호화 백업 | P0+P1: 에러 처리 강화, retry 로직, 임시 파일 보안 강화 (tempfile 사용) |
+| `.github/workflows/sync-kv.yml` | GitHub → Key Vault 이전 워크플로우 (수동) | - |
+| `.github/workflows/sync-secrets.yml` | GitHub Secrets → 서버 동기화 (기존, 유지) | - |
+
+**P0+P1 개선 상세 (커밋 4c28ef7):**
+- **#2 에러 처리 강화 (P0)**: HTTP 상태 코드 명시적 검증, JSON 파싱 예외 구체화, curl 실패 감지
+- **#4 Retry 로직 (P1)**: 429/5xx/네트워크 오류 시 자동 재시도 (1s → 2s → 4s backoff)
+- **#5 임시 파일 보안 (P1)**: `/tmp` 대신 `BACKUP_DIR` 사용, tempfile 모듈로 race condition 방지, try-finally로 정리 보장
 
 ### 4.2 systemd 서비스
 
@@ -161,6 +166,17 @@ gemini-session.service
 
 ## 8. 남은 작업 (다음 세션)
 
+### ✅ 완료: P0+P1 개선 (2026-09-18)
+- #2 에러 처리 강화 (P0) ✅
+- #4 Retry 로직 (P1) ✅
+- #5 임시 파일 보안 (P1) ✅
+
+### 우선순위 0: P2 개선 (선택)
+- **#1 토큰 캐싱 (P2)**: Azure AD 토큰 1시간 유효 → 메모리/파일 캐싱으로 서비스 재시작 시 1~2초 절약
+- **#3 부분 시크릿 로드 (P2)**: `kv-fetch-env.py --keys KEY1,KEY2` 옵션 추가 (현재 56개 전체 로드)
+- **#6 GPG import 중복 제거 (P3)**: `gpg --list-keys` 체크 후 없을 때만 import
+- **#7 동시 실행 보호 (P3)**: PID 파일 lock (systemd timer는 중복 방지 내장)
+
 ### 우선순위 1: 나머지 systemd 서비스 전환
 - 9개 서비스의 `EnvironmentFile=secrets.env` 제거 → `kv-fetch-env.py` 경유로 변경
   ```
@@ -194,13 +210,18 @@ gemini-session.service
 ## 9. Git 상태
 
 ### 관련 파일 (커밋됨)
-| 파일 | 커밋 |
-|------|------|
-| `scripts/deploy/kv-fetch-env.py` | `f1160f1` |
-| `scripts/deploy/kv-backup.py` | `40dc5d8` |
-| `docs/handover-secrets-kv.md` | `f1160f1` |
-| `.github/workflows/sync-kv.yml` | `1bde988` (이전) |
-| `.github/workflows/sync-secrets.yml` | 수정 다수 (이전) |
+| 파일 | 최근 커밋 | 변경 내용 |
+|------|----------|----------|
+| `scripts/deploy/kv-fetch-env.py` | `4c28ef7` | P0+P1 개선: +184줄 (에러 처리, retry, HTTP 상태 검증) |
+| `scripts/deploy/kv-backup.py` | `4c28ef7` | P0+P1 개선: +235줄 (에러 처리, retry, tempfile 보안) |
+| `docs/handover-secrets-kv.md` | `4c28ef7` | 개선 내역 업데이트 |
+| `.github/workflows/sync-kv.yml` | `1bde988` (이전) | - |
+| `.github/workflows/sync-secrets.yml` | 수정 다수 (이전) | - |
+
+### 푸시 상태 (2026-09-18)
+```
+✅ origin/main: b9305b3..4c28ef7 (7 커밋 푸시 완료)
+```
 
 ### 미푸시 커밋 (2026-09-18 기준)
 ```
