@@ -31,7 +31,7 @@ Azure Key Vault (kv-devforge-prod-krc) — 단일 소스 (56개 시크릿)
 |------|-----|
 | Key Vault URL | `https://kv-devforge-prod-krc.vault.azure.net` |
 | Key Vault 이름 | `kv-devforge-prod-krc` |
-| 시크릿 수 | 81개 (이름: 밑줄 `_` → 하이픈 `-` 변환됨) |
+| 시크릿 수 | 94개 (이름: 밑줄 `_` → 하이픈 `-` 변환됨) |
 | 테넌트 ID | `b08cd1bf-7952-489c-8fbb-aa907bb74709` |
 | 구독 ID | `e71711e2-5df5-4259-bd0d-4bd58fd1ca67` (또는 d0a7db48) |
 | Service Principal | 이름: `kv-app-devforge-prod-krc` |
@@ -59,6 +59,13 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 | `DEVFORGE_DATABASE_URL` | `DEVFORGE-DATABASE-URL` |
 
 **복원 규칙**: Key Vault 조회 시 하이픈 → 밑줄 변환 (`kv-fetch-env.py`가 처리)
+
+**API 키 rotation 전략**: 계정별 분리 (2026-09-18 업데이트)
+- **BRAVE, CONTEXT7, EXA, GEMINI, TAVILY, YOUCOM**: 각 4개 계정 분리
+  - `HYEONMINPARK4U`, `MESIDS`, `MINIPARK4U`, `PLAYPARK4U`
+  - TAVILY/YOUCOM의 MESIDS는 `-GITHUB` 접미사 사용
+- **OPENROUTER**: 3개 계정 (`HYEONMINPARK4U`, `MESIDS`, `MINIPARK4U`)
+- 목적: rate limit 분산, quota 격리, 장애 격리
 
 ---
 
