@@ -3,6 +3,53 @@
 작성일: 2026-09-18
 분석자: Claude Code
 목적: secrets.env 의존성 제거를 위한 전환 전략 수립
+**상태: Phase 1~3 완료 (9개 서비스 전환)**
+
+---
+
+## 전환 완료 현황 (2026-09-18)
+
+### ✅ 완료된 서비스 (9개)
+
+**Phase 1: 저위험 프록시 (3개)**
+- ✅ `anthropic-gudokpin-proxy.service` — kv-fetch-env.py 경유
+- ✅ `anthropic-openrouter-proxy.service` — kv-fetch-env.py 경유
+- ✅ `gemini-openai-proxy.service` — kv-fetch-env.py 경유
+
+**Phase 2: 핵심 프록시 (2개)**
+- ✅ `anthropic-proxy.service` — **Claude Code 메인 프록시**, kv-fetch-env.py 경유
+- ✅ `devforge-watchdog.service` — Slack 알림, kv-fetch-env.py 경유
+
+**Phase 3: 컨테이너 (2개)**
+- ✅ `container-postgres.container` — ExecStartPre + kv-export-env.sh
+- ✅ `container-devforge-mcp.container` — ExecStartPre + kv-export-env.sh
+
+**Pre-Phase (참고)**
+- ✅ `openrouter-rr-proxy.service` — 첫 전환 검증 완료
+- ✅ `or-rate-limiter.service` — 첫 전환 검증 완료
+
+### ⏭️ 전환 불필요 (1개)
+- `container-devforge-worker.container` — 환경변수 미사용
+
+### ⚠️ 보류 (2개)
+- `ebook-watcher.service` — 경로 문제 (`/opt/workspace/ebooklib` 존재하지 않음, 실제 경로: `/opt/workspace/minihome/apps/ebooklib`)
+- `container-devforge-fastapi.container` — 기존 코드 버그 (`NameError: name 'calendar_router' is not defined`), Key Vault 전환과 무관
+
+### 🛠️ 구현된 신규 스크립트
+
+1. **kv-fetch-env.py `env` 서브커맨드** (추가)
+   - `python3 kv-fetch-env.py env` → stdout에 KEY='VALUE' 출력
+   - shell eval 안전: single quote 이스케이프 처리
+   
+2. **kv-export-env.sh** (신규)
+   - Key Vault → 임시 env 파일 생성 (`/run/user/{uid}/kv-temp.env`)
+   - 컨테이너 ExecStartPre에서 사용
+   - 권한 600 자동 설정
+
+3. **토큰 캐싱** (P2 개선 #1)
+   - `/run/user/{uid}/kv-token-cache.json`에 토큰 캐싱
+   - TTL 55분 (Azure AD 토큰 3599초 - 5분 여유)
+   - 캐시 히트 시 토큰 API 호출 건너뛰기 (4~5초 절약)
 
 ---
 

@@ -78,31 +78,31 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 - **#4 Retry 로직 (P1)**: 429/5xx/네트워크 오류 시 자동 재시도 (1s → 2s → 4s backoff)
 - **#5 임시 파일 보안 (P1)**: `/tmp` 대신 `BACKUP_DIR` 사용, tempfile 모듈로 race condition 방지, try-finally로 정리 보장
 
-### 4.2 systemd 서비스
+### 4.2 systemd 서비스 & 컨테이너
 
-**전환 완료 (Key Vault 기반):**
-| 서비스 | 변경 일자 | 비고 |
-|--------|----------|------|
-| `openrouter-rr-proxy.service` | 2026-09-17 | 첫 전환 (검증 완료) |
-| `or-rate-limiter.service` | 2026-09-17 | 첫 전환 (검증 완료) |
-| `anthropic-gudokpin-proxy.service` | 2026-09-18 | Phase 1 |
-| `anthropic-openrouter-proxy.service` | 2026-09-18 | Phase 1 |
-| `gemini-openai-proxy.service` | 2026-09-18 | Phase 1 |
-| `anthropic-proxy.service` | 2026-09-18 | Phase 2 (메인 프록시) |
-| `devforge-watchdog.service` | 2026-09-18 | Phase 2 |
+**전환 완료 (Key Vault 기반, 9개):**
+| 서비스 | Phase | 변경 일자 | 비고 |
+|--------|-------|----------|------|
+| `openrouter-rr-proxy.service` | Pre-Phase | 2026-09-17 | 첫 전환 (검증 완료) |
+| `or-rate-limiter.service` | Pre-Phase | 2026-09-17 | 첫 전환 (검증 완료) |
+| `anthropic-gudokpin-proxy.service` | Phase 1 | 2026-09-18 | - |
+| `anthropic-openrouter-proxy.service` | Phase 1 | 2026-09-18 | - |
+| `gemini-openai-proxy.service` | Phase 1 | 2026-09-18 | - |
+| `anthropic-proxy.service` | Phase 2 | 2026-09-18 | **메인 프록시** |
+| `devforge-watchdog.service` | Phase 2 | 2026-09-18 | Slack 알림 |
+| `container-postgres.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
+| `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
 
-**전환 보류:**
+**전환 불필요 (1개):**
 | 서비스 | 사유 |
 |--------|------|
-| `ebook-watcher.service` | 경로 문제 (`/opt/workspace/ebooklib` 존재하지 않음, 별도 조사 필요) |
+| `container-devforge-worker.container` | 환경변수 미사용 |
 
-**아직 secrets.env 사용 (전환 대기):**
-```
-container-devforge-fastapi
-container-devforge-mcp
-container-devforge-worker
-container-postgres
-```
+**전환 보류 (2개):**
+| 서비스 | 사유 | 우선순위 |
+|--------|------|---------|
+| `ebook-watcher.service` | 경로 문제 (`/opt/workspace/ebooklib` 존재하지 않음) | P3 |
+| `container-devforge-fastapi.container` | 기존 코드 버그 (`calendar_router` undefined), Key Vault 전환 무관 | P3 |
 
 ### 4.3 GPG 백업
 
