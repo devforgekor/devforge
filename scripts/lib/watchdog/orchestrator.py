@@ -322,7 +322,7 @@ def _write_liveness() -> None:
 
 
 def _ping_external() -> None:
-    """외부 dead-man's switch 핑. HTTP(WATCHDOG_PING_URL) 또는 SSH(WATCHDOG_PING_SSH)."""
+    """외부 dead-man's switch 핑. HTTP(WATCHDOG_PING_URL) 또는 SSH(DEVFORGE_WATCHDOG_PING_SSH)."""
     global _last_ssh_ping
     url = os.environ.get("WATCHDOG_PING_URL", "")
     if url:
@@ -332,7 +332,9 @@ def _ping_external() -> None:
             urllib.request.urlopen(url, timeout=5).read()
         except Exception:
             pass
-    host = os.environ.get("WATCHDOG_PING_SSH", "")
+    host = os.environ.get("DEVFORGE_WATCHDOG_PING_SSH") or os.environ.get(
+        "WATCHDOG_PING_SSH", ""
+    )
     if host and time.time() - _last_ssh_ping >= 300:  # 5분에 1회만(SSH 부하 제한)
         try:
             subprocess.run(
