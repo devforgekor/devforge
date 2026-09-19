@@ -222,6 +222,47 @@ TDD CLI subcommand is unnecessary complexity. The production line already produc
 
 ---
 
+## 5.1 Backlog — Secret Injection Hardening (Phase 3 이후 후보)
+
+**Date**: 2026-09-19 · **Trigger**: WebObsidian 마스터 비밀번호가 EnvironmentFile quoting 버그로 노출된 사건.
+
+### 배경
+현재 KV 시크릿은 `kv-fetch-env.py env → tmpfs EnvironmentFile → 컨테이너 환경변수`로 주입된다.
+tmpfs(디스크 평문 없음)이지만 **프로세스 환경변수에 값이 남아** `podman exec <c> env`,
+`/proc/<pid>/environ`, `ps e`로 조회 가능하다. 초기 측정: WebObsidian 컨테이너가 97개 KV
+시크릿 전부를 env로 보유(민감 키 12+).
+
+### 진행 상황
+| 단계 | 내용 | 상태 |
+|:-----|:-----|:-----|
+| 2 (선행) | 서비스별 최소 주입: `kv-fetch-env.py env --keys`, `kv-export-env.sh <out> [keys]`, `env-file-normalize.py` 자동수정/검증 | ✅ 2026-09-19 |
+| 3 (이 문서) | env 노출 제거: systemd `LoadCredential=` 또는 `podman --secret` 전환 | ⬜ 검토 대기 |
+
+### Phase 3 상세 (env → 파일/secret)
+| 항목 | 현재 (EnvironmentFile) | 목표 (LoadCredential/podman secret) |
+|:-----|:----------------------|:-----------------------------------|
+| 저장 | tmpfs 평문 전체 | `/run/credentials/<unit>/` (0400) 또는 secret store |
+| 프로세스 env 노출 | 전부 노출 | 없음 — 앱이 파일에서 직접 읽음 |
+| 주입 범위 | 서비스별 최소(2번 완료) | 서비스별 최소 유지 |
+| 필요 변경 | — | 앱이 env 대신 파일을 읽도록 수정 + 유닛 전환 |
+| 적용 범위 | — | postgres/mcp/fastapi/webobsidian 등 순차 |
+
+### 전환 순서 (제안)
+1. WebObsidian 1개 서비스 시범: `LoadCredential=webobsidian_pw:/...` + 앱이
+   `$CREDENTIALS_DIRECTORY/webobsidian_pw` 파일을 읽도록 패치(또는 entrypoint에서 env화).
+2. fastapi/mcp: entrypoint 래퍼(`kv-fetch-env.py`)를 파일 기반 credential로 교체.
+3. postgres: 비밀번호를 `postgres`가 아니라 `POSTGRES_PASSWORD_FILE` 패턴으로.
+4. 완료 후 `kv-temp.env`/`kv-<slug>.env` 경로 폐기.
+
+### 리스크
+| Risk | Mitigation |
+|:-----|:-----------|
+| 앱이 env만 읽도록 작성됨 | credential→env 브릿지(entrypoint)로 최소 코드 변경 |
+| 다수 서비스 동시 변경 | 1개 서비스 시범 → 패턴 확립 후 순차 |
+| 비밀번호 회전 시 stale | 기동 시 credential 재주입(현행과 동일) |
+
+---
+
 ## 6. Risk Assessment
 
 | Risk | Phase | Mitigation |

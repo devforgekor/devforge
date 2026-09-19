@@ -243,16 +243,51 @@ def get_secret_value(token, name):
         return ""
 
 
+def parse_selection(argv):
+    """--keys KEY1,KEY2 (KV 하이픈 표기) 선택 파싱. 없으면 (None, 나머지 args)."""
+    selected = None
+    rest = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--keys" and i + 1 < len(argv):
+            selected = {
+                k.strip().replace("_", "-").upper()
+                for k in argv[i + 1].split(",")
+                if k.strip()
+            }
+            i += 2
+        else:
+            rest.append(argv[i])
+            i += 1
+    return selected, rest
+
+
+def filter_secrets(all_names, selected):
+    """선택 키만 남긴다. 선택 키가 KV에 없으면 즉시 실패(조용한 누락 방지)."""
+    if selected is None:
+        return all_names
+    available = {n.upper() for n in all_names}
+    missing = sorted(selected - available)
+    if missing:
+        print(
+            f"❌ KV에 없는 키 요청: {', '.join(missing)} (오타 또는 미등록)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return [n for n in all_names if n.upper() in selected]
+
+
 def main():
     if len(sys.argv) < 2:
         print("사용법: kv-fetch-env.py <command> [args...]", file=sys.stderr)
-        print("       kv-fetch-env.py env  # stdout에 KEY=VALUE 출력", file=sys.stderr)
+        print("       kv-fetch-env.py env [--keys KEY1,KEY2]  # stdout에 KEY=VALUE 출력", file=sys.stderr)
         sys.exit(1)
 
     # env 서브커맨드: stdout에 KEY=VALUE 형식으로 출력
     if sys.argv[1] == "env":
+        selected, _ = parse_selection(sys.argv[2:])
         token = get_token()
-        secrets = list_secrets(token)
+        secrets = filter_secrets(list_secrets(token), selected)
 
         for kv_name in secrets:
             env_name = kv_name.replace("-", "_")
@@ -267,8 +302,9 @@ def main():
         sys.exit(0)
 
     # 기존 동작: 환경변수 주입 후 명령 실행
+    selected, _ = parse_selection(sys.argv[1:])
     token = get_token()
-    secrets = list_secrets(token)
+    secrets = filter_secrets(list_secrets(token), selected)
 
     for kv_name in secrets:
         env_name = kv_name.replace("-", "_")
