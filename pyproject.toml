@@ -62,7 +62,7 @@ dev = [
     "ruff>=0.5,<1.0",
     "mypy>=1.10,<2.0",
     # Architecture
-    "import-linter>=0.6,<1.0",
+    "import-linter>=0.6,<3.0",
 ]
 track_b = [
     # Track B: LLM 공급자 추상화 (별도 문서화, Phase 0.5+에서 선택적 설치)
@@ -158,7 +158,7 @@ markers = [
 
 # ─────────────────── import-linter ───────────────────
 # Architecture contracts — enforced in CI
-# https://github.com/seddq/import-linter
+# https://github.com/seddonym/import-linter
 #
 # Layer ordering (high to low): higher layers CAN import lower layers.
 #   application      → depends on everything (highest level)
