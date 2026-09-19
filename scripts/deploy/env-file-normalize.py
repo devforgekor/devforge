@@ -78,7 +78,16 @@ def main() -> int:
 
     normalized, fixed, malformed = normalize_text(text)
 
+    if malformed:
+        sample = malformed[0][:40]
+        print(
+            f"❌ KEY=VALUE 형식 오류 {len(malformed)}줄 (예: '{sample}') — 원본 보존",
+            file=sys.stderr,
+        )
+        return 1
+
     if fixed and not check_only:
+        # malformed 검증 통과 후에만 기록 (실패 시 원본 그대로 유지)
         with open(path, "w", encoding="utf-8") as f:
             f.write(normalized)
         print(
@@ -91,13 +100,6 @@ def main() -> int:
             f"⚠️  quoting artifact 감지(미수정, check-only): {', '.join(sorted(set(fixed)))}",
             file=sys.stderr,
         )
-
-    if malformed:
-        sample = malformed[0][:40]
-        print(
-            f"❌ KEY=VALUE 형식 오류 {len(malformed)}줄 (예: '{sample}')", file=sys.stderr
-        )
-        return 1
 
     return 0
 
