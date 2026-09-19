@@ -67,10 +67,9 @@ def _load_keys_for(service: str) -> list[tuple[str, str]]:
     """Load API keys for a single provider from environment variables.
 
     Priority:
-    1. Environment variables (from Key Vault via kv-fetch-env.py)
+    1. Environment variables (from Azure KV via kv-fetch-env.py)
        - Consolidated format: PREFIX_API_KEYS="key1,key2" or "name1:cipher1,name2:cipher2"
        - Individual format: PREFIX_ACCOUNT_API_KEY (auto-collected)
-    2. Fallback: secrets.env file (deprecated, for backward compatibility)
     """
     cfg = PROVIDERS.get(service)
     if not cfg:
@@ -100,17 +99,9 @@ def _load_keys_for(service: str) -> list[tuple[str, str]]:
             keys = [(f"{service}:{name}", key) for name, key in individual_keys]
             return keys
 
-    # 2. Fallback: secrets.env 파일 (호환성 유지)
+    # Azure KV → env var only (secrets.env deprecated)
     if not keys_str:
-        secrets_path = os.path.expanduser("~/.config/devforge/secrets.env")
-        if os.path.exists(secrets_path):
-            with open(secrets_path) as f:
-                for line in f:
-                    if line.startswith(f"{env_name}="):
-                        keys_str = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        break
-
-    if not keys_str:
+        return []
         return []
 
     # 통합 포맷 파싱 (쉼표 구분, 옵션: name:cipher)

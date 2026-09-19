@@ -25,11 +25,7 @@ def log(msg):
 
 
 def get_secret(key):
-    with open(os.path.expanduser("~/.config/devforge/secrets.env")) as f:
-        for line in f:
-            if line.startswith(key):
-                return line.split("=", 1)[1].strip()
-    return None
+    return os.environ.get(key, None)
 
 
 def send_telegram(text):

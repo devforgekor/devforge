@@ -70,17 +70,11 @@ SECRET_KEYS = {
 
 
 def _read_secret(key: str) -> str:
-    try:
-        for line in Path("~/.config/devforge/secrets.env").expanduser().read_text().splitlines():
-            if line.startswith(key + "="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    except Exception:
-        pass
     return os.getenv(key, "")
 
 
 def _load_keys(service: str) -> list[tuple[str, str]]:
-    """Load API keys for a service from secrets.env (supports encryption)."""
+    """Load API keys for a service from env (Azure KV, encrypted)."""
     var_name = SECRET_KEYS[service]
     keys_str = _read_secret(var_name)
     if not keys_str:

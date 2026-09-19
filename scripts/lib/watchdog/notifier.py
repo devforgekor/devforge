@@ -19,7 +19,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
-from lib.watchdog.config import SLACK_SECRETS, SLACK_CHANNEL, ALERT_DEDUP_SEC
+from lib.watchdog.config import SLACK_CHANNEL, ALERT_DEDUP_SEC
 from .messenger import log_message
 
 KST = timezone(timedelta(hours=9))
@@ -45,15 +45,8 @@ def sd_notify(state: str) -> bool:
     except OSError:
         return False
 
-# Secrets cache
-_SECRETS: dict[str, str] = {}
-_SF = Path(SLACK_SECRETS)
-if _SF.exists():
-    for _line in _SF.read_text().split("\n"):
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _v = _line.split("=", 1)
-            _SECRETS[_k.strip()] = _v.strip().strip('"').strip("'")
+# Secrets cache (Azure KV → env var)
+_SECRETS: dict[str, str] = dict(os.environ)
 
 
 def kst_now() -> str:

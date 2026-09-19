@@ -11,19 +11,9 @@ RESULTS_PATH = "/tmp/14b_comparison_results.json"
 SLACK_TOKEN = None
 SLACK_CHANNEL = None
 
-# Load secrets
-sf = os.path.expanduser("~/.config/devforge/secrets.env")
-if os.path.exists(sf):
-    for line in open(sf).read().split("\n"):
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, _, v = line.partition("=")
-        v = v.strip().strip('"').strip("'")
-        if k.strip() == "SLACK_BOT_TOKEN_KEY":
-            SLACK_TOKEN = v
-        elif k.strip() == "SLACK_CHANNEL":
-            SLACK_CHANNEL = v
+# Load secrets (Azure KV → env var)
+SLACK_TOKEN = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
+SLACK_CHANNEL = os.environ.get("SLACK_CHANNEL", "")
 
 if not SLACK_TOKEN:
     print("ERROR: SLACK_BOT_TOKEN not found")

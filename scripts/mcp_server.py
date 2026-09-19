@@ -558,17 +558,8 @@ async def telegram_send(text: str) -> str:
     """
     from lib.notify import Notifier
 
-    _sf = Path.home() / ".config/devforge/secrets.env"
-    if _sf.exists():
-        _s = {}
-        for _line in _sf.read_text().split("\n"):
-            _line = _line.strip()
-            if _line and not _line.startswith("#") and "=" in _line:
-                _k, _, _v = _line.partition("=")
-                _s[_k.strip()] = _v.strip().strip('"').strip("'")
-        ok = await asyncio.to_thread(Notifier(_s).send_telegram, text)
-    else:
-        ok = False
+    _s = dict(os.environ)
+    ok = await asyncio.to_thread(Notifier(_s).send_telegram, text)
     return json.dumps({"ok": ok}, ensure_ascii=False)
 
 
@@ -1196,15 +1187,7 @@ def _deepdive_send_alert(text: str) -> bool:
     """Send Slack alert for Deep Dive hang via lib.notify. Returns success."""
     from lib.notify import Notifier
 
-    _sf = Path.home() / ".config/devforge/secrets.env"
-    if not _sf.exists():
-        return False
-    _s = {}
-    for _line in _sf.read_text().split("\n"):
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _, _v = _line.partition("=")
-            _s[_k.strip()] = _v.strip().strip('"').strip("'")
+    _s = dict(os.environ)
     channel = _s.get("SLACK_CHANNEL", "#alerts")
     try:
         return Notifier(_s).send_slack(channel, text)

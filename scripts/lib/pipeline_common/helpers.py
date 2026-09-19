@@ -3,25 +3,15 @@
 """Helper functions for pipeline_common."""
 
 import json
+import os
 import sys
 import urllib.request
-from pathlib import Path
 
 from lib.common import log
 
 
-_SF = Path.home() / ".config/devforge/secrets.env"
-_SLACK_TOKEN = ""
-_SLACK_CHANNEL = ""
-if _SF.exists():
-    for _line in _SF.read_text().split("\n"):
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _, _v = _line.partition("=")
-            if _k.strip() == "SLACK_BOT_TOKEN_KEY":
-                _SLACK_TOKEN = _v.strip().strip('"').strip("'")
-            elif _k.strip() == "SLACK_CHANNEL":
-                _SLACK_CHANNEL = _v.strip().strip('"').strip("'")
+_SLACK_TOKEN = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
+_SLACK_CHANNEL = os.environ.get("SLACK_CHANNEL", "")
 
 
 def slack_send(text):

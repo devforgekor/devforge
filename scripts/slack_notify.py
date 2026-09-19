@@ -6,7 +6,7 @@
 Queries proxy journald for this tmux session's token usage,
 sends a formatted summary via Slack.
 
-Requires in ~/.config/devforge/secrets.env:
+Requires via env (Azure KV → systemd EnvironmentFile):
   SLACK_BOT_TOKEN=<token>
   SLACK_CHANNEL=<channel>  (optional, defaults to DevForge_Bot DM)
 """
@@ -31,18 +31,8 @@ PRICING = {
 }
 USD_TO_CNY = 0.14  # approximate conversion for balance display
 
-_SECRETS: Dict[str, str] = {}
-_SF = Path.home() / ".config/devforge/secrets.env"
-if _SF.exists():
-    for _line in _SF.read_text().split("\n"):
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _, _v = _line.partition("=")
-            _SECRETS[_k.strip()] = _v.strip().strip('"').strip("'")
-
-
 def _slack_send(text: str) -> bool:
-    token = _SECRETS.get("SLACK_BOT_TOKEN_KEY", "")
+    token = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
     if not token:
         print("  SLACK_BOT_TOKEN_KEY not configured", file=sys.stderr)
         return False

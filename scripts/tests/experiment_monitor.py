@@ -16,20 +16,9 @@ EXPER_DIR = os.path.join(SERVER_DIR, "data", "experiment")
 RUNNER_PID_FILE = os.path.join(EXPER_DIR, "exp_runner.pid")
 RUNNER_LOG = os.path.join(EXPER_DIR, "exp_5phase.log")
 
-# Slack
-SLACK_TOKEN = ""
-SLACK_CHANNEL = ""
-_sf = os.path.join(os.path.expanduser("~"), ".config/devforge/secrets.env")
-if os.path.exists(_sf):
-    for line in open(_sf).read().split("\n"):
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, _, v = line.partition("=")
-            v = v.strip().strip('"').strip("'")
-            if k.strip() == "SLACK_BOT_TOKEN_KEY":
-                SLACK_TOKEN = v
-            elif k.strip() == "SLACK_CHANNEL":
-                SLACK_CHANNEL = v
+# Slack (Azure KV → env var)
+SLACK_TOKEN = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
+SLACK_CHANNEL = os.environ.get("SLACK_CHANNEL", "")
 
 
 def slack_send(text):

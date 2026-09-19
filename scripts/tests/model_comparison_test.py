@@ -151,7 +151,7 @@ LLM: llama.cpp (Qwen models via :8082 extract / :8083 review)
 DB Schema: turns(user_turn, thinking, text, created_at), review_facts(turn_id, fact_index, evidence, fact_type, category, faithful_score, faithful_method)
 Known files: auth_routes.py, config.py, models/user.py, lib/db.py, lib/llm_client.py, pipelines/extract.py
 CI/CD: GitHub Actions, code coverage 85%+, zero-downtime blue-green deploy via Caddy
-Security: no secrets in repo, env vars via ~/.config/devforge/secrets.env, API keys rotated weekly
+Security: no secrets in repo, env vars via Azure KV, API keys rotated weekly
 """
 
 # ═══════════════════════════════════════════════════════════════

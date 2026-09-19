@@ -92,7 +92,7 @@ def _flatten_text(content) -> str:
 
 
 def _resolve_api_key() -> str:
-    """Resolve primary OpenRouter API key from env (secrets.env sourced by systemd)."""
+    """Resolve primary OpenRouter API key from env (Azure KV via systemd)."""
     return API_KEYS[0] if API_KEYS else ""
 
 
@@ -929,7 +929,7 @@ def main() -> None:
             "[openrouter-proxy] WARNING: OPENROUTER_MESIDS_API_KEY not set",
             file=sys.stderr,
         )
-        print("[openrouter-proxy] Set it in ~/.config/devforge/secrets.env", file=sys.stderr)
+        print("[openrouter-proxy] Set keys in env (Azure KV)", file=sys.stderr)
 
     OpenRouterProxyHandler.upstream = urlsplit(args.upstream)
     host, port_str = args.listen.rsplit(":", 1)

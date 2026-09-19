@@ -147,18 +147,11 @@ def _maybe_create_task(dedup: str) -> None:
 # ── GitHub Issue → (dev-poll auto-safe claim → dev_pipeline PR) ──────
 GH_REPO = os.environ.get("WATCHDOG_GH_REPO", "devforgekor/devforge")
 GH_LABELS = os.environ.get("WATCHDOG_GH_LABELS", "watchdog,auto-safe")
-_GH_SECRETS = os.path.expanduser("~/.config/devforge/secrets.env")
-
-
 def _gh_env() -> dict:
     env = {**os.environ}
-    try:
-        for line in open(_GH_SECRETS):
-            if line.startswith("MY_GITHUB_TOKEN_KEY="):
-                env["GH_TOKEN"] = line.split("=", 1)[1].strip().strip('"').strip("'")
-                break
-    except OSError:
-        pass
+    token = os.environ.get("MY_GITHUB_TOKEN_KEY", "")
+    if token:
+        env["GH_TOKEN"] = token
     return env
 
 

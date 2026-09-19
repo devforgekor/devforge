@@ -34,15 +34,9 @@ def _get_client():
         return _notion
     from notion_client import Client
 
-    sf = os.path.expanduser("~/.config/devforge/secrets.env")
-    token = None
-    with open(sf) as f:
-        for line in f:
-            if line.strip().startswith("NOTION_TOKEN_KEY="):
-                token = line.strip().split("=", 1)[1].strip("'\"").strip("'")
-                break
+    token = os.environ.get("NOTION_TOKEN_KEY", "")
     if not token:
-        raise RuntimeError("NOTION_TOKEN_KEY not found in secrets.env")
+        raise RuntimeError("NOTION_TOKEN_KEY not found in env (Azure KV)")
     _notion = Client(auth=token)
     return _notion
 

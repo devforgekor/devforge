@@ -303,14 +303,7 @@ def receive_telegram_file(file_id: str, sender: str = "", filename: str = "") ->
     Returns:
         UUID string of registered file, or None on failure.
     """
-    secrets_path = Path.home() / ".config/devforge/secrets.env"
-    token = ""
-    if secrets_path.exists():
-        for line in secrets_path.read_text().split("\n"):
-            line = line.strip()
-            if line.startswith("TELEGRAM_TOKEN_KEY="):
-                token = line.split("=", 1)[1].strip().strip('"').strip("'")
-                break
+    token = os.environ.get("TELEGRAM_TOKEN_KEY", "")
     if not token:
         print("  [file_registry] TELEGRAM_TOKEN_KEY not found", flush=True)
         return None

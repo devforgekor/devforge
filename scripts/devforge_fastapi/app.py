@@ -58,32 +58,18 @@ app = FastAPI(title="DevForge FastAPI")
 mcp_app = mcp.http_app(path="/")
 app.mount("/mcp", mcp_app)
 
-# ── Secrets ──────────────────────────────────────────────────
+# ── Secrets (Azure KV → env var via systemd EnvironmentFile) ──
 
-_SECRETS: dict[str, str] = {}
-_SF = Path.home() / ".config/devforge/secrets.env"
-if _SF.exists():
-    for _line in _SF.read_text().split("\n"):
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _, _v = _line.partition("=")
-            _SECRETS[_k.strip()] = _v.strip().strip('"').strip("'")
-else:
-    # Container runtime: env vars injected via EnvironmentFile=
-    _KEYS = [
-        "SLACK_SIGNING_SECRET_KEY",
-        "SLACK_BOT_TOKEN_KEY",
-        "TELEGRAM_TOKEN_KEY",
-        "TELEGRAM_CHAT_ID",
-        "SMTP_HOST",
-        "SMTP_PORT",
-        "SMTP_USER",
-        "GMAIL_SMTP_MINIPARK4U",
-    ]
-    for _k in _KEYS:
-        _v = os.environ.get(_k, "")
-        if _v:
-            _SECRETS[_k] = _v
+_SECRETS: dict[str, str] = {k: os.environ.get(k, "") for k in (
+    "SLACK_SIGNING_SECRET_KEY",
+    "SLACK_BOT_TOKEN_KEY",
+    "TELEGRAM_TOKEN_KEY",
+    "TELEGRAM_CHAT_ID",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "GMAIL_SMTP_MINIPARK4U",
+)}
 
 SLACK_SIGNING_SECRET = _SECRETS.get("SLACK_SIGNING_SECRET_KEY", "")
 SLACK_BOT_TOKEN = _SECRETS.get("SLACK_BOT_TOKEN_KEY", "")

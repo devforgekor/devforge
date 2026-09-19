@@ -1,6 +1,6 @@
 # DevForge — OCI Object Storage (스토리지 & 파일 교환)
 
-> 최종 갱신: 2026-09-11
+> 최종 갱신: 2026-09-19 (devforge 리전 청주 `ap-chuncheon-1`로 정정)
 > 관련: [system-architecture.md](./system-architecture.md) · [../CLAUDE.yaml](../CLAUDE.yaml)
 > 상태: 백업 파이프라인 운영 중 / 파일 교환(Exchange) OCI 전환 **완료** (Droplr 단축)
 
@@ -18,7 +18,8 @@ DevForge의 원격 오브젝트 스토리지는 **OCI Object Storage**를 사용
 이전 Azure Blob(`stshareddevforgeprodkrc/devforge`)은 **2026-09-11 제거**됐다.
 최종 공유 주소는 **Droplr 단축 URL**로 통일한다.
 
-- 리전: `ap-tokyo-1` · Namespace: `nrhe1zafhd0v` · 컴파트먼트: 테넌시 루트
+- 리전: `ap-chuncheon-1` · Namespace: `axgly0lmehyp` · 컴파트먼트: 테넌시 루트
+  (도쿄 `ap-tokyo-1`/`nrhe1zafhd0v`는 onmydoc 전용 — devforge는 청주 사용. 2026-09-19 정정)
 - 인증: 서버의 OCI CLI 프로파일 `~/.oci/config` (user opc)
 
 ---
@@ -70,7 +71,7 @@ API 요청 수만 소폭 증가)
 | `delete-logs-30d` | DELETE | `logs/` | 30일 |
 
 - Lifecycle은 **1일 1회 실행**, 변경 반영에 최대 24시간 소요.
-- 서비스 위임 정책 필요: `Allow service objectstorage-ap-tokyo-1 to manage object-family in tenancy`
+- 서비스 위임 정책 필요: `Allow service objectstorage-ap-chuncheon-1 to manage object-family in tenancy`
   (정책 `devforge-storage-service`)
 
 ### 3.3 예산
@@ -136,7 +137,7 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 ### 5.3 최종 주소 = Droplr
 - 긴 OCI PAR URL을 **Droplr로 단축**해 단일 주소 체계로 제공.
 - 기존 자산 재사용: `scripts/lib/blob_uploader._shorten_with_droplr()`, `scripts/droplr_upload.py`
-  (`drplr link --porcelain`, 자격증명은 `~/.config/devforge/secrets.env`의 `DRPLR_*`)
+  (`drplr link --porcelain`, 자격증명은 `~/.config/devforge/secrets.env`의 `DROPLR_*`)
 - 파이프라인 산출물(review bundle)도 `releases/` 업로드 후 Droplr 단축 → Notion 메모로 공유.
 
 ---

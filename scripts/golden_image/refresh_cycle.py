@@ -33,16 +33,7 @@ def _health_check(ip: str, api_key: str, timeout: int = 5) -> tuple[bool, int]:
 
 
 def _load_api_key() -> str:
-    api_key = os.environ.get("LLAMA_API_KEY", "")
-    if not api_key:
-        try:
-            with open(os.path.expanduser("~/.config/devforge/secrets.env")) as f:
-                for line in f:
-                    if line.startswith("LLAMA_API_KEY="):
-                        api_key = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-        except Exception:
-            pass
-    return api_key
+    return os.environ.get("LLAMA_API_KEY", "")
 
 
 def _check_deployments(api_key: str) -> None:

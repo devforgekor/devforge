@@ -439,13 +439,15 @@ decisions:
     값은 KV를 고치는 케이스였다. 비밀 아닌 config를 KV에 미등록하면 조용히 skip되어 기능이 죽는다.'
   status: open
 - id: dp-01
-  detail: '서버측 Droplr 단축 깨짐 발견(2026-09-19, P0 미수정): scripts/lib/droplr.py:40이 DRPLR_EMAIL/DRPLR_PASSWORD를 읽지만 KV 실제 키는 DROPLR_USER/DROPLR_PASS.
+  detail: '서버측 Droplr 단축 깨짐 발견(2026-09-19, P0): scripts/lib/droplr.py:40이 DRPLR_EMAIL/DRPLR_PASSWORD를 읽지만 KV 실제 키는 DROPLR_USER/DROPLR_PASS.
     이름 불일치로 shorten()이 항상 None → blob_uploader._shorten_with_droplr(), droplr_upload.py(droplr/dplr alias), cli.py 업로드 경로
-    단축이 조용히 실패. 수정 방향: DROPLR_USER/DROPLR_PASS(Basic) 기준으로 변경(실제 API 호출 검증됨, HTTP 201).'
-  status: open
+    단축이 조용히 실패. 수정: _cred("DRPLR_EMAIL")→_cred("DROPLR_USER"), _cred("DRPLR_PASSWORD")→_cred("DROPLR_PASS") (2026-09-19).
+    doc-ki-01도 동시 수정. Bearer 인증(DROPLR_AUTH_TOKEN) 옵션도 추가 — Basic 우선, 만료 회전 필요 시 연결 예정.'
+  status: resolved
 - id: dp-02
   detail: 'DROPLR_AUTH_TOKEN_KEY 등록됨(2026-09-19) — 현재 아무 코드도 읽지 않음(grep 0건). 값은 유효한 JWT(id 500784, exp 2026-09-26)이며 실측 검증:
-    Bearer → HTTP 201, Basic(DROPLR_USER/PASS) → HTTP 201. 둘 다 동작. Bearer 경로를 코드에 연결하려면 만료 회전 필요(Basic보다 안전). 미연결 상태로는 미사용.'
+    Bearer → HTTP 201, Basic(DROPLR_USER/PASS) → HTTP 201. 둘 다 동작. Bearer 경로를 코드에 연결하려면 만료 회전 필요(Basic보다 안전).
+    2026-09-19 droplr.py에 Bearer 인증 코드 경로 추가(_cred("DROPLR_AUTH_TOKEN") 우선, 기본은 Basic). 미연결 상태로 유지 — 만료일(2026-09-26) 도래 시 회전 로직 구현 후 연결.'
   status: open
 - id: dp-03
   detail: 'devforge-url-shorten(~/.config/devforge/bin)은 이미 Droplr 제거 상태(주석: ''Droplr removed - CloudFront blocks POST'')
@@ -460,7 +462,9 @@ decisions:
 - id: dp-review-01
   detail: '붙여준 ''Droplr API 사용 가이드 팩트체크'' 리뷰 검토(2026-09-19): 원본 가이드는 이 레포/docs에 존재하지 않음(droplr|drplr 검색). 리뷰의 생태계 설명은 독립 검증
     결과 대체로 정확(HMAC-SHA1+15분 skew, 앱키 요청발급, drplr 1.2.0, droplr-api 1.0.0, JumpCloud 인수, Loom→Atlassian, CloudApp→Zight, ScreenPal).
-    단 ''drplr CLI가 표준'' 전제는 서버 현실과 다름(서버는 Python HTTP API). 반영 대상 문서 없음.'
+    단 ''drplr CLI가 표준'' 전제는 서버 현실과 다름(서버는 Python HTTP API). 반영 대상 문서 없음.
+    [2026-09-19 Droplr 집중 해결 완료] dp-01: 코드 키 불일치 수정(DRPLR_EMAIL/PASSWORD→DROPLR_USER/PASS). doc-ki-01: docs 표기 정정.
+    dp-02: Bearer 인증 코드 경로 추가(Basic 우선, 만료 회전 필요 시 연결 예정). droplr.py 검증: 문법 OK, import OK.'
   status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
@@ -520,18 +524,19 @@ known_issues:
     Does not auto-reload on file change. Restart command: systemctl --user restart container-devforge-mcp.'
   resolved: false
 - id: doc-ki-01
-  detail: docs/object-storage.md:139가 자격증명을 'DRPLR_*'로 표기 — 실제 키(DROPLR_USER/PASS)와 불일치. 문서 정정 필요.
-  resolved: false
+  detail: docs/object-storage.md:139가 자격증명을 'DRPLR_*'로 표기 — 실제 키(DROPLR_USER/PASS)와 불일치. 2026-09-19 DROPLR_*로 정정 완료.
+  resolved: true
 - text: 'Docs still inconsistent (P2 backlog): OPERATIONS_GUIDE `mcp serve` port role; API_REFERENCE vs system-architecture
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
     placement.'
   resolved: false
 - id: dp-ki-01
-  detail: 'P0: scripts/lib/droplr.py가 DRPLR_EMAIL/DRPLR_PASSWORD를 읽으나 KV 키는 DROPLR_USER/DROPLR_PASS — 서버 Droplr 단축 전면 실패.
-    수정 필요.'
-  resolved: false
+  detail: 'P0(해결 2026-09-19): scripts/lib/droplr.py가 DRPLR_EMAIL/DRPLR_PASSWORD를 읽으나 KV 키는 DROPLR_USER/DROPLR_PASS — 서버 Droplr 단축 전면 실패.
+    수정 완료: _cred("DROPLR_USER")/_cred("DROPLR_PASS")로 변경. Bearer 인증(DROPLR_AUTH_TOKEN) 옵션도 추가.'
+  resolved: true
 - id: dp-ki-02
-  detail: 'P1: DROPLR_AUTH_TOKEN_KEY가 KV에 등록됐으나 코드 미연결(grep 0건). JWT exp 2026-09-26 — 연결 시 회전 로직 필요.'
+  detail: 'P1: DROPLR_AUTH_TOKEN_KEY가 KV에 등록됐으나 코드 미연결(grep 0건). JWT exp 2026-09-26 — 연결 시 회전 로직 필요.
+    2026-09-19 droplr.py에 Bearer 인증 코드 경로 추가(_cred("DROPLR_AUTH_TOKEN") 우선, 기본은 Basic). 회전 로직 구현 전 미연결 유지.'
   resolved: false
 - text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중 RemoteDisconnected/ConnectionResetError
     반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB) 메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'

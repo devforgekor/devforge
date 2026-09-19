@@ -10,27 +10,14 @@ import subprocess
 from typing import Any, Dict, List, Optional
 
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SECRETS_PATH = os.path.expanduser("~/.config/devforge/secrets.env")
 STATE_PATH = os.path.join(SCRIPTS_DIR, "data", "dev_pipeline_state.json")
 AUTO_TASKS_PATH = os.path.join(SCRIPTS_DIR, "data", "auto_tasks.md")
 DEFAULT_REPO = "devforgekor/devforge"
 
 
 def _read_token() -> Optional[str]:
-    """Extract MY_GITHUB_TOKEN_KEY from secrets.env (handles optional quotes)."""
-    if not os.path.isfile(SECRETS_PATH):
-        return None
-    import re
-
-    with open(SECRETS_PATH) as f:
-        for line in f:
-            line = line.strip()
-            m = re.match(r"^MY_GITHUB_TOKEN_KEY=(.*)$", line)
-            if m:
-                raw = m.group(1)
-                raw = raw.strip('"').strip("'").strip()
-                return raw if raw else None
-    return None
+    """Extract MY_GITHUB_TOKEN_KEY from env (Azure KV sourced)."""
+    return os.environ.get("MY_GITHUB_TOKEN_KEY", "")
 
 
 def _gh_env() -> Dict[str, str]:

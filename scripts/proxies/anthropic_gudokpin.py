@@ -75,7 +75,7 @@ STRIP_RESP_HEADERS = {
 
 ANTHROPIC_API_KEY = os.environ.get("GUDOKPIN_API_KEY") or ""
 
-# Gudokpin uses a single API key (GUDOKPIN_API_KEY in secrets.env).
+# Gudokpin uses a single API key (GUDOKPIN_API_KEY in env, Azure KV).
 API_KEYS: List[str] = [ANTHROPIC_API_KEY if ANTHROPIC_API_KEY else os.environ.get("GUDOKPIN_API_KEY", "")]
 # Filter out empty entries while preserving order.
 API_KEYS = [k for k in API_KEYS if k]
@@ -103,7 +103,7 @@ def _flatten_text(content) -> str:
 
 
 def _resolve_api_key() -> str:
-    """Resolve primary OpenRouter API key from env (secrets.env sourced by systemd)."""
+    """Resolve primary OpenRouter API key from env (Azure KV via systemd)."""
     return API_KEYS[0] if API_KEYS else ""
 
 
@@ -932,7 +932,7 @@ def main() -> None:
             "[gudokpin-proxy] WARNING: GUDOKPIN_API_KEY not set",
             file=sys.stderr,
         )
-        print("[gudokpin-proxy] Set it in ~/.config/devforge/secrets.env", file=sys.stderr)
+        print("[gudokpin-proxy] Set GUDOKPIN_API_KEY in env (Azure KV)", file=sys.stderr)
 
     OpenRouterProxyHandler.upstream = urlsplit(args.upstream)
     host, port_str = args.listen.rsplit(":", 1)

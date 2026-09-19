@@ -129,8 +129,7 @@ SWAP_CRIT_MB = 9000
 MEM_WARN_PCT = 80
 MEM_CRIT_PCT = 90
 
-# ── Slack ──────────────────────────────────────────────────────────
-SLACK_SECRETS = os.path.expanduser("~/.config/devforge/secrets.env")
+# ── Slack (Azure KV → env var) ───────────────────────────
 SLACK_CHANNEL = "U0APJGD8CBW"
 ALERT_DEDUP_SEC = 300  # 5min per-component dedup
 
@@ -184,6 +183,6 @@ SANDBOX_MEM_LIMIT = "128m"
 SANDBOX_VERIFY_TIMEOUT = 120  # seconds
 SANDBOX_VERIFY_MEM_LIMIT = "256m"
 # project_dir이 이 경로 하위가 아니면 sandbox_verify를 거부한다.
-# host 임의 경로(예: secrets.env가 있는 디렉토리) 읽기전용 마운트로 인한
+# host 임의 경로 읽기전용 마운트로 인한 정보 유출 방지
 # 정보 유출을 막기 위한 allowlist.
 SANDBOX_VERIFY_ALLOWED_ROOT = "/opt/projects/server"

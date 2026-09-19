@@ -9,7 +9,7 @@
 
 ## 1. 시스템 개요
 
-**DevForge**는 Oracle Cloud(OCI, `ap-tokyo-1`, ARM Ampere A1) 단일 서버에서 운영되는
+**DevForge**는 Oracle Cloud(OCI, `ap-chuncheon-1`, ARM Ampere A1) 단일 서버에서 운영되는
 LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 
 - Host: DEVFORGE (ARM Neoverse-N1 4-core, 22Gi + zram + swap)

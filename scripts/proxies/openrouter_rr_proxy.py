@@ -47,8 +47,6 @@ LISTEN_PORT = int(os.environ.get("OPENROUTER_RR_PROXY_PORT", "8451"))
 # mtime check, no restart needed).
 OPCODE_CONFIG = os.path.expanduser("~/.config/opencode/opencode-rr.json")
 
-SECRETS_FILE = os.path.expanduser("~/.config/devforge/secrets.env")
-
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 CHAT_ENDPOINT = f"{OPENROUTER_API_BASE}/chat/completions"
 MODELS_ENDPOINT = f"{OPENROUTER_API_BASE}/models"
@@ -62,17 +60,12 @@ YOUR_APP_NAME = os.environ.get("YOUR_APP_NAME", "DevForge OpenRouter RR Proxy")
 
 
 def _load_keys() -> list[str]:
-    """Load OpenRouter API keys from environment variables.
-
-    Priority:
-    1. Environment variables (from Key Vault via kv-fetch-env.py)
-    2. Fallback: secrets.env file (deprecated, for backward compatibility)
+    """Load OpenRouter API keys from environment variables (Azure KV).
 
     Supports 3-account rotation: MESIDS, MINIPARK4U, HYEONMINPARK4U
     """
     keys: list[str] = []
 
-    # 1. 환경변수 우선 조회 (Key Vault)
     for env_var in (
         "OPENROUTER_MESIDS_API_KEY",
         "OPENROUTER_MINIPARK4U_API_KEY",
@@ -82,25 +75,13 @@ def _load_keys() -> list[str]:
         if val and val not in keys:
             keys.append(val)
 
-    # 2. Fallback: secrets.env 파일 (호환성 유지)
-    if not keys and os.path.exists(SECRETS_FILE):
-        with open(SECRETS_FILE) as f:
-            for line in f:
-                line = line.strip()
-                if (
-                    line.startswith("OPENROUTER_MESIDS_API_KEY=")
-                    or line.startswith("OPENROUTER_MINIPARK4U_API_KEY=")
-                    or line.startswith("OPENROUTER_HYEONMINPARK4U_API_KEY=")
-                ):
-                    keys.append(line.split("=", 1)[1].strip().strip("\"'"))
-
     return keys
 
 
 KEYS = _load_keys()
 if len(KEYS) < 2:
     print(
-        f"❌ ERROR: Need at least 2 OpenRouter API keys, found {len(KEYS)}. Check secrets.env or env vars.",
+        f"❌ ERROR: Need at least 2 OpenRouter API keys, found {len(KEYS)}. Check env vars.",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -125,7 +106,7 @@ logger = logging.getLogger("openrouter-rr-proxy")
 client: httpx.AsyncClient = None  # type: ignore[assignment]
 current_key_index = 0
 
-# Account labels aligned with KEYS order (secrets.env parse order).
+# Account labels aligned with KEYS order.
 ACCOUNT_LABELS = ["MESIDS", "MINIPARK4U", "HYEONMINPARK4U"]
 
 # model_id -> key index, loaded from opencode-rr.json (mtime-cached).

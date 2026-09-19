@@ -10,9 +10,7 @@ SCRIPT_DIR="/opt/projects/server/scripts"
 LOG "system_sync start"
 
 # ── duckdns ──
-SECRETS="$HOME/.config/devforge/secrets.env"
-DUCKDNS_TOKEN_KEY=""
-[ -f "$SECRETS" ] && source "$SECRETS"
+DUCKDNS_TOKEN_KEY="${DUCKDNS_TOKEN_KEY:-}"
 if curl -s -o /dev/null -w "%{http_code}" \
     "https://www.duckdns.org/update?domains=devforgekor&token=${DUCKDNS_TOKEN_KEY:-MISSING}&ip=&verbose=true" \
     2>/dev/null | grep -q 200; then

@@ -5,16 +5,7 @@
 import os, sys
 from pathlib import Path
 
-secrets = Path.home() / ".config/devforge/secrets.env"
-key = None
-if secrets.exists():
-    for line in secrets.read_text().splitlines():
-        if line.startswith("QWEN_480B_API_KEY="):
-            key = line.split("=", 1)[1].strip().strip('"').strip("'")
-            break
-
-if not key:
-    key = os.environ.get("QWEN_480B_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+key = os.environ.get("QWEN_480B_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
 
 if not key:
     print("[aider] No OpenRouter API key found (QWEN_480B_API_KEY)", file=sys.stderr)

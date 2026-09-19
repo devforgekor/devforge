@@ -30,20 +30,9 @@ def _fetch_json(url):
 
 
 def _load_smtp():
-    env = {}
-    try:
-        with open(os.path.expanduser("~/.config/devforge/secrets.env")) as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                env[k.strip()] = v.strip().strip('"').strip("'")
-    except Exception:
-        pass
-    for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "ALERT_EMAIL_TO", "ALERT_EMAIL_FROM"):
-        if k not in env:
-            env[k] = os.environ.get(k, "")
+    env = {k: os.environ.get(k, "") for k in (
+        "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "ALERT_EMAIL_TO", "ALERT_EMAIL_FROM",
+    )}
     return env
 
 

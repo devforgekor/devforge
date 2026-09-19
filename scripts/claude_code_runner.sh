@@ -89,7 +89,7 @@ _sleep_between() {
 _run_one() {
   local variant="$1" i="$2" outfn="$3"
   if $SOURCE_SECRETS; then
-    set -a; [ -f /home/opc/.config/devforge/secrets.env ] && source /home/opc/.config/devforge/secrets.env; set +a
+    : # secrets loaded via systemd EnvironmentFile (Azure KV)
   fi
   /bin/bash "$WRAPPER" deepseek-v4-flash "$PROMPT_FILE" "$outfn" || true
   local http_code

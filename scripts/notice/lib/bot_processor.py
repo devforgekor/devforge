@@ -43,19 +43,10 @@ LLM_MODEL = os.environ.get("BOT_LLM_MODEL", "qwen2.5-coder-7b")
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", "/opt/projects/server"))
 
 
-def _load_secrets() -> dict:
-    secrets = {}
-    sf = Path.home() / ".config/devforge/secrets.env"
-    if sf.exists():
-        for line in sf.read_text().split("\n"):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, val = line.partition("=")
-                secrets[key.strip()] = val.strip().strip('"').strip("'")
-    return secrets
-
-
-_SECRETS = _load_secrets()
+_SECRETS: dict[str, str] = {k: os.environ.get(k, "") for k in (
+    "SLACK_BOT_TOKEN_KEY", "SLACK_SIGNING_SECRET_KEY", "SLACK_CHANNEL",
+    "TELEGRAM_TOKEN_KEY", "TELEGRAM_CHAT_ID",
+)}
 
 
 def _call_llm(messages: list, temperature: float = 0.3, max_tokens: int = 512) -> str:

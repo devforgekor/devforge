@@ -26,7 +26,6 @@ import os
 import sys
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
@@ -37,17 +36,8 @@ from bot_processor import process as bot_process
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.db import esc_sql, psql_json, psql_ok
 
-SECRETS: dict[str, str] = {}
-_SF = Path.home() / ".config/devforge/secrets.env"
-if _SF.exists():
-    for _line in _SF.read_text().split("\n"):
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _, _v = _line.partition("=")
-            SECRETS[_k.strip()] = _v.strip().strip('"').strip("'")
-
-SLACK_SIGNING_SECRET = SECRETS.get("SLACK_SIGNING_SECRET_KEY", "")
-SLACK_BOT_TOKEN = SECRETS.get("SLACK_BOT_TOKEN_KEY", "")
+SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET_KEY", "")
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
 LISTEN_ADDR = os.environ.get("SLACK_LISTEN", "127.0.0.1:8084")
 
 

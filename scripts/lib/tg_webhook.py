@@ -20,13 +20,7 @@ from lib.db import esc_sql, psql_ok
 
 
 def _load_token() -> str:
-    sf = Path.home() / ".config/devforge/secrets.env"
-    if sf.exists():
-        for line in sf.read_text().split("\n"):
-            line = line.strip()
-            if line.startswith("TELEGRAM_TOKEN_KEY="):
-                return line.split("=", 1)[1].strip().strip("\"'")
-    return ""
+    return os.environ.get("TELEGRAM_TOKEN_KEY", "")
 
 
 TG_TOKEN = _load_token()

@@ -31,20 +31,8 @@ from text_quality import validate as validate_korean
 from lib.file_registry import receive_telegram_file, register_file
 
 
-def _load_secrets():
-    secrets = {}
-    secrets_file = Path.home() / ".config/devforge/secrets.env"
-    if secrets_file.exists():
-        for line in secrets_file.read_text().split("\n"):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, val = line.partition("=")
-                secrets[key.strip()] = val.strip().strip('"').strip("'")
-    return secrets
-
-SECRETS = _load_secrets()
-TOKEN = SECRETS.get("TELEGRAM_TOKEN_KEY", "")
-CHAT_ID = SECRETS.get("TELEGRAM_CHAT_ID", "")
+TOKEN = os.environ.get("TELEGRAM_TOKEN_KEY", "")
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 OFFSET_FILE = Path("/var/tmp/telegram_bot_offset.txt")
 

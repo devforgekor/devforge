@@ -15,7 +15,7 @@
 #   Day Embedding     — embed_batch.py (:8081, enriched → embedded)
 # Each phase has its own budget check. Mid-cycle timeout carries forward in pipeline_state.
 #
-# Secrets: DUCKDNS_TOKEN_KEY in ~/.config/devforge/secrets.env
+# Secrets: DUCKDNS_TOKEN_KEY via env (Azure KV → systemd EnvironmentFile)
 # Server philosophy: Slow but complete. Single inference container handles all ports.
 
 MODEL_CTL="/opt/projects/server/scripts/lib/model_ctl.sh"
@@ -78,10 +78,7 @@ flock -n 200 || { echo "[$(LOG_TS)] day_cycle already running — exit"; exit 0;
 # Slack alert helper — same format as notifier.py send_alert()
 _slack_alert() {
     local title="$1" detail="$2" color="${3:-danger}"
-    local secrets_file="$HOME/.config/devforge/secrets.env"
-    local token=""; local channel=""
-    [ -f "$secrets_file" ] && . "$secrets_file"
-    token="${SLACK_BOT_TOKEN_KEY:-}"; channel="${SLACK_CHANNEL:-U0APJGD8CBW}"
+    local token="${SLACK_BOT_TOKEN_KEY:-}"; local channel="${SLACK_CHANNEL:-U0APJGD8CBW}"
     [ -z "$token" ] && return 1
     local kst_now
     kst_now=$(TZ=Asia/Seoul date '+%m/%d %H:%M')

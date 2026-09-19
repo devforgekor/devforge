@@ -7,24 +7,11 @@ from __future__ import annotations
 
 import os
 
-SECRETS_PATH = os.path.expanduser("~/.config/devforge/secrets.env")
-
 
 def ensure_env(env_name: str) -> None:
-    """Load DEVFORGE_ENCRYPTION_PASSPHRASE and env_name from secrets.env if not already set."""
+    """Ensure DEVFORGE_ENCRYPTION_PASSPHRASE and env_name are set via env (Azure KV)."""
     if os.environ.get("DEVFORGE_ENCRYPTION_PASSPHRASE") and os.environ.get(env_name):
         return
-    if not os.path.exists(SECRETS_PATH):
-        return
-    with open(SECRETS_PATH) as f:
-        for line in f:
-            line = line.rstrip("\n")
-            if line.startswith("DEVFORGE_ENCRYPTION_PASSPHRASE="):
-                val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                os.environ.setdefault("DEVFORGE_ENCRYPTION_PASSPHRASE", val)
-            elif line.startswith(f"{env_name}="):
-                val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                os.environ.setdefault(env_name, val)
 
 
 def load_encrypted_keys(env_name: str) -> list[str]:
