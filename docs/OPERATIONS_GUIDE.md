@@ -55,6 +55,11 @@ devforge inference ensure day_extract  # Check model readiness
 ```bash
 # Database
 export DEVFORGE_DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/dbname"
+```
+> **컨테이너 (devforge-mcp / devforge-fastapi)**: `DEVFORGE_DATABASE_URL`은
+> `~/.config/containers/systemd/container-devforge-{mcp,fastapi}.container`의
+> `Environment=` 로 주입한다 (Azure KV의 `DEVFORGE-DATABASE-URL`은 2026-09-19 현재 미존재).
+> 변경 후: `systemctl --user daemon-reload && systemctl --user restart container-devforge-{mcp,fastapi}`
 
 # LLM
 export DEVFORGE_LLM_PROVIDER=local

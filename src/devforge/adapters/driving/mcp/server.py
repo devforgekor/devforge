@@ -769,13 +769,13 @@ async def get_conversation(params: GetConversationParams) -> dict[str, Any]:
             select(Turn).where(Turn.conversation_id == conv_id).order_by(Turn.seq)
         )
         turns = []
-        for row in result:
+        for turn in result.scalars():
             turns.append(
                 {
-                    "seq": row.seq,
-                    "user_turn": row.user_turn[:500],
-                    "text": (row.text or "")[:500],
-                    "source": row.source,
+                    "seq": turn.seq,
+                    "user_turn": turn.user_turn[:500],
+                    "text": (turn.text or "")[:500],
+                    "source": turn.source,
                 }
             )
     return {

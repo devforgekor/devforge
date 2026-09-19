@@ -24,7 +24,7 @@ bounded_contexts:
         tables: ["turns"]
         related_files: ["turn_watcher.py", "schema.sql"]
       - term: "Source"
-        definition: "Which AI tool produced the turn: claude, copilot, gemini, aider."
+        definition: "Which AI tool produced the turn. Active collectors: claude, opencode. Copilot retained (inactive, cost exhausted). gemini/aider retired 2026-09-19."
         related_files: ["lib/agents.py", "turn_watcher.py"]
       - term: "Parser"
         definition: "Module that reads JSONL transcripts from a specific AI tool and normalizes to the turns schema."

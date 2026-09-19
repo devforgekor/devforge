@@ -556,19 +556,19 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Log parsers \u2014 Claude, Aider, Copilot, Gemini."
+      purpose: "Log parsers \u2014 Claude, Copilot, OpenCode."
     aider.py:
-      status: production
-      purpose: "parser_aider.py \u2014 extract turns from Aider chat history (.aider.chat.history.md)."
+      status: deprecated
+      purpose: "REMOVED 2026-09-19 \u2014 parser_aider.py was deleted (source retired)."
     claude.py:
       status: production
       purpose: "parser_claude.py \u2014 extract turns from Claude Code session JSONL."
     copilot.py:
       status: production
-      purpose: "parser_copilot.py \u2014 extract turns from Copilot events.jsonl."
+      purpose: "parser_copilot.py \u2014 extract turns from Copilot events.jsonl (inactive: cost exhausted)."
     gemini.py:
-      status: production
-      purpose: "parser_gemini.py \u2014 extract turns from Gemini CLI session JSONL."
+      status: deprecated
+      purpose: "REMOVED 2026-09-19 \u2014 parser_gemini.py was deleted (source retired)."
     opencode.py:
       status: production
       purpose: "parser_opencode.py \u2014 extract turns from the OpenCode session\

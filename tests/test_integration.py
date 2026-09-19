@@ -229,17 +229,23 @@ class TestMCPServerTools:
 
     @pytest.mark.characterization
     def test_mcp_tools_registered(self):
-        """MCP server should have 5 registered tools."""
+        """MCP server should have 18 registered tools."""
         from devforge.adapters.driving.mcp.server import get_tools
 
         tools = get_tools()
-        assert len(tools) == 5
+        assert len(tools) == 18
         tool_names = [t["name"] for t in tools]
-        assert "knowledge_search" in tool_names
-        assert "pipeline_status" in tool_names
-        assert "extract_turn" in tool_names
-        assert "deepdive_step" in tool_names
-        assert "store_observation" in tool_names
+        for expected in (
+            "knowledge_search",
+            "pipeline_status",
+            "extract_turn",
+            "deepdive_step",
+            "store_observation",
+            "get_conversation",
+            "obs_search",
+            "ingest",
+        ):
+            assert expected in tool_names
 
     @pytest.mark.characterization
     def test_mcp_tool_schemas_valid(self):

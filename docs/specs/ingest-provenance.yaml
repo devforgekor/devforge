@@ -59,10 +59,7 @@ provenance:
     format: "<origin>[:<provider>]"
     values:
       - claude-code
-      - copilot
-      - aider
       - opencode
-      - gemini-cli
       - mcp_ingest            # MCP ingest 기본값(origin 미상 시)
       - "chrome:chatgpt"
       - "chrome:claude"
@@ -70,6 +67,7 @@ provenance:
       - "chrome:deepseek"
       - "chrome:aistudio"
       - "chrome:qwen"
+      # retired 2026-09-19: copilot (cost exhausted), aider, gemini-cli — 로컬 수집 중단
     default: unknown
     storage_column: turns.source    # NOT NULL DEFAULT 'unknown'
   agent:
