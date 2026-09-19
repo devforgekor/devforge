@@ -15,14 +15,13 @@ Usage:
   3) A/B experiment (4 variants × 20회):
      /opt/projects/server/scripts/claude_code_runner.sh ./prompt.txt --ab
 
-  4) 2-5s random jitter + secrets sourcing (구 lowqps_runner):
-     /opt/projects/server/scripts/claude_code_runner.sh ./prompt.txt --jitter 2-5 --source-secrets
+   4) 2-5s random jitter (구 lowqps_runner):
+      /opt/projects/server/scripts/claude_code_runner.sh ./prompt.txt --jitter 2-5
 
 Options:
   -n, --runs N        Requests per variant (default: 200 single, 20 --ab)
   -o, --output DIR    Output directory
   --jitter MIN-MAX    Random sleep range (default: 1s fixed)
-  --source-secrets    Source ~/.config/devforge/secrets.env before each request
   --ab                A/B test across 4 proxy config variants
 
 Notes:

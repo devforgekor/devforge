@@ -12,7 +12,7 @@ set -euo pipefail
 #   -n, --runs N        Requests per variant (default: 200 single, 20 --ab)
 #   -o, --output DIR    Output directory
 #   --jitter MIN-MAX    Random sleep range between requests (default: 1s fixed)
-#   --source-secrets    Source ~/.config/devforge/secrets.env before each request
+#   --source-secrets    (deprecated) no-op — secrets via systemd EnvironmentFile
 #   --ab                A/B test across 4 proxy config variants
 #   -h, --help          Show this message
 
@@ -89,7 +89,7 @@ _sleep_between() {
 _run_one() {
   local variant="$1" i="$2" outfn="$3"
   if $SOURCE_SECRETS; then
-    : # secrets loaded via systemd EnvironmentFile (Azure KV)
+    : # no-op — secrets via systemd EnvironmentFile (Azure KV)
   fi
   /bin/bash "$WRAPPER" deepseek-v4-flash "$PROMPT_FILE" "$outfn" || true
   local http_code

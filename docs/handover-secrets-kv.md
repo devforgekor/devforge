@@ -80,6 +80,21 @@ Key Vault 단일 소스로 관리한다(서버 디스크 평문 방지). 코드�
 `secrets.env` 삭제(2026-09-18) 이후 비밀 아닌 키를 KV에 미등록하면 조용히 skip되어
 기능이 죽는다(이번 watchdog heartbeat 정지 사례). 신규 키 추가 시 KV 등록을 누락하지 말 것.
 
+### ⚠️ 멀티라인 PEM 저장 주의 (2026-09-19)
+Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**된다. PEM(개인키/공개키)을 그대로
+등록하면 복원 시 파싱이 틀려 지문이 달라진다 — 실제로 OCI 업로드 401의 원인이었다.
+
+| 코드/파일 | Key Vault 시크릿 |
+|----------|------------------|
+| `~/.oci/oci_api_key.pem` (개인키) | `OCI-DEVFORGE-RSA-API-KEY` |
+| `~/.oci/oci_api_key_public.pem` (공개키) | `OCI-DEVFORGE-RSA-API-PUB-KEY` |
+| `~/.oci/config` 지문 | `OCI-DEVFORGE-API-KEY-FINGERPRINT` |
+| 테넌시/유저 OCID | `OCI-DEVFORGE-TENANCY-OCID` / `OCI-DEVFORGE-USER-OCID` |
+
+- **복원 규칙**: `-----BEGIN X-----`~`-----END X-----` 구간을 잘라 base64의 공백을 모두 제거한 뒤 64자 단위로 재래핑.
+- devforge 등록 키 지문: `e7:58:b7:c6:59:a0:de:8c:97:41:2f:00:cc:b1:b9:08` (청주 `ap-chuncheon-1`).
+- `OCI-DEVFORGE-PRIVATE-KEY` / `OCI-DEVFORGE-PUBLIC-KEY`는 **SSH 키**(OpenSSH/ssh-rsa)로 OCI API 키와 별개다.
+
 ---
 
 ## 4. 구현된 구성 요소

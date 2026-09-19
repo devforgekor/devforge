@@ -1,8 +1,8 @@
 # DevForge — OCI Object Storage (스토리지 & 파일 교환)
 
-> 최종 갱신: 2026-09-19 (devforge 리전 청주 `ap-chuncheon-1`로 정정)
+> 최종 갱신: 2026-09-19 (리전 청주 정정 · OCI 인증 복구 · 백업 정상화 · lifecycle 적용)
 > 관련: [system-architecture.md](./system-architecture.md) · [../CLAUDE.yaml](../CLAUDE.yaml)
-> 상태: 백업 파이프라인 운영 중 / 파일 교환(Exchange) OCI 전환 **완료** (Droplr 단축)
+> 상태: 백업 파이프라인 정상화(2026-09-19) / 파일 교환(Exchange) OCI 전환 **완료** (Droplr 단축)
 
 ---
 
@@ -20,14 +20,17 @@ DevForge의 원격 오브젝트 스토리지는 **OCI Object Storage**를 사용
 
 - 리전: `ap-chuncheon-1` · Namespace: `axgly0lmehyp` · 컴파트먼트: 테넌시 루트
   (도쿄 `ap-tokyo-1`/`nrhe1zafhd0v`는 onmydoc 전용 — devforge는 청주 사용. 2026-09-19 정정)
-- 인증: 서버의 OCI CLI 프로파일 `~/.oci/config` (user opc)
+- 인증: OCI API 키, 지문 `e7:58:b7:c6:59:a0:de:8c:97:41:2f:00:cc:b1:b9:08`
+  - 개인키: `~/.oci/oci_api_key.pem` (chmod 600), 프로파일 `~/.oci/config` (DEFAULT, region `ap-chuncheon-1`)
+  - 원본: Azure Key Vault `OCI-DEVFORGE-RSA-API-KEY` / `OCI-DEVFORGE-API-KEY-FINGERPRINT`
+  - ⚠️ KV 값은 **개행이 공백으로 치환**되어 저장됨 → 사용 시 `BEGIN`/`END` 사이 base64를 공백 제거 후 64자로 재래핑해 복원해야 한다(그대로 저장하면 지문이 달라져 401)
 
 ---
 
 ## 2. 버킷과 prefix 구조
 
 ```
-devforge-standard/   (Storage tier: Standard, NoPublicAccess)
+devforge-standard/   (Storage tier: Standard, NoPublicAccess, 2026-09-19 청주 신규 생성)
 ├─ backups/
 │  ├─ database/        osync_backup.py  (pg_dump -Fc, 매일)
 │  └─ application/     osync_backup.py  (scripts+docs+systemd units, 매주)
@@ -39,12 +42,12 @@ devforge-standard/   (Storage tier: Standard, NoPublicAccess)
 ├─ logs/               로그 스냅샷 (30일 후 자동 삭제)
 └─ tmp/                임시 교환 (7일 후 자동 삭제)
 
-devforge-archive/    (Storage tier: Archive, NoPublicAccess)  ← 콜드 전용, 현재 비어 있음
+devforge-archive/    (Storage tier: Archive, NoPublicAccess)  ← 콜드 전용, 청주에는 미생성
 ```
 
-폴더는 실제 디렉터리가 아니라 **객체 키 prefix**다. 콘솔에서 빈 폴더로 보이도록
-0바이트 placeholder 객체(`.../`)를 만들어 두었다. (빈 placeholder는 저장비 0원,
-API 요청 수만 소폭 증가)
+폴더는 실제 디렉터리가 아니라 **객체 키 prefix**다. 청주 신규 버킷은 placeholder를 만들지
+않았다(prefix는 첫 객체 업로드 시 콘솔에 표시). 도쿄 시절에는 빈 폴더 표시용 0바이트
+placeholder(`.../`)를 두었다(저장비 0원, API 요청 수만 소폭 증가).
 
 > `devforge-ia` 버킷은 만들었다가 삭제했다. OCI에서 **Infrequent Access는 버킷 등급이 아니라
 > 객체 등급**이므로 별도 버킷이 필요 없다. (버킷 기본 등급은 Standard/Archive만 가능)
@@ -71,8 +74,9 @@ API 요청 수만 소폭 증가)
 | `delete-logs-30d` | DELETE | `logs/` | 30일 |
 
 - Lifecycle은 **1일 1회 실행**, 변경 반영에 최대 24시간 소요.
-- 서비스 위임 정책 필요: `Allow service objectstorage-ap-chuncheon-1 to manage object-family in tenancy`
-  (정책 `devforge-storage-service`)
+- 2026-09-19 적용 완료. IAM 정책 `devforge-storage-service`:
+  `Allow service objectstorage-ap-chuncheon-1 to manage object-family in tenancy`
+  (정책 생성 직후엔 `InsufficientServicePermissions` → 전파 후 반영됨)
 
 ### 3.3 예산
 - Budget `devforge-monthly`: **USD 1 / MONTHLY**
@@ -105,6 +109,8 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 - 수동 실행: `python3.11 /opt/projects/server/scripts/osync_backup.py all [--force]`
 - 감시: watchdog이 `devforge-backup-safety.timer`(stale→kick)와 `devforge-backup.service` 실행결과(`ActiveState/Result`)를 감시하고, 실패 시 **자동 재실행**(self-heal, backoff/circuit)합니다.
 - 검증: 복원 테스트 결과 `48 tables OK` (2026-09-11)
+- 2026-09-19: OCI 키 지문 불일치/미설치로 업로드 실패 → 등록 키(`e7:58…`) 복원·설치로 정상화.
+  sentinel 생성으로 watchdog 재실행 루프 중단, 원격 `backups/database/devforge_2026-09-19.dump`(105.9MB) 업로드 확인.
 
 > 레거시: `/usr/local/bin/dump_postgres.sh` → `/mnt/secure_meta/snapshots`(현재 빈 디렉터리)는
 > 폐기됨. 위 osync 파이프라인이 대체.
@@ -186,6 +192,10 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 export PATH="$HOME/.local/bin:$PATH"; export SUPPRESS_LABEL_WARNING=True
 oci os bucket list --compartment-id "$(grep '^tenancy=' ~/.oci/config | cut -d= -f2)"
 oci os object list --bucket-name devforge-standard --prefix backups/ --fields name,size,timeCreated
+
+# 인증/네임스페이스·lifecycle 확인 (지문 e7:58…)
+oci os ns get
+oci os object-lifecycle-policy get --bucket-name devforge-standard
 
 # 백업 / 복원 테스트 수동 실행
 python3.11 /opt/projects/server/scripts/osync_backup.py all --force

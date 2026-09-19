@@ -1,8 +1,8 @@
 # DevForge 시스템 전체 구조
 
-> Status: active · Date: 2026-09-14 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/REFACTORING_PLAN.md`
+> Status: active · Date: 2026-09-19 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/REFACTORING_PLAN.md`
 > 서버 전체 런타임·데이터 흐름·스토리지의 통합 구조 문서.
-> 최종 갱신: 2026-09-14 (리팩토링 코드 레이어 §3.5 추가 — 이전 2026-09-11 버전은 OCI 스토리지 계층 추가)
+> 최종 갱신: 2026-09-19 (OCI 리전 청주 정정·파일 교환 OCI 일원화 반영 — 이전 2026-09-14)
 > 자동 생성 문서(`docs/architecture/*`)와 달리 이 문서는 **수동 관리**다.
 
 ---
@@ -212,8 +212,8 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | `/opt/workspace` | 6G | ebooklib, news, common-lib |
 | `/` | 44.5G | OS |
 
-- 원격: **OCI Object Storage** (`devforge-standard`, `devforge-archive`).
-- 파일 교환: OCI Object Storage (`uploads/*`, PAR → Droplr). 파이프라인 산출물은 Azure Blob(현행).
+- 원격: **OCI Object Storage** (`devforge-standard`, 청주 `axgly0lmehyp`; `devforge-archive`는 미생성).
+- 파일 교환: OCI Object Storage (`uploads/*`, `releases/*`, PAR → Droplr). 파이프라인 산출물도 OCI (Azure Blob은 2026-09-11 제거).
 - 단축: **Droplr** (`drplr` CLI).
 
 ---
