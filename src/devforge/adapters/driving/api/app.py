@@ -190,16 +190,16 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
                 try:
                     conv_id = UUID(str(conversation_id))
                 except ValueError:
-                    return {"error": f"Invalid conversation_id (must be UUID): {conversation_id}"}, 400
+                    return {
+                        "error": f"Invalid conversation_id (must be UUID): {conversation_id}"
+                    }, 400
                 conv = await db.get(Conversation, conv_id)
                 if conv is None:
                     conv = Conversation(id=conv_id, title=title, source=source, model=model)
                     db.add(conv)
                     await db.flush()
             else:
-                conv = Conversation(
-                    id=uuid4(), title=title, source=source, model=model
-                )
+                conv = Conversation(id=uuid4(), title=title, source=source, model=model)
                 db.add(conv)
                 await db.flush()
                 conv_id = conv.id
@@ -236,18 +236,22 @@ def create_app(config: Optional[ConfigRegistry] = None) -> FastAPI:
                         skipped += 1
                         continue
 
-                db.add(Turn(
-                    id=uuid4(),
-                    conversation_id=conv_id,
-                    seq=seq,
-                    user_turn=str(turn.get("user_turn", ""))[:4000],
-                    thinking=str(turn.get("thinking", ""))[:4000] if turn.get("thinking") else None,
-                    text=str(turn.get("text", ""))[:8000] if turn.get("text") else "",
-                    meta_data=turn.get("meta") if isinstance(turn.get("meta"), dict) else {},
-                    source_message_id=smid,
-                    agent=agent,
-                    source=source,
-                ))
+                db.add(
+                    Turn(
+                        id=uuid4(),
+                        conversation_id=conv_id,
+                        seq=seq,
+                        user_turn=str(turn.get("user_turn", ""))[:4000],
+                        thinking=str(turn.get("thinking", ""))[:4000]
+                        if turn.get("thinking")
+                        else None,
+                        text=str(turn.get("text", ""))[:8000] if turn.get("text") else "",
+                        meta_data=turn.get("meta") if isinstance(turn.get("meta"), dict) else {},
+                        source_message_id=smid,
+                        agent=agent,
+                        source=source,
+                    )
+                )
                 await db.flush()
                 inserted += 1
                 seq += 1

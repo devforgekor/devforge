@@ -453,13 +453,15 @@ register_tool(
 
 
 async def deepdive_step_enter(params: DeepDiveStepEnterParams) -> dict[str, Any]:
-    return await deepdive(DeepDiveParams(
-        session_id=params.session_id,
-        step=1,
-        step_name="enter",
-        base_timeout_sec=params.base_timeout_sec,
-        affected_files=params.affected_files,
-    ))
+    return await deepdive(
+        DeepDiveParams(
+            session_id=params.session_id,
+            step=1,
+            step_name="enter",
+            base_timeout_sec=params.base_timeout_sec,
+            affected_files=params.affected_files,
+        )
+    )
 
 
 register_tool(
@@ -470,11 +472,13 @@ register_tool(
 
 
 async def deepdive_step_exit(params: DeepDiveStepExitParams) -> dict[str, Any]:
-    return await deepdive(DeepDiveParams(
-        session_id=params.session_id,
-        step=1,
-        step_name="exit",
-    ))
+    return await deepdive(
+        DeepDiveParams(
+            session_id=params.session_id,
+            step=1,
+            step_name="exit",
+        )
+    )
 
 
 register_tool(
@@ -485,11 +489,13 @@ register_tool(
 
 
 async def deepdive_session_heartbeat(params: DeepDiveSessionHeartbeatParams) -> dict[str, Any]:
-    return await deepdive(DeepDiveParams(
-        session_id=params.session_id,
-        step=params.step,
-        step_name="heartbeat",
-    ))
+    return await deepdive(
+        DeepDiveParams(
+            session_id=params.session_id,
+            step=params.step,
+            step_name="heartbeat",
+        )
+    )
 
 
 register_tool(
@@ -508,11 +514,15 @@ async def deepdive_session_status(params: DeepDiveSessionStatusParams) -> dict[s
     gateway = DatabaseGateway.from_config(config)
     async with gateway.session() as db:
         from devforge.domain.models import DeepDiveStep
+
         result = await db.execute(
-            select(DeepDiveStep).where(
+            select(DeepDiveStep)
+            .where(
                 DeepDiveStep.session_id == params.session_id,
                 DeepDiveStep.status == "ACTIVE",
-            ).order_by(DeepDiveStep.started_at.desc()).limit(1)
+            )
+            .order_by(DeepDiveStep.started_at.desc())
+            .limit(1)
         )
         step = result.scalar_one_or_none()
         if step is None:
@@ -542,16 +552,28 @@ async def deepdive_verify_sandbox(params: DeepDiveVerifySandboxParams) -> dict[s
     gateway = DatabaseGateway.from_config(config)
     async with gateway.session() as db:
         from devforge.domain.models import DeepDiveStep
+
         result = await db.execute(
-            select(DeepDiveStep).where(
+            select(DeepDiveStep)
+            .where(
                 DeepDiveStep.session_id == params.session_id,
-            ).order_by(DeepDiveStep.started_at.desc()).limit(1)
+            )
+            .order_by(DeepDiveStep.started_at.desc())
+            .limit(1)
         )
         step = result.scalar_one_or_none()
         if step is None:
-            return {"session_id": params.session_id, "verified": False, "reason": "session_not_found"}
+            return {
+                "session_id": params.session_id,
+                "verified": False,
+                "reason": "session_not_found",
+            }
         if step.status != "ACTIVE":
-            return {"session_id": params.session_id, "verified": False, "reason": f"status={step.status}"}
+            return {
+                "session_id": params.session_id,
+                "verified": False,
+                "reason": f"status={step.status}",
+            }
         return {
             "session_id": params.session_id,
             "verified": True,
@@ -568,13 +590,15 @@ register_tool(
 
 
 async def obs_write(params: ObsWriteParams) -> dict[str, Any]:
-    return await store_observation(StoreObservationParams(
-        observation=params.observation,
-        category="general",
-        source=params.source,
-        context=params.context,
-        tags=params.tags,
-    ))
+    return await store_observation(
+        StoreObservationParams(
+            observation=params.observation,
+            category="general",
+            source=params.source,
+            context=params.context,
+            tags=params.tags,
+        )
+    )
 
 
 register_tool(
@@ -601,11 +625,13 @@ register_tool(
 
 
 async def search_turns(params: SearchTurnsParams) -> dict[str, Any]:
-    return await knowledge_search(KnowledgeSearchParams(
-        query=params.query,
-        limit=params.limit,
-        pipeline_state=params.pipeline_state,
-    ))
+    return await knowledge_search(
+        KnowledgeSearchParams(
+            query=params.query,
+            limit=params.limit,
+            pipeline_state=params.pipeline_state,
+        )
+    )
 
 
 register_tool(
@@ -635,13 +661,15 @@ async def search_similarity(params: SearchSimilarityParams) -> dict[str, Any]:
         result = await db.execute(stmt, {"query": params.query, "limit": params.limit})
         turns = []
         for row in result:
-            turns.append({
-                "id": str(row.id),
-                "conversation_id": str(row.conversation_id),
-                "seq": row.seq,
-                "user_turn": row.user_turn[:500],
-                "similarity": float(row.similarity) if row.similarity else 0.0,
-            })
+            turns.append(
+                {
+                    "id": str(row.id),
+                    "conversation_id": str(row.conversation_id),
+                    "seq": row.seq,
+                    "user_turn": row.user_turn[:500],
+                    "similarity": float(row.similarity) if row.similarity else 0.0,
+                }
+            )
     return {"query": params.query, "count": len(turns), "results": turns}
 
 
@@ -703,13 +731,15 @@ async def mem_search(params: MemSearchParams) -> dict[str, Any]:
         result = await db.execute(stmt, {"query": params.query, "limit": params.limit})
         turns = []
         for row in result:
-            turns.append({
-                "id": str(row.id),
-                "conversation_id": str(row.conversation_id),
-                "seq": row.seq,
-                "user_turn": row.user_turn[:500],
-                "source": row.source,
-            })
+            turns.append(
+                {
+                    "id": str(row.id),
+                    "conversation_id": str(row.conversation_id),
+                    "seq": row.seq,
+                    "user_turn": row.user_turn[:500],
+                    "source": row.source,
+                }
+            )
     return {"query": params.query, "count": len(turns), "results": turns}
 
 
@@ -740,12 +770,14 @@ async def get_conversation(params: GetConversationParams) -> dict[str, Any]:
         )
         turns = []
         for row in result:
-            turns.append({
-                "seq": row.seq,
-                "user_turn": row.user_turn[:500],
-                "text": (row.text or "")[:500],
-                "source": row.source,
-            })
+            turns.append(
+                {
+                    "seq": row.seq,
+                    "user_turn": row.user_turn[:500],
+                    "text": (row.text or "")[:500],
+                    "source": row.source,
+                }
+            )
     return {
         "conversation_id": str(conv.id),
         "title": conv.title,
@@ -786,7 +818,9 @@ async def ingest(params: IngestParams) -> dict[str, Any]:
             try:
                 conv_id = UUID(params.conversation_id)
             except ValueError:
-                return {"error": f"Invalid conversation_id (must be UUID): {params.conversation_id}"}
+                return {
+                    "error": f"Invalid conversation_id (must be UUID): {params.conversation_id}"
+                }
             conv = await db.get(Conversation, conv_id)
             if conv is None:
                 conv = Conversation(id=conv_id, title=title, source=source, model=model)
@@ -799,7 +833,10 @@ async def ingest(params: IngestParams) -> dict[str, Any]:
             conv_id = conv.id
 
         seq_row = await db.execute(
-            select(Turn.seq).where(Turn.conversation_id == conv_id).order_by(Turn.seq.desc()).limit(1)
+            select(Turn.seq)
+            .where(Turn.conversation_id == conv_id)
+            .order_by(Turn.seq.desc())
+            .limit(1)
         )
         seq = (seq_row.scalar() or 0) + 1
 

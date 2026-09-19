@@ -3,11 +3,17 @@
 # Path: systemd:devforge-turn-watcher.service (host), CLI: turn_watcher.py --once
 """turn_watcher.py — real-time session transcript → PostgreSQL (raw insert).
 
-Polls Claude Code / Copilot / Gemini / Aider jsonl files and the OpenCode
-sqlite DB every few seconds. Inserts new turns with pipeline_state='raw' —
-text_clean is deferred to raw_consumer (Pass 2) in the devforge-worker container.
+Polls Claude Code / Copilot jsonl files and the OpenCode sqlite DB every
+few seconds. Inserts new turns with pipeline_state='raw' — text_clean is
+deferred to raw_consumer (Pass 2) in the devforge-worker container.
 
 Pipe: turn_watcher (jsonl/DB → raw) → raw_consumer (raw → pending) → day_cycle
+
+Claude 수집 정책 (단일 경로):
+- 세션은 `~/.claude/projects/-home-opc/*.jsonl`만 수집한다 (SOURCES["claude"]).
+- claude는 반드시 HOME(~)에서 실행할 것. 다른 cwd(예: /opt/workspace)에서
+  실행하면 `-opt-workspace` 같은 프로젝트 디렉토리가 생성되며 수집되지 않는다.
+- gemini/aider 소스는 2026-09-19 폐기, copilot은 비용 소진으로 중단 상태.
 """
 
 import json
@@ -20,10 +26,8 @@ from typing import Dict, List
 
 from lib.db import esc_sql, psql, psql_ok
 from lib.parsers import opencode as opencode_parser
-from lib.parsers.aider import parse as parse_aider
 from lib.parsers.claude import parse as parse_claude
 from lib.parsers.copilot import parse as parse_copilot
-from lib.parsers.gemini import parse as parse_gemini
 from lib.tracking.agent_names import normalize as normalize_agent
 
 POLL_INTERVAL = 3  # seconds between full scans
@@ -39,16 +43,6 @@ SOURCES = {
         "parser": parse_copilot,
         "dir": Path("/home/opc/.copilot/session-state"),
         "glob": None,  # handled specially — subdirectories
-    },
-    "gemini": {
-        "parser": parse_gemini,
-        "dir": Path("/home/opc/.gemini/tmp/opc/chats"),
-        "glob": "session-*.jsonl",
-    },
-    "aider": {
-        "parser": parse_aider,
-        "dir": Path("/home/opc/.aider.chat.history.md"),
-        "glob": None,  # single file
     },
     "opencode": {
         "parser": opencode_parser.parse,
@@ -120,19 +114,6 @@ def _list_session_files(source: str, config: Dict) -> List[tuple]:
                 if ef.exists():
                     paths.append((sub.name, ef))
         return paths
-    elif source == "gemini":
-        paths = []
-        for p in sorted(d.glob("session-*.jsonl")):
-            try:
-                with open(p) as f:
-                    header = json.loads(f.readline().strip())
-                sid = header.get("sessionId", p.stem.replace("session-", ""))
-            except Exception:
-                sid = p.stem.replace("session-", "")
-            paths.append((sid, p))
-        return paths
-    elif source == "aider":
-        return [(str(uuid.uuid5(uuid.NAMESPACE_DNS, "aider.devforge")), d)]
     elif source == "opencode":
         # One entry per session in the sqlite DB. Session ids stay raw here;
         # process_session maps them to deterministic UUIDs via sid_fn.
@@ -175,7 +156,7 @@ def insert_turns(
     existing_ids = set()
     msg_ids = [t.get("source_message_id") for t in new_turns if t.get("source_message_id")]
     for i in range(0, len(msg_ids), _INSERT_CHUNK):
-        chunk = msg_ids[i:i + _INSERT_CHUNK]
+        chunk = msg_ids[i : i + _INSERT_CHUNK]
         ids_sql = ",".join(f"'{esc_sql(m)}'" for m in chunk)
         rows = psql(f"SELECT source_message_id FROM turns WHERE source_message_id IN ({ids_sql})")
         if rows:
@@ -324,9 +305,7 @@ def run_once() -> int:
 
         for session_id, path in sessions:
             try:
-                n = process_session(
-                    source, session_id, path, config["parser"], checkpoint, config
-                )
+                n = process_session(source, session_id, path, config["parser"], checkpoint, config)
                 total += n
             except Exception as e:
                 print(f"  ERROR {source}/{session_id[:8]}: {e}")

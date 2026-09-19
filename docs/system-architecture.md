@@ -170,6 +170,14 @@ turn_watcher → turns(raw) → raw_consumer(worker) → pending
 결과는 DB(`turns`, `review_facts`, `observations`, `embeddings`)에 저장되고
 MCP(`fact_*`, `obs_*`, `search_*`, `mem_*`)로 노출된다.
 
+**수집 소스 (2026-09-19 기준)**:
+- claude: `~/.claude/projects/-home-opc/*.jsonl` **단일 경로만** 수집.
+  claude는 반드시 HOME(~)에서 실행할 것 — `/opt/workspace` 등 다른 cwd에서
+  실행하면 `-opt-workspace` 같은 프로젝트 디렉토리가 생성되고 수집되지 않는다.
+- opencode: `~/.local/share/opencode/opencode.db`
+- copilot: `~/.copilot/session-state` (비용 소진으로 비활성)
+- gemini/aider: 2026-09-19 폐기 (파서 삭제)
+
 ### 4.3 ebook 파이프라인
 `ebook-watcher`(5분 loop): discover → collect(FlareSolverr/Playwright) → enrich → index → revalidate.
 `ebook-api`(:8089)가 서빙, Caddy `/api/*` 경유.
