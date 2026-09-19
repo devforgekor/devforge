@@ -68,7 +68,8 @@ _SECRETS: dict[str, str] = {k: os.environ.get(k, "") for k in (
     "SMTP_HOST",
     "SMTP_PORT",
     "SMTP_USER",
-    "GMAIL_SMTP_MINIPARK4U",
+    "GMAIL_SMTP_USER_MINIPARK4U",
+    "GMAIL_SMTP_PASSWORD_MINIPARK4U",
 )}
 
 SLACK_SIGNING_SECRET = _SECRETS.get("SLACK_SIGNING_SECRET_KEY", "")
