@@ -173,8 +173,8 @@ def regenerate_handover_yaml():
         f"ORDER BY id"
     )
     issues = _pj(
-        f"SELECT DISTINCT ON (issue_text) issue_text, issue_id, detail, resolved FROM known_issues "
-        f"WHERE NOT resolved ORDER BY issue_text, id DESC"
+        f"SELECT DISTINCT ON (COALESCE(issue_id, issue_text)) issue_text, issue_id, detail, resolved "
+        f"FROM known_issues WHERE NOT resolved ORDER BY COALESCE(issue_id, issue_text), id DESC"
     )
     completed = _pj(
         "SELECT log_text FROM ("

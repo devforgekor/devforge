@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-19T05:20:14.21929+00:00'
+  time: '2026-09-19T13:44:05.96125+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -427,6 +427,41 @@ decisions:
   detail: '최종 판정(2026-09-14): Phase 0 실행 승인. 다음 행동 — specs/mcp-contract.json 초안(스키마는 review-triage-v5 §2.2) → ADR-0006에 12툴
     목록 반영·Accepted 전환 → W1 baseline 1주 측정 → 게이트 6개 통과 후 Phase A/MCP 착수.'
   status: open
+- id: hb-01
+  detail: 'watchdog 외부 heartbeat 정지 복구(2026-09-19): onmydoc 외부 dead-man''s switch(~/.wd_monitor/wdpulse.py)가 ''watchdog heartbeat
+    is stale(1489m)'' 알림. 원인=2026-09-18 KV 전환으로 secrets.env 삭제 시 비밀 아닌 설정값 WATCHDOG_PING_SSH=onmydoc이 KV에 미등록 → orchestrator._ping_external()이
+    조용히 skip. 수정: 코드를 DEVFORGE_WATCHDOG_PING_SSH/DEVFORGE_WATCHDOG_PING_URL만 읽도록 변경(fallback 제거), KV DEVFORGE-WATCHDOG-PING-SSH
+    값 오등록(SP id c9146961 → onmydoc) 교정. 검증: 재시작 후 onmydoc last_ping 갱신(age 54s). 커밋 e832929 push. task #35.'
+  status: open
+- id: hb-02
+  detail: 'KV 이름 규칙 확정(2026-09-19): 비밀/비밀아님 구분 없이 KV 단일 소스로 관리하되 코드에서는 DEVFORGE_ 접두어로 읽는다. env 키명은 KV 시크릿명의 ''_''↔''-'' 1:1
+    변환(DEVFORGE_WATCHDOG_PING_SSH ↔ DEVFORGE-WATCHDOG-PING-SSH). ''이름 불일치''와 ''값 오등록''은 별개 문제로 분리 진단할 것 — 이번은 이름은 코드를 맞추고
+    값은 KV를 고치는 케이스였다. 비밀 아닌 config를 KV에 미등록하면 조용히 skip되어 기능이 죽는다.'
+  status: open
+- id: dp-01
+  detail: '서버측 Droplr 단축 깨짐 발견(2026-09-19, P0 미수정): scripts/lib/droplr.py:40이 DRPLR_EMAIL/DRPLR_PASSWORD를 읽지만 KV 실제 키는 DROPLR_USER/DROPLR_PASS.
+    이름 불일치로 shorten()이 항상 None → blob_uploader._shorten_with_droplr(), droplr_upload.py(droplr/dplr alias), cli.py 업로드 경로
+    단축이 조용히 실패. 수정 방향: DROPLR_USER/DROPLR_PASS(Basic) 기준으로 변경(실제 API 호출 검증됨, HTTP 201).'
+  status: open
+- id: dp-02
+  detail: 'DROPLR_AUTH_TOKEN_KEY 등록됨(2026-09-19) — 현재 아무 코드도 읽지 않음(grep 0건). 값은 유효한 JWT(id 500784, exp 2026-09-26)이며 실측 검증:
+    Bearer → HTTP 201, Basic(DROPLR_USER/PASS) → HTTP 201. 둘 다 동작. Bearer 경로를 코드에 연결하려면 만료 회전 필요(Basic보다 안전). 미연결 상태로는 미사용.'
+  status: open
+- id: dp-03
+  detail: 'devforge-url-shorten(~/.config/devforge/bin)은 이미 Droplr 제거 상태(주석: ''Droplr removed - CloudFront blocks POST'')
+    → TinyURL/is.gd로 대체. 서버 표준은 Node CLI(drplr)가 아니라 Python HTTP API(Basic)임. drplr CLI는 로컬 PC ~/.config/drplr/config.json(암호화)에만
+    존재하며 1.2.0/droplr-api 1.0.0.'
+  status: open
+- id: kv-01
+  detail: 'secrets.env 삭제 여파(2026-09-19): 프로덕션 .py 39개가 아직 ~/.config/devforge/secrets.env를 fallback으로 읽음(notion_client, watchdog/config,
+    slack_notify, telegram_send, file_registry, research/_keys 등). KV로 래핑되지 않은 timer/cron/oneshot 경로는 전부 조용히 실패 가능 — heartbeat
+    사고와 동일 뿌리. 별도 감사 태스크 필요.'
+  status: open
+- id: dp-review-01
+  detail: '붙여준 ''Droplr API 사용 가이드 팩트체크'' 리뷰 검토(2026-09-19): 원본 가이드는 이 레포/docs에 존재하지 않음(droplr|drplr 검색). 리뷰의 생태계 설명은 독립 검증
+    결과 대체로 정확(HMAC-SHA1+15분 skew, 앱키 요청발급, drplr 1.2.0, droplr-api 1.0.0, JumpCloud 인수, Loom→Atlassian, CloudApp→Zight, ScreenPal).
+    단 ''drplr CLI가 표준'' 전제는 서버 현실과 다름(서버는 Python HTTP API). 반영 대상 문서 없음.'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -443,6 +478,9 @@ known_issues:
     at 23G + ctx 4096 + cache-ram 512. 14B Q4 is more stable alternative.'
   resolved: false
 - text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
+  resolved: false
+- id: az-gi-k1
+  detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
   resolved: false
 - text: 'Azure 2 vCPU(FX2ms_v2 = 1 physical core/2 SMT threads) Spot 성능 실측: llama.cpp n_threads=1(물리 core 기준), -t 2 무효(prefill
     14.28→14.36 tok/s, memory-bound). 실측 prefill ~14 tok/s(신규), 장시간/장문맥에서 6.7로 감소, generation ~2-4.5 tok/s(장문맥 0.5). ctx 32768
@@ -481,9 +519,19 @@ known_issues:
 - text: 'devforge-mcp MCP tools (action_write, action_poll_results) require container restart for FastMCP tool registry update.
     Does not auto-reload on file change. Restart command: systemctl --user restart container-devforge-mcp.'
   resolved: false
+- id: doc-ki-01
+  detail: docs/object-storage.md:139가 자격증명을 'DRPLR_*'로 표기 — 실제 키(DROPLR_USER/PASS)와 불일치. 문서 정정 필요.
+  resolved: false
 - text: 'Docs still inconsistent (P2 backlog): OPERATIONS_GUIDE `mcp serve` port role; API_REFERENCE vs system-architecture
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
     placement.'
+  resolved: false
+- id: dp-ki-01
+  detail: 'P0: scripts/lib/droplr.py가 DRPLR_EMAIL/DRPLR_PASSWORD를 읽으나 KV 키는 DROPLR_USER/DROPLR_PASS — 서버 Droplr 단축 전면 실패.
+    수정 필요.'
+  resolved: false
+- id: dp-ki-02
+  detail: 'P1: DROPLR_AUTH_TOKEN_KEY가 KV에 등록됐으나 코드 미연결(grep 0건). JWT exp 2026-09-26 — 연결 시 회전 로직 필요.'
   resolved: false
 - text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중 RemoteDisconnected/ConnectionResetError
     반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB) 메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'
@@ -493,6 +541,33 @@ known_issues:
   resolved: false
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
+  resolved: false
+- id: kv-ki-01
+  detail: 'P1: secrets.env 삭제 후 39개 프로덕션 .py가 여전히 해당 파일을 fallback으로 참조 → KV 미주입 실행경로 조용히 실패. 감사·전환 필요.'
+  resolved: false
+- id: kv-ki-02
+  detail: 'KV 누락 config 키(2026-09-19 감사): SMTP_HOST/PORT/USER, DUCKDNS_ACCOUNT/DOMAIN/*_IP, OCI_REGION/HOME_REGION/IDCS_URL,
+    DEVFORGE_SERVER_HOST/USER/SSH_KEY, NEWS_WEB_URL, VERCEL_*, EBOOK_DAILY_TRAFFIC_LIMIT_MB, DATAIMPULSE_*, MASKPROXY_*, NEON_DATABASE_URL
+    등. 사용처 grep 후 필요한 키만 등록.'
+  resolved: false
+- id: nki01-01
+  detail: 이전 cycle 49 day_verify facts NLI/reranker 없이 force-pass. reranker_recover.py 기본 조건에 source='day_verify' 포함 여부 확인
+    필요. 미포함 시 SQL 일괄 UPDATE 필요.
+  resolved: false
+- id: nki01-02
+  detail: cli.py status --json models.pod-a = ["?", "?", "?"]. Pod A /v1/models 응답 문제 지속. Pod A 기능상 정상 작동 중.
+  resolved: false
+- id: nki01-03
+  detail: turns 테이블에 updated_at 컬럼 없음. pipeline_state 변경 추적 어려움. (created_at만 존재)
+  resolved: false
+- id: nki01-04
+  detail: CONTRADICTION=0 미해결. 신규 GSAR COMPLEMENTARY 4-way NLI 첫 결과 확인 후 재평가 필요.
+  resolved: false
+- id: nki02-01
+  detail: OCI root 확장 미완료. /etc/fstab 정리 완료, 백업 완료. Pod A는 정상 기동 중 (devforge-net 브릿지), Pod B 복구 필요.
+  resolved: false
+- id: nki12-02
+  detail: OpenRouter free model (:free)은 유료 키($10+)로 호출해도 cost=$0이지만 RPM 20 제한은 키 등급과 무관하게 동일. 15RPM proxy로 대응.
   resolved: false
 - text: 'OPEN(2026-09-14): 최종 계획(D1~D9) 결정 대기. 저위험 M0(0회 MCP 툴 allowlist false: lsp proxy_artifact_{get,info,list}· detect_lsp_servers·yggdrasil
     list_plans) 미적용(사용자 승인 대기). 컷오버 도메인(watchdog/turn_collection/pipeline/ model_management)+웹수집/ingest+추출 라우팅(ADR-0005) 미구현
@@ -528,17 +603,25 @@ known_issues:
 - text: 'Reranker --batch-size 1024 on 22GB OCI ARM: RSS ~4.6GB, safe. Swap 73% used (2.9/4GB) despite swappiness=10, indicating
     genuine RAM pressure. Do not increase batch-size beyond 1024 without verifying free memory >6GB.'
   resolved: false
+- id: sec-ki-01
+  detail: '보안: 검증 과정에서 DROPLR JWT/비밀번호가 세션 로그·도구 출력에 노출됨. 해당 세션 로그 공유 시 토큰 회전 권장. 향후 /proc/<pid>/environ 전체 덤프 금지(필요 키만 grep).'
+  resolved: false
 - text: 'Slot deadlock watchdog is reactive not preventive: --slot-prompt-similarity 0 reduces but doesn''t eliminate risk.
     If deadlock persists after Pod B restart, need different cache-reuse strategy (--cache-reuse 0 as last resort).'
+  resolved: false
+- id: strict-xplore-removed
+  detail: 3 experimental test files (*_7b_vs_9b*) import FREE variants as aliases. Body still uses old names. Verify prompt
+    equivalence.
+  resolved: false
+- id: sys-day-extract-re-export
+  detail: Backward compat for nli_compare.py, extract_compare.py. Now FREE. These tests work but test different prompts than
+    before.
   resolved: false
 - text: 'Veritas single-batch predicate 간섭 리스크: MiniCheck 원 설계는 (document, single_claim) → binary. _binary_nli_batch에서 모든
     predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음. max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도
     문제 발견 시 각 predicate 개별 호출로 분리 (latency N배 증가).'
   resolved: false
 - text: watchdog 코드에 ruff SIM102/F401 등 기존 스타일 경고 다수 + checker.py 타입 경고 존재. 단, cli.py lint는 위반 0. 기능 영향 없음, 정리 시 일괄 처리.
-  resolved: false
-- id: az-gi-k1
-  detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
   resolved: false
 completed_log:
 - OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
@@ -642,3 +725,7 @@ completed_log:
   Phase 0 산출물 6종 + 12툴 계약 열거 + mcp-contract.json JSON Schema + 게이트 6개 선형 체인+예외 경로. 5차 교차검증 후 리뷰 루프 종결, 최종=Phase 0 실행 승인. rf-triage-07:
   (1) specs/mcp-contract.json 초안 작성, (2) ADR-0006 Accepted 전환, (3) W1 baseline 측정 시작. 산출물: docs/reports/review-triage{-package,-v2,-v3,-v4,-v5}-20260914.md,
   Droplr v1 https://d.pr/97DxrE · v2 https://d.pr/ihZ81J · v3 https://d.pr/koCTH7 · v4 https://d.pr/RZygjB · v5 https://d.pr/waa3yN'
+- '(2026-09-19, opencode) watchdog 외부 heartbeat 복구 — KV DEVFORGE-WATCHDOG-PING-SSH 등록(값 SP id→onmydoc 교정), orchestrator._ping_external()을
+  DEVFORGE_WATCHDOG_PING_SSH/URL로 정리, 재시작 후 onmydoc last_ping 갱신 확인(age 54s). 커밋 e832929 push. task #35 completed.'
+- (2026-09-19, opencode) Droplr 생태계·서버 통합 감사 — lib/droplr.py 키 불일치(P0), DROPLR_AUTH_TOKEN_KEY 미사용, devforge-url-shorten의 Droplr
+  제거, secrets.env fallback 39파일, KV 누락 config 목록 식별. 붙여준 외부 팩트체크 리뷰 독립 검증(대체로 정확, 원본 가이드는 레포에 부재).
