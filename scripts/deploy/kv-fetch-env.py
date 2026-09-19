@@ -258,9 +258,10 @@ def main():
             env_name = kv_name.replace("-", "_")
             value = get_secret_value(token, kv_name)
             if value:
-                # shell eval 안전: 값을 single quote로 감싸고 내부 ' 이스케이프
-                safe_value = value.replace("'", "'\\''")
-                print(f"{env_name}='{safe_value}'")
+                # systemd EnvironmentFile 형식: 값은 그대로(raw), 개행만 제거.
+                # single-quote로 감싸면 소비자(EnvironmentFile)가 따옴표를 값의
+                # 일부로 읽어 인증 실패한다(2026-09-19 WEBOBSIDIAN_PASSWORD 사례).
+                print(f"{env_name}={value.replace(chr(10), ' ')}")
 
         print(f"✅ Key Vault 시크릿 출력 완료: {len(secrets)}개", file=sys.stderr)
         sys.exit(0)
