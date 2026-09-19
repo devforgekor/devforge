@@ -1,7 +1,7 @@
 # DevForge 시크릿 관리 전환 핸드오버
 
 작성일: 2026-09-18
-최종 업데이트: 2026-09-18 (세션 2)
+최종 업데이트: 2026-09-19 (watchdog 외부 heartbeat 키 복구)
 작성자: opencode 세션
 상태: **완료** — 평문 시크릿 제거 완료 (secrets.env + .env.local 모두 삭제)
 
@@ -66,6 +66,19 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
   - TAVILY/YOUCOM의 MESIDS는 `-GITHUB` 접미사 사용
 - **OPENROUTER**: 3개 계정 (`HYEONMINPARK4U`, `MESIDS`, `MINIPARK4U`)
 - 목적: rate limit 분산, quota 격리, 장애 격리
+
+### ⚠️ 비밀 아닌 config 값 (2026-09-19 추가)
+Key Vault는 "시크릿" 저장소지만, 아래 값들은 **자격증명이 아닌 설정값**이라
+Key Vault 단일 소스로 관리한다(서버 디스크 평문 방지). 코드는 `DEVFORGE_` 접두어로 읽는다.
+
+| 코드가 읽는 env | Key Vault 시크릿 이름 | 예시 값 | 읽는 위치 |
+|----------------|----------------------|---------|----------|
+| `DEVFORGE_WATCHDOG_PING_SSH` | `DEVFORGE-WATCHDOG-PING-SSH` | `onmydoc` | `scripts/lib/watchdog/orchestrator.py:_ping_external` |
+| `DEVFORGE_WATCHDOG_PING_URL` | `DEVFORGE-WATCHDOG-PING-URL` | (미사용, HTTP 핑 시) | 동일 |
+
+**규칙**: 비밀/비밀아님 모두 KV에 넣고, 코드에서는 `DEVFORGE_` 접두어로 읽는다.
+`secrets.env` 삭제(2026-09-18) 이후 비밀 아닌 키를 KV에 미등록하면 조용히 skip되어
+기능이 죽는다(이번 watchdog heartbeat 정지 사례). 신규 키 추가 시 KV 등록을 누락하지 말 것.
 
 ---
 
@@ -213,6 +226,21 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 - **#6 GPG import 중복 제거 (P3)**: `gpg --list-keys` 체크 후 없을 때만 import
 - **#7 동시 실행 보호 (P3)**: PID 파일 lock (systemd timer는 중복 방지 내장)
 
+### 우선순위 0.5: 누락 config 키 감사 (2026-09-19 추가)
+`secrets.env` 삭제 시 KV에 미등록된 비밀 아닌 config가 다수 존재. 현재 KV에 **없는** 키(사용처 확인 후 등록 필요):
+
+| 누락 키 | 사용처(추정) | 비고 |
+|---------|-------------|------|
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` | news collector, golden_image, kuhwa | `GMAIL_SMTP_MINIPARK4U`(KV)와 별개 |
+| `DUCKDNS_ACCOUNT` / `DUCKDNS_DOMAIN` / `DUCKDNS_*_IP` | duckdns 갱신 스크립트 | `DUCKDNS_TOKEN_KEY`만 KV에 있음 |
+| `OCI_REGION` / `OCI_HOME_REGION` / `OCI_IDCS_URL` | OCI 자동화 | |
+| `DEVFORGE_SERVER_HOST` / `_USER` / `_SSH_KEY` | 서버 자기참조 자동화 | SSH 키는 비밀 |
+| `NEWS_WEB_URL` / `VERCEL_*` | news/vercel 재배포 | |
+| `EBOOK_DAILY_TRAFFIC_LIMIT_MB`, `DATAIMPULSE_*`, `MASKPROXY_*`, `NEON_DATABASE_URL` 등 | 각 프로젝트 | 사용 여부 확인 필요 |
+
+→ KV 미등록 상태로 코드가 env를 읽으면 조용히 skip/기본값 사용 → 기능 정지 가능.
+   사용처를 grep으로 확인해 실제 필요한 키만 KV에 등록한다.
+
 ### 우선순위 1: 나머지 systemd 서비스 전환
 - **완료**: 10개 서비스 전환 완료 (2026-09-18)
 - **남은 작업**: `container-devforge-fastapi.container` (기존 버그로 인해 보류)
@@ -233,6 +261,15 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 ---
 
 ## 9. Git 상태
+
+### 2026-09-19: watchdog 외부 heartbeat 복구 (커밋 대상)
+| 파일 | 변경 내용 |
+|------|----------|
+| `scripts/lib/watchdog/orchestrator.py` | `_ping_external()`가 `DEVFORGE_WATCHDOG_PING_SSH` / `DEVFORGE_WATCHDOG_PING_URL`을 읽도록 변경 (기존 `WATCHDOG_PING_*` 제거) |
+| `docs/handover-secrets-kv.md` | 누락 config 키 감사 + 비밀 아님 키 규칙 추가 |
+
+- KV `DEVFORGE-WATCHDOG-PING-SSH` 값: `c9146961-...`(SP id, 오등록) → `onmydoc`으로 교정
+- 검증: watchdog 재시작 후 onmydoc `~/wd_monitor/last_ping` 갱신 확인(age 54s)
 
 ### 관련 파일 (커밋됨)
 | 파일 | 최근 커밋 | 변경 내용 |
@@ -285,6 +322,7 @@ f1160f1 docs: 시크릿 관리 전환 핸드오버 + kv-fetch-env 래퍼
 
 - 개인키는 **로컬 PC에서만** 보관 (서버/이메일/클라우드 저장 금지)
 - `azure-client-secret`은 서버에서만, chmod 600
-- `secrets.env` 평문은 아직 서버에 존재 — 전환 완료 후 반드시 삭제
+- `secrets.env` 평문은 삭제 완료(2026-09-18). 백업 `secrets.env.backup.20260918`만 잔존 — 2주 안정화 후 삭제
 - GitHub org 시크릿에 시크릿 값이 아직 존재 — 안정 확인 후 삭제
 - 백업 .gpg 파일은 서버 디스크에 있지만 복호화 불가 (개인키 없음) — 추가 오프사이트 복사 권장
+- 프로세스 env 덤프 시 KV 값이 노출될 수 있음 — `tr`/`xargs`로 `/proc/<pid>/environ` 전체 출력 금지, 필요한 키만 grep
