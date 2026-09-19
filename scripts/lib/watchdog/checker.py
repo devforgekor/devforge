@@ -92,7 +92,7 @@ def check_health(port: int, label: str = "") -> tuple[bool, str]:
 # ── T2: LLM Probe (실제 추론 검증) ─────────────────────────────────
 
 
-def check_llm_probe(port: int, label: str = "", timeout: int = 15) -> tuple[bool, str]:
+def check_llm_probe(port: int, label: str = "", timeout: int = 60) -> tuple[bool, str]:
     """T2: POST /v1/chat with max_tokens=1. Returns (ok, latency_ms)."""
     body = json.dumps(
         {
