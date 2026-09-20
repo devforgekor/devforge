@@ -204,7 +204,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- pip3 install --user argcomplete (tracer bash-completion 오류 해결)
 - 'system_sync.sh: git auto-commit 로직 추가'
 - 'devforge-daily-structure.service: git commit + git push ExecStart 추가 (%% 이스케이프)'
 - systemd daemon-reload 완료, 실제 커밋 생성 확인 (5811f6e)
@@ -320,3 +319,5 @@ completed_log:
   cli.py lint english-only-docs 14→0. 남은 것(>400줄 문서 2, 기타 정책 lint) 기록. ingest/provenance 연결 점검 PASS(unknown 0%).'
 - '(2026-09-20, opencode) Shadow 검증 하네스: scripts/shadow_diff.py 생성(prod vs review_facts_shadow, diff=0 게이트), 자체검증 entity_scan
   100→diff=0→정리. ADR-0003 Applied로 갱신. 실제 shadow run은 리팩터드 파이프라인 구현 후.'
+- '(2026-09-20, opencode) W1 baseline 복구: baseline-daily.service가 user 유닛에 User=opc 지정으로 매일 216/GROUP 실패 → 줄 제거. 2026-09-20.json
+  생성(turns_24h 165, total 8000, hook p95 331ms). 미측정일 D2~D7(09-15~19)은 장애로 소실 기록. 이후 7일 연속 측정으로 게이트 2/3/6 산출.'
