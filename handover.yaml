@@ -466,6 +466,12 @@ decisions:
   detail: kv-fetch-env.py/kv-backup.py에 다중KV 병합(AZURE_KEYVAULT_URLS) 추가, 새 SP abc5aab0 사용. 구 KV(kv-devforge-prod-krc, tenant
     b08cd1bf)는 purge protection으로 2026-12-09까지 퍼지 불가 → 이름 재사용 보류. 런타임 영향 없음.
   status: open
+- id: KV-AUDIT-2026-09-20
+  detail: '핸드오버 문서(docs/handover-secrets-kv.md)를 실제 상태와 감사. 일치: secrets.env 삭제, GPG 개인키 부재, 신규 테넌트 9ec65251/SP abc5aab0 다중KV,
+    devforge 93/onmydoc 88, kv-backup.timer active, webobsidian drop-in, task #38. 정정: §12 컨테이너 4→3(fastapi KV 미적용), §4.2
+    fastapi 보류사유(calendar_router는 try/except 가드됨), §4.2 서비스 11개+컨테이너 3개(누락 3서비스 추가), §8 fallback 제거→호환성 잔존(14 .py), kuhwa.yaml→update-schedule.yml,
+    §4.1 kv-export-env.sh 추가. 조치: 미푸시였던 0ec3855 포함 main 13커밋 push 완료(main=origin/main).'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -501,6 +507,10 @@ known_issues:
   resolved: false
 - text: 실행 중인 Claude Code 세션은 env를 이미 들고 있어 재시작 시에만 모드 반영. claude-mode set은 미래 세션/새 tmux 창에 적용됨. tmux setenv -g로 글로벌 env는
     openrouter로 이미 동기화됨.
+  resolved: false
+- id: CLAUDE-SECRETSENV-2026-09-20
+  detail: /home/opc/.claude/secrets.env 에 NOTION_TOKEN 평문 잔존(감사 시 mode 644, world-readable). KV(NOTION-TOKEN-KEY)와 중복. 권한
+    600으로 조치함. 파일 삭제 권장(미삭제).
   resolved: false
 - text: 'CRITICAL: exa_mcp.py + context7_mcp.py _read_message()/_send_message() modified for JSON-line compat. If update_handover.py
     runs before session writes to handover.yaml, completed_log and decisions may get overwritten. Always check handover.yaml
@@ -742,3 +752,6 @@ completed_log:
   DEVFORGE_WATCHDOG_PING_SSH/URL로 정리, 재시작 후 onmydoc last_ping 갱신 확인(age 54s). 커밋 e832929 push. task #35 completed.'
 - (2026-09-19, opencode) Droplr 생태계·서버 통합 감사 — lib/droplr.py 키 불일치(P0), DROPLR_AUTH_TOKEN_KEY 미사용, devforge-url-shorten의 Droplr
   제거, secrets.env fallback 39파일, KV 누락 config 목록 식별. 붙여준 외부 팩트체크 리뷰 독립 검증(대체로 정확, 원본 가이드는 레포에 부재).
+- '(2026-09-20, opencode) 핸드오버 문서 감사·정정 — docs/handover-secrets-kv.md 실제 상태 대조. 일치 8항목 확인. 정정 7건(§4.1 kv-export-env.sh 누락,
+  §4.2 fastapi 사유·서비스 수, §8 fallback 잔존·kuhwa 파일명, §9 push, §12 컨테이너 3개). 미푸시 커밋 13개 push(main=origin/main, 0ec3855 포함). 보안:
+  ~/.claude/secrets.env NOTION_TOKEN 평문 mode644→600 조치, 삭제 권장.'

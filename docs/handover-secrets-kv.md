@@ -238,9 +238,10 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 ## 8. 남은 작업 (다음 세션)
 
 ### ✅ 완료: 2026-09-18 세션 2
-1. **평문 시크릿 제거 완료**
-   - `~/.config/devforge/secrets.env` 삭제 (백업: `secrets.env.backup.20260918`)
-   - `/opt/workspace/minihome/apps/news/.env.local` 삭제 (백업: `.env.local.backup.20260918`)
+1. **평문 시크릿 제거**
+   - `~/.config/devforge/secrets.env` 삭제. 단 백업 `secrets.env.backup.20260918`는 **감사(2026-09-20) 시 디스크에 없음**.
+   - `/opt/workspace/minihome/apps/news/.env.local` 삭제. 백업 `.env.local.backup.20260918`는 news가 아닌 `ebooklib/`에만 존재.
+   - `~/.claude/secrets.env`(NOTION_TOKEN 평문, 당시 mode 644) 잔존 — §11 보안 노트 참조. 권한 600 조치, 삭제 권장.
    
 2. **코드 리팩터링 (6개 파일) — 환경변수 우선으로 변경**
    - News 프로젝트: `translator.py`, `digest.py`, `exa_extractor.py`, `multilingual_processor.py`
@@ -287,17 +288,17 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 - **남은 작업**: `container-devforge-fastapi.container` (KV 미적용, §4.2 참조)
 
 ### 우선순위 2: secrets.env 파일 제거
-- **완료**: `~/.config/devforge/secrets.env` 삭제 완료 (2026-09-18)
-- **완료**: `/opt/workspace/minihome/apps/news/.env.local` 삭제 완료 (2026-09-18)
-- **완료**: 백업 생성 (`*.backup.20260918`)
+- **완료**: `~/.config/devforge/secrets.env` 삭제 완료 (2026-09-18). 백업 파일은 감사 시 디스크에 없음.
+- **완료**: `/opt/workspace/minihome/apps/news/.env.local` 삭제 완료 (2026-09-18). 백업은 `ebooklib/.env.local.backup.20260918`에만 존재.
+- **추가 조치 필요**: `~/.claude/secrets.env`(NOTION_TOKEN 평문) 잔존 — 삭제 권장 (§11 참조).
 
 ### 우선순위 3: GitHub 시크릿 정리
 - 안정 확인 후 (2주) GitHub org 시크릿에서 시크릿 값 삭제
 - GitHub은 Azure 연동 자격증명 (`AZURE_MESIDS_*`)만 유지
 
 ### 우선순위 4: sync-kv.yml 워크플로우 정리
-- 현재 GitHub → Key Vault 이전용 (수동). `tr` 충돌 + 시크릿 접근 문제로 GitHub Actions에서 불안정
-- 서버 직접 등록 방식(`kv-backup.py` 로직)이 더 확실 — 워크플로우 대신 스크립트 활용 권장
+- `.github/workflows/sync-kv.yml` → **2026-09-20 `.github/_deprecated/sync-kv.yml.deprecated`로 폐기 이동**
+- 기존 GitHub → Key Vault 이전용(수동)이었고 `tr` 충돌 + 시크릿 접근 문제로 불안정 → 서버 직접 등록(`kv-backup.py` 로직) 권장
 
 ---
 
@@ -333,7 +334,8 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 - 개인키는 **로컬 PC에서만** 보관 (서버/이메일/클라우드 저장 금지)
 - `azure-client-secret`은 서버에서만, chmod 600
-- `secrets.env` 평문은 삭제 완료(2026-09-18). 백업 `secrets.env.backup.20260918`만 잔존 — 2주 안정화 후 삭제
+- `secrets.env` 평문은 삭제 완료(2026-09-18). 단 감사(2026-09-20) 결과 `secrets.env.backup.20260918` 백업은 디스크에 없음.
+- **`~/.claude/secrets.env` (NOTION_TOKEN 평문)**: 감사(2026-09-20)에서 발견. 당시 mode 644 → **600으로 조치**. KV(`NOTION-TOKEN-KEY`)와 중복이므로 파일 삭제 권장(미삭제).
 - GitHub org 시크릿에 시크릿 값이 아직 존재 — 안정 확인 후 삭제
 - 백업 .gpg 파일은 서버 디스크에 있지만 복호화 불가 (개인키 없음) — 추가 오프사이트 복사 권장
 - 프로세스 env 덤프 시 KV 값이 노출될 수 있음 — `tr`/`xargs`로 `/proc/<pid>/environ` 전체 출력 금지, 필요한 키만 grep
