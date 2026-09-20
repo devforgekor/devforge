@@ -1,7 +1,7 @@
 # DevForge 시크릿 관리 전환 핸드오버
 
 작성일: 2026-09-18
-최종 업데이트: 2026-09-20 (신규 테넌트/KV 마이그레이션 — §12 참조)
+최종 업데이트: 2026-09-20 (신규 테넌트/KV 마이그레이션 §12 + 감사 정정 §4/§8/§9)
 작성자: opencode 세션
 상태: **완료** — 평문 시크릿 제거 완료 (secrets.env + .env.local 모두 삭제)
 
@@ -121,7 +121,8 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 |------|------|----------------------|
 | `scripts/deploy/kv-fetch-env.py` | Key Vault → 환경변수 주입 → 명령 실행 래퍼 | P0+P1: 에러 처리 강화, retry 로직 (최대 3회, exponential backoff) |
 | `scripts/deploy/kv-backup.py` | Key Vault → GPG 암호화 백업 | P0+P1: 에러 처리 강화, retry 로직, 임시 파일 보안 강화 (tempfile 사용) |
-| `.github/workflows/sync-kv.yml` | GitHub → Key Vault 이전 워크플로우 (수동) | - |
+| `scripts/deploy/kv-export-env.sh` | 지정 키만 KV 조회 → 임시 EnvironmentFile 생성(서비스별 최소 주입) | quoting artifact 자동 정규화 (2026-09-19) |
+| `.github/_deprecated/sync-kv.yml.deprecated` | GitHub → Key Vault 이전 워크플로우 (폐기, 서버 직접 등록 권장) | 2026-09-20 비활성 |
 | `.github/workflows/sync-secrets.yml` | GitHub Secrets → 서버 동기화 (기존, 유지) | - |
 
 **P0+P1 개선 상세 (커밋 4c28ef7):**
@@ -131,7 +132,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 ### 4.2 systemd 서비스 & 컨테이너
 
-**전환 완료 (Key Vault 기반, 10개):**
+**전환 완료 (시스템드 서비스 11개 + 컨테이너 3개):**
 | 서비스 | Phase | 변경 일자 | 비고 |
 |--------|-------|----------|------|
 | `openrouter-rr-proxy.service` | Pre-Phase | 2026-09-17 | 첫 전환 (검증 완료) |
@@ -141,9 +142,13 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | `gemini-openai-proxy.service` | Phase 1 | 2026-09-18 | - |
 | `anthropic-proxy.service` | Phase 2 | 2026-09-18 | **메인 프록시** |
 | `devforge-watchdog.service` | Phase 2 | 2026-09-18 | Slack 알림 |
+| `ebook-api.service` | Phase 4 | 2026-09-18 | ebooklib 프록시 인증 |
+| `devforge-summary-retry.service` | 후속 | 2026-09-18 | news 요약 재시도 |
+| `ebook-watcher.service` | 후속 | 2026-09-18 | ebook 파이프라인 loop |
+| `devforge-news.service` | 후속 | 2026-09-18 | news collector |
 | `container-postgres.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
 | `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
-| `ebook-api.service` | Phase 4 | 2026-09-18 | ebooklib 프록시 인증 |
+| `container-webobsidian.container` | Phase 3 | 2026-09-19 | ExecStartPre + kv-export-env.sh (WEBOBSIDIAN-PASSWORD) |
 
 **전환 불필요 (1개):**
 | 서비스 | 사유 |
@@ -153,7 +158,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 **전환 보류 (1개):**
 | 서비스 | 사유 | 우선순위 |
 |--------|------|---------|
-| `container-devforge-fastapi.container` | 기존 코드 버그 (`calendar_router` undefined), Key Vault 전환 무관 | P3 |
+| `container-devforge-fastapi.container` | `calendar_router`는 이미 try/except로 가드됨(2026-09-20 확인) — 전환 자체가 저우선 | P3 |
 
 ### 4.3 GPG 백업
 
