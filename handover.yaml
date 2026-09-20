@@ -163,9 +163,6 @@ known_issues:
 - text: 'Azure Qwen Deep Dive 검증 미완: azureqwen provider로 Deep Dive 1회 실행은 opencode 재시작 필요(config 핫리로드 안 됨) + launch로 VM/터널
     유지 상태여야 함. 엔드포인트 자체는 curl로 finish_reason:"tool_calls" 검증 완료.'
   resolved: false
-- text: azure_spot 모듈 config VM_SIZE=Standard_FX2mds_v2 vs runbook/azure-qwen=Standard_FX2ms_v2 (둘 다 2vCPU/42GiB, 모듈 배포는 mds로
-    검증). 필요 시 통일.
-  resolved: false
 - text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. SSOT
     (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
@@ -184,19 +181,12 @@ known_issues:
 - text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
   resolved: false
-- text: 'Veritas single-batch predicate 간섭 리스크: MiniCheck 원 설계는 (document, single_claim) → binary. _binary_nli_batch에서 모든
-    predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음. max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도
-    문제 발견 시 각 predicate 개별 호출로 분리 (latency N배 증가).'
-  resolved: false
 - id: WEBOBSIDIAN-CGROUP-2026-09-20
   detail: 'stale child cgroup(runtime, 9/19 생성)으로 ExecStartPre attach EBUSY → drop-in(Slice=webobsidian-workaround.slice)으로
     우회 복구. 2026-09-20 07:04 KST 재부팅 실행(커널 cgroup 잔존 제거 목적). 재부팅 후 조치: (1) container-webobsidian 정상 기동 확인, (2) ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'Reranker HTTP 500 244→0 fix: triple-layer (batch-size 1024, ctx 4096, pkill+relaunch, 1500ch truncation). Batch NLI overflow
-  fix: evidence 500→300ch, source 2000→1000ch. --large-only CLI flag. pipeline_state scanned→pending. 40-turn regression verified:
-  0 errors, 612 total facts.'
 - 'Phase 3: pipelines/extract_llm.py (2423 lines) split into lib/extract_llm/ package (4 submodules: _core, chunking, edc,
   parser). Re-export facade preserved for backward compat. All 6 files compile clean. All 4 callers import verified (extract.py,
   enrich.py, extract_verify.py, post_extract_supplement.py). 23 symbols re-exported. extract.py --help preflight OK.'
@@ -318,3 +308,5 @@ completed_log:
 - '(2026-09-20, opencode) 171/184: (171) MCP HA(healthcheck+Restart+watchdog)로 완화, 재연결 부재는 클라이언트 한계. (184) llm_recordings
   fixtures worker/mcp ro 마운트 → in-container replay 가능. 부수 수정: mcp ExecStartPre가 삭제된 DROPLR-AUTH-TOKEN-KEY 요청으로 기동 실패하던 잠복
   버그 제거(restart 중 발견), 정상 기동 확인.'
+- '(2026-09-20, opencode) 166/175: (175) VM_SIZE 불일치는 의도된 SKU 분리(런타임 mds/빌더 ms)로 종결. (166) DEVFORGE_NLI_PER_FACT 토글 추가로 배치
+  NLI 간섭 리스크 완화. 174는 운영 창(VM+opencode 재시작) 필요로 유지.'
