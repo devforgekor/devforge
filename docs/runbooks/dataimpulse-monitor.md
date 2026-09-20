@@ -40,12 +40,12 @@
 1. **DataImpulse 대시보드 IP 화이트리스트 등록**
    - `https://app.dataimpulse.com/dashboard` 접속
    - **Manage Whitelist IPs** → `161.33.199.207` 추가
-2. **환경변수 확인**
+2. **환경변수 확인 (Azure Key Vault)**
+   `~/.config/devforge/secrets.env`는 폐지되었습니다(2026-09-18). 자격증명은 KV에 있습니다.
    ```bash
-   cat ~/.config/devforge/secrets.env | grep DATAIMPULSE
-   # DATAIMPULSE_USER=fa04f846bd08b59ef691
-   # DATAIMPULSE_PASS=38687aa65730d426
+   python3 /opt/projects/server/scripts/deploy/kv-fetch-env.py env --keys DATAIMPULSE-HOST,DATAIMPULSE-PORT,DATAIMPULSE-LOGIN,DATAIMPULSE-PASS
    ```
+   (값은 화면에 출력되므로 로그에 남기지 마세요.)
 3. **프록시 연결 테스트**
    ```bash
    curl --proxy http://gw.dataimpulse.com:823 http://ifconfig.me
