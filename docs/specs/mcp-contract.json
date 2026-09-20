@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "version": "1.0",
   "contract_id": "devforge-mcp-12",
-  "status": "draft",
+  "status": "frozen",
   "source": {
     "adr": "docs/adr/0006-mcp-tool-surface.md",
     "schema_ref": "docs/reports/review-triage-v5-20260914.md §2.2",

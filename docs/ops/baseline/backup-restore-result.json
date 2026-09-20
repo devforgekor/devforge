@@ -16,5 +16,11 @@
     "rto_seconds": 43.14,
     "rpo_hours": 24
   },
-  "verdict": "PASS — measured RTO (43s) and RPO (24h) are within the proposed bounds (4h / 1d)"
+  "verdict": "PASS — measured RTO (43s) and RPO (24h) are within the proposed bounds (4h / 1d)",
+  "confirmed": {
+    "rto": "4h",
+    "rpo": "1d",
+    "confirmed_by": "user",
+    "confirmed_at": "2026-09-20"
+  }
 }

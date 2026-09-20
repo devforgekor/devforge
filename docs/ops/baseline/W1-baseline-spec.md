@@ -145,7 +145,7 @@ if __name__ == "__main__":
 | 게이트 | 통과 조건 | 근거 |
 |---|---|---|
 | Gate 1: 계약 승인 | `specs/mcp-contract.json` Schema 검증 + allowlist diff=0 + ADR-0006 Accepted | ✅ `gate-1-result.json` (diff=0), ✅ ADR-0006 Accepted |
-| Gate 2: baseline 완료 | W1 측정 + 임계값·허용오차·RTO/RPO 확정 | 🔄 W1 측정 진행(baseline 복구 09-20) · ✅ RTO 43s/RPO 24h 실측(`backup-restore-result.json`) · RTO/RPO 사용자 확정 대기 |
+| Gate 2: baseline 완료 | W1 측정 + 임계값·허용오차·RTO/RPO 확정 | ✅ RTO 4h/RPO 1d 확정(09-20, 실측 43s/24h) · ✅ 계약 frozen · 🔄 baseline 7일 완료 후 임계값 확정 |
 | Gate 3: 경보 발동 | baseline 기반 임계값에서 1건 발동 | gate 2 이후 |
 | Gate 4: 롤백 리허설 | 정규화 diff(허용오차 내) + health 10분 | gate 3 이후 |
 | Gate 5: 수치·용어 정합 | 32/12/25/≈15/9/−8/448/7152 전 문서 | 병행 |
@@ -159,8 +159,9 @@ if __name__ == "__main__":
 - [x] Gate 1: ADR-0006 Accepted (12툴 반영)
 - [x] Gate 2: hook 오버헤드 측정 — `2026-09-20.json` (avg 271ms / p95 331ms)
 - [x] Gate 2: 백업 복원 속도 테스트 — `backup-restore-result.json` (**RTO 43s** / dump 111MB→51 tables / RPO 24h)
-- [ ] Gate 2: W1 baseline 측정 계속 (baseline-daily.service 복구 2026-09-20; D2-D7 갭, D8 재개)
-- [ ] Gate 2: RTO/RPO 확정 (제안 RTO 4h / RPO 1d — 실측이 크게 여유, **사용자 확정 필요** → 확정 시 계약 freeze)
+- [x] Gate 2: RTO/RPO **확정** — **RTO 4h / RPO 1d** (사용자 확정 2026-09-20; 실측 43s/24h로 여유 확인)
+- [x] Gate 2: 계약 **frozen** 전환 (`docs/specs/mcp-contract.json` status=frozen; 이후 변경은 supersede ADR)
+- [ ] Gate 2: W1 baseline 7일 완료 시 임계값·허용오차 확정(§2.3)
 
 ---
 
