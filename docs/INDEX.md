@@ -56,6 +56,7 @@
 | **Key Vault 마이그레이션 분석** | `_archive/kv-migration-analysis.md` | archived |
 | DataImpulse 대시보드 모니터(계약) | `specs/dataimpulse-monitor.yaml` | active |
 | DataImpulse 대시보드 모니터(런북) | `runbooks/dataimpulse-monitor.md` | active |
+| Web LLM(Qwen/DeepSeek) CLI 운영(런북) | `runbooks/web-llm.md` | active |
 
 ### 4) 뷰어 / 프론트
 | 문서 | 상태 |
