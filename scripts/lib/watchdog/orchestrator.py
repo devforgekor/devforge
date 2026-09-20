@@ -570,6 +570,19 @@ def _fix_loop_common(pipe: str, llm_port: int):
 _llm_probe_fails: dict[int, int] = {}
 
 
+def _llm_is_busy(port: int) -> bool:
+    """모델이 실제로 처리 중인가(/slots is_processing). 느린 처리와 행을 구분한다.
+
+    실제 hang 여부는 _check_slot_deadlocks(전 슬롯 정체 3회)가 판정하므로,
+    처리 중이면 probe 실패를 장애로 보지 않고 recovery를 건너뛴다.
+    """
+    try:
+        slots = check_llm_slots(port)
+    except Exception:
+        return False
+    return any(s.get("is_processing") for s in slots)
+
+
 def day_fix_loop():
     """3-Phase day recovery: infra → pipeline-stuck → LLM code fix.
 
@@ -626,10 +639,12 @@ def day_fix_loop():
     if not probe_ok:
         detail_lc = probe_detail.lower()
         transient = any(p in detail_lc for p in LLM_PROBE_TRANSIENT)
-        if pipeline_running or transient:
+        busy = _llm_is_busy(8082)
+        if pipeline_running or transient or busy:
             log(
                 f"  [watchdog] probe :8082 not-ready "
-                f"(pipeline={pipeline_running}, transient={transient}): {probe_detail} — skip recovery"
+                f"(pipeline={pipeline_running}, transient={transient}, busy={busy}): "
+                f"{probe_detail} — skip recovery"
             )
         else:
             _llm_probe_fails[8082] = _llm_probe_fails.get(8082, 0) + 1
