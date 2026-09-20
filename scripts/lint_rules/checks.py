@@ -136,22 +136,23 @@ def check_identifier_naming(filepath: Path, relpath_root: Path) -> List[Dict]:
 
     skip_model_check = relpath in MODEL_NAME_OK_FILES
 
-    stem = filepath.stem.lower()
-    for part in stem.split("_"):
-        if MODEL_SIZE_PATTERN.fullmatch(part):
-            violations.append({
-                "rule": "no-model-in-filename",
-                "severity": "P1",
-                "message": f"Filename contains model size '{part}': '{filepath.name}'",
-                "file": relpath,
-            })
-        if MODEL_BRAND_PATTERN.fullmatch(part):
-            violations.append({
-                "rule": "no-model-in-filename",
-                "severity": "P1",
-                "message": f"Filename contains model brand '{part}': '{filepath.name}'",
-                "file": relpath,
-            })
+    if not skip_model_check:
+        stem = filepath.stem.lower()
+        for part in stem.split("_"):
+            if MODEL_SIZE_PATTERN.fullmatch(part):
+                violations.append({
+                    "rule": "no-model-in-filename",
+                    "severity": "P1",
+                    "message": f"Filename contains model size '{part}': '{filepath.name}'",
+                    "file": relpath,
+                })
+            if MODEL_BRAND_PATTERN.fullmatch(part):
+                violations.append({
+                    "rule": "no-model-in-filename",
+                    "severity": "P1",
+                    "message": f"Filename contains model brand '{part}': '{filepath.name}'",
+                    "file": relpath,
+                })
 
     try:
         content = filepath.read_text()

@@ -192,7 +192,7 @@ def build_status():
 
 
 def main():
-    TEST = test_setup("experiment_monitor", "Background Slack status reporter for long experiments")
+    _TEST = test_setup("experiment_monitor", "Background Slack status reporter for long experiments")
     # 단독 실행 시: 무한루프 돌며 30분마다 Slack 전송
     interval = 1800  # 30분
     print(f"[Experiment Monitor] 시작됨. {interval // 60}분 간격 Slack 보고.", flush=True)

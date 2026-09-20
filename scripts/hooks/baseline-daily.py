@@ -2,7 +2,7 @@
 # Status: production
 # Path: systemd:baseline-daily.timer
 """W1 Baseline Daily Runner — D2-D7."""
-import json, os, sys, subprocess, datetime, time
+import json, os, subprocess, datetime
 
 OUTDIR = "/opt/projects/server/docs/ops/baseline"
 DB = 'podman exec -i postgres psql -U postgres -d devforge_app -t -A'
