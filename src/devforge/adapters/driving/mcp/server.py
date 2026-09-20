@@ -22,8 +22,12 @@ In Claude Code:
 
 from __future__ import annotations
 
+import asyncio
 import json
-from collections.abc import AsyncIterator
+import os
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import FastAPI
@@ -37,10 +41,27 @@ from devforge.ports.extract import PipelineStatusParams
 
 logger = get_logger(__name__)
 
+
+@asynccontextmanager
+async def _lifespan(server_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Run the Deep Dive hang-detection loop alongside the server lifespan."""
+    task = asyncio.create_task(_deepdive_expiry_loop())
+    logger.debug("mcp lifespan start: %s", server_app.title)
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
 app = FastAPI(
     title="DevForge MCP Server",
     description="MCP tools for DevForge AI agent workflows",
     version="1.4.0",
+    lifespan=_lifespan,
 )
 
 
@@ -95,14 +116,15 @@ class StoreObservationParams(BaseModel):
 
 class DeepDiveStepEnterParams(BaseModel):
     session_id: str
-    step_name: str = "enter"
-    base_timeout_sec: int = 300
+    step: int = 1
+    step_name: str = ""
+    force: bool = False
     affected_files: Optional[int] = None
 
 
 class DeepDiveStepExitParams(BaseModel):
     session_id: str
-    step_name: str = "exit"
+    step: int = 1
 
 
 class DeepDiveSessionHeartbeatParams(BaseModel):
@@ -449,19 +471,199 @@ register_tool(
 )
 
 
-# ── Contract tool wrappers (12-tool contract compliance) ──
+# ── Deep Dive hang detection (Phase 1 + Phase 2) ──
+# Per-step base timeout + min/max bounds; the expiry loop escalates overruns and
+# aborts after DEEPDIVE_OVERRUN_LIMIT consecutive checks. Phase 2: when affected_files
+# is given, max_bound = base + n*DEEPDIVE_FILE_MARGIN_SEC, clamped to [min, max].
+
+DEEPDIVE_STEP_BUDGETS: dict[int, dict[str, Any]] = {
+    1: {"name": "yggdrasil_planning", "base": 180, "min": 60, "max": 600},
+    2: {"name": "code_explore", "base": 300, "min": 120, "max": 900},
+    3: {"name": "lsp_analysis", "base": 300, "min": 120, "max": 1200},
+    4: {"name": "external_verify", "base": 300, "min": 120, "max": 900},
+    5: {"name": "plan_finalize", "base": 240, "min": 60, "max": 600},
+    6: {"name": "implementation", "base": 600, "min": 300, "max": 2400},
+    7: {"name": "verification", "base": 300, "min": 120, "max": 900},
+}
+DEEPDIVE_CHECK_INTERVAL = 60
+DEEPDIVE_OVERRUN_LIMIT = 3
+DEEPDIVE_FILE_MARGIN_SEC = 120
+
+
+def _deepdive_effective_max(step: int, affected_files: Optional[int]) -> int:
+    """Phase 2 dynamic max_bound. None → static max (Phase 1 compatibility)."""
+    budget = DEEPDIVE_STEP_BUDGETS[step]
+    if affected_files is None:
+        return budget["max"]
+    n = max(0, affected_files)
+    raw = budget["base"] + n * DEEPDIVE_FILE_MARGIN_SEC
+    return min(max(raw, budget["min"]), budget["max"])
+
+
+def _send_deepdive_alert(text: str) -> bool:
+    """Best-effort Slack alert (env: SLACK_BOT_TOKEN_KEY, SLACK_CHANNEL)."""
+    token = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
+    channel = os.environ.get("SLACK_CHANNEL", "#alerts")
+    if not token:
+        logger.warning("deepdive alert skipped (no SLACK_BOT_TOKEN_KEY): %s", text)
+        return False
+    import urllib.request
+
+    payload = json.dumps({"channel": channel, "text": text}).encode()
+    req = urllib.request.Request(
+        "https://slack.com/api/chat.postMessage",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return bool(json.loads(r.read().decode()).get("ok"))
+    except Exception as e:
+        logger.warning("deepdive alert failed: %s", e)
+        return False
+
+
+def _as_aware(dt: Any) -> datetime:
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+async def _deepdive_check_expired() -> list[dict[str, Any]]:
+    """ACTIVE steps past their max bound, or heartbeat-stale past base timeout."""
+    from sqlalchemy import select
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import DeepDiveStep
+
+    config = get_config()
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        rows = (await db.scalars(select(DeepDiveStep).where(DeepDiveStep.status == "ACTIVE"))).all()
+
+    now = datetime.now(timezone.utc)
+    expired: list[dict[str, Any]] = []
+    for r in rows:
+        age = (now - _as_aware(r.started_at)).total_seconds()
+        stale = (now - _as_aware(r.last_heartbeat_at)).total_seconds()
+        if age > r.max_bound_sec:
+            reason = "max_bound_exceeded"
+        elif age > r.base_timeout_sec and stale > r.base_timeout_sec:
+            reason = "heartbeat_stale"
+        else:
+            continue
+        expired.append(
+            {
+                "id": r.id,
+                "session_id": r.session_id,
+                "step": r.step,
+                "step_name": r.step_name,
+                "overrun_count": r.overrun_count,
+                "reason": reason,
+            }
+        )
+    return expired
+
+
+async def _deepdive_escalate(row: dict[str, Any]) -> None:
+    from sqlalchemy import update
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import DeepDiveStep
+
+    sid, step, name, reason = row["session_id"], row["step"], row["step_name"], row["reason"]
+    overrun = row["overrun_count"] + 1
+    config = get_config()
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        if overrun >= DEEPDIVE_OVERRUN_LIMIT:
+            await db.execute(
+                update(DeepDiveStep).where(DeepDiveStep.id == row["id"]).values(status="ABORTED")
+            )
+            await asyncio.to_thread(
+                _send_deepdive_alert,
+                f"[DeepDive] {sid} step {step}({name}) {overrun}회 연속 초과({reason}) — 세션 자동 중단 (ABORTED)",
+            )
+        else:
+            await db.execute(
+                update(DeepDiveStep).where(DeepDiveStep.id == row["id"]).values(overrun_count=overrun)
+            )
+            await asyncio.to_thread(
+                _send_deepdive_alert,
+                f"[DeepDive] {sid} step {step}({name}) {overrun}회차 초과({reason}) — 주의 (자동 중단은 3회부터)",
+            )
+
+
+async def _deepdive_expiry_loop() -> None:
+    """Every DEEPDIVE_CHECK_INTERVAL seconds, escalate overrun ACTIVE steps."""
+    while True:
+        try:
+            for row in await _deepdive_check_expired():
+                await _deepdive_escalate(row)
+        except Exception as e:  # noqa: BLE001 — the loop must never die
+            logger.warning("deepdive expiry loop error: %s", e)
+        await asyncio.sleep(DEEPDIVE_CHECK_INTERVAL)
 
 
 async def deepdive_step_enter(params: DeepDiveStepEnterParams) -> dict[str, Any]:
-    return await deepdive(
-        DeepDiveParams(
-            session_id=params.session_id,
-            step=1,
-            step_name="enter",
-            base_timeout_sec=params.base_timeout_sec,
-            affected_files=params.affected_files,
+    if params.step not in DEEPDIVE_STEP_BUDGETS:
+        return {"ok": False, "error": f"step {params.step} not in 1..7"}
+    budget = DEEPDIVE_STEP_BUDGETS[params.step]
+    name = params.step_name.strip() or budget["name"]
+    effective_max = _deepdive_effective_max(params.step, params.affected_files)
+
+    from sqlalchemy import func as sql_func
+    from sqlalchemy import insert, select, update
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import DeepDiveStep
+
+    config = get_config()
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        existing = await db.scalar(
+            select(DeepDiveStep).where(
+                DeepDiveStep.session_id == params.session_id,
+                DeepDiveStep.step == params.step,
+            )
         )
-    )
+        if existing is not None and existing.status == "ABORTED" and not params.force:
+            return {
+                "ok": False,
+                "error": (
+                    "step previously ABORTED (반복 hang으로 자동 중단됨) — "
+                    "force=true로 원인 확인 후 재진입하세요"
+                ),
+                "session_id": params.session_id,
+                "step": params.step,
+            }
+        values = {
+            "step_name": name,
+            "base_timeout_sec": budget["base"],
+            "min_bound_sec": budget["min"],
+            "max_bound_sec": effective_max,
+            "status": "ACTIVE",
+            "started_at": sql_func.now(),
+            "ended_at": None,
+            "elapsed_sec": None,
+            "overrun_count": 0,
+            "last_heartbeat_at": sql_func.now(),
+            "affected_files": params.affected_files,
+        }
+        if existing is not None:
+            await db.execute(update(DeepDiveStep).where(DeepDiveStep.id == existing.id).values(**values))
+        else:
+            await db.execute(insert(DeepDiveStep).values(session_id=params.session_id, step=params.step, **values))
+    return {
+        "ok": True,
+        "session_id": params.session_id,
+        "step": params.step,
+        "step_name": name,
+        "effective_max_sec": effective_max,
+        "affected_files": params.affected_files,
+    }
 
 
 register_tool(
@@ -472,13 +674,39 @@ register_tool(
 
 
 async def deepdive_step_exit(params: DeepDiveStepExitParams) -> dict[str, Any]:
-    return await deepdive(
-        DeepDiveParams(
-            session_id=params.session_id,
-            step=1,
-            step_name="exit",
+    from sqlalchemy import func as sql_func
+    from sqlalchemy import select, update
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import DeepDiveStep
+
+    config = get_config()
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        existing = await db.scalar(
+            select(DeepDiveStep).where(
+                DeepDiveStep.session_id == params.session_id,
+                DeepDiveStep.step == params.step,
+                DeepDiveStep.status == "ACTIVE",
+            )
         )
-    )
+        if existing is None:
+            return {
+                "ok": False,
+                "error": "no ACTIVE step to exit",
+                "session_id": params.session_id,
+                "step": params.step,
+            }
+        elapsed = int((datetime.now(timezone.utc) - _as_aware(existing.started_at)).total_seconds())
+        await db.execute(
+            update(DeepDiveStep).where(DeepDiveStep.id == existing.id).values(
+                ended_at=sql_func.now(),
+                elapsed_sec=elapsed,
+                status="DONE",
+                overrun_count=0,
+            )
+        )
+    return {"ok": True, "session_id": params.session_id, "step": params.step, "elapsed_sec": elapsed}
 
 
 register_tool(
@@ -489,13 +717,30 @@ register_tool(
 
 
 async def deepdive_session_heartbeat(params: DeepDiveSessionHeartbeatParams) -> dict[str, Any]:
-    return await deepdive(
-        DeepDiveParams(
-            session_id=params.session_id,
-            step=params.step,
-            step_name="heartbeat",
+    from sqlalchemy import func as sql_func
+    from sqlalchemy import update
+
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import DeepDiveStep
+
+    config = get_config()
+    gateway = DatabaseGateway.from_config(config)
+    async with gateway.session() as db:
+        result = await db.execute(
+            update(DeepDiveStep)
+            .where(
+                DeepDiveStep.session_id == params.session_id,
+                DeepDiveStep.step == params.step,
+                DeepDiveStep.status == "ACTIVE",
+            )
+            .values(last_heartbeat_at=sql_func.now())
         )
-    )
+        heartbeat_ok = bool(getattr(result, "rowcount", 0))
+    return {
+        "ok": heartbeat_ok,
+        "session_id": params.session_id,
+        "step": params.step,
+    }
 
 
 register_tool(
@@ -510,30 +755,52 @@ async def deepdive_session_status(params: DeepDiveSessionStatusParams) -> dict[s
     from sqlalchemy import select
 
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.domain.models import DeepDiveStep
 
     gateway = DatabaseGateway.from_config(config)
     async with gateway.session() as db:
-        from devforge.domain.models import DeepDiveStep
-
-        result = await db.execute(
-            select(DeepDiveStep)
-            .where(
-                DeepDiveStep.session_id == params.session_id,
-                DeepDiveStep.status == "ACTIVE",
+        rows = (
+            await db.scalars(
+                select(DeepDiveStep)
+                .where(DeepDiveStep.session_id == params.session_id)
+                .order_by(DeepDiveStep.step)
             )
-            .order_by(DeepDiveStep.started_at.desc())
-            .limit(1)
+        ).all()
+
+    if not rows:
+        return {"session_id": params.session_id, "status": "NONE"}
+
+    aborted = [r.step for r in rows if r.status == "ABORTED"]
+    active = next((r for r in rows if r.status == "ACTIVE"), None)
+    out: dict[str, Any] = {
+        "session_id": params.session_id,
+        "steps": [
+            {
+                "step": r.step,
+                "step_name": r.step_name,
+                "status": r.status,
+                "overrun_count": r.overrun_count,
+                "max_bound_sec": r.max_bound_sec,
+                "affected_files": r.affected_files,
+                "elapsed_sec": r.elapsed_sec,
+            }
+            for r in rows
+        ],
+        "has_aborted_step": bool(aborted),
+        "aborted_steps": aborted,
+    }
+    if active is not None:
+        out.update(
+            {
+                "step": active.step,
+                "step_name": active.step_name,
+                "status": active.status,
+                "elapsed_sec": active.elapsed_sec,
+            }
         )
-        step = result.scalar_one_or_none()
-        if step is None:
-            return {"session_id": params.session_id, "status": "NONE"}
-        return {
-            "session_id": step.session_id,
-            "step": step.step,
-            "step_name": step.step_name,
-            "status": step.status,
-            "elapsed_sec": step.elapsed_sec,
-        }
+    else:
+        out["status"] = "NONE"
+    return out
 
 
 register_tool(
