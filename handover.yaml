@@ -198,8 +198,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'MCP transport compatibility fix: exa_mcp.py + context7_mcp.py had legacy Content-Length header transport. Claude Code v2.1.158
-  uses JSON-line transport. Fixed _read_message() + _send_message() in both. 12/12 MCP servers connected.'
 - 'Pod B: 14B Q4 model loaded at 8081 (2min load, 8.4G). Ready for Phase 1 tests (no-GS + with-GS).'
 - 'Extraction test plan structured: 3-phase plan (Phase 1=model comparison, Phase 2=4B pre-filter, Phase 3=final). Yggdrasil
   session dp-20260628-extraction-test-series.'
@@ -314,3 +312,6 @@ completed_log:
   churn 리셋이 원인.'
 - '(2026-09-20, opencode) 임베딩 검증: churn-off에서 embed_batch 완주(1 ok/0 failed, embeddings 3554→3555, :8081=200). 임베딩 정지 원인은 churn이
   embed 모드를 깨뜨린 것. decision embedding-unblocked-2026-09-20.'
+- '(2026-09-20, opencode) watchdog "처리중 vs 행" 로직 활성화: _llm_is_busy(/slots is_processing)로 busy면 probe 실패를 장애로 보지 않고 recovery
+  skip, 실제 hang은 기존 _check_slot_deadlocks(전슬롯 3회 정체)가 판정. 기존엔 day_fix_loop가 먼저 restart해 슬롯 정체감지가 dead code였음. commit 699c24e.
+  백로그 처리(day-cycle) 재개.'
