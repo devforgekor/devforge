@@ -53,7 +53,7 @@
 | Azure 재빌드 핸드오버 | `plans/azure-golden-image-rebuild-handover.md` | active |
 | Azure Deep Dive E2E 검증 | `reports/azure-deepdive-e2e-verification-20260914.md` | record |
 | **Azure Key Vault 시크릿 전환(핸드오버)** | `handover-secrets-kv.md` | **done** |
-| **Key Vault 마이그레이션 분석** | `kv-migration-analysis.md` | record |
+| **Key Vault 마이그레이션 분석** | `_archive/kv-migration-analysis.md` | archived |
 | DataImpulse 대시보드 모니터(계약) | `specs/dataimpulse-monitor.yaml` | active |
 | DataImpulse 대시보드 모니터(런북) | `runbooks/dataimpulse-monitor.md` | active |
 
