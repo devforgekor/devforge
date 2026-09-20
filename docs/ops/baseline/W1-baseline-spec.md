@@ -1,6 +1,7 @@
 # W1 Baseline Measurement — Phase 0 Gate 2
 
 > **Status:** in_progress · **Date:** 2026-09-14 · **Owner:** devforge
+> **2026-09-20 수정**: `baseline-daily.service`가 `User=opc`(user 유닛에 부적합)로 매일 `216/GROUP` 실패 → 해당 줄 제거로 복구. **미측정일 D2~D7(09-15~19)** 는 서비스 장애로 소실 — 09-14(D1) + 09-20 재개. 게이트 2/3/6 판정은 재개 후 7일 연속 측정으로 산출.
 > **선행:** `specs/mcp-contract.json` (gate 1) · `docs/adr/0006-mcp-tool-surface.md` (Accepted)
 > **목적:** W1(1주) 동안 공유 baseline을 측정하여 게이트 2·3·6 통과 여부와 임계값/허용오차/RTO/RPO 확정의 근거를 수집한다.
 
