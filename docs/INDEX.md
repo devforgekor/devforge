@@ -86,6 +86,7 @@
 | 설계 결정 기록(ADR) | `adr/0001-config-priority.md` ~ `adr/0006-mcp-tool-surface.md` | record |
 | 시스템 전체 구조 | `system-architecture.md` (§3.5 코드 레이어) | active |
 | **최종 통합 계획(Cutover+MCP+결정)** | `plans/final-plan.md` | active |
+| **Phase 3 계획(embed 이관, D6=A)** | `plans/phase3-plan.md` | approved |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
 | MCP 툴 사용 감사(30일) | `reports/mcp-tool-audit-20260914.md` | record |
 | 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |
