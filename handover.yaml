@@ -181,13 +181,16 @@ known_issues:
 - text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
   resolved: false
+- id: SLACK-BOT-INACTIVE-2026-09-20
+  detail: 'Slack 봇 토큰 account_inactive — Notifier.send_slack 실패(테스트: alert_sent False). watchdog Slack 알림·baseline 실패 알림 등
+    Slack 경로 전부 영향. KV SLACK-BOT-TOKEN-KEY 점검/재발급 필요.'
+  resolved: false
 - id: WEBOBSIDIAN-CGROUP-2026-09-20
   detail: 'stale child cgroup(runtime, 9/19 생성)으로 ExecStartPre attach EBUSY → drop-in(Slice=webobsidian-workaround.slice)으로
     우회 복구. 2026-09-20 07:04 KST 재부팅 실행(커널 cgroup 잔존 제거 목적). 재부팅 후 조치: (1) container-webobsidian 정상 기동 확인, (2) ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'OCI 계정 검증: 실측 tenancy 해시 비교로 로컬 creds=mesids 계정임을 확인, OCI_MESIDS_*(5키) 별칭 저장.'
 - 'OpenRouter 키 교체: 무효 키(401) → 유효 키($10) 승격, /api/v1/credits 검증, 과금 확인.'
 - 'Claude 백엔드 전환 모드 시스템 구축: claude-mode(openrouter/deepseek 전환) + claude-aliases :44777 하드코딩 제거. 기본 모드 openrouter. 검증 완료.'
 - '2026-09-12'', ''text'': ''azure_spot 정합+엔드포인트화+삭제검증+TTL, 라이브 전경로 검증, MoE(Q4) 툴콜 검증. 런북(Q4·DiskController·llm.service·--jinja)
@@ -311,3 +314,6 @@ completed_log:
   복구됨(09-20).'
 - '(2026-09-20, opencode) Phase 0 마무리: RTO 4h/RPO 1d 확정(사용자), mcp-contract status draft→frozen(12툴, allowlist diff=0). Gate
   1 정식 통과(gate-1-result.json), Gate 2 RTO/RPO 완료(backup-restore-result.json). 잔여=W1 baseline 7일 후 임계값/허용오차.'
+- '(2026-09-20, opencode) W1 baseline 재시작: 자동 수집이 09-15~19 매 실행 216/GROUP 실패(python 실행 전)로 데이터 미축적 확인. 새 D1=2026-09-20, 목표
+  7일(09-26). 실패 감지 OnFailure=baseline-daily-failed.service → 마커 ~/.local/state/baseline-daily.failed + journal. Slack 알림은
+  account_inactive로 불가(known_issue 등록).'
