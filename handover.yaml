@@ -187,9 +187,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'Phase 3: pipelines/extract_llm.py (2423 lines) split into lib/extract_llm/ package (4 submodules: _core, chunking, edc,
-  parser). Re-export facade preserved for backward compat. All 6 files compile clean. All 4 callers import verified (extract.py,
-  enrich.py, extract_verify.py, post_extract_supplement.py). 23 symbols re-exported. extract.py --help preflight OK.'
 - OCI onmydoc 인스턴스 확인 (RUNNING) + 접속 정보를 시크릿 OCI_INSTANCE_*(4키)와 메모리에 기록.
 - 'OCI 계정 검증: 실측 tenancy 해시 비교로 로컬 creds=mesids 계정임을 확인, OCI_MESIDS_*(5키) 별칭 저장.'
 - 'OpenRouter 키 교체: 무효 키(401) → 유효 키($10) 승격, /api/v1/credits 검증, 과금 확인.'
@@ -310,3 +307,6 @@ completed_log:
   버그 제거(restart 중 발견), 정상 기동 확인.'
 - '(2026-09-20, opencode) 166/175: (175) VM_SIZE 불일치는 의도된 SKU 분리(런타임 mds/빌더 ms)로 종결. (166) DEVFORGE_NLI_PER_FACT 토글 추가로 배치
   NLI 간섭 리스크 완화. 174는 운영 창(VM+opencode 재시작) 필요로 유지.'
+- '(2026-09-20, opencode) Phase 0 마무리(부분): Gate 1 정식화(gate-1-result.json, diff=0). Gate 2 백업 복원 속도 실측 — devforge_2026-09-19.dump(111MB)→51
+  tables, RTO 43s, RPO 24h(backup-restore-result.json) → 제안 RTO 4h/RPO 1d 대비 여유. RTO/RPO 사용자 확정 후 계약 freeze. W1 baseline 서비스
+  복구됨(09-20).'
