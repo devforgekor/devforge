@@ -17,6 +17,14 @@ LIVENESS_STALE_SEC = 900  # 15min — watchdog dead man's switch threshold
 WATCHDOG_LIVENESS_FILE = "/var/tmp/watchdog_last_cycle_ts"  # watchdog self heartbeat (checked by liveness timer / external)
 LATENCY_CHECK_INTERVAL = 300  # 5min between T3 latency checks
 
+# ── LLM probe 관용성 (단일 오탐으로 inference 재시작 금지) ──────────
+# day 모델은 CPU 프리필이 길어 60s를 넘기기 쉽고, 단계마다 모델을 로드/전환하므로
+# :8082가 일시적으로 503(Loading)/timeout이 되는 것은 정상 상태다.
+LLM_PROBE_TIMEOUT_SEC = 120  # probe 타임아웃(기존 60 → 120)
+LLM_PROBE_FAIL_THRESHOLD = 3  # 연속 N회 실패에만 recovery 발동
+# 모델 로딩/전환 중 정상 상태(장애 아님) — 카운트하지 않고 건너뜀.
+LLM_PROBE_TRANSIENT = ("503", "loading model")
+
 # ── MODE ────────────────────────────────────────────────────────────
 MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
 MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"

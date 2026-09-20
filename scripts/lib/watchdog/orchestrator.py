@@ -55,6 +55,9 @@ from lib.watchdog.config import (
     CHECK_INTERVAL,
     HEARTBEAT_INTERVAL,
     LIVENESS_STALE_SEC,
+    LLM_PROBE_FAIL_THRESHOLD,
+    LLM_PROBE_TIMEOUT_SEC,
+    LLM_PROBE_TRANSIENT,
     STALE_HEARTBEAT_KICKS,
     STALE_KICK_COOLDOWN_SEC,
     WATCHDOG_LIVENESS_FILE,
@@ -383,7 +386,10 @@ def run_day_checks(dry_run: bool = False) -> dict:
                 send_alert(f"llm:{name}", "LATENCY", lat_detail)
         results["probes"].append(probe)
     pipe_name, _ = check_pipeline("day_cycle.sh")
-    if not pipe_name and not _test_active:
+    _day_paused = os.path.exists(os.path.expanduser("~/.config/devforge/day-cycle.paused"))
+    if _day_paused and not _test_active:
+        log("  day-cycle paused (flag present) — skipping auto-start (embed window)")
+    if not pipe_name and not _test_active and not _day_paused:
         try:
             work = psql_json(
                 "SELECT count(*)::int AS cnt FROM turns "
@@ -559,6 +565,11 @@ def _fix_loop_common(pipe: str, llm_port: int):
                 update_exp_state(fix_attempts=exp.get("fix_attempts", 0) + 1)
 
 
+# :8082 probe 연속 실패 카운터 (port → count). 단일 오탐(로딩/일시 timeout)으로
+# inference를 재시작하지 않기 위해 사용한다.
+_llm_probe_fails: dict[int, int] = {}
+
+
 def day_fix_loop():
     """3-Phase day recovery: infra → pipeline-stuck → LLM code fix.
 
@@ -570,10 +581,16 @@ def day_fix_loop():
     Phase 2 — Pipeline state stuck (3600s no change) → restart day_cycle.
 
     Phase 3 — Only if infra+state healthy → LLM code fix loop (existing).
+
+    소유권 원칙: day_cycle 파이프라인이 실행 중이면 그 파이프라인이 추론 모델을
+    소유한다. 이때는 probe 실패(로딩/모델 전환 중 503·timeout)를 장애로 보지 않고
+    recovery를 건너뛴다(설계상 순차 파이프라인과의 동시성 충돌 방지).
     """
     if _test_active:
         log(f"  SKIP day fix loop — protection active ({_test_active})")
         return
+
+    pipeline_running, _ = check_pipeline("day_cycle.sh")
 
     # ── Phase 1a: port conflict ──
     port_ok, port_detail = check_port_conflict()
@@ -602,14 +619,29 @@ def day_fix_loop():
         return
 
     # ── Phase 1c: LLM probe on :8082 (day-extractor) ──
-    probe_ok, probe_detail = check_llm_probe(8082, "day-extract")
+    probe_ok, probe_detail = check_llm_probe(8082, "day-extract", timeout=LLM_PROBE_TIMEOUT_SEC)
     if not probe_ok:
-        log(f"  [watchdog] LLM probe :8082 failed: {probe_detail}")
-        _state.add_event("infra", "llm_probe_failed", probe_detail)
-        if recover_inference_cascade():
-            _state.add_event("infra", "llm_probe_recovered", "inference restarted")
-            send_recovery("infra:llm_probe", "inference restarted after probe failure")
+        detail_lc = probe_detail.lower()
+        transient = any(p in detail_lc for p in LLM_PROBE_TRANSIENT)
+        if pipeline_running or transient:
+            log(
+                f"  [watchdog] probe :8082 not-ready "
+                f"(pipeline={pipeline_running}, transient={transient}): {probe_detail} — skip recovery"
+            )
+        else:
+            _llm_probe_fails[8082] = _llm_probe_fails.get(8082, 0) + 1
+            log(
+                f"  [watchdog] LLM probe :8082 failed "
+                f"({_llm_probe_fails[8082]}/{LLM_PROBE_FAIL_THRESHOLD}): {probe_detail}"
+            )
+            _state.add_event("infra", "llm_probe_failed", probe_detail)
+            if _llm_probe_fails[8082] >= LLM_PROBE_FAIL_THRESHOLD:
+                _llm_probe_fails[8082] = 0
+                if recover_inference_cascade():
+                    _state.add_event("infra", "llm_probe_recovered", "inference restarted")
+                    send_recovery("infra:llm_probe", "inference restarted after probe failure")
         return
+    _llm_probe_fails[8082] = 0
 
     # ── Phase 2: pipeline state stuck ──
     stuck = _state.check_pipeline_stuck()
@@ -617,6 +649,9 @@ def day_fix_loop():
         for s in stuck:
             log(f"  [watchdog] pipeline stuck: {s['state']} ({s['cnt']} turns, {s['stuck_sec']}s)")
             _state.add_event("pipeline_stuck", s["state"], f"{s['cnt']} turns, {s['stuck_sec']}s")
+        if pipeline_running:
+            log("  [watchdog] pipeline running — skip day_cycle restart (owner active)")
+            return
         log("  [watchdog] restarting day_cycle to unstick pipeline")
         subprocess.run(
             ["systemctl", "--user", "restart", "devforge-day-cycle.service"],
