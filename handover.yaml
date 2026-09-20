@@ -138,6 +138,13 @@ decisions:
     JWT 경로 제거하고 HTTP Basic(DROPLR_USER/PASS) 전용으로 전환. KV DROPLR-AUTH-TOKEN-KEY 삭제(soft, common). 검증: Basic /account 200. commit
     (droplr Basic-only).'
   status: resolved
+- id: watchdog-probe-ownership-2026-09-20
+  detail: '원인: day_cycle은 순차 파이프라인(flock 단일인스턴스+oneshot)인데, watchdog가 독립적으로 :8082를 60s마다 probe하고 503(Loading)/timeout을 장애로
+    판정→recover_inference_cascade(inference 재시작)→파이프라인 모델을 죽여 churn(특히 embed 모드는 :8082 부재로 100% 실패). 수정(1+2): (1) 관용성 — LLM_PROBE_TIMEOUT_SEC
+    60→120, LLM_PROBE_FAIL_THRESHOLD=3(연속 3회), 503/Loading은 transient로 카운트 제외. (2) 소유권 — day_cycle 파이프라인 실행 중이면 probe recovery/파이프라인-stuck
+    restart 모두 skip. 추가: watchdog day-cycle 자동기동에 pause 플래그 가드, embed_window.sh(day-cycle+watchdog 정지→embed 완주→복구). 검증: 실행
+    중 probe 로그가 skip recovery로 전환. commit 1d2cee1.'
+  status: resolved
 known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
@@ -189,10 +196,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'Pattern 2+4 auto-fix system: reflex_rules DDL + 5 SQL functions + lib/reflex_rules.py + lib/auto_fix.py + lib/observation.py
-  + cli.py reflex command + obs_remediate MCP. Action queue bridge: lib/action_queue.py + MCP tools action_write/action_poll_results
-  + watchdog _consume_actions(). Security: shell=False, injection validation, timeouts. 9/9 tests passed. Commit 70d78b7 pushed
-  to main.'
 - 'extraction: Phase 1 test series init. Models available (30B MoE, 14B Q4, 4B Q8 x2, 0.5B Q8). Downloaded Qwen3.5-4B-Q8_0
   (4.2G), Qwen3-14B-Q4_K_M (8.4G). Removed Qwen3-8B-Q8_0 (8.2G), Qwen3.5-9B-Q8.'
 - 'Qwen3-Coder-30B-A3B-Q4_K_M test: 30B MoE no-GS (0/5 GOOD on chunk2, 503 slot deadlock). 30B MoE with GS (4/5 GOOD, 243s,
@@ -307,3 +310,5 @@ completed_log:
   미설치.'
 - '(2026-09-20, opencode) git-lfs 3.7.1 설치+git lfs install(vault .gitattributes LFS 패턴 적용). KV 정리 종료 확인: A-2/A-3/droplr Basic/쓰기
   SP/secrets.env 제거 완료, 잔여는 시간게이트 #38/KV-NAME-REUSE(2026-12)뿐. 재부팅(WEBOBSIDIAN-CGROUP)은 임베딩 완료 후로 보류.'
+- '(2026-09-20, opencode) watchdog churn 근본원인 수정: 파이프라인 소유권 vs watchdog probe 동시성. probe 관용성(timeout 120s, 연속 3회, 503/Loading
+  transient) + 파이프라인 실행 중 recovery/stuck-restart skip. embed_window.sh 추가. commit 1d2cee1. (190 enrich 크래시는 별개 과제로 잔존)'
