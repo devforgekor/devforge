@@ -178,9 +178,11 @@ def regenerate_handover_yaml():
     )
     completed = _pj(
         "SELECT log_text FROM ("
+        "SELECT log_text, id FROM ("
         "SELECT DISTINCT ON (log_text) log_text, id FROM completed_log "
         "ORDER BY log_text, id DESC"
-        ") sub ORDER BY id ASC LIMIT 50"
+        ") dedup ORDER BY id DESC LIMIT 50"
+        ") recent ORDER BY id ASC"
     )
 
     def _fmt_dec(d):
