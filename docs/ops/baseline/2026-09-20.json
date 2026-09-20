@@ -1,11 +1,11 @@
 {
   "date": "2026-09-20",
   "mode": "daily",
-  "turns_24h": "165",
-  "turns_total": "8000",
+  "turns_24h": "170",
+  "turns_total": "8011",
   "turns_source": {
     "legacy:pre-2026-09": "7163",
-    "opencode": "505",
+    "opencode": "516",
     "claude": "332"
   },
   "turns_age_days": "124.5",
@@ -14,7 +14,7 @@
   "pipeline_state": {
     "embedded": "3197",
     "embed_skipped": "77",
-    "pending": "2455",
+    "pending": "2466",
     "verified": "2271"
   },
   "services": {
@@ -34,12 +34,12 @@
   "netdata": "active",
   "hook_overhead": {
     "iterations": 100,
-    "avg_ms": 271.5602,
-    "p50_ms": 271.5305,
-    "p95_ms": 331.9007,
-    "p99_ms": 375.6044,
-    "min_ms": 185.5044,
-    "max_ms": 375.6044,
+    "avg_ms": 260.0789,
+    "p50_ms": 264.0836,
+    "p95_ms": 329.9073,
+    "p99_ms": 353.0335,
+    "min_ms": 137.3415,
+    "max_ms": 353.0335,
     "mode": "safe(mock)"
   },
   "mcp_health": "{\"status\":\"healthy\",\"tools_count\":18}"
