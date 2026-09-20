@@ -45,6 +45,10 @@
 
 출처: `reports/industry-standard-comparison-20260914.md` (AWS/Gingerlabs/Albato·Speakeasy/Copilot 40→13/RAG-MCP/NSA·OWASP).
 
+> **웹-LLM 컴포넌트 (2026-09-20)**: `chrome-web-llm` CLI가 운영 중이다 — 로그인된 웹 LLM(Qwen/DeepSeek)을
+> Playwright Chromium + `chrome-cli-bridge` 확장 + relay(:9876)로 구동, 세션 저장(수집)과 모델 간 핸드오프(공유) 지원.
+> 운영: `runbooks/web-llm.md` / 상세: `~/.local/share/chrome-web-llm/README.md`. 파이프라인 수집 연결은 Phase B.
+
 ## 4. MCP 툴 최적화 계획
 
 ### 4.1 판별 기준 (훅 / 로직 / 툴)
