@@ -15,12 +15,22 @@ from datetime import datetime
 
 HOME = os.path.expanduser("~")
 
-KEYVAULT_URL = os.environ.get(
-    "AZURE_MESIDS_KEYVAULT_URL", "https://kv-devforge-prod-krc.vault.azure.net"
+TENANT_ID = os.environ.get("AZURE_KEYVAULT_TENANT_ID", "9ec65251-a106-4dc3-9878-4278caa80b1b")
+CLIENT_ID = os.environ.get("AZURE_KEYVAULT_CLIENT_ID", "abc5aab0-5394-46e0-bf4d-daf4129d1d78")
+# 다중 KV: 앞→뒤 순서로 조회하며 동일 이름은 뒤(나중) 값이 우선한다.
+KEYVAULT_URLS = [
+    u.strip()
+    for u in os.environ.get(
+        "AZURE_KEYVAULT_URLS",
+        "https://kv-common-prod-krc.vault.azure.net,"
+        "https://kv-devforge-prod2-krc.vault.azure.net",
+    ).split(",")
+    if u.strip()
+]
+SECRET_FILE = os.environ.get(
+    "AZURE_KEYVAULT_CLIENT_SECRET_FILE",
+    os.path.join(HOME, ".config/devforge/azure-client-secret"),
 )
-TENANT_ID = os.environ.get("AZURE_MESIDS_TENANT_ID", "b08cd1bf-7952-489c-8fbb-aa907bb74709")
-CLIENT_ID = os.environ.get("AZURE_MESIDS_CLIENT_SECRET_ID", "169a8e1e-9bd1-4023-a78a-785e2fec321d")
-SECRET_FILE = os.path.join(HOME, ".config/devforge/azure-client-secret")
 GPG_RECIPIENT = "DevForge Secrets Backup"
 BACKUP_DIR = os.environ.get("KV_BACKUP_DIR", os.path.join(HOME, ".config/devforge/backups"))
 KEEP_DAYS = int(os.environ.get("KV_BACKUP_KEEP_DAYS", "60"))
@@ -156,9 +166,9 @@ def get_token():
             sys.exit(1)
 
 
-def list_secrets(token):
+def list_secrets(token, vault_url):
     secrets = []
-    url = f"{KEYVAULT_URL}/secrets?api-version=7.4"
+    url = f"{vault_url}/secrets?api-version=7.4"
     while url:
         success = False
         for attempt in range(MAX_RETRIES):
@@ -211,14 +221,14 @@ def list_secrets(token):
     return secrets
 
 
-def get_secret_value(token, name):
+def get_secret_value(token, vault_url, name):
     r = run(
         [
             "curl",
             "-s",
             "-w",
             "\n%{http_code}",
-            f"{KEYVAULT_URL}/secrets/{name}?api-version=7.4",
+            f"{vault_url}/secrets/{name}?api-version=7.4",
             "-H",
             f"Authorization: Bearer {token}",
         ]
@@ -250,14 +260,18 @@ def main():
     token = get_token()
     print("✅ Azure 토큰 획득")
 
-    secrets = list_secrets(token)
-    print(f"📋 Key Vault에서 {len(secrets)}개 시크릿 발견")
+    # 다중 KV 병합 (뒤 KV가 동일 이름을 덮어씀)
+    merged = {}
+    for vault_url in KEYVAULT_URLS:
+        for name in list_secrets(token, vault_url):
+            merged[name] = vault_url
+    print(f"📋 Key Vault에서 {len(merged)}개 시크릿 발견")
 
     # env 파일 구성 (하이픈 → 밑줄 복원)
     env_lines = []
-    for name in secrets:
+    for name, vault_url in merged.items():
         underscore_name = name.replace("-", "_")
-        value = get_secret_value(token, name)
+        value = get_secret_value(token, vault_url, name)
         env_lines.append(f"{underscore_name}={value}")
         print(f"  ✓ {underscore_name}")
 

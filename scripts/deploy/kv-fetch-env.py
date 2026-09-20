@@ -11,12 +11,22 @@ import sys
 import time
 
 HOME = os.path.expanduser("~")
-SECRET_FILE = os.path.join(HOME, ".config/devforge/azure-client-secret")
-TENANT_ID = os.environ.get("AZURE_MESIDS_TENANT_ID", "b08cd1bf-7952-489c-8fbb-aa907bb74709")
-CLIENT_ID = os.environ.get("AZURE_MESIDS_CLIENT_SECRET_ID", "169a8e1e-9bd1-4023-a78a-785e2fec321d")
-KEYVAULT_URL = os.environ.get(
-    "AZURE_MESIDS_KEYVAULT_URL", "https://kv-devforge-prod-krc.vault.azure.net"
+SECRET_FILE = os.environ.get(
+    "AZURE_KEYVAULT_CLIENT_SECRET_FILE",
+    os.path.join(HOME, ".config/devforge/azure-client-secret"),
 )
+TENANT_ID = os.environ.get("AZURE_KEYVAULT_TENANT_ID", "9ec65251-a106-4dc3-9878-4278caa80b1b")
+CLIENT_ID = os.environ.get("AZURE_KEYVAULT_CLIENT_ID", "abc5aab0-5394-46e0-bf4d-daf4129d1d78")
+# 다중 KV: 앞→뒤 순서로 조회하며 동일 이름은 뒤(나중) 값이 우선한다.
+KEYVAULT_URLS = [
+    u.strip()
+    for u in os.environ.get(
+        "AZURE_KEYVAULT_URLS",
+        "https://kv-common-prod-krc.vault.azure.net,"
+        "https://kv-devforge-prod2-krc.vault.azure.net",
+    ).split(",")
+    if u.strip()
+]
 MAX_RETRIES = 3
 RETRY_BACKOFF = [1, 2, 4]  # exponential backoff (seconds)
 TOKEN_CACHE_FILE = f"/run/user/{os.getuid()}/kv-token-cache.json"
@@ -150,9 +160,9 @@ def get_token():
             sys.exit(1)
 
 
-def list_secrets(token):
+def list_secrets(token, vault_url):
     secrets = []
-    url = f"{KEYVAULT_URL}/secrets?api-version=7.4"
+    url = f"{vault_url}/secrets?api-version=7.4"
     while url:
         success = False
         for attempt in range(MAX_RETRIES):
@@ -207,14 +217,14 @@ def list_secrets(token):
     return secrets
 
 
-def get_secret_value(token, name):
+def get_secret_value(token, vault_url, name):
     r = subprocess.run(
         [
             "curl",
             "-s",
             "-w",
             "\n%{http_code}",
-            f"{KEYVAULT_URL}/secrets/{name}?api-version=7.4",
+            f"{vault_url}/secrets/{name}?api-version=7.4",
             "-H",
             f"Authorization: Bearer {token}",
         ],
@@ -262,19 +272,24 @@ def parse_selection(argv):
     return selected, rest
 
 
-def filter_secrets(all_names, selected):
-    """선택 키만 남긴다. 선택 키가 KV에 없으면 즉시 실패(조용한 누락 방지)."""
-    if selected is None:
-        return all_names
-    available = {n.upper() for n in all_names}
-    missing = sorted(selected - available)
-    if missing:
-        print(
-            f"❌ KV에 없는 키 요청: {', '.join(missing)} (오타 또는 미등록)",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return [n for n in all_names if n.upper() in selected]
+def resolve_secrets(token, selected):
+    """다중 KV를 병합해 {kv_name: vault_url} 을 반환. 뒤 KV가 동일 이름을 덮어쓴다.
+    선택 키(--keys)가 어느 KV에도 없으면 즉시 실패(조용한 누락 방지)."""
+    merged = {}
+    for vault_url in KEYVAULT_URLS:
+        for name in list_secrets(token, vault_url):
+            merged[name] = vault_url
+    if selected is not None:
+        available = {n.upper() for n in merged}
+        missing = sorted(selected - available)
+        if missing:
+            print(
+                f"❌ KV에 없는 키 요청: {', '.join(missing)} (오타 또는 미등록)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        merged = {n: u for n, u in merged.items() if n.upper() in selected}
+    return merged
 
 
 def main():
@@ -287,11 +302,11 @@ def main():
     if sys.argv[1] == "env":
         selected, _ = parse_selection(sys.argv[2:])
         token = get_token()
-        secrets = filter_secrets(list_secrets(token), selected)
+        secrets = resolve_secrets(token, selected)
 
-        for kv_name in secrets:
+        for kv_name, vault_url in secrets.items():
             env_name = kv_name.replace("-", "_")
-            value = get_secret_value(token, kv_name)
+            value = get_secret_value(token, vault_url, kv_name)
             if value:
                 # systemd EnvironmentFile 형식: 값은 그대로(raw), 개행만 제거.
                 # single-quote로 감싸면 소비자(EnvironmentFile)가 따옴표를 값의
@@ -304,11 +319,11 @@ def main():
     # 기존 동작: 환경변수 주입 후 명령 실행
     selected, _ = parse_selection(sys.argv[1:])
     token = get_token()
-    secrets = filter_secrets(list_secrets(token), selected)
+    secrets = resolve_secrets(token, selected)
 
-    for kv_name in secrets:
+    for kv_name, vault_url in secrets.items():
         env_name = kv_name.replace("-", "_")
-        value = get_secret_value(token, kv_name)
+        value = get_secret_value(token, vault_url, kv_name)
         os.environ[env_name] = value
 
     print(f"✅ Key Vault 시크릿 로드 완료: {len(secrets)}개", file=sys.stderr)
