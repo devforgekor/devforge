@@ -29,9 +29,18 @@ $S/web-llm.sh -m qwen "질문"
 $S/web-llm.sh -m deepseek -s proj "질문"           # 세션 저장(수집)
 $S/web-llm.sh -m deepseek --from proj "이 대화 검토"  # 핸드오프(공유)
 $S/web-llm.sh --list-sessions
+
+# 모드(검색/사고)
+$S/web-llm.sh -m qwen --search "오늘 서울 날씨"      # Qwen "Web search" 모드
+$S/web-llm.sh -m deepseek --think "단계별로 풀어줘"   # DeepSeek "DeepThink"
+
+# 셸 함수(~/.bashrc): webq=Qwen, webd=DeepSeek(사고 기본 ON), 세션=$WL_SESSION(기본 chat)
+webq "질문"; WL_SESSION=proj webd "질문"; webq --search "최신 뉴스"
 ```
 
 세션 파일: `~/.local/share/chrome-web-llm/conversations/<name>.jsonl`
+
+모드 토글: Qwen=`Select Mode`(Auto / Web search / Deep Research), DeepSeek=`div.ds-toggle-button`(DeepThink / Search). 제출 전 자동 설정.
 
 ## 핵심 규칙
 
