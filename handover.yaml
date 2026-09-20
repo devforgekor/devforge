@@ -11,247 +11,6 @@ last_checkpoint:
   git: {}
   task: null
 decisions:
-- id: nd01-01
-  detail: 'Pod A 장애 근본 원인: legacy devforge-mcp.service (host-level python3 mcp_server.py --port 8000)가 port 8000 점유 → pasta
-    사망 → Pod A :8080+8000 port forwarding 차단. disabled 상태였으나 존재만으로 systemctl --user start 가능. init.scope (systemd user instance
-    startup)에서 trigger 확인됨. watchdog/timer/의존성 아님.'
-  status: open
-- id: nd01-02
-  detail: 'Legacy MCP 서비스 영구 제거: devforge-mcp.service → .service.disabled rename → rm 삭제. 재발 방지 완료.'
-  status: open
-- id: nd01-03
-  detail: 이전 cycle (Jun 23) 17 extracted → 49 verified turns는 NLI 미수행 상태로 force-pass. 49 day_verify facts 모두 nli_llm=NULL,
-    verdict=pending. source='day_verify'는 reranker_recover.py 기본 범위 아닐 수 있어 수동 처리 또는 SQL UPDATE 필요.
-  status: open
-- id: nd01-04
-  detail: 'Slack 봇 crash (ModuleNotFoundError: lib.llm_client)와 MCP 기동은 동시성 이벤트일 뿐 인과관계 없음. slack.py 내 MCP 호출 로직 없음.'
-  status: open
-- id: nd02-01
-  detail: 'OCI root 확장: /etc/fstab에서 /var/log, /var/tmp 항목 제거 완료. /var/log(4.4G) + /var/tmp(2.1G) → /opt/ai_data/expansion_bak/
-    백업 완료. LV 제거 blocked: tmux(4472) 및 활성 프로세스가 /var/tmp 점유, lazy umount 후에도 dmsetup/lvremove 실패. 최종 결정: 재부팅 → 싱글유저 모드에서 lv_tmp_new(3G)
-    + lv_logs(10G) + lv_tmp(10G, unmounted) 제거 → lvextend ocivolume/root -l +100%FREE → xfs_growfs / → mkdir /var/log /var/tmp
-    → 재부팅 → backup 복원 → 서비스 재시작.'
-  status: open
-- id: nd02-02
-  detail: Legacy devforge-mcp.service 제거 확인 완료. container-devforge-mcp.service (FastMCP Streamable HTTP, :8000) Quadlet 정상
-    기동 확인.
-  status: open
-- id: nd02-03
-  detail: Postgres container(data-pod)는 OCI root 확장 대상(/var/log, /var/tmp)과 무관 → 중단 불필요. /mnt/lv_db 정상 마운트 유지.
-  status: open
-- id: nd03-01
-  detail: 'gemini.py REPL에서 한글 입력 시 화면 echo 깨짐 (readline이 UTF-8 멀티바이트 문자 폭 계산 실패). 실제 입력값은 정상. 해결: readline.parse_and_bind
-    set input-meta on / set convert-meta off / set output-meta on 추가.'
-  status: open
-- id: nd05-01
-  detail: 'Slot deadlock auto-detection in watchdog: _check_slot_deadlocks() in __init__.py, SLOT_STUCK_THRESHOLD=3 in state.py,
-    recover_slot_deadlock() in recovery.py. llama-server PR #22083 (--slot-prompt-similarity 0) workaround in pod-b-entrypoint.sh.
-    watchdog restarts Pod B on ≥2 processing slots stuck for ≥3 cycles.'
-  status: open
-- id: nd05-04
-  detail: 'Stale model references cleanup: 5 files had outdated 14B/f16/Q4 comments. day-verifier was mistakenly changed to
-    9B Q8 → user caught it ("9b는 enricher 잖아") → reverted to Qwen2.5-Coder-7B Q8. Rule: port map comments in pod_manager.py
-    are SSOT, pod-b-entrypoint.sh comments are mirror.'
-  status: open
-- id: nd05-05
-  detail: 'PostgreSQL shared_buffers 4GB→512MB: restarted, verified effect. DB 668MB 기준 적정값. 동적 조정 불필요 확인 (PG가 자체 buffer 관리).'
-  status: open
-- id: nd05-06
-  detail: 'Aider Qwen wrapper: aider_qwen.py replaces gemini wrapper. Gemini SSL blocked (Oracle Cloud TLSV1_ALERT_INTERNAL_ERROR).
-    OpenRouter Qwen3 Coder 480B (:free) via QWEN_480B_API_KEY. Rule injection: infrastructure.md + llm-common-rule.md + llm-agent-rule.md
-    auto-attached via --read. alias aider=''python3 /opt/projects/server/scripts/aider_qwen.py'' in .bashrc.'
-  status: open
-- id: nd05-07
-  detail: 'Aider real-world test: generated pytest for analyze_exit_code() with 30 parametrized test cases, all passed. Path
-    handling correct (unlike DeepSeek direct mode). $0.0019 cost. Qwen3 Coder 480B is competent for code generation. Free
-    tier rate-limited but usable with pauses.'
-  status: open
-- id: nd06-01
-  detail: OpenCode 1.17.11 installed globally via npm. Node.js v24.15.0. Works with Anthropic proxy (DeepSeek V4 Flash via
-    ANTHROPIC_BASE_URL). read-only and tool-using tasks verified. MCP native support confirmed (opencode mcp add --url/--env).
-  status: open
-- id: nd06-02
-  detail: 'Gemini OpenAI-compatible proxy (gemini_openai.py): FastAPI on 127.0.0.1:4431. OpenAI /v1/chat/completions → Gemini
-    native protocol translation. KeyRotator integration with 6 keys from secrets.env (round-robin, auto-backoff on 429). Bypasses
-    /etc/hosts redirect via hardcoded Google IPs (same pattern as proxies/gemini.py). Independent state file (~/.cache/devforge/gemini_openai_rotator_state.json)
-    — does NOT interfere with gemini.py (port 4430). Verified: non-streaming, streaming SSE, /v1/models all pass. systemd
-    user service enabled (boot auto-start).'
-  status: open
-- id: nd06-03
-  detail: 'Extract LLM max_tokens D-approach (reverse-calc from CAP) finalization in extract_llm.py. _calc_max_tokens(text_len)
-    → ceil(300ch/fact) additive wanted vs CAP-reverse achievable → min(). TIMEOUT_PER_TOK=1.2, GEN_TIME_BUF=90, CAP=1800,
-    MIN_USEFUL_TOKENS=256, MAX_INPUT_CHARS_ADVERTISED=6500. Structured JSON logging (print+json.dumps) for 4 operational events:
-    max_tokens_overflow(2 subtypes), tokens_truncated, extract_skip_overflow. Concurrent prefill crash fixed (ThreadPoolExecutor
-    removed → sequential solo section-major). Long-turn truncation (118114e1, f1925ee3) root cause = hardcoded MAX_TOKENS_EXTRACT=512
-    — resolved by dynamic _calc_max_tokens. User sign-off obtained: 구조적 정합 + 운영 가시성 + 동시성 가정 명시. 3개 후속 항목(canary baseline,
-    idle timeout SSE, structured logging) 논의 완료. 배포 승인됨.'
-  status: open
-- id: nd06-04
-  detail: 'ChatML-style markers applied across all production prompt/context code (6 files). Convention: === SOURCE_xxx ===
-    (underscore) for factual/source data, --- REASONING_xxx --- (dash) for reasoning traces, === CONTEXT_xxx === (underscore)
-    for derived/context data. extract_llm.py: REASONING_THINKING + CONTEXT_ENTITIES. enrich.py: SOURCE_USER_TURN + REASONING_THINKING
-    + SOURCE_TEXT + CONTEXT_FACTS + verifier prompt (SOURCE_TURN + CONTEXT_MCP). prj/core.py: SOURCE_TURN + CONTEXT_FACTS
-    + CONTEXT_ENRICH + CONTEXT_REVIEW. verify/core.py: SOURCE_TURN + CONTEXT_FINDINGS. pipeline_common.py: CONTEXT_PIPELINE.
-    night_cycle.py: CONTEXT_NIGHT_DEBATE + CONTEXT_P_FINDINGS + CONTEXT_R_VERDICTS + CONTEXT_J_DECISION.'
-  status: open
-- gemini.py(4430) + gemini_pool.py 삭제, gemini_openai.py(4431)로 통합
-- 'newhand/open-newhand: 세션 종료 후 자동 git commit/push'
-- AGENTS.md 동기화 sync_gemini_rules.py로 자동화, GEMINI.md 제거
-- 'RPD 추적 + 429 분기: retryDelay >=300s는 daily quota, <300s는 rate limit'
-- 'opencode v1.17.11: mcpServers deprecated → mcp 키, type:local+command[] 배열 형식'
-- 'newhand/open-newhand 통일: /proc 체인으로 세션 감지, 터미널=실행/세션 내=commit/push'
-- newhand() 종료 후 자동 commit/push 제거
-- id: nd07-01
-  detail: open-newhand 함수 CWD 문제 + 상대 경로 버그 수정. opencode 호출 전 cd /opt/projects/server 누락으로 project-level .opencode.json 미인식
-    → handover instructions 미주입. 상대 경로 .opencode-handover.md를 절대 경로로 변경.
-  status: open
-- id: nd07-02
-  detail: 'open-newhand() 0바이트 .opencode.json 생성 버그: heredoc(cat > "$OC_CONFIG" << OCEND)이 빈 파일 생성 → opencode가 project-level
-    config를 읽지 못함. 근본 원인 불명(heredoc 자체 문제 또는 타이밍 이슈). 수정: (1) proc chain 루프에 || break 추가 — /proc 읽기 실패 시 무한루프 방지 (2) .opencode.json
-    파일 생성 대신 OPENCODE_CONFIG_CONTENT env var 사용 — printf로 JSON 생성, mktemp + trap으로 merged instructions 파일 관리 (3) heredoc 제거로
-    0바이트 config 생성 원천 차단 (4) handover 파일 크기 출력으로 사용자 확인 가능. newhand()에도 동일 || break 적용.'
-  status: open
-- id: nd07-03
-  detail: 'Pod B Quadlet → direct systemd service (devforge-pod-b.service) + symlink. Workaround for Podman 5.6 cgroup bug:
-    219/CGROUP crashloop because --cgroups=split + --sdnotify=conmon fail in rootless cgroup v2 (no CPU delegation). Type=exec
-    works. container-devforge-pod-b.service is now a symlink → devforge-pod-b.service. No changes needed in 34 calling files.'
-  status: open
-- id: nd07-04
-  detail: 'MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns (200-500c): was 512-612 max_tok, now 256-356. At 2 t/s,
-    halves generation time. T20 Turn 1: 524c→356max_tok, 530s elapsed. MIN_USEFUL_TOKENS=256 already exists.'
-  status: open
-- id: nd07-05
-  detail: mcp-trunc-proxy v0.2.2 installed (npm global). Wrapped 8/11 MCPs (filesystem, search-proxy, exa-search, fetch, github,
-    context7, yggdrasil, lsp) with 50-80KB thresholds, memory store. time/shrimp/devforge-mcp excluded (tiny output/HTTP).
-    90-98% token reduction on large responses. Requires Claude Code restart.
-  status: open
-- id: nd07-06
-  detail: 'token-savior-recall v4.4.1 installed (pip3.11). Profile: optimized (15 tools). Structural code nav + persistent
-    memory (SQLite FTS5) + Bash output compaction (34 patterns). tsbench: -80% tokens, 97.9% score. MCP entry added to mcp.json,
-    requires restart. Env: WORKSPACE_ROOTS=/opt/projects/server, TOKEN_SAVIOR_PROFILE=optimized.'
-  status: open
-- id: nd07-07
-  detail: T20 predicate extraction test (free-form + atomic, Pod B day mode Qwen3-8B-Q8_0). Turn 1 success (ec91527a, 524c,
-    530s), Turn 2 timeout (0d73684c, 258c, 568s). Interrupted by user. MAX_TOKENS_BASE 256 verified working. Need to restart
-    Pod B health (was down after cleanup) and day-cycle timer before full retest.
-  status: open
-- id: nd08-01
-  detail: 'Pattern 2+4 auto-fix system implemented. reflex_rules DDL (schema.sql), 5 PL/pgSQL functions (reflex_functions.sql:
-    detect_patterns, promote_rules, decay_rules, match_rule, daily_rule_report), lib/reflex_rules.py (CRUD + lifecycle), lib/auto_fix.py
-    (safe remediation catalog: raise_timeout, restart_container, notify, log_only), lib/observation.py (unified observation
-    API). cli.py reflex command group (list/show/add/approve/reject/match/detect/promote/decay/report). obs_remediate MCP
-    tool (confidence-based: >=0.7 auto-fix, >=0.3 notify, <0.3 log). auto_log PostToolUse hook.'
-  status: open
-- id: nd08-02
-  detail: 'Action queue bridge — MCP tool writes action to watchdog_pulses (category=action), watchdog _consume_actions()
-    executes safely per cycle. lib/action_queue.py: action_write, action_claim_pending (atomic PENDING->IN_PROGRESS), execute_action,
-    action_complete/action_fail (retry->escalation). 3 executors (systemctl, podman, cli) with shell=False, injection validation,
-    explicit timeouts. MCP tools: action_write, action_poll_results. watchdog __init__.py: _consume_actions() called every
-    cycle. 9/9 tests passed (mocked unit + real DB integration).'
-  status: open
-- id: nd08-03
-  detail: 'Web research validated architecture. AgentScope (Postgres row-level lock queue), ClawDaemon (SQLite event queue),
-    Cerebro/corvus (tokio::mpsc channel) all use same "MCP writes -> DB queue -> daemon executes" pattern. Security: mutex-induced
-    hang avoided (atomic DB queue, no channel mutex), RCE by design avoided (HTTP transport + shell=False), write access scope
-    limited to 3 deterministic action types. Conditional approval secured.'
-  status: open
-- id: nd09-01
-  detail: 'Bug fix: match_rule SQL function had hardcoded trigger_source IS NULL — source filtering dead. Added obs_source
-    param to SQL + Python rule_match() + remediate_observation() + obs_remediate MCP. DB redeployed.'
-  status: open
-- id: nd09-02
-  detail: 'Bug fix: auto_log.py _handle_bash marked denied/blocked commands as bash_executed=true. Added tool_output.error
-    early return — only executed commands get the tag.'
-  status: open
-- id: nd09-03
-  detail: 'All 3 hooks (pretool_bash_log, auto_log, ruff_lint) made fully silent. ruff_lint.py: removed hookSpecificOutput.
-    pretool_bash_log.py: removed stderr output.'
-  status: open
-- id: nd09-06
-  detail: 'UI conciseness: same-type tools collapsed, thought minimized, final only'
-  status: open
-- id: nd09-04
-  detail: 'Token savings measurement: proxy→DB, extract_llm→DB, reports/token-stats.py'
-  status: open
-- id: nd09-05
-  detail: 'mcp-trunc-proxy patch: proxy.mjs +1 line, JSONL stats, patches/ saved'
-  status: open
-- id: nd10-01
-  detail: 'Phase 1 — predicate extraction quality test: 3-phase plan (Deep Dive workflow). == Current State (2026-06-28) ==
-    - 30B MoE (Qwen3-Coder-30B-A3B-Q4_K_M, 18G, 8081): no-GS chunk2 FAIL (0/5, 503), with-GS full turn DONE (4/5 GOOD, 243s,
-    1533P+326C). Finish=stop. - 14B Q4 (Qwen3-14B-Q4_K_M, 8.4G, 8081): LOADED at 8081. Tests NOT RUN. - Pod B env: CTX_SIZE=4096,
-    CACHE_RAM=512, UBATCH=256, THREADS=4, FLASH_ATTN=1. MemoryMax=23G. - Pod A: UP (devforge-net bridge). Available for Phase
-    2 (4B parallel test). - Predicate Golden Set: scripts/docs/predicate-golden-set.yaml (16 entries). - Test scripts: /tmp/test_30b_golden.py
-    (30B GS test, working), /tmp/test_14b_feedback.py (14B with retry, NOT RUN). /tmp/test_14b_golden.py (14B simple version,
-    NOT RUN). == Phase 1 (NEXT) == Run 14B Q4 x 2 tests on the SAME 760-char turn (in /tmp/): A) WITHOUT Golden Set (baseline)
-    B) WITH Golden Set Expected: 80%+ GOOD with GS, clear GS vs no-GS gap (no-GS: ~50%). == Phase 2 (after Pod A recovery)
-    == 4B pre-filter x 2 models: - Qwen3.5-4B-Q8 (4B×4B, DeltaNet+Attention hybrid) - qwen3-4b-instruct-2507-q8 (4B×3B, dense
-    4B + Qwen2.5-0.5B verifier combo) Limit: 3 facts max. Verify with 30B or 14B. == Phase 3 == Top 2 model combos x 12 DB
-    samples (short 4 + medium 4 + long 4). Final comparison. == Execution Protocol == 1. cli.py status --json → check Pod
-    B mode/timer 2. systemctl --user stop devforge-day-cycle.{service,timer} 3. test_setup(name, desc) → heartbeat pulse 4.
-    ensure_model(key) or manual env swap + systemctl restart devforge-pod-b 5. Wait for model loaded (podman logs | grep "model
-    loaded") 6. test_heartbeat(detail) on each step 7. Test with retry loop: max 3 retries, 15s backoff, health check between
-    retries 8. test_complete() 9. systemctl --user start devforge-day-cycle.{service,timer} 10. Compare results, update handover
-    == MCP Tools for Deep Dive == - Yggdrasil: plan/structuring (session dp-20260628-extraction-test-series) - filesystem:
-    read/write test scripts - LSP: analyze extract.py blast_radius - context7: llama.cpp GBNF/json_schema docs - shrimp-task-manager:
-    step-by-step task execution - search-proxy/exa-search: research (golden set quality, model comparison) - devforge-mcp:
-    DB queries, custom tools - time: timestamps == Retry Feedback Loop == - 503/API error → wait 15-30s, recheck /health,
-    retry max 3 - JSON parse fail → log raw, return FAIL, retry - Health check before each attempt - Model D state: wait for
-    slot recovery, retry - All retries exhausted → declare test FAIL, continue next test '
-  status: open
-- id: nd10-02
-  detail: dev_pipeline.py — GitHub Issue → PR pipeline 모듈 생성. poll_issues(), claim_issue(), create_pr() 포함. gh CLI wrapper
-    기반, state JSON 파일로 중복 추적. cli.py dev 서브커맨드 (poll/claim/pr) 추가.
-  status: open
-- id: nd10-03
-  detail: 'Label tracking: claim_issue()에서 dev:in-progress label 추가, create_pr()에서 dev:pending-review로 전환. _label_issue()
-    helper — gh issue edit --add-label/--remove-label non-fatal wrapper.'
-  status: open
-- id: nd10-04
-  detail: 'Governance tier (auto-safe): poll_issues(auto_safe=True)로 auto-safe label이 있는 Issue만 필터. dev poll --auto-safe --claim
-    조합으로 timer와 연동.'
-  status: open
-- id: nd10-05
-  detail: 'systemd timer: devforge-dev-poll.service + timer. 10분 간격(*:0/10), cli.py dev poll --auto-safe --claim --once 실행.
-    활성화 완료.'
-  status: open
-- id: nd10-06
-  detail: 'Web 검증 결과: autonomous-dev-team(GitHub) ✅ 실제 README+코드 검증 완료. Baton ✅ 우리와 가장 유사한 아키텍처. sentinel-mcp ❌ GitHub Issue
-    자동화와 무관 (검증 실패).'
-  status: open
-- id: archive-dead-extract-logic-20260703
-  detail: Removed STRICT/XPLORE prompts, _extract_single, _extract_for_turn, _extract_dual_section_major, _observe_extract_usage,
-    _is_low_value, _load_entity_context, _backward_compat. SYSTEM_DAY_EXTRACT re-pointed to _SYSTEM_TEXT_EXTRACT_FREE. 2522→1632
-    lines. E2E all 5 PASS.
-  status: done
-- id: archive-dead-tests-20260703
-  detail: compare_extract_ab*.py (4 files importing _extract_for_turn) → _archive/tests/
-  status: done
-- id: fix-def-gen-timeout-20260701
-  detail: '_get_predicate_definition timeout increased. Root cause: Qwen3-4B-Q8 ~12-14s on 2 cores, not port contention.'
-  status: done
-- id: watchdog-codescanner-20260701
-  detail: 'DB-backed silent except Exception: pass auto-detection + auto-fix. Relifix regression detection. Experimental.'
-  status: open
-- id: edcr-pipeline-20260701
-  detail: '3-phase: OIE (8082+8083) → Canonicalize (8081 embed+judge) → Refinement (8083 re-extract). E2E all 5 checks PASS
-    ~390s.'
-  status: done
-- id: nd11-01
-  detail: 'context7_mcp.py query_docs fix: 3 bugs fixed. (1) type=json param missing → API returns markdown text → resp.json()
-    fails with ''Expecting value'' → all 4 keys appear exhausted → ''All Context7 API keys exhausted or API unavailable''.
-    (2) data["data"] assumed wrong response field — actual JSON has codeSnippets+infoSnippets. (3) _call_api unconditional
-    resp.json() → content-type detection added (JSON→resp.json(), text→resp.text wrapped as {data: text}). Also cleaned 2
-    orphaned context7 processes.'
-  status: closed
-- 'system_sync.sh (30분 주기)에 git auto-commit 추가 — 변경사항 있을 때만 git add -A && git commit -m "auto: sync YYYY-MM-DD"'
-- devforge-daily-structure.service (00:00 UTC=KST 09:00)에 git push 추가 — push할 게 없으면 skip
-- argcomplete 모듈 누락修复 — pip3 install --user argcomplete 로 해결
-- id: nd03-02
-  detail: 'opencode: Gemini provider 제거, 기본 모델 opencode/deepseek-v4-flash-free로 변경. opencode-model-fallback-chain 플러그인 설치.
-    fallback chain: opencode/deepseek-v4-flash-free → openrouter/deepseek/deepseek-v4-flash:free. DeepSeek 동일 모델 유지, 할당량 풀만
-    분리.'
-  status: closed
 - id: nd13-01
   detail: 'Reranker HTTP 500 root cause: llama.cpp --batch-size 256 too small. Embedding/reranker input tokens must fit within
     physical batch size. Error: "input (263 tokens) is too large to process. increase the physical batch size (current batch
@@ -286,37 +45,6 @@ decisions:
     → genuine RAM pressure. batch-size 2048 caused OOM risk (reranker RSS 7.9GB). batch-size 1024 is safe sweet spot (RSS
     4.6GB, available >4GB after reclaim). Verified stable through 4h regression test under sustained load.'
   status: resolved
-- id: nd14-01
-  detail: 'Phase 3: pipelines/extract_llm.py (2423 lines) split into lib/extract_llm/ package with 4 submodules (_core.py,
-    chunking.py, edc.py, parser.py). Original file rewritten as 45-line re-export facade. All 23 symbols re-exported. All
-    4 caller files import chains verified. 6/6 files compile. Lazy import (from extract) confirmed not eagerly resolved. Pyright:
-    10 false positives (type-checker limitations only). Runtime: import --help OK. No production impact.'
-  status: open
-- id: nd15-01
-  detail: 'OCI onmydoc 인스턴스 (2026-08-23 생성, 28,074회 시도 끝에 성공). RUNNING, ap-tokyo-1 AD-1, VM.Standard.A1.Flex 2 OCPU/12GB,
-    Canonical Ubuntu 24.04 Minimal aarch64. Public IP 161.33.199.207, user ubuntu, SSH key ~/.ssh/id_ed25519.pub. 접속 정보를 시크릿
-    OCI_INSTANCE_NAME/OCID/IP/USER + 메모리(oci-onmydoc-instance.md)에 기록. 목적: DEVFORGE output 경로.'
-  status: open
-- id: nd15-02
-  detail: 'OCI 자격증명 검증: 사용자가 ''기존 OCI 키는 다른 계정''이라 주장했으나, tenancy OCID 해시 비교(instance compartment-id == ~/.oci/config tenancy
-    == secrets.env 기존 OCI 키 tenancy, 모두 6f43d2498328)로 로컬 자격증명이 곧 mesids 계정임을 확인. oci CLI로 onmydoc 관리 가능. 시크릿에 OCI_MESIDS_TENANCY_OCID/USER_OCID/API_KEY_FINGERPRINT/REGION/KEY_FILE
-    별칭 키로 저장. 잘못된 ''DIFFERENT OCI account'' 경고 주석 제거.'
-  status: open
-- id: nd15-03
-  detail: 'OpenRouter 키 교체: secrets.env의 OPENROUTER_DEEPSEEK_V4_FLASH_API_KEY가 401 User not found(무효)였음 → or_rate_limiter.py에
-    하드코딩된 유효 키($10 잔액, /api/v1/credits로 검증)로 교체. 백업 secrets.env.bak.20260826110941 생성. OpenRouter 유료 경로 정상 과금 확인(log cache=MISS,
-    $0.0066153→$0.0066179).'
-  status: open
-- id: nd15-04
-  detail: 'Claude 백엔드 전환 모드 시스템 구축: ~/.bashrc.d/claude-mode (SSOT, claude-mode status/set/list) + ~/.config/devforge/claude-mode.conf
-    (MODE=openrouter 기본). openrouter=:44778(OpenRouter 유료 DeepSeek V4 Flash, GMICloud pin+cache), deepseek=:44777(공식 직결).
-    claude-aliases의 claude()/newhand()가 :44777을 하드코딩해 claude-env의 OpenRouter 설정을 무시하던 것이 잔액 소진의 직접 원인 → 하드코딩 제거, mode env
-    상속. 검증 완료(모드 전환 왕복, HTTP 200, claude() 44777=0).'
-  status: open
-- id: az-gi-01
-  detail: '골든 이미지 모델 확정: Qwen3.6-27B-Q8_0 → Qwen3-30B-A3B-Q4_K_M(MoE,3B active). 2 vCPU FX2ms_v2에서 툴콜 정상·~6 tok/s(Q6 3.3,
-    Q8 비권장). 필수 플래그 --jinja + chat-template-kwargs enable_thinking=false. 다음 세션에 이미지 재빌드.'
-  status: open
 - id: svcpod-01
   detail: 'svc pod 호스트 포트포워딩(rootlessport) 장애는 컨테이너 healthcheck(내부 127.0.0.1)로 감지 불가. 감지=호스트 127.0.0.1 publish 포트 TCP connect,
     복구=systemctl --user restart svc-pod.service. watchdog 반영: check_svcpod_ports/recover_svcpod_forwarding/_run_svcpod_forwarding
@@ -326,117 +54,20 @@ decisions:
   detail: Quadlet 디렉터리의 주석뿐인 .container stub은 podman-user-generator 전체를 실패시킨다('no Image or Rootfs key specified'). 비활성화는 .container.disabled로
     rename해야 함. container-flaresolverr.container → _disabled/container-flaresolverr.container.disabled (실제 구동은 손으로 쓴 container-flaresolverr.service).
   status: resolved
-- id: agi12-01
-  detail: '2026-09-12 Azure Golden Image MoE 재빌드 완료: gallery llm-qwen-27b:2026.09.3 등록(MoE Qwen3-30B-A3B-Q4_K_M 18.56GB baked-in
-    + llama.cpp b10919 + llm.service --jinja + enable_thinking=false + libgomp1). 배포 툴콜 검증 finish_reason:"tool_calls", destroy
-    CLEAN(잔여 0). DB golden_image_versions 2026.09.3 active/.2 deprecated.'
-  status: open
-- id: agi12-02
-  detail: 이 구독 Regular StandardFXmsv2Family/StandardFXmdsv2Family quota=0 → 골든 이미지 빌더는 Spot 필수(--priority Spot --eviction-policy
-    Deallocate --max-price -1; lowPriorityCores=3). Regular로 생성하면 QuotaExceeded. runbook-golden-image.md §1.1 반영.
-  status: open
-- id: agi12-03
-  detail: 'llama.cpp 릴리스 자산명 변경: llama-<ver>-bin-ubuntu-x64.tar.gz (구 llama-server-linux-x64.tar.gz 무효). 최신 우분투 빌드는 $ORIGIN
-    RUNPATH 공유 라이브러리 동봉 → /opt/llama 디렉터리째 추출 후 /usr/local/bin/llama-server 심볼릭. libgomp1(OpenMP) 필수(없으면 status=127).'
-  status: open
-- id: agi12-04
-  detail: 'opencode provider azureqwen 등록(~/.config/opencode/opencode.json): npm @ai-sdk/openai-compatible, baseURL http://127.0.0.1:18085/v1,
-    model qwen3-30b. config는 opencode 재시작 시 반영.'
-  status: open
-- id: agi12-05
-  detail: 'yearly_refresh.sh를 runbook에 정합(Spot 빌더, b10919 자산명, libgomp1, llm.service). 실경로는 심볼릭: /opt/projects/server/scripts/golden_image
-    → /opt/workspace/azure/20137133/scripts/golden_image (azure repo commit 44a177b).'
-  status: open
-- id: agi12-06
-  detail: 'opencode-rr 모델 표시명 ORP 방식 확정: opencode-rr.json에 ORP-1(free)/ORP-2(free)/ORP-3(free) 적용(모델: inclusionai/ling-3.0-flash-vl→ORP-1,
-    nvidia/nemotron-3-ultra-550b-a55b→ORP-2, cohere/north-mini-code→ORP-3). refresh_openrouter_free_models.py 자동할당 로직 확인(line
-    239). docs/reports/opencode-structure.md 불일치 3곳 수정(날짜 2026-09-09→14, 모델할당, 기본모델).     RR 프록시 health 정상, timer enabled/active.'
-  status: open
-- id: rf-ssot-01
-  detail: 'Server refactor baseline landed as src/devforge package (src-layout + Ports & Adapters). devforge CLI (pyproject
-    [project.scripts]) works: status / pipeline orchestrate|status / mcp serve / inference switch|status|ensure. Fixed blocking
-    defects: domain/models.py missing TypeDecorator import (whole package import failed), cli.py IndentationError:75, duplicated
-    CLI in cli_cmds. Canonical docs: REFACTORING_PLAN.md v1.4 + adr/0001-0004 + API_REFERENCE.md + OPERATIONS_GUIDE.md + ARCHITECTURE.md.
-    SSOT synced: architecture/code-structure.yaml scans scripts/ + src/devforge/, system-architecture.md §3.5, specs/schema.sql
-    regenerated to match ORM (16 tables). Cutover PENDING: systemd/Quadlet still ExecStart scripts/*.'
-  status: open
 - id: rf-cutover-01
   detail: '최종 통합 계획 수립: docs/plans/final-plan.md (active) = 컷오버(A~I) + MCP 툴 최적화(검토안 A~E) + 의사결정(D1~D9). 구 plans/cutover-remaining-plan.md·plans/open-decisions.md
     → docs/_archive/plans/ 로 superseded. 라이브는 systemd 유닛 22개 + Quadlet 컨테이너 3개가 scripts/* 의존. devforge는 extract 파이프라인/CLI/api/mcp(부분)/config/logging/llm/storage만
     구현, domain(watchdog/turn_collection/pipeline/model_management)·adapters(notification/research/proxy_utils)=0줄 stub. 공통
     원칙 비파괴/병렬검증/1개씩. 전면 cutover는 도메인 구현 후.'
   status: open
-- id: rf-cutover-02
-  detail: '사용자 결정 반영(2026-09-14): (2) shadow DB 라이브 적용 완료(devforge_shadow schema + turns_shadow view + review_facts_shadow).
-    (4) gen_architecture.py 은퇴→_archive/ (호출 제거: system_sync.sh/day_cycle.sh/daily-structure.service), docs/architecture/*
-    동결·수동 관리. Gemini 에이전트 세션 로직 은퇴→_archive/gemini-agent/ (gemini.py/gemini_core/gemini_mcp/ gemini_mon/gemini_quota/gemini_session_start.sh),
-    gemini-session.service disable. gemini 모델 프록시(proxies/gemini_openai)와 세션로그 파서(lib/parsers/gemini.py)는 유지. (1 MCP전략, 3
-    worker 이관, 5 일정/인력)은 보류.'
-  status: open
-- id: rf-standard-01
-  detail: '업계 표준 대조 문서화(2026-09-14): docs/reports/industry-standard-comparison-20260914.md (5계층 프레임: Capture/Transport/Ingestion/Storage·Retrieval/Extraction·Serving).
-    진단 3대 이탈점 — (a) 웹 수집(chrome-web) 파이프라인 미연결, (b) 리팩토링 MCP 계약 불일치(5 vs opencode 허용 12 — 툴 스프롤은 opencode tools allowlist로
-    이미 해소, 서버 노출 devforge 25·lsp 65 → 로드 devforge 12·lsp 13·yggdrasil 4 ≈ 33), (c) 로컬 8B 배치 추출(day_cycle, CPU-bound). 권고:
-    deterministic→소형로컬(grammar)→클라우드 escalation, 추출을 후보정/비동기로, MCP search_tools+ingest 복원+provenance. 결정 기록 adr/0005-extraction-routing.md·adr/0006-mcp-tool-surface.md
-    (proposed). final-plan(§4 MCP 최적화, §5 Phase A~I, §7 D1~D9)에 통합.'
-  status: open
-- id: rf-mcp-audit-01
-  detail: 'MCP 툴 사용 감사(30일, opencode.db part): 로드 33툴 중 0회 9개. 판정 → Remove(lsp proxy_artifact_get/info/list, find_symbol,
-    inspect_symbol, get_symbol_source, detect_lsp_servers, yggdrasil list_plans; 후보 suggest_fixes/rename_symbol/start_lsp),
-    Merge(deepdive_step_enter/exit/heartbeat/status→1툴 action; mem_*+obs_*→memory(action,kind); search_turns+search_similarity→mode;
-    opencode-db list_tables+schema→1; yggdrasil deep_planning+sequential_thinking 검토). 목표 33→~16. 문서: reports/mcp-tool-audit-20260914.md.
-    즉시 적용 가능(저위험): opencode.json tools에서 proxy_artifact_*(3)·list_plans·detect_lsp_servers false. (적용 보류 — 사용자 승인 대기)'
-  status: open
 - id: rf-final-plan-01
   detail: '최종 계획서 통합(2026-09-14): docs/plans/final-plan.md 단일 정본(MCP 툴 최적화 검토안 A~E, 툴 매핑 33→~12, Phase M0~M4, 컷오버 Phase A~I,
     통합 의사결정 D1~D9). 구 cutover-remaining-plan.md·open-decisions.md → docs/_archive/plans/ (superseded). 참조 갱신(INDEX/REFACTORING_PLAN/리포트
     2종/specs/ingest-provenance). 다음: D7~D9 선택 + M0(allowlist 컷) 착수.'
   status: open
-- id: rf-review-01
-  detail: '외부 검토용 산출물(2026-09-14): docs/reports/review-brief-20260914.md (자가완결 — 구조·변화·근거·리뷰질문·용어집·붙여넣기 프롬프트). Droplr(HTML)
-    — 리뷰 브리프: https://d.pr/IFoWKE , 최종계획: https://d.pr/14w4o6 , 근거부록(업계표준+MCP감사): https://d.pr/KXEiPa . 검토 대상 = final-plan;
-    브리프가 컨텍스트 제공.'
-  status: open
-- id: rf-triage-01
-  detail: '리뷰 패키지 3종 분석(2026-09-14): 문서 간 수치 불일치 규명 — 로드 툴 실제 32(opencode.json 실측, 문서 33은 감사표 deep_planning 중복 기재·합계 587 vs
-    475), "0회 9개" 리스트 오류(detect_lsp_servers=2회 포함·suggest_fixes/rename_symbol 누락), MCP 목표 12↔16 혼동(12는 ADR-0006 서버 계약 수),
-    day_cycle 455→실측 448, turns.source 7152 전부 unknown(문서 7131).'
-  status: open
-- id: rf-triage-02
-  detail: '트리아지 v1(2026-09-14): 외부 리뷰 3종(deepseek/qwen1/qwen2) 주장을 시스템 실측 F1~F13과 대조 → 수용 20/부분 8/미수용 6. 사실 오류 6건 기각(Linger=yes라
-    systemd user 생존, netdata active라 observability 완전부재 아님, Phase H 선행 부적절, M3 선행 부적절 등). 보고서: docs/reports/review-triage-package-20260914.md,
-    Droplr https://d.pr/97DxrE'
-  status: open
-- id: rf-triage-03
-  detail: '트리아지 v2(2026-09-14): 검증 응답 2건(V1/V2) 반영 — R3·R4·R7 부분수용, A5 조건부(원본 로그 유무 분기). R4 해소=contract-first(계약 동결→훅→서버구현→구툴제거).
-    V1의 "12=서버 계약" 오류 정정(서버 노출 25, 12는 클라이언트 로드 수). https://d.pr/ihZ81J'
-  status: open
-- id: rf-triage-04
-  detail: '트리아지 v3(2026-09-14): 메타리뷰(M1/M2) 반영 — Phase 0 산출물 6종(포맷·합격기준), 12툴 계약 열거, H0 수락기준, R7 비교축. M2 수치(RTO 4h/RPO 1d·추론
-    12Gi)는 후보/보류로만. https://d.pr/koCTH7'
-  status: open
-- id: rf-triage-05
-  detail: '트리아지 v4(2026-09-14): L1 12갭(G1~G12) 전수 판정·L2 종결 조건부 수용 — 산출물 담당(who: 작성=devforge/검토=외부에이전트/승인=사용자), annotation↔처리방침
-    분리, "서버 내부화"=Phase A 유지→M1 deprecated→M0 removed, ADR-0006은 Proposed라 수정 허용. https://d.pr/RZygjB'
-  status: open
-- id: rf-triage-06
-  detail: '트리아지 v5(2026-09-14): P1(H1~H12)·P2 반영 — Phase 0 2주 일정, mcp-contract.json JSON Schema 정의, 게이트 6개 선형 체인+예외 경로, R7
-    대칭 지표, 게이트6 로프홀 제거, baseline 단일화(W1 공유). 리뷰 루프 종결 선언. https://d.pr/waa3yN'
-  status: open
 - id: rf-triage-07
   detail: '최종 판정(2026-09-14): Phase 0 실행 승인. 다음 행동 — specs/mcp-contract.json 초안(스키마는 review-triage-v5 §2.2) → ADR-0006에 12툴
     목록 반영·Accepted 전환 → W1 baseline 1주 측정 → 게이트 6개 통과 후 Phase A/MCP 착수.'
-  status: open
-- id: hb-01
-  detail: 'watchdog 외부 heartbeat 정지 복구(2026-09-19): onmydoc 외부 dead-man''s switch(~/.wd_monitor/wdpulse.py)가 ''watchdog heartbeat
-    is stale(1489m)'' 알림. 원인=2026-09-18 KV 전환으로 secrets.env 삭제 시 비밀 아닌 설정값 WATCHDOG_PING_SSH=onmydoc이 KV에 미등록 → orchestrator._ping_external()이
-    조용히 skip. 수정: 코드를 DEVFORGE_WATCHDOG_PING_SSH/DEVFORGE_WATCHDOG_PING_URL만 읽도록 변경(fallback 제거), KV DEVFORGE-WATCHDOG-PING-SSH
-    값 오등록(SP id c9146961 → onmydoc) 교정. 검증: 재시작 후 onmydoc last_ping 갱신(age 54s). 커밋 e832929 push. task #35.'
-  status: open
-- id: hb-02
-  detail: 'KV 이름 규칙 확정(2026-09-19): 비밀/비밀아님 구분 없이 KV 단일 소스로 관리하되 코드에서는 DEVFORGE_ 접두어로 읽는다. env 키명은 KV 시크릿명의 ''_''↔''-'' 1:1
-    변환(DEVFORGE_WATCHDOG_PING_SSH ↔ DEVFORGE-WATCHDOG-PING-SSH). ''이름 불일치''와 ''값 오등록''은 별개 문제로 분리 진단할 것 — 이번은 이름은 코드를 맞추고
-    값은 KV를 고치는 케이스였다. 비밀 아닌 config를 KV에 미등록하면 조용히 skip되어 기능이 죽는다.'
   status: open
 - id: dp-01
   detail: '서버측 Droplr 단축 깨짐 발견(2026-09-19, P0 미수정): scripts/lib/droplr.py:40이 DRPLR_EMAIL/DRPLR_PASSWORD를 읽지만 KV 실제 키는 DROPLR_USER/DROPLR_PASS.
@@ -457,21 +88,16 @@ decisions:
     slack_notify, telegram_send, file_registry, research/_keys 등). KV로 래핑되지 않은 timer/cron/oneshot 경로는 전부 조용히 실패 가능 — heartbeat
     사고와 동일 뿌리. 별도 감사 태스크 필요.'
   status: resolved
-- id: dp-review-01
-  detail: '붙여준 ''Droplr API 사용 가이드 팩트체크'' 리뷰 검토(2026-09-19): 원본 가이드는 이 레포/docs에 존재하지 않음(droplr|drplr 검색). 리뷰의 생태계 설명은 독립 검증
-    결과 대체로 정확(HMAC-SHA1+15분 skew, 앱키 요청발급, drplr 1.2.0, droplr-api 1.0.0, JumpCloud 인수, Loom→Atlassian, CloudApp→Zight, ScreenPal).
-    단 ''drplr CLI가 표준'' 전제는 서버 현실과 다름(서버는 Python HTTP API). 반영 대상 문서 없음.'
-  status: open
 - id: KV-MIGRATE-2026-09-20
   detail: kv-fetch-env.py/kv-backup.py에 다중KV 병합(AZURE_KEYVAULT_URLS) 추가, 새 SP abc5aab0 사용. 구 KV(kv-devforge-prod-krc, tenant
     b08cd1bf)는 purge protection으로 2026-12-09까지 퍼지 불가 → 이름 재사용 보류. 런타임 영향 없음.
-  status: open
+  status: resolved
 - id: KV-AUDIT-2026-09-20
   detail: '핸드오버 문서(docs/handover-secrets-kv.md)를 실제 상태와 감사. 일치: secrets.env 삭제, GPG 개인키 부재, 신규 테넌트 9ec65251/SP abc5aab0 다중KV,
     devforge 93/onmydoc 88, kv-backup.timer active, webobsidian drop-in, task #38. 정정: §12 컨테이너 4→3(fastapi KV 미적용), §4.2
     fastapi 보류사유(calendar_router는 try/except 가드됨), §4.2 서비스 11개+컨테이너 3개(누락 3서비스 추가), §8 fallback 제거→호환성 잔존(14 .py), kuhwa.yaml→update-schedule.yml,
     §4.1 kv-export-env.sh 추가. 조치: 미푸시였던 0ec3855 포함 main 13커밋 push 완료(main=origin/main).'
-  status: open
+  status: resolved
 - id: dd-live-mcp-2026-09-20
   detail: '발견(2026-09-20, task #25 착수 중): 라이브 MCP는 리팩터드 서버(src/devforge/adapters/driving/mcp/server.py, 18툴, quadlet Exec=devforge.cli
     mcp serve, 2026-09-19 전환)이며 scripts/mcp_server.py(DEEPDIVE_STEP_BUDGETS/overrun abort/sandbox verify, 25툴)는 비활성. 리팩터드
