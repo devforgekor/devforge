@@ -187,7 +187,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- OCI onmydoc 인스턴스 확인 (RUNNING) + 접속 정보를 시크릿 OCI_INSTANCE_*(4키)와 메모리에 기록.
 - 'OCI 계정 검증: 실측 tenancy 해시 비교로 로컬 creds=mesids 계정임을 확인, OCI_MESIDS_*(5키) 별칭 저장.'
 - 'OpenRouter 키 교체: 무효 키(401) → 유효 키($10) 승격, /api/v1/credits 검증, 과금 확인.'
 - 'Claude 백엔드 전환 모드 시스템 구축: claude-mode(openrouter/deepseek 전환) + claude-aliases :44777 하드코딩 제거. 기본 모드 openrouter. 검증 완료.'
@@ -310,3 +309,5 @@ completed_log:
 - '(2026-09-20, opencode) Phase 0 마무리(부분): Gate 1 정식화(gate-1-result.json, diff=0). Gate 2 백업 복원 속도 실측 — devforge_2026-09-19.dump(111MB)→51
   tables, RTO 43s, RPO 24h(backup-restore-result.json) → 제안 RTO 4h/RPO 1d 대비 여유. RTO/RPO 사용자 확정 후 계약 freeze. W1 baseline 서비스
   복구됨(09-20).'
+- '(2026-09-20, opencode) Phase 0 마무리: RTO 4h/RPO 1d 확정(사용자), mcp-contract status draft→frozen(12툴, allowlist diff=0). Gate
+  1 정식 통과(gate-1-result.json), Gate 2 RTO/RPO 완료(backup-restore-result.json). 잔여=W1 baseline 7일 후 임계값/허용오차.'
