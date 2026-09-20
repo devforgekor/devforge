@@ -269,20 +269,24 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 - **#6 GPG import 중복 제거 (P3)**: `gpg --list-keys` 체크 후 없을 때만 import
 - **#7 동시 실행 보호 (P3)**: PID 파일 lock (systemd timer는 중복 방지 내장)
 
-### 우선순위 0.5: 누락 config 키 감사 (2026-09-19 추가)
-`secrets.env` 삭제 시 KV에 미등록된 비밀 아닌 config가 다수 존재. 현재 KV에 **없는** 키(사용처 확인 후 등록 필요):
+### 우선순위 0.5: 누락 config 키 감사 (2026-09-19 추가, 2026-09-20 감사 확정)
+`secrets.env` 삭제 후 KV 미등록 키를 사용처 grep으로 판정한 결과:
 
-| 누락 키 | 사용처(추정) | 비고 |
-|---------|-------------|------|
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` | news collector, golden_image, kuhwa | `GMAIL_SMTP_MINIPARK4U`(KV)와 별개 |
-| `DUCKDNS_ACCOUNT` / `DUCKDNS_DOMAIN` / `DUCKDNS_*_IP` | duckdns 갱신 스크립트 | `DUCKDNS_TOKEN_KEY`만 KV에 있음 |
-| `OCI_REGION` / `OCI_HOME_REGION` / `OCI_IDCS_URL` | OCI 자동화 | |
-| `DEVFORGE_SERVER_HOST` / `_USER` / `_SSH_KEY` | 서버 자기참조 자동화 | SSH 키는 비밀 |
-| `NEWS_WEB_URL` / `VERCEL_*` | news/vercel 재배포 | |
-| `EBOOK_DAILY_TRAFFIC_LIMIT_MB`, `DATAIMPULSE_*`, `MASKPROXY_*`, `NEON_DATABASE_URL` 등 | 각 프로젝트 | 사용 여부 확인 필요 |
+**실제 등록 필요 (코드가 읽음, KV 미등록/이름 불일치):**
+| 키 | 사용처 | 상태 |
+|----|--------|------|
+| `MASKPROXY_USER` / `_PASS` / `_HOST` / `_PORT` | `ebooklib/apps/backend/lib/toki31_playwright.py` | 값은 삭제된 `apps/backend/.env.local.backup.20260918`에만 존재 |
+| `DATAIMPULSE_USER` / `_PASS` / `_HOST` / `_PORT` | 동일 + `dataimpulse_monitor.py` | 동일 백업에만 존재 |
+| `VERCEL_REVALIDATE_URL` | `ebooklib/scripts/pipeline.py` | 미등록(값 미상) |
+| `VERCEL_REVALIDATE_TOKEN` | `pipeline.py` | KV는 `VERCEL_REVALIDATE_TOKEN_KEY`(이름 불일치) |
 
-→ KV 미등록 상태로 코드가 env를 읽으면 조용히 skip/기본값 사용 → 기능 정지 가능.
-   사용처를 grep으로 확인해 실제 필요한 키만 KV에 등록한다.
+**등록 불필요 (0 사용 / 기본값 / 다른 키로 매핑):**
+`SMTP_HOST/PORT/USER`(kuhwa가 `GMAIL_SMTP_*_MINIPARK4U`에서 매핑), `DUCKDNS_ACCOUNT/DOMAIN/*_IP`, `OCI_HOME_REGION`, `OCI_IDCS_URL`, `DEVFORGE_SERVER_HOST/_USER/_SSH_KEY`, `NEWS_WEB_URL`, `NEON_DATABASE_URL`, `VERCEL_REVALIDATE_SECRET`, `DATAIMPULSE_PROXY_KEY`/`MASKPROXY_API_KEY`/`MASKPROXY_PROXY_KEY`(KV에 있으나 코드 미사용), `OCI_REGION`(기본 ap-chuncheon-1), `EBOOK_DAILY_TRAFFIC_LIMIT_MB`(기본 200).
+
+> **차단**: 현재 SP(`DevForge-llm-Qwen`)는 KV Access Policy가 **get/list 전용**이라 등록 불가
+> (2026-09-20 `az keyvault secret set` → WRITE_DENIED). 등록은 포털/권한 부여 후 진행.
+> 참고: KV에 `DATAIMPULSE_PROXY_KEY`가 있어 코드가 이 이름을 읽도록 매핑하는 대안 가능(값 형식 확인 필요).
+
 
 ### 우선순위 1: 나머지 systemd 서비스 전환
 - **완료**: 시스템드 서비스 11개 + 컨테이너 3개 전환 완료 (2026-09-18~19)

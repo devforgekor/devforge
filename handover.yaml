@@ -478,6 +478,11 @@ decisions:
     deepdive_step_enter는 step=1 고정·base_timeout_sec 기본 300, 만료/abort 백그라운드 루프 없음 → AGENTS/handover가 기술한 Deep Dive hang 감지
     Phase1/2가 현재 미동작. 결정 필요: (a) Phase1/2를 리팩터드로 포팅, (b) 리팩터드 deepdive step 파라미터 개선, (c) 레거시 폐기.'
   status: open
+- id: kv-missing-audit-2026-09-20
+  detail: 'KV 누락 config 키 감사(2026-09-20): 사용처 grep으로 필요/불필요 확정. 실 등록 필요는 MASKPROXY_*, DATAIMPULSE_*(프록시 자격증명), VERCEL_REVALIDATE_URL/TOKEN(이름
+    불일치)뿐. 나머지는 0사용/기본값/매핑. SP가 get/list 전용이라 등록 불가(WRITE_DENIED) → 사용자 포털 작업 필요. 대안: DATAIMPULSE_PROXY_KEY 등 기존 KV 키를 코드가
+    읽도록 매핑.'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -555,9 +560,11 @@ known_issues:
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
   resolved: false
 - id: kv-ki-02
-  detail: 'KV 누락 config 키(2026-09-19 감사): SMTP_HOST/PORT/USER, DUCKDNS_ACCOUNT/DOMAIN/*_IP, OCI_REGION/HOME_REGION/IDCS_URL,
-    DEVFORGE_SERVER_HOST/USER/SSH_KEY, NEWS_WEB_URL, VERCEL_*, EBOOK_DAILY_TRAFFIC_LIMIT_MB, DATAIMPULSE_*, MASKPROXY_*, NEON_DATABASE_URL
-    등. 사용처 grep 후 필요한 키만 등록.'
+  detail: 'KV 누락 config 키 감사 확정(2026-09-20): 등록 필요=(MASKPROXY_USER/PASS/HOST/PORT, DATAIMPULSE_USER/PASS/HOST/PORT — 값은 ebooklib
+    apps/backend/.env.local.backup.20260918에만 존재, VERCEL_REVALIDATE_URL 미등록, VERCEL_REVALIDATE_TOKEN은 KV의 VERCEL_REVALIDATE_TOKEN_KEY와
+    이름 불일치). 등록 불필요=SMTP_*(GMAIL_SMTP_* 매핑), DUCKDNS_*, OCI_HOME_REGION/IDCS_URL, DEVFORGE_SERVER_*, NEWS_WEB_URL, NEON_DATABASE_URL,
+    VERCEL_REVALIDATE_SECRET, OCI_REGION(기본값), EBOOK_DAILY_TRAFFIC_LIMIT_MB(기본값). 차단: SP는 KV Access Policy get/list 전용(az
+    secret set=WRITE_DENIED) → 등록은 포털/권한 후 진행.'
   resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
