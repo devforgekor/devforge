@@ -513,28 +513,8 @@ decisions:
     (droplr Basic-only).'
   status: resolved
 known_issues:
-- text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
-    GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
-  resolved: false
-- text: '리뷰 패키지 원본 수치 미정정(2026-09-14): final-plan §4.2/§4.3 "33→약12"(정정치 로드 32·목표 ≈15·merge −8), review-brief "0회 9개" 리스트
-    오류, mcp-tool-audit 감사표 deep_planning 중복(합계 587 vs 475), day_cycle 455(실측 448), turns.source 7151(실측 7152). v5 후속으로 문서
-    일괄 정정 필요.'
-  resolved: false
-- text: '리뷰 패키지 원본 수치 미정정(2026-09-14): final-plan §4.2/§4.3 "33→약12"(정정치 로드 32·목표 ≈15·merge −8), review-brief "0회 9개" 리스트
-    오류, mcp-tool-audit 감사표 deep_planning 중복(합계 587 vs 475), day_cycle 455(실측 448), turns.source 실측값 문서 불일치(v5:7152→실측:7159,
-    최초:v5 참조 전:7151). v5 후속으로 문서 일괄 정정 필요. W1 baseline 측정 후 Gate 5에서 정합 확인.'
-  resolved: false
-- text: '30B MoE (Qwen3-Coder-30B-A3B-Q4_K_M, 18G) slot deadlock after first request: cause is MemoryMax 22G too tight. Fixed
-    at 23G + ctx 4096 + cache-ram 512. 14B Q4 is more stable alternative.'
-  resolved: false
-- text: 48 stuck turns from earlier session — enrich.py processing them. Status unknown.
-  resolved: false
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
-  resolved: false
-- text: 'Azure 2 vCPU(FX2ms_v2 = 1 physical core/2 SMT threads) Spot 성능 실측: llama.cpp n_threads=1(물리 core 기준), -t 2 무효(prefill
-    14.28→14.36 tok/s, memory-bound). 실측 prefill ~14 tok/s(신규), 장시간/장문맥에서 6.7로 감소, generation ~2-4.5 tok/s(장문맥 0.5). ctx 32768
-    RES ~33.5GB < MemoryMax 38G. SSOT(-c 32768) 반영 완료. 인터랙티브 Deep Dive 백엔드로는 부적합.'
   resolved: false
 - text: 'Azure Qwen Deep Dive 검증 미완: azureqwen provider로 Deep Dive 1회 실행은 opencode 재시작 필요(config 핫리로드 안 됨) + launch로 VM/터널
     유지 상태여야 함. 엔드포인트 자체는 curl로 finish_reason:"tool_calls" 검증 완료.'
@@ -542,32 +522,12 @@ known_issues:
 - text: azure_spot 모듈 config VM_SIZE=Standard_FX2mds_v2 vs runbook/azure-qwen=Standard_FX2ms_v2 (둘 다 2vCPU/42GiB, 모듈 배포는 mds로
     검증). 필요 시 통일.
   resolved: false
-- text: Claude Code Bash 툴의 셸 스냅샷(~/.claude/shell-snapshots/)은 세션 시작 시점의 claude-aliases를 캐시 — 파일 수정 후 type claude에 옛 정의가 보일
-    수 있음. 실사용 환경(새 로그인/인터랙티브 셸)은 파일을 다시 읽어 정상. 세션 재시작으로 해소.
-  resolved: false
-- text: 실행 중인 Claude Code 세션은 env를 이미 들고 있어 재시작 시에만 모드 반영. claude-mode set은 미래 세션/새 tmux 창에 적용됨. tmux setenv -g로 글로벌 env는
-    openrouter로 이미 동기화됨.
-  resolved: false
-- text: 'CRITICAL: exa_mcp.py + context7_mcp.py _read_message()/_send_message() modified for JSON-line compat. If update_handover.py
-    runs before session writes to handover.yaml, completed_log and decisions may get overwritten. Always check handover.yaml
-    after session start.'
-  resolved: false
 - text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. SSOT
     (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
   resolved: false
-- text: 'day-verifier-b (qwen2.5-coder-7b Q4_K_M, :8083): 등록만 되어 있고 day_verify.py에서 실제 호출 없음 (single model port 8082만 사용).
-    Legacy dead config. 제거해도 무방하지만 유지해도 무해. 문제 생기면 llm_client/__init__.py, model_registry.py에서 제거.'
-  resolved: false
-- text: '(Deprecated) Gemini API SSL blocked from Oracle Cloud no longer blocks connections from gemini_openai.py — proxy
-    uses raw SSL sockets with hardcoded IPs (bypasses /etc/hosts and any DNS-level blocks). Native Gemini protocol (proxies/gemini.py)
-    also works independently. Reference: original issue nki05-01 now resolved for both proxies.'
-  resolved: false
 - text: devforge image does not ship tests/ → in-container `DEVFORGE_LLM_REPLAY=1` needs fixtures mounted (DEVFORGE_FIXTURE_DIR
     + -v .../tests/fixtures/llm_recordings:/fixtures:ro), else replay finds no fixture (0 facts).
-  resolved: false
-- text: 'devforge-mcp MCP tools (action_write, action_poll_results) require container restart for FastMCP tool registry update.
-    Does not auto-reload on file change. Restart command: systemctl --user restart container-devforge-mcp.'
   resolved: false
 - text: 'Docs still inconsistent (P2 backlog): OPERATIONS_GUIDE `mcp serve` port role; API_REFERENCE vs system-architecture
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
@@ -576,34 +536,9 @@ known_issues:
 - text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중 RemoteDisconnected/ConnectionResetError
     반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB) 메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'
   resolved: false
-- text: 'extraction: equals predicate still appears 1/turn even with Golden Set (30B MoE, PARALLEL=1). May need stronger GBNF
-    constraints or prompt refinement.'
-  resolved: false
-- text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
-    all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
-  resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
     kv-devforge-prod2-krc로 정상.'
-  resolved: false
-- id: nki01-01
-  detail: 이전 cycle 49 day_verify facts NLI/reranker 없이 force-pass. reranker_recover.py 기본 조건에 source='day_verify' 포함 여부 확인
-    필요. 미포함 시 SQL 일괄 UPDATE 필요.
-  resolved: false
-- id: nki01-02
-  detail: cli.py status --json models.pod-a = ["?", "?", "?"]. Pod A /v1/models 응답 문제 지속. Pod A 기능상 정상 작동 중.
-  resolved: false
-- id: nki01-03
-  detail: turns 테이블에 updated_at 컬럼 없음. pipeline_state 변경 추적 어려움. (created_at만 존재)
-  resolved: false
-- id: nki01-04
-  detail: CONTRADICTION=0 미해결. 신규 GSAR COMPLEMENTARY 4-way NLI 첫 결과 확인 후 재평가 필요.
-  resolved: false
-- id: nki02-01
-  detail: OCI root 확장 미완료. /etc/fstab 정리 완료, 백업 완료. Pod A는 정상 기동 중 (devforge-net 브릿지), Pod B 복구 필요.
-  resolved: false
-- id: nki12-02
-  detail: OpenRouter free model (:free)은 유료 키($10+)로 호출해도 cost=$0이지만 RPM 20 제한은 키 등급과 무관하게 동일. 15RPM proxy로 대응.
   resolved: false
 - text: 'OPEN(2026-09-14): 최종 계획(D1~D9) 결정 대기. 저위험 M0(0회 MCP 툴 allowlist false: lsp proxy_artifact_{get,info,list}· detect_lsp_servers·yggdrasil
     list_plans) 미적용(사용자 승인 대기). 컷오버 도메인(watchdog/turn_collection/pipeline/ model_management)+웹수집/ingest+추출 라우팅(ADR-0005) 미구현
@@ -612,43 +547,11 @@ known_issues:
 - text: OpenCode 세션 시작 시 devforge-mcp(HTTP :8000) 로드가 실패하면 그 세션에서는 재연결하지 않아 deepdive_step_* 툴을 쓸 수 없다(복구해도 새 세션 필요). 해당 세션은
     cli.py task/obs로 기록.
   resolved: false
-- text: OpenCode not yet fully tested in TUI mode (only headless opencode run verified). MCP server connection via opencode
-    mcp add not tested with devforge-mcp container. OpenCode config at ~/.config/opencode/opencode.json uses provider.openai.baseURL
-    pointing to local proxy.
-  resolved: false
-- text: 'Phase 0 미착수(2026-09-14): specs/mcp-contract.json 미작성, ADR-0006 12툴 목록 미열거(Proposed), baseline 미측정. rf-triage-07의
-    다음 행동에 해당.'
-  resolved: false
 - text: 'Phase 0 진행 중(2026-09-14): specs/mcp-contract.json 초안 작성 완료(draft), ADR-0006 Accepted(12툴 열거 완료), W1 baseline 1주 측정
     진행 중(docs/ops/baseline/W1-baseline-spec.md). Gate 1 통과 확인 필요(allowlist diff=0 검증). rf-triage-07 완료.'
   resolved: false
-- text: Phase 1 test scripts in /tmp/ (test_30b_golden.py, test_14b_golden.py, test_14b_feedback.py) — not committed. One-shot
-    test scripts, not production code.
-  resolved: false
-- text: 'Phase 1 test scripts: scripts/lib/test_runner.py (TestRunner framework) + scripts/tests/test_phase1_14b.py (14B Q4
-    GS comparison). /tmp/ scripts are legacy — not committed.'
-  resolved: false
-- text: 'Phase 1 test scripts: scripts/lib/test_runner.py (TestRunner framework) + scripts/tests/test_phase1_14b.py (14B Q4
-    GS comparison). /tmp/ scripts (test_14b_golden.py, test_14b_feedback.py, test_30b_golden.py) are legacy — not committed.'
-  resolved: false
-- text: PostgreSQL shared_buffers 512MB — applied via restart. Ok.
-  resolved: false
 - text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
-  resolved: false
-- text: 'Reranker --batch-size 1024 on 22GB OCI ARM: RSS ~4.6GB, safe. Swap 73% used (2.9/4GB) despite swappiness=10, indicating
-    genuine RAM pressure. Do not increase batch-size beyond 1024 without verifying free memory >6GB.'
-  resolved: false
-- text: 'Slot deadlock watchdog is reactive not preventive: --slot-prompt-similarity 0 reduces but doesn''t eliminate risk.
-    If deadlock persists after Pod B restart, need different cache-reuse strategy (--cache-reuse 0 as last resort).'
-  resolved: false
-- id: strict-xplore-removed
-  detail: 3 experimental test files (*_7b_vs_9b*) import FREE variants as aliases. Body still uses old names. Verify prompt
-    equivalence.
-  resolved: false
-- id: sys-day-extract-re-export
-  detail: Backward compat for nli_compare.py, extract_compare.py. Now FREE. These tests work but test different prompts than
-    before.
   resolved: false
 - text: 'Veritas single-batch predicate 간섭 리스크: MiniCheck 원 설계는 (document, single_claim) → binary. _binary_nli_batch에서 모든
     predicate를 한 prompt에 배치 전송. Claims 간 attention 간섭 가능성 있음. max_new_tokens=1 + numbered answer format으로 독립 평가 유도 중. 정확도
