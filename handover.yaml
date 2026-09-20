@@ -656,26 +656,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
-- PostgreSQL tuning (effective_io_concurrency=200, effective_cache_size=1GB, shared_buffers=512MB). day-cycle.timer removed
-  from 5 files. extract.py deadlock fixed (recover_8082 missing lock.release). Server perf analysis completed (no-mmap keep,
-  netdata fine, zram keep). systemctl kill stuck day_cycle. 48 scanned turns pending watchdog resume.
-- Slot deadlock watchdog auto-detection + recovery. Pod A slirp4netns. MCP --host 0.0.0.0. Stale model refs cleanup (14B→8B,
-  f16→Q8). PostgreSQL shared_buffers restart. --slot-prompt-similarity 0. Aider Qwen wrapper. Gemini SSL blocked.
-- OpenCode 1.17.11 npm install + verification (Anthropic proxy / DeepSeek V4 Flash). Gemini OpenAI-compatible proxy (gemini_openai.py)
-  built with FastAPI + raw SSL sockets + KeyRotator (6 keys round-robin). systemd service gemini-openai-proxy.service on port
-  4431. Verified non-streaming, streaming SSE, /v1/models. OpenCode config points to local proxy. Aider still available but
-  OpenCode tested as alternative.
-- OpenCode AGENTS.md rules research. MCP installation confirmed at /home/opc/.claude/mcp.json (13 servers). Added MCP Tools
-  usage table to llm-agent-rule.md (shared by Claude Code + OpenCode). brave-search simplified (no Claude/OpenCode divergence).
-- 'Extract LLM max_tokens D-approach finalization. Sequential prefill crash fix. Long-turn truncation resolved. Structured
-  JSON logging (4 events). 3-phase review 완료 → 배포 승인. extract_llm.py: _calc_max_tokens, _calc_timeout, MAX_INPUT_CHARS_ADVERTISED
-  추가. import logging 제거 → print+json.dumps로 복원.'
-- 'Extract max_tokens D-approach finalization (reverse-calc from CAP, structured JSON logging). ChatML-style markers migration
-  (6 files, 3-tier convention: INPUT/CONTEXT/DATA + REASONING <<< >>>, START/END restoration, 5-point review fix: ---→<<<
-  >>>, entities→entity, CONTEXT TODO). newhand script reviewed + patches (typ fix, instructions.md guard). DB reset (review_facts+embeddings
-  truncated, pipeline_state→pending). Watchdog restarted. 배포 승인됨.'
-- 'open-newhand 터미널 실행 안됨 수정: ~/.bashrc.d/opencode-aliases — cd 누락 + 상대 경로 절대 경로 변경'
 - 'open-newhand() 수정: open-newhand() 0바이트 .opencode.json 버그 수정 — printf + mktemp + OPENCODE_CONFIG_CONTENT'
 - open-newhand() 0바이트 config 버그 수정 — printf+mktemp+OPENCODE_CONFIG_CONTENT, newhand() proc chain || break
 - Pod B Quadlet → direct systemd service (devforge-pod-b.service + symlink). Podman 5.6 cgroup workaround for 219/CGROUP crashloop.
@@ -764,3 +744,20 @@ completed_log:
 - '(2026-09-20, opencode) 핸드오버 문서 감사·정정 — docs/handover-secrets-kv.md 실제 상태 대조. 일치 8항목 확인. 정정 7건(§4.1 kv-export-env.sh 누락,
   §4.2 fastapi 사유·서비스 수, §8 fallback 잔존·kuhwa 파일명, §9 push, §12 컨테이너 3개). 미푸시 커밋 13개 push(main=origin/main, 0ec3855 포함). 보안:
   ~/.claude/secrets.env NOTION_TOKEN 평문 mode644→600 조치, 삭제 권장.'
+- (2026-09-20, opencode) ~/.claude/secrets.env (NOTION_TOKEN 평문, mode 644) 삭제 완료 — KV(NOTION-TOKEN-KEY)와 중복, mcp.json에 notion
+  서버 미설정으로 안전. 감사 known_issue CLAUDE-SECRETSENV-2026-09-20 resolved 처리.
+- '(2026-09-20, opencode) 스테일 정리: known_issue dp-ki-01(P0) resolve(droplr.py가 DROPLR_USER/PASS 읽음 확인, KV 키 일치), decision dp-01
+  resolved. kv-ki-01 카운트 39→12 정정, fallback 제거 후 resolved.'
+- '(2026-09-20, opencode) secrets.env fallback 제거: 워크스페이스 8개 파일(news 4/timetable 2/azure golden_image 2) env-only 전환, 미사용
+  pathlib Path import 제거. 실 fallback 리더 0개.'
+- '(2026-09-20, opencode) Deep Dive step budget 재교정(task #25): base 신규값 적용 + devforge-mcp 재기동(health 18 tools).'
+- '(2026-09-20, opencode) task #25 착수 중 발견: 라이브 MCP=리팩터드 서버(18툴), scripts/mcp_server.py 레거시(25툴) 비활성. DEEPDIVE_STEP_BUDGETS
+  재교정 무효 → 코드 원복, task #25 blocked 전환. 실측 percentile 분석은 decision dd-live-mcp-2026-09-20에 보존. known_issue LIVE-MCP-DEEPDIVE-2026-09-20
+  등록.'
+- '(2026-09-20, opencode) A-2 KV 누락 config 키 감사: 필요키 확정(MASKPROXY_*/DATAIMPULSE_* 프록시 — 값은 .env.local 백업에만, VERCEL_REVALIDATE_URL/TOKEN
+  이름 불일치), 나머지 12종 불필요 판정. SP get/list 전용으로 등록 불가(WRITE_DENIED). 문서 §8 우선순위 0.5 갱신, kv-ki-02 갱신, decision kv-missing-audit-2026-09-20.'
+- '(2026-09-20, opencode) (a) Phase1/2 hang 감지 리팩터드 포팅 완료: src/devforge/adapters/driving/mcp/server.py (+313/-46). 검증 enter/status/heartbeat/exit,
+  만료 3회→ABORT 시뮬, 재진입 거부/force, import-linter 2 KEPT, pyright 0, pytest pass, MCP 재기동 health 18툴. commit a9626ff push. known_issue
+  LIVE-MCP-DEEPDIVE-2026-09-20 resolved, decision dd-live-mcp/dd-port resolved.'
+- '(2026-09-20, opencode) C2 문서 현행화: 라이브 MCP=리팩터드 서버로 정정 — AGENTS.md(구현위치/task#25 blocked), docs/API_REFERENCE.md, docs/OPERATIONS_GUIDE.md,
+  docs/system-architecture.md. scripts/mcp_server.py=비활성 레거시 명기.'
