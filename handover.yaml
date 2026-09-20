@@ -490,6 +490,12 @@ decisions:
     OR started_at>base AND heartbeat_stale>base), overrun 3회 ABORTED + Slack(chat.postMessage), force 재진입 가드, status has_aborted_step.
     알림은 driving adapter 내 자체 urllib 헬퍼(포트 경계 유지).'
   status: resolved
+- id: a3-fastapi-kv-2026-09-20
+  detail: 'A-3: fastapi 컨테이너는 이미 entrypoint kv-fetch-env 래퍼로 KV 주입 중이었음(문서 §4.2 전환 보류는 stale). 잔여 조치로 quadlet의 평문 DB URL(postgres:devforge_secret_2026)
+    제거 → DEVFORGE_DATABASE_URL을 KV DEVFORGE-POSTGRES-PASSWORD로 런타임 구성(fastapi-entrypoint.sh, mcp_refactored_entrypoint.sh).
+    mcp ExecStartPre 키 목록에 DEVFORGE-POSTGRES-PASSWORD 추가. 검증: fastapi/mcp healthy, mcp DB 도구(pipeline_status) 정상, quadlet
+    평문 시크릿 0.'
+  status: resolved
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -656,7 +662,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'open-newhand() 수정: open-newhand() 0바이트 .opencode.json 버그 수정 — printf + mktemp + OPENCODE_CONFIG_CONTENT'
 - open-newhand() 0바이트 config 버그 수정 — printf+mktemp+OPENCODE_CONFIG_CONTENT, newhand() proc chain || break
 - Pod B Quadlet → direct systemd service (devforge-pod-b.service + symlink). Podman 5.6 cgroup workaround for 219/CGROUP crashloop.
 - MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns halved generation time.
@@ -761,3 +766,5 @@ completed_log:
   LIVE-MCP-DEEPDIVE-2026-09-20 resolved, decision dd-live-mcp/dd-port resolved.'
 - '(2026-09-20, opencode) C2 문서 현행화: 라이브 MCP=리팩터드 서버로 정정 — AGENTS.md(구현위치/task#25 blocked), docs/API_REFERENCE.md, docs/OPERATIONS_GUIDE.md,
   docs/system-architecture.md. scripts/mcp_server.py=비활성 레거시 명기.'
+- '(2026-09-20, opencode) A-3 fastapi/mcp KV: quadlet 평문 DB 비밀번호(devforge_secret_2026) 제거. entrypoint가 KV DEVFORGE-POSTGRES-PASSWORD로
+  DEVFORGE_DATABASE_URL 구성. daemon-reload+재기동, 두 컨테이너 healthy, mcp DB 도구 정상, 평문 0. 문서 §4.2/§12 갱신(컨테이너 4개).'

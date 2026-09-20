@@ -132,7 +132,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 ### 4.2 systemd 서비스 & 컨테이너
 
-**전환 완료 (시스템드 서비스 11개 + 컨테이너 3개):**
+**전환 완료 (시스템드 서비스 11개 + 컨테이너 4개):**
 | 서비스 | Phase | 변경 일자 | 비고 |
 |--------|-------|----------|------|
 | `openrouter-rr-proxy.service` | Pre-Phase | 2026-09-17 | 첫 전환 (검증 완료) |
@@ -147,18 +147,16 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | `ebook-watcher.service` | 후속 | 2026-09-18 | ebook 파이프라인 loop |
 | `devforge-news.service` | 후속 | 2026-09-18 | news collector |
 | `container-postgres.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
-| `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
+| `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh (+DEVFORGE-POSTGRES-PASSWORD, 2026-09-20) |
 | `container-webobsidian.container` | Phase 3 | 2026-09-19 | ExecStartPre + kv-export-env.sh (WEBOBSIDIAN-PASSWORD) |
+| `container-devforge-fastapi.container` | Phase 4 | 2026-09-20 | entrypoint `kv-fetch-env.py` 래퍼 + DB URL을 KV `DEVFORGE-POSTGRES-PASSWORD`로 런타임 구성(quadlet 평문 제거) |
 
 **전환 불필요 (1개):**
 | 서비스 | 사유 |
 |--------|------|
 | `container-devforge-worker.container` | 환경변수 미사용 |
 
-**전환 보류 (1개):**
-| 서비스 | 사유 | 우선순위 |
-|--------|------|---------|
-| `container-devforge-fastapi.container` | `calendar_router`는 이미 try/except로 가드됨(2026-09-20 확인) — 전환 자체가 저우선 | P3 |
+**전환 보류: 없음** (fastapi는 2026-09-20 평문 DB URL 제거로 완료)
 
 ### 4.3 GPG 백업
 
@@ -374,8 +372,7 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 | onmydoc `~/.local/bin/git-credential-kv.py` | 신규 테넌트/SP, URL→`kv-common-prod-krc` |
 
 ### 전환/검증 결과
-- devforge: KV 사용 systemd 서비스 11개 + 컨테이너 3개(postgres/mcp/webobsidian) 재기동 → 시크릿 93개 로드
-  (fastapi 컨테이너는 KV 미적용 — §4.2 참조)
+- devforge: KV 사용 systemd 서비스 11개 + 컨테이너 4개(postgres/mcp/webobsidian/fastapi) — fastapi는 entrypoint `kv-fetch-env.py` 래퍼로 KV 주입, quadlet 평문 DB URL 제거(2026-09-20, §4.2)
 - onmydoc: `git credential get` 인증 OK, `kv-fetch-env.py env` 88개
 - 시크릿 이관 검증: 구 KV 101개 → 신규 KV 값 해시 **MATCH 101 / MISMATCH 0**
   (2026-09-20 마이그레이션 세션 검증치, 이후 감사에서는 재검증 안 함)
