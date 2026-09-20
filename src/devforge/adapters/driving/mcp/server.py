@@ -476,14 +476,17 @@ register_tool(
 # aborts after DEEPDIVE_OVERRUN_LIMIT consecutive checks. Phase 2: when affected_files
 # is given, max_bound = base + n*DEEPDIVE_FILE_MARGIN_SEC, clamped to [min, max].
 
+# base recalibrated 2026-09-20 (task #25) from 57 completed deepdive_steps
+# (2026-08-25..09-13, 0 overruns): base = ceil30(max(p90*1.5, observed_max));
+# min/max kept as safety bounds. Revisit when the sample grows.
 DEEPDIVE_STEP_BUDGETS: dict[int, dict[str, Any]] = {
-    1: {"name": "yggdrasil_planning", "base": 180, "min": 60, "max": 600},
-    2: {"name": "code_explore", "base": 300, "min": 120, "max": 900},
-    3: {"name": "lsp_analysis", "base": 300, "min": 120, "max": 1200},
-    4: {"name": "external_verify", "base": 300, "min": 120, "max": 900},
-    5: {"name": "plan_finalize", "base": 240, "min": 60, "max": 600},
-    6: {"name": "implementation", "base": 600, "min": 300, "max": 2400},
-    7: {"name": "verification", "base": 300, "min": 120, "max": 900},
+    1: {"name": "yggdrasil_planning", "base": 150, "min": 60, "max": 600},
+    2: {"name": "code_explore", "base": 240, "min": 120, "max": 900},
+    3: {"name": "lsp_analysis", "base": 450, "min": 120, "max": 1200},
+    4: {"name": "external_verify", "base": 420, "min": 120, "max": 900},
+    5: {"name": "plan_finalize", "base": 150, "min": 60, "max": 600},
+    6: {"name": "implementation", "base": 810, "min": 300, "max": 2400},
+    7: {"name": "verification", "base": 180, "min": 120, "max": 900},
 }
 DEEPDIVE_CHECK_INTERVAL = 60
 DEEPDIVE_OVERRUN_LIMIT = 3
