@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-20T06:39:42.725589+00:00'
+  time: '2026-09-20T07:06:20.788457+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -632,8 +632,9 @@ known_issues:
 - text: watchdog 코드에 ruff SIM102/F401 등 기존 스타일 경고 다수 + checker.py 타입 경고 존재. 단, cli.py lint는 위반 0. 기능 영향 없음, 정리 시 일괄 처리.
   resolved: false
 - id: WEBOBSIDIAN-CGROUP-2026-09-20
-  detail: stale child cgroup(runtime, 9/19 생성)으로 ExecStartPre attach EBUSY. ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
-    에 Slice=webobsidian-workaround.slice 로 우회 복구(healthz 200). 근본 해결은 재부팅.
+  detail: 'stale child cgroup(runtime, 9/19 생성)으로 ExecStartPre attach EBUSY → drop-in(Slice=webobsidian-workaround.slice)으로
+    우회 복구. 2026-09-20 07:04 KST 재부팅 실행(커널 cgroup 잔존 제거 목적). 재부팅 후 조치: (1) container-webobsidian 정상 기동 확인, (2) ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
+    제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
 - OCI root extension. Services stopped, /var/log+tmp backed up, fstab edited. Blocked at LV removal.
