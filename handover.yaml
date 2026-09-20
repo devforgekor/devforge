@@ -189,7 +189,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'ui: 진행 표시 영어(간결), 요약=한글, 상세는 파일 저장. Token 절약 패턴 확립.'
 - 'Pattern 2+4 auto-fix system: reflex_rules DDL + 5 SQL functions + lib/reflex_rules.py + lib/auto_fix.py + lib/observation.py
   + cli.py reflex command + obs_remediate MCP. Action queue bridge: lib/action_queue.py + MCP tools action_write/action_poll_results
   + watchdog _consume_actions(). Security: shell=False, injection validation, timeouts. 9/9 tests passed. Commit 70d78b7 pushed
@@ -306,3 +305,5 @@ completed_log:
   user 유닛 active, cron 1분. vault droplr-integration.py가 구 테넌트/구SP/구KV + 삭제된 DROPLR-AUTH-TOKEN-KEY(JWT)에 의존 → kv-fetch-env
   경유 Basic(DROPLR-USER/PASS)+drplr auth login으로 정합 수정, 양 서버 동작 확인(webobsidian-url 단축 OK). 커밋 f438fff. 남은 항목: devforge git-lfs
   미설치.'
+- '(2026-09-20, opencode) git-lfs 3.7.1 설치+git lfs install(vault .gitattributes LFS 패턴 적용). KV 정리 종료 확인: A-2/A-3/droplr Basic/쓰기
+  SP/secrets.env 제거 완료, 잔여는 시간게이트 #38/KV-NAME-REUSE(2026-12)뿐. 재부팅(WEBOBSIDIAN-CGROUP)은 임베딩 완료 후로 보류.'
