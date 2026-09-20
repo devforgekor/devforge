@@ -143,7 +143,7 @@ devforge-restore-test.timer (매월 1일 20:30 UTC)
 ### 5.3 최종 주소 = Droplr
 - 긴 OCI PAR URL을 **Droplr로 단축**해 단일 주소 체계로 제공.
 - 기존 자산 재사용: `scripts/lib/blob_uploader._shorten_with_droplr()`, `scripts/droplr_upload.py`
-  (`drplr link --porcelain`, 자격증명은 Key Vault의 `DROPLR_USER`/`DROPLR_PASS`, 선택 `DROPLR_AUTH_TOKEN_KEY` — `secrets.env`는 2026-09-18 삭제됨)
+  (`drplr link --porcelain`, 자격증명은 Key Vault의 `DROPLR_USER`/`DROPLR_PASS`(HTTP Basic) — `secrets.env`는 2026-09-18 삭제됨)
 - 파이프라인 산출물(review bundle)도 `releases/` 업로드 후 Droplr 단축 → Notion 메모로 공유.
 
 ---
