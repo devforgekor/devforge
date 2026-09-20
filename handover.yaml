@@ -667,7 +667,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- Pod B Quadlet → direct systemd service (devforge-pod-b.service + symlink). Podman 5.6 cgroup workaround for 219/CGROUP crashloop.
 - MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns halved generation time.
 - mcp-trunc-proxy v0.2.2 installed + 8/11 MCPs wrapped (90-98% token reduction on large responses).
 - token-savior-recall v4.4.1 installed (pip3.11, optimized profile). Structural nav + memory + Bash compaction.
@@ -774,3 +773,5 @@ completed_log:
   DEVFORGE_DATABASE_URL 구성. daemon-reload+재기동, 두 컨테이너 healthy, mcp DB 도구 정상, 평문 0. 문서 §4.2/§12 갱신(컨테이너 4개).'
 - '(2026-09-20, opencode) task #25 완료: 리팩터드(라이브) Deep Dive budget 재교정 적용(base 150/240/450/420/150/810/180, min/max 유지). MCP
   재기동/health 확인. commit 668011e.'
+- '(2026-09-20, opencode) MCP 계약 툴 HTTP 노출: /tools/{name}에 deepdive_step_enter/exit/session_heartbeat/session_status/verify_sandbox
+  추가. E2E 검증(enter step3 affected_files=5 → effective_max 1050, status/hb/exit/sandbox) 후 정리. commit e5e9ef2.'
