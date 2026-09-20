@@ -170,9 +170,6 @@ known_issues:
     (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
   resolved: false
-- text: devforge image does not ship tests/ → in-container `DEVFORGE_LLM_REPLAY=1` needs fixtures mounted (DEVFORGE_FIXTURE_DIR
-    + -v .../tests/fixtures/llm_recordings:/fixtures:ro), else replay finds no fixture (0 facts).
-  resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
     kv-devforge-prod2-krc로 정상.'
@@ -180,9 +177,6 @@ known_issues:
 - text: 'OPEN(2026-09-14): 최종 계획(D1~D9) 결정 대기. 저위험 M0(0회 MCP 툴 allowlist false: lsp proxy_artifact_{get,info,list}· detect_lsp_servers·yggdrasil
     list_plans) 미적용(사용자 승인 대기). 컷오버 도메인(watchdog/turn_collection/pipeline/ model_management)+웹수집/ingest+추출 라우팅(ADR-0005) 미구현
     — live는 여전히 scripts/*.'
-  resolved: false
-- text: OpenCode 세션 시작 시 devforge-mcp(HTTP :8000) 로드가 실패하면 그 세션에서는 재연결하지 않아 deepdive_step_* 툴을 쓸 수 없다(복구해도 새 세션 필요). 해당 세션은
-    cli.py task/obs로 기록.
   resolved: false
 - text: 'Phase 0 진행 중(2026-09-14): specs/mcp-contract.json 초안 작성 완료(draft), ADR-0006 Accepted(12툴 열거 완료), W1 baseline 1주 측정
     진행 중(docs/ops/baseline/W1-baseline-spec.md). Gate 1 통과 확인 필요(allowlist diff=0 검증). rf-triage-07 완료.'
@@ -200,7 +194,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- systemd daemon-reload 완료, 실제 커밋 생성 확인 (5811f6e)
 - 'Reranker HTTP 500 244→0 fix: triple-layer (batch-size 1024, ctx 4096, pkill+relaunch, 1500ch truncation). Batch NLI overflow
   fix: evidence 500→300ch, source 2000→1000ch. --large-only CLI flag. pipeline_state scanned→pending. 40-turn regression verified:
   0 errors, 612 total facts.'
@@ -322,3 +315,6 @@ completed_log:
 - '(2026-09-20, opencode) devforge-news.service timeout 원인 규명/완화: 수집 자체는 1 feed 43s(번역 0.7s로 빠름; Exa 추출/엔티티 per-article이 병목).
   29 feeds×limit5면 900s 초과. 완화: (1) collector _fetch_rss에 per-feed 네트워크 타임아웃 20s 추가(feedparser.parse(url)는 타임아웃 없음 → feed
   hang 방지, workspace commit ea14c72), (2) 서비스 TimeoutStartSec 900→3600, --limit 5→3, python3 -u. dedup은 실측 0.8s로 병목 아님.'
+- '(2026-09-20, opencode) 171/184: (171) MCP HA(healthcheck+Restart+watchdog)로 완화, 재연결 부재는 클라이언트 한계. (184) llm_recordings
+  fixtures worker/mcp ro 마운트 → in-container replay 가능. 부수 수정: mcp ExecStartPre가 삭제된 DROPLR-AUTH-TOKEN-KEY 요청으로 기동 실패하던 잠복
+  버그 제거(restart 중 발견), 정상 기동 확인.'
