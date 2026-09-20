@@ -96,7 +96,7 @@ pytest tests/test_characterization.py tests/test_integration.py -v
 ```
 
 ### Test Categories
-- **Characterization** (17 tests): Verify existing behavior preserved
+- **Characterization** (31 tests): Verify existing behavior preserved
 - **Integration** (12 tests): Pipeline + DB integration
 
 ### Replay Mode (for deterministic LLM testing)

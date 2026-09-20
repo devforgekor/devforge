@@ -37,7 +37,7 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 │ APPS                                                          │
 │  FastAPI hub :8002  (Slack/Telegram/email + MCP mount)         │
 │    └─ Blob Explorer :8085 (OCI 백엔드 + Droplr, /send·/receive)    │
-│  MCP server  :8000  (FastMCP Streamable HTTP)                  │
+│  MCP server  :8000  (리팩터드 SSE — devforge.adapters.driving.mcp.server) │
 │  ebook-api   :8089  · cashbook :8100 · news :8091              │
 │  tg_webhook  :8001  · review_dashboard :9002                   │
 │  proxies: anthropic :44777 · anthropic_openrouter :44778        │
