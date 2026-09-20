@@ -173,10 +173,6 @@ known_issues:
 - text: devforge image does not ship tests/ → in-container `DEVFORGE_LLM_REPLAY=1` needs fixtures mounted (DEVFORGE_FIXTURE_DIR
     + -v .../tests/fixtures/llm_recordings:/fixtures:ro), else replay finds no fixture (0 facts).
   resolved: false
-- text: 'Docs still inconsistent (P2 backlog): OPERATIONS_GUIDE `mcp serve` port role; API_REFERENCE vs system-architecture
-    ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
-    placement.'
-  resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
     kv-devforge-prod2-krc로 정상.'
