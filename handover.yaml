@@ -145,6 +145,11 @@ decisions:
     restart 모두 skip. 추가: watchdog day-cycle 자동기동에 pause 플래그 가드, embed_window.sh(day-cycle+watchdog 정지→embed 완주→복구). 검증: 실행
     중 probe 로그가 skip recovery로 전환. commit 1d2cee1.'
   status: resolved
+- id: embedding-unblocked-2026-09-20
+  detail: '임베딩 차단 해소(2026-09-20): 임베딩이 2026-09-19 06:09 이후 정지했던 원인은 (a) watchdog의 :8082 probe→inference 재시작, (b) day-cycle
+    Restart=on-failure churn이 embed 모드를 계속 깨뜨린 것. 수정(watchdog 소유권+Restart=no+pause) 후 churn-off 상태에서 embed_batch 완주 검증: embeddings
+    3554→3555, 1 ok/0 failed. 단일 추론 컨테이너의 extract/embed 상호배타는 유지. 런타임: 소량 검증 완료, 대량(verified 2271)은 CPU 속도 제약(느림).'
+  status: resolved
 known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
@@ -193,8 +198,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'Predicate Golden Set YAML: 16 entries (11 GOOD + 5 BAD). Sources: DB review_facts + turns with evidence chains. English/Korean
-  mixed predicates. Created at scripts/docs/predicate-golden-set.yaml.'
 - 'MCP transport compatibility fix: exa_mcp.py + context7_mcp.py had legacy Content-Length header transport. Claude Code v2.1.158
   uses JSON-line transport. Fixed _read_message() + _send_message() in both. 12/12 MCP servers connected.'
 - 'Pod B: 14B Q4 model loaded at 8081 (2min load, 8.4G). Ready for Phase 1 tests (no-GS + with-GS).'
@@ -309,3 +312,5 @@ completed_log:
   느림). 190 상세 갱신.'
 - '(2026-09-20, opencode) 190 enrich 종결: churn 제거(Watchdog 소유권+Restart=no) 후 enrich 1턴 완주 검증(1 enriched, 247s). RemoteDisconnected는
   churn 리셋이 원인.'
+- '(2026-09-20, opencode) 임베딩 검증: churn-off에서 embed_batch 완주(1 ok/0 failed, embeddings 3554→3555, :8081=200). 임베딩 정지 원인은 churn이
+  embed 모드를 깨뜨린 것. decision embedding-unblocked-2026-09-20.'
