@@ -1,7 +1,7 @@
 # W1 Baseline Measurement — Phase 0 Gate 2
 
-> **Status:** in_progress · **Date:** 2026-09-14 · **Owner:** devforge
-> **2026-09-20 수정**: `baseline-daily.service`가 `User=opc`(user 유닛에 부적합)로 매일 `216/GROUP` 실패 → 해당 줄 제거로 복구. **미측정일 D2~D7(09-15~19)** 는 서비스 장애로 소실 — 09-14(D1) + 09-20 재개. 게이트 2/3/6 판정은 재개 후 7일 연속 측정으로 산출.
+> **Status:** in_progress (restart 2026-09-20) · **Owner:** devforge
+> **2026-09-20 재시작**: `baseline-daily.service`가 `User=opc`(user 유닛 부적합)로 09-15~19 매 실행 `216/GROUP` 실패(python 실행 전) → **자동 수집 실패, 데이터 미축적**(타이머는 daily로 발화했음). 해당 줄 제거로 복구. **새 D1 = 2026-09-20**, 목표 7일 연속(09-20~09-26) 종료 시 임계값/허용오차 산출. 실패 감지: `OnFailure=baseline-daily-failed.service` → `~/.local/state/baseline-daily.failed` 마커 + journal. (참고: Slack 봇 토큰 `account_inactive`로 Slack 알림은 불가.)
 > **선행:** `specs/mcp-contract.json` (gate 1) · `docs/adr/0006-mcp-tool-surface.md` (Accepted)
 > **목적:** W1(1주) 동안 공유 baseline을 측정하여 게이트 2·3·6 통과 여부와 임계값/허용오차/RTO/RPO 확정의 근거를 수집한다.
 
