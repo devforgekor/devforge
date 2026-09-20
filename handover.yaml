@@ -196,8 +196,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'extraction: Phase 1 test series init. Models available (30B MoE, 14B Q4, 4B Q8 x2, 0.5B Q8). Downloaded Qwen3.5-4B-Q8_0
-  (4.2G), Qwen3-14B-Q4_K_M (8.4G). Removed Qwen3-8B-Q8_0 (8.2G), Qwen3.5-9B-Q8.'
 - 'Qwen3-Coder-30B-A3B-Q4_K_M test: 30B MoE no-GS (0/5 GOOD on chunk2, 503 slot deadlock). 30B MoE with GS (4/5 GOOD, 243s,
   1533P+326C). Remaining: equals appears once (PARALLEL=1). Memory fix: MemoryMax 22G->23G, ctx 8192->4096, cache-ram 1024->512,
   ubatch 512->256. Fixed 30B slot deadlock.'
@@ -312,3 +310,6 @@ completed_log:
   SP/secrets.env 제거 완료, 잔여는 시간게이트 #38/KV-NAME-REUSE(2026-12)뿐. 재부팅(WEBOBSIDIAN-CGROUP)은 임베딩 완료 후로 보류.'
 - '(2026-09-20, opencode) watchdog churn 근본원인 수정: 파이프라인 소유권 vs watchdog probe 동시성. probe 관용성(timeout 120s, 연속 3회, 503/Loading
   transient) + 파이프라인 실행 중 recovery/stuck-restart skip. embed_window.sh 추가. commit 1d2cee1. (190 enrich 크래시는 별개 과제로 잔존)'
+- '(2026-09-20, opencode) enrich 실패 근본원인 규명: churn(Watchdog cascade + systemd Restart=on-failure)이 in-flight LLM 요청을 리셋 →
+  RemoteDisconnected. 수정: watchdog probe 관용성/소유권 skip(1d2cee1) + day-cycle Restart=no 드롭인 + pause. 격리 후 모델 정상 처리(CPU 프리필 매우
+  느림). 190 상세 갱신.'
