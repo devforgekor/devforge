@@ -344,7 +344,7 @@ Cycle 3: Adjust negative examples based on failure patterns → Final run
 
 ```
 Phase 1: Prompt Redesign
-  ├── T16: _STRUCTURED_FIELDS [file: extract_llm.py]
+  ├── T16: _STRUCTURED_FIELDS [file: extract_llm.py] ✅ DONE (2026-09-20: restored from archive, added to pipelines/extract_llm.py)
   ├── T17a: _SYSTEM_USER_EXTRACT [file: extract_llm.py]
   ├── T17b: _SYSTEM_THINKING_EXTRACT [file: extract_llm.py]
   ├── T17c: _SYSTEM_TEXT_EXTRACT [file: extract_llm.py]

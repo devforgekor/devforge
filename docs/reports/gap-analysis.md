@@ -70,7 +70,7 @@
 
 ## Stage 4 — Extract (7 Phase)
 
-**파일**: `extract.py` (769 lines, Status: production) + `extract_llm.py` (659 lines, Status: production) + `extract_verify.py` (376 lines, Status: production)
+**파일**: `extract.py` (769 lines, Status: production) + `extract_llm.py` (296 lines, Status: production) + `extract_verify.py` (376 lines, Status: production)
 
 ### Phase 4-1: Turn 선점
 

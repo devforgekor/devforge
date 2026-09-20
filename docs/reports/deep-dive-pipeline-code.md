@@ -10,7 +10,7 @@
 | File | Lines | Path (callers) | Dependencies |
 |------|-------|---------------|-------------|
 | `extract.py` | ~1,090 | day_cycle.sh → subprocess | extract_llm.py, extract_verify.py, lib.pod_manager, lib.watchdog.checker |
-| `extract_llm.py` | ~350 | extract.py — submodule | lib.llm_client, lib.model_registry, lib.pod_manager |
+| `extract_llm.py` | ~296 | extract.py — submodule | lib.llm_client, lib.model_registry, lib.pod_manager |
 | `extract_verify.py` | ~400 | extract.py — submodule | lib.llm_client (call_llm, reranker_nli_verdict) |
 | `embed_batch.py` | ~400 | day_cycle.sh → subprocess | lib.pod_manager, lib.infra.preflight |
 | `fts5_refresh.py` | ~70 | day_cycle.sh → subprocess | lib.search.local_index |

@@ -925,7 +925,7 @@ modules:
         \ anti-join."
     extract_llm.py:
       status: production
-      purpose: "LLM extraction submodule \u2014 re-exports from lib/extract_llm package."
+      purpose: "LLM extraction submodule \u2014 re-exports from lib/extract_llm + 8 prompt constants + chunking/edc re-exports."
     extract_verify.py:
       status: production
       purpose: Verification submodule for the Extract Pipeline.
