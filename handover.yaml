@@ -508,10 +508,6 @@ known_issues:
 - text: 실행 중인 Claude Code 세션은 env를 이미 들고 있어 재시작 시에만 모드 반영. claude-mode set은 미래 세션/새 tmux 창에 적용됨. tmux setenv -g로 글로벌 env는
     openrouter로 이미 동기화됨.
   resolved: false
-- id: CLAUDE-SECRETSENV-2026-09-20
-  detail: /home/opc/.claude/secrets.env 에 NOTION_TOKEN 평문 잔존(감사 시 mode 644, world-readable). KV(NOTION-TOKEN-KEY)와 중복. 권한
-    600으로 조치함. 파일 삭제 권장(미삭제).
-  resolved: false
 - text: 'CRITICAL: exa_mcp.py + context7_mcp.py _read_message()/_send_message() modified for JSON-line compat. If update_handover.py
     runs before session writes to handover.yaml, completed_log and decisions may get overwritten. Always check handover.yaml
     after session start.'
