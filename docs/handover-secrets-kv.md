@@ -242,13 +242,14 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
    - `~/.config/devforge/secrets.env` 삭제 (백업: `secrets.env.backup.20260918`)
    - `/opt/workspace/minihome/apps/news/.env.local` 삭제 (백업: `.env.local.backup.20260918`)
    
-2. **코드 리팩터링 완료 (6개 파일)**
+2. **코드 리팩터링 (6개 파일) — 환경변수 우선으로 변경**
    - News 프로젝트: `translator.py`, `digest.py`, `exa_extractor.py`, `multilingual_processor.py`
    - Timetable 프로젝트: `main.py`, `calendar_sync/oauth_service.py`
-   - 패턴: 환경변수 우선 → secrets.env fallback 제거
+   - 패턴: 환경변수 우선. 단 `secrets.env` fallback은 **호환성 유지용으로 잔존**(2026-09-20 감사 확인).
+     `secrets.env` 파일 자체는 삭제됐으므로 런타임 영향 없음. 서버+워크스페이스 14개 .py에 잔존.
    
 3. **kuhwa 워크플로우 수정**
-   - `.github/workflows/kuhwa.yaml`: `secrets.env` 참조 제거
+   - `.github/workflows/update-schedule.yml` (문서 초판 오기: `kuhwa.yaml`): `secrets.env` 참조 없음
    - 환경변수 직접 주입 방식으로 변경
    
 4. **ebook-api.service 전환**
@@ -262,7 +263,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 ### 우선순위 0: P2 개선 (선택)
 - **#1 토큰 캐싱 (P2)**: Azure AD 토큰 1시간 유효 → 메모리/파일 캐싱으로 서비스 재시작 시 1~2초 절약
-- **#3 부분 시크릿 로드 (P2)**: `kv-fetch-env.py --keys KEY1,KEY2` 옵션 추가 (현재 56개 전체 로드)
+- **#3 부분 시크릿 로드 (P2)**: ✅ 완료 — `kv-fetch-env.py env --keys` + `kv-export-env.sh`(서비스별 최소 주입), 컨테이너/일부 서비스에 적용(2026-09-19)
 - **#6 GPG import 중복 제거 (P3)**: `gpg --list-keys` 체크 후 없을 때만 import
 - **#7 동시 실행 보호 (P3)**: PID 파일 lock (systemd timer는 중복 방지 내장)
 
@@ -282,8 +283,8 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
    사용처를 grep으로 확인해 실제 필요한 키만 KV에 등록한다.
 
 ### 우선순위 1: 나머지 systemd 서비스 전환
-- **완료**: 10개 서비스 전환 완료 (2026-09-18)
-- **남은 작업**: `container-devforge-fastapi.container` (기존 버그로 인해 보류)
+- **완료**: 시스템드 서비스 11개 + 컨테이너 3개 전환 완료 (2026-09-18~19)
+- **남은 작업**: `container-devforge-fastapi.container` (KV 미적용, §4.2 참조)
 
 ### 우선순위 2: secrets.env 파일 제거
 - **완료**: `~/.config/devforge/secrets.env` 삭제 완료 (2026-09-18)
@@ -304,7 +305,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 - 2026-09-19: `orchestrator.py`가 `DEVFORGE_WATCHDOG_PING_SSH`/`_URL`을 읽도록 변경(구 `WATCHDOG_PING_*` 제거). KV 값 오등록(`c9146961…`) → `onmydoc` 교정, watchdog 재시작 후 핑 갱신 확인.
 - 2026-09-18: `kv-fetch-env.py`/`kv-backup.py` P0+P1 개선(에러 처리·retry·tempfile 보안), 커밋 `4c28ef7`.
-- 2026-09-20: 다중 KV 지원 변경분은 §12. (미푸시 여부는 `git status`로 확인)
+- 2026-09-20: 다중 KV 지원 변경분은 §12. 감사 결과 `kv-fetch-env.py`/`kv-backup.py` 변경 커밋 `0ec3855`가 **미푸시**였음 → **2026-09-20 push 완료**(`main` = `origin/main`).
 
 ---
 
@@ -366,9 +367,11 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 | onmydoc `~/.local/bin/git-credential-kv.py` | 신규 테넌트/SP, URL→`kv-common-prod-krc` |
 
 ### 전환/검증 결과
-- devforge: KV 사용 systemd 서비스 11개 + 컨테이너 4개(postgres/mcp/webobsidian/fastapi) 재기동 → 시크릿 93개 로드
+- devforge: KV 사용 systemd 서비스 11개 + 컨테이너 3개(postgres/mcp/webobsidian) 재기동 → 시크릿 93개 로드
+  (fastapi 컨테이너는 KV 미적용 — §4.2 참조)
 - onmydoc: `git credential get` 인증 OK, `kv-fetch-env.py env` 88개
 - 시크릿 이관 검증: 구 KV 101개 → 신규 KV 값 해시 **MATCH 101 / MISMATCH 0**
+  (2026-09-20 마이그레이션 세션 검증치, 이후 감사에서는 재검증 안 함)
 - GPG 백업 재생성 확인
 
 ### 구 KV 처리 (보류)
