@@ -189,7 +189,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- Slack MCP and postgres MCP removed (13→11 MCPs). .claudeignore created.
 - 'ui: 진행 표시 영어(간결), 요약=한글, 상세는 파일 저장. Token 절약 패턴 확립.'
 - 'Pattern 2+4 auto-fix system: reflex_rules DDL + 5 SQL functions + lib/reflex_rules.py + lib/auto_fix.py + lib/observation.py
   + cli.py reflex command + obs_remediate MCP. Action queue bridge: lib/action_queue.py + MCP tools action_write/action_poll_results
@@ -303,3 +302,7 @@ completed_log:
   참조 정정. dp-ki-02/doc-ki-01/sec-ki-01/dp-02 resolved.'
 - '(2026-09-20, opencode) Droplr Basic 전용 단순화: JWT/Bearer 경로 제거, KV DROPLR-AUTH-TOKEN-KEY 삭제(common). Basic /account 200 검증.
   object-storage.md 갱신. decision droplr-basic-only-2026-09-20.'
+- '(2026-09-20, opencode) Obsidian 2서버 연계 마무리: devforge/onmydoc 동일 vault(GitHub remote) 동기화 검증(추가/삭제 전파 ~70s), 양 서버 heartbeat
+  user 유닛 active, cron 1분. vault droplr-integration.py가 구 테넌트/구SP/구KV + 삭제된 DROPLR-AUTH-TOKEN-KEY(JWT)에 의존 → kv-fetch-env
+  경유 Basic(DROPLR-USER/PASS)+drplr auth login으로 정합 수정, 양 서버 동작 확인(webobsidian-url 단축 OK). 커밋 f438fff. 남은 항목: devforge git-lfs
+  미설치.'
