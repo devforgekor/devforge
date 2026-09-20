@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0",
+  "contract_id": "devforge-mcp-12",
+  "status": "draft",
+  "source": {
+    "adr": "docs/adr/0006-mcp-tool-surface.md",
+    "schema_ref": "docs/reports/review-triage-v5-20260914.md §2.2",
+    "allowlist": "~/.config/opencode/opencode.json (tools.devforge-mcp_*, default false)"
+  },
+  "tools": [
+    {
+      "name": "deepdive_step_enter",
+      "disposition": "hook",
+      "lifecycle": "active -> hook@M1 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "deepdive_step_exit",
+      "disposition": "hook",
+      "lifecycle": "active -> hook@M1 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "deepdive_session_heartbeat",
+      "disposition": "internalize",
+      "lifecycle": "active -> deprecated@M1 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "deepdive_session_status",
+      "disposition": "internalize",
+      "lifecycle": "active -> deprecated@M1 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "deepdive_verify_sandbox",
+      "disposition": "keep",
+      "lifecycle": "active",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "obs_write",
+      "disposition": "merge",
+      "merge_target": "memory(action=save,kind=obs)",
+      "arg_mapping": {
+        "observation": "memory.text",
+        "category": "memory.kind_detail",
+        "source": "memory.source",
+        "context": "memory.context",
+        "tags": "memory.tags"
+      },
+      "lifecycle": "active -> merged@M3(M2) -> removed@M0",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "obs_search",
+      "disposition": "merge",
+      "merge_target": "memory(action=search,kind=obs)",
+      "arg_mapping": {
+        "query": "memory.query",
+        "source": "memory.source",
+        "limit": "memory.limit"
+      },
+      "lifecycle": "active -> merged@M3 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "search_turns",
+      "disposition": "merge",
+      "merge_target": "search_turns(mode=fts)",
+      "arg_mapping": {
+        "query": "search.query",
+        "limit": "search.limit"
+      },
+      "lifecycle": "active -> merged@M3 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "search_similarity",
+      "disposition": "merge",
+      "merge_target": "search_turns(mode=hybrid)",
+      "arg_mapping": {
+        "query": "search.query",
+        "limit": "search.limit"
+      },
+      "lifecycle": "active -> merged@M3 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "mem_save",
+      "disposition": "merge",
+      "merge_target": "memory(action=save,kind=mem)",
+      "arg_mapping": {
+        "user_turn": "memory.text",
+        "source": "memory.source",
+        "meta": "memory.meta"
+      },
+      "lifecycle": "active -> merged@M3 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "mem_search",
+      "disposition": "merge",
+      "merge_target": "memory(action=search,kind=mem)",
+      "arg_mapping": {
+        "query": "memory.query",
+        "limit": "memory.limit"
+      },
+      "lifecycle": "active -> merged@M3 -> removed@M0",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_conversation",
+      "disposition": "keep",
+      "lifecycle": "active",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    }
+  ],
+  "ingest": {
+    "note": "ADR-0006 §Decision-2: 12툴 계약과 별개로 batch ingestion을 양 표면에 제공. Phase A 수락조건: '계약 12툴 보존 + ingest'.",
+    "surfaces": [
+      "POST /api/v1/ingest",
+      "mcp tool ingest"
+    ],
+    "provenance": {
+      "turns.source": [
+        "chrome:qwen",
+        "chrome:deepseek",
+        "claude-code",
+        "opencode"
+      ],
+      "turns.agent": "client/harness identifier"
+    }
+  },
+  "alias_retention_days": 30,
+  "change_request": {
+    "procedure": "impact_analysis -> approval -> notice",
+    "notice_days": 14
+  }
+}
