@@ -589,6 +589,9 @@ def day_fix_loop():
     if _test_active:
         log(f"  SKIP day fix loop — protection active ({_test_active})")
         return
+    if os.path.exists(os.path.expanduser("~/.config/devforge/day-cycle.paused")):
+        log("  SKIP day fix loop — day-cycle paused (flag present)")
+        return
 
     pipeline_running, _ = check_pipeline("day_cycle.sh")
 
