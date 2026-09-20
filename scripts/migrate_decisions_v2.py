@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — one-off migration
 """One-time migration: parse str(dict) decision_text into structured columns.
 
 Adds decision_id, detail, status, archived_at columns (already applied via ALTER TABLE).

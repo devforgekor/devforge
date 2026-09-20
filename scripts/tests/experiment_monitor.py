@@ -42,7 +42,7 @@ def slack_send(text):
 def get_runner_pid():
     try:
         return int(open(RUNNER_PID_FILE).read().strip())
-    except:
+    except Exception:
         return None
 
 
@@ -50,7 +50,7 @@ def is_alive(pid):
     try:
         os.kill(pid, 0)
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -74,7 +74,7 @@ def get_llm_cpu():
             if "llama-server" in line and "port 808" in line:
                 return line.split()[1]
         return "?"
-    except:
+    except Exception:
         return "?"
 
 
@@ -85,7 +85,7 @@ def get_memory():
         mem = lines[1].split()
         swap = lines[2].split()
         return f"{mem[2]}/{mem[1]}", f"{swap[2]}/{swap[1]}"
-    except:
+    except Exception:
         return "?/", "?/"
 
 
@@ -111,7 +111,7 @@ def check_phase0_progress():
             if line:
                 fname = os.path.basename(line)
                 recent.append(fname)
-    except:
+    except Exception:
         pass
     return recent
 
@@ -140,7 +140,7 @@ def build_status():
     try:
         out = subprocess.check_output(["ps", "-o", "etime=", "-p", str(pid)], timeout=5, text=True)
         runner_elapsed = out.strip()
-    except:
+    except Exception:
         pass
 
     phases = get_phase_metrics()
@@ -167,7 +167,7 @@ def build_status():
             text=True,
         )
         containers = out.strip()
-    except:
+    except Exception:
         pass
 
     phase_summary = "Phase 0 (진행 중)" if current_phase == 0 else f"Phase {current_phase} 진행 중"

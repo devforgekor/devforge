@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """3-turn full pipeline test: polish → extract → enrich → verify (long turns)."""
 import os, sys, time
 

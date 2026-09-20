@@ -435,8 +435,8 @@ def extract(prompt, source_text, model_key):
     """Single 4B extraction call with predicate-constraint-free fields. Retries on transient errors."""
     prompt_text = prompt + "\n\n" + _STRUCTURED_FIELDS_FREE
     total_chars = len(source_text) + len(prompt_text)
-    max_tok = _calc_max_tokens(total_chars) or 512
-    timeout = _calc_timeout(total_chars, max_tok)
+    effective_max_tokens = _calc_max_tokens(total_chars) or 512
+    timeout = _calc_timeout(total_chars, effective_max_tokens)
     import time as _time
 
     for attempt in range(3):
@@ -447,7 +447,7 @@ def extract(prompt, source_text, model_key):
                     {"role": "user", "content": source_text},
                 ],
                 model=model_key,
-                max_tokens=max_tok,
+                max_tokens=effective_max_tokens,
                 temperature=0.0,
                 timeout=timeout,
                 json_mode=True,

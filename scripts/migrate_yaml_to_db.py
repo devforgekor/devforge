@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — one-off migration
 """One-time migration: parse broken handover.yaml and import to DB.
 
 The handover.yaml has YAML single-quote escaping issues (unescaped ' in detail

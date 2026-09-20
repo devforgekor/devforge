@@ -59,9 +59,9 @@ def _fmt_ids(turn_ids: list) -> str:
 
 
 def save_snapshot(stage: str, turn_ids: list, tag: str = "") -> str:
-    ts = _ts()
+    utc_timestamp = _ts()
     safe_tag = f"_{tag}" if tag else ""
-    filename = f"day_cycle_full_{stage}{safe_tag}_{ts}.json"
+    filename = f"day_cycle_full_{stage}{safe_tag}_{utc_timestamp}.json"
     path = os.path.join(EVAL_DIR, filename)
     id_list = _fmt_ids(turn_ids)
     rows = psql_json(
@@ -85,7 +85,7 @@ def save_snapshot(stage: str, turn_ids: list, tag: str = "") -> str:
         f"ORDER BY turn_id, fact_index"
     )
     snapshot = {
-        "timestamp": ts,
+        "timestamp": utc_timestamp,
         "stage": stage,
         "tag": tag or None,
         "n_turns": len(rows),
@@ -738,8 +738,8 @@ def run_verify(snapshot_path: str, system_prompt: str, label: str, chunk_size: i
         "result_dist": {k: v for k, v in sorted(rdist.items()) if v > 0},
     }
 
-    ts = _ts()
-    rpath = os.path.join(EVAL_DIR, f"day_cycle_verify_{label}_ch{chunk_size}_{ts}.json")
+    utc_timestamp = _ts()
+    rpath = os.path.join(EVAL_DIR, f"day_cycle_verify_{label}_ch{chunk_size}_{utc_timestamp}.json")
     with open(rpath, "w") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     print(
@@ -836,8 +836,8 @@ def print_verify_comparison(results: list):
             for r in valid
         ],
     }
-    ts = _ts()
-    rpath = os.path.join(EVAL_DIR, f"day_cycle_verify_summary_{ts}.json")
+    utc_timestamp = _ts()
+    rpath = os.path.join(EVAL_DIR, f"day_cycle_verify_summary_{utc_timestamp}.json")
     with open(rpath, "w") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
     print(f"  [report] {rpath}", flush=True)

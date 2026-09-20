@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: baseline-daily.py
 """Hook overhead measurement — safe run (no DB writes, mocked observe).
 
 W1 baseline spec: docs/ops/baseline/W1-baseline-spec.md

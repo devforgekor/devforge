@@ -547,13 +547,13 @@ or
         prompt = (
             _SYSTEM_USER_EXTRACT_FREE_8B if section_type == "user" else _SYSTEM_TEXT_EXTRACT_FREE_8B
         )
-        max_tok = _calc_max_tokens(len(source_text))
-        if max_tok is None:
+        max_tokens = _calc_max_tokens(len(source_text))
+        if max_tokens is None:
             return None
-        max_tok = min(4096, max_tok * 2)
-        timeout = _calc_timeout(len(source_text), max_tokens=max_tok)
+        max_tokens = min(4096, max_tokens * 2)
+        timeout = _calc_timeout(len(source_text), max_tokens=max_tokens)
         print(
-            f"    [debug] _strict_freeform section={section_type} src_len={len(source_text)} max_tok={max_tok} timeout={timeout}",
+            f"    [debug] _strict_freeform section={section_type} src_len={len(source_text)} max_tokens={max_tokens} timeout={timeout}",
             flush=True,
         )
         try:
@@ -562,7 +562,7 @@ or
                 call_llm,
                 [{"role": "system", "content": prompt}, {"role": "user", "content": user_msg}],
                 model="day_extract",
-                max_tokens=max_tok,
+                max_tokens=max_tokens,
                 temperature=TEMP_EXTRACT,
                 timeout=timeout,
                 json_mode=True,

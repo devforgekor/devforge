@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: manual — OCI launch retry
 """OCI instance launch retry — exponential backoff, max 5min reset, durable.
 Sends Telegram notification on success."""
 

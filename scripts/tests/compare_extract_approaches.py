@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """Compare 3 extract approaches on short/medium/long turns.
 
 Usage: python3 scripts/tests/compare_extract_approaches.py
@@ -177,7 +179,7 @@ def extract_facts(user_turn, thinking, text, system_prompt, label="test", timeou
         cleaned = re.sub(r'```json\s*|\s*```', '', raw)
         try:
             parsed = json.loads(cleaned)
-        except:
+        except Exception:
             return {"error": f"JSON parse failed: {raw[:200]}", "elapsed_s": round(elapsed, 1)}
     extractions = parsed.get("extractions", [])
     if not isinstance(extractions, list):

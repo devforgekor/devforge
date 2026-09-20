@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """Pipeline E2E test — 10 newest turns, all 5 phases with inference mode switching."""
 import json, os, subprocess, sys, time
 

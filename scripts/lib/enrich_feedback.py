@@ -32,8 +32,8 @@ LOOKBACK_HOURS = 72       # verify_result lookback
 
 
 def log(msg: str) -> None:
-    ts = time.strftime("%H:%M:%S", time.gmtime())
-    print(f"[{ts}] [enrich_feedback] {msg}", flush=True)
+    utc_timestamp = time.strftime("%H:%M:%S", time.gmtime())
+    print(f"[{utc_timestamp}] [enrich_feedback] {msg}", flush=True)
 
 
 # ── Embedding ────────────────────────────────────────────────────────

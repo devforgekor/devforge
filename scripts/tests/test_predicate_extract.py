@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """test_predicate_extract.py — Phase B: free-form predicate + atomic claim extraction test.
 
 Calls extract.py --turn-id for each selected turn, validates free-form predicate
@@ -40,7 +42,7 @@ CRITERIA = {
 
 
 def set_status(state, detail=""):
-    status = {"state": state, "detail": detail, "ts": time.time()}
+    status = {"state": state, "detail": detail, "utc_timestamp": time.time()}
     with open(_RESULTS_FILE, "w") as f:
         json.dump(status, f, indent=2)
     log(f"[status] {state}: {detail}")
@@ -112,10 +114,10 @@ def run_turn_extractions(turns):
         def _section_timeout(text: str) -> int:
             if not text:
                 return 0
-            max_tok = _calc_max_tokens(len(text))
-            if max_tok is None:
+            max_tokens = _calc_max_tokens(len(text))
+            if max_tokens is None:
                 return 0  # overflow → fast skip
-            return _calc_timeout(len(text), max_tok)
+            return _calc_timeout(len(text), max_tokens)
 
         user_sec = _section_timeout(turn.get("user_turn", "") or "")
         text_sec = _section_timeout(turn.get("text", "") or "")

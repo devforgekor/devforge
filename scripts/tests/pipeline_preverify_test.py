@@ -47,9 +47,9 @@ def _fmt_ids(turn_ids: list[str]) -> str:
 
 def save_snapshot(stage: str, turn_ids: list[str], tag: str = "") -> str:
     """Save full DB state (turns + facts + MCP) for given turns as JSON."""
-    ts = _ts()
+    utc_timestamp = _ts()
     safe_tag = f"_{tag}" if tag else ""
-    filename = f"pipeline_preverify_{stage}{safe_tag}_{ts}.json"
+    filename = f"pipeline_preverify_{stage}{safe_tag}_{utc_timestamp}.json"
     path = os.path.join(EVAL_DIR, filename)
     id_list = _fmt_ids(turn_ids)
 
@@ -88,7 +88,7 @@ def save_snapshot(stage: str, turn_ids: list[str], tag: str = "") -> str:
         fts5_total = 0
 
     snapshot = {
-        "timestamp": ts,
+        "timestamp": utc_timestamp,
         "stage": stage,
         "tag": tag or None,
         "n_turns": len(rows),

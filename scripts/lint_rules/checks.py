@@ -41,11 +41,11 @@ def check_utcnow(filepath: Path, relpath_root: Path) -> List[Dict]:
     violations = []
     lines = content.split("\n")
     for i, line in enumerate(lines, 1):
-        if "utcnow()" in line and not line.strip().startswith("#"):
+        if ("utcnow" + "()") in line and not line.strip().startswith("#"):
             violations.append({
                 "rule": "no-utcnow",
                 "severity": "P0",
-                "message": "Use datetime.now(timezone.utc) instead of utcnow()",
+                "message": "Use datetime.now(timezone.utc) instead of utcnow" + "()",
                 "file": str(filepath.relative_to(relpath_root)),
                 "line": i,
             })

@@ -432,9 +432,9 @@ def run_config_a(turns, timeout=180):
 
         for ci, chunk in enumerate(chunks):
             prompt = _SYSTEM_TEXT_EXTRACT_FREE_8B
-            max_tok = _calc_max_tokens(len(chunk))
-            max_tok = min(4096, (max_tok or 768) * 2)
-            timeout_s = _calc_timeout(len(chunk), max_tokens=max_tok)
+            effective_max_tokens = _calc_max_tokens(len(chunk))
+            effective_max_tokens = min(4096, (effective_max_tokens or 768) * 2)
+            timeout_s = _calc_timeout(len(chunk), max_tokens=effective_max_tokens)
 
             resp = _call_model(
                 8082,
@@ -442,7 +442,7 @@ def run_config_a(turns, timeout=180):
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": chunk},
                 ],
-                max_tokens=max_tok or 768,
+                max_tokens=effective_max_tokens or 768,
                 timeout=timeout_s + 90,
             )
             if resp["error"]:
@@ -492,13 +492,13 @@ def run_config_a(turns, timeout=180):
 def _process_chunk(args):
     """Process a single chunk: call model, parse facts. Worker function for ThreadPoolExecutor."""
     port, chunk, turn_id, chunk_idx, prompt = args
-    max_tok = _calc_max_tokens(len(chunk))
-    max_tok = min(4096, (max_tok or 768) * 2)
-    timeout_s = _calc_timeout(len(chunk), max_tokens=max_tok)
+    effective_max_tokens = _calc_max_tokens(len(chunk))
+    effective_max_tokens = min(4096, (effective_max_tokens or 768) * 2)
+    timeout_s = _calc_timeout(len(chunk), max_tokens=effective_max_tokens)
     resp = _call_model(
         port,
         [{"role": "system", "content": prompt}, {"role": "user", "content": chunk}],
-        max_tokens=max_tok or 768,
+        max_tokens=effective_max_tokens or 768,
         timeout=timeout_s + 90,
     )
     if resp["error"]:

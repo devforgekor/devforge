@@ -223,17 +223,17 @@ def ensure_dual(
         log("  dual start FAILED — inference container could not start")
         return False
 
-    ok_a = wait_health(meta_a["port"], timeout=600)
-    ok_b = wait_health(meta_b["port"], timeout=600)
+    pod_a_ready = wait_health(meta_a["port"], timeout=600)
+    pod_b_ready = wait_health(meta_b["port"], timeout=600)
 
-    if ok_a and not _check_model_identity(meta_a["port"], model_key_a):
+    if pod_a_ready and not _check_model_identity(meta_a["port"], model_key_a):
         log(f"  FATAL: :{meta_a['port']} wrong model after dual start")
-    if ok_b and not _check_model_identity(meta_b["port"], model_key_b):
+    if pod_b_ready and not _check_model_identity(meta_b["port"], model_key_b):
         log(f"  FATAL: :{meta_b['port']} wrong model after dual start")
 
     _check_container_health()
     time.sleep(5)
-    return ok_a and ok_b
+    return pod_a_ready and pod_b_ready
 
 
 def ensure_sequential_dual(

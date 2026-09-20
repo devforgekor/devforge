@@ -135,8 +135,8 @@ def main():
     failed_ids = []
 
     for i, (ch, wr_id) in enumerate(pending):
-        ts = datetime.now(KST).strftime("%H:%M:%S")
-        print(f"\n[{i+1}/{len(pending)}] {ch}화 (wr_id={wr_id}) [{ts}]")
+        utc_timestamp = datetime.now(KST).strftime("%H:%M:%S")
+        print(f"\n[{i+1}/{len(pending)}] {ch}화 (wr_id={wr_id}) [{utc_timestamp}]")
 
         try:
             result = fetch_episode(wr_id)

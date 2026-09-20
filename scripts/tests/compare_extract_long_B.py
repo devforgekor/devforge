@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """Re-run long/B-chunked-large only. Previous attempt failed due to stale code."""
 import json, os, sys, time
 

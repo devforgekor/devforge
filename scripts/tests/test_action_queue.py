@@ -1,3 +1,5 @@
+# Status: experimental
+# Path: none — test script
 """Test action_queue: write, claim, execute, complete/fail cycle."""
 
 import subprocess

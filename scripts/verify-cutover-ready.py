@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — verification script
 """Phase A pre-cutover verification — V1-V8 checklist."""
 
 import json

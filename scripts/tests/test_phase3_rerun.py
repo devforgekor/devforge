@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """Phase 3 re-run with fixed DB sampling (char_length not est_chars)."""
 
 import sys

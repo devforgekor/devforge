@@ -56,8 +56,8 @@ APP_EXCLUDE_SUFFIX = (".pyc", ".pyo", ".env", ".pem", ".key")
 
 
 def log(msg: str) -> None:
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    line = f"[{ts}] {msg}"
+    utc_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    line = f"[{utc_timestamp}] {msg}"
     print(line, flush=True)
     try:
         STAGE.mkdir(parents=True, exist_ok=True)

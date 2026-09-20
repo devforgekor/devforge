@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """E2E pipeline test: Phase 1 (inline post-processing) + Phase 2 (offline supplement).
 
 Creates a test turn, runs full extract → normalize → verify → store → supplement cycle.

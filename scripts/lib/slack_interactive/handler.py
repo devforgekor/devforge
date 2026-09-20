@@ -140,9 +140,9 @@ class SlackActionHandler(BaseHTTPRequestHandler):
         content_len = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_len).decode("utf-8")
 
-        ts = self.headers.get("X-Slack-Request-Timestamp", "")
+        utc_timestamp = self.headers.get("X-Slack-Request-Timestamp", "")
         sig = self.headers.get("X-Slack-Signature", "")
-        if not _verify_signature(ts, body, sig):
+        if not _verify_signature(utc_timestamp, body, sig):
             self._respond(401, "invalid signature")
             return
 
@@ -173,7 +173,7 @@ class SlackActionHandler(BaseHTTPRequestHandler):
         fact_id = value.split(":", 1)[-1] if ":" in value else value
 
         channel = payload.get("channel", {}).get("id", "")
-        msg_ts = payload.get("message", {}).get("ts", "")
+        msg_ts = payload.get("message", {}).get("utc_timestamp", "")
         original_blocks = payload.get("message", {}).get("blocks", [])
 
         verdict = None
@@ -209,7 +209,7 @@ class SlackActionHandler(BaseHTTPRequestHandler):
                 else:
                     updated_blocks.append(block)
             _slack_post("chat.update", {
-                "channel": channel, "ts": msg_ts,
+                "channel": channel, "utc_timestamp": msg_ts,
                 "text": f"Fact {verdict}: {fact_id[:12]}...",
                 "blocks": updated_blocks,
             })

@@ -4,7 +4,7 @@
 """Monthly restore test — restore latest devforge-standard DB dump into a scratch DB.
 
 Reads the newest /opt/ai_data/backups/db/devforge_*.dump (pg_dump -Fc),
-restores it into test_restore_<ts>, counts public tables, then drops the DB.
+restores it into test_restore_<utc_timestamp>, counts public tables, then drops the DB.
 Exits 0 only when the restored DB has >0 tables.
 """
 from __future__ import annotations
@@ -21,8 +21,8 @@ LOG = "/opt/ai_data/backups/osync.log"
 
 
 def log(msg: str) -> None:
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    line = f"[{ts}] restore-test: {msg}"
+    utc_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    line = f"[{utc_timestamp}] restore-test: {msg}"
     print(line, flush=True)
     try:
         with open(LOG, "a") as f:

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """Compare current E2E result (10-turn, GEN_TIME_BUF=750) against baseline (6-turn)."""
 import json, os, sys
 

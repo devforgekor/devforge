@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: manual — GitHub Secrets sync
 import os
 import sys
 

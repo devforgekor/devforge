@@ -35,12 +35,12 @@ from pipelines.extract_llm import (
 def extract(prompt, source_text, model_key):
     prompt_text = prompt + "\n\n" + _STRUCTURED_FIELDS
     total_chars = len(source_text) + len(prompt_text)
-    max_tok = _calc_max_tokens(total_chars) or 512
-    timeout = _calc_timeout(total_chars, max_tok)
+    effective_max_tokens = _calc_max_tokens(total_chars) or 512
+    timeout = _calc_timeout(total_chars, effective_max_tokens)
     meta = call_llm_with_retry(
         [{"role": "system", "content": prompt_text}, {"role": "user", "content": source_text}],
         model=model_key,
-        max_tokens=max_tok,
+        max_tokens=effective_max_tokens,
         temperature=0.0,
         timeout=timeout,
         json_mode=True,

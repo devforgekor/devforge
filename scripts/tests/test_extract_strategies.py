@@ -469,8 +469,8 @@ def get_baseline_from_db(turn_id: str) -> List[Dict]:
 # ── Runner ──
 
 def log(msg: str):
-    ts = time.strftime("%H:%M:%S")
-    print(f"[{ts}] {msg}")
+    utc_timestamp = time.strftime("%H:%M:%S")
+    print(f"[{utc_timestamp}] {msg}")
 
 def run_strategy(name: str, fn, turn_data: Dict, tid_short: str, key: str) -> Dict:
     log(f"\n  [{key}] Running strategy: {name}")

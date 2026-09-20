@@ -17,6 +17,26 @@ MODEL_NAME_OK_FILES = {
     "scripts/lib/debate/cooperative_debate.py",
     "scripts/pipelines/hybrid.py",
     "scripts/pipelines/night.py",
+    # 2026-09-20: model-specific by nature (model config, resource names, model regex, model-comparison tests)
+    "scripts/aider.py",  # aider model spec ("openrouter/qwen/qwen3-coder:free")
+    "scripts/golden_image/azure_client.py",  # Azure LLM resource names ("llm-qwen-*")
+    "scripts/golden_image/refresh_cycle.py",  # Azure LLM VM prefix ("llm-qwen")
+    "scripts/lib/extract_llm/_core.py",  # _ENTITY_RESOLVER_4B prompt constant
+    "scripts/pipelines/entity_scan.py",  # model-name regex (data)
+    "scripts/tests/nli_compare_14b.py",
+    "scripts/tests/pipeline_verify_compare.py",
+    "scripts/tests/test_4b_dual_review_7b_vs_9b.py",
+    "scripts/tests/test_7b_vs_9b_text_extract.py",
+    "scripts/tests/test_arbiter_dual_7b9b.py",
+    "scripts/tests/test_dual_4b.py",
+    "scripts/tests/test_dual_extract_7b_vs_9b.py",
+    "scripts/tests/test_extract_3config_comparison.py",
+    "scripts/tests/test_extract_strategies.py",
+    "scripts/tests/test_fact5_comparison.py",
+    "scripts/tests/test_phase1_14b.py",
+    "scripts/tests/test_phase2_3.py",
+    "scripts/tests/test_review_7b.py",
+    "scripts/tests/test_review_9b.py",
 }
 
 MODEL_SIZE_PATTERN = re.compile(r"\b(3b|4b|7b|14b|27b|30b)\b", re.IGNORECASE)

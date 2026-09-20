@@ -287,8 +287,8 @@ def main():
             sys.exit(1)
         run(["gpg", "--import", PUBLIC_KEY_FILE])
 
-        ts = datetime.now().strftime("%Y%m%dT%H%M%S")
-        out_file = os.path.join(BACKUP_DIR, f"secrets-backup-{ts}.gpg")
+        utc_timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        out_file = os.path.join(BACKUP_DIR, f"secrets-backup-{utc_timestamp}.gpg")
         r = run(
             [
                 "gpg",

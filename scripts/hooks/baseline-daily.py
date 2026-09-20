@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: production
+# Path: systemd:baseline-daily.timer
 """W1 Baseline Daily Runner — D2-D7."""
 import json, os, sys, subprocess, datetime, time
 
@@ -51,7 +53,7 @@ def collect():
     try:
         r = subprocess.run(["systemctl", "is-active", "netdata"], capture_output=True, text=True)
         out["netdata"] = r.stdout.strip()
-    except:
+    except Exception:
         out["netdata"] = "unreachable"
 
     # 6. hook overhead
@@ -60,7 +62,7 @@ def collect():
     if r.returncode == 0:
         try:
             out["hook_overhead"] = json.loads(r.stdout)
-        except:
+        except Exception:
             out["hook_overhead"] = {"raw": r.stdout[:200]}
 
     # 7. MCP server health
@@ -68,7 +70,7 @@ def collect():
         r = subprocess.run(["curl", "-s", "--max-time", "5", "http://127.0.0.1:8000/health"],
                            capture_output=True, text=True, timeout=10)
         out["mcp_health"] = r.stdout.strip() if r.returncode == 0 else "unreachable"
-    except:
+    except Exception:
         out["mcp_health"] = "unreachable"
 
     return out

@@ -200,9 +200,9 @@ def cmd_watch_incidents(args):
         return
     print(f"\n  Incidents ({len(rows)}):\n")
     for r in rows:
-        ts = (r.get("detected_at") or "?")[5:19].replace("T", " ")
+        utc_timestamp = (r.get("detected_at") or "?")[5:19].replace("T", " ")
         flag = "OPEN" if r.get("status") == "open" else "done"
-        print(f"  [{ts}] #{r['id']} {flag:4s} {r['component']} — {(r.get('symptom') or '')[:70]}")
+        print(f"  [{utc_timestamp}] #{r['id']} {flag:4s} {r['component']} — {(r.get('symptom') or '')[:70]}")
         extra = []
         if r.get("action"):
             extra.append(f"action={r['action']}({r.get('action_result') or '?'})")

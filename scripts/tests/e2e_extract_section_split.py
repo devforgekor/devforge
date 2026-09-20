@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """E2E Pipeline Test — section-split extract.
 
 Runs: embed_batch → entity_scan → extract → enrich → day_verify

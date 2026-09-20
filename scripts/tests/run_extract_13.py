@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Status: experimental
+# Path: none — test script
 """Run extract on our 13 test turns."""
 import json, os, sys, time
 SCRIPTS_DIR = "/opt/projects/server/scripts"

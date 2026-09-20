@@ -87,9 +87,9 @@ def _is_config_or_source_edit(path: str) -> bool:
 def _write_error_log(msg: str) -> None:
     """Append timestamped error to local log file for debugging."""
     try:
-        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        utc_timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         with open(_ERROR_LOG, "a") as f:
-            f.write(f"[{ts}] {msg}\n")
+            f.write(f"[{utc_timestamp}] {msg}\n")
     except Exception:
         pass
 

@@ -49,9 +49,9 @@ def _fmt_ids(turn_ids: list) -> str:
 
 
 def save_snapshot(stage: str, turn_ids: list, tag: str = "") -> str:
-    ts = _ts()
+    utc_timestamp = _ts()
     safe_tag = f"_{tag}" if tag else ""
-    filename = f"pipeline_verify_compare_{stage}{safe_tag}_{ts}.json"
+    filename = f"pipeline_verify_compare_{stage}{safe_tag}_{utc_timestamp}.json"
     path = os.path.join(EVAL_DIR, filename)
     id_list = _fmt_ids(turn_ids)
 
@@ -71,7 +71,7 @@ def save_snapshot(stage: str, turn_ids: list, tag: str = "") -> str:
     )
 
     snapshot = {
-        "timestamp": ts,
+        "timestamp": utc_timestamp,
         "stage": stage,
         "tag": tag or None,
         "n_turns": len(rows),
@@ -564,8 +564,8 @@ def run_verify_on_snapshot(
     }
 
     # Save result
-    ts = _ts()
-    result_path = os.path.join(EVAL_DIR, f"verify_compare_{label}_{ts}.json")
+    utc_timestamp = _ts()
+    result_path = os.path.join(EVAL_DIR, f"verify_compare_{label}_{utc_timestamp}.json")
     with open(result_path, "w") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     print(
@@ -642,8 +642,8 @@ def print_comparison(results: list):
             if "error" not in r
         ],
     }
-    ts = _ts()
-    report_path = os.path.join(EVAL_DIR, f"verify_compare_summary_{ts}.json")
+    utc_timestamp = _ts()
+    report_path = os.path.join(EVAL_DIR, f"verify_compare_summary_{utc_timestamp}.json")
     with open(report_path, "w") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
     print(f"  [report] {report_path}", flush=True)
