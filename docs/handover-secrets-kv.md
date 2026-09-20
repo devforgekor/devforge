@@ -270,25 +270,27 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 ### 우선순위 0.5: 누락 config 키 감사 (2026-09-19 추가, 2026-09-20 감사 확정)
 `secrets.env` 삭제 후 KV 미등록 키를 사용처 grep으로 판정한 결과:
 
-**실제 등록 필요 (코드가 읽음, KV 미등록/이름 불일치):**
-| 키 | 사용처 | 상태 |
-|----|--------|------|
-| `MASKPROXY_USER` / `_PASS` / `_HOST` / `_PORT` | `ebooklib/apps/backend/lib/toki31_playwright.py` | 값은 삭제된 `apps/backend/.env.local.backup.20260918`에만 존재 |
-| `DATAIMPULSE_USER` / `_PASS` / `_HOST` / `_PORT` | 동일 + `dataimpulse_monitor.py` | 동일 백업에만 존재 |
-| `VERCEL_REVALIDATE_URL` | `ebooklib/scripts/pipeline.py` | 미등록(값 미상) |
-| `VERCEL_REVALIDATE_TOKEN` | `pipeline.py` | KV는 `VERCEL_REVALIDATE_TOKEN_KEY`(이름 불일치) |
+**A-2 해소 (2026-09-20) — 등록 불필요, 코드 매핑:**
+KV에 신규 자격증명이 **이미 결합형 키(`*_PROXY_KEY`)로 존재**했고, 코드가 그 키를 읽도록 매핑해 해결.
+
+| 항목 | KV 실제 키 | 코드 조치 |
+|------|-----------|----------|
+| MASKPROXY | `MASKPROXY_PROXY_KEY` = `user:pass@host:port` | `toki31_playwright._load_proxy_env`가 파싱 |
+| DATAIMPULSE | `DATAIMPULSE_PROXY_KEY` = `user:pass@host:port` | 동일 + `dataimpulse_monitor._load_proxy_credentials` |
+| VERCEL revalidate token | `VERCEL_REVALIDATE_TOKEN_KEY` | `pipeline.py`가 `..._TOKEN_KEY`도 읽음 |
+| VERCEL revalidate URL | (KV 미등록) | `pipeline.py` 기본값 `https://miniebook.vercel.app/api/revalidate` |
+
+> 검증(2026-09-20): 결합키 파싱 결과가 **신규값**(DataImpulse pass 회전, MaskProxy user 변경)과 일치, revalidate token은 frontend와 동일.
+> 구 백업 `apps/backend/.env.local.backup.20260918`의 `*_USER/PASS`는 **구값**이라 등록 부적합.
+> KV 쓰기는 여전히 불가(SP get/list 전용)하나, 이 케이스는 **등록 불필요**. (A-2는 코드 매핑으로 종결)
 
 **등록 불필요 (0 사용 / 기본값 / 다른 키로 매핑):**
-`SMTP_HOST/PORT/USER`(kuhwa가 `GMAIL_SMTP_*_MINIPARK4U`에서 매핑), `DUCKDNS_ACCOUNT/DOMAIN/*_IP`, `OCI_HOME_REGION`, `OCI_IDCS_URL`, `DEVFORGE_SERVER_HOST/_USER/_SSH_KEY`, `NEWS_WEB_URL`, `NEON_DATABASE_URL`, `VERCEL_REVALIDATE_SECRET`, `DATAIMPULSE_PROXY_KEY`/`MASKPROXY_API_KEY`/`MASKPROXY_PROXY_KEY`(KV에 있으나 코드 미사용), `OCI_REGION`(기본 ap-chuncheon-1), `EBOOK_DAILY_TRAFFIC_LIMIT_MB`(기본 200).
-
-> **차단**: 현재 SP(`DevForge-llm-Qwen`)는 KV Access Policy가 **get/list 전용**이라 등록 불가
-> (2026-09-20 `az keyvault secret set` → WRITE_DENIED). 등록은 포털/권한 부여 후 진행.
-> 참고: KV에 `DATAIMPULSE_PROXY_KEY`가 있어 코드가 이 이름을 읽도록 매핑하는 대안 가능(값 형식 확인 필요).
+`SMTP_HOST/PORT/USER`(kuhwa가 `GMAIL_SMTP_*_MINIPARK4U`에서 매핑), `DUCKDNS_ACCOUNT/DOMAIN/*_IP`, `OCI_HOME_REGION`, `OCI_IDCS_URL`, `DEVFORGE_SERVER_HOST/_USER/_SSH_KEY`, `NEWS_WEB_URL`, `NEON_DATABASE_URL`, `VERCEL_REVALIDATE_SECRET`, `MASKPROXY_API_KEY`(코드 미사용), `OCI_REGION`(기본 ap-chuncheon-1), `EBOOK_DAILY_TRAFFIC_LIMIT_MB`(기본 200).
 
 
 ### 우선순위 1: 나머지 systemd 서비스 전환
-- **완료**: 시스템드 서비스 11개 + 컨테이너 3개 전환 완료 (2026-09-18~19)
-- **남은 작업**: `container-devforge-fastapi.container` (KV 미적용, §4.2 참조)
+- **완료**: 시스템드 서비스 11개 + 컨테이너 4개 전환 완료 (2026-09-18~20)
+- **남은 작업**: 없음 (fastapi 2026-09-20 완료, §4.2)
 
 ### 우선순위 2: secrets.env 파일 제거
 - **완료**: `~/.config/devforge/secrets.env` 삭제 완료 (2026-09-18). 백업 파일은 감사 시 디스크에 없음.

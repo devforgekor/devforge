@@ -482,8 +482,8 @@ decisions:
 - id: kv-missing-audit-2026-09-20
   detail: 'KV 누락 config 키 감사(2026-09-20): 사용처 grep으로 필요/불필요 확정. 실 등록 필요는 MASKPROXY_*, DATAIMPULSE_*(프록시 자격증명), VERCEL_REVALIDATE_URL/TOKEN(이름
     불일치)뿐. 나머지는 0사용/기본값/매핑. SP가 get/list 전용이라 등록 불가(WRITE_DENIED) → 사용자 포털 작업 필요. 대안: DATAIMPULSE_PROXY_KEY 등 기존 KV 키를 코드가
-    읽도록 매핑.'
-  status: open
+    읽도록 매핑. [해소 2026-09-20: KV 결합키(*_PROXY_KEY) 코드 매핑으로 종결 — 등록 불필요. commit 1b5e694, 499c304.]'
+  status: resolved
 - id: dd-port-2026-09-20
   detail: 'Deep Dive Phase1/2 hang 감지 리팩터드 포팅(2026-09-20): DEEPDIVE_STEP_BUDGETS(원래 legacy 값 유지, 재교정은 task #25 blocked로 보류),
     _deepdive_effective_max(base+n*120 clamp), dedicated enter/exit/heartbeat, FastAPI lifespan 60s 만료 루프(이원 판정: started_at>max
@@ -577,13 +577,6 @@ known_issues:
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
   resolved: false
-- id: kv-ki-02
-  detail: 'KV 누락 config 키 감사 확정(2026-09-20): 등록 필요=(MASKPROXY_USER/PASS/HOST/PORT, DATAIMPULSE_USER/PASS/HOST/PORT — 값은 ebooklib
-    apps/backend/.env.local.backup.20260918에만 존재, VERCEL_REVALIDATE_URL 미등록, VERCEL_REVALIDATE_TOKEN은 KV의 VERCEL_REVALIDATE_TOKEN_KEY와
-    이름 불일치). 등록 불필요=SMTP_*(GMAIL_SMTP_* 매핑), DUCKDNS_*, OCI_HOME_REGION/IDCS_URL, DEVFORGE_SERVER_*, NEWS_WEB_URL, NEON_DATABASE_URL,
-    VERCEL_REVALIDATE_SECRET, OCI_REGION(기본값), EBOOK_DAILY_TRAFFIC_LIMIT_MB(기본값). 차단: SP는 KV Access Policy get/list 전용(az
-    secret set=WRITE_DENIED) → 등록은 포털/권한 후 진행.'
-  resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
     kv-devforge-prod2-krc로 정상.'
@@ -667,7 +660,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- MAX_TOKENS_BASE 512→256 in extract_llm.py:82. Short turns halved generation time.
 - mcp-trunc-proxy v0.2.2 installed + 8/11 MCPs wrapped (90-98% token reduction on large responses).
 - token-savior-recall v4.4.1 installed (pip3.11, optimized profile). Structural nav + memory + Bash compaction.
 - 'T20 predicate extraction test: 1/10 completed, 1/10 timeout, user interrupted. MAX_TOKENS_BASE 256 verified.'
@@ -775,3 +767,6 @@ completed_log:
   재기동/health 확인. commit 668011e.'
 - '(2026-09-20, opencode) MCP 계약 툴 HTTP 노출: /tools/{name}에 deepdive_step_enter/exit/session_heartbeat/session_status/verify_sandbox
   추가. E2E 검증(enter step3 affected_files=5 → effective_max 1050, status/hb/exit/sandbox) 후 정리. commit e5e9ef2.'
+- '(2026-09-20, opencode) A-2 종결: KV 신규키가 이미 결합형(MASKPROXY_PROXY_KEY/DATAIMPULSE_PROXY_KEY)으로 존재 확인 → 코드 매핑(구 백업은 구값). ebooklib
+  toki31_playwright/dataimpulse_monitor/pipeline 수정. commit 1b5e694, 499c304. known_issue kv-ki-02/decision kv-missing-audit
+  resolved.'
