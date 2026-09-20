@@ -111,10 +111,10 @@ contract:
 
   # ── Error codes / messages ─────────────────────────────────────────
   errors:
-    missing_credentials: "DataImpulse 크레덴셜 없음 — 대시보드 확인 스킵"
-    login_redirect: "로그인 필요 — {mode_message}"
-    parse_failure: "사용량 데이터 파싱 실패"
-    exception: "대시보드 확인 실패: {error}"
+    missing_credentials: "DataImpulse credentials missing — dashboard check skipped"
+    login_redirect: "Login required — {mode_message}"
+    parse_failure: "Failed to parse usage data"
+    exception: "Dashboard check failed: {error}"
 
   # ── Verification (2026-09-12) ──────────────────────────────────────
   verification:

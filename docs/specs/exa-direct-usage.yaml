@@ -94,7 +94,7 @@ contract:
 
   # ── Verification (2026-09-12) ──────────────────────────────────────
   verification:
-    - "exa_search: PASS (3 results for 'DataImpulse 대시보드 IP 화이트리스트')"
+    - "exa_search: PASS (3 results for 'DataImpulse dashboard IP whitelist')"
     - "exa_search_text: PASS (formatted output works)"
     - "exa_contents_text: PASS (function available, needs valid URLs)"
     - "available(): PASS (4 keys configured)"

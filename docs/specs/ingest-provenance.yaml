@@ -1,11 +1,11 @@
 # DevForge — Ingest & Provenance Contract
 # Status: proposed (2026-09-14) · Owner: devforge
 # Related: docs/adr/0006-mcp-tool-surface.md, docs/plans/final-plan.md
-# 계약 고정용 스펙(구현 전). machine-readable — English only.
+# Contract-freezing spec (pre-implementation). machine-readable — English only.
 ---
 version: 1
 change_log:
-  - "2026-09-14: v1 proposed (ADR-0006). HTTP+MCP ingest 계약 정의, provenance source taxonomy 고정."
+  - "2026-09-14: v1 proposed (ADR-0006). Defines HTTP+MCP ingest contract and provenance source taxonomy."
 
 ingest:
   purpose: "Batch conversation ingestion — local agent transcripts + web-LLM capture."
@@ -28,7 +28,7 @@ ingest:
       conversation_id:
         type: string
         format: uuid
-        description: "기존 conversation에 추가하려면 해당 UUID. 비어있거나 없는 UUID면 새 conversation 자동 생성 (id=uuid4 또는 제공 UUID)."
+        description: "Existing conversation UUID to append to. If empty or unknown UUID, a new conversation is created (id=uuid4 or the provided UUID)."
       turns:
         type: array
         items:
@@ -50,7 +50,7 @@ ingest:
   idempotency: "unique(source_message_id) — fallback unique(conversation_id, seq)"
   errors:
     - {code: 400, when: "schema violation (missing source/conversation_id/turns)"}
-    - {code: 400, when: "conversation_id가 UUID 형식이 아닐 때"}
+    - {code: 400, when: "conversation_id is not a valid UUID"}
     - {code: 409, when: "duplicate turns (all skipped)"}
     - {code: 413, when: "payload too large"}
 
@@ -60,18 +60,18 @@ provenance:
     values:
       - claude-code
       - opencode
-      - mcp_ingest            # MCP ingest 기본값(origin 미상 시)
+      - mcp_ingest            # MCP ingest default (when origin unknown)
       - "chrome:chatgpt"
       - "chrome:claude"
       - "chrome:gemini"
       - "chrome:deepseek"
       - "chrome:aistudio"
       - "chrome:qwen"
-      # retired 2026-09-19: copilot (cost exhausted), aider, gemini-cli — 로컬 수집 중단
+      # retired 2026-09-19: copilot (cost exhausted), aider, gemini-cli — local collection stopped
     default: unknown
     storage_column: turns.source    # NOT NULL DEFAULT 'unknown'
   agent:
-    description: "client/harness identifier (예: opencode, claude-code)"
+    description: "client/harness identifier (e.g. opencode, claude-code)"
     storage_column: turns.agent
     default: null
   confidence:
@@ -79,9 +79,9 @@ provenance:
     minimum: 0
     maximum: 1
     nullable: true
-    note: "추출/후보정 신뢰도. 미산출 시 null."
+    note: "Extraction/post-correction confidence. null when not produced."
 
 notes:
-  - "현재 DB의 turns.source는 전량 'unknown' (provenance 미기록). 본 계약 적용 시 신규 유입부터 기록한다."
-  - "웹 수집(chrome-web)은 ADR-0006에 따라 확장+relay → ingest 표면으로 전달한다."
-  - "phase: final-plan Phase A(MCP/ingest)·B(웹수집/provenance)에서 구현."
+  - "turns.source is now 100% populated (unknown=0, verified 2026-09-20); new ingests record source/agent."
+  - "Web capture (chrome-web) routes extension+relay into the ingest surface per ADR-0006."
+  - "phase: implemented in final-plan Phase A (MCP/ingest) and B (web capture/provenance)."
