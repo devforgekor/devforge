@@ -1,9 +1,13 @@
 # DevForge 시크릿 관리 전환 핸드오버
 
 작성일: 2026-09-18
-최종 업데이트: 2026-09-19 (watchdog 외부 heartbeat 키 복구)
+최종 업데이트: 2026-09-20 (신규 테넌트/KV 마이그레이션 — §12 참조)
 작성자: opencode 세션
 상태: **완료** — 평문 시크릿 제거 완료 (secrets.env + .env.local 모두 삭제)
+
+> **2026-09-20 변경 요약**: 시크릿 소스를 구 테넌트(`b08cd1bf`)의 단일 KV에서
+> **신규 테넌트(`9ec65251`)의 다중 KV**로 전환. 상세는 §12. 아래 §1~§11 중
+> 구 테넌트/구 KV를 가리키는 서술은 역사 기록이며, **현행 구성은 §12가 SSOT**.
 
 ---
 
@@ -12,20 +16,32 @@
 서버의 평문 시크릿 저장(`~/.config/devforge/secrets.env`)을 **Azure Key Vault 기반**으로 전환.
 목표: 서버 디스크에 평문 시크릿을 두지 않는다.
 
-### 최종 아키텍처
+### 최종 아키텍처 (2026-09-20 갱신 — 다중 KV)
+
+> 아래는 **현행** 구성이다. (§12에 마이그레이션 상세)
+
 ```
-Azure Key Vault (kv-devforge-prod-krc) — 단일 소스 (56개 시크릿)
+신규 테넌트 9ec65251 (sub a942e898) — Azure Key Vault 다중 소스
+   │
+   ├─ kv-common-prod-krc    : 공통 시크릿 (API 키, AZURE-SP-*, DI 등)
+   ├─ kv-devforge-prod2-krc : devforge 전용 (DEVFORGE-*, OCI-DEVFORGE-*)
+   └─ kv-onmydoc-prod-krc   : onmydoc 전용 (OCI-ONMYDOC-*)
    │
    ├─ 주 1회 자동 (일 03:00) → GPG 암호화 백업 → ~/.config/devforge/backups/
    │     (공개키: 서버 / 개인키: 로컬 PC — 서버는 복호화 불가)
    │
-   └─ 서버 서비스 시작 시 → Key Vault API 조회 → 환경변수 주입 (디스크 저장 없음)
-         kv-fetch-env.py 래퍼 경유
+   └─ 서버 서비스 시작 시 → Key Vault API 조회(다중 KV 병합) → 환경변수 주입
+         kv-fetch-env.py 래퍼 경유 (AZURE_KEYVAULT_URLS 순서대로, 뒤 KV가 우선)
 ```
+
+- devforge: `common + devforge` 병합 (93개)
+- onmydoc: `common + onmydoc` 병합 (88개)
 
 ---
 
-## 2. Azure Key Vault 정보
+## 2. Azure Key Vault 정보 (구 테넌트 — 역사 기록)
+
+> ⚠️ 2026-09-20 이전 구성(구 테넌트 `b08cd1bf`). 현행은 §12 참조.
 
 | 항목 | 값 |
 |------|-----|
@@ -194,18 +210,22 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 ---
 
-## 7. GitHub 시크릿 (org 레벨) — Azure 연동용
+## 7. 스크립트 환경변수 / 서버 로컬 파일 (2026-09-20 갱신)
 
-| 시크릿 | 값/용도 |
-|--------|---------|
-| `AZURE_MESIDS_CLIENT_SECRET_ID` | `169a8e1e-9bd1-4023-a78a-785e2fec321d` (SP 앱 ID) |
-| `AZURE_MESIDS_CLIENT_SECRET_VALUE` | Client Secret 값 |
-| `AZURE_MESIDS_TENANT_ID` | `b08cd1bf-7952-489c-8fbb-aa907bb74709` |
-| `AZURE_MESIDS_KEYVAULT_URL` | `https://kv-devforge-prod-krc.vault.azure.net` |
-| `AZURE_MESIDS_SUBSCRIPTION_ID` | `d4077db7-e7ad-4787-8849-d4bfd3c7b9f6` (⚠️ 이 값은 개체 ID — 실제 구독은 `e71711e2...` 또는 `d0a7db48...`. 검증 필요) |
+스크립트(`kv-fetch-env.py`, `kv-backup.py`)가 읽는 env 변수. 미설정 시 **신규 테넌트 기본값**이 적용된다.
 
-### ⚠️ 서버 로컬 파일 (GitHub 외)
-- `~/.config/devforge/azure-client-secret` — Client Secret 값 (chmod 600)
+| env 변수 | 기본값 | 용도 |
+|----------|--------|------|
+| `AZURE_KEYVAULT_TENANT_ID` | `9ec65251-a106-4dc3-9878-4278caa80b1b` | 토큰 테넌트 |
+| `AZURE_KEYVAULT_CLIENT_ID` | `abc5aab0-5394-46e0-bf4d-daf4129d1d78` (SP `DevForge-llm-Qwen`) | 토큰 클라이언트 |
+| `AZURE_KEYVAULT_URLS` | devforge: `common,devforge-prod2` / onmydoc: `common,onmydoc` (콤마 구분) | 다중 KV 병합(뒤 우선) |
+| `AZURE_KEYVAULT_CLIENT_SECRET_FILE` | `~/.config/devforge/azure-client-secret` | Client Secret 파일 경로 |
+
+> 구 변수명 `AZURE_MESIDS_*`는 더 이상 사용하지 않는다(2026-09-20 폐지).
+
+### ⚠️ 서버 로컬 파일
+- `~/.config/devforge/azure-client-secret` — 신규 SP Client Secret (chmod 600)
+- 구 SP secret 백업: `azure-client-secret.mesids.bak.*`
 - 서버 스크립트가 이 파일에서 읽음 (환경변수 설정 불필요)
 
 ---
@@ -275,41 +295,11 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 ---
 
-## 9. Git 상태
+## 9. Git 상태 (역사 기록)
 
-### 2026-09-19: watchdog 외부 heartbeat 복구 (커밋 대상)
-| 파일 | 변경 내용 |
-|------|----------|
-| `scripts/lib/watchdog/orchestrator.py` | `_ping_external()`가 `DEVFORGE_WATCHDOG_PING_SSH` / `DEVFORGE_WATCHDOG_PING_URL`을 읽도록 변경 (기존 `WATCHDOG_PING_*` 제거) |
-| `docs/handover-secrets-kv.md` | 누락 config 키 감사 + 비밀 아님 키 규칙 추가 |
-
-- KV `DEVFORGE-WATCHDOG-PING-SSH` 값: `c9146961-...`(SP id, 오등록) → `onmydoc`으로 교정
-- 검증: watchdog 재시작 후 onmydoc `~/wd_monitor/last_ping` 갱신 확인(age 54s)
-
-### 관련 파일 (커밋됨)
-| 파일 | 최근 커밋 | 변경 내용 |
-|------|----------|----------|
-| `scripts/deploy/kv-fetch-env.py` | `4c28ef7` | P0+P1 개선: +184줄 (에러 처리, retry, HTTP 상태 검증) |
-| `scripts/deploy/kv-backup.py` | `4c28ef7` | P0+P1 개선: +235줄 (에러 처리, retry, tempfile 보안) |
-| `docs/handover-secrets-kv.md` | `4c28ef7` | 개선 내역 업데이트 |
-| `.github/workflows/sync-kv.yml` | `1bde988` (이전) | - |
-| `.github/workflows/sync-secrets.yml` | 수정 다수 (이전) | - |
-
-### 푸시 상태 (2026-09-18)
-```
-✅ origin/main: b9305b3..4c28ef7 (7 커밋 푸시 완료)
-```
-
-### 미푸시 커밋 (2026-09-18 기준)
-```
-f1160f1 docs: 시크릿 관리 전환 핸드오버 + kv-fetch-env 래퍼
-36bddfe auto: sync 2026-09-18
-40dc5d8 feat: Azure Key Vault → GPG 암호화 백업 스크립트 (주 1회 systemd 타이머)
-```
-
-### ⚠️ 미커밋/미푸시 상태
-- `_archive/seedling`, `collect_checkpoint.json` — 로컬 변경 있음 (무관)
-- origin에 푸시 여부: 위 3개 커밋은 origin보다 앞섬 → `git push` 필요
+- 2026-09-19: `orchestrator.py`가 `DEVFORGE_WATCHDOG_PING_SSH`/`_URL`을 읽도록 변경(구 `WATCHDOG_PING_*` 제거). KV 값 오등록(`c9146961…`) → `onmydoc` 교정, watchdog 재시작 후 핑 갱신 확인.
+- 2026-09-18: `kv-fetch-env.py`/`kv-backup.py` P0+P1 개선(에러 처리·retry·tempfile 보안), 커밋 `4c28ef7`.
+- 2026-09-20: 다중 KV 지원 변경분은 §12. (미푸시 여부는 `git status`로 확인)
 
 ---
 
@@ -341,3 +331,53 @@ f1160f1 docs: 시크릿 관리 전환 핸드오버 + kv-fetch-env 래퍼
 - GitHub org 시크릿에 시크릿 값이 아직 존재 — 안정 확인 후 삭제
 - 백업 .gpg 파일은 서버 디스크에 있지만 복호화 불가 (개인키 없음) — 추가 오프사이트 복사 권장
 - 프로세스 env 덤프 시 KV 값이 노출될 수 있음 — `tr`/`xargs`로 `/proc/<pid>/environ` 전체 출력 금지, 필요한 키만 grep
+
+---
+
+## 12. 신규 테넌트/KV 마이그레이션 (2026-09-20) — 현행 SSOT
+
+### 배경
+Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크릿 소스를 구 테넌트(`b08cd1bf`)의
+단일 KV(`kv-devforge-prod-krc`)에서 신규 테넌트의 **다중 KV**로 전환.
+
+### 현행 구성
+
+| 항목 | 값 |
+|------|-----|
+| 테넌트 ID | `9ec65251-a106-4dc3-9878-4278caa80b1b` |
+| 구독 ID | `a942e898-e1ee-47f4-b9b3-d9475672ff4e` |
+| Service Principal | `DevForge-llm-Qwen` (앱 ID `abc5aab0-5394-46e0-bf4d-daf4129d1d78`) |
+| devforge KV | `kv-common-prod-krc` + `kv-devforge-prod2-krc` (다중 병합, 93개) |
+| onmydoc KV | `kv-common-prod-krc` + `kv-onmydoc-prod-krc` (다중 병합, 88개) |
+| Document Intelligence | `di-common-prod-krc` (F0, rg-server-common-prod-krc) |
+| KV 접근 방식 | Access Policy (get/list) — SP에 부여 |
+
+### 스크립트 변경
+| 파일 | 변경 |
+|------|------|
+| `scripts/deploy/kv-fetch-env.py` | 다중 KV 병합(`AZURE_KEYVAULT_URLS`), 신규 테넌트/SP 기본값 |
+| `scripts/deploy/kv-backup.py` | 동일 다중 KV 지원 |
+| onmydoc `~/.local/bin/kv-fetch-env.py` | 동일 버전(기본 URL: common+onmydoc) |
+| onmydoc `~/.local/bin/git-credential-kv.py` | 신규 테넌트/SP, URL→`kv-common-prod-krc` |
+
+### 전환/검증 결과
+- devforge: KV 사용 systemd 서비스 11개 + 컨테이너 4개(postgres/mcp/webobsidian/fastapi) 재기동 → 시크릿 93개 로드
+- onmydoc: `git credential get` 인증 OK, `kv-fetch-env.py env` 88개
+- 시크릿 이관 검증: 구 KV 101개 → 신규 KV 값 해시 **MATCH 101 / MISMATCH 0**
+- GPG 백업 재생성 확인
+
+### 구 KV 처리 (보류)
+- 구 `kv-devforge-prod-krc`(sub `89c6a8ee`, tenant `b08cd1bf`)는 **purge protection**으로
+  **2026-12-09까지 퍼지 불가** → 이름 재사용 보류.
+- 런타임은 신규 KV로 완전 전환되어 구 KV 미사용(영향 없음).
+- **2026-12-20** 재생성·`prod2` 이관 예정: task **#38**, handover `KV-NAME-REUSE-2026-12`.
+
+### 롤백 자산
+- 구 SP secret: `~/.config/devforge/azure-client-secret.mesids.bak.*` (양 서버)
+- 구 스크립트 백업: `*.mesids.bak` (onmydoc)
+- GPG 백업: `~/.config/devforge/backups/secrets-backup-20260920T035400.gpg` (구 101개 포함)
+
+### 부수 이슈
+- `container-webobsidian`: stale child cgroup(2026-09-19 생성)으로 재기동 실패 →
+  `container-webobsidian.service.d/10-slice.conf`의 `Slice=webobsidian-workaround.slice`로 우회 복구.
+  근본 해결은 재부팅. handover `WEBOBSIDIAN-CGROUP-2026-09-20`.

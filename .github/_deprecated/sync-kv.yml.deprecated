@@ -1,3 +1,9 @@
+# DEPRECATED (2026-09-20): GitHub -> Key Vault 단방향 푸시 워크플로우.
+# 사유: (1) 구 테넌트/KV(AZURE_MESIDS_*, kv-devforge-prod-krc) 참조,
+#       (2) KV가 common/devforge/onmydoc 로 분리되어 단일 URL 푸시 불가,
+#       (3) 서버측 kv-backup.py 가 SSOT (문서상 불안정/수동).
+# 후속: GitHub org secrets AZURE_MESIDS_* 는 org admin이 삭제/교체.
+#
 name: Sync to Azure Key Vault
 
 on:
