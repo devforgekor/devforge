@@ -75,7 +75,7 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 | `postgres` | svc | PostgreSQL 16, `devforge_app` (data bind `/mnt/lv_db`) |
 | `devforge-worker` | svc | `worker_supervisor.py` — raw_consumer Pass 2/3 |
 | `flaresolverr` | svc | Cloudflare 우회 (:8191/:8192), ebook bookto31 |
-| `devforge-mcp` | svc | FastMCP 서버 (:8000), `mcp_server.py` |
+| `devforge-mcp` | svc | MCP 서버 (:8000), `devforge.adapters.driving.mcp.server` (리팩터드; `scripts/mcp_server.py`는 비활성 레거시) |
 | `devforge-inference` | (동적) | llama.cpp server :8080-8084 (mode별 모델) |
 | `data-pod-infra` | data-pod | legacy pod infra |
 | `caddy` (rootful) | — | reverse proxy, host net |

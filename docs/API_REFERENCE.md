@@ -39,7 +39,7 @@ Base URL: `http://localhost:8000`  <!-- 리팩토링 기본값. 레거시 라이
 ### MCP SSE Server (port 8100)
 
 > 패키지 구현은 자체 SSE 서버(`devforge.adapters.driving.mcp.server`, `devforge mcp serve`).
-> 레거시 라이브 MCP는 FastMCP Streamable HTTP(`scripts/mcp_server.py`, :8000)다.
+> 현행 라이브 MCP는 이 리팩터드 SSE 서버(`devforge mcp serve`, :8000)다. `scripts/mcp_server.py`(FastMCP Streamable HTTP)는 비활성 레거시.
 
 Base URL: `http://localhost:8100`
 

@@ -18,8 +18,8 @@ uvicorn devforge.adapters.driving.api.app:app --host 0.0.0.0 --port 8000
 devforge mcp serve --host 0.0.0.0 --port 8100
 ```
 
-> 포트는 **리팩토링 패키지 기본값**이다. 레거시 라이브 런타임은 FastAPI hub `:8002`,
-> MCP `:8000`(`scripts/mcp_server.py`, FastMCP Streamable HTTP)이다 — `system-architecture.md` §2 참조.
+> 포트는 **리팩토링 패키지 기본값**이다. 현행 라이브 런타임은 FastAPI hub `:8002`,
+> MCP `:8000`(리팩터드 `devforge.adapters.driving.mcp.server`)이다. `scripts/mcp_server.py`(FastMCP)는 비활성 레거시 — `system-architecture.md` §2 참조.
 
 ### Running the Pipeline
 ```bash
