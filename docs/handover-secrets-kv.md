@@ -363,7 +363,7 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 | devforge KV | `kv-common-prod-krc` + `kv-devforge-prod2-krc` (다중 병합, 93개) |
 | onmydoc KV | `kv-common-prod-krc` + `kv-onmydoc-prod-krc` (다중 병합, 88개) |
 | Document Intelligence | `di-common-prod-krc` (F0, rg-server-common-prod-krc) |
-| KV 접근 방식 | Access Policy (get/list) — SP에 부여 |
+| KV 접근 방식 | **Access Policy 모드** (`enableRbacAuthorization=false` — RBAC 역할 무효). 읽기 SP `DevForge-llm-Qwen`(abc5aab0, get/list). 쓰기 SP `sp-aiagent-rbac-prod-krc`(fcf857e3, get/list/**set**, 2026-09-20 추가) |
 
 ### 스크립트 변경
 | 파일 | 변경 |

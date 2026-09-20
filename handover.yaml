@@ -501,6 +501,12 @@ decisions:
     5:150 6:810 7:180 (ceil30(max(p90*1.5,실측max)), deepdive_steps 57건/0 overrun). min/max는 안전 상한으로 유지, FILE_MARGIN_SEC=120
     유지. MCP 재기동 후 effective_max 로드 확인. commit 668011e.'
   status: resolved
+- id: kv-write-sp-2026-09-20
+  detail: 'KV 쓰기 SP 확보(2026-09-20): sp-aiagent-rbac-prod-krc(app fcf857e3, SP oid 2b34f8ee)에 Access Policy로 비밀 Get/List/Set
+    부여 → kv-common-prod-krc/kv-devforge-prod2-krc/kv-onmydoc-prod-krc 읽기/쓰기 검증. 주의: 3개 KV 모두 enableRbacAuthorization=false(Access
+    Policy 모델)라 RBAC 역할(비밀 책임자/관리자)은 무효 — 정책으로 부여해야 함. AZ-20137133-SP-AIAGENT-CLIENT-ID(common) 오값 6e51696b → fcf857e3로 교정.
+    읽기 기본 SP는 abc5aab0 유지.'
+  status: resolved
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -660,7 +666,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- mcp-trunc-proxy v0.2.2 installed + 8/11 MCPs wrapped (90-98% token reduction on large responses).
 - token-savior-recall v4.4.1 installed (pip3.11, optimized profile). Structural nav + memory + Bash compaction.
 - 'T20 predicate extraction test: 1/10 completed, 1/10 timeout, user interrupted. MAX_TOKENS_BASE 256 verified.'
 - Slack MCP and postgres MCP removed (13→11 MCPs). .claudeignore created.
@@ -770,3 +775,5 @@ completed_log:
 - '(2026-09-20, opencode) A-2 종결: KV 신규키가 이미 결합형(MASKPROXY_PROXY_KEY/DATAIMPULSE_PROXY_KEY)으로 존재 확인 → 코드 매핑(구 백업은 구값). ebooklib
   toki31_playwright/dataimpulse_monitor/pipeline 수정. commit 1b5e694, 499c304. known_issue kv-ki-02/decision kv-missing-audit
   resolved.'
+- '(2026-09-20, opencode) KV 쓰기 권한 확보: sp-aiagent-rbac-prod-krc(fcf857e3) Access Policy Get/List/Set 부여(3 KV), 읽기/쓰기 검증 OK.
+  3 KV는 Access Policy 모델(enableRbacAuthorization=false)이라 RBAC 역할 무효임을 확인. KV AZ-20137133-SP-AIAGENT-CLIENT-ID 오값 교정.'
