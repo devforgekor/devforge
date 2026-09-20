@@ -159,6 +159,9 @@ known_issues:
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
     placement.'
   resolved: false
+- text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중 RemoteDisconnected/ConnectionResetError
+    반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB) 메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'
+  resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
     kv-devforge-prod2-krc로 정상.'
