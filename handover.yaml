@@ -446,12 +446,12 @@ decisions:
 - id: dp-02
   detail: 'DROPLR_AUTH_TOKEN_KEY 등록됨(2026-09-19) — 현재 아무 코드도 읽지 않음(grep 0건). 값은 유효한 JWT(id 500784, exp 2026-09-26)이며 실측 검증:
     Bearer → HTTP 201, Basic(DROPLR_USER/PASS) → HTTP 201. 둘 다 동작. Bearer 경로를 코드에 연결하려면 만료 회전 필요(Basic보다 안전). 미연결 상태로는 미사용.'
-  status: open
+  status: resolved
 - id: dp-03
   detail: 'devforge-url-shorten(~/.config/devforge/bin)은 이미 Droplr 제거 상태(주석: ''Droplr removed - CloudFront blocks POST'')
     → TinyURL/is.gd로 대체. 서버 표준은 Node CLI(drplr)가 아니라 Python HTTP API(Basic)임. drplr CLI는 로컬 PC ~/.config/drplr/config.json(암호화)에만
     존재하며 1.2.0/droplr-api 1.0.0.'
-  status: open
+  status: resolved
 - id: kv-01
   detail: 'secrets.env 삭제 여파(2026-09-19): 프로덕션 .py 39개가 아직 ~/.config/devforge/secrets.env를 fallback으로 읽음(notion_client, watchdog/config,
     slack_notify, telegram_send, file_registry, research/_keys 등). KV로 래핑되지 않은 timer/cron/oneshot 경로는 전부 조용히 실패 가능 — heartbeat
@@ -564,15 +564,9 @@ known_issues:
 - text: 'devforge-mcp MCP tools (action_write, action_poll_results) require container restart for FastMCP tool registry update.
     Does not auto-reload on file change. Restart command: systemctl --user restart container-devforge-mcp.'
   resolved: false
-- id: doc-ki-01
-  detail: docs/object-storage.md:139가 자격증명을 'DRPLR_*'로 표기 — 실제 키(DROPLR_USER/PASS)와 불일치. 문서 정정 필요.
-  resolved: false
 - text: 'Docs still inconsistent (P2 backlog): OPERATIONS_GUIDE `mcp serve` port role; API_REFERENCE vs system-architecture
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
     placement.'
-  resolved: false
-- id: dp-ki-02
-  detail: 'P1: DROPLR_AUTH_TOKEN_KEY가 KV에 등록됐으나 코드 미연결(grep 0건). JWT exp 2026-09-26 — 연결 시 회전 로직 필요.'
   resolved: false
 - text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중 RemoteDisconnected/ConnectionResetError
     반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB) 메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'
@@ -640,9 +634,6 @@ known_issues:
 - text: 'Reranker --batch-size 1024 on 22GB OCI ARM: RSS ~4.6GB, safe. Swap 73% used (2.9/4GB) despite swappiness=10, indicating
     genuine RAM pressure. Do not increase batch-size beyond 1024 without verifying free memory >6GB.'
   resolved: false
-- id: sec-ki-01
-  detail: '보안: 검증 과정에서 DROPLR JWT/비밀번호가 세션 로그·도구 출력에 노출됨. 해당 세션 로그 공유 시 토큰 회전 권장. 향후 /proc/<pid>/environ 전체 덤프 금지(필요 키만 grep).'
-  resolved: false
 - text: 'Slot deadlock watchdog is reactive not preventive: --slot-prompt-similarity 0 reduces but doesn''t eliminate risk.
     If deadlock persists after Pod B restart, need different cache-reuse strategy (--cache-reuse 0 as last resort).'
   resolved: false
@@ -666,7 +657,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- token-savior-recall v4.4.1 installed (pip3.11, optimized profile). Structural nav + memory + Bash compaction.
 - 'T20 predicate extraction test: 1/10 completed, 1/10 timeout, user interrupted. MAX_TOKENS_BASE 256 verified.'
 - Slack MCP and postgres MCP removed (13→11 MCPs). .claudeignore created.
 - 'ui: 진행 표시 영어(간결), 요약=한글, 상세는 파일 저장. Token 절약 패턴 확립.'
@@ -777,3 +767,6 @@ completed_log:
   resolved.'
 - '(2026-09-20, opencode) KV 쓰기 권한 확보: sp-aiagent-rbac-prod-krc(fcf857e3) Access Policy Get/List/Set 부여(3 KV), 읽기/쓰기 검증 OK.
   3 KV는 Access Policy 모델(enableRbacAuthorization=false)이라 RBAC 역할 무효임을 확인. KV AZ-20137133-SP-AIAGENT-CLIENT-ID 오값 교정.'
+- '(2026-09-20, opencode) Droplr 점검·수정: bear맨 회전로직 실체 확인 결과 /token·/oauth/token=404(회전 불가) + env 오타(DROPLR_AUTH_TOKEN vs ..._TOKEN_KEY).
+  droplr.py를 DROPLR_AUTH_TOKEN_KEY 읽기+Bearer/Basic 폴백으로 수정(commit 59ac667). 노출 스캔: 코드/리포 평문 없음, 로깅 없음. object-storage.md secrets.env
+  참조 정정. dp-ki-02/doc-ki-01/sec-ki-01/dp-02 resolved.'
