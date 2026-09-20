@@ -1,0 +1,20 @@
+{
+  "test": "postgres restore speed",
+  "date": "2026-09-20",
+  "tool": "scripts/osync_restore_test.py",
+  "dump": "/opt/ai_data/backups/db/devforge_2026-09-19.dump",
+  "dump_size_bytes": 111069241,
+  "restored_tables": 51,
+  "rto_seconds": 43.14,
+  "rpo_hours": 24,
+  "backup_cadence": "daily 23:00 UTC (osync)",
+  "proposed": {
+    "rto": "4h",
+    "rpo": "1d"
+  },
+  "measured": {
+    "rto_seconds": 43.14,
+    "rpo_hours": 24
+  },
+  "verdict": "PASS — measured RTO (43s) and RPO (24h) are within the proposed bounds (4h / 1d)"
+}

@@ -1,0 +1,27 @@
+{
+  "gate": 1,
+  "name": "contract approval",
+  "date": "2026-09-20",
+  "status": "PASS",
+  "evidence": {
+    "contract_json": "docs/specs/mcp-contract.json",
+    "schema_ref": "docs/reports/review-triage-v5-20260914.md §2.2",
+    "adr": "docs/adr/0006-mcp-tool-surface.md",
+    "adr_status": "Accepted (2026-09-14)",
+    "tools_count": 12,
+    "allowlist_diff": 0,
+    "allowlist_source": "~/.config/opencode/opencode.json (tools.devforge-mcp_*)",
+    "checks": [
+      "root required keys present",
+      "version pattern ^[0-9]+\\.[0-9]+$",
+      "status in {draft,frozen,superseded}",
+      "tools length >= 12",
+      "each tool has name/disposition/lifecycle",
+      "annotations limited to 4 hints",
+      "opencode allowlist name diff = 0",
+      "alias_retention_days >= 14",
+      "change_request.procedure/notice_days valid"
+    ]
+  },
+  "notes": "Contract status remains 'draft' until Gate 2 (baseline + thresholds + RTO/RPO) completes, then freeze."
+}
