@@ -198,8 +198,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'Extraction test plan structured: 3-phase plan (Phase 1=model comparison, Phase 2=4B pre-filter, Phase 3=final). Yggdrasil
-  session dp-20260628-extraction-test-series.'
 - 'Phase 1 test completed: Devin-like TestRunner framework (scripts/lib/test_runner.py) + test_phase1_14b.py. 14B Q4 with/without
   GS comparison. A) no-GS: GOOD, 5 facts, 216s, 499P+281C. B) with-GS: MIXED, 5 facts (1 dup), 257s, 1489P+316C. Verdict:
   INCONCLUSIVE — GS adds 3x token cost without clear quality gain on this turn. Self-healing retry verified. LSP blast_radius
@@ -316,3 +314,5 @@ completed_log:
   백로그 처리(day-cycle) 재개.'
 - '(2026-09-20, opencode) Phase 0: docs/specs/mcp-contract.json 생성(12툴, ADR-0006 일치, opencode allowlist diff=0, annotation
   4종, ingest 계약). 이전엔 파일 부재였음(192 기록 오류 정정). commit 6b97a4f대. 다음: W1 baseline 완료 후 freeze/gate.'
+- '(2026-09-20, opencode) 181 문서 정합: machine-readable spec 3종 영어화(ingest-provenance/dataimpulse-monitor/exa-direct-usage),
+  cli.py lint english-only-docs 14→0. 남은 것(>400줄 문서 2, 기타 정책 lint) 기록. ingest/provenance 연결 점검 PASS(unknown 0%).'
