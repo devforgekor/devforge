@@ -161,6 +161,11 @@ decisions:
     embed(enriched→embedded)+경량 유지보수만 담당. text_clean은 pre-extract 위치 유지(임베딩 앞 이동 금지 — extract/embed 모두 text_clean 컬럼 소비).
     전제: 신규 로직이 clean 컬럼 기록. 계획: docs/plans/phase3-plan.md.'
   status: resolved
+- id: webobsidian-access-2026-09-20
+  detail: 'WebObsidian 접근 모델(2026-09-20): (1) 전용 서브도메인 notes.152-69-229-246.nip.io 루트 서빙(base=/ SPA 호환). (2) Caddy /notes/*·/obsidian/*
+    라우트 제거(prefix+base=/ 불일치로 동작 불가였음). (3) 제공 링크는 공유 링크(GET /share/<id>, 무인증 읽기전용, per-link 비밀번호 옵션) 기본, 루트 앱(/)은 비밀번호 세션
+    읽기/쓰기. webobsidian-url.py 기본=공유링크, --rw=루트앱.'
+  status: resolved
 known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
@@ -195,10 +200,10 @@ known_issues:
 - id: WEBOBSIDIAN-CGROUP-2026-09-20
   detail: 'stale child cgroup(runtime, 9/19 생성)으로 ExecStartPre attach EBUSY → drop-in(Slice=webobsidian-workaround.slice)으로
     우회 복구. 2026-09-20 07:04 KST 재부팅 실행(커널 cgroup 잔존 제거 목적). 재부팅 후 조치: (1) container-webobsidian 정상 기동 확인, (2) ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
-    제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
+    제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인. [2026-09-20 재발: webobsidian-workaround.slice EBUSY → drop-in Slice=webobsidian2.slice
+    전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- 'Claude 백엔드 전환 모드 시스템 구축: claude-mode(openrouter/deepseek 전환) + claude-aliases :44777 하드코딩 제거. 기본 모드 openrouter. 검증 완료.'
 - '2026-09-12'', ''text'': ''azure_spot 정합+엔드포인트화+삭제검증+TTL, 라이브 전경로 검증, MoE(Q4) 툴콜 검증. 런북(Q4·DiskController·llm.service·--jinja)
   정합.'
 - '2026-09-12: svc pod 포트포워딩 복구(systemctl restart svc-pod.service) → rootlessport 재생성, 8000/8002/8085/8191 4/4, devforge-mcp
@@ -325,3 +330,6 @@ completed_log:
   account_inactive로 불가(known_issue 등록).'
 - '(2026-09-20, opencode) Phase 3 계획 확정(D6=A): pre-embed는 신규 로직 소유, devforge=embed. docs/plans/phase3-plan.md 작성(+INDEX).
   text_clean 재배치 검토 결과 임베딩 앞 이동 불가(extract/embed 공통 의존).'
+- '(2026-09-20, opencode) WebObsidian 접근 재정비: root 서브도메인(notes.*) 서빙, /notes·/obsidian 라우트 제거. 제공 링크=읽기전용 공유(/share/<id>),
+  루트앱=비번 읽기/쓰기. webobsidian-url.py는 항상 2줄(읽기전용+편집) 출력. 편집 비번 변경(KV WEBOBSIDIAN-PASSWORD + settings.json userPasswordHash 동기화,
+  6자 미만 허용 위해 해시 직접 주입, mustChangePassword=false). 비번 값은 미기록.'
