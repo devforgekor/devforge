@@ -54,7 +54,8 @@ class TrendTracker:
         n = len(xs)
         if n < 2:
             return None
-        sx = sum(xs); sy = sum(ys)
+        sx = sum(xs)
+        sy = sum(ys)
         sxx = sum(x * x for x in xs)
         sxy = sum(x * y for x, y in zip(xs, ys))
         denom = n * sxx - sx * sx
@@ -111,7 +112,6 @@ class ComponentTracker:
 
     def record_failure(self) -> bool:
         """Record failure, update state, return True if state changed."""
-        from lib.watchdog.config import BACKOFF_RESET_SEC
 
         now = time.monotonic()
         self.consecutive_fail += 1
@@ -261,7 +261,7 @@ class WatchdogState:
 
         # Persist to DB (best-effort, non-blocking)
         try:
-            from lib.db import psql_ok, esc_sql
+            from lib.db import esc_sql, psql_ok
             c = esc_sql(component)
             et = esc_sql(event_type)
             d = esc_sql(detail)
@@ -458,9 +458,12 @@ class WatchdogState:
         prev = self._token_stagnation.get(port, {})
 
         stagnation_count = 0
-        if processing > 0 and prev.get("processing_prev", 0) > 0:
-            if total == prev.get("total_prev", 0):
-                stagnation_count = prev.get("stagnation_count", 0) + 1
+        if (
+            processing > 0
+            and prev.get("processing_prev", 0) > 0
+            and total == prev.get("total_prev", 0)
+        ):
+            stagnation_count = prev.get("stagnation_count", 0) + 1
 
         self._token_stagnation[port] = {
             "total_prev": total,

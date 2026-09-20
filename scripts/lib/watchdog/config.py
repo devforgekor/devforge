@@ -9,7 +9,6 @@ MODE=day (관찰형, 60s 주기):
   Fix loop: inference (:8080)가 수정 담당
 """
 
-import os
 
 # ── 인터벌 ──────────────────────────────────────────────────────────
 CHECK_INTERVAL = 60  # seconds between check cycles

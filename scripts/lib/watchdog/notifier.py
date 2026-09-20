@@ -12,14 +12,12 @@ Telegram: 파일 전송 전용 (watchdog 알림 금지)
 
 import json
 import os
-import sys
-import time
 import urllib.request
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
 
-from lib.watchdog.config import SLACK_CHANNEL, ALERT_DEDUP_SEC
+from lib.watchdog.config import SLACK_CHANNEL
+
 from .messenger import log_message
 
 KST = timezone(timedelta(hours=9))
@@ -105,7 +103,6 @@ def _build_heartbeat_blocks(state: dict) -> tuple[list, str]:
         })
 
     test_progress = state.get("test_progress")
-    active_pulses = state.get("active_pulses", [])
 
     if test_progress:
         # ── Test/Protection mode: show test progress + DB state ──

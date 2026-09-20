@@ -15,7 +15,7 @@ import subprocess
 import time
 import urllib.request
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from lib.db import psql_json
 from lib.infra.health_checks import svc_active
@@ -206,7 +206,7 @@ def check_ebook_pipeline() -> tuple[bool, str]:
             if idle > EBOOK_HANG_STALE_SEC:
                 return False, f"hang 감지: {int(idle)}s 활동 없음"
             return True, f"활동 정상 ({int(idle)}s 전)"
-        except Exception as e:
+        except Exception:
             # 타임스탬프 파싱 실패 시 프로세스 존재만으로 판단
             return True, "로그 활동 (타임스탬프 파싱 불가)"
     except Exception as e:
@@ -305,7 +305,7 @@ def check_postgres() -> tuple[bool, str]:
 
 def check_memory() -> tuple[bool, dict]:
     """return (all_ok, {used_gb, total_gb, pct, swap_used_mb, swap_total_mb, swap_pct, detail})"""
-    result = {
+    result: dict[str, Any] = {
         "used_gb": 0,
         "total_gb": 0,
         "pct": 0,
@@ -334,6 +334,7 @@ def check_memory() -> tuple[bool, dict]:
         pass
 
     warn = result["pct"] >= MEM_WARN_PCT or result["swap_pct"] >= 50
+    result["warn"] = warn
     crit = result["pct"] >= MEM_CRIT_PCT or result["swap_used_mb"] >= SWAP_CRIT_MB
     result["all_ok"] = not crit
     return not crit, result

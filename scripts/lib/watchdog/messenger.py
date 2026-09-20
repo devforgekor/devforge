@@ -11,7 +11,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Optional
 
-from lib.db import psql_ok, psql_json, esc_sql
+from lib.db import esc_sql, psql_json, psql_ok
 
 
 def _make_pulse_id(instruction: str, target_file: str = "", date_str: str = "") -> str:

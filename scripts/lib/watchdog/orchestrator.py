@@ -29,6 +29,7 @@ from lib.experiment_state import (
     update_state as update_exp_state,
 )
 from lib.infra.health_checks import svc_active
+from lib.watchdog import incidents
 from lib.watchdog.checker import (
     check_all_llm,
     check_all_oneshot_results,
@@ -59,15 +60,14 @@ from lib.watchdog.config import (
     WATCHDOG_LIVENESS_FILE,
 )
 from lib.watchdog.messenger import get_undelivered, resolve_pulse
-from lib.watchdog.notifier import heartbeat, send_alert, send_recovery, sd_notify
-from lib.watchdog import incidents
+from lib.watchdog.notifier import heartbeat, sd_notify, send_alert, send_recovery
 from lib.watchdog.recovery import (
     graduated_recover,
     kill_stale_process,
     recover_ebook_watcher,
     recover_inference_cascade,  # noqa: F401 — used in day_fix_loop
-    recover_oom,
     recover_oneshot,
+    recover_oom,
     recover_port_conflict,  # noqa: F401 — used in day_fix_loop
     recover_service,
     recover_slot_deadlock,
@@ -136,10 +136,9 @@ def _run_services(results: dict, dry_run: bool):
                 _state.add_event(f"svc:{name}", "down", svc["detail"])
         else:
             incidents.record_detect(f"svc:{name}", "down", svc["detail"], unit=name)
-            if tracker.record_failure() and tracker.can_alert():
-                if not _test_active:
-                    send_alert(f"svc:{name}", tracker.state.value, svc["detail"])
-                    _state.add_event(f"svc:{name}", "down", svc["detail"])
+            if tracker.record_failure() and tracker.can_alert() and not _test_active:
+                send_alert(f"svc:{name}", tracker.state.value, svc["detail"])
+                _state.add_event(f"svc:{name}", "down", svc["detail"])
         results["services"].append(svc)
 
 
@@ -154,10 +153,9 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
             protected = _test_active
             svc_name = name.replace(".timer", ".service")
             inc_id = incidents.record_detect(f"timer:{name}", "delay", timer["detail"], unit=svc_name)
-            if not protected:
-                if tracker.record_failure() and tracker.can_alert():
-                    send_alert(f"timer:{name}", "DELAY", timer["detail"])
-                    _state.add_event(f"timer:{name}", "delay", timer["detail"])
+            if not protected and tracker.record_failure() and tracker.can_alert():
+                send_alert(f"timer:{name}", "DELAY", timer["detail"])
+                _state.add_event(f"timer:{name}", "delay", timer["detail"])
             if not dry_run and tracker.consecutive_fail >= 1:
                 if protected:
                     log(f"  SKIP kick {name} — protection active ({_test_active})")
@@ -218,10 +216,9 @@ def _run_alert_only(dry_run: bool, results: dict):
             incidents.resolve_if_open(f"svc:{name}")
         else:
             incidents.record_detect(f"svc:{name}", "down", detail, unit=name)
-            if tracker.record_failure() and tracker.can_alert():
-                if not _test_active:
-                    send_alert(f"svc:{name}", tracker.state.value, detail)
-                    _state.add_event(f"svc:{name}", "down", detail)
+            if tracker.record_failure() and tracker.can_alert() and not _test_active:
+                send_alert(f"svc:{name}", tracker.state.value, detail)
+                _state.add_event(f"svc:{name}", "down", detail)
         results.setdefault("services", []).append({"name": name, "ok": ok, "detail": detail})
 
 
@@ -247,10 +244,9 @@ def _run_svcpod_forwarding(results: dict, dry_run: bool):
             _state.add_event("svc:svc-pod-forwarding", "down", detail)
     else:
         incidents.record_detect("svc:svc-pod-forwarding", "down", detail, unit="svc-pod.service")
-        if tracker.record_failure() and tracker.can_alert():
-            if not _test_active:
-                send_alert("svc:svc-pod-forwarding", tracker.state.value, detail)
-                _state.add_event("svc:svc-pod-forwarding", "down", detail)
+        if tracker.record_failure() and tracker.can_alert() and not _test_active:
+            send_alert("svc:svc-pod-forwarding", tracker.state.value, detail)
+            _state.add_event("svc:svc-pod-forwarding", "down", detail)
     results.setdefault("services", []).append(
         {"name": "svc-pod-forwarding", "ok": ok, "detail": detail}
     )
@@ -273,10 +269,9 @@ def _run_oneshot_results(dry_run: bool, results: dict):
                 send_alert(f"oneshot:{name}", tracker.state.value, item["detail"])
                 _state.add_event(f"oneshot:{name}", "failed", item["detail"])
         else:
-            if tracker.record_failure() and tracker.can_alert():
-                if not _test_active:
-                    send_alert(f"oneshot:{name}", tracker.state.value, item["detail"])
-                    _state.add_event(f"oneshot:{name}", "failed", item["detail"])
+            if tracker.record_failure() and tracker.can_alert() and not _test_active:
+                send_alert(f"oneshot:{name}", tracker.state.value, item["detail"])
+                _state.add_event(f"oneshot:{name}", "failed", item["detail"])
         results.setdefault("services", []).append(item)
 
 
@@ -290,10 +285,9 @@ def _run_system_services(dry_run: bool, results: dict):
             incidents.resolve_if_open(f"syssvc:{name}")
         else:
             incidents.record_detect(f"syssvc:{name}", "down", item["detail"], unit=f"system:{name}")
-            if tracker.record_failure() and tracker.can_alert():
-                if not _test_active:
-                    send_alert(f"syssvc:{name}", tracker.state.value, item["detail"])
-                    _state.add_event(f"syssvc:{name}", "down", item["detail"])
+            if tracker.record_failure() and tracker.can_alert() and not _test_active:
+                send_alert(f"syssvc:{name}", tracker.state.value, item["detail"])
+                _state.add_event(f"syssvc:{name}", "down", item["detail"])
         results.setdefault("services", []).append(item)
 
 
@@ -378,11 +372,10 @@ def run_day_checks(dry_run: bool = False) -> dict:
         if ok:
             tracker.record_success()
         else:
-            if tracker.record_failure() and tracker.can_alert():
-                if not _test_active:
-                    detail = f"T1={probe['t1_detail']} T2={probe['t2_detail']}"
-                    send_alert(f"llm:{name}", tracker.state.value, detail)
-                    _state.add_event(f"llm:{name}", "state_change", detail)
+            if tracker.record_failure() and tracker.can_alert() and not _test_active:
+                detail = f"T1={probe['t1_detail']} T2={probe['t2_detail']}"
+                send_alert(f"llm:{name}", tracker.state.value, detail)
+                _state.add_event(f"llm:{name}", "state_change", detail)
         lat_ok, lat_detail = check_probe_latency(probe["port"])
         if not lat_ok and lat_detail != "skip":
             _state.add_event(f"llm:{name}", "latency_warn", lat_detail)
