@@ -150,6 +150,12 @@ decisions:
     Restart=on-failure churn이 embed 모드를 계속 깨뜨린 것. 수정(watchdog 소유권+Restart=no+pause) 후 churn-off 상태에서 embed_batch 완주 검증: embeddings
     3554→3555, 1 ok/0 failed. 단일 추론 컨테이너의 extract/embed 상호배타는 유지. 런타임: 소량 검증 완료, 대량(verified 2271)은 CPU 속도 제약(느림).'
   status: resolved
+- id: shadow-harness-2026-09-20
+  detail: 'Shadow 검증 기반(2026-09-20): devforge_shadow(turns_shadow 뷰 + review_facts_shadow) 적용 확인. diff 하네스 scripts/shadow_diff.py
+    신규 — prod review_facts vs devforge_shadow.review_facts_shadow를 (turn_id,fact_index,extract_model) 키로 fact_type/evidence/verdict/nli_verdict
+    비교, diff=0이면 exit 0(Phase C 컷오버 게이트), --model 필터. 자체검증: entity_scan 100건 복사→diff=0→정리. ADR-0003 상태 갱신(Applied). 잔여: 리팩터드
+    파이프라인(orchestrator/pipeline_stages) 구현 후 실제 shadow run으로 2주 diff=0.'
+  status: resolved
 known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
@@ -198,10 +204,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'Phase 1 test completed: Devin-like TestRunner framework (scripts/lib/test_runner.py) + test_phase1_14b.py. 14B Q4 with/without
-  GS comparison. A) no-GS: GOOD, 5 facts, 216s, 499P+281C. B) with-GS: MIXED, 5 facts (1 dup), 257s, 1489P+316C. Verdict:
-  INCONCLUSIVE — GS adds 3x token cost without clear quality gain on this turn. Self-healing retry verified. LSP blast_radius
-  confirmed zero production impact. Pod B mode restored (review-p, :8081). Day-cycle restarted.'
 - pip3 install --user argcomplete (tracer bash-completion 오류 해결)
 - 'system_sync.sh: git auto-commit 로직 추가'
 - 'devforge-daily-structure.service: git commit + git push ExecStart 추가 (%% 이스케이프)'
@@ -316,3 +318,5 @@ completed_log:
   4종, ingest 계약). 이전엔 파일 부재였음(192 기록 오류 정정). commit 6b97a4f대. 다음: W1 baseline 완료 후 freeze/gate.'
 - '(2026-09-20, opencode) 181 문서 정합: machine-readable spec 3종 영어화(ingest-provenance/dataimpulse-monitor/exa-direct-usage),
   cli.py lint english-only-docs 14→0. 남은 것(>400줄 문서 2, 기타 정책 lint) 기록. ingest/provenance 연결 점검 PASS(unknown 0%).'
+- '(2026-09-20, opencode) Shadow 검증 하네스: scripts/shadow_diff.py 생성(prod vs review_facts_shadow, diff=0 게이트), 자체검증 entity_scan
+  100→diff=0→정리. ADR-0003 Applied로 갱신. 실제 shadow run은 리팩터드 파이프라인 구현 후.'
