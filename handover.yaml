@@ -442,7 +442,7 @@ decisions:
   detail: '서버측 Droplr 단축 깨짐 발견(2026-09-19, P0 미수정): scripts/lib/droplr.py:40이 DRPLR_EMAIL/DRPLR_PASSWORD를 읽지만 KV 실제 키는 DROPLR_USER/DROPLR_PASS.
     이름 불일치로 shorten()이 항상 None → blob_uploader._shorten_with_droplr(), droplr_upload.py(droplr/dplr alias), cli.py 업로드 경로
     단축이 조용히 실패. 수정 방향: DROPLR_USER/DROPLR_PASS(Basic) 기준으로 변경(실제 API 호출 검증됨, HTTP 201).'
-  status: open
+  status: resolved
 - id: dp-02
   detail: 'DROPLR_AUTH_TOKEN_KEY 등록됨(2026-09-19) — 현재 아무 코드도 읽지 않음(grep 0건). 값은 유효한 JWT(id 500784, exp 2026-09-26)이며 실측 검증:
     Bearer → HTTP 201, Basic(DROPLR_USER/PASS) → HTTP 201. 둘 다 동작. Bearer 경로를 코드에 연결하려면 만료 회전 필요(Basic보다 안전). 미연결 상태로는 미사용.'
@@ -456,7 +456,7 @@ decisions:
   detail: 'secrets.env 삭제 여파(2026-09-19): 프로덕션 .py 39개가 아직 ~/.config/devforge/secrets.env를 fallback으로 읽음(notion_client, watchdog/config,
     slack_notify, telegram_send, file_registry, research/_keys 등). KV로 래핑되지 않은 timer/cron/oneshot 경로는 전부 조용히 실패 가능 — heartbeat
     사고와 동일 뿌리. 별도 감사 태스크 필요.'
-  status: open
+  status: resolved
 - id: dp-review-01
   detail: '붙여준 ''Droplr API 사용 가이드 팩트체크'' 리뷰 검토(2026-09-19): 원본 가이드는 이 레포/docs에 존재하지 않음(droplr|drplr 검색). 리뷰의 생태계 설명은 독립 검증
     결과 대체로 정확(HMAC-SHA1+15분 skew, 앱키 요청발급, drplr 1.2.0, droplr-api 1.0.0, JumpCloud 인수, Loom→Atlassian, CloudApp→Zight, ScreenPal).
@@ -472,6 +472,11 @@ decisions:
     fastapi 보류사유(calendar_router는 try/except 가드됨), §4.2 서비스 11개+컨테이너 3개(누락 3서비스 추가), §8 fallback 제거→호환성 잔존(14 .py), kuhwa.yaml→update-schedule.yml,
     §4.1 kv-export-env.sh 추가. 조치: 미푸시였던 0ec3855 포함 main 13커밋 push 완료(main=origin/main).'
   status: open
+- id: dd-budget-2026-09-20
+  detail: 'Deep Dive step budget 재교정(2026-09-20): deepdive_steps 완료 57건(2026-08-25~09-13, overrun 0) percentile. base=ceil30(max(p90*1.5,실측max))
+    → 1:150 2:240 3:450 4:420 5:150 6:810 7:180. min/max 안전 상한 유지, DEEPDIVE_FILE_MARGIN_SEC=120 유지(affected_files 샘플 부족).
+    소표본이라 표본 증가 시 재검토.'
+  status: resolved
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -536,10 +541,6 @@ known_issues:
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
     placement.'
   resolved: false
-- id: dp-ki-01
-  detail: 'P0: scripts/lib/droplr.py가 DRPLR_EMAIL/DRPLR_PASSWORD를 읽으나 KV 키는 DROPLR_USER/DROPLR_PASS — 서버 Droplr 단축 전면 실패.
-    수정 필요.'
-  resolved: false
 - id: dp-ki-02
   detail: 'P1: DROPLR_AUTH_TOKEN_KEY가 KV에 등록됐으나 코드 미연결(grep 0건). JWT exp 2026-09-26 — 연결 시 회전 로직 필요.'
   resolved: false
@@ -551,9 +552,6 @@ known_issues:
   resolved: false
 - text: 'Gemini API SSL blocked from Oracle Cloud: all gemini/* models fail with TLSV1_ALERT_INTERNAL_ERROR. DeepSeek/OpenAI/OpenRouter
     all work. Proxy/rotation infrastructure for Gemini unusable from this server.'
-  resolved: false
-- id: kv-ki-01
-  detail: 'P1: secrets.env 삭제 후 39개 프로덕션 .py가 여전히 해당 파일을 fallback으로 참조 → KV 미주입 실행경로 조용히 실패. 감사·전환 필요.'
   resolved: false
 - id: kv-ki-02
   detail: 'KV 누락 config 키(2026-09-19 감사): SMTP_HOST/PORT/USER, DUCKDNS_ACCOUNT/DOMAIN/*_IP, OCI_REGION/HOME_REGION/IDCS_URL,

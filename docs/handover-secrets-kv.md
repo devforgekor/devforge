@@ -246,8 +246,9 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 2. **코드 리팩터링 (6개 파일) — 환경변수 우선으로 변경**
    - News 프로젝트: `translator.py`, `digest.py`, `exa_extractor.py`, `multilingual_processor.py`
    - Timetable 프로젝트: `main.py`, `calendar_sync/oauth_service.py`
-   - 패턴: 환경변수 우선. 단 `secrets.env` fallback은 **호환성 유지용으로 잔존**(2026-09-20 감사 확인).
-     `secrets.env` 파일 자체는 삭제됐으므로 런타임 영향 없음. 서버+워크스페이스 14개 .py에 잔존.
+   - 패턴: 환경변수 우선. `secrets.env` fallback은 감사(2026-09-20) 후 **제거 완료** — 워크스페이스 8개 파일
+     (news 4: translator/digest/exa_extractor/multilingual_processor, timetable 2, azure golden_image 2) env-only 전환.
+     서버 잔존 참조 4개는 주석(kv-backup/sync-secrets/research-web)과 `config.py` env_file(파일 부재 시 무해)뿐.
    
 3. **kuhwa 워크플로우 수정**
    - `.github/workflows/update-schedule.yml` (문서 초판 오기: `kuhwa.yaml`): `secrets.env` 참조 없음

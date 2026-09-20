@@ -6,8 +6,8 @@
 API: POST https://api.droplr.com/links  (Content-Type: text/plain, body = URL)
 Returns the created drop's `shortlink`, or None on any failure.
 
-Auth priority: Bearer token (DROPLR_AUTH_TOKEN) > Basic (DROPLR_USER / DROPLR_PASS).
-Bearer token auto-rotates when expired via Basic auth at /token endpoint.
+Auth: bearer token obtained via Basic credentials (DROPLR_USER / DROPLR_PASS)
+at /token, cached until expiry; falls back to Basic on each request if refresh fails.
 """
 
 from __future__ import annotations
