@@ -144,8 +144,8 @@ if __name__ == "__main__":
 
 | 게이트 | 통과 조건 | 근거 |
 |---|---|---|
-| Gate 1: 계약 승인 | `specs/mcp-contract.json` Schema 검증 + allowlist diff=0 + ADR-0006 Accepted | ✅ specs/mcp-contract.json 작성 완료, ✅ ADR-0006 Accepted 전환 |
-| Gate 2: baseline 완료 | W1 측정 + 임계값·허용오차·RTO/RPO 확정 | 🔄 W1 측정 진행 중 |
+| Gate 1: 계약 승인 | `specs/mcp-contract.json` Schema 검증 + allowlist diff=0 + ADR-0006 Accepted | ✅ `gate-1-result.json` (diff=0), ✅ ADR-0006 Accepted |
+| Gate 2: baseline 완료 | W1 측정 + 임계값·허용오차·RTO/RPO 확정 | 🔄 W1 측정 진행(baseline 복구 09-20) · ✅ RTO 43s/RPO 24h 실측(`backup-restore-result.json`) · RTO/RPO 사용자 확정 대기 |
 | Gate 3: 경보 발동 | baseline 기반 임계값에서 1건 발동 | gate 2 이후 |
 | Gate 4: 롤백 리허설 | 정규화 diff(허용오차 내) + health 10분 | gate 3 이후 |
 | Gate 5: 수치·용어 정합 | 32/12/25/≈15/9/−8/448/7152 전 문서 | 병행 |
@@ -153,14 +153,14 @@ if __name__ == "__main__":
 
 ---
 
-## 5. 현재 상태 (2026-09-14)
+## 5. 현재 상태 (2026-09-20 갱신)
 
-- [x] Gate 1: `specs/mcp-contract.json` 초안 작성 완료 (v5 §2.2 스키마, v3 §3.1 12툴)
-- [x] Gate 1: ADR-0006 Accepted 전환 완료 (12툴 목록 반영)
-- [ ] Gate 2: W1 baseline 측정 (D1 시작, 1주 소요)
-- [ ] Gate 2: hook 오버헤드 측정 (auto_log.py 호출당 ms) — 실측 필요
-- [ ] Gate 2: 백업 복원 속도 테스트 — 실측 필요
-- [ ] Gate 2: RTO/RPO 확정 (W2 D1-2, 사용자 소유)
+- [x] Gate 1: `specs/mcp-contract.json` 작성 + 스키마 검증 + allowlist diff=0 → `gate-1-result.json`
+- [x] Gate 1: ADR-0006 Accepted (12툴 반영)
+- [x] Gate 2: hook 오버헤드 측정 — `2026-09-20.json` (avg 271ms / p95 331ms)
+- [x] Gate 2: 백업 복원 속도 테스트 — `backup-restore-result.json` (**RTO 43s** / dump 111MB→51 tables / RPO 24h)
+- [ ] Gate 2: W1 baseline 측정 계속 (baseline-daily.service 복구 2026-09-20; D2-D7 갭, D8 재개)
+- [ ] Gate 2: RTO/RPO 확정 (제안 RTO 4h / RPO 1d — 실측이 크게 여유, **사용자 확정 필요** → 확정 시 계약 freeze)
 
 ---
 
