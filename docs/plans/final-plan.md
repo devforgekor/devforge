@@ -37,7 +37,7 @@
 ## 3. 업계 표준 대조 (요약)
 | 계층 | 표준 | 현재 | 판정 |
 |---|---|---|---|
-| Capture | hook(결정론적) + 확장/relay(웹) | 로컬 파서 폴링, 웹 미연결 | 개선 필요 |
+| Capture | hook(결정론적) + 확장/relay(웹) | 로컬 파서 폴링, 웹-LLM CLI 운영(Qwen/DeepSeek) | Phase B(ingest) 연결 필요 |
 | Ingestion | hook→queue→importer | turn_watcher→raw→worker | 부분 |
 | Storage/Retrieval | FTS+vector+RRF, L0~L3 | Postgres+pgvector+FTS5+RRF | 일치(계층 일부) |
 | Extraction | deterministic→LLM, 구조화, evidence, hybrid | 로컬 8B 배치 | 이탈(ADR-0005) |
@@ -142,6 +142,7 @@
 - **D1** 배경: 로컬 8B 배치 추출 → `reports/industry-standard-comparison` §5.3. 선택: 승인/수정/보류. 영향: Phase C·비용·`review_facts` 의미.
 - **D2** 배경: 컷오버 시 **허용 12툴 계약** 보존 필요, `ingest` 미복원. 선택: 승인/조정/보류. 영향: Phase A·클라이언트 무변경.
 - **D3** 배경: 웹 확장 아카이브·파이프라인 미연결. 선택: 재가동(확장+relay→`ingest`)/은퇴. 영향: 수집 커버리지·D5.
+  - **(2026-09-20) 현황**: `chrome-web-llm` CLI **운영 중** — Qwen/DeepSeek 로그인·질의·세션 저장·모델 간 핸드오프(`runbooks/web-llm.md`). 단 대화의 파이프라인 수집(ingest) 배선은 **D4(`ingest`)+D5(보안) 이후 Phase B**에서 처리.
 - **D4** 배경: 계약 고정됨. 선택: M0(`ingest`+provenance 또는 allowlist 컷) 착수/순서변경. 영향: 진행 속도.
 - **D5** (5-1)노출 loopback/bearer/둘다 (5-2)시크릿 redaction (5-3)provenance 값(`chrome:*` 등). 권장: loopback+bearer·redaction 적용·값 유지.
 - **D6** (6-1)worker 이관 흡수/별도 (6-2)2인/1인·범위축소 (6-3)병렬전환/즉시.

@@ -204,10 +204,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- '2026-09-12'', ''text'': ''azure_spot 정합+엔드포인트화+삭제검증+TTL, 라이브 전경로 검증, MoE(Q4) 툴콜 검증. 런북(Q4·DiskController·llm.service·--jinja)
-  정합.'
-- '2026-09-12: svc pod 포트포워딩 복구(systemctl restart svc-pod.service) → rootlessport 재생성, 8000/8002/8085/8191 4/4, devforge-mcp
-  25툴/FlareSolverr 8191 정상.'
 - '2026-09-12: watchdog 재발방지 구현(task#32): config(SVCPOD_UNIT/PUBLISHED_PORTS) + checker.check_svcpod_ports + recovery.recover_svcpod_forwarding
   + orchestrator._run_svcpod_forwarding. 실장애 주입 검증 완료.'
 - '2026-09-12: Quadlet generator 실패 제거: container-flaresolverr.container(주석 stub) → _disabled/*.disabled, daemon-reload 후
@@ -333,3 +329,9 @@ completed_log:
 - '(2026-09-20, opencode) WebObsidian 접근 재정비: root 서브도메인(notes.*) 서빙, /notes·/obsidian 라우트 제거. 제공 링크=읽기전용 공유(/share/<id>),
   루트앱=비번 읽기/쓰기. webobsidian-url.py는 항상 2줄(읽기전용+편집) 출력. 편집 비번 변경(KV WEBOBSIDIAN-PASSWORD + settings.json userPasswordHash 동기화,
   6자 미만 허용 위해 해시 직접 주입, mustChangePassword=false). 비번 값은 미기록.'
+- '(2026-09-20, opencode) web-llm 운영: Playwright Chromium(arm64)+chrome-cli-bridge 확장+relay 자동연결, Qwen 로그인(KV QWENAI-*)·CLI
+  웹UI 경로 완성(web-llm.sh). 시크릿 KV 이전(README/CLI/dataimpulse-monitor.md 평문 제거). DeepSeek 로그인은 CloudFront 403(지역차단) + 프록시(maskproxy/dataimpulse)
+  불통으로 보류.'
+- '(2026-09-20, opencode) DeepSeek 웹 로그인 해결: 원인은 HeadlessChrome UA → DeepSeek AWS WAF+CloudFront가 로그인 API를 403 차단(지역/IP 아님).
+  비-헤드리스 UA(--user-agent) 설정으로 로그인 성공, 프록시 불필요. 확장에 page.key(실제 Enter 이벤트) 추가(DeepSeek는 Enter 전송). CLI -m deepseek 웹UI 직접응답
+  검증(4/Berlin), qwen(4/Paris) 유지. stack-start.sh 기본 UA 적용.'

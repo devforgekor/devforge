@@ -147,6 +147,7 @@ AI Agents → turn_watcher (3s poll) → turns.raw
 | **LLM 공급자 분산** | `MODEL_REGISTRY`가 로컬 포트에만 의존 | 클라우드 API 전환 불가, 키 관리 문제 |
 | **pipelines/ 중복** | `pipelines/enrich.py` vs `lib/enrich/` | 코드 중복 |
 | **proxy_reviewer.py** | `_archive`에 존재하지만 파이프라인에 미반영 | 사용 여부 불명 |
+| **웹 LLM 수집 미연결** | `chrome-web-llm` CLI 운영 중(Qwen/DeepSeek 질의·세션/핸드오프)이나 대화가 파이프라인(`turn_collection`/`ingest`)에 미유입 | 웹 대화가 지식베이스에 반영 안 됨 → Phase B(ADR-0006) |
 
 ---
 
