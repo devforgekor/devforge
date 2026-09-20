@@ -166,9 +166,6 @@ known_issues:
     ports; ADR-0001 253 vs plan 40+ hardcoded paths; OPERATIONS_GUIDE test counts; CONVENTIONS >400-line docs + root SSOT
     placement.'
   resolved: false
-- text: 'enrich LLM 연결 재설정 (2026-09-14): day_cycle 활성화 후 enrich 단계에서 llama-server(:8082 day-enricher)가 다수 호출 중 RemoteDisconnected/ConnectionResetError
-    반복 (Done: 0 enriched, 50 failed). 추정 원인: 4코어 ARM + 8B Q8(~6GB) + KV cache(1024MB) 메모리 압박. day_cycle 기동 자체는 정상. 추가 튜닝 필요.'
-  resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
     kv-devforge-prod2-krc로 정상.'
@@ -196,9 +193,6 @@ known_issues:
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인.'
   resolved: false
 completed_log:
-- 'Qwen3-Coder-30B-A3B-Q4_K_M test: 30B MoE no-GS (0/5 GOOD on chunk2, 503 slot deadlock). 30B MoE with GS (4/5 GOOD, 243s,
-  1533P+326C). Remaining: equals appears once (PARALLEL=1). Memory fix: MemoryMax 22G->23G, ctx 8192->4096, cache-ram 1024->512,
-  ubatch 512->256. Fixed 30B slot deadlock.'
 - 'Predicate Golden Set YAML: 16 entries (11 GOOD + 5 BAD). Sources: DB review_facts + turns with evidence chains. English/Korean
   mixed predicates. Created at scripts/docs/predicate-golden-set.yaml.'
 - 'MCP transport compatibility fix: exa_mcp.py + context7_mcp.py had legacy Content-Length header transport. Claude Code v2.1.158
@@ -313,3 +307,5 @@ completed_log:
 - '(2026-09-20, opencode) enrich 실패 근본원인 규명: churn(Watchdog cascade + systemd Restart=on-failure)이 in-flight LLM 요청을 리셋 →
   RemoteDisconnected. 수정: watchdog probe 관용성/소유권 skip(1d2cee1) + day-cycle Restart=no 드롭인 + pause. 격리 후 모델 정상 처리(CPU 프리필 매우
   느림). 190 상세 갱신.'
+- '(2026-09-20, opencode) 190 enrich 종결: churn 제거(Watchdog 소유권+Restart=no) 후 enrich 1턴 완주 검증(1 enriched, 247s). RemoteDisconnected는
+  churn 리셋이 원인.'
