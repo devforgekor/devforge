@@ -472,11 +472,12 @@ decisions:
     fastapi 보류사유(calendar_router는 try/except 가드됨), §4.2 서비스 11개+컨테이너 3개(누락 3서비스 추가), §8 fallback 제거→호환성 잔존(14 .py), kuhwa.yaml→update-schedule.yml,
     §4.1 kv-export-env.sh 추가. 조치: 미푸시였던 0ec3855 포함 main 13커밋 push 완료(main=origin/main).'
   status: open
-- id: dd-budget-2026-09-20
-  detail: 'Deep Dive step budget 재교정(2026-09-20): deepdive_steps 완료 57건(2026-08-25~09-13, overrun 0) percentile. base=ceil30(max(p90*1.5,실측max))
-    → 1:150 2:240 3:450 4:420 5:150 6:810 7:180. min/max 안전 상한 유지, DEEPDIVE_FILE_MARGIN_SEC=120 유지(affected_files 샘플 부족).
-    소표본이라 표본 증가 시 재검토.'
-  status: resolved
+- id: dd-live-mcp-2026-09-20
+  detail: '발견(2026-09-20, task #25 착수 중): 라이브 MCP는 리팩터드 서버(src/devforge/adapters/driving/mcp/server.py, 18툴, quadlet Exec=devforge.cli
+    mcp serve, 2026-09-19 전환)이며 scripts/mcp_server.py(DEEPDIVE_STEP_BUDGETS/overrun abort/sandbox verify, 25툴)는 비활성. 리팩터드
+    deepdive_step_enter는 step=1 고정·base_timeout_sec 기본 300, 만료/abort 백그라운드 루프 없음 → AGENTS/handover가 기술한 Deep Dive hang 감지
+    Phase1/2가 현재 미동작. 결정 필요: (a) Phase1/2를 리팩터드로 포팅, (b) 리팩터드 deepdive step 파라미터 개선, (c) 레거시 폐기.'
+  status: open
 known_issues:
 - text: 14B Q4 (Qwen3-14B-Q4_K_M) produces GOOD quality extraction predicates WITHOUT Golden Set on 760-char mixed EN/KR turns.
     GS adds 3x prompt tokens without clear quality benefit on this test. Needs evaluation on longer/harder turns.
@@ -561,6 +562,11 @@ known_issues:
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
     kv-devforge-prod2-krc로 정상.'
+  resolved: false
+- id: LIVE-MCP-DEEPDIVE-2026-09-20
+  detail: 라이브 MCP는 리팩터드 서버(18툴)로 전환(2026-09-19)되어 Deep Dive hang 감지(per-step DEEPDIVE_STEP_BUDGETS, overrun 3회 ABORT, sandbox
+    verify)가 미동작. 리팩터드 deepdive_step_enter는 step=1 고정/base_timeout_sec 기본 300, 만료·abort 백그라운드 루프 미구현. AGENTS/handover는 레거시
+    구현을 현행으로 기술 → 문서 정합 필요.
   resolved: false
 - id: nki01-01
   detail: 이전 cycle 49 day_verify facts NLI/reranker 없이 force-pass. reranker_recover.py 기본 조건에 source='day_verify' 포함 여부 확인
