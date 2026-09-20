@@ -837,14 +837,21 @@ def _llm_nli_verify(
     if not needs_llm:
         return extractions
 
+    # Optional: per-fact NLI (no batching) to eliminate cross-claim attention
+    # interference at the cost of N LLM calls. Enable via DEVFORGE_NLI_PER_FACT=1
+    # when batch accuracy is suspected to degrade (see known_issue Veritas 간섭).
+    per_fact = os.environ.get("DEVFORGE_NLI_PER_FACT", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    if per_fact:
+        batches = [[ex] for ex in needs_llm]
+        all_labels = _run_nli_batches(batches, user_turn, thinking, text)
+        return _apply_nli_labels(extractions, needs_llm, all_labels)
+
     # Phase 2: Token-budget batch splitting (each fact is independent)
     # Splits by estimated token cost to stay within llama.cpp 8192 ctx.
     MAX_BUDGET = 7373  # 8192 * 0.9 (10% safety margin)
     FIXED_OVERHEAD = 600
-
-    combined_text = text
-    if thinking:
-        combined_text = f"{thinking[:300]}\n\n{text}"
 
     batches = []
     current = []
@@ -863,7 +870,19 @@ def _llm_nli_verify(
     if current:
         batches.append(current)
 
-    all_labels = []
+    all_labels = _run_nli_batches(batches, user_turn, thinking, text)
+    return _apply_nli_labels(extractions, needs_llm, all_labels)
+
+
+def _run_nli_batches(
+    batches: List[List[Dict[str, Any]]], user_turn: str, thinking: str, text: str
+) -> List[str]:
+    """Run numbered batch NLI for each batch; returns labels in order."""
+    combined_text = text
+    if thinking:
+        combined_text = f"{thinking[:300]}\n\n{text}"
+
+    all_labels: List[str] = []
     for batch in batches:
         numbered_lines = []
         for i, ex in enumerate(batch, 1):
@@ -897,10 +916,22 @@ def _llm_nli_verify(
             print(f"    [nli-batch] ERROR ({n} facts): {e}", flush=True)
             for _ in batch:
                 all_labels.append("NEUTRAL")
+    return all_labels
 
-    for ex, label in zip(needs_llm, all_labels):
+
+def _apply_nli_labels(
+    extractions: List[Dict[str, Any]],
+    needs_llm: List[Dict[str, Any]],
+    labels: List[str],
+) -> List[Dict[str, Any]]:
+    """Assign parsed labels back to the extractions that needed LLM NLI."""
+    if len(labels) != len(needs_llm):
+        print(
+            f"    [nli] label count mismatch: {len(labels)} != {len(needs_llm)}",
+            flush=True,
+        )
+    for ex, label in zip(needs_llm, labels):
         ex["nli_llm"] = label
-
     return extractions
 
 
