@@ -22,10 +22,13 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# ── Paths ──
-DATA_DIR = Path(os.environ.get("DEVFORGE_DATA_DIR", "/opt/ai_data"))
-SERVER_DIR = Path(os.environ.get("DEVFORGE_SERVER_DIR", "/opt/projects/server"))
-CONFIG_DIR = Path(os.environ.get("DEVFORGE_CONFIG_DIR", str(Path.home() / ".config" / "devforge")))
+# Path roots are owned by core.paths (SSOT) and imported here.
+# Why: core.paths needs these constants to build its registry, and core.config
+# needs them to locate config files. When core.config owned them, core.paths had
+# to import from core.config, which forced ConfigRegistry to lazy-import paths
+# to dodge a circular import. Moving ownership to the lower-level module makes
+# the dependency one-directional (config -> paths) and removes that workaround.
+from .paths import CONFIG_DIR, DATA_DIR, SERVER_DIR, get_paths
 
 # File locations (overridable via env for testing)
 SECRETS_FILE = Path(os.environ.get("DEVFORGE_SECRETS_FILE", str(CONFIG_DIR / "secrets.env")))
@@ -42,7 +45,24 @@ STATE_YAML_FILE = SERVER_DIR / "state.yaml"
 CLAUDE_YAML_FILE = SERVER_DIR / "CLAUDE.yaml"
 
 
+def normalize_async_dsn(db_url: str) -> str:
+    """Normalize a PostgreSQL DSN to the SQLAlchemy asyncpg dialect.
 
+    Why: `create_async_engine()` rejects the plain libpq scheme
+    (`postgresql://` / `postgres://`) used by the legacy psql-based scripts,
+    requiring `postgresql+asyncpg://`. Centralizing the rewrite here keeps the
+    core engine factory and the storage adapter from each maintaining their own
+    copy. Empty input is returned unchanged so callers can fail fast.
+    """
+    if not db_url:
+        return ""
+    if db_url.startswith("postgresql+asyncpg://"):
+        return db_url
+    if db_url.startswith("postgresql://"):
+        return db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if db_url.startswith("postgres://"):
+        return db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return db_url
 
 
 # ── Configuration Models ──
@@ -202,8 +222,8 @@ class ConfigRegistry:
         # Load providers.yaml if it exists
         self.providers = self._load_providers()
 
-        # Path resolver
-        from .paths import get_paths
+        # Path resolver (imported at module scope — no circular dependency now
+        # that core.paths owns the path constants).
         self.paths = get_paths()
 
     def _load_providers(self) -> ModelProvidersConfig:
@@ -221,8 +241,37 @@ class ConfigRegistry:
     # ── Convenience properties (backwards compatibility) ──
     @property
     def db_url(self) -> str:
-        """Database URL from env or secrets."""
+        """Raw database URL from env or secrets (scheme left untouched).
+
+        Kept as-is for display/logging (e.g. status commands) where the exact
+        string the operator configured should be shown. Async engine consumers
+        must use `db_url_async` instead.
+        """
         return os.environ.get("DEVFORGE_DATABASE_URL", self.secrets.DEVFORGE_DATABASE_URL)
+
+    @property
+    def db_url_async(self) -> str:
+        """Database URL normalized for the SQLAlchemy asyncpg dialect.
+
+        Why this exists:
+        - Legacy scripts read a bare `DATABASE_URL` (psql/libpq scheme
+          `postgresql://`), while the refactored config reads
+          `DEVFORGE_DATABASE_URL`. Consumers that only checked one name would
+          silently get an empty or wrong-scheme DSN. Reading both names here
+          closes that gap.
+        - `create_async_engine()` requires the `postgresql+asyncpg://` dialect;
+          passing a plain `postgresql://` URL raises at engine construction.
+          Normalizing the scheme in one place means the core engine factory and
+          the storage adapter cannot drift apart.
+        - Returns "" when nothing is configured so callers can fail fast with a
+          clear ConfigurationError instead of a cryptic driver error.
+        """
+        raw = (
+            os.environ.get("DEVFORGE_DATABASE_URL")
+            or os.environ.get("DATABASE_URL")
+            or self.secrets.DEVFORGE_DATABASE_URL
+        )
+        return normalize_async_dsn(raw)
 
     @property
     def inference_mode(self) -> str:

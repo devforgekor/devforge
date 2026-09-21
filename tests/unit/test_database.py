@@ -90,7 +90,7 @@ class TestGetDatabase:
         db_module._gateway = None
         try:
             with patch("devforge.core.database.get_config") as mock_config:
-                mock_config.return_value.db_url = "postgresql+asyncpg://localhost/test"
+                mock_config.return_value.db_url_async = "postgresql+asyncpg://localhost/test"
                 mock_config.return_value.db_pool_size = 5
                 mock_config.return_value.db_max_overflow = 10
 
@@ -107,7 +107,7 @@ class TestGetDatabase:
         db_module._gateway = None
         try:
             with patch("devforge.core.database.get_config") as mock_config:
-                mock_config.return_value.db_url = ""
+                mock_config.return_value.db_url_async = ""
 
                 with pytest.raises(ConfigurationError):
                     get_database()

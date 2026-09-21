@@ -1,11 +1,23 @@
 """
 Centralized path management to eliminate hardcoded paths.
+
+This module is the single source of truth (SSOT) for filesystem roots. The raw
+directory constants live here, not in core.config, because both this registry
+and core.config need them. Owning them in the lower-level module keeps the
+dependency one-directional (config -> paths) and avoids the circular import that
+previously forced ConfigRegistry to lazy-import this module.
 """
 
+import os
 from pathlib import Path
 from typing import Optional
 
-from .config import DATA_DIR, SERVER_DIR
+# Environment-overridable roots (SSOT).
+DATA_DIR = Path(os.environ.get("DEVFORGE_DATA_DIR", "/opt/ai_data"))
+SERVER_DIR = Path(os.environ.get("DEVFORGE_SERVER_DIR", "/opt/projects/server"))
+CONFIG_DIR = Path(
+    os.environ.get("DEVFORGE_CONFIG_DIR", str(Path.home() / ".config" / "devforge"))
+)
 
 
 class Paths:

@@ -192,3 +192,27 @@ layers = [
     "devforge.ports",
 ]
 
+# Each domain subpackage is an independent bounded context: no direct imports
+# between them. Cross-context coordination must be orchestrated by the
+# application layer. (devforge.domain.models is shared data, not a context, so
+# it is intentionally not listed here.)
+[[tool.importlinter.contracts]]
+name = "domain-subpackage-independence"
+type = "independence"
+modules = [
+    "devforge.domain.turn_collection",
+    "devforge.domain.pipeline",
+    "devforge.domain.watchdog",
+    "devforge.domain.model_management",
+]
+
+# Defense-in-depth for the hexagonal intent: the `layering` contract already
+# forbids domain -> adapters transitively, but stating it explicitly keeps the
+# rule intact even if the layer ordering is later edited, and makes the
+# dependency direction obvious to readers of this file.
+[[tool.importlinter.contracts]]
+name = "domain-agnostic-of-adapters"
+type = "forbidden"
+source_modules = ["devforge.domain"]
+forbidden_modules = ["devforge.adapters"]
+

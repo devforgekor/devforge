@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
-from devforge.core.config import ConfigRegistry
+from devforge.core.config import ConfigRegistry, normalize_async_dsn
 
 
 class DatabaseGateway:
@@ -36,11 +36,11 @@ class DatabaseGateway:
     """
 
     def __init__(self, db_url: str, echo: bool = False):
-        # asyncpg doesn't support asyncpg+psycopg2 style; use direct asyncpg dialect
-        if db_url.startswith("postgresql://"):
-            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        elif db_url.startswith("postgres://"):
-            db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        # Normalization is owned by core.config.normalize_async_dsn (SSOT) so
+        # that this adapter and the core engine factory cannot drift. The core
+        # gateway already receives a normalized URL via ConfigRegistry.db_url_async;
+        # applying it here too keeps hand-passed raw libpq URLs working.
+        db_url = normalize_async_dsn(db_url)
 
         # NullPool recommended for serverless / short-lived workers.
         # For long-running services, use QueuePool with pool_size=20.
@@ -66,8 +66,12 @@ class DatabaseGateway:
 
     @classmethod
     def from_config(cls, config: ConfigRegistry, echo: bool = False) -> DatabaseGateway:
-        """Create gateway from ConfigRegistry."""
-        return cls(config.db_url, echo=echo)
+        """Create gateway from ConfigRegistry.
+
+        Uses `db_url_async` (not `db_url`) so the URL is normalized to the
+        asyncpg dialect and also accepts the legacy bare `DATABASE_URL`.
+        """
+        return cls(config.db_url_async, echo=echo)
 
     @property
     def engine(self) -> AsyncEngine:

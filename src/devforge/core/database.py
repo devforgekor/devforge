@@ -1,5 +1,17 @@
 """
 Database connection management using SQLAlchemy 2.0 async.
+
+Role separation (why two gateways exist):
+- This module is the low-level *core* primitive: a generic QueuePool-backed
+  engine/session factory, matching REFACTORING_PLAN §3.2 (`core/database.py`).
+  It has no dependency on adapters (core sits below adapters in the layering
+  contract).
+- `adapters/driven/storage/database_gateway.py` is the *service* gateway used by
+  the FastAPI app, MCP server and extract adapter. It deliberately uses NullPool
+  and adds server-side connect_args (command_timeout/application_name) suited to
+  short-lived requests.
+- Both therefore need the same driver URL normalization; that logic is owned by
+  `ConfigRegistry.db_url_async` so the two cannot diverge.
 """
 
 from contextlib import asynccontextmanager
@@ -83,13 +95,16 @@ def get_database() -> DatabaseGateway:
     global _gateway
     if _gateway is None:
         config = get_config()
-        if not config.db_url:
+        # Use the normalized async DSN (handles bare DATABASE_URL / libpq scheme),
+        # and fail fast with a clear error rather than constructing an engine
+        # from an empty string.
+        if not config.db_url_async:
             raise ConfigurationError(
                 "Database URL is empty. Set DEVFORGE_DATABASE_URL "
                 "(postgresql+asyncpg://...) or DEVFORGE_POSTGRES_PASSWORD."
             )
         _gateway = DatabaseGateway(
-            database_url=config.db_url,
+            database_url=config.db_url_async,
             pool_size=config.db_pool_size,
             max_overflow=config.db_max_overflow,
         )
