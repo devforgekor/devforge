@@ -248,6 +248,14 @@ class ConfigRegistry:
     def duckdns_token(self) -> str:
         return self.secrets.DUCKDNS_TOKEN_KEY
 
+    @property
+    def db_pool_size(self) -> int:
+        return int(os.environ.get("DEVFORGE_DB_POOL_SIZE", "5"))
+
+    @property
+    def db_max_overflow(self) -> int:
+        return int(os.environ.get("DEVFORGE_DB_MAX_OVERFLOW", "10"))
+
     def reload(self) -> None:
         """Reload all config from files (for runtime config changes)."""
         self.secrets = SecretsConfig()

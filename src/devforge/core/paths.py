@@ -129,7 +129,7 @@ class Paths:
         """State YAML file."""
         return self._server_dir / "state.yaml"
 
-    def ensure_dirs(self):
+    def ensure_dirs(self) -> None:
         """Create all required directories."""
         for path in [
             self.logs_dir,

@@ -1,8 +1,6 @@
 """Tests for core.paths module."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch
 
 from devforge.core.paths import Paths, get_paths
 
@@ -20,7 +18,7 @@ class TestPaths:
         """Test Paths initialization with custom directories."""
         custom_data = Path("/tmp/test_data")
         custom_server = Path("/tmp/test_server")
-        
+
         paths = Paths(data_dir=custom_data, server_dir=custom_server)
         assert paths.data_dir == custom_data
         assert paths.server_dir == custom_server
@@ -119,7 +117,7 @@ class TestPaths:
         """Test override_data_dir creates new Paths with different data dir."""
         paths = Paths()
         custom_data = Path("/tmp/custom_data")
-        
+
         new_paths = paths.override_data_dir(custom_data)
         assert new_paths.data_dir == custom_data
         assert new_paths.server_dir == paths.server_dir
@@ -132,27 +130,27 @@ class TestGetPaths:
     def test_singleton_returns_same_instance(self):
         """Test get_paths returns same instance."""
         import devforge.core.paths as paths_module
-        
+
         # Reset singleton for test
         paths_module._paths = None
-        
+
         paths1 = get_paths()
         paths2 = get_paths()
         assert paths1 is paths2
-        
+
         # Cleanup
         paths_module._paths = None
 
     def test_singleton_creates_on_first_call(self):
         """Test get_paths creates instance on first call."""
         import devforge.core.paths as paths_module
-        
+
         # Reset singleton for test
         paths_module._paths = None
-        
+
         paths = get_paths()
         assert paths is not None
         assert paths_module._paths is paths
-        
+
         # Cleanup
         paths_module._paths = None

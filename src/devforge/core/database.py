@@ -2,7 +2,8 @@
 Database connection management using SQLAlchemy 2.0 async.
 """
 
-from typing import AsyncGenerator, Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from .config import get_config
+from .exceptions import ConfigurationError
 
 
 class Base(DeclarativeBase):
@@ -50,9 +52,10 @@ class DatabaseGateway:
             expire_on_commit=False,
         )
 
-    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
+    @asynccontextmanager
+    async def get_session(self) -> AsyncIterator[AsyncSession]:
         """
-        Get async session (use with async with).
+        Yield an async session, committing on success and rolling back on error.
 
         Example:
             async with gateway.get_session() as session:
@@ -65,10 +68,8 @@ class DatabaseGateway:
             except Exception:
                 await session.rollback()
                 raise
-            finally:
-                await session.close()
 
-    async def dispose(self):
+    async def dispose(self) -> None:
         """Close all connections."""
         await self.engine.dispose()
 
@@ -82,9 +83,14 @@ def get_database() -> DatabaseGateway:
     global _gateway
     if _gateway is None:
         config = get_config()
+        if not config.db_url:
+            raise ConfigurationError(
+                "Database URL is empty. Set DEVFORGE_DATABASE_URL "
+                "(postgresql+asyncpg://...) or DEVFORGE_POSTGRES_PASSWORD."
+            )
         _gateway = DatabaseGateway(
             database_url=config.db_url,
-            pool_size=5,
-            max_overflow=10,
+            pool_size=config.db_pool_size,
+            max_overflow=config.db_max_overflow,
         )
     return _gateway
