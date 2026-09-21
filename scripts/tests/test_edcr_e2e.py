@@ -147,16 +147,16 @@ def run_e2e() -> dict:
     log("EDC+R E2E TEST")
     log("=" * 60)
 
-    # ── 0. Ensure both extractors (8082 + 8083) ──
-    log("\n--- Ensuring dual extraction (8082 day-extractor + 8083 day-extractor-b) ---")
-    from lib.pod_manager import ensure_dual_extraction
+    # ── 0. Ensure extractor (8082 day-extractor) ──
+    log("\n--- Ensuring day-extractor (8082) ---")
+    from lib.pod_manager import ensure_model
 
     try:
-        ensure_dual_extraction()
+        ensure_model("day-extractor", skip_if_healthy=True)
         results["mode_ok"] = True
-        log("  dual extraction ensured")
+        log("  day-extractor ensured")
     except Exception as e:
-        results["errors"].append(f"Failed to ensure dual extraction: {e}")
+        results["errors"].append(f"Failed to ensure day-extractor: {e}")
         return results
 
     time.sleep(5)

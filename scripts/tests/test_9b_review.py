@@ -108,8 +108,8 @@ def test_9b_review():
     print("=" * 60)
 
     # Ensure 9B model on 8082
-    print("\n[1] Ensuring 9B model (day-enricher)...")
-    ensure_model("day-enricher", skip_if_healthy=False)
+    print("\n[1] Ensuring 9B model (day-extractor)...")
+    ensure_model("day-extractor", skip_if_healthy=False)
     print("  OK")
 
     # Test user section

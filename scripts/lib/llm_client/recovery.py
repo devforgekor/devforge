@@ -7,8 +7,11 @@ import threading
 _8082_RECOVERY_LOCK = threading.Lock()
 
 _CONNECTION_ERROR_SUBSTRINGS = (
-    "Remote end closed", "Connection reset", "Connection refused",
-    "Broken pipe", "RemoteDisconnected",
+    "Remote end closed",
+    "Connection reset",
+    "Connection refused",
+    "Broken pipe",
+    "RemoteDisconnected",
 )
 
 
@@ -29,6 +32,7 @@ def recover_8082(model_key: str = "day-extractor") -> None:
     try:
         print(f"  [recovery] Reloading 8082 → {model_key}...", flush=True)
         from lib.pod_manager import ensure_model
+
         ensure_model(model_key, skip_if_healthy=False)
         print("  [recovery] 8082 ready", flush=True)
     except Exception as recover_err:
@@ -42,7 +46,6 @@ def _model_key_for_8082(model: str) -> str:
         "day-verify": "day-verifier",
         "day_extract": "day-extractor",
         "extractor": "day-extractor",
-        "day-enricher": "day-enricher",
-        "day_enrich": "day-enricher",
+        "day_enrich": "day-extractor",
     }
     return mapping.get(model, "day-extractor")
