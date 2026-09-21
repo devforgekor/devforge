@@ -15,7 +15,7 @@
 **목표:** 기계 판독 가능한 진행 상황 추적 파일
 
 ```yaml
-# docs/REFACTORING_STATUS.yaml
+# docs/refactoring/REFACTORING_STATUS.yaml
 version: 1.0
 last_updated: 2026-09-21
 canonical_plan: docs/REFACTORING_PLAN.md
@@ -168,7 +168,7 @@ notes:
 **저장:**
 ```bash
 # 위 내용을 파일로 저장
-cat > /opt/projects/server/docs/REFACTORING_STATUS.yaml << 'EOF'
+cat > /opt/projects/server/docs/refactoring/REFACTORING_STATUS.yaml << 'EOF'
 [위 YAML 내용]
 EOF
 ```
@@ -343,7 +343,7 @@ EOF
 ### Task 3: Phase 0 작업 로그 작성 (15분)
 
 ```markdown
-# docs/reports/phase0-work-log.md
+# docs/refactoring/phase0-work-log.md
 
 # Phase 0 Work Log — Week 1-2
 
@@ -417,7 +417,7 @@ None currently.
 
 **저장:**
 ```bash
-cat > /opt/projects/server/docs/reports/phase0-work-log.md << 'EOF'
+cat > /opt/projects/server/docs/refactoring/phase0-work-log.md << 'EOF'
 [위 Markdown 내용]
 EOF
 ```
@@ -430,7 +430,7 @@ EOF
 - [ ] secret-injection-hardening.md 생성 완료
 - [ ] phase0-work-log.md 생성 완료
 - [ ] 모든 파일이 올바른 경로에 저장됨
-- [ ] YAML 파일 구문 검증 (`python3 -c "import yaml; yaml.safe_load(open('docs/REFACTORING_STATUS.yaml'))"`)
+- [ ] YAML 파일 구문 검증 (`python3 -c "import yaml; yaml.safe_load(open('docs/refactoring/REFACTORING_STATUS.yaml'))"`)
 - [ ] Git 커밋
 
 ---
@@ -440,9 +440,9 @@ EOF
 ```bash
 cd /opt/projects/server
 git add \
-  docs/REFACTORING_STATUS.yaml \
+  docs/refactoring/REFACTORING_STATUS.yaml \
   docs/security/secret-injection-hardening.md \
-  docs/reports/phase0-work-log.md
+  docs/refactoring/phase0-work-log.md
 
 git commit -m "docs: add refactoring progress tracking and security docs
 

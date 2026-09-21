@@ -86,7 +86,8 @@ documents:
   active:
     - docs/REFACTORING_PLAN.md
     - docs/REFACTORING_PLAN-appendix.md
-    - docs/REFACTORING_STATUS.yaml
+    - docs/refactoring/REFACTORING_STATUS.yaml
+    - docs/refactoring/phase0-work-log.md
     - docs/plans/final-plan.md
     - docs/plans/phase3-plan.md
   runbooks:

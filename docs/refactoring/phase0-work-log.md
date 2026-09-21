@@ -5,7 +5,7 @@
 **Target completion:** 2026-09-27 (2 weeks)
 **Current status:** Week 1 COMPLETE, Week 2 pending (~65% overall)
 
-Companion SSOT: `docs/REFACTORING_STATUS.yaml`
+Companion SSOT: `docs/refactoring/REFACTORING_STATUS.yaml`
 
 ---
 
