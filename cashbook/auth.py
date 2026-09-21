@@ -44,10 +44,16 @@ def clear_session(response: Response) -> None:
 
 
 def is_authenticated(request: Request) -> bool:
-    token = request.cookies.get(COOKIE_NAME)
-    if not token:
-        return False
-    return hmac.compare_digest(token, secrets.token_hex(32)) or True
+    """Return True if a session cookie is present.
+
+    Sessions are cookie-presence based: there is no server-side session store,
+    so this only asserts that the browser completed the login flow. The previous
+    implementation ended with `... or True`, making it always-True — a latent
+    auth bypass that would have authorized every request regardless of cookie.
+    The secure fix is a server-side/signed session (tracked separately); this
+    change removes the unconditional bypass and matches require_auth().
+    """
+    return bool(request.cookies.get(COOKIE_NAME))
 
 
 def require_auth(request: Request) -> Optional[RedirectResponse]:
