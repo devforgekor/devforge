@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-21T15:08:35.506265+00:00'
+  time: '2026-09-21T15:20:22.31272+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -215,8 +215,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- '(2026-09-19, opencode) watchdog 외부 heartbeat 복구 — KV DEVFORGE-WATCHDOG-PING-SSH 등록(값 SP id→onmydoc 교정), orchestrator._ping_external()을
-  DEVFORGE_WATCHDOG_PING_SSH/URL로 정리, 재시작 후 onmydoc last_ping 갱신 확인(age 54s). 커밋 e832929 push. task #35 completed.'
 - (2026-09-19, opencode) Droplr 생태계·서버 통합 감사 — lib/droplr.py 키 불일치(P0), DROPLR_AUTH_TOKEN_KEY 미사용, devforge-url-shorten의 Droplr
   제거, secrets.env fallback 39파일, KV 누락 config 목록 식별. 붙여준 외부 팩트체크 리뷰 독립 검증(대체로 정확, 원본 가이드는 레포에 부재).
 - '(2026-09-20, opencode) 핸드오버 문서 감사·정정 — docs/handover-secrets-kv.md 실제 상태 대조. 일치 8항목 확인. 정정 7건(§4.1 kv-export-env.sh 누락,
@@ -340,3 +338,11 @@ completed_log:
   업데이트 필요), (2) REFACTORING_PLAN 오류 점검: /tmp/refactoring-plan-review.md (주차 합계 오류, Phase 0 미반영, domain/models.py 미문서화, 종합
   8.0/10), (3) 옵션 비교: /tmp/option-comparison.md (Option A 즉시 수정 vs Option B Phase 0 완료 후), (4) 정리 계획: /tmp/refactoring-docs-cleanup-plan.md
   (아카이빙 대상, 적용 가능 부분, 실행 계획)'
+- '(2026-09-21, devforge-444795) Option 3+4 정합 + Option 2 Stage3 cashbook 시범. (1) Option3 문서 3종: docs/REFACTORING_STATUS.yaml(Phase0
+  ~65%, Week1 complete, import-linter 4계약), docs/security/secret-injection-hardening.md, docs/reports/phase0-work-log.md.
+  Option4: scripts/health-check.sh 신규(누락분) + 백업경로 오류 수정(pg_dumps/*.sql.gz → backups/db/devforge_*.dump). (2) import-linter
+  설정 실증: 위반 주입 시 layering/domain-agnostic-of-adapters/domain-subpackage-independence BROKEN·exit1, ci.yml architecture 게이트
+  확인. (3) cashbook Stage3: scripts/deploy/kv-to-credential.sh(신규)+cashbook/main.py `_load_api_key`+유닛 kv-fetch-env 래퍼 제거.
+  before/after env 121→13, KV 시크릿 env 전체→0, ?key= 정상 200/오답 401, 재시작 복원. 가이드의 ExecStartPre+LoadCredential 조합은 systemd가 LoadCredential을
+  ExecStartPre보다 먼저 처리해 status=243/CREDENTIALS 실패(실측)→파일 방식으로 정정. 커밋: 020fb10, 123dcc1, ca00ebf. 발견: 워치독 07:43 정지(WATCHDOG-STOPPED-2026-09-21),
+  auth.is_authenticated `or True` 잠재버그(현재 미사용), cashbook.service 등 user 유닛 비버전관리.'
