@@ -3,7 +3,10 @@
 **Status:** active · **Date:** 2026-09-21 · **Owner:** devforge
 **대상:** AI 에이전트 또는 개발자 · **난이도:** High · **예상:** 2–3일 (Week 3–4)
 **정본 계획:** `REFACTORING_PLAN.md` Phase 1 / `REFACTORING_STATUS.yaml`
-**선행:** Phase 0 complete (2026-09-21). `CORE-DB-UNWIRED-2026-09-21` 판단 필요.
+**선행:** Phase 0 complete (2026-09-21).
+**선행 판단:** `CORE-DB-UNWIRED-2026-09-21` — 단, 이는 **DatabaseGateway 중복** 문제이지
+`ModelRegistry`와 무관하다(레지스트리는 정적 메타데이터로 SQLAlchemy가 필요 없음).
+아래 §3.1의 정확한 판단 기준 참조.
 
 ---
 
@@ -32,6 +35,24 @@ devforge 쪽에 병렬 구현한다(비파괴).
 | 4 | inference CLI를 포트 기반으로 전환 | `adapters/driving/cli_cmds/inference.py` |
 | 5 | PipelineOrchestrator 골격(+BudgetManager) | `application/orchestrator.py` |
 | 6 | 경로 추상화 검증(하드코딩 잔존) | `core/paths.py` 점검 + 테스트 |
+
+### 선행 판단 — `core/database.py` (CORE-DB-UNWIRED-2026-09-21)
+
+Phase 0 검토문은 이 이슈를 "ModelRegistry가 SQLAlchemy를 쓰는가"로 연결했으나 **부정확**하다.
+`ModelRegistry`는 정적 메타데이터라 DB가 필요 없다. 실제 쟁점은 **DB 게이트웨이 중복**이다.
+
+- `core/database.py` (QueuePool primitive) — 현재 테스트만 참조(미배선).
+- `adapters/driven/storage/database_gateway.py` (NullPool + connect_args + FastAPI `get_db`)
+  — 실사용(MCP/FastAPI/extract_adapter).
+
+두 구현은 풀 전략이 달라 의도적 분리이므로, 결정은 다음 중 하나:
+- **A. 통합(권장)**: 어댑터가 `core.database`의 엔진/세션 팩토리를 재사용 → 단일 SSOT.
+  core는 low-level primitive, 서비스 게이트웨이는 어댑터가 담당. 중복 제거.
+- **B. 제거**: `core/database.py` 삭제, DB는 어댑터 단독 소유. (계획 §3.2의
+  `core/database.py` 항목과 충돌 → 계획도 수정 필요)
+- **C. 유지**: 두 계층으로 두되 역할을 문서화(현행) — 미배선 dead code 위험 잔존.
+
+> 어느 경우든 Task 1~3과 독립적이며 Phase 1 착수를 막지 않는다(blocking 아님).
 
 ---
 
@@ -234,7 +255,15 @@ class PipelineOrchestrator:
 - `core/paths.py`의 모든 경로가 실제 사용처와 일치하는지 점검
   (`data/hardcoded_paths.csv` 인벤토리 대조). `Paths`로 대체 가능한 잔존 하드코딩을
   목록화(전면 치환은 Phase 3에서).
-- Phase 1.5 ADR(`docs/adr/0003-shadow-db.md`)은 존재 → 상태만 "frozen" 확인.
+- **Phase 1.5 상태(실측 2026-09-21): 이미 대부분 완료.**
+  - `docs/adr/0003-shadow-db.md` = **Applied**(frozen 아님).
+  - 실제 자산 존재: `devforge_shadow` 스키마(`turns_shadow` 뷰 +
+    `review_facts_shadow`), `scripts/shadow_diff.py`(self-verified diff=0),
+    `tests/fixtures/replay_harness.py`.
+  - **잔여**: 리팩터드 파이프라인 구현 후 실제 shadow run 2주 diff=0 게이트 —
+    Phase 3 이후로 이월. Phase 1에서 새로 만들 것은 없음.
+  > 검토문의 "Week 4 0.5일(Shadow DB + 체크포인트)" 및 본 계획의 "Week 4.5 2일"은
+  > 모두 현행 대비 과대 추정(이미 완료분 반영). REFACTORING_STATUS 반영 권장.
 - `application/orchestrator.py`의 예산 게이트 단위 테스트 추가.
 
 ---

@@ -58,8 +58,9 @@ phase_1:
   week: "Week 3-4"
 
 phase_1_5:
-  status: planned
-  week: "Week 4.5 (2 days)"
+  status: mostly_complete
+  week: "Week 4.5"
+  note: "ADR-0003 Applied; devforge_shadow schema (turns_shadow + review_facts_shadow), scripts/shadow_diff.py (self-verified diff=0) and tests/fixtures/replay_harness.py already exist. Residual: real shadow run 2-week diff=0 gate after the refactored pipeline (Phase 3)."
 
 archived_docs:
   - docs/_archive/plans/phases.md
