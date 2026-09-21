@@ -28,15 +28,16 @@ if [ -e .git/index.lock ] || [ -e .git/MERGE_HEAD ] \
     LOG "  git commit SKIP (git operation in progress)"
 else
     # Auto-commit is a safety net for generated/runtime state ONLY.
-    # Authored code (src/, tests/, scripts/, pyproject.toml) is excluded on
-    # purpose: those must be committed deliberately with a descriptive message.
-    # Before 2026-09-21 this step did a bare `git add -A`, which swept a human/
-    # agent's in-progress source edits into a generic "auto: sync" commit and
-    # raced their explicit commit (e.g. bd41445 absorbed staged Phase 0 review
-    # fixes before they could be committed). Scoping the stage set removes that
-    # race: source changes stay in the working tree for the author to commit.
+    # Authored content is excluded on purpose and must be committed deliberately
+    # with a descriptive message:
+    #   - code: src/, tests/, scripts/, pyproject.toml  (bd41445 absorbed staged
+    #     Phase 0 review fixes before they could be committed)
+    #   - docs: docs/, *.md  (0dacca5 absorbed INDEX.md edits + doc moves into a
+    #     generic "auto: sync" commit — same failure mode, docs side)
+    # Scoping the stage set removes the race: authored changes stay in the
+    # working tree for the author to commit.
     git add -A
-    git reset -q -- src tests scripts pyproject.toml 2>/dev/null
+    git reset -q -- src tests scripts pyproject.toml docs '*.md' 2>/dev/null
     if git diff --cached --quiet; then
         LOG "  git commit SKIP (no non-source changes)"
     else
