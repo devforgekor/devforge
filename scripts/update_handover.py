@@ -15,12 +15,11 @@ import hashlib
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml
-
 from lib.handover_db import db_write_checkpoint
 
 SERVER_DIR = Path("/opt/projects/server")
@@ -58,7 +57,7 @@ CATEGORY_RULES: List[tuple] = [
 ]
 
 
-def _run(cmd, timeout=15, cwd="/opt/projects/seedling"):
+def _run(cmd, timeout=15, cwd=str(SERVER_DIR)):
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
         return r.stdout.strip()
@@ -86,9 +85,8 @@ def _classify(relpath: str) -> str:
             if pat == relpath:
                 return category
             # wildcard suffix match (e.g. "*.py", "docs/*.md")
-            if pat.startswith("*."):
-                if filename.endswith(pat[1:]):
-                    return category
+            if pat.startswith("*.") and filename.endswith(pat[1:]):
+                return category
             if pat.endswith("/*.md"):
                 prefix = pat[:-5]
                 if relpath.startswith(prefix) and relpath.endswith(".md"):
