@@ -42,67 +42,7 @@ STATE_YAML_FILE = SERVER_DIR / "state.yaml"
 CLAUDE_YAML_FILE = SERVER_DIR / "CLAUDE.yaml"
 
 
-class HardcodedPathResolver:
-    """Centralized path resolution — replaces 40+ hardcoded paths.
 
-    All paths in the refactored codebase should go through this resolver
-    via the `Paths` property of ConfigRegistry.
-    """
-
-    def __init__(self, data_dir: Path = DATA_DIR, server_dir: Path = SERVER_DIR):
-        self._data_dir = data_dir
-        self._server_dir = server_dir
-
-    # ── Data directories ──
-    @property
-    def data_dir(self) -> Path:
-        return self._data_dir
-
-    @property
-    def models_dir(self) -> Path:
-        return self._data_dir / "models" / "gguf"
-
-    @property
-    def scripts_dir(self) -> Path:
-        return self._data_dir / "scripts"
-
-    @property
-    def search_dir(self) -> Path:
-        return self._data_dir / "search"
-
-    @property
-    def current_mode_env(self) -> Path:
-        return self.scripts_dir / "current-mode-inference.env"
-
-    @property
-    def current_system_mode_env(self) -> Path:
-        return self.scripts_dir / "current-system-mode.env"
-
-    @property
-    def inference_entrypoint(self) -> Path:
-        return self.scripts_dir / "inference-entrypoint.sh"
-
-    # ── Server directories ──
-    @property
-    def server_dir(self) -> Path:
-        return self._server_dir
-
-    @property
-    def pipelines_dir(self) -> Path:
-        return self._server_dir / "src" / "devforge" / "pipeline_stages"
-
-    @property
-    def containers_dir(self) -> Path:
-        return self._server_dir / "containers"
-
-    @property
-    def logs_dir(self) -> Path:
-        return self._server_dir / "logs"
-
-    # ── Override for testing ──
-    def override_data_dir(self, path: Path) -> HardcodedPathResolver:
-        """Create resolver with different data dir (for tests)."""
-        return HardcodedPathResolver(data_dir=path, server_dir=self._server_dir)
 
 
 # ── Configuration Models ──
@@ -263,7 +203,8 @@ class ConfigRegistry:
         self.providers = self._load_providers()
 
         # Path resolver
-        self.paths = HardcodedPathResolver()
+        from .paths import get_paths
+        self.paths = get_paths()
 
     def _load_providers(self) -> ModelProvidersConfig:
         """Load providers.yaml if it exists, otherwise return default config."""
