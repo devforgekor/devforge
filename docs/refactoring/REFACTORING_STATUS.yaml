@@ -82,6 +82,7 @@ documents:
     - docs/refactoring/REFACTORING_STATUS.yaml
     - docs/refactoring/phase0-work-log.md
     - docs/plans/final-plan.md
+    - docs/plans/phase1-plan.md
     - docs/plans/phase3-plan.md
   runbooks:
     - docs/runbooks/option-1-phase0-continuation.md
