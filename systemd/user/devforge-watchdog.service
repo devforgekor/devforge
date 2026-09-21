@@ -1,0 +1,23 @@
+# /home/opc/.config/systemd/user/devforge-watchdog.service
+[Unit]
+Description=DevForge Watchdog — container/service/LLM auto-monitor and fix loop
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+OnFailure=devforge-watchdog-failed.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+WatchdogSec=900
+Environment=PYTHONPATH=/opt/projects/server/scripts
+WorkingDirectory=/opt/projects/server/scripts
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3 /opt/projects/server/scripts/watchdog.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=DevForge async day cycle — pipeline_state-driven, 55min budget
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+Restart=on-failure
+RestartSec=30
+Environment=PYTHONPATH=/opt/projects/server/scripts
+WorkingDirectory=/opt/projects/server/scripts
+ExecStart=/bin/bash /opt/projects/server/scripts/day_cycle.sh
+StandardOutput=journal
+StandardError=journal

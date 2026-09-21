@@ -1,0 +1,11 @@
+[Unit]
+Description=Golden Image yearly upstream check (Feb 15)
+After=network.target
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/opt/projects/server/scripts
+WorkingDirectory=/opt/projects/server/scripts
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/golden_image/yearly_check.py
+StandardOutput=journal
+StandardError=journal

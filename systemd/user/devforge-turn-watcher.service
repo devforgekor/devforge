@@ -1,0 +1,18 @@
+# /home/opc/.config/systemd/user/devforge-turn-watcher.service
+[Unit]
+Description=DevForge Turn Watcher — session jsonl → PostgreSQL raw ingestion
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=/opt/projects/server/scripts
+WorkingDirectory=/opt/projects/server/scripts
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/turn_watcher.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

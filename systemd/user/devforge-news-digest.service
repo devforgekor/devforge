@@ -1,0 +1,12 @@
+[Unit]
+Description=DevForge News Digest — 매일 아침 뉴스 다이제스트 발송
+After=network-online.target postgres.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/workspace/minihome/apps/news
+ExecStart=/usr/bin/python3 /opt/workspace/minihome/apps/news/digest.py --window 24 --limit 8
+Environment=HOME=/home/opc
+StandardOutput=journal
+StandardError=journal

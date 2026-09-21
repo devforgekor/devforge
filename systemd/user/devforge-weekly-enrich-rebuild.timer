@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge weekly enrich few-shot rebuild — Mon 03:00 KST (= Sun 18:00 UTC)
+
+[Timer]
+OnCalendar=Sun *-*-* 18:00:00
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

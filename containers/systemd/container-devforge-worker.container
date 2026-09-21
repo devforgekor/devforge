@@ -1,0 +1,23 @@
+[Unit]
+Description=DevForge Worker — raw_consumer (Pass 2/3) + pipeline tasks
+After=svc.pod
+
+[Container]
+ContainerName=devforge-worker
+Image=localhost/devforge-worker:latest
+Pull=never
+Pod=svc.pod
+Entrypoint=/bin/bash
+Exec=/scripts/worker-entrypoint.sh
+Volume=/opt/projects/server/scripts:/scripts:Z
+Volume=/opt/ai_data/search:/opt/ai_data/search:Z
+Volume=/opt/projects/server/tests/fixtures/llm_recordings:/opt/projects/server/tests/fixtures/llm_recordings:ro,Z
+Environment=DEVFORGE_DB_TCP=1
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target

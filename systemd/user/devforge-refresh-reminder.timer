@@ -1,0 +1,15 @@
+[Unit]
+Description=DevForge 4-Month Refresh Reminder Timer
+Documentation=file://%h/.config/devforge/reference-tracking-policy.yaml
+
+[Timer]
+# Fire on 15th of every 4-month cycle (KST 03:00 = 18:00 UTC)
+# Dates: April 15, August 15, December 15
+OnCalendar=*-04-15 18:00:00
+OnCalendar=*-08-15 18:00:00
+OnCalendar=*-12-15 18:00:00
+Persistent=yes
+AccuracySec=1hour
+
+[Install]
+WantedBy=timers.target

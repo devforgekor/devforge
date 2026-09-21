@@ -1,0 +1,13 @@
+[Unit]
+Description=Reference Monitor Timer (weekly RSS feed polling)
+Documentation=file://%h/.config/devforge/reference-tracking-policy.yaml
+
+[Timer]
+# Run weekly (Monday 01:00 KST = 16:00 UTC)
+OnCalendar=Mon *-*-* 16:00:00
+Persistent=yes
+AccuracySec=1min
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

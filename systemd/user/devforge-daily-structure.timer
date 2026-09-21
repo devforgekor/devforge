@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge Daily structure + architecture sync (UTC 00:00 = KST 09:00)
+
+[Timer]
+OnCalendar=00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

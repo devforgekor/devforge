@@ -1,0 +1,8 @@
+[Unit]
+Description=DevForge 30min system sync — gen_architecture + duckdns
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/projects/server/scripts/system_sync.sh
+StandardOutput=journal
+StandardError=journal

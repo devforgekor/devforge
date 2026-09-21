@@ -1,0 +1,20 @@
+# /home/opc/.config/systemd/user/ebook-watcher.service
+[Unit]
+Description=Ebook Pipeline — 파이프라인 루프 (devforge-watchdog 감시)
+After=network-online.target svc-pod.service container-flaresolverr.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+Environment=VERCEL_REVALIDATE_URL=https://miniebook.vercel.app/api/revalidate
+Environment=PYTHONPATH=/opt/workspace/minihome/apps/ebooklib/apps/backend
+WorkingDirectory=/opt/workspace/minihome/apps/ebooklib
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /opt/workspace/minihome/apps/ebooklib/apps/backend/venv/bin/python3 /opt/workspace/minihome/apps/ebooklib/scripts/pipeline.py loop
+WatchdogSec=1800
+Restart=on-watchdog
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

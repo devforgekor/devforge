@@ -1,0 +1,39 @@
+[Unit]
+Description=WebObsidian — browser editor for the Obsidian vault (:8787)
+Documentation=https://github.com/xnohat/webobsidian
+After=network-online.target
+
+[Container]
+ContainerName=webobsidian
+Image=localhost/webobsidian:0.1.1
+Pull=never
+Network=devforge-net
+PublishPort=127.0.0.1:8787:8787
+Volume=/home/opc/Obsidian:/vault:z
+Volume=webobsidian-data:/data:z
+Environment=VAULT_PATH=/vault
+Environment=DATA_DIR=/data
+Environment=ALLOWED_ROOTS=/vault
+Environment=NODE_ENV=production
+Environment=PORT=8787
+Environment=HOST=0.0.0.0
+Environment=WEBOBSIDIAN_WATCH=auto
+Environment=TRUST_PROXY=true
+EnvironmentFile=/run/user/1000/kv-webobsidian.env
+HealthCmd=wget -qO- http://localhost:8787/healthz
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartPeriod=90s
+HealthOnFailure=restart
+
+[Service]
+ExecStartPre=/opt/projects/server/scripts/deploy/kv-export-env.sh /run/user/1000/kv-webobsidian.env WEBOBSIDIAN-PASSWORD
+ExecStopPost=/bin/rm -f /run/user/1000/kv-webobsidian.env
+Restart=always
+RestartSec=15
+TimeoutStartSec=900
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Golden Image deploy check — health + timeout + eviction (15min)
+After=network.target
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/opt/projects/server/scripts
+WorkingDirectory=/opt/projects/server/scripts
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/golden_image/refresh_cycle.py
+StandardOutput=journal
+StandardError=journal

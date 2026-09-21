@@ -1,0 +1,10 @@
+[Unit]
+Description=DevForge Monthly Restore Test Timer (UTC)
+
+[Timer]
+OnCalendar=*-*-01 20:30:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Workspace auto-push timer (KST 12:00 and 24:00 = UTC 03:00,15:00)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+OnCalendar=*-*-* 15:00:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Cashbook FastAPI
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/projects/server/cashbook
+# Stage 3: secret is passed as a mode-600 file, not injected into the environment.
+# CASHBOOK_CREDENTIAL_FILE is a path (not secret); the value never enters env.
+Environment=CASHBOOK_CREDENTIAL_FILE=/run/user/1000/cashbook/cashbook_key
+ExecStartPre=/opt/projects/server/scripts/deploy/kv-to-credential.sh CASHBOOK-API-KEY /run/user/1000/cashbook/cashbook_key
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8100
+ExecStopPost=/bin/rm -f /run/user/1000/cashbook/cashbook_key
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

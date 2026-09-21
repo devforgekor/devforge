@@ -1,0 +1,15 @@
+[Unit]
+Description=DevForge Telegram webhook — NEUTRAL fact CONFIRM/REJECT buttons
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/lib/tg_webhook.py --port 8001 --host 127.0.0.1
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

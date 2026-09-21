@@ -1,0 +1,15 @@
+[Unit]
+Description=eBook FastAPI Backend (SSOT: /opt/workspace/ebooklib)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/workspace/minihome/apps/ebooklib/apps/backend
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /opt/workspace/minihome/apps/ebooklib/apps/backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8089
+Restart=on-failure
+RestartSec=30
+StartLimitBurst=3
+Environment=PYTHONPATH=/opt/workspace/ebooklib/apps/backend
+
+[Install]
+WantedBy=default.target

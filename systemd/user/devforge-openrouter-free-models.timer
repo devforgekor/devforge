@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge OpenRouter Free Model Refresh Timer (매일 00:30 KST)
+
+[Timer]
+OnCalendar=*-*-* 15:30:00
+Persistent=true
+
+[Install]
+WantedBy=default.target

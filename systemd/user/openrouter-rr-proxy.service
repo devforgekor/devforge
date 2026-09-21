@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenRouter Key Round-Robin Proxy
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.11 /opt/projects/server/scripts/proxies/openrouter_rr_proxy.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

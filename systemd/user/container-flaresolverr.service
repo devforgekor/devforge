@@ -1,0 +1,23 @@
+[Unit]
+Description=FlareSolverr — Cloudflare bypass proxy (svc pod)
+After=svc-pod.service
+Requires=svc-pod.service
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman rm -f flaresolverr
+ExecStart=/usr/bin/podman run --name flaresolverr --rm --pod=svc \
+  -v /opt/ai_data/flaresolverr:/app/cache:Z \
+  -e LOG_LEVEL=info \
+  -e HEADLESS=true \
+  -e DISABLE_MEDIA=true \
+  -e BROWSER_WAIT_TIMEOUT=2 \
+  ghcr.io/flaresolverr/flaresolverr:latest
+ExecStop=/usr/bin/podman stop flaresolverr
+Restart=always
+RestartSec=15
+TimeoutStartSec=120
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

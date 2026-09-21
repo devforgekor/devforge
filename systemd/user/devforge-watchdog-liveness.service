@@ -1,0 +1,11 @@
+# /home/opc/.config/systemd/user/devforge-watchdog-liveness.service
+# Dead-man's switch: watchdog 자체 생존 파일이 stale이면 알림.
+[Unit]
+Description=DevForge Watchdog liveness check (dead-man's switch)
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/opt/projects/server/scripts
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/watchdog.py --liveness-check
+StandardOutput=journal
+StandardError=journal

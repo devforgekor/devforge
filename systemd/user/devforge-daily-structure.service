@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge Daily git autocommit + push (UTC 00:00 = KST 09:00; arch-doc gen retired 2026-09-14)
+
+[Service]
+Type=oneshot
+ExecStart=-/bin/bash -c 'cd /opt/projects/server && if git status --porcelain | grep -q .; then git add -A && git commit -m "auto: sync $(date +%%Y-%%m-%%d)"; fi'
+ExecStart=-/bin/bash -c 'cd /opt/projects/server && git push'
+StandardOutput=journal
+StandardError=journal

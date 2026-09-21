@@ -1,0 +1,10 @@
+[Unit]
+Description=DevForge Monthly PostgreSQL Restore Test (osync backup)
+
+[Service]
+Type=oneshot
+Environment=PATH=/home/opc/.local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/osync_restore_test.py
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=900

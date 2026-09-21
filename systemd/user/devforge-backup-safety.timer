@@ -1,0 +1,14 @@
+# Daily backup: fires at KST 08:00 (UTC 23:00).
+# Runs osync_backup.py all -> pg_dump + app config to OCI devforge-standard.
+# Sentinel guard: db once/day, app once/week (skips if already done).
+[Unit]
+Description=DevForge backup → OCI devforge-standard (KST 08:00)
+
+[Timer]
+OnCalendar=*-*-* 23:00:00
+RandomizedDelaySec=120
+Persistent=true
+Unit=devforge-backup.service
+
+[Install]
+WantedBy=timers.target

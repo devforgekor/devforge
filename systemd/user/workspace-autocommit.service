@@ -1,0 +1,8 @@
+[Unit]
+Description=Workspace auto-commit (30min, change-only)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workspace-autocommit.sh
+StandardOutput=journal
+StandardError=journal

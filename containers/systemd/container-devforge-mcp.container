@@ -1,0 +1,35 @@
+[Unit]
+Description=DevForge MCP server — FastMCP refactored (:8000)
+Documentation=https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http
+
+[Container]
+ContainerName=devforge-mcp
+Image=localhost/devforge-fastapi:latest
+Pull=never
+Pod=svc.pod
+Entrypoint=/bin/bash
+Exec=/scripts/mcp_refactored_entrypoint.sh
+Volume=/opt/projects/server/scripts:/scripts:Z
+Volume=/opt/projects/server/src:/src:Z
+Volume=/opt/ai_data/search:/opt/ai_data/search:Z
+Volume=/opt/ai_data/flaresolverr:/opt/ai_data/flaresolverr:Z
+Volume=/opt/ai_data/pip-cache:/pip-cache:Z
+Volume=/opt/projects/server/tests/fixtures/llm_recordings:/opt/projects/server/tests/fixtures/llm_recordings:ro,Z
+EnvironmentFile=/run/user/1000/kv-devforge-mcp.env
+Environment=DEVFORGE_DB_TCP=1
+
+HealthCmd=/bin/bash -c 'curl -sf http://127.0.0.1:8000/health || exit 1'
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=20s
+HealthOnFailure=restart
+
+[Service]
+ExecStartPre=/opt/projects/server/scripts/deploy/kv-export-env.sh /run/user/1000/kv-devforge-mcp.env DEVFORGE-POSTGRES-PASSWORD,GUDOKPIN-API-KEY,DEEPSEEK-API-KEY,MY-GITHUB-TOKEN-KEY,NOTION-TOKEN-KEY,OPENROUTER-HYEONMINPARK4U-API-KEY,OPENROUTER-MESIDS-API-KEY,OPENROUTER-MINIPARK4U-API-KEY,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL,SLACK-SIGNING-SECRET-KEY,TELEGRAM-CHAT-ID,TELEGRAM-TOKEN-KEY,DEVFORGE-WATCHDOG-PING-SSH,DEVFORGE-ENCRYPTION-PASSPHRASE,DROPLR-USER,DROPLR-PASS,BRAVE-MESIDS-API-KEY,TAVILY-MESIDS-GITHUB-API-KEY,EXA-MESIDS-API-KEY,CONTEXT7-MESIDS-API-KEY,GEMINI-MESIDS-API-KEY,YOUCOM-MESIDS-GITHUB-API-KEY
+ExecStopPost=/bin/rm -f /run/user/1000/kv-devforge-mcp.env
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

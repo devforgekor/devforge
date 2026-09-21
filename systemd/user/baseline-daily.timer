@@ -1,0 +1,10 @@
+[Unit]
+Description=DevForge W1 Daily Baseline Timer
+Requires=baseline-daily.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

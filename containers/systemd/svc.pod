@@ -1,0 +1,19 @@
+[Unit]
+Description=svc — Postgres + MCP shared network pod
+
+[Pod]
+PodName=svc
+Network=devforge-net
+PublishPort=127.0.0.1:8000:8000
+PublishPort=127.0.0.1:8191:8191
+PublishPort=127.0.0.1:8085:8085
+PublishPort=127.0.0.1:8002:8002
+ExitPolicy=continue
+
+[Service]
+Restart=always
+RestartSec=15
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

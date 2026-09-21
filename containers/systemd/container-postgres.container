@@ -1,0 +1,29 @@
+[Unit]
+Description=Podman container postgres (Quadlet, svc.pod)
+Wants=svc.pod
+After=svc.pod
+
+[Container]
+ContainerName=postgres
+Image=localhost/devforge-postgres:2026.05.15
+Pull=never
+Pod=svc.pod
+CgroupsMode=no-conmon
+# Stage 3 hardening (2026-09-21): removed EnvironmentFile=kv-postgres.env.
+# DEVFORGE_POSTGRES_PASSWORD was never consumed inside this container (grep: 0
+# references; the image's docker-entrypoint.sh does not support
+# POSTGRES_PASSWORD_FILE either). The DB is already initialized, so no password
+# is needed at runtime. Other services read their own copy via kv-fetch-env.py.
+HealthCmd=pg_isready -U postgres
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=3
+Volume=/mnt/lv_db:/var/lib/postgresql/data:Z
+StartWithPod=true
+
+[Service]
+Restart=on-failure
+TimeoutStopSec=70
+
+[Install]
+WantedBy=default.target

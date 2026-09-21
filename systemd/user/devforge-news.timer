@@ -1,0 +1,10 @@
+[Unit]
+Description=DevForge News Collector Timer (매 6시간)
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

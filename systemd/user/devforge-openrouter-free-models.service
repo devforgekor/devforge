@@ -1,0 +1,13 @@
+[Unit]
+Description=DevForge OpenRouter Free Model Refresh (매일 00:30 KST = 15:30 UTC)
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/opt/projects/server/scripts
+ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/proxies/refresh_openrouter_free_models.py
+WorkingDirectory=/opt/projects/server/scripts
+Nice=19
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=default.target

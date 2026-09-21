@@ -1,0 +1,7 @@
+[Unit]
+Description=NEIS Schedule Fetch (KUHWA)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/workspace/minihome/apps/kuhwa
+ExecStart=/opt/projects/server/scripts/kuhwa_schedule_entry.sh

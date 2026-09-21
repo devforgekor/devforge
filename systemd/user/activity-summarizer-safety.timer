@@ -1,0 +1,14 @@
+# Safety-net timer: fires at KST 09:00 (UTC 00:00)
+# Only triggers if the nightly chain (03:00→backup→summarizer) didn't run.
+# activity_summarizer.py has its own sentinel guard — skips if already done today.
+[Unit]
+Description=DevForge activity summarizer safety net (KST 09:00)
+
+[Timer]
+OnCalendar=*-*-* 00:00:00
+RandomizedDelaySec=180
+Persistent=true
+Unit=activity-summarizer.service
+
+[Install]
+WantedBy=timers.target

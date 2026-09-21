@@ -1,0 +1,19 @@
+[Unit]
+Description=Reference Monitor (RSS feed poller)
+Documentation=file://%h/.config/devforge/reference-tracking-policy.yaml
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/devforge/bin/rss-monitor
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rss-monitor
+
+# Security/isolation
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

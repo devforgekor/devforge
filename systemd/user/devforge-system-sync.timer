@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge 30-min system sync — gen_architecture + duckdns (no Pod B)
+
+[Timer]
+OnCalendar=*:0/30
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

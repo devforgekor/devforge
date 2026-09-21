@@ -1,0 +1,14 @@
+[Unit]
+Description=Obsidian Heartbeat Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=OBSIDIAN_VAULT=%h/Obsidian
+ExecStart=/usr/bin/python3 %h/Obsidian/scripts/heartbeat-daemon.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=NEIS Schedule Fetch Timer (KST 08/12/17)
+
+[Timer]
+OnCalendar=*-*-* 01:00:00
+OnCalendar=*-*-* 05:00:00
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

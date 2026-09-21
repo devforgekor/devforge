@@ -1,0 +1,10 @@
+[Unit]
+Description=DevForge W1 Daily Baseline Measurement
+After=devforge-turn-watcher.service devforge-mcp.service
+OnFailure=baseline-daily-failed.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/hooks/baseline-daily.py
+WorkingDirectory=/opt/projects/server
+Environment=PATH=/usr/local/bin:/usr/bin:/bin

@@ -1,0 +1,8 @@
+[Unit]
+Description=DevForge — Daily activity_log LLM summarization
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/activity_summarizer.py
+StandardOutput=journal
+StandardError=journal

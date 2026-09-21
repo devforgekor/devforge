@@ -1,0 +1,13 @@
+[Unit]
+Description=DevForge 4-Month Refresh Reminder
+Documentation=file://%h/.config/devforge/reference-tracking-policy.yaml
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-cat -t REFRESH -p notice -- /bin/sh -c 'echo "Time for 4-month refresh cycle: Execute refresh_procedure from reference-tracking-policy.yaml v1.2.1"'
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

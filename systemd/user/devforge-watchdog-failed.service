@@ -1,0 +1,11 @@
+# /home/opc/.config/systemd/user/devforge-watchdog-failed.service
+# OnFailure handler: watchdog이 재시작 한계를 넘겨 failed 상태가 되면 알림.
+[Unit]
+Description=DevForge Watchdog failed-state alert (OnFailure)
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/opt/projects/server/scripts
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/watchdog.py --notify-failure
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,8 @@
+[Unit]
+Description=Workspace auto-push (KST 12:00/24:00)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/workspace-autopush.sh
+StandardOutput=journal
+StandardError=journal
