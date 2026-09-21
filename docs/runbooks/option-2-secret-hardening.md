@@ -213,17 +213,21 @@ ExecStart=/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8100
 | mcp | Medium | Yes | 4 |
 | cashbook | Low | Yes (완료) | ✅ |
 
-#### 2.2 postgres 전환 (참고)
+#### 2.2 postgres — 완료 (2026-09-21, 원안과 다름)
 
-PostgreSQL은 `POSTGRES_PASSWORD_FILE` 환경변수 지원:
+**원안(폐기)**: `POSTGRES_PASSWORD_FILE` + credential 파일 마운트.
+**실측 결과**: devforge-postgres 이미지의 `docker-entrypoint.sh`가
+`POSTGRES_PASSWORD_FILE`을 **지원하지 않음**(grep 0). 또한 컨테이너가 받던
+`DEVFORGE_POSTGRES_PASSWORD`는 **내부 참조 0**(불필요)이고, 이미 데이터 디렉터리가
+초기화되어 런타임에 비밀번호가 필요 없음.
 
-```ini
-# containers/devforge-postgres.container
-[Service]
-ExecStartPre=/opt/projects/server/scripts/deploy/kv-to-credential.sh POSTGRES-PASSWORD /run/user/1000/credentials/postgres_pw
-Environment=POSTGRES_PASSWORD_FILE=/run/credentials/postgres_pw
-# Quadlet이 자동으로 /run/credentials/로 마운트
-```
+**실제 조치**: `~/.config/containers/systemd/container-postgres.container`에서
+`EnvironmentFile`/`ExecStartPre`(kv-export-env)/`ExecStopPost` 3줄 제거 →
+컨테이너에 시크릿을 아예 주입하지 않음. 검증: `pg_isready` OK, `turns=8121`,
+env 시크릿 1→0, fastapi/mcp/worker/cashbook active.
+
+> 주의: fresh init 시 이 이미지는 `POSTGRES_PASSWORD`(≠`DEVFORGE_POSTGRES_PASSWORD`)를
+> 읽으므로 재초기화 시 별도 설정 필요. 상세: `docs/security/secret-injection-hardening.md`.
 
 ---
 

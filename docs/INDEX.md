@@ -25,7 +25,7 @@
 |---|---|---|
 | 적용 기록(정본) | `reports/mcp-consolidation-applied-20260911.md` | record |
 | rf-triage-07 패치 노트 | `reports/rf-triage-07-patchnote-20260914.md` | record |
-| 계획(v1~v3) | `plans/mcp-consolidation-server-side.md` | superseded |
+| 계획(v1~v3) | `_archive/plans/mcp-consolidation-server-side.md` | superseded |
 | 분석 | `reports/deepdive-mcp-analysis.md` | record |
 | 비용 실측 | `reports/mcp-cost-baseline.md` | record |
 | P7 게이팅 조사 | `reports/p7-gating-design-research.md` | record |
@@ -50,9 +50,10 @@
 | 스키마/레지스트리 | `specs/schema.sql`, `specs/timer-registry.yaml` | active |
 | Azure Golden Image(런북) | `runbooks/runbook-golden-image.md` | active |
 | Azure Qwen 엔드포인트 | `runbooks/azure-qwen-deepdive-endpoint.md` | active |
-| Azure 재빌드 핸드오버 | `plans/azure-golden-image-rebuild-handover.md` | active |
+| Azure 재빌드 핸드오버 | `_archive/plans/azure-golden-image-rebuild-handover.md` | archived |
 | Azure Deep Dive E2E 검증 | `reports/azure-deepdive-e2e-verification-20260914.md` | record |
 | **Azure Key Vault 시크릿 전환(핸드오버)** | `handover-secrets-kv.md` | **done** |
+| **Stage 3 시크릿 주입 강화(cashbook/postgres)** | `security/secret-injection-hardening.md` | active |
 | **Key Vault 마이그레이션 분석** | `_archive/kv-migration-analysis.md` | archived |
 | DataImpulse 대시보드 모니터(계약) | `specs/dataimpulse-monitor.yaml` | active |
 | DataImpulse 대시보드 모니터(런북) | `runbooks/dataimpulse-monitor.md` | active |
@@ -70,7 +71,7 @@
 |---|---|
 | `reports/14b-5model-10axis-report.md`, `reports/pipeline-e2e-20260621.md`, `reports/architecture-validation.md` | record |
 | `specs/14b-comparison-*.yaml/txt` | active |
-| `plans/14b-comparison-test-plan.md`, `plans/day-night-*.md` | active |
+| `_archive/plans/14b-comparison-test-plan.md`, `_archive/plans/day-night-*.md` | archived |
 
 ### 6) 기타
 - 이동된 과거 문서는 `reports/`(기록) 또는 `runbooks/`(절차)에 있다.
@@ -80,6 +81,10 @@
 | 구분 | 문서 | 상태 |
 |---|---|---|
 | 종합 계획(정본) | `REFACTORING_PLAN.md` | active |
+| 계획 부록(Phase 4-8) | `REFACTORING_PLAN-appendix.md` | active |
+| **진행 상황 추적(기계판독)** | `REFACTORING_STATUS.yaml` | active |
+| **Phase 0 작업 로그** | `reports/phase0-work-log.md` | record |
+| **실행 가이드(Option 1~4)** | `runbooks/option-1-phase0-continuation.md` … `runbooks/option-4-server-maintenance-summary.md` | active |
 | 코드 아키텍처 | `ARCHITECTURE.md` | active |
 | 온보딩/전환 | `MIGRATION_GUIDE.md` | active |
 | Track B 계획 | `LLM_PROVIDER_PLAN.md` | proposed |
@@ -93,7 +98,13 @@
 | MCP 툴 사용 감사(30일) | `reports/mcp-tool-audit-20260914.md` | record |
 | 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |
 | Ingest/Provenance 계약 | `specs/ingest-provenance.yaml` | proposed |
-| 이전 구조 정리(완료) | `plans/code-size-refactoring.md`, `reports/handover-refactoring.md` | record |
+| 이전 구조 정리(완료) | `_archive/plans/code-size-refactoring.md`, `reports/handover-refactoring.md` | record |
+
+## 최근 변경 (2026-09-21)
+- **Phase 0 Week 1 완료**: `core/database.py`·`core/paths.py`(SSOT)·`core/exceptions.py`, import-linter 4 계약(위반 주입으로 강제 검증). 진행 추적은 [`REFACTORING_STATUS.yaml`](./REFACTORING_STATUS.yaml), 로그는 [`reports/phase0-work-log.md`](./reports/phase0-work-log.md).
+- **Stage 3 시크릿 주입 강화**: cashbook(파일 방식, env 121→13·시크릿 0)·postgres(불필요 시크릿 제거, env 1→0). 상세 [`security/secret-injection-hardening.md`](./security/secret-injection-hardening.md). option-2 런북의 `LoadCredential` 원안은 systemd 순서 문제로 무효(실측) → 파일 방식으로 정정.
+- **문서/운영**: Option 3 문서 3종 + Option 4 `scripts/health-check.sh` 신규; `_archive/seedling` 추적 해제; `system_sync.sh` 자동커밋이 소스 편집을 흡수하지 않도록 수정.
+- **미해결**: 워치독 정지(`WATCHDOG-STOPPED-2026-09-21`), `core/database.py` 프로덕션 미배선(`CORE-DB-UNWIRED-2026-09-21`).
 
 ## 최근 변경 (2026-09-18)
 - **Azure Key Vault 시크릿 전환 완료**: 평문 시크릿 제거 완료 (`secrets.env` + `.env.local` 삭제), 10개 systemd 서비스 Key Vault 전환, 6개 Python 파일 리팩터링 (환경변수 우선 패턴), kuhwa 워크플로우 수정. `handover-secrets-kv.md` 완료.
