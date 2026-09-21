@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-21T14:00:35.933697+00:00'
+  time: '2026-09-21T14:42:20.777665+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -173,6 +173,11 @@ known_issues:
 - text: 'Azure Qwen Deep Dive 검증 미완: azureqwen provider로 Deep Dive 1회 실행은 opencode 재시작 필요(config 핫리로드 안 됨) + launch로 VM/터널
     유지 상태여야 함. 엔드포인트 자체는 curl로 finish_reason:"tool_calls" 검증 완료.'
   resolved: false
+- id: CORE-DB-UNWIRED-2026-09-21
+  detail: core/database.py(core 레이어 SQLAlchemy async 게이트웨이)는 프로덕션 미배선 — 현재 tests/unit/test_database.py만 참조. 실제 DB 접근은 adapters/driven/storage/database_gateway.py(MCP
+    서버 20여 곳 + FastAPI + extract_adapter)가 담당. 두 게이트웨이는 의도적 분리(QueuePool vs NullPool)이며 DSN 정규화는 core.config.normalize_async_dsn으로
+    공유하지만, core 쪽은 실사용 경로가 없어 dead code 위험. Phase 1에서 배선하거나 제거 판단 필요.
+  resolved: false
 - text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. SSOT
     (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
@@ -204,30 +209,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- (2026-09-14, opencode) 서버 대규모 리팩토링 검토·정비 — docs 전수 검토→SSOT 정합(컷오버 단계, ADR 0001~0006, 업계표준 대조, MCP 30일 감사). 신규 패키지 결함 수정(domain/models
-  TypeDecorator 누락, cli.py IndentationError, on_conflict pg_insert/excluded). DB 정비(Alembic baseline·ORM↔live 재정합·schema.sql
-  16테이블 재생성·shadow DB(devforge_shadow) 적용·turns.source 추가). CI/빌드(README·Dockerfile·structlog/pyyaml 의존성) green, structlog
-  이중 출력 제거. 은퇴(gen_architecture.py·Gemini 에이전트 세션→_archive). 계획 단일 통합(docs/plans/final-plan.md) + 의사결정 D1~D9, 외부 검토 브리프 작성·Droplr
-  제공.
-- '2026-09-14: Azure azureqwen Deep Dive E2E 검증 성공 — opencode run -m azureqwen/qwen3-30b → deepdive_step_enter/exit(step1·2)
-  → deepdive_steps DONE, destroy CLEAN. ctx 결함(8192 < opencode ~16.7k) 발견 → SSOT -c 32768 정정(runbook §1.2 + yearly_refresh.sh).
-  -t 2 무효(1 physical core/SMT, memory-bound). report docs/reports/azure-deepdive-e2e-verification-20260914.md.'
-- '(2026-09-14, opencode) 리뷰 트리아지 v1~v5 — 최종계획/리뷰브리프/근거부록(OCI HTML)에 대한 외부 리뷰 3종(deepseek·qwen1·qwen2) + 자체 실측 13항목(F1~F13:
-  opencode.json 로드 32툴, 리팩토링 MCP 5툴, day_cycle 448줄, turns.source 7152/7152 unknown, ingest는 레거시에만, shadow DB, auto_log PostToolUse
-  훅 운영, Linger=yes, netdata active, ADR-0006 Proposed, 감사표 중복) 대조 → 수용/부분/미수용 판정. R3·R4·R7 부분수용, contract-first 채택, Phase
-  0 산출물 6종 + 12툴 계약 열거 + mcp-contract.json JSON Schema + 게이트 6개 선형 체인+예외 경로. 5차 교차검증 후 리뷰 루프 종결, 최종=Phase 0 실행 승인. 산출물: docs/reports/review-triage{-package,-v2,-v3,-v4,-v5}-20260914.md,
-  Droplr v1 https://d.pr/97DxrE · v2 https://d.pr/ihZ81J · v3 https://d.pr/koCTH7 · v4 https://d.pr/RZygjB · v5 https://d.pr/waa3yN'
-- '2026-09-18: Claude Code 401 (api key ****b06e invalid) 재발 원인 수정 — 실행 중 Claude 세션이 Sep 6 tmux 세션 시작 시점의 옛 환경을 그대로 물려받아 DeepSeek
-  프록시(:44777) + 만료 키(sk-221d35…b06e)로 요청 중이었음. tmux global env가 gudokpin(:44779, 새 키 sk-78f4…)으로 이미 갱신돼 있었으나 기존 bash(19588)는
-  옛 값을 유지. 수정: devforge tmux 세션의 bash에서 `source ~/.bashrc.d/claude-env` 재실행 → claude 재시작 → 새 프로세스가 gudokpin(:44779) + 새 키로
-  연결 확인. tmux global CLAUDE_MODE=deepseek 불일치 → gudokpin으로 정리. 추가로 ~/.config/aichat/config.yaml의 만료된 DeepSeek 키(sk-221d35…b06e)를
-  새 키(sk-78f4359234df48d7b5b717999b6f228c)로 교체. 참고: 실행 중인 Claude 세션 env는 재시작 시에만 반영되므로, claude-mode 변경 후에는 세션 재시작 필수.'
-- '(2026-09-14, opencode) 리뷰 트리아지 v1~v5 — 최종계획/리뷰브리프/근거부록(OCI HTML)에 대한 외부 리뷰 3종(deepseek·qwen1·qwen2) + 자체 실측 13항목(F1~F13:
-  opencode.json 로드 32툴, 리팩토링 MCP 5툴, day_cycle 448줄, turns.source 실측 7159 unknown, ingest는 레거시에만, shadow DB, auto_log PostToolUse
-  훅 운영, Linger=yes, netdata active, ADR-0006 Proposed→Accepted, 감사표 중복) 대조 → 수용/부분/미수용 판정. R3·R4·R7 부분수용, contract-first 채택,
-  Phase 0 산출물 6종 + 12툴 계약 열거 + mcp-contract.json JSON Schema + 게이트 6개 선형 체인+예외 경로. 5차 교차검증 후 리뷰 루프 종결, 최종=Phase 0 실행 승인. rf-triage-07:
-  (1) specs/mcp-contract.json 초안 작성, (2) ADR-0006 Accepted 전환, (3) W1 baseline 측정 시작. 산출물: docs/reports/review-triage{-package,-v2,-v3,-v4,-v5}-20260914.md,
-  Droplr v1 https://d.pr/97DxrE · v2 https://d.pr/ihZ81J · v3 https://d.pr/koCTH7 · v4 https://d.pr/RZygjB · v5 https://d.pr/waa3yN'
 - '(2026-09-19, opencode) watchdog 외부 heartbeat 복구 — KV DEVFORGE-WATCHDOG-PING-SSH 등록(값 SP id→onmydoc 교정), orchestrator._ping_external()을
   DEVFORGE_WATCHDOG_PING_SSH/URL로 정리, 재시작 후 onmydoc last_ping 갱신 확인(age 54s). 커밋 e832929 push. task #35 completed.'
 - (2026-09-19, opencode) Droplr 생태계·서버 통합 감사 — lib/droplr.py 키 불일치(P0), DROPLR_AUTH_TOKEN_KEY 미사용, devforge-url-shorten의 Droplr
@@ -333,8 +314,23 @@ completed_log:
 - '(2026-09-20, opencode) web-llm: --search/--think 모드 추가(Qwen Web search, DeepSeek DeepThink), webd 기본 --think. 문서 갱신: runbooks/web-llm.md
   + chrome-web-llm/README.md(모드표/셸함수/사용법).'
 - '(2026-09-20, opencode) web-llm 기본값: webq=--search(검색), webd=--search+--think(검색+사고). ~/.bashrc 함수 + runbook/README 갱신.'
-- '(2026-09-21, devforge-444795) cashbook Key Vault 연동 완료: CASHBOOK-API-KEY를 Azure KV에 저장, systemd 서비스에서 kv-fetch-env.py 래퍼로 자동 로드. 평문 시크릿 제거. API 정상 작동 검증(http://localhost:8100/api/cashbook?key=4280873, 현재 잔액 ₩132,536). 다른 11개 서비스와 동일한 보안 패턴 적용. 작업 완료 문서: /tmp/cashbook-kv-migration-summary.md'
-- '(2026-09-21, devforge-444795) 리팩토링 문서 정리: 12개 구식/완료 문서를 docs/_archive/plans/로 이동 (azure-golden-image, code-size-refactoring, mcp-consolidation, phases.md, track-b-migration, 14b-comparison, conversation-extraction, day-night-*, mcp-sse, slack-chatops, refactoring-roadmap). 남은 활성 계획 6개: control-plane-roadmap, design-bash-to-python-migration, etextbook-docker-deployment, final-plan, phase3-plan, vercel-viewer-plan. Git 커밋: ed6971f'
-- '(2026-09-21, devforge-444795) REFACTORING_PLAN.md 개선: (1) 주차 합계 오류 수정 16주→17주 (Phase −1: 0.5주 + Phase 1.5: 0.5주 반영), (2) Phase 0 진행 상황 추가 (status: 🟡 active, ~35-40%, started: 2026-09-13, 완료 7항목, 진행 중 2항목, 미착수 4항목), (3) blueprint.yaml Phase 0 추가 (active, progress 35-40%). Git 커밋: 733139f. 점검 결과: /tmp/refactoring-plan-review.md (종합 평가 8.0/10)'
-- '(2026-09-21, devforge-444795) AI 에이전트용 상세 가이드 4개 작성 (총 1,327 lines): (1) option-1-phase0-continuation.md (Phase 0 리팩토링 계속, 2-3h, Medium-High) — core/database.py SQLAlchemy 2.0 async, core/paths.py 40개 하드코딩 경로 추상화, core/exceptions.py, import-linter 설정, (2) option-2-secret-hardening.md (보안 강화, 1-2h, Medium) — EnvironmentFile→LoadCredential 전환, cashbook 시범 적용, 5개 서비스 전환 계획, (3) option-3-documentation-improvement.md (문서화, 30-60m, Low) — REFACTORING_STATUS.yaml 구조, secret-injection-hardening.md, phase0-work-log.md, (4) option-4-server-maintenance-summary.md (서버 관리, 30m, Low) — 5분 빠른 체크, 30분 전체 체크리스트, 문제 대응. Git 커밋: f53f8b1. 목적: 다른 AI 에이전트가 독립적으로 작업 실행 가능'
-- '(2026-09-21, devforge-444795) 문서 참조: (1) 리팩토링 점검 결과: /tmp/refactoring-status-review.md (12개 문서 아카이빙, Phase 0 40% 진행, blueprint.yaml 업데이트 필요), (2) REFACTORING_PLAN 오류 점검: /tmp/refactoring-plan-review.md (주차 합계 오류, Phase 0 미반영, domain/models.py 미문서화, 종합 8.0/10), (3) 옵션 비교: /tmp/option-comparison.md (Option A 즉시 수정 vs Option B Phase 0 완료 후), (4) 정리 계획: /tmp/refactoring-docs-cleanup-plan.md (아카이빙 대상, 적용 가능 부분, 실행 계획)'
+- '(2026-09-21, devforge-444795) cashbook Key Vault 연동 완료: CASHBOOK-API-KEY를 Azure KV에 저장, systemd 서비스에서 kv-fetch-env.py 래퍼로
+  자동 로드. 평문 시크릿 제거. API 정상 작동 검증(http://localhost:8100/api/cashbook?key=4280873, 현재 잔액 ₩132,536). 다른 11개 서비스와 동일한 보안 패턴 적용.
+  작업 완료 문서: /tmp/cashbook-kv-migration-summary.md'
+- '(2026-09-21, devforge-444795) 리팩토링 문서 정리: 12개 구식/완료 문서를 docs/_archive/plans/로 이동 (azure-golden-image, code-size-refactoring,
+  mcp-consolidation, phases.md, track-b-migration, 14b-comparison, conversation-extraction, day-night-*, mcp-sse, slack-chatops,
+  refactoring-roadmap). 남은 활성 계획 6개: control-plane-roadmap, design-bash-to-python-migration, etextbook-docker-deployment,
+  final-plan, phase3-plan, vercel-viewer-plan. Git 커밋: ed6971f'
+- '(2026-09-21, devforge-444795) REFACTORING_PLAN.md 개선: (1) 주차 합계 오류 수정 16주→17주 (Phase −1: 0.5주 + Phase 1.5: 0.5주 반영), (2)
+  Phase 0 진행 상황 추가 (status: 🟡 active, ~35-40%, started: 2026-09-13, 완료 7항목, 진행 중 2항목, 미착수 4항목), (3) blueprint.yaml Phase 0
+  추가 (active, progress 35-40%). Git 커밋: 733139f. 점검 결과: /tmp/refactoring-plan-review.md (종합 평가 8.0/10)'
+- '(2026-09-21, devforge-444795) AI 에이전트용 상세 가이드 4개 작성 (총 1,327 lines): (1) option-1-phase0-continuation.md (Phase 0 리팩토링
+  계속, 2-3h, Medium-High) — core/database.py SQLAlchemy 2.0 async, core/paths.py 40개 하드코딩 경로 추상화, core/exceptions.py, import-linter
+  설정, (2) option-2-secret-hardening.md (보안 강화, 1-2h, Medium) — EnvironmentFile→LoadCredential 전환, cashbook 시범 적용, 5개 서비스 전환
+  계획, (3) option-3-documentation-improvement.md (문서화, 30-60m, Low) — REFACTORING_STATUS.yaml 구조, secret-injection-hardening.md,
+  phase0-work-log.md, (4) option-4-server-maintenance-summary.md (서버 관리, 30m, Low) — 5분 빠른 체크, 30분 전체 체크리스트, 문제 대응. Git 커밋:
+  f53f8b1. 목적: 다른 AI 에이전트가 독립적으로 작업 실행 가능'
+- '(2026-09-21, devforge-444795) 문서 참조: (1) 리팩토링 점검 결과: /tmp/refactoring-status-review.md (12개 문서 아카이빙, Phase 0 40% 진행, blueprint.yaml
+  업데이트 필요), (2) REFACTORING_PLAN 오류 점검: /tmp/refactoring-plan-review.md (주차 합계 오류, Phase 0 미반영, domain/models.py 미문서화, 종합
+  8.0/10), (3) 옵션 비교: /tmp/option-comparison.md (Option A 즉시 수정 vs Option B Phase 0 완료 후), (4) 정리 계획: /tmp/refactoring-docs-cleanup-plan.md
+  (아카이빙 대상, 적용 가능 부분, 실행 계획)'
