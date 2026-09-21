@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-21T12:19:57.273917+00:00'
+  time: '2026-09-21T14:00:35.933697+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -333,3 +333,8 @@ completed_log:
 - '(2026-09-20, opencode) web-llm: --search/--think 모드 추가(Qwen Web search, DeepSeek DeepThink), webd 기본 --think. 문서 갱신: runbooks/web-llm.md
   + chrome-web-llm/README.md(모드표/셸함수/사용법).'
 - '(2026-09-20, opencode) web-llm 기본값: webq=--search(검색), webd=--search+--think(검색+사고). ~/.bashrc 함수 + runbook/README 갱신.'
+- '(2026-09-21, devforge-444795) cashbook Key Vault 연동 완료: CASHBOOK-API-KEY를 Azure KV에 저장, systemd 서비스에서 kv-fetch-env.py 래퍼로 자동 로드. 평문 시크릿 제거. API 정상 작동 검증(http://localhost:8100/api/cashbook?key=4280873, 현재 잔액 ₩132,536). 다른 11개 서비스와 동일한 보안 패턴 적용. 작업 완료 문서: /tmp/cashbook-kv-migration-summary.md'
+- '(2026-09-21, devforge-444795) 리팩토링 문서 정리: 12개 구식/완료 문서를 docs/_archive/plans/로 이동 (azure-golden-image, code-size-refactoring, mcp-consolidation, phases.md, track-b-migration, 14b-comparison, conversation-extraction, day-night-*, mcp-sse, slack-chatops, refactoring-roadmap). 남은 활성 계획 6개: control-plane-roadmap, design-bash-to-python-migration, etextbook-docker-deployment, final-plan, phase3-plan, vercel-viewer-plan. Git 커밋: ed6971f'
+- '(2026-09-21, devforge-444795) REFACTORING_PLAN.md 개선: (1) 주차 합계 오류 수정 16주→17주 (Phase −1: 0.5주 + Phase 1.5: 0.5주 반영), (2) Phase 0 진행 상황 추가 (status: 🟡 active, ~35-40%, started: 2026-09-13, 완료 7항목, 진행 중 2항목, 미착수 4항목), (3) blueprint.yaml Phase 0 추가 (active, progress 35-40%). Git 커밋: 733139f. 점검 결과: /tmp/refactoring-plan-review.md (종합 평가 8.0/10)'
+- '(2026-09-21, devforge-444795) AI 에이전트용 상세 가이드 4개 작성 (총 1,327 lines): (1) option-1-phase0-continuation.md (Phase 0 리팩토링 계속, 2-3h, Medium-High) — core/database.py SQLAlchemy 2.0 async, core/paths.py 40개 하드코딩 경로 추상화, core/exceptions.py, import-linter 설정, (2) option-2-secret-hardening.md (보안 강화, 1-2h, Medium) — EnvironmentFile→LoadCredential 전환, cashbook 시범 적용, 5개 서비스 전환 계획, (3) option-3-documentation-improvement.md (문서화, 30-60m, Low) — REFACTORING_STATUS.yaml 구조, secret-injection-hardening.md, phase0-work-log.md, (4) option-4-server-maintenance-summary.md (서버 관리, 30m, Low) — 5분 빠른 체크, 30분 전체 체크리스트, 문제 대응. Git 커밋: f53f8b1. 목적: 다른 AI 에이전트가 독립적으로 작업 실행 가능'
+- '(2026-09-21, devforge-444795) 문서 참조: (1) 리팩토링 점검 결과: /tmp/refactoring-status-review.md (12개 문서 아카이빙, Phase 0 40% 진행, blueprint.yaml 업데이트 필요), (2) REFACTORING_PLAN 오류 점검: /tmp/refactoring-plan-review.md (주차 합계 오류, Phase 0 미반영, domain/models.py 미문서화, 종합 8.0/10), (3) 옵션 비교: /tmp/option-comparison.md (Option A 즉시 수정 vs Option B Phase 0 완료 후), (4) 정리 계획: /tmp/refactoring-docs-cleanup-plan.md (아카이빙 대상, 적용 가능 부분, 실행 계획)'
