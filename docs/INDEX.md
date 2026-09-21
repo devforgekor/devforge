@@ -14,6 +14,7 @@
 | `architecture/` | [AUTO] 구조 SSOT (편집 금지) | `infrastructure.md`, `software.yaml`, `code-structure.yaml` |
 | `specs/` | 계약·스키마 | `schema.sql`, `timer-registry.yaml`, `references.yaml`, `proxy-operations.yaml` |
 | `plans/` | 계획·로드맵·설계 | `control-plane-roadmap.md` |
+| `refactoring/` | 리팩토링 진행 추적·로그 | `REFACTORING_STATUS.yaml`, `phase0-work-log.md` |
 | `reports/` | 조사·검증·분석 기록 | `mcp-cost-baseline.md` |
 | `runbooks/` | 실행 절차 | `claude-code-mcp-cleanup.md` |
 | 루트 | 최상위 SSOT 참조 | `domain-glossary.yaml`, `system-architecture.md`, `object-storage.md` |
@@ -82,8 +83,8 @@
 |---|---|---|
 | 종합 계획(정본) | `REFACTORING_PLAN.md` | active |
 | 계획 부록(Phase 4-8) | `REFACTORING_PLAN-appendix.md` | active |
-| **진행 상황 추적(기계판독)** | `REFACTORING_STATUS.yaml` | active |
-| **Phase 0 작업 로그** | `reports/phase0-work-log.md` | record |
+| **진행 상황 추적(기계판독)** | `refactoring/REFACTORING_STATUS.yaml` | active |
+| **Phase 0 작업 로그** | `refactoring/phase0-work-log.md` | record |
 | **실행 가이드(Option 1~4)** | `runbooks/option-1-phase0-continuation.md` … `runbooks/option-4-server-maintenance-summary.md` | active |
 | 코드 아키텍처 | `ARCHITECTURE.md` | active |
 | 온보딩/전환 | `MIGRATION_GUIDE.md` | active |
@@ -98,10 +99,10 @@
 | MCP 툴 사용 감사(30일) | `reports/mcp-tool-audit-20260914.md` | record |
 | 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |
 | Ingest/Provenance 계약 | `specs/ingest-provenance.yaml` | proposed |
-| 이전 구조 정리(완료) | `_archive/plans/code-size-refactoring.md`, `reports/handover-refactoring.md` | record |
+| 이전 구조 정리(완료) | `_archive/plans/code-size-refactoring.md`, `refactoring/handover-refactoring.md` | record |
 
 ## 최근 변경 (2026-09-21)
-- **Phase 0 Week 1 완료**: `core/database.py`·`core/paths.py`(SSOT)·`core/exceptions.py`, import-linter 4 계약(위반 주입으로 강제 검증). 진행 추적은 [`REFACTORING_STATUS.yaml`](./REFACTORING_STATUS.yaml), 로그는 [`reports/phase0-work-log.md`](./reports/phase0-work-log.md).
+- **Phase 0 Week 1 완료**: `core/database.py`·`core/paths.py`(SSOT)·`core/exceptions.py`, import-linter 4 계약(위반 주입으로 강제 검증). 진행 추적은 [`refactoring/REFACTORING_STATUS.yaml`](./refactoring/REFACTORING_STATUS.yaml), 로그는 [`refactoring/phase0-work-log.md`](./refactoring/phase0-work-log.md).
 - **Stage 3 시크릿 주입 강화**: cashbook(파일 방식, env 121→13·시크릿 0)·postgres(불필요 시크릿 제거, env 1→0). 상세 [`security/secret-injection-hardening.md`](./security/secret-injection-hardening.md). option-2 런북의 `LoadCredential` 원안은 systemd 순서 문제로 무효(실측) → 파일 방식으로 정정.
 - **문서/운영**: Option 3 문서 3종 + Option 4 `scripts/health-check.sh` 신규; `_archive/seedling` 추적 해제; `system_sync.sh` 자동커밋이 소스 편집을 흡수하지 않도록 수정.
 - **미해결**: 워치독 정지(`WATCHDOG-STOPPED-2026-09-21`), `core/database.py` 프로덕션 미배선(`CORE-DB-UNWIRED-2026-09-21`).
