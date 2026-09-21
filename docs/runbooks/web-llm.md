@@ -34,8 +34,8 @@ $S/web-llm.sh --list-sessions
 $S/web-llm.sh -m qwen --search "오늘 서울 날씨"      # Qwen "Web search" 모드
 $S/web-llm.sh -m deepseek --think "단계별로 풀어줘"   # DeepSeek "DeepThink"
 
-# 셸 함수(~/.bashrc): webq=Qwen, webd=DeepSeek(사고 기본 ON), 세션=$WL_SESSION(기본 chat)
-webq "질문"; WL_SESSION=proj webd "질문"; webq --search "최신 뉴스"
+# 셸 함수(~/.bashrc): webq=Qwen(검색 기본), webd=DeepSeek(검색+사고 기본), 세션=$WL_SESSION(기본 chat)
+webq "질문"; WL_SESSION=proj webd "질문"; webq --no-search "검색 없이"; webd --no-think "짧게"
 ```
 
 세션 파일: `~/.local/share/chrome-web-llm/conversations/<name>.jsonl`
