@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-20T07:06:20.788457+00:00'
+  time: '2026-09-21T12:19:57.273917+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -204,16 +204,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- '2026-09-12: watchdog 재발방지 구현(task#32): config(SVCPOD_UNIT/PUBLISHED_PORTS) + checker.check_svcpod_ports + recovery.recover_svcpod_forwarding
-  + orchestrator._run_svcpod_forwarding. 실장애 주입 검증 완료.'
-- '2026-09-12: Quadlet generator 실패 제거: container-flaresolverr.container(주석 stub) → _disabled/*.disabled, daemon-reload 후
-  generator rc=0.'
-- '2026-09-12: activity_summarizer.py mark_parse_failed/mark_summarized의 int.isdigit() AttributeError 수정 → Result=success.'
-- '2026-09-12: watchdog checker.py MODE_FILE_INFERENCE import 누락 수정 → _current_inference_port()=8082(기존 None), check_all_llm()이
-  활성 포트만 probe.'
-- '2026-09-12: Azure Golden Image MoE 재빌드 — llm-qwen-27b:2026.09.3 등록(MoE Qwen3-30B-A3B-Q4_K_M + llama.cpp b10919 + llm.service
-  --jinja), 배포 툴콜 검증(finish_reason:tool_calls), 임시 리소스 CLEAN. yearly_refresh.sh/runbook/endpoint doc 정합, opencode azureqwen
-  provider 등록.'
 - (2026-09-14, opencode) 서버 대규모 리팩토링 검토·정비 — docs 전수 검토→SSOT 정합(컷오버 단계, ADR 0001~0006, 업계표준 대조, MCP 30일 감사). 신규 패키지 결함 수정(domain/models
   TypeDecorator 누락, cli.py IndentationError, on_conflict pg_insert/excluded). DB 정비(Alembic baseline·ORM↔live 재정합·schema.sql
   16테이블 재생성·shadow DB(devforge_shadow) 적용·turns.source 추가). CI/빌드(README·Dockerfile·structlog/pyyaml 의존성) green, structlog
@@ -335,3 +325,11 @@ completed_log:
 - '(2026-09-20, opencode) DeepSeek 웹 로그인 해결: 원인은 HeadlessChrome UA → DeepSeek AWS WAF+CloudFront가 로그인 API를 403 차단(지역/IP 아님).
   비-헤드리스 UA(--user-agent) 설정으로 로그인 성공, 프록시 불필요. 확장에 page.key(실제 Enter 이벤트) 추가(DeepSeek는 Enter 전송). CLI -m deepseek 웹UI 직접응답
   검증(4/Berlin), qwen(4/Paris) 유지. stack-start.sh 기본 UA 적용.'
+- '(2026-09-20, opencode) 문서: runbooks/web-llm.md 신규(+INDEX), chrome-web-llm/README.md 전면 갱신(스택/스크립트/세션·핸드오프/UA·WAF/CDP 경고/트러블슈팅).'
+- '(2026-09-20, opencode) 문서: runbooks/webobsidian.md 신규(+INDEX), IMPLEMENTATION_GUIDE §7.5 갱신(서브도메인 루트, 접근 모델 루트=비번/공유=읽기전용,
+  /notes 라우트 제거). 비밀번호 값 미기재 검증(0건).'
+- '(2026-09-20, opencode) 계획 문서: REFACTORING_PLAN §2.5에 웹 LLM 수집 미연결 부채 추가, final-plan §3 Capture 행·D3 현황·컴포넌트 노트에 chrome-web-llm
+  CLI 운영 반영(수집 배선은 Phase B).'
+- '(2026-09-20, opencode) web-llm: --search/--think 모드 추가(Qwen Web search, DeepSeek DeepThink), webd 기본 --think. 문서 갱신: runbooks/web-llm.md
+  + chrome-web-llm/README.md(모드표/셸함수/사용법).'
+- '(2026-09-20, opencode) web-llm 기본값: webq=--search(검색), webd=--search+--think(검색+사고). ~/.bashrc 함수 + runbook/README 갱신.'
