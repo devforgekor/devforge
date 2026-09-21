@@ -5,11 +5,16 @@
 
 Config C: parallel=2, threads=4, cpus=0-2, temp=0.0
 """
-import os, sys, time, json, subprocess
+
+import json
+import os
+import subprocess
+import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from lib.test_common import test_setup, test_heartbeat, test_complete, log
-from lib.pod_manager import ensure_model, MODEL_METADATA
+from lib.pod_manager import MODEL_METADATA, ensure_model
+from lib.test_common import log, test_complete, test_heartbeat, test_setup
 
 TURN_IDS = [
     "2cd9e45f-df54-41a8-aef1-34cfbd9217d4",
@@ -23,7 +28,7 @@ PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."
 EXTRACT_PY = os.path.join(PROJECT_DIR, "scripts", "pipelines", "extract.py")
 
 # Apply Config C to day-extractor metadata
-meta = MODEL_METADATA["day-extractor"]
+meta = copy.deepcopy(MODEL_METADATA.get("day-extractor", {}))
 meta["parallel"] = 2
 meta["threads"] = 4
 meta["threads_batch"] = 4
@@ -33,15 +38,16 @@ log(f"Config C: parallel={meta['parallel']}, threads={meta['threads']}, cpus={me
 
 t0 = time.monotonic()
 ensure_model("day-extractor", skip_if_healthy=False)
-log(f"Pod restart: {time.monotonic()-t0:.0f}s")
+log(f"Pod restart: {time.monotonic() - t0:.0f}s")
 
 for tid in TURN_IDS:
     test_heartbeat(f"Extracting turn {tid[:8]}...")
     t0 = time.monotonic()
     result = subprocess.run(
-        [sys.executable, EXTRACT_PY, "--turn-id", tid,
-         "--json", "--parallel", "2"],
-        capture_output=True, text=True, timeout=3600,
+        [sys.executable, EXTRACT_PY, "--turn-id", tid, "--json", "--parallel", "2"],
+        capture_output=True,
+        text=True,
+        timeout=3600,
         cwd=PROJECT_DIR,
     )
     elapsed = time.monotonic() - t0
@@ -51,8 +57,10 @@ for tid in TURN_IDS:
     brace = stdout.rfind("{\n")
     d = {}
     if brace >= 0:
-        try: d = json.loads(stdout[brace:])
-        except json.JSONDecodeError: pass
+        try:
+            d = json.loads(stdout[brace:])
+        except json.JSONDecodeError:
+            pass
 
     ok = d.get("ok", False)
     facts = d.get("facts", 0)
@@ -65,12 +73,21 @@ for tid in TURN_IDS:
 
 # Query quality from DB
 log(f"\n{'=' * 60}")
-log(f"QUALITY CHECK — review_facts from Config C")
+log("QUALITY CHECK — review_facts from Config C")
 log(f"{'=' * 60}")
 for tid in TURN_IDS:
     db = subprocess.run(
-        ["podman", "exec", "postgres", "psql", "-U", "devforge", "-d", "devforge_app",
-         "-c", f"""
+        [
+            "podman",
+            "exec",
+            "postgres",
+            "psql",
+            "-U",
+            "devforge",
+            "-d",
+            "devforge_app",
+            "-c",
+            f"""
 SELECT fact_index, fact_type, LEFT(evidence,80) AS evidence,
        faithful_score, faithful_method, nli_llm,
        LEFT(corrected_evidence,80) AS corrected
@@ -79,8 +96,11 @@ WHERE turn_id = '{tid}'::uuid AND source = 'extract_pipeline'
   AND fact_type IN ('user','thinking','text')
 ORDER BY fact_index
 LIMIT 20
-         """],
-        capture_output=True, text=True, timeout=10,
+         """,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     log(f"\n--- Turn {tid[:8]} ---")
     for line in db.stdout.strip().split("\n"):

@@ -56,7 +56,9 @@ _EXTRACTOR_KEYS = [
 ]
 for _k in _EXTRACTOR_KEYS:
     if _k in MODEL_METADATA:
-        MODEL_METADATA[_k]["ctx"] = 4096
+        _meta = copy.deepcopy(MODEL_METADATA[_k])
+        _meta["ctx"] = 4096
+        MODEL_METADATA[_k] = _meta
 
 # ── 4B-specific extraction prompt ────────────────────────────
 # 4B Q8 is weaker than 8B — keep prompt short, concrete, direct.

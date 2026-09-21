@@ -9,11 +9,16 @@ Config C: parallel=2, threads=4, cpus=0-2
 
 Uses --turn-id for each of the 3 OOM turns.
 """
-import json, os, subprocess, sys, time
+
+import json
+import os
+import subprocess
+import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from lib.test_common import test_setup, test_heartbeat, test_complete, log
-from lib.pod_manager import ensure_model, MODEL_METADATA
+from lib.pod_manager import MODEL_METADATA, ensure_model
+from lib.test_common import log, test_complete, test_heartbeat, test_setup
 
 # 3 failed turns from DB (largest → smallest)
 TURN_IDS = [
@@ -40,7 +45,7 @@ for cfg in CONFIGS:
     log(f"Config: {cfg['name']}")
     log(f"{'=' * 60}")
 
-    meta = MODEL_METADATA["day-extractor"]
+    meta = copy.deepcopy(MODEL_METADATA.get("day-extractor", {}))
     meta["parallel"] = cfg["parallel"]
     meta["threads"] = cfg["threads"]
     meta["threads_batch"] = cfg["threads"]
@@ -61,9 +66,19 @@ for cfg in CONFIGS:
         test_heartbeat(f"{cfg['name']} — turn {tid[:8]}...")
         t0 = time.monotonic()
         result = subprocess.run(
-            [sys.executable, EXTRACT_PY, "--dry-run", "--turn-id", tid,
-             "--json", "--parallel", str(cfg["parallel"])],
-            capture_output=True, text=True, timeout=1800,
+            [
+                sys.executable,
+                EXTRACT_PY,
+                "--dry-run",
+                "--turn-id",
+                tid,
+                "--json",
+                "--parallel",
+                str(cfg["parallel"]),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=1800,
             cwd=PROJECT_DIR,
         )
         elapsed = round(time.monotonic() - t0)
@@ -81,7 +96,11 @@ for cfg in CONFIGS:
 
         ok = d.get("ok", False)
         facts = d.get("facts", 0)
-        retries = sum(1 for l in (result.stdout+result.stderr).split("\n") if "attempt" in l and "failed" in l)
+        retries = sum(
+            1
+            for l in (result.stdout + result.stderr).split("\n")
+            if "attempt" in l and "failed" in l
+        )
         cfg_facts += facts
         cfg_processed += d.get("processed", 0)
         cfg_failed += d.get("failed", 0)
@@ -92,25 +111,31 @@ for cfg in CONFIGS:
         # Brief cooldown between turns
         time.sleep(3)
 
-    results.append({
-        "config": cfg["name"],
-        "elapsed_s": cfg_elapsed,
-        "facts": cfg_facts,
-        "processed": cfg_processed,
-        "failed": cfg_failed,
-        "retries": cfg_retries,
-        "restart_s": restart_s,
-    })
-    log(f"  Subtotal: {cfg_elapsed}s, facts={cfg_facts}, processed={cfg_processed}, fail={cfg_failed}, retry={cfg_retries}")
+    results.append(
+        {
+            "config": cfg["name"],
+            "elapsed_s": cfg_elapsed,
+            "facts": cfg_facts,
+            "processed": cfg_processed,
+            "failed": cfg_failed,
+            "retries": cfg_retries,
+            "restart_s": restart_s,
+        }
+    )
+    log(
+        f"  Subtotal: {cfg_elapsed}s, facts={cfg_facts}, processed={cfg_processed}, fail={cfg_failed}, retry={cfg_retries}"
+    )
 
 # Summary
 log(f"\n{'=' * 60}")
-log(f"COMPARISON SUMMARY (3 failed turns)")
+log("COMPARISON SUMMARY (3 failed turns)")
 log(f"{'=' * 60}")
 log(f"{'Config':<22} {'Time(s)':>8} {'Facts':>6} {'Proc':>5} {'Fail':>5} {'Retry':>6}")
-log(f"{'-'*22} {'-'*8} {'-'*6} {'-'*5} {'-'*5} {'-'*6}")
+log(f"{'-' * 22} {'-' * 8} {'-' * 6} {'-' * 5} {'-' * 5} {'-' * 6}")
 for r in results:
-    log(f"{r['config']:<22} {r['elapsed_s']:>8} {r['facts']:>6} {r['processed']:>5} "
-        f"{r['failed']:>5} {r['retries']:>6}")
+    log(
+        f"{r['config']:<22} {r['elapsed_s']:>8} {r['facts']:>6} {r['processed']:>5} "
+        f"{r['failed']:>5} {r['retries']:>6}"
+    )
 
 test_complete("3 configs compared on 3 OOM turns")

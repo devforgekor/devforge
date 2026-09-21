@@ -2,56 +2,79 @@
 # Status: experimental
 # Path: none — extract strategy comparison test script
 """Extract strategy comparison for long Korean developer turns on bb9c6363."""
-import json, os, sys, time
+
+import os
+import sys
+import time
 from typing import Dict, List, Optional
 
 SCRIPTS_DIR = "/opt/projects/server/scripts"
 os.chdir(SCRIPTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
 
-from lib.llm_client import call_llm
-from lib.llm.json_parser import parse_llm_json
-from lib.common import strip_think
-from lib.pod_manager import ensure_model
 from lib import pod_manager
+from lib.common import strip_think
+from lib.llm.json_parser import parse_llm_json
+from lib.llm_client import call_llm
+from lib.pod_manager import ensure_model
 
 # ── Temp MODEL_METADATA for cross-model tests ──
 TEST_MODELS = {
     "7b": {
         "file": "Qwen2.5-Coder-7B-Instruct-Q8_0.gguf",
-        "port": 8082, "mode": "day",
-        "model_name": "extractor-test", "ctx": 8192,
-        "parallel": 2, "ubatch_size": 512,
+        "port": 8082,
+        "mode": "day",
+        "model_name": "extractor-test",
+        "ctx": 8192,
+        "parallel": 2,
+        "ubatch_size": 512,
     },
     "8b": {
         "file": "Qwen3-8B-Q4_K_M.gguf",
-        "port": 8082, "mode": "day",
-        "model_name": "extractor-test", "ctx": 8192,
-        "parallel": 2, "ubatch_size": 512,
+        "port": 8082,
+        "mode": "day",
+        "model_name": "extractor-test",
+        "ctx": 8192,
+        "parallel": 2,
+        "ubatch_size": 512,
     },
     "9b": {
         "file": "Qwen3-8B-Q4_K_M.gguf",
-        "port": 8082, "mode": "day",
-        "model_name": "extractor-test", "ctx": 8192,
-        "parallel": 2, "ubatch_size": 512,
+        "port": 8082,
+        "mode": "day",
+        "model_name": "extractor-test",
+        "ctx": 8192,
+        "parallel": 2,
+        "ubatch_size": 512,
     },
     "9b-q4": {
         "file": "Qwen3-8B-Q4_K_M.gguf",
-        "port": 8082, "mode": "day",
-        "model_name": "extractor-test", "ctx": 8192,
-        "parallel": 2, "ubatch_size": 512,
+        "port": 8082,
+        "mode": "day",
+        "model_name": "extractor-test",
+        "ctx": 8192,
+        "parallel": 2,
+        "ubatch_size": 512,
     },
     "14b-qwen": {
         "file": "Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
-        "size": "8.2GB", "port": 8082, "mode": "day",
-        "model_name": "extractor-test", "ctx": 8192,
-        "parallel": 1, "ubatch_size": 512,
+        "size": "8.2GB",
+        "port": 8082,
+        "mode": "day",
+        "model_name": "extractor-test",
+        "ctx": 8192,
+        "parallel": 1,
+        "ubatch_size": 512,
     },
     "14b-nextcoder": {
         "file": "nextcoder-14b-q4_k_m.gguf",
-        "size": "9.0GB", "port": 8082, "mode": "day",
-        "model_name": "extractor-test", "ctx": 8192,
-        "parallel": 1, "ubatch_size": 512,
+        "size": "9.0GB",
+        "port": 8082,
+        "mode": "day",
+        "model_name": "extractor-test",
+        "ctx": 8192,
+        "parallel": 1,
+        "ubatch_size": 512,
     },
 }
 
@@ -96,16 +119,25 @@ TEMP = 0.1
 
 # ── Helpers ──
 
-def _call_extract(system_prompt: str, user_parts: List[str],
-                  timeout: int = TIMEOUT_EXTRACT,
-                  max_tokens: int = MAX_TOKENS) -> Optional[Dict]:
+
+def _call_extract(
+    system_prompt: str,
+    user_parts: List[str],
+    timeout: int = TIMEOUT_EXTRACT,
+    max_tokens: int = MAX_TOKENS,
+) -> Optional[Dict]:
     """Single LLM extraction call."""
     meta = call_llm(
-        [{"role": "system", "content": system_prompt},
-         {"role": "user", "content": "\n".join(user_parts)}],
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "\n".join(user_parts)},
+        ],
         model="day_extract",
-        max_tokens=max_tokens, temperature=TEMP,
-        timeout=timeout, json_mode=True, return_meta=True,
+        max_tokens=max_tokens,
+        temperature=TEMP,
+        timeout=timeout,
+        json_mode=True,
+        return_meta=True,
     )
     raw = meta["content"]
     cleaned = strip_think(raw)
@@ -125,14 +157,18 @@ def _call_extract(system_prompt: str, user_parts: List[str],
 
 # ── Strategy 1: Baseline (single call) ──
 
+
 def strat_baseline(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
     """Current production extract: single LLM call with all fields."""
     parts = [
-        "=== user_turn ===", user_turn or "(empty)",
+        "=== user_turn ===",
+        user_turn or "(empty)",
         "",
-        "=== thinking ===", thinking or "(empty)",
+        "=== thinking ===",
+        thinking or "(empty)",
         "",
-        "=== text ===", text or "(empty)",
+        "=== text ===",
+        text or "(empty)",
     ]
     total_chars = len(user_turn) + len(thinking) + len(text)
     timeout = min(60 + int(total_chars * 0.2) + 300, 1800)
@@ -143,14 +179,18 @@ def strat_baseline(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
 
 # ── Strategy 1b: Baseline + max_tokens=1024 ──
 
+
 def strat_baseline_1024(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
     """Single LLM call with doubled generation tokens."""
     parts = [
-        "=== user_turn ===", user_turn or "(empty)",
+        "=== user_turn ===",
+        user_turn or "(empty)",
         "",
-        "=== thinking ===", thinking or "(empty)",
+        "=== thinking ===",
+        thinking or "(empty)",
         "",
-        "=== text ===", text or "(empty)",
+        "=== text ===",
+        text or "(empty)",
     ]
     total_chars = len(user_turn) + len(thinking) + len(text)
     timeout = min(60 + int(total_chars * 0.2) + 300, 1800)
@@ -160,6 +200,7 @@ def strat_baseline_1024(user_turn: str, thinking: str, text: str) -> Optional[Di
 
 
 # ── Strategy 2: SLIDE chunking (per-field overlapping windows) ──
+
 
 def _chunk_text(text: str, chunk_size: int = 2500, overlap: int = 500) -> List[tuple]:
     """Split text into (start_pos, text_segment) with overlap."""
@@ -201,13 +242,14 @@ def strat_slide(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
         total = len(chunks)
 
         for ci, (start_pos, seg) in enumerate(chunks):
-            prefix = f"=== {field_name} (segment {ci+1}/{total}) ==="
-            is_last = (ci == total - 1)
+            prefix = f"=== {field_name} (segment {ci + 1}/{total}) ==="
+            is_last = ci == total - 1
             need_overlap_hint = not is_last and total > 1
             overlap_hint = (
                 "\n[NOTE: This is a CONTINUATION segment. Extract facts that "
                 "are complete within this segment. Do not extract partial facts.]"
-                if not is_last else ""
+                if not is_last
+                else ""
             )
             parts = [prefix, seg]
             if overlap_hint:
@@ -250,13 +292,16 @@ def strat_slide(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
 
 # ── Strategy 3: Combined-field chunking (ut+thinking+text → N equal chunks) ──
 
+
 def strat_combined(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
     """Concatenate all 3 fields, split into ~3 equal chunks, extract each, merge."""
-    combined = "\n\n".join([
-        "=== user_turn ===\n" + (user_turn or "(empty)"),
-        "=== thinking ===\n" + (thinking or "(empty)"),
-        "=== text ===\n" + (text or "(empty)"),
-    ])
+    combined = "\n\n".join(
+        [
+            "=== user_turn ===\n" + (user_turn or "(empty)"),
+            "=== thinking ===\n" + (thinking or "(empty)"),
+            "=== text ===\n" + (text or "(empty)"),
+        ]
+    )
     total_chars = len(combined)
     n_chunks = 3
     chunk_size = max(500, (total_chars + n_chunks - 1) // n_chunks)
@@ -272,8 +317,12 @@ def strat_combined(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
         seg = combined[start:end]
         if not seg.strip():
             continue
-        prefix = f"=== full turn (segment {ci+1}/{n_chunks}) ==="
-        hint = "\n[NOTE: This is a CONTINUATION. Extract only facts complete within this segment.]" if ci < n_chunks - 1 else ""
+        prefix = f"=== full turn (segment {ci + 1}/{n_chunks}) ==="
+        hint = (
+            "\n[NOTE: This is a CONTINUATION. Extract only facts complete within this segment.]"
+            if ci < n_chunks - 1
+            else ""
+        )
         parts = [prefix, seg, hint] if hint else [prefix, seg]
         timeout = min(60 + int(len(seg) * 0.2) + 300, 1200)
         t0 = time.monotonic()
@@ -310,6 +359,7 @@ def strat_combined(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
 
 # ── Strategy 6: Optimized SLIDE (no thinking, no overlap, bigger chunks) ──
 
+
 def _chunk_text_fast(text: str, chunk_size: int = 3500) -> List[tuple]:
     """Split text into equal chunks with NO overlap."""
     if len(text) <= chunk_size:
@@ -329,18 +379,26 @@ def strat_slide_fast(user_turn: str, thinking: str, text: str) -> Optional[Dict]
     gen_tokens = 0
 
     # Only user_turn + text (skip thinking — low factual density)
-    combined = "\n\n".join([
-        "=== user_turn ===", user_turn or "(empty)",
-        "",
-        "=== text ===", text or "(empty)",
-    ])
+    combined = "\n\n".join(
+        [
+            "=== user_turn ===",
+            user_turn or "(empty)",
+            "",
+            "=== text ===",
+            text or "(empty)",
+        ]
+    )
 
     chunks = _chunk_text_fast(combined, chunk_size=3500)
     n_total = len(chunks)
 
     for ci, (start_pos, seg) in enumerate(chunks):
-        prefix = f"=== turn (part {ci+1}/{n_total}) ==="
-        hint = "\n[NOTE: CONTINUATION. Extract only facts complete within this segment.]" if ci < n_total - 1 else ""
+        prefix = f"=== turn (part {ci + 1}/{n_total}) ==="
+        hint = (
+            "\n[NOTE: CONTINUATION. Extract only facts complete within this segment.]"
+            if ci < n_total - 1
+            else ""
+        )
         parts = [prefix, seg, hint] if hint else [prefix, seg]
         timeout = min(60 + int(len(seg) * 0.2) + 300, 1200)
         t0 = time.monotonic()
@@ -377,6 +435,7 @@ def strat_slide_fast(user_turn: str, thinking: str, text: str) -> Optional[Dict]
 
 # ── Strategy 7: SLIDE + skip thinking (same chunk size, no overlap) ──
 
+
 def strat_slide_fast_v2(user_turn: str, thinking: str, text: str) -> Optional[Dict]:
     """SLIDE but skip thinking field for speed."""
     all_extractions: List[Dict] = []
@@ -396,8 +455,12 @@ def strat_slide_fast_v2(user_turn: str, thinking: str, text: str) -> Optional[Di
         total = len(chunks)
 
         for ci, (start_pos, seg) in enumerate(chunks):
-            prefix = f"=== {field_name} (segment {ci+1}/{total}) ==="
-            hint = "\n[NOTE: CONTINUATION. Extract only facts complete within this segment.]" if ci < total - 1 else ""
+            prefix = f"=== {field_name} (segment {ci + 1}/{total}) ==="
+            hint = (
+                "\n[NOTE: CONTINUATION. Extract only facts complete within this segment.]"
+                if ci < total - 1
+                else ""
+            )
             parts = [prefix, seg, hint] if hint else [prefix, seg]
             timeout = min(60 + int(len(seg) * 0.2) + 300, 1200)
             t0 = time.monotonic()
@@ -433,11 +496,12 @@ def strat_slide_fast_v2(user_turn: str, thinking: str, text: str) -> Optional[Di
 
 # ── Data loading ──
 
+
 def load_turn(turn_id: str) -> Optional[Dict]:
     from lib.db import psql_json
+
     rows = psql_json(
-        "SELECT id, user_turn, thinking, text"
-        f" FROM turns WHERE id = '{turn_id}'::uuid"
+        f"SELECT id, user_turn, thinking, text FROM turns WHERE id = '{turn_id}'::uuid"
     )
     if not rows:
         return None
@@ -457,6 +521,7 @@ def load_turn(turn_id: str) -> Optional[Dict]:
 
 def get_baseline_from_db(turn_id: str) -> List[Dict]:
     from lib.db import psql_json
+
     rows = psql_json(
         "SELECT evidence, fact_type, fact_index, category"
         f" FROM review_facts WHERE turn_id = '{turn_id}'::uuid"
@@ -468,9 +533,11 @@ def get_baseline_from_db(turn_id: str) -> List[Dict]:
 
 # ── Runner ──
 
+
 def log(msg: str):
     utc_timestamp = time.strftime("%H:%M:%S")
     print(f"[{utc_timestamp}] {msg}")
+
 
 def run_strategy(name: str, fn, turn_data: Dict, tid_short: str, key: str) -> Dict:
     log(f"\n  [{key}] Running strategy: {name}")
@@ -485,11 +552,13 @@ def run_strategy(name: str, fn, turn_data: Dict, tid_short: str, key: str) -> Di
     extractions = result.get("extractions", [])
     llm_time_s = result.get("elapsed_ms", 0) / 1000
     usage = result.get("usage", {})
-    ptok = (usage.get("prompt_tokens", 0) or 0)
-    gtok = (usage.get("completion_tokens", 0) or 0)
+    ptok = usage.get("prompt_tokens", 0) or 0
+    gtok = usage.get("completion_tokens", 0) or 0
 
-    log(f"  [{key}] {name}: {len(extractions)} facts, {llm_time_s:.0f}s LLM,"
-        f" {ptok} prompt tok, {gtok} gen tok, {elapsed_wall:.0f}s wall")
+    log(
+        f"  [{key}] {name}: {len(extractions)} facts, {llm_time_s:.0f}s LLM,"
+        f" {ptok} prompt tok, {gtok} gen tok, {elapsed_wall:.0f}s wall"
+    )
 
     # Ground via reranker
     grounded_count = 0
@@ -505,10 +574,15 @@ def run_strategy(name: str, fn, turn_data: Dict, tid_short: str, key: str) -> Di
         type_counts[ft] = type_counts.get(ft, 0) + 1
 
     from lib.llm_client import reranker_score
+
     if extractions:
-        source = (turn_data.get("user_turn", "") or "") + "\n" + \
-                 (turn_data.get("thinking", "") or "") + "\n" + \
-                 (turn_data.get("text", "") or "")
+        source = (
+            (turn_data.get("user_turn", "") or "")
+            + "\n"
+            + (turn_data.get("thinking", "") or "")
+            + "\n"
+            + (turn_data.get("text", "") or "")
+        )
         for ex in extractions:
             ev = ex.get("evidence", "")
             if not ev.strip():
@@ -527,8 +601,10 @@ def run_strategy(name: str, fn, turn_data: Dict, tid_short: str, key: str) -> Di
     avg_len = total_len / len(extractions) if extractions else 0
 
     type_str = ", ".join(f"{k}={v}" for k, v in sorted(type_counts.items()))
-    log(f"  [{key}]   grounding: {grounded_count}✅ {ambig_count}🔶 {ungrounded_count}❌"
-        f" | avg_score={avg_score:.0f} avg_len={avg_len:.0f}ch | types={{{type_str}}}")
+    log(
+        f"  [{key}]   grounding: {grounded_count}✅ {ambig_count}🔶 {ungrounded_count}❌"
+        f" | avg_score={avg_score:.0f} avg_len={avg_len:.0f}ch | types={{{type_str}}}"
+    )
 
     return {
         "strategy": name,
@@ -543,19 +619,22 @@ def run_strategy(name: str, fn, turn_data: Dict, tid_short: str, key: str) -> Di
     }
 
 
-def show_comparison(results: List[Dict], baseline_facts: List[Dict],
-                    turn_id_short: str, model_name: str = "7b"):
+def show_comparison(
+    results: List[Dict], baseline_facts: List[Dict], turn_id_short: str, model_name: str = "7b"
+):
     log("")
     log("=" * 65)
     log(f"COMPARISON: {turn_id_short} @ {model_name}")
     log("=" * 65)
-    log(f"  {'Strategy':<18} {'Facts':>6} {'Grounded':>10} {'Score':>7} {'Len(ch)':>8} {'Time(s)':>8}")
+    log(
+        f"  {'Strategy':<18} {'Facts':>6} {'Grounded':>10} {'Score':>7} {'Len(ch)':>8} {'Time(s)':>8}"
+    )
     log(f"  {'-' * 56}")
 
     # Baseline from DB
     bf = len(baseline_facts)
     bg = sum(1 for f in baseline_facts if f.get("evidence"))
-    log(f"  {'BASELINE (DB)':<18} {bf:>6} {bg}/0/{bf-bg:>1} {'N/A':>7} {'N/A':>8} {'N/A':>8}")
+    log(f"  {'BASELINE (DB)':<18} {bf:>6} {bg}/0/{bf - bg:>1} {'N/A':>7} {'N/A':>8} {'N/A':>8}")
 
     for r in results:
         if r["status"] == "FAIL":
@@ -564,31 +643,41 @@ def show_comparison(results: List[Dict], baseline_facts: List[Dict],
         g = r["grounded"]
         a = r["ambig"]
         u = r["ungrounded"]
-        log(f"  {r['strategy']:<18} {r['fact_count']:>6} "
+        log(
+            f"  {r['strategy']:<18} {r['fact_count']:>6} "
             f"{g}/{a}/{u} {r['avg_score']:>7.0f} "
-            f"{r['avg_len']:>8.0f} {r['llm_time_s']:>8.0f}")
+            f"{r['avg_len']:>8.0f} {r['llm_time_s']:>8.0f}"
+        )
     log(f"{'=' * 65}")
 
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Extract strategy comparison")
-    parser.add_argument("--turn", default="bb9c6363",
-                        choices=["a1faed6c", "b7f65701", "bb9c6363", "all"])
-    parser.add_argument("--strategies", nargs="+",
-                        default=["slide"],
-                        choices=["baseline", "baseline_1024", "slide", "slide_fast",
-                                 "combined"])
-    parser.add_argument("--model", default="7b",
-                        choices=list(TEST_MODELS.keys()),
-                        help="Which model to load on inference :8082")
+    parser.add_argument(
+        "--turn", default="bb9c6363", choices=["a1faed6c", "b7f65701", "bb9c6363", "all"]
+    )
+    parser.add_argument(
+        "--strategies",
+        nargs="+",
+        default=["slide"],
+        choices=["baseline", "baseline_1024", "slide", "slide_fast", "combined"],
+    )
+    parser.add_argument(
+        "--model",
+        default="7b",
+        choices=list(TEST_MODELS.keys()),
+        help="Which model to load on inference :8082",
+    )
     args = parser.parse_args()
 
-    from lib.test_common import test_setup, test_heartbeat, test_complete
+    from lib.test_common import test_complete, test_heartbeat, test_setup
+
     ctx = test_setup("extract_strategies", f"Extract strategy comparison ({args.model})")
 
     # Register temp MODEL_METADATA + ensure inference
-    meta = TEST_MODELS[args.model]
+    meta = copy.deepcopy(TEST_MODELS.get(args.model, {}))
     meta["threads"] = 2
     meta["threads_batch"] = 2
     if args.model.startswith("14b"):
@@ -617,9 +706,11 @@ def main():
             log(f"  Turn not found: {full_tid}")
             continue
 
-        log(f"  sizes: ut={turn_data['ut_len']}ch, "
+        log(
+            f"  sizes: ut={turn_data['ut_len']}ch, "
             f"thinking={turn_data['th_len']}ch, "
-            f"text={turn_data['tx_len']}ch")
+            f"text={turn_data['tx_len']}ch"
+        )
 
         # Baseline from DB
         baseline_facts = get_baseline_from_db(full_tid)
