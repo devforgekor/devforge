@@ -39,7 +39,7 @@
 |------|------|
 | **대상** | `/opt/projects/server/scripts/` (코드), `/opt/projects/server/docs/` (문서) |
 | **제외** | `_archive/` 과거 산출물, `/opt/workspace/` 외부 워크스페이스 |
-| **일정** | **총 16주 (Phase −1 ~ Phase 8)** (Phase −1~7: 14주, Phase 8 안정화: 2주) |
+| **일정** | **총 17주 (Phase −1 ~ Phase 8)** (Phase −1: 2일, Phase 0~7: 14주, Phase 8: 2주) |
 | **팀 규모** | **2인 팀 (Tech Lead + Backend Engineer)** — 1인 팀 가정 시 20주 이상 필요 |
 | **podman-py** | **비도입** — rootless 포트 포워딩 제어 불가 |
 | **LLM 공급자** | Track A에서 **포트 인터페이스만 정의**, 구현은 LocalProvider. Track B는 별도 문서(`LLM_PROVIDER_PLAN.md`)로 분리 |
@@ -309,7 +309,7 @@ class ExtractPipeline:
 
 ---
 
-## 4. 실행 계획 (14주, Track A 전념)
+## 4. 실행 계획 (17주, Phase −1~8)
 
 ### Phase −1: 정리 및 기저장치 캡처 (Week 0.5, 2일)
 
@@ -324,7 +324,33 @@ class ExtractPipeline:
 
 **완료**: 골든마스터 + record/replay 하네스 (구현 + 캡처). **LLM 캡처는 여기서 반드시 진행** (Phase 3 이후엔 구 코드가 사라짐).
 
-### Phase 0: 기반 구축 + 특성화 테스트 (Week 1-2)
+### Phase 0: 기반 구축 + 특성화 테스트 (Week 1-2) 🟡 진행 중
+
+**현재 상태:** 2026-09-21 기준, 추정 진행률 ~35-40%
+
+**완료 항목:**
+- ✅ `pyproject.toml` 생성 + 설치 가능 (`pip install -e .`)
+- ✅ `src/devforge/` 골격 (7개 디렉토리: adapters, application, cli, core, domain, pipeline_stages, ports)
+- ✅ `core/config.py` (부분 구현)
+- ✅ `core/logging.py` (부분 구현)
+- ✅ `ports/extract.py` (LLMPort 인터페이스 정의)
+- ✅ `application/extract_pipeline.py` (초기 구현)
+- ✅ `domain/` 서브디렉토리: `model_management/`, `pipeline/`, `turn_collection/`, `watchdog/`
+
+**진행 중:**
+- 🟡 `ConfigRegistry` 완성 (5개 설정 파일 통합 중)
+- 🟡 `Paths` 추상화 (하드코딩 경로 40곳 해결 중)
+
+**미착수 (Week 1 남은 작업):**
+- ⬜ `core/database.py` + Alembic 설정
+- ⬜ `core/paths.py` 완성
+- ⬜ `core/exceptions.py`
+- ⬜ `import-linter` CI 게이트
+
+**미착수 (Week 2):**
+- ⬜ 특성화 테스트 5개 작성
+
+---
 
 | 주차 | 작업 | 산출물 | 검증 |
 |------|------|--------|------|

@@ -3,9 +3,32 @@
 # AI-maintained: updated as phases progress, items complete, or architecture decisions change.
 # Human reads for context; AI writes to keep current.
 # Phase status: planned → active → complete
-# Last updated: 2026-09-14 (opencode) — canonical code plan: docs/REFACTORING_PLAN.md
+# Last updated: 2026-09-21 — canonical code plan: docs/REFACTORING_PLAN.md
 
 phases:
+- phase: 0
+  name: Refactoring — Foundation + Characterization Tests
+  status: active
+  started: '2026-09-13'
+  progress: ~35-40%
+  refs:
+  - docs/REFACTORING_PLAN.md (v1.4 Final, 17주 계획)
+  - docs/REFACTORING_PLAN-appendix.md (Phase 4-8 상세)
+  completed:
+  - pyproject.toml + src/devforge/ skeleton (7 directories)
+  - core/config.py (partial)
+  - core/logging.py (partial)
+  - ports/extract.py (LLMPort interface)
+  - application/extract_pipeline.py (initial)
+  - domain subdirectories (model_management, pipeline, turn_collection, watchdog)
+  in_progress:
+  - ConfigRegistry completion (5 config files merge)
+  - Paths abstraction (40 hardcoded paths)
+  planned:
+  - core/database.py + Alembic setup
+  - core/paths.py, core/exceptions.py
+  - import-linter CI gate
+  - Characterization tests (5 core paths)
 - phase: 1
   name: Basic Infrastructure + MCP Server
   status: partial
