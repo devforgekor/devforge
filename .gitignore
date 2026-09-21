@@ -32,3 +32,6 @@ batch_results/
 .aider*
 .opencode-handover.md
 .opencode.json
+
+# Archived sibling repo (Seedling) — unused by DevForge; untracked 2026-09-21
+_archive/seedling/
