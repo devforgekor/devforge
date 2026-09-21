@@ -1,6 +1,6 @@
 # Secret Injection Hardening
 
-**Status:** Stage 3 in progress — cashbook pilot COMPLETE (2026-09-21)
+**Status:** Stage 3 in progress — cashbook + postgres COMPLETE (2026-09-21)
 **Origin:** refactoring-roadmap.md §5.1 (archived)
 **Trigger:** WebObsidian EnvironmentFile quoting bug (2026-09-19)
 **Updated:** 2026-09-21
@@ -87,15 +87,30 @@ falling back to `CASHBOOK_API_KEY` (env) for compatibility.
 | Service | Sensitive key | Code change | Priority | Status |
 |---------|---------------|-------------|----------|--------|
 | cashbook | CASHBOOK_API_KEY | yes | P3 | DONE |
-| postgres | POSTGRES_PASSWORD | no (native `_FILE`) | P1 | planned |
+| postgres | (unused) DEVFORGE_POSTGRES_PASSWORD | none | P1 | DONE |
 | webobsidian | master password | yes | P1 | planned |
 | fastapi | multiple (10+) | yes | P2 | planned |
 | mcp | DB credentials | yes | P2 | planned |
 
-**postgres note:** devforge-postgres is a custom image; confirm it honors
-`POSTGRES_PASSWORD_FILE` before switching. Because the DB backs every service,
-stage separately and verify `pg_isready` + app connectivity before removing the
-env password.
+### postgres — DONE (2026-09-21)
+
+The postgres container exposed `DEVFORGE_POSTGRES_PASSWORD` via an
+`EnvironmentFile`, but the variable was **never consumed inside the container**
+(`grep` over the image: 0 references), and the image's `docker-entrypoint.sh`
+does **not** support `POSTGRES_PASSWORD_FILE` (grep: 0) — so the official
+`_FILE` pattern is not available. The data directory is already initialized, so
+no password is required at runtime; every other service obtains its own copy
+through `kv-fetch-env.py`. The `EnvironmentFile=`, `ExecStartPre=` and
+`ExecStopPost=` lines were removed from
+`~/.config/containers/systemd/container-postgres.container`.
+
+**Verified:** `pg_isready` accepting connections; `SELECT count(*) FROM turns`
+ok; postgres env secret-like vars 1 -> 0; fastapi/mcp/worker/cashbook all active.
+
+> On a **fresh** data dir, this image would initialize without a
+> `POSTGRES_PASSWORD` (it reads `POSTGRES_PASSWORD`, not
+> `DEVFORGE_POSTGRES_PASSWORD`). If a rebuild/init is ever needed, set
+> `POSTGRES_PASSWORD` explicitly for that one-off.
 
 ---
 

@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-21T15:20:22.31272+00:00'
+  time: '2026-09-21T15:26:17.11807+00:00'
   summary: no files
   total_files: 0
   recent_files:
@@ -215,8 +215,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- (2026-09-19, opencode) Droplr 생태계·서버 통합 감사 — lib/droplr.py 키 불일치(P0), DROPLR_AUTH_TOKEN_KEY 미사용, devforge-url-shorten의 Droplr
-  제거, secrets.env fallback 39파일, KV 누락 config 목록 식별. 붙여준 외부 팩트체크 리뷰 독립 검증(대체로 정확, 원본 가이드는 레포에 부재).
 - '(2026-09-20, opencode) 핸드오버 문서 감사·정정 — docs/handover-secrets-kv.md 실제 상태 대조. 일치 8항목 확인. 정정 7건(§4.1 kv-export-env.sh 누락,
   §4.2 fastapi 사유·서비스 수, §8 fallback 잔존·kuhwa 파일명, §9 push, §12 컨테이너 3개). 미푸시 커밋 13개 push(main=origin/main, 0ec3855 포함). 보안:
   ~/.claude/secrets.env NOTION_TOKEN 평문 mode644→600 조치, 삭제 권장.'
@@ -346,3 +344,8 @@ completed_log:
   before/after env 121→13, KV 시크릿 env 전체→0, ?key= 정상 200/오답 401, 재시작 복원. 가이드의 ExecStartPre+LoadCredential 조합은 systemd가 LoadCredential을
   ExecStartPre보다 먼저 처리해 status=243/CREDENTIALS 실패(실측)→파일 방식으로 정정. 커밋: 020fb10, 123dcc1, ca00ebf. 발견: 워치독 07:43 정지(WATCHDOG-STOPPED-2026-09-21),
   auth.is_authenticated `or True` 잠재버그(현재 미사용), cashbook.service 등 user 유닛 비버전관리.'
+- '(2026-09-21, devforge-444795) seedling 추적해제 + postgres Stage3. (1) _archive/seedling(미사용 임베디드 repo, gitlink·.gitmodules
+  없음, 165 미커밋)을 git rm --cached + .gitignore로 추적 해제(파일 보존) — 커밋 5f57d8a. (2) postgres 컨테이너의 DEVFORGE_POSTGRES_PASSWORD가 컨테이너
+  내부 참조 0(불필요 노출)이고 이미지 엔트리포인트가 POSTGRES_PASSWORD_FILE 미지원임을 확인 → container-postgres.container의 EnvironmentFile/ExecStartPre(kv-export-env)/ExecStopPost
+  제거. 검증: pg_isready OK, turns 8121, env 시크릿 1→0, fastapi/mcp/worker/cashbook active. 주의: fresh init 시 이 이미지는 POSTGRES_PASSWORD를
+  읽으므로 재초기화 시 별도 설정 필요. quadlet/유닛은 여전히 비버전관리.'
