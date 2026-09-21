@@ -10,6 +10,7 @@ Config C: parallel=2, threads=4, cpus=0-2
 Uses --turn-id for each of the 3 OOM turns.
 """
 
+import copy
 import json
 import os
 import subprocess

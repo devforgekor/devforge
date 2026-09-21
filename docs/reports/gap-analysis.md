@@ -83,7 +83,7 @@
 
 | # | 기능 | 현재 구현 | 업계 일반 표준 | 격차 상세 | 심각도 |
 |---|------|-----------|---------------|-----------|--------|
-| 4-2a~h | 섹션 배칭 / KV cache / F-CoT / entity 주입 / noise 감지 / 체크포인트 | ✅ 모두 구현 | **Continuous batching** (vLLM/TGI의 PagedAttention) 이 대규모 표준이나 단일 노드에서는 현재 방식도 유효. **Cache-Craft** 스타일 prefix KV 공유는 섹션-메이저 배치와 동일 패턴 | 없음 | 🟢 |
+| 4-2a~h | 섹션 배칭 / KV cache / F-CoT / entity 주입 / noise 감지 / 체크포인트 | ✅ 모두 구현. **2026-07-04**: KV cache q8_0 quantization으로 메모리 50% 절감 (dual 8B 안정성 확보) | **Continuous batching** (vLLM/TGI의 PagedAttention) 이 대규모 표준이나 단일 노드에서는 현재 방식도 유효. **Cache-Craft** 스타일 prefix KV 공유는 섹션-메이저 배치와 동일 패턴 | 없음 | 🟢 |
 | 4-2i | **온톨로지 가이드 추출** | 자유 텍스트 evidence. `"evidence": "runner.py port 8082로 변경"` | **스키마 기반 구조화 추출** 이 표준. **Instructor library** (Pydantic model → function calling) 또는 **JSON mode + guardrails** 로 (subject, predicate, object, qualifiers) 형태 강제. **Self-repair loop**: 오류 → schema 수정 → 재추출 | (1) 같은 s-p의 사실 비교가 문자열 유사도로만 가능 (2) 모순 감지가 Jaccard 같은 surface metric에 의존 (3) 검색/집계 쿼리 작성 어려움 | 🟥 |
 | 4-2j | **패턴+LLM 하이브리드** | LLM only. CPU llama.cpp 단일 노드 | **Regex-first → LLM-on-edge** 가 프로덕션 표준. Regex로 고확률 패턴(날짜, 버전, 에러코드, 파일경로) 80-95% 커버 → 저신뢰/복잡만 LLM. 비용 80% 절감 + 지연시간 단축 | 모든 extract가 LLM 호출 → batch당 cost+시간 증가. 단순 패턴도 LLM 거침 | 🟥 |
 

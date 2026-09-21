@@ -6,6 +6,7 @@
 Config C: parallel=2, threads=4, cpus=0-2, temp=0.0
 """
 
+import copy
 import json
 import os
 import subprocess

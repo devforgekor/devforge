@@ -7,6 +7,7 @@ Measures wall-clock time, facts extracted, and retry/error count
 for 3 configurations on identical 2-turn extract dry-run.
 """
 
+import copy
 import json
 import os
 import subprocess

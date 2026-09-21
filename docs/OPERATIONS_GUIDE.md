@@ -137,7 +137,16 @@ devforge inference ensure day_extract
 
 # Check if port is listening
 ss -tlnp | grep 8082
+
+# Check MODEL_METADATA configuration
+devforge status --json | jq '.models'
 ```
+
+**최근 변경사항 (2026-07-04)**:
+- KV cache quantization (`cache_type_k/v: q8_0`) 적용으로 메모리 사용량 50% 감소
+- 모든 day-mode 모델에 적용 (extractor, verifier, enricher)
+- MODEL_METADATA가 KV cache 설정의 SSOT (Single Source of Truth)
+- 자세한 내용: `docs/adr/0007-kv-cache-optimization.md`
 
 ### "Pipeline stuck in 'extracting' state"
 ```bash

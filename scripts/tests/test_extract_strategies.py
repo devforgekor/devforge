@@ -3,6 +3,7 @@
 # Path: none — extract strategy comparison test script
 """Extract strategy comparison for long Korean developer turns on bb9c6363."""
 
+import copy
 import os
 import sys
 import time

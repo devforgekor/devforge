@@ -9,6 +9,7 @@ Usage:
     python3 scripts/tests/test_extract_3config_comparison.py
 """
 
+import copy
 import json
 import os
 import re
@@ -46,6 +47,8 @@ from pipelines.extract_llm import (
 # ── HACK: Bump ctx to 4096 for all test extractor models ──────────
 # ctx=2048 is too small for the extraction system prompt (~500 tok)
 # + Korean text + max_tokens (~1600) → "Context size has been exceeded" → HTTP 500
+# NOTE: We modify MODEL_METADATA directly here (module-level code), but main()
+#       saves/restores the original to prevent leaking changes to other tests.
 _EXTRACTOR_KEYS = [
     "day-extractor",
     "day-extractor-b",
@@ -54,6 +57,7 @@ _EXTRACTOR_KEYS = [
     "day-extractor-4b-q8",
     "day-extractor-4b-q8-b",
 ]
+_ORIGINAL_MODEL_METADATA = copy.deepcopy(MODEL_METADATA)  # Backup before modification
 for _k in _EXTRACTOR_KEYS:
     if _k in MODEL_METADATA:
         _meta = copy.deepcopy(MODEL_METADATA[_k])

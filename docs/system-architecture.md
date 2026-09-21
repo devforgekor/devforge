@@ -162,6 +162,8 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 `llama.cpp:server` 컨테이너 `devforge-inference`를 띄운다.
 포트: 8080 reranker · 8081 embed · 8082 extract/enrich · 8083 verify · 8084 27B verifier.
 
+**KV Cache 최적화 (2026-07-04)**: 모든 day-mode 모델은 `cache_type_k/v: q8_0` (quantized 8-bit)을 사용해 메모리 사용량을 50% 절감. 이를 통해 dual 8B 모델 동시 실행 시 안정성 확보. 자세한 내용은 `docs/adr/0007-kv-cache-optimization.md` 참조.
+
 ### 4.2 turn / observation 파이프라인
 ```
 turn_watcher → turns(raw) → raw_consumer(worker) → pending

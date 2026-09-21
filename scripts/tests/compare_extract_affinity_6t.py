@@ -9,6 +9,7 @@ Config B: parallel=2, threads=2, cpus=0-2
 Both run --limit 6 --dry-run.
 """
 
+import copy
 import json
 import os
 import subprocess
