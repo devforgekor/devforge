@@ -315,7 +315,7 @@ def _ensure_model_healthy(port, key=""):
 
 
 def _start_embed():
-    """Start embed-4b on :8081 in inference container. No-op if healthy."""
+    """Start embeder (Qwen3-Embedding-8B) on :8081 in inference container. No-op if healthy."""
     import urllib.request as _ur
 
     try:
@@ -327,9 +327,9 @@ def _start_embed():
     except Exception:
         pass
 
-    meta = MODEL_METADATA.get("embed-4b")
+    meta = MODEL_METADATA.get("embeder")
     if not meta:
-        log("  [embed] FATAL: embed-4b not in MODEL_METADATA")
+        log("  [embed] FATAL: embeder not in MODEL_METADATA")
         return False
 
     cmd = ["podman", "exec", "-d", INFERENCE_CONTAINER, "/app/llama-server"] + [

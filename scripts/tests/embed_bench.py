@@ -11,8 +11,12 @@ Usage:
 Output: JSON report at /opt/ai_data/embed_bench_report.json
 """
 
-import json, os, sys, time, gc, tracemalloc
-from typing import Any, Dict, List, Optional, Tuple
+import gc
+import json
+import os
+import sys
+import time
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -22,7 +26,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 SCRIPTS_DIR = _SCRIPTS_DIR
 
-from lib.test_common import test_setup, test_heartbeat, test_complete, log, psql_json
+from lib.test_common import test_complete, test_setup
 
 # ── Config ───────────────────────────────────────────────────────────────
 BENCH_DATA = "/opt/ai_data/embed_bench_pairs.json"
@@ -41,6 +45,7 @@ def load_pairs() -> List[Dict]:
 # ── Model runners ────────────────────────────────────────────────────────
 class ModelRunner:
     """Base class for embedding model benchmark runner."""
+
     name: str
     label: str  # short display name
 
@@ -58,8 +63,15 @@ class ModelRunner:
 
 class STransformerRunner(ModelRunner):
     """sentence-transformers model (FP32 or ONNX)."""
-    def __init__(self, name: str, model_id: str, label: str = None,
-                 backend: str = "default", file_name: str = None):
+
+    def __init__(
+        self,
+        name: str,
+        model_id: str,
+        label: str = None,
+        backend: str = "default",
+        file_name: str = None,
+    ):
         self.name = name
         self.model_id = model_id
         self.label = label or name
@@ -69,6 +81,7 @@ class STransformerRunner(ModelRunner):
 
     def load(self) -> None:
         from sentence_transformers import SentenceTransformer
+
         kw = {"cache_folder": CACHE_DIR}
         if self.backend == "onnx":
             kw["backend"] = "onnx"
@@ -86,14 +99,22 @@ class STransformerRunner(ModelRunner):
 
     def memory_mb(self) -> float:
         import psutil
+
         proc = psutil.Process()
         return proc.memory_info().rss / 1024 / 1024
 
 
 class LlamaEmbedRunner(ModelRunner):
     """GGUF embedding model via llama-cpp-python."""
-    def __init__(self, name: str, gguf_filename: str, label: str = None,
-                 n_ctx: int = 2048, n_threads: int = 4):
+
+    def __init__(
+        self,
+        name: str,
+        gguf_filename: str,
+        label: str = None,
+        n_ctx: int = 2048,
+        n_threads: int = 4,
+    ):
         self.name = name
         self.gguf_path = os.path.join(GGUF_DIR, gguf_filename)
         self.label = label or name
@@ -103,6 +124,7 @@ class LlamaEmbedRunner(ModelRunner):
 
     def load(self) -> None:
         from llama_cpp import Llama
+
         if not os.path.exists(self.gguf_path):
             raise FileNotFoundError(f"GGUF not found: {self.gguf_path}")
         t0 = time.monotonic()
@@ -128,6 +150,7 @@ class LlamaEmbedRunner(ModelRunner):
 
     def memory_mb(self) -> float:
         import psutil
+
         proc = psutil.Process()
         return proc.memory_info().rss / 1024 / 1024
 
@@ -135,9 +158,9 @@ class LlamaEmbedRunner(ModelRunner):
 # ── Benchmark runner ─────────────────────────────────────────────────────
 def run_benchmark(runner: ModelRunner, pairs: List[Dict]) -> Dict[str, Any]:
     """Run full benchmark for one model runner."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Benchmark: {runner.label}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Load model
     gc.collect()
@@ -224,14 +247,19 @@ def run_benchmark(runner: ModelRunner, pairs: List[Dict]) -> Dict[str, Any]:
         prec = tp / (tp + fp) if (tp + fp) else 0
         rec = tp / (tp + fn) if (tp + fn) else 0
         f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0
-        threshold_results.append({
-            "threshold": thresh,
-            "accuracy": round(acc, 3),
-            "precision": round(prec, 3),
-            "recall": round(rec, 3),
-            "f1": round(f1, 3),
-            "tp": tp, "fp": fp, "tn": tn, "fn": fn,
-        })
+        threshold_results.append(
+            {
+                "threshold": thresh,
+                "accuracy": round(acc, 3),
+                "precision": round(prec, 3),
+                "recall": round(rec, 3),
+                "f1": round(f1, 3),
+                "tp": tp,
+                "fp": fp,
+                "tn": tn,
+                "fn": fn,
+            }
+        )
         if f1 > best_f1:
             best_f1 = f1
             best_threshold = thresh
@@ -258,8 +286,7 @@ def run_benchmark(runner: ModelRunner, pairs: List[Dict]) -> Dict[str, Any]:
 
     print(f"  Mean score: {stats['mean_score']}")
     print(f"  Best threshold: {best_threshold} (F1={best_f1:.3f})")
-    print(f"  Batch: {len(pairs)} pairs in {stats['batch_time_ms']}ms "
-          f"({stats['pairs_per_sec']}/s)")
+    print(f"  Batch: {len(pairs)} pairs in {stats['batch_time_ms']}ms ({stats['pairs_per_sec']}/s)")
     print(f"  Memory: +{stats['mem_delta_mb']}MB")
 
     return stats
@@ -267,6 +294,7 @@ def run_benchmark(runner: ModelRunner, pairs: List[Dict]) -> Dict[str, Any]:
 
 def _get_rss_mb() -> float:
     import psutil
+
     return psutil.Process().memory_info().rss / 1024 / 1024
 
 
@@ -274,26 +302,29 @@ def _get_rss_mb() -> float:
 def main():
     TEST = test_setup("embed_bench", "Embedding model benchmark")
     import argparse
+
     parser = argparse.ArgumentParser(description="Embedding model benchmark")
-    parser.add_argument("--models", nargs="+", default=None,
-                        help="Models to test (default: all)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Load models only, no scoring")
-    parser.add_argument("--output", default=REPORT_OUT,
-                        help=f"Output path (default: {REPORT_OUT})")
+    parser.add_argument("--models", nargs="+", default=None, help="Models to test (default: all)")
+    parser.add_argument("--dry-run", action="store_true", help="Load models only, no scoring")
+    parser.add_argument("--output", default=REPORT_OUT, help=f"Output path (default: {REPORT_OUT})")
     args = parser.parse_args()
 
     # Define model runners
     ALL_MODELS: List[ModelRunner] = [
         STransformerRunner(
-            "bge-m3", "BAAI/bge-m3", label="BGE-M3 FP32",
+            "bge-m3",
+            "BAAI/bge-m3",
+            label="BGE-M3 FP32",
         ),
         STransformerRunner(
-            "bge-m3-onnx", "BAAI/bge-m3", label="BGE-M3 ONNX",
+            "bge-m3-onnx",
+            "BAAI/bge-m3",
+            label="BGE-M3 ONNX",
             backend="onnx",
         ),
         STransformerRunner(
-            "e5-large-instruct", "intfloat/multilingual-e5-large-instruct",
+            "e5-large-instruct",
+            "intfloat/multilingual-e5-large-instruct",
             label="E5-Large-Instruct FP32",
         ),
     ]
@@ -302,15 +333,22 @@ def main():
     if os.path.isdir(GGUF_DIR):
         for fname in os.listdir(GGUF_DIR):
             if fname.endswith(".gguf"):
-                label = fname.replace(".gguf", "").replace("qwen3-embed-4b-", "Qwen3-4B-")
-                ALL_MODELS.append(LlamaEmbedRunner(
-                    f"qwen3-{fname}", fname, label=label,
-                ))
+                label = (
+                    fname.replace(".gguf", "")
+                    .replace("qwen3-embed-8b-", "Qwen3-8B-")
+                    .replace("qwen3-embed-4b-", "Qwen3-4B-")
+                )
+                ALL_MODELS.append(
+                    LlamaEmbedRunner(
+                        f"qwen3-{fname}",
+                        fname,
+                        label=label,
+                    )
+                )
 
     # Filter
     if args.models:
-        ALL_MODELS = [m for m in ALL_MODELS if m.name in args.models
-                      or m.label in args.models]
+        ALL_MODELS = [m for m in ALL_MODELS if m.name in args.models or m.label in args.models]
 
     # Load pairs
     pairs = load_pairs()
@@ -337,24 +375,27 @@ def main():
         except Exception as e:
             print(f"  [{runner.label}] ERROR: {e}")
             import traceback
+
             traceback.print_exc()
             results[runner.name] = {"error": str(e)}
 
     # Summary table
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  SUMMARY: Embedding Model Benchmark ({len(pairs)} pairs)")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print(f"  {'Model':<25s} {'Mean':>6s} {'Best@F1':>9s} {'Pairs/s':>8s} {'Mem':>6s} {'Load':>6s}")
-    print(f"  {'-'*25} {'-'*6} {'-'*9} {'-'*8} {'-'*6} {'-'*6}")
+    print(f"  {'-' * 25} {'-' * 6} {'-' * 9} {'-' * 8} {'-' * 6} {'-' * 6}")
     for name, r in results.items():
         if "error" in r:
             print(f"  {name:<25s} {'ERROR':>6s} {r['error']}")
             continue
-        print(f"  {name:<25s} {r['mean_score']:>5.1f} "
-              f"{r['best_f1']:>7.3f} @{r['best_threshold']:.2f} "
-              f"{r['pairs_per_sec']:>7.1f} "
-              f"{r['mem_delta_mb']:>5.0f}MB "
-              f"{r['load_time_s']:>4.0f}s")
+        print(
+            f"  {name:<25s} {r['mean_score']:>5.1f} "
+            f"{r['best_f1']:>7.3f} @{r['best_threshold']:.2f} "
+            f"{r['pairs_per_sec']:>7.1f} "
+            f"{r['mem_delta_mb']:>5.0f}MB "
+            f"{r['load_time_s']:>4.0f}s"
+        )
 
     # Save report
     report = {

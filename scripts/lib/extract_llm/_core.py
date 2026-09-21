@@ -371,7 +371,7 @@ def _checkpoint_sections(extractions):
 
 
 def _ensure_embed_8081() -> bool:
-    """Start/ensure embed-4b on :8081 inside inference container without restart.
+    """Start/ensure embeder (Qwen3-Embedding-8B) on :8081 inside inference container without restart.
 
     Returns True if :8081 healthy. Non-blocking on existing healthy instance.
     """
@@ -386,9 +386,9 @@ def _ensure_embed_8081() -> bool:
     except Exception:
         pass
 
-    meta = MODEL_METADATA.get("embed-4b")
+    meta = MODEL_METADATA.get("embeder")
     if not meta:
-        print("  [embed] FATAL: embed-4b not in MODEL_METADATA")
+        print("  [embed] FATAL: embeder not in MODEL_METADATA")
         return False
 
     port = meta["port"]
@@ -457,7 +457,7 @@ def _ensure_embed_8081() -> bool:
 
 
 def _stop_embed_8081() -> None:
-    """Kill embed-4b llama-server on :8081."""
+    """Kill embeder (Qwen3-Embedding-8B) llama-server on :8081."""
     _sp.run(
         ["podman", "exec", "devforge-inference", "pkill", "-f", "llama-server.*8081"],
         timeout=10,
@@ -499,7 +499,7 @@ def _extract_edcr_freeform(
 
     Phase 1 (OIE): Single 8B Q8 on 8082, processes chunks sequentially.
       llama-server's parallel=2 handles slot scheduling internally.
-    Phase 2 (EDC normalize): embed-4b on 8081 → SeqMatcher → Embed 3-tier → dedup
+    Phase 2 (EDC normalize): embeder on 8081 → SeqMatcher → Embed 3-tier → dedup
       Falls back to LLM-as-judge when embed server unavailable.
     Phase 3 (Cleanup): Kill embed, keep 8082 for NLI verify.
 

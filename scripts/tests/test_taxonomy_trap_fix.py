@@ -309,7 +309,7 @@ def _stop_embed_server():
 
 
 def start_embed_server() -> bool:
-    """Start embed-4b on :8081 via podman exec (does NOT restart inference container).
+    """Start embeder (Qwen3-Embedding-8B) on :8081 via podman exec (does NOT restart inference container).
 
     Uses same pattern as ensure_dual_extraction() — starts a new llama-server
     inside the running inference container without disturbing existing models.
@@ -327,9 +327,9 @@ def start_embed_server() -> bool:
     except Exception:
         pass
 
-    meta = MODEL_METADATA.get("embed-4b")
+    meta = MODEL_METADATA.get("embeder")
     if not meta:
-        print("  [embed] FATAL: embed-4b not in MODEL_METADATA")
+        print("  [embed] FATAL: embeder not in MODEL_METADATA")
         return False
 
     port = meta["port"]
