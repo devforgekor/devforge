@@ -1,6 +1,6 @@
 # Secret Injection Hardening
 
-**Status:** Planned (Stage 3)
+**Status:** Stage 3 in progress — cashbook pilot COMPLETE (2026-09-21)
 **Origin:** refactoring-roadmap.md §5.1 (archived)
 **Trigger:** WebObsidian EnvironmentFile quoting bug (2026-09-19)
 **Updated:** 2026-09-21
@@ -10,97 +10,103 @@
 
 ## Problem Statement
 
-**Current state (Stage 2 — minimal injection, DONE):**
+**Stage 2 (minimal injection, previously deployed):**
 
-- KV secrets -> `scripts/deploy/kv-fetch-env.py` -> tmpfs EnvironmentFile -> process env
-- tmpfs prevents plaintext persistence on disk, and each service requests only the
-  keys it needs (no more "all 109 secrets" leakage).
-- **Remaining problem:** secrets still land in the process environment, so they are
-  readable via `ps e`, `/proc/<pid>/environ`, and `podman exec <c> env`.
-
-**Stage 2 rollout evidence (2026-09-21):** cashbook migrated to KV
-(`CASHBOOK-API-KEY` in Azure Key Vault, loaded through the `kv-fetch-env.py`
-wrapper). This is Stage 2, **not** Stage 3 — the secret is still exported into the
-environment.
+- KV secrets -> `scripts/deploy/kv-fetch-env.py` -> process environment.
+- Secrets are still readable from `/proc/<pid>/environ`, `ps e`, and
+  `podman exec <c> env`.
+- Measured 2026-09-21 (cashbook, before Stage 3): the process had **121 env
+  vars including every KV secret** (`CASHBOOK_API_KEY`, `GUDOKPIN_API_KEY`,
+  `SLACK_BOT_TOKEN_KEY`, `TELEGRAM_TOKEN_KEY`, ...). The wrapper was called
+  without `--keys`, so it injected the whole vault — both an exposure and a
+  least-privilege violation.
 
 ---
 
-## Solution: LoadCredential / podman --secret (Stage 3)
+## Solution: secret file (not environment variable)
 
-### Goal
+The correct pattern for systemd user services here is:
 
-| Item | Current (EnvironmentFile) | Target (LoadCredential) |
-|------|---------------------------|-------------------------|
-| Storage | tmpfs -> env vars | tmpfs -> credential file -> app reads file |
-| `/proc/<pid>/environ` | secret visible | secret NOT visible |
-| Access | any process via /proc | only systemd + the service process |
-| Reload | restart | restart |
+1. `ExecStartPre` fetches **one** secret with `kv-fetch-env.py env --keys` and
+   writes it to a mode-600 file under `/run/user/1000/<svc>/`.
+2. The unit sets an env var holding the **path** (not the value).
+3. The app reads the file at startup; the value never enters the environment.
 
-### Approach A — systemd `LoadCredential=` (recommended)
+### CRITICAL — do NOT use `LoadCredential=` with `ExecStartPre`
 
-For user services (uid 1000): `cashbook`, `fastapi`, `mcp`.
+The option-2 guide originally proposed `ExecStartPre=` + `LoadCredential=`.
+That does **not** work: systemd resolves `LoadCredential=` **before**
+`ExecStartPre=` runs, so the source file does not exist yet and the unit fails
+with:
+
+```
+Failed at step CREDENTIALS spawning ...: No such file or directory
+(status=243/CREDENTIALS)
+```
+
+Verified 2026-09-21 on systemd 252. If true `LoadCredential=` isolation is
+wanted, the secret must be produced by a **separate oneshot unit ordered
+`Before=` the service** (so it exists at start), not by `ExecStartPre`.
+
+---
+
+## cashbook — DONE (pilot, 2026-09-21)
+
+`~/.config/systemd/user/cashbook.service`:
 
 ```ini
 [Service]
-ExecStartPre=/opt/projects/server/scripts/deploy/kv-to-credential.sh CASHBOOK-API-KEY /run/user/1000/credentials/cashbook_key
-LoadCredential=cashbook_key:/run/user/1000/credentials/cashbook_key
+Type=simple
+WorkingDirectory=/opt/projects/server/cashbook
+Environment=CASHBOOK_CREDENTIAL_FILE=/run/user/1000/cashbook/cashbook_key
+ExecStartPre=/opt/projects/server/scripts/deploy/kv-to-credential.sh CASHBOOK-API-KEY /run/user/1000/cashbook/cashbook_key
 ExecStart=/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8100
-# App reads from $CREDENTIALS_DIRECTORY/cashbook_key
+ExecStopPost=/bin/rm -f /run/user/1000/cashbook/cashbook_key
+Restart=always
+RestartSec=5
 ```
 
-The app must read the file; simply re-exporting it in `ExecStart` reintroduces the
-env-var exposure (see option-2 guide §1.3).
+`cashbook/main.py`: `_load_api_key()` reads `CASHBOOK_CREDENTIAL_FILE` first,
+falling back to `CASHBOOK_API_KEY` (env) for compatibility.
 
-```python
-# cashbook/main.py
-import os
-from pathlib import Path
+**Verified:**
 
-
-def load_api_key() -> str:
-    creds_dir = os.getenv("CREDENTIALS_DIRECTORY")
-    if creds_dir:
-        key_file = Path(creds_dir) / "cashbook_key"
-        if key_file.exists():
-            return key_file.read_text().strip()
-    return os.getenv("CASHBOOK_API_KEY", "")
-```
-
-### Approach B — podman `--secret`
-
-For Quadlet containers (`postgres`), which natively support `POSTGRES_PASSWORD_FILE`.
-
-```ini
-# containers/devforge-postgres.container
-[Service]
-ExecStartPre=/opt/projects/server/scripts/deploy/kv-to-credential.sh POSTGRES-PASSWORD /run/user/1000/credentials/postgres_pw
-Environment=POSTGRES_PASSWORD_FILE=/run/credentials/postgres_pw
-```
+| Check | Before | After |
+|-------|--------|-------|
+| env vars | 121 | 13 |
+| KV secret keys in env | all | 0 |
+| credential file | none | `/run/user/1000/cashbook/cashbook_key` (600) |
+| API `?key=<correct>` | 200 | 200 |
+| API `?key=<wrong>` | 200 | 401 |
+| survives restart | - | yes (file regenerated) |
 
 ---
 
-## Migration Sequence
+## Migration Sequence (remaining)
 
-| Service | Sensitive key | Code change | Priority | Stage 3 status |
-|---------|---------------|-------------|----------|----------------|
-| cashbook | CASHBOOK_API_KEY | yes (main.py) | P3 | planned |
+| Service | Sensitive key | Code change | Priority | Status |
+|---------|---------------|-------------|----------|--------|
+| cashbook | CASHBOOK_API_KEY | yes | P3 | DONE |
 | postgres | POSTGRES_PASSWORD | no (native `_FILE`) | P1 | planned |
-| webobsidian | master password | yes (config load) | P1 | planned |
-| fastapi | multiple (10+) | yes (core/config.py) | P2 | planned |
-| mcp | DB credentials | yes (connection string) | P2 | planned |
+| webobsidian | master password | yes | P1 | planned |
+| fastapi | multiple (10+) | yes | P2 | planned |
+| mcp | DB credentials | yes | P2 | planned |
 
-Recommended order: postgres (native) -> webobsidian (single key) -> fastapi/mcp (many keys).
+**postgres note:** devforge-postgres is a custom image; confirm it honors
+`POSTGRES_PASSWORD_FILE` before switching. Because the DB backs every service,
+stage separately and verify `pg_isready` + app connectivity before removing the
+env password.
 
 ---
 
-## Rollback Plan
+## Rollback
 
 ```bash
-# 1. Restore the previous unit definition
-git checkout HEAD~1 ~/.config/systemd/user/<service>.service
-# 2. Reload and restart
+# cashbook
+cp /tmp/opencode/cashbook-backup/cashbook.service.bak ~/.config/systemd/user/cashbook.service
+git checkout HEAD -- cashbook/main.py   # if main.py change must be reverted
 systemctl --user daemon-reload
-systemctl --user restart <service>.service
+systemctl --user restart cashbook.service
 ```
 
 ---
@@ -109,28 +115,20 @@ systemctl --user restart <service>.service
 
 ```bash
 PID=$(systemctl --user show -p MainPID --value cashbook.service)
-
-# Before (Stage 2): secret visible
-sudo cat /proc/$PID/environ | tr '\0' '\n' | grep CASHBOOK_API_KEY
-# After  (Stage 3): empty output expected
-
-# Credential is wired (link into the runtime credentials dir)
-sudo ls -l /proc/$PID/fd/ | grep credentials
+/usr/bin/tr '\0' '\n' < /proc/$PID/environ | grep -c '^CASHBOOK_API_KEY='   # expect 0
+ls -l /run/user/1000/cashbook/cashbook_key                                  # expect 600
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8100/api/cashbook?key=<key>'   # 200
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8100/api/cashbook?key=WRONG'   # 401
 ```
+
+> Note: the file is owned by the service user (mode 600). Any same-user process
+> could read it; `LoadCredential=` via a pre-service would tighten that, at the
+> cost of a second unit. Accepted for the pilot.
 
 ---
 
 ## References
 
-- systemd.exec(5): `LoadCredential=`
-- Podman secrets: https://docs.podman.io/en/latest/markdown/podman-secret.1.html
+- systemd.exec(5): `LoadCredential=`, `$CREDENTIALS_DIRECTORY`
+- scripts/deploy/kv-to-credential.sh, scripts/deploy/kv-fetch-env.py
 - docs/runbooks/option-2-secret-hardening.md
-- refactoring-roadmap.md §5.1 (archived)
-
----
-
-**Next actions:**
-
-1. Implement `scripts/deploy/kv-to-credential.sh`.
-2. Pilot with `postgres` (native `_FILE` support, no app change).
-3. Verify no secret in `/proc/<pid>/environ`; then roll out to webobsidian/fastapi/mcp.

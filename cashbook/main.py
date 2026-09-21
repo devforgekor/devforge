@@ -18,7 +18,24 @@ import auth
 import storage
 from models import CashBook, Deposit, Withdrawal
 
-API_KEY = os.environ.get("CASHBOOK_API_KEY", "")
+def _load_api_key() -> str:
+    """Load the API key from the Stage 3 credential file, else the environment.
+
+    Stage 3 keeps secrets out of the process environment (see
+    docs/security/secret-injection-hardening.md). CASHBOOK_CREDENTIAL_FILE holds
+    the *path* to a mode-600 file written by kv-to-credential.sh at service
+    start; the path is not secret, the value is.
+    """
+    cred_path = os.environ.get("CASHBOOK_CREDENTIAL_FILE", "")
+    if cred_path and os.path.exists(cred_path):
+        with open(cred_path) as fh:
+            value = fh.read().strip()
+        if value:
+            return value
+    return os.environ.get("CASHBOOK_API_KEY", "")
+
+
+API_KEY = _load_api_key()
 
 app = FastAPI(title="Cashbook")
 

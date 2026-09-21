@@ -45,13 +45,26 @@ systemctl --user cat cashbook.service | grep "kv-fetch-env.py"
 - **장점:** 컨테이너 전용, Quadlet 통합
 - **단점:** Quadlet 서비스에만 적용 가능
 
-**권장:** Option A (시스템 서비스와 컨테이너 모두 적용 가능)
+> **⚠️ 2026-09-21 검증 결과 — 이 가이드 원안(Task 1.2의 `ExecStartPre` + `LoadCredential`)은 동작하지 않습니다.**
+> systemd는 `LoadCredential=`을 `ExecStartPre=`보다 **먼저** 처리하므로 소스 파일이 아직 없고, 유닛이
+> `Failed at step CREDENTIALS ... (status=243/CREDENTIALS)`로 실패합니다 (systemd 252 실측).
+> 올바른 방식은 **파일 방식**: `ExecStartPre`가 600 파일을 생성하고, 앱이 경로 env(`CASHBOOK_CREDENTIAL_FILE`)로
+> 그 파일을 직접 읽습니다. 실제 적용본/검증 수치는 `docs/security/secret-injection-hardening.md` 참조.
+> 진정한 `LoadCredential=` 격리가 필요하면 secret 생성용 **별도 oneshot 유닛을 서비스에 `Before=`로 선행** 배치해야 합니다.
+
+**권장:** 파일 방식(위 정정안). Option B(podman --secret)는 컨테이너(postgres)에만 해당.
 
 ---
 
 ## 작업 계획
 
 ### Task 1: 시범 적용 — cashbook 서비스 (30분)
+
+> **2026-09-21 완료.** 실제 적용은 아래 원안이 아니라 파일 방식으로 진행됨:
+> `scripts/deploy/kv-to-credential.sh`(신규) + `cashbook/main.py`의 `_load_api_key()` +
+> 유닛에서 `kv-fetch-env` 래퍼 제거 → `ExecStartPre` + `CASHBOOK_CREDENTIAL_FILE`.
+> before/after: env 121→13, KV 시크릿 env 노출 전체→0, `?key=` 정상 200/오답 401.
+> 아래 1.1~1.4는 원안(참고용)이며, `LoadCredential` 사용 부분은 위 경고대로 무효입니다.
 
 #### 1.1 시크릿 파일 생성 스크립트 작성
 ```bash
