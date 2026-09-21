@@ -1,0 +1,132 @@
+# Machine-readable refactoring progress tracker.
+# SSOT for "where are we" queries; narrative lives in docs/REFACTORING_PLAN.md.
+# Keep this file in sync with reality at each work session (see option-3 guide).
+version: 1.0
+last_updated: 2026-09-21
+canonical_plan: docs/REFACTORING_PLAN.md
+canonical_appendix: docs/REFACTORING_PLAN-appendix.md
+
+current_phase:
+  number: 0
+  name: Foundation + Characterization Tests
+  week: "Week 1-2"
+  status: active
+  started: 2026-09-13
+  progress_percent: 65
+
+phase_0:
+  week_1:
+    status: complete
+    progress_percent: 100
+    completed:
+      - pyproject.toml (src-layout, pip install -e . works)
+      - "src/devforge/ skeleton (adapters, application, cli, core, domain, pipeline_stages, ports)"
+      - "core/config.py: ConfigRegistry + 5-source merge (secrets/providers/runtime/system/state)"
+      - "core/logging.py: structlog + JSON, single-emission via ProcessorFormatter"
+      - "core/paths.py: Paths SSOT for DATA_DIR/SERVER_DIR/CONFIG_DIR"
+      - "core/database.py: SQLAlchemy 2.0 async DatabaseGateway"
+      - "core/exceptions.py: DevForgeError hierarchy"
+      - "ports/extract.py: LLMPort interface"
+      - "application/extract_pipeline.py: initial orchestration"
+      - "domain subpackages: model_management, pipeline, turn_collection, watchdog"
+      - "alembic/: env.py + initial + fix_initial_schema migrations"
+      - "import-linter: 4 contracts (layering, hexagonal, domain-subpackage-independence, domain-agnostic-of-adapters)"
+      - "unit tests: tests/unit/ (49 passing)"
+    verification:
+      ruff: pass
+      mypy_strict: pass
+      pytest_unit: "49 passed"
+      lint_imports: "4 kept, 0 broken"
+      import_linter_enforcement: "verified via injected violations (exit 1)"
+
+  week_2:
+    status: pending
+    progress_percent: 0
+    note: "tests/test_characterization.py exists as a Phase 0.6 stub, but the 5 targeted characterization tests are not written."
+    pending:
+      - task: Characterization test 1
+        description: day_cycle.sh batch scheduling logic (scanned count = 10)
+        files: [tests/characterization/test_day_cycle.py]
+      - task: Characterization test 2
+        description: check_all_llm T1/T2 probe (port 8082 -> 200 OK)
+        files: [tests/characterization/test_check_all_llm.py]
+      - task: Characterization test 3
+        description: call_llm response format + content freeze
+        files: [tests/characterization/test_call_llm.py]
+      - task: Characterization test 4
+        description: watchdog 60s loop (liveness_ts update)
+        files: [tests/characterization/test_watchdog.py]
+      - task: Characterization test 5
+        description: text_clean language detection (Korean sanitization)
+        files: [tests/characterization/test_text_clean.py]
+
+phase_1:
+  status: planned
+  week: "Week 3-4"
+
+phase_1_5:
+  status: planned
+  week: "Week 4.5 (2 days)"
+
+archived_docs:
+  - docs/_archive/plans/phases.md
+  - docs/_archive/plans/refactoring-roadmap.md
+  - docs/_archive/plans/azure-golden-image-rebuild-handover.md
+  - docs/_archive/plans/code-size-refactoring.md
+  - docs/_archive/plans/mcp-consolidation-server-side.md
+  - docs/_archive/plans/track-b-migration.md
+  - docs/_archive/plans/14b-comparison-test-plan.md
+  - docs/_archive/plans/conversation-extraction-research.md
+  - docs/_archive/plans/day-night-restructure-plan.md
+  - docs/_archive/plans/day-night-split-handoff-plan.md
+  - docs/_archive/plans/mcp-sse-server.md
+  - docs/_archive/plans/slack-chatops-design.md
+
+documents:
+  active:
+    - docs/REFACTORING_PLAN.md
+    - docs/REFACTORING_PLAN-appendix.md
+    - docs/REFACTORING_STATUS.yaml
+    - docs/plans/final-plan.md
+    - docs/plans/phase3-plan.md
+  runbooks:
+    - docs/runbooks/option-1-phase0-continuation.md
+    - docs/runbooks/option-2-secret-hardening.md
+    - docs/runbooks/option-3-documentation-improvement.md
+    - docs/runbooks/option-4-server-maintenance-summary.md
+    - docs/runbooks/daily-server-maintenance.md
+  security:
+    - docs/security/secret-injection-hardening.md
+
+git_commits:
+  - hash: ed6971f
+    date: 2026-09-21
+    message: "docs(archive): move completed and old plan docs to _archive"
+  - hash: 733139f
+    date: 2026-09-21
+    message: "docs(refactoring): update Phase 0 progress and fix week count (16->17)"
+  - hash: f53f8b1
+    date: 2026-09-21
+    message: "docs(runbooks): add detailed guides for Options 1-4"
+  - hash: 72f67a4
+    date: 2026-09-21
+    message: "refactor(phase-0): complete Week 1 tasks (database/paths/exceptions/import-linter)"
+  - hash: 73b6c66
+    date: 2026-09-21
+    message: "fix(tests): make database tests exercise real behavior"
+  - hash: 4840f6f
+    date: 2026-09-21
+    message: "refactor(phase-0): centralize DSN normalization and path constants"
+  - hash: 0b4b88a
+    date: 2026-09-21
+    message: "fix(system-sync): stop auto-commit from absorbing authored source"
+  - hash: 9af3c4e
+    date: 2026-09-21
+    message: "docs(handover): record core/database.py unwired-in-production issue"
+
+notes:
+  - Phase 0 start date is the src/devforge/ first-creation date (2026-09-13).
+  - "Week count fixed 16 -> 17 (Phase -1: 0.5w + Phase 1.5: 0.5w)."
+  - 12 old plan documents archived on 2026-09-21 (docs/_archive/plans/).
+  - "Known drift: blueprint.yaml still reports Phase 0 progress ~35-40%; update via its owning tooling (phase_tracker) rather than editing by hand."
+  - "Known issue: core/database.py is not wired to production (tests only); see handover known_issues CORE-DB-UNWIRED-2026-09-21."

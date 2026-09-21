@@ -24,7 +24,7 @@ journalctl --user --since "1 hour ago" --priority=err -n 10
 df -h | awk '$5 > 85 {print}'
 
 # 5. 최근 백업
-ls -lht /opt/ai_data/backups/pg_dumps/*.sql.gz | head -1
+ls -lht /opt/ai_data/backups/db/devforge_*.dump | head -1
 ```
 
 ---
@@ -83,7 +83,7 @@ echo "Memory: $(free -h | awk 'NR==2 {print $3 "/" $2}')"
 echo "Disk: $(df -h / | awk 'NR==2 {print $5}')"
 systemctl --user list-units --type=service --state=failed || echo "All services OK"
 journalctl --user --since "1 hour ago" --priority=err -n 5 || echo "No errors"
-ls -lht /opt/ai_data/backups/pg_dumps/*.sql.gz | head -1 | awk '{print "Backup:", $6, $7, $8}'
+ls -lht /opt/ai_data/backups/db/devforge_*.dump | head -1 | awk '{print "Backup:", $6, $7, $8}'
 echo "=== Check Complete ==="
 SCRIPT
 ```
