@@ -1,14 +1,14 @@
 last_checkpoint:
-  time: '2026-09-21T22:41:26.108429+00:00'
-  summary: 8 source, 60 config, 4 docs, 1 generated
-  total_files: 85
+  time: '2026-09-21T23:31:16.751736+00:00'
+  summary: 10 source, 60 config, 4 docs, 1 generated
+  total_files: 87
   recent_files:
     data: []
     docs:
     - server/docs/INDEX.md
+    - server/docs/plans/phase1-plan.md
     - server/docs/refactoring/REFACTORING_STATUS.yaml
     - server/docs/refactoring/phase0-work-log.md
-    - server/docs/runbooks/option-3-documentation-improvement.md
     config:
     - server/systemd/user/activity-summarizer-safety.timer
     - server/systemd/user/activity-summarizer.service
@@ -22,6 +22,8 @@ last_checkpoint:
     - server/systemd/user/container-flaresolverr.service
     source:
     - server/cashbook/auth.py
+    - server/scripts/deploy/sync-units.sh
+    - server/scripts/system_sync.sh
     - server/scripts/update_handover.py
     - server/tests/characterization/__init__.py
     - server/tests/characterization/test_call_llm.py
@@ -232,8 +234,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) 스테일 정리: known_issue dp-ki-01(P0) resolve(droplr.py가 DROPLR_USER/PASS 읽음 확인, KV 키 일치), decision dp-01
-  resolved. kv-ki-01 카운트 39→12 정정, fallback 제거 후 resolved.'
 - '(2026-09-20, opencode) secrets.env fallback 제거: 워크스페이스 8개 파일(news 4/timetable 2/azure golden_image 2) env-only 전환, 미사용
   pathlib Path import 제거. 실 fallback 리더 0개.'
 - '(2026-09-20, opencode) Deep Dive step budget 재교정(task #25): base 신규값 적용 + devforge-mcp 재기동(health 18 tools).'
@@ -372,3 +372,8 @@ completed_log:
   ValueError), (4) watchdog liveness(경로 상수 /var/tmp/watchdog_last_cycle_ts + 현재 ts 기록), (5) text_clean 언어감지(ko/en 0.8, 기타
   unknown). 문서: REFACTORING_STATUS.yaml·phase0-work-log.md를 docs/refactoring/로 이동, Week2/Phase0 complete(100%), INDEX·option-3
   경로 갱신. 생성 파일: tests/characterization/{test_day_cycle,test_check_all_llm,test_call_llm,test_watchdog,test_text_clean}.py'
+- '(2026-09-21, devforge-444795) 보완검토 반영 + 운영 정비. (1) auto-sync 문서 흡수 위험: 검토문은 "흡수 없음"이나 0dacca5가 docs(INDEX.md+문서 이동)를 흡수한
+  실증 확인 → system_sync.sh가 docs·*.md도 unstage(이제 collect_checkpoint.json만 자동커밋). (2) 유닛 드리프트: 현재 없음(diff clean)이나 동기화 메커니즘
+  부재 → scripts/deploy/sync-units.sh 신규(repo 미러=SSOT, --check 드리프트 / 기본 배포+daemon-reload). (3) 가이드 SSOT 규칙 확정: phase1-plan.md
+  rev.2 = 최종상태 기준(devforge import, 중간 import 에러 허용 명시), Phase 1.5 mostly-complete 정정, CORE-DB-UNWIRED=DatabaseGateway 중복으로
+  재정의. 세션검증(쿠키 서명/서버측)은 Phase2+ 별도과제 유지. 커밋: sync-units/system_sync, 322a4ef.'
