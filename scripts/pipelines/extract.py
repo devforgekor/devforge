@@ -47,13 +47,13 @@ from extract_llm import (
     _SIGTERM_RECEIVED,
     SYSTEM_DESCRIBE_FILE,
     _checkpoint_sections,
+    _fix_status_hallucination,
     _parse_json,
+    _quality_check_facts,
     _sigterm_handler,
 )
 from extract_llm import (
     _extract_edcr_freeform as _extract_solo_section_major,
-    _fix_status_hallucination,
-    _quality_check_facts,
 )
 from extract_verify import (
     _llm_nli_verify,
@@ -280,7 +280,9 @@ def _delete_checkpoint(turn_id: str) -> None:
 # ── Phase 1: Extract — SELECT unprocessed turns ──────────────────────
 
 
-def _get_unprocessed_turns(limit: int = BATCH_LIMIT, large_only: bool = False) -> List[Dict[str, Any]]:
+def _get_unprocessed_turns(
+    limit: int = BATCH_LIMIT, large_only: bool = False
+) -> List[Dict[str, Any]]:
     """Atomically claim scanned turns via FOR UPDATE SKIP LOCKED,
     set pipeline_state='extracting', and return turn data.
     Prevents duplicate processing when multiple workers run concurrently.
@@ -300,7 +302,7 @@ def _get_unprocessed_turns(limit: int = BATCH_LIMIT, large_only: bool = False) -
                     WHERE rf.turn_id = t.id AND rf.source = 'extract_pipeline'
                   )
                   AND t.pipeline_state IN ('scanned', 'pending')
-                  {'AND (LENGTH(t.user_turn) > 2000 OR LENGTH(t.text) > 2000)' if large_only else ''}
+                  {"AND (LENGTH(t.user_turn) > 2000 OR LENGTH(t.text) > 2000)" if large_only else ""}
                 ORDER BY t.est_chars ASC NULLS LAST, t.created_at DESC
                 LIMIT {limit}
                 FOR UPDATE SKIP LOCKED
@@ -711,10 +713,18 @@ def extract_pipeline(
             for t in turns:
                 if t["id"] == tid:
                     src_text = t.get("user_turn", "") or t.get("text", "") or ""
-                    parts = [t.get("user_turn","") or "", t.get("thinking","") or "", t.get("text","") or ""]
+                    parts = [
+                        t.get("user_turn", "") or "",
+                        t.get("thinking", "") or "",
+                        t.get("text", "") or "",
+                    ]
                     source_text_qc = " ".join(p for p in parts if p)
                     break
-            fixed = _fix_status_hallucination(extractions_by_turn[tid], src_text) if src_text else extractions_by_turn[tid]
+            fixed = (
+                _fix_status_hallucination(extractions_by_turn[tid], src_text)
+                if src_text
+                else extractions_by_turn[tid]
+            )
             extractions_by_turn[tid] = _quality_check_facts(fixed, source_text_qc)
 
     # ── Phase 4: Store ── sequential DB writes ─────────────────
@@ -964,8 +974,13 @@ def _preflight_gate() -> None:
     # ── Lazy imports (avoid circular at module level) ────────────────
     import gc as _gc
 
-    from lib.watchdog.checker import check_health, check_model_file, check_memory_budget, check_postgres
     from lib.pod_manager import ensure_model as _ensure_model
+    from lib.watchdog.checker import (
+        check_health,
+        check_memory_budget,
+        check_model_file,
+        check_postgres,
+    )
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -990,6 +1005,7 @@ def _preflight_gate() -> None:
     if not ok:
         _log(f"memory low ({detail}) — attempting reclaim")
         from lib.pod_manager.container import _reclaim_memory as _reclaim
+
         _reclaim()
         _gc.collect()
         ok, detail = check_memory_budget(_need_gb)
@@ -1007,11 +1023,11 @@ def _preflight_gate() -> None:
         _ensure_model("day-extractor", skip_if_healthy=False)
         ok, detail = check_health(8082, "day-extractor")
         if ok:
-            _log(f":8082 recovered")
+            _log(":8082 recovered")
         else:
             errors.append(f":8082 failed after restart: {detail}")
     else:
-        _log(f":8082 health OK")
+        _log(":8082 health OK")
 
     # ── 4. Port 8080 — reranker (복구: _launch_reranker, 실패 시 경고) ─
     ok, detail = check_health(8080, "reranker")
@@ -1020,11 +1036,11 @@ def _preflight_gate() -> None:
         _launch_reranker()
         ok, detail = check_health(8080, "reranker")
         if ok:
-            _log(f":8080 recovered")
+            _log(":8080 recovered")
         else:
-            warnings.append(f":8080 unavailable after launch — reranker fallback active")
+            warnings.append(":8080 unavailable after launch — reranker fallback active")
     else:
-        _log(f":8080 health OK")
+        _log(":8080 health OK")
 
     # ── 5. DB connectivity (복구 불가) ───────────────────────────────
     ok, detail = check_postgres()
@@ -1051,33 +1067,58 @@ def _preflight_gate() -> None:
 
 def _launch_reranker() -> bool:
     """Launch reranker (Qwen3-Reranker-4B-Q8_0.gguf) on :8080 via podman exec."""
+    import subprocess
+
     from lib.model_registry import MODEL_METADATA
     from lib.pod_manager import wait_health
-    import subprocess
 
     subprocess.run(
         ["podman", "exec", "devforge-inference", "pkill", "-f", "reranking.*8080"],
-        capture_output=True, timeout=15,
+        capture_output=True,
+        timeout=15,
     )
 
-    reranker = MODEL_METADATA["reranker"]
+    reranker = MODEL_METADATA.get("reranker")
+    if not reranker:
+        print("  [reranker] MODEL_METADATA missing 'reranker' key", flush=True)
+        return False
+
     cmd = [
-        "podman", "exec", "-d", "devforge-inference",
-        "taskset", "-c", "0-3",
+        "podman",
+        "exec",
+        "-d",
+        "devforge-inference",
+        "taskset",
+        "-c",
+        "0-3",
         "/app/llama-server",
-        "-m", f"/models/{reranker['file']}",
-        "--host", "0.0.0.0", "--port", "8080",
-        "--ctx-size", str(reranker.get("ctx", 2048)),
-        "--batch-size", str(reranker.get("batch_size", 256)),
-        "--ubatch-size", str(reranker.get("ubatch_size", 256)),
-        "--threads", str(reranker.get("threads", 4)),
-        "--threads-batch", str(reranker.get("threads_batch", 4)),
-        "--no-mmap", "--reranking", "-lv", "6",
+        "-m",
+        f"/models/{reranker['file']}",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--ctx-size",
+        str(reranker.get("ctx", 2048)),
+        "--batch-size",
+        str(reranker.get("batch_size", 256)),
+        "--ubatch-size",
+        str(reranker.get("ubatch_size", 256)),
+        "--threads",
+        str(reranker.get("threads", 4)),
+        "--threads-batch",
+        str(reranker.get("threads_batch", 4)),
+        "--no-mmap",
+        "--reranking",
+        "-lv",
+        "6",
     ]
     print("  [reranker] launching on :8080 via podman exec", flush=True)
     r = subprocess.run(cmd, capture_output=True, timeout=30, text=True)
     if r.returncode != 0:
-        print(f"  [reranker] launch failed (rc={r.returncode}): {r.stderr.strip()[:200]}", flush=True)
+        print(
+            f"  [reranker] launch failed (rc={r.returncode}): {r.stderr.strip()[:200]}", flush=True
+        )
         return False
     ok = wait_health(8080, timeout=300)
     if ok:
@@ -1106,7 +1147,11 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--pulse-context", help="Inject Watchdog Pulse context")
-    parser.add_argument("--large-only", action="store_true", help="Only process turns with user_turn or text > 2000 chars")
+    parser.add_argument(
+        "--large-only",
+        action="store_true",
+        help="Only process turns with user_turn or text > 2000 chars",
+    )
     parser.add_argument(
         "--describe-files",
         action="store_true",
