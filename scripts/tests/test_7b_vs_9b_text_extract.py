@@ -222,8 +222,8 @@ def call_llm_direct(prompt, text, port, max_tokens=1024):
 PORT = 8083
 
 MODELS_TO_TEST = [
-    ("day-verifier-b", "7B (qwen2.5-coder-7b)"),
-    ("day-enricher-b", "9B (Qwen3.5-9B)"),
+    ("day-verifier", "7B (qwen2.5-coder-7b)"),
+    ("day-enricher", "9B (Qwen3.5-9B)"),
 ]
 
 print("=" * 72)
@@ -268,7 +268,7 @@ for model_key, label in MODELS_TO_TEST:
 print(f"\n{'=' * 72}")
 print("  DONE. Cleanup: restarting 4B extract-b on :8083...")
 pkill_on_port(PORT)
-ok = start_model("day-extractor-b", PORT)
+    ok = start_model(model_key, PORT)
 if ok:
     print("  4B extract-b restarted on :8083")
 else:

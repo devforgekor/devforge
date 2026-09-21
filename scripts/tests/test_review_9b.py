@@ -9,7 +9,7 @@ sys.path.insert(0, "/opt/projects/server/scripts")
 
 from lib.llm.json_parser import parse_llm_json
 from lib.llm_client import call_llm_with_retry
-from lib.pod_manager import ensure_dual, ensure_model
+from lib.pod_manager import ensure_model
 from pipelines.extract_llm import (
     _STRUCTURED_FIELDS,
     _calc_max_tokens,
@@ -152,9 +152,9 @@ def test():
     turns = load_turns()
     print(f"  {len(turns)} turns loaded\n")
 
-    # Phase 1+2: Dual 4B (same as 7B test for fair comparison)
-    print("[Phase 1+2] Dual 4B extraction (A-Strict:8082 + B-Xplore:8083)...")
-    ensure_dual("day-extractor", "day-extractor-b", skip_if_healthy=False)
+    # Phase 1+2: Single 4B extractor (sequential strict + xplore)
+    print("[Phase 1+2] 4B extraction (day-extractor:8082)...")
+    ensure_model("day-extractor", skip_if_healthy=False)
     strict_results = {}
     for t in turns:
         eid = str(t["id"])[:8]
@@ -170,17 +170,17 @@ def test():
         strict_results[eid] = all_f
         print(f"  {eid} total: {len(all_f)}")
 
-    print("\n[Phase 2] 4B XPLORE extraction (8083)...")
+    print("\n[Phase 2] 4B XPLORE extraction (same model)...")
     xplore_results = {}
     for t in turns:
         eid = str(t["id"])[:8]
         all_f = []
         if len(t["user"]) > 50:
-            f, lat = extract(_SYSTEM_USER_EXTRACT_XPLORE, "user", t["user"], "day_extract_b")
+            f, lat = extract(_SYSTEM_USER_EXTRACT_XPLORE, "user", t["user"], "day_extract")
             all_f.extend(f)
             print(f"  {eid} user: {len(f)} ({lat:.0f}s)")
         if len(t["text"]) > 50:
-            f, lat = extract(_SYSTEM_TEXT_EXTRACT_XPLORE, "text", t["text"], "day_extract_b")
+            f, lat = extract(_SYSTEM_TEXT_EXTRACT_XPLORE, "text", t["text"], "day_extract")
             all_f.extend(f)
             print(f"  {eid} text: {len(f)} ({lat:.0f}s)")
         xplore_results[eid] = all_f
