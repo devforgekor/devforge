@@ -1,13 +1,30 @@
 last_checkpoint:
-  time: '2026-09-21T15:26:17.11807+00:00'
-  summary: no files
-  total_files: 0
+  time: '2026-09-21T22:35:35.544039+00:00'
+  summary: 2 source, 60 config, 4 docs, 1 generated
+  total_files: 77
   recent_files:
     data: []
-    docs: []
-    config: []
-    source: []
-    generated: []
+    docs:
+    - server/docs/INDEX.md
+    - server/docs/refactoring/REFACTORING_STATUS.yaml
+    - server/docs/refactoring/phase0-work-log.md
+    - server/docs/runbooks/option-3-documentation-improvement.md
+    config:
+    - server/systemd/user/activity-summarizer-safety.timer
+    - server/systemd/user/activity-summarizer.service
+    - server/systemd/user/anthropic-gudokpin-proxy.service
+    - server/systemd/user/anthropic-openrouter-proxy.service
+    - server/systemd/user/anthropic-proxy.service
+    - server/systemd/user/baseline-daily-failed.service
+    - server/systemd/user/baseline-daily.service
+    - server/systemd/user/baseline-daily.timer
+    - server/systemd/user/cashbook.service
+    - server/systemd/user/container-flaresolverr.service
+    source:
+    - server/cashbook/auth.py
+    - server/scripts/update_handover.py
+    generated:
+    - server/collect_checkpoint.json
   git: {}
   task: null
 decisions:
@@ -202,12 +219,6 @@ known_issues:
     ID DM). 사용자는 Slack 정상이라 하나 서버 봇은 차단 상태 → 확인 필요(어느 봇/앱, 서버發 여부). 다음 세션: Slack 앱 재활성/신규 Bot Token(KV SLACK-BOT-TOKEN-KEY
     갱신). **보류(사용자 지시)**.'
   resolved: false
-- id: WATCHDOG-STOPPED-2026-09-21
-  detail: '워치독 정지(2026-09-21): devforge-watchdog.service가 07:43:11 UTC 명시적 stop 후 미재시작(inactive/dead, Restart=always인데도 자동복구
-    안 됨). day-cycle은 별도 timer가 없고 워치독이 기동·감시하므로 파이프라인·자동복구 공백 발생. 여파: devforge-watchdog-liveness.timer(dead-man 스위치)가 매분 실패(watchdog_last_cycle_ts
-    26625s stale, limit 900s), health-check/system-sync에서 failed service로 탐지. pause 플래그·실행 중 파이프라인 없음 → 의도적 정지의 잔재로 추정(churn
-    이력 있어 임의 재시작 보류). 재시작은 사용자 판단 필요.'
-  resolved: false
 - id: WEBOBSIDIAN-CGROUP-2026-09-20
   detail: 'stale child cgroup(runtime, 9/19 생성)으로 ExecStartPre attach EBUSY → drop-in(Slice=webobsidian-workaround.slice)으로
     우회 복구. 2026-09-20 07:04 KST 재부팅 실행(커널 cgroup 잔존 제거 목적). 재부팅 후 조치: (1) container-webobsidian 정상 기동 확인, (2) ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
@@ -215,9 +226,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) 핸드오버 문서 감사·정정 — docs/handover-secrets-kv.md 실제 상태 대조. 일치 8항목 확인. 정정 7건(§4.1 kv-export-env.sh 누락,
-  §4.2 fastapi 사유·서비스 수, §8 fallback 잔존·kuhwa 파일명, §9 push, §12 컨테이너 3개). 미푸시 커밋 13개 push(main=origin/main, 0ec3855 포함). 보안:
-  ~/.claude/secrets.env NOTION_TOKEN 평문 mode644→600 조치, 삭제 권장.'
 - (2026-09-20, opencode) ~/.claude/secrets.env (NOTION_TOKEN 평문, mode 644) 삭제 완료 — KV(NOTION-TOKEN-KEY)와 중복, mcp.json에 notion
   서버 미설정으로 안전. 감사 known_issue CLAUDE-SECRETSENV-2026-09-20 resolved 처리.
 - '(2026-09-20, opencode) 스테일 정리: known_issue dp-ki-01(P0) resolve(droplr.py가 DROPLR_USER/PASS 읽음 확인, KV 키 일치), decision dp-01
@@ -349,3 +357,8 @@ completed_log:
   내부 참조 0(불필요 노출)이고 이미지 엔트리포인트가 POSTGRES_PASSWORD_FILE 미지원임을 확인 → container-postgres.container의 EnvironmentFile/ExecStartPre(kv-export-env)/ExecStopPost
   제거. 검증: pg_isready OK, turns 8121, env 시크릿 1→0, fastapi/mcp/worker/cashbook active. 주의: fresh init 시 이 이미지는 POSTGRES_PASSWORD를
   읽으므로 재초기화 시 별도 설정 필요. quadlet/유닛은 여전히 비버전관리.'
+- '(2026-09-21, devforge-444795) 운영 안정성 수정 4건. (1) 워치독 재시작: 07:43:11 명시적 stop 후 미복구(원인: 스크립트 흔적 없는 수동 stop 잔재, pause 플래그·파이프라인
+  없음). start 후 active, liveness OK(21s), NRestarts=0. known_issue WATCHDOG-STOPPED-2026-09-21 resolved. (2) cashbook auth.is_authenticated의
+  `or True` 제거(항상 True 잠재 우회) → 쿠키 존재 검사로 정정(미사용 함수). 진짜 세션검증은 별도 과제. (3) scripts/update_handover.py `_run` 기본 cwd=/opt/projects/seedling(stale)
+  → SERVER_DIR, SIM102/I001 정리. (4) 유닛 버전관리: containers/systemd/(quadlet .container/.pod) + systemd/user/(hand-written .service/.timer,
+  생성 container-*.service 제외) 미러 추가 + README(배포법/시크릿 금지). 시크릿 스캔 clean. 커밋: e1512f7, e5b11be, (systemd 미러).'
