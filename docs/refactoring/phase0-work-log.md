@@ -3,7 +3,7 @@
 **Phase:** 0 (Foundation + Characterization Tests)
 **Started:** 2026-09-13
 **Target completion:** 2026-09-27 (2 weeks)
-**Current status:** Week 1 COMPLETE, Week 2 pending (~65% overall)
+**Current status:** Phase 0 COMPLETE (Week 1 + Week 2) as of 2026-09-21
 
 Companion SSOT: `docs/refactoring/REFACTORING_STATUS.yaml`
 
@@ -60,19 +60,25 @@ the auto-commit now skips when a git operation is in progress and unstages
 
 ---
 
-## Week 2 (target 2026-09-23 ~ 2026-09-27) — PENDING
+## Week 2 (2026-09-21) — COMPLETE
 
-### Pending tasks
-- Characterization test 1: `day_cycle.sh` batch scheduling (scanned count = 10).
-- Characterization test 2: `check_all_llm` T1/T2 probe (port 8082 -> 200 OK).
-- Characterization test 3: `call_llm` response format + content freeze.
-- Characterization test 4: watchdog 60s loop (liveness_ts update).
-- Characterization test 5: `text_clean` language detection.
+### Completed — `tests/characterization/` (19 tests, all pass)
+- test 1 `test_day_cycle.py`: batch reservation selects oldest pending, `LIMIT 50`,
+  `pending -> batching` (the header comment still says "10" — stale; the real query
+  is LIMIT 50, captured as the locked behavior).
+- test 2 `test_check_all_llm.py`: T1/T2 probe shape; T2 runs only if T1 ok;
+  non-serving port skipped.
+- test 3 `test_call_llm.py`: returns stripped content; `return_meta=True` shape;
+  registry defaults (max_tokens/temperature/port); `json_mode` sets response_format;
+  unknown model raises ValueError.
+- test 4 `test_watchdog.py`: liveness path constant + current-timestamp write.
+- test 5 `test_text_clean.py`: language detection (`ko`/`en` fixed 0.8; others unknown).
 
 ### Notes
-- `tests/test_characterization.py` exists as a Phase 0.6 stub but does not satisfy the
-  5 targeted characterization tests above.
-- Characterization tests depend on LLM record/replay fixtures from Phase -1.
+- No live DB/LLM/ports: tests parse `day_cycle.sh` text or mock urllib/probe functions.
+  LLM record/replay fixtures remain available for deeper Phase 3.5 comparison.
+- `tests/test_characterization.py` (Phase 0.6 stub) still covers config/pipeline/fixture
+  checks; the 5 targeted tests live in `tests/characterization/`.
 
 ---
 
@@ -88,4 +94,4 @@ None.
   `adapters/driven/storage/database_gateway.py`. See handover known_issue
   `CORE-DB-UNWIRED-2026-09-21` — decide wire-or-remove in Phase 1.
 
-**Next update:** when Week 2 characterization tests are written.
+**Next update:** at Phase 1 start (inference container port + LLM provider port).

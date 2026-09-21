@@ -10,9 +10,10 @@ current_phase:
   number: 0
   name: Foundation + Characterization Tests
   week: "Week 1-2"
-  status: active
+  status: complete
   started: 2026-09-13
-  progress_percent: 65
+  completed: 2026-09-21
+  progress_percent: 100
 
 phase_0:
   week_1:
@@ -40,25 +41,17 @@ phase_0:
       import_linter_enforcement: "verified via injected violations (exit 1)"
 
   week_2:
-    status: pending
-    progress_percent: 0
-    note: "tests/test_characterization.py exists as a Phase 0.6 stub, but the 5 targeted characterization tests are not written."
-    pending:
-      - task: Characterization test 1
-        description: day_cycle.sh batch scheduling logic (scanned count = 10)
-        files: [tests/characterization/test_day_cycle.py]
-      - task: Characterization test 2
-        description: check_all_llm T1/T2 probe (port 8082 -> 200 OK)
-        files: [tests/characterization/test_check_all_llm.py]
-      - task: Characterization test 3
-        description: call_llm response format + content freeze
-        files: [tests/characterization/test_call_llm.py]
-      - task: Characterization test 4
-        description: watchdog 60s loop (liveness_ts update)
-        files: [tests/characterization/test_watchdog.py]
-      - task: Characterization test 5
-        description: text_clean language detection (Korean sanitization)
-        files: [tests/characterization/test_text_clean.py]
+    status: complete
+    progress_percent: 100
+    completed:
+      - "test 1: day_cycle.sh batch scheduling (oldest pending, LIMIT 50, pending->batching) - tests/characterization/test_day_cycle.py"
+      - "test 2: check_all_llm T1/T2 probe (T2 only if T1 ok; inactive port skipped) - tests/characterization/test_check_all_llm.py"
+      - "test 3: call_llm contract (content vs return_meta, registry defaults, json_mode, unknown model) - tests/characterization/test_call_llm.py"
+      - "test 4: watchdog liveness (path constant + current-timestamp write) - tests/characterization/test_watchdog.py"
+      - "test 5: text_clean language detection (ko/en fixed 0.8; others unknown) - tests/characterization/test_text_clean.py"
+    verification:
+      pytest: "tests/characterization: 19 passed (mocked/parsed; no live DB/LLM/ports)"
+    note: "tests/test_characterization.py (Phase 0.6 stub) still covers config/pipeline/fixture checks; the 5 targeted behavior-capture tests live in tests/characterization/."
 
 phase_1:
   status: planned

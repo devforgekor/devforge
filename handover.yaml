@@ -1,7 +1,7 @@
 last_checkpoint:
-  time: '2026-09-21T22:35:35.544039+00:00'
-  summary: 2 source, 60 config, 4 docs, 1 generated
-  total_files: 77
+  time: '2026-09-21T22:41:26.108429+00:00'
+  summary: 8 source, 60 config, 4 docs, 1 generated
+  total_files: 85
   recent_files:
     data: []
     docs:
@@ -23,6 +23,12 @@ last_checkpoint:
     source:
     - server/cashbook/auth.py
     - server/scripts/update_handover.py
+    - server/tests/characterization/__init__.py
+    - server/tests/characterization/test_call_llm.py
+    - server/tests/characterization/test_check_all_llm.py
+    - server/tests/characterization/test_day_cycle.py
+    - server/tests/characterization/test_text_clean.py
+    - server/tests/characterization/test_watchdog.py
     generated:
     - server/collect_checkpoint.json
   git: {}
@@ -226,8 +232,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- (2026-09-20, opencode) ~/.claude/secrets.env (NOTION_TOKEN 평문, mode 644) 삭제 완료 — KV(NOTION-TOKEN-KEY)와 중복, mcp.json에 notion
-  서버 미설정으로 안전. 감사 known_issue CLAUDE-SECRETSENV-2026-09-20 resolved 처리.
 - '(2026-09-20, opencode) 스테일 정리: known_issue dp-ki-01(P0) resolve(droplr.py가 DROPLR_USER/PASS 읽음 확인, KV 키 일치), decision dp-01
   resolved. kv-ki-01 카운트 39→12 정정, fallback 제거 후 resolved.'
 - '(2026-09-20, opencode) secrets.env fallback 제거: 워크스페이스 8개 파일(news 4/timetable 2/azure golden_image 2) env-only 전환, 미사용
@@ -362,3 +366,9 @@ completed_log:
   `or True` 제거(항상 True 잠재 우회) → 쿠키 존재 검사로 정정(미사용 함수). 진짜 세션검증은 별도 과제. (3) scripts/update_handover.py `_run` 기본 cwd=/opt/projects/seedling(stale)
   → SERVER_DIR, SIM102/I001 정리. (4) 유닛 버전관리: containers/systemd/(quadlet .container/.pod) + systemd/user/(hand-written .service/.timer,
   생성 container-*.service 제외) 미러 추가 + README(배포법/시크릿 금지). 시크릿 스캔 clean. 커밋: e1512f7, e5b11be, (systemd 미러).'
+- '(2026-09-21, devforge-444795) Phase 0 Week 2 완료 = Phase 0 종료. tests/characterization/ 신규 5종(19 tests pass, mock/text-parse만
+  — 라이브 DB/LLM/포트 불필요): (1) day_cycle.sh 배치 예약(oldest pending, LIMIT 50, pending→batching. 헤더 주석 "10"은 stale라 실제값 50을 특성화),
+  (2) check_all_llm T1/T2(T2는 T1 성공 시에만, 비활성 포트 skip), (3) call_llm 계약(content/return_meta/registry 기본값/json_mode/unknown
+  ValueError), (4) watchdog liveness(경로 상수 /var/tmp/watchdog_last_cycle_ts + 현재 ts 기록), (5) text_clean 언어감지(ko/en 0.8, 기타
+  unknown). 문서: REFACTORING_STATUS.yaml·phase0-work-log.md를 docs/refactoring/로 이동, Week2/Phase0 complete(100%), INDEX·option-3
+  경로 갱신. 생성 파일: tests/characterization/{test_day_cycle,test_check_all_llm,test_call_llm,test_watchdog,test_text_clean}.py'
