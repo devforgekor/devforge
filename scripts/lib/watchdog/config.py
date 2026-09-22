@@ -107,6 +107,19 @@ TIMER_TARGETS = {
     "kuhwa-schedule.timer": {"expected": "kuhwa", "max_idle": 90000},  # 25h
     "workspace-autopush.timer": {"expected": "workspace_autopush", "max_idle": 90000},  # 25h
     "reference-monitor.timer": {"expected": "reference", "max_idle": 604800},  # 7일
+    # Phase 3 미등록 편입 (guide §5, 주기×1.5 여유)
+    "golden-image-deploy-check.timer": {
+        "expected": "golden_image_deploy_check",
+        "max_idle": 1350,
+    },  # 15분
+    "workspace-autocommit.timer": {"expected": "workspace_autocommit", "max_idle": 2700},  # 30분
+    "devforge-summary-retry.timer": {"expected": "summary_retry", "max_idle": 10800},  # 2시간
+    "baseline-daily.timer": {"expected": "baseline_daily", "max_idle": 129600},  # 24h
+    "kv-backup.timer": {"expected": "kv_backup", "max_idle": 907200},  # 주 1회×1.5 = 10.5일
+    "golden-image-yearly-check.timer": {
+        "expected": "golden_image_yearly",
+        "max_idle": 34560000,
+    },  # 연 1회, guide 지정 400일
 }
 
 # One-shot 서비스 결과 감시 (alert-only, 재시작 안 함).
@@ -117,6 +130,9 @@ ONESHOT_RESULT_TARGETS = [
     "devforge-backup.service",  # OCI 백업 (DB + app)
     "devforge-restore-test.service",  # 월간 복원 검증
     "devforge-system-sync.service",  # 30분 아키텍처/동기화
+    "kv-backup.service",  # 주간 KV 백업 (Phase 3)
+    "workspace-autocommit.service",  # workspace 자동 커밋 (Phase 3)
+    "golden-image-deploy-check.service",  # 배포 헬스체크 (Phase 3)
 ]
 
 # ── 컨테이너 exclusion (절대 재시작 금지) ───────────────────────────
