@@ -317,7 +317,12 @@ def main():
         sys.exit(0)
 
     # 기존 동작: 환경변수 주입 후 명령 실행
-    selected, _ = parse_selection(sys.argv[1:])
+    # 기존 동작: 환경변수 주입 후 명령 실행
+    # [WHY] rest(명령+인자)에서 --keys를 제거해 대상 명령에 새어나가지 않게 한다.
+    selected, rest = parse_selection(sys.argv[1:])
+    if not rest:
+        print("❌ 실행할 명령이 없습니다 (사용법: kv-fetch-env.py <command> [args] [--keys K1,K2])", file=sys.stderr)
+        sys.exit(1)
     token = get_token()
     secrets = resolve_secrets(token, selected)
 
@@ -327,7 +332,7 @@ def main():
         os.environ[env_name] = value
 
     print(f"✅ Key Vault 시크릿 로드 완료: {len(secrets)}개", file=sys.stderr)
-    os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
+    os.execvpe(rest[0], rest, os.environ)
 
 
 if __name__ == "__main__":
