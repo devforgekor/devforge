@@ -1,4 +1,37 @@
 entries:
+- time: '2026-09-22T11:45:43.268448+00:00'
+  type: refactor
+  summary: 'Watchdog Phase 2 v2.1 legacy-parity rewrite: replaced v1 (CRITICAL/RECOVERING, HealthCheckResult) with legacy
+    state machine (HEALTHY/DEGRADED/UNHEALTHY/DOWN), BackoffCalculator, TrendTracker, RecoveryCoordinator, CheckCoordinator,
+    batch health adapters, PostgresIncidentRepository, JsonStateStorage, WatchdogService. 207 passed / 2 skipped; import-linter
+    4 KEPT; mypy clean.'
+  changed:
+  - path: src/devforge/ports/
+    type: changed
+    note: types.py (ComponentState/HealthCheck/RecoveryAction/CircuitState), health_check/recovery/notification/incident_repository/state_persistence/heartbeat
+      ports
+  - path: src/devforge/domain/watchdog/
+    type: changed
+    note: monitoring/{backoff,tracker}, recovery/{strategies,graduation}, orchestration/check_coordinator
+  - path: src/devforge/adapters/driven/
+    type: changed
+    note: health/{systemd,llm,system,pipeline}, notification/{slack,systemd}, recovery/systemd_recovery, storage/{state_json,incident_pg,heartbeat_pg}
+  - path: src/devforge/application/watchdog_service.py
+    type: changed
+    note: WatchdogService + create_watchdog_service; non-blocking backoff; single-record-per-cycle parity
+  - path: docs/plans/phase2-detailed-guide-v2.md
+    type: added
+    note: v2.1 implementation guide (18 tasks, legacy parity)
+  - path: docs/architecture/code-structure.yaml
+    type: changed
+    note: watchdog v2.1 module tree
+  decisions:
+  - 'Fix v2.1 E2 double-count: a component records exactly once per cycle (legacy either/or parity)'
+  - Non-blocking backoff via ComponentTracker.next_attempt_at (replaces whole-cycle asyncio.sleep)
+  - HeartbeatRepository port extracted from HeartbeatHealthChecker (raw SQL isolated in adapter)
+  - CLI uses public WatchdogService.component_states()/resolve_incident() (no private access)
+  - Incident _capture_context implemented (bounded, secret-masked, async)
+  - 'Guide defects found: func.make_interval(secs=) invalid; TrendTracker test expected 25-35min but legacy yields 16min'
 - time: '2026-06-06T03:35:53.825972+00:00'
   type: auto
   summary: 'structural.containers[caddy].status: Up 35 hours (healthy) -> Up 39 hours (healthy); structural.containers[devforge-qwen].status:

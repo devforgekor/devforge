@@ -1,15 +1,14 @@
 last_checkpoint:
-  time: '2026-09-22T01:02:37.636011+00:00'
-  summary: 1 source, 2 docs, 1 generated
-  total_files: 46
+  time: '2026-09-22T11:44:35.904091+00:00'
+  summary: 2 docs, 1 generated
+  total_files: 3
   recent_files:
     data: []
     docs:
-    - server/docs/INDEX.md
-    - server/docs/plans/python-version-strategy.md
+    - server/docs/architecture/code-structure.yaml
+    - server/docs/reports/agent-rules-analysis-20260922.md
     config: []
-    source:
-    - server/src/devforge/adapters/driving/mcp/server.py
+    source: []
     generated:
     - server/collect_checkpoint.json
   git: {}
