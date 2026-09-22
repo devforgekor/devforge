@@ -12,7 +12,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-09-14'
+  updated: '2026-09-22'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -1294,11 +1294,44 @@ modules:
       status: unknown
       purpose: "Local LLM adapter \u2014 Track A (llama.cpp HTTP servers only)."
 - path: src/devforge/adapters/driven/notification/
-  purpose: src/devforge/adapters/driven/notification
+  purpose: Notification adapters (legacy notifier.py)
   files:
     __init__.py:
-      status: unknown
+      status: experimental
       purpose: __init__.py
+    slack_notifier.py:
+      status: experimental
+      purpose: "Slack Web API notifier (legacy notifier.py:60-81, 345, 362)."
+    systemd_notifier.py:
+      status: experimental
+      purpose: "sd_notify notifier (legacy notifier.py:26-48)."
+- path: src/devforge/adapters/driven/health/
+  purpose: Health check adapters (legacy checker.py) — batch HealthCheckPort
+  files:
+    __init__.py:
+      status: experimental
+      purpose: __init__.py
+    systemd_health.py:
+      status: experimental
+      purpose: "systemd user service/timer checks (checker.py:150-162, 371-397)."
+    llm_health.py:
+      status: experimental
+      purpose: "LLM inference probes (checker.py:79-127, 493-528)."
+    system_health.py:
+      status: experimental
+      purpose: "Memory/disk checks (checker.py:306-371)."
+    pipeline_health.py:
+      status: experimental
+      purpose: "Worker heartbeat checks (checker.py:417-491)."
+- path: src/devforge/adapters/driven/recovery/
+  purpose: Recovery adapters (legacy recovery.py recover_* family)
+  files:
+    __init__.py:
+      status: experimental
+      purpose: __init__.py
+    systemd_recovery.py:
+      status: experimental
+      purpose: "RecoveryPort implementation — systemctl restart/timer kick + probe."
 - path: src/devforge/adapters/driven/proxy_utils/
   purpose: src/devforge/adapters/driven/proxy_utils
   files:
@@ -1312,7 +1345,7 @@ modules:
       status: unknown
       purpose: __init__.py
 - path: src/devforge/adapters/driven/storage/
-  purpose: src/devforge/adapters/driven/storage
+  purpose: Storage adapters (DB, state, incidents)
   files:
     __init__.py:
       status: unknown
@@ -1323,6 +1356,15 @@ modules:
     extract_adapter.py:
       status: unknown
       purpose: PostgreSQL adapter for extract pipeline ports.
+    state_json.py:
+      status: experimental
+      purpose: "JsonStateStorage \u2014 atomic legacy-compatible watchdog state (state.py:290-336)."
+    incident_pg.py:
+      status: experimental
+      purpose: "PostgresIncidentRepository \u2014 legacy incidents.py:112-227 dedup/reopen."
+    heartbeat_pg.py:
+      status: experimental
+      purpose: "PostgresHeartbeatRepository \u2014 watchdog_pulses heartbeat_* rows."
 - path: src/devforge/adapters/driving/
   purpose: src/devforge/adapters/driving
   files:
@@ -1353,6 +1395,9 @@ modules:
     status.py:
       status: unknown
       purpose: CLI subcommands for status inspection.
+    watchdog.py:
+      status: experimental
+      purpose: "Watchdog CLI (status/check/resolve) \u2014 factory-injected, no application import."
 - path: src/devforge/adapters/driving/mcp/
   purpose: src/devforge/adapters/driving/mcp
   files:
@@ -1363,7 +1408,7 @@ modules:
       status: unknown
       purpose: MCP (Model Context Protocol) server for DevForge.
 - path: src/devforge/application/
-  purpose: src/devforge/application
+  purpose: Application services (use-case orchestration)
   files:
     __init__.py:
       status: unknown
@@ -1371,6 +1416,12 @@ modules:
     extract_pipeline.py:
       status: unknown
       purpose: "Extract pipeline service \u2014 orchestrates the extract phase."
+    orchestrator.py:
+      status: unknown
+      purpose: "Pipeline orchestrator \u2014 budget-managed stage execution."
+    watchdog_service.py:
+      status: experimental
+      purpose: "WatchdogService + create_watchdog_service \u2014 legacy orchestrator main loop."
 - path: src/devforge/core/
   purpose: src/devforge/core
   files:
@@ -1418,11 +1469,44 @@ modules:
       status: unknown
       purpose: __init__.py
 - path: src/devforge/domain/watchdog/
-  purpose: src/devforge/domain/watchdog
+  purpose: Watchdog domain (legacy-parity v2.1) — state machine, backoff, recovery, checks
   files:
     __init__.py:
-      status: unknown
+      status: experimental
       purpose: __init__.py
+- path: src/devforge/domain/watchdog/monitoring/
+  purpose: Component tracking, circuit breaker, trend ETA
+  files:
+    __init__.py:
+      status: experimental
+      purpose: __init__.py
+    backoff.py:
+      status: experimental
+      purpose: "CrashLoopBackOff with jitter — BackoffCalculator (legacy state.py:160)."
+    tracker.py:
+      status: experimental
+      purpose: "ComponentTracker + TrackerRegistry + TrendTracker (legacy state.py:28-232)."
+- path: src/devforge/domain/watchdog/recovery/
+  purpose: Recovery kind classification and graduated recovery
+  files:
+    __init__.py:
+      status: experimental
+      purpose: __init__.py
+    strategies.py:
+      status: experimental
+      purpose: "Recovery kind classification — classify_recovery_kind (orchestrator dispatch)."
+    graduation.py:
+      status: experimental
+      purpose: "RecoveryCoordinator — legacy graduated_recover (recovery.py:270)."
+- path: src/devforge/domain/watchdog/orchestration/
+  purpose: Check dispatch
+  files:
+    __init__.py:
+      status: experimental
+      purpose: __init__.py
+    check_coordinator.py:
+      status: experimental
+      purpose: "CheckCoordinator — batch health-port dispatch into the tracker registry."
 - path: src/devforge/pipeline_stages/
   purpose: src/devforge/pipeline_stages
   files:
@@ -1440,11 +1524,35 @@ modules:
       purpose: "Extract EDC (Extract, Describe, Classify) \u2014 prompt building and\
         \ response parsing."
 - path: src/devforge/ports/
-  purpose: src/devforge/ports
+  purpose: Hexagonal ports — lowest layer, importable by domain/adapters/application
   files:
     __init__.py:
       status: unknown
       purpose: __init__.py
+    container.py:
+      status: experimental
+      purpose: Inference container manager port.
     extract.py:
       status: unknown
       purpose: "Extract pipeline ports \u2014 hexagonal architecture interfaces."
+    types.py:
+      status: experimental
+      purpose: "Watchdog value objects \u2014 ComponentState, HealthCheck, RecoveryAction, CircuitState, Incident."
+    health_check.py:
+      status: experimental
+      purpose: "HealthCheckPort \u2014 batch check_health() -> list[HealthCheck]."
+    recovery.py:
+      status: experimental
+      purpose: "RecoveryPort \u2014 execute_recovery(action) -> bool."
+    notification.py:
+      status: experimental
+      purpose: "NotificationPort \u2014 send_alert/send_recovery/sd_notify."
+    incident_repository.py:
+      status: experimental
+      purpose: "IncidentRepository \u2014 record_detect/record_action/resolve_if_open/find_open."
+    state_persistence.py:
+      status: experimental
+      purpose: "StateStoragePort \u2014 legacy watchdog_state.json save/load."
+    heartbeat.py:
+      status: experimental
+      purpose: "HeartbeatRepository \u2014 list_heartbeats() (dead-man's switch)."
