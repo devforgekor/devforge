@@ -165,14 +165,14 @@ systemctl --user disable devforge-watchdog.service
 
 ## 3. 선결 체크리스트
 
-- [ ] §2.1 코드(dry_run/serve/liveness/factory) 구현 + green
-- [ ] `scripts/deploy/watchdog-v2-entrypoint.sh` 생성 + 실행권한
-- [ ] `kv-export-env.sh`에 `SLACK-BOT-TOKEN-KEY`,`SLACK-CHANNEL` 포함 확인
-- [ ] quadlet에서 `devforge` import 확인: `python3 -c "import devforge"` (PYTHONPATH=/src)
-- [ ] pod 내 DB 도달: entrypoint DSN으로 `SELECT 1` 성공
-- [ ] 백업(§2.4) 완료
-- [ ] shadow 중 `watchdog_state.json`·`watchdog_incidents`·Slack **무변경** 확인
-- [ ] liveness 파일 갱신 확인 (`/var/tmp/watchdog_last_cycle_ts`)
+- [x] §2.1 코드(dry_run/serve/liveness/factory) 구현 + green (2026-09-22)
+- [x] `scripts/deploy/watchdog-v2-entrypoint.sh` 생성 + 실행권한
+- [x] `kv-export-env.sh`에 `SLACK-BOT-TOKEN-KEY`,`SLACK-CHANNEL` 포함 확인
+- [x] quadlet에서 `devforge` import 확인: `python3 -c "import devforge"` (PYTHONPATH=/src)
+- [x] pod 내 DB 도달: entrypoint DSN으로 `SELECT 1` 성공
+- [x] 백업(§2.4) 완료 (20260922)
+- [x] shadow 중 `watchdog_state.json`·`watchdog_incidents`·Slack **무변경** 확인 (dry-run 검증)
+- [x] liveness 파일 갱신 확인 (`/var/tmp/watchdog_last_cycle_ts`)
 
 ---
 

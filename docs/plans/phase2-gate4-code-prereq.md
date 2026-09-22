@@ -222,14 +222,14 @@ podman run --rm -v /opt/projects/server/src:/src:Z -e PYTHONPATH=/src \
 
 ## 8. 체크리스트
 
-- [ ] `WatchdogService.dry_run` + `run_cycle` 가드 + `dry_run`/`check_interval_sec` 프로퍼티
-- [ ] `create_watchdog_service(config, dry_run=False)` + `from_config` + **빈 DSN 명시적 에러**
-- [ ] **Slack 토큰 env `SLACK_BOT_TOKEN_KEY`** 정정 (R1)
-- [ ] CLI `serve` — **`await _factory()`** (R3) + `_write_liveness`
-- [ ] `cli.py` factory env(`WATCHDOG_DRY_RUN`)
-- [ ] `scripts/deploy/watchdog-v2-entrypoint.sh`
-- [ ] 신규 테스트 7건 green
-- [ ] `mypy`/`ruff`/`lint-imports` 유지
+- [x] `WatchdogService.dry_run` + `run_cycle` 가드 + `dry_run`/`check_interval_sec` 프로퍼티
+- [x] `create_watchdog_service(config, dry_run=False)` + `from_config` + **빈 DSN 명시적 에러**
+- [x] **Slack 토큰 env `SLACK_BOT_TOKEN_KEY`** 정정 (R1)
+- [x] CLI `serve` — **`await _factory()`** (R3) + `_write_liveness`
+- [x] `cli.py` factory env(`WATCHDOG_DRY_RUN`)
+- [x] `scripts/deploy/watchdog-v2-entrypoint.sh`
+- [x] 신규 테스트 7건 green (12 tests passed)
+- [x] `mypy`/`ruff`/`lint-imports` 유지
 
 ---
 

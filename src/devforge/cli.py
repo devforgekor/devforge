@@ -69,7 +69,7 @@ def _default_pipeline_factory() -> Any:
 set_pipeline_factory(_default_pipeline_factory)
 
 
-def _watchdog_service_factory() -> Any:
+async def _watchdog_service_factory() -> Any:
     """Build the production WatchdogService (composition-root wiring).
 
     Defined here so the watchdog driving adapter never imports the application
