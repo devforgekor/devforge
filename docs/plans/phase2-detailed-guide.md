@@ -1,5 +1,8 @@
 # Phase 2 Detailed Implementation Guide — Watchdog Subsystem
 
+> ⚠️ **SUPERSEDED** by `docs/plans/phase2-detailed-guide-v2.md` (v2.1 — legacy-parity, COMPLETE).
+> This v1 guide is retained for reference only. **Do NOT implement from this file.**
+
 ## Overview
 
 **Target**: `scripts/lib/watchdog` → `src/devforge/domain/watchdog` + adapters  

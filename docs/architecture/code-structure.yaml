@@ -6,6 +6,8 @@
 # 🔴 Do NOT create new files under `scripts/` without user approval.
 # 🔴 New code belongs under `src/devforge/` (refactored src-layout); `scripts/` is legacy.
 # 🔴 MANUALLY MAINTAINED since 2026-09-14 (auto-generator `gen_architecture.py` retired — it was unreliable).
+# 🔴 UPDATE RULE: on any add/move/delete under `scripts/` or `src/devforge/`, update this file in the SAME commit.
+# 🔴 Verified by `tests/unit/test_code_structure.py` — every listed file MUST exist on disk.
 #
 # Rule priority: code-structure.yaml > llm-common-rule.md > agent's judgment
 # If this file says a module has `no_subprocess: true`, do NOT add subprocess calls there.
@@ -147,9 +149,6 @@ modules:
     sqlite_mcp.py:
       status: experimental
       purpose: "SQLite MCP \u2014 read-only access to OpenCode session database."
-    sync_gemini_rules.py:
-      status: experimental
-      purpose: Sync shared rules into OpenCode AGENTS.md.
     system_sync.sh:
       status: unknown
       purpose: "system_sync.sh \u2014 30min system maintenance (no inference, no pipeline)"
@@ -557,18 +556,12 @@ modules:
     __init__.py:
       status: production
       purpose: "Log parsers \u2014 Claude, Copilot, OpenCode."
-    aider.py:
-      status: deprecated
-      purpose: "REMOVED 2026-09-19 \u2014 parser_aider.py was deleted (source retired)."
     claude.py:
       status: production
       purpose: "parser_claude.py \u2014 extract turns from Claude Code session JSONL."
     copilot.py:
       status: production
       purpose: "parser_copilot.py \u2014 extract turns from Copilot events.jsonl (inactive: cost exhausted)."
-    gemini.py:
-      status: deprecated
-      purpose: "REMOVED 2026-09-19 \u2014 parser_gemini.py was deleted (source retired)."
     opencode.py:
       status: production
       purpose: "parser_opencode.py \u2014 extract turns from the OpenCode session\
@@ -968,9 +961,6 @@ modules:
     anthropic_openrouter.py:
       status: production
       purpose: Anthropic-to-OpenAI format conversion proxy for OpenRouter.
-    gemini_openai.py:
-      status: experimental
-      purpose: OpenAI-compatible reverse proxy for Google Gemini API with key rotation.
     openrouter_rr_proxy.py:
       status: experimental
       purpose: OpenRouter API Key Round-Robin Proxy.
@@ -1157,10 +1147,6 @@ modules:
       status: unknown
       purpose: "3-turn full pipeline test: polish \u2192 extract \u2192 enrich \u2192\
         \ verify (long turns)."
-    test_4b_dual_review_7b_vs_9b.py:
-      status: experimental
-      purpose: "4B full pipeline (dual + FactArbiter + LLM conflict) \u2192 7B/9B\
-        \ review comparison."
     test_7b_vs_9b_text_extract.py:
       status: experimental
       purpose: Compare 7B vs 9B extraction from narrative Korean text where 4B returns
@@ -1189,18 +1175,10 @@ modules:
       status: experimental
       purpose: 'Dual 4B concurrent test: inference core 0 (:8083) B-Xplore, inference
         core 1 (:8082) A-Strict.'
-    test_dual_extract_7b_vs_9b.py:
-      status: experimental
-      purpose: '7B dual vs 9B dual extraction: which model/persona combo performs
-        best.'
     test_edcr_e2e.py:
       status: experimental
       purpose: "E2E test for _extract_edcr_freeform: OIE \u2192 Canonicalize \u2192\
         \ Refinement."
-    test_extract_3config_comparison.py:
-      status: experimental
-      purpose: 'Compare 3 extraction configs: 8B Q8 parallel=2 vs 8B Q4 dual vs 4B
-        Q8 dual.'
     test_extract_strategies.py:
       status: experimental
       purpose: Extract strategy comparison for long Korean developer turns on bb9c6363.
@@ -1243,15 +1221,9 @@ modules:
       status: unknown
       purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
         \uC640 \uBE44\uAD50) \u2014 inference container"
-    test_review_7b.py:
-      status: experimental
-      purpose: Sequential dual 4B (Strict+Xplore) -> 7B review on real DB turns.
     test_review_9b.py:
       status: experimental
       purpose: Sequential dual 4B (Strict+Xplore) -> 9B review on real DB turns.
-    test_taxonomy_trap_fix.py:
-      status: experimental
-      purpose: Test free-form extraction (Taxonomy Trap fix) + 3-stage predicate canonicalization.
     test_v5_arbiter_fallback.py:
       status: experimental
       purpose: 'V5 Pre-Extract Test: Pure Python FactArbiter with CONFLICT-only LLM
