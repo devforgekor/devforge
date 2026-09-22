@@ -56,7 +56,7 @@ def exa_search(query: str, type: str = "auto", num_results: int = DEFAULT_NUM,
         raise ValueError("query is required")
     pool = _keys()
     if not pool:
-        raise RuntimeError(f"{KEYS_ENV} not configured")
+        raise RuntimeError("EXA API keys not configured")
 
     payload = {"query": query, "type": type, "numResults": min(num_results, MAX_NUM)}
     if include_domains:
@@ -96,7 +96,7 @@ def exa_contents(urls: list[str], text: bool = True, highlights: bool = True) ->
         raise ValueError("urls is required")
     pool = _keys()
     if not pool:
-        raise RuntimeError(f"{KEYS_ENV} not configured")
+        raise RuntimeError("EXA API keys not configured")
 
     payload: dict = {"urls": urls[:10]}
     contents = {}
