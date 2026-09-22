@@ -21,7 +21,7 @@ _SCRIPTS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
-from lib.auth.api_key_cipher import decrypt_data
+from lib.auth.key_loader import load_api_keys
 from lib.auth.key_rotator import KeyRotator
 
 PROVIDERS = {
@@ -64,61 +64,16 @@ def _log(msg: str):
 
 
 def _load_keys_for(service: str) -> list[tuple[str, str]]:
-    """Load API keys for a single provider from environment variables.
+    """Round-robin-ready keys for a search provider.
 
-    Priority:
-    1. Environment variables (from Azure KV via kv-fetch-env.py)
-       - Consolidated format: PREFIX_API_KEYS="key1,key2" or "name1:cipher1,name2:cipher2"
-       - Individual format: PREFIX_ACCOUNT_API_KEY (auto-collected)
+    Delegates to the shared loader (lib.auth.key_loader.load_api_keys), which
+    handles both consolidated (PREFIX_API_KEYS) and per-account
+    (PREFIX_ACCOUNT_API_KEY) env formats for every rotating provider.
     """
     cfg = PROVIDERS.get(service)
     if not cfg:
         return []
-
-    prefix = cfg["prefix"]
-    keys_str = ""
-
-    # 1-1. 통합 환경변수 조회 (PREFIX_API_KEYS)
-    env_name = f"{prefix}_API_KEYS"
-    keys_str = os.environ.get(env_name, "")
-
-    # 1-2. 개별 환경변수 자동 수집 (PREFIX_*_API_KEY 패턴)
-    if not keys_str:
-        individual_keys = []
-        for env_key, env_val in os.environ.items():
-            # PREFIX_로 시작하고 _API_KEY로 끝나는 패턴 매칭
-            if env_key.startswith(f"{prefix}_") and env_key.endswith("_API_KEY"):
-                # PREFIX_ACCOUNT_API_KEY에서 ACCOUNT 추출
-                account = env_key[len(prefix) + 1 : -8]  # "_API_KEY" = 8자
-                if account:  # PREFIX_API_KEY는 제외 (account가 빈 문자열)
-                    individual_keys.append((account.lower(), env_val.strip()))
-
-        if individual_keys:
-            # 알파벳 순으로 정렬하여 일관성 유지
-            individual_keys.sort(key=lambda x: x[0])
-            keys = [(f"{service}:{name}", key) for name, key in individual_keys]
-            return keys
-
-    # Azure KV → env var only (secrets.env deprecated)
-    if not keys_str:
-        return []
-        return []
-
-    # 통합 포맷 파싱 (쉼표 구분, 옵션: name:cipher)
-    keys = []
-    for item in keys_str.split(","):
-        item = item.strip()
-        if not item:
-            continue
-        if ":" in item:
-            name, cipher = item.split(":", 1)
-            plain = decrypt_data(cipher.strip())
-            if plain is None:
-                plain = cipher.strip()
-            keys.append((f"{service}:{name.strip()}", plain))
-        else:
-            keys.append((f"{service}:key-{len(keys)}", item.strip()))
-    return keys
+    return load_api_keys(cfg["prefix"], service=service)
 
 
 class SearchProxy:

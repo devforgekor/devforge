@@ -72,6 +72,7 @@ ALERT_ONLY_TARGETS = [
     "container-flaresolverr",  # Cloudflare 우회
     "anthropic-openrouter-proxy",  # Anthropic→OpenRouter 변환
     "anthropic-proxy",  # DeepSeek 역방향 프록시
+    "gemini-openai-proxy",  # Gemini 키 로테이션
     "or-rate-limiter",  # OpenRouter rate limiter
 ]
 
