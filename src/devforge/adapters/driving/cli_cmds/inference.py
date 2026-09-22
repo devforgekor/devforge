@@ -1,5 +1,4 @@
 """CLI subcommand for inference model management."""
-
 from __future__ import annotations
 
 import json
@@ -13,6 +12,17 @@ from devforge.core.logging import get_logger
 
 app = typer.Typer(name="inference", help="Inference model management")
 logger = get_logger(__name__)
+
+# Composition root injection (set by devforge.cli.py)
+_manager: Any = None  # InferenceContainerManager
+_registry: Any = None  # ModelRegistry
+
+
+def init(manager: Any, registry: Any) -> None:
+    """Set the port implementations (called from composition root)."""
+    global _manager, _registry
+    _manager = manager
+    _registry = registry
 
 
 def _run_cmd(cmd: list[str], timeout: int = 30) -> dict[str, Any]:
@@ -44,17 +54,19 @@ def switch_mode(
         typer.echo(f"Already in {mode} mode")
         return
 
-    # Update current-system-mode.env
-    system_env = config.paths.current_system_mode_env
     if dry_run:
-        typer.echo(f"[dry-run] Would write MODE={mode} to {system_env}")
-        typer.echo("[dry-run] Would signal day_cycle.sh to restart")
+        typer.echo(f"[dry-run] Would switch to {mode} mode")
         return
 
-    system_env.write_text(f"MODE={mode}\n")
-    typer.echo(f"Switched to {mode} mode (wrote {system_env})")
+    if _manager is not None:
+        port = config.model_port
+        _manager.switch_mode(mode, port, model_key=None)
+        typer.echo(f"Switched to {mode} mode (via port)")
+    else:
+        system_env = config.paths.current_system_mode_env
+        system_env.write_text(f"MODE={mode}\n")
+        typer.echo(f"Switched to {mode} mode (wrote {system_env})")
 
-    # Signal day_cycle.sh
     result = _run_cmd(["pkill", "-USR1", "-f", "day_cycle.sh"])
     if result["returncode"] == 0:
         typer.echo("Sent USR1 signal to day_cycle.sh")
@@ -74,6 +86,8 @@ def inference_status() -> None:
         "system_mode_env": str(config.paths.current_system_mode_env),
         "mode_env": str(config.paths.current_mode_env),
     }
+    if _registry is not None:
+        status["registry_keys"] = _registry.keys()
     typer.echo(json.dumps(status, indent=2))
 
 
@@ -83,6 +97,16 @@ def ensure_model(
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
     """Ensure the model pod is running for the given model key."""
+    if _manager is not None and _registry is not None:
+        try:
+            _manager.ensure_model(model_key, skip_if_healthy=True)
+            typer.echo(f"OK: model '{model_key}' ensured via port")
+        except Exception as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(1)
+        return
+
+    # Fallback: legacy socket check
     from devforge.adapters.driven.llm.local_adapter import MODEL_REGISTRY
 
     if model_key not in MODEL_REGISTRY:
@@ -102,9 +126,7 @@ def ensure_model(
         typer.echo(f"[dry-run] Would ensure model '{model_name}' on port {port}")
         return
 
-    # Check if port is listening
     import socket
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(1)
     result = sock.connect_ex(("127.0.0.1", port))
