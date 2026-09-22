@@ -1,5 +1,5 @@
 [Unit]
-Description=eBook FastAPI Backend (SSOT: /opt/workspace/ebooklib)
+Description=eBook FastAPI Backend (SSOT: /opt/workspace/minihome/apps/ebooklib)
 After=network.target
 
 [Service]
@@ -9,7 +9,7 @@ ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /opt/workspace/min
 Restart=on-failure
 RestartSec=30
 StartLimitBurst=3
-Environment=PYTHONPATH=/opt/workspace/ebooklib/apps/backend
+Environment=PYTHONPATH=/opt/workspace/minihome/apps/ebooklib/apps/backend
 
 [Install]
 WantedBy=default.target
