@@ -139,6 +139,10 @@ module = "devforge.adapters.driven.storage.extract_adapter"
 disable_error_code = ["arg-type", "attr-defined"]
 
 [[tool.mypy.overrides]]
+module = "devforge.adapters.driven.storage.incident_pg"
+disable_error_code = ["arg-type"]  # legacy Column-style ORM attribute typing
+
+[[tool.mypy.overrides]]
 module = "yaml"
 ignore_missing_imports = true
 

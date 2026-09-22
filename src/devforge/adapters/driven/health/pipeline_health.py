@@ -1,68 +1,43 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: application/watchdog_service.py, cli.py
-"""Pipeline health check adapter (async via database)."""
+# Path: adapters/driven/health/
+"""Worker heartbeat checks (legacy checker.py:417-491)."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from typing import Mapping
 
 from devforge.ports.health_check import HealthCheckPort
-from devforge.ports.types import HealthCheckResult
+from devforge.ports.heartbeat import HeartbeatRepository
+from devforge.ports.types import HealthCheck
+
+DEFAULT_WORKER_MAX_AGE = 1800
 
 
-class PipelineHeartbeatCheck(HealthCheckPort):
-    """Health check for pipeline heartbeats."""
+class HeartbeatHealthChecker(HealthCheckPort):
+    """Dead-man's switch for heartbeat_* rows in watchdog_pulses."""
 
-    def __init__(self, db_session_factory: Any, stale_threshold_sec: int = 300) -> None:
-        self._session_factory = db_session_factory
-        self._threshold = stale_threshold_sec
+    def __init__(self, repository: HeartbeatRepository,
+                 workers: Mapping[str, int] | None = None) -> None:
+        self._repository = repository
+        self._workers = dict(workers or {})   # worker -> max_age_sec
 
-    async def check_health(self) -> HealthCheckResult:
-        """Check if pipeline heartbeats are recent."""
-        stale = []
-        now = datetime.now(timezone.utc)
-
+    async def check_health(self) -> list[HealthCheck]:
         try:
-            async with self._session_factory() as session:
-                result = await session.execute(
-                    """
-                    SELECT name, last_heartbeat_at
-                    FROM pulse_tracking
-                    WHERE resolved_at IS NULL
-                    ORDER BY last_heartbeat_at DESC
-                    """
-                )
-                pulses = result.fetchall()
+            readings = await self._repository.list_heartbeats()
+        except Exception as e:  # noqa: BLE001
+            return [HealthCheck("heartbeat:db", False, f"query failed: {e}")]
 
-            for name, last_heartbeat in pulses:
-                if last_heartbeat is None:
-                    stale.append(name)
-                    continue
-
-                elapsed = (now - last_heartbeat).total_seconds()
-                if elapsed > self._threshold:
-                    stale.append(f"{name} ({int(elapsed)}s)")
-
-        except Exception as e:
-            return HealthCheckResult(
-                component="pipeline-heartbeats",
-                ok=False,
-                detail=f"Query failed: {e}",
-                timestamp=now,
-            )
-
-        if stale:
-            return HealthCheckResult(
-                component="pipeline-heartbeats",
-                ok=False,
-                detail=f"Stale heartbeats: {', '.join(stale)}",
-                timestamp=now,
-            )
-
-        return HealthCheckResult(
-            component="pipeline-heartbeats",
-            ok=True,
-            detail=f"{len(pulses)} active pipelines",
-            timestamp=now,
-        )
+        seen = {r.worker: r for r in readings}
+        checks: list[HealthCheck] = []
+        for worker, max_age in self._workers.items():
+            row = seen.get(worker)
+            if row is None:
+                checks.append(HealthCheck(f"heartbeat:{worker}", False, "never beat"))
+                continue
+            if row.status in ("RESOLVED", "IGNORED"):
+                checks.append(HealthCheck(f"heartbeat:{worker}", True, row.status))
+                continue
+            age = row.age_sec
+            checks.append(HealthCheck(f"heartbeat:{worker}", age < max_age,
+                                      f"{age}s ago" if age < max_age else f"{age}s >= {max_age}s"))
+        return checks

@@ -1,92 +1,61 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: application/watchdog_service.py, cli.py
-"""Systemd health check adapter (async)."""
+# Path: adapters/driven/health/
+"""systemd user service/timer checks (legacy checker.py:150-162, 371-397)."""
 from __future__ import annotations
 
 import asyncio
 import subprocess
 from datetime import datetime, timezone
+from typing import Iterable, Mapping
 
 from devforge.ports.health_check import HealthCheckPort
-from devforge.ports.types import HealthCheckResult
+from devforge.ports.types import HealthCheck
+
+DEFAULT_TIMER_MAX_IDLE_SEC = 2100
 
 
-class SystemdServiceHealthCheck(HealthCheckPort):
-    """Health check for systemd user services."""
-
-    def __init__(self, service_names: list[str]) -> None:
-        self._services = service_names
-
-    async def check_health(self) -> HealthCheckResult:
-        """Check if all services are active."""
-        failed = []
-
-        for service in self._services:
-            try:
-                result = await asyncio.to_thread(
-                    subprocess.run,
-                    ["systemctl", "--user", "is-active", service],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if result.returncode != 0:
-                    failed.append(service)
-            except Exception:
-                failed.append(service)
-
-        if failed:
-            return HealthCheckResult(
-                component="systemd-services",
-                ok=False,
-                detail=f"Failed services: {', '.join(failed)}",
-                timestamp=datetime.now(timezone.utc),
-            )
-
-        return HealthCheckResult(
-            component="systemd-services",
-            ok=True,
-            detail=f"All {len(self._services)} services active",
-            timestamp=datetime.now(timezone.utc),
-        )
+async def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    return await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=5)
 
 
-class SystemdTimerHealthCheck(HealthCheckPort):
-    """Health check for systemd timers."""
+class SystemdServiceHealthChecker(HealthCheckPort):
+    def __init__(self, services: Iterable[str], prefix: str = "svc") -> None:
+        self._services = list(services)
+        self._prefix = prefix
 
-    def __init__(self, timer_names: list[str]) -> None:
-        self._timers = timer_names
+    async def check_health(self) -> list[HealthCheck]:
+        return [await self._check(name) for name in self._services]
 
-    async def check_health(self) -> HealthCheckResult:
-        """Check if all timers are active."""
-        failed = []
+    async def _check(self, name: str) -> HealthCheck:
+        try:
+            r = await _run(["systemctl", "--user", "is-active", name])
+            ok = r.returncode == 0
+            detail = "active" if ok else "inactive"
+        except Exception as e:  # noqa: BLE001
+            ok, detail = False, str(e)
+        return HealthCheck(component=f"{self._prefix}:{name}", is_healthy=ok, detail=detail)
 
-        for timer in self._timers:
-            try:
-                result = await asyncio.to_thread(
-                    subprocess.run,
-                    ["systemctl", "--user", "is-active", timer],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if result.returncode != 0:
-                    failed.append(timer)
-            except Exception:
-                failed.append(timer)
 
-        if failed:
-            return HealthCheckResult(
-                component="systemd-timers",
-                ok=False,
-                detail=f"Failed timers: {', '.join(failed)}",
-                timestamp=datetime.now(timezone.utc),
-            )
+class SystemdTimerHealthChecker(HealthCheckPort):
+    def __init__(self, timers: Mapping[str, int], prefix: str = "timer") -> None:
+        self._timers = dict(timers)   # timer unit -> max_idle_sec
+        self._prefix = prefix
 
-        return HealthCheckResult(
-            component="systemd-timers",
-            ok=True,
-            detail=f"All {len(self._timers)} timers active",
-            timestamp=datetime.now(timezone.utc),
-        )
+    async def check_health(self) -> list[HealthCheck]:
+        return [await self._check(name, max_idle) for name, max_idle in self._timers.items()]
+
+    async def _check(self, name: str, max_idle: int) -> HealthCheck:
+        try:
+            r = await _run(["systemctl", "--user", "show", name,
+                            "--property=LastTriggerUSec", "--value"])
+            last = r.stdout.strip()
+            if not last or last == "n/a":
+                return HealthCheck(f"{self._prefix}:{name}", False, "never triggered")
+            last_dt = datetime.strptime(last, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+            idle = (datetime.now(timezone.utc) - last_dt).total_seconds()
+            ok = idle <= max_idle
+            detail = f"{int(idle)}s ago" if ok else f"{int(idle)}s idle > {max_idle}s limit"
+        except Exception as e:  # noqa: BLE001
+            ok, detail = False, str(e)
+        return HealthCheck(f"{self._prefix}:{name}", ok, detail)

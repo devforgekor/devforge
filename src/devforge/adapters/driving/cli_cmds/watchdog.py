@@ -1,72 +1,48 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: cli.py, systemd
-"""CLI subcommands for watchdog operations."""
+# Path: adapters/driving/cli_cmds/ (composition root: cli.py)
+"""Watchdog CLI commands (driving adapter — factory injected, no application import)."""
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 import typer
 
 app = typer.Typer(name="watchdog", help="Watchdog operations")
-
-# Composition root injection (set by cli.py)
-_service: Any = None  # WatchdogService
+_factory: Callable[[], Coroutine[Any, Any, Any]] | None = None
 
 
-def init(service: Any) -> None:
-    """Set the watchdog service (called from composition root)."""
-    global _service
-    _service = service
+def init(factory: Callable[[], Coroutine[Any, Any, Any]]) -> None:
+    global _factory
+    _factory = factory
 
 
-def _get_service() -> Any:
-    """Get the watchdog service (requires composition root init)."""
-    global _service
-    if _service is None:
-        raise RuntimeError(
-            "Watchdog service not initialized. Call watchdog.init() from cli.py first."
-        )
-    return _service
+def _build_service() -> Any:
+    if _factory is None:
+        raise RuntimeError("watchdog.init() not called from composition root")
+    return asyncio.run(_factory())
 
 
 @app.command("status")
-def watchdog_status() -> None:
-    """Show component status."""
-    service = _get_service()
-    statuses = service.get_all_statuses()
-
-    for status in statuses:
-        typer.echo(
-            f"{status.name}: {status.state.value} "
-            f"(fail_count={status.fail_count}, "
-            f"circuit={'OPEN' if status.circuit_open else 'CLOSED'})"
-        )
+def status() -> None:
+    """Print per-component tracker state."""
+    svc = _build_service()
+    for s in svc.component_states():
+        typer.echo(f"{s['name']}: {s['state']} fails={s['fail_count']} circuit={s['circuit_open']}")
 
 
 @app.command("check")
-def watchdog_check() -> None:
-    """Run one check-fix cycle."""
-    service = _get_service()
-    result = asyncio.run(service.run_check_cycle())
-
-    typer.echo(f"Checks: {result['checks']}")
-    typer.echo(f"Failed: {result['failed']}")
-    typer.echo(f"Fixed: {result['fixed']}")
-    typer.echo(f"Timestamp: {result['timestamp']}")
+def check() -> None:
+    """Run one health-check cycle."""
+    result = asyncio.run(_build_service().run_cycle())
+    typer.echo(f"checks={result['checks']} failed={result['failed']}")
 
 
 @app.command("resolve")
-def watchdog_resolve(
-    incident_id: int = typer.Argument(..., help="Incident ID"),
-    note: str = typer.Argument(..., help="Resolution note"),
-) -> None:
-    """Resolve an incident."""
-    service = _get_service()
-    success = asyncio.run(service.resolve_incident(incident_id, note))
-
-    if success:
-        typer.echo(f"Incident {incident_id} resolved")
-    else:
-        typer.echo(f"Failed to resolve incident {incident_id}")
+def resolve(incident_id: int, note: str) -> None:
+    """Resolve an incident by id."""
+    svc = _build_service()
+    asyncio.run(svc.resolve_incident(incident_id, note))
+    typer.echo("resolved=True")

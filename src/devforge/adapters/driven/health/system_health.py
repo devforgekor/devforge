@@ -1,68 +1,68 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: application/watchdog_service.py, cli.py
-"""System health check adapter (async via psutil)."""
+# Path: adapters/driven/health/
+"""Memory/disk checks (legacy checker.py:306-371)."""
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
-
-import psutil
+import subprocess
+from typing import Iterable
 
 from devforge.ports.health_check import HealthCheckPort
-from devforge.ports.types import HealthCheckResult
+from devforge.ports.types import HealthCheck
+
+MEM_WARN_PCT = 90
+MEM_CRIT_PCT = 95
+SWAP_CRIT_MB = 1024
 
 
-class MemoryHealthCheck(HealthCheckPort):
-    """Health check for system memory."""
-
-    def __init__(self, threshold_percent: float = 90.0) -> None:
-        self._threshold = threshold_percent
-
-    async def check_health(self) -> HealthCheckResult:
-        """Check if memory usage is below threshold."""
-        mem = await asyncio.to_thread(psutil.virtual_memory)
-        usage_pct = mem.percent
-
-        if usage_pct >= self._threshold:
-            return HealthCheckResult(
-                component="memory",
-                ok=False,
-                detail=f"Memory usage {usage_pct:.1f}% >= {self._threshold}%",
-                timestamp=datetime.now(timezone.utc),
-            )
-
-        return HealthCheckResult(
-            component="memory",
-            ok=True,
-            detail=f"Memory usage {usage_pct:.1f}%",
-            timestamp=datetime.now(timezone.utc),
-        )
+async def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    return await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=5)
 
 
-class DiskHealthCheck(HealthCheckPort):
-    """Health check for disk space."""
+class MemoryHealthChecker(HealthCheckPort):
+    async def check_health(self) -> list[HealthCheck]:
+        try:
+            r = await _run(["free", "-m"])
+            pct = swap_pct = 0
+            swap_used = 0
+            for line in r.stdout.splitlines():
+                parts = line.split()
+                if line.startswith("Mem:"):
+                    total, used = int(parts[1]), int(parts[2])
+                    pct = round(used / total * 100) if total else 0
+                elif line.startswith("Swap:"):
+                    total, used = int(parts[1]), int(parts[2])
+                    swap_used = used
+                    swap_pct = round(used / total * 100) if total else 0
+            ok = pct < MEM_CRIT_PCT and swap_used < SWAP_CRIT_MB
+            detail = f"mem={pct}% swap={swap_pct}%"
+            return [HealthCheck("system:memory", ok, detail,
+                                metric_value=float(pct), threshold=float(MEM_CRIT_PCT))]
+        except Exception as e:  # noqa: BLE001
+            return [HealthCheck("system:memory", False, str(e))]
 
-    def __init__(self, path: str, threshold_percent: float = 90.0) -> None:
-        self._path = path
-        self._threshold = threshold_percent
 
-    async def check_health(self) -> HealthCheckResult:
-        """Check if disk usage is below threshold."""
-        disk = await asyncio.to_thread(psutil.disk_usage, self._path)
-        usage_pct = disk.percent
+class DiskHealthChecker(HealthCheckPort):
+    def __init__(self, mounts: Iterable[str], threshold_pct: int = 90) -> None:
+        self._mounts = list(mounts)
+        self._threshold = threshold_pct
 
-        if usage_pct >= self._threshold:
-            return HealthCheckResult(
-                component=f"disk-{self._path}",
-                ok=False,
-                detail=f"Disk usage {usage_pct:.1f}% >= {self._threshold}%",
-                timestamp=datetime.now(timezone.utc),
-            )
+    async def check_health(self) -> list[HealthCheck]:
+        try:
+            r = await _run(["df", "--output=target,pcent", "-x", "tmpfs"])
+            usage: dict[str, int] = {}
+            for line in r.stdout.splitlines()[1:]:
+                parts = line.split()
+                if len(parts) >= 2:
+                    usage[parts[0]] = int(parts[1].replace("%", ""))
+            return [self._one(m, usage.get(m)) for m in self._mounts]
+        except Exception as e:  # noqa: BLE001
+            return [HealthCheck(f"system:disk:{m}", False, str(e)) for m in self._mounts]
 
-        return HealthCheckResult(
-            component=f"disk-{self._path}",
-            ok=True,
-            detail=f"Disk usage {usage_pct:.1f}%",
-            timestamp=datetime.now(timezone.utc),
-        )
+    def _one(self, mount: str, pct: int | None) -> HealthCheck:
+        if pct is None:
+            return HealthCheck(f"system:disk:{mount}", False, "mount not found")
+        ok = pct < self._threshold
+        return HealthCheck(f"system:disk:{mount}", ok, f"{pct}% used",
+                           metric_value=float(pct), threshold=float(self._threshold))

@@ -327,48 +327,53 @@ def get_config() -> ConfigRegistry:
     return _config
 
 
-# ── Watchdog Configuration ──
+# ── Watchdog Configuration (v2.1 — legacy parity) ──
 
 
 @dataclass(frozen=True)
 class WatchdogConfig:
-    """Watchdog subsystem configuration."""
+    """Watchdog subsystem configuration.
 
-    # Circuit breaker
+    Defaults mirror scripts/lib/watchdog/config.py (SSOT): SERVICE_TARGETS,
+    TIMER_TARGETS, LLM_TARGETS, HEARTBEAT_WORKERS. When the legacy constants
+    change, update both.
+    """
+
     failure_threshold: int = 3
-    success_threshold: int = 2
-    circuit_reset_timeout_sec: int = 300
-
-    # Recovery
-    recovery_escalation_levels: list[tuple[int, str]] = field(default_factory=lambda: [
-        (1, "soft"),
-        (3, "medium"),
-        (5, "hard"),
-    ])
-
-    # Health checks
+    success_threshold: int = 2               # reserved; circuit is 3/120s/5 in legacy
+    circuit_reset_timeout_sec: int = 120
+    backoff_reset_sec: int = 600
     check_interval_sec: int = 60
     check_timeout_sec: int = 30
+    state_file: str = "/opt/ai_data/scripts/watchdog_state.json"
 
-    # Targets
     critical_services: list[str] = field(default_factory=lambda: [
-        "devforge-fastapi",
-        "devforge-mcp",
-        "postgres",
+        "devforge-turn-watcher", "openrouter-rr-proxy", "devforge-day-cycle",
+        "ebook-watcher", "container-devforge-fastapi", "container-devforge-worker",
+        "ebook-api", "devforge-news-api", "cashbook",
     ])
-
-    llm_targets: dict[str, int] = field(default_factory=lambda: {
-        "pod-a": 11434,
-        "pod-b": 11435,
+    timers: dict[str, int] = field(default_factory=lambda: {
+        "devforge-day-cycle.timer": 2100, "devforge-night-cycle.timer": 2100,
     })
+    llm_targets: dict[str, int] = field(default_factory=lambda: {
+        "day-extract": 8082, "night-verify": 8084,
+    })
+    day_ports: list[int] = field(default_factory=lambda: [8080, 8082])
+    heartbeat_workers: dict[str, int] = field(default_factory=lambda: {
+        "embed_batch": 1800, "liveness_embed_batch": 1800, "entity_scan": 1800,
+        "text_clean": 1800, "day_extract": 1800, "day_enrich": 1800, "news_collector": 25200,
+    })
+    disks: list[str] = field(default_factory=lambda: ["/", "/opt/ai_data"])
 
     @classmethod
     def from_env(cls) -> "WatchdogConfig":
-        """Load from environment variables."""
+        """Load scalar settings from environment variables."""
         return cls(
             failure_threshold=int(os.getenv("WATCHDOG_FAILURE_THRESHOLD", "3")),
             success_threshold=int(os.getenv("WATCHDOG_SUCCESS_THRESHOLD", "2")),
-            circuit_reset_timeout_sec=int(os.getenv("WATCHDOG_CIRCUIT_RESET_SEC", "300")),
+            circuit_reset_timeout_sec=int(os.getenv("WATCHDOG_CIRCUIT_RESET_SEC", "120")),
+            backoff_reset_sec=int(os.getenv("WATCHDOG_BACKOFF_RESET_SEC", "600")),
             check_interval_sec=int(os.getenv("WATCHDOG_CHECK_INTERVAL_SEC", "60")),
             check_timeout_sec=int(os.getenv("WATCHDOG_CHECK_TIMEOUT_SEC", "30")),
+            state_file=os.getenv("WATCHDOG_STATE_FILE", "/opt/ai_data/scripts/watchdog_state.json"),
         )

@@ -19,6 +19,7 @@ import typer
 
 from devforge.adapters.driving.cli_cmds import inference as inference_cmds
 from devforge.adapters.driving.cli_cmds import mcp as mcp_cmds
+from devforge.adapters.driving.cli_cmds import watchdog as watchdog_cmds
 from devforge.adapters.driving.mcp.server import set_pipeline_factory
 from devforge.core.logging import setup_logging
 
@@ -32,12 +33,14 @@ app = typer.Typer(
 
 # ── Sub-apps ──
 # Pipeline commands are defined here (the CLI is the composition root and is
-# allowed to import the application layer); mcp/inference are driving adapters.
+# allowed to import the application layer); mcp/inference/watchdog are driving
+# adapters.
 pipeline_app = typer.Typer(name="pipeline", help="Pipeline management")
 
 app.add_typer(pipeline_app, name="pipeline")
 app.add_typer(inference_cmds.app, name="inference")
 app.add_typer(mcp_cmds.app, name="mcp")
+app.add_typer(watchdog_cmds.app, name="watchdog")
 
 
 def _default_pipeline_factory() -> Any:
@@ -64,6 +67,21 @@ def _default_pipeline_factory() -> Any:
 
 # Register at import time so `devforge mcp serve` has the factory wired.
 set_pipeline_factory(_default_pipeline_factory)
+
+
+def _watchdog_service_factory() -> Any:
+    """Build the production WatchdogService (composition-root wiring).
+
+    Defined here so the watchdog driving adapter never imports the application
+    layer directly (see the `layering` import-linter contract).
+    """
+    from devforge.application.watchdog_service import create_watchdog_service
+    from devforge.core.config import WatchdogConfig
+
+    return create_watchdog_service(WatchdogConfig.from_env())
+
+
+watchdog_cmds.init(_watchdog_service_factory)
 
 
 @app.command()

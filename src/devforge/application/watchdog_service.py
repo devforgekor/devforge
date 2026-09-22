@@ -1,192 +1,156 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: cli.py, adapters/driving/cli_cmds/watchdog.py, systemd
-"""Watchdog application service — orchestrates health monitoring, recovery, notification."""
+# Path: application/
+"""Watchdog application service (legacy orchestrator.py main loop)."""
 from __future__ import annotations
 
-import os
-from collections.abc import Mapping, Sequence
+import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from devforge.core.config import WatchdogConfig
-from devforge.domain.watchdog.model import ComponentState, Incident
-from devforge.domain.watchdog.monitoring.tracker import ComponentTracker
-from devforge.domain.watchdog.orchestration.check_coordinator import CheckCoordinator, CheckPlan
-from devforge.domain.watchdog.orchestration.fix_coordinator import FixCoordinator
+from devforge.domain.watchdog.monitoring.tracker import TrackerRegistry
+from devforge.domain.watchdog.orchestration.check_coordinator import CheckCoordinator
 from devforge.domain.watchdog.recovery.graduation import RecoveryCoordinator
 from devforge.ports.health_check import HealthCheckPort
 from devforge.ports.incident_repository import IncidentRepository
 from devforge.ports.notification import NotificationPort
 from devforge.ports.recovery import RecoveryPort
+from devforge.ports.state_persistence import StateStoragePort
+
+log = logging.getLogger(__name__)
+
+_EVENT_TYPE = {"svc": "down", "timer": "delay", "oneshot": "failed",
+               "syssvc": "down", "llm": "down", "pipeline": "stuck",
+               "system": "crit", "infra": "down"}
 
 
 class WatchdogService:
-    """Application service for watchdog orchestration.
-
-    Coordinates health monitoring, recovery, and notification.
-    """
-
-    def __init__(
-        self,
-        config: WatchdogConfig,
-        health_ports: Mapping[str, HealthCheckPort],
-        recovery_ports: Mapping[str, RecoveryPort],
-        notification_ports: Sequence[NotificationPort],
-        incident_repo: IncidentRepository,
-    ) -> None:
-        # Core domain
-        self._tracker = ComponentTracker(
-            failure_threshold=config.failure_threshold,
-            success_threshold=config.success_threshold,
-        )
-        self._recovery_coordinator = RecoveryCoordinator(self._tracker)
-
-        # Orchestration
-        self._check_coordinator = CheckCoordinator(self._tracker, health_ports)
-        self._fix_coordinator = FixCoordinator(
-            self._recovery_coordinator,
-            recovery_ports,
-        )
-
-        # Infrastructure
-        self._notification_ports = notification_ports
-        self._incident_repo = incident_repo
-
-        # Config
+    def __init__(self, config: WatchdogConfig, registry: TrackerRegistry,
+                 check_coordinator: CheckCoordinator, recovery_coordinator: RecoveryCoordinator,
+                 recovery_port: RecoveryPort, notification_ports: Sequence[NotificationPort],
+                 incident_repo: IncidentRepository,
+                 state_storage: Optional[StateStoragePort] = None) -> None:
         self._config = config
+        self._registry = registry
+        self._checks = check_coordinator
+        self._recovery = recovery_coordinator
+        self._recovery_port = recovery_port
+        self._notifiers = list(notification_ports)
+        self._incidents = incident_repo
+        self._state = state_storage
+        self._mode = "day"
+        self._last_heartbeat_ts = 0.0
 
-    async def run_check_cycle(self) -> dict[str, Any]:
-        """Execute one complete check-fix cycle.
+    def _event_type(self, component: str) -> str:
+        return _EVENT_TYPE.get(component.split(":", 1)[0], "down")
 
-        Returns:
-            Summary dict with check/fix results.
-        """
-        # 1. Execute health checks
-        plan = CheckPlan(
-            components=list(self._config.critical_services),
-            parallel=True,
-            timeout_per_check=self._config.check_timeout_sec,
-        )
+    async def run_cycle(self) -> dict[str, Any]:
+        checks = await self._checks.run()
+        failed = self._checks.failed(checks)
 
-        check_results = await self._check_coordinator.execute_checks(plan)
+        # 1. healthy → resolve incidents (orchestrator.py:126)
+        for c in checks:
+            if c.is_healthy:
+                await self._incidents.resolve_if_open(c.component)
 
-        # 2. Identify failures
-        failed = [r.component for r in check_results if not r.ok]
+        # 2. failed → incident → recovery → alert (orchestrator.py:128-143)
+        #
+        # Legacy parity note: a component outcome maps to EXACTLY ONE tracker
+        # record call per cycle. The CheckCoordinator already recorded this
+        # cycle's failure, so on a FAILED recovery we must not record again
+        # (legacy's graduated_recover owns the single record call in the
+        # recovery branch). Only a SUCCESSFUL recovery resets the tracker.
+        for c in checks:
+            if c.is_healthy:
+                continue
+            t = self._registry.get(c.component)
+            inc_id = await self._incidents.record_detect(
+                c.component, self._event_type(c.component), c.detail)
+            action = self._recovery.plan(c.component, c.detail)
+            if action is not None and t.can_attempt_recovery():
+                # Non-blocking backoff: defer the next attempt instead of
+                # sleeping the whole cycle (legacy sleeps in-line).
+                t.schedule_next_attempt(action.backoff_sec)
+                ok = await self._recovery_port.execute_recovery(action)
+                await self._incidents.record_action(inc_id, action.kind, ok)
+                if ok:
+                    self._recovery.record_result(c.component, True)
+                    for n in self._notifiers:
+                        await n.send_recovery(c.component, f"{action.kind} ok")
+            if t.is_degraded() and t.can_alert():
+                for n in self._notifiers:
+                    await n.send_alert(c.component, t.state.value, c.detail)
 
-        # 3. Execute fixes
-        fix_results = {}
-        if failed:
-            fix_results = await self._fix_coordinator.execute_fixes(failed)
+        self._persist()
+        return {"checks": len(checks), "failed": len(failed),
+                "timestamp": datetime.now(timezone.utc).isoformat()}
 
-        # 4. Create incidents for new failures
-        for component in failed:
-            status = self._tracker.get_status(component)
-            if status and status.state == ComponentState.CRITICAL:
-                # Check if already open incident
-                open_incidents = await self._incident_repo.find_open(component)
-                if not open_incidents:
-                    incident = Incident(
-                        id=None,
-                        component=component,
-                        severity=status.state.value,
-                        detail=f"Consecutive failures: {status.consecutive_failures}",
-                        created_at=datetime.now(timezone.utc),
-                        resolved_at=None,
-                        resolution_note=None,
-                    )
-                    await self._incident_repo.save(incident)
+    def component_states(self) -> list[dict[str, object]]:
+        """Read-model for the CLI: per-component summary (no private access)."""
+        return [t.summary() for t in self._registry.all().values()]
 
-        # 5. Send notifications
-        for component in failed:
-            status = self._tracker.get_status(component)
-            if status:
-                for notifier in self._notification_ports:
-                    await notifier.send_alert(component, status)
+    async def resolve_incident(self, incident_id: int, note: str) -> None:
+        """Resolve an incident via the repository port."""
+        await self._incidents.record_action(incident_id, f"manual: {note}", True)
 
-        # 6. Notify recovery results
-        for component, success in fix_results.items():
-            action = self._recovery_coordinator.plan_recovery(component)
-            if action:
-                for notifier in self._notification_ports:
-                    await notifier.send_recovery(component, action, success)
+    def _persist(self) -> None:
+        if self._state is not None:
+            self._state.save(self._registry.all(), self._last_heartbeat_ts, self._mode)
 
-        return {
-            "checks": len(check_results),
-            "failed": len(failed),
-            "fixed": sum(1 for v in fix_results.values() if v),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-
-    async def resolve_incident(self, incident_id: int, note: str) -> bool:
-        """Manually resolve an incident."""
-        return await self._incident_repo.resolve(incident_id, note)
-
-    def get_component_status(self, component: str) -> Any:
-        """Get current status of component."""
-        return self._tracker.get_status(component)
-
-    def get_all_statuses(self) -> Any:
-        """Get status of all tracked components."""
-        return self._tracker.all_statuses()
+    def load_state(self) -> None:
+        if self._state is not None:
+            payload = self._state.load()
+            self._registry.restore(
+                {c["name"]: c for c in payload.get("components", []) if "name" in c})
+            self._last_heartbeat_ts = float(payload.get("last_heartbeat_ts", 0.0))
+            self._mode = payload.get("mode", self._mode)
 
 
-async def create_watchdog_service(config: WatchdogConfig) -> WatchdogService:
-    """Factory function to create fully-wired WatchdogService."""
-    from devforge.adapters.driven.health.llm_health import LLMHealthCheck
-    from devforge.adapters.driven.health.system_health import (
-        DiskHealthCheck,
-        MemoryHealthCheck,
-    )
+def create_watchdog_service(config: WatchdogConfig) -> WatchdogService:
+    """Composition factory — wires ports/adapters for the CLI (E3)."""
+    from devforge.adapters.driven.health.llm_health import LLMHealthChecker
+    from devforge.adapters.driven.health.pipeline_health import HeartbeatHealthChecker
+    from devforge.adapters.driven.health.system_health import DiskHealthChecker, MemoryHealthChecker
     from devforge.adapters.driven.health.systemd_health import (
-        SystemdServiceHealthCheck,
-        SystemdTimerHealthCheck,
+        SystemdServiceHealthChecker,
+        SystemdTimerHealthChecker,
     )
     from devforge.adapters.driven.notification.slack_notifier import SlackNotifier
     from devforge.adapters.driven.notification.systemd_notifier import SystemdNotifier
     from devforge.adapters.driven.recovery.systemd_recovery import SystemdRecoveryAdapter
-    from devforge.adapters.driven.storage.incident_pg import PostgreSQLIncidentRepository
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.adapters.driven.storage.heartbeat_pg import PostgresHeartbeatRepository
+    from devforge.adapters.driven.storage.incident_pg import PostgresIncidentRepository
+    from devforge.adapters.driven.storage.state_json import JsonStateStorage
     from devforge.core.config import get_config
-    from devforge.core.database import DatabaseGateway
 
-    # Health check ports
-    health_ports: Mapping[str, HealthCheckPort] = {
-        "systemd-services": SystemdServiceHealthCheck(config.critical_services),
-        "systemd-timers": SystemdTimerHealthCheck([
-            "devforge-day-cycle.timer",
-            "devforge-night-cycle.timer",
-        ]),
-        "llm-pods": LLMHealthCheck(config.llm_targets),
-        "memory": MemoryHealthCheck(threshold_percent=90.0),
-        "disk-root": DiskHealthCheck("/", threshold_percent=90.0),
-        "disk-data": DiskHealthCheck("/opt/ai_data", threshold_percent=90.0),
+    registry = TrackerRegistry()
+    gateway = DatabaseGateway(get_config().db_url_async)
+    heartbeat_repo = PostgresHeartbeatRepository(gateway)
+    health_ports: dict[str, HealthCheckPort] = {
+        "svc": SystemdServiceHealthChecker(config.critical_services),
+        "timer": SystemdTimerHealthChecker(config.timers),
+        "llm": LLMHealthChecker(config.llm_targets, day_ports=set(config.day_ports)),
+        "system": MemoryHealthChecker(),
+        "disk": DiskHealthChecker(config.disks),
+        "heartbeat": HeartbeatHealthChecker(heartbeat_repo, config.heartbeat_workers),
     }
+    check_coordinator = CheckCoordinator(registry, health_ports)
+    recovery_coordinator = RecoveryCoordinator(registry)
+    recovery_port = SystemdRecoveryAdapter()
 
-    # Recovery ports
-    recovery_ports: Mapping[str, RecoveryPort] = {
-        svc: SystemdRecoveryAdapter()
-        for svc in config.critical_services
-    }
+    notifiers: list[NotificationPort] = [SystemdNotifier()]
+    import os
+    slack_token = os.environ.get("SLACK_BOT_TOKEN", "")
+    if slack_token:
+        notifiers.append(SlackNotifier(slack_token, os.environ.get("SLACK_CHANNEL", "")))
 
-    # Notification ports
-    app_config = get_config()
-    notification_ports: Sequence[NotificationPort] = [
-        SystemdNotifier(),
-    ]
-    if app_config.secrets.SLACK_BOT_TOKEN_KEY:
-        # Use the webhook URL from secrets
-        webhook_url = os.environ.get("DEVFORGE_SLACK_WEBHOOK")
-        if webhook_url:
-            notification_ports = list(notification_ports) + [SlackNotifier(webhook_url)]
+    incident_repo = PostgresIncidentRepository(gateway)
+    state_storage = JsonStateStorage(config.state_file)
 
-    # Incident repository
-    db = DatabaseGateway(app_config.db_url_async)
-    incident_repo = PostgreSQLIncidentRepository(db.session_maker)
-
-    return WatchdogService(
-        config=config,
-        health_ports=health_ports,
-        recovery_ports=recovery_ports,
-        notification_ports=notification_ports,
-        incident_repo=incident_repo,
-    )
+    service = WatchdogService(config, registry, check_coordinator, recovery_coordinator,
+                              recovery_port, notifiers, incident_repo, state_storage)
+    service.load_state()
+    return service
