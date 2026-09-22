@@ -629,9 +629,6 @@ modules:
       status: production
       purpose: "Research facade \u2014 one entry point over web/exa/context7/fetch\
         \ providers."
-    _keys.py:
-      status: production
-      purpose: Shared encrypted-key loader for research providers (exa, context7).
     context7.py:
       status: production
       purpose: "Context7 docs core \u2014 library resolve + docs query (extracted\

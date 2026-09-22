@@ -14,9 +14,8 @@ if _SCRIPTS not in sys.path:
 
 import httpx
 
-from lib.research._keys import load_encrypted_keys
+from lib.auth.key_loader import load_api_keys
 
-KEYS_ENV = "EXA_API_KEYS"
 DEFAULT_NUM = 10
 MAX_NUM = 100
 API_BASE = "https://api.exa.ai"
@@ -28,7 +27,7 @@ _idx = 0
 def _keys() -> list[str]:
     global _pool
     if _pool is None:
-        _pool = load_encrypted_keys(KEYS_ENV)
+        _pool = [key for _, key in load_api_keys("EXA")]
     return _pool
 
 

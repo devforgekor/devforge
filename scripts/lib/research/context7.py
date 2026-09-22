@@ -14,9 +14,8 @@ if _SCRIPTS not in sys.path:
 
 import httpx
 
-from lib.research._keys import load_encrypted_keys
+from lib.auth.key_loader import load_api_keys
 
-KEYS_ENV = "CONTEXT7_API_KEYS"
 API_BASE = "https://context7.com/api"
 
 _pool: list[str] | None = None
@@ -26,7 +25,7 @@ _idx = 0
 def _keys() -> list[str]:
     global _pool
     if _pool is None:
-        _pool = load_encrypted_keys(KEYS_ENV)
+        _pool = [key for _, key in load_api_keys("CONTEXT7")]
     return _pool
 
 
