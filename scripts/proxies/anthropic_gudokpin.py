@@ -25,6 +25,9 @@ DEFAULT_UPSTREAM = "https://api.gudokpin.com/v1"
 
 # Map Anthropic model names → Gudokpin model IDs (from GET /v1/models).
 # GPT/Gemini/Grok 등도 Gudokpin에서 동일하게 접근 가능하므로 identity 매핑 추가.
+# [WHY] Gudokpin gateway는 claude 계열만 안정적(tool_call+streaming). 미지원/미상
+#       모델은 모두 Claude로 고정한다 (DeepSeek-V4-Flash는 Gudokpin에서 미제공).
+DEFAULT_GUDOKPIN_MODEL = "claude-sonnet-5"
 MODEL_MAP = {
     # Claude Code가 에이전트(tool call)로 동작하려면 tool_call 지원 모델 필요.
     # Gudokpin 실측: claude-sonnet-5/claude-opus-5만 tool_call+streaming OK.
@@ -35,8 +38,8 @@ MODEL_MAP = {
     "claude-opus-4-8": "claude-opus-5",
     "claude-haiku": "claude-fable-5",
     "claude-fable": "claude-fable-5",
-    # cheap text-only (tool_call 미지원 — 비에이전트 용도)
-    "claude-fast": "DeepSeek-V4-Flash-0731",
+    # cheap text-only — Gudokpin에서 Claude로 고정 (기존 DeepSeek 미제공)
+    "claude-fast": "claude-sonnet-5",
     # ChatGPT / GPT 모델 (Gudokpin identity) — claude --model <id> 로 선택
     "gpt-5.6-luna": "gpt-5.6-luna",
     "gpt-5.6-sol": "gpt-5.6-sol",
@@ -188,7 +191,7 @@ def _anthropic_to_openai(anthropic_body: dict) -> dict:
                     msg_obj["tool_calls"] = tool_calls
                 msgs.append(msg_obj)
 
-    model = MODEL_MAP.get(anthropic_body.get("model", ""), "DeepSeek-V4-Flash-0731")
+    model = MODEL_MAP.get(anthropic_body.get("model", ""), DEFAULT_GUDOKPIN_MODEL)
     stream = anthropic_body.get("stream", False)
 
     req: dict = {
@@ -595,7 +598,7 @@ class OpenRouterProxyHandler(BaseHTTPRequestHandler):
         )
 
     def _resolve_model(self, anthropic_model: str) -> str:
-        return MODEL_MAP.get(anthropic_model, "DeepSeek-V4-Flash-0731")
+        return MODEL_MAP.get(anthropic_model, DEFAULT_GUDOKPIN_MODEL)
 
     def _reverse_model(self, openai_model: str) -> str:
         return _OPENAI_TO_ANTHROPIC_MODEL.get(openai_model, openai_model)
