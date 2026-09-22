@@ -19,7 +19,6 @@ _EXACT: dict[str, str] = {
     "svc:container-flaresolverr": "",
     "svc:anthropic-openrouter-proxy": "",
     "svc:anthropic-proxy": "",
-    "svc:gemini-openai-proxy": "",
     "svc:or-rate-limiter": "",
 }
 # Prefix → kind. "" prefix means "no recovery (alert-only)".

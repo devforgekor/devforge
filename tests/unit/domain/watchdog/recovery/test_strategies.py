@@ -39,7 +39,7 @@ def test_alert_only_targets_return_none() -> None:
     """legacy ALERT_ONLY_TARGETS must never be recovered (container/proxy infra)."""
     for comp in ("svc:container-postgres", "svc:container-devforge-mcp",
                  "svc:container-flaresolverr", "svc:anthropic-openrouter-proxy",
-                 "svc:anthropic-proxy", "svc:gemini-openai-proxy", "svc:or-rate-limiter"):
+                 "svc:anthropic-proxy", "svc:or-rate-limiter"):
         assert classify_recovery_kind(comp) is None, comp
 
 
