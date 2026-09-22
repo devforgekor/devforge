@@ -31,7 +31,7 @@ class WatchdogService:
                  check_coordinator: CheckCoordinator, recovery_coordinator: RecoveryCoordinator,
                  recovery_port: RecoveryPort, notification_ports: Sequence[NotificationPort],
                  incident_repo: IncidentRepository,
-                 state_storage: Optional[StateStoragePort] = None) -> None:
+                 state_storage: Optional[StateStoragePort] = None, dry_run: bool = False) -> None:
         self._config = config
         self._registry = registry
         self._checks = check_coordinator
@@ -42,6 +42,7 @@ class WatchdogService:
         self._state = state_storage
         self._mode = "day"
         self._last_heartbeat_ts = 0.0
+        self._dry_run = dry_run
 
     def _event_type(self, component: str) -> str:
         return _EVENT_TYPE.get(component.split(":", 1)[0], "down")
@@ -50,13 +51,14 @@ class WatchdogService:
         checks = await self._checks.run()
         failed = self._checks.failed(checks)
 
-        # 1. healthy → resolve incidents; warn on latency (legacy T3, metric > threshold)
+        # 1. healthy → resolve incidents (skipped in dry_run)
         for c in checks:
             if not c.is_healthy:
                 continue
-            await self._incidents.resolve_if_open(c.component)
+            if not self._dry_run:
+                await self._incidents.resolve_if_open(c.component)
             if (c.metric_value is not None and c.threshold is not None
-                    and c.metric_value > c.threshold):
+                    and c.metric_value > c.threshold) and not self._dry_run:
                 for n in self._notifiers:
                     await n.send_alert(c.component, "LATENCY", c.detail)
 
@@ -71,6 +73,14 @@ class WatchdogService:
             if c.is_healthy:
                 continue
             t = self._registry.get(c.component)
+
+            if self._dry_run:
+                action = self._recovery.plan(c.component, c.detail)
+                log.info("[dry-run] %s failed: %s (would %s)",
+                         c.component, c.detail,
+                         action.kind if action is not None else "alert-only")
+                continue
+
             inc_id = await self._incidents.record_detect(
                 c.component, self._event_type(c.component), c.detail)
             action = self._recovery.plan(c.component, c.detail)
@@ -88,8 +98,9 @@ class WatchdogService:
                 for n in self._notifiers:
                     await n.send_alert(c.component, t.state.value, c.detail)
 
-        self._persist()
-        return {"checks": len(checks), "failed": len(failed),
+        if not self._dry_run:
+            self._persist()
+        return {"checks": len(checks), "failed": len(failed), "dry_run": self._dry_run,
                 "timestamp": datetime.now(timezone.utc).isoformat()}
 
     def component_states(self) -> list[dict[str, object]]:
@@ -112,8 +123,16 @@ class WatchdogService:
             self._last_heartbeat_ts = float(payload.get("last_heartbeat_ts", 0.0))
             self._mode = payload.get("mode", self._mode)
 
+    @property
+    def dry_run(self) -> bool:
+        return self._dry_run
 
-def create_watchdog_service(config: WatchdogConfig) -> WatchdogService:
+    @property
+    def check_interval_sec(self) -> int:
+        return self._config.check_interval_sec
+
+
+def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> WatchdogService:
     """Composition factory — wires ports/adapters for the CLI (E3)."""
     from devforge.adapters.driven.health.ebook_health import EbookPipelineHealthChecker
     from devforge.adapters.driven.health.llm_health import LLMHealthChecker
@@ -134,9 +153,13 @@ def create_watchdog_service(config: WatchdogConfig) -> WatchdogService:
     from devforge.adapters.driven.storage.incident_pg import PostgresIncidentRepository
     from devforge.adapters.driven.storage.state_json import JsonStateStorage
     from devforge.core.config import get_config
+    from devforge.core.exceptions import ConfigurationError
 
     registry = TrackerRegistry()
-    gateway = DatabaseGateway(get_config().db_url_async)
+    cfg = get_config()
+    if not cfg.db_url_async:
+        raise ConfigurationError("DEVFORGE_DATABASE_URL is not set (run inside devforge-net)")
+    gateway = DatabaseGateway.from_config(cfg)
     heartbeat_repo = PostgresHeartbeatRepository(gateway)
     ebook_svc = "ebook-watcher"
     svc_targets = [s for s in config.critical_services if s != ebook_svc]
@@ -160,7 +183,7 @@ def create_watchdog_service(config: WatchdogConfig) -> WatchdogService:
 
     notifiers: list[NotificationPort] = [SystemdNotifier()]
     import os
-    slack_token = os.environ.get("SLACK_BOT_TOKEN", "")
+    slack_token = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
     if slack_token:
         notifiers.append(SlackNotifier(slack_token, os.environ.get("SLACK_CHANNEL", "")))
 
@@ -168,6 +191,7 @@ def create_watchdog_service(config: WatchdogConfig) -> WatchdogService:
     state_storage = JsonStateStorage(config.state_file)
 
     service = WatchdogService(config, registry, check_coordinator, recovery_coordinator,
-                              recovery_port, notifiers, incident_repo, state_storage)
+                              recovery_port, notifiers, incident_repo, state_storage,
+                              dry_run=dry_run)
     service.load_state()
     return service

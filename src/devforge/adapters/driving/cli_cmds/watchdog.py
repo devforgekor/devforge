@@ -5,13 +5,27 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import time
 from collections.abc import Callable, Coroutine
+from pathlib import Path
 from typing import Any
 
 import typer
 
 app = typer.Typer(name="watchdog", help="Watchdog operations")
 _factory: Callable[[], Coroutine[Any, Any, Any]] | None = None
+
+LIVENESS_FILE = Path(os.environ.get("WATCHDOG_LIVENESS_FILE", "/var/tmp/watchdog_last_cycle_ts"))
+
+
+def _write_liveness() -> None:
+    """[WHY] legacy orchestrator._write_liveness parity — keeps devforge-watchdog-liveness.timer valid."""
+    try:
+        LIVENESS_FILE.write_text(str(int(time.time())))
+    except OSError as e:
+        import logging
+        logging.getLogger(__name__).warning("liveness write failed: %s", e)
 
 
 def init(factory: Callable[[], Coroutine[Any, Any, Any]]) -> None:
@@ -46,3 +60,22 @@ def resolve(incident_id: int, note: str) -> None:
     svc = _build_service()
     asyncio.run(svc.resolve_incident(incident_id, note))
     typer.echo("resolved=True")
+
+
+@app.command("serve")
+def serve() -> None:
+    """Watchdog loop entrypoint for the systemd unit (reads WATCHDOG_* env)."""
+    asyncio.run(_serve_loop())
+
+
+async def _serve_loop() -> None:
+    if _factory is None:
+        raise RuntimeError("watchdog.init() not called from composition root")
+    svc = await _factory()                      # single event loop
+    interval = svc.check_interval_sec
+    import logging
+    logging.getLogger(__name__).info("watchdog serve: interval=%ss dry_run=%s", interval, svc.dry_run)
+    while True:
+        await svc.run_cycle()
+        _write_liveness()
+        await asyncio.sleep(interval)

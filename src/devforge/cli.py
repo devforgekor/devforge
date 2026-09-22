@@ -75,10 +75,13 @@ def _watchdog_service_factory() -> Any:
     Defined here so the watchdog driving adapter never imports the application
     layer directly (see the `layering` import-linter contract).
     """
+    import os
+
     from devforge.application.watchdog_service import create_watchdog_service
     from devforge.core.config import WatchdogConfig
 
-    return create_watchdog_service(WatchdogConfig.from_env())
+    dry_run = os.environ.get("WATCHDOG_DRY_RUN", "") == "1"
+    return create_watchdog_service(WatchdogConfig.from_env(), dry_run=dry_run)
 
 
 watchdog_cmds.init(_watchdog_service_factory)
