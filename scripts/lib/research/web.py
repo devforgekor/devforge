@@ -21,8 +21,8 @@ _SCRIPTS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
-from lib.auth.key_loader import load_api_keys
-from lib.auth.key_rotator import KeyRotator
+from lib.auth.key_loader import load_api_keys  # noqa: E402
+from lib.auth.key_rotator import KeyRotator  # noqa: E402
 
 PROVIDERS = {
     "brave": {

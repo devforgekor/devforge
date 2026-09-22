@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by — proxies/gemini_openai.py, lib/research/web.py
+# Path: imported by — lib/research/web.py, lib/auth/__init__.py
 """Unified provider API-key loader — round-robin ready, env-driven.
 
 All rotating providers (BRAVE, CONTEXT7, EXA, GEMINI, TAVILY, YOUCOM) share

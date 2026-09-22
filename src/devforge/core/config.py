@@ -377,8 +377,7 @@ class WatchdogConfig:
     ])
     alert_only_targets: list[str] = field(default_factory=lambda: [
         "container-postgres", "container-devforge-mcp", "container-flaresolverr",
-        "anthropic-openrouter-proxy", "anthropic-proxy", "gemini-openai-proxy",
-        "or-rate-limiter",
+        "anthropic-openrouter-proxy", "anthropic-proxy", "or-rate-limiter",
     ])
     oneshot_result_targets: list[str] = field(default_factory=lambda: [
         "devforge-daily-structure.service", "devforge-backup.service",

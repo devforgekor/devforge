@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: imported by proxies/gemini_openai.py
+# Path: imported by — lib/auth/__init__.py (re-export; no active caller)
 """Daily per-key API quota tracker.
 Tracks Requests Per Day (RPD) and token usage per key,
 persists to JSON, auto-resets at midnight UTC.
