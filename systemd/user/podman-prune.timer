@@ -1,0 +1,10 @@
+# /home/opc/.config/systemd/user/podman-prune.timer
+[Unit]
+Description=Podman dangling image prune timer (daily 04:30 KST = 19:30 UTC)
+
+[Timer]
+OnCalendar=*-*-* 19:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

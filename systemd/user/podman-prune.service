@@ -1,0 +1,11 @@
+# /home/opc/.config/systemd/user/podman-prune.service
+[Unit]
+Description=Podman dangling image prune (retention 48h)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/projects/server/scripts/deploy/podman-prune.sh
+StandardOutput=journal
+StandardError=journal
+Nice=19
+IOSchedulingClass=idle
