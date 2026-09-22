@@ -116,7 +116,7 @@ tail -50 /opt/ai_data/flaresolverr/ebook_watcher/watcher.log | grep -i dataimpul
 ```bash
 python3 -c "
 import os, sys
-sys.path.insert(0, '/opt/workspace/ebooklib/apps/backend')
+sys.path.insert(0, '/opt/workspace/minihome/apps/ebooklib/apps/backend')
 from lib.dataimpulse_monitor import (
     _is_ip_whitelist_mode, _load_proxy_credentials,
     _proxy_url, _build_proxy_config, _parse_usage

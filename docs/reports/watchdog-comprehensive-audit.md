@@ -275,7 +275,7 @@ def _check_token_stagnation(results, dry_run=False):
 
 ### 6.5 관련 ebooklib 패치 (병행)
 
-ebook 파이프라인 쪽도 함께 hardening 되었다 (`/opt/workspace/ebooklib`):
+ebook 파이프라인 쪽도 함께 hardening 되었다 (`/opt/workspace/minihome/apps/ebooklib`):
 
 | 커밋 | 내용 |
 |------|------|

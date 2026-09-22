@@ -229,7 +229,7 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | Droplr | 최종 단축 주소 | `lib/droplr.py` (HTTP API), `scripts/droplr_upload.py` |
 | Notion | 메모/리뷰 기록 | `lib/notion_client.py` |
 | Slack/Telegram/Gmail | 알림 | `lib/notify.py` |
-| Vercel (miniebook) | **최종 뷰어**(포털 홈/상태/뉴스/도서관) | `/opt/workspace/ebooklib/apps/frontend` (Next.js, 서버측 `NEXT_PUBLIC_API_URL`=nip.io) |
+| Vercel (miniebook) | **최종 뷰어**(포털 홈/상태/뉴스/도서관) | `/opt/workspace/minihome/apps/ebooklib/apps/frontend` (Next.js, 서버측 `NEXT_PUBLIC_API_URL`=nip.io) |
 
 > **뷰어 = 표시 전용(Vercel)**: 로직·데이터는 devforge에서 완성, Vercel은 ISR 캐시로 표시만. 파일 교환은 devforge(`/send`,`/receive`) 직접 — Vercel 미경유. (계획: `docs/plans/vercel-viewer-plan.md`)
 
@@ -273,7 +273,7 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 | 코드 구조 SSOT | `docs/architecture/code-structure.yaml` | 파일 레이아웃 |
 | watchdog 감사 | `docs/reports/watchdog-comprehensive-audit.md` | watchdog 패치 이력 |
 | golden image runbook | `docs/runbooks/runbook-golden-image.md` | 이미지 배포 |
-| ebook 아키텍처 | `/opt/workspace/ebooklib/docs/00-ARCHITECTURE.md` | ebook 상세 |
+| ebook 아키텍처 | `/opt/workspace/minihome/apps/ebooklib/docs/00-ARCHITECTURE.md` | ebook 상세 |
 | 통합 제어 | `CLAUDE.yaml` | 진입점/엔트리포인트 목록 |
 | 리팩토링 계획(정본) | `docs/REFACTORING_PLAN.md` | src-layout + Ports&Adapters 전환 계획(v1.4) |
 | 코드 아키텍처 | `docs/ARCHITECTURE.md` | 패키지 레이아웃·의존성 규칙(import-linter) |
