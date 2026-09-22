@@ -6,6 +6,6 @@ Description=DevForge Watchdog liveness check (dead-man's switch)
 [Service]
 Type=oneshot
 Environment=PYTHONPATH=/opt/projects/server/scripts
-ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/watchdog.py --liveness-check
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/watchdog.py --liveness-check
 StandardOutput=journal
 StandardError=journal

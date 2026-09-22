@@ -5,6 +5,6 @@ OnFailure=baseline-daily-failed.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/hooks/baseline-daily.py
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/hooks/baseline-daily.py
 WorkingDirectory=/opt/projects/server
 Environment=PATH=/usr/local/bin:/usr/bin:/bin

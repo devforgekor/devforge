@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3.12 /opt/workspace/minihome/apps/news/news_api.py --port 8091
+ExecStart=/usr/bin/python3 /opt/workspace/minihome/apps/news/news_api.py --port 8091
 WorkingDirectory=/opt/workspace/minihome/apps/news
 Restart=on-failure
 RestartSec=5

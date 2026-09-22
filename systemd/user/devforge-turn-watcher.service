@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=simple
 Environment=PYTHONPATH=/opt/projects/server/scripts
 WorkingDirectory=/opt/projects/server/scripts
-ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/turn_watcher.py
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/turn_watcher.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
