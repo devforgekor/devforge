@@ -7,35 +7,41 @@
 
 ---
 
-## 1. 현황 매트릭스 (실측 2026-09-22)
+## 0. 결정 (2026-09-22)
 
-| 영역 | 현재 버전 | 근거 | 목표(제안) | 변경 |
-|------|-----------|------|-----------|------|
-| 호스트 기본 `python3` | **3.9.25** | `/usr/bin/python3` → `python3.9` | 3.11 (devforge 한정 venv) | 예정 |
-| `python3.11` | 3.11.13 | 설치됨, devforge/deps **미설치** | — | — |
-| `python3.12` | 호스트 미설치 | — | (대안 기준) | 선택 |
-| devforge 패키지 설치 | **python3.9** editable | `.local/lib/python3.9/site-packages` | 3.11 venv | 예정 |
-| 실행 컨테이너 (devforge-base/fastapi/mcp/worker) | **3.12.13** | `podman inspect` PYTHON_VERSION | 3.11 (또는 3.12 선언) | 결정 |
-| 컨테이너 flaresolverr / inference | 3.11.15 / 3.12.3 | `podman exec` | 유지 | 아니오 |
-| repo `Dockerfile` | **python:3.11-slim** | `FROM` 라인 | 실행 이미지와 일치 | 수정 |
-| user unit (33) | **27× `/usr/bin/python3`(3.9)**, **6× `python3.11`** | 유닛 grep | devforge 관련만 3.11 | 단계적 |
-| `pyproject.toml` | `requires-python>=3.9`, ruff `py39`, mypy `3.9` | grep | 3.11 | 예정 |
+**devforge 기준 = Python 3.12** (사용자 결정). 근거: 실행 컨테이너가 이미 3.12.13이라
+**재빌드 불필요**, 주요 의존성 3.12 지원(Context7). legacy `scripts/`와 대다수 user unit은
+당분간 3.9 유지.
 
-6개 3.11 유닛: `devforge-backup`, `devforge-openrouter-free-models`, `devforge-restore-test`,
-`devforge-tg-webhook`, `openrouter-rr-proxy`, `or-rate-limiter`.
+## 1. 런타임 매트릭스
 
-### 3.9 호환 텍스트 (정정 대상, 이관 후)
-| 위치 | 내용 |
-|------|------|
-| `pyproject.toml:11` | `requires-python = ">=3.9"` |
-| `pyproject.toml:24` | classifier `Python :: 3.9` |
-| `pyproject.toml:86` | ruff `target-version = "py39"` |
-| `pyproject.toml:97` | `"UP"` 비활성 주석 |
-| `pyproject.toml:106` | mypy `python_version = "3.9"` |
-| `scripts/lib/watchdog/messenger.py:57,190` | "Python 3.9: list[dict] not supported" |
-| `src/devforge/adapters/driving/mcp/server.py:11` | "for Python 3.9 compatibility" |
-| `docs/runbooks/timetable-calendar-sync.md:63` | "Python 3.9+" (별개 서비스) |
-| `scripts/tests/model_comparison_test.py:148` | fixture 문구 "Stack: Python 3.9" |
+### 이행 후 (2026-09-22)
+| 영역 | 버전 | 상태 |
+|------|------|------|
+| devforge 기준 / 호스트 dev·test | **3.12** (3.12.14) | python3.12 설치 + `pip install --user -e ".[dev]"` 완료 |
+| `pyproject.toml` | `requires-python>=3.12`, ruff `py312`, mypy `3.12` | ✅ 변경 |
+| `Dockerfile` | `python:3.12-slim` (builder/runtime) | ✅ 변경(실행 이미지와 일치) |
+| CI `.github/workflows/ci.yml` | `PYTHON_VERSION: "3.12"` | ✅ 변경 |
+| 실행 컨테이너 (devforge-base/fastapi/mcp/worker) | 3.12.13 | 변경 없음(이미 3.12) |
+| 호스트 기본 `python3` | 3.9.25 | **미변경**(legacy scripts용) |
+| user unit (33) | 27×3.9 / 6×3.11 | **미변경**(Step 4/5 대상) |
+| legacy `scripts/` | 3.9 | 당분간 유지 |
+
+### 이행 전 (참고)
+호스트 기본 3.9.25 · devforge는 python3.9 editable · Dockerfile 3.11-slim(실행 이미지 3.12와
+불일치) · pyproject `>=3.9`/ruff py39/mypy 3.9 · user unit 27×3.9·6×3.11.
+
+### 3.9 호환 텍스트
+- ✅ **해소:** `pyproject.toml` 5항목(11/24/86/97/106 → 3.12), `mcp/server.py:11`(주석 갱신)
+- ⏳ **잔존(의도적):** `messenger.py:57,190`(legacy 3.9 유지), `timetable-calendar-sync.md:63`
+  (별개 서비스), `model_comparison_test.py:148`(fixture 데이터)
+
+### 검증 결과 (Python 3.12, 2026-09-22)
+`pytest tests/unit tests/characterization` **68 passed** · `ruff` pass · `mypy src/devforge`
+41 files success · `lint-imports` 4 KEPT · `import devforge` OK.
+- 3.12에서 발견·수정: `mcp/server.py` mypy 3건(`_StepBudget` TypedDict + `_as_aware` cast),
+  `pyproject [dev]`에 레거시 테스트 의존성(`tiktoken`, `langdetect`) 추가.
+- 주의: `mypy python_version=3.9`로 3.12를 검사하면 anyio의 `match`에서 실패 → 3.12 상향이 필수였음.
 
 ---
 
@@ -73,62 +79,42 @@ KV 개별 키(`CONTEXT7_*_API_KEY`)를 `label:value`로 조합해야 동작한�
 
 ---
 
-## 4. 개선안 (단계적 · 즉시 변경 금지)
+## 4. 이행 (실행 완료 2026-09-22)
 
 **영역 분리 원칙:** `devforge`(신규) / `legacy scripts`(기존) / `보조 서비스`(서비스별)를
-각각 독립적으로 전환한다. 한 번에 올리지 않는다.
+각각 독립적으로 전환한다.
 
-### Step 0 — 현황 고정 (완료)
-- 본 문서 + handover `PY-RUNTIME-SPLIT-2026-09-22`. **설정 파일 무변경.**
+### 완료
+- **Step 0 현황 고정** ✅ 본 문서 + handover `PY-RUNTIME-SPLIT-2026-09-22`.
+- **Step 1 검증(3.12)** ✅ `uv venv --python 3.12` + `pip install -e ".[dev]"` →
+  pytest 68 passed, ruff/mypy/lint-imports green (검증 중 발견한 `mcp/server.py` mypy 3건과
+  레거시 테스트 의존성 `tiktoken`/`langdetect`도 함께 정리).
+- **Step 2 pyproject 상향** ✅ `requires-python>=3.12`, classifier 3.12, ruff `py312`,
+  mypy `3.12`, `[dev]`에 tiktoken/langdetect.
+- **Step 3 Dockerfile/CI** ✅ `python:3.12-slim`(builder+runtime), ci `PYTHON_VERSION=3.12`.
+- **호스트 dev/test** ✅ python3.12(3.12.14) 설치 + `pip install --user -e ".[dev]"`.
 
-### Step 1 — devforge를 3.11에서 검증 (변경 아님, 검증)
-```bash
-python3.11 -m venv /opt/projects/server/.venv311
-. .venv311/bin/activate
-pip install -U pip && pip install -e ".[dev]"
-pytest tests/unit tests/characterization -q
-ruff check src tests && mypy src/devforge && lint-imports
-```
-- 통과 시에만 다음 단계. 실패 시 원인 기록 후 보류.
-- (대안) 3.12 기준이면 `python3.12` 설치 후 동일 검증.
-
-### Step 2 — pyproject 상향 (검증 통과 후, 별도 커밋)
-```toml
-requires-python = ">=3.11"            # 또는 >=3.12
-# classifier: 3.9 제거, 3.11(또는 3.12) 추가
-# [tool.ruff] target-version = "py311" # 또는 py312
-# [tool.mypy] python_version = "3.11"  # 또는 3.12
-# "UP" 비활성 주석 정리(3.9 사유 제거)
-```
-+ §1의 3.9 텍스트 정정(주석/fixture). `docs/runbooks/timetable-*`는 별개 서비스이므로 분리 판단.
-
-### Step 3 — Dockerfile ↔ 실행 이미지 일치
-- 3.11 기준이면 이미지를 `python:3.11-slim`으로 재빌드(별도 창), 3.12 기준이면 `Dockerfile`을
-  `python:3.12-slim`으로 수정. **둘 중 하나로 반드시 일치.**
-
-### Step 4 — devforge 관련 user unit만 3.11로
-- 현재 6개는 이미 3.11. 나머지 중 devforge 직접 관련(예: `devforge-turn-watcher`)부터 전환.
-- 전환 전 `sync-units.sh`로 미러 정합 유지(미러가 SSOT).
-
-### Step 5 — legacy scripts / 나머지 unit (별도 마이그레이션)
-- 서비스별 검증 후 개별 전환. 일괄 금지.
+### 남음
+- **Step 4** devforge 관련 user unit을 3.12로 전환(현재 6×3.11 / 27×3.9).
+  `sync-units.sh`로 미러 정합 유지(미러=SSOT).
+- **Step 5** legacy `scripts/`와 나머지 unit 별도 마이그레이션(서비스별).
+- 호스트 기본 `python3`(3.9)는 legacy용으로 유지.
 
 ### 롤백
-- 3.9 환경/유닛 정의를 유지 → 문제 시 `git checkout`/unit 원복 + `daemon-reload`.
+- `git checkout` pyproject/Dockerfile/ci + `daemon-reload`. 3.9 환경은 그대로 남아 있음.
 
 ---
 
-## 5. 하지 말 것 (금지)
+## 5. 주의 (검증 선행)
 
-- ❌ `pyproject`만 `>=3.11`로 일괄 상향 (호스트 3.9 `pip install` 실패, R3).
-- ❌ legacy scripts와 user unit을 동시 전환.
-- ❌ 검증 없이 컨테이너 재빌드/유닛 전환.
-- ❌ `docs/architecture/`(자동/동결) 편집.
+- pyproject 상향은 **3.12 검증 통과 후**에만 (완료). 검증 없이 올리면 호스트 3.9 `pip install` 실패(R3).
+- legacy scripts와 user unit 동시 전환 금지.
+- `docs/architecture/`(자동/동결) 편집 금지.
 
 ---
 
-## 6. 결정 필요 (사용자)
+## 6. 결정 (2026-09-22 확정)
 
-1. **devforge 공식 기준 버전:** `3.11`(repo Dockerfile과 일치, 보수적) vs `3.12`(실행 컨테이너와 일치).
-2. **legacy scripts 3.9 유지 기한** 및 서비스별 전환 우선순위.
-3. 호스트 dev/test를 3.11/3.12 중 무엇으로 둘지(테스트 기준 단일화).
+1. **devforge 공식 기준 = Python 3.12** ✅ (실행 컨테이너와 일치, 재빌드 불필요).
+2. **legacy scripts = 3.9 유지** (기한 미정), 서비스별 전환.
+3. **호스트 dev/test = 3.12** (`python3.12`); 기본 `python3`(3.9)는 legacy용으로 유지.
