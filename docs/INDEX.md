@@ -95,6 +95,7 @@
 | 시스템 전체 구조 | `system-architecture.md` (§3.5 코드 레이어) | active |
 | **최종 통합 계획(Cutover+MCP+결정)** | `plans/final-plan.md` | active |
 | **Phase 1 구현 가이드(추론 포트/어댑터)** | `plans/phase1-plan.md` | active |
+| **Python 런타임 버전 전략(현황+이관안)** | `plans/python-version-strategy.md` | active |
 | **Phase 3 계획(embed 이관, D6=A)** | `plans/phase3-plan.md` | approved |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
 | MCP 툴 사용 감사(30일) | `reports/mcp-tool-audit-20260914.md` | record |
