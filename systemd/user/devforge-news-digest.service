@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/workspace/minihome/apps/news
-ExecStart=/usr/bin/python3 /opt/workspace/minihome/apps/news/digest.py --window 24 --limit 8
+ExecStart=/usr/bin/python3.12 /opt/workspace/minihome/apps/news/digest.py --window 24 --limit 8
 Environment=HOME=/home/opc
 StandardOutput=journal
 StandardError=journal

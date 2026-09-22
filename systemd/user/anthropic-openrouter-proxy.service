@@ -5,7 +5,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3 -u /opt/projects/server/scripts/proxies/anthropic_openrouter.py --keys OPENROUTER-*,DEEPSEEK-*
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.12 -u /opt/projects/server/scripts/proxies/anthropic_openrouter.py --keys OPENROUTER-*,DEEPSEEK-*
 Environment=PYTHONPATH=/opt/projects/server/scripts
 Restart=on-failure
 RestartSec=5

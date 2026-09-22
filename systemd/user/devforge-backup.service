@@ -4,7 +4,7 @@ Description=DevForge backup — pg_dump + app config → OCI devforge-standard
 [Service]
 Type=oneshot
 Environment=PATH=/home/opc/.local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/osync_backup.py all
+ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/osync_backup.py all
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=900

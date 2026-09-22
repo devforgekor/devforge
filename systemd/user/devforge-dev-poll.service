@@ -3,7 +3,7 @@ Description=DevForge Dev Poll — auto-safe issue claim
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/projects/server/scripts/cli.py dev poll --auto-safe --claim --once
+ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/cli.py dev poll --auto-safe --claim --once
 WorkingDirectory=/opt/projects/server/scripts
 StandardOutput=journal
 StandardError=journal

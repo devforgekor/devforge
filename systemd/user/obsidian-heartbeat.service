@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 Environment=OBSIDIAN_VAULT=%h/Obsidian
-ExecStart=/usr/bin/python3 %h/Obsidian/scripts/heartbeat-daemon.py
+ExecStart=/usr/bin/python3.12 %h/Obsidian/scripts/heartbeat-daemon.py
 Restart=always
 RestartSec=10
 

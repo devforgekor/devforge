@@ -13,7 +13,7 @@ NotifyAccess=main
 WatchdogSec=900
 Environment=PYTHONPATH=/opt/projects/server/scripts
 WorkingDirectory=/opt/projects/server/scripts
-ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3 /opt/projects/server/scripts/watchdog.py --keys SLACK-*,DEVFORGE-*,MY-GITHUB-TOKEN-KEY,TELEGRAM-*
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.12 /opt/projects/server/scripts/watchdog.py --keys SLACK-*,DEVFORGE-*,MY-GITHUB-TOKEN-KEY,TELEGRAM-*
 Restart=always
 RestartSec=10
 StandardOutput=journal
