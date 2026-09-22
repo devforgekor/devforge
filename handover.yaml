@@ -1,15 +1,27 @@
 last_checkpoint:
-  time: '2026-09-22T11:44:35.904091+00:00'
-  summary: 2 docs, 1 generated
-  total_files: 3
+  time: '2026-09-22T16:48:55.938757+00:00'
+  summary: 1 source, 17 config, 2 docs, 2 generated
+  total_files: 25
   recent_files:
     data: []
     docs:
-    - server/docs/architecture/code-structure.yaml
-    - server/docs/reports/agent-rules-analysis-20260922.md
-    config: []
-    source: []
+    - server/docs/handover-secrets-kv.md
+    - server/docs/plans/python-version-strategy.md
+    config:
+    - server/systemd/user/activity-summarizer.service
+    - server/systemd/user/baseline-daily-failed.service
+    - server/systemd/user/baseline-daily.service
+    - server/systemd/user/devforge-backup.service
+    - server/systemd/user/devforge-dev-poll.service
+    - server/systemd/user/devforge-news-api.service
+    - server/systemd/user/devforge-news-digest.service
+    - server/systemd/user/devforge-openrouter-free-models.service
+    - server/systemd/user/devforge-restore-test.service
+    - server/systemd/user/devforge-tg-webhook.service
+    source:
+    - server/scripts/proxies/anthropic_gudokpin.py
     generated:
+    - server/changelog.yaml
     - server/collect_checkpoint.json
   git: {}
   task: null

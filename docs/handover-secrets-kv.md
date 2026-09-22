@@ -263,7 +263,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 ### 우선순위 0: P2 개선 (선택)
 - **#1 토큰 캐싱 (P2)**: Azure AD 토큰 1시간 유효 → 메모리/파일 캐싱으로 서비스 재시작 시 1~2초 절약
-- **#3 부분 시크릿 로드 (P2)**: ✅ 완료 — `kv-fetch-env.py env --keys` + `kv-export-env.sh`(서비스별 최소 주입), 컨테이너/일부 서비스에 적용(2026-09-19)
+- **#3 부분 시크릿 로드 (P2)**: ✅ 완료 — `kv-fetch-env.py env --keys` + `kv-export-env.sh`(서비스별 최소 주입), 컨테이너/일부 서비스에 적용(2026-09-19). **2026-09-22: exec 모드 `--keys` 버그 수정 + prefix 와일드카드 추가 → 유저 서비스 10개에도 적용(§13)**
 - **#6 GPG import 중복 제거 (P3)**: `gpg --list-keys` 체크 후 없을 때만 import
 - **#7 동시 실행 보호 (P3)**: PID 파일 lock (systemd timer는 중복 방지 내장)
 
@@ -395,3 +395,7 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 - `container-webobsidian`: stale child cgroup(2026-09-19 생성)으로 재기동 실패 →
   `container-webobsidian.service.d/10-slice.conf`의 `Slice=webobsidian-workaround.slice`로 우회 복구.
   근본 해결은 재부팅. handover `WEBOBSIDIAN-CGROUP-2026-09-20`.
+
+## 13. 최소 주입 + 키 로더 통합 (2026-09-22)
+
+서비스별 `--keys` 필터 + `load_api_keys` 통합 → `docs/runbooks/kv-least-privilege.md`.

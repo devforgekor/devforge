@@ -1,4 +1,34 @@
 entries:
+- time: '2026-09-22T16:48:53.139776+00:00'
+  type: refactor
+  summary: 'Least-privilege KV injection + shared key loader: kv-fetch-env --keys (exec-mode fix + prefix wildcards), 10 user
+    services filtered (109->3..12), load_api_keys unified for brave/exa/tavily/youcom/context7, dead code removed (lib/research/_keys,
+    lib/search/manager, aider, sync-secrets, core/database), gudokpin proxy pinned to claude, 8 services verified on Python
+    3.12.'
+  changed:
+  - path: scripts/deploy/kv-fetch-env.py
+    type: changed
+    note: exec-mode --keys strips flag from command args; prefix wildcard (OPENROUTER-*)
+  - path: systemd/user/*.service
+    type: changed
+    note: 10 services get per-service --keys filters; 8 verified on python3.12
+  - path: scripts/lib/auth/key_loader.py
+    type: changed
+    note: shared load_api_keys (Azure KV, per-account); future-annotations for 3.9
+  - path: scripts/proxies/anthropic_gudokpin.py
+    type: changed
+    note: DEFAULT_GUDOKPIN_MODEL=claude-sonnet-5; unmapped models -> claude
+  - path: scripts/lib/research/_keys.py
+    type: removed
+    note: legacy loader
+  - path: src/devforge/core/database.py
+    type: removed
+    note: dead code
+  decisions:
+  - OpenRouter RR proxy keeps its own model-account pinning (RPM is global; not unified)
+  - Only the 8 services verified this session stay on Python 3.12; 17 rolled back to cutover
+  - Gudokpin gateway only serves claude-* reliably -> pin all unmapped models to claude
+  - gemini-openai-proxy deleted (abandoned); news gemini fallback removed (OpenRouter-only)
 - time: '2026-09-22T11:45:43.268448+00:00'
   type: refactor
   summary: 'Watchdog Phase 2 v2.1 legacy-parity rewrite: replaced v1 (CRITICAL/RECOVERING, HealthCheckResult) with legacy
