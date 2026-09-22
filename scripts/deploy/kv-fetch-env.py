@@ -274,21 +274,30 @@ def parse_selection(argv):
 
 def resolve_secrets(token, selected):
     """다중 KV를 병합해 {kv_name: vault_url} 을 반환. 뒤 KV가 동일 이름을 덮어쓴다.
-    선택 키(--keys)가 어느 KV에도 없으면 즉시 실패(조용한 누락 방지)."""
+
+    선택 키(--keys)는 정확한 이름 또는 프리픽스 와일드카드(`OPENROUTER-*`)를 허용.
+    정확한 이름이 어느 KV에도 없으면 즉시 실패(조용한 누락 방지)."""
     merged = {}
     for vault_url in KEYVAULT_URLS:
         for name in list_secrets(token, vault_url):
             merged[name] = vault_url
     if selected is not None:
         available = {n.upper() for n in merged}
-        missing = sorted(selected - available)
+        exact = {s for s in selected if not s.endswith("*")}
+        prefixes = tuple(s[:-1] for s in selected if s.endswith("*"))
+        missing = sorted(exact - available)
         if missing:
             print(
                 f"❌ KV에 없는 키 요청: {', '.join(missing)} (오타 또는 미등록)",
                 file=sys.stderr,
             )
             sys.exit(1)
-        merged = {n: u for n, u in merged.items() if n.upper() in selected}
+
+        def _keep(name: str) -> bool:
+            upper = name.upper()
+            return upper in exact or (bool(prefixes) and upper.startswith(prefixes))
+
+        merged = {n: u for n, u in merged.items() if _keep(n)}
     return merged
 
 

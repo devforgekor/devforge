@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/workspace/minihome/apps/news
-ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3 -u /opt/workspace/minihome/apps/news/collector.py --limit 3
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3 -u /opt/workspace/minihome/apps/news/collector.py --limit 3 --keys OPENROUTER-*,GEMINI-*,BRAVE-*,EXA-*,TAVILY-*,YOUCOM-*,CONTEXT7-*,TELEGRAM-*,GMAIL-*
 TimeoutStartSec=3600
 Environment=HOME=/home/opc
 Environment=PYTHONPATH=/opt/projects/server/scripts:/opt/workspace/minihome/apps/news

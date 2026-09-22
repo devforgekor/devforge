@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.11 /opt/projects/server/scripts/or_rate_limiter.py
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.11 /opt/projects/server/scripts/or_rate_limiter.py --keys OPENROUTER-*
 Restart=always
 RestartSec=3
 

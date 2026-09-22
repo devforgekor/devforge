@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3 /opt/workspace/minihome/apps/news/summary_retry.py --loops 3
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3 /opt/workspace/minihome/apps/news/summary_retry.py --loops 3 --keys OPENROUTER-*,GEMINI-*,BRAVE-*,EXA-*,TAVILY-*,YOUCOM-*,CONTEXT7-*,TELEGRAM-*,GMAIL-*
 WorkingDirectory=/opt/workspace/minihome/apps/news
 Environment=PYTHONUNBUFFERED=1
 Environment=VERCEL_REVALIDATE_URL=https://mini-news.vercel.app/api/revalidate

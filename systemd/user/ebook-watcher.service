@@ -9,7 +9,7 @@ Type=notify
 Environment=VERCEL_REVALIDATE_URL=https://miniebook.vercel.app/api/revalidate
 Environment=PYTHONPATH=/opt/workspace/minihome/apps/ebooklib/apps/backend
 WorkingDirectory=/opt/workspace/minihome/apps/ebooklib
-ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /opt/workspace/minihome/apps/ebooklib/apps/backend/venv/bin/python3 /opt/workspace/minihome/apps/ebooklib/scripts/pipeline.py loop
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /opt/workspace/minihome/apps/ebooklib/apps/backend/venv/bin/python3 /opt/workspace/minihome/apps/ebooklib/scripts/pipeline.py loop --keys DATAIMPULSE-*,VERCEL-*,BRAVE-*
 WatchdogSec=1800
 Restart=on-watchdog
 RestartSec=30
