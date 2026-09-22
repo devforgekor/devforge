@@ -13,6 +13,14 @@ _EXACT: dict[str, str] = {
     "svc:svc-pod-forwarding": "svcpod",   # recover_svcpod_forwarding
     "svc:ebook-watcher": "ebook",         # recover_ebook_watcher
     "system:memory": "oom",               # recover_oom
+    # Alert-only (legacy ALERT_ONLY_TARGETS) — monitor only, never restart.
+    "svc:container-postgres": "",
+    "svc:container-devforge-mcp": "",
+    "svc:container-flaresolverr": "",
+    "svc:anthropic-openrouter-proxy": "",
+    "svc:anthropic-proxy": "",
+    "svc:gemini-openai-proxy": "",
+    "svc:or-rate-limiter": "",
 }
 # Prefix → kind. "" prefix means "no recovery (alert-only)".
 _PREFIX: dict[str, str] = {
@@ -29,7 +37,7 @@ _PREFIX: dict[str, str] = {
 def classify_recovery_kind(component: str) -> Optional[str]:
     """Return the recovery kind for a tracker key, or None if alert-only."""
     if component in _EXACT:
-        return _EXACT[component]
+        return _EXACT[component] or None
     if component.startswith("svc:container-"):
         return "container"                # recover_container
     if component.startswith("svc:"):

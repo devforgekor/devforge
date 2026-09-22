@@ -50,10 +50,15 @@ class WatchdogService:
         checks = await self._checks.run()
         failed = self._checks.failed(checks)
 
-        # 1. healthy → resolve incidents (orchestrator.py:126)
+        # 1. healthy → resolve incidents; warn on latency (legacy T3, metric > threshold)
         for c in checks:
-            if c.is_healthy:
-                await self._incidents.resolve_if_open(c.component)
+            if not c.is_healthy:
+                continue
+            await self._incidents.resolve_if_open(c.component)
+            if (c.metric_value is not None and c.threshold is not None
+                    and c.metric_value > c.threshold):
+                for n in self._notifiers:
+                    await n.send_alert(c.component, "LATENCY", c.detail)
 
         # 2. failed → incident → recovery → alert (orchestrator.py:128-143)
         #
@@ -110,11 +115,15 @@ class WatchdogService:
 
 def create_watchdog_service(config: WatchdogConfig) -> WatchdogService:
     """Composition factory — wires ports/adapters for the CLI (E3)."""
+    from devforge.adapters.driven.health.ebook_health import EbookPipelineHealthChecker
     from devforge.adapters.driven.health.llm_health import LLMHealthChecker
     from devforge.adapters.driven.health.pipeline_health import HeartbeatHealthChecker
+    from devforge.adapters.driven.health.svcpod_health import SvcpodForwardingHealthChecker
     from devforge.adapters.driven.health.system_health import DiskHealthChecker, MemoryHealthChecker
     from devforge.adapters.driven.health.systemd_health import (
+        OneshotResultHealthChecker,
         SystemdServiceHealthChecker,
+        SystemdSystemServiceHealthChecker,
         SystemdTimerHealthChecker,
     )
     from devforge.adapters.driven.notification.slack_notifier import SlackNotifier
@@ -129,10 +138,18 @@ def create_watchdog_service(config: WatchdogConfig) -> WatchdogService:
     registry = TrackerRegistry()
     gateway = DatabaseGateway(get_config().db_url_async)
     heartbeat_repo = PostgresHeartbeatRepository(gateway)
+    ebook_svc = "ebook-watcher"
+    svc_targets = [s for s in config.critical_services if s != ebook_svc]
     health_ports: dict[str, HealthCheckPort] = {
-        "svc": SystemdServiceHealthChecker(config.critical_services),
+        "svc": SystemdServiceHealthChecker(svc_targets),
+        "ebook": EbookPipelineHealthChecker(ebook_svc),        # hang-aware (legacy check_ebook_pipeline)
+        "alert": SystemdServiceHealthChecker(config.alert_only_targets),   # svc: prefix, alert-only
+        "syssvc": SystemdSystemServiceHealthChecker(config.system_service_targets),
+        "svcpod": SvcpodForwardingHealthChecker(config.svcpod_published_ports),
         "timer": SystemdTimerHealthChecker(config.timers),
-        "llm": LLMHealthChecker(config.llm_targets, day_ports=set(config.day_ports)),
+        "oneshot": OneshotResultHealthChecker(config.oneshot_result_targets),
+        "llm": LLMHealthChecker(config.llm_targets, day_ports=set(config.day_ports),
+                                latency_baseline_ms=config.llm_latency_baseline_ms),
         "system": MemoryHealthChecker(),
         "disk": DiskHealthChecker(config.disks),
         "heartbeat": HeartbeatHealthChecker(heartbeat_repo, config.heartbeat_workers),

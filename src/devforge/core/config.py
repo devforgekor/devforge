@@ -352,13 +352,50 @@ class WatchdogConfig:
         "ebook-watcher", "container-devforge-fastapi", "container-devforge-worker",
         "ebook-api", "devforge-news-api", "cashbook",
     ])
-    timers: dict[str, int] = field(default_factory=lambda: {
-        "devforge-day-cycle.timer": 2100, "devforge-night-cycle.timer": 2100,
+    timers: dict[str, int] = field(default_factory=lambda: {  # unit -> max_idle_sec (legacy TIMER_TARGETS)
+        "devforge-openrouter-free-models.timer": 93600,
+        "devforge-system-sync.timer": 2700,
+        "devforge-news.timer": 25200,
+        "devforge-daily-structure.timer": 90000,
+        "devforge-weekly-enrich-rebuild.timer": 604800,
+        "devforge-restore-test.timer": 2592000,
+        "devforge-backup-safety.timer": 97200,
+        "devforge-dev-poll.timer": 1800,
+        "devforge-news-digest.timer": 90000,
+        "kuhwa-schedule.timer": 90000,
+        "workspace-autopush.timer": 90000,
+        "reference-monitor.timer": 604800,
+        "golden-image-deploy-check.timer": 1350,
+        "workspace-autocommit.timer": 2700,
+        "devforge-summary-retry.timer": 10800,
+        "baseline-daily.timer": 129600,
+        "kv-backup.timer": 907200,
+        "golden-image-yearly-check.timer": 34560000,
     })
+    system_service_targets: list[str] = field(default_factory=lambda: [
+        "caddy", "netdata",  # rootful system services — alert-only
+    ])
+    alert_only_targets: list[str] = field(default_factory=lambda: [
+        "container-postgres", "container-devforge-mcp", "container-flaresolverr",
+        "anthropic-openrouter-proxy", "anthropic-proxy", "gemini-openai-proxy",
+        "or-rate-limiter",
+    ])
+    oneshot_result_targets: list[str] = field(default_factory=lambda: [
+        "devforge-daily-structure.service", "devforge-backup.service",
+        "devforge-restore-test.service", "devforge-system-sync.service",
+        "kv-backup.service", "workspace-autocommit.service",
+        "golden-image-deploy-check.service",
+    ])
     llm_targets: dict[str, int] = field(default_factory=lambda: {
         "day-extract": 8082, "night-verify": 8084,
     })
     day_ports: list[int] = field(default_factory=lambda: [8080, 8082])
+    # svc pod host port forwarding (rootlessport) — legacy SVCPOD_PUBLISHED_PORTS
+    svcpod_published_ports: dict[int, str] = field(default_factory=lambda: {
+        8000: "devforge-mcp", 8002: "devforge-fastapi",
+        8085: "blob-explorer", 8191: "flaresolverr",
+    })
+    llm_latency_baseline_ms: int = 2000  # legacy check_probe_latency baseline
     heartbeat_workers: dict[str, int] = field(default_factory=lambda: {
         "embed_batch": 1800, "liveness_embed_batch": 1800, "entity_scan": 1800,
         "text_clean": 1800, "day_extract": 1800, "day_enrich": 1800, "news_collector": 25200,

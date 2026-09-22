@@ -59,3 +59,56 @@ class SystemdTimerHealthChecker(HealthCheckPort):
         except Exception as e:  # noqa: BLE001
             ok, detail = False, str(e)
         return HealthCheck(f"{self._prefix}:{name}", ok, detail)
+
+
+class SystemdSystemServiceHealthChecker(HealthCheckPort):
+    """Rootful system services — alert-only (legacy checker.py:583-596)."""
+
+    def __init__(self, services: Iterable[str], prefix: str = "syssvc") -> None:
+        self._services = list(services)
+        self._prefix = prefix
+
+    async def check_health(self) -> list[HealthCheck]:
+        return [await self._check(name) for name in self._services]
+
+    async def _check(self, name: str) -> HealthCheck:
+        try:
+            r = await _run(["systemctl", "is-active", name])  # no --user (rootful scope)
+            st = r.stdout.strip()
+            ok = st == "active"
+            detail = st or "unknown"
+        except Exception as e:  # noqa: BLE001
+            ok, detail = False, str(e)
+        return HealthCheck(component=f"{self._prefix}:{name}", is_healthy=ok, detail=detail)
+
+
+class OneshotResultHealthChecker(HealthCheckPort):
+    """One-shot service last-run result (legacy checker.py:550-573).
+
+    Timer LastTrigger updates even when the service fails, so use
+    ActiveState/Result to catch failures (e.g. daily-structure git backlog).
+    """
+
+    def __init__(self, services: Iterable[str], prefix: str = "oneshot") -> None:
+        self._services = list(services)
+        self._prefix = prefix
+
+    async def check_health(self) -> list[HealthCheck]:
+        return [await self._check(name) for name in self._services]
+
+    async def _check(self, name: str) -> HealthCheck:
+        try:
+            r = await _run(["systemctl", "--user", "show", name,
+                            "--property=ActiveState", "--property=Result"])
+            props: dict[str, str] = {}
+            for line in r.stdout.strip().splitlines():
+                if "=" in line:
+                    k, _, v = line.partition("=")
+                    props[k.strip()] = v.strip()
+            active = props.get("ActiveState", "")
+            result = props.get("Result", "")
+            ok = not (active == "failed" or result not in ("", "success"))
+            detail = f"ActiveState={active} Result={result or 'success'}"
+        except Exception as e:  # noqa: BLE001
+            ok, detail = False, str(e)
+        return HealthCheck(component=f"{self._prefix}:{name}", is_healthy=ok, detail=detail)

@@ -9,7 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from devforge.adapters.driven.health.systemd_health import (
+    OneshotResultHealthChecker,
     SystemdServiceHealthChecker,
+    SystemdSystemServiceHealthChecker,
     SystemdTimerHealthChecker,
 )
 
@@ -53,3 +55,34 @@ async def test_timer_recent_ok() -> None:
                 2026, 9, 22, 0, 1, tzinfo=__import__("datetime").timezone.utc)
             checks = await SystemdTimerHealthChecker({"t.timer": 2100}).check_health()
     assert checks[0].is_healthy is True
+
+
+@pytest.mark.asyncio
+async def test_syssvc_active() -> None:
+    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout="active\n"))):
+        checks = await SystemdSystemServiceHealthChecker(["caddy", "netdata"]).check_health()
+    assert all(c.is_healthy for c in checks)
+    assert [c.component for c in checks] == ["syssvc:caddy", "syssvc:netdata"]
+
+
+@pytest.mark.asyncio
+async def test_syssvc_inactive() -> None:
+    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout="inactive\n"))):
+        checks = await SystemdSystemServiceHealthChecker(["caddy"]).check_health()
+    assert checks[0].is_healthy is False and checks[0].detail == "inactive"
+
+
+@pytest.mark.asyncio
+async def test_oneshot_success() -> None:
+    out = "ActiveState=inactive\nResult=success\n"
+    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=out))):
+        checks = await OneshotResultHealthChecker(["devforge-backup.service"]).check_health()
+    assert checks[0].is_healthy and checks[0].component == "oneshot:devforge-backup.service"
+
+
+@pytest.mark.asyncio
+async def test_oneshot_failed() -> None:
+    out = "ActiveState=failed\nResult=exit-code\n"
+    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=out))):
+        checks = await OneshotResultHealthChecker(["devforge-backup.service"]).check_health()
+    assert checks[0].is_healthy is False

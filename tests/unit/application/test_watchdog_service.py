@@ -217,3 +217,14 @@ async def test_component_states_and_resolve_incident() -> None:
     assert states and states[0]["name"] == "svc:x" and states[0]["state"] == "DEGRADED"
     await svc.resolve_incident(1, "note")
     assert (1, "manual: note", True) in incidents.actions
+
+
+@pytest.mark.asyncio
+async def test_latency_warning_alert() -> None:
+    """Healthy check over the latency threshold still alerts (legacy T3 LATENCY)."""
+    notifier = FakeNotifier()
+    check = HealthCheck("llm:day-extract", True, "probe ok (9000ms)",
+                        metric_value=9000.0, threshold=6000.0)
+    svc = _service([check], notifier=notifier)
+    await svc.run_cycle()
+    assert any(a[1] == "LATENCY" for a in notifier.alerts)

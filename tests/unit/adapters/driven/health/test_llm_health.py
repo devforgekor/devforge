@@ -58,3 +58,11 @@ async def test_connection_refused_unhealthy() -> None:
     with patch("httpx.AsyncClient", return_value=_client(get_exc=Exception("connection refused"))):
         checks = await LLMHealthChecker({"day-extract": 8082}).check_health()
     assert checks[0].is_healthy is False
+
+
+@pytest.mark.asyncio
+async def test_probe_sets_latency_metric() -> None:
+    with patch("httpx.AsyncClient", return_value=_client()):
+        checks = await LLMHealthChecker({"day-extract": 8082}).check_health()
+    assert checks[0].metric_value is not None
+    assert checks[0].threshold == 6000.0  # 2000ms baseline x3
