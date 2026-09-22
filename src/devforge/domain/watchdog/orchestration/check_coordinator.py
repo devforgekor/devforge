@@ -4,6 +4,7 @@
 """Check coordination logic (pure, no I/O)."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from devforge.domain.watchdog.monitoring.tracker import ComponentTracker
@@ -28,7 +29,7 @@ class CheckCoordinator:
     def __init__(
         self,
         tracker: ComponentTracker,
-        health_ports: dict[str, HealthCheckPort],
+        health_ports: Mapping[str, HealthCheckPort],
     ) -> None:
         self._tracker = tracker
         self._health_ports = health_ports

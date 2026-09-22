@@ -15,6 +15,7 @@ Priority: env vars > secrets.env > providers.yaml > current-*.env > state.yaml >
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
@@ -324,3 +325,50 @@ def get_config() -> ConfigRegistry:
     if _config is None:
         _config = ConfigRegistry()
     return _config
+
+
+# ── Watchdog Configuration ──
+
+
+@dataclass(frozen=True)
+class WatchdogConfig:
+    """Watchdog subsystem configuration."""
+
+    # Circuit breaker
+    failure_threshold: int = 3
+    success_threshold: int = 2
+    circuit_reset_timeout_sec: int = 300
+
+    # Recovery
+    recovery_escalation_levels: list[tuple[int, str]] = field(default_factory=lambda: [
+        (1, "soft"),
+        (3, "medium"),
+        (5, "hard"),
+    ])
+
+    # Health checks
+    check_interval_sec: int = 60
+    check_timeout_sec: int = 30
+
+    # Targets
+    critical_services: list[str] = field(default_factory=lambda: [
+        "devforge-fastapi",
+        "devforge-mcp",
+        "postgres",
+    ])
+
+    llm_targets: dict[str, int] = field(default_factory=lambda: {
+        "pod-a": 11434,
+        "pod-b": 11435,
+    })
+
+    @classmethod
+    def from_env(cls) -> "WatchdogConfig":
+        """Load from environment variables."""
+        return cls(
+            failure_threshold=int(os.getenv("WATCHDOG_FAILURE_THRESHOLD", "3")),
+            success_threshold=int(os.getenv("WATCHDOG_SUCCESS_THRESHOLD", "2")),
+            circuit_reset_timeout_sec=int(os.getenv("WATCHDOG_CIRCUIT_RESET_SEC", "300")),
+            check_interval_sec=int(os.getenv("WATCHDOG_CHECK_INTERVAL_SEC", "60")),
+            check_timeout_sec=int(os.getenv("WATCHDOG_CHECK_TIMEOUT_SEC", "30")),
+        )

@@ -4,6 +4,8 @@
 """Fix coordination logic (pure, no I/O)."""
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from devforge.domain.watchdog.recovery.graduation import RecoveryCoordinator
 from devforge.ports.recovery import RecoveryPort
 
@@ -14,7 +16,7 @@ class FixCoordinator:
     def __init__(
         self,
         recovery_coordinator: RecoveryCoordinator,
-        recovery_ports: dict[str, RecoveryPort],
+        recovery_ports: Mapping[str, RecoveryPort],
     ) -> None:
         self._recovery = recovery_coordinator
         self._recovery_ports = recovery_ports

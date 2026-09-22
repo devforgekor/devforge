@@ -1,60 +1,82 @@
 #!/usr/bin/env python3
 # Status: experimental
-# Path: adapters/driven/recovery/*, application/watchdog_service.py
-"""Systemd recovery action adapter."""
+# Path: application/watchdog_service.py, cli.py
+"""Systemd recovery adapter (async)."""
 from __future__ import annotations
 
+import asyncio
 import subprocess
 
-from devforge.domain.watchdog.model import RecoveryAction
+from devforge.ports.recovery import RecoveryPort
+from devforge.ports.types import RecoveryAction
 
 
-class SystemdRecoveryAdapter:
-    """Execute recovery actions via systemd (async-compatible)."""
+class SystemdRecoveryAdapter(RecoveryPort):
+    """Execute recovery actions via systemd."""
 
     async def execute_recovery(self, action: RecoveryAction) -> bool:
+        """Execute recovery action for systemd service."""
         if action.action_type == "restart":
-            return self._restart_service(action.component)
+            return await self._restart_service(action.component)
         elif action.action_type == "reload":
-            return self._reload_service(action.component)
+            return await self._reload_service(action.component)
         elif action.action_type == "reset":
-            return self._hard_reset(action.component)
-        return False
+            return await self._hard_reset(action.component)
+        else:
+            return False
 
-    def _restart_service(self, service: str) -> bool:
+    async def _restart_service(self, service: str) -> bool:
+        """Soft restart: systemctl restart."""
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["systemctl", "--user", "restart", service],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
             return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except Exception:
             return False
 
-    def _reload_service(self, service: str) -> bool:
+    async def _reload_service(self, service: str) -> bool:
+        """Medium recovery: systemctl reload-or-restart."""
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["systemctl", "--user", "reload-or-restart", service],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
             return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except Exception:
             return False
 
-    def _hard_reset(self, service: str) -> bool:
+    async def _hard_reset(self, service: str) -> bool:
+        """Hard reset: stop + daemon-reload + start."""
         try:
-            subprocess.run(
+            # Stop
+            await asyncio.to_thread(
+                subprocess.run,
                 ["systemctl", "--user", "stop", service],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
-            subprocess.run(
+
+            # Daemon reload
+            await asyncio.to_thread(
+                subprocess.run,
                 ["systemctl", "--user", "daemon-reload"],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
-            result = subprocess.run(
+
+            # Start
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["systemctl", "--user", "start", service],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
             return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except Exception:
             return False
