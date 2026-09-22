@@ -24,7 +24,7 @@
 | CI `.github/workflows/ci.yml` | `PYTHON_VERSION: "3.12"` | ✅ 변경 |
 | 실행 컨테이너 (devforge-base/fastapi/mcp/worker) | 3.12.13 | 변경 없음(이미 3.12) |
 | 호스트 기본 `python3` | 3.9.25 | **미변경**(legacy scripts용) |
-| user unit (33) | 27×3.9 / 6×3.11 | **미변경**(Step 4/5 대상) |
+| user unit | **8×3.12 (검증 완료) / 나머지 3.9·3.11** | **부분 전환**(2026-09-22) — 아래 §4 참조 |
 | legacy `scripts/` | 3.9 | 당분간 유지 |
 
 ### 이행 전 (참고)
@@ -102,6 +102,22 @@ KV 개별 키(`CONTEXT7_*_API_KEY`)를 `label:value`로 조합해야 동작한�
 - **Step 5** legacy `scripts/`와 나머지 unit 별도 마이그레이션(서비스별, 컷오버).
 - 호스트 기본 `python3`(3.9)는 legacy용으로 유지.
 - **우선순위:** Phase 1(devforge 포트/어댑터)을 먼저 진행. Step 4/5는 컷오버로 이월(Phase 1과 무관).
+
+### 부분 전환 완료 (2026-09-22) — 검증된 8개만
+이번 세션에서 키 로더 이관·`--keys` 필터를 적용하며 **함께 검증된 8개 서비스**만 3.12로 전환
+(§5 "legacy scripts와 user unit 동시 전환 금지"의 예외 — **검증 선행** 조건 충족):
+
+| 서비스 | 스크립트 | 3.12 검증 |
+|--------|----------|-----------|
+| anthropic-openrouter-proxy, anthropic-proxy, anthropic-gudokpin-proxy | `proxies/anthropic*.py` | active |
+| openrouter-rr-proxy | `proxies/openrouter_rr_proxy.py` | active + `/v1/models` 응답 |
+| or-rate-limiter | `or_rate_limiter.py` | active |
+| devforge-watchdog | `watchdog.py` + `lib/watchdog/*` | active + "Watchdog started" |
+| devforge-news, devforge-summary-retry | `news/collector.py`, `summary_retry.py` | summary_retry `--dry-run` exit 0; collector import OK (피드 fetch hang은 3.9와 동일 = 네트워크) |
+
+- `tenacity`, `feedparser`를 3.12에 설치.
+- **나머지 17개 유닛은 롤백**(3.9/3.11 유지) → 컷오버로 이월. 커밋 `7d6ac60`.
+- 검증 없이 일괄 이관했다가 되돌린 이력: `2bcc515`(일괄) → `7d6ac60`(17개 롤백).
 
 ### 롤백
 - `git checkout` pyproject/Dockerfile/ci + `daemon-reload`. 3.9 환경은 그대로 남아 있음.
