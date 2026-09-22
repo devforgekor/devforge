@@ -29,7 +29,7 @@ class Budget:
         return self.remaining() <= 0
 
     def gate(self) -> None:
-        """Raise PipelineBudgetExceeded if budget is expired."""
+        """Raise PipelineBudgetError if budget is expired."""
         if self.expired():
             raise PipelineBudgetError(
                 f"Budget of {self.limit_sec}s exceeded"
