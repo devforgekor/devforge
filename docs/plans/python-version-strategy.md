@@ -94,11 +94,14 @@ KV 개별 키(`CONTEXT7_*_API_KEY`)를 `label:value`로 조합해야 동작한�
 - **Step 3 Dockerfile/CI** ✅ `python:3.12-slim`(builder+runtime), ci `PYTHON_VERSION=3.12`.
 - **호스트 dev/test** ✅ python3.12(3.12.14) 설치 + `pip install --user -e ".[dev]"`.
 
-### 남음
-- **Step 4** devforge 관련 user unit을 3.12로 전환(현재 6×3.11 / 27×3.9).
-  `sync-units.sh`로 미러 정합 유지(미러=SSOT).
-- **Step 5** legacy `scripts/`와 나머지 unit 별도 마이그레이션(서비스별).
+### 남음 (컷오버 이월)
+- **Step 4 정정:** 호스트 user unit 중 **`devforge` 패키지를 실행하는 것은 0개**(전부 legacy
+  `scripts/*.py`). 따라서 "devforge 관련 유닛 전환"은 대상이 없고, 유닛을 3.12로 바꾸는 것은
+  곧 **legacy 스크립트를 3.12에서 실행**하는 일 → **컷오버(Phase A~I)** 에서 legacy 호환성 검증과
+  함께 처리. `sync-units.sh`로 미러 정합 유지(미러=SSOT).
+- **Step 5** legacy `scripts/`와 나머지 unit 별도 마이그레이션(서비스별, 컷오버).
 - 호스트 기본 `python3`(3.9)는 legacy용으로 유지.
+- **우선순위:** Phase 1(devforge 포트/어댑터)을 먼저 진행. Step 4/5는 컷오버로 이월(Phase 1과 무관).
 
 ### 롤백
 - `git checkout` pyproject/Dockerfile/ci + `daemon-reload`. 3.9 환경은 그대로 남아 있음.
