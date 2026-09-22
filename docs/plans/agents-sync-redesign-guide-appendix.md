@@ -40,9 +40,9 @@ git -C /opt/projects/server log --oneline --diff-filter=D -- scripts/sync_gemini
 # B-4. Copilot 타깃 부재 (F6)
 find /home/opc /opt/projects/server -name 'copilot-instructions.md' 2>/dev/null
 
-# B-5. 미등록 타이머 (F12)
+# B-5. 미등록 타이머 (F12) — UNIT=$(NF-1) (핵심: $NF는 service라 항상 빈 출력)
 comm -23 \
-  <(systemctl --user list-timers --all --no-legend | awk '{print $NF}' | grep '\.timer$' | sort -u) \
+  <(systemctl --user list-timers --all --no-legend | awk '{print $(NF-1)}' | grep '\.timer$' | sort -u) \
   <(python3.12 -c "import sys;sys.path.insert(0,'/opt/projects/server/scripts');from lib.watchdog import config as c;print('\n'.join(sorted(c.TIMER_TARGETS)))")
 ```
 

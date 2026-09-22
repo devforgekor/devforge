@@ -2,7 +2,7 @@
 
 - 작성: 2026-09-22 (KST)
 - 작성자: opencode (build)
-- 상태: 분석 완료 / 개선 미착수 (승인 대기)
+- 상태: Phase A·B·C 적용 완료 (2026-09-22) — Option B 커밋 `84079de`, Phase 3 커밋 `a35af00`
 - 근거 세션: `ses_f373796a6ffeQLkf1a5RwgdPaw` (claude·opencode·copilot 교칙 관리 현황, 2026-09-22 11:02–11:22)
 
 ---
@@ -103,7 +103,7 @@ state_collector ──> docs/architecture/infrastructure.md   (정본, 자동)
 
 | 작업 | 내용 | 관계 |
 |---|---|---|
-| **A. 미등록 타이머 편입** | `config.py TIMER_TARGETS`에 6개 추가 | 독립. 단 재설계(B)가 만들 generator 서비스 감시에 재사용 |
+| **A. 미등록 타이머 편입** | `config.py TIMER_TARGETS`에 6개 추가 ✅ | 완료(`a35af00`). 재설계 generator 접점은 미생성으로 소멸 |
 | **B. `AGENTS.md` 동기화 재설계** | 소스 → `AGENTS.md` 생성기 + systemd `.path` unit | **C(규칙 오류)의 구조적 해결책** |
 | **C. 규칙 오류 수정** | 드리프트 정정 + 스테일 문서 갱신 | 대부분 B로 흡수. B 선행 조건 포함 |
 
@@ -126,7 +126,7 @@ state_collector ──> docs/architecture/infrastructure.md   (정본, 자동)
 
 > **UPDATE 2026-09-22**: Option B 확정으로 Phase 1(역이관+재생성)·Phase 2(생성기+.path)는 **기각** —
 > `AGENTS.md`가 수동 canonical이 되어 재생성/diff가 존재하지 않음. 대체안: `docs/reports/agent-rules-content-audit-20260922.md` §4.
-> Phase 3(미등록 타이머 편입)은 유효.
+> Phase 3(미등록 타이머 편입)은 **완료** (`a35af00`, task #328).
 
 ### Phase 1 — 무결성 복원 (저위험, 즉시)
 1. `llm-agent-rule.md`에 `AGENTS.md` 최신 2건 역이관.
@@ -141,9 +141,12 @@ state_collector ──> docs/architecture/infrastructure.md   (정본, 자동)
 3. watchdog `ONESHOT_RESULT_TARGETS`에 generator 서비스 등록(생성 실패만 관측).
 4. 주기(예: daily) 드리프트 체크: 재생성 후 `diff != 0`이면 alert.
 
-### Phase 3 — watchdog 타이머 편입 (A)
-- `TIMER_TARGETS`에 6종 추가(별도 설계 보고서 참조), `golden-image-deploy-check`/`workspace-autocommit` 포함.
-- generator가 timer라면 감시 대상에도 자동 편입.
+### Phase 3 — watchdog 타이머 편입 (A) ✅ 완료 (2026-09-22, `a35af00`)
+- `TIMER_TARGETS` 6종 편입: `golden-image-deploy-check` · `workspace-autocommit` · `devforge-summary-retry` · `baseline-daily` · `kv-backup` · `golden-image-yearly-check` (가이드 §5, 주기×1.5).
+- `ONESHOT_RESULT_TARGETS` 3종 추가: `kv-backup` · `workspace-autocommit` · `golden-image-deploy-check` (`.service`).
+- 제외 3종: `activity-summarizer-safety`(알림성) · `devforge-refresh-reminder`(연 3회) · `devforge-watchdog-liveness`(자체 liveness).
+- generator는 Option B 채택으로 미생성 — 자동 편입 접점 없음.
+- 상세: `docs/plans/agents-sync-redesign-guide.md` §5.
 
 ---
 

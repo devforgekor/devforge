@@ -3,7 +3,7 @@
 - 작성: 2026-09-22 (KST)
 - 상태: **SUPERSEDED (2026-09-22)** — Option B(수동 canonical 병합 + `agent_docs` 포인터)로 대체됨.
   Phase 1(재생성)/Phase 2(생성기 + `.path`)는 **기각** (수동 파일이면 재생성 diff가 존재하지 않음).
-  Phase 3(미등록 타이머 편입)은 유효 — §5 유지. 상세 결론: `docs/reports/agent-rules-content-audit-20260922.md` §4.
+  Phase 3(미등록 타이머 편입)은 **완료 (2026-09-22, commit `a35af00`)** — §5 참조. 상세 결론: `docs/reports/agent-rules-content-audit-20260922.md` §4.
 - 선행 보고서: `docs/reports/agent-rules-analysis-20260922.md` (Phase 2 제안도 본 문서 결정으로 기각)
 - 범위: Phase 1(무결성 복원) · Phase 2(재발 방지: 생성기 + `.path`) · Phase 3(미등록 타이머 편입)
 
@@ -299,33 +299,42 @@ ls -la /opt/projects/server/AGENTS.md          # -> /home/opc/AGENTS.md
 
 ---
 
-## 5. Phase 3 — 미등록 타이머 편입
+## 5. Phase 3 — 미등록 타이머 편입 ✅ 완료 (2026-09-22)
+
+- 커밋: `a35af00` — `scripts/lib/watchdog/config.py` (+16)
+- 사용자 승인: 가이드 §5 따름(6종), ONESHOT 제안대로 3종
+- G5 통과: `comm -23` 잔여 = 의도 제외 3종 + OS/일시 유닛만
 
 ### 후보 산출(정확히)
 ```bash
+# list-timers 컬럼: NEXT LAST UNIT ACTIVE → UNIT은 $(NF-1), $NF는 ACTIVE(service)
 comm -23 \
-  <(systemctl --user list-timers --all --no-legend | awk '{print $NF}' | grep '\.timer$' | sort -u) \
+  <(systemctl --user list-timers --all --no-legend | awk '{print $(NF-1)}' | grep '\.timer$' | sort -u) \
   <(python3.12 -c "import sys;sys.path.insert(0,'/opt/projects/server/scripts');from lib.watchdog import config as c;print('\n'.join(sorted(c.TIMER_TARGETS)))")
 ```
+> ⚠️ `$(NF-1)` 필수 — `$NF`는 service명이라 `grep '\.timer$'`가 항상 빈 출력.
 
-### 미등록 후보 9종 (검증 F12)
-| 타이머 | 판단 |
-|--------|------|
-| `golden-image-deploy-check.timer` | **편입** (보고서 지정) |
-| `workspace-autocommit.timer` | **편입** (보고서 지정) |
-| `kv-backup.timer` | **편입 검토** (백업 실패 = 데이터 리스크) |
-| `baseline-daily.timer` | 편입 검토 |
-| `devforge-refresh-reminder.timer` | 편입 검토 |
-| `devforge-summary-retry.timer` | 편입 검토 |
-| `golden-image-yearly-check.timer` | 편입 검토(연 1회, max_idle 400일) |
-| `activity-summarizer-safety.timer` | 제외 검토(알림성) |
-| `devforge-watchdog-liveness.timer` | **제외** (watchdog 자체 liveness) |
+### 미등록 후보 9종 (검증 F12) — 확정 판정
+| 타이머 | 판정 | max_idle |
+|--------|------|----------|
+| `golden-image-deploy-check.timer` | **편입** (보고서 지정) | 1350 (15m×1.5) |
+| `workspace-autocommit.timer` | **편입** (보고서 지정) | 2700 (30m×1.5) |
+| `devforge-summary-retry.timer` | **편입** | 10800 (2h×1.5) |
+| `baseline-daily.timer` | **편입** | 129600 (24h×1.5) |
+| `kv-backup.timer` | **편입** (백업 = 데이터 리스크) | 907200 (주×1.5) |
+| `golden-image-yearly-check.timer` | **편입** (연 1회) | 34560000 (400일, 지정) |
+| `devforge-refresh-reminder.timer` | **제외** (연 3회 알림성) | — |
+| `activity-summarizer-safety.timer` | **제외** (알림성, 가이드 §5) | — |
+| `devforge-watchdog-liveness.timer` | **제외** (watchdog 자체 liveness) | — |
 
-> 보고서는 "6종"이라 했으나 실측은 9종. 편입은 **개별 판단**이며, 각 항목에 `expected`/`max_idle`를 명시한다.
+> 보고서는 "6종"이라 했으나 실측은 9종. 최종 6종 편입·3종 제외로 확정(사용자 승인).
 
-### 작업
-`scripts/lib/watchdog/config.py` `TIMER_TARGETS`에 편입 대상 추가(주기×1.5 여유로 `max_idle` 산정).
-`ONESHOT_RESULT_TARGETS`에 해당 `.service` 추가(실패 감지).
+### ONESHOT_RESULT_TARGETS +3 (실패 감지)
+`kv-backup.service` · `workspace-autocommit.service` · `golden-image-deploy-check.service` (기존 4종 유지 → 총 7종)
+
+### 검증 결과
+- G5 residual (의도된 잔여): `activity-summarizer-safety`, `devforge-refresh-reminder`, `devforge-watchdog-liveness` + `grub-boot-success`, `systemd-tmpfiles-clean`, 일시 hash 유닛 3종
+- ruff / mypy(src) / lint-imports(4 KEPT) / unit+characterization 195 passed (2 skipped) / LSP diagnostics 0
 
 ---
 
@@ -337,7 +346,7 @@ comm -23 \
 | **G2 (Phase 2)** | `gen_agents.py --check` exit 0; `AGENTS.md` mtime 갱신; `.path` 발화 로그 확인; `head -1 CLAUDE.md` = `@AGENTS.md` |
 | **G3 (드리프트 내성)** | 소스 1줄 수정 → 60초 내 `AGENTS.md` 반영 → `--check` exit 0 |
 | **G4 (무회귀)** | `lint-imports` 4 KEPT; `pytest tests/unit tests/characterization` green; `mypy src/devforge` clean |
-| **G5 (Phase 3)** | `comm -23` 결과가 의도한 잔여만 남음 |
+| **G5 (Phase 3)** | `comm -23` 결과가 의도한 잔여만 남음 | ✅ 통과 (2026-09-22, `a35af00`) |
 
 ---
 
