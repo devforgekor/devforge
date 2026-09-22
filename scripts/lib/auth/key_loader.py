@@ -15,6 +15,8 @@ Resolution order for `{PREFIX}`:
 
 Returns ``[(name, plaintext_key), ...]`` suitable for ``KeyRotator``.
 """
+from __future__ import annotations
+
 import os
 import sys
 

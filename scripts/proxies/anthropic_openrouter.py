@@ -19,6 +19,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional
 from urllib.parse import urlsplit
 
+from lib.auth.key_loader import load_api_keys
+
 # ── Config ─────────────────────────────────────────────────────────────────
 DEFAULT_LISTEN = "127.0.0.1:44778"
 DEFAULT_UPSTREAM = "https://openrouter.ai/api/v1"
@@ -55,19 +57,10 @@ STRIP_RESP_HEADERS = {
     "www-authenticate",
 }
 
-ANTHROPIC_API_KEY = os.environ.get("OPENROUTER_MESIDS_API_KEY") or ""
-
-# Ordered list of OpenRouter API keys. Tried in order; on 401/402/403 (auth/credit)
-# the proxy retries with the next key. Non-retryable status codes (4xx other than
-# 401/402/403, all 2xx/3xx/5xx) are passed through unchanged.
-API_KEYS: List[str] = [
-    os.environ.get("OPENROUTER_MESIDS_API_KEY", ""),
-    os.environ.get("OPENROUTER_MINIPARK4U_API_KEY", ""),
-    os.environ.get("OPENROUTER_HYEONMINPARK4U_API_KEY", ""),
-    os.environ.get("OPENROUTER_API_KEY", ""),
-]
-# Filter out empty entries while preserving order.
-API_KEYS = [k for k in API_KEYS if k]
+# Ordered list of OpenRouter API keys (Azure KV per-account, round-robin ready).
+# Tried in order; on 401/402/403 (auth/credit) the proxy retries with the next key.
+# Non-retryable status codes (4xx other than 401/402/403, all 2xx/3xx/5xx) pass through.
+API_KEYS: List[str] = [key for _, key in load_api_keys("OPENROUTER")]
 
 # Status codes that indicate the current key is bad (auth failure or no credit).
 # Trigger key rotation to the next entry in API_KEYS.

@@ -18,7 +18,6 @@ MODEL_NAME_OK_FILES = {
     "scripts/pipelines/hybrid.py",
     "scripts/pipelines/night.py",
     # 2026-09-20: model-specific by nature (model config, resource names, model regex, model-comparison tests)
-    "scripts/aider.py",  # aider model spec ("openrouter/qwen/qwen3-coder:free")
     "scripts/golden_image/azure_client.py",  # Azure LLM resource names ("llm-qwen-*")
     "scripts/golden_image/refresh_cycle.py",  # Azure LLM VM prefix ("llm-qwen")
     "scripts/lib/extract_llm/_core.py",  # _ENTITY_RESOLVER_4B prompt constant
