@@ -63,7 +63,7 @@ def switch_mode(
         _manager.switch_mode(mode, port, model_key=None)
         typer.echo(f"Switched to {mode} mode (via port)")
     else:
-        system_env = config.paths.current_system_mode_env
+        system_env = config.paths.current_mode_env
         system_env.write_text(f"MODE={mode}\n")
         typer.echo(f"Switched to {mode} mode (wrote {system_env})")
 
