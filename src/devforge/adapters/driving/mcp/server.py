@@ -8,7 +8,7 @@ Provides tools to the host LLM (Claude Code, Copilot CLI) for:
   - store_observation: Save Qwen worker observations
 
 Architecture:
-  - FastAPI app exposes tools via SSE (for Python 3.9 compatibility)
+  - FastAPI app exposes tools via SSE (host clients: Claude Code, Copilot CLI)
   - Each tool is a standalone function with typed parameters
   - Uses PostgresExtractAdapter + LocalLLMAdapter as backend
   - Tools return JSON-serializable results
@@ -28,7 +28,7 @@ import os
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict, cast
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -479,7 +479,14 @@ register_tool(
 # base recalibrated 2026-09-20 (task #25) from 57 completed deepdive_steps
 # (2026-08-25..09-13, 0 overruns): base = ceil30(max(p90*1.5, observed_max));
 # min/max kept as safety bounds. Revisit when the sample grows.
-DEEPDIVE_STEP_BUDGETS: dict[int, dict[str, Any]] = {
+class _StepBudget(TypedDict):
+    name: str
+    base: int
+    min: int
+    max: int
+
+
+DEEPDIVE_STEP_BUDGETS: dict[int, _StepBudget] = {
     1: {"name": "yggdrasil_planning", "base": 150, "min": 60, "max": 600},
     2: {"name": "code_explore", "base": 240, "min": 120, "max": 900},
     3: {"name": "lsp_analysis", "base": 450, "min": 120, "max": 1200},
@@ -531,7 +538,8 @@ def _send_deepdive_alert(text: str) -> bool:
 
 
 def _as_aware(dt: Any) -> datetime:
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    # dt comes from SQLAlchemy columns (Column[datetime]); normalize to aware.
+    return cast(datetime, dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt)
 
 
 async def _deepdive_check_expired() -> list[dict[str, Any]]:

@@ -8,7 +8,7 @@ version = "1.4.0"
 description = "DevForge: AI agent workflow pipeline server (refactored)"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 authors = [
     { name = "DevForge Team" }
 ]
@@ -21,8 +21,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -63,6 +62,10 @@ dev = [
     "mypy>=1.10,<2.0",
     # Architecture
     "import-linter>=0.6,<3.0",
+    # Legacy scripts deps required by tests/characterization (they import
+    # scripts/lib/*, e.g. lib.text_cleaner needs tiktoken + langdetect).
+    "tiktoken>=0.5,<1.0",
+    "langdetect>=1.0,<2.0",
 ]
 track_b = [
     # Track B: LLM 공급자 추상화 (별도 문서화, Phase 0.5+에서 선택적 설치)
@@ -83,7 +86,7 @@ where = ["src"]
 # ─────────────────── ruff ───────────────────
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py312"
 line-length = 100
 src = ["src"]
 extend-exclude = ["tests/_archive"]
@@ -94,7 +97,7 @@ ignore = [
     "E501",   # line too long — tolerated per project style
     "SIM105", # contextlib.suppress pattern — try/except/pass is fine for cleanup
     "SIM115", # open() without context manager — valid for temp file patterns
-    "UP",     # pyupgrade — all UP rules disabled for Python 3.9 compatibility
+    "UP",     # pyupgrade style rules deferred (would rewrite typing.List/Optional broadly)
 ]
 
 [tool.ruff.lint.isort]
@@ -103,7 +106,7 @@ known-first-party = ["devforge"]
 # ─────────────────── mypy ───────────────────
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
