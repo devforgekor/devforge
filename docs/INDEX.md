@@ -113,6 +113,7 @@
 | 에이전트 규칙 동기화 재설계 | `plans/agents-sync-redesign-guide.md` | record |
 | **Python 런타임 버전 전략(현황+이관안)** | `plans/python-version-strategy.md` | active |
 | **Phase 3 계획(embed 이관, D6=A)** | `plans/phase3-plan.md` | approved |
+| **2026 표준 대비 개선 계획(12항목)** | `plans/2026-standard-gap-remediation.md` | proposed |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
 | MCP 툴 사용 감사(30일) | `reports/mcp-tool-audit-20260914.md` | record |
 | 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |
@@ -129,6 +130,7 @@
 - **known_issue 종료(3건)**: `CLAUDE-PROJECTS-LOST`(XFS 복구불가·재발방지 문서화 `rollback-guide` §6.2), `DATAIMPULSE-CHECK-BROKEN`(깨진 import 재현 안됨·ebooklib 죽은 함수 제거), `CADDY-HEALTHCHECK-UNHEALTHY`(컨테이너 healthcheck 제거 → **host-side** `caddy-health-check.timer`).
 - **인프라**: rootless graphroot를 `/opt/ai_data/rootless-storage`로 격리(rootful과 부모 공유 제거, podman 5.6 DB static-dir 마이그레이션). 런북 `rootless-graphroot-isolation.md` §4.5 보강.
 - **shadow-run 창 리셋**: graphroot 이동으로 watchdog v2 재기동 → Phase 2.5 24h 창 = **09-23 13:32 ~ 09-24 13:32 UTC**. P2/컷오버는 창 만료 후.
+- **2026 표준 대비 딥다이브**: `plans/2026-standard-gap-remediation.md` 신규 — 12항목(공급망·secretless·MCP Top10·OTel/SLO·policy-as-code·canary/DORA)을 서버 실측과 대조, context7/web 검증. Deep Dive `dp-20260923-2026-standard-gap-server-logic`.
 
 ## 최근 변경 (2026-09-21)
 - **Phase 0 Week 1 완료**: `core/database.py`·`core/paths.py`(SSOT)·`core/exceptions.py`, import-linter 4 계약(위반 주입으로 강제 검증). 진행 추적은 [`refactoring/REFACTORING_STATUS.yaml`](./refactoring/REFACTORING_STATUS.yaml), 로그는 [`refactoring/phase0-work-log.md`](./refactoring/phase0-work-log.md).
