@@ -18,10 +18,21 @@ _WORKER = "day_extract"
 
 
 def _db_reachable() -> bool:
+    """True only if async DSN is set AND TCP connect to host:port succeeds."""
+    import socket
+    from urllib.parse import urlparse
+
     try:
         from devforge.core.config import get_config
+
         url = get_config().db_url_async
-        return bool(url)
+        if not url:
+            return False
+        parsed = urlparse(url)
+        if not parsed.hostname or not parsed.port:
+            return False
+        with socket.create_connection((parsed.hostname, parsed.port), timeout=1.0):
+            return True
     except Exception:  # noqa: BLE001
         return False
 
