@@ -1,6 +1,6 @@
 # Phase 1 구현 가이드 — 추론 컨테이너 도메인화 + LLM Provider 포트
 
-**Status:** active · **Date:** 2026-09-22 (rev.3) · **Owner:** devforge
+**Status:** done — Phase 1 완료(2026-09-22) · **Date:** 2026-09-22 (rev.3) · **Owner:** devforge
 **대상:** AI 에이전트 또는 개발자 · **난이도:** High · **예상:** 2–3일 (Week 3–4)
 **정본 계획:** `REFACTORING_PLAN.md` Phase 1 / `REFACTORING_STATUS.yaml`
 **선행 문서:** `docs/plans/python-version-strategy.md`, handover `PY-RUNTIME-SPLIT-2026-09-22`

@@ -381,7 +381,7 @@ class ExtractPipeline:
 
 > **코드 완료**: `docs/plans/phase2-detailed-guide-v2.md` v2.1 **COMPLETE** (18 tasks A1–E3).
 > **구현**: `domain/watchdog/{monitoring,orchestration,recovery}`, `adapters/driven/{health,container,recovery,notification}`, `adapters/driven/storage/{incident_pg,state_json,heartbeat_pg}`, `ports/{health_check,heartbeat,incident_repository,notification,recovery,state_persistence,types}`, `application/watchdog_service.py`.
-> **현재**: legacy `devforge-watchdog.service` + `devforge-watchdog-v2.service` 동시 active, 24h shadow-run 대조 데이터 수집 중(recovery off). 컷오버는 Phase 2.9. 상세 `docs/plans/phase2-gate4-cutover-plan.md`(→ `watchdog-standard-compliance.md`로 재설계).
+> **현재**: legacy `devforge-watchdog.service` + `devforge-watchdog-v2.service` 동시 active, 24h shadow-run 대조 데이터 수집 중(recovery off). 컷오버는 Phase 2.9. 상세 `docs/plans/watchdog-standard-compliance.md`(정본; 원안 `_archive/plans/phase2-gate4-cutover-plan.md`).
 > **실제**: 2026-09-22 코드 완료 → **09-23 shadow-run**. 계획(Week 5, 10 tasks) 대비 **스코프 확장**(18 tasks + Gate 1~4). 잔여: `IssueCollector`, MCP `watchdog_*` 분리.
 
 | 작업 | 산출물 | 검증 |

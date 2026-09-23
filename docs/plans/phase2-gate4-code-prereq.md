@@ -1,7 +1,7 @@
 # Phase 2 v2.1 — Gate 4 코드 선행 스펙 (§2.1 상세)
 
 - 작성: 2026-09-22 (KST)
-- 상위: `docs/plans/phase2-gate4-cutover-plan.md` §2.1
+- 상위: `docs/_archive/plans/phase2-gate4-cutover-plan.md` §2.1 (→ 정본 `plans/watchdog-standard-compliance.md`)
 - 목적: 컷오버 전 **반드시 선행**해야 하는 코드 변경(dry_run·serve 루프·liveness·factory)을 코드 레벨로 확정
 - 원칙: legacy parity 유지 (`orchestrator._run_*(dry_run)` 의미와 동일)
 

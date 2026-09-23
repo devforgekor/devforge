@@ -1,7 +1,7 @@
 # DevForge 최종 계획서 — 컷오버 + MCP 최적화 + 의사결정 통합
 
-> Status: active · Date: 2026-09-14 · Owner: devforge
-> Related: `docs/REFACTORING_PLAN.md`, `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/adr/0005-extraction-routing.md`, `docs/adr/0006-mcp-tool-surface.md`
+> Status: active · Date: 2026-09-23 (초판 2026-09-14) · Owner: devforge
+> Related: `docs/REFACTORING_PLAN.md`, `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/adr/0005-extraction-routing.md`, `docs/adr/0006-mcp-tool-surface.md`, `plans/watchdog-standard-compliance.md`, `plans/2026-standard-gap-remediation.md`
 > 이 문서가 **정본(단일 계획서)**이다. 아래 §1~§7은 이전에 분리돼 있던 컷오버 계획·MCP 툴 최적화·의사결정을 통합한다.
 > 근거 원문: `docs/reports/industry-standard-comparison-20260914.md`, `docs/reports/mcp-tool-audit-20260914.md`.
 
@@ -141,6 +141,22 @@
 | D7 | **MCP 최적화 옵션** | A/B/C/D/E | A 즉시 + B | |
 | D8 | **훅/로직 전환 범위** | deepdive만/obs포함/최소 | deepdive+obs | |
 | D9 | **Merge 범위** | memory/search/schema/plan 전체/일부 | 전체(4) | |
+
+**현황 (2026-09-23, 근거 있는 것만 기록 — 나머지는 미결)**
+
+| ID | 현황 | 근거 |
+|---|---|---|
+| D1 | **미결**(권장 승인) | ADR-0005 `Proposed`(미구현). Phase 3는 ADR-0005를 범위 외로 둠 |
+| D2 | **승인(Effective at cutover)** | ADR-0006 `Accepted`(12툴 계약), `specs/mcp-contract.json` frozen |
+| D3 | **재가동(운영 중)** | `chrome-web-llm` CLI 운영, 단 파이프라인 ingest 배선은 D4/D5 이후 |
+| D4 | **미착수** | M0(allowlist 컷) 미실행 |
+| D5 | **미결**(권장 loopback+bearer) | ingest 미복원 |
+| D6 | **확정 = A** | `plans/phase3-plan.md`(D6=A: devforge는 embed 소유) |
+| D7 | **미결**(권장 A 즉시+B) | MCP 최적화 미착수 |
+| D8 | **미결**(권장 deepdive+obs) | 훅/로직 전환 미착수 |
+| D9 | **미결**(권장 전체 4) | Merge 파사드 미착수 |
+
+> 표준 정합 후속 항목(공급망·secretless·MCP audit·OTel/SLO 등)은 `plans/2026-standard-gap-remediation.md`로 분리. watchdog Gate4 재설계는 `plans/watchdog-standard-compliance.md`(정본).
 
 **상세**
 - **D1** 배경: 로컬 8B 배치 추출 → `reports/industry-standard-comparison` §5.3. 선택: 승인/수정/보류. 영향: Phase C·비용·`review_facts` 의미.

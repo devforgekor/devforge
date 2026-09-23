@@ -1,8 +1,8 @@
 # Watchdog 표준 준수 계획 (Phase 2 Gate 4 개정판)
 
-> Status: proposed · 2026-09-23 · Deep Dive `dp-20260923-watchdog-standard-compliance`
+> Status: active — P1 완료(2026-09-23), P2~P4 대기(shadow-run 창 만료 후) · 2026-09-23 · Deep Dive `dp-20260923-watchdog-standard-compliance`
 > 목적: Gate 4 컷오버를 **업계/업스트림 표준**에 맞게 재설계. 3개 비표준 요소 교정 + 신뢰성 보강.
-> 대체: `phase2-gate4-cutover-plan.md` §2.1–2.7 (본 계획이 정본). 코드 선행분은 `phase2-gate4-code-prereq.md` 참조.
+> 대체: `_archive/plans/phase2-gate4-cutover-plan.md` §2.1–2.7 (본 계획이 정본). 코드 선행분은 `phase2-gate4-code-prereq.md` 참조.
 
 ---
 

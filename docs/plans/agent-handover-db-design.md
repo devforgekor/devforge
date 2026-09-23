@@ -229,7 +229,7 @@ application/handover_service.py          오케스트레이션(체크포인트 �
 
 ## 9. 로드맵 배치 / 후속
 
-- **배치**: Phase 2 **Gate 4 컷오버 이후** 리팩터링 Phase. 선행: `phase2-gate4-cutover-plan.md`, `phase2-gate4-code-prereq.md`.
+- **배치**: Phase 2 **Gate 4 컷오버 이후** 리팩터링 Phase. 선행: `plans/watchdog-standard-compliance.md`(정본), `phase2-gate4-code-prereq.md`.
 - **후속(별건)**: `tasks`/`watchdog_pulses` 등 스크립트 전용 테이블의 ORM 편입, `action_queue` claim 원자화, `handover-gen.timer` 문서-실체 불일치 정정.
 
 ---

@@ -1,6 +1,6 @@
 # Phase 2 구현 가이드 — Watchdog 도메인화
 
-**Status:** active · **Date:** 2026-09-22 (rev.1) · **Owner:** devforge
+**Status:** done — Phase 2 v2.1 COMPLETE(18 tasks); shadow-run(2.5) 진행 · **Date:** 2026-09-22 (rev.1) · **Owner:** devforge
 **대상:** AI 에이전트 또는 개발자 · **난이도:** High · **예상:** 3–4일 (Week 5–6)
 **선행:** Phase 0+1 complete. **정본:** `REFACTORING_PLAN.md` / `REFACTORING_STATUS.yaml`
 

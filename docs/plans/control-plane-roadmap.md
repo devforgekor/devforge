@@ -1,6 +1,8 @@
 # 로드맵 — watchdog → 하이브리드 → 컨트롤 플레인
 
-> Status: proposed · Date: 2026-09-11 · Owner: devforge · Related: `docs/reports/control-plane-registry-research.md`, `docs/reports/p7-gating-design-research.md`
+> Status: **proposed — Stage 1(registry+discovery) 미착수, Stage 2(컨트롤 플레인) 미착수** · Date: 2026-09-11 (현황 2026-09-23) · Owner: devforge
+> 전제 진행: watchdog **v2.1(hex 재작성)**은 Phase 2.5 shadow-run — 이는 Stage 1의 *토대*일 뿐 **Stage 1(registry화)이 아니다**.
+> Related: `docs/reports/control-plane-registry-research.md`, `docs/reports/p7-gating-design-research.md`, `plans/watchdog-standard-compliance.md`(Gate4 P1–P4 정본), `plans/final-plan.md`(컷오버 정본)
 > 관련: `docs/reports/control-plane-registry-research.md`(조사·검증), `docs/reports/mcp-consolidation-applied-20260911.md`(MCP 통합), `docs/reports/p7-gating-design-research.md`(게이팅 원칙)
 > 전제: 현재는 **"신뢰성 컨트롤러(watchdog)"** 까지 구현됨. **"조율/거버넌스"는 미구현**.
 

@@ -85,8 +85,8 @@ phase_2:
     status: in_progress
     unit: devforge-watchdog-v2.service
     legacy_unit: devforge-watchdog.service
-    plan: docs/plans/phase2-gate4-cutover-plan.md
-    note: "Gate 4 §2.5 — both units active, collecting 24h parity data (recovery off). Superseded redesign: docs/plans/watchdog-standard-compliance.md (P1-P4)."
+    plan: docs/plans/watchdog-standard-compliance.md
+    note: "Gate 4 §2.5 — both units active, collecting 24h parity data (recovery off). Original plan archived: docs/_archive/plans/phase2-gate4-cutover-plan.md."
   verification:
     lint_imports: "4 kept, 0 broken"
     characterization_parity: "watchdog/recovery/systemd/system/heartbeat/llm parity tests present"
@@ -117,11 +117,14 @@ documents:
     - docs/plans/phase2-plan.md
     - docs/plans/phase2-detailed-guide-v2.md
     - docs/plans/phase2-gate4-code-prereq.md
-    - docs/plans/phase2-gate4-cutover-plan.md
     - docs/plans/watchdog-standard-compliance.md
+    - docs/plans/dataimpulse-watchdog-delegation.md
+    - docs/plans/error-record-analysis-design.md
+    - docs/plans/2026-standard-gap-remediation.md
     - docs/plans/phase3-plan.md
   superseded:
-    - docs/plans/phase2-detailed-guide.md  # v1 → v2.1
+    - docs/_archive/plans/phase2-detailed-guide.md  # v1 → v2.1
+    - docs/_archive/plans/phase2-gate4-cutover-plan.md  # → watchdog-standard-compliance.md
   runbooks:
     - docs/runbooks/option-1-phase0-continuation.md
     - docs/runbooks/option-2-secret-hardening.md

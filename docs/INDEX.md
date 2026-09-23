@@ -8,6 +8,11 @@
 ## 상태 범례
 `proposed`(제안) · `active`(진행) · `done`(완료) · `record`(시점기록) · `superseded`(대체)
 
+## 성격 범례 (living vs record)
+- **living(정본·갱신 대상)** — 현행 계획의 단일 출처. 현재: `REFACTORING_PLAN.md`(매크로) · `plans/final-plan.md`(컷오버) · `plans/watchdog-standard-compliance.md`(Gate4) · `plans/2026-standard-gap-remediation.md`(표준).
+- **record(시점기록·불변)** — 완료/과거 시점 기록(`reports/`, 완료 phase plan, 구현 종결 설계). 갱신하지 않음.
+- **superseded(대체)** — `_archive/`로 이동. 참조는 정본으로 재배선.
+
 ## 폴더 안내
 | 폴더 | 내용 | 예 |
 |---|---|---|
@@ -37,7 +42,7 @@
 ### 2) 컨트롤 플레인 / watchdog
 | 구분 | 문서 | 상태 |
 |---|---|---|
-| 로드맵(정본) | `plans/control-plane-roadmap.md` | proposed |
+| 로드맵(전망) | `plans/control-plane-roadmap.md` | proposed (Stage1 미착수) |
 | 조사·검증 | `reports/control-plane-registry-research.md` | record |
 | 감사 | `reports/watchdog-comprehensive-audit.md` | record |
 | 갭 분석 | `reports/watchdog-port-conflict-gap-analysis.md` | record |
@@ -77,7 +82,7 @@
 | 문서 | 상태 |
 |---|---|
 | `reports/14b-5model-10axis-report.md`, `reports/pipeline-e2e-20260621.md`, `reports/architecture-validation.md` | record |
-| `specs/14b-comparison-*.yaml/txt` | active |
+| `specs/14b-comparison-checklist.yaml`, `specs/14b-comparison-scoring-sheet.yaml` (+ rubric `.txt` 2종) | active |
 | `_archive/plans/14b-comparison-test-plan.md`, `_archive/plans/day-night-*.md` | archived |
 
 ### 6) 기타
@@ -91,26 +96,29 @@
 | 계획 부록(Phase 4-8) | `REFACTORING_PLAN-appendix.md` | active |
 | **진행 상황 추적(기계판독)** | `refactoring/REFACTORING_STATUS.yaml` | active |
 | **Phase 0 작업 로그** | `refactoring/phase0-work-log.md` | record |
-| **실행 가이드(Option 1~4)** | `runbooks/option-1-phase0-continuation.md` … `runbooks/option-4-server-maintenance-summary.md` | active |
+| **실행 가이드(Option 1~4)** | `runbooks/option-1-phase0-continuation.md`, `runbooks/option-2-secret-hardening.md`, `runbooks/option-3-documentation-improvement.md`, `runbooks/option-4-server-maintenance-summary.md` | active |
 | 코드 아키텍처 | `ARCHITECTURE.md` | active |
 | 온보딩/전환 | `MIGRATION_GUIDE.md` | active |
 | Track B 계획 | `LLM_PROVIDER_PLAN.md` | proposed |
 | CLI/HTTP API 레퍼런스 | `API_REFERENCE.md` | active |
 | 운영 가이드 | `OPERATIONS_GUIDE.md` | active |
-| 설계 결정 기록(ADR) | `adr/0001-config-priority.md` ~ `adr/0006-mcp-tool-surface.md` | record |
+| 설계 결정 기록(ADR) | `adr/0001-config-priority.md`, `adr/0002-llm-provider-flag.md`, `adr/0003-shadow-db.md`, `adr/0004-alembic-migrate.md`, `adr/0005-extraction-routing.md`, `adr/0006-mcp-tool-surface.md`, `adr/0007-kv-cache-optimization.md`, `adr/0008-context-limit-refactoring.md` | record |
 | 시스템 전체 구조 | `system-architecture.md` (§3.5 코드 레이어) | active |
 | **최종 통합 계획(Cutover+MCP+결정)** | `plans/final-plan.md` | active |
 | **Phase 1 구현 가이드(추론 포트/어댑터)** | `plans/phase1-plan.md` | done |
 | **Phase 2 계획(watchdog 도메인화)** | `plans/phase2-plan.md` | active |
 | **Phase 2 구현 가이드 v2.1(legacy-parity, COMPLETE)** | `plans/phase2-detailed-guide-v2.md` | done |
-| Phase 2 구현 가이드 v1 | `plans/phase2-detailed-guide.md` | superseded |
-| **Phase 2 Gate 4 컷오버 실행 계획** | `plans/phase2-gate4-cutover-plan.md` | superseded |
+| Phase 2 구현 가이드 v1 | `_archive/plans/phase2-detailed-guide.md` | superseded |
+| **Phase 2 Gate 4 컷오버 실행 계획** | `_archive/plans/phase2-gate4-cutover-plan.md` | superseded |
 | Phase 2 Gate 4 코드 선행 스펙 | `plans/phase2-gate4-code-prereq.md` | record |
 | **Watchdog 표준 정합 재설계(P1–P4)** | `plans/watchdog-standard-compliance.md` | active |
 | DataImpulse 감시 위임(watchdog) | `plans/dataimpulse-watchdog-delegation.md` | active |
 | 오류 상세 기록 설계(3계층) | `plans/error-record-analysis-design.md` | active |
 | Agent handover DB 설계 | `plans/agent-handover-db-design.md` | active |
-| 에이전트 규칙 동기화 재설계 | `plans/agents-sync-redesign-guide.md` | record |
+| 에이전트 규칙 동기화 재설계 | `plans/agents-sync-redesign-guide.md`, `plans/agents-sync-redesign-guide-appendix.md` | record |
+| 에이전트 규칙 병합 초안 | `plans/agents-md-merged-draft.md` | record |
+| bash→python 이관 설계(구) | `plans/design-bash-to-python-migration.md` | record |
+| eTextbook Docker 배포(구) | `plans/etextbook-docker-deployment-plan.md` | record |
 | **Python 런타임 버전 전략(현황+이관안)** | `plans/python-version-strategy.md` | active |
 | **Phase 3 계획(embed 이관, D6=A)** | `plans/phase3-plan.md` | approved |
 | **2026 표준 대비 개선 계획(12항목)** | `plans/2026-standard-gap-remediation.md` | proposed |
