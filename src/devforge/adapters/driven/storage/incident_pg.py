@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import re
 import subprocess
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import func, insert, select, update
@@ -18,8 +19,26 @@ from devforge.ports.incident_repository import IncidentRepository
 from devforge.ports.types import Incident
 
 REOPEN_WINDOW_SEC = 3600
-_CONTEXT_MAX_LEN = 500
-_SECRET_RE = re.compile(r"(token|key|password|secret|passwd)\s*[=:]\s*\S+", re.IGNORECASE)
+_JOURNAL_TAIL_LINES = 40
+_SYSTEMD_PROPS = "ActiveState,SubState,Result,ExecMainStatus,NRestarts"
+_CONTAINER_LOG_MAX = 4000
+
+# 4-pattern masking (error-record-analysis-design §1.4).
+_MASK_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"(?i)(authorization:\s*bearer\s+)\S+"), r"\1***"),
+    (re.compile(r"sk-[A-Za-z0-9_\-]{10,}"), "sk-***"),
+    (re.compile(r"(?i)(password|passwd|token|secret|api[_-]?key)\s*[=:]\s*\S+"), r"\1=***"),
+    (
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
+        "***PRIVATE KEY***",
+    ),
+]
+
+
+def _mask(text: str) -> str:
+    for pattern, repl in _MASK_PATTERNS:
+        text = pattern.sub(repl, text)
+    return text
 
 
 def _to_incident(row: WatchdogIncident) -> Incident:
@@ -38,6 +57,8 @@ def _to_incident(row: WatchdogIncident) -> Incident:
         resolved_at=row.resolved_at,
         fail_count=row.fail_count,
         reopen_count=row.reopen_count,
+        context_jsonb=row.context_jsonb,
+        action_error=row.action_error,
     )
 
 
@@ -49,7 +70,7 @@ class PostgresIncidentRepository(IncidentRepository):
         self, component: str, event_type: str, detail: str, unit: Optional[str] = None
     ) -> Optional[int]:
         dedup = f"{component}:{event_type}"
-        context = await _capture_context(unit)
+        context_jsonb = await _capture_context_jsonb(component, unit)
         async with self._gateway.session() as session:
             open_row = (
                 await session.execute(
@@ -66,6 +87,7 @@ class PostgresIncidentRepository(IncidentRepository):
                     .values(
                         fail_count=WatchdogIncident.fail_count + 1,
                         symptom=detail[:500],
+                        context_jsonb=context_jsonb,  # repeat: refresh diagnostics
                         last_seen_at=func.now(),
                     )
                 )
@@ -95,6 +117,7 @@ class PostgresIncidentRepository(IncidentRepository):
                         detected_at=func.now(),
                         last_seen_at=func.now(),
                         symptom=detail[:500],
+                        context_jsonb=context_jsonb,  # reopen: refresh diagnostics
                     )
                 )
                 return recent.id  # type: ignore[no-any-return]
@@ -106,14 +129,20 @@ class PostgresIncidentRepository(IncidentRepository):
                         component=component,
                         status="open",
                         symptom=detail[:500],
-                        context=context,
+                        context_jsonb=context_jsonb,
                     )
                     .returning(WatchdogIncident.id)
                 )
             ).scalar_one()
             return new_row  # type: ignore[no-any-return]
 
-    async def record_action(self, incident_id: Optional[int], action: str, ok: bool) -> None:
+    async def record_action(
+        self,
+        incident_id: Optional[int],
+        action: str,
+        ok: bool,
+        error: Optional[dict[str, Any]] = None,
+    ) -> None:
         if incident_id is None:
             return
         values: dict[str, Any] = {
@@ -121,6 +150,8 @@ class PostgresIncidentRepository(IncidentRepository):
             "action_result": "success" if ok else "fail",
             "action_at": func.now(),
         }
+        if error is not None:
+            values["action_error"] = error
         if ok:
             values.update(status="resolved", resolved_at=func.now())
         async with self._gateway.session() as session:
@@ -158,30 +189,60 @@ class PostgresIncidentRepository(IncidentRepository):
         return [_to_incident(r) for r in rows]
 
 
-async def _capture_context(unit: Optional[str]) -> Optional[str]:
-    """Best-effort bounded, masked diagnostic context (legacy incidents.py:87-109).
-
-    Runs outside the DB session so the subprocess never holds a connection.
-    """
-    if not unit:
-        return None
+async def _run_capture(cmd: list[str], timeout: int) -> Optional[str]:
+    """Run a read-only capture command; return stdout or None (best-effort)."""
     try:
         r = await asyncio.to_thread(
-            subprocess.run,
-            [
-                "systemctl",
-                "--user",
-                "show",
-                unit,
-                "--property=ActiveState,SubState,Result,ExecMainStatus",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=3,
+            subprocess.run, cmd, capture_output=True, text=True, timeout=timeout
         )
-        text = (r.stdout or "").strip()
     except Exception:  # noqa: BLE001
         return None
-    if not text:
-        return None
-    return _SECRET_RE.sub(r"\1=***", text)[:_CONTEXT_MAX_LEN]
+    out = (r.stdout or "").strip()
+    return out or None
+
+
+async def _capture_context_jsonb(component: str, unit: Optional[str]) -> dict[str, Any]:
+    """Structured, masked, bounded diagnostics (error-record-analysis-design §1.3-1.4).
+
+    Reads only (systemctl show / journalctl tail / podman logs). Best-effort:
+    a missing tool (e.g. inside the v2 container) yields an absent section, not
+    an error. Runs outside the DB session so subprocesses never hold a connection.
+    """
+    unit = unit or (component.split(":", 1)[1] if ":" in component else component)
+    ctx: dict[str, Any] = {
+        "schema_version": 1,
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "component": component,
+        "unit": unit,
+        "truncated": False,
+    }
+
+    show_cmd = ["systemctl", "--user", "show", unit, f"--property={_SYSTEMD_PROPS}"]
+    ctx["command"] = show_cmd
+    out = await _run_capture(show_cmd, timeout=3)
+    if out:
+        props: dict[str, str] = {}
+        for line in out.splitlines():
+            if "=" in line:
+                key, _, value = line.partition("=")
+                props[key] = _mask(value)
+        ctx["systemd"] = props
+
+    journal = await _run_capture(
+        ["journalctl", "--user", "-u", unit, "--no-pager", "-n", str(_JOURNAL_TAIL_LINES)],
+        timeout=5,
+    )
+    if journal:
+        ctx["journal_tail"] = [_mask(ln) for ln in journal.splitlines() if ln.strip()]
+
+    if unit.startswith("container-"):
+        container = unit[len("container-") :]
+        logs = await _run_capture(["podman", "logs", "--tail", "40", container], timeout=5)
+        if logs:
+            masked = _mask(logs)
+            if len(masked) > _CONTAINER_LOG_MAX:
+                masked = masked[-_CONTAINER_LOG_MAX:]
+                ctx["truncated"] = True
+            ctx["container"] = {"logs_tail": masked}
+
+    return ctx

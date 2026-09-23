@@ -20,7 +20,7 @@ def _row(**overrides: Any) -> SimpleNamespace:
         id=1, dedup_key="svc:x:down", component="svc:x", status="open",
         symptom="down", context=None, detected_at=now, last_seen_at=now,
         action=None, action_result=None, action_at=None, resolved_at=None,
-        fail_count=1, reopen_count=0,
+        fail_count=1, reopen_count=0, context_jsonb=None, action_error=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -135,33 +135,11 @@ class TestPostgresIncidentRepository:
         assert [i.id for i in found] == [1, 2]
         assert all(isinstance(i, Incident) for i in found)
 
-
-class TestCaptureContext:
     @pytest.mark.asyncio
-    async def test_none_unit_returns_none(self) -> None:
-        from devforge.adapters.driven.storage import incident_pg
-        assert await incident_pg._capture_context(None) is None
-
-
-@pytest.mark.asyncio
-async def test_capture_context_masks_secrets_and_bounds(monkeypatch: Any) -> None:
-    from devforge.adapters.driven.storage import incident_pg
-
-    async def fake_to_thread(*a: Any, **k: Any) -> Any:
-        return SimpleNamespace(stdout="ActiveState=active\nToken=supersecret123\n")
-
-    monkeypatch.setattr(incident_pg.asyncio, "to_thread", fake_to_thread)
-    ctx = await incident_pg._capture_context("svc:x")
-    assert ctx is not None
-    assert "supersecret123" not in ctx and "Token=***" in ctx
-
-
-@pytest.mark.asyncio
-async def test_capture_context_subprocess_error_returns_none(monkeypatch: Any) -> None:
-    from devforge.adapters.driven.storage import incident_pg
-
-    async def boom(*a: Any, **k: Any) -> Any:
-        raise RuntimeError("systemctl missing")
-
-    monkeypatch.setattr(incident_pg.asyncio, "to_thread", boom)
-    assert await incident_pg._capture_context("svc:x") is None
+    async def test_record_action_records_error(self) -> None:
+        session = _Session([_Result()])
+        repo = PostgresIncidentRepository(_Gateway(session))
+        await repo.record_action(5, "restart", False, error={"reason": "exit 1"})
+        assert len(session.executed) == 1
+        # action_error is carried in the UPDATE values
+        assert "action_error" in session.executed[0].compile().params

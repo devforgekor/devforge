@@ -498,7 +498,9 @@ class WatchdogIncident(Base):
     component = Column(Text, nullable=False)
     status = Column(Text, nullable=False, server_default=sql_text("'open'"))
     symptom = Column(Text)
-    context = Column(Text)
+    context = Column(Text)  # deprecated (error-record-design §3): kept until no reader
+    context_jsonb = Column(JSONB, nullable=False, server_default=sql_text("'{}'::jsonb"))
+    action_error = Column(JSONB)
     detected_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     action = Column(Text)
@@ -511,6 +513,7 @@ class WatchdogIncident(Base):
     __table_args__ = (
         Index("idx_watchdog_incidents_open", "status", "dedup_key"),
         Index("idx_watchdog_incidents_created", sql_text("detected_at DESC")),
+        Index("idx_watchdog_incidents_context", "context_jsonb", postgresql_using="gin"),
     )
 
 
