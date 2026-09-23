@@ -1,8 +1,8 @@
 # DevForge 시스템 전체 구조
 
-> Status: active · Date: 2026-09-19 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/REFACTORING_PLAN.md`
+> Status: active · Date: 2026-09-23 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/REFACTORING_PLAN.md`
 > 서버 전체 런타임·데이터 흐름·스토리지의 통합 구조 문서.
-> 최종 갱신: 2026-09-19 (OCI 리전 청주 정정·파일 교환 OCI 일원화 반영 — 이전 2026-09-14)
+> 최종 갱신: 2026-09-23 (root offload bind 14 + SELinux restorecon + journald 상한·SystemKeepFree + 일일 정리 타이머 반영)
 > 자동 생성 문서(`docs/architecture/*`)와 달리 이 문서는 **수동 관리**다.
 
 ---
@@ -208,11 +208,22 @@ FastAPI hub, `telegram_send`, `mcp_server.py`에서 사용.
 
 | 위치 | 크기 | 내용 |
 |---|---|---|
-| `/opt/ai_data` | 100G | models/gguf, flaresolverr(novels/epub), search.db, backups(스테이징), containers |
+| `/opt/ai_data` | 100G | models/gguf, flaresolverr(novels/epub), search.db, backups(스테이징), containers, **`system-savings/`** |
 | `/mnt/lv_db` | 30G | PostgreSQL data (bind) |
 | `/opt/projects` | 10G | server repo |
 | `/opt/workspace` | 6G | ebooklib, news, common-lib |
-| `/` | 44.5G | OS |
+| `/` (boot) | 45G | OS only — 대용량 캐시·넷데이터 등은 아래 bind로 offload |
+
+- **root offload (2026-09-23)**: `/opt/ai_data/system-savings/` 아래로 데이터를 옮긴 뒤 `/etc/fstab` bind 14곳
+  (`netdata`, `~/.cache`, `~/.npm`, `~/.rustup`, `~/.local/{bin,n,share/*,lib/*}`, `~/nltk_data`)으로 기존 경로를 유지.
+  모두 `x-systemd.requires=opt-ai_data.mount` — 재부팅 시 `lv_ai_data` 마운트 후 자동 복원.
+  이전 후 `restorecon -RF`로 SELinux 라벨 재부여 (오프로드 경로 `unlabeled_t` 방지).
+- **일일 정리**: `root-volume-daily-clean.timer` (매일, `/usr/local/sbin/root-volume-daily-clean.sh`) —
+  sandbox `/var/tmp` 잔재·dnf·pip·journal 200M·85% 이상이면 경고.
+  journald: `SystemMaxUse=200M`, `SystemKeepFree=2G`, `MaxRetentionSec=2week` (`size.conf` 단일 SSOT).
+- 주의: `opencode.db`(~2G)는 본 세션 종료 후 `opencode-db-offload.service`(재부팅 oneshot)로 `system-savings` 이전 대기 —
+  이전 전까지 root에 잔존(진단: `findmnt /home/opc/.local/share/opencode`가 없으면 미이전).
+  이전 스크립트는 `rsync -aX` 후 마운트 view에서 `restorecon -RF` 수행.
 
 - 원격: **OCI Object Storage** (`devforge-standard`, 청주 `axgly0lmehyp`; `devforge-archive`는 미생성).
 - 파일 교환: OCI Object Storage (`uploads/*`, `releases/*`, PAR → Droplr). 파이프라인 산출물도 OCI (Azure Blob은 2026-09-11 제거).

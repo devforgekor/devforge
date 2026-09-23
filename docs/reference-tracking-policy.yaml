@@ -1,0 +1,484 @@
+# reference-tracking-policy.yaml
+# Version: 1.2.1 (DRY refactor)
+# Last updated: 2026-05-13
+# Purpose: Define rules for tracking upstream technology changes,
+#          evaluating stability, and applying updates on a 4-month cycle
+#          with migration difficulty considered, emergency CVE response, 
+#          and concrete operational accountability.
+
+metadata:
+  document_name: "Reference Tracking Policy"
+  version: "1.2.1"
+  effective_date: "2026-05-13"
+  maintainers:
+    - role: "system owner"
+      contact: "local"
+  base_dir: "~/.config/devforge"
+  refresh_cycle: "4 months (April 15, August 15, December 15 UTC at 00:00)"
+  next_refresh_date: "2026-08-15"
+  emergency_response_enabled: true
+  policy_evolution_log: "historical/policy-log.md"
+
+# ---------- Health Check Suite (defined once, referenced in step 6c) ----------
+health_check_suite:
+  purpose: "Verify all affected units after update; ALL checks must pass before proceeding"
+  default_wait_time: "90 seconds (3 healthcheck cycles at 30s interval; adjust per service)"
+  checks:
+    - id: "unit_active"
+      command: "systemctl --user is-active <unit>"
+      expected_result: "active"
+      purpose: "Confirm service started and stabilized"
+      timeout: "immediate"
+
+    - id: "healthcheck_passes"
+      command: "journalctl --user -u <unit>-healthcheck.timer -n 3 --no-pager | grep -i 'success'"
+      expected_result: "3 consecutive success lines within last 90 seconds"
+      purpose: "Confirm service internal health over multiple cycles (not just startup)"
+      timeout: "90–120 seconds (wait for 3 healthcheck cycles)"
+      note: "If <unit> has no dedicated healthcheck.timer, skip this check and document in refresh-log.md"
+
+    - id: "api_response"
+      command: "curl -f -m 5 http://localhost:NNNN/health || exit 1"
+      expected_result: "HTTP 200 within 5 seconds"
+      purpose: "Verify external API responsiveness"
+      timeout: "5 seconds"
+      customization: "Adjust endpoint and timeout per service (e.g., postgres: pg_isready -h localhost, redis: redis-cli ping)"
+
+    - id: "log_stability"
+      command: "journalctl --user -u <unit> --since '2 minutes ago' | grep -iE '(CRITICAL|ERROR)' | wc -l"
+      expected_result: "0 (no CRITICAL or ERROR messages in last 2 minutes)"
+      purpose: "Confirm no cascading failures post-update"
+      timeout: "immediate"
+
+# ---------- Watched References (with Priority) ----------
+references:
+  - id: "podman_releases"
+    name: "Podman Releases"
+    url: "https://github.com/containers/podman/releases"
+    rss: "https://github.com/containers/podman/releases.atom"
+    check_frequency: "weekly"
+    priority: "High"
+    stability_gate: "podman_stable"
+    migration_difficulty_eval: "podman_migration"
+
+  - id: "systemd_releases"
+    name: "systemd Releases"
+    url: "https://github.com/systemd/systemd/releases"
+    rss: "https://github.com/systemd/systemd/releases.atom"
+    check_frequency: "weekly"
+    priority: "High"
+    stability_gate: "systemd_stable"
+    migration_difficulty_eval: "systemd_migration"
+
+  - id: "postgres_image"
+    name: "PostgreSQL Docker Image"
+    url: "https://hub.docker.com/_/postgres"
+    check_frequency: "quarterly"
+    priority: "High"
+    stability_gate: "image_stable"
+    migration_difficulty_eval: "image_migration"
+
+  - id: "litellm_image"
+    name: "LiteLLM Docker Image"
+    url: "https://hub.docker.com/r/berriai/litellm"
+    check_frequency: "quarterly"
+    priority: "Medium"
+    stability_gate: "image_stable"
+    migration_difficulty_eval: "image_migration"
+
+  - id: "redhat_dev_blog"
+    name: "Red Hat Developer Blog (containers)"
+    url: "https://developers.redhat.com/topics/containers"
+    check_frequency: "monthly"
+    priority: "Low"
+    stability_gate: "redhat_best_practice"
+    migration_difficulty_eval: "none"
+
+  - id: "fedora_magazine"
+    name: "Fedora Magazine"
+    url: "https://fedoramagazine.org/"
+    check_frequency: "monthly"
+    priority: "Low"
+    stability_gate: "fedora_best_practice"
+    migration_difficulty_eval: "none"
+
+  - id: "arch_wiki_podman"
+    name: "Arch Wiki - Podman"
+    url: "https://wiki.archlinux.org/title/Podman"
+    check_frequency: "quarterly"
+    priority: "Low"
+    stability_gate: "community_documentation"
+    migration_difficulty_eval: "none"
+
+  - id: "cisa_advisories"
+    name: "CISA Cybersecurity Advisories"
+    url: "https://www.cisa.gov/news-events/cybersecurity-advisories"
+    check_frequency: "weekly"
+    priority: "High"
+    stability_gate: "none"
+    migration_difficulty_eval: "none"
+    emergency_trigger: true
+
+  - id: "snyk_vuln_db"
+    name: "Snyk Vulnerability Database"
+    url: "https://security.snyk.io/"
+    check_frequency: "weekly"
+    priority: "High"
+    stability_gate: "image_cve_free"
+    migration_difficulty_eval: "none"
+    emergency_trigger: true
+
+# ---------- Stability Gate Definitions (revised with concrete examples) ----------
+stability_gates:
+  podman_stable:
+    criteria:
+      - "Included in the current stable release of Fedora or RHEL/OL for at least 2 months"
+      - "No critical or high 'regression' labeled issues in GitHub for that version"
+      - "No revert or deprecation notice affecting current Quadlet usage"
+      - "No breaking change to Quadlet syntax or timer semantics required by version upgrade"
+    breaking_change_examples:
+      - "Quadlet v1.0→v2.0: Volume=dir:/container/path syntax → Mount=type=bind,src=/host,dst=/container/path (requires .container file rewrite)"
+      - "Quadlet Network=host deprecation → requires explicit Network=pasta:options or bridge redefinition"
+      - "Quadlet EnvironmentFile expansion (${VAR}) disabled → requires explicit --env-file or inline Environment= rewrite"
+    how_to_check:
+      - "Check Fedora package version: `dnf list podman` on latest Fedora (or check distro repos online)"
+      - "Review GitHub Issues for the version: filter by label 'regression', sort by created"
+      - "Scan Podman release notes for breaking changes in Quadlet syntax"
+    gate_result: '\"pass\" or \"fail\"'
+    evaluator_role: "human (operations owner)"
+
+  systemd_stable:
+    criteria:
+      - "Version is present in a stable RHEL/Fedora/Oracle Linux release for at least 3 months"
+      - "The stable branch in systemd git has had the version for 3+ months without rollback"
+      - "No critical user-unit breaking changes listed in NEWS"
+      - "No breaking change to Quadlet or timer unit syntax required by version upgrade"
+    breaking_change_examples:
+      - "systemd user timers: OnCalendar=*-*-* 20:00:00 UTC → OnCalendar=%Y-%m-%d 20:00:00 (format shift if adopted)"
+      - "systemd services: StartLimitBurst/StartLimitInterval deprecated → StartLimitIntervalSec added (config file rewrite if used)"
+      - "EnvironmentFile expansion changes (e.g., recursive vs. non-recursive) → may require secrets.env format adjustment"
+    how_to_check:
+      - "Check RHEL/Fedora/OL package repositories for version"
+      - "Look at systemd-stable branch commit history for version retention time"
+      - "Read NEWS file in systemd repo for user instance changes (search: 'timer', 'Unit', 'Environment')"
+    gate_result: '\"pass\" or \"fail\"'
+    evaluator_role: "human (operations owner)"
+
+  image_stable:
+    criteria:
+      - "The fixed image tag has been published for at least 60 days"
+      - "The tag has been in active use (by the team) for at least 30 days without operational issues or regressions"
+      - "No Critical or High CVE in Snyk/Trivy for that specific tag"
+      - "No breaking change to container runtime parameters or Quadlet compatibility"
+    breaking_change_examples:
+      - "PostgreSQL 15→16: pg_dump output format changes; initdb directory structure differs → requires manual pg_upgrade OR full data export/re-import"
+      - "LiteLLM v2.0→v3.0: config.yaml schema changed (api_base → api_key_required logic); ENV var references no longer auto-expanded"
+      - "Container entrypoint change (e.g., service_launcher wrapper added) → may conflict with Quadlet ExecStart override"
+    how_to_check:
+      - "Docker Hub: tag page shows publish date"
+      - "Internal log: check for service stability over last 30 days (journalctl --user -u <service>, incident log)"
+      - "Search Snyk for image:tag vulnerabilities"
+    gate_result: '\"pass\" or \"fail\"'
+    evaluator_role: "human (security + ops owner)"
+
+  redhat_best_practice:
+    criteria:
+      - "Article/guide published at least 6 months ago"
+      - "No subsequent retraction or contradictory update"
+      - "Referenced positively in other community resources (Arch Wiki, Fedora discussions)"
+    how_to_check:
+      - "Note article date and check for follow-up posts"
+      - "Search for the pattern in Arch Wiki talk pages or Fedora mailing lists"
+    gate_result: '\"pass\" or \"fail\"'
+    evaluator_role: "automated (FTS + manual spot-check)"
+
+  fedora_best_practice:
+    criteria:
+      - "Article published at least 4 months ago"
+      - "Uses stable Fedora release, not rawhide/beta"
+      - "No user comments reporting broken functionality"
+    how_to_check:
+      - "Check article date and Fedora version referenced"
+      - "Scan comments or related forum threads"
+    gate_result: '\"pass\" or \"fail\"'
+    evaluator_role: "automated (FTS + manual spot-check)"
+
+  community_documentation:
+    criteria:
+      - "Wiki page has not been flagged as outdated"
+      - "Recent edits are minor or for new stable versions, not reversals"
+    how_to_check:
+      - "View page history and 'Talk' page"
+    gate_result: '\"pass\" or \"fail\"'
+    evaluator_role: "automated (git history diff)"
+
+  image_cve_free:
+    criteria:
+      - "No CVE rated Critical or High affecting the current image tag"
+    how_to_check:
+      - "Search Snyk/Trivy with image identifier"
+    gate_result: '\"pass\" or \"fail\"'
+    evaluator_role: "automated (Snyk API query)"
+
+# ---------- Migration Difficulty Levels ----------
+migration_difficulty_levels:
+  low:
+    definition: "No configuration file changes required. Update tag/package and restart."
+    examples:
+      - "Bumping patch version of an image (e.g., postgres:16.3 → postgres:16.4)"
+      - "Minor package update with no API changes (e.g., podman 5.1.2 → 5.1.3)"
+    actions:
+      - "Update image reference or package"
+      - "systemctl --user daemon-reload"
+      - "systemctl --user restart affected-unit"
+      - "Verify logs (see health_check_suite above)"
+    rollback_time: "< 5 minutes"
+
+  medium:
+    definition: "Configuration file adjustments needed (new options, env vars, but same unit structure)."
+    examples:
+      - "Quadlet Network default changes from 'host' to 'pasta'; adding explicit Network=pasta:... line"
+      - "Environment variable renamed or added in a container image; secrets.env key added"
+    actions:
+      - "Modify .container/.pod file lines"
+      - "systemctl --user daemon-reload"
+      - "systemctl --user restart affected-unit"
+      - "Test connectivity/functionality"
+      - "Document changes in handover/refresh-log.md"
+    rollback_time: "10–20 minutes"
+
+  high:
+    definition: "Unit syntax overhaul or deprecated options removed. Multiple files may need rewriting."
+    examples:
+      - "Quadlet deprecates a directive (e.g., Volume= → Mount= syntax; requires full rewrite of .container)"
+      - "systemd timer syntax changes requiring unit file rewrite (OnCalendar format shift)"
+      - "New major version of container image that changes data directory structure (manual pg_upgrade OR data export/re-import required)"
+    actions:
+      - "Create dedicated Git branch: git checkout -b migration/YYYY-MM-component-vX-to-vY"
+      - "Rewrite affected unit files, test in isolation on staging"
+      - "Update all documentation (blueprint.yaml, handover.yaml, reference-watchlist.md)"
+      - "Tag current stable state before applying: git tag pre-migration-YYYY-MM-component"
+      - "Apply changes, run full validation (all checks in health_check_suite must pass)"
+      - "If failure: automatic rollback script invoked (see rollback_automation)"
+    rollback_time: "30–60 minutes"
+    recommendation: "Dedicate this refresh cycle solely to this HIGH migration; do not mix LOW/MEDIUM updates"
+
+# ---------- Emergency CVE Response (bypass 4-month cycle) ----------
+emergency_response:
+  trigger_conditions:
+    - "CISA or Snyk publishes Critical CVE affecting podman, systemd, or postgres image"
+    - "Affected version currently deployed in production"
+    - "No stable patch published yet (vendor advisory issued)"
+  evaluation_process:
+    - step: 1
+      name: "Declare emergency"
+      actor: "operations owner"
+      action: "Confirm CVE affects current deployment; create Git issue and tag branch"
+      example: "git checkout -b emergency/CVE-2026-XXXXX-podman"
+    - step: 2
+      name: "Evaluate workarounds"
+      actor: "operations owner + security review"
+      action: "Check if: (a) patch available from vendor, (b) workaround exists (disable feature, network isolation), (c) upgrade path available"
+    - step: 3
+      name: "Choose action"
+      decision_tree:
+        - condition: "Stable patch available"
+          action: "Execute immediate update (skip 4-month wait, use health_check_suite)"
+          git_tag: "emergency-update-YYYY-MM-DD-CVE-XXXXX"
+        - condition: "No patch; workaround available"
+          action: "Apply workaround immediately, plan proper fix for next 4-month cycle"
+          git_tag: "emergency-workaround-YYYY-MM-DD-CVE-XXXXX"
+        - condition: "No patch; no workaround; non-critical component"
+          action: "Isolate component (disable service if possible), schedule formal migration window"
+          git_tag: "emergency-isolation-YYYY-MM-DD-CVE-XXXXX"
+  documentation:
+    - "All emergency actions logged to handover/refresh-log.md with [EMERGENCY] prefix"
+    - "Next scheduled 4-month cycle must include post-mortem review of emergency decision"
+
+# ---------- Automated Collection ----------
+collection:
+  method: "systemd user timer with rss-monitor script"
+  timer_unit: "reference-monitor.timer"
+  service_unit: "reference-monitor.service"
+  script_path: "~/.config/devforge/bin/rss-monitor"
+  automation_role: "automated (systemd timer)"
+  logging:
+    target: "journal"
+    tag: "REFERENCE"
+    format: "[REFERENCE] <id>: <message>"
+  query_recent: "journalctl --user -t REFERENCE --since '4 months ago'"
+
+# ---------- 4-Month Refresh Day Procedure (revised with roles & timing) ----------
+refresh_procedure:
+  frequency: "every 4 months on 15th UTC at 00:00 (April 15, August 15, December 15)"
+  total_duration_estimate: "1–2 hours (plus extra if HIGH migration selected)"
+  steps:
+    - step: 1
+      name: "Review collected reference data"
+      actor: "operations owner"
+      action: "Run: journalctl --user -t REFERENCE --since '4 months ago' | tee /tmp/refresh-candidates.log"
+      output: "list of candidate updates with dates"
+      duration: "10 min"
+
+    - step: 2
+      name: "Update watchlist entries"
+      actor: "operations owner"
+      action: "Edit reference-watchlist.md; populate 'latest_discovered_version' and 'last_checked' date for each reference"
+      file_path: "~/.config/devforge/reference-watchlist.md"
+      duration: "10 min"
+
+    - step: 3
+      name: "Evaluate stability gates"
+      actor: "operations owner (human judgment) + automated checks (Snyk/Trivy API)"
+      action: "For each candidate: apply stability_gates criteria; explicitly document breaking-change assessment; mark gate_pass=true/false"
+      output: "reference-watchlist.md updated with gate_pass and notes"
+      duration: "20–30 min"
+
+    - step: 4
+      name: "Classify migration difficulty"
+      actor: "operations owner"
+      action: "For each gate_pass=true candidate, determine LOW/MEDIUM/HIGH using examples in migration_difficulty_levels"
+      output: "migration_difficulty populated in watchlist"
+      duration: "10 min"
+
+    - step: 5
+      name: "Decision"
+      actor: "operations owner"
+      decision_tree:
+        - condition: "all candidates LOW or MEDIUM"
+          action: "Proceed with all updates (step 6)"
+        - condition: "one or more HIGH candidates present"
+          action: "Either: (a) postpone all HIGH to next 4-month cycle, apply only LOW/MEDIUM now, OR (b) dedicate this entire cycle to the single HIGH migration (skip LOW/MEDIUM)"
+      note: "No HIGH update should be mixed with LOW/MEDIUM to limit risk blast radius"
+      decision_log: "recorded in handover/refresh-log.md with timestamp"
+      duration: "5–10 min"
+
+    - step: 6
+      name: "Apply updates"
+      actor: "operations owner (execution + verification)"
+      order: "Apply LOW updates first, then MEDIUM, only then HIGH (if chosen)"
+      per_update:
+        - sub_step: "6a"
+          name: "Create Git branch and tag"
+          action: |
+            git checkout -b refresh/YYYY-MM-component-old-to-new
+            git tag refresh-YYYY-MM-component-before
+          duration: "1 min"
+
+        - sub_step: "6b"
+          name: "Execute migration actions"
+          action: "Follow actions from migration_difficulty_levels[LOW|MEDIUM|HIGH]"
+          example: "For LOW: update image tag → daemon-reload → systemctl restart → verify logs"
+          duration: "5–10 min per update"
+
+        - sub_step: "6c"
+          name: "Run health verification"
+          action: |
+            Execute all checks in health_check_suite (defined at top of document).
+            For each unit update:
+              1. unit_active: systemctl --user is-active <unit> → expect 'active'
+              2. healthcheck_passes: wait 90s, check 3 consecutive success lines in journal
+              3. api_response: curl -f -m 5 http://localhost:NNNN/health → expect HTTP 200
+              4. log_stability: check last 2 min of logs → expect 0 CRITICAL/ERROR messages
+            
+            ALL checks must pass before proceeding. If ANY check fails → invoke rollback_automation (step 6d).
+          duration: "2–3 min per update"
+          reference: "(see health_check_suite at top of document for complete check definitions)"
+
+        - sub_step: "6d"
+          name: "If health check FAILS"
+          action: "Invoke rollback_automation (see section below); document failure reason in refresh-log.md with [ROLLBACK] prefix"
+          duration: "5–10 min"
+
+      rollback_automation:
+        script_location: "~/.config/devforge/bin/rollback-update.sh"
+        trigger: "Any single check in health_check_suite fails"
+        actions:
+          - "Restore previous .container/.pod/.service files from Git: git checkout HEAD~ -- <files>"
+          - "Restore previous image tag (pull from local registry or re-tag)"
+          - "systemctl --user daemon-reload && systemctl --user restart <unit>"
+          - "Re-run all checks in health_check_suite (see top of document); must all pass before declaring rollback complete"
+          - "Log failure and rollback decision to handover/refresh-log.md with [ROLLBACK] prefix"
+        manual_override: "If automated rollback fails, operations owner must manually intervene (see runbook: docs/rollback-runbook.md)"
+        duration: "5–10 minutes"
+
+    - step: 7
+      name: "Update documentation"
+      actor: "operations owner"
+      actions:
+        - action: "Archive previous blueprint/CLAUDE.yaml to historical/ with date: cp blueprint.yaml historical/blueprint-YYYY-MM-DD.yaml"
+        - action: "Update blueprint.yaml and CLAUDE.yaml with new stable versions, breaking-change notes, and configuration changes"
+        - action: "Append decision log to handover/refresh-log.md with format:
+            [YYYY-MM-DD Refresh]
+            Decision: [LOW+MEDIUM only | HIGH only | all | emergency]
+            Updates applied:
+            - Component: old_version → new_version, difficulty: LOW|MEDIUM|HIGH, gate_pass: true|false, outcome: success|rollback, notes: <any issues>"
+        - action: "Update reference-watchlist.md with 'last_checked' date and 'current_stable_version' for all references"
+        - action: "Commit to Git: git add . && git commit -m 'Refresh YYYY-MM: <list of components>' --trailer='Co-authored-by: Copilot <...>'"
+      duration: "15 min"
+
+    - step: 8
+      name: "Schedule next refresh"
+      actor: "operations owner + automation"
+      action: |
+        1. Set next_refresh_date in this file (refresh_procedure.frequency section)
+        2. Update calendar reminder (personal calendar or systemd.timer reminder)
+        3. Email stakeholders with refresh outcome summary (components updated, no issues, next cycle date)
+      duration: "5 min"
+
+# ---------- File Structure (explicit paths & Git conventions) ----------
+files:
+  base_dir: "~/.config/devforge"
+  policy_yaml: "reference-tracking-policy.yaml"
+  watchlist_md: "reference-watchlist.md"
+  handover_log: "handover/refresh-log.md"
+  historical_dir: "historical/"
+  blueprint_dir: "blueprint/"
+  systemd_units_dir: "~/.config/containers/systemd/"
+  git_branch_naming: "refresh/YYYY-MM-component-old-to-new, emergency/CVE-XXXXX, migration/YYYY-MM-component-vX-to-vY"
+  git_tag_naming: "refresh-YYYY-MM-before, refresh-YYYY-MM-component-after, emergency-update-YYYY-MM-DD-CVE, pre-migration-YYYY-MM"
+  rollback_script: "~/.config/devforge/bin/rollback-update.sh"
+  rss_monitor_script: "~/.config/devforge/bin/rss-monitor"
+
+# ---------- Appendix: Watchlist Record Template ----------
+watchlist_record_template:
+  id: "unique_id"
+  name: "Human name"
+  url: "primary URL"
+  rss: "rss feed if available"
+  priority: "High|Medium|Low"
+  check_frequency: "weekly|monthly|quarterly"
+  latest_discovered_version: "x.y.z"
+  current_stable_version: "x.y.z"
+  stability_gate: "gate_id"
+  last_stability_check: "YYYY-MM-DD"
+  gate_pass: true/false
+  breaking_change_assessment: "none|minor|moderate|major (with notes)"
+  migration_difficulty: "LOW|MEDIUM|HIGH|none"
+  last_updated: "YYYY-MM-DD"
+  deployed_version: "x.y.z (current production version)"
+  notes: "optional observations, rationale for gate_pass decision"
+
+# ---------- Appendix: Example Refresh Log Entry ----------
+refresh_log_entry_template: |
+  [2026-05-13 Refresh]
+  Cycle: Q2 2026 (Jan 1 → May 1)
+  Decision: Apply LOW + MEDIUM updates; defer HIGH
+  
+  Updates applied:
+  - podman 5.1.2 → 5.1.3 (patch), difficulty: LOW, gate_pass: true, outcome: success ✓
+  - postgres:16.3 → 16.4 (patch), difficulty: LOW, gate_pass: true, outcome: success ✓
+  - litellm v1.2.5 → v1.2.6 (minor), difficulty: MEDIUM (env var added), gate_pass: true, outcome: success ✓
+    [manual note: added LITELLM_NEW_FEATURE=true to secrets.env]
+  - systemd 255 → 256 (minor), difficulty: MEDIUM, gate_pass: true, outcome: success ✓
+    [manual note: no timer syntax changes; tested all timers with new version]
+  
+  Deferred for Q3:
+  - podman 6.0.0 (major): breaking change to Volume= syntax; difficulty: HIGH; gate_pass: true; defer per policy
+  
+  Health checks: all passed (unit_active, healthcheck_passes, api_response, log_stability)
+  Rollbacks: none
+  Next refresh: 2026-09-01
+  
+  Emergency actions this cycle: none
+  Post-refresh note: All services stable; ready for normal operations.

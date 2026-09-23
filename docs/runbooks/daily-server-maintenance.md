@@ -115,29 +115,44 @@ systemctl --user restart devforge-swap.service
 ### 3.1 파일시스템 사용률
 
 ```bash
-# 디스크 사용률
+# 디스크 사용률 (root는 45G boot LV)
 df -h
 
 # 대용량 디렉토리 (top 10)
 du -sh /opt/projects/server/* | sort -rh | head -10
 du -sh /opt/ai_data/* | sort -rh | head -10
+
+# 자동 정리 타이머 상태 (일일, root 전용)
+systemctl status root-volume-daily-clean.timer --no-pager
+journalctl -u root-volume-daily-clean.service -n 5 --no-pager
+
+# root offload bind 마운트 생존 확인 (14곳 + opencode 이전 후 15곳)
+findmnt -n -o TARGET | grep -E 'system-savings|/opt/netdata|\.cache|opencode' | head -20
 ```
 
 **판단 기준:**
-- 사용률 > 85%: ⚠️ 정리 필요
+- 사용률 > 85%: ⚠️ 정리 필요 (타이머가 자동 경고도 발송)
 - 사용률 > 95%: 🚨 긴급 정리
 
 **정리 대상:**
 ```bash
-# 오래된 로그 (30일 이상)
-find /opt/projects/server/logs -name "*.log" -mtime +30 -ls
+# 자동 정리가 이미 수행 (sandbox tmp, dnf, pip, journal 200M)
+sudo /usr/local/sbin/root-volume-daily-clean.sh
 
-# 임시 파일
+# 임시 파일 (수동 보조)
 find /tmp -name "claude-*" -mtime +7 -ls
 find /var/tmp -name "*.tmp" -mtime +7 -ls
 
+# /var/tmp bulk (cache/dnf, temp clone, playwright profile 등 재생성 가능분)
+sudo rm -rf /var/tmp/cache/dnf /var/tmp/cache/uptrack /var/tmp/cache/PackageKit
+sudo rm -rf /var/tmp/playwright_chromiumdev_profile-* /var/tmp/opencode-src /var/tmp/webobsidian-src
+sudo du -sh /var/tmp   # 목표 < 500MB (tor·node-compile-cache는 보존 가능)
+
 # Docker/Podman 정리
 podman system prune -af --volumes
+
+# data LV 여유 (offload 대상이 남아 있으면 system-savings로 이동 가능)
+df -h /opt/ai_data
 ```
 
 ### 3.2 inode 사용률
@@ -277,11 +292,13 @@ git status --short
 ### 7.1 로그 로테이션 확인
 
 ```bash
-# journald 로그 크기
+# journald 로그 크기 (상한: SystemMaxUse=200M, SystemKeepFree=2G, MaxRetentionSec=2week)
 journalctl --disk-usage
 
-# 30일 이상 로그 정리
-sudo journalctl --vacuum-time=30d
+# 강제 정리 (타이머가 이미 daily vacuum — 수동은 비상용)
+sudo journalctl --vacuum-size=200M
+# 확인: /etc/systemd/journald.conf.d/size.conf (단일 SSOT)
+# 라벨 이상 시: sudo restorecon -RF /opt/netdata /home/opc/.cache …
 ```
 
 ### 7.2 임시 파일 정리
@@ -477,8 +494,12 @@ crontab -e
 - [ ] 모든 핵심 서비스 running 상태
 - [ ] 최근 1시간 내 critical 에러 없음
 - [ ] 최근 백업 < 24시간
-- [ ] 디스크 용량 충분 (> 15% 여유)
+- [ ] 디스크 용량 충분 (> 15% 여유) — root는 `root-volume-daily-clean.timer`가 daily 실행 중
+- [ ] root offload bind 마운트 정상 (`findmnt -n -o SOURCE | grep -c system-savings` = 15; 14 bind + opencode)
+- [ ] `journalctl --disk-usage` ≤ 200M
+- [ ] `/var/tmp` < 500MB (`du -sh /var/tmp` — cache/dnf·temp clone 제거 후 기준)
 - [ ] 로그에 이상 패턴 없음
+- [ ] (재부팅 직후) rollback-guide §6.1 체크리스트 완료 (bind·label·WebObsidian drop-in·승인 재검토)
 - [ ] (선택) 상태 리포트 생성 및 저장
 
 ---
@@ -486,11 +507,12 @@ crontab -e
 ## 12. 참고 문서
 
 - `/opt/projects/server/docs/OPERATIONS_GUIDE.md` — 운영 가이드
-- `/opt/projects/server/docs/system-architecture.md` — 시스템 아키텍처
+- `/opt/projects/server/docs/system-architecture.md` — 시스템 아키텍처 (스토리지 §5: system-savings bind)
+- `/opt/projects/server/docs/operations/rollback-guide.md` — fstab bind 롤백 (§6)
 - `/opt/projects/server/docs/handover-secrets-kv.md` — Key Vault 시크릿 관리
 
 ---
 
 **작성자:** Claude Code (devforge-444795)  
-**최종 업데이트:** 2026-09-21  
-**버전:** 1.0
+**최종 업데이트:** 2026-09-23  
+**버전:** 1.1

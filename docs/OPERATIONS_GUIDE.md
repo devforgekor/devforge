@@ -57,8 +57,9 @@ devforge inference ensure day_extract  # Check model readiness
 export DEVFORGE_DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/dbname"
 ```
 > **컨테이너 (devforge-mcp / devforge-fastapi)**: `DEVFORGE_DATABASE_URL`은
-> `~/.config/containers/systemd/container-devforge-{mcp,fastapi}.container`의
-> `Environment=` 로 주입한다 (Azure KV의 `DEVFORGE-DATABASE-URL`은 2026-09-19 현재 미존재).
+> Azure KV `DEVFORGE-DATABASE-URL`(`kv-common-prod-krc`·`kv-devforge-prod2-krc`,
+> 2026-09-23 등록)에서 `kv-fetch-env.py`로 주입하거나,
+> 컨테이너 quadlet의 `Environment=` 로 직접 주입한다.
 > 변경 후: `systemctl --user daemon-reload && systemctl --user restart container-devforge-{mcp,fastapi}`
 
 # LLM

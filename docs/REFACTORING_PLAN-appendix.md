@@ -112,6 +112,7 @@
 | **podman-py rootless** | High | Medium | **비도입 확정** | Mitigated (결정됨) |
 | **MCP 도구 인터페이스 변경** | Low | Medium | **도구명 별칭 + 에이전트 회귀 테스트** | To Do (Phase 4) |
 | **팀 학습 곡선** | High | Medium | **문서화 + 페어 프로그래밍 + 2인 팀** | Monitoring (전체) |
+| **OS root 볼륨 용량 고갈** | Medium | High | **`/opt/ai_data/system-savings` bind offload + `root-volume-daily-clean.timer`** (일일 정리·85% 경고) | Mitigated (2026-09-23, ops — 계획서 범위 외) |
 
 > **v1.1에서 삭제된 Critical/High 리스크 4건 재추가**:
 > - 프로덕션 DB 경합 → **replay 하네스**는 적용, **섀도 DB는 미구현** (Status: Partial)

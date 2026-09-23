@@ -14,7 +14,7 @@
 | F1 | 앱 이미지 = `localhost/devforge-base:latest` (**Python 3.12.13**, `devforge` import 가능) | `podman images`, `podman run` |
 | F2 | 네트워크 = `svc.pod`(`Network=devforge-net`). 컨테이너는 **`Pod=svc.pod`** 관례. pod 내 postgres = `127.0.0.1:5432` | `svc.pod`, quadlet들 |
 | F3 | 시크릿 = **KV**(`kv-export-env.sh`/`kv-fetch-env.py`). **`~/.config/devforge/secrets.env`는 존재하지 않음** | `ls`, quadlet 관례 |
-| F4 | KV 키: `DEVFORGE_POSTGRES_PASSWORD`, `SLACK_BOT_TOKEN_KEY`, `SLACK_CHANNEL`, `SLACK_SIGNING_SECRET_KEY`, `DEVFORGE_WATCHDOG_PING_SSH` (**`DEVFORGE_DATABASE_URL` 없음**) | `kv-fetch-env.py env` (키 이름) |
+| F4 | KV 키: `DEVFORGE_POSTGRES_PASSWORD`, `SLACK_BOT_TOKEN_KEY`, `SLACK_CHANNEL`, `SLACK_SIGNING_SECRET_KEY`, `DEVFORGE_WATCHDOG_PING_SSH`, **`DEVFORGE-DATABASE-URL` (2026-09-23 등록)** | `kv-safe.py list` (키 이름) |
 | F5 | 이미지에 **`systemd-notify`·`python3-systemd` 없음** | `podman run ... which` |
 | F6 | `DatabaseGateway.from_config(config)` 존재 (SSOT) | `database_gateway.py:68` |
 | F7 | v2.1에 **dry-run 플래그 없음** (legacy에는 있음: `orchestrator._run_*(dry_run)`) | `watchdog_service.py`, `orchestrator.py` |
@@ -40,7 +40,7 @@
 | 8 | shadow-run이 공유 상태를 그대로 씀 | **dry_run으로 incidents/state/Slack/recovery 차단** + 별도 state 파일 | F10 (오염) |
 | 9 | (언급 없음) | **루프가 liveness 파일 기록** | F8 |
 | 10 | (언급 없음) | `DatabaseGateway.from_config(config)` 사용 | F6 |
-| 11 | DSN 미설정 | **entrypoint에서 `DEVFORGE_DATABASE_URL` 구성** (mcp 패턴) | F4 (KV에 URL 없음) |
+| 11 | DSN 미설정 | **entrypoint에서 `DEVFORGE_DATABASE_URL` 구성** (mcp 패턴, KV 미주입 시 폴백) | F4 (KV `DEVFORGE-DATABASE-URL`은 2026-09-23 등록됨 — 가드는 방어적 유지) |
 
 ---
 

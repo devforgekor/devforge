@@ -269,6 +269,100 @@ journalctl --user -u devforge-watchdog.service --since "5 min ago" | grep -i pod
 
 ---
 
+## 6. Root Volume Offload (fstab bind ×14 + daily clean) (2026-09-23)
+
+**Change**: OS root 45G 용량 고잡 해소 — 대용량 캐시/홈 데이터를 `/opt/ai_data/system-savings/`로 이전 후 fstab bind 14곳, journald 상한, `root-volume-daily-clean.timer`(daily).
+
+**Impact**:
+- `/etc/fstab` bind 14행 + `x-systemd.requires=opt-ai_data.mount` — 재부팅 시 `lv_ai_data` 실패 시 관련 bind·서비스 기동 실패 가능
+- 경로는 동일하나 실제 데이터는 `datavg/lv_ai_data` (XFS) — 14곳은 `restorecon -RF`로 라벨 재부여 완료 (2026-09-23)
+- journald: `SystemMaxUse=200M`, `SystemKeepFree=2G`, `MaxRetentionSec=2week` (`/etc/systemd/journald.conf.d/size.conf`; `60-retention.conf` 30day는 제거해 단일 SSOT)
+- `opencode.db`(~2G)는 본 세션 종료 후 `opencode-db-offload.service`가 재부팅 시 이전 (세션 중 이전 금지; `rsync -aX` + 마운트 후 `restorecon`)
+
+**Rollback Trigger**:
+- 재부팅 후 bind 마운트 미적용 → `netdata`, `~/.local/bin`, python site-packages 등 경로 소실
+- `opt-ai_data.mount` 실패로 boot 늘어남
+- 서비스가 잘못된 경로(빈 root 스냅샷)를 읽음
+
+**Rollback Steps**:
+```bash
+# 0) 조건: opencode 종료 상태에서만 (db 잠금 방지)
+# 1) fstab에서 offload 섹션 주석 처리 (16행경로 주석)
+sudo cp -a /etc/fstab /etc/fstab.bak.$(date +%Y%m%d)
+sudo sed -i '/^# ── root-volume offload binds/,/^\/opt\/ai_data\/system-savings\/home\/nltk_data/d' /etc/fstab
+# 또는 해당 bind 14행을 '#' 주석
+
+# 2) 현재 bind 해제 후 원본 경로로 복구
+#    (데이터는 system-savings에 있으므로 root로 역이전 후 umount)
+for mp in /opt/netdata /home/opc/.rustup /home/opc/.npm /home/opc/.cache \
+  /home/opc/.local/share/junie /home/opc/.local/share/claude /home/opc/.local/share/uv \
+  /home/opc/.local/n /home/opc/.local/bin \
+  /home/opc/.local/lib/python3.9 /home/opc/.local/lib/python3.11 /home/opc/.local/lib/python3.12 \
+  /home/opc/.local/lib/node_modules /home/opc/nltk_data; do
+  findmnt -n "$mp" >/dev/null && sudo umount "$mp" || true
+done
+
+# 3) system-savings → 원위치 복구 (root 용량 주의; 충분할 때만)
+# 예: rsync -a /opt/ai_data/system-savings/home/.cache/ /home/opc/.cache/
+#     (14곳 전체 유사; netdata는 /opt/ai_data/system-savings/netdata/ → /opt/netdata/)
+
+# 4) 일일 정리/타이머 비활성 (선택)
+sudo systemctl disable --now root-volume-daily-clean.timer
+sudo rm -f /etc/systemd/journald.conf.d/size.conf
+sudo systemctl restart systemd-journald   # MaxRetentionSec=2week 해제
+
+# 5) 재부팅 검증
+# findmnt /home/opc/.cache  → bind 없어야 정상, 경로에 기존 데이터 존재
+# systemctl is-active netdata
+```
+
+**Side Effects**:
+- Rollback 시 root 용량이 즉시 증가 — offload 전 상태(≈36G/45G)로 복귀 가능
+- `opencode-db-offload.service`가 아직 실행 전이면 db는 root에 남음 (무해)
+- journald 상한 해제 시 로그 재팽창 가능
+
+### 6.1 재부팅 후 체크리스트 (post-reboot)
+
+사용자가 `sudo reboot`를 실행한 뒤 **다음 세션 시작 시** 아래를 순서대로 확인한다.
+
+```bash
+# 1) offload bind 생존 — SOURCE=system-savings 14건 + opencode 이전 후 15건
+#    (TARGET는 원본 경로이므로 system-savings가 SOURCE에만 나타난다)
+findmnt -n -o SOURCE | grep -c system-savings   # 기대: 14 → opencode 이전 후 15
+
+# 2) opencode.db 이전 검증 (oneshot이 끝난 뒤)
+findmnt -M /home/opc/.local/share/opencode && df -h /
+ls -lh /opt/ai_data/system-savings/home/.local/share/opencode/opencode.db
+#   실패 시: opencode 종료 후 sudo /usr/local/sbin/opencode-db-offload.sh
+
+# 3) SELinux 라벨 (bind 직후 unlabeled 잔존 확인)
+findmnt -n -o TARGET | while read -r t; do
+  sudo ls -ldZ "$t" 2>/dev/null
+done | grep unlabeled_t || echo "labels OK"
+
+# 4) 핵심 서비스 / 경로
+systemctl is-active netdata caddy.service || true
+python3 -c "import site; print(site.getsitepackages())"   # python3.9 bind 경로
+sudo journalctl --disk-usage   # ≤ 200M
+
+# 5) WebObsidian 임시 drop-in 제거 (WEBOBSIDIAN-CGROUP 근본 해소)
+rm -f ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
+systemctl --user daemon-reload
+systemctl --user restart container-webobsidian.service
+systemctl --user is-active container-webobsidian.service
+```
+
+**승인 대기 / 재검토 (재부팅 후 사용자 확인):**
+- [ ] 승인 대기 3개 (wf-approvals) — 재부팅 후 재검토
+- [ ] 도메인 승인 항목 — 재부팅 후 재검토
+- [ ] a-1 boot LV 증량 — 용량 압박 재발 시 재고려 (현행 미증량 유지)
+- [ ] a-3 fstab 미러링 — 장단점은 별도 보고, 실행 여부 미결정
+- [ ] Slack Bot Token 재발급 — `auth.test` → `account_inactive` 확인됨 (C-1 테스트 완료, 키 무효)
+
+**성공 기준:** `findmnt … system-savings` = 15, root < 25%, `opencode.db`가 `system-savings`에 있고 bind 마운트 active, `unlabeled_t` 0건.
+
+---
+
 ## General Rollback Checklist
 
 Before any rollback:
@@ -295,5 +389,5 @@ After rollback:
 
 ---
 
-**Last Updated**: 2026-09-20  
+**Last Updated**: 2026-09-23  
 **Maintainer**: Automated via rollback-guide generation (manual edits preserved)

@@ -72,7 +72,7 @@ Key Vault는 시크릿 이름에 **밑줄(`_`)을 허용하지 않음** → 하�
 |----------------|---------------|
 | `OPENROUTER_MESIDS_API_KEY` | `OPENROUTER-MESIDS-API-KEY` |
 | `BRAVE_API_KEYS` | `BRAVE-API-KEYS` |
-| `DEVFORGE_DATABASE_URL` | `DEVFORGE-DATABASE-URL` |
+| `DEVFORGE_DATABASE_URL` | `DEVFORGE-DATABASE-URL` (2026-09-23 등록: `kv-common-prod-krc`·`kv-devforge-prod2-krc`, DSN host `127.0.0.1:5432`, 쓰기 SP `sp-aiagent-rbac-prod-krc`) |
 
 **복원 규칙**: Key Vault 조회 시 하이픈 → 밑줄 변환 (`kv-fetch-env.py`가 처리)
 
@@ -399,3 +399,45 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 ## 13. 최소 주입 + 키 로더 통합 (2026-09-22)
 
 서비스별 `--keys` 필터 + `load_api_keys` 통합 → `docs/runbooks/kv-least-privilege.md`.
+
+## 14. DataImpulse API 키 (2026-09-23)
+
+DataImpulse Gateway API(`https://gw.dataimpulse.com:777`) 사용량 모니터 도입에 따라
+시크릿 `DATAIMPULSE-API-KEY`(login, Basic Auth user)를 `kv-common-prod-krc`에 등록
+(쓰기 SP `sp-aiagent-rbac-prod-krc`로 set).
+
+> 정정(2026-09-23): 이후 정리로 `DATAIMPULSE-LOGIN/PASS/HOST/PORT`는 purge되고 **`DATAIMPULSE-API-KEY` + `DATAIMPULSE-PROXY-KEY`만 유지**한다(§14.1).
+
+- 코드 매핑: `DATAIMPULSE-API-KEY` → env `DATAIMPULSE_API_KEY` → `lib/dataimpulse_monitor._load_proxy_credentials`
+- 프록시 로더(`toki31_playwright._load_proxy_env`)도 `DATAIMPULSE_API_KEY`/`DATAIMPULSE_LOGIN`을 USER로 매핑
+- 서비스 주입: `ebook-watcher.service`/`ebook-api.service`의 `--keys DATAIMPULSE-*`에 자동 포함
+- 상세 런북: `docs/runbooks/dataimpulse-monitor.md`
+- 서버 하드코딩 금지: `.env.local`은 템플릿(값 없음), 실제 값은 KV만
+
+### 14.1 키 정리 + MaskProxy 제거 (2026-09-23)
+toki31에서 MaskProxy 폴백을 제거(407로 통과 불가)하고, 시크릿을 최소 집합으로 정리.
+
+- **유지**: `DATAIMPULSE-PROXY-KEY`, `DATAIMPULSE-API-KEY`, `MASKPROXY-PROXY-KEY`, `MASKPROXY-API-KEY`
+- **삭제(soft-delete)**: `DATAIMPULSE-LOGIN/PASS/HOST/PORT`, `MASKPROXY-USER/PASS/HOST/PORT`
+- `DATAIMPULSE-PROXY-KEY`(user:pass@host:port) 단독으로 프록시·API 모두 접근 가능(검증:
+  user=API-KEY, pass 유효). `DATAIMPULSE-API-KEY`는 user와 동일 값(중복)이나 식별용으로 유지.
+- **로더 수정**: `toki31_playwright._load_proxy_env`가 개별 PASS 없이도 PROXY-KEY에서
+  PASS/HOST/PORT를 setdefault로 채우도록 수정(USER만 있어도 동작).
+- **비노출 도구**: `scripts/deploy/kv-safe.py`
+  (`list`/`compare`/`set-from-env`/`set-from-file`) — 시크릿 값 절대 미출력, 해시/길이만.
+  AGENTS.md §0에 "KV 값 무출력·마스킹, `az ... show -o tsv` 금지" 규칙 추가 (§11 포인터).
+
+## 15. ebook 백엔드 평문 .env 제거 (2026-09-23)
+
+`apps/ebooklib/apps/backend/.env`(평문)를 KV로 이관 후 삭제.
+
+| 기존 .env 키 | KV 시크릿 | 코드가 읽는 env | 처리 |
+|--------------|-----------|----------------|------|
+| `ADMIN_PASSWORD` | `EBOOK-ADMIN-PASSWORD` | `EBOOK_ADMIN_PASSWORD` (fallback `ADMIN_PASSWORD`) | 이관 |
+| `CORS_ORIGINS` | `EBOOK-CORS-ORIGINS` | `EBOOK_CORS_ORIGINS` (fallback `CORS_ORIGINS`) | 이관 |
+| `ENV`, `DEBUG` | — | (미사용) | 폐기 |
+
+- **하드코딩 제거**: `routers/pipeline.py`의 기본값 `ADMIN_PASSWORD="01074604416"` 삭제 → 미설정 시 빈 문자열(인증 전면 거부).
+- **주입**: `ebook-api.service` `--keys`에 `EBOOK-*` 추가.
+- 로컬 개발: `load_dotenv`는 유지(파일 없으면 무해). `.env.local`은 템플릿.
+- 등록은 쓰기 SP `sp-aiagent-rbac-prod-krc`로 수행.

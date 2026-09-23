@@ -179,7 +179,7 @@ def _watchdog_service_factory() -> Any:
 ```bash
 #!/bin/bash
 set -euo pipefail
-# [WHY] KV에 DEVFORGE_DATABASE_URL이 없다(F4). mcp entrypoint와 동일하게 pod 내부 DSN을 구성.
+# [WHY] KV 미주입 시 폴백 (mcp entrypoint와 동일). KV DEVFORGE-DATABASE-URL은 2026-09-23 등록됨 — 가드는 방어적 유지.
 if [ -z "${DEVFORGE_DATABASE_URL:-}" ] && [ -n "${DEVFORGE_POSTGRES_PASSWORD:-}" ]; then
   export DEVFORGE_DATABASE_URL="postgresql+asyncpg://postgres:${DEVFORGE_POSTGRES_PASSWORD}@127.0.0.1:5432/devforge_app"
 fi
