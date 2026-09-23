@@ -1,16 +1,12 @@
 last_checkpoint:
-  time: '2026-09-23T02:48:40.953385+00:00'
-  summary: 3 source, 1 docs, 1 generated
-  total_files: 9
+  time: '2026-09-23T03:55:53.943386+00:00'
+  summary: 1 generated
+  total_files: 2
   recent_files:
     data: []
-    docs:
-    - server/docs/plans/error-record-analysis-design.md
+    docs: []
     config: []
-    source:
-    - server/scripts/proxies/model_score.py
-    - server/scripts/proxies/refresh_openrouter_free_models.py
-    - server/tests/unit/test_model_score.py
+    source: []
     generated:
     - server/collect_checkpoint.json
   git: {}
@@ -249,6 +245,22 @@ known_issues:
     우회 복구. 2026-09-20 07:04 KST 재부팅 실행(커널 cgroup 잔존 제거 목적). 재부팅 후 조치: (1) container-webobsidian 정상 기동 확인, (2) ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
     제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인. [2026-09-20 재발: webobsidian-workaround.slice EBUSY → drop-in Slice=webobsidian2.slice
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
+  resolved: false
+- id: OPENCODE-DB-ON-ROOT-2026-09-23
+  detail: 'opencode.db(~2G)+WAL/shm이 root boot LV에 잔존(세션 중 이전 불가). opencode-db-offload.service(oneshot,
+    multi-user.target, enabled)가 재부팅 시 /opt/ai_data/system-savings/home/.local/share/opencode로 rsync 후 fstab
+    bind 추가+mount. 검증: findmnt -M /home/opc/.local/share/opencode && df -h /. 실패 시 수동: opencode 종료 후
+    /usr/local/sbin/opencode-db-offload.sh.'
+  resolved: false
+- id: CLAUDE-PROJECTS-LOST-2026-09-23
+  detail: 'root offload 이전 중 /home/opc/.claude/projects(~112M, Claude Code 세션 jsonl 기록)가 rsync 실패(dest
+    parent 미생성) 후 mv+.old 제거로 소실. XFS라 복구 불가. history.jsonl은 보존. 재발 방지: 이전 시 반드시 dest
+    mkdir -p 선행 + rsync --remove-source-files 금지, 단계별 findmnt/df 검증.'
+  resolved: false
+- id: ROOT-BIND-REBOOT-2026-09-23
+  detail: 'fstab bind 14곳은 opt-ai_data.mount 의존. lv_ai_data 마운트 실패 시 netdata/홈 도구 경로 소실 가능.
+    재부팅 후 확인: findmnt | grep system-savings(원본 경로 14개 active), netdata active, python import 경로. 롤백:
+    docs/operations/rollback-guide.md §6.'
   resolved: false
 completed_log:
 - '(2026-09-20, opencode) task #25 착수 중 발견: 라이브 MCP=리팩터드 서버(18툴), scripts/mcp_server.py 레거시(25툴) 비활성. DEEPDIVE_STEP_BUDGETS
