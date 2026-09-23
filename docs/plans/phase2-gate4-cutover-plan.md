@@ -4,6 +4,7 @@
 - 기준: `docs/plans/phase2-detailed-guide-v2.md` (Gate 4 + Risk 1)
 - 대체: `/tmp/phase2-v21-gate4-plan.md` (초안) — 아래 §1에서 오류 11건 정정
 - 상태: 계획 확정 / 코드 선행(§2.1) 필요
+- **대체됨(2026-09-23)**: `docs/plans/watchdog-standard-compliance.md`(P1–P4 재설계)가 본 계획 §2.1–2.7을 대체. 본 문서는 배포 기록으로 보존.
 
 ---
 

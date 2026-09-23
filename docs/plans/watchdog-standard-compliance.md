@@ -36,7 +36,7 @@
 - 표준: **loopback 한정 publish**(`127.0.0.1:5432:5432`)가 보안 정석 (외부 인터페이스 미노출).
 
 ### 1.4 신뢰성·배포 (P3/P4)
-- `Type` 미지정(=simple) → 행(hang) 감지 불가. 표준은 `Type=notify`+`WatchdogSec`+`sd_notify`.
+- 컨테이너 quadlet은 conmon이 `Type=notify`를 제공하나 **`WatchdogSec` 미설정**(`WatchdogUSec=0`) → 행(hang) 감지 불가. 표준은 `Type=notify`+`WatchdogSec`+`sd_notify`.
 - `:latest` 이동 태그 → dangling 누적(109개/82GB). 표준은 immutable tag + retention.
 
 ---
@@ -160,15 +160,18 @@ async def _serve_loop() -> None:
 - 외부 의존성 없이 **소켓 프로토콜 직접 구현**(context7: *프로토콜은 libsystemd 없이 재구현 가능*, 안정 인터페이스).
 
 ### 4.2 유닛
-P2 유닛에 이미 반영(`Type=notify`, `NotifyAccess=main`, `WatchdogSec=180`, `Restart=on-watchdog`).
-- ping 주기 60s ≤ WatchdogSec/3(180) → 3배 여유.
+P2(호스트 유닛) 전환 후에만 유효하다. **현행 컨테이너 quadlet에는 `WatchdogSec`을 설정하지 않는다** — `--sdnotify=conmon` 모드에서 컨테이너 PID1에 `NOTIFY_SOCKET`이 전달되지 않아(`/proc/1/environ` 확인, 2026-09-23) 코드의 `_sd_notify("WATCHDOG=1")`가 no-op이고, `WatchdogSec`을 켜면 WATCHDOG 미수신으로 **오탐 재시작**이 발생한다.
+- 현행 행(hang) 감지는 **`devforge-watchdog-liveness.timer`**(5분 dead-man's switch, active)가 담당한다.
+- P2로 호스트 유닛(`~/.config/systemd/user/devforge-watchdog-v2.service`) 전환 시 `Type=notify`/`WatchdogSec=180`/`Restart=on-watchdog`가 실제로 동작한다(ping 60s ≤ WatchdogSec/3).
 
 **검증**
 ```bash
-systemctl --user show devforge-watchdog-v2 -p Type -p WatchdogUSec      # notify / 3min
-journalctl --user -u devforge-watchdog-v2 | grep -i watchdog            # 정상
-kill -STOP $(systemctl --user show -p MainPID --value devforge-watchdog-v2); sleep 200
-systemctl --user is-active devforge-watchdog-v2   # 재시작 확인(timeout kill)
+systemctl --user show devforge-watchdog-v2 -p Type -p WatchdogUSec   # notify / 0 (현행, 의도적)
+systemctl --user is-active devforge-watchdog-liveness.timer          # active (행 감지 대체)
+# P2 전환 후:
+# systemctl --user show devforge-watchdog-v2 -p Type -p WatchdogUSec # notify / 3min
+# kill -STOP $(systemctl --user show -p MainPID --value devforge-watchdog-v2); sleep 200
+# systemctl --user is-active devforge-watchdog-v2                    # 재시작 확인(timeout kill)
 ```
 
 > 근거: context7 `systemd.daemon.notify`(`READY=1`, `WATCHDOG=1`, `STATUS=`), systemd `sd_notify(3)` 안정 인터페이스.
@@ -190,7 +193,7 @@ systemctl --user is-active devforge-watchdog-v2   # 재시작 확인(timeout kil
 
 - [ ] P1: graphroot 부모 분리 + 인벤토리 diff 0 + `permission denied` 0
 - [ ] P2: 호스트 유닛에서 svc/timer/oneshot/ebook/system 오탐 0, host→DB `select 1` 성공
-- [ ] P3: `Type=notify`/`WatchdogSec` 동작 + 강제 hang 시 자동 재시작
+- [ ] P3: `Type=notify`/`WatchdogSec` 동작 + 강제 hang 시 자동 재시작 — **현행은 `WatchdogSec` 미적용(§4.2), liveness 타이머가 대체; P2 전환 후 활성**
 - [ ] P4: immutable tag + retention 문서화, dangling 0 근접
 - [ ] 전 단계: `pytest -x --tb=short`, `ruff check src/devforge`, `mypy src/devforge`, `lint-imports` (4 KEPT) green
 - [ ] shadow-run 24h 유효(비교 대상 유효)

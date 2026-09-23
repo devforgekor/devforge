@@ -162,6 +162,11 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 |--------|------|
 | `container-devforge-worker.container` | 환경변수 미사용 |
 
+**soft-delete 잔존 (1개, purge 대기):**
+| 시크릿 | 볼트 | 비고 |
+|--------|------|------|
+| `DROPLR-AUTH-TOKEN-KEY` | `kv-common-prod-krc` | 본 세션 산출물 아님(구 자격증명). purge는 쓰기 SP 필요 — 보안상 서비스 영향 없음(복구창 내). |
+
 **전환 보류: 없음** (fastapi는 2026-09-20 평문 DB URL 제거로 완료)
 
 ### 4.3 GPG 백업

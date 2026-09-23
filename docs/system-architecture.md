@@ -103,7 +103,7 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 |---|---|---|
 | `devforge-watchdog` | `scripts/watchdog.py` | 서비스/타이머/컨테이너/디스크 감시·복구 |
 | `devforge-turn-watcher` | `scripts/turn_watcher.py` | 대화 로그 → turns(raw) 수집 |
-| `devforge-day-cycle` | `scripts/day_cycle.sh` | 일일 파이프라인 체인 |
+| `devforge-day-cycle` | `scripts/day_cycle.sh` | 일일 파이프라인 체인 (oneshot; 타이머 없음 — watchdog `orchestrator.py`가 pending 턴 존재 시 `start`로 기동) |
 | `devforge-system-sync` | `scripts/system_sync.sh` | DuckDNS + autocommit (문서생성 은퇴 2026-09-14) |
 | `devforge-backup` | `scripts/osync_backup.py all` | OCI 백업(DB+앱) |
 | `devforge-restore-test` | `scripts/osync_restore_test.py` | 월간 복원 검증 |
