@@ -3,6 +3,7 @@
 # Path: tests/conftest.py — shared pytest fixtures for all test_*.py files
 """Shared pytest fixtures for DevForge server tests."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,15 @@ def pytest_configure(config: Any) -> None:
 
     config.addinivalue_line("markers", "integration: marks tests that hit real DB / LLM / services")
     config.addinivalue_line("markers", "slow: marks slow tests (> 10s) — use -m 'not slow' to skip")
+
+    # [WHY] Characterization tests assert the DSN *shape* via get_config(), which
+    # reads the real environment. Without a DSN the suite is env-dependent and
+    # fails in a bare shell. Set a non-secret placeholder only when unset, so a
+    # real DSN still wins and tests are self-contained.
+    os.environ.setdefault(
+        "DEVFORGE_DATABASE_URL",
+        "postgresql+asyncpg://postgres:placeholder@127.0.0.1:5432/devforge_app",
+    )
 
 
 # ── fixtures ──────────────────────────────────────────────────────────
