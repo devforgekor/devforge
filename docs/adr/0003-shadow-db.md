@@ -21,4 +21,4 @@ During refactoring, parallel execution (shadow) requires:
 - Phase 3.5 parallel validation can run both pipelines without DB conflicts
 - LLM non-determinism eliminated in shadow tests via replay
 - Shadow DB can be dropped after cutover (`DROP SCHEMA devforge_shadow CASCADE;`)
-- **Gap**: refactored pipeline (`application/orchestrator` + `pipeline_stages`) is still a stub, so the real shadow run producing `review_facts_shadow` for the diff=0 gate is pending Phase C implementation.
+- **Gap (2026-09-23)**: `application/orchestrator.py`(골격)·`pipeline_stages/extract`는 존재하나, devforge가 소유하는 **embed** 단계는 미구현(Phase 3, D6=A) → `review_facts_shadow`를 생성하는 실제 shadow run과 2주 diff=0 게이트는 Phase 3 착수 후.

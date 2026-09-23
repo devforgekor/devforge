@@ -14,12 +14,12 @@
 ## 1. 현황 (As-Is)
 
 ### 1.1 리팩토링 완료분 (유지)
-- `src/devforge`: `core/{config,logging}`, `domain/models`(live 정합), `ports/extract`, `adapters/driven/{llm,storage}`, `adapters/driving/{api,mcp,cli_cmds}`, `application/extract_pipeline`, `pipeline_stages/extract`.
-- 인프라: Alembic baseline(`alembic check` clean), ORM↔live 정합, `docs/specs/schema.sql`(16 테이블), shadow DB(`devforge_shadow`).
+- `src/devforge`: `core/{config,logging,paths,exceptions}`, `domain/models`(live 정합), `ports/{extract,container,health_check,heartbeat,incident_repository,notification,recovery,state_persistence,types}`, `adapters/driven/{llm,storage,health,container,recovery,notification,research,proxy_utils}`, `adapters/driving/{api,mcp,cli_cmds}`, `application/{extract_pipeline,orchestrator,watchdog_service}`, `domain/watchdog/{monitoring,orchestration,recovery}`, `pipeline_stages/extract`.
+- 인프라: Alembic baseline(`alembic check` clean), ORM↔live 정합, `docs/specs/schema.sql`(16 테이블), shadow DB(`devforge_shadow` 라이브).
 
 ### 1.2 컷오버 미완 (라이브 의존성)
-- 라이브는 여전히 **systemd 유닛 22개 + Quadlet 컨테이너 3개**가 `scripts/*`를 실행.
-- `devforge`에 `domain/{watchdog,turn_collection,pipeline,model_management}`·`adapters/driven/{notification,research,proxy_utils}` = **0줄 stub**.
+- 라이브는 여전히 **systemd 유닛 30개 + Quadlet 컨테이너 다수**가 `scripts/*`를 실행.
+- Phase 0/1/1.5 완료, **Phase 2(watchdog) shadow-run(2.5)** — `devforge-watchdog-v2.service`가 legacy와 병행. `IssueCollector`·MCP `watchdog_*` 분리 잔여.
 - 은퇴: `gen_architecture.py`(문서생성기), Gemini 에이전트 세션 → `_archive/`.
 
 ### 1.3 MCP 툴 감사 (30일, opencode `part` DB)

@@ -67,7 +67,7 @@
 
 > **안정화 기간**: 리팩토링 후 버그 수정, 잔여 도메인 마무리, 팀 온보딩. **KPI 측정 시작**.
 >
-> **최종 통합 계획(컷오버 + MCP 최적화 + 의사결정)**: [`docs/plans/final-plan.md`](./plans/final-plan.md) — 라이브 systemd 유닛 22개/Quadlet 3개의 `scripts/*` → `devforge` 전환 + MCP 툴 최적화 + 결정 D1~D9.
+> **최종 통합 계획(컷오버 + MCP 최적화 + 의사결정)**: [`docs/plans/final-plan.md`](./plans/final-plan.md) — 라이브 systemd 유닛 30개/Quadlet 다수의 `scripts/*` → `devforge` 전환 + MCP 툴 최적화 + 결정 D1~D9.
 
 ---
 

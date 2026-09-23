@@ -93,9 +93,11 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 > `/opt/ai_data/pip-cache`에 cp312 aarch64 wheel 존재 확인 — 캐시 비면 `import typer`
 > 실패 crash loop(§OPERATIONS_GUIDE DSN 주입 참조).
 >
-> **코드 레이어 주의(2026-09-14)**: 위 서비스/컨테이너의 `ExecStart`는 아직 레거시
-> `scripts/*`를 가리킨다. 리팩토링 최종본은 `src/devforge/` 패키지(§3.5)이며
+> **코드 레이어 주의(2026-09-23)**: 위 서비스/컨테이너의 `ExecStart`는 아직 레거시
+> `scripts/*`를 가리킨다(라이브 유닛 30개). 리팩토링 최종본은 `src/devforge/` 패키지(§3.5)이며
 > **컷오버는 미완료**다 — `devforge` CLI는 설치·동작하지만 라이브 서비스는 미사용.
+> Phase 0/1/1.5 완료, Phase 2(watchdog)는 shadow-run(2.5): `devforge-watchdog-v2.service`가
+> legacy와 병행. 진행 SSOT: `docs/refactoring/REFACTORING_STATUS.yaml`.
 
 ### 3.2 systemd --user 서비스 (대표)
 
