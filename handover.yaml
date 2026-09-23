@@ -1,20 +1,13 @@
 last_checkpoint:
-  time: '2026-09-23T05:07:06.35806+00:00'
-  summary: 3 source, 1 config, 4 docs, 1 generated
-  total_files: 13
+  time: '2026-09-23T12:12:01.138192+00:00'
+  summary: 1 config, 1 generated
+  total_files: 11
   recent_files:
     data: []
-    docs:
-    - server/docs/operations/rollback-guide.md
-    - server/docs/reference-tracking-policy.yaml
-    - server/docs/runbooks/daily-server-maintenance.md
-    - server/docs/system-architecture.md
+    docs: []
     config:
-    - server/blueprint.yaml
-    source:
-    - server/scripts/lib/watchdog/checker.py
-    - server/scripts/lib/watchdog/config.py
-    - server/scripts/lib/watchdog/recovery.py
+    - server/systemd/user/ebook-api.service
+    source: []
     generated:
     - server/collect_checkpoint.json
   git: {}
@@ -213,6 +206,10 @@ decisions:
     실패, caddy.service itself active), reference-monitor(rss-monitor가 policy yaml 미탐지 — 아카이브에만 존재), webobsidian activating(NRestarts
     236, WEBOBSIDIAN-CGROUP drop-in 잔존). 재부팅 체크리스트는 rollback-guide §6.1.'
   status: resolved
+- id: root-reboot-decision-2026-09-23
+  detail: '(2026-09-23, 사용자 확정) root offload 재부팅 후속 결정: (a-1) boot LV 증량 = 현 상태 유지 확정(미증량). (a-3) fstab 미러링 = 미설정 결정 — 대신
+    원샷(oneshot) 로직 보강으로 대체. (별건) Slack Bot Token 재발급 = 보류 유지(사용자 설정 검토 중).'
+  status: resolved
 known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
@@ -294,8 +291,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) 190 enrich 종결: churn 제거(Watchdog 소유권+Restart=no) 후 enrich 1턴 완주 검증(1 enriched, 247s). RemoteDisconnected는
-  churn 리셋이 원인.'
 - '(2026-09-20, opencode) 임베딩 검증: churn-off에서 embed_batch 완주(1 ok/0 failed, embeddings 3554→3555, :8081=200). 임베딩 정지 원인은 churn이
   embed 모드를 깨뜨린 것. decision embedding-unblocked-2026-09-20.'
 - '(2026-09-20, opencode) watchdog "처리중 vs 행" 로직 활성화: _llm_is_busy(/slots is_processing)로 busy면 probe 실패를 장애로 보지 않고 recovery
@@ -454,3 +449,6 @@ completed_log:
 - '2026-09-23: _run_timers kick --no-block (oneshot 26s>10s timeout 제거); check_timer에 ExecMainStartTimestamp 포함'
 - '2026-09-23: REFERENCE-MONITOR-POLICY-MISSING resolved=True (gate_result pass/fail 수정 반영)'
 - '2026-09-23: ruff/mypy/pytest/lint-imports 최종 검증 전부 통과'
+- '(2026-09-23, opencode) a-3 후속 확인: fstab 미러링 미설정 대신 watchdog 보강으로 대체 확인. ONESHOT_RESULT_TARGETS에 root-volume-daily-clean.service·opencode-db-offload.service
+  추가, check_oneshot_result가 타이머 LastTrigger 대신 ActiveState/Result로 판정 + system-scope 폴백 (commit 9f9dd33). 라이브 프로브: root-volume-daily-clean=success,
+  opencode-db-offload=success.'
