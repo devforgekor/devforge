@@ -78,7 +78,7 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 | `devforge-mcp` | svc | MCP 서버 (:8000), `devforge.adapters.driving.mcp.server` (리팩터드; `scripts/mcp_server.py`는 비활성 레거시) |
 | `devforge-inference` | (동적) | llama.cpp server :8080-8084 (mode별 모델) |
 | `data-pod-infra` | data-pod | legacy pod infra |
-| `caddy` (rootful) | — | reverse proxy, host net |
+| `caddy` (rootful) | — | reverse proxy, host net. 컨테이너 healthcheck 없음 → **host-side** `caddy-health-check.timer`(curl `:2019/config/`, 1분, 3연속 실패 시 restart) |
 
 > 서비스 발견/상태는 `cli.py status --json`이 SSOT. 컨테이너는 quadlet
 > (`~/.config/containers/systemd/`)로 관리. 비활성 quadlet은 반드시

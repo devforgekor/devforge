@@ -272,6 +272,25 @@ az sig image-version create \
   --replica-count 1
 ```
 
+### 1.6.1 운영 창 체크리스트 (FX2ms_v2 부팅 호환 — known_issue `az-gi-k1`)
+
+이미지 정의/배포를 만지는 **운영 창**에서 착수 전/후 확인한다.
+
+**착수 전 진단**
+```bash
+# 1) 이미지 정의 features에 DiskControllerTypes=SCSI,NVMe 병기 확인 (NVMe 단독이면 부팅 실패)
+az sig image-definition show -g rg-devforge-prod-cin --gallery-name gallery_devforge_prod_cin \
+  --gallery-image-definition llm-qwen-27b --query "features" -o json
+# 2) SKU 가용성 (E4s_v3 = NotAvailableForSubscription → FX2ms_v2 단일 유지)
+az vm list-skus -l centralindia --size Standard_FX2ms_v2 --query "[].restrictions" -o json
+```
+
+**체크리스트**
+- [ ] 이미지 정의 features에 `DiskControllerTypes=SCSI,NVMe` **병기** (NVMe 단독 금지)
+- [ ] 배포 SKU = `Standard_FX2ms_v2` (E4s_v3 사용 금지 — 구독 미제공)
+- [ ] 배포 후 부팅 로그에 `cannot boot ... DiskControllerTypes supported: NVMe` **부재**
+- [ ] 실패 시 `golden-image-deploy-check.timer`(15분) 재시도 큐 확인
+
 ### 1.7 임시 리소스 정리
 
 ```bash

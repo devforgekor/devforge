@@ -119,6 +119,24 @@ KV 개별 키(`CONTEXT7_*_API_KEY`)를 `label:value`로 조합해야 동작한�
 - **나머지 17개 유닛은 롤백**(3.9/3.11 유지) → 컷오버로 이월. 커밋 `7d6ac60`.
 - 검증 없이 일괄 이관했다가 되돌린 이력: `2bcc515`(일괄) → `7d6ac60`(17개 롤백).
 
+### 다음 배치 (사전 준비 — shadow-run 창 이후)
+
+전환 대상(legacy 3.9 유지 유닛)은 실행 시점에 재열거한다:
+
+```bash
+# ExecStart에 python3.12 미지정 user 유닛 (legacy 3.9 후보)
+grep -L "python3.12" ~/.config/systemd/user/*.service
+```
+
+절차(검증 선행, 서비스별):
+1. 대상 스크립트를 `python3.12 -c "import ..."` 또는 `--dry-run`으로 import/동작 검증.
+2. `ExecStart`의 `/usr/bin/python3` → `/usr/bin/python3.12` 변경(미러=SSOT → `sync-units.sh`).
+3. `daemon-reload` + restart + health 확인. 실패 시 즉시 원복.
+4. 검증 통과분만 배치, 실패분은 3.9 유지.
+
+> **제약**: watchdog v2 shadow-run 창(09-23 13:32 ~ 09-24 13:32 UTC) 동안은 모니터링 대상 서비스 재기동이
+> 비교를 교란하므로 **창 이후** 착수. `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
+
 ### 롤백
 - `git checkout` pyproject/Dockerfile/ci + `daemon-reload`. 3.9 환경은 그대로 남아 있음.
 

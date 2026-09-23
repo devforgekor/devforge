@@ -60,6 +60,12 @@
 | DataImpulse 대시보드 모니터(런북) | `runbooks/dataimpulse-monitor.md` | active |
 | Web LLM(Qwen/DeepSeek) CLI 운영(런북) | `runbooks/web-llm.md` | active |
 | WebObsidian 웹 열람/편집(런북) | `runbooks/webobsidian.md` | active |
+| **일일 서버 점검(런북)** | `runbooks/daily-server-maintenance.md` | active |
+| **rootless graphroot 격리(런북)** | `runbooks/rootless-graphroot-isolation.md` | active |
+| KV 최소권한(런북) | `runbooks/kv-least-privilege.md` | active |
+| cross-DB 동기화(런북) | `runbooks/cross-db-sync-guide.md` | active |
+| 일정/캘린더 동기화(런북) | `runbooks/timetable-calendar-sync.md` | active |
+| **Caddy healthcheck(host-side)** | `system-architecture.md` §3.2 · `caddy-health-check.{service,timer}` | active |
 
 ### 4) 뷰어 / 프론트
 | 문서 | 상태 |
@@ -101,6 +107,10 @@
 | **Phase 2 Gate 4 컷오버 실행 계획** | `plans/phase2-gate4-cutover-plan.md` | superseded |
 | Phase 2 Gate 4 코드 선행 스펙 | `plans/phase2-gate4-code-prereq.md` | record |
 | **Watchdog 표준 정합 재설계(P1–P4)** | `plans/watchdog-standard-compliance.md` | active |
+| DataImpulse 감시 위임(watchdog) | `plans/dataimpulse-watchdog-delegation.md` | active |
+| 오류 상세 기록 설계(3계층) | `plans/error-record-analysis-design.md` | active |
+| Agent handover DB 설계 | `plans/agent-handover-db-design.md` | active |
+| 에이전트 규칙 동기화 재설계 | `plans/agents-sync-redesign-guide.md` | record |
 | **Python 런타임 버전 전략(현황+이관안)** | `plans/python-version-strategy.md` | active |
 | **Phase 3 계획(embed 이관, D6=A)** | `plans/phase3-plan.md` | approved |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
@@ -115,6 +125,10 @@
 - **컷오버 미착수**: 라이브 유닛 30개가 아직 `scripts/*` 실행(`plans/final-plan.md` §5 Phase A~I).
 - **root offload 후속 확정**: boot LV 증량 미수행 유지, fstab 미러링 미설정(대신 watchdog 원샷 결과 감시 보강). decision `root-reboot-decision-2026-09-23`.
 - **운영**: `docs/runbooks/daily-server-maintenance.md` §11 root offload·journald 상한 반영, `docs/operations/rollback-guide.md` §6.1 재부팅 체크리스트.
+- **known_issue 정리(4건 종료)**: `OPENCODE-DB-ON-ROOT`·`WEBOBSIDIAN-CGROUP`·`CORE-DB-UNWIRED`·`ROOT-BIND-REBOOT` → resolved.
+- **known_issue 종료(3건)**: `CLAUDE-PROJECTS-LOST`(XFS 복구불가·재발방지 문서화 `rollback-guide` §6.2), `DATAIMPULSE-CHECK-BROKEN`(깨진 import 재현 안됨·ebooklib 죽은 함수 제거), `CADDY-HEALTHCHECK-UNHEALTHY`(컨테이너 healthcheck 제거 → **host-side** `caddy-health-check.timer`).
+- **인프라**: rootless graphroot를 `/opt/ai_data/rootless-storage`로 격리(rootful과 부모 공유 제거, podman 5.6 DB static-dir 마이그레이션). 런북 `rootless-graphroot-isolation.md` §4.5 보강.
+- **shadow-run 창 리셋**: graphroot 이동으로 watchdog v2 재기동 → Phase 2.5 24h 창 = **09-23 13:32 ~ 09-24 13:32 UTC**. P2/컷오버는 창 만료 후.
 
 ## 최근 변경 (2026-09-21)
 - **Phase 0 Week 1 완료**: `core/database.py`·`core/paths.py`(SSOT)·`core/exceptions.py`, import-linter 4 계약(위반 주입으로 강제 검증). 진행 추적은 [`refactoring/REFACTORING_STATUS.yaml`](./refactoring/REFACTORING_STATUS.yaml), 로그는 [`refactoring/phase0-work-log.md`](./refactoring/phase0-work-log.md).

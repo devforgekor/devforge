@@ -10,10 +10,10 @@
 
 ```bash
 # 전제: opc 로그인 셸 (rootless). rootful caddy는 영향 없음.
-# 1) 서비스 중지  2) graphroot 이동  3) 설정 변경  4) 재기동  5) 검증
-systemctl --user stop devforge-watchdog-v2 ...        # §3
-mv /opt/ai_data/containers/storage /opt/ai_data/rootless-storage   # §4
-# storage.conf graphroot 수정 (§5) 후 daemon-reload + 재기동 (§6)
+# 1) 서비스 중지  2) graphroot 이동  3) DB 경로 마이그레이션  4) 설정 변경  5) 재기동  6) 검증
+systemctl --user stop devforge-watchdog.service devforge-watchdog-v2 ...   # §3
+mv /opt/ai_data/containers/storage /opt/ai_data/rootless-storage           # §4
+# podman DB static-dir 갱신 (§4.5, 필수) → storage.conf graphroot 수정 (§5) → daemon-reload + 재기동 (§6)
 ```
 
 ---
@@ -64,7 +64,7 @@ Quadlet 유닛과 pod를 정지한다. **rootful caddy는 건드리지 않는다
 ```bash
 # 3-1. Quadlet 기반 유닛 정지 (pod 단위 유닛 포함)
 systemctl --user stop \
-  devforge-watchdog-v2.service \
+  devforge-watchdog.service devforge-watchdog-v2.service \
   container-devforge-fastapi.service \
   container-devforge-mcp.service \
   container-devforge-worker.service \
@@ -97,6 +97,30 @@ ls /opt/ai_data/containers/                      # storage 없음, root-storage�
 
 ---
 
+### 4.5 podman DB static-dir 마이그레이션 (podman ≥5, **필수**)
+
+graphroot를 옮기면 podman이 `database static dir ... does not match our static dir ...`로 **모든 명령을 거부**한다.
+libpod DB(`graphroot/db.sql`, sqlite)의 `DBConfig`·`VolumeConfig`에 이전 경로가 기록돼 있기 때문. DB를 갱신한다.
+
+```bash
+cp -a /opt/ai_data/rootless-storage/db.sql /opt/ai_data/rootless-storage/db.sql.bak.$(date +%Y%m%d)
+python3 - <<'PY'
+import sqlite3
+db = '/opt/ai_data/rootless-storage/db.sql'
+OLD, NEW = '/opt/ai_data/containers/storage', '/opt/ai_data/rootless-storage'
+c = sqlite3.connect(db)
+c.execute('UPDATE DBConfig SET StaticDir=replace(StaticDir,?,?), '
+          'GraphRoot=replace(GraphRoot,?,?), VolumeDir=replace(VolumeDir,?,?)',
+          (OLD, NEW, OLD, NEW, OLD, NEW))
+for name, js in list(c.execute('SELECT Name, JSON FROM VolumeConfig')):
+    if js and OLD.encode() in js:
+        c.execute('UPDATE VolumeConfig SET JSON=? WHERE Name=?', (js.replace(OLD.encode(), NEW.encode()), name))
+c.commit()
+PY
+podman ps   # 이제 동작해야 함 (rc=0)
+```
+> podman 5.6.0(sqlite) 기준 실측. 경로가 다른 테이블에 더 있으면 `PRAGMA table_info` + `LIKE '%<old>%'`로 전수 확인.
+
 ## 5. 설정 변경
 
 rootless graphroot를 새 경로로 지정한다.
@@ -121,10 +145,10 @@ systemctl --user start \
   svc-pod.service data-pod.service \
   container-postgres.service container-devforge-fastapi.service \
   container-devforge-mcp.service container-devforge-worker.service \
-  container-flaresolverr.service 2>&1
+  container-flaresolverr.service container-webobsidian.service 2>&1
 
-# 정상 기동 후 shadow watchdog 재개
-systemctl --user start devforge-watchdog-v2.service
+# 정상 기동 후 watchdog 재개 (legacy + shadow v2)
+systemctl --user start devforge-watchdog.service devforge-watchdog-v2.service
 ```
 
 ---
@@ -163,15 +187,17 @@ journalctl --user -u devforge-watchdog-v2 --since "-5 min" | grep -i "permission
 문제 시 원복(서비스 중지 → 경로/설정 복원 → 재기동).
 
 ```bash
-systemctl --user stop devforge-watchdog-v2.service svc-pod.service data-pod.service \
+systemctl --user stop devforge-watchdog.service devforge-watchdog-v2.service svc-pod.service data-pod.service \
   container-postgres.service container-devforge-fastapi.service \
   container-devforge-mcp.service container-devforge-worker.service container-flaresolverr.service
+cp -a /opt/ai_data/rootless-storage/db.sql.bak.<날짜> /opt/ai_data/rootless-storage/db.sql   # DB 경로 원복
 mv /opt/ai_data/rootless-storage /opt/ai_data/containers/storage
 cp ~/.config/containers/storage.conf.bak.<날짜> ~/.config/containers/storage.conf
 systemctl --user daemon-reload
 systemctl --user start svc-pod.service data-pod.service container-postgres.service \
   container-devforge-fastapi.service container-devforge-mcp.service \
-  container-devforge-worker.service container-flaresolverr.service
+  container-devforge-worker.service container-flaresolverr.service container-webobsidian.service
+systemctl --user start devforge-watchdog.service devforge-watchdog-v2.service
 ```
 
 ---
@@ -180,6 +206,8 @@ systemctl --user start svc-pod.service data-pod.service container-postgres.servi
 
 - **SELinux**: 동일 볼륨 내 rename이므로 라벨 재부여 불필요. 경로 변경 후 문제가 있으면 `sudo restorecon -R /opt/ai_data/rootless-storage`.
 - **Quadlet 경로 하드코딩**: 유닛이 graphroot를 명시하면 수정 필요. 현재 Quadlet은 graphroot를 참조하지 않음(기본값 사용) → `daemon-reload`만으로 반영.
+- **podman DB static-dir**: graphroot 이동 시 **§4.5를 반드시 선행**하지 않으면 podman이 `database configuration mismatch`로 전 명령을 거부한다(podman ≥5 sqlite). DB 백업(`db.sql.bak`)은 롤백에 필요.
+- **legacy watchdog 간섭**: `devforge-watchdog.service`(legacy)가 정지된 서비스를 자동 재기동하므로 §3에서 함께 정지한다.
 - **동시 작업 금지**: rootless podman 전체 정지가 필요하므로 **다른 rootless 작업이 끝난 뒤** 실행.
 - **watchdog shadow-run**: 본 작업으로 중단되므로 완료 후 재기동. 24h 모니터링 타이머는 재기동 시점부터 재계산 권장.
 - **성공 기준**: §7(a)의 두 graphroot 부모가 다르고, §7(b) diff가 비어 있으며, §7(d)에 `permission denied`가 없을 것.

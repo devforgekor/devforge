@@ -101,8 +101,10 @@ Environment=PYTHONPATH=/opt/projects/server/src:/opt/projects/server/scripts
 Environment=WATCHDOG_DRY_RUN=1
 Environment=WATCHDOG_STATE_FILE=/opt/ai_data/scripts/watchdog_state.v2.json
 Environment=WATCHDOG_CHECK_INTERVAL_SEC=60
-EnvironmentFile=%h/.config/devforge/watchdog.env
+ExecStartPre=/opt/projects/server/scripts/deploy/kv-export-env.sh %t/kv-devforge-watchdog.env DEVFORGE-DATABASE-URL,DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL
+EnvironmentFile=%t/kv-devforge-watchdog.env
 ExecStart=/usr/bin/python3.12 -m devforge.cli watchdog serve
+ExecStopPost=/bin/rm -f %t/kv-devforge-watchdog.env
 WatchdogSec=180
 Restart=on-watchdog
 RestartSec=30
@@ -111,8 +113,18 @@ TimeoutStopSec=30
 [Install]
 WantedBy=default.target
 ```
-- `watchdog.env` = `kv-export-env.sh`로 생성(DSN+Slack): `DEVFORGE_DATABASE_URL`, `DEVFORGE_POSTGRES_PASSWORD`, `SLACK_BOT_TOKEN_KEY`, `SLACK_CHANNEL`.
-- DSN 소스: KV `DEVFORGE-DATABASE-URL` (2026-09-23 등록). 호스트 유닛은 entrypoint가 없으므로 env 파일로 DSN을 직접 주입한다(폴백 없음).
+- KV 주입: `ExecStartPre`(`kv-export-env.sh`)가 `%t/kv-devforge-watchdog.env` 생성 → `EnvironmentFile`. DSN 소스 = KV `DEVFORGE-DATABASE-URL`(2026-09-23 등록).
+- **`_sd_notify`는 raw AF_UNIX 소켓 구현**(`cli_cmds/watchdog.py:34`) → **libsystemd/`systemd.daemon` 불필요**, python3.12에서 `Type=notify`/`WatchdogSec` 그대로 동작(실측 확인).
+- `devforge`는 python3.12에 editable 설치 완료(`python-version-strategy.md`). 미설치 환경이면 `pip install --user -e .` 선행.
+
+**P2 착수 체크리스트 (shadow-run 창 만료 후)**
+- [ ] shadow-run 창 만료(≥2026-09-24 13:32 UTC) + 비교 유효
+- [ ] `devforge-watchdog-v2.container` → `_disabled/` 이동(동일 이름 `.service` 충돌 방지)
+- [ ] 위 `.service`를 미러(`systemd/user/`)에 두고 `sync-units.sh`로 배포
+- [ ] `daemon-reload` → `container-devforge-watchdog-v2.service` stop → `devforge-watchdog-v2.service` start
+- [ ] `systemctl --user show devforge-watchdog-v2 -p Type -p WatchdogUSec` (=notify, 3min)
+- [ ] 오탐 0(svc/timer/oneshot/ebook/system) + host→DB `select 1`
+- [ ] legacy 중단(P2.6) — shadow 비교 종료 후
 - P2 실행 시 기존 컨테이너 quadlet `devforge-watchdog-v2.container`를 **제거**(동일 이름 `.service`로 대체) — 이름 충돌 방지. **현재(2026-09-23)는 컨테이너 quadlet으로 shadow 실행 중이며 P2 미실행.**
 - `PYTHONPATH`에 `scripts` 포함: health adapter가 `lib.watchdog.config` 등 레거시 설정을 import할 수 있음(패리티 테스트 기준).
 
@@ -191,12 +203,16 @@ systemctl --user is-active devforge-watchdog-liveness.timer          # active (�
 
 ## 6. 단계별 검증 게이트
 
-- [ ] P1: graphroot 부모 분리 + 인벤토리 diff 0 + `permission denied` 0
+- [x] P1: graphroot 부모 분리 + 인벤토리 diff 0 + `permission denied` 0 — **완료 2026-09-23** (rootless→`/opt/ai_data/rootless-storage`; runbook §4.5 DB 마이그레이션 포함)
 - [ ] P2: 호스트 유닛에서 svc/timer/oneshot/ebook/system 오탐 0, host→DB `select 1` 성공
 - [ ] P3: `Type=notify`/`WatchdogSec` 동작 + 강제 hang 시 자동 재시작 — **현행은 `WatchdogSec` 미적용(§4.2), liveness 타이머가 대체; P2 전환 후 활성**
 - [ ] P4: immutable tag + retention 문서화, dangling 0 근접
 - [ ] 전 단계: `pytest -x --tb=short`, `ruff check src/devforge`, `mypy src/devforge`, `lint-imports` (4 KEPT) green
 - [ ] shadow-run 24h 유효(비교 대상 유효)
+
+> **P2 착수 게이트(shadow-run)**: graphroot 이동으로 watchdog v2가 재기동되어 Phase 2.5 창이 리셋됨 →
+> **현재 창 = 2026-09-23 13:32 ~ 09-24 13:32 UTC**. P2(및 컷오버)는 이 창 만료 후 착수한다(조기 전환 시 비교 무효).
+> 착수 전 §3 P2 절차의 `devforge-watchdog-v2.container` 제거 → 동일 이름 호스트 유닛 대체를 재확인.
 
 ---
 

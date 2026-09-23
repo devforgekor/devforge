@@ -361,6 +361,26 @@ systemctl --user is-active container-webobsidian.service
 
 **성공 기준:** `findmnt … system-savings` = 15, root < 25%, `opencode.db`가 `system-savings`에 있고 bind 마운트 active, `unlabeled_t` 0건.
 
+### 6.2 데이터 이전 안전 수칙 (재발 방지, 2026-09-23)
+
+`/home/opc/.claude/projects`(~112M, Claude Code 세션 jsonl)가 이전 중 **소실**됐다(XFS, 복구 불가) —
+rsync가 dest 부모 미생성으로 실패한 뒤 `mv` + `.old` 제거가 실행됨. `history.jsonl`은 보존. 모든 홈 데이터 이전에 적용:
+
+```bash
+# 1) dry-run으로 대상/용량 먼저 확인
+rsync -aX --dry-run --itemize-changes "$SRC/" "$DEST/"
+# 2) dest 부모 반드시 선행 생성
+mkdir -p "$DEST"
+# 3) 이전 (--remove-source-files 금지 — 검증 전 소스 삭제 금지)
+rsync -aX "$SRC/" "$DEST/"
+# 4) 검증: 파일 수/용량 대조 후에만 원본 정리
+find "$SRC" | wc -l; find "$DEST" | wc -l; du -sh "$SRC" "$DEST"
+# 5) bind 마운트/용량 확인
+findmnt -M "$DEST"; df -h /
+```
+
+> **금지**: rsync 실패 상태에서 `mv` + `rm`(.old)로 원본을 정리하는 것 — 검증 없는 파괴적 정리.
+
 ---
 
 ## General Rollback Checklist

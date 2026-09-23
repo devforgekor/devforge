@@ -397,6 +397,33 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 - 런타임은 신규 KV로 완전 전환되어 구 KV 미사용(영향 없음).
 - **2026-12-20** 재생성·`prod2` 이관 예정: task **#38**, handover `KV-NAME-REUSE-2026-12`.
 
+### 재생성/이관 사전 절차 (2026-12, task #38)
+
+**타임라인**: purge protection 만료 **2026-12-09** → 이관 착수 **2026-12-20 이후**.
+
+**사전 점검 (지금 ~ 12-09)**
+```bash
+# 1) 런타임이 구 KV 이름을 참조하지 않는지 (구 KV = kv-devforge-prod-krc, sub 89c6a8ee)
+grep -rn "89c6a8ee\|b08cd1bf" /opt/projects/server/scripts /opt/projects/server/containers ~/.config/systemd/user 2>/dev/null | grep -v _archive
+# 2) 현행 다중 KV URL 확인 (prod2만 사용해야 정상)
+grep -n "AZURE_KEYVAULT_URLS\|vault.azure.net" scripts/deploy/kv-fetch-env.py | head
+# 3) 이관 대상 시크릿 인벤토리 (devforge 16개) + GPG 백업 최신성
+python3 scripts/deploy/kv-safe.py list kv-devforge-prod2-krc | wc -l
+ls -lt ~/.config/devforge/backups/*.gpg | head -1
+```
+
+**실행 (12-20 이후, 승인 필요)**
+1. 퍼지 확인: `az keyvault list-deleted` → 구 KV 부재 확인.
+2. 신규 테넌트(9ec65251 / sub a942e898)에 `kv-devforge-prod-krc` **재생성**.
+3. `prod2`의 devforge 시크릿 이관(`kv-safe.py set-from-file`/`kv-backup.py`) → 값 해시 **MATCH** 검증.
+4. SP `abc5aab0`에 **get/list** Access Policy 부여(쓰기 필요 시 `sp-aiagent-rbac-prod-krc`).
+5. 기본 URL 전환: `kv-fetch-env.py`/`kv-backup.py`의 `AZURE_KEYVAULT_URLS`에서 `prod2`→`prod-krc`.
+6. devforge 서비스 재기동 + 검증(`kv-fetch-env.py env` 개수, 컨테이너 health).
+7. 검증 통과 후 `kv-devforge-prod2-krc` 삭제.
+
+**롤백**: 5번 전까지는 무중단. 문제 시 기본 URL을 `prod2`로 원복 + 서비스 재기동(prod2 유지).
+**가드**: 서비스 재기동 수반 → **watchdog shadow-run 창(§P2 게이트) 이후** 착수.
+
 ### 롤백 자산
 - 구 SP secret: `~/.config/devforge/azure-client-secret.mesids.bak.*` (양 서버)
 - 구 스크립트 백업: `*.mesids.bak` (onmydoc)

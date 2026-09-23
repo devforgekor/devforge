@@ -482,6 +482,21 @@ systemctl --user restart <service>.service
 # sudo reboot
 ```
 
+### 10.4 Caddy healthcheck (host-side)
+
+**배경(2026-09-23):** caddy 컨테이너는 alpine(musl)이라 이 커널에서 `podman exec`로 동적 musl 바이너리(`wget`/`sh`)를
+실행하면 `RELRO protection failed`로 실패 → 컨테이너 healthcheck가 **오탐 unhealthy**. 컨테이너 healthcheck를 제거하고
+**host-side 검사**로 대체했다(`/etc/systemd/system/caddy-health-check.{service,timer}`, `curl http://127.0.0.1:2019/config/`, 1분, 3연속 실패 시 `try-restart caddy`).
+
+**진단/확인:**
+```bash
+systemctl is-active caddy.service caddy-health-check.timer
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:2019/config/   # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:80/            # 308
+journalctl -t caddy-health --since "-10 min"                            # 실패 로그
+sudo podman inspect caddy --format '{{if .Config.Healthcheck}}has{{else}}none{{end}}'  # none
+```
+
 ---
 
 ## 11. 자동화 스크립트 (선택)
