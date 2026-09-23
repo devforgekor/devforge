@@ -123,3 +123,63 @@ class TestLivenessWrite:
         from devforge.adapters.driving.cli_cmds.watchdog import _write_liveness
         # 예외가 발생하지 않아야 함 (내부에서 catch함)
         _write_liveness()  # 기본 경로는 /var/tmp/watchdog_last_cycle_ts (쓰기 실패 가능)
+
+
+class TestSdNotify:
+    """Type=notify/WatchdogSec 대응 sd_notify 소켓 프로토콜 검증."""
+
+    def test_sd_notify_is_noop_without_notify_socket(self, monkeypatch) -> None:
+        monkeypatch.delenv("NOTIFY_SOCKET", raising=False)
+        # NOTIFY_SOCKET 부재 시 예외 없이 no-op
+        from devforge.adapters.driving.cli_cmds.watchdog import _sd_notify
+        _sd_notify("READY=1")
+
+    def test_sd_notify_sends_datagram_to_socket(self, tmp_path, monkeypatch) -> None:
+        import socket as _socket
+
+        sock_path = tmp_path / "notify.sock"
+        server = _socket.socket(_socket.AF_UNIX, _socket.SOCK_DGRAM)
+        server.bind(str(sock_path))
+        server.settimeout(2)
+        monkeypatch.setenv("NOTIFY_SOCKET", str(sock_path))
+
+        from devforge.adapters.driving.cli_cmds.watchdog import _sd_notify
+        _sd_notify("WATCHDOG=1")
+
+        data = server.recv(64)
+        server.close()
+        assert data == b"WATCHDOG=1"
+
+    def test_sd_notify_handles_missing_socket(self, tmp_path, monkeypatch) -> None:
+        # connect 실패해도 예외를 전파하지 않아야 함
+        monkeypatch.setenv("NOTIFY_SOCKET", str(tmp_path / "does_not_exist.sock"))
+        from devforge.adapters.driving.cli_cmds.watchdog import _sd_notify
+        _sd_notify("READY=1")
+
+    @pytest.mark.asyncio
+    async def test_serve_loop_emits_ready_and_watchdog(self, factory, tmp_path, monkeypatch) -> None:
+        """serve 루프가 READY=1 후 매 cycle WATCHDOG=1을 보낸다."""
+        import socket as _socket
+
+        sock_path = tmp_path / "notify.sock"
+        server = _socket.socket(_socket.AF_UNIX, _socket.SOCK_DGRAM)
+        server.bind(str(sock_path))
+        server.settimeout(2)
+        monkeypatch.setenv("NOTIFY_SOCKET", str(sock_path))
+        patch_liveness_file(tmp_path / "liveness")
+
+        watchdog_cmds.init(factory)
+        try:
+            await asyncio.wait_for(watchdog_cmds._serve_loop(), timeout=0.5)
+        except asyncio.TimeoutError:
+            pass
+
+        received = []
+        while True:
+            try:
+                received.append(server.recv(64))
+            except OSError:
+                break
+        server.close()
+        assert b"READY=1" in received
+        assert b"WATCHDOG=1" in received

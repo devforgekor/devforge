@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
+import socket
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
@@ -15,6 +17,7 @@ import typer
 
 app = typer.Typer(name="watchdog", help="Watchdog operations")
 _factory: Callable[[], Coroutine[Any, Any, Any]] | None = None
+log = logging.getLogger(__name__)
 
 LIVENESS_FILE = Path(os.environ.get("WATCHDOG_LIVENESS_FILE", "/var/tmp/watchdog_last_cycle_ts"))
 
@@ -24,8 +27,26 @@ def _write_liveness() -> None:
     try:
         LIVENESS_FILE.write_text(str(int(time.time())))
     except OSError as e:
-        import logging
-        logging.getLogger(__name__).warning("liveness write failed: %s", e)
+        log.warning("liveness write failed: %s", e)
+
+
+def _sd_notify(state: str) -> None:
+    """Send a systemd sd_notify datagram (READY=1, WATCHDOG=1, ...).
+
+    [WHY] Type=notify + WatchdogSec standard: systemd restarts us if a cycle hangs.
+    The protocol is stable and reimplementable without libsystemd (sd_notify(3));
+    no-op when NOTIFY_SOCKET is unset (e.g. running under CLI/manual).
+    """
+    sock_path = os.environ.get("NOTIFY_SOCKET", "")
+    if not sock_path:
+        return
+    addr = "\0" + sock_path[1:] if sock_path.startswith("@") else sock_path
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+            s.connect(addr)
+            s.sendall(state.encode())
+    except OSError as e:
+        log.warning("sd_notify(%s) failed: %s", state, e)
 
 
 def init(factory: Callable[[], Coroutine[Any, Any, Any]]) -> None:
@@ -73,9 +94,10 @@ async def _serve_loop() -> None:
         raise RuntimeError("watchdog.init() not called from composition root")
     svc = await _factory()                      # single event loop
     interval = svc.check_interval_sec
-    import logging
-    logging.getLogger(__name__).info("watchdog serve: interval=%ss dry_run=%s", interval, svc.dry_run)
+    log.info("watchdog serve: interval=%ss dry_run=%s", interval, svc.dry_run)
+    _sd_notify("READY=1")
     while True:
         await svc.run_cycle()
         _write_liveness()
+        _sd_notify("WATCHDOG=1")
         await asyncio.sleep(interval)
