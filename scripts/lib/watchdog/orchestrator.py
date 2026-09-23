@@ -118,11 +118,24 @@ def sigusr1_handler(signum, frame):
 # ── Common checks ──────────────────────────────────────────────────────
 
 
+def _day_cycle_paused() -> bool:
+    """[WHY] pause 플래그 = 의도적 정지 신호. auto-start뿐 아니라 critical-service
+    복구(_run_services)에서도 존중해야 사용자의 `systemctl stop`이 되돌려지지 않는다."""
+    return os.path.exists(os.path.expanduser("~/.config/devforge/day-cycle.paused"))
+
+
 def _run_services(results: dict, dry_run: bool):
     global _test_active
+    day_paused = _day_cycle_paused()
     for svc in check_all_services():
         name = svc["name"]
         tracker = _state.get(f"svc:{name}")
+        if name == "devforge-day-cycle" and day_paused:
+            # 의도적 정지 — 복구/알림 제외(정상 취급)
+            tracker.record_success()
+            incidents.resolve_if_open(f"svc:{name}")
+            results["services"].append(svc)
+            continue
         if svc["ok"]:
             tracker.record_success()
             incidents.resolve_if_open(f"svc:{name}")
@@ -387,7 +400,7 @@ def run_day_checks(dry_run: bool = False) -> dict:
                 send_alert(f"llm:{name}", "LATENCY", lat_detail)
         results["probes"].append(probe)
     pipe_name, _ = check_pipeline("day_cycle.sh")
-    _day_paused = os.path.exists(os.path.expanduser("~/.config/devforge/day-cycle.paused"))
+    _day_paused = _day_cycle_paused()
     if _day_paused and not _test_active:
         log("  day-cycle paused (flag present) — skipping auto-start (embed window)")
     if not pipe_name and not _test_active and not _day_paused:
@@ -603,7 +616,7 @@ def day_fix_loop():
     if _test_active:
         log(f"  SKIP day fix loop — protection active ({_test_active})")
         return
-    if os.path.exists(os.path.expanduser("~/.config/devforge/day-cycle.paused")):
+    if _day_cycle_paused():
         log("  SKIP day fix loop — day-cycle paused (flag present)")
         return
 
