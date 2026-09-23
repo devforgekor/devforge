@@ -325,8 +325,6 @@ def main():
         print(f"✅ Key Vault 시크릿 출력 완료: {len(secrets)}개", file=sys.stderr)
         sys.exit(0)
 
-    # 기존 동작: 환경변수 주입 후 명령 실행
-    # 기존 동작: 환경변수 주입 후 명령 실행
     # [WHY] rest(명령+인자)에서 --keys를 제거해 대상 명령에 새어나가지 않게 한다.
     selected, rest = parse_selection(sys.argv[1:])
     if not rest:

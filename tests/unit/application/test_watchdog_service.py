@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 from unittest.mock import AsyncMock, MagicMock
@@ -33,17 +34,13 @@ class FakeTracker:
         return self.state == ComponentState.DEGRADED
 
     def can_alert(self, dedup_sec: int = 300) -> bool:
-        import time
-        import monotonic
-        return (monotonic.time() - self.last_alert_ts) >= dedup_sec
+        return (time.monotonic() - self.last_alert_ts) >= dedup_sec
 
     def can_attempt_recovery(self) -> bool:
-        import monotonic
-        return monotonic.time() >= self.next_attempt_at
+        return time.monotonic() >= self.next_attempt_at
 
     def schedule_next_attempt(self, sec: int) -> None:
-        import monotonic
-        self.next_attempt_at = monotonic.time() + sec
+        self.next_attempt_at = time.monotonic() + sec
 
     def record_failure(self) -> bool:
         self.consecutive_fail += 1
