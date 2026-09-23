@@ -39,11 +39,13 @@ async def test_timer_kick_starts_service() -> None:
 
 @pytest.mark.asyncio
 async def test_probe_failure_overrides_ok() -> None:
-    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(returncode=0))):
-        with patch("asyncio.sleep", new=AsyncMock()):
-            probe = AsyncMock(return_value=False)
-            ok = await SystemdRecoveryAdapter(probe=probe).execute_recovery(
-                RecoveryAction("svc:x", "service", "down"))
+    with (
+        patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(returncode=0))),
+        patch("asyncio.sleep", new=AsyncMock()),
+    ):
+        probe = AsyncMock(return_value=False)
+        ok = await SystemdRecoveryAdapter(probe=probe).execute_recovery(
+            RecoveryAction("svc:x", "service", "down"))
     assert ok is False
 
 

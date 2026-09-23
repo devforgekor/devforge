@@ -4,15 +4,13 @@
 """Tests for WatchdogService dry_run mode (Gate 4 code prereq)."""
 from __future__ import annotations
 
-import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from devforge.application.watchdog_service import WatchdogService, create_watchdog_service
+from devforge.application.watchdog_service import WatchdogService
 from devforge.core.config import WatchdogConfig
 from devforge.ports.types import ComponentState, HealthCheck, RecoveryAction
 

@@ -5,15 +5,13 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
 
 from devforge.adapters.driving.cli_cmds import watchdog as watchdog_cmds
-from devforge.core.config import WatchdogConfig
+
 
 # 모듈 상수를 패치하기 위한 헬퍼
 def patch_liveness_file(new_path: Path):

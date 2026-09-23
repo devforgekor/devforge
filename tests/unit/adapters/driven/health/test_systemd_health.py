@@ -48,12 +48,14 @@ async def test_timer_never_triggered() -> None:
 @pytest.mark.asyncio
 async def test_timer_recent_ok() -> None:
     recent = "Mon 2026-09-22 00:00:00 UTC"
-    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=recent + "\n"))):
-        with patch("devforge.adapters.driven.health.systemd_health.datetime") as dt:
-            dt.strptime.side_effect = __import__("datetime").datetime.strptime
-            dt.now.return_value = __import__("datetime").datetime(
-                2026, 9, 22, 0, 1, tzinfo=__import__("datetime").timezone.utc)
-            checks = await SystemdTimerHealthChecker({"t.timer": 2100}).check_health()
+    with (
+        patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=recent + "\n"))),
+        patch("devforge.adapters.driven.health.systemd_health.datetime") as dt,
+    ):
+        dt.strptime.side_effect = __import__("datetime").datetime.strptime
+        dt.now.return_value = __import__("datetime").datetime(
+            2026, 9, 22, 0, 1, tzinfo=__import__("datetime").timezone.utc)
+        checks = await SystemdTimerHealthChecker({"t.timer": 2100}).check_health()
     assert checks[0].is_healthy is True
 
 
