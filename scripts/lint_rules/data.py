@@ -12,6 +12,7 @@ MODEL_NAME_OK_FILES = {
     "scripts/lib/llm_client.py",
     "scripts/lint_rules.py",
     "scripts/lib/tracking/agent_names.py",
+    "scripts/proxies/model_score.py",  # role scoring keyword data (matches model IDs)
     "scripts/observer.py",
     "scripts/lib/debate/cooperative_debate.py",
     "scripts/pipelines/hybrid.py",

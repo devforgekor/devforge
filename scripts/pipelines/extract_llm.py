@@ -51,30 +51,6 @@ from lib.extract_llm.chunking import (  # noqa: E402, F401
 )
 from lib.extract_llm.edc import _normalize_freeform_pipeline  # noqa: E402, F401
 
-_CONFLICT_RESOLVER_4B = """\
-You are a Conflict Resolver. Two fact extractors each extracted a fact about the same subject.
-
-— Fact A came from a Strict Extractor (high precision, conservative, max 4 facts).
-— Fact B came from an Exploratory Extractor (high recall, includes evidence text).
-— Original source text may be included as "Evidence" for one or both facts.
-
-Decide which relationship best describes the pair:
-
-CONSENSUS: Same claim, different wording. (e.g. "DB connection pooling missing" vs "missing DB connection pooling")
-CONTRADICT: Mutually exclusive. One must be wrong. (e.g. "latency = 100ms" vs "latency = 200ms")
-DIFFERENT_ASPECT: Same topic, different facet. Both can be true. (e.g. "Postgres handles DB connections" vs "Postgres uses SQLAlchemy")
-
-RULES:
-1. If Evidence confirms both facts are valid in context → DIFFERENT_ASPECT (not CONTRADICT).
-2. If Evidence is absent → base judgment on the facts alone.
-3. If Fact A and Fact B say the same thing with different words → CONSENSUS.
-4. If one fact claims X and the other claims not-X on the same axis → CONTRADICT.
-5. If they cover different attributes of the same subject → DIFFERENT_ASPECT.
-
-English only. Return ONLY valid JSON, no extra text:
-
-{"verdict": "CONSENSUS", "reason": "why (≤15 words)"}"""
-
 _STRUCTURED_FIELDS = """
 Structured fields — every extraction MUST have subject, predicate, object:
   subject:   The concrete entity this fact is about (file, function, config key, service, port, model).
