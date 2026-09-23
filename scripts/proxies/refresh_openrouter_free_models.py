@@ -32,6 +32,7 @@ PROXY_URL = "http://127.0.0.1:8451/v1/models"
 # auto-router target: the opencode-rr profile (RR proxy free models).
 # The default (global) opencode.json stays pinned to opencode-go/deepseek-v4-flash.
 OPCODE_CONFIG = Path.home() / ".config/opencode/opencode-rr.json"
+ANALYSIS_CONFIG = Path.home() / ".config/devforge/analysis_models.json"
 CACHE_FILE = Path.home() / ".cache/devforge/openrouter_free_models.json"
 CACHE_TTL_SEC = 24 * 60 * 60  # 1 day
 
@@ -77,41 +78,24 @@ def fetch_models() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Scoring
+# Scoring (role-aware; impl extracted to model_score.py)
 # ---------------------------------------------------------------------------
+
+sys.path.insert(0, str(Path(__file__).parent))
+from model_score import (  # noqa: E402
+    enrich_with_aa,
+    fetch_aa_models,
+    load_aa_cache,
+    save_aa_cache,
+)
+from model_score import rank as _rank_models  # noqa: E402
 
 
 def _coding_score(model: dict) -> float:
-    """Score model for coding. Uses coding_index if present, else heuristics."""
-    benchmarks = model.get("benchmarks", {}) or {}
-    aa = benchmarks.get("artificial_analysis", {}) or {}
-    coding = aa.get("coding_index")
+    """Backward-compatible alias — coding role score (see model_score.score)."""
+    from model_score import score as _score
 
-    if coding is not None:
-        # coding_index is a benchmark index comparable across models
-        return float(coding) + _context_bonus(model)
-
-    # No benchmark — cap below ANY benchmarked model.
-    # Benchmarks run roughly 30-60 for free models; cap unknown at 25 so
-    # verified models (with data) always outrank guesswork.
-    desc = (model.get("description") or "").lower()
-    bonus = 0.0
-    if "code" in desc or "coding" in desc:
-        bonus += 10.0
-    if "agentic" in desc.lower():
-        bonus += 8.0
-    context = model.get("context_length") or 0
-    if context >= 100000:
-        bonus += 5.0
-    return min(25.0 + bonus, 29.9)  # hard cap under 30 (below any coding_index)
-
-
-def _context_bonus(model: dict) -> float:
-    """Small bonus for large context (useful for coding)."""
-    context = model.get("context_length") or 0
-    if context >= 256000:
-        return 5.0
-    return 0.0
+    return _score(model, "coding")
 
 
 def _test_model(model_id: str, key_idx: int = 0) -> tuple[bool, str]:
@@ -185,6 +169,38 @@ def _extract_org(model_id: str) -> str:
     return base.split("/")[0] if "/" in base else base
 
 
+def _select_quality_diverse(models: list[dict], top_n: int) -> list[dict]:
+    """Pick top_n: quality-first, then org diversity to keep fallbacks viable.
+
+    Rationale: org diversity avoids one provider's pool exhaustion breaking the
+    whole chain, but picking a low-quality model purely for org coverage puts a
+    weak fallback in place. So we prefer the single best model overall, then fill
+    remaining slots with the best model from each *other* org.
+    """
+    if not models:
+        return []
+    ranked = sorted(models, key=lambda m: m["_score"], reverse=True)
+    picked = [ranked[0]]
+    used_orgs = {_extract_org(ranked[0]["id"])}
+    for m in ranked[1:]:
+        if len(picked) >= top_n:
+            break
+        org = _extract_org(m["id"])
+        if org in used_orgs:
+            continue
+        picked.append(m)
+        used_orgs.add(org)
+    # If org diversity left slots empty, fill with next-best remaining models.
+    if len(picked) < top_n:
+        for m in ranked:
+            if m in picked:
+                continue
+            picked.append(m)
+            if len(picked) >= top_n:
+                break
+    return picked
+
+
 def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
     """Set opencode-rr.json model/chain/provider.models to diverse free models.
 
@@ -196,16 +212,17 @@ def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
     call (with retries) through the RR proxy — only models that actually
     respond are selected.
     """
-    # Group usable models by upstream org, keep best-scoring per org
+    # Group usable models by upstream org, keep best-scoring per org.
     by_org: dict[str, dict] = {}
     for m in models:
         org = _extract_org(m["id"])
         if org not in by_org or m["_score"] > by_org[org]["_score"]:
             by_org[org] = m
 
-    # Sort orgs by best score, then verify candidates (with retries) and keep
-    # only models that respond to a dummy call, up to top-3 diverse orgs.
-    diverse = sorted(by_org.values(), key=lambda m: m["_score"], reverse=True)
+    # Order candidates quality-first, then org diversity: the single best model
+    # leads, then best-of-each-other-org (avoids a weak model entering the chain
+    # purely for org coverage — see _select_quality_diverse rationale).
+    diverse = _select_quality_diverse(list(by_org.values()), len(by_org))
     top: list[dict] = []
     print("\n(final verification — dummy hello call, up to 3 retries):")
     for m in diverse:
@@ -230,7 +247,7 @@ def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
 
     config = _read_opencode()
     provider = config.setdefault("provider", {}).setdefault("openrouter", {})
-    prov_models = provider.setdefault("models", {})
+    provider.setdefault("models", {})   # ensure key exists (side effect only)
 
     # Rebuild models dict preserving existing names where possible
     new_models = {}
@@ -254,6 +271,43 @@ def _apply_opencode(models: list[dict], dry_print: bool = False) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+
+def _apply_analysis(models: list[dict], top_n: int = 3, dry_run: bool = False) -> int:
+    """Write reasoning-role selection to analysis_models.json (not opencode-rr.json).
+
+    Consumed by the separate error-analysis logic (file contract only, no code
+    coupling). Quality-first org-diverse chain + local Qwen fallback.
+    """
+    if not models:
+        print("\n✗ No working free reasoning models found — analysis_models.json NOT modified")
+        return 1
+
+    top = _select_quality_diverse(models, top_n)
+
+    if dry_run:
+        print("\n(dry-run: analysis_models.json not modified)")
+        for i, m in enumerate(top, 1):
+            print(f"  {i}. [{_extract_org(m['id'])}] {m['id']} score={m['_score']:.1f}")
+        return 0
+
+    payload = {
+        "schema_version": 1,
+        "role": "reasoning",
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "primary": f"openrouter/{top[0]['id']}",
+        "chain": [f"openrouter/{m['id']}" for m in top],
+        "fallback_local": "qwen3-8b",
+    }
+    tmp = ANALYSIS_CONFIG.with_suffix(".json.tmp")
+    ANALYSIS_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    with open(tmp, "w") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp, ANALYSIS_CONFIG)
+    orgs = "/".join(_extract_org(m["id"]) for m in top)
+    print(f"✓ analysis_models.json updated: primary={top[0]['id']} (orgs: {orgs})")
+    return 0
 
 
 def _load_cached() -> list[dict] | None:
@@ -280,6 +334,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="print ranking only")
     parser.add_argument("--force", action="store_true", help="ignore cache")
     parser.add_argument("--top", type=int, default=3, help="number of models to select")
+    parser.add_argument("--role", choices=["coding", "reasoning"], default="coding",
+                        help="coding → opencode-rr.json (default); reasoning → analysis_models.json")
     args = parser.parse_args()
 
     # 1. Fetch (with cache)
@@ -300,12 +356,20 @@ def main() -> int:
             if not any(k in m.get("id", "").lower() for k in EXCLUDE_KEYWORDS)
         ]
         _save_cache(models)
-    print(f"  {len(models)} candidate free models")
+    print(f"  {len(models)} candidate free models (role={args.role})")
 
-    # 2. Score / rank
-    for m in models:
-        m["_score"] = _coding_score(m)
-    models.sort(key=lambda m: m["_score"], reverse=True)
+    # 2a. Enrich with Artificial Analysis free API (fill missing indices)
+    aa = load_aa_cache()
+    if not aa:
+        aa = fetch_aa_models()
+        if aa:
+            save_aa_cache(aa)
+    enriched = enrich_with_aa(models, aa)
+    if enriched:
+        print(f"  AA enrichment: +{enriched} models (source: artificialanalysis.ai)")
+
+    # 2b. Score / rank (role-aware)
+    _rank_models(models, args.role)
 
     # 3. Live-test top 15 (don't waste proxy calls on all)
     usable = []
@@ -318,6 +382,8 @@ def main() -> int:
         time.sleep(0.3)  # avoid hammering RR proxy / OpenRouter
 
     # 4. Apply — pass ALL usable models; _apply_opencode picks diverse orgs.
+    if args.role == "reasoning":
+        return _apply_analysis(usable, top_n=args.top, dry_run=args.dry_run)
     if args.dry_run:
         print("\n(dry-run: opencode-rr.json not modified)")
         # still show what would be selected
