@@ -55,6 +55,15 @@ modules:
     day_cycle.sh:
       status: unknown
       purpose: "day_cycle.sh \u2014 async pipeline (pipeline_state-driven)"
+    shadow_diff.py:
+      status: experimental
+      purpose: "Production vs shadow extract-output diff (cutover gate)."
+    verify-cutover-ready.py:
+      status: experimental
+      purpose: "Phase A pre-cutover verification \u2014 V1-V8 checklist."
+    verify-provenance.py:
+      status: experimental
+      purpose: "Provenance verification \u2014 turns.source recorded correctly."
     droplr_upload.py:
       status: production
       purpose: Upload a file to Azure Blob, shorten with Droplr, print d.pr URL.
@@ -843,12 +852,33 @@ modules:
       status: unknown
       purpose: "yearly_refresh.sh \u2014 Golden Image \uAC31\uC2E0 (\uC218\uB3D9/\uC790\
         \uB3D9)"
+- path: scripts/deploy/
+  purpose: Deployment / Key Vault scripts
+  files:
+    env-file-normalize.py:
+      status: production
+      purpose: "EnvironmentFile normalization + quoting-error guard (called by kv-export-env.sh)."
+    kv-backup.py:
+      status: production
+      purpose: "Key Vault \u2192 GPG-encrypted secrets backup."
+    kv-fetch-env.py:
+      status: production
+      purpose: "Fetch KV secrets into env vars and exec target (multi-KV merge, --keys filter)."
+    kv-safe.py:
+      status: production
+      purpose: "Key Vault safe wrapper \u2014 never prints secret values (list/compare/set)."
 - path: scripts/hooks/
   purpose: Hooks
   files:
     auto_log.py:
       status: experimental
       purpose: "PostToolUse hook \u2014 auto-log tool calls to DB for session persistence."
+    baseline-daily.py:
+      status: production
+      purpose: "W1 baseline daily runner (systemd: baseline-daily.timer)."
+    measure-hook-overhead.py:
+      status: production
+      purpose: "Hook overhead measurement \u2014 safe run (no DB writes, mocked observe)."
     pretool_bash_log.py:
       status: experimental
       purpose: 'PreToolUse hook: log ALL Bash tool call attempts as observations.'
@@ -881,6 +911,12 @@ modules:
     telegram_bot.py:
       status: production
       purpose: telegram_bot.py --- DevForge Telegram bot for remote operations.
+    lib/bot_processor.py:
+      status: production
+      purpose: Shared bot message processor for Telegram & Slack.
+    lib/text_quality.py:
+      status: production
+      purpose: "Phase 2 Tier 1 \u2014 outbound Korean text quality guardrails."
 - path: scripts/pipelines/
   purpose: Pipelines
   files:
@@ -948,9 +984,15 @@ modules:
     anthropic_openrouter.py:
       status: production
       purpose: Anthropic-to-OpenAI format conversion proxy for OpenRouter.
+    anthropic_gudokpin.py:
+      status: production
+      purpose: Anthropic-to-OpenAI format conversion proxy for Gudokpin.
     openrouter_rr_proxy.py:
       status: experimental
       purpose: OpenRouter API Key Round-Robin Proxy.
+    model_score.py:
+      status: experimental
+      purpose: Role-aware OpenRouter model scoring + Artificial Analysis enrichment.
     refresh_openrouter_free_models.py:
       status: experimental
       purpose: OpenRouter free model auto-refresh for opencode.
@@ -1264,6 +1306,12 @@ modules:
     systemd_notifier.py:
       status: experimental
       purpose: "sd_notify notifier (legacy notifier.py:26-48)."
+- path: src/devforge/adapters/driven/container/
+  purpose: Inference container lifecycle adapter (Podman)
+  files:
+    podman_adapter.py:
+      status: experimental
+      purpose: "Podman adapter for inference container lifecycle."
 - path: src/devforge/adapters/driven/health/
   purpose: Health check adapters (legacy checker.py) — batch HealthCheckPort
   files:
@@ -1282,6 +1330,12 @@ modules:
     pipeline_health.py:
       status: experimental
       purpose: "Worker heartbeat checks (checker.py:417-491)."
+    svcpod_health.py:
+      status: experimental
+      purpose: "svc-pod host port forwarding check (legacy checker.py:679-701)."
+    ebook_health.py:
+      status: experimental
+      purpose: "ebook-watcher pipeline liveness (legacy checker.py:162-235)."
 - path: src/devforge/adapters/driven/recovery/
   purpose: Recovery adapters (legacy recovery.py recover_* family)
   files:
@@ -1394,6 +1448,12 @@ modules:
     logging.py:
       status: unknown
       purpose: "Structured logging via structlog \u2014 centralized configuration."
+    paths.py:
+      status: unknown
+      purpose: "Centralized path management \u2014 SSOT for filesystem roots."
+    exceptions.py:
+      status: unknown
+      purpose: "Custom exception hierarchy for DevForge."
 - path: src/devforge/domain/
   purpose: src/devforge/domain
   files:
@@ -1409,6 +1469,12 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
+    metadata.py:
+      status: experimental
+      purpose: "Pure domain model for inference model metadata."
+    registry.py:
+      status: experimental
+      purpose: "Inference model registry (pure domain, no I/O)."
 - path: src/devforge/domain/pipeline/
   purpose: src/devforge/domain/pipeline
   files:
