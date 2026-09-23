@@ -9,7 +9,7 @@
 #
 # 서브커맨드:
 #   list <vault> [prefix]              시크릿 이름만 출력
-#   compare <vault> <secret> <file>    로컬 파일 값과 KV 값의 해시 일치 여부만 출력
+#   compare <vault> <secret> <file>    로컬 파일과 KV 값 일치 여부만 출력 (공백 무시; PEM 대응)
 #   set-from-env <vault> <secret> <ENV> 환경변수 값을 0600 temp 경유로 등록(값 미출력)
 #   set-from-file <vault> <secret> <file> 파일 값을 등록(값 미출력)
 #
@@ -38,6 +38,15 @@ def _sha256_short(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:12]
 
 
+def _canonical(value: str) -> str:
+    """공백을 모두 제거한 비교용 정규형.
+
+    [WHY] KV는 멀티라인(PEM) 저장/조회 시 개행을 공백으로 치환한다(2026-09-19).
+    raw 비교는 개행↔공백 차이만으로 false MISMATCH를 낸다.
+    """
+    return "".join(value.split())
+
+
 def cmd_list(vault: str, prefix: str = "") -> int:
     """시크릿 이름만 출력 (값 미출력)."""
     r = _run(["keyvault", "secret", "list", "--vault-name", vault, "--query", "[].name", "-o", "tsv"])
@@ -58,19 +67,22 @@ def _get_value(vault: str, secret: str) -> str:
 
 
 def cmd_compare(vault: str, secret: str, local_file: str) -> int:
-    """로컬 파일 값과 KV 값의 해시를 비교 (값 미출력)."""
+    """로컬 파일 값과 KV 값을 공백 무시로 비교 (값 미출력)."""
     if not os.path.exists(local_file):
         print(f"로컬 파일 없음: {local_file}", file=sys.stderr)
         return 2
     with open(local_file, "r", encoding="utf-8") as f:
-        local = f.read().strip()
+        local = f.read()
     try:
         remote = _get_value(vault, secret)
     except RuntimeError as e:
         print(f"KV 조회 실패: {e}", file=sys.stderr)
         return 1
-    same = local == remote
-    print(f"{secret}: local={_sha256_short(local)} remote={_sha256_short(remote)} -> {'MATCH' if same else 'MISMATCH'}")
+    same = _canonical(local) == _canonical(remote)
+    print(
+        f"{secret}: local={_sha256_short(local)} remote={_sha256_short(remote)} "
+        f"-> {'MATCH' if same else 'MISMATCH'} (whitespace-insensitive)"
+    )
     return 0 if same else 3
 
 
