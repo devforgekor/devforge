@@ -61,16 +61,16 @@ decisions:
     → docs/_archive/plans/ 로 superseded. 라이브는 systemd 유닛 22개 + Quadlet 컨테이너 3개가 scripts/* 의존. devforge는 extract 파이프라인/CLI/api/mcp(부분)/config/logging/llm/storage만
     구현, domain(watchdog/turn_collection/pipeline/model_management)·adapters(notification/research/proxy_utils)=0줄 stub. 공통
     원칙 비파괴/병렬검증/1개씩. 전면 cutover는 도메인 구현 후.'
-  status: open
+  status: resolved
 - id: rf-final-plan-01
   detail: '최종 계획서 통합(2026-09-14): docs/plans/final-plan.md 단일 정본(MCP 툴 최적화 검토안 A~E, 툴 매핑 33→~12, Phase M0~M4, 컷오버 Phase A~I,
     통합 의사결정 D1~D9). 구 cutover-remaining-plan.md·open-decisions.md → docs/_archive/plans/ (superseded). 참조 갱신(INDEX/REFACTORING_PLAN/리포트
     2종/specs/ingest-provenance). 다음: D7~D9 선택 + M0(allowlist 컷) 착수.'
-  status: open
+  status: resolved
 - id: rf-triage-07
   detail: '최종 판정(2026-09-14): Phase 0 실행 승인. 다음 행동 — specs/mcp-contract.json 초안(스키마는 review-triage-v5 §2.2) → ADR-0006에 12툴
     목록 반영·Accepted 전환 → W1 baseline 1주 측정 → 게이트 6개 통과 후 Phase A/MCP 착수.'
-  status: open
+  status: resolved
 - id: dp-01
   detail: '서버측 Droplr 단축 깨짐 발견(2026-09-19, P0 미수정): scripts/lib/droplr.py:40이 DRPLR_EMAIL/DRPLR_PASSWORD를 읽지만 KV 실제 키는 DROPLR_USER/DROPLR_PASS.
     이름 불일치로 shorten()이 항상 None → blob_uploader._shorten_with_droplr(), droplr_upload.py(droplr/dplr alias), cli.py 업로드 경로
@@ -251,8 +251,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) Phase 0 마무리: RTO 4h/RPO 1d 확정(사용자), mcp-contract status draft→frozen(12툴, allowlist diff=0). Gate
-  1 정식 통과(gate-1-result.json), Gate 2 RTO/RPO 완료(backup-restore-result.json). 잔여=W1 baseline 7일 후 임계값/허용오차.'
 - '(2026-09-20, opencode) W1 baseline 재시작: 자동 수집이 09-15~19 매 실행 216/GROUP 실패(python 실행 전)로 데이터 미축적 확인. 새 D1=2026-09-20, 목표
   7일(09-26). 실패 감지 OnFailure=baseline-daily-failed.service → 마커 ~/.local/state/baseline-daily.failed + journal. Slack 알림은
   account_inactive로 불가(known_issue 등록).'
@@ -408,3 +406,6 @@ completed_log:
   7단계 + 롤백/가드) 추가.'
 - '(2026-09-23, opencode) 사전 준비 문서화: az-gi-k1 — runbook-golden-image.md §1.6.1 운영 창 체크리스트(DiskControllerTypes=SCSI,NVMe·FX2ms_v2
   단일·부팅 로그 확인) 추가.'
+- '(2026-09-23, opencode) decision 종결(3건): rf-cutover-01·rf-final-plan-01·rf-triage-07 — 계획 단계 완료로 resolved. final-plan.md
+  정본 확립, mcp-contract frozen·Gate 1 통과·W1 baseline 진행. 실행 진척은 std-compliance-01(P1-P4)·REFACTORING_STATUS.yaml·final-plan
+  §7(D7~D9)/Phase M으로 추적.'
