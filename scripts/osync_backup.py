@@ -47,6 +47,9 @@ APP_SOURCES = [
     ("/opt/projects/server/scripts", "scripts"),
     ("/opt/projects/server/docs", "docs"),
     ("/home/opc/.config/systemd/user", "systemd-user"),
+    # [WHY] MCP offline install depends on this cache; an empty cache crash-loops
+    # the container (2026-09-23). Backing it up keeps restore possible offline.
+    ("/opt/ai_data/pip-cache", "pip-cache"),
 ]
 APP_EXCLUDE_DIRS = {
     "node_modules", ".git", "__pycache__", ".ruff_cache", ".pytest_cache",
