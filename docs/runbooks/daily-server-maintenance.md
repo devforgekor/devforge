@@ -113,6 +113,19 @@ systemctl --user restart devforge-postgres.service
 systemctl --user restart devforge-swap.service
 ```
 
+### 2.3 day-cycle 의도적 정지/재개
+
+`devforge-day-cycle`은 watchdog의 critical 서비스(`SERVICE_TARGETS`)라 단순 `stop`은 복구 루프가
+되돌린다. **pause 플래그**를 함께 두면 auto-start·day fix loop·critical-service 복구가 모두 억제된다.
+
+```bash
+touch ~/.config/devforge/day-cycle.paused        # 의도적 정지 신호
+systemctl --user stop devforge-day-cycle.service
+# 재개:
+rm ~/.config/devforge/day-cycle.paused
+```
+> 플래그 없이 차단하려면 `systemctl --user mask devforge-day-cycle.service`(재부팅 후 `unmask` 필요).
+
 ---
 
 ## 3. 디스크 용량 (5분)
@@ -547,4 +560,4 @@ crontab -e
 
 **작성자:** Claude Code (devforge-444795)  
 **최종 업데이트:** 2026-09-23  
-**버전:** 1.3 (§7 pip-cache 백업 포함 명시)
+**버전:** 1.4 (§2.3 day-cycle 의도적 정지/재개 추가)
