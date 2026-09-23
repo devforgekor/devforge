@@ -210,6 +210,10 @@ decisions:
   detail: '(2026-09-23, 사용자 확정) root offload 재부팅 후속 결정: (a-1) boot LV 증량 = 현 상태 유지 확정(미증량). (a-3) fstab 미러링 = 미설정 결정 — 대신
     원샷(oneshot) 로직 보강으로 대체. (별건) Slack Bot Token 재발급 = 보류 유지(사용자 설정 검토 중).'
   status: resolved
+- id: shadow-run-gate-2026-09-24
+  detail: '(2026-09-23, 사용자 결정) 구현 보류: shadow-run 창 만료(2026-09-24 13:32 UTC) 후 parity 데이터를 검토한 뒤 P2(watchdog 호스트 유닛)·후속(컷오버
+    등)을 구현한다. 데이터 결과에 따라 방향이 달라질 수 있으므로 창 이전 구현 금지. 창 이전 가능: 비파괴 항목(공급망 CI/문서)만.'
+  status: resolved
 known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
