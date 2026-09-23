@@ -147,11 +147,15 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | `devforge-summary-retry.service` | 후속 | 2026-09-18 | news 요약 재시도 |
 | `ebook-watcher.service` | 후속 | 2026-09-18 | ebook 파이프라인 loop |
 | `devforge-news.service` | 후속 | 2026-09-18 | news collector |
-| `container-postgres.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
 | `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh (+`DEVFORGE-POSTGRES-PASSWORD` 2026-09-20, **`DEVFORGE-DATABASE-URL` 2026-09-23**) |
 | `devforge-watchdog-v2.container` | Phase 3 | 2026-09-23 | ExecStartPre + kv-export-env.sh (**`DEVFORGE-DATABASE-URL`**+PASSWORD+SLACK) — 재시작 시 DSN KV 주입 |
 | `container-webobsidian.container` | Phase 3 | 2026-09-19 | ExecStartPre + kv-export-env.sh (WEBOBSIDIAN-PASSWORD) |
 | `container-devforge-fastapi.container` | Phase 4 | 2026-09-20 | entrypoint `kv-fetch-env.py` 래퍼 + DB URL을 KV `DEVFORGE-POSTGRES-PASSWORD`로 런타임 구성(quadlet 평문 제거) |
+
+**전환 해제 (1개):**
+| 서비스 | 사유 |
+|--------|------|
+| `container-postgres.container` | 2026-09-21 Stage 3 hardening — 이미지가 `POSTGRES_PASSWORD` 미사용(grep 0), DB 기동 완료로 `EnvironmentFile`/`ExecStartPre` 제거 |
 
 **전환 불필요 (1개):**
 | 서비스 | 사유 |
@@ -291,7 +295,7 @@ KV에 신규 자격증명이 **이미 결합형 키(`*_PROXY_KEY`)로 존재**�
 
 
 ### 우선순위 1: 나머지 systemd 서비스 전환
-- **완료**: 시스템드 서비스 11개 + 컨테이너 4개 전환 완료 (2026-09-18~20)
+- **완료**: 시스템드 서비스 11개 + 컨테이너 4개 전환 완료 (2026-09-18~23; postgres는 09-21 해제, watchdog-v2는 09-23 추가)
 - **남은 작업**: 없음 (fastapi 2026-09-20 완료, §4.2)
 
 ### 우선순위 2: secrets.env 파일 제거
@@ -376,7 +380,7 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 | onmydoc `~/.local/bin/git-credential-kv.py` | 신규 테넌트/SP, URL→`kv-common-prod-krc` |
 
 ### 전환/검증 결과
-- devforge: KV 사용 systemd 서비스 11개 + 컨테이너 4개(postgres/mcp/webobsidian/fastapi) — fastapi는 entrypoint `kv-fetch-env.py` 래퍼로 KV 주입, quadlet 평문 DB URL 제거(2026-09-20, §4.2)
+- devforge: KV 사용 systemd 서비스 11개 + 컨테이너 4개(mcp/watchdog-v2/webobsidian/fastapi) — fastapi는 entrypoint `kv-fetch-env.py` 래퍼로 KV 주입, quadlet 평문 DB URL 제거(2026-09-20, §4.2)
 - onmydoc: `git credential get` 인증 OK, `kv-fetch-env.py env` 88개
 - 시크릿 이관 검증: 구 KV 101개 → 신규 KV 값 해시 **MATCH 101 / MISMATCH 0**
   (2026-09-20 마이그레이션 세션 검증치, 이후 감사에서는 재검증 안 함)

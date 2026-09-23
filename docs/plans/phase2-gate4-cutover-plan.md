@@ -108,15 +108,16 @@ Wants=svc-pod.service
 
 [Container]
 ContainerName=devforge-watchdog-v2
-Image=localhost/devforge-base:latest
+Image=localhost/devforge-fastapi:latest
 Pull=never
 Pod=svc.pod
 Entrypoint=/bin/bash
 Exec=/scripts/deploy/watchdog-v2-entrypoint.sh
-Volume=/opt/projects/server/src:/src:Z
+Volume=/opt/projects/server:/opt/projects/server:Z
 Volume=/opt/projects/server/scripts:/scripts:Z
-Volume=/opt/ai_data:/opt/ai_data:Z
-Environment=PYTHONPATH=/src
+Volume=/opt/ai_data/scripts:/opt/ai_data/scripts:Z
+Volume=/opt/ai_data/pip-cache:/pip-cache:Z
+Environment=PYTHONPATH=/opt/projects/server/src:/scripts
 Environment=WATCHDOG_DRY_RUN=1
 Environment=WATCHDOG_STATE_FILE=/opt/ai_data/scripts/watchdog_state.v2.json
 Environment=WATCHDOG_CHECK_INTERVAL_SEC=60
