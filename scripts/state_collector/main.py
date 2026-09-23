@@ -288,14 +288,6 @@ def main():
         print(f"  [refs] collection failed: {e}", file=sys.stderr)
         references = {}
 
-    # Phase auto-tracking
-    phase_data = {}
-    try:
-        from lib.tracking.phase_tracker import auto_update as auto_update_phases
-        phase_data = auto_update_phases()
-    except Exception as e:
-        print(f"  [phase_tracker] auto-update failed: {e}", file=sys.stderr)
-
     if validate_mode:
         status, mismatches = run_validation(structural, CLAUDE_FILE, SERVER_DIR)
         now_str = datetime.now(TZ).isoformat()
@@ -314,7 +306,7 @@ def main():
         return 0 if status == "pass" else 1
 
     # 3. Save new state
-    save_state(structural, metrics, STATE_FILE, references, phase_data)
+    save_state(structural, metrics, STATE_FILE, references)
 
     # 4. Detect changes against previous structural state
     new_hash = structural_hash(structural)
@@ -351,7 +343,7 @@ def main():
     prev_validation = (prev_state or {}).get("validation")
     if prev_state and prev_validation:
         metrics["validation"] = prev_validation
-        save_state(structural, metrics, STATE_FILE, references, phase_data)
+        save_state(structural, metrics, STATE_FILE, references)
 
     # 7. Generate MOTD
     generate_motd(structural, metrics, MOTD_FILE, TOKEN_USAGE_BASE)

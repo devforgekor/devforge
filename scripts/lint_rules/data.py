@@ -12,7 +12,6 @@ MODEL_NAME_OK_FILES = {
     "scripts/lib/llm_client.py",
     "scripts/lint_rules.py",
     "scripts/lib/tracking/agent_names.py",
-    "scripts/lib/tracking/phase_tracker.py",
     "scripts/observer.py",
     "scripts/lib/debate/cooperative_debate.py",
     "scripts/pipelines/hybrid.py",

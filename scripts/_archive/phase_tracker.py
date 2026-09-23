@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-# Status: production
-# Path: imported by — production scripts
-"""Phase auto-tracker — detects completed items from live system state.
+# Status: deprecated
+# Path: none — retired 2026-09-23 (see WHY below)
+"""[RETIRED 2026-09-23] Phase auto-tracker — detects completed items from live system state.
+
+[WHY] Retired: its data source `docs/phases.md` was moved to `docs/_archive/plans/`,
+so `scan_phases_md()` returned {} and the 15-min state_collector call was a silent
+no-op. Its phase numbering (1/1.5/2.1-2.6) also conflicted with both blueprint.yaml
+phases and REFACTORING_PLAN phases. Replaced by: blueprint.yaml (AI-maintained) +
+docs/refactoring/REFACTORING_STATUS.yaml (machine-readable refactoring SSOT).
+Do not reactivate without reconciling the phase numbering and data source.
 
 SLOC-exempt: 453 lines — single cohesive phase tracker (scan phases.md → evaluate
 detection rules → update checkboxes → sync blueprint.yaml). RULES dict, phase

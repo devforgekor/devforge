@@ -709,17 +709,13 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Tracking \u2014 phase detection, dependency tracking, agent name normalization."
+      purpose: "Tracking \u2014 dependency tracking, agent name normalization."
     agent_names.py:
       status: production
       purpose: Single source of truth for agent name normalization.
     dependency_tracker.py:
       status: production
       purpose: "Reference tracking \u2014 external project watch + internal code observation."
-    phase_tracker.py:
-      status: production
-      purpose: "Phase auto-tracker \u2014 detects completed items from live system\
-        \ state."
   constraints:
     max_lines_per_file: 150
 - path: scripts/lib/verify/
