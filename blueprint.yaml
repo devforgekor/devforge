@@ -70,7 +70,7 @@ phases:
     timeline: this week
     status: active
     items:
-    - journald log retention config (MaxRetentionSec=2week, SystemMaxUse=200M, RateLimit — done 2026-09-23, /etc/systemd/journald.conf.d/size.conf)
+    - journald log retention config (MaxRetentionSec=2week, SystemMaxUse=200M, SystemKeepFree=2G, RateLimit — done 2026-09-23, /etc/systemd/journald.conf.d/size.conf)
     - Language pipeline guardrails — lib/text_quality.py (script purity, token budget, think-tag detection)
     - update_handover.py quality-score-based context selection — prioritize high-fidelity turns
     - 'Translation quality measurement infrastructure — source_lang column + lib/translation_quality.py (cosine similarity
