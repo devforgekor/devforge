@@ -221,15 +221,6 @@ known_issues:
     (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
   resolved: false
-- id: DATAIMPULSE-CHECK-BROKEN-2026-09-23
-  detail: pipeline.py:2517이 존재하지 않는 `_check_dataimpulse_usage`를 lib.dataimpulse_monitor에서 import → ImportError가 조용히 삼켜짐(죽은
-    코드). 실제 동작은 pipeline.py:54 로컬 함수뿐. ebooklib 소유 파일이라 별도 도메인 편집 승인 필요. status.json.sources.toki31.updated_at으로 와치독 감지 가능.
-  resolved: false
-- id: GRAPHROOT-SHARED-2026-09-23
-  detail: 'rootless(/opt/ai_data/containers/storage)와 rootful(/opt/ai_data/containers/root-storage)가 부모 디렉터리 공유 → rootless
-    podman이 형제 root-storage(root소유) 접근 시 permission denied, 컨테이너 exit 126(간헐). 해결안 P1: rootless graphroot를 /opt/ai_data/rootless-storage로
-    분리. 런북 docs/runbooks/rootless-graphroot-isolation.md. 현재는 자동 해소 상태(안정)이나 재발 가능.'
-  resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
     kv-devforge-prod2-krc로 정상.'
@@ -260,16 +251,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) user 유닛 점검: User=/Group= 오설정 0건(baseline-daily만 있었고 수정됨). stale 경로로 인한 서비스 장애 3건 발견/수정 — (1) devforge-news-api.service
-  구경로 /opt/workspace/news → minihome/apps/news(CHDIR 실패 재시작 4444회 종료, active 8091 200), (2) gemini-openai-proxy.service 파일
-  삭제(2026-09-15 은퇴)됐는데 활성화 잔존 → disable+stop+_disabled 이동(1652회 폭주 종료), (3) devforge-news-digest.service 구경로 정정. 잔여: devforge-news.service
-  timeout(collector 15분 초과, 별건).'
-- '(2026-09-20, opencode) devforge-news.service timeout 원인 규명/완화: 수집 자체는 1 feed 43s(번역 0.7s로 빠름; Exa 추출/엔티티 per-article이 병목).
-  29 feeds×limit5면 900s 초과. 완화: (1) collector _fetch_rss에 per-feed 네트워크 타임아웃 20s 추가(feedparser.parse(url)는 타임아웃 없음 → feed
-  hang 방지, workspace commit ea14c72), (2) 서비스 TimeoutStartSec 900→3600, --limit 5→3, python3 -u. dedup은 실측 0.8s로 병목 아님.'
-- '(2026-09-20, opencode) 171/184: (171) MCP HA(healthcheck+Restart+watchdog)로 완화, 재연결 부재는 클라이언트 한계. (184) llm_recordings
-  fixtures worker/mcp ro 마운트 → in-container replay 가능. 부수 수정: mcp ExecStartPre가 삭제된 DROPLR-AUTH-TOKEN-KEY 요청으로 기동 실패하던 잠복
-  버그 제거(restart 중 발견), 정상 기동 확인.'
 - '(2026-09-20, opencode) 166/175: (175) VM_SIZE 불일치는 의도된 SKU 분리(런타임 mds/빌더 ms)로 종결. (166) DEVFORGE_NLI_PER_FACT 토글 추가로 배치
   NLI 간섭 리스크 완화. 174는 운영 창(VM+opencode 재시작) 필요로 유지.'
 - '(2026-09-20, opencode) Phase 0 마무리(부분): Gate 1 정식화(gate-1-result.json, diff=0). Gate 2 백업 복원 속도 실측 — devforge_2026-09-19.dump(111MB)→51
@@ -420,3 +401,11 @@ completed_log:
 - '(2026-09-23, opencode) known_issue 종료: CADDY-HEALTHCHECK-UNHEALTHY — 원인은 컨테이너 내 동적 musl exec 실패 (podman exec + musl RELRO,
   커널 6.12 UEK). 컨테이너 --health-cmd 제거하고 host-side 검사로 대체: caddy-health-check.{service,timer}(curl http://127.0.0.1:2019/config/,
   1분 주기, 3연속 실패 시 caddy restart). 검증: admin=200, host:80=308, health=none, failed unit 0. 백업: /etc/systemd/system/caddy.service.bak.20260923.'
+- '(2026-09-23, opencode) known_issue 종료: GRAPHROOT-SHARED — rootless graphroot를 /opt/ai_data/rootless-storage로 분리(부모 공유 제거).
+  rootless=/opt/ai_data/rootless-storage, rootful=/opt/ai_data/containers/root-storage. podman 5.6 DBConfig static-dir 마이그레이션
+  필요(런북 §4.5 보강). 검증: 컨테이너/파드/이미지 diff 0, ebook-api 200, postgres OK, permission denied 0. 롤백 자산: storage.conf.bak.20260923,
+  db.sql.bak.20260923.'
+- '(2026-09-23, opencode) known_issue 종료: DATAIMPULSE-CHECK-BROKEN — 깨진 import는 재현되지 않음(활성 경로는 _refresh_dataimpulse_periodic
+  → check_dataimpulse_sync). ebooklib scripts/pipeline.py의 죽은 함수 _check_dataimpulse_usage() 제거(교차 도메인 승인). py_compile OK.'
+- '(2026-09-23, opencode) shadow-run 창 리셋: ④ graphroot 이동으로 devforge-watchdog-v2(shadow) 13:32:05 UTC 재기동 → Phase 2.5 24h
+  비교 창은 09-23 13:32 ~ 09-24 13:32 UTC. P2(호스트 유닛 전환/컷오버)는 이 창 만료 후로 보류(조기 전환 금지).'
