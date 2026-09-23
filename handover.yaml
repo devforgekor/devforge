@@ -217,22 +217,6 @@ known_issues:
 - text: 'Azure Qwen Deep Dive 검증 미완: azureqwen provider로 Deep Dive 1회 실행은 opencode 재시작 필요(config 핫리로드 안 됨) + launch로 VM/터널
     유지 상태여야 함. 엔드포인트 자체는 curl로 finish_reason:"tool_calls" 검증 완료.'
   resolved: false
-- id: CADDY-HEALTHCHECK-UNHEALTHY-2026-09-23
-  detail: '호스트 caddy 컨테이너 healthcheck unit(cc824…-541f2c…service) FailingStreak 600+ / unhealthy. 원인: 컨테이너 내 exec(healthcheck
-    wget 포함)가 Error relocating /lib/ld-musl-aarch64.so.1: RELRO protection failed 로 실패. caddy.service 자체는 active, host :80
-    308, :2019 admin API host curl 정상 → 서비스 장애 아님, healthcheck만 오탐성 실패. 웹라우팅 실증 필요 시 host curl로 확인. 컨테이너 이미지/ld-musl 재빌드 또는
-    healthcheck 경로 변경으로 근본 해결(별건).'
-  resolved: false
-- id: CLAUDE-PROJECTS-LOST-2026-09-23
-  detail: 'root offload 이전 중 /home/opc/.claude/projects(~112M, Claude Code 세션 jsonl 기록)가 rsync 실패(dest parent 미생성) 후 mv+.old
-    제거로 소실. XFS라 복구 불가. history.jsonl은 보존. 재발 방지: 이전 시 반드시 dest mkdir -p 선행 + rsync --remove-source-files 금지, 단계별 findmnt/df
-    검증.'
-  resolved: false
-- id: CORE-DB-UNWIRED-2026-09-21
-  detail: core/database.py(core 레이어 SQLAlchemy async 게이트웨이)는 프로덕션 미배선 — 현재 tests/unit/test_database.py만 참조. 실제 DB 접근은 adapters/driven/storage/database_gateway.py(MCP
-    서버 20여 곳 + FastAPI + extract_adapter)가 담당. 두 게이트웨이는 의도적 분리(QueuePool vs NullPool)이며 DSN 정규화는 core.config.normalize_async_dsn으로
-    공유하지만, core 쪽은 실사용 경로가 없어 dead code 위험. Phase 1에서 배선하거나 제거 판단 필요.
-  resolved: false
 - text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. SSOT
     (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
@@ -254,11 +238,6 @@ known_issues:
     list_plans) 미적용(사용자 승인 대기). 컷오버 도메인(watchdog/turn_collection/pipeline/ model_management)+웹수집/ingest+추출 라우팅(ADR-0005) 미구현
     — live는 여전히 scripts/*.'
   resolved: false
-- id: OPENCODE-DB-ON-ROOT-2026-09-23
-  detail: 'opencode.db(~2G)+WAL/shm이 root boot LV에 잔존(세션 중 이전 불가). opencode-db-offload.service(oneshot, multi-user.target,
-    enabled)가 재부팅 시 /opt/ai_data/system-savings/home/.local/share/opencode로 rsync 후 fstab bind 추가+mount. 검증: findmnt -M /home/opc/.local/share/opencode
-    && df -h /. 실패 시 수동: opencode 종료 후 /usr/local/sbin/opencode-db-offload.sh.'
-  resolved: false
 - text: 'Phase 0 진행 중(2026-09-14): specs/mcp-contract.json 초안 작성 완료(draft), ADR-0006 Accepted(12툴 열거 완료), W1 baseline 1주 측정
     진행 중(docs/ops/baseline/W1-baseline-spec.md). Gate 1 통과 확인 필요(allowlist diff=0 검증). rf-triage-07 완료.'
   resolved: false
@@ -270,10 +249,6 @@ known_issues:
 - text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
   resolved: false
-- id: ROOT-BIND-REBOOT-2026-09-23
-  detail: 'fstab bind 14곳은 opt-ai_data.mount 의존. lv_ai_data 마운트 실패 시 netdata/홈 도구 경로 소실 가능. 재부팅 후 확인: findmnt | grep system-savings(원본
-    경로 14개 active), netdata active, python import 경로. 롤백: docs/operations/rollback-guide.md §6.'
-  resolved: false
 - id: SLACK-BOT-INACTIVE-2026-09-20
   detail: '진단(2026-09-20): KV 이름 매핑 정상(SLACK_BOT_TOKEN_KEY). KV 토큰으로 auth.test/chat.postMessage → error=account_inactive(Slack
     앱/봇 비활성). 서버 내 다른 Slack 토큰/웹훅 없음(shell/units/claude-env/netdata/kuhwa). devforge↔onmydoc 동일 토큰(sha ff00438962f5). SLACK_CHANNEL=U0APJGD8CBW(User
@@ -284,26 +259,7 @@ known_issues:
   detail: 'watchdog v2 컨테이너에 systemctl/journalctl/pgrep/free 부재 → svc/timer/oneshot/ebook/system 체크 전부 오탐(false-negative).
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
-- id: WEBOBSIDIAN-CGROUP-2026-09-20
-  detail: 'stale child cgroup(runtime, 9/19 생성)으로 ExecStartPre attach EBUSY → drop-in(Slice=webobsidian-workaround.slice)으로
-    우회 복구. 2026-09-20 07:04 KST 재부팅 실행(커널 cgroup 잔존 제거 목적). 재부팅 후 조치: (1) container-webobsidian 정상 기동 확인, (2) ~/.config/systemd/user/container-webobsidian.service.d/10-slice.conf
-    제거 + daemon-reload + restart, (3) 기본 slice에서 정상 기동 재확인. [2026-09-20 재발: webobsidian-workaround.slice EBUSY → drop-in Slice=webobsidian2.slice
-    전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
-  resolved: false
 completed_log:
-- '(2026-09-20, opencode) 임베딩 검증: churn-off에서 embed_batch 완주(1 ok/0 failed, embeddings 3554→3555, :8081=200). 임베딩 정지 원인은 churn이
-  embed 모드를 깨뜨린 것. decision embedding-unblocked-2026-09-20.'
-- '(2026-09-20, opencode) watchdog "처리중 vs 행" 로직 활성화: _llm_is_busy(/slots is_processing)로 busy면 probe 실패를 장애로 보지 않고 recovery
-  skip, 실제 hang은 기존 _check_slot_deadlocks(전슬롯 3회 정체)가 판정. 기존엔 day_fix_loop가 먼저 restart해 슬롯 정체감지가 dead code였음. commit 699c24e.
-  백로그 처리(day-cycle) 재개.'
-- '(2026-09-20, opencode) Phase 0: docs/specs/mcp-contract.json 생성(12툴, ADR-0006 일치, opencode allowlist diff=0, annotation
-  4종, ingest 계약). 이전엔 파일 부재였음(192 기록 오류 정정). commit 6b97a4f대. 다음: W1 baseline 완료 후 freeze/gate.'
-- '(2026-09-20, opencode) 181 문서 정합: machine-readable spec 3종 영어화(ingest-provenance/dataimpulse-monitor/exa-direct-usage),
-  cli.py lint english-only-docs 14→0. 남은 것(>400줄 문서 2, 기타 정책 lint) 기록. ingest/provenance 연결 점검 PASS(unknown 0%).'
-- '(2026-09-20, opencode) Shadow 검증 하네스: scripts/shadow_diff.py 생성(prod vs review_facts_shadow, diff=0 게이트), 자체검증 entity_scan
-  100→diff=0→정리. ADR-0003 Applied로 갱신. 실제 shadow run은 리팩터드 파이프라인 구현 후.'
-- '(2026-09-20, opencode) W1 baseline 복구: baseline-daily.service가 user 유닛에 User=opc 지정으로 매일 216/GROUP 실패 → 줄 제거. 2026-09-20.json
-  생성(turns_24h 165, total 8000, hook p95 331ms). 미측정일 D2~D7(09-15~19)은 장애로 소실 기록. 이후 7일 연속 측정으로 게이트 2/3/6 산출.'
 - '(2026-09-20, opencode) user 유닛 점검: User=/Group= 오설정 0건(baseline-daily만 있었고 수정됨). stale 경로로 인한 서비스 장애 3건 발견/수정 — (1) devforge-news-api.service
   구경로 /opt/workspace/news → minihome/apps/news(CHDIR 실패 재시작 4444회 종료, active 8091 200), (2) gemini-openai-proxy.service 파일
   삭제(2026-09-15 은퇴)됐는데 활성화 잔존 → disable+stop+_disabled 이동(1652회 폭주 종료), (3) devforge-news-digest.service 구경로 정정. 잔여: devforge-news.service
@@ -452,3 +408,15 @@ completed_log:
 - '(2026-09-23, opencode) a-3 후속 확인: fstab 미러링 미설정 대신 watchdog 보강으로 대체 확인. ONESHOT_RESULT_TARGETS에 root-volume-daily-clean.service·opencode-db-offload.service
   추가, check_oneshot_result가 타이머 LastTrigger 대신 ActiveState/Result로 판정 + system-scope 폴백 (commit 9f9dd33). 라이브 프로브: root-volume-daily-clean=success,
   opencode-db-offload=success.'
+- '(2026-09-23, opencode) known_issue 종료: OPENCODE-DB-ON-ROOT — opencode.db가 system-savings로 이전(bind active), root 18%. opencode-db-offload
+  Result=success.'
+- '(2026-09-23, opencode) known_issue 종료: WEBOBSIDIAN-CGROUP — drop-in 10-slice.conf 제거 + 재부팅 후 정상 기동, container-webobsidian
+  health=healthy.'
+- '(2026-09-23, opencode) known_issue 종료: CORE-DB-UNWIRED — core/database.py 삭제(dead code, commit 84a97b5); 게이트웨이는 adapters/driven/storage/database_gateway.py.'
+- '(2026-09-23, opencode) known_issue 종료: ROOT-BIND-REBOOT — 재부팅 후 rollback-guide §6.1 통과(bind 15, SELinux label OK, netdata/caddy
+  active).'
+- '(2026-09-23, opencode) known_issue 종료: CLAUDE-PROJECTS-LOST — /home/opc/.claude/projects(~112M)는 XFS라 복구 불가(수용). 재발 방지
+  수칙을 rollback-guide §6.2에 문서화: dest mkdir -p 선행, --remove-source-files 금지, 이전 전 dry-run, 파일 수/용량 대조 후에만 원본 정리.'
+- '(2026-09-23, opencode) known_issue 종료: CADDY-HEALTHCHECK-UNHEALTHY — 원인은 컨테이너 내 동적 musl exec 실패 (podman exec + musl RELRO,
+  커널 6.12 UEK). 컨테이너 --health-cmd 제거하고 host-side 검사로 대체: caddy-health-check.{service,timer}(curl http://127.0.0.1:2019/config/,
+  1분 주기, 3연속 실패 시 caddy restart). 검증: admin=200, host:80=308, health=none, failed unit 0. 백업: /etc/systemd/system/caddy.service.bak.20260923.'
