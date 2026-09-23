@@ -2,7 +2,12 @@
 > 상위: [REFACTORING_PLAN.md](./REFACTORING_PLAN.md) (정본: [plans/final-plan.md](./plans/final-plan.md))
 > 400줄 규칙(CONVENTIONS)에 따라 분리됨(2026-09-20).
 
-### Phase 4: Turn Collection + MCP 재구성 (Week 10)
+> **페이즈 표기(정본)**: `Phase <N>[.<M>]` — N=로드맵 단계(0~8), M=내부 단계(0=구현, 1~4=Gate, 5=shadow/병렬 run, 9=컷오버). `Gate k`·컷오버 `Phase A~I`는 phase 내부 라벨.
+> **현행 진행(2026-09-23)**: Phase 0/1/1.5 완료, Phase 2 shadow-run(2.5). 아래 Phase 4~8 중 **일부 항목은 계획 순서와 무관하게 선행 구현됨** — `adapters/driven/{storage,notification,research,proxy_utils}`(Phase 5/8), `Dockerfile`·`.github/workflows/ci.yml`·`ARCHITECTURE.md`·`MIGRATION_GUIDE.md`(Phase 6). 잔여는 컷오버(Phase A~I) 이후 마무리.
+
+### Phase 4: Turn Collection + MCP 재구성 (Week 10) ⬜ 부분 선행
+
+> `domain/turn_collection/` 골격 존재. MCP 재편·`AgentInterface`·`IssueCollector`는 잔여.
 
 | 작업 | 산출물 | 검증 |
 |------|--------|------|
@@ -11,7 +16,9 @@
 | `AgentInterface` 추상화 | `application/agent_interface.py` | Web/CLI/Scheduled 공통 인터페이스 |
 | 배치 리뷰 시스템 | `application/issue_collector.py` + tools | P0/P1 자동 수집 → 주간 리포트 |
 
-### Phase 5: 잔여 도메인 + 인터페이스 (Week 11)
+### Phase 5: 잔여 도메인 + 인터페이스 (Week 11) ⬜ 부분 선행
+
+> `adapters/driven/storage/`(database_gateway, extract_adapter, incident_pg, state_json, heartbeat_pg) 구현됨. OCI SDK/FileRegistry·blob_explorer 잔여.
 
 | 작업 | 산출물 | 검증 |
 |------|--------|------|
@@ -20,7 +27,9 @@
 
 **조정**: `notification/`, `research/`, `proxy_utils/`는 **Phase 8(안정화)**로 이동 → Week 11에 2개 도메인만 처리
 
-### Phase 6: 컨테이너화 + CI/CD (Week 12-13)
+### Phase 6: 컨테이너화 + CI/CD (Week 12-13) ⬜ 부분 선행
+
+> `Dockerfile`·`.github/workflows/ci.yml`·`ARCHITECTURE.md`·`MIGRATION_GUIDE.md`·ADR-0001/0002/0004 이미 존재. 단일 `devforge:latest` digest 고정·다중 진입점 통합은 잔여.
 
 | 작업 | 산출물 |
 |------|--------|
@@ -32,7 +41,9 @@
 | `docs/adr/0001-config-priority.md` | ConfigRegistry 우선순위 |
 | `docs/adr/0002-llm-provider-flag.md` | Provider 추상화 결정 (Track B는 별도) |
 
-### Phase 7: Final Cutover (Week 14)
+### Phase 7: Final Cutover (Week 14) ⬜ 미착수
+
+> 라이브 유닛 30개가 아직 `scripts/*` 실행(`plans/final-plan.md` §5 Phase A~I).
 
 | 작업 | 검증 |
 |------|------|
@@ -42,7 +53,9 @@
 | 롤백 훈련 (Quadlet digest 고정) | **5분 이내** 롤백 검증 |
 | `day_cycle.sh` → `devforge pipeline orchestrate` | 래퍼 10줄 검증 |
 
-### Phase 8: Stabilization (Week 15-16)
+### Phase 8: Stabilization (Week 15-16) ⬜ 부분 선행
+
+> `adapters/driven/{notification,research,proxy_utils}` 골격 존재. Bug triage·온보딩·KPI 측정 잔여.
 
 | 작업 | 검증 |
 |------|------|
@@ -101,24 +114,24 @@
 
 | 리스크 | 가능성 | 영향 | 완화 | Status |
 |--------|--------|------|------|--------|
-| **프로덕션 DB 경합** | High | Critical | **섀도 DB 분리 (Phase 1.5)** + replay 하네스 | Partial — replay 적용, 섀도 DB 미구현 |
+| **프로덕션 DB 경합** | High | Critical | **섀도 DB 분리 (Phase 1.5)** + replay 하네스 | Mitigated — replay + `devforge_shadow` 스키마 라이브 |
 | **LLM 응답 비재현성** | High | High | **record/replay 하네스 (Phase −1)** | Mitigated (Phase −1) |
-| **day_cycle.sh 로직 누락 (455줄)** | Medium | High | **행위 명세 (Phase −1)** + 2주 병렬 검증 | In Progress (Phase 3.5) |
-| **데이터 손실 (pipeline_state)** | Low | Critical | **Alembic + expand/contract** (ADR로 규정) | To Do (Phase 0) |
+| **day_cycle.sh 로직 누락 (455줄)** | Medium | High | **행위 명세 (Phase −1)** + 2주 병렬 검증 | In Progress (Phase 3) |
+| **데이터 손실 (pipeline_state)** | Low | Critical | **Alembic + expand/contract** (ADR로 규정) | Mitigated (Phase 0) |
 | **기존 시스템 중단** | Medium | Critical | **Feature flag + 섀도 DB + 단계적 전환** | Partial (Phase −1 ~ 3.5) |
-| **순환 참조 재발** | Medium | High | **import-linter CI 게이트** | Mitigated (Phase 0) |
-| **하드코딩 경로 미해결** | Medium | High | **`Paths` 추상화 (Phase 0)** + 검증 | In Progress (Phase 0) |
+| **순환 참조 재발** | Medium | High | **import-linter CI 게이트** | Mitigated (Phase 0, 4 KEPT) |
+| **하드코딩 경로 미해결** | Medium | High | **`Paths` 추상화 (Phase 0)** + 검증 | Mitigated (Phase 0) — `core/paths.py` |
 | **LLM 공급자 전환 (Track B)** | Medium | Medium | **Feature Flag + 별도 문서화** | Planning (docs/LLM_PROVIDER_PLAN.md) |
 | **podman-py rootless** | High | Medium | **비도입 확정** | Mitigated (결정됨) |
 | **MCP 도구 인터페이스 변경** | Low | Medium | **도구명 별칭 + 에이전트 회귀 테스트** | To Do (Phase 4) |
 | **팀 학습 곡선** | High | Medium | **문서화 + 페어 프로그래밍 + 2인 팀** | Monitoring (전체) |
 | **OS root 볼륨 용량 고갈** | Medium | High | **`/opt/ai_data/system-savings` bind offload + `root-volume-daily-clean.timer`** (일일 정리·85% 경고) | Mitigated (2026-09-23, ops — 계획서 범위 외) |
 
-> **v1.1에서 삭제된 Critical/High 리스크 4건 재추가**:
-> - 프로덕션 DB 경합 → **replay 하네스**는 적용, **섀도 DB는 미구현** (Status: Partial)
-> - 데이터 손실 → **Alembic + expand/contract**으로 부분 해결 (Status: To Do)
-> - 기존 시스템 중단 → **Feature flag**으로 완화 (Status: Partial)
-> - 순환 참조 → **import-linter**으로 해결 (Status: Mitigated)
+> **v1.1에서 삭제된 Critical/High 리스크 4건 재추가 (2026-09-23 현행화)**:
+> - 프로덕션 DB 경합 → **replay 하네스 + `devforge_shadow` 스키마** 적용 (Status: Mitigated)
+> - 데이터 손실 → **Alembic + expand/contract** 적용 (Status: Mitigated)
+> - 기존 시스템 중단 → **Feature flag + 병행 운영(watchdog v1/v2)** (Status: Partial)
+> - 순환 참조 → **import-linter 4 contracts KEPT** (Status: Mitigated)
 
 ---
 

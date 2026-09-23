@@ -1,10 +1,12 @@
-# DevForge 서버 리팩토링 종합 계획서 v1.4
+# DevForge 서버 리팩토링 종합 계획서 v1.5
 
-> Status: active · Date: 2026-09-14 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/adr/`
+> Status: active · Date: 2026-09-23 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/adr/`, `docs/refactoring/REFACTORING_STATUS.yaml`
 
-> **버전**: 1.4 (최종)
-> **상태**: Final — 모든 리뷰 반영, 실행 준비 완료
-> **Changelog**: v1.0→v1.1: 12주→14주, 특성화 테스트 | v1.1→v1.2: Track B 분리, 섀도 DB | v1.2→v1.3: 리스크 복원, 팀규모 | v1.3→v1.4: 일정/표현 정합성 수정
+> **버전**: 1.5 (실행 현황 반영)
+> **상태**: Active — Phase 0/1/1.5 완료, **Phase 2 shadow-run(2.5) 진행 중**
+> **Changelog**: v1.0→v1.1: 12주→14주, 특성화 테스트 | v1.1→v1.2: Track B 분리, 섀도 DB | v1.2→v1.3: 리스크 복원, 팀규모 | v1.3→v1.4: 일정/표현 정합성 수정 | v1.4→v1.5: 페이즈 표기 통일(`Phase <N>[.<M>]`), Phase 0~2 실행 현황·목표구조 현행화
+
+> **페이즈 표기(정본)**: `Phase <N>[.<M>]` — N=로드맵 단계(0~8), M=내부 단계(0=구현, 1~4=검증 Gate, 5=shadow/병렬 run, 9=컷오버). `Gate k`·컷오버 `Phase A~I`는 phase 내부 라벨이며 별도 phase가 아니다. 기계판독 진행 현황은 `docs/refactoring/REFACTORING_STATUS.yaml`.
 
 ---
 
@@ -39,7 +41,7 @@
 |------|------|
 | **대상** | `/opt/projects/server/scripts/` (코드), `/opt/projects/server/docs/` (문서) |
 | **제외** | `_archive/` 과거 산출물, `/opt/workspace/` 외부 워크스페이스 |
-| **일정** | **총 17주 (Phase −1 ~ Phase 8)** (Phase −1: 2일, Phase 0~7: 14주, Phase 8: 2주) |
+| **일정** | **계획 총 17주 (Phase −1 ~ Phase 8)** (Phase −1: 2일, Phase 0~7: 14주, Phase 8: 2주). **실제**: Phase 0~2를 2026-09-13~09-23(11일)에 압축 진행 — 잔여는 §4.0 재기준 |
 | **팀 규모** | **2인 팀 (Tech Lead + Backend Engineer)** — 1인 팀 가정 시 20주 이상 필요 |
 | **podman-py** | **비도입** — rootless 포트 포워딩 제어 불가 |
 | **LLM 공급자** | Track A에서 **포트 인터페이스만 정의**, 구현은 LocalProvider. Track B는 별도 문서(`LLM_PROVIDER_PLAN.md`)로 분리 |
@@ -48,6 +50,8 @@
 ---
 
 ## 2. 현재 시스템 분석 (As-Is)
+
+> **기준 시점(2026-09-14) 스냅샷.** 현재 `scripts/`는 **컷오버 전까지 병존하는 레거시**이며(라이브 유닛 30개가 아직 `scripts/*` 실행), 신규 로직은 `src/devforge/`로 이전 중이다. 최신 실측은 `docs/refactoring/REFACTORING_STATUS.yaml`을 본다.
 
 ### 2.1 디렉토리 구조 현황
 ```
@@ -179,53 +183,28 @@ AI Agents → turn_watcher (3s poll) → turns.raw
 ├── src/
 │   └── devforge/
 │       ├── __init__.py
-│       ├── cli.py                  # Typer 단일 진입점
-│       ├── core/                   # 공통 인프라
-│       │   ├── __init__.py
-│       │   ├── config.py           # ConfigRegistry (BaseSettings)
-│       │   ├── database.py         # SQLAlchemy 2.0 async pool
-│       │   ├── logging.py          # JSON 구조화 로깅
-│       │   ├── paths.py            # 하드코딩 경로 추상화 (40곳 해결)
-│       │   └── exceptions.py
-│       ├── ports/                  # 인터페이스 정의 (Protocols)
-│       │   ├── __init__.py
-│       │   ├── extract.py          # LLMPort / ExtractPort / TurnRepository (Protocols)
-│       │   ├── storage.py          # StoragePort Protocol
-│       │   └── container.py        # ContainerManager Protocol
-│       ├── domain/                 # 비즈니스 도메인 (Bounded Contexts)
-│       │   ├── __init__.py
-│       │   ├── turn_collection/    # parsers, watcher, collector
-│       │   ├── pipeline/           # extract, enrich, embed, review 로직
-│       │   ├── watchdog/           # health checks, recovery
-│       │   └── model_management/   # 모델 메타데이터 (GGUF)
-│       ├── adapters/               # 외부 기술 구현체
-│       │   ├── __init__.py
-│       │   ├── driven/             # 주도(호출) 어댑터
-│       │   │   ├── __init__.py
-│       │   │   ├── llm/
-│       │   │   │   ├── __init__.py
-│       │   │   │   └── local_adapter.py  # 로컬 포트 (8080-8085) — Track A 기본
-│       │   │   ├── storage/        # DatabaseGateway + extract/turn/observation 어댑터
-│       │   │   ├── notification/   # Slack, Telegram, Apprise   (Phase 8)
-│       │   │   ├── research/       # exa, context7              (Phase 8)
-│       │   │   └── proxy_utils/    # 게이트웨이                  (Phase 8)
-│       │   └── driving/            # 구동(피호출) 어댑터
-│       │       ├── __init__.py
-│       │       ├── api/            # FastAPI HTTP API
-│       │       ├── mcp/            # MCP 서버 + Tools
-│       │       └── cli_cmds/       # CLI 서브커맨드
-│       ├── application/            # 애플리케이션 서비스 / 오케스트레이션
-│       │   ├── __init__.py
-│       │   ├── orchestrator.py     # PipelineOrchestrator (BudgetManager 포함)
-│       │   ├── day_cycle.py        # 일일 사이클 실행
-│       │   ├── agent_interface.py  # Web/CLI/Scheduled 추상화
-│       │   └── issue_collector.py  # 배치 리뷰 시스템
-│       └── pipeline_stages/        # 파이프라인 실행 모듈 (domain 로직 호출)
-│           ├── __init__.py
-│           ├── extract.py
-│           ├── enrich.py
-│           ├── embed.py
-│           └── review.py
+│       ├── cli.py                  # ✅ Typer 단일 진입점 (composition root)
+│       ├── core/                   # ✅ config, database, logging, paths, exceptions
+│       ├── ports/                  # ✅ extract, container, health_check, heartbeat,
+│       │                           #    incident_repository, notification, recovery,
+│       │                           #    state_persistence, types
+│       ├── domain/                 # ✅ Bounded Contexts
+│       │   ├── model_management/   #    모델 메타데이터 (GGUF)
+│       │   ├── turn_collection/    #    parsers, watcher, collector
+│       │   ├── pipeline/stages/    #    extract, enrich, embed, review
+│       │   └── watchdog/           #    monitoring(tracker,backoff) / orchestration /
+│       │                           #    recovery(graduation,strategies)
+│       ├── adapters/
+│       │   ├── driven/             # ✅ llm(local_adapter),
+│       │   │                       #    storage(database_gateway, extract_adapter,
+│       │   │                       #    incident_pg, state_json, heartbeat_pg),
+│       │   │                       #    health(6), container(podman_adapter),
+│       │   │                       #    recovery(systemd_recovery),
+│       │   │                       #    notification(slack,systemd), research, proxy_utils
+│       │   └── driving/            # ✅ api, mcp, cli_cmds
+│       ├── application/            # ✅ extract_pipeline, orchestrator, watchdog_service
+│       │                           # ⬜ day_cycle, agent_interface, issue_collector
+│       └── pipeline_stages/        # ✅ extract/  ⬜ enrich, embed, review
 ├── tests/
 │   ├── unit/
 │   ├── integration/
@@ -309,9 +288,24 @@ class ExtractPipeline:
 
 ---
 
-## 4. 실행 계획 (17주, Phase −1~8)
+## 4. 실행 계획 (계획 17주 → 실제 기준 재기준, Phase −1~8)
 
-### Phase −1: 정리 및 기저장치 캡처 (Week 0.5, 2일)
+### 4.0 실제 vs 계획 (실행 중 변경 반영, 2026-09-23 기준)
+
+| Phase | 계획 | 실제 | 상태 | 실행 중 변경(스코프) |
+|---|---|---|---|---|
+| −1 정리·캡처 | Week 0.5 (2일) | ~09-13 | ✅ 완료 | 산출물 6종 확인(`data/{golden_master.json,day_cycle_behavior.md,hardcoded_paths.csv}`, `tests/fixtures/{llm_recordings(6),replay_harness.py}`, `sql/shadow_schema.sql`); `scripts/*.bak`=0, `golden_image` 심링크→디렉토리 |
+| 0 기반·특성화 | Week 1-2 (~09-27) | 09-13 → **09-21** (9일) | ✅ 완료 | 6일 조기 완료. `core/database.py`는 09-22 dead code 제거 → `adapters/driven/storage/database_gateway.py`로 이전 |
+| 1 추론/LLM 포트 | Week 3-4 | 09-21 → **09-22** | ✅ 완료 | 계획 항목 전량 완료 |
+| 1.5 섀도DB·replay | Week 4.5 (2일) | ~09-20 → 09-22 | ✅ 완료 | `devforge_shadow` 라이브 |
+| 2 Watchdog | Week 5 (10 tasks) | 09-22 → **09-23** | 🟡 **2.5 shadow-run** | **대폭 확장**: Gate 1~4 + v2.1 **18 tasks(A1–E3)**. `IssueCollector`·MCP `watchdog_*` 분리는 **잔여** |
+| 3 파이프라인 | Week 6-7 | 재기준 | ⬜ 승인(D6=A) | **범위 축소**: devforge는 **embed** 단계만 소유 |
+| 3.5 병렬 검증 | Week 8-9 (2주) | — | ⬜ | 2주(n≥14) 유지 — 통계 검정 요건 |
+| 4~8 | Week 10-16 | 일부 선행 | ⬜/부분 | storage·notification·research·proxy_utils, `Dockerfile`·CI·`ARCHITECTURE`·`MIGRATION_GUIDE` **선행 구현** |
+
+> **재기준 원칙**: Phase 0~2는 계획 대비 압축 진행(2주→9일 등)됐으므로 잔여(Phase 3 이후)는 캘린더 주차가 아니라 **의존성·검증 요건**(예: Phase 3.5의 2주 대조, Phase 2.9 컷오버)으로 일정을 산정한다.
+
+### Phase −1: 정리 및 기저장치 캡처 (Week 0.5, 2일) ✅ 완료
 
 | 작업 | 산출물 | 검증 |
 |------|--------|------|
@@ -324,47 +318,41 @@ class ExtractPipeline:
 
 **완료**: 골든마스터 + record/replay 하네스 (구현 + 캡처). **LLM 캡처는 여기서 반드시 진행** (Phase 3 이후엔 구 코드가 사라짐).
 
-### Phase 0: 기반 구축 + 특성화 테스트 (Week 1-2) 🟡 진행 중
+### Phase 0: 기반 구축 + 특성화 테스트 (Week 1-2) ✅ 완료 (2026-09-21)
 
-**현재 상태:** 2026-09-21 기준, 추정 진행률 ~35-40%
+**상태:** complete · **검증:** `ruff` pass · `mypy` pass · `pytest tests/unit` 49 passed · `lint-imports` 4 kept / 0 broken (위반 주입으로 강제 검증)
 
 **완료 항목:**
 - ✅ `pyproject.toml` 생성 + 설치 가능 (`pip install -e .`)
-- ✅ `src/devforge/` 골격 (7개 디렉토리: adapters, application, cli, core, domain, pipeline_stages, ports)
-- ✅ `core/config.py` (부분 구현)
-- ✅ `core/logging.py` (부분 구현)
-- ✅ `ports/extract.py` (LLMPort 인터페이스 정의)
-- ✅ `application/extract_pipeline.py` (초기 구현)
+- ✅ `src/devforge/` 골격 (adapters, application, cli, core, domain, pipeline_stages, ports)
+- ✅ `core/config.py` ConfigRegistry + 5-source merge (secrets/providers/runtime/system/state)
+- ✅ `core/logging.py` structlog + JSON, single-emission
+- ✅ `core/paths.py` Paths SSOT (DATA_DIR/SERVER_DIR/CONFIG_DIR)
+- ✅ `core/database.py` SQLAlchemy 2.0 async DatabaseGateway
+- ✅ `core/exceptions.py` DevForgeError hierarchy
+- ✅ `ports/extract.py` LLMPort
+- ✅ `application/extract_pipeline.py`
 - ✅ `domain/` 서브디렉토리: `model_management/`, `pipeline/`, `turn_collection/`, `watchdog/`
+- ✅ `alembic/` (env + initial + fix_initial_schema)
+- ✅ `import-linter` 4 contracts (layering / hexagonal / domain-subpackage-independence / domain-agnostic-of-adapters)
+- ✅ 특성화 테스트 5종: `tests/characterization/test_{day_cycle,check_all_llm,call_llm,watchdog,text_clean}.py`
 
-**진행 중:**
-- 🟡 `ConfigRegistry` 완성 (5개 설정 파일 통합 중)
-- 🟡 `Paths` 추상화 (하드코딩 경로 40곳 해결 중)
-
-**미착수 (Week 1 남은 작업):**
-- ⬜ `core/database.py` + Alembic 설정
-- ⬜ `core/paths.py` 완성
-- ⬜ `core/exceptions.py`
-- ⬜ `import-linter` CI 게이트
-
-**미착수 (Week 2):**
-- ⬜ 특성화 테스트 5개 작성
+> 상세: `docs/refactoring/REFACTORING_STATUS.yaml` `phase_0`, `docs/refactoring/phase0-work-log.md`.
 
 ---
 
-| 주차 | 작업 | 산출물 | 검증 |
-|------|------|--------|------|
-| **Week 1** | `pyproject.toml` + `src/devforge/` 골격 | 30+ `__init__.py` | `pip install -e .` 성공 |
-| | `ConfigRegistry` (5개 파일 통합, `Paths` 추상화) | `core/config.py`, `core/paths.py` | 기존 5개 파일 파싱 |
-| | `DatabaseGateway` + Alembic 설정 | `core/database.py`, `alembic/` | `alembic upgrade head` 성공 |
-| | 로깅 표준화 (structlog + JSON) | `core/logging.py` | stdout JSON 출력 |
-| | `import-linter` CI 게이트 | `pyproject.toml` | `linter` 0 violations |
-| **Week 2** | **특성화 테스트 작성 (5개 핵심 경로)** | `tests/characterization/` | - `day_cycle.sh` 배치 예약 로직 (scanned count = 10) <br> - `check_all_llm` T1/T2 probe (포트 8082 활성화 시 200) <br> - `call_llm` 응답 형식 + **응답 내용 고정** <br> - `watchdog` 60초 루프 (liveness_ts 업데이트) <br> - `text_clean` 언어 감지 (한국어 텍스트 정제 결과 고정) |
+| 계획 주차 | 실제 | 작업 | 검증 |
+|------|------|------|------|
+| Week 1 | 2026-09-13 ~ **09-21** | `pyproject.toml` + `src/devforge/` 골격, `ConfigRegistry`(5-source), `Paths`, `DatabaseGateway`+Alembic, structlog, `import-linter` | `pip install -e .`, `alembic upgrade head`, `lint-imports` 4 KEPT |
+| Week 2 | 2026-09-13 ~ **09-21** (병행) | 특성화 테스트 5종(`day_cycle`·`check_all_llm`·`call_llm`·`watchdog`·`text_clean`) | `tests/characterization/` 5/5 |
 
-**진입**: Phase −1 완료 (골든마스터 + LLM 캡처 필수)  
-**완료**: `devforge --help` 동작, 특성화 테스트 5/5 통과
+**진입**: Phase −1 완료 (골든마스터 + LLM 캡처 필수) — 충족  
+**완료**: `devforge --help` 동작, 특성화 테스트 5/5 통과 (계획 09-27 대비 **09-21 완료**)
 
-### Phase 1: 추론 컨테이너 도메인화 + LLM Provider 포트 (Week 3-4)
+### Phase 1: 추론 컨테이너 도메인화 + LLM Provider 포트 (Week 3-4) ✅ 완료 (2026-09-22)
+
+> 가이드: `docs/plans/phase1-plan.md`. 산출물: `ports/container.py`·`ports/extract.py`(LLMPort), `adapters/driven/llm/local_adapter.py`, `domain/model_management/`, `application/orchestrator.py`(골격), `core/paths.py`.
+> **실제**: 2026-09-21 ~ 09-22 (계획 Week 3-4 대비 단축).
 
 | 주차 | 작업 | 산출물 | 검증 |
 |------|------|--------|------|
@@ -376,7 +364,10 @@ class ExtractPipeline:
 | | 하드코딩 경로 40곳 검증 | `core/paths.py` | `Paths.data_dir` 오버라이드 가능 |
 | | Phase 1.5 ADR 작성 | `docs/adr/0003-shadow-db.md` | 스키마 설계 결정문서 |
 
-### Phase 1.5: 섀도 DB + Replay 하네스 (Week 4.5, 2일)
+### Phase 1.5: 섀도 DB + Replay 하네스 (Week 4.5, 2일) ✅ 완료
+
+> `devforge_shadow` 스키마 라이브 확인(`information_schema`), `scripts/shadow_diff.py`(diff=0 자체검증), `tests/fixtures/replay_harness.py` 존재. 잔여 2주 diff=0 게이트는 리팩터드 파이프라인(Phase 3)과 함께 수행.
+> **실제**: ~2026-09-20 ~ 09-22.
 
 | 작업 | 산출물 | 검증 |
 |------|--------|------|
@@ -386,7 +377,12 @@ class ExtractPipeline:
 
 **목적**: Phase 3의 구/신 비교가 **같은 DB에서 경합하지 않도록** + **LLM 응답 비재현성 해결**
 
-### Phase 2: Watchdog 도메인화 + IssueCollector (Week 5)
+### Phase 2: Watchdog 도메인화 + IssueCollector (Week 5) 🟡 Phase 2.5 shadow-run 진행 중
+
+> **코드 완료**: `docs/plans/phase2-detailed-guide-v2.md` v2.1 **COMPLETE** (18 tasks A1–E3).
+> **구현**: `domain/watchdog/{monitoring,orchestration,recovery}`, `adapters/driven/{health,container,recovery,notification}`, `adapters/driven/storage/{incident_pg,state_json,heartbeat_pg}`, `ports/{health_check,heartbeat,incident_repository,notification,recovery,state_persistence,types}`, `application/watchdog_service.py`.
+> **현재**: legacy `devforge-watchdog.service` + `devforge-watchdog-v2.service` 동시 active, 24h shadow-run 대조 데이터 수집 중(recovery off). 컷오버는 Phase 2.9. 상세 `docs/plans/phase2-gate4-cutover-plan.md`(→ `watchdog-standard-compliance.md`로 재설계).
+> **실제**: 2026-09-22 코드 완료 → **09-23 shadow-run**. 계획(Week 5, 10 tasks) 대비 **스코프 확장**(18 tasks + Gate 1~4). 잔여: `IssueCollector`, MCP `watchdog_*` 분리.
 
 | 작업 | 산출물 | 검증 |
 |------|--------|------|
@@ -395,7 +391,10 @@ class ExtractPipeline:
 | `IssueCollector` 구현 | `application/issue_collector.py` + `collected_issues` 테이블 | 자동 수집 트리거 동작 |
 | MCP 도구 `watchdog_*` 분리 | `adapters/driving/mcp/tools/watchdog/` | `devforge watchdog status` 동작 |
 
-### Phase 3: 파이프라인 도메인화 + 오케스트레이터 (Week 6-7)
+### Phase 3: 파이프라인 도메인화 + 오케스트레이터 (Week 6-7) ⬜ 계획 확정 (D6=A)
+
+> 가이드: `docs/plans/phase3-plan.md` (approved). 범위: devforge는 **embed** 단계 소유(`enriched → embedded`), shadow diff=0 + 2주 병렬 후 컷오버.
+> **재기준(2026-09-23)**: 미착수. Phase 2.9 컷오버(또는 병행) 이후 착수. 계획 Week 6-7은 실제 주차가 아니라 의존성 기준.
 
 | 주차 | 작업 | 산출물 |
 |------|------|--------|
@@ -407,7 +406,9 @@ class ExtractPipeline:
 | | orchestrate/status/resume/budget_gate | `adapters/driving/mcp/tools/orchestration/` |
 | | `day_cycle.sh` → `devforge pipeline orchestrate` 래퍼 | `scripts/day_cycle.sh` (10줄) |
 
-### Phase 3.5: 병렬 검증 (Week 8-9, **2주 확보**)
+### Phase 3.5: 병렬 검증 (Week 8-9, **2주 확보**) ⬜ 재기준
+
+> **재기준(2026-09-23)**: Phase 3 완료 후 2주 대조 시작. 주차(Week 8-9)는 계획 표기이며 실제 일정은 Phase 3 착수 시점 기준으로 산정.
 
 | 작업 | 검증 |
 |------|------|

@@ -94,7 +94,13 @@
 | 설계 결정 기록(ADR) | `adr/0001-config-priority.md` ~ `adr/0006-mcp-tool-surface.md` | record |
 | 시스템 전체 구조 | `system-architecture.md` (§3.5 코드 레이어) | active |
 | **최종 통합 계획(Cutover+MCP+결정)** | `plans/final-plan.md` | active |
-| **Phase 1 구현 가이드(추론 포트/어댑터)** | `plans/phase1-plan.md` | active |
+| **Phase 1 구현 가이드(추론 포트/어댑터)** | `plans/phase1-plan.md` | done |
+| **Phase 2 계획(watchdog 도메인화)** | `plans/phase2-plan.md` | active |
+| **Phase 2 구현 가이드 v2.1(legacy-parity, COMPLETE)** | `plans/phase2-detailed-guide-v2.md` | done |
+| Phase 2 구현 가이드 v1 | `plans/phase2-detailed-guide.md` | superseded |
+| **Phase 2 Gate 4 컷오버 실행 계획** | `plans/phase2-gate4-cutover-plan.md` | superseded |
+| Phase 2 Gate 4 코드 선행 스펙 | `plans/phase2-gate4-code-prereq.md` | record |
+| **Watchdog 표준 정합 재설계(P1–P4)** | `plans/watchdog-standard-compliance.md` | active |
 | **Python 런타임 버전 전략(현황+이관안)** | `plans/python-version-strategy.md` | active |
 | **Phase 3 계획(embed 이관, D6=A)** | `plans/phase3-plan.md` | approved |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
@@ -102,6 +108,13 @@
 | 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |
 | Ingest/Provenance 계약 | `specs/ingest-provenance.yaml` | proposed |
 | 이전 구조 정리(완료) | `_archive/plans/code-size-refactoring.md`, `refactoring/handover-refactoring.md` | record |
+
+## 최근 변경 (2026-09-23)
+- **리팩토링 현황 정합(Phase 표기 통일)**: `Phase <N>[.<M>]` 단일 체계 채택(N=로드맵 단계, M=구현/Gate/shadow-run/컷오버). `REFACTORING_PLAN.md` **v1.5** — Phase 0/1/1.5 완료·**Phase 2 shadow-run(2.5)** 반영. `refactoring/REFACTORING_STATUS.yaml` v1.1 현행화.
+- **Phase 2 진행**: `plans/phase2-detailed-guide-v2.md`(v2.1) **COMPLETE**(18 tasks). legacy `devforge-watchdog.service` + `devforge-watchdog-v2.service` **동시 active**, 24h shadow-run 대조 데이터 수집 중(recovery off). 컷오버는 Phase 2.9.
+- **컷오버 미착수**: 라이브 유닛 30개가 아직 `scripts/*` 실행(`plans/final-plan.md` §5 Phase A~I).
+- **root offload 후속 확정**: boot LV 증량 미수행 유지, fstab 미러링 미설정(대신 watchdog 원샷 결과 감시 보강). decision `root-reboot-decision-2026-09-23`.
+- **운영**: `docs/runbooks/daily-server-maintenance.md` §11 root offload·journald 상한 반영, `docs/operations/rollback-guide.md` §6.1 재부팅 체크리스트.
 
 ## 최근 변경 (2026-09-21)
 - **Phase 0 Week 1 완료**: `core/database.py`·`core/paths.py`(SSOT)·`core/exceptions.py`, import-linter 4 계약(위반 주입으로 강제 검증). 진행 추적은 [`refactoring/REFACTORING_STATUS.yaml`](./refactoring/REFACTORING_STATUS.yaml), 로그는 [`refactoring/phase0-work-log.md`](./refactoring/phase0-work-log.md).

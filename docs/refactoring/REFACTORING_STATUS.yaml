@@ -1,19 +1,24 @@
 # Machine-readable refactoring progress tracker.
 # SSOT for "where are we" queries; narrative lives in docs/REFACTORING_PLAN.md.
 # Keep this file in sync with reality at each work session (see option-3 guide).
-version: 1.0
-last_updated: 2026-09-21
+version: 1.1
+last_updated: 2026-09-23
 canonical_plan: docs/REFACTORING_PLAN.md
 canonical_appendix: docs/REFACTORING_PLAN-appendix.md
 
+# Phase notation (canonical, 2026-09-23):
+#   Phase <N>[.<M>] — N = roadmap stage from REFACTORING_PLAN (0..8);
+#   M = sub-step (0=build, 1-4=verification gates, 5=shadow/parallel run, 9=cutover).
+#   "Gate k" and cutover "Phase A-I" are labels within a phase, not separate phases.
+#   Current: Phase 2.5 = watchdog Gate 4 shadow-run.
+
 current_phase:
-  number: 0
-  name: Foundation + Characterization Tests
-  week: "Week 1-2"
-  status: complete
-  started: 2026-09-13
-  completed: 2026-09-21
-  progress_percent: 100
+  number: 2.5
+  name: "Watchdog domainization — Gate 4 shadow-run"
+  week: "Week 5-6"
+  status: in_progress
+  note: "v2.1 code COMPLETE (18 tasks A1-E3). Legacy devforge-watchdog.service and devforge-watchdog-v2.service both active; collecting 24h shadow-run parity data (recovery off) before cutover (Phase 2.9)."
+  progress_percent: 80
 
 phase_0:
   week_1:
@@ -54,13 +59,38 @@ phase_0:
     note: "tests/test_characterization.py (Phase 0.6 stub) still covers config/pipeline/fixture checks; the 5 targeted behavior-capture tests live in tests/characterization/."
 
 phase_1:
-  status: planned
+  status: complete
   week: "Week 3-4"
+  completed: 2026-09-22
+  summary: "Inference container port + LLMPort/LocalLLMAdapter; model_management domain; CLI inference subcommands; PipelineOrchestrator sketch (BudgetManager); Paths abstraction."
+  guide: docs/plans/phase1-plan.md
 
 phase_1_5:
-  status: mostly_complete
+  status: complete
   week: "Week 4.5"
-  note: "ADR-0003 Applied; devforge_shadow schema (turns_shadow + review_facts_shadow), scripts/shadow_diff.py (self-verified diff=0) and tests/fixtures/replay_harness.py already exist. Residual: real shadow run 2-week diff=0 gate after the refactored pipeline (Phase 3)."
+  note: "ADR-0003 Applied; devforge_shadow schema live (verified via information_schema), scripts/shadow_diff.py + tests/fixtures/replay_harness.py exist. Residual 2-week diff=0 gate runs with the refactored pipeline (Phase 3)."
+
+phase_2:
+  status: shadow_run
+  week: "Week 5-6"
+  guide: docs/plans/phase2-detailed-guide-v2.md
+  guide_status: "COMPLETE — 18 tasks (A1-A5, B1-B3, C1-C4, D1-D3, E1-E3)"
+  code:
+    - "domain/watchdog/{monitoring,orchestration,recovery} (pure logic)"
+    - "adapters/driven/{health,container,recovery,notification}"
+    - "adapters/driven/storage/{incident_pg,state_json,heartbeat_pg}"
+    - "ports/{health_check,heartbeat,incident_repository,notification,recovery,state_persistence,types}"
+    - "application/watchdog_service.py"
+  shadow_run:
+    status: in_progress
+    unit: devforge-watchdog-v2.service
+    legacy_unit: devforge-watchdog.service
+    plan: docs/plans/phase2-gate4-cutover-plan.md
+    note: "Gate 4 §2.5 — both units active, collecting 24h parity data (recovery off). Superseded redesign: docs/plans/watchdog-standard-compliance.md (P1-P4)."
+  verification:
+    lint_imports: "4 kept, 0 broken"
+    characterization_parity: "watchdog/recovery/systemd/system/heartbeat/llm parity tests present"
+    test_functions: 344
 
 archived_docs:
   - docs/_archive/plans/phases.md
@@ -84,7 +114,14 @@ documents:
     - docs/refactoring/phase0-work-log.md
     - docs/plans/final-plan.md
     - docs/plans/phase1-plan.md
+    - docs/plans/phase2-plan.md
+    - docs/plans/phase2-detailed-guide-v2.md
+    - docs/plans/phase2-gate4-code-prereq.md
+    - docs/plans/phase2-gate4-cutover-plan.md
+    - docs/plans/watchdog-standard-compliance.md
     - docs/plans/phase3-plan.md
+  superseded:
+    - docs/plans/phase2-detailed-guide.md  # v1 → v2.1
   runbooks:
     - docs/runbooks/option-1-phase0-continuation.md
     - docs/runbooks/option-2-secret-hardening.md
@@ -124,5 +161,7 @@ notes:
   - Phase 0 start date is the src/devforge/ first-creation date (2026-09-13).
   - "Week count fixed 16 -> 17 (Phase -1: 0.5w + Phase 1.5: 0.5w)."
   - 12 old plan documents archived on 2026-09-21 (docs/_archive/plans/).
-  - "Known drift: blueprint.yaml still reports Phase 0 progress ~35-40%; update via its owning tooling (phase_tracker) rather than editing by hand."
+  - "(2026-09-23) Phase notation unified to Phase <N>[.<M>]; Phase 0/1/1.5 marked complete, Phase 2 moved to shadow-run (2.5). REFACTORING_PLAN.md bumped to v1.5."
+  - "Live cutover NOT started: 30 user units still run scripts/* (final-plan §5 cutover Phase A-I). Current workstream = Phase 2.5 watchdog shadow-run."
+  - "(2026-09-23) blueprint.yaml updated to reality (Phase 0 complete; refactoring block current_phase 2.5). phase_tracker retired — its target docs/phases.md was archived (silent no-op) and its numbering conflicted. blueprint.yaml is now AI-maintained; refactoring SSOT = this file."
   - "Known issue: core/database.py is not wired to production (tests only); see handover known_issues CORE-DB-UNWIRED-2026-09-21."

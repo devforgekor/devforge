@@ -3,32 +3,34 @@
 # AI-maintained: updated as phases progress, items complete, or architecture decisions change.
 # Human reads for context; AI writes to keep current.
 # Phase status: planned → active → complete
-# Last updated: 2026-09-21 — canonical code plan: docs/REFACTORING_PLAN.md
+# Last updated: 2026-09-23 — canonical code plan: docs/REFACTORING_PLAN.md (v1.5)
+# NOTE: `phases:` below are the PRODUCT roadmap numbering and are NOT the same as
+# REFACTORING_PLAN phases. Refactoring progress lives in the `refactoring:` block
+# and in docs/refactoring/REFACTORING_STATUS.yaml (machine-readable SSOT).
 
 phases:
 - phase: 0
   name: Refactoring — Foundation + Characterization Tests
-  status: active
+  status: complete
   started: '2026-09-13'
-  progress: ~35-40%
+  completed: '2026-09-21'
+  progress: 100%
   refs:
-  - docs/REFACTORING_PLAN.md (v1.4 Final, 17주 계획)
+  - docs/REFACTORING_PLAN.md (v1.5, actual-baselined)
   - docs/REFACTORING_PLAN-appendix.md (Phase 4-8 상세)
+  - docs/refactoring/REFACTORING_STATUS.yaml (machine-readable SSOT)
   completed:
-  - pyproject.toml + src/devforge/ skeleton (7 directories)
-  - core/config.py (partial)
-  - core/logging.py (partial)
-  - ports/extract.py (LLMPort interface)
-  - application/extract_pipeline.py (initial)
+  - pyproject.toml + src/devforge/ skeleton (adapters, application, cli, core, domain, pipeline_stages, ports)
+  - core/config.py ConfigRegistry (5-source merge)
+  - core/logging.py (structlog + JSON, single-emission)
+  - core/paths.py (Paths SSOT: DATA_DIR/SERVER_DIR/CONFIG_DIR)
+  - core/database.py + alembic/ (initial + fix_initial_schema)
+  - core/exceptions.py (DevForgeError hierarchy)
+  - ports/extract.py (LLMPort)
+  - application/extract_pipeline.py
   - domain subdirectories (model_management, pipeline, turn_collection, watchdog)
-  in_progress:
-  - ConfigRegistry completion (5 config files merge)
-  - Paths abstraction (40 hardcoded paths)
-  planned:
-  - core/database.py + Alembic setup
-  - core/paths.py, core/exceptions.py
-  - import-linter CI gate
-  - Characterization tests (5 core paths)
+  - import-linter 4 contracts (4 kept, 0 broken)
+  - characterization tests (5 core paths: day_cycle, check_all_llm, call_llm, watchdog, text_clean)
 - phase: 1
   name: Basic Infrastructure + MCP Server
   status: partial
@@ -109,8 +111,17 @@ phases:
   - User decision rationale tracking — structured decision logging with evidence chain
   - Back-translation fidelity check — when fast translation API available
 refactoring:
-  plan: docs/REFACTORING_PLAN.md (v1.4, canonical)
-  status: partial — package scaffolded; live services still run scripts/* (cutover pending)
+  plan: docs/REFACTORING_PLAN.md (v1.5, canonical)
+  status: active — Phase 0/1/1.5 complete; Phase 2 shadow-run (2.5); live services still run scripts/* (cutover pending)
+  current_phase: '2.5'
+  current_phase_name: Watchdog domainization — Gate 4 shadow-run
+  phase_status:
+    '0': complete
+    '1': complete
+    '1.5': complete
+    '2': shadow_run
+    '3': planned
+  notation: Phase <N>[.<M>] — N=roadmap stage (0..8), M=sub-step (0=build, 1-4=gate, 5=shadow-run, 9=cutover). Gate k / cutover Phase A-I are intra-phase labels.
   package: src/devforge/ (pip install -e ., single `devforge` CLI)
   structure: src-layout + DDD bounded contexts + Ports & Adapters (hexagonal)
   docs:
