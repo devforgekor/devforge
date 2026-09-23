@@ -251,11 +251,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) 166/175: (175) VM_SIZE 불일치는 의도된 SKU 분리(런타임 mds/빌더 ms)로 종결. (166) DEVFORGE_NLI_PER_FACT 토글 추가로 배치
-  NLI 간섭 리스크 완화. 174는 운영 창(VM+opencode 재시작) 필요로 유지.'
-- '(2026-09-20, opencode) Phase 0 마무리(부분): Gate 1 정식화(gate-1-result.json, diff=0). Gate 2 백업 복원 속도 실측 — devforge_2026-09-19.dump(111MB)→51
-  tables, RTO 43s, RPO 24h(backup-restore-result.json) → 제안 RTO 4h/RPO 1d 대비 여유. RTO/RPO 사용자 확정 후 계약 freeze. W1 baseline 서비스
-  복구됨(09-20).'
 - '(2026-09-20, opencode) Phase 0 마무리: RTO 4h/RPO 1d 확정(사용자), mcp-contract status draft→frozen(12툴, allowlist diff=0). Gate
   1 정식 통과(gate-1-result.json), Gate 2 RTO/RPO 완료(backup-restore-result.json). 잔여=W1 baseline 7일 후 임계값/허용오차.'
 - '(2026-09-20, opencode) W1 baseline 재시작: 자동 수집이 09-15~19 매 실행 216/GROUP 실패(python 실행 전)로 데이터 미축적 확인. 새 D1=2026-09-20, 목표
@@ -409,3 +404,7 @@ completed_log:
   → check_dataimpulse_sync). ebooklib scripts/pipeline.py의 죽은 함수 _check_dataimpulse_usage() 제거(교차 도메인 승인). py_compile OK.'
 - '(2026-09-23, opencode) shadow-run 창 리셋: ④ graphroot 이동으로 devforge-watchdog-v2(shadow) 13:32:05 UTC 재기동 → Phase 2.5 24h
   비교 창은 09-23 13:32 ~ 09-24 13:32 UTC. P2(호스트 유닛 전환/컷오버)는 이 창 만료 후로 보류(조기 전환 금지).'
+- '(2026-09-23, opencode) 사전 준비 문서화: KV-NAME-REUSE-2026-12 — handover-secrets-kv.md §12에 재생성/이관 사전 절차(사전 점검 명령 + 12-20 실행
+  7단계 + 롤백/가드) 추가.'
+- '(2026-09-23, opencode) 사전 준비 문서화: az-gi-k1 — runbook-golden-image.md §1.6.1 운영 창 체크리스트(DiskControllerTypes=SCSI,NVMe·FX2ms_v2
+  단일·부팅 로그 확인) 추가.'
