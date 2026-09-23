@@ -174,14 +174,13 @@ decisions:
     Podman docs, Red Hat/systemd/Datadog host-monitoring. 문서 docs/plans/watchdog-standard-compliance.md. 기각: 컨테이너+nsenter/privileged(안티패턴).'
   status: open
 - id: di-delegation-01
-  detail: DataImpulse 감시는 와치독이 '경로 활성/정지 감지+기록+알림'만 담당(복구 없음). 트래픽 안전망·대시보드 비교는 프로그램(ebooklib) 내부 유지. 신호는 기존 재사용(status.json.sources.toki31
-    / collect_toki31.log / pgrep) — 신규 env·헬스비트 파일 0. L1-L4 폴백(WatchdogSec→프로그램 자립→Slack 3회→IP whitelist). docs/plans/dataimpulse-watchdog-delegation.md.
-  status: open
+  detail: '(구현 완료 2026-09-23) DataImpulse 경로 감시를 watchdog에 위임(읽기전용·fails-open·alert-only, 기본 비활성). adapters/driven/health/dataimpulse_path.py
+    + WATCHDOG_DATAIMPULSE_*. 활성화는 P2.6 이후(WATCHDOG_DATAIMPULSE_ENABLED=1). 잔여: ebooklib 신호 스키마 확정(§8-1).'
+  status: resolved
 - id: error-record-01
-  detail: 오류 상세 기록 = 3계층(L1 symptom / L2 context_jsonb / L3 observations raw). context text(500자)→jsonb 승격, 캡처 확대(systemd+container+journal+traceback),
-    마스킹 4패턴, repeat 시 갱신, action_error 추가. 별도 오류 분석 로직(감지/결정/복구 분리, decision packet, intent-only). retention L3=90일, category=watchdog_error.
-    docs/plans/error-record-analysis-design.md.
-  status: open
+  detail: '(§1 완료 2026-09-23) 3계층 오류 기록 구현: watchdog_incidents.context_jsonb(NOT NULL)+action_error+GIN, 구조화 캡처(systemd/journal40/podman)+capture_status/degraded,
+    4패턴 마스킹, repeat/reopen 갱신, action_error. 마이그레이션 미적용(승인 필요·순서게이트). §2 분석 로직은 error-analysis-01로 분리.'
+  status: resolved
 - id: model-select-01
   detail: 분석용 모델 선정 = role(reasoning) 프로파일 + AA free API enrichment + 4계층 점수(primary→보조합성×0.9→AA→키워드). AA API 키 KV(kv-common-prod-krc/ARTIFICIALANALYSIS-API-KEY),
     Free tier만(Pro 제외). 매칭 id>canonical_slug(날짜 접미사 제거). analysis_models.json 분리 산출(opencode-rr.json 불변). 폴백 OpenRouter→local
@@ -214,6 +213,11 @@ decisions:
   detail: '(2026-09-23, 사용자 결정) 구현 보류: shadow-run 창 만료(2026-09-24 13:32 UTC) 후 parity 데이터를 검토한 뒤 P2(watchdog 호스트 유닛)·후속(컷오버
     등)을 구현한다. 데이터 결과에 따라 방향이 달라질 수 있으므로 창 이전 구현 금지. 창 이전 가능: 비파괴 항목(공급망 CI/문서)만.'
   status: resolved
+- id: error-analysis-01
+  detail: '오류 분석·수정 로직(별도 계층, error-record-analysis-design.md §2): L1~L3 구조를 입력으로 군집/근본원인 후보/전체 문제점 → decision packet(evidence·fix·verify·STOP·risk·confidence).
+    intent-only(실행 권한 없음), 읽기전용 진단 기본·승인 게이트, 모든 결론에 raw_ref 근거, 불확실성 표기. 별도 모듈(application/error_analysis.py + ports/어댑터),
+    와치독과 독립 실행. 입력: watchdog_incidents/context_jsonb/observations(+action_error).'
+  status: open
 known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
@@ -255,9 +259,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) W1 baseline 재시작: 자동 수집이 09-15~19 매 실행 216/GROUP 실패(python 실행 전)로 데이터 미축적 확인. 새 D1=2026-09-20, 목표
-  7일(09-26). 실패 감지 OnFailure=baseline-daily-failed.service → 마커 ~/.local/state/baseline-daily.failed + journal. Slack 알림은
-  account_inactive로 불가(known_issue 등록).'
 - '(2026-09-20, opencode) Phase 3 계획 확정(D6=A): pre-embed는 신규 로직 소유, devforge=embed. docs/plans/phase3-plan.md 작성(+INDEX).
   text_clean 재배치 검토 결과 임베딩 앞 이동 불가(extract/embed 공통 의존).'
 - '(2026-09-20, opencode) WebObsidian 접근 재정비: root 서브도메인(notes.*) 서빙, /notes·/obsidian 라우트 제거. 제공 링크=읽기전용 공유(/share/<id>),
@@ -413,3 +414,5 @@ completed_log:
 - '(2026-09-23, opencode) decision 종결(3건): rf-cutover-01·rf-final-plan-01·rf-triage-07 — 계획 단계 완료로 resolved. final-plan.md
   정본 확립, mcp-contract frozen·Gate 1 통과·W1 baseline 진행. 실행 진척은 std-compliance-01(P1-P4)·REFACTORING_STATUS.yaml·final-plan
   §7(D7~D9)/Phase M으로 추적.'
+- '(2026-09-23, opencode) decision 정리: error-record-01 → resolved(§1 기록 완료), §2 분석 로직은 신규 decision error-analysis-01(open)로
+  분리. di-delegation-01 → resolved(구현 완료, 활성화는 P2.6 이후).'
