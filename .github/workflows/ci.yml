@@ -94,6 +94,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: [lint, type-check, architecture, test]
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
