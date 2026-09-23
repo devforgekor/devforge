@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: adapters/driven/health/
 """systemd user service/timer checks (legacy checker.py:150-162, 371-397)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -39,7 +40,7 @@ class SystemdServiceHealthChecker(HealthCheckPort):
 
 class SystemdTimerHealthChecker(HealthCheckPort):
     def __init__(self, timers: Mapping[str, int], prefix: str = "timer") -> None:
-        self._timers = dict(timers)   # timer unit -> max_idle_sec
+        self._timers = dict(timers)  # timer unit -> max_idle_sec
         self._prefix = prefix
 
     async def check_health(self) -> list[HealthCheck]:
@@ -47,12 +48,15 @@ class SystemdTimerHealthChecker(HealthCheckPort):
 
     async def _check(self, name: str, max_idle: int) -> HealthCheck:
         try:
-            r = await _run(["systemctl", "--user", "show", name,
-                            "--property=LastTriggerUSec", "--value"])
+            r = await _run(
+                ["systemctl", "--user", "show", name, "--property=LastTriggerUSec", "--value"]
+            )
             last = r.stdout.strip()
             if not last or last == "n/a":
                 return HealthCheck(f"{self._prefix}:{name}", False, "never triggered")
-            last_dt = datetime.strptime(last, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+            last_dt = datetime.strptime(last, "%a %Y-%m-%d %H:%M:%S %Z").replace(
+                tzinfo=timezone.utc
+            )
             idle = (datetime.now(timezone.utc) - last_dt).total_seconds()
             ok = idle <= max_idle
             detail = f"{int(idle)}s ago" if ok else f"{int(idle)}s idle > {max_idle}s limit"
@@ -98,8 +102,9 @@ class OneshotResultHealthChecker(HealthCheckPort):
 
     async def _check(self, name: str) -> HealthCheck:
         try:
-            r = await _run(["systemctl", "--user", "show", name,
-                            "--property=ActiveState", "--property=Result"])
+            r = await _run(
+                ["systemctl", "--user", "show", name, "--property=ActiveState", "--property=Result"]
+            )
             props: dict[str, str] = {}
             for line in r.stdout.strip().splitlines():
                 if "=" in line:

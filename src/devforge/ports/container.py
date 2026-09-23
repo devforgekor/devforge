@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: cli.py → PodmanInferenceAdapter, MCP server, tests
 """Inference container lifecycle port (llama.cpp podman containers)."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -12,6 +13,7 @@ from typing import Optional
 @dataclass(frozen=True)
 class ContainerHealth:
     """Result of a container health check."""
+
     port: int
     ok: bool
     model_key: Optional[str] = None

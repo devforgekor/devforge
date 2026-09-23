@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: cli.py → inference CLI, orchestrator, tests
 """Inference model registry (pure domain, no I/O)."""
+
 from __future__ import annotations
 
 from typing import Iterator, Mapping

@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: ports/recovery.py
 """Recovery port (legacy recover_* family)."""
+
 from __future__ import annotations
 
 from typing import Protocol

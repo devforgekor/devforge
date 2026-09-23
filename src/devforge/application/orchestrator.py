@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: cli.py, pipeline orchestration, tests
 """Pipeline orchestrator skeleton with budget management."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -18,6 +19,7 @@ class PipelineBudgetError(Exception):
 @dataclass(frozen=True)
 class Budget:
     """Time budget for a single pipeline stage."""
+
     limit_sec: int
     started_at: datetime = field(default_factory=lambda: datetime.now(tz=_KST))
 
@@ -31,14 +33,14 @@ class Budget:
     def gate(self) -> None:
         """Raise PipelineBudgetError if budget is expired."""
         if self.expired():
-            raise PipelineBudgetError(
-                f"Budget of {self.limit_sec}s exceeded"
-            )
+            raise PipelineBudgetError(f"Budget of {self.limit_sec}s exceeded")
 
 
 class PipelineStage(Protocol):
     """Protocol for a single pipeline stage."""
+
     name: str
+
     def run(self) -> str: ...
 
 

@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: ports/health_check.py
 """Health check port (batch)."""
+
 from __future__ import annotations
 
 from typing import Protocol

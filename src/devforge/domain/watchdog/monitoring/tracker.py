@@ -5,6 +5,7 @@
 
 Also houses TrendTracker (legacy state.py:28-77).
 """
+
 from __future__ import annotations
 
 import time
@@ -13,10 +14,10 @@ from typing import List, Optional, Tuple
 from devforge.domain.watchdog.monitoring.backoff import BackoffCalculator
 from devforge.ports.types import CircuitState, ComponentState, HealthCheck
 
-CIRCUIT_BREAKER_TIMEOUT = 120   # config.py:129
-BACKOFF_RESET_SEC = 600         # config.py:128
-DEFAULT_ALERT_DEDUP_SEC = 300   # state.py:148
-TREND_MAX_SAMPLES = 60          # state.py:38
+CIRCUIT_BREAKER_TIMEOUT = 120  # config.py:129
+BACKOFF_RESET_SEC = 600  # config.py:128
+DEFAULT_ALERT_DEDUP_SEC = 300  # state.py:148
+TREND_MAX_SAMPLES = 60  # state.py:38
 
 
 class ComponentTracker:
@@ -92,7 +93,11 @@ class ComponentTracker:
         return False
 
     def is_degraded(self) -> bool:
-        return self.state in (ComponentState.DEGRADED, ComponentState.UNHEALTHY, ComponentState.DOWN)
+        return self.state in (
+            ComponentState.DEGRADED,
+            ComponentState.UNHEALTHY,
+            ComponentState.DOWN,
+        )
 
     def can_attempt_recovery(self) -> bool:
         """Non-blocking backoff gate: recovery may run once next_attempt_at passes."""
@@ -107,23 +112,36 @@ class ComponentTracker:
 
     def circuit_status(self) -> CircuitState:
         is_open = self.circuit_open_until > time.monotonic()
-        return CircuitState(is_open=is_open, failure_count=self.consecutive_fail,
-                            opens_at=self.circuit_open_until if is_open else None,
-                            can_retry=self.can_retry())
+        return CircuitState(
+            is_open=is_open,
+            failure_count=self.consecutive_fail,
+            opens_at=self.circuit_open_until if is_open else None,
+            can_retry=self.can_retry(),
+        )
 
     # ── persistence ─────────────────────────────────────────────────
     def summary(self) -> dict[str, object]:
-        return {"name": self.name, "state": self.state.value, "fail_count": self.fail_count,
-                "consecutive_fail": self.consecutive_fail,
-                "circuit_open": self.circuit_open_until > time.monotonic()}
+        return {
+            "name": self.name,
+            "state": self.state.value,
+            "fail_count": self.fail_count,
+            "consecutive_fail": self.consecutive_fail,
+            "circuit_open": self.circuit_open_until > time.monotonic(),
+        }
 
     def to_dict(self) -> dict[str, object]:
-        return {"name": self.name, "state": self.state.value, "fail_count": self.fail_count,
-                "consecutive_fail": self.consecutive_fail,
-                "last_state_change": self.last_state_change, "last_alert_ts": self.last_alert_ts,
-                "last_success_ts": self.last_success_ts, "last_fail_ts": self.last_fail_ts,
-                "circuit_open_until": self.circuit_open_until,
-                "next_attempt_at": self.next_attempt_at}
+        return {
+            "name": self.name,
+            "state": self.state.value,
+            "fail_count": self.fail_count,
+            "consecutive_fail": self.consecutive_fail,
+            "last_state_change": self.last_state_change,
+            "last_alert_ts": self.last_alert_ts,
+            "last_success_ts": self.last_success_ts,
+            "last_fail_ts": self.last_fail_ts,
+            "circuit_open_until": self.circuit_open_until,
+            "next_attempt_at": self.next_attempt_at,
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "ComponentTracker":
@@ -132,12 +150,12 @@ class ComponentTracker:
             t.state = ComponentState(data.get("state", "HEALTHY"))
         except ValueError:
             t.state = ComponentState.HEALTHY
-        t.fail_count = int(data.get("fail_count", 0))            # type: ignore[call-overload]
+        t.fail_count = int(data.get("fail_count", 0))  # type: ignore[call-overload]
         t.consecutive_fail = int(data.get("consecutive_fail", 0))  # type: ignore[call-overload]
         t.last_state_change = float(data.get("last_state_change", 0.0))  # type: ignore[arg-type]
-        t.last_alert_ts = float(data.get("last_alert_ts", 0.0))    # type: ignore[arg-type]
+        t.last_alert_ts = float(data.get("last_alert_ts", 0.0))  # type: ignore[arg-type]
         t.last_success_ts = float(data.get("last_success_ts", time.monotonic()))  # type: ignore[arg-type]
-        t.last_fail_ts = float(data.get("last_fail_ts", 0.0))      # type: ignore[arg-type]
+        t.last_fail_ts = float(data.get("last_fail_ts", 0.0))  # type: ignore[arg-type]
         t.circuit_open_until = float(data.get("circuit_open_until", 0.0))  # type: ignore[arg-type]
         t.next_attempt_at = float(data.get("next_attempt_at", 0.0))  # type: ignore[arg-type]
         return t
@@ -175,7 +193,7 @@ class TrendTracker:
 
     def __init__(self, max_samples: int = TREND_MAX_SAMPLES) -> None:
         self.max_samples = max_samples
-        self._data: List[Tuple[float, float]] = []   # (monotonic_sec, value)
+        self._data: List[Tuple[float, float]] = []  # (monotonic_sec, value)
 
     def add(self, value: float, timestamp: Optional[float] = None) -> None:
         """Record a sample. Timestamp defaults to time.monotonic()."""
@@ -200,10 +218,10 @@ class TrendTracker:
             return None
         slope = (n * sxy - sx * sy) / denom
         if slope <= 0:
-            return None                       # ← slope first (legacy order)
+            return None  # ← slope first (legacy order)
         latest = ys[-1]
         if threshold <= latest:
-            return 0.0                        # ← breach second
+            return 0.0  # ← breach second
         return (threshold - latest) / slope / 60.0
 
     def latest(self) -> Optional[float]:

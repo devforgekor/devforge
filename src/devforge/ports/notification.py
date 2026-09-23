@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: ports/notification.py
 """Notification port (legacy notifier.py:345, 362)."""
+
 from __future__ import annotations
 
 from typing import Protocol

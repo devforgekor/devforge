@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: cli.py → PodmanInferenceAdapter, inference CLI, tests
 """Pure domain model for inference model metadata."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

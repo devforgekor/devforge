@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: domain/watchdog/orchestration/
 """Check dispatch (orchestrator.py split)."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -12,8 +13,9 @@ from devforge.ports.types import HealthCheck
 
 
 class CheckCoordinator:
-    def __init__(self, registry: TrackerRegistry,
-                 health_ports: Mapping[str, HealthCheckPort]) -> None:
+    def __init__(
+        self, registry: TrackerRegistry, health_ports: Mapping[str, HealthCheckPort]
+    ) -> None:
         self._registry = registry
         self._ports = health_ports
 

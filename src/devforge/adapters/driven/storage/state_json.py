@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: adapters/driven/storage/
 """Atomic JSON persistence, legacy-compatible (state.py:290-336)."""
+
 from __future__ import annotations
 
 import json
@@ -29,8 +30,9 @@ class JsonStateStorage(StateStoragePort):
                 "mode": mode,
             }
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            fd, tmp = tempfile.mkstemp(dir=str(self.path.parent),
-                                       prefix=".watchdog_state_", suffix=".tmp")
+            fd, tmp = tempfile.mkstemp(
+                dir=str(self.path.parent), prefix=".watchdog_state_", suffix=".tmp"
+            )
             try:
                 with os.fdopen(fd, "w") as f:
                     json.dump(payload, f, ensure_ascii=False, indent=2)

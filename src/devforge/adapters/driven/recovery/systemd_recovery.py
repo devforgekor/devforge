@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: adapters/driven/recovery/
 """RecoveryPort implementation (legacy recover_* family)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +13,7 @@ from devforge.ports.recovery import RecoveryPort
 from devforge.ports.types import RecoveryAction
 
 _RESTART = ("service", "container")
-_PROBE_DELAY_SEC = 5.0   # legacy recovery.py:111 sleep(5)
+_PROBE_DELAY_SEC = 5.0  # legacy recovery.py:111 sleep(5)
 
 
 class SystemdRecoveryAdapter(RecoveryPort):
@@ -23,8 +24,9 @@ class SystemdRecoveryAdapter(RecoveryPort):
 
     async def _systemctl(self, *args: str) -> bool:
         try:
-            r = await asyncio.to_thread(subprocess.run, ["systemctl", "--user", *args],
-                                        capture_output=True, timeout=30)
+            r = await asyncio.to_thread(
+                subprocess.run, ["systemctl", "--user", *args], capture_output=True, timeout=30
+            )
             return r.returncode == 0
         except Exception:  # noqa: BLE001
             return False

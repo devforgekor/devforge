@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: adapters/driven/storage/
 """Postgres heartbeat repository (legacy checker.py:417-491)."""
+
 from __future__ import annotations
 
 from sqlalchemy import text

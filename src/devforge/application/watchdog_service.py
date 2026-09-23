@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: application/
 """Watchdog application service (legacy orchestrator.py main loop)."""
+
 from __future__ import annotations
 
 import logging
@@ -21,17 +22,31 @@ from devforge.ports.state_persistence import StateStoragePort
 
 log = logging.getLogger(__name__)
 
-_EVENT_TYPE = {"svc": "down", "timer": "delay", "oneshot": "failed",
-               "syssvc": "down", "llm": "down", "pipeline": "stuck",
-               "system": "crit", "infra": "down"}
+_EVENT_TYPE = {
+    "svc": "down",
+    "timer": "delay",
+    "oneshot": "failed",
+    "syssvc": "down",
+    "llm": "down",
+    "pipeline": "stuck",
+    "system": "crit",
+    "infra": "down",
+}
 
 
 class WatchdogService:
-    def __init__(self, config: WatchdogConfig, registry: TrackerRegistry,
-                 check_coordinator: CheckCoordinator, recovery_coordinator: RecoveryCoordinator,
-                 recovery_port: RecoveryPort, notification_ports: Sequence[NotificationPort],
-                 incident_repo: IncidentRepository,
-                 state_storage: Optional[StateStoragePort] = None, dry_run: bool = False) -> None:
+    def __init__(
+        self,
+        config: WatchdogConfig,
+        registry: TrackerRegistry,
+        check_coordinator: CheckCoordinator,
+        recovery_coordinator: RecoveryCoordinator,
+        recovery_port: RecoveryPort,
+        notification_ports: Sequence[NotificationPort],
+        incident_repo: IncidentRepository,
+        state_storage: Optional[StateStoragePort] = None,
+        dry_run: bool = False,
+    ) -> None:
         self._config = config
         self._registry = registry
         self._checks = check_coordinator
@@ -57,8 +72,11 @@ class WatchdogService:
                 continue
             if not self._dry_run:
                 await self._incidents.resolve_if_open(c.component)
-            if (c.metric_value is not None and c.threshold is not None
-                    and c.metric_value > c.threshold) and not self._dry_run:
+            if (
+                c.metric_value is not None
+                and c.threshold is not None
+                and c.metric_value > c.threshold
+            ) and not self._dry_run:
                 for n in self._notifiers:
                     await n.send_alert(c.component, "LATENCY", c.detail)
 
@@ -76,13 +94,17 @@ class WatchdogService:
 
             if self._dry_run:
                 action = self._recovery.plan(c.component, c.detail)
-                log.info("[dry-run] %s failed: %s (would %s)",
-                         c.component, c.detail,
-                         action.kind if action is not None else "alert-only")
+                log.info(
+                    "[dry-run] %s failed: %s (would %s)",
+                    c.component,
+                    c.detail,
+                    action.kind if action is not None else "alert-only",
+                )
                 continue
 
             inc_id = await self._incidents.record_detect(
-                c.component, self._event_type(c.component), c.detail)
+                c.component, self._event_type(c.component), c.detail
+            )
             action = self._recovery.plan(c.component, c.detail)
             if action is not None and t.can_attempt_recovery():
                 # Non-blocking backoff: defer the next attempt instead of
@@ -100,8 +122,12 @@ class WatchdogService:
 
         if not self._dry_run:
             self._persist()
-        return {"checks": len(checks), "failed": len(failed), "dry_run": self._dry_run,
-                "timestamp": datetime.now(timezone.utc).isoformat()}
+        return {
+            "checks": len(checks),
+            "failed": len(failed),
+            "dry_run": self._dry_run,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
     def component_states(self) -> list[dict[str, object]]:
         """Read-model for the CLI: per-component summary (no private access)."""
@@ -119,7 +145,8 @@ class WatchdogService:
         if self._state is not None:
             payload = self._state.load()
             self._registry.restore(
-                {c["name"]: c for c in payload.get("components", []) if "name" in c})
+                {c["name"]: c for c in payload.get("components", []) if "name" in c}
+            )
             self._last_heartbeat_ts = float(payload.get("last_heartbeat_ts", 0.0))
             self._mode = payload.get("mode", self._mode)
 
@@ -165,14 +192,17 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
     svc_targets = [s for s in config.critical_services if s != ebook_svc]
     health_ports: dict[str, HealthCheckPort] = {
         "svc": SystemdServiceHealthChecker(svc_targets),
-        "ebook": EbookPipelineHealthChecker(ebook_svc),        # hang-aware (legacy check_ebook_pipeline)
-        "alert": SystemdServiceHealthChecker(config.alert_only_targets),   # svc: prefix, alert-only
+        "ebook": EbookPipelineHealthChecker(ebook_svc),  # hang-aware (legacy check_ebook_pipeline)
+        "alert": SystemdServiceHealthChecker(config.alert_only_targets),  # svc: prefix, alert-only
         "syssvc": SystemdSystemServiceHealthChecker(config.system_service_targets),
         "svcpod": SvcpodForwardingHealthChecker(config.svcpod_published_ports),
         "timer": SystemdTimerHealthChecker(config.timers),
         "oneshot": OneshotResultHealthChecker(config.oneshot_result_targets),
-        "llm": LLMHealthChecker(config.llm_targets, day_ports=set(config.day_ports),
-                                latency_baseline_ms=config.llm_latency_baseline_ms),
+        "llm": LLMHealthChecker(
+            config.llm_targets,
+            day_ports=set(config.day_ports),
+            latency_baseline_ms=config.llm_latency_baseline_ms,
+        ),
         "system": MemoryHealthChecker(),
         "disk": DiskHealthChecker(config.disks),
         "heartbeat": HeartbeatHealthChecker(heartbeat_repo, config.heartbeat_workers),
@@ -183,6 +213,7 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
 
     notifiers: list[NotificationPort] = [SystemdNotifier()]
     import os
+
     slack_token = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
     if slack_token:
         notifiers.append(SlackNotifier(slack_token, os.environ.get("SLACK_CHANNEL", "")))
@@ -190,8 +221,16 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
     incident_repo = PostgresIncidentRepository(gateway)
     state_storage = JsonStateStorage(config.state_file)
 
-    service = WatchdogService(config, registry, check_coordinator, recovery_coordinator,
-                              recovery_port, notifiers, incident_repo, state_storage,
-                              dry_run=dry_run)
+    service = WatchdogService(
+        config,
+        registry,
+        check_coordinator,
+        recovery_coordinator,
+        recovery_port,
+        notifiers,
+        incident_repo,
+        state_storage,
+        dry_run=dry_run,
+    )
     service.load_state()
     return service

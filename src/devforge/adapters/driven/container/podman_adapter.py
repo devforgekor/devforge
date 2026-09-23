@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: cli.py, inference CLI, orchestrator, tests
 """Podman adapter for inference container lifecycle."""
+
 from __future__ import annotations
 
 import logging
@@ -25,20 +26,33 @@ _INFERENCE_RUN_ARGS = [
     "run",
     "-d",
     "--replace",
-    "--name", INFERENCE_CONTAINER,
+    "--name",
+    INFERENCE_CONTAINER,
     "--rm",
-    "--entrypoint", "/bin/bash",
-    "--pull", "newer",
-    "--network", "devforge-net",
-    "-v", "/opt/ai_data/models/gguf:/models:Z",
-    "-v", f"{ENTRYPOINT_SCRIPT}:/entrypoint.d/inference-entrypoint.sh:Z",
-    "-v", f"{MODE_FILE}:/entrypoint.d/current-mode.env:Z",
-    "--publish", "127.0.0.1:8080:8080",
-    "--publish", "127.0.0.1:8081:8081",
-    "--publish", "127.0.0.1:8082:8082",
-    "--publish", "127.0.0.1:8083:8083",
-    "--publish", "127.0.0.1:8084:8084",
-    "--env", "SERVER_TIMEOUT=28800",
+    "--entrypoint",
+    "/bin/bash",
+    "--pull",
+    "newer",
+    "--network",
+    "devforge-net",
+    "-v",
+    "/opt/ai_data/models/gguf:/models:Z",
+    "-v",
+    f"{ENTRYPOINT_SCRIPT}:/entrypoint.d/inference-entrypoint.sh:Z",
+    "-v",
+    f"{MODE_FILE}:/entrypoint.d/current-mode.env:Z",
+    "--publish",
+    "127.0.0.1:8080:8080",
+    "--publish",
+    "127.0.0.1:8081:8081",
+    "--publish",
+    "127.0.0.1:8082:8082",
+    "--publish",
+    "127.0.0.1:8083:8083",
+    "--publish",
+    "127.0.0.1:8084:8084",
+    "--env",
+    "SERVER_TIMEOUT=28800",
     "ghcr.io/ggml-org/llama.cpp:server",
     "/entrypoint.d/inference-entrypoint.sh",
 ]
@@ -63,11 +77,16 @@ class PodmanInferenceAdapter(InferenceContainerManager):
         try:
             r = subprocess.run(
                 [
-                    "podman", "ps",
-                    "--filter", f"name={INFERENCE_CONTAINER}",
-                    "--format", "{{.Status}}",
+                    "podman",
+                    "ps",
+                    "--filter",
+                    f"name={INFERENCE_CONTAINER}",
+                    "--format",
+                    "{{.Status}}",
                 ],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             status = r.stdout.strip()
             if not status:
@@ -90,6 +109,7 @@ class PodmanInferenceAdapter(InferenceContainerManager):
         """Return True if the container serves *model_key*."""
         try:
             import json
+
             req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/models")
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data: Any = json.loads(resp.read())
@@ -127,7 +147,8 @@ class PodmanInferenceAdapter(InferenceContainerManager):
         try:
             subprocess.run(
                 ["podman", "rm", "-v", "-f", "-i", INFERENCE_CONTAINER],
-                capture_output=True, timeout=30,
+                capture_output=True,
+                timeout=30,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
@@ -181,6 +202,7 @@ class PodmanInferenceAdapter(InferenceContainerManager):
 
         lines = [f"{k}={v}" for k, v in pairs]
         import pathlib
+
         pathlib.Path(self._mode_env_path).write_text("\n".join(lines) + "\n")
         logger.info("wrote env for %s:%d -> %s", mode, port, meta.file if meta else "?")
 
@@ -200,26 +222,28 @@ class PodmanInferenceAdapter(InferenceContainerManager):
         health_timeout = 600
         ok = self._start_and_wait(port, health_timeout)
         if ok and model_key and not self.model_identity(port, model_key):
-                logger.warning(":%d wrong model after start — retrying with env re-write", port)
-                self._write_mode_env(mode, port, model_key)
-                self.stop()
-                ok = self._podman_start()
+            logger.warning(":%d wrong model after start — retrying with env re-write", port)
+            self._write_mode_env(mode, port, model_key)
+            self.stop()
+            ok = self._podman_start()
+            if ok:
+                ok = self._start_and_wait(port, min(health_timeout, 300))
                 if ok:
-                    ok = self._start_and_wait(port, min(health_timeout, 300))
-                    if ok:
-                        # Retry identity check with backoff
-                        for attempt in range(5):
-                            if self.model_identity(port, model_key):
-                                break
-                            wait_time = 10 * (attempt + 1)
-                            logger.warning(
-                                ":%d model identity check #%d failed — waiting %ds",
-                                port, attempt + 1, wait_time
-                            )
-                            time.sleep(wait_time)
-                            self._write_mode_env(mode, port, model_key)
-                        else:
-                            logger.error(":%d wrong model after 5 retries — continuing anyway", port)
+                    # Retry identity check with backoff
+                    for attempt in range(5):
+                        if self.model_identity(port, model_key):
+                            break
+                        wait_time = 10 * (attempt + 1)
+                        logger.warning(
+                            ":%d model identity check #%d failed — waiting %ds",
+                            port,
+                            attempt + 1,
+                            wait_time,
+                        )
+                        time.sleep(wait_time)
+                        self._write_mode_env(mode, port, model_key)
+                    else:
+                        logger.error(":%d wrong model after 5 retries — continuing anyway", port)
 
         if ok:
             logger.info(":%d ready", port)

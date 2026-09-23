@@ -15,9 +15,7 @@ from typing import Optional
 # Environment-overridable roots (SSOT).
 DATA_DIR = Path(os.environ.get("DEVFORGE_DATA_DIR", "/opt/ai_data"))
 SERVER_DIR = Path(os.environ.get("DEVFORGE_SERVER_DIR", "/opt/projects/server"))
-CONFIG_DIR = Path(
-    os.environ.get("DEVFORGE_CONFIG_DIR", str(Path.home() / ".config" / "devforge"))
-)
+CONFIG_DIR = Path(os.environ.get("DEVFORGE_CONFIG_DIR", str(Path.home() / ".config" / "devforge")))
 
 
 class Paths:

@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: adapters/driven/notification/
 """sd_notify notifier (legacy notifier.py:26-48)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,8 +14,9 @@ from devforge.ports.notification import NotificationPort
 class SystemdNotifier(NotificationPort):
     async def sd_notify(self, state: str) -> bool:
         try:
-            r = await asyncio.to_thread(subprocess.run, ["systemd-notify", "--user", state],
-                                        capture_output=True, timeout=5)
+            r = await asyncio.to_thread(
+                subprocess.run, ["systemd-notify", "--user", state], capture_output=True, timeout=5
+            )
             return r.returncode == 0
         except Exception:  # noqa: BLE001
             return False

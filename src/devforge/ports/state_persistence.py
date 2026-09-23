@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: ports/state_persistence.py
 """Port for watchdog state persistence (legacy watchdog_state.json)."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Protocol

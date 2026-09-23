@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: domain/watchdog/recovery/
 """Recovery coordinator — legacy graduated_recover (recovery.py:270-297)."""
+
 from __future__ import annotations
 
 from typing import Optional
@@ -12,8 +13,9 @@ from devforge.ports.types import RecoveryAction
 
 
 class RecoveryCoordinator:
-    def __init__(self, registry: TrackerRegistry,
-                 strategy: Optional[RecoveryStrategy] = None) -> None:
+    def __init__(
+        self, registry: TrackerRegistry, strategy: Optional[RecoveryStrategy] = None
+    ) -> None:
         self._registry = registry
         self._strategy = strategy or DefaultRecoveryStrategy()
 

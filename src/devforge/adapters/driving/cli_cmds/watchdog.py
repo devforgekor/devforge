@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: adapters/driving/cli_cmds/ (composition root: cli.py)
 """Watchdog CLI commands (driving adapter — factory injected, no application import)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -92,7 +93,7 @@ def serve() -> None:
 async def _serve_loop() -> None:
     if _factory is None:
         raise RuntimeError("watchdog.init() not called from composition root")
-    svc = await _factory()                      # single event loop
+    svc = await _factory()  # single event loop
     interval = svc.check_interval_sec
     log.info("watchdog serve: interval=%ss dry_run=%s", interval, svc.dry_run)
     _sd_notify("READY=1")

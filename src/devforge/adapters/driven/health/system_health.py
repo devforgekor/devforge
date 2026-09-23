@@ -2,6 +2,7 @@
 # Status: experimental
 # Path: adapters/driven/health/
 """Memory/disk checks (legacy checker.py:306-371)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -37,8 +38,15 @@ class MemoryHealthChecker(HealthCheckPort):
                     swap_pct = round(used / total * 100) if total else 0
             ok = pct < MEM_CRIT_PCT and swap_used < SWAP_CRIT_MB
             detail = f"mem={pct}% swap={swap_pct}%"
-            return [HealthCheck("system:memory", ok, detail,
-                                metric_value=float(pct), threshold=float(MEM_CRIT_PCT))]
+            return [
+                HealthCheck(
+                    "system:memory",
+                    ok,
+                    detail,
+                    metric_value=float(pct),
+                    threshold=float(MEM_CRIT_PCT),
+                )
+            ]
         except Exception as e:  # noqa: BLE001
             return [HealthCheck("system:memory", False, str(e))]
 
@@ -64,5 +72,10 @@ class DiskHealthChecker(HealthCheckPort):
         if pct is None:
             return HealthCheck(f"system:disk:{mount}", False, "mount not found")
         ok = pct < self._threshold
-        return HealthCheck(f"system:disk:{mount}", ok, f"{pct}% used",
-                           metric_value=float(pct), threshold=float(self._threshold))
+        return HealthCheck(
+            f"system:disk:{mount}",
+            ok,
+            f"{pct}% used",
+            metric_value=float(pct),
+            threshold=float(self._threshold),
+        )

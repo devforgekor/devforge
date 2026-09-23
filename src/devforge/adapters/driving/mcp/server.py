@@ -476,6 +476,7 @@ register_tool(
 # aborts after DEEPDIVE_OVERRUN_LIMIT consecutive checks. Phase 2: when affected_files
 # is given, max_bound = base + n*DEEPDIVE_FILE_MARGIN_SEC, clamped to [min, max].
 
+
 # base recalibrated 2026-09-20 (task #25) from 57 completed deepdive_steps
 # (2026-08-25..09-13, 0 overruns): base = ceil30(max(p90*1.5, observed_max));
 # min/max kept as safety bounds. Revisit when the sample grows.
@@ -599,7 +600,9 @@ async def _deepdive_escalate(row: dict[str, Any]) -> None:
             )
         else:
             await db.execute(
-                update(DeepDiveStep).where(DeepDiveStep.id == row["id"]).values(overrun_count=overrun)
+                update(DeepDiveStep)
+                .where(DeepDiveStep.id == row["id"])
+                .values(overrun_count=overrun)
             )
             await asyncio.to_thread(
                 _send_deepdive_alert,
@@ -664,9 +667,15 @@ async def deepdive_step_enter(params: DeepDiveStepEnterParams) -> dict[str, Any]
             "affected_files": params.affected_files,
         }
         if existing is not None:
-            await db.execute(update(DeepDiveStep).where(DeepDiveStep.id == existing.id).values(**values))
+            await db.execute(
+                update(DeepDiveStep).where(DeepDiveStep.id == existing.id).values(**values)
+            )
         else:
-            await db.execute(insert(DeepDiveStep).values(session_id=params.session_id, step=params.step, **values))
+            await db.execute(
+                insert(DeepDiveStep).values(
+                    session_id=params.session_id, step=params.step, **values
+                )
+            )
     return {
         "ok": True,
         "session_id": params.session_id,
@@ -710,14 +719,21 @@ async def deepdive_step_exit(params: DeepDiveStepExitParams) -> dict[str, Any]:
             }
         elapsed = int((datetime.now(timezone.utc) - _as_aware(existing.started_at)).total_seconds())
         await db.execute(
-            update(DeepDiveStep).where(DeepDiveStep.id == existing.id).values(
+            update(DeepDiveStep)
+            .where(DeepDiveStep.id == existing.id)
+            .values(
                 ended_at=sql_func.now(),
                 elapsed_sec=elapsed,
                 status="DONE",
                 overrun_count=0,
             )
         )
-    return {"ok": True, "session_id": params.session_id, "step": params.step, "elapsed_sec": elapsed}
+    return {
+        "ok": True,
+        "session_id": params.session_id,
+        "step": params.step,
+        "elapsed_sec": elapsed,
+    }
 
 
 register_tool(

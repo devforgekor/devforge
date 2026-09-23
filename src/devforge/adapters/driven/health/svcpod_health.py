@@ -7,6 +7,7 @@ Rootless bridge publishes ports via rootlessport (userspace proxy). If that
 process dies, containers stay healthy but the host cannot reach them
 (2026-09-12 incident). Verified by a real TCP connect, not container state.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,8 +30,9 @@ def _tcp_connect(port: int, timeout: float) -> bool:
 
 
 class SvcpodForwardingHealthChecker(HealthCheckPort):
-    def __init__(self, ports: Mapping[int, str], component: str = DEFAULT_COMPONENT,
-                 timeout: float = 1.0) -> None:
+    def __init__(
+        self, ports: Mapping[int, str], component: str = DEFAULT_COMPONENT, timeout: float = 1.0
+    ) -> None:
         self._ports = dict(ports)
         self._component = component
         self._timeout = timeout
@@ -42,6 +44,9 @@ class SvcpodForwardingHealthChecker(HealthCheckPort):
             if not ok:
                 down.append(f"{port}({label})")
         if down:
-            return [HealthCheck(self._component, False,
-                                "svc pod ports not forwarded: " + ", ".join(down))]
+            return [
+                HealthCheck(
+                    self._component, False, "svc pod ports not forwarded: " + ", ".join(down)
+                )
+            ]
         return [HealthCheck(self._component, True, f"{len(self._ports)} ports forwarded")]
