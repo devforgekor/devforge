@@ -209,6 +209,14 @@ async def _capture_context_jsonb(component: str, unit: Optional[str]) -> dict[st
     an error. Runs outside the DB session so subprocesses never hold a connection.
     """
     unit = unit or (component.split(":", 1)[1] if ":" in component else component)
+    # [WHY] "degraded must be visible": record which sections were captured vs
+    # absent so a partial context is never mistaken for a complete one.
+    is_container = unit.startswith("container-")
+    capture_status: dict[str, str] = {
+        "systemd": "absent",
+        "journal": "absent",
+        "container": "n/a" if not is_container else "absent",
+    }
     ctx: dict[str, Any] = {
         "schema_version": 1,
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -227,6 +235,7 @@ async def _capture_context_jsonb(component: str, unit: Optional[str]) -> dict[st
                 key, _, value = line.partition("=")
                 props[key] = _mask(value)
         ctx["systemd"] = props
+        capture_status["systemd"] = "ok"
 
     journal = await _run_capture(
         ["journalctl", "--user", "-u", unit, "--no-pager", "-n", str(_JOURNAL_TAIL_LINES)],
@@ -234,8 +243,9 @@ async def _capture_context_jsonb(component: str, unit: Optional[str]) -> dict[st
     )
     if journal:
         ctx["journal_tail"] = [_mask(ln) for ln in journal.splitlines() if ln.strip()]
+        capture_status["journal"] = "ok"
 
-    if unit.startswith("container-"):
+    if is_container:
         container = unit[len("container-") :]
         logs = await _run_capture(["podman", "logs", "--tail", "40", container], timeout=5)
         if logs:
@@ -244,5 +254,8 @@ async def _capture_context_jsonb(component: str, unit: Optional[str]) -> dict[st
                 masked = masked[-_CONTAINER_LOG_MAX:]
                 ctx["truncated"] = True
             ctx["container"] = {"logs_tail": masked}
+            capture_status["container"] = "ok"
 
+    ctx["capture_status"] = capture_status
+    ctx["degraded"] = [k for k, v in capture_status.items() if v == "absent"]
     return ctx

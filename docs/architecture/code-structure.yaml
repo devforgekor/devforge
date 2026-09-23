@@ -1438,6 +1438,9 @@ modules:
     watchdog_service.py:
       status: experimental
       purpose: "WatchdogService + create_watchdog_service \u2014 legacy orchestrator main loop."
+    dora.py:
+      status: experimental
+      purpose: "Pure DORA metrics derivation (2026 four keys) from deployment/incident events."
 - path: src/devforge/core/
   purpose: src/devforge/core
   files:

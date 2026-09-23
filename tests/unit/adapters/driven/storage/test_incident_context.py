@@ -41,6 +41,8 @@ async def test_capture_structured(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ctx["systemd"]["ExecMainStatus"] == "15"
     assert ctx["journal_tail"] == ["line one", "line two token=***"]
     assert ctx["truncated"] is False
+    assert ctx["capture_status"] == {"systemd": "ok", "journal": "ok", "container": "n/a"}
+    assert ctx["degraded"] == []
 
 
 @pytest.mark.asyncio
@@ -53,6 +55,8 @@ async def test_capture_container_logs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(incident_pg, "_run_capture", _fake_run)
     ctx = await incident_pg._capture_context_jsonb("svc:container-devforge-mcp", None)
     assert ctx["container"]["logs_tail"] == "container log line"
+    assert ctx["capture_status"]["container"] == "ok"
+    assert ctx["degraded"] == ["systemd", "journal"]
 
 
 @pytest.mark.asyncio
@@ -65,3 +69,5 @@ async def test_capture_best_effort_no_tools(monkeypatch: pytest.MonkeyPatch) -> 
     # missing tools (e.g. inside the v2 container) -> absent sections, not error
     assert "systemd" not in ctx
     assert "journal_tail" not in ctx
+    assert ctx["capture_status"] == {"systemd": "absent", "journal": "absent", "container": "n/a"}
+    assert ctx["degraded"] == ["systemd", "journal"]

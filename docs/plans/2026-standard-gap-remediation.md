@@ -163,7 +163,7 @@
   - Graceful degradation 패턴: **"degraded must be visible"** — 부분 결과는 **명시적으로 표시**해야 한다(무표시 partial은 downstream 오해 유발).
   - Panorama(OSDI'18): 컴포넌트가 에러를 *처리만* 하고 *보고하지 않으면* 관측성 저하 → "보고"가 원칙.
 - **판단**: 방향은 표준과 일치. 다만 **"어떤 섹션이 누락됐는지"를 명시**하는 편이 표준에 더 부합.
-- **권고**: `context_jsonb`에 **`capture_status`(예: `{"systemd":"absent","journal":"ok","container":"absent"}`)** 또는 `degraded: ["systemd","journal"]` 필드 추가 → 무표시 partial 제거. (구현은 별도 승인)
+- **권고/구현**: `context_jsonb`에 **`capture_status`**(`{"systemd":"ok|absent|n/a",...}`) + **`degraded`**(absent 섹션 목록) 필드 추가 → 무표시 partial 제거. **구현 완료**(`incident_pg._capture_context_jsonb`, 2026-09-23).
 
 ### 18.2 `context`(text) 미기록 → 기존 NULL (무해)
 
@@ -187,6 +187,6 @@
   - **Deployment frequency·lead time** ← git/CI(커밋 시각→배포=유닛/이미지 갱신 시각).
   - **기록 위치**: 일일 `state.yaml`의 `dora` 섹션(비파괴) 또는 신규 `dora_metrics` 테이블(additive). 1차는 `state.yaml` 권장.
 - **판단**: 이벤트 소스(incidents/git)가 이미 있어 **파생 계산**만 추가하면 됨. 별도 SaaS 불요.
-- **권고**: §12를 "`state.yaml.dora` 일일 기록 + `watchdog_incidents`/git에서 파생"으로 구체화.
+- **권고/구현**: §12를 "`state.yaml.dora` 일일 기록 + `watchdog_incidents`/git에서 파생"으로 구체화. **파생 계산 구현 완료**(`application/dora.py` — `compute_dora`/`deployments_from_incidents`, 순수 함수, 테스트 포함). `state.yaml.dora` 배선은 후속(incidents→CFR/recovery 즉시 파생 가능, deploy/lead는 git/CI 소스 필요).
 
 > **출처(§18)**: CNCF observability for AI agents(2026-08), Panorama OSDI'18, PostgreSQL Error Reporting/JSON log(16/19), PostgreSQL error fields, DORA `dora.dev`(2026-01 갱신)/Datadog DORA data-collected/IBM(2026-06).
