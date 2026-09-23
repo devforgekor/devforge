@@ -1,6 +1,9 @@
 # DataImpulse 경로 감시 — 와치독 위임 계획 (Deep Dive, 재정의판)
 
-> Status: proposed · 2026-09-23 · Deep Dive `dp-20260923-dataimpulse-monitoring-delegation`
+> Status: implemented (dry-run, disabled by default) · 2026-09-23 · Deep Dive `dp-20260923-dataimpulse-monitoring-delegation`
+> **구현**: `adapters/driven/health/dataimpulse_path.py`(읽기 전용·fails-open) + `ports/types.py:PathStatus` + `core/config.py`(WATCHDOG_DATAIMPULSE_*) + `watchdog_service` 등록(활성 시) + `strategies.py`(`dataimpulse:` alert-only) + `tests/unit/adapters/driven/health/test_dataimpulse_path.py`.
+> **기본 비활성**(`WATCHDOG_DATAIMPULSE_ENABLED=0`), P2.6(단일 리더) 이후 활성. **신호 실측 주의**: 현재 `status.json.sources={}`(비어 있음) → top-level `phase/updated_at` 폴백으로 동작.
+> **[한계] top-level 폴백의 의미**: 폴백 시 `active`는 "**pipeline loop가 살아 있음**"을 뜻하며 "toki31 수집 중"과 동일하지 않다(현재 `phase=loop`, `source=bookto31`). 따라서 loop만 살아 있고 toki31이 정체된 경우를 **놓칠 수 있다(false negative)**. §8-1(정상 vs 이상 판정) 확정 전에는 이 한계를 인지하고, 확정 후 `sources.toki31.phase=="collect"` 신호가 실제로 기록되도록 ebooklib 측 확인이 필요.
 > **역할 경계(사용자 확정)**: 와치독은 **감지(detect)·기록(record)·알림(alert)만**. 트래픽 안전망·사용량 제어·비교는 **프로그램(ebooklib) 내부 책임**.
 > 배치: `watchdog-standard-compliance.md` P2(호스트 유닛) 이후, P2.6(단일 리더) 이후 활성화.
 

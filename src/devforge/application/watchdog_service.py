@@ -207,6 +207,16 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
         "disk": DiskHealthChecker(config.disks),
         "heartbeat": HeartbeatHealthChecker(heartbeat_repo, config.heartbeat_workers),
     }
+    if config.dataimpulse_enabled:
+        from devforge.adapters.driven.health.dataimpulse_path import DataImpulsePathHealthChecker
+
+        health_ports["dataimpulse"] = DataImpulsePathHealthChecker(
+            status_file=config.dataimpulse_status_file,
+            log_file=config.dataimpulse_log_file,
+            stale_sec=config.dataimpulse_stale_sec,
+            deep_stale_sec=config.dataimpulse_deep_stale_sec,
+            deep_consecutive=config.dataimpulse_deep_consecutive,
+        )
     check_coordinator = CheckCoordinator(registry, health_ports)
     recovery_coordinator = RecoveryCoordinator(registry)
     recovery_port = SystemdRecoveryAdapter()

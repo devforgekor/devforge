@@ -31,6 +31,7 @@ _PREFIX: dict[str, str] = {
     "pipeline:": "pipeline",  # systemctl --user restart devforge-day-cycle
     "syssvc:": "",  # alert-only (rootful, no restart)
     "system:disk": "",  # alert-only
+    "dataimpulse:": "",  # alert-only (path liveness; recovery is ebooklib's job)
 }
 
 

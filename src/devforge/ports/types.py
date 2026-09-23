@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 
 class ComponentState(Enum):
@@ -49,6 +49,23 @@ class RecoveryAction:
     backoff_sec: int = 0
 
 
+@dataclass(frozen=True)
+class PathStatus:
+    """Read-only snapshot of a monitored data path (e.g. DataImpulse/toki31).
+
+    `state`: active | stalled | absent | unknown. `unknown` must NOT alert
+    (fails-open): a missing/unparseable signal is absence of evidence, not a fault.
+    """
+
+    name: str
+    active: bool
+    last_seen: Optional[datetime]
+    processed: Optional[int]
+    phase: Optional[str]
+    state: str = "unknown"
+    detail: str = ""
+
+
 @dataclass
 class CircuitState:
     """Circuit breaker snapshot (state.py:134-141)."""
@@ -77,3 +94,5 @@ class Incident:
     resolved_at: Optional[datetime] = None
     fail_count: int = 1
     reopen_count: int = 0
+    context_jsonb: Optional[dict[str, Any]] = None
+    action_error: Optional[dict[str, Any]] = None

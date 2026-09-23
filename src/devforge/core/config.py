@@ -441,6 +441,15 @@ class WatchdogConfig:
         }
     )
     disks: list[str] = field(default_factory=lambda: ["/", "/opt/ai_data"])
+    # DataImpulse path (toki31) liveness — read-only, alert-only (no recovery).
+    # Disabled by default until watchdog-standard-compliance P2.6 (single leader);
+    # dry-run observation first. Signals are read-only (status.json/log/pgrep).
+    dataimpulse_enabled: bool = False
+    dataimpulse_status_file: str = "/opt/ai_data/flaresolverr/ebook_watcher/status.json"
+    dataimpulse_log_file: str = "/opt/ai_data/flaresolverr/ebook_watcher/collect_toki31.log"
+    dataimpulse_stale_sec: int = 1800
+    dataimpulse_deep_stale_sec: int = 300
+    dataimpulse_deep_consecutive: int = 3
 
     @classmethod
     def from_env(cls) -> "WatchdogConfig":
@@ -453,4 +462,11 @@ class WatchdogConfig:
             check_interval_sec=int(os.getenv("WATCHDOG_CHECK_INTERVAL_SEC", "60")),
             check_timeout_sec=int(os.getenv("WATCHDOG_CHECK_TIMEOUT_SEC", "30")),
             state_file=os.getenv("WATCHDOG_STATE_FILE", "/opt/ai_data/scripts/watchdog_state.json"),
+            dataimpulse_enabled=os.getenv("WATCHDOG_DATAIMPULSE_ENABLED", "0").lower()
+            in ("1", "true", "yes", "on"),
+            dataimpulse_status_file=os.getenv("WATCHDOG_DATAIMPULSE_STATUS_FILE", cls.dataimpulse_status_file),
+            dataimpulse_log_file=os.getenv("WATCHDOG_DATAIMPULSE_LOG_FILE", cls.dataimpulse_log_file),
+            dataimpulse_stale_sec=int(os.getenv("WATCHDOG_DATAIMPULSE_STALE_SEC", "1800")),
+            dataimpulse_deep_stale_sec=int(os.getenv("WATCHDOG_DATAIMPULSE_DEEP_STALE_SEC", "300")),
+            dataimpulse_deep_consecutive=int(os.getenv("WATCHDOG_DATAIMPULSE_DEEP_CONSECUTIVE", "3")),
         )

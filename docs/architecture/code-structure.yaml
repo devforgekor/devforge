@@ -1336,6 +1336,9 @@ modules:
     ebook_health.py:
       status: experimental
       purpose: "ebook-watcher pipeline liveness (legacy checker.py:162-235)."
+    dataimpulse_path.py:
+      status: experimental
+      purpose: "DataImpulse path (toki31) liveness — read-only, alert-only (fails-open)."
 - path: src/devforge/adapters/driven/recovery/
   purpose: Recovery adapters (legacy recovery.py recover_* family)
   files:
