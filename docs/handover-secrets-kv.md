@@ -122,7 +122,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | `scripts/deploy/kv-fetch-env.py` | Key Vault → 환경변수 주입 → 명령 실행 래퍼 | P0+P1: 에러 처리 강화, retry 로직 (최대 3회, exponential backoff) |
 | `scripts/deploy/kv-backup.py` | Key Vault → GPG 암호화 백업 | P0+P1: 에러 처리 강화, retry 로직, 임시 파일 보안 강화 (tempfile 사용) |
 | `scripts/deploy/kv-export-env.sh` | 지정 키만 KV 조회 → 임시 EnvironmentFile 생성(서비스별 최소 주입) | quoting artifact 자동 정규화 (2026-09-19) |
-| `scripts/deploy/kv-safe.py` | 시크릿 **값 미출력** 래퍼 (`list`/`compare`/`set-from-env`/`set-from-file`) | 2026-09-23 신규 — DSN 등록·검증용 |
+| `scripts/deploy/kv-safe.py` | 시크릿 **값 미출력** 래퍼 (`list`/`compare`/`set-from-env`/`set-from-file`) | 2026-09-23 신규 — DSN 등록·검증용. `compare`는 **공백 무시**(KV 개행→공백 치환 대응) |
 | `.github/_deprecated/sync-kv.yml.deprecated` | GitHub → Key Vault 이전 워크플로우 (폐기, 서버 직접 등록 권장) | 2026-09-20 비활성 |
 | `.github/workflows/sync-secrets.yml` | GitHub Secrets → 서버 동기화 (기존, 유지) | - |
 

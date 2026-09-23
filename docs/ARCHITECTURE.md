@@ -62,6 +62,16 @@ ports            → (최하위, 의존성 없음)
 - `core`는 절대 `adapters`를 import하지 않는다 (순환 방지).
 - `cli.py`(composition root)만이 `application`을 import하는 진입점이다.
 
+## 3.1 CI (`.github/workflows/ci.yml`)
+
+`lint → type-check → architecture → test → build` 순서. 로컬 검증 명령은 CI와 동일하게 맞춘다:
+
+- `lint`: `ruff check src/ tests/` (**tests/ 포함**) + `ruff format --check src/`
+- `type-check`: `mypy src/ --ignore-missing-imports`
+- `architecture`: `lint-imports` (4 contracts KEPT)
+- `test`: `pytest tests/test_characterization.py tests/test_integration.py` (Postgres 서비스)
+- `build`: GHCR push (`permissions: packages: write` 필요)
+
 ## 4. 진입점 / 계약
 
 | 종류 | 정의 | 비고 |

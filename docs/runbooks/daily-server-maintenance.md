@@ -314,6 +314,8 @@ pip3 download -d /opt/ai_data/pip-cache \
 - `typer*.whl` 없음 → ⚠️ MCP 재시작 전 반드시 refill
 - 0개 → 즉시 재다운로드 후 `systemctl --user restart container-devforge-mcp`
 
+> 복구 수단: 주간 app 백업(`osync_backup.py app`)에 `/opt/ai_data/pip-cache`가 포함된다(2026-09-23).
+
 ---
 
 ## 8. 정기 유지보수 작업 (선택)
@@ -545,4 +547,4 @@ crontab -e
 
 **작성자:** Claude Code (devforge-444795)  
 **최종 업데이트:** 2026-09-23  
-**버전:** 1.2 (§7 pip-cache 추가, 섹션 재번호)
+**버전:** 1.3 (§7 pip-cache 백업 포함 명시)
