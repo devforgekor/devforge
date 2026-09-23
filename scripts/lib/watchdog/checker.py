@@ -369,20 +369,39 @@ def check_disk() -> list[dict]:
 
 
 def check_timer(timer_name: str, max_idle_sec: int = 2100) -> tuple[bool, str]:
-    """Timer가 max_idle_sec 내에 마지막으로 실행됐는지 확인."""
+    """Timer가 max_idle_sec 내에 마지막으로 실행됐는지 확인.
+
+    LastTriggerUSec는 timer 본체 발동 시각만 갱신한다. oneshot service는
+    종료 후 ActiveEnterTimestamp가 비므로 ExecMainStartTimestamp까지
+    함께 본다(수동 kick 포함).
+    """
     try:
-        r = subprocess.run(
-            ["systemctl", "--user", "show", timer_name, "--property=LastTriggerUSec", "--value"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        last_str = r.stdout.strip()
-        if not last_str or last_str == "n/a":
+        svc_name = timer_name.replace(".timer", ".service")
+        candidates: list[datetime] = []
+        queries = [
+            (timer_name, "LastTriggerUSec"),
+            (svc_name, "ActiveEnterTimestamp"),
+            (svc_name, "ExecMainStartTimestamp"),
+        ]
+        for unit, prop in queries:
+            r = subprocess.run(
+                ["systemctl", "--user", "show", unit, f"--property={prop}", "--value"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            s = r.stdout.strip()
+            if not s or s == "n/a":
+                continue
+            try:
+                dt = datetime.strptime(s, "%a %Y-%m-%d %H:%M:%S %Z")
+                candidates.append(dt.replace(tzinfo=timezone.utc))
+            except ValueError:
+                pass
+        if not candidates:
             return False, "never triggered"
 
-        last_dt = datetime.strptime(last_str, "%a %Y-%m-%d %H:%M:%S %Z")
-        last_dt = last_dt.replace(tzinfo=timezone.utc)
+        last_dt = max(candidates)
         idle = (datetime.now(timezone.utc) - last_dt).total_seconds()
         if idle > max_idle_sec:
             return False, f"{int(idle)}s idle > {max_idle_sec}s limit"
@@ -547,25 +566,35 @@ def check_all_timers() -> list[dict]:
     return results
 
 
+def _show_unit_props(name: str, user: bool) -> dict:
+    cmd = ["systemctl"]
+    if user:
+        cmd.append("--user")
+    cmd += ["show", name, "--property=LoadState", "--property=ActiveState", "--property=Result"]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+    d = {}
+    for line in r.stdout.strip().splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            d[k.strip()] = v.strip()
+    return d
+
+
 def check_oneshot_result(name: str) -> tuple[bool, str]:
     """One-shot 서비스의 '마지막 실행 결과'를 확인.
 
     타이머 LastTrigger는 서비스가 실패해도 갱신되므로, ActiveState/Result로
     실패를 감지한다. (예: daily-structure 실패 → git push 백로그 누적)
+    user 스코프 미로드 시 system 스코프로 폴백 (root offload oneshot).
     """
     try:
-        r = subprocess.run(
-            ["systemctl", "--user", "show", name,
-             "--property=ActiveState", "--property=Result"],
-            capture_output=True, text=True, timeout=5,
-        )
-        d = {}
-        for line in r.stdout.strip().splitlines():
-            if "=" in line:
-                k, _, v = line.partition("=")
-                d[k.strip()] = v.strip()
+        d = _show_unit_props(name, user=True)
+        if d.get("LoadState") == "not-found":
+            d = _show_unit_props(name, user=False)
         active = d.get("ActiveState", "")
         result = d.get("Result", "")
+        if d.get("LoadState") == "not-found":
+            return False, "LoadState=not-found"
         if active == "failed" or result not in ("", "success"):
             return False, f"ActiveState={active} Result={result}"
         return True, f"ActiveState={active} Result={result or 'success'}"

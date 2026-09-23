@@ -384,6 +384,9 @@ class WatchdogConfig:
         "devforge-restore-test.service", "devforge-system-sync.service",
         "kv-backup.service", "workspace-autocommit.service",
         "golden-image-deploy-check.service",
+        "root-volume-daily-clean.service",
+        "opencode-db-offload.service",
+        "reference-monitor.service",
     ])
     llm_targets: dict[str, int] = field(default_factory=lambda: {
         "day-extract": 8082, "night-verify": 8084,

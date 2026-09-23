@@ -169,8 +169,14 @@ def recover_oneshot(name: str) -> bool:
         return False
     log(f"  re-run oneshot {name}...")
     try:
-        subprocess.run(["systemctl", "--user", "reset-failed", name], capture_output=True, timeout=10)
-        subprocess.run(["systemctl", "--user", "start", name], capture_output=True, timeout=30)
+        # root/system 스코프 oneshot은 --user start 불가 → LoadState로 분기
+        from lib.watchdog.checker import _show_unit_props
+        user_ok = _show_unit_props(name, user=True).get("LoadState") != "not-found"
+        scope = ["systemctl"] + (["--user"] if user_ok else [])
+        subprocess.run(scope + ["reset-failed", name], capture_output=True, timeout=10)
+        r = subprocess.run(scope + ["start", name], capture_output=True, timeout=30, text=True)
+        if r.returncode != 0:
+            log(f"  oneshot start failed scope={'user' if user_ok else 'system'}: {(r.stderr or r.stdout or '')[:200]}")
         from lib.watchdog.checker import check_oneshot_result
 
         for _ in range(9):  # ~45s

@@ -164,8 +164,9 @@ def _run_timers(results: dict, dry_run: bool, mode: str = "day"):
                     log(f"  SKIP kick {name} — protection active ({_test_active})")
                 else:
                     log(f"  kicking {svc_name} (timer delayed {timer['detail']})")
+                    # --no-block: oneshot이 26s+ 걸려도 job 제출만 기다려 timeout 방지
                     r = subprocess.run(
-                        ["systemctl", "--user", "start", svc_name],
+                        ["systemctl", "--user", "--no-block", "start", svc_name],
                         capture_output=True,
                         timeout=10,
                     )
@@ -1023,6 +1024,7 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
             for m in msgs:
                 log(f"[TO_OPERATOR] {m['type']}: {m['content']}")
 
+        results: dict = {}
         try:
             results = run_day_checks(dry_run=dry_run)
             log("day check done")
@@ -1033,6 +1035,7 @@ def main_loop(one_shot: bool = False, dry_run: bool = False):
             import traceback
 
             traceback.print_exc()
+            results = {}
 
         stale_beats = check_heartbeats()
         _handle_stale_heartbeats(stale_beats)

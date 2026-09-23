@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-# [WHY] KV에 DEVFORGE_DATABASE_URL이 없다(F4). devforge 패키지를 소스에서 설치.
+# [WHY] pip -e 설치는 소스 경로 고정. DSN 폴백은 KV 미주입 시 방어용 (F4는 2026-09-23 해소).
 pip install --root-user-action=ignore -e /opt/projects/server 2>/dev/null
 export PYTHONPATH=/opt/projects/server/src:/scripts
 if [ -z "${DEVFORGE_DATABASE_URL:-}" ] && [ -n "${DEVFORGE_POSTGRES_PASSWORD:-}" ]; then

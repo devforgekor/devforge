@@ -132,6 +132,10 @@ ONESHOT_RESULT_TARGETS = [
     "kv-backup.service",  # 주간 KV 백업 (Phase 3)
     "workspace-autocommit.service",  # workspace 자동 커밋 (Phase 3)
     "golden-image-deploy-check.service",  # 배포 헬스체크 (Phase 3)
+    # root offload 재발 방지 (2026-09-23): 타이머가 돌아도 결과 실패는 LastTrigger로 못 잡음
+    "root-volume-daily-clean.service",
+    "opencode-db-offload.service",  # boot oneshot — 재부팅 후 실패 시 기록
+    "reference-monitor.service",  # weekly RSS — policy 미탐지 등 exit 1 감지
 ]
 
 # ── 컨테이너 exclusion (절대 재시작 금지) ───────────────────────────
