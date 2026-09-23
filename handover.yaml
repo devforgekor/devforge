@@ -294,33 +294,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) A-3 fastapi/mcp KV: quadlet 평문 DB 비밀번호(devforge_secret_2026) 제거. entrypoint가 KV DEVFORGE-POSTGRES-PASSWORD로
-  DEVFORGE_DATABASE_URL 구성. daemon-reload+재기동, 두 컨테이너 healthy, mcp DB 도구 정상, 평문 0. 문서 §4.2/§12 갱신(컨테이너 4개).'
-- '(2026-09-20, opencode) task #25 완료: 리팩터드(라이브) Deep Dive budget 재교정 적용(base 150/240/450/420/150/810/180, min/max 유지). MCP
-  재기동/health 확인. commit 668011e.'
-- '(2026-09-20, opencode) MCP 계약 툴 HTTP 노출: /tools/{name}에 deepdive_step_enter/exit/session_heartbeat/session_status/verify_sandbox
-  추가. E2E 검증(enter step3 affected_files=5 → effective_max 1050, status/hb/exit/sandbox) 후 정리. commit e5e9ef2.'
-- '(2026-09-20, opencode) A-2 종결: KV 신규키가 이미 결합형(MASKPROXY_PROXY_KEY/DATAIMPULSE_PROXY_KEY)으로 존재 확인 → 코드 매핑(구 백업은 구값). ebooklib
-  toki31_playwright/dataimpulse_monitor/pipeline 수정. commit 1b5e694, 499c304. known_issue kv-ki-02/decision kv-missing-audit
-  resolved.'
-- '(2026-09-20, opencode) KV 쓰기 권한 확보: sp-aiagent-rbac-prod-krc(fcf857e3) Access Policy Get/List/Set 부여(3 KV), 읽기/쓰기 검증 OK.
-  3 KV는 Access Policy 모델(enableRbacAuthorization=false)이라 RBAC 역할 무효임을 확인. KV AZ-20137133-SP-AIAGENT-CLIENT-ID 오값 교정.'
-- '(2026-09-20, opencode) Droplr 점검·수정: bear맨 회전로직 실체 확인 결과 /token·/oauth/token=404(회전 불가) + env 오타(DROPLR_AUTH_TOKEN vs ..._TOKEN_KEY).
-  droplr.py를 DROPLR_AUTH_TOKEN_KEY 읽기+Bearer/Basic 폴백으로 수정(commit 59ac667). 노출 스캔: 코드/리포 평문 없음, 로깅 없음. object-storage.md secrets.env
-  참조 정정. dp-ki-02/doc-ki-01/sec-ki-01/dp-02 resolved.'
-- '(2026-09-20, opencode) Droplr Basic 전용 단순화: JWT/Bearer 경로 제거, KV DROPLR-AUTH-TOKEN-KEY 삭제(common). Basic /account 200 검증.
-  object-storage.md 갱신. decision droplr-basic-only-2026-09-20.'
-- '(2026-09-20, opencode) Obsidian 2서버 연계 마무리: devforge/onmydoc 동일 vault(GitHub remote) 동기화 검증(추가/삭제 전파 ~70s), 양 서버 heartbeat
-  user 유닛 active, cron 1분. vault droplr-integration.py가 구 테넌트/구SP/구KV + 삭제된 DROPLR-AUTH-TOKEN-KEY(JWT)에 의존 → kv-fetch-env
-  경유 Basic(DROPLR-USER/PASS)+drplr auth login으로 정합 수정, 양 서버 동작 확인(webobsidian-url 단축 OK). 커밋 f438fff. 남은 항목: devforge git-lfs
-  미설치.'
-- '(2026-09-20, opencode) git-lfs 3.7.1 설치+git lfs install(vault .gitattributes LFS 패턴 적용). KV 정리 종료 확인: A-2/A-3/droplr Basic/쓰기
-  SP/secrets.env 제거 완료, 잔여는 시간게이트 #38/KV-NAME-REUSE(2026-12)뿐. 재부팅(WEBOBSIDIAN-CGROUP)은 임베딩 완료 후로 보류.'
-- '(2026-09-20, opencode) watchdog churn 근본원인 수정: 파이프라인 소유권 vs watchdog probe 동시성. probe 관용성(timeout 120s, 연속 3회, 503/Loading
-  transient) + 파이프라인 실행 중 recovery/stuck-restart skip. embed_window.sh 추가. commit 1d2cee1. (190 enrich 크래시는 별개 과제로 잔존)'
-- '(2026-09-20, opencode) enrich 실패 근본원인 규명: churn(Watchdog cascade + systemd Restart=on-failure)이 in-flight LLM 요청을 리셋 →
-  RemoteDisconnected. 수정: watchdog probe 관용성/소유권 skip(1d2cee1) + day-cycle Restart=no 드롭인 + pause. 격리 후 모델 정상 처리(CPU 프리필 매우
-  느림). 190 상세 갱신.'
 - '(2026-09-20, opencode) 190 enrich 종결: churn 제거(Watchdog 소유권+Restart=no) 후 enrich 1턴 완주 검증(1 enriched, 247s). RemoteDisconnected는
   churn 리셋이 원인.'
 - '(2026-09-20, opencode) 임베딩 검증: churn-off에서 embed_batch 완주(1 ok/0 failed, embeddings 3554→3555, :8081=200). 임베딩 정지 원인은 churn이
@@ -468,3 +441,16 @@ completed_log:
   chat.postMessage=not_authed — 토큰 무효 유지, 재발급 보류. (5) boot LV 미증량·fstab 미러링 미수행(사용자 결정). (6) 와치독: ONESHOT_RESULT_TARGETS에
   root-volume-daily-clean/opencode-db-offload/reference-monitor 추가, check_oneshot_result·recover_oneshot에 system 스코프 폴백. reference-monitor
   known_issue resolved.'
+- '2026-09-23: WatchdogConfig.oneshot_result_targets parity with legacy ONESHOT_RESULT_TARGETS (3종 추가); characterization parity
+  통과'
+- '2026-09-23: orchestrator main_loop results 미초기화 UnboundLocalError 수정 (NRestarts 2→0)'
+- '2026-09-23: _run_timers kick --no-block (oneshot 26s>timeout=10 타임아웃 제거); check_timer에 service ActiveEnter/ExecMainStart
+  반영'
+- '2026-09-23: check_oneshot_result system 폴백으로 root-volume-daily-clean/opencode-db-offload/reference-monitor 감지'
+- '2026-09-23: opencode-db-offload 수동 실행 — opencode.db 2.0G 이전+bind, fstab 15행, root 21%'
+- '2026-09-23: REFERENCE-MONITOR-POLICY-MISSING resolved=True (policy gate_result pass/fail 수정)'
+- '2026-09-23: ruff/mypy(76)/pytest(전체)/lint-imports(4 kept) 최종 검증 통과'
+- '2026-09-23: WatchdogConfig.oneshot_result_targets parity with legacy (3종 추가); characterization parity 통과'
+- '2026-09-23: _run_timers kick --no-block (oneshot 26s>10s timeout 제거); check_timer에 ExecMainStartTimestamp 포함'
+- '2026-09-23: REFERENCE-MONITOR-POLICY-MISSING resolved=True (gate_result pass/fail 수정 반영)'
+- '2026-09-23: ruff/mypy/pytest/lint-imports 최종 검증 전부 통과'
