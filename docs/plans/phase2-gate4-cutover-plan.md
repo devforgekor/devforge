@@ -87,12 +87,16 @@ async def _serve_loop() -> None:
 ```bash
 #!/bin/bash
 set -euo pipefail
+# [WHY] pip -e 설치는 소스 경로 고정. DSN 폴백은 KV 미주입 시 방어용 (F4는 2026-09-23 해소).
+pip install --root-user-action=ignore -e /opt/projects/server 2>/dev/null
+export PYTHONPATH=/opt/projects/server/src:/scripts
 if [ -z "${DEVFORGE_DATABASE_URL:-}" ] && [ -n "${DEVFORGE_POSTGRES_PASSWORD:-}" ]; then
   export DEVFORGE_DATABASE_URL="postgresql+asyncpg://postgres:${DEVFORGE_POSTGRES_PASSWORD}@127.0.0.1:5432/devforge_app"
 fi
 exec python3 -m devforge.cli watchdog serve
 ```
 > pod 내부이므로 host는 `127.0.0.1:5432`(F2), user는 `postgres` (mcp entrypoint와 동일).
+> 1차: KV `DEVFORGE-DATABASE-URL` EnvironmentFile 주입(2026-09-23) · 2차: 위 폴백.
 
 ### 2.3. Quadlet (수정판)
 `~/.config/containers/systemd/devforge-watchdog-v2.container`:
@@ -119,7 +123,7 @@ Environment=WATCHDOG_CHECK_INTERVAL_SEC=60
 EnvironmentFile=/run/user/1000/kv-devforge-watchdog.env
 
 [Service]
-ExecStartPre=/opt/projects/server/scripts/deploy/kv-export-env.sh /run/user/1000/kv-devforge-watchdog.env DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL
+ExecStartPre=/opt/projects/server/scripts/deploy/kv-export-env.sh /run/user/1000/kv-devforge-watchdog.env DEVFORGE-DATABASE-URL,DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL
 ExecStopPost=/bin/rm -f /run/user/1000/kv-devforge-watchdog.env
 Restart=always
 RestartSec=60
@@ -168,6 +172,7 @@ systemctl --user disable devforge-watchdog.service
 - [x] §2.1 코드(dry_run/serve/liveness/factory) 구현 + green (2026-09-22)
 - [x] `scripts/deploy/watchdog-v2-entrypoint.sh` 생성 + 실행권한
 - [x] `kv-export-env.sh`에 `SLACK-BOT-TOKEN-KEY`,`SLACK-CHANNEL` 포함 확인
+- [x] `kv-export-env.sh`에 `DEVFORGE-DATABASE-URL` 선두 포함 + mcp·watchdog-v2 quadlet 갱신 + EnvironmentFile 주입 검증 (2026-09-23)
 - [x] quadlet에서 `devforge` import 확인: `python3 -c "import devforge"` (PYTHONPATH=/src)
 - [x] pod 내 DB 도달: entrypoint DSN으로 `SELECT 1` 성공
 - [x] 백업(§2.4) 완료 (20260922)

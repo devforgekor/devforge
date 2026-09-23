@@ -117,11 +117,12 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 ### 4.1 서버 스크립트 (git 커밋됨)
 
-| 파일 | 역할 | 최근 개선 (2026-09-18) |
+| 파일 | 역할 | 최근 개선 |
 |------|------|----------------------|
 | `scripts/deploy/kv-fetch-env.py` | Key Vault → 환경변수 주입 → 명령 실행 래퍼 | P0+P1: 에러 처리 강화, retry 로직 (최대 3회, exponential backoff) |
 | `scripts/deploy/kv-backup.py` | Key Vault → GPG 암호화 백업 | P0+P1: 에러 처리 강화, retry 로직, 임시 파일 보안 강화 (tempfile 사용) |
 | `scripts/deploy/kv-export-env.sh` | 지정 키만 KV 조회 → 임시 EnvironmentFile 생성(서비스별 최소 주입) | quoting artifact 자동 정규화 (2026-09-19) |
+| `scripts/deploy/kv-safe.py` | 시크릿 **값 미출력** 래퍼 (`list`/`compare`/`set-from-env`/`set-from-file`) | 2026-09-23 신규 — DSN 등록·검증용 |
 | `.github/_deprecated/sync-kv.yml.deprecated` | GitHub → Key Vault 이전 워크플로우 (폐기, 서버 직접 등록 권장) | 2026-09-20 비활성 |
 | `.github/workflows/sync-secrets.yml` | GitHub Secrets → 서버 동기화 (기존, 유지) | - |
 
@@ -147,7 +148,8 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | `ebook-watcher.service` | 후속 | 2026-09-18 | ebook 파이프라인 loop |
 | `devforge-news.service` | 후속 | 2026-09-18 | news collector |
 | `container-postgres.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh |
-| `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh (+DEVFORGE-POSTGRES-PASSWORD, 2026-09-20) |
+| `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh (+`DEVFORGE-POSTGRES-PASSWORD` 2026-09-20, **`DEVFORGE-DATABASE-URL` 2026-09-23**) |
+| `devforge-watchdog-v2.container` | Phase 3 | 2026-09-23 | ExecStartPre + kv-export-env.sh (**`DEVFORGE-DATABASE-URL`**+PASSWORD+SLACK) — 재시작 시 DSN KV 주입 |
 | `container-webobsidian.container` | Phase 3 | 2026-09-19 | ExecStartPre + kv-export-env.sh (WEBOBSIDIAN-PASSWORD) |
 | `container-devforge-fastapi.container` | Phase 4 | 2026-09-20 | entrypoint `kv-fetch-env.py` 래퍼 + DB URL을 KV `DEVFORGE-POSTGRES-PASSWORD`로 런타임 구성(quadlet 평문 제거) |
 

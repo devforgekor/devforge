@@ -56,11 +56,15 @@ devforge inference ensure day_extract  # Check model readiness
 # Database
 export DEVFORGE_DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/dbname"
 ```
-> **컨테이너 (devforge-mcp / devforge-fastapi)**: `DEVFORGE_DATABASE_URL`은
-> Azure KV `DEVFORGE-DATABASE-URL`(`kv-common-prod-krc`·`kv-devforge-prod2-krc`,
-> 2026-09-23 등록)에서 `kv-fetch-env.py`로 주입하거나,
-> 컨테이너 quadlet의 `Environment=` 로 직접 주입한다.
-> 변경 후: `systemctl --user daemon-reload && systemctl --user restart container-devforge-{mcp,fastapi}`
+> **컨테이너 DSN 주입 (2026-09-23)**:
+> - KV 키 `DEVFORGE-DATABASE-URL`은 **양쪽 볼트**(`kv-common-prod-krc`·`kv-devforge-prod2-krc`)에 등록.
+> - **mcp / watchdog-v2**: quadlet `ExecStartPre`의 `kv-export-env.sh`가 `DEVFORGE-DATABASE-URL`을
+>   포함해 `/run/user/1000/kv-*.env`로 export → `EnvironmentFile` 주입. 재시작 시 갱신됨.
+> - **fastapi**: entrypoint가 `DEVFORGE_POSTGRES_PASSWORD`로 DSN 구성(방어적 폴백 — URL 미주입 시).
+> - 키 존재 확인(값 미출력): `scripts/deploy/kv-safe.py list <vault> DEVFORGE-DATABASE`
+> - 변경 후: `systemctl --user daemon-reload && systemctl --user restart container-devforge-mcp devforge-watchdog-v2`
+> - MCP 오프라인 설치 의존: `/opt/ai_data/pip-cache`에 **cp312 aarch64 wheel** 필수
+>   (캐시 비면 `import typer` 실패 → 컨테이너 crash loop; 2026-09-23 19개 wheel로 복구).
 
 # LLM
 export DEVFORGE_LLM_PROVIDER=local

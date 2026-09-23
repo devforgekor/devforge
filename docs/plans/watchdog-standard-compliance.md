@@ -111,8 +111,8 @@ TimeoutStopSec=30
 [Install]
 WantedBy=default.target
 ```
-- `watchdog.env` = `kv-export-env.sh`로 생성(DSN+Slack): `DEVFORGE_DATABASE_URL`, `SLACK_BOT_TOKEN_KEY`, `SLACK_CHANNEL`.
-- `DEVFORGE_DATABASE_URL="postgresql+asyncpg://postgres:<pw>@127.0.0.1:5432/devforge_app"` (KV의 `DEVFORGE-POSTGRES-PASSWORD` 사용).
+- `watchdog.env` = `kv-export-env.sh`로 생성(DSN+Slack): `DEVFORGE_DATABASE_URL`, `DEVFORGE_POSTGRES_PASSWORD`, `SLACK_BOT_TOKEN_KEY`, `SLACK_CHANNEL`.
+- DSN 1차 소스: KV `DEVFORGE-DATABASE-URL` (2026-09-23 등록, export 키 선두). 2차 폴백: entrypoint가 `DEVFORGE-POSTGRES-PASSWORD`로 `postgresql+asyncpg://postgres:<pw>@127.0.0.1:5432/devforge_app` 구성 — 가드는 방어적 유지.
 - 기존 컨테이너 quadlet `devforge-watchdog-v2.container`는 **제거**(동일 이름 `.service`로 대체) — shadow 비교 후가 아니라 **이전 시점에** 제거해 이름 충돌 방지.
 - `PYTHONPATH`에 `scripts` 포함: health adapter가 `lib.watchdog.config` 등 레거시 설정을 import할 수 있음(패리티 테스트 기준).
 

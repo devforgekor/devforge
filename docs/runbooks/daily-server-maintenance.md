@@ -25,6 +25,11 @@
 4. ✅ 로그 확인 (5분)
 5. ✅ 업데이트 체크 (5분)
 6. ✅ 백업 상태 (5분)
+7. ✅ pip-cache / MCP 오프라인 설치 (2분)
+8. ✅ 정기 유지보수 작업 (선택)
+9. ✅ 상태 리포트 생성
+10. ✅ 문제 발생 시 대응
+11. ✅ 완료 체크리스트
 
 ---
 
@@ -287,9 +292,33 @@ git status --short
 
 ---
 
-## 7. 정기 유지보수 작업 (선택)
+## 7. pip-cache / MCP 오프라인 설치 (2분)
 
-### 7.1 로그 로테이션 확인
+MCP entrypoint는 `pip install --no-index --find-links=/pip-cache`로 typer·rich 등 설치한다.
+캐시가 비면 `ModuleNotFoundError: typer` → 컨테이너 crash loop (2026-09-23 실제 발생).
+
+```bash
+# wheel 존재 확인 (typer 필수)
+ls /opt/ai_data/pip-cache/typer*.whl 2>/dev/null || echo "EMPTY — refill needed"
+ls /opt/ai_data/pip-cache/*.whl 2>/dev/null | wc -l   # 정상 시 ≥19
+
+# 없으면 재다운로드 (컨테이너 py3.12 aarch64 타깃; 호스트 py3.9 주의)
+pip3 download -d /opt/ai_data/pip-cache \
+  --python-version 312 --only-binary=:all: \
+  --implementation cp --abi cp312 \
+  --platform manylinux_2_17_aarch64 --platform manylinux2014_aarch64 --platform any \
+  typer rich structlog pyyaml asyncpg alembic pgvector
+```
+
+**판단 기준:**
+- `typer*.whl` 없음 → ⚠️ MCP 재시작 전 반드시 refill
+- 0개 → 즉시 재다운로드 후 `systemctl --user restart container-devforge-mcp`
+
+---
+
+## 8. 정기 유지보수 작업 (선택)
+
+### 8.1 로그 로테이션 확인
 
 ```bash
 # journald 로그 크기 (상한: SystemMaxUse=200M, SystemKeepFree=2G, MaxRetentionSec=2week)
@@ -301,7 +330,7 @@ sudo journalctl --vacuum-size=200M
 # 라벨 이상 시: sudo restorecon -RF /opt/netdata /home/opc/.cache …
 ```
 
-### 7.2 임시 파일 정리
+### 8.2 임시 파일 정리
 
 ```bash
 # tmpfs 사용량
@@ -312,7 +341,7 @@ find /tmp -type f -mtime +7 -delete
 find /var/tmp -type f -mtime +7 -delete
 ```
 
-### 7.3 Docker/Podman 정리
+### 8.3 Docker/Podman 정리
 
 ```bash
 # 미사용 이미지/볼륨 정리
@@ -324,9 +353,9 @@ du -sh ~/.local/share/containers/storage/
 
 ---
 
-## 8. 상태 리포트 생성
+## 9. 상태 리포트 생성
 
-### 8.1 요약 리포트
+### 9.1 요약 리포트
 
 ```bash
 cat > /tmp/server-health-report.txt << EOF
@@ -354,7 +383,7 @@ EOF
 cat /tmp/server-health-report.txt
 ```
 
-### 8.2 리포트 저장
+### 9.2 리포트 저장
 
 ```bash
 # 리포트를 문서화
@@ -370,9 +399,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## 9. 문제 발생 시 대응
+## 10. 문제 발생 시 대응
 
-### 9.1 서비스 다운
+### 10.1 서비스 다운
 
 **증상:** systemctl status shows "failed"
 
@@ -397,7 +426,7 @@ systemctl --user restart <service>.service
 /path/to/service --verbose
 ```
 
-### 9.2 디스크 풀
+### 10.2 디스크 풀
 
 **증상:** df -h shows 100%
 
@@ -416,7 +445,7 @@ podman system prune -af --volumes
 find /opt/ai_data/backups -name "*.gz" -mtime +30 -delete
 ```
 
-### 9.3 메모리 누수
+### 10.3 메모리 누수
 
 **증상:** free -h shows low available memory
 
@@ -440,9 +469,9 @@ systemctl --user restart <service>.service
 
 ---
 
-## 10. 자동화 스크립트 (선택)
+## 11. 자동화 스크립트 (선택)
 
-### 10.1 헬스 체크 스크립트
+### 11.1 헬스 체크 스크립트
 
 ```bash
 #!/bin/bash
@@ -474,7 +503,7 @@ echo ""
 echo "=== Check Complete ==="
 ```
 
-### 10.2 cron 설정 (일일 체크)
+### 11.2 cron 설정 (일일 체크)
 
 ```bash
 # cron 작업 추가 (매일 오전 9시)
@@ -486,7 +515,7 @@ crontab -e
 
 ---
 
-## 11. 완료 체크리스트
+## 12. 완료 체크리스트
 
 작업 완료 후 아래 항목을 확인하세요:
 
@@ -499,12 +528,13 @@ crontab -e
 - [ ] `journalctl --disk-usage` ≤ 200M
 - [ ] `/var/tmp` < 500MB (`du -sh /var/tmp` — cache/dnf·temp clone 제거 후 기준)
 - [ ] 로그에 이상 패턴 없음
+- [ ] `/opt/ai_data/pip-cache/typer*.whl` 존재 (없으면 MCP crash loop 유발 — §7)
 - [ ] (재부팅 직후) rollback-guide §6.1 체크리스트 완료 (bind·label·WebObsidian drop-in·승인 재검토)
 - [ ] (선택) 상태 리포트 생성 및 저장
 
 ---
 
-## 12. 참고 문서
+## 13. 참고 문서
 
 - `/opt/projects/server/docs/OPERATIONS_GUIDE.md` — 운영 가이드
 - `/opt/projects/server/docs/system-architecture.md` — 시스템 아키텍처 (스토리지 §5: system-savings bind)
@@ -515,4 +545,4 @@ crontab -e
 
 **작성자:** Claude Code (devforge-444795)  
 **최종 업데이트:** 2026-09-23  
-**버전:** 1.1
+**버전:** 1.2 (§7 pip-cache 추가, 섹션 재번호)

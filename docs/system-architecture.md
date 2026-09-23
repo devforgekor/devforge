@@ -86,6 +86,12 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 > rootless bridge의 발행 포트는 `rootlessport`(userspace proxy)가 포워딩 —
 > 컨테이너 healthcheck와 별개로 **호스트 도달성**을 watchdog이 감시(§4.4, 2026-09-12).
 >
+> **DSN 주입(2026-09-23)**: `devforge-mcp`·`devforge-watchdog-v2`는
+> `ExecStartPre`(`kv-export-env.sh`)로 KV `DEVFORGE-DATABASE-URL`(양쪽 볼트 등록)을
+> `EnvironmentFile`에 넣는다. `devforge-fastapi`·`devforge-worker`는 entrypoint 폴백
+> (PASSWORD→DSN). MCP 재시작 전 `/opt/ai_data/pip-cache`에 cp312 aarch64 wheel 존재 확인
+> — 캐시 비면 `import typer` 실패 crash loop(§OPERATIONS_GUIDE DSN 주입 참조).
+>
 > **코드 레이어 주의(2026-09-14)**: 위 서비스/컨테이너의 `ExecStart`는 아직 레거시
 > `scripts/*`를 가리킨다. 리팩토링 최종본은 `src/devforge/` 패키지(§3.5)이며
 > **컷오버는 미완료**다 — `devforge` CLI는 설치·동작하지만 라이브 서비스는 미사용.
