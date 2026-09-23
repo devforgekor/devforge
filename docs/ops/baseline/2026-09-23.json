@@ -1,28 +1,18 @@
 {
   "date": "2026-09-23",
   "mode": "daily",
-  "turns_24h": "167",
-  "turns_total": "8301",
-  "turns_source": {
-    "legacy:pre-2026-09": "7163",
-    "opencode": "740",
-    "claude": "398"
-  },
-  "turns_age_days": "126.9",
-  "observations_24h": "44",
-  "observations_7d": "1092",
-  "pipeline_state": {
-    "embedded": "3433",
-    "embed_skipped": "78",
-    "enriched": "37",
-    "pending": "2756",
-    "verified": "1997"
-  },
+  "turns_24h": "",
+  "turns_total": "",
+  "turns_source": {},
+  "turns_age_days": "",
+  "observations_24h": "",
+  "observations_7d": "",
+  "pipeline_state": {},
   "services": {
     "devforge-turn-watcher.timer": "inactive",
     "devforge-turn-watcher.service": "active",
     "devforge-day-cycle.timer": "inactive",
-    "devforge-day-cycle.service": "activating",
+    "devforge-day-cycle.service": "inactive",
     "devforge-worker.timer": "inactive",
     "devforge-worker.service": "inactive",
     "devforge-fastapi.timer": "inactive",
@@ -30,17 +20,17 @@
     "devforge-mcp.timer": "inactive",
     "devforge-mcp.service": "inactive",
     "devforge-watchdog.timer": "inactive",
-    "devforge-watchdog.service": "active"
+    "devforge-watchdog.service": "activating"
   },
   "netdata": "active",
   "hook_overhead": {
     "iterations": 100,
-    "avg_ms": 315.2969,
-    "p50_ms": 314.5986,
-    "p95_ms": 427.9803,
-    "p99_ms": 601.8031,
-    "min_ms": 198.202,
-    "max_ms": 601.8031,
+    "avg_ms": 890.8784,
+    "p50_ms": 199.6415,
+    "p95_ms": 4079.6233,
+    "p99_ms": 5159.2458,
+    "min_ms": 35.3724,
+    "max_ms": 5159.2458,
     "mode": "safe(mock)"
   },
   "mcp_health": "{\"status\":\"healthy\",\"tools_count\":18}"
