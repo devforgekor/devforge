@@ -1,17 +1,20 @@
 last_checkpoint:
-  time: '2026-09-23T04:43:27.866653+00:00'
-  summary: 1 config, 4 docs, 1 generated
-  total_files: 7
+  time: '2026-09-23T05:07:06.35806+00:00'
+  summary: 3 source, 1 config, 4 docs, 1 generated
+  total_files: 13
   recent_files:
     data: []
     docs:
-    - server/docs/REFACTORING_PLAN-appendix.md
     - server/docs/operations/rollback-guide.md
+    - server/docs/reference-tracking-policy.yaml
     - server/docs/runbooks/daily-server-maintenance.md
     - server/docs/system-architecture.md
     config:
     - server/blueprint.yaml
-    source: []
+    source:
+    - server/scripts/lib/watchdog/checker.py
+    - server/scripts/lib/watchdog/config.py
+    - server/scripts/lib/watchdog/recovery.py
     generated:
     - server/collect_checkpoint.json
   git: {}
@@ -270,12 +273,6 @@ known_issues:
 - text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
   resolved: false
-- id: REFERENCE-MONITOR-POLICY-MISSING-2026-09-23
-  detail: 'reference-monitor.service failed(2026-09-21~, oneshot). ExecStart=%h/.config/devforge/bin/rss-monitor가 reference-tracking-policy.yaml
-    not found 로 exit 1. 정책 파일은 /opt/projects/server/_archive/reference-tracking-policy.yaml 에만 존재, ~/.config/devforge/ 에 없음.
-    timer는 enabled+active(월 16:00 UTC), service는 disabled(의도적 oneshot). WantedBy=multi-user.target은 user unit에 부적합(설치 시 주의).
-    스크립트 syntax OK. 조치 방안: (1) 정책을 ~/.config/devforge/ 또는 공식 경로로 복원, (2) 또는 timer/service disable. 아카이브가 사실상 SSOT.'
-  resolved: false
 - id: ROOT-BIND-REBOOT-2026-09-23
   detail: 'fstab bind 14곳은 opt-ai_data.mount 의존. lv_ai_data 마운트 실패 시 netdata/홈 도구 경로 소실 가능. 재부팅 후 확인: findmnt | grep system-savings(원본
     경로 14개 active), netdata active, python import 경로. 롤백: docs/operations/rollback-guide.md §6.'
@@ -297,11 +294,6 @@ known_issues:
     전환으로 복구(10-slice.conf.bak.20260920 백업). 근본해결(리부팅+drop-in 제거)은 잔존.]'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) (a) Phase1/2 hang 감지 리팩터드 포팅 완료: src/devforge/adapters/driving/mcp/server.py (+313/-46). 검증 enter/status/heartbeat/exit,
-  만료 3회→ABORT 시뮬, 재진입 거부/force, import-linter 2 KEPT, pyright 0, pytest pass, MCP 재기동 health 18툴. commit a9626ff push. known_issue
-  LIVE-MCP-DEEPDIVE-2026-09-20 resolved, decision dd-live-mcp/dd-port resolved.'
-- '(2026-09-20, opencode) C2 문서 현행화: 라이브 MCP=리팩터드 서버로 정정 — AGENTS.md(구현위치/task#25 blocked), docs/API_REFERENCE.md, docs/OPERATIONS_GUIDE.md,
-  docs/system-architecture.md. scripts/mcp_server.py=비활성 레거시 명기.'
 - '(2026-09-20, opencode) A-3 fastapi/mcp KV: quadlet 평문 DB 비밀번호(devforge_secret_2026) 제거. entrypoint가 KV DEVFORGE-POSTGRES-PASSWORD로
   DEVFORGE_DATABASE_URL 구성. daemon-reload+재기동, 두 컨테이너 healthy, mcp DB 도구 정상, 평문 0. 문서 §4.2/§12 갱신(컨테이너 4개).'
 - '(2026-09-20, opencode) task #25 완료: 리팩터드(라이브) Deep Dive budget 재교정 적용(base 150/240/450/420/150/810/180, min/max 유지). MCP
@@ -462,3 +454,17 @@ completed_log:
   drop-in 잔존(WEBOBSIDIAN-CGROUP). (5) 문서: rollback-guide §6.1 재부팅 체크리스트(bind 15·label·WebObsidian drop-in 제거·승인 재검토), daily-server-maintenance
   §3/§11 갱신. decision root-followup-2026-09-23, known_issues CADDY-HEALTHCHECK/REFERENCE-MONITOR-POLICY-MISSING 등록. (6) a-1
   미증량·a-3 미실행(장단점 보고만) 사용자 결정 반영.'
+- '(2026-09-23, devforge-444795) 실패 유닛 3건 정리 + 와치독 oneshot 감지 확장. (1) reference-monitor: 정책 _archive→~/.config/devforge+docs
+  복원, YAML gate_result 7줄 수정 → rss-monitor 성공(podman/systemd 신버전 감지). known_issue REFERENCE-MONITOR-POLICY-MISSING resolved.
+  (2) watchdog: ONESHOT_RESULT_TARGETS에 root-volume-daily-clean/opencode-db-offload/reference-monitor 추가, check_oneshot_result·recover_oneshot에
+  system 스코프 폴백 (root oneshot은 --user 미로드). 재시작 적용. (3) Slack C-1 재테스트: KV 토큰(len59) auth.test=account_inactive, chat.postMessage=not_authed
+  — 여전히 무효. (4) caddy healthcheck=컨테이너 SELinux AVC(ld-musl read denied)로 wget 실패, 호스트 :80/:2019 정상(서비스 장애 아님). (5) webobsidian=webobsidian2.slice
+  cgroup EBUSY 잔존(NRestarts 300+), 재부팅 후 10-slice.conf 제거 예정(§6.1).'
+- '(2026-09-23, devforge-444795) 실패 유닛 3건 원인 규명·해소(일부). (1) caddy healthcheck: 컨테이너 내 wget exec가 SELinux AVC (container_t→container_file_t
+  read denied, cat mislabel)로 ld-musl RELRO 실패 → healthcheck만 unhealthy, caddy.service active·host :80/:2019 정상. (2) reference-monitor:
+  정책 YAML gate_result: "pass" or "fail" (7곳) 파싱 불가 + 경로 부재 → 아카이브 복원+YAML 수정 → rss-monitor exit 0, REFERENCE 로그 확인(podman
+  v6.1.0-RC1, systemd-stable v260.5). (3) webobsidian: 10-slice.conf가 webobsidian2.slice를 가리키나 해당 cgroup이 EBUSY (스테일 잔존) →
+  NRestarts 300+ 폭주, :8787 down. 재부팅 후 drop-in 제거로 해소 예정(rollback-guide §6.1). (4) Slack 재테스트: auth.test=account_inactive,
+  chat.postMessage=not_authed — 토큰 무효 유지, 재발급 보류. (5) boot LV 미증량·fstab 미러링 미수행(사용자 결정). (6) 와치독: ONESHOT_RESULT_TARGETS에
+  root-volume-daily-clean/opencode-db-offload/reference-monitor 추가, check_oneshot_result·recover_oneshot에 system 스코프 폴백. reference-monitor
+  known_issue resolved.'

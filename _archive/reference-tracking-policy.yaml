@@ -144,7 +144,7 @@ stability_gates:
       - "Check Fedora package version: `dnf list podman` on latest Fedora (or check distro repos online)"
       - "Review GitHub Issues for the version: filter by label 'regression', sort by created"
       - "Scan Podman release notes for breaking changes in Quadlet syntax"
-    gate_result: "pass" or "fail"
+    gate_result: '\"pass\" or \"fail\"'
     evaluator_role: "human (operations owner)"
 
   systemd_stable:
@@ -161,7 +161,7 @@ stability_gates:
       - "Check RHEL/Fedora/OL package repositories for version"
       - "Look at systemd-stable branch commit history for version retention time"
       - "Read NEWS file in systemd repo for user instance changes (search: 'timer', 'Unit', 'Environment')"
-    gate_result: "pass" or "fail"
+    gate_result: '\"pass\" or \"fail\"'
     evaluator_role: "human (operations owner)"
 
   image_stable:
@@ -178,7 +178,7 @@ stability_gates:
       - "Docker Hub: tag page shows publish date"
       - "Internal log: check for service stability over last 30 days (journalctl --user -u <service>, incident log)"
       - "Search Snyk for image:tag vulnerabilities"
-    gate_result: "pass" or "fail"
+    gate_result: '\"pass\" or \"fail\"'
     evaluator_role: "human (security + ops owner)"
 
   redhat_best_practice:
@@ -189,7 +189,7 @@ stability_gates:
     how_to_check:
       - "Note article date and check for follow-up posts"
       - "Search for the pattern in Arch Wiki talk pages or Fedora mailing lists"
-    gate_result: "pass" or "fail"
+    gate_result: '\"pass\" or \"fail\"'
     evaluator_role: "automated (FTS + manual spot-check)"
 
   fedora_best_practice:
@@ -200,7 +200,7 @@ stability_gates:
     how_to_check:
       - "Check article date and Fedora version referenced"
       - "Scan comments or related forum threads"
-    gate_result: "pass" or "fail"
+    gate_result: '\"pass\" or \"fail\"'
     evaluator_role: "automated (FTS + manual spot-check)"
 
   community_documentation:
@@ -209,7 +209,7 @@ stability_gates:
       - "Recent edits are minor or for new stable versions, not reversals"
     how_to_check:
       - "View page history and 'Talk' page"
-    gate_result: "pass" or "fail"
+    gate_result: '\"pass\" or \"fail\"'
     evaluator_role: "automated (git history diff)"
 
   image_cve_free:
@@ -217,7 +217,7 @@ stability_gates:
       - "No CVE rated Critical or High affecting the current image tag"
     how_to_check:
       - "Search Snyk/Trivy with image identifier"
-    gate_result: "pass" or "fail"
+    gate_result: '\"pass\" or \"fail\"'
     evaluator_role: "automated (Snyk API query)"
 
 # ---------- Migration Difficulty Levels ----------
