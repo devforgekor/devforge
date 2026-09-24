@@ -96,12 +96,18 @@ class DataImpulsePathHealthChecker(HealthCheckPort):
             return self._structured(structured, proc)
         if log_age is not None:
             if log_age <= self._stale_sec:
-                return self._result(True, "active", None, None, None, f"active (log age={int(log_age)}s)")
-            return self._result(False, "stalled", None, None, None, f"stalled (log age={int(log_age)}s)")
+                return self._result(
+                    True, "active", None, None, None, f"active (log age={int(log_age)}s)"
+                )
+            return self._result(
+                False, "stalled", None, None, None, f"stalled (log age={int(log_age)}s)"
+            )
         if proc:
             return self._result(True, "active", None, None, None, "active (process present)")
         if self._status_file.exists():
-            return self._result(True, "unknown", None, None, None, "status unparseable, no other signal")
+            return self._result(
+                True, "unknown", None, None, None, "status unparseable, no other signal"
+            )
         return self._result(False, "absent", None, None, None, "no status/log/process")
 
     def _structured(self, status: dict[str, Any], proc: bool) -> PathStatus:
@@ -116,15 +122,23 @@ class DataImpulsePathHealthChecker(HealthCheckPort):
         ts = _parse_ts(node.get("updated_at") or status.get("updated_at"))
         if ts is None:
             if proc:
-                return self._result(True, "active", None, processed, phase, "active (process present, no timestamp)")
-            return self._result(True, "unknown", None, processed, phase, "status missing updated_at")
+                return self._result(
+                    True, "active", None, processed, phase, "active (process present, no timestamp)"
+                )
+            return self._result(
+                True, "unknown", None, processed, phase, "status missing updated_at"
+            )
         age = (datetime.now(timezone.utc) - ts).total_seconds()
         if age > self._stale_sec:
-            return self._result(False, "stalled", ts, processed, phase, f"stalled (phase={phase}, age={int(age)}s)")
+            return self._result(
+                False, "stalled", ts, processed, phase, f"stalled (phase={phase}, age={int(age)}s)"
+            )
         deep = self._deep_stall(processed)
         if deep is not None:
             return self._result(False, "stalled", ts, processed, phase, deep)
-        return self._result(True, "active", ts, processed, phase, f"active (phase={phase}, age={int(age)}s)")
+        return self._result(
+            True, "active", ts, processed, phase, f"active (phase={phase}, age={int(age)}s)"
+        )
 
     def _deep_stall(self, processed: Optional[int]) -> Optional[str]:
         """Return a stall message if `processed` has not advanced for N deep windows."""

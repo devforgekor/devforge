@@ -466,9 +466,15 @@ class WatchdogConfig:
             state_file=os.getenv("WATCHDOG_STATE_FILE", "/opt/ai_data/scripts/watchdog_state.json"),
             dataimpulse_enabled=os.getenv("WATCHDOG_DATAIMPULSE_ENABLED", "0").lower()
             in ("1", "true", "yes", "on"),
-            dataimpulse_status_file=os.getenv("WATCHDOG_DATAIMPULSE_STATUS_FILE", cls.dataimpulse_status_file),
-            dataimpulse_log_file=os.getenv("WATCHDOG_DATAIMPULSE_LOG_FILE", cls.dataimpulse_log_file),
+            dataimpulse_status_file=os.getenv(
+                "WATCHDOG_DATAIMPULSE_STATUS_FILE", cls.dataimpulse_status_file
+            ),
+            dataimpulse_log_file=os.getenv(
+                "WATCHDOG_DATAIMPULSE_LOG_FILE", cls.dataimpulse_log_file
+            ),
             dataimpulse_stale_sec=int(os.getenv("WATCHDOG_DATAIMPULSE_STALE_SEC", "1800")),
             dataimpulse_deep_stale_sec=int(os.getenv("WATCHDOG_DATAIMPULSE_DEEP_STALE_SEC", "300")),
-            dataimpulse_deep_consecutive=int(os.getenv("WATCHDOG_DATAIMPULSE_DEEP_CONSECUTIVE", "3")),
+            dataimpulse_deep_consecutive=int(
+                os.getenv("WATCHDOG_DATAIMPULSE_DEEP_CONSECUTIVE", "3")
+            ),
         )
