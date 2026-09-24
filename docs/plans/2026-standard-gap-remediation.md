@@ -1,6 +1,6 @@
 # 2026 표준 대비 서버 로직 개선 계획
 
-> Status: proposed · Date: 2026-09-23 · Owner: devforge
+> Status: **진행 중(2026-09-24)** — §1·§2 ✅ 완료 · §3·§4 ◐ 부분(모니터/SP통일; federation·회전 권한 대기) · Date: 2026-09-23 · Owner: devforge
 > Related: `REFACTORING_PLAN.md`, `plans/final-plan.md`, `plans/watchdog-standard-compliance.md`, `plans/error-record-analysis-design.md`, `plans/dataimpulse-watchdog-delegation.md`, `reports/industry-standard-comparison-20260914.md`
 > Deep Dive: `dp-20260923-2026-standard-gap-server-logic` (Yggdrasil)
 > 방법: 서버 실측(코드/CI/설정/DB) → 2026 표준·동향(web) → **context7 검증** → 항목별 갭·조치. 기존 계획에 **항목 추가** 방식(중복 최소화).
@@ -9,20 +9,20 @@
 
 ## 0. 요약 (12항목)
 
-| # | 항목 | 서버 현황(As-Is) | 갭 | 우선 |
-|---|------|------------------|----|------|
-| 1 | SBOM/서명/SLSA | CI build→GHCR **무서명**, SBOM 0 | SBOM·서명·provenance | **P0** |
-| 2 | 이미지/의존성 스캔 | trivy/pip-audit 0 | 취약점·의존성 스캔 | **P0** |
-| 3 | secretless identity | KV **SP client_secret**(장수명) | managed identity/federation | **P0** |
-| 4 | secret rotation | rotation 타이머 0(주간 kv-backup만) | 자동 rotation | **P0** |
-| 5 | MCP audit/telemetry | MCP 툴호출 감사 0(`observations` 28k는 별개) | OWASP **MCP08** | **P1** |
-| 6 | shadow MCP 인벤토리 | opencode **15개 중 4 enabled**, 감사·드리프트 0 | OWASP **MCP09** | **P1** |
-| 7 | tool-poisoning | 내부 툴, 정의 스캔·승인 0(`mcp-contract.json` frozen) | OWASP **MCP03** | **P1** |
-| 8 | progressive discovery | opencode allowlist(~33) 프루닝 | 임계(1–5%)·programmatic calling | P2 |
-| 9 | OpenTelemetry | structlog JSON + LLM `/metrics` | OTel + **GenAI conv** | **P1** |
-| 10 | SLO/error budget | watchdog alert-only 임계만 | SLO + burn-rate | **P1** |
-| 11 | policy-as-code | 문서+import-linter+lint_rules(부분) | OPA/Conftest 기계강제 | P2 |
-| 12 | canary/feature flag | shadow/병렬+digest 롤백 | canary·flag·DORA | P2 |
+| # | 항목 | 서버 현황(As-Is) | 갭 | 우선 | 상태 |
+|---|------|------------------|----|------|------|
+| 1 | SBOM/서명/SLSA | CI build→GHCR **무서명**, SBOM 0 | SBOM·서명·provenance | **P0** | ✅ 완료 |
+| 2 | 이미지/의존성 스캔 | trivy/pip-audit 0 | 취약점·의존성 스캔 | **P0** | ✅ 완료 |
+| 3 | secretless identity | KV **SP client_secret**(장수명) | managed identity/federation | **P0** | ◐ 부분 |
+| 4 | secret rotation | rotation 타이머 0(주간 kv-backup만) | 자동 rotation | **P0** | ◐ 부분 |
+| 5 | MCP audit/telemetry | MCP 툴호출 감사 0(`observations` 28k는 별개) | OWASP **MCP08** | **P1** | — |
+| 6 | shadow MCP 인벤토리 | opencode **15개 중 4 enabled**, 감사·드리프트 0 | OWASP **MCP09** | **P1** | — |
+| 7 | tool-poisoning | 내부 툴, 정의 스캔·승인 0(`mcp-contract.json` frozen) | OWASP **MCP03** | **P1** | — |
+| 8 | progressive discovery | opencode allowlist(~33) 프루닝 | 임계(1–5%)·programmatic calling | P2 | — |
+| 9 | OpenTelemetry | structlog JSON + LLM `/metrics` | OTel + **GenAI conv** | **P1** | — |
+| 10 | SLO/error budget | watchdog alert-only 임계만 | SLO + burn-rate | **P1** | — |
+| 11 | policy-as-code | 문서+import-linter+lint_rules(부분) | OPA/Conftest 기계강제 | P2 | — |
+| 12 | canary/feature flag | shadow/병렬+digest 롤백 | canary·flag·DORA | P2 | — |
 
 ---
 
@@ -32,6 +32,7 @@
 - **표준(2026)**: SBOM(CycloneDX/SPDX) + **cosign/sigstore keyless 서명** + **SLSA/in-toto provenance**가 사실상 의무(EO 14028·CISA attestation·EU CRA). 2025–26 Shai-Hulud npm/PyPI 웜(1,000+ 패키지), 77% 조직이 공급망 사고 경험(Omdia/Palo Alto).
 - **context7 검증**: `cosign` keyless sign/verify, `verify-attestation`(identity+OIDC issuer), `syft`가 CycloneDX/SPDX + in-toto 서명 attestation 지원.
 - **조치**: CI build 잡에 `anchore/sbom-action`(CycloneDX) → `cosign sign`(keyless, GH OIDC) → provenance(`actions/attest-build-provenance`) 추가. `final-plan` Phase H에 "immutable tag(P4)+서명/attestation" 명시.
+- **상태(2026-09-24) ✅ 완료**: `ci.yml` build에 SBOM(CycloneDX)+artifact, Trivy(CRITICAL/HIGH), cosign keyless, `attest-build-provenance` 추가. **전 액션 SHA 고정**(CVE-2026-33634 태그 강제푸시 대응) + 최소권한 `permissions`. 커밋 `ed6bc5d`.
 
 ## 2. 이미지 / 의존성 스캔 (P0)
 
@@ -39,18 +40,21 @@
 - **표준**: 컨테이너 이미지 스캔(`trivy image`)+SBOM 소스(`--sbom-sources oci/rekor`), Python 의존성(`pip-audit`), GitHub dependency review.
 - **context7 검증**: `trivy image --sbom-sources rekor/oci`(SBOM 기반 스캔, CycloneDX 감지).
 - **조치**: CI에 `pip-audit`(의존성) + `trivy image`(GHCR 이미지) 추가. 실패 임계(Critical/High) 정책 1p.
+- **상태(2026-09-24) ✅ 완료**: `dependency-scan`(pip-audit; dev-only pytest 어드바이저리 allowlist) + `dependency-review`(PR) + build Trivy(fixable CRITICAL/HIGH). **uv.lock 도입**(재현성) + **Dependabot**(uv/github-actions/docker). 커밋 `ed6bc5d`·`b061d2b`·`bff9062`.
 
 ## 3. Secretless Workload Identity (P0)
 
 - **As-Is**: `scripts/deploy/kv-fetch-env.py`가 `~/.config/devforge/azure-client-secret`(SP client_secret)로 OAuth 토큰 획득 → **장수명 secret**.
 - **표준**: IETF **WIMSE**(workload identity practices, 2026-08), SPIFFE/SPIRE, **workload identity federation**(GitHub OIDC)·**managed identity**. "remove→replace→rotate".
 - **조치**: (단기) SP secret 만료 감시+회전(§4). (장기) GitHub Actions→Azure는 **OIDC federation**, 서버 런타임은 **managed identity** 전환 검토. `handover-secrets-kv.md`에 경로 추가.
+- **상태(2026-09-24) ◐ 부분**: 단기 완료 — SP 자격증명 **validity probe + 만료 경보**(`kv-sp-secret-check`, daily) + **KV SP를 fcf857e3 단일로 통일**(`kv-fetch-env`/`kv-backup`/`az`/문서). 장기 미완 — 서버는 OCI(managed identity 불가), CI는 Azure 미사용 → federation/managed identity는 조건부. 커밋 `f15467b`·`61a72af`·`08248ff`·`bddcbea`.
 
 ## 4. Secret Rotation 자동화 (P0)
 
 - **As-Is**: rotation 타이머 0. `kv-backup.timer`(주간)만. SP secret `.bak` 수동 보관.
 - **표준**: 만료 **전** 갱신(WIMSE), 회전 트리거(만료 임박), 감사 로그.
 - **조치**: SP secret 만료일 기록 + 만료 30/7일 전 알림 타이머(또는 federation 전환 시 소멸). KV 시크릿 회전 절차를 `handover-secrets-kv.md`에 명문화.
+- **상태(2026-09-24) ◐ 부분**: **만료 30/7일 경보 타이머**(`devforge-sp-secret-check.timer`, daily) 구현 + 만료일 시드(2028-09-19). **자동 회전 경로**(`read-expiry`/`rotate`, Graph) 구현했으나 **`Application.ReadWrite` + 관리자 동의 대기**(현 SP는 Graph 권한 없어 자동 회전 불가). 회전 절차 문서화 pending.
 
 ## 5. MCP Audit / Telemetry (P1)
 
