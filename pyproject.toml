@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69.0", "wheel"]
+requires = ["setuptools>=84.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -29,7 +29,7 @@ classifiers = [
 dependencies = [
     # Web framework (Track A)
     "fastapi>=0.110,<1.0",
-    "uvicorn[standard]>=0.27,<1.0",
+    "uvicorn[standard]>=0.53.0,<1.0",
     # LLM / data
     "pydantic>=2.5,<3.0",
     # Database
@@ -81,7 +81,7 @@ otel = [
 ]
 track_b = [
     # Track B: LLM 공급자 추상화 (별도 문서화, Phase 0.5+에서 선택적 설치)
-    "openai>=1.40,<2.0",
+    "openai>=3.16.2,<4.0",
     "anthropic>=1.7.0,<2.0",
     "litellm>=1.40,<2.0",  # Optional: for unified provider routing
 ]
