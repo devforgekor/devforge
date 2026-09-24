@@ -259,20 +259,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-20, opencode) Phase 3 계획 확정(D6=A): pre-embed는 신규 로직 소유, devforge=embed. docs/plans/phase3-plan.md 작성(+INDEX).
-  text_clean 재배치 검토 결과 임베딩 앞 이동 불가(extract/embed 공통 의존).'
-- '(2026-09-20, opencode) WebObsidian 접근 재정비: root 서브도메인(notes.*) 서빙, /notes·/obsidian 라우트 제거. 제공 링크=읽기전용 공유(/share/<id>),
-  루트앱=비번 읽기/쓰기. webobsidian-url.py는 항상 2줄(읽기전용+편집) 출력. 편집 비번 변경(KV WEBOBSIDIAN-PASSWORD + settings.json userPasswordHash 동기화,
-  6자 미만 허용 위해 해시 직접 주입, mustChangePassword=false). 비번 값은 미기록.'
-- '(2026-09-20, opencode) web-llm 운영: Playwright Chromium(arm64)+chrome-cli-bridge 확장+relay 자동연결, Qwen 로그인(KV QWENAI-*)·CLI
-  웹UI 경로 완성(web-llm.sh). 시크릿 KV 이전(README/CLI/dataimpulse-monitor.md 평문 제거). DeepSeek 로그인은 CloudFront 403(지역차단) + 프록시(maskproxy/dataimpulse)
-  불통으로 보류.'
-- '(2026-09-20, opencode) DeepSeek 웹 로그인 해결: 원인은 HeadlessChrome UA → DeepSeek AWS WAF+CloudFront가 로그인 API를 403 차단(지역/IP 아님).
-  비-헤드리스 UA(--user-agent) 설정으로 로그인 성공, 프록시 불필요. 확장에 page.key(실제 Enter 이벤트) 추가(DeepSeek는 Enter 전송). CLI -m deepseek 웹UI 직접응답
-  검증(4/Berlin), qwen(4/Paris) 유지. stack-start.sh 기본 UA 적용.'
-- '(2026-09-20, opencode) 문서: runbooks/web-llm.md 신규(+INDEX), chrome-web-llm/README.md 전면 갱신(스택/스크립트/세션·핸드오프/UA·WAF/CDP 경고/트러블슈팅).'
-- '(2026-09-20, opencode) 문서: runbooks/webobsidian.md 신규(+INDEX), IMPLEMENTATION_GUIDE §7.5 갱신(서브도메인 루트, 접근 모델 루트=비번/공유=읽기전용,
-  /notes 라우트 제거). 비밀번호 값 미기재 검증(0건).'
 - '(2026-09-20, opencode) 계획 문서: REFACTORING_PLAN §2.5에 웹 LLM 수집 미연결 부채 추가, final-plan §3 Capture 행·D3 현황·컴포넌트 노트에 chrome-web-llm
   CLI 운영 반영(수집 배선은 Phase B).'
 - '(2026-09-20, opencode) web-llm: --search/--think 모드 추가(Qwen Web search, DeepSeek DeepThink), webd 기본 --think. 문서 갱신: runbooks/web-llm.md
@@ -416,3 +402,16 @@ completed_log:
   §7(D7~D9)/Phase M으로 추적.'
 - '(2026-09-23, opencode) decision 정리: error-record-01 → resolved(§1 기록 완료), §2 분석 로직은 신규 decision error-analysis-01(open)로
   분리. di-delegation-01 → resolved(구현 완료, 활성화는 P2.6 이후).'
+- '(2026-09-23, opencode) code: phase_tracker 은퇴(commit 8dde8c6) — docs/phases.md 아카이브로 silent no-op이던 15분 호출 제거, _archive
+  이동, blueprint AI 유지. 양방향 code-structure 테스트 추가(0686051).'
+- '(2026-09-23, opencode) code: DataImpulse 경로 감시 구현(7650a7c) — adapters/driven/health/dataimpulse_path.py(읽기전용·fails-open·alert-only,
+  기본 비활성), ports/types.PathStatus, WATCHDOG_DATAIMPULSE_*, strategies dataimpulse: alert-only. 테스트 7.'
+- '(2026-09-23, opencode) code: error-record §1 구현(412765e) — watchdog_incidents.context_jsonb+action_error+GIN(마이그레이션 20260923_error_record,
+  미적용), incident_pg 구조화 캡처(systemd/journal40/podman)+4패턴 마스킹+repeat 갱신+action_error.'
+- '(2026-09-23, opencode) code: capture_status/degraded + DORA 파생 계산 구현(dc60dd3) — incident_pg capture_status(ok/absent/n/a),
+  application/dora.py compute_dora+deployments_from_incidents(순수, 4 keys). 테스트 포함.'
+- '(2026-09-23, opencode) docs: 2026 표준 대비 개선 계획 딥다이브(0e6ed15) — plans/2026-standard-gap-remediation.md 12항목(공급망·secretless·MCP
+  Top10·OTel/SLO·policy-as-code·canary/DORA), context7/web 검증, 검토·수정 이력 6건.'
+- '(2026-09-23, opencode) docs: 계획 문서 통합(a34633f) — superseded 2건 _archive 이동(phase2-detailed-guide v1·gate4-cutover), INDEX
+  living/record 범례+미등록 등록, 등록 검증 테스트(tests/unit/test_docs_index.py), phase1/2 done·watchdog-standard active·control-plane-roadmap
+  proposed 정정.'

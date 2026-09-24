@@ -122,6 +122,8 @@
 | **Python 런타임 버전 전략(현황+이관안)** | `plans/python-version-strategy.md` | active |
 | **Phase 3 계획(embed 이관, D6=A)** | `plans/phase3-plan.md` | approved |
 | **2026 표준 대비 개선 계획(12항목)** | `plans/2026-standard-gap-remediation.md` | proposed |
+| **감시→(수정\|미실행 실행) 분리 아키텍처(종합)** | `plans/detection-remediation-architecture.md` | proposed |
+| **감시→수정/미실행 실행 구현 가이드** | `plans/detection-remediation-implementation-guide.md` | proposed |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
 | MCP 툴 사용 감사(30일) | `reports/mcp-tool-audit-20260914.md` | record |
 | 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |
