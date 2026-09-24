@@ -16,7 +16,7 @@ SECRET_FILE = os.environ.get(
     os.path.join(HOME, ".config/devforge/azure-client-secret"),
 )
 TENANT_ID = os.environ.get("AZURE_KEYVAULT_TENANT_ID", "9ec65251-a106-4dc3-9878-4278caa80b1b")
-CLIENT_ID = os.environ.get("AZURE_KEYVAULT_CLIENT_ID", "abc5aab0-5394-46e0-bf4d-daf4129d1d78")
+CLIENT_ID = os.environ.get("AZURE_KEYVAULT_CLIENT_ID", "fcf857e3-686e-49a8-b58c-f49a33e7b840")
 # 다중 KV: 앞→뒤 순서로 조회하며 동일 이름은 뒤(나중) 값이 우선한다.
 KEYVAULT_URLS = [
     u.strip()

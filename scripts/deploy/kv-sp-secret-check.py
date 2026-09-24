@@ -32,7 +32,7 @@ META_FILE = os.environ.get(
     os.path.join(HOME, ".config/devforge/azure-client-secret.meta.json"),
 )
 TENANT_ID = os.environ.get("AZURE_KEYVAULT_TENANT_ID", "9ec65251-a106-4dc3-9878-4278caa80b1b")
-CLIENT_ID = os.environ.get("AZURE_KEYVAULT_CLIENT_ID", "abc5aab0-5394-46e0-bf4d-daf4129d1d78")
+CLIENT_ID = os.environ.get("AZURE_KEYVAULT_CLIENT_ID", "fcf857e3-686e-49a8-b58c-f49a33e7b840")
 APP_ID = os.environ.get("AZURE_SP_SECRET_APP_ID", CLIENT_ID)
 WARN_DAYS = float(os.environ.get("AZURE_SP_SECRET_WARN_DAYS", "30"))
 CRITICAL_DAYS = float(os.environ.get("AZURE_SP_SECRET_CRITICAL_DAYS", "7"))
