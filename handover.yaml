@@ -1,33 +1,32 @@
 last_checkpoint:
-  time: '2026-09-24T15:00:00.882494+00:00'
-  summary: 16 source, 2 docs, 1 generated
-  total_files: 27
+  time: '2026-09-25T00:30:00.283832+09:00'
+  summary: 10 source, 2 docs, 1 generated
+  total_files: 21
   recent_files:
-    data: []
-    docs:
-    - server/docs/architecture/code-structure.yaml
-    - server/docs/plans/2026-standard-gap-remediation.md
-    config: []
     source:
     - server/src/devforge/adapters/driven/llm/local_adapter.py
     - server/src/devforge/adapters/driven/storage/incident_pg.py
-    - server/src/devforge/adapters/driving/cli_cmds/watchdog.py
     - server/src/devforge/adapters/driving/mcp/server.py
     - server/src/devforge/application/slo.py
     - server/src/devforge/application/watchdog_service.py
     - server/src/devforge/cli.py
-    - server/src/devforge/core/config.py
     - server/src/devforge/core/logging.py
     - server/src/devforge/core/telemetry.py
-    - server/src/devforge/ports/incident_repository.py
-    - server/src/devforge/ports/types.py
-    - server/tests/unit/adapters/driven/storage/test_incident_pg.py
-    - server/tests/unit/application/test_slo.py
     - server/tests/unit/application/test_watchdog_service.py
     - server/tests/unit/core/test_telemetry.py
+    config: []
+    docs:
+    - server/docs/architecture/code-structure.yaml
+    - server/docs/plans/2026-standard-gap-remediation.md
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 19 files changed, 258 insertions(+), 61 deletions(-)
+      staged: (none)
+      untracked_files: 5
   task: null
 decisions:
 - id: nd13-01
@@ -301,7 +300,8 @@ known_issues:
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
   resolved: false
 - id: shadow-paused-2026-09-24
-  detail: 'watchdog v2 shadow 정지(inactive). ⑦ §10 SLO·⑧ §9 OTel·⑨ #13/#12 등 변경 후 재시작 필요(⑩). legacy는 active(production).'
+  detail: 'watchdog v2 shadow 정지(inactive). ⑦ §10 SLO 완료, ⑧ §9 OTel API 계측 완료(로컬 trace/run + GenAI span; exporter는 devforge[otel])
+    · ⑨ #13/#12 변경 후 재시작 필요(⑩). legacy는 active(production).'
   resolved: false
 - id: SLACK-BOT-INACTIVE-2026-09-20
   detail: '진단(2026-09-20): KV 이름 매핑 정상(SLACK_BOT_TOKEN_KEY). KV 토큰으로 auth.test/chat.postMessage → error=account_inactive(Slack
@@ -310,23 +310,15 @@ known_issues:
     갱신). **보류(사용자 지시)**.'
   resolved: false
 - id: standards-p1-remaining
-  detail: §10 SLO/error budget, §9 OTel+GenAI 미착수(P1). §5/§6/§7 완료.
+  detail: §10 SLO/error budget ◐ 부분(application/slo.py + config.slo_targets + find_since + CLI watchdog slo; MWMBR/배선은 백엔드·⑩
+    후). §9 OTel+GenAI ◐ 부분(core/telemetry.py + opentelemetry-api 기본 + extra [otel]; 로컬 trace/run 상관 + LLM GenAI span; exporter
+    백엔드 결정 필요). §5/§6/§7 완료.
   resolved: false
 - id: WATCHDOG-CONTAINER-TOOLS-2026-09-23
   detail: 'watchdog v2 컨테이너에 systemctl/journalctl/pgrep/free 부재 → svc/timer/oneshot/ebook/system 체크 전부 오탐(false-negative).
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-21, devforge-444795) seedling 추적해제 + postgres Stage3. (1) _archive/seedling(미사용 임베디드 repo, gitlink·.gitmodules
-  없음, 165 미커밋)을 git rm --cached + .gitignore로 추적 해제(파일 보존) — 커밋 5f57d8a. (2) postgres 컨테이너의 DEVFORGE_POSTGRES_PASSWORD가 컨테이너
-  내부 참조 0(불필요 노출)이고 이미지 엔트리포인트가 POSTGRES_PASSWORD_FILE 미지원임을 확인 → container-postgres.container의 EnvironmentFile/ExecStartPre(kv-export-env)/ExecStopPost
-  제거. 검증: pg_isready OK, turns 8121, env 시크릿 1→0, fastapi/mcp/worker/cashbook active. 주의: fresh init 시 이 이미지는 POSTGRES_PASSWORD를
-  읽으므로 재초기화 시 별도 설정 필요. quadlet/유닛은 여전히 비버전관리.'
-- '(2026-09-21, devforge-444795) 운영 안정성 수정 4건. (1) 워치독 재시작: 07:43:11 명시적 stop 후 미복구(원인: 스크립트 흔적 없는 수동 stop 잔재, pause 플래그·파이프라인
-  없음). start 후 active, liveness OK(21s), NRestarts=0. known_issue WATCHDOG-STOPPED-2026-09-21 resolved. (2) cashbook auth.is_authenticated의
-  `or True` 제거(항상 True 잠재 우회) → 쿠키 존재 검사로 정정(미사용 함수). 진짜 세션검증은 별도 과제. (3) scripts/update_handover.py `_run` 기본 cwd=/opt/projects/seedling(stale)
-  → SERVER_DIR, SIM102/I001 정리. (4) 유닛 버전관리: containers/systemd/(quadlet .container/.pod) + systemd/user/(hand-written .service/.timer,
-  생성 container-*.service 제외) 미러 추가 + README(배포법/시크릿 금지). 시크릿 스캔 clean. 커밋: e1512f7, e5b11be, (systemd 미러).'
 - '(2026-09-21, devforge-444795) Phase 0 Week 2 완료 = Phase 0 종료. tests/characterization/ 신규 5종(19 tests pass, mock/text-parse만
   — 라이브 DB/LLM/포트 불필요): (1) day_cycle.sh 배치 예약(oldest pending, LIMIT 50, pending→batching. 헤더 주석 "10"은 stale라 실제값 50을 특성화),
   (2) check_all_llm T1/T2(T2는 T1 성공 시에만, 비활성 포트 skip), (3) call_llm 계약(content/return_meta/registry 기본값/json_mode/unknown
@@ -461,3 +453,10 @@ completed_log:
   burn-rate) + ports/types.SloTarget + WatchdogConfig.slo_targets(turn-watcher/day-cycle/postgres/mcp, 99%/30d) + IncidentRepository.find_since(윈도+open
   스팬) + WatchdogService.slo_report + CLI `watchdog slo`. 테스트 tests/unit/application/test_slo.py. 검증: full pytest 386 passed·ruff/mypy(79)/lint-imports(4
   kept) green, live `watchdog slo` 실측(day-cycle 99.9953%, 나머지 100%). MWMBR·watchdog 배선은 메트릭 백엔드/⑩ 후.'
+- '(2026-09-24, opencode) §10 SLO/error budget 로컬 근사: application/slo.py(가용=1−union(downtime)/window, error budget, burn-rate)
+  + SloTarget + WatchdogConfig.slo_targets(turn-watcher/day-cycle/postgres/mcp, 99%/30d) + IncidentRepository.find_since +
+  WatchdogService.slo_report + CLI watchdog slo. 검증: pytest 386 passed, live 실측 day-cycle 99.9953%.'
+- '(2026-09-24, opencode) §9 OTel+GenAI: opentelemetry-api 기본 + extra [otel](SDK/OTLP). core/telemetry.py(span·local trace/run
+  contextvars·GenAI semconv·genai_usage_attributes·setup_telemetry) + structlog inject_trace_context + LLM GenAI CLIENT span(chat
+  model, usage tokens) + watchdog run span + incident context_jsonb/MCP audit trace·run 상관. 검증: full pytest 394 passed(live
+  embed 모드 flaky 2건), ruff/mypy(80)/lint-imports green, console exporter 실측.'
