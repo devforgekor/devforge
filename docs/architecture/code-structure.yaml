@@ -45,6 +45,9 @@ modules:
       status: production
       purpose: "DevForge CLI \u2014 AI \uB300\uD654 \uAC80\uC0C9 \uBC0F \uC800\uC7A5\
         \ \uB3C4\uAD6C."
+    dev_agent.py:
+      status: experimental
+      purpose: "Agent Issue->PR runner \u2014 worktree-isolated, ruff+pytest gated, review-only PR."
     collect_novel.py:
       status: experimental
       purpose: "bookto31.com \uD558\uB0A8\uC790\uC758 \uD0D1 \uACF5\uB7B5\uBC95 \uC804\
