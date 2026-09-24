@@ -15,7 +15,7 @@
 | 2 | 이미지/의존성 스캔 | trivy/pip-audit 0 | 취약점·의존성 스캔 | **P0** | ✅ 완료 |
 | 3 | secretless identity | KV **SP client_secret**(장수명) | managed identity/federation | **P0** | ◐ 부분 |
 | 4 | secret rotation | rotation 타이머 0(주간 kv-backup만) | 자동 rotation | **P0** | ◐ 부분 |
-| 5 | MCP audit/telemetry | MCP 툴호출 감사 0(`observations` 28k는 별개) | OWASP **MCP08** | **P1** | — |
+| 5 | MCP audit/telemetry | MCP 툴호출 감사 0(`observations` 28k는 별개) | OWASP **MCP08** | **P1** | ✅ 완료 |
 | 6 | shadow MCP 인벤토리 | opencode **15개 중 4 enabled**, 감사·드리프트 0 | OWASP **MCP09** | **P1** | ✅ 완료 |
 | 7 | tool-poisoning | 내부 툴, 정의 스캔·승인 0(`mcp-contract.json` frozen) | OWASP **MCP03** | **P1** | ✅ 완료 |
 | 8 | progressive discovery | opencode allowlist(~33) 프루닝 | 임계(1–5%)·programmatic calling | P2 | — |
@@ -61,6 +61,7 @@
 - **As-Is**: MCP 툴 호출의 체계적 감사 없음. `observations`(28k)·`activity_log`는 별도 목적.
 - **표준**: OWASP **MCP08(Lack of Audit and Telemetry)** — 툴 호출/컨텍스트 변경을 **불변 audit trail**로. NSA MCP 지침(2026-05)도 감사 강조.
 - **조치**: MCP 툴 호출을 `observations`(`source='mcp'`, `category='mcp_audit'`)로 기록(error-record §1 L3 재사용 — 단, L3 규정 `source='watchdog'`/`category='watchdog_error'`와 **category로 구분**해 혼선 방지). `ports`/어댑터로 분리(와치독 결합 0). 감사 필드: tool, args_hash, result, ts.
+- **상태(2026-09-24) ✅ 완료**: `server.py:call_tool`이 `observations(source='mcp', category='mcp_audit')`에 `{tool, args_hash, result, error}` 기록(best-effort — 실패해도 툴 호출 불변, args는 **해시만**). MCP 컨테이너 재시작으로 **배포·실측 검증**(`mcp|pipeline_status|ok|<hash>`). 라우트 데코레이터 버그 수정(`adf6b24`). 커밋 `4387aca`·`adf6b24`.
 
 ## 6. Shadow MCP 서버 인벤토리 (P1)
 
