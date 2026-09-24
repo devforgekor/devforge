@@ -126,6 +126,7 @@
 | **감시→수정/미실행 실행 구현 가이드** | `plans/detection-remediation-implementation-guide.md` | proposed |
 | **Fitness Functions+heartbeat+drift 구현 가이드** | `plans/fitness-functions-heartbeat-drift-guide.md` | proposed |
 | **시스템 Reference Architecture(right-sized plane+loop)** | `plans/system-reference-architecture.md` | proposed |
+| **실행 계획(창 중 vs 창 이후)** | `plans/execution-plan-2026-09-24.md` | active |
 | 로직 기록·추적 감사(2026-09-23) | `reports/logic-recording-tracking-audit-20260923.md` | record |
 | incident→이슈→PR 루프 감사(2026-09-23) | `reports/incident-issue-pr-loop-audit-20260923.md` | record |
 | 시스템적 배선 갭 분석(2026-09-24) | `reports/systemic-wiring-gap-analysis-20260924.md` | record |
