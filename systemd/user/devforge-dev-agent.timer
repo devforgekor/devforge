@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge Dev Agent timer (auto-safe Issue->PR, 4x/day)
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

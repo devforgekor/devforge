@@ -1,0 +1,13 @@
+[Unit]
+Description=DevForge Dev Agent — auto-safe Issue->PR runner (worktree, gated)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/projects/server
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.12 /opt/projects/server/scripts/dev_agent.py --execute --timeout 1500 --keys MY-GITHUB-TOKEN-KEY
+TimeoutStartSec=3600
+StandardOutput=journal
+StandardError=journal
