@@ -410,6 +410,8 @@ class WatchdogConfig:
             "root-volume-daily-clean.service",
             "opencode-db-offload.service",
             "reference-monitor.service",
+            "devforge-dev-aging.service",
+            "devforge-sp-secret-check.service",
         ]
     )
     llm_targets: dict[str, int] = field(
