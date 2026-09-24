@@ -81,7 +81,7 @@ otel = [
 ]
 track_b = [
     # Track B: LLM 공급자 추상화 (별도 문서화, Phase 0.5+에서 선택적 설치)
-    "openai>=1.40,<2.0",
+    "openai>=3.16.2,<4.0",
     "anthropic>=1.7.0,<2.0",
     "litellm>=1.40,<2.0",  # Optional: for unified provider routing
 ]
