@@ -36,8 +36,7 @@
 | 항목 | 값 |
 |------|-----|
 | KV | `kv-common-prod-krc` (tenant `9ec65251`, sub `a942e898`) |
-| 읽기 SP | `DevForge-llm-Qwen` (`abc5aab0-5394-46e0-bf4d-daf4129d1d78`, get/list) |
-| 쓰기 SP | `sp-aiagent-rbac-prod-krc` (`fcf857e3-...`, get/list/**set**) |
+| 읽기/쓰기 SP | `sp-aiagent-rbac-prod-krc` (`fcf857e3-686e-49a8-b58c-f49a33e7b840`, get/list/**set**, 2026-09-24 통일) |
 | 시크릿 이름 | `DATAIMPULSE-API-KEY` (login), `DATAIMPULSE-PROXY-KEY` (user:pass@host:port 결합형) |
 
 > 2026-09-23 정리: `DATAIMPULSE-LOGIN/PASS/HOST/PORT`는 purge됨(결합형으로 충분). MaskProxy도 `MASKPROXY-PROXY-KEY/API-KEY`만 유지.

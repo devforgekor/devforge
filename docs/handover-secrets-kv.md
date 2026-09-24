@@ -231,15 +231,15 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | env 변수 | 기본값 | 용도 |
 |----------|--------|------|
 | `AZURE_KEYVAULT_TENANT_ID` | `9ec65251-a106-4dc3-9878-4278caa80b1b` | 토큰 테넌트 |
-| `AZURE_KEYVAULT_CLIENT_ID` | `abc5aab0-5394-46e0-bf4d-daf4129d1d78` (SP `DevForge-llm-Qwen`) | 토큰 클라이언트 |
+| `AZURE_KEYVAULT_CLIENT_ID` | `fcf857e3-686e-49a8-b58c-f49a33e7b840` (SP `sp-aiagent-rbac-prod-krc`, 2026-09-24 통일) | 토큰 클라이언트 |
 | `AZURE_KEYVAULT_URLS` | devforge: `common,devforge-prod2` / onmydoc: `common,onmydoc` (콤마 구분) | 다중 KV 병합(뒤 우선) |
 | `AZURE_KEYVAULT_CLIENT_SECRET_FILE` | `~/.config/devforge/azure-client-secret` | Client Secret 파일 경로 |
 
 > 구 변수명 `AZURE_MESIDS_*`는 더 이상 사용하지 않는다(2026-09-20 폐지).
 
 ### ⚠️ 서버 로컬 파일
-- `~/.config/devforge/azure-client-secret` — 신규 SP Client Secret (chmod 600)
-- 구 SP secret 백업: `azure-client-secret.mesids.bak.*`
+- `~/.config/devforge/azure-client-secret` — SP `sp-aiagent-rbac-prod-krc`(fcf857e3) Client Secret (chmod 600, 2026-09-24 통일)
+- 구 SP secret 백업: `azure-client-secret.mesids.bak.*`(구 MESIDS), `azure-client-secret.abc5aab0.bak.*`(이전 읽기 SP)
 - 서버 스크립트가 이 파일에서 읽음 (환경변수 설정 불필요)
 
 ---
@@ -370,11 +370,11 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 |------|-----|
 | 테넌트 ID | `9ec65251-a106-4dc3-9878-4278caa80b1b` |
 | 구독 ID | `a942e898-e1ee-47f4-b9b3-d9475672ff4e` |
-| Service Principal | `DevForge-llm-Qwen` (앱 ID `abc5aab0-5394-46e0-bf4d-daf4129d1d78`) |
+| Service Principal | `sp-aiagent-rbac-prod-krc` (앱 ID `fcf857e3-686e-49a8-b58c-f49a33e7b840`, 2026-09-24 통일) |
 | devforge KV | `kv-common-prod-krc` + `kv-devforge-prod2-krc` (다중 병합, 93개) |
 | onmydoc KV | `kv-common-prod-krc` + `kv-onmydoc-prod-krc` (다중 병합, 88개) |
 | Document Intelligence | `di-common-prod-krc` (F0, rg-server-common-prod-krc) |
-| KV 접근 방식 | **Access Policy 모드** (`enableRbacAuthorization=false` — RBAC 역할 무효). 읽기 SP `DevForge-llm-Qwen`(abc5aab0, get/list). 쓰기 SP `sp-aiagent-rbac-prod-krc`(fcf857e3, get/list/**set**, 2026-09-20 추가) |
+| KV 접근 방식 | **Access Policy 모드** (`enableRbacAuthorization=false` — RBAC 역할 무효). 단일 SP `sp-aiagent-rbac-prod-krc`(fcf857e3, get/list/**set**, 2026-09-24 읽기+쓰기 통일). 이전 읽기 SP `DevForge-llm-Qwen`(abc5aab0)는 미사용 |
 
 ### 스크립트 변경
 | 파일 | 변경 |
@@ -416,7 +416,7 @@ ls -lt ~/.config/devforge/backups/*.gpg | head -1
 1. 퍼지 확인: `az keyvault list-deleted` → 구 KV 부재 확인.
 2. 신규 테넌트(9ec65251 / sub a942e898)에 `kv-devforge-prod-krc` **재생성**.
 3. `prod2`의 devforge 시크릿 이관(`kv-safe.py set-from-file`/`kv-backup.py`) → 값 해시 **MATCH** 검증.
-4. SP `abc5aab0`에 **get/list** Access Policy 부여(쓰기 필요 시 `sp-aiagent-rbac-prod-krc`).
+4. ~~SP `abc5aab0`에 **get/list** Access Policy 부여~~ → 2026-09-24 단일 SP `sp-aiagent-rbac-prod-krc`(fcf857e3, get/list/set)로 통일.
 5. 기본 URL 전환: `kv-fetch-env.py`/`kv-backup.py`의 `AZURE_KEYVAULT_URLS`에서 `prod2`→`prod-krc`.
 6. devforge 서비스 재기동 + 검증(`kv-fetch-env.py env` 개수, 컨테이너 health).
 7. 검증 통과 후 `kv-devforge-prod2-krc` 삭제.
@@ -426,6 +426,7 @@ ls -lt ~/.config/devforge/backups/*.gpg | head -1
 
 ### 롤백 자산
 - 구 SP secret: `~/.config/devforge/azure-client-secret.mesids.bak.*` (양 서버)
+- 통일 전 읽기 SP secret: `~/.config/devforge/azure-client-secret.abc5aab0.bak.20260924T110507Z` (2026-09-24 fcf857e3 통일)
 - 구 스크립트 백업: `*.mesids.bak` (onmydoc)
 - GPG 백업: `~/.config/devforge/backups/secrets-backup-20260920T035400.gpg` (구 101개 포함)
 
