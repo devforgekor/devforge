@@ -1,25 +1,16 @@
 last_checkpoint:
-  time: '2026-09-24T13:40:01.045334+00:00'
-  summary: 6 source, 5 config, 3 docs, 1 generated
-  total_files: 23
+  time: '2026-09-24T14:00:01.233517+00:00'
+  summary: 3 source, 2 docs, 1 generated
+  total_files: 14
   recent_files:
     data: []
     docs:
     - server/docs/ops/baseline/D1-summary.md
     - server/docs/plans/2026-standard-gap-remediation.md
-    - server/docs/plans/agent-handover-db-design.md
-    config:
-    - server/CLAUDE.yaml
-    - server/systemd/user/devforge-handover-gen.service
-    - server/systemd/user/devforge-handover-gen.timer
-    - server/systemd/user/devforge-mcp-inventory.service
-    - server/systemd/user/devforge-mcp-inventory.timer
+    config: []
     source:
     - server/scripts/dev_agent.py
-    - server/scripts/lib/watchdog/config.py
-    - server/scripts/update_handover.py
     - server/src/devforge/adapters/driving/mcp/server.py
-    - server/src/devforge/core/config.py
     - server/tests/unit/test_mcp_audit.py
     generated:
     - server/collect_checkpoint.json
@@ -249,6 +240,10 @@ decisions:
     dev 설치는 uv sync --extra dev.
   status: resolved
 known_issues:
+- id: agent-docs-session-stale
+  detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
+    안 됨 → 새 세션에 명시 지시 필요).'
+  resolved: false
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
   resolved: false
@@ -258,6 +253,20 @@ known_issues:
 - text: 'CRITICAL: 골든 이미지 llm.service -c 8192 < opencode baseline 요청 ~16,699 tokens → provider로 Deep Dive 시 컨텍스트 초과. SSOT
     (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
+  resolved: false
+- id: dependabot-deferred-2026-09-24
+  detail: '#21 pytest 8→9 CI 실패(마이그레이션 필요; 머지 시 pip-audit PYSEC-2026-1845 allowlist 제거 가능). #13 setup-python은 sync-secrets.yml
+    수정→배포 시 컨테이너 재기동+시크릿 재동기화 리스크. #12 python 3.14는 런타임 기반.'
+  resolved: false
+- id: dependency-review-disabled
+  detail: repo Dependency graph 꺼짐 → dependency-review 잡 비활성(모든 PR 차단). Settings→Code security→Dependency graph 활성 후 ci.yml에
+    복원(주석 참고).
+  resolved: false
+- id: error-record-analysis-2026-09-24
+  detail: error-record §2 분석 계층 후속(설계만, 미구현). §1 마이그레이션은 적용됨(2026-09-24, watchdog_incidents context_jsonb/action_error/GIN).
+  resolved: false
+- id: graph-readwrite-pending
+  detail: fcf857e3에 Graph Application.ReadWrite 관리자 동의 대기 → 승인 후 kv-sp-secret-check.py read-expiry로 만료일 확정 + rotate 활성.
   resolved: false
 - id: KV-NAME-REUSE-2026-12
   detail: '구 KV(sub 89c6a8ee/tenant b08cd1bf) scheduled purge 2026-12-09. 2026-12-20 이후 재생성+prod2 이관 예정 (task #38). 현재 devforge는
@@ -278,66 +287,23 @@ known_issues:
 - text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
   resolved: false
+- id: shadow-paused-2026-09-24
+  detail: 'watchdog v2 shadow 정지(inactive). ⑦ §10 SLO·⑧ §9 OTel·⑨ #13/#12 등 변경 후 재시작 필요(⑩). legacy는 active(production).'
+  resolved: false
 - id: SLACK-BOT-INACTIVE-2026-09-20
   detail: '진단(2026-09-20): KV 이름 매핑 정상(SLACK_BOT_TOKEN_KEY). KV 토큰으로 auth.test/chat.postMessage → error=account_inactive(Slack
     앱/봇 비활성). 서버 내 다른 Slack 토큰/웹훅 없음(shell/units/claude-env/netdata/kuhwa). devforge↔onmydoc 동일 토큰(sha ff00438962f5). SLACK_CHANNEL=U0APJGD8CBW(User
     ID DM). 사용자는 Slack 정상이라 하나 서버 봇은 차단 상태 → 확인 필요(어느 봇/앱, 서버發 여부). 다음 세션: Slack 앱 재활성/신규 Bot Token(KV SLACK-BOT-TOKEN-KEY
     갱신). **보류(사용자 지시)**.'
   resolved: false
+- id: standards-p1-remaining
+  detail: §10 SLO/error budget, §9 OTel+GenAI 미착수(P1). §5/§6/§7 완료.
+  resolved: false
 - id: WATCHDOG-CONTAINER-TOOLS-2026-09-23
   detail: 'watchdog v2 컨테이너에 systemctl/journalctl/pgrep/free 부재 → svc/timer/oneshot/ebook/system 체크 전부 오탐(false-negative).
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
-- id: shadow-paused-2026-09-24
-  detail: 'watchdog v2 shadow 정지(inactive). ⑦ §10 SLO·⑧ §9 OTel·⑨ #13/#12 등 변경 후 재시작 필요(⑩). legacy는 active(production).'
-  resolved: false
-- id: graph-readwrite-pending
-  detail: fcf857e3에 Graph Application.ReadWrite 관리자 동의 대기 → 승인 후 kv-sp-secret-check.py read-expiry로 만료일 확정 + rotate 활성.
-  resolved: false
-- id: dependabot-deferred-2026-09-24
-  detail: '#21 pytest 8→9 CI 실패(마이그레이션 필요; 머지 시 pip-audit PYSEC-2026-1845 allowlist 제거 가능). #13 setup-python은 sync-secrets.yml
-    수정→배포 시 컨테이너 재기동+시크릿 재동기화 리스크. #12 python 3.14는 런타임 기반.'
-  resolved: false
-- id: dependency-review-disabled
-  detail: repo Dependency graph 꺼짐 → dependency-review 잡 비활성(모든 PR 차단). Settings→Code security→Dependency graph 활성 후 ci.yml에
-    복원(주석 참고).
-  resolved: false
-- id: agent-docs-session-stale
-  detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
-    안 됨 → 새 세션에 명시 지시 필요).'
-  resolved: false
-- id: error-record-analysis-2026-09-24
-  detail: error-record §2 분석 계층 후속(설계만, 미구현). §1 마이그레이션은 적용됨(2026-09-24, watchdog_incidents context_jsonb/action_error/GIN).
-  resolved: false
-- id: standards-p1-remaining
-  detail: §10 SLO/error budget, §9 OTel+GenAI 미착수(P1). §5/§6/§7 완료.
-  resolved: false
 completed_log:
-- '(2026-09-20, opencode) 계획 문서: REFACTORING_PLAN §2.5에 웹 LLM 수집 미연결 부채 추가, final-plan §3 Capture 행·D3 현황·컴포넌트 노트에 chrome-web-llm
-  CLI 운영 반영(수집 배선은 Phase B).'
-- '(2026-09-20, opencode) web-llm: --search/--think 모드 추가(Qwen Web search, DeepSeek DeepThink), webd 기본 --think. 문서 갱신: runbooks/web-llm.md
-  + chrome-web-llm/README.md(모드표/셸함수/사용법).'
-- '(2026-09-20, opencode) web-llm 기본값: webq=--search(검색), webd=--search+--think(검색+사고). ~/.bashrc 함수 + runbook/README 갱신.'
-- '(2026-09-21, devforge-444795) cashbook Key Vault 연동 완료: CASHBOOK-API-KEY를 Azure KV에 저장, systemd 서비스에서 kv-fetch-env.py 래퍼로
-  자동 로드. 평문 시크릿 제거. API 정상 작동 검증(http://localhost:8100/api/cashbook?key=4280873, 현재 잔액 ₩132,536). 다른 11개 서비스와 동일한 보안 패턴 적용.
-  작업 완료 문서: /tmp/cashbook-kv-migration-summary.md'
-- '(2026-09-21, devforge-444795) 리팩토링 문서 정리: 12개 구식/완료 문서를 docs/_archive/plans/로 이동 (azure-golden-image, code-size-refactoring,
-  mcp-consolidation, phases.md, track-b-migration, 14b-comparison, conversation-extraction, day-night-*, mcp-sse, slack-chatops,
-  refactoring-roadmap). 남은 활성 계획 6개: control-plane-roadmap, design-bash-to-python-migration, etextbook-docker-deployment,
-  final-plan, phase3-plan, vercel-viewer-plan. Git 커밋: ed6971f'
-- '(2026-09-21, devforge-444795) REFACTORING_PLAN.md 개선: (1) 주차 합계 오류 수정 16주→17주 (Phase −1: 0.5주 + Phase 1.5: 0.5주 반영), (2)
-  Phase 0 진행 상황 추가 (status: 🟡 active, ~35-40%, started: 2026-09-13, 완료 7항목, 진행 중 2항목, 미착수 4항목), (3) blueprint.yaml Phase 0
-  추가 (active, progress 35-40%). Git 커밋: 733139f. 점검 결과: /tmp/refactoring-plan-review.md (종합 평가 8.0/10)'
-- '(2026-09-21, devforge-444795) AI 에이전트용 상세 가이드 4개 작성 (총 1,327 lines): (1) option-1-phase0-continuation.md (Phase 0 리팩토링
-  계속, 2-3h, Medium-High) — core/database.py SQLAlchemy 2.0 async, core/paths.py 40개 하드코딩 경로 추상화, core/exceptions.py, import-linter
-  설정, (2) option-2-secret-hardening.md (보안 강화, 1-2h, Medium) — EnvironmentFile→LoadCredential 전환, cashbook 시범 적용, 5개 서비스 전환
-  계획, (3) option-3-documentation-improvement.md (문서화, 30-60m, Low) — REFACTORING_STATUS.yaml 구조, secret-injection-hardening.md,
-  phase0-work-log.md, (4) option-4-server-maintenance-summary.md (서버 관리, 30m, Low) — 5분 빠른 체크, 30분 전체 체크리스트, 문제 대응. Git 커밋:
-  f53f8b1. 목적: 다른 AI 에이전트가 독립적으로 작업 실행 가능'
-- '(2026-09-21, devforge-444795) 문서 참조: (1) 리팩토링 점검 결과: /tmp/refactoring-status-review.md (12개 문서 아카이빙, Phase 0 40% 진행, blueprint.yaml
-  업데이트 필요), (2) REFACTORING_PLAN 오류 점검: /tmp/refactoring-plan-review.md (주차 합계 오류, Phase 0 미반영, domain/models.py 미문서화, 종합
-  8.0/10), (3) 옵션 비교: /tmp/option-comparison.md (Option A 즉시 수정 vs Option B Phase 0 완료 후), (4) 정리 계획: /tmp/refactoring-docs-cleanup-plan.md
-  (아카이빙 대상, 적용 가능 부분, 실행 계획)'
 - '(2026-09-21, devforge-444795) Option 3+4 정합 + Option 2 Stage3 cashbook 시범. (1) Option3 문서 3종: docs/REFACTORING_STATUS.yaml(Phase0
   ~65%, Week1 complete, import-linter 4계약), docs/security/secret-injection-hardening.md, docs/reports/phase0-work-log.md.
   Option4: scripts/health-check.sh 신규(누락분) + 백업경로 오류 수정(pg_dumps/*.sql.gz → backups/db/devforge_*.dump). (2) import-linter
