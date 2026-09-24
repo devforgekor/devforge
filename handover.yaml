@@ -1,16 +1,38 @@
 last_checkpoint:
-  time: '2026-09-23T12:12:01.138192+00:00'
-  summary: 1 config, 1 generated
-  total_files: 11
+  time: '2026-09-24T22:00:00.354115+09:00'
+  summary: 9 source, 5 config, 4 docs, 1 generated
+  total_files: 28
   recent_files:
-    data: []
-    docs: []
+    source:
+    - server/scripts/lib/watchdog/config.py
+    - server/scripts/mcp_inventory_check.py
+    - server/scripts/update_handover.py
+    - server/src/devforge/adapters/driven/health/dataimpulse_path.py
+    - server/src/devforge/adapters/driving/mcp/server.py
+    - server/src/devforge/core/config.py
+    - server/tests/fitness/test_mcp_contract.py
+    - server/tests/fitness/test_mcp_inventory.py
+    - server/tests/fitness/test_wiring.py
     config:
-    - server/systemd/user/ebook-api.service
-    source: []
+    - server/CLAUDE.yaml
+    - server/systemd/user/devforge-handover-gen.service
+    - server/systemd/user/devforge-handover-gen.timer
+    - server/systemd/user/devforge-mcp-inventory.service
+    - server/systemd/user/devforge-mcp-inventory.timer
+    docs:
+    - server/docs/architecture/code-structure.yaml
+    - server/docs/plans/2026-standard-gap-remediation.md
+    - server/docs/plans/agent-handover-db-design.md
+    - server/docs/plans/error-record-analysis-design.md
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 6 files changed, 88 insertions(+), 28 deletions(-)
+      staged: (none)
+      untracked_files: 1
   task: null
 decisions:
 - id: nd13-01
