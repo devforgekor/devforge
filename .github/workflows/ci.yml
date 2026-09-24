@@ -82,7 +82,9 @@ jobs:
           pip install -e ".[dev]"
           pip install pip-audit
       - name: pip-audit (dependency vulnerabilities)
-        run: pip-audit --desc
+        # PYSEC-2026-1845: pytest<9 local /tmp DoS — dev-only tooling, not shipped
+        # in the image. Accepted risk; remove after the pytest 9 migration.
+        run: pip-audit --desc --ignore-vuln PYSEC-2026-1845
 
   # PR-only: block known-vulnerable / license-incompatible dependency changes.
   # Requires the repository dependency graph (public repo: default; private: GHAS).
