@@ -89,14 +89,16 @@ jobs:
         # in the image. Accepted risk; remove after the pytest 9 migration.
         run: uv run --frozen --with pip-audit pip-audit --desc --ignore-vuln PYSEC-2026-1845
 
-  # PR-only: block known-vulnerable / license-incompatible dependency changes.
-  # Requires the repository dependency graph (public repo: default; private: GHAS).
-  dependency-review:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+  # dependency-review is disabled: the repository's Dependency graph is off, so
+  # the action errors ("not supported on this repository") and blocks every PR.
+  # Re-enable (Settings → Code security → Dependency graph) then restore this job:
+  #   dependency-review:
+  #     runs-on: ubuntu-latest
+  #     if: github.event_name == 'pull_request'
+  #     permissions: { contents: read, pull-requests: write }
+  #     steps:
+  #       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+  #       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
   test:
     runs-on: ubuntu-latest
