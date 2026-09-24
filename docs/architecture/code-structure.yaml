@@ -867,6 +867,9 @@ modules:
     kv-safe.py:
       status: production
       purpose: "Key Vault safe wrapper \u2014 never prints secret values (list/compare/set)."
+    kv-sp-secret-check.py:
+      status: production
+      purpose: "Azure SP client secret live validity probe + expiry alert (watchdog oneshot)."
 - path: scripts/hooks/
   purpose: Hooks
   files:
