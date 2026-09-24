@@ -11,6 +11,11 @@ import re
 import time
 import urllib.request
 
+# [WHY] Manual live experiment (switches models, talks to :8081), run as a script.
+# Not a unit test; pytest 9 errors when a test returns non-None, so keep it out
+# of collection (run: `python3 tests/test_experiment.py`).
+__test__ = False
+
 SWITCH_FILE = "/opt/ai_data/debate/switch/model-switch.json"
 HEALTH_URL = "http://127.0.0.1:8081/health"
 LLM_URL = "http://127.0.0.1:8081/v1/chat/completions"
