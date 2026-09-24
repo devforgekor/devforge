@@ -70,3 +70,33 @@ def test_load_expiry_should_read_metadata(tmp_path):
 
 def test_load_expiry_should_return_none_when_missing(tmp_path):
     assert kv.load_expiry(str(tmp_path / "absent.json")) is None
+
+
+def test_min_credential_expiry_should_pick_earliest():
+    apps = [
+        {
+            "passwordCredentials": [
+                {"endDateTime": "2028-01-01T00:00:00Z"},
+                {"endDateTime": "2027-06-01T00:00:00Z"},
+            ]
+        }
+    ]
+    parsed = kv.min_credential_expiry(apps)
+    assert parsed is not None and parsed.year == 2027
+
+
+def test_min_credential_expiry_should_return_none_when_empty():
+    assert kv.min_credential_expiry([]) is None
+    assert kv.min_credential_expiry([{"passwordCredentials": []}]) is None
+
+
+def test_build_rotation_payload_should_set_end_date():
+    cred = kv.build_rotation_payload(NOW, years=1.0)["passwordCredential"]
+    assert cred["endDateTime"].startswith("2027-09-24")
+    assert "displayName" in cred
+
+
+def test_save_and_load_meta_roundtrip(tmp_path):
+    meta = tmp_path / "meta.json"
+    kv.save_meta(str(meta), {"expires_at": "2028-01-01", "key_id": "abc"})
+    assert kv.load_meta(str(meta))["key_id"] == "abc"
