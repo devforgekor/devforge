@@ -1,7 +1,7 @@
 last_checkpoint:
-  time: '2026-09-25T08:00:00.365694+09:00'
+  time: '2026-09-25T08:30:00.296203+09:00'
   summary: 1 source, 1 generated
-  total_files: 13
+  total_files: 14
   recent_files:
     source:
     - server/tests/test_experiment.py
@@ -13,7 +13,7 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 5 files changed, 28 insertions(+), 32 deletions(-)
+      unstaged: 5 files changed, 37 insertions(+), 51 deletions(-)
       staged: (none)
       untracked_files: 1
   task: null
@@ -255,12 +255,6 @@ known_issues:
     (runbook-golden-image.md §1.2 + yearly_refresh.sh) -c 32768로 갱신 완료(2026-09-14). 단 배포본 2026.09.3은 아직 8192 → 차기 이미지 재빌드
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
   resolved: false
-- id: dependabot-deferred-2026-09-24
-  detail: '#21 pytest 8→9 CI 실패(마이그레이션 필요; 머지 시 pip-audit PYSEC-2026-1845 allowlist 제거 가능)만 잔존. #13 resolved: setup-python
-    v7.0.0 SHA 핀(ci.yml 5곳 + sync-secrets.yml) + sync-secrets push 트리거 제거(workflow_dispatch 전용 — post-KV secrets.env 재생성/컨테이너
-    재기동 방지). commit ba9fdac, PR #13 close(superseded). #12 resolved(보류 확정): base python:3.12-slim 유지, PR #12 close + dependabot
-    ignore major(3.14 런타임 이관 시 재개).'
-  resolved: false
 - id: dependency-review-disabled
   detail: repo Dependency graph 꺼짐 → dependency-review 잡 비활성(모든 PR 차단). Settings→Code security→Dependency graph 활성 후 ci.yml에
     복원(주석 참고).
@@ -310,18 +304,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-21, devforge-444795) 보완검토 반영 + 운영 정비. (1) auto-sync 문서 흡수 위험: 검토문은 "흡수 없음"이나 0dacca5가 docs(INDEX.md+문서 이동)를 흡수한
-  실증 확인 → system_sync.sh가 docs·*.md도 unstage(이제 collect_checkpoint.json만 자동커밋). (2) 유닛 드리프트: 현재 없음(diff clean)이나 동기화 메커니즘
-  부재 → scripts/deploy/sync-units.sh 신규(repo 미러=SSOT, --check 드리프트 / 기본 배포+daemon-reload). (3) 가이드 SSOT 규칙 확정: phase1-plan.md
-  rev.2 = 최종상태 기준(devforge import, 중간 import 에러 허용 명시), Phase 1.5 mostly-complete 정정, CORE-DB-UNWIRED=DatabaseGateway 중복으로
-  재정의. 세션검증(쿠키 서명/서버측)은 Phase2+ 별도과제 유지. 커밋: sync-units/system_sync, 322a4ef.'
-- '(2026-09-22, devforge-444795) Python 3.12 확정 및 devforge 이행. Deep Dive(dp-20260922-python-runtime-version-strategy, Context7
-  검증: SQLAlchemy 2.0.52/asyncpg 0.31/pydantic 2.13.4/sse-starlette 3.4 등 3.12 지원) → 사용자 결정 devforge=3.12 (실행 컨테이너가 이미 3.12.13이라
-  재빌드 불필요). 이행: pyproject requires-python>=3.12·ruff py312·mypy 3.12·classifier 3.12, Dockerfile python:3.12-slim, ci PYTHON_VERSION=3.12,
-  호스트 python3.12(3.12.14) 설치+editable. 검증(3.12): pytest 68 passed·ruff/mypy(41 files)/lint-imports green. 동반 수정: mcp/server.py
-  mypy 3건(_StepBudget TypedDict, _as_aware cast), pyproject [dev]에 tiktoken/langdetect. 잔여: legacy scripts/대다수 user unit은
-  3.9 유지(Step4/5), 기본 python3도 3.9. 문서: docs/plans/python-version-strategy.md. known_issue PY-RUNTIME-SPLIT-2026-09-22(부분
-  해소).'
 - '(2026-09-23, devforge-444795) watchdog 표준준수 Deep Dive + DataImpulse 위임 + 오류 기록/분석 + 모델선정 개선. (1) 검증: 컨테이너에 systemctl/journalctl/pgrep/free
   부재(체크 오탐), rootless/rootful graphroot 부모공유(exit126), toki31는 detached 프로세스라 ebook-watcher journal에 0건(기존 check_ebook_pipeline
   감지 불가), dataimpulse_monitor에 flock 없음. (2) 문서: phase2 표준준수판(P1-P4)+DataImpulse 위임(감지만)+오류 기록 3계층+분석 로직(decision packet)+graphroot
@@ -449,3 +431,11 @@ completed_log:
   push(paths=self) 트리거 제거→workflow_dispatch 전용(post-KV secrets.env 재생성·컨테이너 재기동 부작용 차단), commit ba9fdac, PR #13 close. #12
   python:3.14-slim은 docs/plans/python-version-strategy.md(3.12)에 따라 보류, PR #12 close + dependabot ignore major. 잔존: #21 pytest
   9.'
+- '(2026-09-24, opencode) Dependabot #21/#25/#26 처리: pytest 8.4.2→9.1.1(pyproject+uv.lock) + pip-audit PYSEC-2026-1845 allowlist
+  제거(pip-audit clean), actions/checkout·upload-artifact v7.0.1 SHA 핀(ci.yml+sync-secrets), tests/test_experiment.py __test__=False(라이브
+  스크립트; pytest 9 non-None return 오류 회피). 검증: python3.12+pytest9.1.1 전체 395 passed/10 skipped, CI green(6 jobs), commit 616db1b.
+  잔존: #24/#27/#28/#29/#30/#31.'
+- '(2026-09-24, opencode) Dependabot 잔여 일괄 정리(open PR 0): build-push-action v6→v7.4.0(SHA), anchore/sbom-action→v0.24.2(SHA),
+  uvicorn>=0.53.0(pyproject+cashbook), python-multipart>=0.0.32(cashbook), setuptools>=84.0.0, openai track_b>=3.16.2,<4.0(미사용
+  옵션, lock 3.19.2; distro 제거). 검증: python3.12+pytest9.1.1 395 passed/10 skipped, pip-audit clean, CI green(build 포함 v7 실동작).
+  commit fb22e92.'
