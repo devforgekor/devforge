@@ -1,9 +1,10 @@
 last_checkpoint:
-  time: '2026-09-25T02:00:00.560507+09:00'
-  summary: no files
-  total_files: 2
+  time: '2026-09-25T02:30:00.317860+09:00'
+  summary: 1 source
+  total_files: 218
   recent_files:
-    source: []
+    source:
+    - server/src/devforge/core/telemetry.py
     config: []
     docs: []
     data: []
@@ -11,9 +12,9 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 19 files changed, 249 insertions(+), 53 deletions(-)
+      unstaged: 4 files changed, 37 insertions(+), 40 deletions(-)
       staged: (none)
-      untracked_files: 5
+      untracked_files: 1
   task: null
 decisions:
 - id: nd13-01
@@ -254,8 +255,10 @@ known_issues:
     시 bake 필요(MemoryMax=38G, ctx32768 RES ~33.5GB).'
   resolved: false
 - id: dependabot-deferred-2026-09-24
-  detail: '#21 pytest 8→9 CI 실패(마이그레이션 필요; 머지 시 pip-audit PYSEC-2026-1845 allowlist 제거 가능). #13 setup-python은 sync-secrets.yml
-    수정→배포 시 컨테이너 재기동+시크릿 재동기화 리스크. #12 python 3.14는 런타임 기반.'
+  detail: '#21 pytest 8→9 CI 실패(마이그레이션 필요; 머지 시 pip-audit PYSEC-2026-1845 allowlist 제거 가능)만 잔존. #13 resolved: setup-python
+    v7.0.0 SHA 핀(ci.yml 5곳 + sync-secrets.yml) + sync-secrets push 트리거 제거(workflow_dispatch 전용 — post-KV secrets.env 재생성/컨테이너
+    재기동 방지). commit ba9fdac, PR #13 close(superseded). #12 resolved(보류 확정): base python:3.12-slim 유지, PR #12 close + dependabot
+    ignore major(3.14 런타임 이관 시 재개).'
   resolved: false
 - id: dependency-review-disabled
   detail: repo Dependency graph 꺼짐 → dependency-review 잡 비활성(모든 PR 차단). Settings→Code security→Dependency graph 활성 후 ci.yml에
@@ -306,12 +309,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-21, devforge-444795) Phase 0 Week 2 완료 = Phase 0 종료. tests/characterization/ 신규 5종(19 tests pass, mock/text-parse만
-  — 라이브 DB/LLM/포트 불필요): (1) day_cycle.sh 배치 예약(oldest pending, LIMIT 50, pending→batching. 헤더 주석 "10"은 stale라 실제값 50을 특성화),
-  (2) check_all_llm T1/T2(T2는 T1 성공 시에만, 비활성 포트 skip), (3) call_llm 계약(content/return_meta/registry 기본값/json_mode/unknown
-  ValueError), (4) watchdog liveness(경로 상수 /var/tmp/watchdog_last_cycle_ts + 현재 ts 기록), (5) text_clean 언어감지(ko/en 0.8, 기타
-  unknown). 문서: REFACTORING_STATUS.yaml·phase0-work-log.md를 docs/refactoring/로 이동, Week2/Phase0 complete(100%), INDEX·option-3
-  경로 갱신. 생성 파일: tests/characterization/{test_day_cycle,test_check_all_llm,test_call_llm,test_watchdog,test_text_clean}.py'
 - '(2026-09-21, devforge-444795) 보완검토 반영 + 운영 정비. (1) auto-sync 문서 흡수 위험: 검토문은 "흡수 없음"이나 0dacca5가 docs(INDEX.md+문서 이동)를 흡수한
   실증 확인 → system_sync.sh가 docs·*.md도 unstage(이제 collect_checkpoint.json만 자동커밋). (2) 유닛 드리프트: 현재 없음(diff clean)이나 동기화 메커니즘
   부재 → scripts/deploy/sync-units.sh 신규(repo 미러=SSOT, --check 드리프트 / 기본 배포+daemon-reload). (3) 가이드 SSOT 규칙 확정: phase1-plan.md
@@ -447,3 +444,7 @@ completed_log:
   contextvars·GenAI semconv·genai_usage_attributes·setup_telemetry) + structlog inject_trace_context + LLM GenAI CLIENT span(chat
   model, usage tokens) + watchdog run span + incident context_jsonb/MCP audit trace·run 상관. 검증: full pytest 394 passed(live
   embed 모드 flaky 2건), ruff/mypy(80)/lint-imports green, console exporter 실측.'
+- '(2026-09-24, opencode) Dependabot #13/#12 정리: #13 setup-python v5→v7 SHA 핀(ci.yml 5 + sync-secrets) + sync-secrets.yml
+  push(paths=self) 트리거 제거→workflow_dispatch 전용(post-KV secrets.env 재생성·컨테이너 재기동 부작용 차단), commit ba9fdac, PR #13 close. #12
+  python:3.14-slim은 docs/plans/python-version-strategy.md(3.12)에 따라 보류, PR #12 close + dependabot ignore major. 잔존: #21 pytest
+  9.'
