@@ -42,7 +42,7 @@
 |---|---|---|---|
 | 1 | 배선 미검증 | 모든 `.timer`/`.service`의 `ExecStart`·`Unit`·훅이 **실재 스크립트**를 참조 | `tests/fitness/test_wiring.py` |
 | 2 | 이식 갭 | legacy 기능(예: incident→issue)이 v2에 **존재** | `tests/fitness/test_port_parity.py` |
-| 3 | 완결성 | 마이그레이션 applied(`alembic current==head`), 활성 기능 전제 충족 | `tests/fitness/test_completion.py` |
+| 3 | 완결성 | 마이그레이션 applied(`alembic current==head`), 활성 기능 전제 충족, **PR 완결(required checks/merge queue)** | `tests/fitness/test_completion.py` |
 | 4 | 계약 분열 | `context_jsonb` SSOT — text-only 소비자 0, 라우팅 표가 모든 prefix 커버 | `tests/fitness/test_contract.py` |
 | 5 | 문서=실제 | 문서가 주장한 경로/배선 실재(기존 `test_docs_index`/`test_code_structure` 확장) | `tests/unit/test_docs_index.py`(확장) |
 
@@ -102,6 +102,13 @@ def test_unit_exec_files_exist():
 ### 3.4 시사점
 - **silent no-op 직접 해결**: "돌아야 하는데 조용히 안 도는" 모든 것을 **heartbeat로 탐지**(phase_tracker류 문제 재발 차단).
 - **B(catch-up)의 트리거**와 정합: heartbeat 미수신 = "미실행" → D1의 B 컨트롤러 입력.
+
+### 3.5 Aging WIP (flow-level dead-man's switch)
+- §3은 **job 단위** heartbeat. **work-item 단위**(이슈→PR) 정체는 **Aging WIP / Work Item Age**(Kanban 표준)로 탐지 — "정체 항목을 문제 되기 전에 조치".
+- 구현: 이슈 `claimed_at`(dev_pipeline state) → PR 생성 시각. `now - claimed_at > SLE`(예: 3일)면 **경보**(정체).
+- **실측 증거**: #8(9/14)·#9(9/20) claim 후 PR 없음 → **SLE 초과** = 전형적 aging WIP.
+- 지표(Kanban 4): WIP · Work Item Age · Cycle Time · Throughput.
+- **Stalled Work**: 정의된 시간 내 진전 없음 → C 트랙(D1 §6) 완결 감지와 동일.
 
 ---
 

@@ -90,6 +90,22 @@
 
 ---
 
+### 5.1 표준 해법 (업계: Open SWE / SWE-agent / Kanban)
+
+우리 루프는 **Open SWE 패턴의 반쪽**(트리거+claim만). 표준은:
+
+| 표준 | 내용 | 우리 대응 |
+|---|---|---|
+| **Agent Issue→PR** | 라벨(`auto-safe`)→에이전트(**Plan→Implement→Test→Review**)→**PR 자동 오픈 + 이슈 링크** | **Implement/Review·자동 PR 미배선**(§3 정체 원인) |
+| **GitHub 완결 강제** | required status checks + merge queue | PR 미생성 → PR 후 적용 |
+| **Aging WIP / Stalled Work** | work-item age > **SLE** → 경보 | #8/#9 = **SLE 초과**(claim 후 PR 없음) |
+
+**표준 정합**: 위 3표준은 `plans/detection-remediation-architecture.md` §6(C 트랙) · `plans/fitness-functions-heartbeat-drift-guide.md` §3.5(Aging WIP)·§2.2 #3(완결)와 일치 — 본 감사는 그 **실측 근거**.
+
+**수정 방향(표준 기반)**: ① 에이전트 실행 연결(Implement→Review) ② `create_pr` 자동 배선(+ahead>0 가드) ③ Aging WIP 경보(SLE) ④ (선택) required checks.
+
+---
+
 ## 6. 검증 명령 (재현)
 
 ```bash

@@ -182,7 +182,18 @@ incident의 `dedup_key`(`component:event_type`)를 **계층 subject**로 취급�
 | 선행 | incident 기록 | **desired-state registry**(roadmap Stage1) |
 | 공통 | 멱등·bounded·verify·audit·staleness check | 동일 |
 
-**C(escalate) 트랙** — A/B와 **직교**: prefix가 아니라 **반복 빈도**(`repeat_count ≥ TASK_THRESHOLD`)로 발화. 조치 = GitHub 이슈 생성(멱등, `auto-safe`) → `dev_pipeline` claim → PR. 소비 기록 = `context_jsonb`(D2). 실측·정체 = `reports/incident-issue-pr-loop-audit-20260923.md`(현재 PR 단계 정체, v2 미이식).
+**C(escalate) 트랙** — A/B와 **직교**: prefix가 아니라 **반복 빈도**(`repeat_count ≥ TASK_THRESHOLD`)로 발화. 소비 기록 = `context_jsonb`(D2). 실측·정체 = `reports/incident-issue-pr-loop-audit-20260923.md`.
+
+C는 **에이전트 파이프라인**(표준: Open SWE/SWE-agent)으로 구체화한다:
+```
+반복 incident → 이슈 생성(멱등, auto-safe) → [C 파이프라인]
+   Plan(코드베이스 조사) → Implement → Test → Review → commit/push → PR 자동 오픈(이슈에 링크)
+   → required checks + merge queue(완결 강제) → 이슈 close
+```
+- **트리거 = 라벨**(`auto-safe`) — 이슈는 watchdog 반복규칙이 생성.
+- **현재 갭**: 우리 파이프라인은 **트리거+claim(빈 브랜치)까지만** — **Implement/Test/Review·자동 PR이 없음**(D3 실측: `pr_created={}`). → C의 완성 = 에이전트 실행 + 자동 PR 배선.
+- **가드**: `create_pr`은 **브랜치 ahead>0일 때만**(빈 PR 방지), 0이면 skip 사유 반환.
+- **완결 감지**: claim→PR **age > SLE** → 경보(flow-level dead-man's switch, fitness guide §3.5).
 
 > **겹침 주의**: `oneshot ... failed`는 A(복구=재실행)일 수도 B(미실행 실행)일 수도 있다 → **분류 규칙**으로 단일 목적지 지정(중복 실행 방지). **"이미 실행됐는지" 확인이 B의 필수 전제**.
 
