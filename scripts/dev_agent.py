@@ -16,6 +16,7 @@ import subprocess
 import sys
 from typing import Optional
 
+AGENT_VERSION = "0.1"
 REPO = "/opt/projects/server"
 WORKTREE_ROOT = "/tmp/dev-agent"
 sys.path.insert(0, os.path.join(REPO, "scripts"))
@@ -98,7 +99,9 @@ def gate(worktree: str) -> bool:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Agent Issue->PR runner")
+    parser = argparse.ArgumentParser(
+        description=f"Agent Issue->PR runner (v{AGENT_VERSION})"
+    )
     parser.add_argument("--issue", type=int, help="issue number (default: oldest claimed)")
     parser.add_argument("--model", default=os.environ.get("DEV_AGENT_MODEL", ""),
                         help="opencode model (provider/model)")
