@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge MCP Inventory daily timer (shadow MCP drift)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

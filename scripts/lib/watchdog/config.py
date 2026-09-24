@@ -131,6 +131,7 @@ ONESHOT_RESULT_TARGETS = [
     "devforge-system-sync.service",  # 30분 아키텍처/동기화
     "devforge-dev-aging.service",  # Aging WIP (SLE 초과 정체 이슈) — exit 1 시 alert
     "devforge-sp-secret-check.service",  # Azure SP client secret 만료/무효 — exit 1 시 alert
+    "devforge-mcp-inventory.service",  # shadow MCP 드리프트(OWASP MCP09) — exit 1 시 alert
     "kv-backup.service",  # 주간 KV 백업 (Phase 3)
     "workspace-autocommit.service",  # workspace 자동 커밋 (Phase 3)
     "golden-image-deploy-check.service",  # 배포 헬스체크 (Phase 3)

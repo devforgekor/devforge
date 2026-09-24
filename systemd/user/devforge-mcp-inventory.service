@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge MCP Inventory — shadow MCP drift check (OWASP MCP09)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/projects/server
+ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/mcp_inventory_check.py
+StandardOutput=journal
+StandardError=journal

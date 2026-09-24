@@ -412,6 +412,7 @@ class WatchdogConfig:
             "reference-monitor.service",
             "devforge-dev-aging.service",
             "devforge-sp-secret-check.service",
+            "devforge-mcp-inventory.service",
         ]
     )
     llm_targets: dict[str, int] = field(
