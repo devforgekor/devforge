@@ -8,6 +8,8 @@ PublishPort=127.0.0.1:8000:8000
 PublishPort=127.0.0.1:8191:8191
 PublishPort=127.0.0.1:8085:8085
 PublishPort=127.0.0.1:8002:8002
+# P2 (2026-09-24): host watchdog v2 needs postgres on host loopback
+PublishPort=127.0.0.1:5432:5432
 ExitPolicy=continue
 
 [Service]

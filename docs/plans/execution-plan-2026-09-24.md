@@ -62,15 +62,17 @@ P2 (watchdog 호스트 유닛)  ← S0, 모든 재기동 작업의 전제(감지
 
 ## 3. 창 이후 (재기동 수반)
 
-### 3.1 P2 — watchdog 호스트 유닛 전환 (S0, 최우선)
-- **근거/초안**: `plans/watchdog-standard-compliance.md` §3.2 (초안·`systemd-analyze verify` 통과).
+### 3.1 P2 — watchdog 호스트 유닛 전환 + postgres loopback publish (S0, 최우선)
+- **근거**: `plans/watchdog-standard-compliance.md` §3.1·§3.2.
+- **선행 스모크(실측)**: 호스트 v2 `watchdog check` → **도구 정상**(오탐 해소 확인), 단 **DB 도달 실패**(`heartbeat:db … 127.0.0.1:5432`, 호스트 5432 미리슨) → **publish 필수**.
 - **절차**:
-  1. `devforge-watchdog-v2.container` → `_disabled/` 이동.
-  2. `devforge-watchdog-v2.service`(호스트) 배포(`sync-units.sh`).
-  3. `daemon-reload` → container stop → service start.
-  4. 검증: 오탐 0(svc/timer/oneshot/ebook/system), host→DB `select 1`.
-- **게이트**: 창 만료 후 + shadow 데이터 검토.
-- **롤백**: 컨테이너 quadlet 복귀.
+  1. **postgres loopback publish**: `svc.pod`에 `PublishPort=127.0.0.1:5432:5432`(pod 수준, 기존 8000/8002/8085/8191과 동일 패턴) → **pod 재생성**.
+  2. `devforge-watchdog-v2.container` → `_disabled/` 이동.
+  3. `devforge-watchdog-v2.service`(호스트) 배포(`sync-units.sh`).
+  4. `daemon-reload` → container stop → service start.
+  5. 검증: 오탐 0(svc/timer/oneshot/ebook/system) + host→DB `select 1` + `ss -ltn | grep 5432`.
+- **게이트**: A안 — 창 무관(지금). 단 **재기동 수반**(pod 재생성 + v2 재기동).
+- **롤백**: 컨테이너 quadlet 복귀 + `svc.pod` publish 제거.
 
 ### 3.2 error-record 마이그레이션 적용 + 배포
 - **절차**: `alembic upgrade head`(additive: `context_jsonb`+`action_error`+GIN) → 코드 배포(비-dry-run).
