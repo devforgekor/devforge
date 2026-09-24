@@ -119,7 +119,7 @@
 |---|---|---|
 | 기동 시간 | ~10-30초 (pip 네트워크 다운로드) | ~2초 (로컬 wheel cache) |
 | cache 위치 | — | `/opt/ai_data/pip-cache/` (17 wheels) |
-| requirements | — | `scripts/mcp-requirements.txt` |
+| requirements | — | `scripts/mcp_refactored_entrypoint.sh` (hardcoded pip list; `mcp-requirements.txt` removed 2026-09-24) |
 | 엔트리포인트 | `pip install` | `pip install --no-index --find-links=/pip-cache` |
 | 네트워크 의존 | 있음 | 없음 (offline install) |
 
