@@ -1,6 +1,7 @@
 # DevForge 서버 리팩토링 종합 계획서 v1.5
 
 > Status: active · Date: 2026-09-23 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/adr/`, `docs/refactoring/REFACTORING_STATUS.yaml`
+> **연계(운영 아키텍처, 별도 정본)**: `plans/system-reference-architecture.md`(목표 운영/제어 아키텍처) · `plans/detection-remediation-architecture.md`(감지→수정) · `plans/fitness-functions-heartbeat-drift-guide.md`(검증). 본 계획=코드 재구성, 위=운영 아키텍처(컷오버 후 승격).
 
 > **버전**: 1.5 (실행 현황 반영)
 > **상태**: Active — Phase 0/1/1.5 완료, **Phase 2 shadow-run(2.5) 진행 중**

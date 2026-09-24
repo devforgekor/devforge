@@ -181,7 +181,7 @@
 | 스키마 드리프트 | Alembic baseline + `alembic check` clean |
 
 ## 9. 근거 / 링크
-- 계획: (구) `plans/cutover-remaining-plan.md`, (구) `plans/open-decisions.md` → **본 문서로 통합**
+- 계획: (구) `_archive/plans/cutover-remaining-plan.md`, (구) `_archive/plans/open-decisions.md` → **본 문서로 통합**
 - 표준: `reports/industry-standard-comparison-20260914.md`
 - 감사: `reports/mcp-tool-audit-20260914.md`
 - ADR: `adr/0005-extraction-routing.md`, `adr/0006-mcp-tool-surface.md`

@@ -160,7 +160,7 @@
 ## 최근 변경 (2026-09-14)
 - **MCP 툴 사용 감사(2026-09-14)**: opencode `part` DB 30일 실사용 분석 → 로드 33툴 중 **0회 9개**. keep/merge/remove 확정(`reports/mcp-tool-audit-20260914.md`): Remove(lsp proxy_artifact 3·detect_lsp_servers·find_symbol·inspect_symbol·get_symbol_source·list_plans 등), Merge(deepdive 4→1, mem+obs→2, search 2→1, list_tables+schema→1), 목표 33→약 16.
 - **외부 검토 브리프(2026-09-14)**: 서버 무지(無知) 에이전트의 리뷰용 자가완결 브리프 작성 — `reports/review-brief-20260914.md` (구조·변화·근거·리뷰질문·용어집). Droplr: 브리프 `d.pr/IFoWKE`, 최종계획 `d.pr/14w4o6`, 근거부록 `d.pr/KXEiPa`.
-- **최종 계획서 통합(2026-09-14)**: 컷오버 계획 + MCP 툴 최적화 + 의사결정(D1~D9)을 [`plans/final-plan.md`](./plans/final-plan.md)로 통합. 구 `plans/cutover-remaining-plan.md`·`plans/open-decisions.md`는 `docs/_archive/plans/`로 superseded.
+- **최종 계획서 통합(2026-09-14)**: 컷오버 계획 + MCP 툴 최적화 + 의사결정(D1~D9)을 [`plans/final-plan.md`](./plans/final-plan.md)로 통합. 구 `_archive/plans/cutover-remaining-plan.md`·`_archive/plans/open-decisions.md`로 superseded.
 - **업계 표준 대조 문서화(2026-09-14)**: 웹 조사(5계층)와 서버 실측 대조 → `reports/industry-standard-comparison-20260914.md`. 결정 기록 `adr/0005-extraction-routing.md`(추출 하이브리드 라우팅·후보정)·`adr/0006-mcp-tool-surface.md`(계약 보존·ingest·provenance; 점진공개 옵션). 계약 스펙 `specs/ingest-provenance.yaml`.
 - **은퇴/적용(2026-09-14)**: Shadow DB(`devforge_shadow`) 라이브 적용. 문서생성기 `gen_architecture.py` 은퇴 → `_archive/` (호출부 `system_sync.sh`·`day_cycle.sh`·`daily-structure.service` 제거; `architecture/*`는 수동/동결). Gemini 에이전트 세션 로직 은퇴 → `_archive/gemini-agent/` (`gemini-session.service` disable).
 - **Cutover 계획**: `scripts/*` → `devforge` 전환(단계 A~I)·MCP 최적화·의사결정을 [`plans/final-plan.md`](./plans/final-plan.md)에 통합. (라이브 유닛 22개+컨테이너 3개 의존, 다수 도메인 미구현)

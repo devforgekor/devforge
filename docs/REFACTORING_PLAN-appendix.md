@@ -172,7 +172,7 @@
 | 용어 | 정의 |
 |------|------|
 | **Ports & Adapters** | 핵심 로직(Port = Protocol)과 외부 기술(Adapter) 분리 — Cockburn (2005) |
-| **Track A / Track B** | Track A: 리팩토링 (핵심), Track B: LLM 공급자 (별도 문서화). 주의: `plans/track-b-migration.md`의 "Track B"는 svc.pod 이관으로 무관 |
+| **Track A / Track B** | Track A: 리팩토링 (핵심), Track B: LLM 공급자 (별도 문서화). 주의: `_archive/plans/track-b-migration.md`의 "Track B"는 svc.pod 이관으로 무관 |
 | **Characterization Test** | 리팩토링 전 기존 동작 고정 — Feathers, *Working Effectively with Legacy Code* |
 | **Shadow DB** | 프로덕션 DB와 분리된 검증 전용 스키마 |
 | **record/replay 하네스** | LLM 응답 캡처 → 재생으로 결정론화 |

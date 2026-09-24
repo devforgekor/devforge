@@ -1,6 +1,6 @@
 # svc pod 호스트 포트포워딩 장애 복구 · 재발방지 (2026-09-12)
 
-> Status: record · Date: 2026-09-12 · Owner: devforge · Related: [`reports/watchdog-port-conflict-gap-analysis.md`](./watchdog-port-conflict-gap-analysis.md), [`reports/deep-dive-watchdog-port-conflict-design.md`](./deep-dive-watchdog-port-conflict-design.md), [`plans/azure-golden-image-rebuild-handover.md`](../plans/azure-golden-image-rebuild-handover.md)
+> Status: record · Date: 2026-09-12 · Owner: devforge · Related: [`reports/watchdog-port-conflict-gap-analysis.md`](./watchdog-port-conflict-gap-analysis.md), [`reports/deep-dive-watchdog-port-conflict-design.md`](./deep-dive-watchdog-port-conflict-design.md), [`_archive/plans/azure-golden-image-rebuild-handover.md`](../_archive/plans/azure-golden-image-rebuild-handover.md)
 
 ## 1. 목적
 Deep Dive 백엔드(devforge-mcp, HTTP :8000) 도달 불가로 다음 세션 진행이 차단된 원인을 정비하고, 동일 장애가 재발하지 않도록 watchdog에 **호스트 포트포워딩 감지·자동복구**를 추가한다.

@@ -50,8 +50,8 @@ docs/
 ## 4. 언어·길이
 - **human-facing(reports/runbooks/roadmap/plans) = 한국어**, **machine-readable(specs/DDL/식별자/프롬프트) = 영어**.
 - 문서 **≤400줄** 권장. 초과 시 분할(파일명에 `-2` 등). 단, 기존 장문 문서는 **다음 대개정 시** 분할하며
-  2026-09-14 기준 예외를 인정한다: `plans/day-night-split-handoff-plan.md`(814), `REFACTORING_PLAN.md`(564),
-  `plans/slack-chatops-design.md`(559), `reports/etextbook-patch-analysis.md`(523), `runbooks/runbook-golden-image.md`(503),
+  2026-09-14 기준 예외를 인정한다: `_archive/plans/day-night-split-handoff-plan.md`(814), `REFACTORING_PLAN.md`(564),
+  `_archive/plans/slack-chatops-design.md`(559), `reports/etextbook-patch-analysis.md`(523), `runbooks/runbook-golden-image.md`(503),
   `plans/design-bash-to-python-migration.md`(456), `reports/opencode-roundrobin-failure-analysis.md`(444),
   `plans/etextbook-docker-deployment-plan.md`(433).
 - 코드 블록 내 식별자·경로·명령은 영어.

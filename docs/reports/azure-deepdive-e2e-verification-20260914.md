@@ -1,6 +1,6 @@
 # Azure azureqwen Deep Dive E2E 검증 (2026-09-14)
 
-> Status: record · Date: 2026-09-14 · Owner: devforge · Related: [`runbooks/azure-qwen-deepdive-endpoint.md`](../runbooks/azure-qwen-deepdive-endpoint.md), [`runbooks/runbook-golden-image.md`](../runbooks/runbook-golden-image.md), [`plans/azure-golden-image-rebuild-handover.md`](../plans/azure-golden-image-rebuild-handover.md)
+> Status: record · Date: 2026-09-14 · Owner: devforge · Related: [`runbooks/azure-qwen-deepdive-endpoint.md`](../runbooks/azure-qwen-deepdive-endpoint.md), [`runbooks/runbook-golden-image.md`](../runbooks/runbook-golden-image.md), [`_archive/plans/azure-golden-image-rebuild-handover.md`](../_archive/plans/azure-golden-image-rebuild-handover.md)
 
 ## 1. 목적
 골든 이미지 `llm-qwen-27b:2026.09.3`(Qwen3-30B-A3B MoE baked-in) Spot VM을 **opencode 추론 백엔드**로 사용할 때,

@@ -1,6 +1,6 @@
 # DevForge — Code Architecture
 
-> Status: active · Date: 2026-09-23 · Owner: devforge · Related: `docs/system-architecture.md`, `docs/REFACTORING_PLAN.md`, `docs/refactoring/REFACTORING_STATUS.yaml`
+> Status: active · Date: 2026-09-23 · Owner: devforge · Related: `docs/system-architecture.md`, `docs/REFACTORING_PLAN.md`, `docs/refactoring/REFACTORING_STATUS.yaml`, `docs/plans/system-reference-architecture.md`(운영/제어 아키텍처 peer)
 > 코드 구조(패키지·계층·의존성 규칙)의 정본. 런타임/인프라 구조는 `docs/system-architecture.md`를 본다.
 
 ---
