@@ -48,6 +48,9 @@ modules:
     dev_agent.py:
       status: experimental
       purpose: "Agent Issue->PR runner \u2014 worktree-isolated, ruff+pytest gated, review-only PR."
+    mcp_inventory_check.py:
+      status: production
+      purpose: "MCP server inventory drift check (OWASP MCP09 shadow MCP)."
     collect_novel.py:
       status: experimental
       purpose: "bookto31.com \uD558\uB0A8\uC790\uC758 \uD0D1 \uACF5\uB7B5\uBC95 \uC804\

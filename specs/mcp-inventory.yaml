@@ -1,0 +1,30 @@
+# MCP server inventory — approved governance list (OWASP MCP09 "shadow MCP").
+#
+# SSOT for the live opencode config (`mcp` section in
+# ~/.config/opencode/opencode.json). Distinct from specs/mcp-contract.json,
+# which is the tool contract — do not mix the two.
+#
+# enabled  : current state in the live config
+# approved : governance decision; a server may be enabled only if approved=true
+# owner    : responsible party; purpose: one line
+#
+# Drift check: scripts/mcp_inventory_check.py (unlisted or enabled-not-approved).
+version: 1
+config_paths:
+  - "~/.config/opencode/opencode.json"
+servers:
+  - {name: devforge-mcp, type: remote, enabled: true, approved: true, owner: devforge, purpose: "Project MCP — knowledge/pipeline/deepdive/memory tools."}
+  - {name: yggdrasil, type: local, enabled: true, approved: true, owner: devforge, purpose: "Planning / deep-think MCP."}
+  - {name: lsp, type: local, enabled: true, approved: true, owner: devforge, purpose: "Code intelligence (agent-lsp)."}
+  - {name: opencode-db, type: local, enabled: true, approved: true, owner: devforge, purpose: "OpenCode session DB query."}
+  - {name: filesystem, type: local, enabled: false, approved: false, owner: devforge, purpose: "Filesystem access (disabled)."}
+  - {name: search-proxy, type: local, enabled: false, approved: false, owner: devforge, purpose: "Web search proxy (disabled)."}
+  - {name: exa-search, type: local, enabled: false, approved: false, owner: devforge, purpose: "Exa web search (disabled)."}
+  - {name: fetch, type: local, enabled: false, approved: false, owner: devforge, purpose: "URL fetch (disabled)."}
+  - {name: github, type: local, enabled: false, approved: false, owner: devforge, purpose: "GitHub MCP wrapper (disabled)."}
+  - {name: context7, type: local, enabled: false, approved: false, owner: devforge, purpose: "Library docs lookup (disabled)."}
+  - {name: time, type: local, enabled: false, approved: false, owner: devforge, purpose: "Time utilities (disabled)."}
+  - {name: shrimp-task-manager, type: local, enabled: false, approved: false, owner: devforge, purpose: "Task manager (disabled)."}
+  - {name: token-savior, type: local, enabled: false, approved: false, owner: devforge, purpose: "Token optimization (disabled)."}
+  - {name: git, type: local, enabled: false, approved: false, owner: devforge, purpose: "Git operations (disabled)."}
+  - {name: postgres, type: local, enabled: false, approved: false, owner: devforge, purpose: "Postgres access (disabled)."}
