@@ -17,6 +17,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.11.12"
 
 jobs:
   lint:
@@ -26,15 +27,17 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff mypy
-          pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Verify lockfile is in sync
+        run: uv lock --check
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --extra dev
       - name: Ruff (lint)
-        run: ruff check src/ tests/ --output-format=concise
+        run: uv run --frozen ruff check src/ tests/ --output-format=concise
       - name: Ruff (format check)
-        run: ruff format --check src/
+        run: uv run --frozen ruff format --check src/
 
   type-check:
     runs-on: ubuntu-latest
@@ -44,13 +47,13 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install mypy
-          pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --extra dev
       - name: Mypy (strict)
-        run: python -m mypy src/ --ignore-missing-imports
+        run: uv run --frozen python -m mypy src/ --ignore-missing-imports
 
   architecture:
     runs-on: ubuntu-latest
@@ -60,13 +63,13 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install import-linter
-          pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --extra dev
       - name: Import Linter
-        run: lint-imports
+        run: uv run --frozen lint-imports
 
   dependency-scan:
     runs-on: ubuntu-latest
@@ -76,15 +79,15 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install pip-audit
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --extra dev
       - name: pip-audit (dependency vulnerabilities)
         # PYSEC-2026-1845: pytest<9 local /tmp DoS — dev-only tooling, not shipped
         # in the image. Accepted risk; remove after the pytest 9 migration.
-        run: pip-audit --desc --ignore-vuln PYSEC-2026-1845
+        run: uv run --frozen --with pip-audit pip-audit --desc --ignore-vuln PYSEC-2026-1845
 
   # PR-only: block known-vulnerable / license-incompatible dependency changes.
   # Requires the repository dependency graph (public repo: default; private: GHAS).
@@ -117,13 +120,14 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --extra dev
       - name: Run tests
         run: |
-          pytest tests/fitness/ tests/test_characterization.py tests/test_integration.py -v --tb=short
+          uv run --frozen pytest tests/fitness/ tests/test_characterization.py tests/test_integration.py -v --tb=short
         env:
           DEVFORGE_DATABASE_URL: postgresql+asyncpg://devforge:devforge_app_2026@localhost:5432/devforge_app
 

@@ -1,7 +1,14 @@
 # ── Stage 1: Builder ──
 FROM python:3.12-slim AS builder
 
-WORKDIR /build
+# uv (pinned) — installs the exact dependency set from uv.lock.
+COPY --from=ghcr.io/astral-sh/uv:0.11.12 /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+WORKDIR /app
 
 # Build dependencies for native wheels (asyncpg, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,14 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Resolve runtime deps from the lock first (cached layer; project not yet installed)
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --no-editable --no-install-project
+
 # Copy package sources + metadata (README is referenced by pyproject.toml)
-COPY pyproject.toml README.md ./
 COPY src/ ./src/
 COPY alembic/ ./alembic/
-
-# Build a portable (non-editable) wheel + resolve runtime deps into /wheels
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip wheel --no-cache-dir --wheel-dir /wheels .
+RUN uv sync --frozen --no-dev --no-editable
 
 # ── Stage 2: Runtime ──
 FROM python:3.12-slim AS runtime
@@ -30,11 +37,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install the application wheel and its dependencies
-COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir /wheels/* && \
-    rm -rf /wheels
+# Copy the locked virtualenv (built in stage 1) and put it on PATH
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Alembic migration assets (kept alongside the installed package)
 COPY alembic/ ./alembic/
