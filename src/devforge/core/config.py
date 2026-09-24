@@ -23,6 +23,8 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from devforge.ports.types import SloTarget
+
 # Path roots are owned by core.paths (SSOT) and imported here.
 # Why: core.paths needs these constants to build its registry, and core.config
 # needs them to locate config files. When core.config owned them, core.paths had
@@ -453,6 +455,16 @@ class WatchdogConfig:
     dataimpulse_stale_sec: int = 1800
     dataimpulse_deep_stale_sec: int = 300
     dataimpulse_deep_consecutive: int = 3
+    # Availability SLOs (2026 standard-gap §10). Component keys match the
+    # watchdog tracker keys produced by the health checkers (svc: prefix).
+    slo_targets: list[SloTarget] = field(
+        default_factory=lambda: [
+            SloTarget("turn-watcher", "svc:devforge-turn-watcher", 0.99, 30),
+            SloTarget("day-cycle", "svc:devforge-day-cycle", 0.99, 30),
+            SloTarget("postgres", "svc:container-postgres", 0.99, 30),
+            SloTarget("mcp", "svc:container-devforge-mcp", 0.99, 30),
+        ]
+    )
 
     @classmethod
     def from_env(cls) -> "WatchdogConfig":

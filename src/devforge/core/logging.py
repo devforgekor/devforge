@@ -24,6 +24,8 @@ import structlog
 from structlog.processors import JSONRenderer as _JSONRenderer
 from structlog.stdlib import ProcessorFormatter
 
+from devforge.core.telemetry import inject_trace_context
+
 _JSON_RENDERER = _JSONRenderer
 
 
@@ -43,6 +45,7 @@ def setup_logging(
 
     shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
+        inject_trace_context,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),

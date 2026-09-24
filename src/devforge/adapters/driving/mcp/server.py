@@ -38,6 +38,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from devforge.core.config import get_config
 from devforge.core.logging import get_logger
+from devforge.core.telemetry import correlation
 from devforge.ports.extract import PipelineStatusParams
 
 logger = get_logger(__name__)
@@ -1240,6 +1241,7 @@ async def _audit_tool_call(
                 "args_hash": _args_hash(params),
                 "result": "ok" if ok else "error",
                 "error": (error or "")[:200],
+                **correlation(),
             },
             tags={"kind": "mcp_audit"},
         )

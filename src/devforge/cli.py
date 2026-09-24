@@ -22,8 +22,10 @@ from devforge.adapters.driving.cli_cmds import mcp as mcp_cmds
 from devforge.adapters.driving.cli_cmds import watchdog as watchdog_cmds
 from devforge.adapters.driving.mcp.server import set_pipeline_factory
 from devforge.core.logging import setup_logging
+from devforge.core.telemetry import setup_telemetry
 
 setup_logging(level="INFO", component="cli")
+setup_telemetry(service_name="devforge-cli")
 
 app = typer.Typer(
     name="devforge",

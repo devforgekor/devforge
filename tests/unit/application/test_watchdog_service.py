@@ -12,7 +12,13 @@ import pytest
 
 from devforge.application.watchdog_service import WatchdogService
 from devforge.core.config import WatchdogConfig
-from devforge.ports.types import ComponentState, HealthCheck, RecoveryAction
+from devforge.ports.types import (
+    ComponentState,
+    HealthCheck,
+    Incident,
+    RecoveryAction,
+    SloTarget,
+)
 
 
 @dataclass
@@ -155,6 +161,7 @@ class FakeIncidentRepo:
         self.detect_calls: list[tuple[str, str, str]] = []
         self.action_calls: list[tuple[Optional[int], str, bool]] = []
         self.resolve_calls: list[str] = []
+        self.incidents: list[Incident] = []
 
     async def record_detect(self, component: str, event_type: str, detail: str, unit: Optional[str] = None) -> Optional[int]:
         self.detect_calls.append((component, event_type, detail))
@@ -168,6 +175,9 @@ class FakeIncidentRepo:
 
     async def find_open(self, component: Optional[str] = None) -> list:
         return []
+
+    async def find_since(self, since) -> list:
+        return list(self.incidents)
 
 
 class FakeStateStorage:
@@ -387,3 +397,48 @@ class TestWatchdogServiceProperties:
             state_storage=comps["state_storage"],
         )
         assert svc.check_interval_sec == 42
+
+
+class TestSloReport:
+    def _service(self, comps, config: WatchdogConfig) -> WatchdogService:
+        return WatchdogService(
+            config=config,
+            registry=comps["registry"],
+            check_coordinator=comps["check_coordinator"],
+            recovery_coordinator=comps["recovery_coordinator"],
+            recovery_port=comps["recovery_port"],
+            notification_ports=[comps["notifier"]],
+            incident_repo=comps["incident_repo"],
+            state_storage=comps["state_storage"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_targets_returns_empty(self, service_components) -> None:
+        svc = self._service(service_components, WatchdogConfig(slo_targets=[]))
+        assert await svc.slo_report() == []
+
+    @pytest.mark.asyncio
+    async def test_reports_breach_from_open_incident(self, service_components) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
+        service_components["incident_repo"].incidents = [
+            Incident(
+                id=1,
+                dedup_key="svc:a:down",
+                component="svc:a",
+                status="open",
+                symptom="down",
+                context=None,
+                detected_at=now - timedelta(hours=10),
+                last_seen_at=now - timedelta(hours=10),
+                resolved_at=None,
+            )
+        ]
+        config = WatchdogConfig(slo_targets=[SloTarget("a", "svc:a", 0.99, 30)])
+        svc = self._service(service_components, config)
+        rows = await svc.slo_report(now=now)
+        assert len(rows) == 1
+        assert rows[0]["name"] == "a"
+        assert rows[0]["breached"] is True
+        assert abs(rows[0]["downtime_sec"] - 36000) < 1

@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from devforge.application.slo import compute_slos
 from devforge.core.config import WatchdogConfig
+from devforge.core.telemetry import new_run_id, set_run_id, span
 from devforge.domain.watchdog.monitoring.tracker import TrackerRegistry
 from devforge.domain.watchdog.orchestration.check_coordinator import CheckCoordinator
 from devforge.domain.watchdog.recovery.graduation import RecoveryCoordinator
@@ -63,6 +66,12 @@ class WatchdogService:
         return _EVENT_TYPE.get(component.split(":", 1)[0], "down")
 
     async def run_cycle(self) -> dict[str, Any]:
+        run_id = new_run_id("watchdog")
+        set_run_id(run_id)
+        with span("watchdog.run_cycle", attributes={"run_id": run_id}):
+            return await self._run_cycle()
+
+    async def _run_cycle(self) -> dict[str, Any]:
         checks = await self._checks.run()
         failed = self._checks.failed(checks)
 
@@ -132,6 +141,16 @@ class WatchdogService:
     def component_states(self) -> list[dict[str, object]]:
         """Read-model for the CLI: per-component summary (no private access)."""
         return [t.summary() for t in self._registry.all().values()]
+
+    async def slo_report(self, *, now: Optional[datetime] = None) -> list[dict[str, Any]]:
+        """Local SLI/SLO/error-budget for configured targets (2026-standard-gap §10)."""
+        targets = self._config.slo_targets
+        if not targets:
+            return []
+        now = now or datetime.now(timezone.utc)
+        window_days = max(t.window_days for t in targets)
+        incidents = await self._incidents.find_since(now - timedelta(days=window_days))
+        return [asdict(r) for r in compute_slos(incidents, targets, now=now)]
 
     async def resolve_incident(self, incident_id: int, note: str) -> None:
         """Resolve an incident via the repository port."""

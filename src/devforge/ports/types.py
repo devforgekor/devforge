@@ -66,6 +66,20 @@ class PathStatus:
     detail: str = ""
 
 
+@dataclass(frozen=True)
+class SloTarget:
+    """An availability SLO for one watchdog component (2026 standard-gap §10).
+
+    `component` is the exact watchdog tracker key (e.g. "svc:devforge-day-cycle").
+    `objective` is the target availability ratio in (0, 1] (0.99 = 99%).
+    """
+
+    name: str
+    component: str
+    objective: float = 0.99
+    window_days: int = 30
+
+
 @dataclass
 class CircuitState:
     """Circuit breaker snapshot (state.py:134-141)."""

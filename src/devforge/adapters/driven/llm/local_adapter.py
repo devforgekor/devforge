@@ -17,6 +17,17 @@ from urllib.request import Request, urlopen
 
 from devforge.core.config import get_config
 from devforge.core.logging import get_logger
+from devforge.core.telemetry import (
+    GEN_AI_OPERATION_NAME,
+    GEN_AI_PROVIDER_NAME,
+    GEN_AI_REQUEST_MAX_TOKENS,
+    GEN_AI_REQUEST_MODEL,
+    GEN_AI_REQUEST_TEMPERATURE,
+    GEN_AI_RESPONSE_MODEL,
+    SpanKind,
+    genai_usage_attributes,
+    span,
+)
 from devforge.ports.extract import ExtractedFact, LLMPort, TurnData
 
 logger = get_logger(__name__)
@@ -132,31 +143,44 @@ class LocalLLMAdapter(LLMPort):
             timeout=http_timeout,
         )
 
-        try:
-            import asyncio
+        with span(
+            f"chat {model_name}",
+            kind=SpanKind.CLIENT if SpanKind is not None else None,
+            attributes={
+                GEN_AI_OPERATION_NAME: "chat",
+                GEN_AI_PROVIDER_NAME: "llamacpp",
+                GEN_AI_REQUEST_MODEL: model_name,
+                GEN_AI_REQUEST_MAX_TOKENS: body["max_tokens"],
+                GEN_AI_REQUEST_TEMPERATURE: body["temperature"],
+                "server.port": port,
+            },
+        ) as sp:
+            try:
+                import asyncio
 
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: urlopen(req, timeout=http_timeout).read().decode("utf-8"),
-            )
-            response = json.loads(result)
-        except (URLError, socket.timeout, json.JSONDecodeError) as e:
-            logger.error("llm_call_failed", model=model_name, port=port, error=str(e))
-            raise RuntimeError(f"LLM call to :{port} ({model_name}) failed: {e}")
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: urlopen(req, timeout=http_timeout).read().decode("utf-8"),
+                )
+                response = json.loads(result)
+            except (URLError, socket.timeout, json.JSONDecodeError) as e:
+                logger.error("llm_call_failed", model=model_name, port=port, error=str(e))
+                raise RuntimeError(f"LLM call to :{port} ({model_name}) failed: {e}")
 
-        choices = response.get("choices", [])
-        if not choices:
-            raise RuntimeError(f"LLM ({model_name}) returned no choices: {response}")
+            choices = response.get("choices", [])
+            if not choices:
+                raise RuntimeError(f"LLM ({model_name}) returned no choices: {response}")
 
-        content = (choices[0]["message"].get("content") or "").strip()
-        usage = response.get("usage", {})
-        elapsed_ms = 0  # Would need timing in the actual call
+            content = (choices[0]["message"].get("content") or "").strip()
+            usage = response.get("usage", {})
+            sp.set_attribute(GEN_AI_RESPONSE_MODEL, model_name)
+            sp.set_attributes(genai_usage_attributes(usage))
 
         return {
             "content": content,
             "usage": usage,
-            "elapsed_ms": elapsed_ms,
+            "elapsed_ms": 0,  # Would need timing in the actual call
             "model": model_name,
         }
 

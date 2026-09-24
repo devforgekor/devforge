@@ -1450,6 +1450,9 @@ modules:
     dora.py:
       status: experimental
       purpose: "Pure DORA metrics derivation (2026 four keys) from deployment/incident events."
+    slo.py:
+      status: experimental
+      purpose: "Pure availability SLI/SLO + error-budget derivation from watchdog incident downtime (2026 standard-gap §10)."
 - path: src/devforge/core/
   purpose: src/devforge/core
   files:
@@ -1469,6 +1472,9 @@ modules:
     exceptions.py:
       status: unknown
       purpose: "Custom exception hierarchy for DevForge."
+    telemetry.py:
+      status: experimental
+      purpose: "OTel API tracing + GenAI semantic conventions; trace_id/run_id correlation (2026 standard-gap §9). No-op without OTEL_EXPORTER_OTLP_ENDPOINT / devforge[otel]."
 - path: src/devforge/domain/
   purpose: src/devforge/domain
   files:
@@ -1589,7 +1595,7 @@ modules:
       purpose: "NotificationPort \u2014 send_alert/send_recovery/sd_notify."
     incident_repository.py:
       status: experimental
-      purpose: "IncidentRepository \u2014 record_detect/record_action/resolve_if_open/find_open."
+      purpose: "IncidentRepository \u2014 record_detect/record_action/resolve_if_open/find_open/find_since."
     state_persistence.py:
       status: experimental
       purpose: "StateStoragePort \u2014 legacy watchdog_state.json save/load."

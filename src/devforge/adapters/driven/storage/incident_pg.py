@@ -11,9 +11,10 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func, insert, or_, select, update
 
 from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+from devforge.core.telemetry import correlation
 from devforge.domain.models import WatchdogIncident
 from devforge.ports.incident_repository import IncidentRepository
 from devforge.ports.types import Incident
@@ -188,6 +189,26 @@ class PostgresIncidentRepository(IncidentRepository):
             )
         return [_to_incident(r) for r in rows]
 
+    async def find_since(self, since: datetime) -> list[Incident]:
+        """Incidents relevant to an SLI window: detected in-window OR still open.
+
+        [WHY] An incident opened before the window and never resolved still spans
+        the window, so excluding it would under-count downtime (false-good SLI).
+        """
+        stmt = (
+            select(WatchdogIncident)
+            .where(
+                or_(
+                    WatchdogIncident.detected_at >= since,
+                    WatchdogIncident.status == "open",
+                )
+            )
+            .order_by(WatchdogIncident.detected_at.asc())
+        )
+        async with self._gateway.session() as session:
+            rows = (await session.execute(stmt)).scalars().all()
+        return [_to_incident(r) for r in rows]
+
 
 async def _run_capture(cmd: list[str], timeout: int) -> Optional[str]:
     """Run a read-only capture command; return stdout or None (best-effort)."""
@@ -224,6 +245,8 @@ async def _capture_context_jsonb(component: str, unit: Optional[str]) -> dict[st
         "unit": unit,
         "truncated": False,
     }
+    # [WHY] correlate the incident with the active trace/run (2026-standard-gap §9).
+    ctx.update(correlation())
 
     show_cmd = ["systemctl", "--user", "show", unit, f"--property={_SYSTEMD_PROPS}"]
     ctx["command"] = show_cmd

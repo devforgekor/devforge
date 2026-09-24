@@ -1,6 +1,6 @@
 # 2026 표준 대비 서버 로직 개선 계획
 
-> Status: **진행 중(2026-09-24)** — §1·§2 ✅ 완료 · §3·§4 ◐ 부분(모니터/SP통일; federation·회전 권한 대기) · Date: 2026-09-23 · Owner: devforge
+> Status: **진행 중(2026-09-24)** — §1·§2·§5·§6·§7 ✅ 완료 · §3·§4·§9·§10 ◐ 부분(SP 권한 대기; SLO 로컬 근사; OTel API 계측·exporter 선택적) · Date: 2026-09-23 · Owner: devforge
 > Related: `REFACTORING_PLAN.md`, `plans/final-plan.md`, `plans/watchdog-standard-compliance.md`, `plans/error-record-analysis-design.md`, `plans/dataimpulse-watchdog-delegation.md`, `reports/industry-standard-comparison-20260914.md`
 > Deep Dive: `dp-20260923-2026-standard-gap-server-logic` (Yggdrasil)
 > 방법: 서버 실측(코드/CI/설정/DB) → 2026 표준·동향(web) → **context7 검증** → 항목별 갭·조치. 기존 계획에 **항목 추가** 방식(중복 최소화).
@@ -19,8 +19,8 @@
 | 6 | shadow MCP 인벤토리 | opencode **15개 중 4 enabled**, 감사·드리프트 0 | OWASP **MCP09** | **P1** | ✅ 완료 |
 | 7 | tool-poisoning | 내부 툴, 정의 스캔·승인 0(`mcp-contract.json` frozen) | OWASP **MCP03** | **P1** | ✅ 완료 |
 | 8 | progressive discovery | opencode allowlist(~33) 프루닝 | 임계(1–5%)·programmatic calling | P2 | — |
-| 9 | OpenTelemetry | structlog JSON + LLM `/metrics` | OTel + **GenAI conv** | **P1** | — |
-| 10 | SLO/error budget | watchdog alert-only 임계만 | SLO + burn-rate | **P1** | — |
+| 9 | OpenTelemetry | structlog JSON + LLM `/metrics` | OTel + **GenAI conv** | **P1** | ◐ 부분 |
+| 10 | SLO/error budget | watchdog alert-only 임계만 | SLO + burn-rate | **P1** | ◐ 부분 |
 | 11 | policy-as-code | 문서+import-linter+lint_rules(부분) | OPA/Conftest 기계강제 | P2 | — |
 | 12 | canary/feature flag | shadow/병렬+digest 롤백 | canary·flag·DORA | P2 | — |
 
@@ -89,12 +89,14 @@
 - **표준**: OTel 표준화가 2026 핵심. **GenAI semantic conventions**(`gen_ai.usage.*_tokens` 등; semantic-conventions-genai repo로 이동)로 LLM/에이전트 span·token·tool call 추적. agentic observability(감사 trail).
 - **context7 검증**: `opentelemetry-semantic-conventions`의 GenAI token 속성 상수 확인.
 - **조치**: `trace_id`/`run_id`를 `context_jsonb`·incident에 상관(error-record에 이미 "선택" → 승격). deepdive/extract에 OTel GenAI span 도입(경량, 선택적 exporter).
+- **상태(2026-09-24) ◐ 부분**: OTel **API만** 기본 의존성(`opentelemetry-api`), SDK+OTLP exporter는 optional extra `devforge[otel]`. `core/telemetry.py`(span 컨텍스트매니저·local trace/run contextvars·GenAI semconv 상수·`genai_usage_attributes`·`setup_telemetry` idempotent) + structlog `inject_trace_context` + LLM 어댑터 GenAI CLIENT span(`chat {model}`, usage tokens) + watchdog cycle run span + incident `context_jsonb`·MCP audit `observations`에 trace/run 상관. **미완**: 실제 exporter 백엔드 선택·설치(OTLP endpoint/console), deepdive/agent span 확대, collector 도입은 ⑩ 이후(백엔드 결정 필요).
 
 ## 10. SLO / Error Budget Burn-rate (P1)
 
 - **As-Is**: watchdog alert-only 임계(고정). SLO·error budget 0.
 - **표준**: SLO + **multi-window burn-rate(MWMBR)** 경보, error budget 정책. "두 번의 나쁜 롤아웃이 30일 예산 88% 소진"(Elastic 2026).
 - **조치**: 핵심 서비스(turn-watcher/day-cycle/postgres/mcp) **SLI/SLO** 정의(예: 가용 99%). **전제: 메트릭 백엔드 필요**(Prometheus/OTel collector 등 — 단일 호스트 경량 도입 또는 로컬 집계). 백엔드 도입 전에는 SLI를 watchdog 로컬 집계(가용/실패 카운트)로 근사하고, burn-rate는 백엔드 확보 후. `final-plan`/`watchdog-standard`에 항목 추가.
+- **상태(2026-09-24) ◐ 부분**: 로컬 근사 구현 — `application/slo.py`(순수: 가용=1−union(incident downtime)/window, error budget, 단일 윈도 burn-rate) + `ports/types.SloTarget` + `WatchdogConfig.slo_targets`(turn-watcher/day-cycle/postgres/mcp, 99%/30d) + `IncidentRepository.find_since`(윈도 내 + open 스팬) + `WatchdogService.slo_report` + CLI `watchdog slo`. 테스트: `tests/unit/application/test_slo.py`. **미완**: MWMBR(다중 윈도) 경보·watchdog 배선·state.yaml.dora 연동은 메트릭 백엔드/재기동 후(⑩).
 
 ## 11. Policy-as-code (P2)
 

@@ -136,6 +136,15 @@ class TestPostgresIncidentRepository:
         assert all(isinstance(i, Incident) for i in found)
 
     @pytest.mark.asyncio
+    async def test_find_since_maps_rows(self) -> None:
+        session = _Session([_Result(rows=[_row(id=3), _row(id=4)])])
+        repo = PostgresIncidentRepository(_Gateway(session))
+        found = await repo.find_since(datetime.now(timezone.utc))
+        assert [i.id for i in found] == [3, 4]
+        assert all(isinstance(i, Incident) for i in found)
+        assert len(session.executed) == 1
+
+    @pytest.mark.asyncio
     async def test_record_action_records_error(self) -> None:
         session = _Session([_Result()])
         repo = PostgresIncidentRepository(_Gateway(session))

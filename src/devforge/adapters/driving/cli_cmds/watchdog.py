@@ -76,6 +76,21 @@ def check() -> None:
     typer.echo(f"checks={result['checks']} failed={result['failed']}")
 
 
+@app.command("slo")
+def slo() -> None:
+    """Print availability SLI/SLO/error-budget per target (local approximation)."""
+    rows = asyncio.run(_build_service().slo_report())
+    if not rows:
+        typer.echo("no SLO targets configured")
+        return
+    for r in rows:
+        typer.echo(
+            f"{r['name']}: availability={r['availability']:.4%} slo={r['objective']:.2%} "
+            f"downtime={r['downtime_sec']:.0f}s budget_left={r['error_budget_remaining_sec']:.0f}s "
+            f"burn={r['burn_rate']:.2f} incidents={r['incident_count']} breached={r['breached']}"
+        )
+
+
 @app.command("resolve")
 def resolve(incident_id: int, note: str) -> None:
     """Resolve an incident by id."""
