@@ -23,6 +23,7 @@ In Claude Code:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 from collections.abc import AsyncGenerator, AsyncIterator
@@ -1211,6 +1212,42 @@ async def sse_endpoint() -> Any:
 
 
 @app.post("/tools/{tool_name}")
+def _args_hash(params: dict[str, Any]) -> str:
+    """Stable hash of tool arguments (audit stores a hash, never raw args)."""
+    payload = json.dumps(params, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+async def _audit_tool_call(
+    tool_name: str, params: dict[str, Any], ok: bool, error: Optional[str] = None
+) -> None:
+    """Best-effort MCP tool-call audit (OWASP MCP08). Never raises.
+
+    Records to observations(source='mcp', category='mcp_audit'); args are hashed.
+    """
+    try:
+        config = get_config()
+        from devforge.adapters.driven.storage.extract_adapter import (
+            PostgresObservationRepository,
+        )
+
+        repo = PostgresObservationRepository.from_config(config)
+        await repo.save_observation(
+            observation=f"mcp tool={tool_name} result={'ok' if ok else 'error'}",
+            category="mcp_audit",
+            source="mcp",
+            context={
+                "tool": tool_name,
+                "args_hash": _args_hash(params),
+                "result": "ok" if ok else "error",
+                "error": (error or "")[:200],
+            },
+            tags={"kind": "mcp_audit"},
+        )
+    except Exception as exc:  # audit must never break the tool call
+        logger.warning("mcp_audit_failed", tool=tool_name, error=str(exc))
+
+
 async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> Any:
     """MCP protocol: Call a specific tool with parameters."""
     params = params or {}
@@ -1257,8 +1294,10 @@ async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> 
     try:
         validated = schemas[tool_name](**params)
         result = await tool_funcs[tool_name](validated)  # type: ignore[operator]
+        await _audit_tool_call(tool_name, params, ok=True)
         return JSONResponse(content={"result": result})
     except Exception as e:
+        await _audit_tool_call(tool_name, params, ok=False, error=str(e))
         logger.error("mcp_tool_error", tool=tool_name, error=str(e))
         return JSONResponse(
             status_code=500,
