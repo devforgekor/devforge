@@ -3,6 +3,8 @@
 > Status: active · Date: 2026-09-24 · Owner: devforge
 > Related: `plans/system-reference-architecture.md`, `plans/fitness-functions-heartbeat-drift-guide.md`, `plans/detection-remediation-implementation-guide.md`, `reports/systemic-wiring-gap-analysis-20260924.md`, `plans/watchdog-standard-compliance.md`
 > 목적: shadow-run 창(만료 **2026-09-24 13:32 UTC**) 기준으로 잔여 작업을 **선행·시퀀스·게이트**까지 상세화.
+>
+> **갱신(2026-09-24)**: `shadow-pause-batch` 결정으로 shadow(v2)를 정지한 뒤 §5~§10을 일괄 진행(정지 중 프로덕션 무영향). §2.3 공급망 CI·§3.1 P2·§9 OTel·§10 SLO 완료. 잔여는 **⑩ shadow 재시작(24h 측정)** → 컷오버.
 
 ---
 

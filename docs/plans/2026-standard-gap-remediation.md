@@ -40,7 +40,7 @@
 - **표준**: 컨테이너 이미지 스캔(`trivy image`)+SBOM 소스(`--sbom-sources oci/rekor`), Python 의존성(`pip-audit`), GitHub dependency review.
 - **context7 검증**: `trivy image --sbom-sources rekor/oci`(SBOM 기반 스캔, CycloneDX 감지).
 - **조치**: CI에 `pip-audit`(의존성) + `trivy image`(GHCR 이미지) 추가. 실패 임계(Critical/High) 정책 1p.
-- **상태(2026-09-24) ✅ 완료**: `dependency-scan`(pip-audit; dev-only pytest 어드바이저리 allowlist) + `dependency-review`(PR) + build Trivy(fixable CRITICAL/HIGH). **uv.lock 도입**(재현성) + **Dependabot**(uv/github-actions/docker). 커밋 `ed6bc5d`·`b061d2b`·`bff9062`.
+- **상태(2026-09-24) ✅ 완료**: `dependency-scan`(pip-audit) + `dependency-review`(PR) + build Trivy(fixable CRITICAL/HIGH). **uv.lock 도입**(재현성) + **Dependabot**(uv/github-actions/docker). **pytest 9 마이그레이션으로 PYSEC-2026-1845 allowlist 제거**(pip-audit clean). 커밋 `ed6bc5d`·`b061d2b`·`bff9062`·`616db1b`.
 
 ## 3. Secretless Workload Identity (P0)
 
@@ -124,6 +124,8 @@
 > 배치 제약: shadow-run 창(09-24 13:32 UTC) 중 서비스 재기동 금지.
 > - **비파괴 선행 가능**: 1·2(CI SBOM/서명/스캔 — CI만 변경), 4의 만료 감시(알림 타이머), 11(policy-as-code CI).
 > - **서비스 재기동/키 재구성 수반(창 이후)**: 3(secretless 전환), 4의 실제 rotation, 5~7(MCP 계측/감사), 9(OTel), 10(SLO/메트릭).
+>
+> **갱신(2026-09-24)**: `shadow-pause-batch` 결정으로 shadow(v2)를 정지한 뒤 §5~§10을 일괄 진행(정지 중 프로덕션 무영향). §9·§10 로컬 구현은 ⑩ shadow 재시작 전 완료.
 
 ## 14. 측정 지표
 
@@ -142,8 +144,8 @@
 
 1. 항목별 실제 구현은 각 계획(REFACTORING/final-plan/watchdog-standard)에 **반영 승인** 필요.
 2. managed identity/federation 전환은 Azure 권한·SP 재구성 필요(사용자 승인).
-3. OTel 도입은 exporter/백엔드 선택 필요(경량 self-host 또는 OTLP endpoint).
-4. `specs/mcp-inventory.yaml` 등 **신규 파일** 생성 승인 필요.
+3. OTel **API 계측은 완료**(§9, `core/telemetry.py`). 실제 exporter/백엔드 선택만 미완(경량 self-host 또는 OTLP endpoint, `devforge[otel]` 설치 시 활성).
+4. 신규 파일 생성 승인: `specs/mcp-inventory.yaml`·`specs/mcp-tools.snapshot.json`(완료), `core/telemetry.py`·`application/slo.py`(2026-09-24 완료).
 
 ---
 

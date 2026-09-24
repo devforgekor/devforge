@@ -1,6 +1,6 @@
 # Watchdog 표준 준수 계획 (Phase 2 Gate 4 개정판)
 
-> Status: active — P1 완료(2026-09-23), P2~P4 대기(shadow-run 창 만료 후) · 2026-09-23 · Deep Dive `dp-20260923-watchdog-standard-compliance`
+> Status: active — P1 완료(2026-09-23), **P2 완료(2026-09-24)**, P3~P4 대기 · 2026-09-23 · Deep Dive `dp-20260923-watchdog-standard-compliance`
 > 목적: Gate 4 컷오버를 **업계/업스트림 표준**에 맞게 재설계. 3개 비표준 요소 교정 + 신뢰성 보강.
 > 대체: `_archive/plans/phase2-gate4-cutover-plan.md` §2.1–2.7 (본 계획이 정본). 코드 선행분은 `phase2-gate4-code-prereq.md` 참조.
 
@@ -66,7 +66,7 @@ journalctl --user -u devforge-watchdog-v2 | grep -c "permission denied"  # 0
 
 ---
 
-## 3. P2 — 호스트 유닛 전환 + loopback publish
+## 3. P2 — 호스트 유닛 전환 + loopback publish ✅ 완료(2026-09-24)
 
 ### 3.1 postgres loopback publish (실측 확정: pod 수준)
 `containers/systemd/svc.pod`에 추가(**pod 수준** — pod 멤버는 pod 생성 시 publish 지정):
@@ -210,6 +210,8 @@ systemctl --user is-active devforge-watchdog-liveness.timer          # active (�
 > **P2 착수 게이트(shadow-run)**: graphroot 이동으로 watchdog v2가 재기동되어 Phase 2.5 창이 리셋됨 →
 > **현재 창 = 2026-09-23 13:32 ~ 09-24 13:32 UTC**. P2(및 컷오버)는 이 창 만료 후 착수한다(조기 전환 시 비교 무효).
 > 착수 전 §3 P2 절차의 `devforge-watchdog-v2.container` 제거 → 동일 이름 호스트 유닛 대체를 재확인.
+>
+> **갱신(2026-09-24)**: A안(창 무관 즉시 실행)으로 P2 **완료** — `svc.pod` 127.0.0.1:5432 publish + `devforge-watchdog-v2.container` → `.container.disabled` + host unit(kv-fetch-env exec 패턴) 배포(오탐 해소·host→DB `select 1` OK). shadow(v2)는 `shadow-pause-batch` 결정으로 정지 후 §5~§10 일괄 진행, ⑩에서 24h 재측정 재시작 예정.
 
 ---
 

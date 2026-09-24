@@ -124,7 +124,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | `scripts/deploy/kv-export-env.sh` | 지정 키만 KV 조회 → 임시 EnvironmentFile 생성(서비스별 최소 주입) | quoting artifact 자동 정규화 (2026-09-19) |
 | `scripts/deploy/kv-safe.py` | 시크릿 **값 미출력** 래퍼 (`list`/`compare`/`set-from-env`/`set-from-file`) | 2026-09-23 신규 — DSN 등록·검증용. `compare`는 **공백 무시**(KV 개행→공백 치환 대응) |
 | `.github/_deprecated/sync-kv.yml.deprecated` | GitHub → Key Vault 이전 워크플로우 (폐기, 서버 직접 등록 권장) | 2026-09-20 비활성 |
-| `.github/workflows/sync-secrets.yml` | GitHub Secrets → 서버 동기화 (기존, 유지) | - |
+| `.github/workflows/sync-secrets.yml` | GitHub Secrets → 서버 동기화 | **2026-09-24: `workflow_dispatch` 수동 전용**. 파일 변경 시 자동 실행되는 push 트리거 제거 — KV 이관(secrets.env 삭제) 후 auto-run이 `secrets.env`를 재생성하고 컨테이너를 재기동해 stale 평문 시크릿 재유입 위험이 있었음 |
 
 **P0+P1 개선 상세 (커밋 4c28ef7):**
 - **#2 에러 처리 강화 (P0)**: HTTP 상태 코드 명시적 검증, JSON 파싱 예외 구체화, curl 실패 감지
