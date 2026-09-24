@@ -1,20 +1,31 @@
 last_checkpoint:
-  time: '2026-09-24T14:00:01.233517+00:00'
-  summary: 3 source, 2 docs, 1 generated
-  total_files: 14
+  time: '2026-09-24T23:30:00.266945+09:00'
+  summary: 10 source, 1 docs, 1 generated
+  total_files: 13
   recent_files:
-    data: []
+    source:
+    - server/src/devforge/adapters/driven/storage/incident_pg.py
+    - server/src/devforge/adapters/driving/cli_cmds/watchdog.py
+    - server/src/devforge/application/slo.py
+    - server/src/devforge/application/watchdog_service.py
+    - server/src/devforge/core/config.py
+    - server/src/devforge/ports/incident_repository.py
+    - server/src/devforge/ports/types.py
+    - server/tests/unit/adapters/driven/storage/test_incident_pg.py
+    - server/tests/unit/application/test_slo.py
+    - server/tests/unit/application/test_watchdog_service.py
+    config: []
     docs:
     - server/docs/ops/baseline/D1-summary.md
-    - server/docs/plans/2026-standard-gap-remediation.md
-    config: []
-    source:
-    - server/scripts/dev_agent.py
-    - server/src/devforge/adapters/driving/mcp/server.py
-    - server/tests/unit/test_mcp_audit.py
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 13 files changed, 131 insertions(+), 32 deletions(-)
+      staged: (none)
+      untracked_files: 3
   task: null
 decisions:
 - id: nd13-01
