@@ -26,13 +26,21 @@ def _server_paths(text: str) -> set[str]:
     return set(SERVER_PATH_RE.findall(text))
 
 
+def _resolve(path: str) -> Path:
+    """Map an absolute /opt/projects/server path to this checkout (CI-portable)."""
+    prefix = "/opt/projects/server/"
+    if path.startswith(prefix):
+        return ROOT / path[len(prefix):]
+    return Path(path)
+
+
 def test_service_exec_paths_exist() -> None:
     missing: list[str] = []
     for unit in sorted((ROOT / "systemd/user").glob("*.service")) + sorted(
         (ROOT / "containers/systemd").glob("*.container")
     ):
         for path in _server_paths(unit.read_text(encoding="utf-8")):
-            if not Path(path).exists():
+            if not _resolve(path).exists():
                 missing.append(f"{unit.name}: {path}")
     assert not missing, f"ExecStart references missing files: {missing}"
 
@@ -58,6 +66,6 @@ def test_hook_commands_reference_existing_scripts() -> None:
         for group in groups:
             for hook in group.get("hooks", []):
                 for path in _server_paths(hook.get("command", "")):
-                    if not Path(path).exists():
+                    if not _resolve(path).exists():
                         missing.append(f"hook: {path}")
     assert not missing, f"hooks reference missing scripts: {missing}"
