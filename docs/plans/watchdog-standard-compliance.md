@@ -68,18 +68,18 @@ journalctl --user -u devforge-watchdog-v2 | grep -c "permission denied"  # 0
 
 ## 3. P2 — 호스트 유닛 전환 + loopback publish
 
-### 3.1 postgres loopback publish
-`~/.config/containers/systemd/container-postgres.container`에 추가:
+### 3.1 postgres loopback publish (실측 확정: pod 수준)
+`containers/systemd/svc.pod`에 추가(**pod 수준** — pod 멤버는 pod 생성 시 publish 지정):
 ```ini
 PublishPort=127.0.0.1:5432:5432
 ```
 ```bash
-systemctl --user daemon-reload
-systemctl --user restart container-postgres.service
-ss -ltnp | grep 5432            # 127.0.0.1:5432 만, 0.0.0.0 아님
+bash scripts/deploy/sync-units.sh          # svc.pod -> live + daemon-reload
+systemctl --user restart svc-pod.service   # ExecStartPre(podman pod create)가 5432로 pod 재생성
+ss -ltn | grep 5432                        # 127.0.0.1:5432 만, 0.0.0.0 아님
 ```
-> 주의: pod 멤버는 publish를 **pod 생성 시** 지정해야 하는 경우가 있음. svc.pod에 이미 publish된 포트(8000/8002/8085)가 있으므로 pod 수준 publish로 처리 가능. 미동작 시 `svc-pod` 재생성 검토.
-> 근거: context7 `Podman --publish` — hostIP 미지정 시 all-adresses, `127.0.0.1` 지정 시 loopback 한정.
+> 실측(2026-09-24): pod 수준 publish로 동작. `svc-pod.service`의 `ExecStartPre=podman pod create … --publish 127.0.0.1:5432:5432`가 재생성 시 반영되고, 멤버는 `BindsTo=svc-pod.service`로 함께 재기동된다. **`container-postgres.container`가 아니라 `svc.pod`**에 넣는 것이 정답.
+> 근거: context7 `Podman --publish` — hostIP 미지정 시 all-addresses, `127.0.0.1` 지정 시 loopback 한정.
 
 ### 3.2 watchdog 호스트 유닛 (이전 — 신규 추가 아님)
 현재 신규 와치독(v2)은 **컨테이너 quadlet**(`~/.config/containers/systemd/devforge-watchdog-v2.container`)으로 shadow 실행 중이다. P2는 **동일한 이름의 서비스를 컨테이너→호스트 실행으로 이전**하는 것이며, **3번째 와치독을 만드는 것이 아니다**.
@@ -101,10 +101,7 @@ Environment=PYTHONPATH=/opt/projects/server/src:/opt/projects/server/scripts
 Environment=WATCHDOG_DRY_RUN=1
 Environment=WATCHDOG_STATE_FILE=/opt/ai_data/scripts/watchdog_state.v2.json
 Environment=WATCHDOG_CHECK_INTERVAL_SEC=60
-ExecStartPre=/opt/projects/server/scripts/deploy/kv-export-env.sh %t/kv-devforge-watchdog.env DEVFORGE-DATABASE-URL,DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL
-EnvironmentFile=%t/kv-devforge-watchdog.env
-ExecStart=/usr/bin/python3.12 -m devforge.cli watchdog serve
-ExecStopPost=/bin/rm -f %t/kv-devforge-watchdog.env
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.12 -m devforge.cli watchdog serve --keys DEVFORGE-DATABASE-URL,DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL
 WatchdogSec=180
 Restart=on-watchdog
 RestartSec=30
@@ -113,19 +110,19 @@ TimeoutStopSec=30
 [Install]
 WantedBy=default.target
 ```
-- KV 주입: `ExecStartPre`(`kv-export-env.sh`)가 `%t/kv-devforge-watchdog.env` 생성 → `EnvironmentFile`. DSN 소스 = KV `DEVFORGE-DATABASE-URL`(2026-09-23 등록).
+- KV 주입: `kv-fetch-env.py`가 시크릿을 로드한 뒤 `os.execvpe`로 대상을 실행(legacy watchdog와 동일 패턴, `Type=notify` 안전). **`ExecStartPre`+`EnvironmentFile` 방식은 채택하지 않음** — systemd가 `EnvironmentFile`을 `ExecStartPre`보다 먼저 읽어 파일 부재로 **기동 실패**(2026-09-24 실측: `Failed to load environment files`). DSN 소스 = KV `DEVFORGE-DATABASE-URL`(2026-09-23 등록).
 - **`_sd_notify`는 raw AF_UNIX 소켓 구현**(`cli_cmds/watchdog.py:34`) → **libsystemd/`systemd.daemon` 불필요**, python3.12에서 `Type=notify`/`WatchdogSec` 그대로 동작(실측 확인).
 - `devforge`는 python3.12에 editable 설치 완료(`python-version-strategy.md`). 미설치 환경이면 `pip install --user -e .` 선행.
 
-**P2 착수 체크리스트 (shadow-run 창 만료 후)**
-- [ ] shadow-run 창 만료(≥2026-09-24 13:32 UTC) + 비교 유효
-- [ ] `devforge-watchdog-v2.container` → `_disabled/` 이동(동일 이름 `.service` 충돌 방지)
-- [ ] 위 `.service`를 미러(`systemd/user/`)에 두고 `sync-units.sh`로 배포
-- [ ] `daemon-reload` → `container-devforge-watchdog-v2.service` stop → `devforge-watchdog-v2.service` start
-- [ ] `systemctl --user show devforge-watchdog-v2 -p Type -p WatchdogUSec` (=notify, 3min)
-- [ ] 오탐 0(svc/timer/oneshot/ebook/system) + host→DB `select 1`
-- [ ] legacy 중단(P2.6) — shadow 비교 종료 후
-- P2 실행 시 기존 컨테이너 quadlet `devforge-watchdog-v2.container`를 **제거**(동일 이름 `.service`로 대체) — 이름 충돌 방지. **현재(2026-09-23)는 컨테이너 quadlet으로 shadow 실행 중이며 P2 미실행.**
+**P2 착수 체크리스트 — 완료(2026-09-24)**
+- [x] 창 무관 즉시 실행(A안) — 기존 컨테이너 shadow는 도구 부재로 무의미
+- [x] `devforge-watchdog-v2.container` → **`.container.disabled`로 확장자 변경**
+- [x] 위 `.service`를 미러(`systemd/user/`)에 두고 `sync-units.sh`로 배포
+- [x] `daemon-reload` → v2 컨테이너 stop → `devforge-watchdog-v2.service` start
+- [x] `systemctl --user show devforge-watchdog-v2 -p Type -p WatchdogUSec` (=notify)
+- [x] 오탐 해소(systemctl/free 사용 가능) + host→DB `select 1` OK
+- [ ] legacy 중단(P2.6) — 24h shadow 비교 종료 후
+- **⚠️ Quadlet 비활성 관례(정정)**: `_disabled/`로 **이동만 하면 안 됨** — Quadlet이 `.container` 확장자를 계속 스캔해 유닛을 생성한다(2026-09-24 실측). **`.container.disabled`로 확장자**를 바꿔야 스캔에서 제외된다(기존 `_disabled/*.container.disabled`가 이 관례).
 - `PYTHONPATH`에 `scripts` 포함: health adapter가 `lib.watchdog.config` 등 레거시 설정을 import할 수 있음(패리티 테스트 기준).
 
 **검증**

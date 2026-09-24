@@ -24,7 +24,7 @@ Output the COMPLETE function — no "// ... rest of code" or "same as above" pla
 **대응 프롬프트:**
 
 ```
-This project ONLY uses libraries listed in @requirements.txt (or @package.json).
+This project ONLY uses libraries listed in @pyproject.toml / @uv.lock (or @package.json).
 Do NOT import any external library not already present in the project.
 If you need a library that is not available, list the requirement and ask before adding it.
 ```
