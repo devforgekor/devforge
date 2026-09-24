@@ -44,7 +44,7 @@ dependencies = [
     # Settings
     "pydantic-settings>=2.0,<3.0",
     # Logging / config files
-    "structlog>=24.1,<26.0",
+    "structlog>=26.1.0,<27.0",
     "pyyaml>=6.0,<7.0",
     # MCP SSE
     "sse-starlette>=3.0,<4.0",
