@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge Dev Aging — Aging WIP (stalled claimed issues) check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/projects/server/scripts/cli.py dev aging
+WorkingDirectory=/opt/projects/server/scripts
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge Dev Aging daily timer (Aging WIP)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

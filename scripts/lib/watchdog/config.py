@@ -129,6 +129,7 @@ ONESHOT_RESULT_TARGETS = [
     "devforge-backup.service",  # OCI 백업 (DB + app)
     "devforge-restore-test.service",  # 월간 복원 검증
     "devforge-system-sync.service",  # 30분 아키텍처/동기화
+    "devforge-dev-aging.service",  # Aging WIP (SLE 초과 정체 이슈) — exit 1 시 alert
     "kv-backup.service",  # 주간 KV 백업 (Phase 3)
     "workspace-autocommit.service",  # workspace 자동 커밋 (Phase 3)
     "golden-image-deploy-check.service",  # 배포 헬스체크 (Phase 3)

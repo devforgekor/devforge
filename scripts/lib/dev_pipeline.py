@@ -5,6 +5,7 @@
 
 import datetime
 import json
+import logging
 import os
 import subprocess
 from typing import Any, Dict, List, Optional
@@ -13,6 +14,11 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_PATH = os.path.join(SCRIPTS_DIR, "data", "dev_pipeline_state.json")
 AUTO_TASKS_PATH = os.path.join(SCRIPTS_DIR, "data", "auto_tasks.md")
 DEFAULT_REPO = "devforgekor/devforge"
+
+# [WHY] Kanban "Work Item Age" SLE — claimed issue with no PR past this is stalled (Aging WIP).
+SLE_DAYS_DEFAULT = 3.0
+
+log = logging.getLogger(__name__)
 
 
 def _read_token() -> Optional[str]:
@@ -57,6 +63,62 @@ def _save_state(data: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
     with open(STATE_PATH, "w") as f:
         json.dump(data, f, indent=2)
+
+
+def _parse_ts(value: Optional[str]) -> Optional[datetime.datetime]:
+    """Parse an ISO-8601 timestamp (tolerating a trailing Z). None if absent/invalid."""
+    if not value:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _branch_ahead_count(branch: str, base: str = "main", repo: str = DEFAULT_REPO) -> Optional[int]:
+    """Commits on `branch` not in `base` (GitHub compare). None if the branch is absent/unknown."""
+    result = _run_gh(["api", f"repos/{repo}/compare/{base}...{branch}", "--jq", ".ahead_by"])
+    if result.returncode != 0:
+        return None
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return None
+
+
+def aged_work_items(
+    sle_days: float = SLE_DAYS_DEFAULT, now: Optional[datetime.datetime] = None
+) -> List[Dict[str, Any]]:
+    """Claimed issues with no PR whose age exceeds SLE — Kanban Aging WIP / Stalled Work.
+
+    Returns a list sorted by descending age: {issue, title, claimed_at, age_days}.
+    """
+    state = _load_state()
+    claimed = state.get("claimed", {})
+    pr_created = state.get("pr_created", {})
+    if now is None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+    aged: List[Dict[str, Any]] = []
+    for key, info in claimed.items():
+        if key in pr_created:
+            continue
+        claimed_at = _parse_ts(info.get("claimed_at"))
+        if claimed_at is None:
+            continue
+        age_days = (now - claimed_at).total_seconds() / 86400
+        if age_days > sle_days:
+            issue: Any = int(key) if str(key).isdigit() else key
+            aged.append(
+                {
+                    "issue": issue,
+                    "title": info.get("title", ""),
+                    "claimed_at": info.get("claimed_at"),
+                    "age_days": round(age_days, 2),
+                }
+            )
+    aged.sort(key=lambda item: item["age_days"], reverse=True)
+    return aged
 
 
 def poll_issues(
@@ -226,9 +288,18 @@ def _label_issue(
 def create_pr(issue_number: int, repo: str = DEFAULT_REPO) -> Optional[str]:
     """Create a PR from the issue's branch.
 
-    Returns the PR URL or None on failure.
+    Guards against empty PRs: the branch must be ahead of main. Returns the PR URL
+    or None when the branch is missing/empty or creation fails.
     """
     branch = f"issue-{issue_number}-auto"
+
+    ahead = _branch_ahead_count(branch, "main", repo)
+    if ahead is None:
+        log.warning("create_pr: branch %s missing or compare failed — skipping", branch)
+        return None
+    if ahead == 0:
+        log.warning("create_pr: branch %s has 0 commits ahead of main — skipping empty PR", branch)
+        return None
 
     result = _run_gh(
         [

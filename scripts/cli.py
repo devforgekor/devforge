@@ -49,7 +49,7 @@ from lib.cli_watch import (
 from lib.cli_worklog import cmd_worklog_add, cmd_worklog_recent, cmd_worklog_search
 from lib.db import esc_sql
 from lib.db import psql as _sql
-from lib.dev_pipeline import claim_issue, create_pr, poll_issues
+from lib.dev_pipeline import aged_work_items, claim_issue, create_pr, poll_issues
 from lib.llm_client import MODEL_REGISTRY
 from lib.reflex_rules import (
     rule_create,
@@ -896,6 +896,18 @@ def cmd_dev_pr(args):
         print("PR creation failed — push branch first, then retry.")
 
 
+def cmd_dev_aging(args):
+    """Report Aging WIP (claimed issues with no PR past SLE). Exit 1 if any."""
+    aged = aged_work_items(sle_days=args.sle_days)
+    if not aged:
+        print(f"Aging WIP 없음 (SLE={args.sle_days}d)")
+        return
+    print(f"Aging WIP {len(aged)}건 (SLE={args.sle_days}d):")
+    for item in aged:
+        print(f"  #{item['issue']} age={item['age_days']}d — {item['title']}")
+    sys.exit(1)
+
+
 def cmd_dashboard(args):
     """Show review_facts model performance dashboard."""
     sql_model = """
@@ -1498,6 +1510,8 @@ async def main():
     dev_claim.add_argument("number", type=int, help="Issue number")
     dev_pr = dev_sub.add_parser("pr", help="Create PR from issue branch")
     dev_pr.add_argument("number", type=int, help="Issue number")
+    dev_aging = dev_sub.add_parser("aging", help="Report Aging WIP (stalled claimed issues)")
+    dev_aging.add_argument("--sle-days", type=float, default=3.0, help="Age threshold in days")
 
     p_experiment = sub.add_parser("experiment", help="실험 레지스트리 관리")
     exp_sub = p_experiment.add_subparsers(dest="exp_command")
@@ -1950,6 +1964,8 @@ async def main():
             cmd_dev_claim(args)
         elif args.dev_command == "pr":
             cmd_dev_pr(args)
+        elif args.dev_command == "aging":
+            cmd_dev_aging(args)
         else:
             p_dev.print_help()
     else:
