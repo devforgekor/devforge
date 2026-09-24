@@ -1211,7 +1211,6 @@ async def sse_endpoint() -> Any:
     return EventSourceResponse(event_generator())
 
 
-@app.post("/tools/{tool_name}")
 def _args_hash(params: dict[str, Any]) -> str:
     """Stable hash of tool arguments (audit stores a hash, never raw args)."""
     payload = json.dumps(params, sort_keys=True, default=str, separators=(",", ":"))
@@ -1248,6 +1247,7 @@ async def _audit_tool_call(
         logger.warning("mcp_audit_failed", tool=tool_name, error=str(exc))
 
 
+@app.post("/tools/{tool_name}")
 async def call_tool(tool_name: str, params: Optional[dict[str, Any]] = None) -> Any:
     """MCP protocol: Call a specific tool with parameters."""
     params = params or {}
