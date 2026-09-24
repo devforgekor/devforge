@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # Status: production
-# Path: systemd:handover-gen.timer
+# Path: none — manual (agent-invoked at session end); handover-gen.timer planned but absent
 """update_handover.py — Quality-scored session context capture.
 
-Triggered by SessionEnd hook AND 10-min checkpoint timer.
+Manual: invoked by the agent at session end. The SessionEnd hook runs
+slack_notify.py and a handover-gen.timer does not exist (doc-vs-reality gap;
+see docs/plans/agent-handover-db-design.md 후속).
 Categorizes recent files by priority (source > config/docs > generated)
 so downstream LLMs can distinguish real work from auto-generated noise.
 
