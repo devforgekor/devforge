@@ -16,7 +16,7 @@
 | 3 | secretless identity | KV **SP client_secret**(장수명) | managed identity/federation | **P0** | ◐ 부분 |
 | 4 | secret rotation | rotation 타이머 0(주간 kv-backup만) | 자동 rotation | **P0** | ◐ 부분 |
 | 5 | MCP audit/telemetry | MCP 툴호출 감사 0(`observations` 28k는 별개) | OWASP **MCP08** | **P1** | — |
-| 6 | shadow MCP 인벤토리 | opencode **15개 중 4 enabled**, 감사·드리프트 0 | OWASP **MCP09** | **P1** | — |
+| 6 | shadow MCP 인벤토리 | opencode **15개 중 4 enabled**, 감사·드리프트 0 | OWASP **MCP09** | **P1** | ✅ 완료 |
 | 7 | tool-poisoning | 내부 툴, 정의 스캔·승인 0(`mcp-contract.json` frozen) | OWASP **MCP03** | **P1** | ✅ 완료 |
 | 8 | progressive discovery | opencode allowlist(~33) 프루닝 | 임계(1–5%)·programmatic calling | P2 | — |
 | 9 | OpenTelemetry | structlog JSON + LLM `/metrics` | OTel + **GenAI conv** | **P1** | — |
@@ -67,6 +67,7 @@
 - **As-Is**: opencode에 **15개 MCP 서버 설정**(filesystem, search-proxy, devforge-mcp, exa-search, fetch, github, context7, time, shrimp-task-manager, yggdrasil, lsp, token-savior, opencode-db, git, postgres) 중 **4개만 enabled**. 정기 감사·드리프트 점검 없음.
 - **표준**: OWASP **MCP09(Shadow MCP Servers)** — 미관리/미승인 서버가 공격면. 인벤토리+승인+주기 감사.
 - **조치**: MCP 서버 **승인 인벤토리**(enabled/disabled·소유·목적)를 **신규 `specs/mcp-inventory.yaml`**로 등록(`specs/mcp-contract.json`은 **툴 계약**으로 별개 — 혼용 금지), 주기 드리프트 점검(watchdog oneshot 재사용).
+- **상태(2026-09-24) ✅ 완료**: `specs/mcp-inventory.yaml`(15개·4 enabled; **enabled는 approved 필수**) + `scripts/mcp_inventory_check.py`(live opencode config 대조: unlisted / enabled-not-approved → exit 1) + `tests/fitness/test_mcp_inventory.py`(CI 인벤토리 검증 + config 존재 시 드리프트; CI에서는 skip). 실측 OK(15 listed, 4 enabled). **watchdog/timer 배선은 쉐도우 후**(현재 standalone). 커밋 `82ce98b`.
 
 ## 7. Tool-poisoning 스캔 (P1)
 
