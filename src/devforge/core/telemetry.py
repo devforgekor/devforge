@@ -25,15 +25,19 @@ from uuid import uuid4
 
 log = logging.getLogger(__name__)
 
+# [WHY] Pre-declared as Any so mypy is stable whether or not opentelemetry is
+# installed (CI installs it; stripped envs do not) — avoids branch-dependent types.
+_otel_trace: Any = None
+_SpanKind: Any = None
+_OTEL = False
 try:  # OTel API — base dependency; absent only in stripped test envs.
-    from opentelemetry import trace as _otel_trace
-    from opentelemetry.trace import SpanKind as _SpanKind
+    import opentelemetry.trace as _otel_trace_mod
 
+    _otel_trace = _otel_trace_mod
+    _SpanKind = _otel_trace_mod.SpanKind
     _OTEL = True
 except Exception:  # noqa: BLE001 — instrumentation must never break the app
-    _otel_trace = None
-    _SpanKind = None
-    _OTEL = False
+    pass
 
 # ── GenAI semantic conventions (semantic-conventions-genai) ──
 GEN_AI_OPERATION_NAME = "gen_ai.operation.name"
