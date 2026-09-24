@@ -23,6 +23,11 @@ from devforge.core.config import get_config
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "llm_recordings"
 
+# Runtime inference modes written to current-mode-inference.env. Mirrors the
+# model registry modes (scripts/lib/model_registry.py) plus the dual-server mode
+# (scripts/lib/pod_manager/container.py `_write_dual_env`).
+RUNTIME_MODES = ("day", "night", "embed", "rerank", "dual")
+
 
 # ── 1. ConfigRegistry ──
 
@@ -39,9 +44,14 @@ class TestConfigRegistry:
 
     @pytest.mark.characterization
     def test_runtime_env_loaded(self):
-        """Runtime mode env should be loaded (day/night)."""
+        """Runtime mode env should be loaded and reflected in inference_mode.
+
+        [WHY] current-mode-inference.env MODE is not limited to day/night: the
+        model registry also serves embed/rerank modes, and dual-server mode
+        writes MODE=dual (scripts/lib/model_registry.py, pod_manager/container.py).
+        """
         config = get_config()
-        assert config.runtime.MODE in ("day", "night")
+        assert config.runtime.MODE in RUNTIME_MODES
         assert config.inference_mode == config.runtime.MODE
 
     @pytest.mark.characterization

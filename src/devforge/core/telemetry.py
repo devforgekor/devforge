@@ -20,7 +20,7 @@ import contextlib
 import logging
 import os
 from contextvars import ContextVar
-from typing import Any, Iterator, Optional
+from typing import Any, Generator, Optional
 from uuid import uuid4
 
 log = logging.getLogger(__name__)
@@ -160,7 +160,7 @@ def span(
     *,
     kind: Any = None,
     attributes: Optional[dict[str, Any]] = None,
-) -> Iterator[Span]:
+) -> Generator[Span, None, None]:
     """Start a span, propagating trace/run context (works without the SDK)."""
     attrs = dict(attributes or {})
     parent_trace = _trace_id_var.get()

@@ -281,9 +281,14 @@ class TestConfigToPipelineIntegration:
 
     @pytest.mark.characterization
     def test_config_model_resolution(self):
-        """ConfigRegistry should resolve model names."""
+        """ConfigRegistry.model_name must mirror the runtime env MODEL_NAME.
+
+        [WHY] The served model depends on the active runtime mode (day/night/
+        embed/rerank/dual), so asserting a fixed subset is incorrect.
+        """
         config = get_config()
-        assert config.model_name in ("day-extractor", "day-enricher", "night-proposer")
+        assert config.model_name
+        assert config.model_name == config.runtime.MODEL_NAME
 
     @pytest.mark.characterization
     def test_config_mode(self):
