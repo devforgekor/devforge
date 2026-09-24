@@ -1,0 +1,9 @@
+[Unit]
+Description=DevForge Handover Gen timer (regenerate handover.yaml every 10min)
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -63,7 +63,7 @@ SessionEnd hook / 수동
 1. **계층 위반**: 핸드오버는 `src/devforge` **밖**(`grep handover src/` = 0건). ORM/Alembic/import-linter 미적용.
 2. **스키마 드리프트**: `git_state`는 `update_handover.py:222,245`에서 계산되나 `_insert_checkpoint`(`handover_db.py:65`)가 **버림**. `content_hash`/`replaced_by`/`archived_at`/`resolved_at` 영구 미기록.
 3. **동시성 없음**: `flock`은 YAML만 보호(`update_handover.py:265`), DB 쓰기(`:269`)와 YAML 재생성(`handover_db.py:212`)은 무보호. `action_queue.py:61-114` claim은 docstring과 달리 `FOR UPDATE`/`SKIP LOCKED` 없음(중복 실행 가능).
-4. **문서 불일치**: `update_handover.py:3`·`CLAUDE.yaml:139`는 `handover-gen.timer`를 명시하나 **해당 유닛 없음**(라이브는 SessionEnd hook 경로). **(정정 2026-09-24)**: `update_handover.py` 헤더/docstring·`CLAUDE.yaml`을 **manual·타이머 없음**으로 갱신(SessionEnd hook은 `slack_notify.py`).
+4. **문서 불일치**: `update_handover.py:3`·`CLAUDE.yaml:139`는 `handover-gen.timer`를 명시하나 **해당 유닛 없음**(라이브는 SessionEnd hook 경로). **(해소 2026-09-24)**: `devforge-handover-gen.timer`(10분) **신설** + `update_handover.py` 헤더·`CLAUDE.yaml` 정합(SessionEnd hook은 `slack_notify.py`).
 5. **SQL 주입 표면**: 전 경로 f-string + `esc_sql`(바인드 파라미터 없음).
 6. **미등록 테이블**: `tasks`(세션 컨텍스트 핵심), `watchdog_pulses`, `pipeline_*`도 `models.py`/`schema.sql` 밖.
 
@@ -230,7 +230,7 @@ application/handover_service.py          오케스트레이션(체크포인트 �
 ## 9. 로드맵 배치 / 후속
 
 - **배치**: Phase 2 **Gate 4 컷오버 이후** 리팩터링 Phase. 선행: `plans/watchdog-standard-compliance.md`(정본), `phase2-gate4-code-prereq.md`.
-- **후속(별건)**: `tasks`/`watchdog_pulses` 등 스크립트 전용 테이블의 ORM 편입, `action_queue` claim 원자화, `handover-gen.timer` 문서-실체 불일치 정정(**완료 2026-09-24**: `update_handover.py`·`CLAUDE.yaml` → manual 명시).
+- **후속(별건)**: `tasks`/`watchdog_pulses` 등 스크립트 전용 테이블의 ORM 편입, `action_queue` claim 원자화, `handover-gen.timer` 문서-실체 불일치 정정(**해소 2026-09-24**: `devforge-handover-gen.timer` 신설 + 문서 정합).
 
 ---
 
