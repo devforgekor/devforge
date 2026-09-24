@@ -17,7 +17,7 @@
 | 4 | secret rotation | rotation 타이머 0(주간 kv-backup만) | 자동 rotation | **P0** | ◐ 부분 |
 | 5 | MCP audit/telemetry | MCP 툴호출 감사 0(`observations` 28k는 별개) | OWASP **MCP08** | **P1** | — |
 | 6 | shadow MCP 인벤토리 | opencode **15개 중 4 enabled**, 감사·드리프트 0 | OWASP **MCP09** | **P1** | — |
-| 7 | tool-poisoning | 내부 툴, 정의 스캔·승인 0(`mcp-contract.json` frozen) | OWASP **MCP03** | **P1** | — |
+| 7 | tool-poisoning | 내부 툴, 정의 스캔·승인 0(`mcp-contract.json` frozen) | OWASP **MCP03** | **P1** | ✅ 완료 |
 | 8 | progressive discovery | opencode allowlist(~33) 프루닝 | 임계(1–5%)·programmatic calling | P2 | — |
 | 9 | OpenTelemetry | structlog JSON + LLM `/metrics` | OTel + **GenAI conv** | **P1** | — |
 | 10 | SLO/error budget | watchdog alert-only 임계만 | SLO + burn-rate | **P1** | — |
@@ -73,6 +73,7 @@
 - **As-Is**: 내부 툴이라 tool 정의 스캔/승인 단계 없음. `specs/mcp-contract.json` frozen(12툴)로 계약은 있음.
 - **표준**: OWASP **MCP03(Tool Poisoning)** — 툴 description/schema를 **신뢰하지 않는 입력**으로 취급, 정의 스캔·사람 승인. Microsoft control-plane(툴 정의 스캔) 참조.
 - **조치**: `mcp-contract.json` 기반 **정의 diff/계약 테스트**를 CI에 추가(툴 추가·변경 시 승인 필요). 외부 MCP 서버 도입 시 정의 스캔 단계.
+- **상태(2026-09-24) ✅ 완료**: `tests/fitness/test_mcp_contract.py` — (a) 계약 툴이 서버에 존재, (b) 툴 정의(description+inputSchema) **해시 스냅샷**(`specs/mcp-tools.snapshot.json`, 18툴) 일치. 툴 추가/변경 시 **CI 실패 → 스냅샷 리뷰·갱신(승인)**. CI(`tests/fitness`) + dev-agent 게이트에서 실행. 커밋 `b0f5a2c`.
 
 ## 8. Progressive Discovery / Programmatic Tool Calling (P2)
 
