@@ -1,38 +1,28 @@
 last_checkpoint:
-  time: '2026-09-24T22:00:00.354115+09:00'
-  summary: 9 source, 5 config, 4 docs, 1 generated
-  total_files: 28
+  time: '2026-09-24T13:30:00.898264+00:00'
+  summary: 6 source, 5 config, 2 docs, 1 generated
+  total_files: 24
   recent_files:
-    source:
-    - server/scripts/lib/watchdog/config.py
-    - server/scripts/mcp_inventory_check.py
-    - server/scripts/update_handover.py
-    - server/src/devforge/adapters/driven/health/dataimpulse_path.py
-    - server/src/devforge/adapters/driving/mcp/server.py
-    - server/src/devforge/core/config.py
-    - server/tests/fitness/test_mcp_contract.py
-    - server/tests/fitness/test_mcp_inventory.py
-    - server/tests/fitness/test_wiring.py
+    data: []
+    docs:
+    - server/docs/plans/2026-standard-gap-remediation.md
+    - server/docs/plans/agent-handover-db-design.md
     config:
     - server/CLAUDE.yaml
     - server/systemd/user/devforge-handover-gen.service
     - server/systemd/user/devforge-handover-gen.timer
     - server/systemd/user/devforge-mcp-inventory.service
     - server/systemd/user/devforge-mcp-inventory.timer
-    docs:
-    - server/docs/architecture/code-structure.yaml
-    - server/docs/plans/2026-standard-gap-remediation.md
-    - server/docs/plans/agent-handover-db-design.md
-    - server/docs/plans/error-record-analysis-design.md
-    data: []
+    source:
+    - server/scripts/dev_agent.py
+    - server/scripts/lib/watchdog/config.py
+    - server/scripts/update_handover.py
+    - server/src/devforge/adapters/driving/mcp/server.py
+    - server/src/devforge/core/config.py
+    - server/tests/unit/test_mcp_audit.py
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 6 files changed, 88 insertions(+), 28 deletions(-)
-      staged: (none)
-      untracked_files: 1
+  git: {}
   task: null
 decisions:
 - id: nd13-01
