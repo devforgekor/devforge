@@ -1,10 +1,11 @@
 last_checkpoint:
-  time: '2026-09-24T13:30:00.898264+00:00'
-  summary: 6 source, 5 config, 2 docs, 1 generated
-  total_files: 24
+  time: '2026-09-24T13:40:01.045334+00:00'
+  summary: 6 source, 5 config, 3 docs, 1 generated
+  total_files: 23
   recent_files:
     data: []
     docs:
+    - server/docs/ops/baseline/D1-summary.md
     - server/docs/plans/2026-standard-gap-remediation.md
     - server/docs/plans/agent-handover-db-design.md
     config:
@@ -230,6 +231,23 @@ decisions:
     intent-only(실행 권한 없음), 읽기전용 진단 기본·승인 게이트, 모든 결론에 raw_ref 근거, 불확실성 표기. 별도 모듈(application/error_analysis.py + ports/어댑터),
     와치독과 독립 실행. 입력: watchdog_incidents/context_jsonb/observations(+action_error).'
   status: open
+- id: p2-a-2026-09-24
+  detail: 'P2는 A안(창 무관 즉시 실행): 기존 컨테이너 shadow는 도구 부재로 무의미. v2를 호스트 유닛으로 전환 + postgres 5432 publish. 이후 새 24h shadow.'
+  status: resolved
+- id: sp-unify-fcf857e3
+  detail: KV SP를 fcf857e3(sp-aiagent-rbac-prod-krc) 단일로 통일(읽기+쓰기). 서버 secret 파일·az 컨텍스트·문서 갱신. 만료 2028-09-19 시드.
+  status: resolved
+- id: dev-agent-design
+  detail: 'C1 구현 에이전트: opencode run + git worktree 격리 + ruff/pytest 게이트 + review-only PR(자동 머지 없음). --auto 불필요(외부 디렉터리 auto-reject).
+    4x/day 타이머.'
+  status: resolved
+- id: shadow-pause-batch
+  detail: 쉐도우 정지 후 ⑦~⑩ 일괄 진행 결정. 정지는 프로덕션 무영향(dry-run, legacy가 커버). 변경 안정화 후 1회 재시작하여 최종 상태 24h 측정.
+  status: resolved
+- id: deps-orphan-removal
+  detail: dev-requirements.txt·scripts/mcp-requirements.txt 삭제(orphan·중복). Dependabot이 매니페스트로 채택해 제약을 갱신했으나 SSOT는 pyproject+uv.lock.
+    dev 설치는 uv sync --extra dev.
+  status: resolved
 known_issues:
 - id: az-gi-k1
   detail: 'FX2ms_v2 부팅 호환: 이미지 정의에 DiskControllerTypes=SCSI,NVMe 병기 필수(아니면 cannot boot). E4s_v3는 현재 NotAvailableForSubscription.'
@@ -269,6 +287,30 @@ known_issues:
 - id: WATCHDOG-CONTAINER-TOOLS-2026-09-23
   detail: 'watchdog v2 컨테이너에 systemctl/journalctl/pgrep/free 부재 → svc/timer/oneshot/ebook/system 체크 전부 오탐(false-negative).
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
+  resolved: false
+- id: shadow-paused-2026-09-24
+  detail: 'watchdog v2 shadow 정지(inactive). ⑦ §10 SLO·⑧ §9 OTel·⑨ #13/#12 등 변경 후 재시작 필요(⑩). legacy는 active(production).'
+  resolved: false
+- id: graph-readwrite-pending
+  detail: fcf857e3에 Graph Application.ReadWrite 관리자 동의 대기 → 승인 후 kv-sp-secret-check.py read-expiry로 만료일 확정 + rotate 활성.
+  resolved: false
+- id: dependabot-deferred-2026-09-24
+  detail: '#21 pytest 8→9 CI 실패(마이그레이션 필요; 머지 시 pip-audit PYSEC-2026-1845 allowlist 제거 가능). #13 setup-python은 sync-secrets.yml
+    수정→배포 시 컨테이너 재기동+시크릿 재동기화 리스크. #12 python 3.14는 런타임 기반.'
+  resolved: false
+- id: dependency-review-disabled
+  detail: repo Dependency graph 꺼짐 → dependency-review 잡 비활성(모든 PR 차단). Settings→Code security→Dependency graph 활성 후 ci.yml에
+    복원(주석 참고).
+  resolved: false
+- id: agent-docs-session-stale
+  detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
+    안 됨 → 새 세션에 명시 지시 필요).'
+  resolved: false
+- id: error-record-analysis-2026-09-24
+  detail: error-record §2 분석 계층 후속(설계만, 미구현). §1 마이그레이션은 적용됨(2026-09-24, watchdog_incidents context_jsonb/action_error/GIN).
+  resolved: false
+- id: standards-p1-remaining
+  detail: §10 SLO/error budget, §9 OTel+GenAI 미착수(P1). §5/§6/§7 완료.
   resolved: false
 completed_log:
 - '(2026-09-20, opencode) 계획 문서: REFACTORING_PLAN §2.5에 웹 LLM 수집 미연결 부채 추가, final-plan §3 Capture 행·D3 현황·컴포넌트 노트에 chrome-web-llm
@@ -427,3 +469,20 @@ completed_log:
 - '(2026-09-23, opencode) docs: 계획 문서 통합(a34633f) — superseded 2건 _archive 이동(phase2-detailed-guide v1·gate4-cutover), INDEX
   living/record 범례+미등록 등록, 등록 검증 테스트(tests/unit/test_docs_index.py), phase1/2 done·watchdog-standard active·control-plane-roadmap
   proposed 정정.'
+- '(2026-09-24, opencode) 표준 P1: §7 tool-poisoning(tests/fitness/test_mcp_contract.py + specs/mcp-tools.snapshot.json), §6
+  shadow MCP 인벤토리(specs/mcp-inventory.yaml + scripts/mcp_inventory_check.py + timer), §5 MCP audit(server.py call_tool → observations
+  source=mcp/category=mcp_audit, 배포·실측 검증). 커밋 b0f5a2c·82ce98b·4387aca·adf6b24.'
+- '(2026-09-24, opencode) 공급망: SBOM(CycloneDX)+cosign keyless+provenance, trivy(CRITICAL/HIGH)+pip-audit, uv.lock 도입 + Dependabot(uv/github-actions/docker),
+  전 액션 SHA 고정. 커밋 ed6bc5d·b061d2b·bff9062.'
+- '(2026-09-24, opencode) P2: watchdog v2 컨테이너→호스트 유닛 전환 + postgres 127.0.0.1:5432 publish(pod 재생성). 오탐 해소(systemctl/free),
+  heartbeat:db OK. Quadlet 비활성은 .container.disabled 확장자 필요, host unit은 kv-fetch-env exec 패턴. 커밋 e26f49b·c0923ca.'
+- '(2026-09-24, opencode) C1 incident→PR 자동 배선: scripts/dev_agent.py(worktree 격리·ruff/pytest 게이트·review-only PR) + devforge-dev-agent.timer.
+  PR #17 end-to-end 검증(머지). 커밋 fb15d81·87c9000·cdb2fac.'
+- '(2026-09-24, opencode) §3/§4: SP secret validity probe+만료 경보(kv-sp-secret-check, daily), Graph read-expiry/rotate 경로(권한
+  대기), KV SP를 fcf857e3 단일로 통일. 커밋 f15467b·61a72af·08248ff·bddcbea.'
+- '(2026-09-24, opencode) CI 복구: main red 원인(ruff format 2파일, test_wiring 절대경로, dependency-review dependency graph 꺼짐) 수정
+  + Dependabot 9 PR 머지. 커밋 9b4c098·b7a65b0·84448bd.'
+- '(2026-09-24, opencode) 검증: full pytest 373 passed(tests/_archive crash → norecursedirs), ruff/mypy/lint-imports green,
+  repo↔live 드리프트 0. 리뷰서 실버그 3건 수정(MCP /tools 라우트 데코레이터, dev-agent 커밋 감지, pytest _archive). orphan requirements 2개 제거. 커밋 d6a8564·0de5f28.'
+- '(2026-09-24, opencode) 배포 타이머: devforge-sp-secret-check·dev-aging·dev-agent·mcp-inventory·handover-gen(daily/10min/4x).
+  legacy watchdog 재시작(새 ONESHOT 타깃 반영).'
