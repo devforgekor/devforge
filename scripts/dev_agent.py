@@ -140,7 +140,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
 
     os.makedirs(WORKTREE_ROOT, exist_ok=True)
-    _run(["git", "fetch", "origin", branch], cwd=REPO, timeout=120)
+    _run(
+        ["git", "fetch", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}"],
+        cwd=REPO, timeout=120,
+    )
     _run(["git", "worktree", "remove", "--force", worktree], cwd=REPO, timeout=60)
     result = _run(
         ["git", "worktree", "add", "--force", worktree, "-B", branch, f"origin/{branch}"],
@@ -159,11 +162,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             print("gating failed — no PR")
             return 1
         _run(["git", "add", "-A"], cwd=worktree)
-        diff = _run(["git", "status", "--porcelain"], cwd=worktree)
-        if not diff.stdout.strip():
+        if _run(["git", "status", "--porcelain"], cwd=worktree).stdout.strip():
+            _run(["git", "commit", "-m", f"feat: resolve #{number} {issue['title']}"], cwd=worktree)
+        ahead = _run(["git", "rev-list", "--count", f"origin/{branch}..HEAD"], cwd=worktree)
+        if ahead.stdout.strip() in ("", "0"):
             print("no changes produced — nothing to PR")
             return 0
-        _run(["git", "commit", "-m", f"feat: resolve #{number} {issue['title']}"], cwd=worktree)
         push = _run(["git", "push", "-u", "origin", branch], cwd=worktree, timeout=120)
         if push.returncode != 0:
             print(f"push failed: {push.stderr[-500:]}")
