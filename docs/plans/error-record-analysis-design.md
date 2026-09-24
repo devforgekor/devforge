@@ -3,6 +3,8 @@
 > Status: §1 implemented (migration pending apply) · 2026-09-23 · Deep Dive `dp-20260923-dataimpulse-monitoring-delegation`
 > **구현(§1)**: `alembic/versions/20260923_error_record.py`(additive: `context_jsonb`+`action_error`+GIN, **미적용**), `domain/models.py`, `ports/types.py:Incident`, `ports/incident_repository.py`, `adapters/driven/storage/incident_pg.py`(구조화 캡처·4패턴 마스킹·repeat/reopen 갱신·action_error), `tests/unit/adapters/driven/storage/test_incident_context.py`.
 > **미적용/게이트**: DB 마이그레이션은 승인 후 적용(additive라 backward-compatible). 캡처(systemctl/journalctl/podman)는 **P2 호스트 유닛**에서만 실제 수집(v2 컨테이너는 도구 부재 → 섹션 생략, best-effort).
+> **소비처 연결**: §1 기록(`context_jsonb`)은 `incident → GitHub 이슈 → PR` 루프의 **이슈 본문**에 소비되어야 하나, 현재는 legacy `context`(text)만 사용됨(`scripts/lib/watchdog/incidents.py:177`). 연결 현황·정체는 `reports/incident-issue-pr-loop-audit-20260923.md` §3.1.
+> **파이프라인 위치**: 본 문서=**기록 계층(D2)**. 상위 라우팅·거버넌스=`plans/detection-remediation-architecture.md`(D1, A/B/C), C 트랙 실측=`incident-issue-pr-loop-audit`(D3).
 > **[순서 게이트] 마이그레이션 → 코드 배포 순서 필수**: `models.py`가 `context_jsonb`/`action_error`를 정의하므로, 마이그레이션 미적용 상태에서 **비-dry-run**으로 incidents를 조회/기록하면 컬럼 부재 오류가 난다. 현재 v2는 `WATCHDOG_DRY_RUN=1`(incidents 미접촉)이라 안전하나, P2.6(복구 ON) 이전에 마이그레이션을 먼저 적용할 것.
 > **§2 분석 로직** = 후속(별도 모듈). §4 분석용 모델 선정 = 완료(`model_score.py`).
 > 목적: 오류를 **구조화하여 자세히 기록**(§1)하고, **별도 분석 로직**이 그 구조를 읽어 전체 문제점을 파악·수정안 제시(§2).

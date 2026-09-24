@@ -124,6 +124,10 @@
 | **2026 표준 대비 개선 계획(12항목)** | `plans/2026-standard-gap-remediation.md` | proposed |
 | **감시→(수정\|미실행 실행) 분리 아키텍처(종합)** | `plans/detection-remediation-architecture.md` | proposed |
 | **감시→수정/미실행 실행 구현 가이드** | `plans/detection-remediation-implementation-guide.md` | proposed |
+| **Fitness Functions+heartbeat+drift 구현 가이드** | `plans/fitness-functions-heartbeat-drift-guide.md` | proposed |
+| 로직 기록·추적 감사(2026-09-23) | `reports/logic-recording-tracking-audit-20260923.md` | record |
+| incident→이슈→PR 루프 감사(2026-09-23) | `reports/incident-issue-pr-loop-audit-20260923.md` | record |
+| 시스템적 배선 갭 분석(2026-09-24) | `reports/systemic-wiring-gap-analysis-20260924.md` | record |
 | 업계 표준 대조 진단 | `reports/industry-standard-comparison-20260914.md` | record |
 | MCP 툴 사용 감사(30일) | `reports/mcp-tool-audit-20260914.md` | record |
 | 외부 검토 브리프 | `reports/review-brief-20260914.md` | record |

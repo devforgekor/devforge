@@ -1,7 +1,8 @@
 # 감시·기록 → (수정 | 미실행 실행) 분리 아키텍처 — 종합 보고서
 
 > Status: proposed · Date: 2026-09-23 · Owner: devforge
-> Related: `plans/error-record-analysis-design.md`, `plans/dataimpulse-watchdog-delegation.md`, `plans/watchdog-standard-compliance.md`, `plans/control-plane-roadmap.md`, `plans/2026-standard-gap-remediation.md`
+> Related: `plans/error-record-analysis-design.md`(기록 D2), `reports/incident-issue-pr-loop-audit-20260923.md`(C 트랙 D3), `plans/detection-remediation-implementation-guide.md`, `plans/dataimpulse-watchdog-delegation.md`, `plans/watchdog-standard-compliance.md`, `plans/control-plane-roadmap.md`, `plans/2026-standard-gap-remediation.md`
+> **통합 범위**: 본 문서가 **상위(라우팅·거버넌스)**. 기록= D2, 인간/에이전트 조치(C: 이슈→PR)= D3. 한 파이프라인의 3구간.
 > 방법: 업계 표준·최근 동향(web) 조사 → 서버 실측 대조 → 아키텍처 제안.
 
 ---
@@ -31,8 +32,10 @@
 | 트리거 | 와치독 **기록을 근거**로 발화 | event → rule → routing |
 | 컨트롤러 A | **오류 수정**(fix) — 기록된 실패 복구 | remediation(복구) |
 | 컨트롤러 B | **미실행 실행**(catch-up) — 안 돈 작업 실행 | desired-state reconcile |
+| 컨트롤러 C | **에스컬레이션**(escalate) — **반복 incident → GitHub 이슈 → PR**(인간/에이전트) | runbook/HITL |
 
 > 초기 아이디어("prefix로 A/B 분리")는 **subject 계층 라우팅(§5.1)**으로 흡수. 아래는 **표준 기반 설계**다.
+> **C 트랙은 이미 존재**(legacy `scripts/lib/watchdog/incidents.py` → `dev_pipeline`) — 실측·정체는 D3(`reports/incident-issue-pr-loop-audit-20260923.md`). 본 설계는 이를 **라우팅의 한 분기로 편입**한다.
 
 ---
 
@@ -88,6 +91,9 @@
 | di-delegation | 구현(감지·기록·알림, 복구 없음) | **detect+record+alert 전담**의 실제 예 |
 | control-plane-roadmap Stage1 | 미착수(registry+discovery+reconciler) | **B(catch-up)의 desired-state 기반** |
 | watchdog-standard P1~P4 | P1 완료 | 신뢰성/호스트 유닛(감지 정확도) |
+| incident→이슈→PR(legacy) | **동작 중**(PR 정체) | **C(escalate) 트랙** — v2 미이식(`reports/incident-issue-pr-loop-audit-20260923.md`) |
+
+> **기록 계약 단일화**: A/B/C 모두 **`context_jsonb`(D2 §1)를 SSOT**로 소비해야 한다. 현재 C(이슈 본문)는 legacy `context`(text)만 사용 → D2 §1 이식 시 통일.
 
 > **중요**: 와치독이 이미 `timer:...:delay "never triggered"`, `oneshot ... failed`를 **기록**한다(실측). 즉 제안의 트리거 신호는 **이미 생성 중**이다.
 
@@ -98,12 +104,13 @@
 ```
 [1 Detect]   와치독: 상태/스케줄/프로세스/포트 감시 (읽기전용, fails-open)
       │  incident(기록)
-[2 Record]   watchdog_incidents(L1) + context_jsonb(L2) + observations(L3)  ← error-record §1
-      │  분류(규칙): {fix | catch-up | alert-only} + dedup/severity
-[3 Route]    결정론 규칙 우선 → 모호하면 (후속) 분석 로직(error-analysis-01)
+[2 Record]   watchdog_incidents(L1) + context_jsonb(L2) + observations(L3)  ← D2(error-record §1)
+      │  분류(규칙): {fix | catch-up | escalate | alert-only} + dedup/severity
+[3 Route]    prefix(종류) × repeat_count(빈도) → logic   (모호하면 후속 분석: D2 §2)
       │
 [4 Act]      A. 오류 수정(fix): 복구 액션(재시작/재기동/재시도) — bounded·멱등
              B. 미실행 실행(catch-up): desired-state 대비 미실행 → 실행
+             C. 에스컬레이션(escalate): 반복 incident → GitHub 이슈 → claim → PR   ← D3
       │  검증(verify) + 결과 기록
 [5 Govern]   감사(불변 로그) · human-in-the-loop(위험/불명) · 롤백 · 중복방지
 ```
@@ -119,6 +126,7 @@
 incident의 `dedup_key`(`component:event_type`)를 **계층 subject**로 취급한다: `svc.ebook-watcher.down`, `oneshot.backup.failed`, `timer.sync.delay`.
 - **NATS 표준**: `.` 토큰 계층 + 와일드카드(`*`=1토큰, `>`=하위 전체). "고유 subject가 많아지면 **와일드카드+계층 네이밍**"이 정답. **publisher는 목적지를 지정하지 않고**, subscriber가 패턴으로 구독.
 - **적용**: A 컨트롤러는 `svc.>`, `llm.>`, `pipeline.>`, `infra.>` 구독. B 컨트롤러는 `oneshot.>`, `timer.>` 구독. **서로소 구독 → A/B 중복 처리 0.**
+- **C(escalate)는 두 번째 축**: 종류(prefix)가 아니라 **빈도**(동일 `dedup_key` N회/기간)로 발화. 기존 `TASK_THRESHOLD=3`/7일(legacy)과 정합. 즉 **라우팅 = `prefix → {A|B|alert}` + `repeat_count → C`**(한 표에 두 축).
 - **CloudEvents**: `type` 속성이 "routing·observability·policy에 쓰인다" → incident `type` = `prefix.event`가 라우팅 키.
 
 ### 5.2 level-based reconciliation (K8s controller 패턴)
@@ -173,6 +181,8 @@ incident의 `dedup_key`(`component:event_type`)를 **계층 subject**로 취급�
 | 위험 | 재시작 폭주(backoff/circuit) | **중복 실행**(이미 돈 걸 또 실행) |
 | 선행 | incident 기록 | **desired-state registry**(roadmap Stage1) |
 | 공통 | 멱등·bounded·verify·audit·staleness check | 동일 |
+
+**C(escalate) 트랙** — A/B와 **직교**: prefix가 아니라 **반복 빈도**(`repeat_count ≥ TASK_THRESHOLD`)로 발화. 조치 = GitHub 이슈 생성(멱등, `auto-safe`) → `dev_pipeline` claim → PR. 소비 기록 = `context_jsonb`(D2). 실측·정체 = `reports/incident-issue-pr-loop-audit-20260923.md`(현재 PR 단계 정체, v2 미이식).
 
 > **겹침 주의**: `oneshot ... failed`는 A(복구=재실행)일 수도 B(미실행 실행)일 수도 있다 → **분류 규칙**으로 단일 목적지 지정(중복 실행 방지). **"이미 실행됐는지" 확인이 B의 필수 전제**.
 
