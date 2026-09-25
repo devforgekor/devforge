@@ -32,6 +32,19 @@ async def test_memory_crit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_memory_swap_under_legacy_crit_is_healthy() -> None:
+    # shadow 창 오탐 재발 방지: swap 1550MB는 legacy SWAP_CRIT_MB(9000) 미만이고
+    # mem 60%도 MEM_CRIT_PCT(90) 미만이므로 정상이다.
+    out = ("              total        used\n"
+           "Mem:          22945       13884\n"
+           "Swap:          4095        1550\n")
+    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=out))):
+        checks = await MemoryHealthChecker().check_health()
+    assert checks[0].is_healthy is True
+    assert checks[0].threshold == 90.0
+
+
+@pytest.mark.asyncio
 async def test_disk_ok() -> None:
     out = "Target  Use%\n/        40%\n/opt     50%\n"
     with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=out))):
