@@ -260,6 +260,7 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
             stale_sec=config.dataimpulse_stale_sec,
             deep_stale_sec=config.dataimpulse_deep_stale_sec,
             deep_consecutive=config.dataimpulse_deep_consecutive,
+            reconcile_gap_pct=config.dataimpulse_reconcile_gap_pct,
         )
     check_coordinator = CheckCoordinator(registry, health_ports)
     recovery_coordinator = RecoveryCoordinator(registry)

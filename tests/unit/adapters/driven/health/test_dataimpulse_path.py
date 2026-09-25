@@ -115,3 +115,98 @@ async def test_deep_stall_after_consecutive_checks(
     results = [(await checker.check_health())[0].is_healthy for _ in range(3)]
     # first two establish the baseline, third reports the deep stall
     assert results[0] is True and results[1] is True and results[2] is False
+
+
+def _write_traffic_status(path: Path, traffic: dict) -> None:
+    ts = datetime.now(timezone.utc).isoformat()
+    path.write_text(
+        json.dumps({"phase": "collect", "updated_at": ts, "sources": {}, "traffic": traffic}),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+async def test_degraded_when_quota_warn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _mock_pgrep(monkeypatch, present=False)
+    _write_traffic_status(
+        tmp_path / "status.json",
+        {
+            "summary": {
+                "quota_level": "warn",
+                "used_mb_guard": 330,
+                "daily_limit_mb": 400,
+                "chapters_today": 1100,
+                "daily_chapter_cap": 2000,
+                "forecast_mb": 360,
+                "exceeded": False,
+            }
+        },
+    )
+    checks = await _checker(tmp_path).check_health()
+    assert checks[0].is_healthy is False
+    assert "[degraded]" in checks[0].detail and "quota warn" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_degraded_when_daily_cap_reached(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _mock_pgrep(monkeypatch, present=False)
+    _write_traffic_status(
+        tmp_path / "status.json",
+        {"summary": {"quota_level": "ok", "used_mb_guard": 400, "daily_limit_mb": 400, "exceeded": True}},
+    )
+    checks = await _checker(tmp_path).check_health()
+    assert checks[0].is_healthy is False and "daily cap reached" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_degraded_when_bucket_stop_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _mock_pgrep(monkeypatch, present=False)
+    _write_traffic_status(tmp_path / "status.json", {"bucket_anomaly_stop": True})
+    checks = await _checker(tmp_path).check_health()
+    assert checks[0].is_healthy is False and "safety-net stop" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_degraded_when_reconcile_gap_over_threshold(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _mock_pgrep(monkeypatch, present=False)
+    _write_traffic_status(
+        tmp_path / "status.json",
+        {"reconcile": {"day": "2026-09-23", "gap_pct": 25.0}},
+    )
+    checks = await _checker(tmp_path).check_health()
+    assert checks[0].is_healthy is False and "reconcile gap" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_reconcile_gap_threshold_is_configurable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _mock_pgrep(monkeypatch, present=False)
+    _write_traffic_status(
+        tmp_path / "status.json",
+        {"reconcile": {"day": "2026-09-23", "gap_pct": 15.0}},
+    )
+    assert (await _checker(tmp_path).check_health())[0].is_healthy is True
+    strict = _checker(tmp_path, reconcile_gap_pct=10.0)
+    assert (await strict.check_health())[0].is_healthy is False
+
+
+@pytest.mark.asyncio
+async def test_active_when_traffic_normal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _mock_pgrep(monkeypatch, present=False)
+    _write_traffic_status(
+        tmp_path / "status.json",
+        {"summary": {"quota_level": "ok", "exceeded": False}, "reconcile": {"gap_pct": 5.0}},
+    )
+    checks = await _checker(tmp_path).check_health()
+    assert checks[0].is_healthy is True and "[active]" in checks[0].detail

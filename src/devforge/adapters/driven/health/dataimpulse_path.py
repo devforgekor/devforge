@@ -66,6 +66,7 @@ class DataImpulsePathHealthChecker(HealthCheckPort):
         deep_stale_sec: int = DEFAULT_DEEP_STALE_SEC,
         deep_consecutive: int = DEFAULT_DEEP_CONSECUTIVE,
         process_pattern: str = DEFAULT_PROCESS_PATTERN,
+        reconcile_gap_pct: float = 20.0,
     ) -> None:
         self._status_file = Path(status_file)
         self._log_file = Path(log_file)
@@ -74,6 +75,7 @@ class DataImpulsePathHealthChecker(HealthCheckPort):
         self._deep_stale_sec = deep_stale_sec
         self._deep_consecutive = deep_consecutive
         self._process_pattern = process_pattern
+        self._reconcile_gap_pct = reconcile_gap_pct
         # in-memory deep-check baseline (design §2.5; DB persistence deferred)
         self._last_processed: Optional[int] = None
         self._last_change_mono: Optional[float] = None
@@ -120,6 +122,9 @@ class DataImpulsePathHealthChecker(HealthCheckPort):
         if not isinstance(processed, int):
             processed = None
         ts = _parse_ts(node.get("updated_at") or status.get("updated_at"))
+        signal = self._traffic_signal(status)
+        if signal is not None:
+            return self._result(False, "degraded", ts, processed, phase, signal)
         if ts is None:
             if proc:
                 return self._result(
@@ -160,6 +165,43 @@ class DataImpulsePathHealthChecker(HealthCheckPort):
         self._stall_count += 1
         if self._stall_count >= self._deep_consecutive:
             return f"deep stall: processed={processed} unchanged for >{self._deep_stale_sec}s x{self._stall_count}"
+        return None
+
+    def _traffic_signal(self, status: dict[str, Any]) -> Optional[str]:
+        """status.json.traffic 요약 기반 경보 — 없으면 None(정상).
+
+        비페이징(alert-only)·상태 전이 경보 표준: 요약이 임계를 넘을 때만 degrade하고,
+        중복/억제/전이는 watchdog 상태기계가 담당한다. 소유/범위 메타를 문구에 포함.
+        """
+        traffic = status.get("traffic")
+        if not isinstance(traffic, dict):
+            return None
+        summary = traffic.get("summary")
+        if isinstance(summary, dict):
+            level = summary.get("quota_level")
+            if level in ("warn", "critical"):
+                return (
+                    f"quota {level}: {summary.get('used_mb_guard')}/"
+                    f"{summary.get('daily_limit_mb')}MB, chapters "
+                    f"{summary.get('chapters_today')}/{summary.get('daily_chapter_cap')}, "
+                    f"forecast {summary.get('forecast_mb')}MB "
+                    "(owner=ebooklib scope=traffic)"
+                )
+            if summary.get("exceeded"):
+                return (
+                    f"daily cap reached: {summary.get('used_mb_guard')}/"
+                    f"{summary.get('daily_limit_mb')}MB (owner=ebooklib scope=traffic)"
+                )
+        if traffic.get("bucket_anomaly_stop") or traffic.get("calibration_emergency"):
+            return "traffic safety-net stop flag set (owner=ebooklib scope=traffic)"
+        reconcile = traffic.get("reconcile")
+        if isinstance(reconcile, dict):
+            gap = reconcile.get("gap_pct")
+            if isinstance(gap, (int, float)) and abs(gap) >= self._reconcile_gap_pct:
+                return (
+                    f"API/bucket reconcile gap {gap}% (day={reconcile.get('day')}) "
+                    "(owner=ebooklib scope=traffic)"
+                )
         return None
 
     def _read_status(self) -> Optional[dict[str, Any]]:

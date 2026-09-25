@@ -455,6 +455,7 @@ class WatchdogConfig:
     dataimpulse_stale_sec: int = 1800
     dataimpulse_deep_stale_sec: int = 300
     dataimpulse_deep_consecutive: int = 3
+    dataimpulse_reconcile_gap_pct: float = 20.0
     # Availability SLOs (2026 standard-gap §10). Component keys match the
     # watchdog tracker keys produced by the health checkers (svc: prefix).
     slo_targets: list[SloTarget] = field(
@@ -489,5 +490,8 @@ class WatchdogConfig:
             dataimpulse_deep_stale_sec=int(os.getenv("WATCHDOG_DATAIMPULSE_DEEP_STALE_SEC", "300")),
             dataimpulse_deep_consecutive=int(
                 os.getenv("WATCHDOG_DATAIMPULSE_DEEP_CONSECUTIVE", "3")
+            ),
+            dataimpulse_reconcile_gap_pct=float(
+                os.getenv("WATCHDOG_DATAIMPULSE_RECONCILE_GAP_PCT", "20")
             ),
         )
