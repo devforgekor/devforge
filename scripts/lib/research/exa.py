@@ -1,7 +1,10 @@
 #!/usr/bin/env python3.11
 # Status: production
 # Path: imported by — exa_mcp.py, lib/research/__init__.py, cli.py
-"""Exa search core — semantic web search + contents (extracted from exa_mcp.py)."""
+"""Exa search core — semantic web search + contents (extracted from exa_mcp.py).
+
+Key rotation uses lib.auth.key_rotator.KeyRotator with state under ~/.cache/devforge.
+"""
 
 from __future__ import annotations
 
@@ -12,27 +15,32 @@ _SCRIPTS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
-import httpx
+import httpx  # noqa: E402
 
-from lib.auth.key_loader import load_api_keys
+from lib.auth.key_loader import load_api_keys  # noqa: E402
+from lib.auth.key_rotator import KeyRotator  # noqa: E402
 
 DEFAULT_NUM = 10
 MAX_NUM = 100
 API_BASE = "https://api.exa.ai"
+STATE_FILE = os.path.expanduser("~/.cache/devforge/exa_state.json")
+# [WHY] 429 재시도 기본값 — KeyRotator 일일쿼타 임계(300s) 미만이어야 짧은 지터백오프.
+_RETRY_SECONDS = 10
 
-_pool: list[str] | None = None
-_idx = 0
+_rotator: KeyRotator | None = None
 
 
-def _keys() -> list[str]:
-    global _pool
-    if _pool is None:
-        _pool = [key for _, key in load_api_keys("EXA")]
-    return _pool
+def _get_rotator() -> KeyRotator | None:
+    global _rotator
+    if _rotator is None:
+        keys = load_api_keys("EXA")
+        if keys:
+            _rotator = KeyRotator(keys, state_file=STATE_FILE)
+    return _rotator
 
 
 def available() -> bool:
-    return bool(_keys())
+    return _get_rotator() is not None
 
 
 def _call_api(key: str, endpoint: str, payload: dict) -> dict:
@@ -45,18 +53,50 @@ def _call_api(key: str, endpoint: str, payload: dict) -> dict:
         return resp.json()
 
 
-def exa_search(query: str, type: str = "auto", num_results: int = DEFAULT_NUM,
-               include_domains=None, exclude_domains=None, category=None,
-               start_published_date=None, end_published_date=None,
-               text: bool = False, highlights: bool = True, summary: bool = False) -> list[dict]:
+def _call_rotated(endpoint: str, payload: dict) -> dict:
+    """Pick a key via the shared KeyRotator and call once. Raises if every key fails."""
+    rot = _get_rotator()
+    if rot is None:
+        raise RuntimeError("EXA API keys not configured")
+    last_error = ""
+    for _ in range(rot.n):
+        picked = rot.pick()
+        if picked is None:
+            break
+        idx, _name, key = picked
+        try:
+            result = _call_api(key, endpoint, payload)
+        except Exception as e:
+            last_error = str(e)
+            print(f"[research.exa] Key {idx} failed: {e}", file=sys.stderr)
+            continue
+        if isinstance(result, dict) and result.get("_rate_limited"):
+            rot.rate_limited(idx, retry_seconds=_RETRY_SECONDS)
+            continue
+        rot.success(idx)
+        return result
+    if last_error:
+        raise RuntimeError(f"All {rot.n} Exa API keys failed: {last_error}")
+    raise RuntimeError(f"All {rot.n} Exa API keys rate-limited")
+
+
+def exa_search(
+    query: str,
+    type: str = "auto",
+    num_results: int = DEFAULT_NUM,
+    include_domains=None,
+    exclude_domains=None,
+    category=None,
+    start_published_date=None,
+    end_published_date=None,
+    text: bool = False,
+    highlights: bool = True,
+    summary: bool = False,
+) -> list[dict]:
     """Return raw Exa result dicts. Raises RuntimeError if all keys rate-limited."""
-    global _idx
     query = (query or "").strip()
     if not query:
         raise ValueError("query is required")
-    pool = _keys()
-    if not pool:
-        raise RuntimeError("EXA API keys not configured")
 
     payload = {"query": query, "type": type, "numResults": min(num_results, MAX_NUM)}
     if include_domains:
@@ -79,24 +119,13 @@ def exa_search(query: str, type: str = "auto", num_results: int = DEFAULT_NUM,
     if contents:
         payload["contents"] = contents
 
-    for i in range(len(pool)):
-        idx = (_idx + i) % len(pool)
-        result = _call_api(pool[idx], "/search", payload)
-        if isinstance(result, dict) and result.get("_rate_limited"):
-            continue
-        _idx = (idx + 1) % len(pool)
-        return result.get("results", []) or []
-    raise RuntimeError(f"All {len(pool)} Exa API keys rate-limited")
+    return _call_rotated("/search", payload).get("results", []) or []
 
 
 def exa_contents(urls: list[str], text: bool = True, highlights: bool = True) -> list[dict]:
     """Return raw Exa contents result dicts. Raises RuntimeError if all keys rate-limited."""
-    global _idx
     if not urls:
         raise ValueError("urls is required")
-    pool = _keys()
-    if not pool:
-        raise RuntimeError("EXA API keys not configured")
 
     payload: dict = {"urls": urls[:10]}
     contents = {}
@@ -107,14 +136,7 @@ def exa_contents(urls: list[str], text: bool = True, highlights: bool = True) ->
     if contents:
         payload["contents"] = contents
 
-    for i in range(len(pool)):
-        idx = (_idx + i) % len(pool)
-        result = _call_api(pool[idx], "/contents", payload)
-        if isinstance(result, dict) and result.get("_rate_limited"):
-            continue
-        _idx = (idx + 1) % len(pool)
-        return result.get("results", []) or []
-    raise RuntimeError(f"All {len(pool)} Exa API keys rate-limited")
+    return _call_rotated("/contents", payload).get("results", []) or []
 
 
 # ── text helpers (MCP parity) ─────────────────────────────────
