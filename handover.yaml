@@ -1,15 +1,13 @@
 last_checkpoint:
-  time: '2026-09-26T02:30:00.142075+09:00'
-  summary: 1 source, 1 generated
-  total_files: 5
+  time: '2026-09-26T03:00:00.502551+09:00'
+  summary: no files
+  total_files: 1
   recent_files:
-    source:
-    - server/tests/unit/test_rerank_consumer.py
+    source: []
     config: []
     docs: []
     data: []
-    generated:
-    - server/collect_checkpoint.json
+    generated: []
   git:
     server:
       branch: main
