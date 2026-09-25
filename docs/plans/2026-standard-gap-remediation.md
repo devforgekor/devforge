@@ -1,6 +1,6 @@
 # 2026 표준 대비 서버 로직 개선 계획
 
-> Status: **진행 중(2026-09-24)** — §1·§2·§5·§6·§7 ✅ 완료 · §3·§4·§9·§10 ◐ 부분(SP 권한 대기; SLO 로컬 근사; OTel API 계측·exporter 선택적) · Date: 2026-09-23 · Owner: devforge
+> Status: **진행 중(최종 갱신 2026-09-25)** — §1·§2·§5·§6·§7 ✅ 완료 · §3·§4·§9·§10 ◐ 부분(SP 권한 대기; rotation 자동화 경로 Graph 권한 대기; OTel exporter 미선택; SLO 로컬 근사) · shadow(watchdog v2) 재기동 09-25T01:05:12Z → 24h 패리티 관측 중(~09-26T01:05:12Z) · Date: 2026-09-23 · Owner: devforge
 > Related: `REFACTORING_PLAN.md`, `plans/final-plan.md`, `plans/watchdog-standard-compliance.md`, `plans/error-record-analysis-design.md`, `plans/dataimpulse-watchdog-delegation.md`, `reports/industry-standard-comparison-20260914.md`
 > Deep Dive: `dp-20260923-2026-standard-gap-server-logic` (Yggdrasil)
 > 방법: 서버 실측(코드/CI/설정/DB) → 2026 표준·동향(web) → **context7 검증** → 항목별 갭·조치. 기존 계획에 **항목 추가** 방식(중복 최소화).
@@ -13,14 +13,14 @@
 |---|------|------------------|----|------|------|
 | 1 | SBOM/서명/SLSA | CI build→GHCR **무서명**, SBOM 0 | SBOM·서명·provenance | **P0** | ✅ 완료 |
 | 2 | 이미지/의존성 스캔 | trivy/pip-audit 0 | 취약점·의존성 스캔 | **P0** | ✅ 완료 |
-| 3 | secretless identity | KV **SP client_secret**(장수명) | managed identity/federation | **P0** | ◐ 부분 |
-| 4 | secret rotation | rotation 타이머 0(주간 kv-backup만) | 자동 rotation | **P0** | ◐ 부분 |
+| 3 | secretless identity | KV SP **fcf857e3 단일화** + validity probe(장수명 secret 잔존) | managed identity/federation | **P0** | ◐ 부분 |
+| 4 | secret rotation | 만료 30/7일 **경보 타이머**만(자동 회전은 Graph 권한 대기) | 자동 rotation | **P0** | ◐ 부분 |
 | 5 | MCP audit/telemetry | MCP 툴호출 감사 0(`observations` 28k는 별개) | OWASP **MCP08** | **P1** | ✅ 완료 |
 | 6 | shadow MCP 인벤토리 | opencode **15개 중 4 enabled**, 감사·드리프트 0 | OWASP **MCP09** | **P1** | ✅ 완료 |
 | 7 | tool-poisoning | 내부 툴, 정의 스캔·승인 0(`mcp-contract.json` frozen) | OWASP **MCP03** | **P1** | ✅ 완료 |
 | 8 | progressive discovery | opencode allowlist(~33) 프루닝 | 임계(1–5%)·programmatic calling | P2 | — |
-| 9 | OpenTelemetry | structlog JSON + LLM `/metrics` | OTel + **GenAI conv** | **P1** | ◐ 부분 |
-| 10 | SLO/error budget | watchdog alert-only 임계만 | SLO + burn-rate | **P1** | ◐ 부분 |
+| 9 | OpenTelemetry | structlog JSON + LLM `/metrics` + **OTel API 계측**(exporter 미설정) | OTel + **GenAI conv** | **P1** | ◐ 부분 |
+| 10 | SLO/error budget | alert-only 임계 + **SLO 로컬 근사**(`application/slo.py`, CLI `watchdog slo`) | MWMBR·백엔드 배선 | **P1** | ◐ 부분 |
 | 11 | policy-as-code | 문서+import-linter+lint_rules(부분) | OPA/Conftest 기계강제 | P2 | — |
 | 12 | canary/feature flag | shadow/병렬+digest 롤백 | canary·flag·DORA | P2 | — |
 
@@ -121,11 +121,12 @@
 | **P1** | 5,6,7,9,10 | MCP 거버넌스·관측성·SLO. error-record/watchdog과 연결 |
 | **P2** | 8,11,12 | 플랫폼·릴리스. 컷오버 이후 |
 
-> 배치 제약: shadow-run 창(09-24 13:32 UTC) 중 서비스 재기동 금지.
+> 배치 제약: shadow-run 창(**2026-09-25T01:05:12Z ~ 09-26T01:05:12Z**) 중 v2·감시대상 서비스 재기동 금지(재기동 = 창 리셋). 비파괴 개발(코드·테스트·문서)은 허용.
 > - **비파괴 선행 가능**: 1·2(CI SBOM/서명/스캔 — CI만 변경), 4의 만료 감시(알림 타이머), 11(policy-as-code CI).
 > - **서비스 재기동/키 재구성 수반(창 이후)**: 3(secretless 전환), 4의 실제 rotation, 5~7(MCP 계측/감사), 9(OTel), 10(SLO/메트릭).
 >
 > **갱신(2026-09-24)**: `shadow-pause-batch` 결정으로 shadow(v2)를 정지한 뒤 §5~§10을 일괄 진행(정지 중 프로덕션 무영향). §9·§10 로컬 구현은 ⑩ shadow 재시작 전 완료.
+> **갱신(2026-09-25)**: 패리티 하네스 `scripts/watchdog_parity.py` 완성 → v2↔legacy 패리티 버그 4건 수정(유닛 타입 판정·timer 타임스탬프 후보·LLM 서빙 포트 가드·detail 보강) → Q1/Q2 결정 반영(`wd-q1-unit-type-health`·`wd-q2-incident-record-policy`) → v2 재기동(창 리셋, 사용자 승인). 초기 스모크 `detection_gaps=0, legacy_only=0, exit 0`(v2_only 2건은 alert_only 정책상 허용).
 
 ## 14. 측정 지표
 
@@ -146,6 +147,7 @@
 2. managed identity/federation 전환은 Azure 권한·SP 재구성 필요(사용자 승인).
 3. OTel **API 계측은 완료**(§9, `core/telemetry.py`). 실제 exporter/백엔드 선택만 미완(경량 self-host 또는 OTLP endpoint, `devforge[otel]` 설치 시 활성).
 4. 신규 파일 생성 승인: `specs/mcp-inventory.yaml`·`specs/mcp-tools.snapshot.json`(완료), `core/telemetry.py`·`application/slo.py`(2026-09-24 완료).
+5. shadow(watchdog v2) **24h 패리티 관측 진행 중**(09-25T01:05:12Z ~ 09-26T01:05:12Z). 종료 후 `python3 scripts/watchdog_parity.py --since 2026-09-25T01:05:12Z`로 최종 비교 → 이상 시 컷오버/다음 단계 판단. §9·§10 배선은 이 관측 이후.
 
 ---
 
