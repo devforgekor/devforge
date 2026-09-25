@@ -19,7 +19,10 @@ from devforge.ports.types import HealthCheck
 
 TRANSIENT_TOKENS = ("503", "loading model")
 DEFAULT_LATENCY_BASELINE_MS = 2000
-SLOT_POLL_SEC = 2.0
+# [WHY] 체크 주기(60s)에 맞춘다. 포화 유예(15s) 동안 2s마다 /slots를 두드리면
+# 사이클당 5-6회가 발생해 저널이 노이즈로 덮이는데, 슬롯 상태는 분 단위로만
+# 바뀐다. 유예 창보다 길게 두면 재확인은 유예 만료 시 1회로 줄어든다.
+SLOT_POLL_SEC = 60.0
 SATURATION_GRACE_SEC = 15.0
 
 
