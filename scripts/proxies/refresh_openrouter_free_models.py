@@ -33,6 +33,7 @@ PROXY_URL = "http://127.0.0.1:8451/v1/models"
 # The default (global) opencode.json stays pinned to opencode-go/deepseek-v4-flash.
 OPCODE_CONFIG = Path.home() / ".config/opencode/opencode-rr.json"
 ANALYSIS_CONFIG = Path.home() / ".config/devforge/analysis_models.json"
+RERANK_CONFIG = Path.home() / ".config/devforge/rerank_models.json"
 CACHE_FILE = Path.home() / ".cache/devforge/openrouter_free_models.json"
 CACHE_TTL_SEC = 24 * 60 * 60  # 1 day
 
@@ -323,6 +324,140 @@ def _load_cached() -> list[dict] | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Rerank role (separate: /rerank API, not chat completions)
+# ---------------------------------------------------------------------------
+
+# Rerank quality order by provider family (no public AA index for rerankers).
+_RERANK_FAMILY_RANK = (
+    "cohere/rerank-4", "voyageai/rerank", "jina", "cohere/rerank", "bge",
+    "qwen3-reranker", "nemotron-rerank",
+)
+
+
+def fetch_rerank_models() -> list[dict]:
+    """Fetch catalog filtered to rerank modality (direct OpenRouter; RR proxy drops qs)."""
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/models?output_modalities=rerank",
+        headers={"User-Agent": "devforge-rr-auto"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode()).get("data", [])
+
+
+def _rerank_family_score(model_id: str) -> float:
+    for i, fam in enumerate(_RERANK_FAMILY_RANK):
+        if fam in model_id:
+            return 1000.0 - i  # earlier family → higher score
+    return 0.0
+
+
+def _test_rerank(model_id: str, api_key: str) -> tuple[bool, str]:
+    """Live-test a reranker via OpenRouter /rerank. Returns (ok, detail)."""
+    body = json.dumps({
+        "model": model_id,
+        "query": "What is the capital of France?",
+        "documents": ["Paris is the capital of France.", "Python is a programming language."],
+        "top_n": 1,
+    }).encode()
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/rerank",
+        data=body,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+                 "User-Agent": "devforge-rr-auto"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TEST_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode())
+            if data.get("results"):
+                return True, f"top={data['results'][0].get('index')}"
+    except urllib.error.HTTPError as e:
+        return False, f"HTTP {e.code}"
+    except Exception as e:
+        return False, str(e)[:80]
+    return False, "no results"
+
+
+RERANK_TEST_RETRIES = 3
+
+
+def _test_rerank_retry(model_id: str, keys: list[str]) -> tuple[bool, str]:
+    """Free rerankers are flaky (502/429): retry across keys before rejecting."""
+    last = "no attempts"
+    for attempt in range(RERANK_TEST_RETRIES):
+        ok, detail = _test_rerank(model_id, keys[attempt % len(keys)])
+        if ok:
+            return True, detail
+        last = detail
+        if attempt < RERANK_TEST_RETRIES - 1:
+            time.sleep(1.0)
+    return False, f"failed {RERANK_TEST_RETRIES}x (last: {last})"
+
+
+def _apply_rerank(dry_run: bool = False) -> int:
+    """Select usable free rerankers, live-test them, write rerank_models.json."""
+    try:
+        models = fetch_rerank_models()
+    except Exception as e:
+        print(f"✗ Rerank fetch failed: {e}")
+        return 1
+    # [WHY] 크레딧 소진(2026-09) → 유료 리랭커는 사용 금지. `:free`만 후보로 둔다.
+    catalog = [
+        m for m in models
+        if str(m.get("id", "")).endswith(":free") and _rerank_family_score(m["id"]) > 0
+    ]
+    for m in catalog:
+        m["_score"] = _rerank_family_score(m["id"])
+    catalog.sort(key=lambda m: m["_score"], reverse=True)
+    print(f"  {len(catalog)} free rerank candidates")
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    keys = [
+        os.environ.get(k, "")
+        for k in ("OPENROUTER_API_KEY", "OPENROUTER_MESIDS_API_KEY",
+                  "OPENROUTER_MINIPARK4U_API_KEY", "OPENROUTER_HYEONMINPARK4U_API_KEY")
+    ]
+    keys = [k for k in keys if k.startswith("sk-or")]
+    if not keys:
+        print("✗ No OpenRouter API key available for rerank test")
+        return 1
+
+    usable = []
+    for m in catalog[:8]:
+        ok, detail = _test_rerank_retry(m["id"], keys)
+        print(f"  {'✓' if ok else '✗'} {m['id']:45s} test={detail}")
+        if ok:
+            usable.append(m)
+        time.sleep(0.3)
+
+    if not usable:
+        print("\n✗ No working free rerankers — rerank_models.json NOT modified")
+        return 1
+    top = usable[:3]
+    if dry_run:
+        print("\n(dry-run: rerank_models.json not modified)")
+        for i, m in enumerate(top, 1):
+            print(f"  {i}. {m['id']}")
+        return 0
+    payload = {
+        "schema_version": 1,
+        "role": "rerank",
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "primary": top[0]["id"],
+        "chain": [m["id"] for m in top],
+        "fallback_local": "reranker-8080",
+    }
+    RERANK_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = RERANK_CONFIG.with_suffix(".json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp, RERANK_CONFIG)
+    print(f"✓ rerank_models.json updated: primary={top[0]['id']}")
+    return 0
+
+
 def _save_cache(models: list[dict]) -> None:
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(CACHE_FILE, "w") as f:
@@ -334,9 +469,13 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="print ranking only")
     parser.add_argument("--force", action="store_true", help="ignore cache")
     parser.add_argument("--top", type=int, default=3, help="number of models to select")
-    parser.add_argument("--role", choices=["coding", "reasoning"], default="coding",
-                        help="coding → opencode-rr.json (default); reasoning → analysis_models.json")
+    parser.add_argument("--role", choices=["coding", "reasoning", "rerank"], default="coding",
+                        help="coding → opencode-rr.json (default); reasoning → analysis_models.json; rerank → rerank_models.json")
     args = parser.parse_args()
+
+    # rerank는 완전히 별도 경로(/rerank API, :free 필터 불필요)
+    if args.role == "rerank":
+        return _apply_rerank(dry_run=args.dry_run)
 
     # 1. Fetch (with cache)
     models = None

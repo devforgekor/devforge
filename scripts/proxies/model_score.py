@@ -36,16 +36,21 @@ from typing import Any
 ROLE_BENCHMARK: dict[str, str] = {
     "coding": "coding_index",
     "reasoning": "intelligence_index",
+    "rerank": "",
 }
 ROLE_FALLBACK_WEIGHTS: dict[str, tuple[tuple[str, float], ...]] = {
     "coding": (("agentic_index", 0.6), ("intelligence_index", 0.4)),
     "reasoning": (("coding_index", 0.5), ("agentic_index", 0.5)),
+    "rerank": (),
 }
 
 # Keywords that hint at capability when no benchmark index is available.
 ROLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "coding": ("code", "coding", "agentic"),
     "reasoning": ("reasoning", "think", "r1", "qwen", "deepseek", "reason"),
+    # [WHY] 리랭커는 AA 지수가 없다. 이름의 계열(rerank/bge/cohere/jina/voyage/nemotron)
+    # 과 정렬 품질 관행(cohere/voyage > qwen > nvidia)으로 점수를 매긴다.
+    "rerank": ("rerank", "cohere", "voyage", "jina", "bge", "nemotron", "qwen"),
 }
 
 # No-benchmark scores are capped below any real index (free models run ~30-60).
@@ -116,6 +121,8 @@ def score(model: dict[str, Any], role: str = "coding") -> float:
     """Score a model for the given role (higher is better)."""
     if role not in ROLE_BENCHMARK:
         raise ValueError(f"unknown role: {role!r} (expected one of {sorted(ROLE_BENCHMARK)})")
+    if not ROLE_BENCHMARK[role]:  # rerank: no AA index — heuristic only
+        return _heuristic_score(model, role)
     value = _benchmark_value(model, ROLE_BENCHMARK[role])
     if value is not None:
         return value + _context_bonus(model)
