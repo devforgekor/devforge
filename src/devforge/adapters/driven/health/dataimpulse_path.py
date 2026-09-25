@@ -187,6 +187,12 @@ class DataImpulsePathHealthChecker(HealthCheckPort):
                     f"forecast {summary.get('forecast_mb')}MB "
                     "(owner=ebooklib scope=traffic)"
                 )
+            if summary.get("burn_level") in ("warn", "critical"):
+                return (
+                    f"burn-rate {summary.get('burn_level')}: "
+                    f"1h={summary.get('burn_rate_1h')} 6h={summary.get('burn_rate_6h')} "
+                    "(owner=ebooklib scope=traffic)"
+                )
             if summary.get("exceeded"):
                 return (
                     f"daily cap reached: {summary.get('used_mb_guard')}/"

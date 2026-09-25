@@ -210,3 +210,24 @@ async def test_active_when_traffic_normal(
     )
     checks = await _checker(tmp_path).check_health()
     assert checks[0].is_healthy is True and "[active]" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_degraded_when_burn_rate_warn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _mock_pgrep(monkeypatch, present=False)
+    _write_traffic_status(
+        tmp_path / "status.json",
+        {
+            "summary": {
+                "quota_level": "ok",
+                "burn_level": "warn",
+                "burn_rate_1h": 1.2,
+                "burn_rate_6h": 1.1,
+                "exceeded": False,
+            }
+        },
+    )
+    checks = await _checker(tmp_path).check_health()
+    assert checks[0].is_healthy is False and "burn-rate" in checks[0].detail
