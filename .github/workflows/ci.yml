@@ -195,3 +195,11 @@ jobs:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+      # SLSA Build L2 downstream verification: the signature must be verifiable
+      # against this workflow's identity (not only produced).
+      - name: Verify signature (keyless)
+        run: |
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.workflow_ref }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}"
