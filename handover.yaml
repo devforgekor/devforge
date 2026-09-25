@@ -1,22 +1,18 @@
 last_checkpoint:
-  time: '2026-09-25T14:00:00.566389+09:00'
-  summary: 3 source, 1 docs, 1 generated
-  total_files: 11
+  time: '2026-09-25T14:30:00.540468+09:00'
+  summary: 1 generated
+  total_files: 2
   recent_files:
-    source:
-    - server/src/devforge/adapters/driven/health/system_health.py
-    - server/tests/characterization/test_system_parity.py
-    - server/tests/unit/adapters/driven/health/test_system_health.py
+    source: []
     config: []
-    docs:
-    - server/docs/plans/2026-standard-gap-remediation.md
+    docs: []
     data: []
     generated:
     - server/collect_checkpoint.json
   git:
     server:
       branch: main
-      unstaged: 5 files changed, 37 insertions(+), 33 deletions(-)
+      unstaged: 5 files changed, 33 insertions(+), 37 deletions(-)
       staged: (none)
       untracked_files: 2
   task: null
