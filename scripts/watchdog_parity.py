@@ -12,8 +12,9 @@ v2 signal. Parity is **component-set based** (v2 logs the same component every
 cycle while unhealthy; legacy records one incident per episode, so raw counts
 are not directly comparable).
 
-Exit 0 iff there is no v2_only (possible false positive) and no legacy_only
-(possible miss) component; otherwise exit 1 and print the differences.
+Exit 0 iff every v2_only component is an expected alert-only family (legacy
+records alerts, not incidents, for memory/llm/disk/heartbeat) and there is no
+legacy_only component; any other v2_only is a detection gap and exits 1.
 
 Usage:
   python3 scripts/watchdog_parity.py
@@ -125,6 +126,9 @@ def build_report(
     legacy_only = sorted(legacy_set - v2_set)
     ever = legacy_ever if legacy_ever is not None else set()
     v2_only_reasons = {c: classify_v2_only(c, ever) for c in v2_only}
+    # alert_only families are an expected record-policy difference, not a
+    # detection gap, so they do not fail the gate.
+    gate_failures = [c for c in v2_only if v2_only_reasons[c] != "alert_only"]
 
     components = [
         {
@@ -145,6 +149,7 @@ def build_report(
         "matched": matched,
         "v2_only": v2_only,
         "v2_only_reasons": v2_only_reasons,
+        "gate_failures": gate_failures,
         "legacy_only": legacy_only,
         "components": components,
         "v2_samples": v2_samples,
@@ -158,6 +163,10 @@ def _print_report(rep: dict[str, Any], since: datetime, until: datetime, service
     print(
         f"# v2={rep['v2_components']} legacy={rep['legacy_components']} "
         f"matched={len(rep['matched'])} v2_only={len(rep['v2_only'])} legacy_only={len(rep['legacy_only'])}"
+    )
+    print(
+        f"# gate   : detection_gaps={len(rep['gate_failures'])} "
+        f"legacy_only={len(rep['legacy_only'])} (alert_only excluded by record policy)"
     )
     print()
     print(f"{'component':<44}{'v2':>5}{'legacy':>8}{'reopen':>8}  verdict      detail")
@@ -201,7 +210,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         _print_report(rep, since, until, args.service)
 
-    return 0 if not rep["v2_only"] and not rep["legacy_only"] else 1
+    return 0 if not rep["gate_failures"] and not rep["legacy_only"] else 1
 
 
 if __name__ == "__main__":

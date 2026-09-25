@@ -101,5 +101,23 @@ def test_incident_prefixes_match_service_record_policy() -> None:
     assert wp.LEGACY_INCIDENT_PREFIXES == INCIDENT_COMPONENT_PREFIXES
 
 
+MEMORY_LINE = (
+    "2026-09-25T01:06:18Z [info] [dry-run] system:memory failed: mem=61% swap=37% (would oom)"
+)
+
+
+def test_gate_failures_exclude_alert_only_family() -> None:
+    rep = wp.build_report([V2_LINE, MEMORY_LINE], [], set())
+    assert sorted(rep["v2_only"]) == ["svc:devforge-day-cycle", "system:memory"]
+    assert rep["gate_failures"] == ["svc:devforge-day-cycle"]
+
+
+def test_main_exit_0_when_only_alert_only_differences(monkeypatch) -> None:
+    monkeypatch.setattr(wp, "_journal_lines", lambda *a, **k: [MEMORY_LINE])
+    monkeypatch.setattr(wp, "_legacy_rows", lambda *a, **k: [])
+    monkeypatch.setattr(wp, "_legacy_ever", lambda: set())
+    assert wp.main(["--json"]) == 0
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
