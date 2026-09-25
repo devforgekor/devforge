@@ -1,16 +1,10 @@
 last_checkpoint:
-  time: '2026-09-25T10:30:00.295741+09:00'
-  summary: 8 source, 1 generated
-  total_files: 16
+  time: '2026-09-25T11:00:00.289769+09:00'
+  summary: 2 source, 1 generated
+  total_files: 9
   recent_files:
     source:
     - server/scripts/watchdog_parity.py
-    - server/src/devforge/adapters/driven/health/llm_health.py
-    - server/src/devforge/adapters/driven/health/systemd_health.py
-    - server/src/devforge/application/watchdog_service.py
-    - server/tests/unit/adapters/driven/health/test_llm_health.py
-    - server/tests/unit/adapters/driven/health/test_systemd_health.py
-    - server/tests/unit/application/test_watchdog_service.py
     - server/tests/unit/test_watchdog_parity.py
     config: []
     docs: []
@@ -20,7 +14,7 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 5 files changed, 54 insertions(+), 41 deletions(-)
+      unstaged: 4 files changed, 28 insertions(+), 34 deletions(-)
       staged: (none)
       untracked_files: 2
   task: null
