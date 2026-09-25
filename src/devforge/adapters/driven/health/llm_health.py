@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
 from pathlib import Path
-from typing import Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
 import httpx
 
@@ -17,6 +19,8 @@ from devforge.ports.types import HealthCheck
 
 TRANSIENT_TOKENS = ("503", "loading model")
 DEFAULT_LATENCY_BASELINE_MS = 2000
+SLOT_POLL_SEC = 2.0
+SATURATION_GRACE_SEC = 15.0
 
 
 def _read_key(path: Path, key: str) -> str:
@@ -54,6 +58,7 @@ class LLMHealthChecker(HealthCheckPort):
         mode_reader: Optional[Callable[[], str]] = None,
         latency_baseline_ms: int = DEFAULT_LATENCY_BASELINE_MS,
         serving_port_reader: Optional[Callable[[], Optional[int]]] = None,
+        saturation_grace_sec: float = SATURATION_GRACE_SEC,
     ) -> None:
         self._targets = dict(targets)
         self._timeout = timeout
@@ -61,6 +66,7 @@ class LLMHealthChecker(HealthCheckPort):
         self._mode_reader = mode_reader or (lambda: "day")
         self._latency_baseline_ms = latency_baseline_ms
         self._serving_port_reader = serving_port_reader
+        self._saturation_grace_sec = saturation_grace_sec
 
     async def check_health(self) -> list[HealthCheck]:
         mode = self._mode_reader()
@@ -83,6 +89,9 @@ class LLMHealthChecker(HealthCheckPort):
                 if t1.status_code != 200:
                     detail = f"HTTP {t1.status_code}"
                     return self._result(component, False, detail)
+                saturated = await self._wait_for_free_slot(client, port)
+                if saturated is not None:
+                    return self._result(component, True, saturated)
                 start = time.monotonic()
                 t2 = await client.post(
                     f"http://127.0.0.1:{port}/v1/chat/completions",
@@ -109,6 +118,36 @@ class LLMHealthChecker(HealthCheckPort):
             if any(tok in detail.lower() for tok in TRANSIENT_TOKENS):
                 return self._result(component, True, f"transient: {detail}")  # not a fault
             return self._result(component, False, detail)
+
+    async def _wait_for_free_slot(self, client: httpx.AsyncClient, port: int) -> Optional[str]:
+        """[WHY] CPU 전용 llama.cpp(--parallel 2)는 긴 프롬프트(최대 5000tok, 슬롯당
+        분 단위)로 두 슬롯을 점유한다. 그러면 1토큰 프로브가 큐에서 60s 타임아웃을
+        맞지만 서버는 정상 수행 중이다. 슬롯이 비면 T2를 던지고, 계속 차 있으면
+        슬롯 자체가 '실제 추론이 진행 중'인 증거이므로 transient로 본다. /slots를
+        읽지 못하면 예전 동작(무조건 T2)으로 돌아간다."""
+        deadline = time.monotonic() + self._saturation_grace_sec
+        while True:
+            slots = await self._read_slots(client, port)
+            if slots is None:
+                return None
+            busy = sum(1 for s in slots if isinstance(s, dict) and s.get("is_processing"))
+            if busy < len(slots):
+                return None
+            if time.monotonic() >= deadline:
+                return f"transient: {busy}/{len(slots)} slots busy (real work queued)"
+            await asyncio.sleep(min(SLOT_POLL_SEC, max(deadline - time.monotonic(), 0.05)))
+
+    async def _read_slots(
+        self, client: httpx.AsyncClient, port: int
+    ) -> Optional[list[dict[str, Any]]]:
+        try:
+            r = await client.get(f"http://127.0.0.1:{port}/slots")
+            if r.status_code != 200:
+                return None
+            data = json.loads(r.text)
+        except Exception:  # noqa: BLE001 — /slots 미지원·파싱 실패는 예전 경로로 폴백
+            return None
+        return data if isinstance(data, list) and data else None
 
     @staticmethod
     def _result(
