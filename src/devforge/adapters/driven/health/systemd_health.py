@@ -30,12 +30,36 @@ class SystemdServiceHealthChecker(HealthCheckPort):
 
     async def _check(self, name: str) -> HealthCheck:
         try:
-            r = await _run(["systemctl", "--user", "is-active", name])
-            state = (r.stdout or "").strip()
-            # [WHY] legacy svc_active(): 'activating'은 Type=oneshot의 ExecStart가
-            #      진행 중인 정상 상태인데 is-active는 이때 rc=3을 반환한다.
-            ok = state in ("active", "activating")
-            detail = state or "unknown"
+            r = await _run(
+                [
+                    "systemctl",
+                    "--user",
+                    "show",
+                    name,
+                    "--property=LoadState",
+                    "--property=Type",
+                    "--property=ActiveState",
+                ]
+            )
+            props: dict[str, str] = {}
+            for line in (r.stdout or "").splitlines():
+                if "=" in line:
+                    k, _, v = line.partition("=")
+                    props[k.strip()] = v.strip()
+            load = props.get("LoadState", "")
+            unit_type = props.get("Type", "")
+            state = props.get("ActiveState", "")
+            if load and load != "loaded":
+                ok, detail = False, f"load={load} state={state or 'unknown'}"
+            else:
+                # [WHY] systemd: oneshot은 ExecStart가 끝나면 즉시 inactive가 정상
+                #      상태다(systemd#18949). Prometheus 표준 규칙·monitord도
+                #      oneshot의 inactive를 무시한다. 장기 러닝 유닛의 inactive는
+                #      장애로 본다(systemd: inactive = stopped).
+                ok = state in ("active", "activating", "reloading") or (
+                    state == "inactive" and unit_type == "oneshot"
+                )
+                detail = f"{state or 'unknown'} type={unit_type or '?'}"
         except Exception as e:  # noqa: BLE001
             ok, detail = False, str(e) or type(e).__name__
         return HealthCheck(component=f"{self._prefix}:{name}", is_healthy=ok, detail=detail)

@@ -36,6 +36,20 @@ _EVENT_TYPE = {
     "infra": "down",
 }
 
+# [WHY] record-policy parity: legacy orchestrator inserts watchdog_incidents rows
+# only for systemd-shaped components (svc/timer/oneshot/syssvc record_detect);
+# memory, llm, disk and heartbeat failures go to send_alert() only. Google SRE
+# advises alerting on symptoms rather than internal state, and ITIL defines an
+# incident as an unplanned service interruption — so v2 keeps the same split
+# instead of turning every unhealthy check into an incident (keeps SLO error
+# budget meaningful).
+INCIDENT_COMPONENT_PREFIXES = ("svc:", "timer:", "oneshot:", "syssvc:")
+
+
+def writes_incident(component: str) -> bool:
+    """Whether a failed component produces a watchdog_incidents row."""
+    return component.startswith(INCIDENT_COMPONENT_PREFIXES)
+
 
 class WatchdogService:
     def __init__(
@@ -111,16 +125,21 @@ class WatchdogService:
                 )
                 continue
 
-            inc_id = await self._incidents.record_detect(
-                c.component, self._event_type(c.component), c.detail
-            )
+            # Alert-only families (memory/llm/disk/heartbeat) still get recovery
+            # and notification, but never an incident row (see policy above).
+            inc_id: Optional[int] = None
+            if writes_incident(c.component):
+                inc_id = await self._incidents.record_detect(
+                    c.component, self._event_type(c.component), c.detail
+                )
             action = self._recovery.plan(c.component, c.detail)
             if action is not None and t.can_attempt_recovery():
                 # Non-blocking backoff: defer the next attempt instead of
                 # sleeping the whole cycle (legacy sleeps in-line).
                 t.schedule_next_attempt(action.backoff_sec)
                 ok = await self._recovery_port.execute_recovery(action)
-                await self._incidents.record_action(inc_id, action.kind, ok)
+                if inc_id is not None:
+                    await self._incidents.record_action(inc_id, action.kind, ok)
                 if ok:
                     self._recovery.record_result(c.component, True)
                     for n in self._notifiers:

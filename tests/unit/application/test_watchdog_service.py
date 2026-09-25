@@ -399,6 +399,87 @@ class TestWatchdogServiceProperties:
         assert svc.check_interval_sec == 42
 
 
+class TestIncidentRecordPolicy:
+    """Q2 record-policy: systemd 계열만 incident, 나머지는 복구/알림만."""
+
+    @staticmethod
+    def _service(comps, dry_run: bool = False) -> WatchdogService:
+        return WatchdogService(
+            config=WatchdogConfig(check_interval_sec=60),
+            registry=comps["registry"],
+            check_coordinator=comps["check_coordinator"],
+            recovery_coordinator=comps["recovery_coordinator"],
+            recovery_port=comps["recovery_port"],
+            notification_ports=[comps["notifier"]],
+            incident_repo=comps["incident_repo"],
+            state_storage=comps["state_storage"],
+            dry_run=dry_run,
+        )
+
+    @staticmethod
+    def _with_checks(comps, checks: list[HealthCheck]) -> None:
+        comps["check_coordinator"] = FakeCheckCoordinator(checks, comps["registry"])
+
+    @pytest.mark.asyncio
+    async def test_systemd_components_still_write_incidents(self, service_components) -> None:
+        comps = service_components
+        self._with_checks(
+            comps,
+            [
+                HealthCheck(component="svc:a", is_healthy=False, detail="down"),
+                HealthCheck(component="timer:t.timer", is_healthy=False, detail="delay"),
+                HealthCheck(component="oneshot:o.service", is_healthy=False, detail="failed"),
+                HealthCheck(component="syssvc:caddy", is_healthy=False, detail="down"),
+            ],
+        )
+        await self._service(comps).run_cycle()
+        assert [c for c, _, _ in comps["incident_repo"].detect_calls] == [
+            "svc:a",
+            "timer:t.timer",
+            "oneshot:o.service",
+            "syssvc:caddy",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_alert_only_component_skips_incident_but_still_recovers(
+        self, service_components
+    ) -> None:
+        comps = service_components
+        # consecutive_fail=3 → UNHEALTHY → recovery 계획됨
+        tracker = comps["registry"].get("system:memory")
+        tracker.consecutive_fail = 3
+        tracker.state = ComponentState.UNHEALTHY
+        self._with_checks(
+            comps, [HealthCheck(component="system:memory", is_healthy=False, detail="swap=1520MB")]
+        )
+        await self._service(comps).run_cycle()
+
+        assert comps["incident_repo"].detect_calls == []
+        assert comps["incident_repo"].action_calls == []
+        assert len(comps["recovery_port"].actions) == 1
+
+    @pytest.mark.asyncio
+    async def test_alert_only_component_still_notifies(self, service_components) -> None:
+        comps = service_components
+        self._with_checks(
+            comps, [HealthCheck(component="llm:day-extract", is_healthy=False, detail="HTTP 503")]
+        )
+        await self._service(comps).run_cycle()
+
+        assert comps["incident_repo"].detect_calls == []
+        assert [a[0] for a in comps["notifier"].alerts] == ["llm:day-extract"]
+
+    @pytest.mark.asyncio
+    async def test_writes_incident_predicate(self, service_components) -> None:
+        from devforge.application.watchdog_service import writes_incident
+
+        assert writes_incident("svc:a")
+        assert writes_incident("timer:t.timer")
+        assert not writes_incident("system:memory")
+        assert not writes_incident("llm:day-extract")
+        assert not writes_incident("heartbeat:db")
+
+
 class TestSloReport:
     def _service(self, comps, config: WatchdogConfig) -> WatchdogService:
         return WatchdogService(

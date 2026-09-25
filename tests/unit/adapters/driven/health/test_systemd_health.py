@@ -17,40 +17,83 @@ from devforge.adapters.driven.health.systemd_health import (
 )
 
 
+def _svc_props(active: str, unit_type: str = "simple", load: str = "loaded") -> str:
+    return f"LoadState={load}\nType={unit_type}\nActiveState={active}\n"
+
+
 @pytest.mark.asyncio
 async def test_all_services_active() -> None:
-    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout="active\n"))):
+    with patch(
+        "asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=_svc_props("active")))
+    ):
         checks = await SystemdServiceHealthChecker(["a", "b"]).check_health()
     assert all(c.is_healthy for c in checks)
     assert [c.component for c in checks] == ["svc:a", "svc:b"]
 
 
 @pytest.mark.asyncio
-async def test_inactive_service() -> None:
-    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout="inactive\n"))):
+async def test_inactive_long_running_service_is_unhealthy() -> None:
+    with patch(
+        "asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=_svc_props("inactive")))
+    ):
         checks = await SystemdServiceHealthChecker(["a"]).check_health()
-    assert checks[0].is_healthy is False and checks[0].detail == "inactive"
+    assert checks[0].is_healthy is False
+    assert "inactive" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_oneshot_inactive_between_runs_is_healthy() -> None:
+    # Q1: systemd는 oneshot이 ExecStart를 마치면 즉시 inactive가 정상 상태다
+    #     (systemd#18949). Prometheus/monitord도 oneshot의 inactive를 무시한다.
+    with patch(
+        "asyncio.to_thread",
+        new=AsyncMock(return_value=MagicMock(stdout=_svc_props("inactive", unit_type="oneshot"))),
+    ):
+        checks = await SystemdServiceHealthChecker(["devforge-day-cycle"]).check_health()
+    assert checks[0].is_healthy is True
 
 
 @pytest.mark.asyncio
 async def test_activating_service_is_healthy_when_oneshot_running() -> None:
-    # legacy svc_active(): Type=oneshot의 ExecStart 진행 중 — is-active는 rc=3이다.
-    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout="activating\n"))):
+    with patch(
+        "asyncio.to_thread",
+        new=AsyncMock(return_value=MagicMock(stdout=_svc_props("activating", "oneshot"))),
+    ):
         checks = await SystemdServiceHealthChecker(["devforge-day-cycle"]).check_health()
     assert checks[0].is_healthy is True
-    assert checks[0].detail == "activating"
+    assert "activating" in checks[0].detail
 
 
 @pytest.mark.asyncio
 async def test_failed_service_is_unhealthy() -> None:
-    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout="failed\n"))):
+    with patch(
+        "asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=_svc_props("failed")))
+    ):
         checks = await SystemdServiceHealthChecker(["a"]).check_health()
-    assert checks[0].is_healthy is False and checks[0].detail == "failed"
+    assert checks[0].is_healthy is False
+    assert "failed" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_missing_unit_file_is_unhealthy_even_if_oneshot() -> None:
+    with patch(
+        "asyncio.to_thread",
+        new=AsyncMock(
+            return_value=MagicMock(
+                stdout=_svc_props("inactive", unit_type="oneshot", load="not-found")
+            )
+        ),
+    ):
+        checks = await SystemdServiceHealthChecker(["ghost"]).check_health()
+    assert checks[0].is_healthy is False
+    assert "not-found" in checks[0].detail
 
 
 @pytest.mark.asyncio
 async def test_prefix_override() -> None:
-    with patch("asyncio.to_thread", new=AsyncMock(return_value=MagicMock(returncode=0))):
+    with patch(
+        "asyncio.to_thread", new=AsyncMock(return_value=MagicMock(stdout=_svc_props("active")))
+    ):
         checks = await SystemdServiceHealthChecker(["x"], prefix="container").check_health()
     assert checks[0].component == "container:x"
 

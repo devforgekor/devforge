@@ -93,5 +93,13 @@ def test_build_report_carries_v2_only_reasons() -> None:
     assert rep["legacy_only"] == ["svc:other"]
 
 
+def test_incident_prefixes_match_service_record_policy() -> None:
+    # [WHY] SSOT pin: 하네스가 보는 legacy 기록 정책과 v2의 기록 정책이
+    #      한꺼번에 움직여야 패리티 분류가 흐려지지 않는다.
+    from devforge.application.watchdog_service import INCIDENT_COMPONENT_PREFIXES
+
+    assert wp.LEGACY_INCIDENT_PREFIXES == INCIDENT_COMPONENT_PREFIXES
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
