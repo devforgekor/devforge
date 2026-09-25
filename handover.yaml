@@ -1,20 +1,22 @@
 last_checkpoint:
-  time: '2026-09-25T13:00:00.294347+09:00'
-  summary: 2 source, 1 generated
-  total_files: 9
+  time: '2026-09-25T13:30:00.276084+09:00'
+  summary: 3 source, 1 docs, 1 generated
+  total_files: 11
   recent_files:
     source:
-    - server/src/devforge/adapters/driven/health/llm_health.py
-    - server/tests/unit/adapters/driven/health/test_llm_health.py
+    - server/src/devforge/adapters/driven/health/system_health.py
+    - server/tests/characterization/test_system_parity.py
+    - server/tests/unit/adapters/driven/health/test_system_health.py
     config: []
-    docs: []
+    docs:
+    - server/docs/plans/2026-standard-gap-remediation.md
     data: []
     generated:
     - server/collect_checkpoint.json
   git:
     server:
       branch: main
-      unstaged: 5 files changed, 28 insertions(+), 32 deletions(-)
+      unstaged: 5 files changed, 42 insertions(+), 36 deletions(-)
       staged: (none)
       untracked_files: 2
   task: null
@@ -321,8 +323,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '2026-09-23: WatchdogConfig.oneshot_result_targets parity with legacy ONESHOT_RESULT_TARGETS (3종 추가); characterization parity
-  통과'
 - '2026-09-23: orchestrator main_loop results 미초기화 UnboundLocalError 수정 (NRestarts 2→0)'
 - '2026-09-23: _run_timers kick --no-block (oneshot 26s>timeout=10 타임아웃 제거); check_timer에 service ActiveEnter/ExecMainStart
   반영'
@@ -444,3 +444,11 @@ completed_log:
   동일 (wd-q2-incident-record-policy) → systemd_health.py·watchdog_service.py 구현, 하네스 프리픽스와 동일성 고정 테스트. (4) 게이트에서 alert_only
   제외 → 새 창 스모크 detection_gaps=0·legacy_only=0·exit 0(55c30d7). (5) v2 재기동 2026-09-25T01:05:12Z(창 리셋, 사용자 승인). 검증: 421 passed/10
   skipped py3.9+py3.12, ruff·mypy·lint-imports(4 kept)·CI 6/6 green.'
+- '(2026-09-25, opencode) LLM 프로브 포화 선감지 + memory 임계치 legacy 정렬 후 2차 재기동(창 09-25T04:10:17Z ~ 09-26T04:10:17Z, 사용자 승인). (1)
+  원인 규명: CPU 전용 llama.cpp(--parallel 2, Qwen3-8B-Q8, 4스레드)가 day enrichment(최대 5000tok 프롬프트, ~7.6tok/s)로 슬롯 2개를 포화 → 1토큰 프로브가
+  60s 타임아웃(이전 창 60회, /health는 2ms로 정상, llama.cpp task declined = 프로브 포기). (2) llm_health.py가 /slots 선확인 → 슬롯 여유 시 T2 그대로,
+  계속 포화 시 15초 그레이스 후 transient 정상(실측 15.3s, 이전 60s). legacy는 60s 유지·llm은 incident 미기록이라 게이트 영향 없음(ed88a2a). (3) memory 임계치
+  불일치(v2 95/1024 vs legacy 90/9000) → legacy 정렬로 이전 창 74회 오탐 제거(매사이클 OOM 복구 계획 해소), characterization 상수 고정 + 관측값(61%/1550MB=정상)
+  회귀 테스트(727b536). (4) 사전 점검: 타이머18개·critical/system/alert_only·oneshot·llm·svcpod·heartbeat 대상 전부 legacy 일치, disk 미감시·스왑
+  9000MB 도달불가는 legacy 미해결로 계획 §16-6 기록. 새 창 스모크 v2=0 legacy=0 exit 0. 검증 427 passed py3.9+3.12, ruff·format·mypy·lint-imports
+  green, CI 6/6 green 2회.'
