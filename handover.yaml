@@ -1,16 +1,21 @@
 last_checkpoint:
-  time: '2026-09-25T08:00:01.205806+00:00'
+  time: '2026-09-25T17:30:00.596506+09:00'
   summary: 1 docs, 1 generated
   total_files: 3
   recent_files:
-    data: []
+    source: []
+    config: []
     docs:
     - server/docs/runbooks/dataimpulse-monitor.md
-    config: []
-    source: []
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 6 files changed, 43 insertions(+), 37 deletions(-)
+      staged: (none)
+      untracked_files: 2
   task: null
 decisions:
 - id: nd13-01
