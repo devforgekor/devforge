@@ -1,13 +1,8 @@
 last_checkpoint:
-  time: '2026-09-25T01:00:01.183316+00:00'
-  summary: 8 source, 2 docs, 1 generated
-  total_files: 20
+  time: '2026-09-25T10:30:00.295741+09:00'
+  summary: 8 source, 1 generated
+  total_files: 16
   recent_files:
-    data: []
-    docs:
-    - server/docs/architecture/code-structure.yaml
-    - server/docs/plans/execution-plan-2026-09-24.md
-    config: []
     source:
     - server/scripts/watchdog_parity.py
     - server/src/devforge/adapters/driven/health/llm_health.py
@@ -17,9 +12,17 @@ last_checkpoint:
     - server/tests/unit/adapters/driven/health/test_systemd_health.py
     - server/tests/unit/application/test_watchdog_service.py
     - server/tests/unit/test_watchdog_parity.py
+    config: []
+    docs: []
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 5 files changed, 54 insertions(+), 41 deletions(-)
+      staged: (none)
+      untracked_files: 2
   task: null
 decisions:
 - id: nd13-01
@@ -244,6 +247,18 @@ decisions:
   detail: dev-requirements.txt·scripts/mcp-requirements.txt 삭제(orphan·중복). Dependabot이 매니페스트로 채택해 제약을 갱신했으나 SSOT는 pyproject+uv.lock.
     dev 설치는 uv sync --extra dev.
   status: resolved
+- id: wd-q1-unit-type-health
+  detail: 'watchdog v2 서비스 건강 판정은 유닛 타입을 고려한다(사용자 결정 2026-09-25). systemd는 oneshot이 ExecStart를 마치면 즉시 inactive가 정상(systemd#18949),
+    장기러닝 서비스의 inactive는 장애. Prometheus 표준 규칙과 monitord(ignore_inactive_oneshot_services)도 동일 관례. 판정: LoadState≠loaded=장애 /
+    failed=장애 / active·activating·reloading=정상 / inactive+oneshot=정상 / inactive+장기러닝=장애. systemctl show로 LoadState+Type+ActiveState를
+    1회 조회.'
+  status: resolved
+- id: wd-q2-incident-record-policy
+  detail: 'watchdog v2의 watchdog_incidents 기록 범위를 legacy와 동일하게 유지한다(사용자 결정 2026-09-25). 기록은 systemd 계열만 (svc:/timer:/oneshot:/syssvc:),
+    memory·llm·disk·heartbeat는 복구와 알림만 수행하고 행을 만들지 않는다. 근거: Google SRE는 내부 상태(메모리 등) 기반 알림·티켓을 지양하고 증상 기반 알림을 권고, ITIL incident는
+    계획되지 않은 서비스 중단이며 이는 SLO 오류 예산을 의미 있게 유지한다. watchdog_service.INCIDENT_COMPONENT_PREFIXES가 SSOT, parity 하네스가 같은 상수를 고정 테스트로
+    묶는다.'
+  status: resolved
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -288,11 +303,13 @@ known_issues:
 - text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
   resolved: false
-- id: shadow-running-2026-09-24
-  detail: 'watchdog v2 host unit 재시작(2026-09-24T23:58:36Z, dry_run=True, NRestarts=0, 텔레메트리 run_id/trace_id 로그 확인). 24h 창
-    = 09-24T23:58:36Z ~ 09-25T23:58:36Z. 창 중 v2/감시대상 재기동 금지(=창 리셋), 비파괴 개발만 허용. 종료 후 v2 dry-run 감지(journal) vs legacy incident(watchdog_incidents)
-    parity 비교 → 이상 시 컷오버/다음 단계. 첫 사이클 dry-run 감지: svc:devforge-day-cycle inactive, timer:weekly-enrich never-triggered, llm:day-extract
-    fail, system:memory 55%/swap35%.'
+- id: shadow-running-2026-09-25
+  detail: 'watchdog v2 host unit 재기동(2026-09-25T01:05:12Z, dry_run=True, NRestarts=0, legacy active 유지)으로 24h 창 재개. 창 = 09-25T01:05:12Z
+    ~ 09-26T01:05:12Z. 이전 창(09-24T23:58:36Z)은 패리티 버그 수정 반영을 위해 66분 만에 조기 리셋(사용자 승인). 창 중 v2/감시대상 재기동 금지(=창 리셋), 비파괴 개발만 허용.
+    종료 후 `python3 scripts/watchdog_parity.py --since <창시작ISO>`로 v2 dry-run journal ↔ legacy watchdog_incidents 비교 → 이상 시 컷오버/다음
+    단계. 재기동 직후 스모크: detection_gaps=0, legacy_only=0, exit 0. v2_only 2건(system:memory·llm:day-extract)은 모두 alert_only(설계상
+    허용), 이전 창의 day-cycle·weekly-timer 오탐은 제거됨. 잔여 관측은 실제 상태: system:memory mem=61%/swap=37%(≥1GB crit), llm:day-extract ReadTimeout(모델
+    로딩, 서빙 포트 8082만 프로브).'
   resolved: false
 - id: SLACK-BOT-INACTIVE-2026-09-20
   detail: '진단(2026-09-20): KV 이름 매핑 정상(SLACK_BOT_TOKEN_KEY). KV 토큰으로 auth.test/chat.postMessage → error=account_inactive(Slack
@@ -310,14 +327,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-23, devforge-444795) 실패 유닛 3건 원인 규명·해소(일부). (1) caddy healthcheck: 컨테이너 내 wget exec가 SELinux AVC (container_t→container_file_t
-  read denied, cat mislabel)로 ld-musl RELRO 실패 → healthcheck만 unhealthy, caddy.service active·host :80/:2019 정상. (2) reference-monitor:
-  정책 YAML gate_result: "pass" or "fail" (7곳) 파싱 불가 + 경로 부재 → 아카이브 복원+YAML 수정 → rss-monitor exit 0, REFERENCE 로그 확인(podman
-  v6.1.0-RC1, systemd-stable v260.5). (3) webobsidian: 10-slice.conf가 webobsidian2.slice를 가리키나 해당 cgroup이 EBUSY (스테일 잔존) →
-  NRestarts 300+ 폭주, :8787 down. 재부팅 후 drop-in 제거로 해소 예정(rollback-guide §6.1). (4) Slack 재테스트: auth.test=account_inactive,
-  chat.postMessage=not_authed — 토큰 무효 유지, 재발급 보류. (5) boot LV 미증량·fstab 미러링 미수행(사용자 결정). (6) 와치독: ONESHOT_RESULT_TARGETS에
-  root-volume-daily-clean/opencode-db-offload/reference-monitor 추가, check_oneshot_result·recover_oneshot에 system 스코프 폴백. reference-monitor
-  known_issue resolved.'
 - '2026-09-23: WatchdogConfig.oneshot_result_targets parity with legacy ONESHOT_RESULT_TARGETS (3종 추가); characterization parity
   통과'
 - '2026-09-23: orchestrator main_loop results 미초기화 UnboundLocalError 수정 (NRestarts 2→0)'
@@ -433,3 +442,11 @@ completed_log:
   6 tests(전체 401 passed). code-structure.yaml + execution-plan §3.1 usage. 실행: python3 scripts/watchdog_parity.py --since
   2026-09-24T23:58:36Z. 초기 관측: v2_only=4(day-cycle inactive·weekly-enrich never-triggered·llm:day-extract·system:memory 55%)
   — 24h 후 재판정. commit 8a191de.'
+- '(2026-09-25, opencode) ⑩ shadow parity: 하네스 완성 → v2↔legacy 패리티 버그 4건 수정 → Q1/Q2 결정 반영 → 창 재시작. (1) scripts/watchdog_parity.py(8a191de):
+  v2 dry-run journal ↔ legacy watchdog_incidents 비교, v2_only를 alert_only/parity_gap/never_recorded로 분류, --json·gate 지원. (2)
+  초기 창 v2_only=4 원인 규명·수정(ba8f6f2): service 체크가 유닛 타입 무시 → day-cycle inactive 오탐(legacy는 is-active rc, oneshot inactive는 정상);
+  timer 체크가 LastTriggerUSec만 봐 weekly-enrich 첫 실행 전 오탐(legacy는 3개 타임스탬프 후보); llm 체크가 비서빙 포트 프로브 → 503/타임아웃 오탐(legacy는 _current_inference_port
+  가드, mode는 매 사이클 재읽음); detail이 빈 str(e)로 패일포인트 가려짐. (3) 사용자 결정: Q1 유닛 타입별 판정(wd-q1-unit-type-health), Q2 incident 기록 정책 legacy
+  동일 (wd-q2-incident-record-policy) → systemd_health.py·watchdog_service.py 구현, 하네스 프리픽스와 동일성 고정 테스트. (4) 게이트에서 alert_only
+  제외 → 새 창 스모크 detection_gaps=0·legacy_only=0·exit 0(55c30d7). (5) v2 재기동 2026-09-25T01:05:12Z(창 리셋, 사용자 승인). 검증: 421 passed/10
+  skipped py3.9+py3.12, ruff·mypy·lint-imports(4 kept)·CI 6/6 green.'
