@@ -1,21 +1,23 @@
 last_checkpoint:
-  time: '2026-09-25T08:30:00.296203+09:00'
-  summary: 1 source, 1 generated
-  total_files: 14
+  time: '2026-09-24T23:52:53.24734+00:00'
+  summary: 4 source, 4 docs, 1 generated
+  total_files: 33
   recent_files:
-    source:
-    - server/tests/test_experiment.py
-    config: []
-    docs: []
     data: []
+    docs:
+    - server/docs/handover-secrets-kv.md
+    - server/docs/plans/2026-standard-gap-remediation.md
+    - server/docs/plans/execution-plan-2026-09-24.md
+    - server/docs/plans/watchdog-standard-compliance.md
+    config: []
+    source:
+    - server/src/devforge/core/telemetry.py
+    - server/tests/test_characterization.py
+    - server/tests/test_experiment.py
+    - server/tests/test_integration.py
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 5 files changed, 37 insertions(+), 51 deletions(-)
-      staged: (none)
-      untracked_files: 1
+  git: {}
   task: null
 decisions:
 - id: nd13-01
@@ -304,21 +306,6 @@ known_issues:
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
 completed_log:
-- '(2026-09-23, devforge-444795) watchdog 표준준수 Deep Dive + DataImpulse 위임 + 오류 기록/분석 + 모델선정 개선. (1) 검증: 컨테이너에 systemctl/journalctl/pgrep/free
-  부재(체크 오탐), rootless/rootful graphroot 부모공유(exit126), toki31는 detached 프로세스라 ebook-watcher journal에 0건(기존 check_ebook_pipeline
-  감지 불가), dataimpulse_monitor에 flock 없음. (2) 문서: phase2 표준준수판(P1-P4)+DataImpulse 위임(감지만)+오류 기록 3계층+분석 로직(decision packet)+graphroot
-  격리 런북. context7/exa 검증(Podman storage, systemd sd_notify, drift detection, LLM leaderboard). (3) 구현: watchdog sd_notify(READY/WATCHDOG,
-  Type=notify+WatchdogSec), model_score.py(role별 4계층 점수+AA free API enrichment), refresh_openrouter_free_models.py --role
-  coding|reasoning, 21 단위테스트. (4) AA API 키 KV 등록 확인(kv-common-prod-krc/ARTIFICIALANALYSIS-API-KEY, Free 100req/day, Pro 제외).
-  (5) ebook-api.service 구경로(/opt/workspace/ebooklib, 부재) 수정 + 수동 uvicorn→systemd 복구(8089 /health ok). (6) podman prune 타이머(daily
-  48h) + dangling 82GB 중 ~50GB 정리(다른 세션/디스크 100%→35%). (7) opencode.db WAL 회수 711MB→0.6MB(본체 VACUUM은 opencode 종료 필요). 커밋:
-  2c38da3(모델선정), ccb555a(sd_notify), 442117a(docs), d2ae0c2(prune), 170ab3d(exa.py), 5870b85(gitignore). handover cp#133.'
-- '(2026-09-23, devforge-444795) root 볼륨 offload + 리팩토링 계획서 대조 수정(본 세션, 재부팅 직전). (1) 인프라: root 36G→~9G, fstab bind 14, journald
-  200M/2week, root-volume-daily-clean.timer. (2) 계획서 REFACTORING_PLAN 본문은 코드구조 범위라 무변경, 부록 리스크 OS root 1행 추가. (3) 문서: blueprint.yaml
-  journald 30day→2week done, system-architecture §5, daily-server-maintenance §3/§7/§11 v1.1, rollback-guide §6 신규. (4) 재부팅
-  대비: opencode-db-offload.{sh,service} 설치+enable(세션 중 미실행), known_issues OPENCODE-DB-ON-ROOT/CLAUDE-PROJECTS-LOST/ROOT-BIND-REBOOT
-  등록. (5) 데이터 손실 기록: .claude/projects(~112M) 이전 실패 시 소실(XFS 복구불가). 다음 세션: findmnt로 bind 14+opencode 이전 검증, opencode.db가 system-savings에
-  있으면 known_issue resolve.'
 - '(2026-09-23, devforge-444795) root offload 후속 + 실패 유닛 분석 + 재부팅 체크리스트 문서화(재부팅 전). (1) 갭 보완 반영: journald SystemKeepFree=2G,
   60-retention.conf 제거(size.conf 단일 SSOT), 14 bind restorecon unlabeled 0건, opencode-db-offload.sh rsync -aX+restorecon. (2)
   a-2 /var/tmp: junk+age 정리 후 bulk(cache/dnf 1.0G, uptrack 154M, temp clone, playwright) 추가 제거 → 1324→88MB, root 8.8G/20%.
@@ -439,3 +426,12 @@ completed_log:
   uvicorn>=0.53.0(pyproject+cashbook), python-multipart>=0.0.32(cashbook), setuptools>=84.0.0, openai track_b>=3.16.2,<4.0(미사용
   옵션, lock 3.19.2; distro 제거). 검증: python3.12+pytest9.1.1 395 passed/10 skipped, pip-audit clean, CI green(build 포함 v7 실동작).
   commit fb22e92.'
+- '(2026-09-24, opencode) 쉐도우 시작 전 수정파일 버그 수정 + 양방향 검증: (1) core/telemetry.span @contextmanager 반환형 Iterator→Generator(deprecation),
+  (2) 런타임 MODE brittle 테스트 2건(test_characterization/test_integration) — MODE=day/night/embed/rerank/dual 인정, model_name=runtime.MODEL_NAME
+  미러(embed 창에서 실패하던 버그). 양방향 검증: 모드 day↔embed, 문서↔코드(test_code_structure), repo↔live(sync-units 드리프트 0), py3.9↔3.12(395 passed/10
+  skipped), ruff/mypy(80)/lint-imports(4) green, CI green. commit 19544ef.'
+- '(2026-09-24, opencode) 문서 정합성 점검·수정(문서↔코드): (1) 2026-standard-gap-remediation §2 pip-audit pytest allowlist 문구 제거(pytest9
+  마이그레이션 반영), §13/§16 OTel API 완료·신규파일·shadow-pause 갱신. (2) handover-secrets-kv: sync-secrets.yml workflow_dispatch 수동 전용(post-KV
+  가드) 반영. (3) watchdog-standard-compliance: P2 완료(2026-09-24). (4) execution-plan-2026-09-24: shadow 정지·§2.3/§3.1/§9/§10 완료.
+  검증: test_docs_index/test_doc_links/test_code_structure 6 passed, stale grep 0. commit a637a18. INDEX 최근변경(09-23)는 record라
+  소급 편집 안 함.'
