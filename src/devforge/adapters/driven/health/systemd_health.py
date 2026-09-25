@@ -31,10 +31,13 @@ class SystemdServiceHealthChecker(HealthCheckPort):
     async def _check(self, name: str) -> HealthCheck:
         try:
             r = await _run(["systemctl", "--user", "is-active", name])
-            ok = r.returncode == 0
-            detail = "active" if ok else "inactive"
+            state = (r.stdout or "").strip()
+            # [WHY] legacy svc_active(): 'activating'은 Type=oneshot의 ExecStart가
+            #      진행 중인 정상 상태인데 is-active는 이때 rc=3을 반환한다.
+            ok = state in ("active", "activating")
+            detail = state or "unknown"
         except Exception as e:  # noqa: BLE001
-            ok, detail = False, str(e)
+            ok, detail = False, str(e) or type(e).__name__
         return HealthCheck(component=f"{self._prefix}:{name}", is_healthy=ok, detail=detail)
 
 
@@ -48,20 +51,37 @@ class SystemdTimerHealthChecker(HealthCheckPort):
 
     async def _check(self, name: str, max_idle: int) -> HealthCheck:
         try:
-            r = await _run(
-                ["systemctl", "--user", "show", name, "--property=LastTriggerUSec", "--value"]
-            )
-            last = r.stdout.strip()
-            if not last or last == "n/a":
+            # [WHY] legacy check_timer(): LastTriggerUSec는 타이머 본체 발동 시각만
+            #      갱신한다. oneshot 서비스는 종료 후 ActiveEnterTimestamp가 비므로
+            #      서비스 ExecMainStartTimestamp까지 함께 봐야 수동 kick도 잡는다.
+            svc_name = name.replace(".timer", ".service")
+            queries = [
+                (name, "LastTriggerUSec"),
+                (svc_name, "ActiveEnterTimestamp"),
+                (svc_name, "ExecMainStartTimestamp"),
+            ]
+            candidates: list[datetime] = []
+            for unit, prop in queries:
+                r = await _run(
+                    ["systemctl", "--user", "show", unit, f"--property={prop}", "--value"]
+                )
+                s = (r.stdout or "").strip()
+                if not s or s == "n/a":
+                    continue
+                try:
+                    candidates.append(
+                        datetime.strptime(s, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+                    )
+                except ValueError:
+                    pass
+            if not candidates:
                 return HealthCheck(f"{self._prefix}:{name}", False, "never triggered")
-            last_dt = datetime.strptime(last, "%a %Y-%m-%d %H:%M:%S %Z").replace(
-                tzinfo=timezone.utc
-            )
+            last_dt = max(candidates)
             idle = (datetime.now(timezone.utc) - last_dt).total_seconds()
             ok = idle <= max_idle
             detail = f"{int(idle)}s ago" if ok else f"{int(idle)}s idle > {max_idle}s limit"
         except Exception as e:  # noqa: BLE001
-            ok, detail = False, str(e)
+            ok, detail = False, str(e) or type(e).__name__
         return HealthCheck(f"{self._prefix}:{name}", ok, detail)
 
 

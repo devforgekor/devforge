@@ -58,13 +58,39 @@ def test_build_report_matched_and_diff() -> None:
 def test_main_exit_1_on_parity_gap(monkeypatch) -> None:
     monkeypatch.setattr(wp, "_journal_lines", lambda *a, **k: [V2_LINE])
     monkeypatch.setattr(wp, "_legacy_rows", lambda *a, **k: [_legacy("svc:other")])
+    monkeypatch.setattr(wp, "_legacy_ever", lambda: set())
     assert wp.main(["--since", "2026-09-24T00:00:00Z", "--until", "2026-09-25T00:00:00Z"]) == 1
 
 
 def test_main_exit_0_on_parity(monkeypatch) -> None:
     monkeypatch.setattr(wp, "_journal_lines", lambda *a, **k: [V2_LINE])
     monkeypatch.setattr(wp, "_legacy_rows", lambda *a, **k: [_legacy("svc:devforge-day-cycle")])
+    monkeypatch.setattr(wp, "_legacy_ever", lambda: {"svc:devforge-day-cycle"})
     assert wp.main(["--json"]) == 0
+
+
+def test_classify_v2_only_flags_alert_only_families() -> None:
+    assert wp.classify_v2_only("system:memory", {"svc:x"}) == "alert_only"
+    assert wp.classify_v2_only("llm:day-extract", {"svc:x"}) == "alert_only"
+    assert wp.classify_v2_only("disk:/", set()) == "alert_only"
+
+
+def test_classify_v2_only_flags_parity_gap_when_legacy_recorded_before() -> None:
+    assert wp.classify_v2_only("svc:devforge-day-cycle", {"svc:devforge-day-cycle"}) == (
+        "parity_gap"
+    )
+    assert wp.classify_v2_only("timer:t.timer", {"timer:t.timer"}) == "parity_gap"
+
+
+def test_classify_v2_only_flags_never_recorded_when_new_component() -> None:
+    assert wp.classify_v2_only("timer:t.timer", {"svc:x"}) == "never_recorded"
+
+
+def test_build_report_carries_v2_only_reasons() -> None:
+    rows = [_legacy("svc:other")]
+    rep = wp.build_report([V2_LINE], rows, {"svc:devforge-day-cycle"})
+    assert rep["v2_only_reasons"] == {"svc:devforge-day-cycle": "parity_gap"}
+    assert rep["legacy_only"] == ["svc:other"]
 
 
 if __name__ == "__main__":

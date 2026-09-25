@@ -81,7 +81,32 @@ def _legacy_rows(since: datetime, until: datetime) -> list[dict[str, Any]]:
     return psql_json(query)
 
 
-def build_report(v2_lines: list[str], legacy_rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _legacy_ever() -> set[str]:
+    """All components legacy has ever recorded (window-independent)."""
+    rows = psql_json("SELECT DISTINCT component FROM watchdog_incidents")
+    return {r["component"] for r in rows}
+
+
+# [WHY] legacy orchestrator writes incidents only for these prefixes; memory,
+# llm, disk, heartbeat and dataimpulse failures go to send_alert() only, so they
+# can never appear in watchdog_incidents — v2_only for them is not a detection
+# bug but a record-policy difference.
+LEGACY_INCIDENT_PREFIXES = ("svc:", "timer:", "oneshot:", "syssvc:")
+
+
+def classify_v2_only(component: str, legacy_ever: set[str]) -> str:
+    if not component.startswith(LEGACY_INCIDENT_PREFIXES):
+        return "alert_only"
+    if component in legacy_ever:
+        return "parity_gap"
+    return "never_recorded"
+
+
+def build_report(
+    v2_lines: list[str],
+    legacy_rows: list[dict[str, Any]],
+    legacy_ever: Optional[set[str]] = None,
+) -> dict[str, Any]:
     v2_counts: dict[str, int] = {}
     v2_samples: dict[str, str] = {}
     for line in v2_lines:
@@ -98,6 +123,8 @@ def build_report(v2_lines: list[str], legacy_rows: list[dict[str, Any]]) -> dict
     matched = sorted(v2_set & legacy_set)
     v2_only = sorted(v2_set - legacy_set)
     legacy_only = sorted(legacy_set - v2_set)
+    ever = legacy_ever if legacy_ever is not None else set()
+    v2_only_reasons = {c: classify_v2_only(c, ever) for c in v2_only}
 
     components = [
         {
@@ -108,6 +135,7 @@ def build_report(v2_lines: list[str], legacy_rows: list[dict[str, Any]]) -> dict
             "verdict": "matched"
             if comp in v2_set and comp in legacy_set
             else ("v2_only" if comp in v2_set else "legacy_only"),
+            "reason": v2_only_reasons.get(comp, ""),
         }
         for comp in sorted(v2_set | legacy_set)
     ]
@@ -116,6 +144,7 @@ def build_report(v2_lines: list[str], legacy_rows: list[dict[str, Any]]) -> dict
         "legacy_components": len(legacy_set),
         "matched": matched,
         "v2_only": v2_only,
+        "v2_only_reasons": v2_only_reasons,
         "legacy_only": legacy_only,
         "components": components,
         "v2_samples": v2_samples,
@@ -139,9 +168,13 @@ def _print_report(rep: dict[str, Any], since: datetime, until: datetime, service
             f"  {c['verdict']:<12} {detail[:40]}"
         )
     if rep["v2_only"]:
-        print("\n[!] v2_only (v2 flagged, legacy never recorded — possible false positive):")
+        print("\n[!] v2_only (v2 flagged, legacy never recorded):")
+        print("    alert_only = legacy records only alerts for this family (policy)")
+        print("    parity_gap = legacy recorded it before (window/state semantics)")
+        print("    never_recorded = legacy checks it but has never recorded")
         for comp in rep["v2_only"]:
-            print(f"    {comp}: {rep['v2_samples'].get(comp, '')}")
+            reason = rep["v2_only_reasons"].get(comp, "")
+            print(f"    {comp} [{reason}]: {rep['v2_samples'].get(comp, '')}")
     if rep["legacy_only"]:
         print("\n[!] legacy_only (legacy recorded, v2 never flagged — possible miss):")
         for comp in rep["legacy_only"]:
@@ -160,7 +193,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     since = parse_iso(args.since) if args.since else now - timedelta(hours=24)
     until = parse_iso(args.until) if args.until else now
 
-    rep = build_report(_journal_lines(args.service, since, until), _legacy_rows(since, until))
+    rep = build_report(
+        _journal_lines(args.service, since, until), _legacy_rows(since, until), _legacy_ever()
+    )
     if args.json:
         print(json.dumps({"since": since.isoformat(), "until": until.isoformat(), **rep}, indent=2, default=str))
     else:

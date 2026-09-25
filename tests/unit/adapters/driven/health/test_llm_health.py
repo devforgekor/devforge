@@ -66,3 +66,48 @@ async def test_probe_sets_latency_metric() -> None:
         checks = await LLMHealthChecker({"day-extract": 8082}).check_health()
     assert checks[0].metric_value is not None
     assert checks[0].threshold == 6000.0  # 2000ms baseline x3
+
+
+@pytest.mark.asyncio
+async def test_non_serving_port_skipped() -> None:
+    # legacy check_all_llm(): 현재 서빙 포트만 프로브한다(비서빙 포트 오탐 방지).
+    client = _client()
+    with patch("httpx.AsyncClient", return_value=client):
+        checks = await LLMHealthChecker(
+            {"day-extract": 8082, "night-verify": 8084},
+            day_ports={8082, 8084},
+            serving_port_reader=lambda: 8082,
+        ).check_health()
+    assert [c.component for c in checks] == ["llm:day-extract"]
+    assert client.get.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_empty_exception_message_reports_type_name() -> None:
+    # httpx.ReadError('')처럼 메시지가 빈 예외는 detail이 공란이 되지 않아야 한다.
+    with patch("httpx.AsyncClient", return_value=_client(get_exc=Exception(""))):
+        checks = await LLMHealthChecker({"day-extract": 8082}).check_health()
+    assert checks[0].is_healthy is False
+    assert checks[0].detail == "Exception"
+
+
+def test_runtime_mode_and_serving_port_read_from_env_file(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from devforge.adapters.driven.health import llm_health
+
+    sysfile = tmp_path / "current-system-mode.env"
+    sysfile.write_text("MODE=night\n")
+    rtfile = tmp_path / "current-mode-inference.env"
+    rtfile.write_text("MODE=night\nPORT=8084\n")
+    monkeypatch.setattr(llm_health, "SYSTEM_ENV_FILE", sysfile)
+    monkeypatch.setattr(llm_health, "RUNTIME_ENV_FILE", rtfile)
+    assert llm_health.read_runtime_mode() == "night"
+    assert llm_health.read_serving_port() == 8084
+
+
+def test_runtime_readers_fall_back_when_file_missing(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from devforge.adapters.driven.health import llm_health
+
+    monkeypatch.setattr(llm_health, "SYSTEM_ENV_FILE", tmp_path / "nope.env")
+    monkeypatch.setattr(llm_health, "RUNTIME_ENV_FILE", tmp_path / "nope.env")
+    assert llm_health.read_runtime_mode() == "day"
+    assert llm_health.read_serving_port() is None

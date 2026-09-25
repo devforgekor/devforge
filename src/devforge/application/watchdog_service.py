@@ -181,7 +181,11 @@ class WatchdogService:
 def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> WatchdogService:
     """Composition factory — wires ports/adapters for the CLI (E3)."""
     from devforge.adapters.driven.health.ebook_health import EbookPipelineHealthChecker
-    from devforge.adapters.driven.health.llm_health import LLMHealthChecker
+    from devforge.adapters.driven.health.llm_health import (
+        LLMHealthChecker,
+        read_runtime_mode,
+        read_serving_port,
+    )
     from devforge.adapters.driven.health.pipeline_health import HeartbeatHealthChecker
     from devforge.adapters.driven.health.svcpod_health import SvcpodForwardingHealthChecker
     from devforge.adapters.driven.health.system_health import DiskHealthChecker, MemoryHealthChecker
@@ -221,6 +225,8 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
             config.llm_targets,
             day_ports=set(config.day_ports),
             latency_baseline_ms=config.llm_latency_baseline_ms,
+            mode_reader=read_runtime_mode,  # 매 사이클 current-system-mode.env 재읽기
+            serving_port_reader=read_serving_port,  # 서빙 포트만 프로브(legacy 오탐 방지)
         ),
         "system": MemoryHealthChecker(),
         "disk": DiskHealthChecker(config.disks),
