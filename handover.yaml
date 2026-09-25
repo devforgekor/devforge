@@ -1,21 +1,18 @@
 last_checkpoint:
-  time: '2026-09-25T20:30:00.249439+09:00'
-  summary: 2 source, 1 docs, 1 generated
-  total_files: 7
+  time: '2026-09-25T21:00:00.244841+09:00'
+  summary: 1 generated
+  total_files: 3
   recent_files:
-    source:
-    - server/scripts/lib/research/context7.py
-    - server/scripts/lib/research/exa.py
+    source: []
     config: []
-    docs:
-    - server/docs/plans/2026-standard-gap-remediation.md
+    docs: []
     data: []
     generated:
     - server/collect_checkpoint.json
   git:
     server:
       branch: main
-      unstaged: 5 files changed, 31 insertions(+), 36 deletions(-)
+      unstaged: 5 files changed, 30 insertions(+), 37 deletions(-)
       staged: (none)
       untracked_files: 2
   task: null
