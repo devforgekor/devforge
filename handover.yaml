@@ -1,7 +1,7 @@
 last_checkpoint:
-  time: '2026-09-24T23:52:53.24734+00:00'
-  summary: 4 source, 4 docs, 1 generated
-  total_files: 33
+  time: '2026-09-25T00:00:02.221881+00:00'
+  summary: 3 source, 4 docs, 1 generated
+  total_files: 31
   recent_files:
     data: []
     docs:
@@ -13,7 +13,6 @@ last_checkpoint:
     source:
     - server/src/devforge/core/telemetry.py
     - server/tests/test_characterization.py
-    - server/tests/test_experiment.py
     - server/tests/test_integration.py
     generated:
     - server/collect_checkpoint.json
