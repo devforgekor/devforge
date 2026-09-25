@@ -18,11 +18,9 @@ servers:
   - {name: lsp, type: local, enabled: true, approved: true, owner: devforge, purpose: "Code intelligence (agent-lsp)."}
   - {name: opencode-db, type: local, enabled: true, approved: true, owner: devforge, purpose: "OpenCode session DB query."}
   - {name: filesystem, type: local, enabled: false, approved: false, owner: devforge, purpose: "Filesystem access (disabled)."}
-  - {name: search-proxy, type: local, enabled: true, approved: true, owner: devforge, purpose: "Web search proxy (research subagent only; permission-gated)."}
-  - {name: exa-search, type: local, enabled: true, approved: true, owner: devforge, purpose: "Exa semantic search (research subagent only; permission-gated)."}
   - {name: fetch, type: local, enabled: false, approved: false, owner: devforge, purpose: "URL fetch (disabled)."}
   - {name: github, type: local, enabled: false, approved: false, owner: devforge, purpose: "GitHub MCP wrapper (disabled)."}
-  - {name: context7, type: local, enabled: true, approved: true, owner: devforge, purpose: "Library docs lookup (research subagent only; permission-gated)."}
+  - {name: search, type: local, enabled: true, approved: true, owner: devforge, purpose: "Unified search MCP (web+Exa+Context7, 3 tools; research subagent only; permission-gated)."}
   - {name: time, type: local, enabled: false, approved: false, owner: devforge, purpose: "Time utilities (disabled)."}
   - {name: shrimp-task-manager, type: local, enabled: false, approved: false, owner: devforge, purpose: "Task manager (disabled)."}
   - {name: token-savior, type: local, enabled: false, approved: false, owner: devforge, purpose: "Token optimization (disabled)."}
