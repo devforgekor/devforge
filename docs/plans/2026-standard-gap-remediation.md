@@ -1,6 +1,6 @@
 # 2026 표준 대비 서버 로직 개선 계획
 
-> Status: **진행 중(최종 갱신 2026-09-25)** — §1·§2·§5·§6·§7 ✅ 완료 · §3·§4·§9·§10 ◐ 부분(SP 권한 대기; rotation 자동화 경로 Graph 권한 대기; OTel exporter 미선택; SLO 로컬 근사) · shadow(watchdog v2) 재기동 09-25T01:05:12Z → 24h 패리티 관측 중(~09-26T01:05:12Z) · Date: 2026-09-23 · Owner: devforge
+> Status: **진행 중(최종 갱신 2026-09-25)** — §1·§2·§5·§6·§7 ✅ 완료 · §3·§4·§9·§10 ◐ 부분(SP 권한 대기; rotation 자동화 경로 Graph 권한 대기; OTel exporter 미선택; SLO 로컬 근사) · shadow(watchdog v2) 재기동 09-25T04:10:17Z → 24h 패리티 관측 중(~09-26T04:10:17Z) · Date: 2026-09-23 · Owner: devforge
 > Related: `REFACTORING_PLAN.md`, `plans/final-plan.md`, `plans/watchdog-standard-compliance.md`, `plans/error-record-analysis-design.md`, `plans/dataimpulse-watchdog-delegation.md`, `reports/industry-standard-comparison-20260914.md`
 > Deep Dive: `dp-20260923-2026-standard-gap-server-logic` (Yggdrasil)
 > 방법: 서버 실측(코드/CI/설정/DB) → 2026 표준·동향(web) → **context7 검증** → 항목별 갭·조치. 기존 계획에 **항목 추가** 방식(중복 최소화).
@@ -121,12 +121,13 @@
 | **P1** | 5,6,7,9,10 | MCP 거버넌스·관측성·SLO. error-record/watchdog과 연결 |
 | **P2** | 8,11,12 | 플랫폼·릴리스. 컷오버 이후 |
 
-> 배치 제약: shadow-run 창(**2026-09-25T01:05:12Z ~ 09-26T01:05:12Z**) 중 v2·감시대상 서비스 재기동 금지(재기동 = 창 리셋). 비파괴 개발(코드·테스트·문서)은 허용.
+> 배치 제약: shadow-run 창(**2026-09-25T04:10:17Z ~ 09-26T04:10:17Z**) 중 v2·감시대상 서비스 재기동 금지(재기동 = 창 리셋). 비파괴 개발(코드·테스트·문서)은 허용.
 > - **비파괴 선행 가능**: 1·2(CI SBOM/서명/스캔 — CI만 변경), 4의 만료 감시(알림 타이머), 11(policy-as-code CI).
 > - **서비스 재기동/키 재구성 수반(창 이후)**: 3(secretless 전환), 4의 실제 rotation, 5~7(MCP 계측/감사), 9(OTel), 10(SLO/메트릭).
 >
 > **갱신(2026-09-24)**: `shadow-pause-batch` 결정으로 shadow(v2)를 정지한 뒤 §5~§10을 일괄 진행(정지 중 프로덕션 무영향). §9·§10 로컬 구현은 ⑩ shadow 재시작 전 완료.
 > **갱신(2026-09-25)**: 패리티 하네스 `scripts/watchdog_parity.py` 완성 → v2↔legacy 패리티 버그 4건 수정(유닛 타입 판정·timer 타임스탬프 후보·LLM 서빙 포트 가드·detail 보강) → Q1/Q2 결정 반영(`wd-q1-unit-type-health`·`wd-q2-incident-record-policy`) → v2 재기동(창 리셋, 사용자 승인). 초기 스모크 `detection_gaps=0, legacy_only=0, exit 0`(v2_only 2건은 alert_only 정책상 허용).
+> **갱신(2026-09-25 04:10Z)**: 2차 재기동(창 재설정, 사용자 승인) — (1) LLM 프로브 포화 선감지(`/slots` 확인 후 15초 그레이스, 계속 포화면 transient)로 CPU 전용 llama.cpp 큐 대기 오탐(창 내 60회) 제거, (2) memory 임계치를 legacy에 정렬(`MEM_CRIT_PCT` 95→90, `SWAP_CRIT_MB` 1024→9000)해 오탐 74회 제거. 새 창 스모크 `v2=0 legacy=0 detection_gaps=0 legacy_only=0 exit 0`.
 
 ## 14. 측정 지표
 
@@ -147,7 +148,8 @@
 2. managed identity/federation 전환은 Azure 권한·SP 재구성 필요(사용자 승인).
 3. OTel **API 계측은 완료**(§9, `core/telemetry.py`). 실제 exporter/백엔드 선택만 미완(경량 self-host 또는 OTLP endpoint, `devforge[otel]` 설치 시 활성).
 4. 신규 파일 생성 승인: `specs/mcp-inventory.yaml`·`specs/mcp-tools.snapshot.json`(완료), `core/telemetry.py`·`application/slo.py`(2026-09-24 완료).
-5. shadow(watchdog v2) **24h 패리티 관측 진행 중**(09-25T01:05:12Z ~ 09-26T01:05:12Z). 종료 후 `python3 scripts/watchdog_parity.py --since 2026-09-25T01:05:12Z`로 최종 비교 → 이상 시 컷오버/다음 단계 판단. §9·§10 배선은 이 관측 이후.
+5. shadow(watchdog v2) **24h 패리티 관측 진행 중**(09-25T04:10:17Z ~ 09-26T04:10:17Z). 종료 후 `python3 scripts/watchdog_parity.py --since 2026-09-25T04:10:17Z`로 최종 비교 → 이상 시 컷오버/다음 단계 판단. §9·§10 배선은 이 관측 이후.
+6. **미해결(관측 결과 기록)**: (a) disk는 legacy가 실패를 만들지 않음(DISK_WARN/CRIT 상수 미사용, 트렌드 ETA만 계산)인데 v2는 90%에서 실패 — 현재 미발생. (b) legacy `SWAP_CRIT_MB=9000` > 스왑 총량 4095MB로 도달 불가 → 정렬 후 v2도 스왑 사실상 미감시. (a)(b) 모두 창 종료 후 양쪽 함께 재설계 필요.
 
 ---
 
