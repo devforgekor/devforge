@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-25T13:30:00.276084+09:00'
+  time: '2026-09-25T14:00:00.566389+09:00'
   summary: 3 source, 1 docs, 1 generated
   total_files: 11
   recent_files:
@@ -16,7 +16,7 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 5 files changed, 42 insertions(+), 36 deletions(-)
+      unstaged: 5 files changed, 37 insertions(+), 33 deletions(-)
       staged: (none)
       untracked_files: 2
   task: null
@@ -255,6 +255,14 @@ decisions:
     계획되지 않은 서비스 중단이며 이는 SLO 오류 예산을 의미 있게 유지한다. watchdog_service.INCIDENT_COMPONENT_PREFIXES가 SSOT, parity 하네스가 같은 상수를 고정 테스트로
     묶는다.'
   status: resolved
+- id: wd-shadow-obs-2026-09-25
+  detail: 'shadow(watchdog v2) 24h 관측 창 = 2026-09-25T04:10:17Z ~ 2026-09-26T04:10:17Z (2차 재기동, 사용자 승인, dry_run=True). 관측은
+    세션 종료와 무관하게 host systemd 유닛(devforge-watchdog-v2.service)이 계속 수행한다. 다음 세션 첫 행동: (1) `python3 scripts/watchdog_parity.py
+    --since 2026-09-25T04:10:17Z` 실행 → detection_gaps=0·legacy_only=0 이고 나머지가 alert_only뿐이면 정상, (2) 24h 경과 확인 후 dry_run 해제
+    (정식 재우기) 여부를 사용자와 판정, (3) 창 중에는 v2·감시대상 재기동 금지(=창 리셋), 비파괴 개발만 허용. 창 종료 후 백로그: legacy disk 미감시 / SWAP_CRIT_MB=9000 > 스왑
+    총량 4095로 도달 불가 / Slack 알림 보류(account_inactive). 본 세션 커밋: ed88a2a(LLM 포화 선감지), 727b536(memory 임계치 legacy 정렬), 66f71e2(계획
+    문서 창 갱신); 직전 세션: 39d86ba(Q1/Q2), 55c30d7(게이트 alert_only 제외), 2f13668(계획 문서).'
+  status: accepted
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
