@@ -1,20 +1,20 @@
 last_checkpoint:
-  time: '2026-09-25T19:00:00.174598+09:00'
-  summary: 2 source, 1 generated
-  total_files: 6
+  time: '2026-09-25T19:30:00.293263+09:00'
+  summary: 1 source, 1 docs, 1 generated
+  total_files: 9
   recent_files:
     source:
-    - server/scripts/lib/research/context7.py
-    - server/scripts/lib/research/exa.py
+    - server/src/devforge/adapters/driven/health/llm_health.py
     config: []
-    docs: []
+    docs:
+    - server/docs/plans/2026-standard-gap-remediation.md
     data: []
     generated:
     - server/collect_checkpoint.json
   git:
     server:
       branch: main
-      unstaged: 8 files changed, 131 insertions(+), 99 deletions(-)
+      unstaged: 11 files changed, 144 insertions(+), 107 deletions(-)
       staged: (none)
       untracked_files: 2
   task: null
