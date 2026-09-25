@@ -1,10 +1,14 @@
 last_checkpoint:
-  time: '2026-09-26T01:00:00.299661+09:00'
-  summary: 3 source, 1 generated
-  total_files: 9
+  time: '2026-09-26T01:30:00.555389+09:00'
+  summary: 7 source, 1 generated
+  total_files: 15
   recent_files:
     source:
+    - server/scripts/lib/research/rerank.py
+    - server/scripts/proxies/model_score.py
+    - server/scripts/proxies/refresh_openrouter_free_models.py
     - server/scripts/proxies/unified_search.py
+    - server/tests/unit/test_rerank_selection.py
     - server/tests/unit/test_research_mcp.py
     - server/tests/unit/test_unified_search_mcp.py
     config: []
@@ -15,9 +19,9 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 5 files changed, 33 insertions(+), 34 deletions(-)
+      unstaged: 7 files changed, 73 insertions(+), 39 deletions(-)
       staged: (none)
-      untracked_files: 3
+      untracked_files: 4
   task: null
 decisions:
 - id: nd13-01
