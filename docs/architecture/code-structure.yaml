@@ -64,6 +64,9 @@ modules:
     shadow_diff.py:
       status: experimental
       purpose: "Production vs shadow extract-output diff (cutover gate)."
+    watchdog_parity.py:
+      status: experimental
+      purpose: "Watchdog v2 dry-run (journal) vs legacy incidents (watchdog_incidents) parity harness (Phase 2.5 gate)."
     verify-cutover-ready.py:
       status: experimental
       purpose: "Phase A pre-cutover verification \u2014 V1-V8 checklist."

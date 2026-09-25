@@ -76,6 +76,7 @@ P2 (watchdog 호스트 유닛)  ← S0, 모든 재기동 작업의 전제(감지
 - **게이트**: A안 — 창 무관.
 - **롤백**: 컨테이너 quadlet 복귀 + `svc.pod` publish 제거.
 - **이후**: 24h shadow(호스트 v2 dry-run vs legacy) → parity → cutover.
+  - parity 도구: `python3 scripts/watchdog_parity.py --since <창시작ISO>` (v2 dry-run journal ↔ `watchdog_incidents`, exit 0=parity · 1=v2_only/legacy_only 존재). `--json` 지원.
 
 ### 3.2 error-record 마이그레이션 적용 + 배포
 - **절차**: `alembic upgrade head`(additive: `context_jsonb`+`action_error`+GIN) → 코드 배포(비-dry-run).
