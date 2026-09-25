@@ -32,7 +32,7 @@
 - **표준(2026)**: SBOM(CycloneDX/SPDX) + **cosign/sigstore keyless 서명** + **SLSA/in-toto provenance**가 사실상 의무(EO 14028·CISA attestation·EU CRA). 2025–26 Shai-Hulud npm/PyPI 웜(1,000+ 패키지), 77% 조직이 공급망 사고 경험(Omdia/Palo Alto).
 - **context7 검증**: `cosign` keyless sign/verify, `verify-attestation`(identity+OIDC issuer), `syft`가 CycloneDX/SPDX + in-toto 서명 attestation 지원.
 - **조치**: CI build 잡에 `anchore/sbom-action`(CycloneDX) → `cosign sign`(keyless, GH OIDC) → provenance(`actions/attest-build-provenance`) 추가. `final-plan` Phase H에 "immutable tag(P4)+서명/attestation" 명시.
-- **상태(2026-09-24) ✅ 완료**: `ci.yml` build에 SBOM(CycloneDX)+artifact, Trivy(CRITICAL/HIGH), cosign keyless, `attest-build-provenance` 추가. **전 액션 SHA 고정**(CVE-2026-33634 태그 강제푸시 대응) + 최소권한 `permissions`. 커밋 `ed6bc5d`.
+- **상태(2026-09-24) ✅ 완료**: `ci.yml` build에 SBOM(CycloneDX)+artifact, Trivy(CRITICAL/HIGH), cosign keyless, `attest-build-provenance` 추가. **전 액션 SHA 고정**(CVE-2026-33634 태그 강제푸시 대응) + 최소권한 `permissions`. 커밋 `ed6bc5d`. **레벨 명기(2026-09-25)**: 달성 = **SLSA Build L2**(호스티드 빌드 + 서명된 provenance). L3(런 간 격리·서명키 비노출 하드닝 빌더)는 미적용. 스펙 표기는 v1.0 levels가 Retired이므로 **v1.2** 기준.
 
 ## 2. 이미지 / 의존성 스캔 (P0)
 
@@ -68,7 +68,8 @@
 - **As-Is**: opencode에 **15개 MCP 서버 설정**(filesystem, search-proxy, devforge-mcp, exa-search, fetch, github, context7, time, shrimp-task-manager, yggdrasil, lsp, token-savior, opencode-db, git, postgres) 중 **4개만 enabled**. 정기 감사·드리프트 점검 없음.
 - **표준**: OWASP **MCP09(Shadow MCP Servers)** — 미관리/미승인 서버가 공격면. 인벤토리+승인+주기 감사.
 - **조치**: MCP 서버 **승인 인벤토리**(enabled/disabled·소유·목적)를 **신규 `specs/mcp-inventory.yaml`**로 등록(`specs/mcp-contract.json`은 **툴 계약**으로 별개 — 혼용 금지), 주기 드리프트 점검(watchdog oneshot 재사용).
-- **상태(2026-09-24) ✅ 완료**: `specs/mcp-inventory.yaml`(15개·4 enabled; **enabled는 approved 필수**) + `scripts/mcp_inventory_check.py`(live opencode config 대조: unlisted / enabled-not-approved → exit 1) + `tests/fitness/test_mcp_inventory.py`(CI 인벤토리 검증 + config 존재 시 드리프트; CI에서는 skip). 실측 OK(15 listed, 4 enabled). **watchdog/timer 배선은 쉐도우 후**(현재 standalone). 커밋 `82ce98b`.
+- **상태(2026-09-24) ✅ 완료**: `specs/mcp-inventory.yaml`(15개·4 enabled; **enabled는 approved 필수**) + `scripts/mcp_inventory_check.py`(live opencode config 대조: unlisted / enabled-not-approved → exit 1) + `tests/fitness/test_mcp_inventory.py`(CI 인벤토리 검증 + config 존재 시 드리프트; CI에서는 skip). 실측 OK(15 listed, 4 enabled). **타이머 배선 확인(2026-09-25)**: `devforge-mcp-inventory.timer` daily=enabled+active, 최근 실행 exit 0 — 초기 'standalone' 서술은 stale. **실패 경보는 미배선**: 공유 `devforge-watchdog-failed.service`는 메시지가 watchdog 전용이라 재사용 부적합 → 전용 OnFailure 핸들러를 **창 종료 후** 배선(§16-7). 커밋 `82ce98b`.
+- **상태(2026-09-25)**: 검색 MCP 3종(`search-proxy`·`exa-search`·`context7`) **승인·활성**(enabled 7). KV 주입은 `kv-fetch-env.py --keys`, 노출은 **research 서브에이전트에만 permission allow**(글로벌 deny → last-match-wins). 드리프트 재검증 OK(15 listed, 7 enabled). v2 재기동 없음(설정·코드만).
 
 ## 7. Tool-poisoning 스캔 (P1)
 
@@ -128,6 +129,8 @@
 > **갱신(2026-09-24)**: `shadow-pause-batch` 결정으로 shadow(v2)를 정지한 뒤 §5~§10을 일괄 진행(정지 중 프로덕션 무영향). §9·§10 로컬 구현은 ⑩ shadow 재시작 전 완료.
 > **갱신(2026-09-25)**: 패리티 하네스 `scripts/watchdog_parity.py` 완성 → v2↔legacy 패리티 버그 4건 수정(유닛 타입 판정·timer 타임스탬프 후보·LLM 서빙 포트 가드·detail 보강) → Q1/Q2 결정 반영(`wd-q1-unit-type-health`·`wd-q2-incident-record-policy`) → v2 재기동(창 리셋, 사용자 승인). 초기 스모크 `detection_gaps=0, legacy_only=0, exit 0`(v2_only 2건은 alert_only 정책상 허용).
 > **갱신(2026-09-25 04:10Z)**: 2차 재기동(창 재설정, 사용자 승인) — (1) LLM 프로브 포화 선감지(`/slots` 확인 후 15초 그레이스, 계속 포화면 transient)로 CPU 전용 llama.cpp 큐 대기 오탐(창 내 60회) 제거, (2) memory 임계치를 legacy에 정렬(`MEM_CRIT_PCT` 95→90, `SWAP_CRIT_MB` 1024→9000)해 오탐 74회 제거. 새 창 스모크 `v2=0 legacy=0 detection_gaps=0 legacy_only=0 exit 0`.
+> **갱신(2026-09-25, 창 유지·재기동 없음)**: v2 LLM 프로브 `/slots` 폴링을 2s→60s(`SLOT_POLL_SEC`)로 정렬 — 유예(15s) 동안 사이클당 5~6회 두드리던 것을 유예 만료 시 1회 재확인으로 축소(실측: 사이클 간격 61~63s로 주기는 이미 정상, 낭비는 창 내부 폴링). 적용은 다음 재시작 창. 검색 MCP 3종 인벤토리 승인 반영(§6).
+> **갱신(2026-09-25, 표준 재검토)**: ① SLSA 달성 레벨을 **Build L2**로 명기(§1; L3 미달, 스펙 v1.2). ② Azure **Parallel Run** 문서 URL 404(2026-09) → **Strangler Fig**로 대체 인용. ③ MCP 인벤토리는 **이미 daily 타이머로 배선**(언급 정정), 실패 **경보만** 창 종료 후. ④ v2 유닛 하드닝은 창 종료 후 — `RestartSteps`/`RestartMaxDelaySec`는 **systemd 252에서 미지원(v254+)**이라 제외, `NoNewPrivileges=yes`·`ProtectSystem=strict`+`ReadWritePaths`만 검토(`PrivateTmp`는 liveness `/var/tmp` 경로와 충돌).
 
 ## 14. 측정 지표
 
@@ -150,6 +153,7 @@
 4. 신규 파일 생성 승인: `specs/mcp-inventory.yaml`·`specs/mcp-tools.snapshot.json`(완료), `core/telemetry.py`·`application/slo.py`(2026-09-24 완료).
 5. shadow(watchdog v2) **24h 패리티 관측 진행 중**(09-25T04:10:17Z ~ 09-26T04:10:17Z). 종료 후 `python3 scripts/watchdog_parity.py --since 2026-09-25T04:10:17Z`로 최종 비교 → 이상 시 컷오버/다음 단계 판단. §9·§10 배선은 이 관측 이후.
 6. **미해결(관측 결과 기록)**: (a) disk는 legacy가 실패를 만들지 않음(DISK_WARN/CRIT 상수 미사용, 트렌드 ETA만 계산)인데 v2는 90%에서 실패 — 현재 미발생. (b) legacy `SWAP_CRIT_MB=9000` > 스왑 총량 4095MB로 도달 불가 → 정렬 후 v2도 스왑 사실상 미감시. (a)(b) 모두 창 종료 후 양쪽 함께 재설계 필요.
+7. **창 종료 후 정정 체크리스트(2026-09-25 표준 재검토, 사용자 결정: 창 종료 후 배선)**: (a) `devforge-mcp-inventory.service`에 **전용 OnFailure** 추가 — 공유 핸들러는 메시지가 watchdog 전용이므로 `--notify-failure --unit <unit>` 일반화 또는 전용 핸들러로 OWASP MCP09 "자동 스캔+경보" 충족. (b) v2 유닛 하드닝: `NoNewPrivileges=yes`, `ProtectSystem=strict`+`ReadWritePaths=/opt/ai_data/scripts`(상태파일), liveness 파일 경로 유지(`PrivateTmp` 제외). (c) `RestartSteps`/`RestartMaxDelaySec`는 **systemd 252에서 미지원** → 업그레이드 전 보류. 모두 재기동 수반이므로 창(09-26T04:10:17Z) 종료 후. (작업 등록: CLI task, P1.)
 
 ---
 
