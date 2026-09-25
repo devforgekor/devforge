@@ -1,16 +1,15 @@
 last_checkpoint:
-  time: '2026-09-26T01:30:00.555389+09:00'
-  summary: 7 source, 1 generated
-  total_files: 15
+  time: '2026-09-26T02:00:00.204397+09:00'
+  summary: 6 source, 1 generated
+  total_files: 13
   recent_files:
     source:
     - server/scripts/lib/research/rerank.py
     - server/scripts/proxies/model_score.py
     - server/scripts/proxies/refresh_openrouter_free_models.py
     - server/scripts/proxies/unified_search.py
+    - server/tests/unit/test_rerank_consumer.py
     - server/tests/unit/test_rerank_selection.py
-    - server/tests/unit/test_research_mcp.py
-    - server/tests/unit/test_unified_search_mcp.py
     config: []
     docs: []
     data: []
@@ -19,9 +18,9 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 7 files changed, 73 insertions(+), 39 deletions(-)
+      unstaged: 5 files changed, 45 insertions(+), 33 deletions(-)
       staged: (none)
-      untracked_files: 4
+      untracked_files: 3
   task: null
 decisions:
 - id: nd13-01
@@ -266,6 +265,18 @@ decisions:
     총량 4095로 도달 불가 / Slack 알림 보류(account_inactive). 본 세션 커밋: ed88a2a(LLM 포화 선감지), 727b536(memory 임계치 legacy 정렬), 66f71e2(계획
     문서 창 갱신); 직전 세션: 39d86ba(Q1/Q2), 55c30d7(게이트 alert_only 제외), 2f13668(계획 문서).'
   status: accepted
+- id: search-mcp-consolidation-2026-09-25
+  detail: '통합 검색 MCP: search-proxy/exa-search/context7 3서버 6툴 → `search` 1서버 3툴(search/fetch_contents/query_docs). 툴 스키마 4228B→1298B(-69%).
+    lib/research 재사용, permission search_* (build deny / research allow).'
+  status: applied
+- id: openrouter-rerank-free-2026-09-25
+  detail: '검색 결과 리랭킹: OpenRouter :free(nvidia/llama-nemotron-rerank-vl-1b-v2:free) → 로컬 8080 → 원본 순서. 크레딧 소진으로 유료 리랭커 금지(:free
+    강제). ~/.config/devforge/rerank_models.json, 타이머가 coding/rerank/reasoning 갱신.'
+  status: applied
+- id: ebooklib-metadata-official-2026-09-25
+  detail: 'ebooklib 메타데이터: 제목 검색(네이버→문피아→카카오, 파생작·작가 교차검증 제외) + 완결검수(문피아 우선·네이버 보조, ''완결'' 주장 시 마지막 회차 본문 확인, 카카오 상태 제외).
+    이중 캡 400MB/2000화.'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
