@@ -5,6 +5,7 @@
 > **기본 비활성**(`WATCHDOG_DATAIMPULSE_ENABLED=0`), P2.6(단일 리더) 이후 활성. **신호 실측 주의**: 현재 `status.json.sources={}`(비어 있음) → top-level `phase/updated_at` 폴백으로 동작.
 > **[한계] top-level 폴백의 의미**: 폴백 시 `active`는 "**pipeline loop가 살아 있음**"을 뜻하며 "toki31 수집 중"과 동일하지 않다(현재 `phase=loop`, `source=bookto31`). 따라서 loop만 살아 있고 toki31이 정체된 경우를 **놓칠 수 있다(false negative)**. §8-1(정상 vs 이상 판정) 확정 전에는 이 한계를 인지하고, 확정 후 `sources.toki31.phase=="collect"` 신호가 실제로 기록되도록 ebooklib 측 확인이 필요.
 > **역할 경계(사용자 확정)**: 와치독은 **감지(detect)·기록(record)·알림(alert)만**. 트래픽 안전망·사용량 제어·비교는 **프로그램(ebooklib) 내부 책임**.
+> **[확장 2026-09-25]**: `status.json.traffic` **요약 신호**에 대한 경보 추가 — quota `warn/critical`, 일일 cap 도달, 버킷/보정 stop 플래그, API↔버킷 **reconcile gap** ≥ 임계(`WATCHDOG_DATAIMPULSE_RECONCILE_GAP_PCT`, 기본 20). 여전히 **감지·기록·알림만**(차단/제어는 ebooklib)이며, 상태 전이·중복 억제는 와치독 상태기계가 담당. 문구에 `owner=ebooklib scope=traffic` 포함.
 > 배치: `watchdog-standard-compliance.md` P2(호스트 유닛) 이후, P2.6(단일 리더) 이후 활성화.
 
 ---
