@@ -62,14 +62,16 @@ TOOLS = [
     {
         "name": "query_docs",
         "description": (
-            "Query up-to-date library/framework docs (Context7). Pass library name or ID; "
-            "if only a name is given it is resolved to an ID first."
+            "Up-to-date library/website docs (Context7). 'library' may be a name (auto-resolved) "
+            "or an ID: /owner/repo, /owner/repo/version, /websites/<site>, /packages/<name>. "
+            "Keep each query to ONE topic; for multi-concept questions call this once per concept "
+            "(in parallel when independent). Prefer official sources."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "library": {"type": "string", "description": "Library name (e.g. FastAPI) or ID (/org/project)"},
-                "query": {"type": "string", "description": "Question about the library"},
+                "library": {"type": "string", "description": "Library name (e.g. FastAPI) or ID (/org/project[/version], /websites/<site>)"},
+                "query": {"type": "string", "description": "Question about ONE topic in the library"},
             },
             "required": ["library", "query"],
         },
