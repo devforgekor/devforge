@@ -363,7 +363,16 @@ decisions:
     obsidian-heartbeat) 3.12 전환. 상주 3종(turn-watcher/news-api/obsidian-heartbeat) 재기동 → active, 저널 오류 0, v2 incident 0, drift
     0. 결과: python ExecStart 대상 전량 3.12(의도적 예외: ebooklib venv, kv-fetch-env 래퍼, cashbook ExecStartPre). PY-3.12 이관 종결.'
   status: applied
+- id: abc-s1-2026-09-26
+  detail: 'A/B/C S1 완료: domain/watchdog/routing.py(순수 라우팅 — logic fix/catchup/alert, impact, terminal 마커; kind는 strategies.classify_recovery_kind
+    SSOT 재사용) + tests/test_routing.py(14). 동작 무변경, lint-imports 4 KEPT. 중요: 가이드 S2/S3는 WATCHDOG_DRY_RUN=1 관찰 전제였으나 v2 production
+    전환으로 무효 → mutating 자동실행 검증 정책(feature-flag off→on vs shadow) 결정 필요(가이드 §9.5).'
+  status: applied
 known_issues:
+- id: abc-s2s3-validation-2026-09-26
+  detail: 'A/B/C S2/S3 배선 검증 방식 미정: 가이드 전제(와치독 dry-run 관찰)가 v2 production 전환으로 무효. 선택지: (a) WATCHDOG_CATCHUP_ENABLED 기본 off
+    + A/B 배선 후 flag on 하 관측, (b) 별도 shadow 인스턴스, (c) 특정 컴포넌트 한정 canary. mutating 자동 실행 정책(승인 필요 여부)도 함께 확정 필요.'
+  resolved: false
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
     안 됨 → 새 세션에 명시 지시 필요).'
@@ -443,7 +452,6 @@ known_issues:
     대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
   resolved: false
 completed_log:
-- '(2026-09-23, opencode) known_issue 종료: CORE-DB-UNWIRED — core/database.py 삭제(dead code, commit 84a97b5); 게이트웨이는 adapters/driven/storage/database_gateway.py.'
 - '(2026-09-23, opencode) known_issue 종료: ROOT-BIND-REBOOT — 재부팅 후 rollback-guide §6.1 통과(bind 15, SELinux label OK, netdata/caddy
   active).'
 - '(2026-09-23, opencode) known_issue 종료: CLAUDE-PROJECTS-LOST — /home/opc/.claude/projects(~112M)는 XFS라 복구 불가(수용). 재발 방지
@@ -585,3 +593,4 @@ completed_log:
   실 스모크 OK(5 가설, decision propose). analysis_models.json 재생성. §2(규칙+LLM) 마무리. 잔여: PY-3.12 잔여(유지보수 창), A/B/C(F4).'
 - '2026-09-26: PY-3.12 2차 — oneshot 8종 3.12 전환(stdlib-only 검증, 재기동 없음, no drift). 잔여는 상주 서비스(유지보수 창).'
 - '2026-09-26: PY-3.12 3차(최종) — 상주 5종 3.12 전환·재기동 검증(active, 오류 0, incident 0). python ExecStart 대상 전량 3.12. 이관 종결.'
+- '2026-09-26: A/B/C S1(routing.py + 14 tests) 완료. S2/S3는 검증정책 결정 대기(known_issue abc-s2s3-validation-2026-09-26).'

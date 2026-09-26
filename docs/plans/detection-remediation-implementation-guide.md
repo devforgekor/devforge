@@ -1,6 +1,7 @@
 # 감시→(수정|미실행 실행) 구현 가이드 (표준 기반)
 
-> Status: proposed · Date: 2026-09-23 · Owner: devforge
+> Status: active · Date: 2026-09-23 · Owner: devforge
+> **진행(2026-09-26)**: **S1 완료** — `domain/watchdog/routing.py`(순수 라우팅, `strategies.classify_recovery_kind` kind SSOT 재사용) + `tests/unit/domain/watchdog/test_routing.py`(14). 동작 무변경, lint-imports 4 KEPT. **S2/S3 전제 변경**: 가이드는 `WATCHDOG_DRY_RUN=1` 관찰을 전제하나 v2는 2026-09-26 **production(`dry_run=0`)** 전환됨 → "dry-run 관찰" 불가. mutating 자동 실행 검증은 **feature-flag off→on + 관측** 또는 shadow 중 택일 필요(§9.5 정책 결정).
 > Related: `plans/detection-remediation-architecture.md`(설계·근거), `plans/error-record-analysis-design.md`, `plans/watchdog-standard-compliance.md`, `plans/control-plane-roadmap.md`
 > 목적: 설계(§표준)를 **파일·시그니처·데이터 흐름 수준**으로 구체화. **기존 incident 데이터를 그대로 트리거**로 사용.
 
@@ -172,7 +173,7 @@ class CatchupController:        # B
 | 단계 | 내용 | 게이트 |
 |---|---|---|
 | **S0** | P2(와치독 호스트 유닛) | shadow-run 창 만료(09-24 13:32 UTC) |
-| S1 | `routing.py` + 테스트(순수) | lint/mypy/test green, 동작 무변경 |
+| S1 | `routing.py` + 테스트(순수) | ✅ done 2026-09-26 (lint-imports 4 KEPT, 14 tests, 동작 무변경) |
 | S2 | **A** 배선(기존 recovery) — **dry-run** | shadow에서 오탐 0 확인 후 enable |
 | S3 | **B** `CatchupPort` — **dry-run** | 실행 이력/중복 0, 한도·큐소진 skip 확인 |
 | S4 | 거버넌스(staleness/counter/impact/audit) | 감사 커버리지 100% |
