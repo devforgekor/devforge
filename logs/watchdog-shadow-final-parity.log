@@ -1,0 +1,27 @@
+=== watchdog shadow final parity @ 2026-09-26T04:12:00Z ===
+NRestarts=0
+ExecMainStartTimestamp=Fri 2026-09-25 04:10:17 GMT
+ActiveState=active
+SubState=running
+--- parity (since 2026-09-25T04:10:17Z) ---
+# watchdog v2 shadow parity
+# window : 2026-09-25T04:10:17+00:00 ~ 2026-09-26T04:12:00.246557+00:00
+# v2 svc : devforge-watchdog-v2.service (dry-run)
+# v2=3 legacy=0 matched=0 v2_only=3 legacy_only=0
+# gate   : detection_gaps=0 legacy_only=0 (alert_only excluded by record policy)
+
+component                                      v2  legacy  reopen  verdict      detail
+heartbeat:day_enrich                            1       0       0  v2_only      1816s >= 1800s
+heartbeat:liveness_embed_batch                  1       0       0  v2_only      1808s >= 1800s
+llm:day-extract                                 4       0       0  v2_only      HTTP 503
+
+[!] v2_only (v2 flagged, legacy never recorded):
+    alert_only = legacy records only alerts for this family (policy)
+    parity_gap = legacy recorded it before (window/state semantics)
+    never_recorded = legacy checks it but has never recorded
+    heartbeat:day_enrich [alert_only]: 1816s >= 1800s
+    heartbeat:liveness_embed_batch [alert_only]: 1808s >= 1800s
+    llm:day-extract [alert_only]: HTTP 503
+parity_exit=0
+P0 GATE: PASS — detection_gaps=0, legacy_only=0. Cutover (P1) needs user approval.
+--- end 2026-09-26T04:12:00Z ---
