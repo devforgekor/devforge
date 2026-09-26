@@ -1495,6 +1495,9 @@ modules:
     error_analysis.py:
       status: experimental
       purpose: "error-record §2 \u2014 rules decision packet + LLM hypothesis merge."
+    day_cycle.py:
+      status: experimental
+      purpose: "run_full_cycle — owned-stage day-cycle orchestration (D6=A: FTS5 refresh + embed)."
 - path: src/devforge/core/
   purpose: src/devforge/core
   files:

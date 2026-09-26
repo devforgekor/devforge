@@ -3,6 +3,7 @@
 Usage:
     devforge --help
     devforge status
+    devforge pipeline extract
     devforge pipeline orchestrate
     devforge pipeline status
     devforge mcp serve
@@ -131,8 +132,8 @@ def status(
         typer.echo("  Use 'devforge status --json' for full JSON output")
 
 
-@pipeline_app.command("orchestrate")
-def pipeline_orchestrate(
+@pipeline_app.command("extract")
+def pipeline_extract(
     limit: int = typer.Option(50, "--limit", "-n", help="Max turns to process"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Simulate without writing"),
     turn_id: str = typer.Option(None, "--turn-id", help="Process single turn"),
@@ -185,6 +186,68 @@ def pipeline_orchestrate(
     asyncio.run(run())
 
 
+def _build_embed_stage(limit: int) -> Any:
+    """Compose the production EmbedStage (composition-root wiring)."""
+    from devforge.adapters.driven.llm.embed_adapter import HttpEmbedClient
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.adapters.driven.storage.embedding_adapter import PostgresEmbedAdapter
+    from devforge.adapters.driven.text.cleaner_splitter import estimate_tokens, split_sentences
+    from devforge.core.config import get_config
+    from devforge.pipeline_stages.embed import EmbedStage
+
+    config = get_config()
+    return EmbedStage(
+        port=PostgresEmbedAdapter(DatabaseGateway.from_config(config)),
+        client=HttpEmbedClient(),
+        split_sentences=split_sentences,
+        estimate_tokens=estimate_tokens,
+        limit=limit,
+    )
+
+
+def _fts5_refresh_callable() -> Any:
+    """Subprocess-backed FTS5 refresh (scripts/pipelines/fts5_refresh.py)."""
+
+    def run() -> str:
+        import subprocess
+
+        proc = subprocess.run(
+            ["python3.12", "/opt/projects/server/scripts/pipelines/fts5_refresh.py"],
+            capture_output=True,
+            text=True,
+            timeout=150,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"fts5_refresh exit={proc.returncode}: {proc.stderr[-200:]}")
+        return "fts5_refresh OK"
+
+    return run
+
+
+@pipeline_app.command("orchestrate")
+def pipeline_orchestrate(
+    limit: int = typer.Option(50, "--limit", "-n", help="Max turns to embed"),
+    budget_sec: int = typer.Option(3600, "--budget-sec", help="Shared stage budget"),
+    skip_fts5: bool = typer.Option(False, "--skip-fts5", help="Skip the FTS5 refresh stage"),
+) -> None:
+    """Run owned day-cycle stages (D6=A: FTS5 refresh + embed, enriched -> embedded)."""
+    import json as json_module
+
+    from devforge.application.day_cycle import run_full_cycle
+    from devforge.application.orchestrator import PipelineBudgetError
+
+    try:
+        results = run_full_cycle(
+            embed_stage=_build_embed_stage(limit),
+            fts5_refresh=None if skip_fts5 else _fts5_refresh_callable(),
+            budget_sec=budget_sec,
+        )
+    except PipelineBudgetError as exc:
+        typer.echo(json_module.dumps({"error": str(exc)}, indent=2))
+        raise typer.Exit(code=1) from exc
+    typer.echo(json_module.dumps({"stages": results}, indent=2))
+
+
 @pipeline_app.command("status")
 def pipeline_status_cmd() -> None:
     """Show pipeline state distribution."""
@@ -203,7 +266,7 @@ def pipeline_status_cmd() -> None:
                 json_module.dumps(
                     {
                         "error": f"Cannot connect to database: {e}",
-                        "use": "devforge pipeline orchestrate --dry-run for simulation",
+                        "use": "devforge pipeline extract --dry-run for simulation",
                     },
                     indent=2,
                 )

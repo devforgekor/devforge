@@ -19,7 +19,7 @@ pip install -e ".[dev,track_b]"
 ```bash
 devforge --help
 devforge status --json
-devforge pipeline orchestrate --dry-run --limit 10
+devforge pipeline extract --dry-run --limit 10
 devforge pipeline status
 devforge mcp serve --port 8100
 devforge inference status

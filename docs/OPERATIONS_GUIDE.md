@@ -23,14 +23,17 @@ devforge mcp serve --host 0.0.0.0 --port 8100
 
 ### Running the Pipeline
 ```bash
-# Dry run (no DB writes)
-devforge pipeline orchestrate --dry-run --limit 10
+# Extract — dry run (no DB writes)
+devforge pipeline extract --dry-run --limit 10
 
-# Full run
-devforge pipeline orchestrate --limit 100
+# Extract — full run
+devforge pipeline extract --limit 100
 
-# Single turn
-devforge pipeline orchestrate --turn-id <UUID>
+# Extract — single turn
+devforge pipeline extract --turn-id <UUID>
+
+# Owned day-cycle stages (D6=A: FTS5 refresh + embed, enriched -> embedded)
+devforge pipeline orchestrate --limit 50
 ```
 
 ### Checking Status

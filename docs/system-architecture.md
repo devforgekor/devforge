@@ -153,10 +153,10 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 | domain | `src/devforge/domain/models.py` | SQLAlchemy 모델 (`docs/specs/schema.sql` 대응) |
 | adapters/driven | `.../llm/local_adapter.py`, `.../storage/*` | 로컬 llama.cpp(:8080-8085), PostgreSQL(`DatabaseGateway`) |
 | adapters/driving | `.../{api,mcp,cli_cmds}/` | FastAPI(:8000), MCP SSE(:8100), CLI 서브커맨드 |
-| application | `src/devforge/application/extract_pipeline.py` | extract 파이프라인 서비스 |
+| application | `src/devforge/application/{extract_pipeline,day_cycle}.py` | extract 파이프라인 + 소유단계 오케스트레이션(D6=A) |
 
 주요 명령(정본: [`docs/API_REFERENCE.md`](./API_REFERENCE.md)): `devforge status [--json]`,
-`devforge pipeline orchestrate|status`, `devforge mcp serve`, `devforge inference switch|status|ensure`.
+`devforge pipeline extract|orchestrate|status`, `devforge mcp serve`, `devforge inference switch|status|ensure`.
 
 > **컷오버 전**: systemd 유닛/Quadlet은 레거시 `scripts/`(§3.2)를 계속 사용하며,
 > `devforge` CLI·패키지는 **병행 설치만** 되어 있다. 운영 절차는

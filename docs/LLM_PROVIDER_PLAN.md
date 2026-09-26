@@ -59,7 +59,7 @@ ConfigRegistry.llm_provider = DEVFORGE_LLM_PROVIDER (local|openai|anthropic)
 3. `ModelProvidersConfig.resolve_provider_name()`을 `providers.yaml` 매핑 조회로 확장.
 4. `MODEL_REGISTRY` 하드코딩 포트를 `providers.yaml` 모델 매핑으로 대체(로컬은 유지).
 5. 회귀: replay fixture + 특성화 테스트로 Track A 동작 불변 확인.
-6. e2e: `DEVFORGE_LLM_PROVIDER=openai devforge pipeline orchestrate --dry-run`.
+6. e2e: `DEVFORGE_LLM_PROVIDER=openai devforge pipeline extract --dry-run`.
 
 ## 5. 리스크
 

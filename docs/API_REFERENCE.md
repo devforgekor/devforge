@@ -14,7 +14,8 @@ devforge --help
 | Command | Description | Examples |
 |---------|-------------|----------|
 | `devforge status` | Show server status | `devforge status`, `devforge status --json` |
-| `devforge pipeline orchestrate` | Run extract pipeline | `devforge pipeline orchestrate --limit 50`, `--turn-id UUID`, `--dry-run` |
+| `devforge pipeline extract` | Run extract pipeline | `devforge pipeline extract --limit 50`, `--turn-id UUID`, `--dry-run` |
+| `devforge pipeline orchestrate` | Run owned day-cycle stages (D6=A: FTS5 + embed) | `devforge pipeline orchestrate --limit 50`, `--skip-fts5` |
 | `devforge pipeline status` | Show pipeline state distribution | `devforge pipeline status` |
 | `devforge mcp serve` | Start MCP SSE server | `devforge mcp serve --port 8100` |
 | `devforge inference switch` | Switch day/night mode | `devforge inference switch day` |
