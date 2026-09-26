@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 """handover_db.py — DB read/write operations for update_handover.py."""
 
