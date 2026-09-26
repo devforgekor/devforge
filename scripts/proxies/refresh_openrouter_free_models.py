@@ -16,6 +16,8 @@ Usage:
   refresh_openrouter_free_models.py --force    # ignore 1-day freshness cache
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
