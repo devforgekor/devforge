@@ -137,3 +137,11 @@ systemd-run --user --on-calendar="2026-09-26 04:12:00 UTC" \
 - `plans/execution-plan-2026-09-24.md` §3 (창 이후 시퀀스)
 - 코드: `src/devforge/cli.py:85`, `adapters/driving/cli_cmds/watchdog.py:23`, `application/watchdog_service.py:46`
 - CLI task: `#493`·`#494`·`#495`
+
+## 11. 실행 이력
+
+- **2026-09-26T04:12:00Z — P0 자동 실행: PASS.**
+  무결성 `NRestarts=0`/`ExecMainStart=2026-09-25 04:10:17 GMT`; 패리티 `detection_gaps=0`·`legacy_only=0`(v2_only 3건 전부 alert_only). 로그 `logs/watchdog-shadow-final-parity.log`.
+- **2026-09-26T05:06:31Z — P1 컷오버 실행 완료.**
+  `stop devforge-watchdog.service` → v2 `WATCHDOG_DRY_RUN=0` + restart. 검증: `dry_run=False`, `watchdog_state.v2.json` 생성, liveness 갱신, open incident 0, `NRestarts=0`, journal 오류 0. legacy inactive(롤백용 유닛 보존), 유닛 백업 `~/.config/systemd/user/devforge-watchdog-v2.service.bak`.
+- **미실행(대기)**: P2(`#494a`/`#495`/C7/C10), P3(`#494b`/§16-6/error-record §2/F2), P4(A/B/C/F3/PY-3.12).

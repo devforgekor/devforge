@@ -1,5 +1,5 @@
 [Unit]
-Description=DevForge Watchdog v2.1 (hexagonal, shadow)
+Description=DevForge Watchdog v2.1 (hexagonal)
 After=container-postgres.service
 Wants=container-postgres.service
 
@@ -7,7 +7,7 @@ Wants=container-postgres.service
 Type=notify
 NotifyAccess=main
 Environment=PYTHONPATH=/opt/projects/server/src:/opt/projects/server/scripts
-Environment=WATCHDOG_DRY_RUN=1
+Environment=WATCHDOG_DRY_RUN=0
 Environment=WATCHDOG_STATE_FILE=/opt/ai_data/scripts/watchdog_state.v2.json
 Environment=WATCHDOG_CHECK_INTERVAL_SEC=60
 ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.12 -m devforge.cli watchdog serve --keys DEVFORGE-DATABASE-URL,DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL

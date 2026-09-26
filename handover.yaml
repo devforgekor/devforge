@@ -1,20 +1,15 @@
 last_checkpoint:
-  time: '2026-09-26T14:00:00.139405+09:00'
+  time: '2026-09-26T05:00:01.145632+00:00'
   summary: 1 generated
   total_files: 3
   recent_files:
-    source: []
-    config: []
-    docs: []
     data: []
+    docs: []
+    config: []
+    source: []
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 5 files changed, 29 insertions(+), 33 deletions(-)
-      staged: (none)
-      untracked_files: 4
+  git: {}
   task: null
 decisions:
 - id: nd13-01
@@ -277,6 +272,11 @@ decisions:
     P1 원자적 컷오버 = legacy stop 먼저 → WATCHDOG_DRY_RUN=0 + v2 restart(순서 엄수, 이중복구 방지). 정본: docs/plans/watchdog-cutover-execution-20260926.md
     (충돌 C1~C10). 특히 C5 하드닝 /var/tmp ReadWritePaths 필수, C10 sync-units 전체 실행 금지.'
   status: accepted
+- id: wd-cutover-applied-2026-09-26
+  detail: 'P1 컷오버 실행 완료(2026-09-26T05:06:31Z). 순서: devforge-watchdog.service stop → devforge-watchdog-v2.service WATCHDOG_DRY_RUN=0
+    + restart(단일 리더 확보). 검증: dry_run=False, watchdog_state.v2.json 생성, liveness 갱신, open incident 0, NRestarts=0, journal
+    오류 0. 운영 와치독 = v2 단일(legacy inactive, 롤백용 유닛 보존). 백업: ~/.config/systemd/user/devforge-watchdog-v2.service.bak.'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -354,13 +354,7 @@ known_issues:
     리부트 시 소실(Linger=yes로 로그아웃은 무관). 미실행 시 수동: python3 scripts/watchdog_parity.py --since 2026-09-25T04:10:17Z --json. 결과 로그
     logs/watchdog-shadow-final-parity.log(P0 GATE PASS/FAIL).'
   resolved: false
-- id: wd-cutover-pending-2026-09-26
-  detail: 'P1 컷오버 대기: G1(NRestarts=0, ExecMainStart=2026-09-25 04:10:17 GMT)·G2(detection_gaps=0·legacy_only=0) 통과 + 사용자 승인
-    필요. 중간 패리티(01:09Z)는 충족, v2_only 3건 전부 alert_only. 다음 세션 첫 행동: logs/watchdog-shadow-final-parity.log 의 P0 GATE 확인 → 승인
-    시 P1 실행. 정본 docs/plans/watchdog-cutover-execution-20260926.md, 스냅샷 docs/reports/watchdog-cutover-handover-20260926.md'
-  resolved: false
 completed_log:
-- '2026-09-23: check_oneshot_result system 폴백으로 root-volume-daily-clean/opencode-db-offload/reference-monitor 감지'
 - '2026-09-23: opencode-db-offload 수동 실행 — opencode.db 2.0G 이전+bind, fstab 15행, root 21%'
 - '2026-09-23: REFERENCE-MONITOR-POLICY-MISSING resolved=True (policy gate_result pass/fail 수정)'
 - '2026-09-23: ruff/mypy(76)/pytest(전체)/lint-imports(4 kept) 최종 검증 통과'
@@ -490,3 +484,5 @@ completed_log:
   scripts/deploy/watchdog-shadow-final-parity.sh, 계획서 docs/plans/watchdog-cutover-execution-20260926.md(INDEX 등록), 핸드오버 docs/reports/watchdog-cutover-handover-20260926.md.
   검증: pytest docs_index/doc_links/fitness_wiring 6 passed, ruff clean.'
 - '2026-09-26: 사용자 결정 — 즉시 컷오버(현 산출물), A/B/C 컷오버 후 연기, Slack 배선만+문서화. P1은 legacy stop 먼저(이중복구 C2 방지).'
+- '2026-09-26: P1 컷오버 완료 — legacy stop → v2 WATCHDOG_DRY_RUN=0 + restart. 검증: dry_run=False, state file 생성, liveness 갱신, open
+  incident 0, NRestarts=0, 오류 로그 0. 이후 P2(비재기동 정리: #494a/#495/C7/C10), P3(v2 유지보수 재기동) 대기.'
