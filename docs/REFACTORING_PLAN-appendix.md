@@ -3,7 +3,7 @@
 > 400줄 규칙(CONVENTIONS)에 따라 분리됨(2026-09-20).
 
 > **페이즈 표기(정본)**: `Phase <N>[.<M>]` — N=로드맵 단계(0~8), M=내부 단계(0=구현, 1~4=Gate, 5=shadow/병렬 run, 9=컷오버). `Gate k`·컷오버 `Phase A~I`는 phase 내부 라벨.
-> **현행 진행(2026-09-23)**: Phase 0/1/1.5 완료, Phase 2 shadow-run(2.5). 아래 Phase 4~8 중 **일부 항목은 계획 순서와 무관하게 선행 구현됨** — `adapters/driven/{storage,notification,research,proxy_utils}`(Phase 5/8), `Dockerfile`·`.github/workflows/ci.yml`·`ARCHITECTURE.md`·`MIGRATION_GUIDE.md`(Phase 6). 잔여는 컷오버(Phase A~I) 이후 마무리.
+> **현행 진행(2026-09-26)**: Phase 0/1/1.5/2 **완료 — Phase 2.9 watchdog 컷오버 완료**. 아래 Phase 4~8 중 **일부 항목은 계획 순서와 무관하게 선행 구현됨** — `adapters/driven/{storage,notification,research,proxy_utils}`(Phase 5/8), `Dockerfile`·`.github/workflows/ci.yml`·`ARCHITECTURE.md`·`MIGRATION_GUIDE.md`(Phase 6). 잔여는 컷오버(Phase A~I) 이후 마무리.
 
 ### Phase 4: Turn Collection + MCP 재구성 (Week 10) ⬜ 부분 선행
 

@@ -19,7 +19,7 @@
 
 ### 1.2 컷오버 미완 (라이브 의존성)
 - 라이브는 여전히 **systemd 유닛 30개 + Quadlet 컨테이너 다수**가 `scripts/*`를 실행.
-- Phase 0/1/1.5 완료, **Phase 2(watchdog) shadow-run(2.5)** — `devforge-watchdog-v2.service`가 legacy와 병행. `IssueCollector`·MCP `watchdog_*` 분리 잔여.
+- Phase 0/1/1.5/2 완료, **Phase 2.9(watchdog) 컷오버 완료 2026-09-26** — legacy `devforge-watchdog.service` 중지, `devforge-watchdog-v2.service` 단독. `IssueCollector`·MCP `watchdog_*` 분리 잔여.
 - 은퇴: `gen_architecture.py`(문서생성기), Gemini 에이전트 세션 → `_archive/`.
 
 ### 1.3 MCP 툴 감사 (30일, opencode `part` DB)

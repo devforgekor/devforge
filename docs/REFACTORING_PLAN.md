@@ -1,11 +1,11 @@
-# DevForge 서버 리팩토링 종합 계획서 v1.5
+# DevForge 서버 리팩토링 종합 계획서 v1.6
 
-> Status: active · Date: 2026-09-23 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/adr/`, `docs/refactoring/REFACTORING_STATUS.yaml`
+> Status: active · Date: 2026-09-26 · Owner: devforge · Related: `docs/ARCHITECTURE.md`, `docs/MIGRATION_GUIDE.md`, `docs/adr/`, `docs/refactoring/REFACTORING_STATUS.yaml`
 > **연계(운영 아키텍처, 별도 정본)**: `plans/system-reference-architecture.md`(목표 운영/제어 아키텍처) · `plans/detection-remediation-architecture.md`(감지→수정) · `plans/fitness-functions-heartbeat-drift-guide.md`(검증). 본 계획=코드 재구성, 위=운영 아키텍처(컷오버 후 승격).
 
-> **버전**: 1.5 (실행 현황 반영)
-> **상태**: Active — Phase 0/1/1.5 완료, **Phase 2 shadow-run(2.5) 진행 중**
-> **Changelog**: v1.0→v1.1: 12주→14주, 특성화 테스트 | v1.1→v1.2: Track B 분리, 섀도 DB | v1.2→v1.3: 리스크 복원, 팀규모 | v1.3→v1.4: 일정/표현 정합성 수정 | v1.4→v1.5: 페이즈 표기 통일(`Phase <N>[.<M>]`), Phase 0~2 실행 현황·목표구조 현행화
+> **버전**: 1.6 (실행 현황 반영 — Phase 2.9 컷오버 완료)
+> **상태**: Active — Phase −1/0/1/1.5/2 **완료(Phase 2.9 watchdog 컷오버 2026-09-26)** → 다음 **Phase 3**(파이프라인 embed 도메인화, 승인 D6=A)
+> **Changelog**: v1.0→v1.1: 12주→14주, 특성화 테스트 | v1.1→v1.2: Track B 분리, 섀도 DB | v1.2→v1.3: 리스크 복원, 팀규모 | v1.3→v1.4: 일정/표현 정합성 수정 | v1.4→v1.5: 페이즈 표기 통일(`Phase <N>[.<M>]`), Phase 0~2 실행 현황·목표구조 현행화 | v1.5→v1.6: Phase 2.9 컷오버 완료 반영(STATUS.yaml 동기화)
 
 > **페이즈 표기(정본)**: `Phase <N>[.<M>]` — N=로드맵 단계(0~8), M=내부 단계(0=구현, 1~4=검증 Gate, 5=shadow/병렬 run, 9=컷오버). `Gate k`·컷오버 `Phase A~I`는 phase 내부 라벨이며 별도 phase가 아니다. 기계판독 진행 현황은 `docs/refactoring/REFACTORING_STATUS.yaml`.
 
@@ -299,7 +299,7 @@ class ExtractPipeline:
 | 0 기반·특성화 | Week 1-2 (~09-27) | 09-13 → **09-21** (9일) | ✅ 완료 | 6일 조기 완료. `core/database.py`는 09-22 dead code 제거 → `adapters/driven/storage/database_gateway.py`로 이전 |
 | 1 추론/LLM 포트 | Week 3-4 | 09-21 → **09-22** | ✅ 완료 | 계획 항목 전량 완료 |
 | 1.5 섀도DB·replay | Week 4.5 (2일) | ~09-20 → 09-22 | ✅ 완료 | `devforge_shadow` 라이브 |
-| 2 Watchdog | Week 5 (10 tasks) | 09-22 → **09-23** | 🟡 **2.5 shadow-run** | **대폭 확장**: Gate 1~4 + v2.1 **18 tasks(A1–E3)**. `IssueCollector`·MCP `watchdog_*` 분리는 **잔여** |
+| 2 Watchdog | Week 5 (10 tasks) | 09-22 → **09-26** | ✅ **2.9 컷오버 완료** | **대폭 확장**: Gate 1~4 + v2.1 **18 tasks(A1–E3)**. 컷오버 2026-09-26T05:06Z(legacy 중지·v2 단독, P0 parity PASS). `IssueCollector`·MCP `watchdog_*` 분리는 **잔여** |
 | 3 파이프라인 | Week 6-7 | 재기준 | ⬜ 승인(D6=A) | **범위 축소**: devforge는 **embed** 단계만 소유 |
 | 3.5 병렬 검증 | Week 8-9 (2주) | — | ⬜ | 2주(n≥14) 유지 — 통계 검정 요건 |
 | 4~8 | Week 10-16 | 일부 선행 | ⬜/부분 | storage·notification·research·proxy_utils, `Dockerfile`·CI·`ARCHITECTURE`·`MIGRATION_GUIDE` **선행 구현** |
@@ -378,12 +378,12 @@ class ExtractPipeline:
 
 **목적**: Phase 3의 구/신 비교가 **같은 DB에서 경합하지 않도록** + **LLM 응답 비재현성 해결**
 
-### Phase 2: Watchdog 도메인화 + IssueCollector (Week 5) 🟡 Phase 2.5 shadow-run 진행 중
+### Phase 2: Watchdog 도메인화 + IssueCollector (Week 5) ✅ 완료 — Phase 2.9 컷오버 (2026-09-26)
 
 > **코드 완료**: `docs/plans/phase2-detailed-guide-v2.md` v2.1 **COMPLETE** (18 tasks A1–E3).
 > **구현**: `domain/watchdog/{monitoring,orchestration,recovery}`, `adapters/driven/{health,container,recovery,notification}`, `adapters/driven/storage/{incident_pg,state_json,heartbeat_pg}`, `ports/{health_check,heartbeat,incident_repository,notification,recovery,state_persistence,types}`, `application/watchdog_service.py`.
-> **현재**: legacy `devforge-watchdog.service` + `devforge-watchdog-v2.service` 동시 active, 24h shadow-run 대조 데이터 수집 중(recovery off). 컷오버는 Phase 2.9. 상세 `docs/plans/watchdog-standard-compliance.md`(정본; 원안 `_archive/plans/phase2-gate4-cutover-plan.md`).
-> **실제**: 2026-09-22 코드 완료 → **09-23 shadow-run**. 계획(Week 5, 10 tasks) 대비 **스코프 확장**(18 tasks + Gate 1~4). 잔여: `IssueCollector`, MCP `watchdog_*` 분리.
+> **현재**: **컷오버 완료(2026-09-26T05:06Z)** — legacy `devforge-watchdog.service` 중지(롤백용 보관), `devforge-watchdog-v2.service` 단독(`WATCHDOG_DRY_RUN=0`, 단일 리더). P0 parity PASS(detection_gaps=0, legacy_only=0). 상세 `docs/plans/watchdog-cutover-execution-20260926.md`(정본).
+> **실제**: 2026-09-22 코드 완료 → 09-23 shadow-run → **09-26 컷오버**. 계획(Week 5, 10 tasks) 대비 **스코프 확장**(18 tasks + Gate 1~4). 잔여: `IssueCollector`, MCP `watchdog_*` 분리.
 
 | 작업 | 산출물 | 검증 |
 |------|--------|------|
