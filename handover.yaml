@@ -1,25 +1,27 @@
 last_checkpoint:
-  time: '2026-09-26T18:00:00.209169+09:00'
-  summary: 1 source, 4 docs, 1 generated
-  total_files: 14
+  time: '2026-09-26T09:30:01.183013+00:00'
+  summary: 10 source, 2 docs, 1 generated
+  total_files: 22
   recent_files:
+    data: []
+    docs:
+    - server/docs/architecture/code-structure.yaml
+    - server/docs/plans/final-plan.md
+    config: []
     source:
     - server/scripts/review_sequential.py
-    config: []
-    docs:
-    - server/docs/REFACTORING_PLAN-appendix.md
-    - server/docs/REFACTORING_PLAN.md
-    - server/docs/plans/final-plan.md
-    - server/docs/plans/phase2-plan.md
-    data: []
+    - server/src/devforge/adapters/driven/llm/embed_adapter.py
+    - server/src/devforge/adapters/driven/storage/embedding_adapter.py
+    - server/src/devforge/adapters/driven/text/__init__.py
+    - server/src/devforge/adapters/driven/text/cleaner_splitter.py
+    - server/src/devforge/pipeline_stages/embed/__init__.py
+    - server/src/devforge/pipeline_stages/embed/chunking.py
+    - server/src/devforge/pipeline_stages/embed/stage.py
+    - server/src/devforge/ports/embed.py
+    - server/tests/unit/test_embed_stage.py
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 5 files changed, 25 insertions(+), 24 deletions(-)
-      staged: (none)
-      untracked_files: 3
+  git: {}
   task: null
 decisions:
 - id: nd13-01
