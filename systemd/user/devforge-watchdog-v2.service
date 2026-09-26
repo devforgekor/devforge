@@ -6,6 +6,9 @@ Wants=container-postgres.service
 [Service]
 Type=notify
 NotifyAccess=main
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/ai_data/scripts
 Environment=PYTHONPATH=/opt/projects/server/src:/opt/projects/server/scripts
 Environment=WATCHDOG_DRY_RUN=0
 Environment=WATCHDOG_STATE_FILE=/opt/ai_data/scripts/watchdog_state.v2.json
