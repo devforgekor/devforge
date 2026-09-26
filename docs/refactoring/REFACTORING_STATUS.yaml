@@ -2,7 +2,7 @@
 # SSOT for "where are we" queries; narrative lives in docs/REFACTORING_PLAN.md.
 # Keep this file in sync with reality at each work session (see option-3 guide).
 version: 1.1
-last_updated: 2026-09-23
+last_updated: 2026-09-26
 canonical_plan: docs/REFACTORING_PLAN.md
 canonical_appendix: docs/REFACTORING_PLAN-appendix.md
 
@@ -13,12 +13,12 @@ canonical_appendix: docs/REFACTORING_PLAN-appendix.md
 #   Current: Phase 2.5 = watchdog Gate 4 shadow-run.
 
 current_phase:
-  number: 2.5
-  name: "Watchdog domainization — Gate 4 shadow-run"
+  number: 2.9
+  name: "Watchdog domainization — cutover (v2 production)"
   week: "Week 5-6"
-  status: in_progress
-  note: "v2.1 code COMPLETE (18 tasks A1-E3). Legacy devforge-watchdog.service and devforge-watchdog-v2.service both active; collecting 24h shadow-run parity data (recovery off) before cutover (Phase 2.9)."
-  progress_percent: 80
+  status: complete
+  note: "v2.1 cutover DONE 2026-09-26T05:06Z: legacy devforge-watchdog.service stopped (inactive, rollback unit preserved), v2 devforge-watchdog-v2.service WATCHDOG_DRY_RUN=0 (single leader). P0 parity PASS (detection_gaps=0, legacy_only=0). Residual: IssueCollector, MCP watchdog_* separation. See docs/plans/watchdog-cutover-execution-20260926.md."
+  progress_percent: 95
 
 phase_0:
   week_1:
@@ -71,7 +71,7 @@ phase_1_5:
   note: "ADR-0003 Applied; devforge_shadow schema live (verified via information_schema), scripts/shadow_diff.py + tests/fixtures/replay_harness.py exist. Residual 2-week diff=0 gate runs with the refactored pipeline (Phase 3)."
 
 phase_2:
-  status: shadow_run
+  status: cutover_complete
   week: "Week 5-6"
   guide: docs/plans/phase2-detailed-guide-v2.md
   guide_status: "COMPLETE — 18 tasks (A1-A5, B1-B3, C1-C4, D1-D3, E1-E3)"
@@ -82,11 +82,11 @@ phase_2:
     - "ports/{health_check,heartbeat,incident_repository,notification,recovery,state_persistence,types}"
     - "application/watchdog_service.py"
   shadow_run:
-    status: in_progress
+    status: complete
     unit: devforge-watchdog-v2.service
     legacy_unit: devforge-watchdog.service
     plan: docs/plans/watchdog-standard-compliance.md
-    note: "Gate 4 §2.5 — both units active, collecting 24h parity data (recovery off). Original plan archived: docs/_archive/plans/phase2-gate4-cutover-plan.md."
+    note: "Gate 4 §2.5 PASS + Phase 2.9 cutover DONE 2026-09-26T05:06Z (window 2026-09-25T04:10:17Z~09-26T04:10:17Z). legacy stopped, v2 recovery ON. See docs/plans/watchdog-cutover-execution-20260926.md. Original plan archived: docs/_archive/plans/phase2-gate4-cutover-plan.md."
   verification:
     lint_imports: "4 kept, 0 broken"
     characterization_parity: "watchdog/recovery/systemd/system/heartbeat/llm parity tests present"

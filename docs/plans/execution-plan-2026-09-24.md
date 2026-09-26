@@ -82,6 +82,7 @@ P2 (watchdog 호스트 유닛)  ← S0, 모든 재기동 작업의 전제(감지
 - **절차**: `alembic upgrade head`(additive: `context_jsonb`+`action_error`+GIN) → 코드 배포(비-dry-run).
 - **순서**: **마이그레이션 → 배포**(컬럼 부재 방지).
 - **검증**: `\d watchdog_incidents`에 컬럼, incident 1건에 `context_jsonb` 기록.
+- **상태(2026-09-26)**: §1 마이그레이션은 **적용 완료**(2026-09-24, `watchdog_incidents.context_jsonb/action_error/GIN` 실측). §2 분석 계층(코드)만 배포 대기 — P3(창 종료 후)로 이월.
 
 ### 3.3 F2 — heartbeat (dead-man's switch)
 - **근거**: `plans/fitness-functions-heartbeat-drift-guide.md` §3.
