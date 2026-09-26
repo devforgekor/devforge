@@ -1,43 +1,25 @@
 last_checkpoint:
-  time: '2026-09-26T08:30:00.721267+00:00'
-  summary: 378 source, 3 config, 5 docs, 1 generated
-  total_files: 403
+  time: '2026-09-26T18:00:00.209169+09:00'
+  summary: 1 source, 4 docs, 1 generated
+  total_files: 14
   recent_files:
-    data: []
+    source:
+    - server/scripts/review_sequential.py
+    config: []
     docs:
     - server/docs/REFACTORING_PLAN-appendix.md
     - server/docs/REFACTORING_PLAN.md
     - server/docs/plans/final-plan.md
     - server/docs/plans/phase2-plan.md
-    - server/docs/plans/python-version-strategy.md
-    config:
-    - server/systemd/user/cashbook.service
-    - server/systemd/user/openrouter-rr-proxy.service
-    - server/systemd/user/or-rate-limiter.service
-    source:
-    - server/scripts/activity_summarizer.py
-    - server/scripts/auto_commit_guard.py
-    - server/scripts/bench_llm.py
-    - server/scripts/blob_explorer/__init__.py
-    - server/scripts/blob_explorer/__main__.py
-    - server/scripts/blob_explorer/blob.py
-    - server/scripts/blob_explorer/handler.py
-    - server/scripts/claude_code_runner.sh
-    - server/scripts/claude_code_wrapper.sh
-    - server/scripts/cli.py
-    - server/scripts/collect_novel.py
-    - server/scripts/day_cycle.sh
-    - server/scripts/deploy/env-file-normalize.py
-    - server/scripts/deploy/heartbeat-ping.sh
-    - server/scripts/deploy/kv-backup.py
-    - server/scripts/deploy/kv-export-env.sh
-    - server/scripts/deploy/kv-fetch-env.py
-    - server/scripts/deploy/kv-safe.py
-    - server/scripts/deploy/kv-sp-secret-check.py
-    - server/scripts/deploy/kv-to-credential.sh
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 5 files changed, 25 insertions(+), 24 deletions(-)
+      staged: (none)
+      untracked_files: 3
   task: null
 decisions:
 - id: nd13-01
