@@ -11,6 +11,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from devforge.application.controllers import CatchupController
 from devforge.application.slo import compute_slos
 from devforge.core.config import WatchdogConfig
 from devforge.core.telemetry import new_run_id, set_run_id, span
@@ -64,8 +65,10 @@ class WatchdogService:
         incident_repo: IncidentRepository,
         state_storage: Optional[StateStoragePort] = None,
         dry_run: bool = False,
+        catchup: Optional["CatchupController"] = None,
     ) -> None:
         self._config = config
+        self._catchup = catchup
         self._registry = registry
         self._checks = check_coordinator
         self._recovery = recovery_coordinator
@@ -139,18 +142,27 @@ class WatchdogService:
                 inc_id = await self._incidents.record_detect(
                     c.component, self._event_type(c.component), c.detail
                 )
-            action = self._recovery.plan(c.component, c.detail)
-            if action is not None and t.can_attempt_recovery():
-                # Non-blocking backoff: defer the next attempt instead of
-                # sleeping the whole cycle (legacy sleeps in-line).
-                t.schedule_next_attempt(action.backoff_sec)
-                ok = await self._recovery_port.execute_recovery(action)
-                if inc_id is not None:
-                    await self._incidents.record_action(inc_id, action.kind, ok)
-                if ok:
-                    self._recovery.record_result(c.component, True)
-                    for n in self._notifiers:
-                        await n.send_recovery(c.component, f"{action.kind} ok")
+            # B catch-up canary (S3): handle oneshot/timer via the catch-up
+            # controller (deduped) instead of the A recovery path. Flag off by
+            # default → existing behavior for every component (guide §8).
+            if self._catchup is not None and self._catchup_applies(c.component):
+                outcome = await self._catchup.reconcile(
+                    c.component, self._event_type(c.component), inc_id
+                )
+                log.info("catchup %s -> %s", c.component, outcome)
+            else:
+                action = self._recovery.plan(c.component, c.detail)
+                if action is not None and t.can_attempt_recovery():
+                    # Non-blocking backoff: defer the next attempt instead of
+                    # sleeping the whole cycle (legacy sleeps in-line).
+                    t.schedule_next_attempt(action.backoff_sec)
+                    ok = await self._recovery_port.execute_recovery(action)
+                    if inc_id is not None:
+                        await self._incidents.record_action(inc_id, action.kind, ok)
+                    if ok:
+                        self._recovery.record_result(c.component, True)
+                        for n in self._notifiers:
+                            await n.send_recovery(c.component, f"{action.kind} ok")
             if t.is_degraded() and t.can_alert():
                 for n in self._notifiers:
                     await n.send_alert(c.component, t.state.value, c.detail)
@@ -190,6 +202,14 @@ class WatchdogService:
             return False
         decision = route(component, self._event_type(component), detail)
         return decision.logic == "fix" and decision.terminal
+
+    def _catchup_applies(self, component: str) -> bool:
+        """Canary-gated: oneshot/timer catch-up via B (S3)."""
+        if not self._config.catchup_enabled or not matches_canary(
+            component, self._config.catchup_canary
+        ):
+            return False
+        return route(component, self._event_type(component), "").logic == "catchup"
 
     def _persist(self) -> None:
         if self._state is not None:
@@ -291,6 +311,11 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
 
     incident_repo = PostgresIncidentRepository(gateway)
     state_storage = JsonStateStorage(config.state_file)
+    from devforge.adapters.driven.recovery.systemd_catchup import SystemdCatchupAdapter
+
+    catchup = CatchupController(
+        SystemdCatchupAdapter(), incident_repo, window_sec=config.catchup_window_sec
+    )
 
     service = WatchdogService(
         config,
@@ -302,6 +327,7 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
         incident_repo,
         state_storage,
         dry_run=dry_run,
+        catchup=catchup,
     )
     service.load_state()
     return service

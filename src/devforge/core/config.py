@@ -456,6 +456,10 @@ class WatchdogConfig:
     # [WHY] default off: enabling changes production recovery; flip per-canary.
     routing_enabled: bool = False
     routing_canary: list[str] = field(default_factory=list)
+    # B catch-up canary (S3). Default off — runs missed oneshots / kicks stale timers.
+    catchup_enabled: bool = False
+    catchup_canary: list[str] = field(default_factory=list)
+    catchup_window_sec: int = 600
     # DataImpulse path (toki31) liveness — read-only, alert-only (no recovery).
     # Disabled by default until watchdog-standard-compliance P2.6 (single leader);
     # dry-run observation first. Signals are read-only (status.json/log/pgrep).
@@ -493,6 +497,12 @@ class WatchdogConfig:
             routing_canary=[
                 s for s in os.getenv("WATCHDOG_ROUTING_CANARY", "").split(",") if s
             ],
+            catchup_enabled=os.getenv("WATCHDOG_CATCHUP_ENABLED", "0").lower()
+            in ("1", "true", "yes", "on"),
+            catchup_canary=[
+                s for s in os.getenv("WATCHDOG_CATCHUP_CANARY", "").split(",") if s
+            ],
+            catchup_window_sec=int(os.getenv("WATCHDOG_CATCHUP_WINDOW_SEC", "600")),
             dataimpulse_enabled=os.getenv("WATCHDOG_DATAIMPULSE_ENABLED", "0").lower()
             in ("1", "true", "yes", "on"),
             dataimpulse_status_file=os.getenv(
