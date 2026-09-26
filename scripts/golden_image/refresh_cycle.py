@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd:golden-image-deploy-check.timer
 """15분 주기 — 배포 동기화 + 헬스체크 + 타임아웃(10분) + 잔존 VM 강제 종료."""

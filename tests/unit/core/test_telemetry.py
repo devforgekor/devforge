@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/core/
 """Tests for OTel/GenAI telemetry + correlation (2026 standard-gap §9)."""

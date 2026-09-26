@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — lib/auth/__init__.py (re-export; no active caller)
 """Daily per-key API quota tracker.

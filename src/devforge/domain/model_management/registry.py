@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: cli.py → inference CLI, orchestrator, tests
 """Inference model registry (pure domain, no I/O)."""

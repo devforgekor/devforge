@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — notice/telegram_bot.py, notice/slack.py
 """scripts/notice/lib/bot_processor.py -- Shared bot message processor for Telegram & Slack.

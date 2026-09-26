@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: scripts/proxies/refresh_openrouter_free_models.py, error analysis model selection
 """Role-aware OpenRouter model scoring + Artificial Analysis enrichment.

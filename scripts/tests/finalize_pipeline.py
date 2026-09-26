@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — library
 """Finalize E2E 10-sample pipeline. Skip failed feedback loop; summarize existing phases."""

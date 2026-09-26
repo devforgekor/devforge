@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — test only
 """PipelineOrchestrator + Budget unit tests."""

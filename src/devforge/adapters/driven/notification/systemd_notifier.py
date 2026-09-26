@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driven/notification/
 """sd_notify notifier (legacy notifier.py:26-48)."""

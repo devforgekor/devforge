@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: none — Python FactArbiter, planned for pipeline integration
 """Pure Python fact consolidation for multi-pass extraction pipeline.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by — lib.debate.cooperative_debate; CLI via lib.infra.azure_spot.cli
 """Azure Spot VM lifecycle management.

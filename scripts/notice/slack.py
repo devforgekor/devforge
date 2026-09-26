@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd:devforge-slack
 """slack.py --- Slack Events API + Interactive actions for DevForge bot.

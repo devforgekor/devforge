@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: day_cycle.sh — Phase 0 (before extract), day_cycle.py
 """Entity Scan — Phase 0: deterministic entity extraction via regex + DB lookup.

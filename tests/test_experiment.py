@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/test_experiment.py — pytest (통합)
 """Experiment tests: DART round, experiment runner verification.

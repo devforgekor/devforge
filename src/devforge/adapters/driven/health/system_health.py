@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driven/health/
 """Memory/disk checks (legacy checker.py:306-371)."""

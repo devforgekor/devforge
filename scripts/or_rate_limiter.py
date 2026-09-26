@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: opencode.json — local rate-limiting proxy for OpenRouter free models
 """OpenRouter rate-limiting proxy (15 RPM, multi-key round-robin + auto-retry on 429/5xx)."""

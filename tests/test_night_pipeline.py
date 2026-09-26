@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/test_night_cycle.py — stub (데이터 없음)
 """Night pipeline tests — all test functions depend on stale experiment data (r1 rotation)

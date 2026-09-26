@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driven/health/
 """LLM inference probes (legacy checker.py:79-127, 493-528)."""

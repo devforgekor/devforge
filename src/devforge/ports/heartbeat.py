@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: ports/heartbeat.py
 """Heartbeat repository port (legacy messenger.py:155-186)."""

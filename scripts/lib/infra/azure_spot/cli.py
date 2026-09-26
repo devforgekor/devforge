@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: azure_spot CLI entry (lib.infra.azure_spot.cli:main)
 """CLI entry point for Azure Spot VM lifecycle management."""

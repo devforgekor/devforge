@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — lib/infra/preflight.py, lib/watchdog
 """Experiment state file — 실험 중 watchdog과 pipeline 간 상태 공유.

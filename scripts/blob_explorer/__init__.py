@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 """Azure Blob web interface: send + receive — split from blob_explorer.py."""
 

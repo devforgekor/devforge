@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — 24h watchdog v2 shadow parity harness (Phase 2.5 gate). Run manually after the window.
 """watchdog_parity.py — v2 dry-run detections vs legacy watchdog incidents.

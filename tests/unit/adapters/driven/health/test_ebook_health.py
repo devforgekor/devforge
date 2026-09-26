@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/adapters/driven/health/
 """Tests for ebook-watcher pipeline liveness checker (gap #3)."""

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd/user/devforge-sp-secret-check.service (weekly, `check`); admin runbook (`rotate`)
 """Azure SP client secret: monitor (validity/expiry) + Graph read/rotate.

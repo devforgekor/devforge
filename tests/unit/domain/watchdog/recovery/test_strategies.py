@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/domain/watchdog/recovery/
 """Tests for recovery kind classification (B1)."""

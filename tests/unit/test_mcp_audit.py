@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: tests/unit/test_mcp_audit.py — MCP tool-call audit (OWASP MCP08)
 """MCP tool-call audit helpers: stable args hashing + never-raise behaviour."""

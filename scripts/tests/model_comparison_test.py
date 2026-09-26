@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — 14B Q4_K_M x3 비교: Extract + NLI + MCP + Verify 4-phase
 """14B Q4_K_M 3종 비교: 실제 파이프라인 extract/verify 패턴으로 평가.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 """Cache-control helpers for Anthropic/DeepSeek proxy.
 

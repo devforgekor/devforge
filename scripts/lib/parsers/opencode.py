@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by turn_watcher.py — production scripts
 """parser_opencode.py — extract turns from the OpenCode session sqlite DB.

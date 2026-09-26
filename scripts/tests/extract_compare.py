@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — 3-model comparison: 3B Q8_0 vs 7B Q4_K_M vs 7B Q8_0
 """동일 5개 turn으로 추출 정확도/속도 비교 + MiniCheck NLI 검증"""

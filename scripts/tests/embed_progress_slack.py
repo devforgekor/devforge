@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — 1회성 Slack embed progress report (transferred from pipelines/)
 """Slack embed progress reporter — send Qwen 8B embedding status to Slack every 30min."""

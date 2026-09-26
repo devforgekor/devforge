@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: hooks:PostToolUse in settings.json — auto-log tool calls to observations table
 """PostToolUse hook — auto-log tool calls to DB for session persistence."""

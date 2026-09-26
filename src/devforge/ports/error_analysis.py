@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: application/error_analysis.py (wired via cli.py composition root)
 """Error-record analysis port (§2) — read-only incident evidence.

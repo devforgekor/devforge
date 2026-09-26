@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: scripts/deploy/kv-fetch-env.py
 # Azure Key Vault에서 시크릿을 조회해 환경변수로 설정하고 대상 명령을 실행한다.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driven/health/
 """DataImpulse path (toki31) liveness — read-only, alert-only (no recovery).

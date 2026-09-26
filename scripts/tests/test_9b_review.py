@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — prototype of 9B review test for 4B extraction completeness
 """9B Extraction Review Test: 4B results → 9B finds missed facts."""

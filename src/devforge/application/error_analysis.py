@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driving/cli_cmds/errors.py (via cli.py composition root)
 """Error-record analysis (§2) — structured incidents → decision packet.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — arbiter model comparison: dual 9B vs dual 7B on V6 pairs
 """Dual arbiter comparison: 9B (2 instances) vs 7B (2 instances) on V6 raw pairs.

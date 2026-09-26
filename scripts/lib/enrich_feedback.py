@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — enrich.py (dynamic few-shot), watchdog.py (no longer called directly)
 """Enrich Feedback — dynamic few-shot retrieval for enrich pipeline.

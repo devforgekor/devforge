@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — manual validation of hardcoded port removal
 """Validate no hardcoded 127.0.0.1:808{0-4} ports remain in modified files.

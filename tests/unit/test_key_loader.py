@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/
 """Unit tests for the shared provider key loader (round-robin ready)."""

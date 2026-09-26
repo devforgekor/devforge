@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: day_cycle.sh — Extract phase (after polish, via day_cycle.py)
 """Extract Pipeline — state-based fact extraction via NOT EXISTS anti-join.

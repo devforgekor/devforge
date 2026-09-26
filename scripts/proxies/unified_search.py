@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: MCP stdio (opencode.json: search) — thin wrapper over lib/research/*
 """Unified search MCP — Brave/Tavily/you.com + Exa + Context7 in one server.

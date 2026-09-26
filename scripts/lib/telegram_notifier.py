@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: day_cycle.sh:380, mcp_server.py — Telegram notification tools
 """Telegram notifier for pipeline alerts.

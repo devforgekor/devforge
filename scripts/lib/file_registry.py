@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — cli.py, notice/telegram_bot.py, pipelines/extract.py
 """file_registry.py — DevForge File Management System.

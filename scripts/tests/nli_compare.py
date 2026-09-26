@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — MiniCheck vs 7B LLM NLI comparison test
 """MiniCheck(flan-t5-large, 770M) vs Qwen2.5-Coder-7B NLI 비교.

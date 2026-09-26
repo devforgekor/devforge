@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — prototype: sequential dual 4B -> 9B review completeness check
 """Sequential dual 4B (Strict+Xplore) -> 9B review on real DB turns."""

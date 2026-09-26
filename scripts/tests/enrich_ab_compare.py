@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: manual — enrich A/B quality comparison (day-enrich 9B Q4 vs day-verifier 7B Q8)
 """Enrich A/B Quality Comparison — runs same turns through two models and compares.

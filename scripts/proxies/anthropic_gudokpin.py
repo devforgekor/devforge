@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd:anthropic-gudokpin-proxy
 """Anthropic-to-OpenAI format conversion proxy for Gudokpin.

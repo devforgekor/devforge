@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — integrated pipeline test (kiwi→polish→fts5→extract→enrich→embed)
 """Integrated Pipeline Test — 전처리부터 Embed까지 전체 검증.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — verification script
 """Phase A pre-cutover verification — V1-V8 checklist."""

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — V6 quality filter test for arbiter output
 """V6 Quality Filters: Post-processing improvements for arbiter output.

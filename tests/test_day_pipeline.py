@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/test_day_pipeline.py — pytest (통합)
 """Day pipeline tests: small verify (3B), extraction faithfulness, quantized extract.

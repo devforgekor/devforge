@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — test script
 """E2E pipeline test: Phase 1 (inline post-processing) + Phase 2 (offline supplement).

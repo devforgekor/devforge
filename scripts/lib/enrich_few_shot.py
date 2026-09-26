@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by — enrich.py (load_few_shot), weekly_enrich_rebuild.sh (rebuild)
 """Enrich Few-Shot — static diversity-first few-shot examples for enrich pipeline.

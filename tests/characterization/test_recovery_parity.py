@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/characterization/
 """Parity: systemd recovery adapter vs legacy recover_service.

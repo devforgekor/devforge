@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by — lib.infra.azure_spot.__init__, cli, lib.debate.cooperative_debate
 """Azure Spot VM orchestrator — coordinates VM lifecycle (endpoint provider)."""

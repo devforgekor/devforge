@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — test script
 """Test chunking strategies — _split_atomic and its helper functions.

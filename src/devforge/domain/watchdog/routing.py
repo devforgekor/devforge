@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: application/controllers.py, domain/watchdog/recovery/strategies.py
 """A/B/C routing (detection-remediation-implementation-guide §3).

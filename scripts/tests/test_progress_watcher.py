@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — manual background watcher for 14B comparison test
 "14B Test Progress Watcher — reads test log, sends Slack updates."

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — Full day_cycle pipeline end-to-end test (10 real turns)
 """Full Day Cycle Pipeline Test — day_cycle.sh 로직 전체 검증.

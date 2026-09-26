@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: 사용자 직접 실행 (수동 수집 스크립트)
 """bookto31.com 하남자의 탑 공략법 전체 회차 수집.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: manual — quality verification for Config C
 """Extract 3 previously-failed OOM turns with Config C, store & verify quality.

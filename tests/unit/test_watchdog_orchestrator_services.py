@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/test_watchdog_orchestrator_services.py — legacy watchdog _run_services
 """Regression: pause 플래그가 critical-service 복구를 막아 의도적 정지를 유지한다.

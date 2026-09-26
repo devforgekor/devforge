@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: PreToolUse hook -- settings.json (Bash matcher)
 """PreToolUse hook: log ALL Bash tool call attempts as observations.

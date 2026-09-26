@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: manual; systemd/user/devforge-mcp-inventory.service (later)
 """MCP server inventory drift check (OWASP MCP09 shadow MCP).

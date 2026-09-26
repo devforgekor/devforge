@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — manual extract+enrich quality spot-check
 """extract_enrich_quality_spotcheck.py

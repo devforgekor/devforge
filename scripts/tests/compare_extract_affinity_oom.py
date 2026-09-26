@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: manual — parallel=2 affinity comparison on OOM turns
 """Compare parallel=2 affinity configs on 3 previously-failed turns.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — auto_log.py (hook), cli.py (reflex command), pipeline scripts, hooks
 """Safe remediation catalog — Pattern 2 "Safe First" engine.

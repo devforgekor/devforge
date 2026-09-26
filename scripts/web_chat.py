@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — library
 """web_chat.py — DeepSeek web chat CLI via Playwright.

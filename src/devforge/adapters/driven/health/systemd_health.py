@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driven/health/
 """systemd user service/timer checks (legacy checker.py:150-162, 371-397)."""

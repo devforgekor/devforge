@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: manual — dev tool
 """DevForge LLM Benchmark — decode tps 측정 및 실험 레지스트리 등록.

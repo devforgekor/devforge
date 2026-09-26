@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: tests/unit/test_kv_sp_secret_check.py — scripts/deploy/kv-sp-secret-check.py
 """SP secret expiry classification and metadata parsing."""

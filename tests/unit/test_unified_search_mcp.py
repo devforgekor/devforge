@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/test_unified_search_mcp.py
 """Unified search MCP — protocol handshake and tool surface."""

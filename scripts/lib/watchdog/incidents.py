@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — lib/watchdog/orchestrator.py, lib/cli_watch.py
 """Incident recorder — detect → capture → remediate → record (audit).

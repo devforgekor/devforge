@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — blob_explorer/handler.py
 """OCI Object Storage backend for the file-exchange UI (send + receive).

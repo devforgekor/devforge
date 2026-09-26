@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: day_cycle.sh — FTS5 refresh phase (post text_clean)
 """FTS5 Refresh — text_clean 기준 FTS5 인덱스 동기화.

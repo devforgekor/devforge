@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/test_all.py — unified test entry point
 """DevForge Test Suite — 단일 진입점.

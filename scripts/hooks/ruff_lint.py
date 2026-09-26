@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: PostToolUse hook in settings.json — auto-fix + lint feedback via additionalContext
 """PostToolUse hook — auto-fix Python files with ruff, surface remaining violations."""

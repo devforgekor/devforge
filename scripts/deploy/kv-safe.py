@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: scripts/deploy/kv-safe.py
 # Key Vault 시크릿 값을 stdout/로그에 절대 노출하지 않는 안전 래퍼.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: day_cycle.sh
 """Embed Batch Pipeline — text_clean 기준 embedding (unified preprocessing).

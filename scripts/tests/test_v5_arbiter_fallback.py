@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — V5 Arbiter test: Python FactArbiter + LLM fallback for CONFLICT only
 """V5 Pre-Extract Test: Pure Python FactArbiter with CONFLICT-only LLM fallback.

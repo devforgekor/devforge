@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by — scripts/proxies/unified_search.py
 """Relevance reranking for search results.

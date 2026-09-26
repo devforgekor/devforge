@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — manual enrich quality scoring test (moved from pipelines/)
 """Enrich Verify — score enrichment metadata quality manually.

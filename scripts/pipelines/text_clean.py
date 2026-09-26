@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: day_cycle.sh — Text Preprocessing step (formerly text_clean.py + polish_batch.py)
 """Unified Text Preprocessing — Clean + Polish in one stage.

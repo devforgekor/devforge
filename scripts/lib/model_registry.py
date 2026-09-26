@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: lib/pod_manager/models.py — SSOT for model registry
 """Model metadata registry — single source of truth for all model definitions.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — test script
 """Test chunk-aware verification — creates synthetic long-source turn + predicates, runs day_verify."""

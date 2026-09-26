@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: devforge-worker — Pass 2: raw → pending (text_clean)
 """Consume raw turns from DB — apply text_clean, advance to pending.

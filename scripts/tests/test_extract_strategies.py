@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — extract strategy comparison test script
 """Extract strategy comparison for long Korean developer turns on bb9c6363."""

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — one-off migration
 """One-time migration: parse str(dict) decision_text into structured columns.

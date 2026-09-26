@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by CLI search, MCP search tools
 """SQLite FTS5 search index — Korean-aware BM25 via Kiwi terms.

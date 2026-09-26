@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: scripts/golden_image/refresh_cycle.py, scripts/golden_image/yearly_refresh.sh
 """Azure CLI wrapper — Managed Identity prior, SP fallback, retry."""

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: day_cycle.sh
 """worklog_generator.py — 3-stage speculative pipeline: draft model → Python verify → review model.

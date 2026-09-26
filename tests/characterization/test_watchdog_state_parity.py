@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/characterization/
 """Parity: v2 ComponentTracker vs legacy lib.watchdog.state.ComponentTracker.

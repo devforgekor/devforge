@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: ports/state_persistence.py
 """Port for watchdog state persistence (legacy watchdog_state.json)."""

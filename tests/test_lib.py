@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/test_lib.py — pytest (통합)
 """Library tests: text quality, operator model evaluation.

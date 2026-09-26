@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: MCP stdio (mcp.json: search-proxy) — thin wrapper over lib/research/web.py
 """MCP search proxy (thin wrapper). Core logic lives in lib.research.web."""

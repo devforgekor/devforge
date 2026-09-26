@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — scripts/tests/*
 """Shared test utilities — setup, heartbeat, cleanup, re-exports.

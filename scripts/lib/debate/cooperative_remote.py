@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: lib/debate/cooperative_remote.py — imported by cooperative_debate.py
 """SSH tunnel management and remote model activation for cooperative debate mode.

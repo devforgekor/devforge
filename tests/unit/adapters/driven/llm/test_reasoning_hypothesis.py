@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/adapters/driven/llm/
 """Tests for the §2 reasoning hypothesis adapter (pure parsing helpers)."""

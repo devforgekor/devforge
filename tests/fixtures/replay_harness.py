@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 """LLM record/replay 하네스 — Phase 3.5 구/신 대조를 위한 fixture 캡처.
 
 Architecture:

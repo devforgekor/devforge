@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: core/logging.py, adapters/driven/llm/local_adapter.py, adapters/driven/storage/incident_pg.py, mcp/server.py
 """Lightweight OpenTelemetry tracing + GenAI semantic conventions (2026 standard-gap §9).

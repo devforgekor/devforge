@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by CLI search, MCP search tools
 """Hybrid search — BM25 + Dense RRF fusion, optional cross-encoder reranker.

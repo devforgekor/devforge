@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — embedding model benchmark tool
 """Embedding Model Benchmark — compare faithfulness accuracy, speed, memory.

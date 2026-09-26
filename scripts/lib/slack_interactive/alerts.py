@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 """Slack alert senders — NEUTRAL facts, noise markers, extract fail reports."""
 

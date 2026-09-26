@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: cli.py → PodmanInferenceAdapter, inference CLI, tests
 """Pure domain model for inference model metadata."""

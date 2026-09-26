@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: day_cycle.py — MCP metadata enrichment (runs after extract)
 """Enrich Pipeline — post-extract MCP metadata enrichment (tldr, intent, entities, tags).

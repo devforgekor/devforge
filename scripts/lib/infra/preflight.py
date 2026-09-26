@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: all pipeline entry points — preflight checks for port contention, stale processes, memory
 """Shared preflight checks for DevForge pipelines.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — pod_manager.py, embed_batch.py, test_common.py, tests/*
 """Protection context manager — file-based dead man's switch.

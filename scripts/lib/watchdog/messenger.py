@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — watchdog.py, day_pipeline.py, pipelines/*
 """Watchdog Messenger — 정보 중개 시스템.

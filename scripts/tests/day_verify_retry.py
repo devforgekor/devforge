@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — Coder Q8_0 retry with longer timeout
 """Coder Q8_0만 classify-P / classify-J / edge cases 재테스트 (timeout=300s)."""

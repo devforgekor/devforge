@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: tests/unit/test_dev_pipeline.py — scripts/lib/dev_pipeline.py (create_pr 가드, Aging WIP)
 """create_pr empty-branch guard and Aging WIP (Kanban Work Item Age) detection."""

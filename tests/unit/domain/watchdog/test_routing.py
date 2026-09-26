@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/domain/watchdog/
 """Tests for A/B/C routing (S1, pure)."""

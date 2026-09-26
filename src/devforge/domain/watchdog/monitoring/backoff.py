@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: domain/watchdog/monitoring/
 """CrashLoopBackOff with jitter (legacy state.py:160-171, config.py:126)."""

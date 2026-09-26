@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: ports/incident_repository.py
 """Incident repository port (legacy incidents.py)."""

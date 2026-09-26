@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driven/health/
 """ebook-watcher pipeline liveness (legacy checker.py:162-235).

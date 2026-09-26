@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — Phase B/C shadow validation harness (pre-cutover). Run manually or by cutover gate.
 """shadow_diff.py — production vs shadow extract-output diff.

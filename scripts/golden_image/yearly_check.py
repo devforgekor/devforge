@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd:golden-image-yearly-check.timer
 """Yearly upstream change detection — Qwen/llama.cpp via GitHub API."""

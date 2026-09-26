@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 """Feedback provider — extracts recent fix patterns from activity_log and returns
 them as few-shot message arrays for injection into LLM conversations.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 """Unified LLM client — single entry point for all pipeline scripts."""
 

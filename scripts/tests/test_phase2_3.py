@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — comprehensive Phase 2 + Phase 3 extraction quality test runner
 """Phase 2+3: 4B extraction quality + 12-sample final comparison.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — P/R/J 3-model comparison: Mistral(P) vs Qwen2.5-7B-Instruct(R) vs Llama 3.1 8B(J)
 """P(Proposer)/R(Refuter)/J(Judge) 역할별 추천 모델 검증.

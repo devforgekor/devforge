@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/test_watchdog_parity.py — scripts/watchdog_parity.py
 """Tests for the watchdog v2 shadow parity harness."""

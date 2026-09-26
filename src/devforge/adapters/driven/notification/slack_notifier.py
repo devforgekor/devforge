@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driven/notification/
 """Slack Web API notifier (legacy notifier.py:60-81, 345, 362)."""

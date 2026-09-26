@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — arbiter model comparison test (7B/9B on V6 raw pairs)
 """Arbiter model comparison: 4B vs 7B/9B on identical V6 extraction pairs.

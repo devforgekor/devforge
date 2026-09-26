@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: manual first; systemd/user/devforge-dev-agent.service (later)
 """Agent Issue->PR runner.

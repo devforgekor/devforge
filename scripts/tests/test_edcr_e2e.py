@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — E2E test for _extract_edcr_freeform (EDC+R pipeline)
 """E2E test for _extract_edcr_freeform: OIE → Canonicalize → Refinement.

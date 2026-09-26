@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: application/
 """Watchdog application service (legacy orchestrator.py main loop)."""

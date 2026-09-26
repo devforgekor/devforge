@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — night PRJ GT evaluation: P=30B Q4_K_M → R=14B Q4_K_M → N14B Q6_K(J)
 """Ground truth 기반 night P-R-J 평가. P=30B(P), R=14B(R), J=N14B Q6.

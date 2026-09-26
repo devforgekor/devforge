@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: systemd:container-devforge-tg-webhook.service — Telegram callback handler
 """Minimal Telegram webhook for NEUTRAL fact CONFIRM/REJECT buttons.

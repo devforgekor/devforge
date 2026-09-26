@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — lib/research/web.py, lib/auth/__init__.py
 """Unified provider API-key loader — round-robin ready, env-driven.

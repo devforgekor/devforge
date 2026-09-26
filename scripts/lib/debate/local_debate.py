@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: lib/debate/local_debate.py — imported by cli.py, orchestrator.py, cooperative_debate.py
 """LocalDebate — multi-agent debate using local inference + inference.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by — scripts/tests/test_phase1_14b.py
 """TestRunner — Devin-like self-healing test framework for LLM evaluation.

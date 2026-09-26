@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/application/
 """Tests for the pure DORA calculator (2026 standard-gap §12/§18.3)."""

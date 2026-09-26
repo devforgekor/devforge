@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 """Slack Interactive Handler — receives Slack block_actions and processes NEUTRAL fact confirm/reject."""
 

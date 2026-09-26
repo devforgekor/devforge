@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/test_kv_safe.py — scripts/deploy/kv-safe.py 비교 정규화
 """kv-safe.py `compare`의 공백 무시 비교 회귀 테스트.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — standalone test runner for Phase 1 (14B Q4 with/without Golden Set)
 """Phase 1: Test Qwen3-14B-Q4_K_M with/without Golden Set on the same full turn.

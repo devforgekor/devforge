@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — prototype of dual 4B extraction test
 """Dual 4B concurrent test: inference core 0 (:8083) B-Xplore, inference core 1 (:8082) A-Strict."""

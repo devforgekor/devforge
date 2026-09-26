@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/adapters/driven/storage/
 """Tests for PostgresIncidentRepository (E1) — fake gateway, no live DB."""

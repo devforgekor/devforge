@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — day_verify(reviewer) 3-model comprehensive comparison
 """inference(7B reviewer) 모델 비교: 5개 역할 전체 테스트.

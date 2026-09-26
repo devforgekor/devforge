@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: application/controllers.py, application/watchdog_service.py
 """Remediation governance (detection-remediation-implementation-guide §5, S4).

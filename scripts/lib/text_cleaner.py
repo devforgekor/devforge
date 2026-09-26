@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: text_clean.py — language-aware preprocessing (Kiwi for ko, skip for en)
 """Language-aware text cleaner with sentence segmentation and token estimation.

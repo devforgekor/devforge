@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: background — full embed run with watchdog progress
 """Full Embed Runner — continuous embed_batch.py loop with watchdog progress.

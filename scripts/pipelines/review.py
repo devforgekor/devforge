@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by review_pipeline_3model.py
 """Step implementations for the 3-Model Review Pipeline.

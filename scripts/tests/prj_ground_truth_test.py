@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — P/R/J ground-truth evaluation (inference swap, 4 cores dedicated)
 """Ground truth 기반 P→R→J day 분류 3모델 정밀 평가.

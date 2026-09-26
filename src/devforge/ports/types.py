@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: ports/*, domain/watchdog/*, adapters/driven/*, application/*
 """Shared value objects for the watchdog subsystem.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — 7B vs 9B text extraction comparison
 """Compare 7B vs 9B extraction from narrative Korean text where 4B returns 0.

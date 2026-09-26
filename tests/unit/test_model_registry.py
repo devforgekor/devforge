@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — test only
 """ModelRegistry unit tests + parity with legacy MODEL_METADATA."""

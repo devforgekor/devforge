@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/domain/watchdog/orchestration/
 """Tests for CheckCoordinator (B3)."""

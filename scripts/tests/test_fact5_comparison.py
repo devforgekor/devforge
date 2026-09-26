@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — Fact 5 vs V6 dual comparison test
 """Fact 5 vs V6 Comparison: Increase "Max 4 facts" to "Max 5 facts" in detective prompt.

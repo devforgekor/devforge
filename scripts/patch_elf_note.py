@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — library
 """Re-apply NOTE phdr patch to Copilot CLI ELF binary.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — library
 """DeepSeek Pro evaluation of 12-run comparison test results.

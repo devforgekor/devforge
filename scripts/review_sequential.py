@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: bash — sequential code review via devforge-mcp, feeds Aider prompt crafting
 """Call review_sequential MCP tool and print structured analysis as JSON to stdout."""

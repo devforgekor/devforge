@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — NEUTRAL class improvement test (NextCoder 14B Q6)
 """NEUTRAL NLI Class Improvement — OLD vs V2 vs V3 (CoT + plausible unstated few-shot).

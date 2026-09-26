@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by — orchestrator.py
 """Test execution sandbox — Podman read-only tmpfs for safe code execution.

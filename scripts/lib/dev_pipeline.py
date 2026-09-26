@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — cli.py (dev subcommand)
 """GitHub Issue -> PR pipeline (DevForge Devin-like)."""

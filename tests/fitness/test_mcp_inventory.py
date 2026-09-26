@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: tests/fitness/test_mcp_inventory.py — specs/mcp-inventory.yaml
 """MCP server inventory validity + live drift (OWASP MCP09 shadow MCP)."""

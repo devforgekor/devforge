@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — test script
 """test_predicate_extract.py — Phase B: free-form predicate + atomic claim extraction test.

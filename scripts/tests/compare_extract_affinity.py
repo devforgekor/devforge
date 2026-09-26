@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: manual — extract affinity config comparison
 """Compare extract affinity configs: parallel/threads/cpus.

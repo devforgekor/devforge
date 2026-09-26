@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: domain/watchdog/monitoring/
 """Component state tracker, registry, and circuit breaker (legacy state.py:79-232).

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: lib/debate/debate_data.py — imported by cooperative_debate.py, local_debate.py, debate_llm.py, cooperative_remote.py
 """Model catalogue, remote hosts, prompt templates — pure data, no logic."""

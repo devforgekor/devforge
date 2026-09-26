@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: mcp_server.py flaresolverr_bypass (rate_limit 파라미터), 독립 스크립트에서 직접 사용
 """FlareSolverr 요청 속도 제한 유틸리티.

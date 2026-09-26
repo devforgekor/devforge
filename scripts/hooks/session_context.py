@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: hooks/session_context.py — Claude SessionStart hook (dormant, not in active hooks config)
 """SessionStart hook — inject DevForge work context into Claude."""

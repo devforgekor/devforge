@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — manual background experiment status reporter to Slack
 "Experiment monitor — background Slack status reporter for long experiments."

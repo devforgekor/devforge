@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: /opt/projects/server/scripts/deploy/env-file-normalize.py (kv-export-env.sh에서 호출)
 """EnvironmentFile 정규화 + quoting 오류 감시.

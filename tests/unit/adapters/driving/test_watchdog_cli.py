@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/adapters/driving/
 """Tests for watchdog CLI serve command (Gate 4 code prereq)."""

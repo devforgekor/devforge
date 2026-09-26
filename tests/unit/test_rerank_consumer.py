@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/test_rerank_consumer.py
 """Search rerank consumer: ordering, fallback, record preservation."""

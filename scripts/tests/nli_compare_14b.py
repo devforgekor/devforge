@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — 14B NLI grounding comparison (NextCoder vs Qwen2.5-Coder)
 """14B NLI Grounding Comparison — sequential test of both 14B Q8 models.

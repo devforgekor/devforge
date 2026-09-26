@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: application/controllers.py (via cli.py / watchdog_service)
 """Catch-up port (B logic) — run a missed oneshot / kick a stale timer."""

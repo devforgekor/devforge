@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: cli.py (composition root: cli.py → errors_cmds.init)
 """Error-record analysis CLI (§2) — read-only decision packet."""

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: scripts/deploy/kv-backup.py
 # Key Vault → GPG 암호화 백업

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — day cycle pipeline test harness (scan → extract → verify → enrich → embed)
 """Day cycle pipeline test harness.

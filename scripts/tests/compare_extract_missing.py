@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — test script
 """Run missing extract approach comparisons: medium/C, long/A, long/C, long/B-large-chunk."""

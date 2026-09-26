@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 """Tool-use/tool-result adjacency repair for DeepSeek proxy.
 

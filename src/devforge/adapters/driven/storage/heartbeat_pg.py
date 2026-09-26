@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driven/storage/
 """Postgres heartbeat repository (legacy checker.py:417-491)."""

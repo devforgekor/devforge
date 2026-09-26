@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: imported by — lib.infra.azure_spot.__init__, orchestrator, cli
 """Azure Spot VM manager — create, poll, delete spot VMs."""

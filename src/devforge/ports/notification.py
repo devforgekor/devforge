@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: ports/notification.py
 """Notification port (legacy notifier.py:345, 362)."""

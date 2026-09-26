@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/
 """Tests for role-aware OpenRouter model scoring (model_score.py)."""

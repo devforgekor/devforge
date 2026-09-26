@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: cli.py, pipeline orchestration, tests
 """Pipeline orchestrator skeleton with budget management."""

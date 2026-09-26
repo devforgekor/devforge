@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/characterization/
 """Parity: memory adapter vs `free -m` (always runnable on Linux)."""

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: day_cycle.sh — Post-Extract Supplement (offline missing-fact LLM)
 """Post-extract supplement — offline LLM call to find missing facts.

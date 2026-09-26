@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: lib/debate/cooperative_debate.py — imported by orchestrator.py (via lib.debate)
 """CooperativeDebate — Proposer/Refuter on Azure spot VMs, Judge/Synthesis local.

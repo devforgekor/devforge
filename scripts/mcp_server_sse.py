@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — manual start (planned: systemd:devforge-mcp.service)
 """MCP Server — SSE-based tool server (protocol 2024-11-05).

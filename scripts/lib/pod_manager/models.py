@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: lib/pod_manager/models.py — re-export from lib.model_registry (SSOT)
 """Model metadata — re-exported from lib.model_registry for backward compat.

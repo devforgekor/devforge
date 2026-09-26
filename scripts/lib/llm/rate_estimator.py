@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — production scripts
 """Rate estimators for LLM inference — token-count-based and timings-based.

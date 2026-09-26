@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — standalone tldr verification method comparison
 """TLDR Verification Method Comparison — Reranker vs Embedding (NLI :8085 removed).

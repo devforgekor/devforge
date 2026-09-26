@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: adapters/driving/cli_cmds/ (composition root: cli.py)
 """Watchdog CLI commands (driving adapter — factory injected, no application import)."""

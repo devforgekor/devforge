@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: manual — full pipeline smoke test with new affinity config
 """Full pipeline smoke test: extract → enrich → day_verify with --limit 2 --dry-run.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: tmux client-detached hook
 """slack_notify.py — Session-end report → Slack DM.

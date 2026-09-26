@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: module entry — slack_interactive
 """Entry point for python3 -m lib.slack_interactive."""

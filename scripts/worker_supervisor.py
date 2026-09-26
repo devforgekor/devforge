@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: devforge-worker — supervisor for raw_consumer + scheduled pipeline tasks
 """Worker container supervisor.

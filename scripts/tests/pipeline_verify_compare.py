@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — Full pipeline NEUTRAL test (10 real samples, 3 verify prompts)
 """Full Pipeline NEUTRAL Test — 10 real samples with 3 verify prompt variants.

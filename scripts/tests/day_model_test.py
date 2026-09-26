@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — 14B Q8_0 단일 extract + MiniCheck verify 속도/정확도 테스트
 """14B Q8_0 단일 extract + MiniCheck hallucination 검증.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: tests/fitness/test_mcp_contract.py — specs/mcp-contract.json + specs/mcp-tools.snapshot.json
 """MCP tool-definition contract (OWASP MCP03 tool poisoning).

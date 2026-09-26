@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/conftest.py — shared pytest fixtures for all test_*.py files
 """Shared pytest fixtures for DevForge server tests."""

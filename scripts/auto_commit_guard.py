@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: session hook
 """Session guard — auto-commit unlogged changes so nothing is lost."""

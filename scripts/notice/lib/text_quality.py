@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — notice/telegram_bot.py
 """Phase 2 Tier 1 — Outbound Korean text quality guardrails.

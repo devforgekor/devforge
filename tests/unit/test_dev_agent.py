@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/test_dev_agent.py — scripts/dev_agent.py (AGENT_VERSION)
 """AGENT_VERSION constant is exposed and surfaced in the CLI description."""

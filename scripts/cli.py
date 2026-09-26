@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: manual — CLI entry
 """DevForge CLI — AI 대화 검색 및 저장 도구."""

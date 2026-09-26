@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: application/controllers.py (CatchupController)
 """Catch-up adapter (B): systemctl --user start (oneshot / timer's service)."""

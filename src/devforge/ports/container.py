@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: cli.py → PodmanInferenceAdapter, MCP server, tests
 """Inference container lifecycle port (llama.cpp podman containers)."""

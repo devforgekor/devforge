@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — manual 14B single-extract test with direct container start
 "14B Q8_0 single extract test — manual container start, no health check race."

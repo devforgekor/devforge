@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: day_cycle.sh — Phase 3 (verify checkpoint-based)
 """Day Verify Pipeline — 14B verify + category on inference only.

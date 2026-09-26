@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — cli.py (reflex command), auto_fix.py (match), hooks, pipeline scripts
 """Reflex rule CRUD and lifecycle management.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — production scripts
 """enrich_consumer — read enrichment metadata from review_facts and prepare for MCP tools.

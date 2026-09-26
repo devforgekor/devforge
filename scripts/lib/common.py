@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: all pipeline files, lib modules
 """Shared utilities — log, timestamp, and other common helpers."""

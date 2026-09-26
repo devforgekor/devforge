@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd:devforge-turn-watcher.service (host), CLI: turn_watcher.py --once
 """turn_watcher.py — real-time session transcript → PostgreSQL (raw insert).

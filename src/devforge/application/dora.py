@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — pure DORA calculator (wiring to state.yaml.dora is a follow-up)
 """DORA metrics derivation (pure, no I/O).

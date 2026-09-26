@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: extract.py — submodule for verification and post-processing
 """Verification submodule for the Extract Pipeline.

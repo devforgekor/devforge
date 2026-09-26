@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: application/error_analysis.py (via cli.py composition root)
 """LLM second stage for error-record §2 (design §4).

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: deprecated
 # Path: none — night.py archived, replaced by night_cycle.py
 """Pipeline E2E test harness — test DB → extract → verify → night_review.

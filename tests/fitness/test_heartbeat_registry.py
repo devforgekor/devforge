@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/fitness/
 """Fitness: heartbeat registry SSOT stays bound to code, config, and units.

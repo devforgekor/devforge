@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: tests/unit/test_rerank_selection.py
 """OpenRouter rerank role: free-only selection + family scoring."""

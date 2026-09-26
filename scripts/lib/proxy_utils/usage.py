@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 """Usage tracking, streaming parsing, and balance helpers for proxy.
 

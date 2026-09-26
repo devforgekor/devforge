@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — verification script
 """provenance 검증 — turns.source가 정상 기록되는지 확인"""

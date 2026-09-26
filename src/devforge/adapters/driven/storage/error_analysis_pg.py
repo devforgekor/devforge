@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: application/error_analysis.py (wired via cli.py composition root)
 """Postgres reader for error-record analysis (§2): watchdog_incidents L1+L2."""
