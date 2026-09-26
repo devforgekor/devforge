@@ -22,14 +22,14 @@ log "KST: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S')"
 log ""
 
 # Register protection
-python3 -c "
+python3.12 -c "
 import sys; sys.path.insert(0, '.')
 from lib.test_common import test_setup
 test_setup('e2e_extract_section_split', 'E2E test: section-split extract pipeline')
 print('Protection registered.')
 "
 
-PY="python3 -B"
+PY="python3.12 -B"
 recover_8082() {
     log "[recovery] Reloading 8082..."
     $PY -c "

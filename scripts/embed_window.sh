@@ -36,9 +36,9 @@ fi
 
 cd "$SERVER_DIR" || exit 1
 if [ -n "$LIMIT" ]; then
-    python3 scripts/pipelines/embed_batch.py --limit "$LIMIT"
+    python3.12 scripts/pipelines/embed_batch.py --limit "$LIMIT"
 else
-    python3 scripts/pipelines/embed_batch.py
+    python3.12 scripts/pipelines/embed_batch.py
 fi
 rc=$?
 

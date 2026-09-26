@@ -10,7 +10,7 @@ PARALLEL=2
 TS=$(date -u +%Y%m%d_%H%M%S)
 SNAPSHOT_DIR="data/eval/20turns_${TS}"
 REPORT="$SNAPSHOT_DIR/full_report.json"
-PY="python3 -B"
+PY="python3.12 -B"
 
 mkdir -p "$SNAPSHOT_DIR"
 

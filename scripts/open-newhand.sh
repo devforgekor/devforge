@@ -20,7 +20,7 @@ if git diff --quiet && git diff --cached --quiet && [ "$(git ls-files --others -
 fi
 
 # 커밋 메시지 생성 (handover last_checkpoint.summary)
-MSG=$(python3 -c "
+MSG=$(python3.12 -c "
 import yaml
 with open('$HANDOVER') as f:
     d = yaml.safe_load(f)

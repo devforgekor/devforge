@@ -28,7 +28,7 @@ ENV_NAME="$(printf '%s' "$KV_NAME" | /usr/bin/tr '-' '_' | /usr/bin/tr '[:lower:
 # kv-fetch-env.py `env --keys` prints raw "NAME=value" lines (newlines collapsed).
 # --keys enforces least privilege and fails loudly if the key is missing.
 # stderr carries the status line and must not pollute the value.
-value="$(python3 "$DEPLOY_DIR/kv-fetch-env.py" env --keys "$KV_NAME" 2>/dev/null \
+value="$(python3.12 "$DEPLOY_DIR/kv-fetch-env.py" env --keys "$KV_NAME" 2>/dev/null \
     | sed -n "s/^${ENV_NAME}=//p")"
 
 if [ -z "$value" ]; then

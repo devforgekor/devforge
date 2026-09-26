@@ -14,14 +14,14 @@ OUTPUT=${1:?output path required (usage: kv-export-env.sh <output_path> [KEY1,KE
 KEYS=${2:-}
 
 if [ -n "$KEYS" ]; then
-    python3 "$SCRIPT_DIR/kv-fetch-env.py" env --keys "$KEYS" > "$OUTPUT"
+    python3.12 "$SCRIPT_DIR/kv-fetch-env.py" env --keys "$KEYS" > "$OUTPUT"
 else
     echo "⚠️  키 미지정: 전체 KV 시크릿을 export 합니다(레거시). 최소 주입을 권장합니다." >&2
-    python3 "$SCRIPT_DIR/kv-fetch-env.py" env > "$OUTPUT"
+    python3.12 "$SCRIPT_DIR/kv-fetch-env.py" env > "$OUTPUT"
 fi
 
 # EnvironmentFile quoting 자동수정 + KEY=VALUE 형식 검증 (실패 시 잘못된 env 차단)
-python3 "$SCRIPT_DIR/env-file-normalize.py" "$OUTPUT"
+python3.12 "$SCRIPT_DIR/env-file-normalize.py" "$OUTPUT"
 
 # 권한 설정
 chmod 600 "$OUTPUT"

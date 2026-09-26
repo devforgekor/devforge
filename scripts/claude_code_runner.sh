@@ -78,7 +78,7 @@ _sleep_between() {
   if [ -n "$JITTER" ]; then
     local min="${JITTER%%-*}" max="${JITTER##*-}"
     local sec
-    sec=$(python3 -c "import random; print(random.uniform($min, $max))")
+    sec=$(python3.12 -c "import random; print(random.uniform($min, $max))")
     sleep "$sec"
   else
     sleep 1

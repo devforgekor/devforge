@@ -20,7 +20,7 @@ START_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Run pipeline, redirect all stdout to log
 LOG=$(mktemp)
 cd "$BASE"
-python3 scripts/pipelines/extract.py --limit 50 --json > "$LOG" 2>&1 || true
+python3.12 scripts/pipelines/extract.py --limit 50 --json > "$LOG" 2>&1 || true
 PIPELINE_EXIT=$?
 
 END_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -30,10 +30,10 @@ RESULT_JSON=$(tail -1 "$LOG" 2>/dev/null || echo '{"ok":false}')
 echo "$RESULT_JSON" > "$RUN_FILE"
 
 # Extract key metrics for YAML summary
-PROCESSED=$(echo "$RESULT_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('processed',0))" 2>/dev/null || echo "0")
-FAILED=$(echo "$RESULT_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('failed',0))" 2>/dev/null || echo "0")
-FACTS=$(echo "$RESULT_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('facts',0))" 2>/dev/null || echo "0")
-ELAPSED=$(echo "$RESULT_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('elapsed_s',0))" 2>/dev/null || echo "0")
+PROCESSED=$(echo "$RESULT_JSON" | python3.12 -c "import sys,json; d=json.load(sys.stdin); print(d.get('processed',0))" 2>/dev/null || echo "0")
+FAILED=$(echo "$RESULT_JSON" | python3.12 -c "import sys,json; d=json.load(sys.stdin); print(d.get('failed',0))" 2>/dev/null || echo "0")
+FACTS=$(echo "$RESULT_JSON" | python3.12 -c "import sys,json; d=json.load(sys.stdin); print(d.get('facts',0))" 2>/dev/null || echo "0")
+ELAPSED=$(echo "$RESULT_JSON" | python3.12 -c "import sys,json; d=json.load(sys.stdin); print(d.get('elapsed_s',0))" 2>/dev/null || echo "0")
 
 # Query DB for per-turn timing stats
 DB_STATS=$(podman exec postgres psql -U devforge -d devforge_app -t -A -F ',' \

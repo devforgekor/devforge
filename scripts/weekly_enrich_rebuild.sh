@@ -17,7 +17,7 @@ LOG "weekly_enrich_rebuild start"
 
 # ── Phase 1: Quality check ──
 LOG "  Quality check..."
-QC=$(python3 -c "
+QC=$(python3.12 -c "
 import sys; sys.path.insert(0, '$SCRIPT_DIR')
 from lib.enrich_few_shot import quality_check
 result = quality_check()
@@ -39,7 +39,7 @@ LOG "  Quality check: $QC_STATUS"
 
 # ── Phase 2: Diversity rebuild ──
 LOG "  Rebuilding few-shot examples..."
-python3 -c "
+python3.12 -c "
 import sys; sys.path.insert(0, '$SCRIPT_DIR')
 from lib.enrich_few_shot import rebuild
 result = rebuild(dry_run=False)

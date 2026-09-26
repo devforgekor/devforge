@@ -28,7 +28,7 @@ GROUP BY source;"
 # 2. Switch to NextCoder Q8
 echo "[$(date)] Switching to NextCoder Q8..."
 cd /opt/projects/server/scripts
-python3 -c "
+python3.12 -c "
 import sys
 sys.path.insert(0, '.')
 from lib.pod_manager import MODEL_METADATA
@@ -70,7 +70,7 @@ print('pod_manager.py updated to NextCoder Q8')
 
 # 3. Restart inference with NextCoder Q8
 echo "[$(date)] Starting inference with NextCoder Q8..."
-python3 -c "
+python3.12 -c "
 import sys
 sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.pod_manager import ensure_model
@@ -81,7 +81,7 @@ print(f'START: {\"OK\" if ok else \"FAIL\"}')
 # 4. Run NextCoder Q8 verify
 echo "[$(date)] Running NextCoder Q8 verify..."
 cd /opt/projects/server/scripts/pipelines
-python3 day_verify.py --limit 10 --model nextcoder_q8 2>&1
+python3.12 day_verify.py --limit 10 --model nextcoder_q8 2>&1
 echo "[$(date)] NextCoder Q8 verify complete!"
 
 # 5. Comparison report

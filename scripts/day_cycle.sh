@@ -83,7 +83,7 @@ _slack_alert() {
     local kst_now
     kst_now=$(TZ=Asia/Seoul date '+%m/%d %H:%M')
 
-    python3 -c "
+    python3.12 -c "
 import json, sys
 payload = {
     'channel': sys.argv[1],
@@ -115,7 +115,7 @@ LOG "day_cycle start"
 
 # Resolve day cycle phase role to physical model key (SSOT: pod_manager.DAY_PHASE_MODELS)
 _day_phase_model() {
-    python3 -c "
+    python3.12 -c "
 import sys; sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.pod_manager import DAY_PHASE_MODELS
 print(DAY_PHASE_MODELS['$1'])
@@ -187,7 +187,7 @@ else
 fi
 
 LOG "=== System: worklog ==="
-if timeout 240 python3 "$PIPELINE_DIR/worklog_generator.py" 2>&1; then
+if timeout 240 python3.12 "$PIPELINE_DIR/worklog_generator.py" 2>&1; then
     LOG "  worklog OK"
 else
     RC=$?
@@ -234,7 +234,7 @@ NEED_CLEAN=${NEED_CLEAN:-0}
 
 if [ "$NEED_CLEAN" -gt 0 ]; then
     LOG "=== Text Preprocess (${NEED_CLEAN} batching turns) ==="
-    timeout 600 python3 "$PIPELINE_DIR/text_clean.py" 2>&1
+    timeout 600 python3.12 "$PIPELINE_DIR/text_clean.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
@@ -258,14 +258,14 @@ podman exec postgres psql -U devforge -d devforge_app -c "
 
 # ── FTS5 Refresh (text_clean 기준) ─────────
 LOG "=== FTS5 Refresh ==="
-timeout 120 python3 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
+timeout 120 python3.12 "$PIPELINE_DIR/fts5_refresh.py" 2>&1
 
 # ── Entity Scan (no LLM, no inference) ──
 NEED_SCAN=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT count(*)::int FROM turns WHERE pipeline_state = 'cleaned'" 2>/dev/null || echo "0")
 if [ "$NEED_SCAN" -gt 0 ]; then
     LOG "=== Entity Scan (${NEED_SCAN} cleaned turns) ==="
-    timeout 300 python3 "$PIPELINE_DIR/entity_scan.py" 2>&1
+    timeout 300 python3.12 "$PIPELINE_DIR/entity_scan.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
@@ -281,7 +281,7 @@ if [ "$NEED_EXTRACT" -gt 0 ]; then
     _budget_gate "scanned" 15 120 || { LOG "Budget insufficient for extract — deferring"; exit 0; }
     LOG "=== Day Extract (:8082, ${NEED_EXTRACT} scanned turns) ==="
     ensure_inference "day-extract" "$(_day_phase_model day_extract)" false 1200
-    python3 "$PIPELINE_DIR/extract.py" 2>&1
+    python3.12 "$PIPELINE_DIR/extract.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
@@ -292,7 +292,7 @@ fi
 
 # ── Extract Fail Alert: failed/noise turns → Slack with classification buttons ──
 if [ -f /var/tmp/extract_fail_report.json ]; then
-    timeout 60 python3 -m lib.slack_interactive --send-extract-fail 2>&1 || true
+    timeout 60 python3.12 -m lib.slack_interactive --send-extract-fail 2>&1 || true
 fi
 
 # ── Noise Marker 처리: 사용자 확인된 건 처리, 미확인은 Telegram ───
@@ -318,7 +318,7 @@ NOISE_PENDING=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*) FROM review_facts WHERE fact_type='noise_marker' AND user_verdict IS NULL AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
 if [ "${NOISE_PENDING:-0}" -gt 0 ]; then
     LOG "  ${NOISE_PENDING} noise markers - sending Slack"
-    timeout 60 python3 -m lib.slack_interactive --send-noise-alert 2>&1 || true
+    timeout 60 python3.12 -m lib.slack_interactive --send-noise-alert 2>&1 || true
 fi
 
 # ── NEUTRAL Auto-Resolve: GROUNDED/UNGROUNDED는 시스템 처리 ───
@@ -345,7 +345,7 @@ NEUTRAL_AMB=$(podman exec postgres psql -U devforge -d devforge_app -t -A -c \
   "SELECT COUNT(*) FROM review_facts WHERE source='extract_pipeline' AND nli_llm='NEUTRAL' AND user_verdict IS NULL AND nli_verdict='AMBIGUOUS' AND telegram_notified_at IS NULL" 2>/dev/null || echo "0")
 if [ "${NEUTRAL_AMB:-0}" -gt 0 ]; then
     LOG "  ${NEUTRAL_AMB} NEUTRAL+AMBIGUOUS facts - Slack alert + exit"
-    timeout 60 python3 -m lib.slack_interactive --send-alert 2>&1 || true
+    timeout 60 python3.12 -m lib.slack_interactive --send-alert 2>&1 || true
     exit 0
 fi
 
@@ -356,7 +356,7 @@ NEED_RECOVER=${NEED_RECOVER:-0}
 if [ "$NEED_RECOVER" -gt 0 ]; then
     LOG "=== Reranker Launch + Recovery (${NEED_RECOVER} RERANKER_ERROR facts) ==="
     _launch_reranker
-    timeout 600 python3 "$PIPELINE_DIR/reranker_recover.py" 2>&1
+    timeout 600 python3.12 "$PIPELINE_DIR/reranker_recover.py" 2>&1
     RC=$?
     if [ $RC -eq 1 ]; then
         LOG "  Reranker recover skipped (inference unhealthy)"
@@ -378,7 +378,7 @@ if [ "$NEED_SUPPLEMENT" -gt 0 ]; then
         SUPP_LIMIT=5
         [ "$SUPP_BUDGET" -ge 2400 ] && SUPP_LIMIT=10
         LOG "=== Post-Extract Supplement (:8082, ${NEED_SUPPLEMENT} turns, limit=${SUPP_LIMIT}) ==="
-        timeout 600 python3 "$PIPELINE_DIR/post_extract_supplement.py" --limit "$SUPP_LIMIT" 2>&1
+        timeout 600 python3.12 "$PIPELINE_DIR/post_extract_supplement.py" --limit "$SUPP_LIMIT" 2>&1
         RC=$?
         ELAPSED=$(( $(date +%s) - START_TS ))
         BUDGET=$(BUDGET)
@@ -396,7 +396,7 @@ if [ "$NEED_ENRICH" -gt 0 ]; then
     _budget_gate "verified" 20 60 || { LOG "Budget insufficient for enrich — deferring"; exit 0; }
     LOG "=== Day Enrich (:8082, ${NEED_ENRICH} verified turns) ==="
     ensure_inference "day-enrich" "$(_day_phase_model day_enrich)" false 1200
-    python3 "$PIPELINE_DIR/enrich.py" 2>&1
+    python3.12 "$PIPELINE_DIR/enrich.py" 2>&1
     RC=$?
     ELAPSED=$(( $(date +%s) - START_TS ))
     BUDGET=$(BUDGET)
@@ -420,7 +420,7 @@ if [ "$NEED_EMBED" -gt 0 ] || [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
 
     if [ "$NEED_EMBED" -gt 0 ]; then
         LOG "=== Day Embedding (${NEED_EMBED} enriched turns) ==="
-        python3 "$PIPELINE_DIR/embed_batch.py" 2>&1
+        python3.12 "$PIPELINE_DIR/embed_batch.py" 2>&1
         RC=$?
         ELAPSED=$(( $(date +%s) - START_TS ))
         LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
@@ -430,7 +430,7 @@ if [ "$NEED_EMBED" -gt 0 ] || [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
     if [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
         _budget_gate "enriched" 20 30 || { LOG "Budget insufficient for feedback embed — deferring"; exit 0; }
         LOG "=== Feedback Embedding (${NEED_FEEDBACK_EMBED} unembedded feedback examples) ==="
-        timeout 600 python3 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
+        timeout 600 python3.12 "$PIPELINE_DIR/embed_batch.py" --feedback 2>&1
         RC=$?
         ELAPSED=$(( $(date +%s) - START_TS ))
         LOG "  Feedback embed exit=$RC, elapsed=${ELAPSED}s"

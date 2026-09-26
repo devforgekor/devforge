@@ -2,7 +2,7 @@
 # model_ctl.sh — DevForge inference container model management shell functions
 # Source this file in cycle scripts and pipeline wrappers.
 #
-# All functions delegate to Python backend: python3 -m lib.model_ctl
+# All functions delegate to Python backend: python3.12 -m lib.model_ctl
 #
 # Usage:
 #   source /opt/projects/server/scripts/lib/model_ctl.sh
@@ -20,7 +20,7 @@
 #   8084 — verifier
 
 MODEL_CTL_SCRIPT_DIR="/opt/projects/server/scripts"
-MODEL_CTL_PY="python3 -m lib.model_ctl"
+MODEL_CTL_PY="python3.12 -m lib.model_ctl"
 
 # ── Resolve model port from registry ──────────────────────────────────
 _model_port() {

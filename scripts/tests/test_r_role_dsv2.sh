@@ -12,18 +12,18 @@ mkdir -p "$EXPER_DIR"
 log() { echo "[$TIMESTAMP] $*"; }
 
 # Read P findings
-P_FINDINGS=$(python3 -c "
+P_FINDINGS=$(python3.12 -c "
 import json
 with open('$P_EXP') as f:
     data = json.load(f)
 findings = data.get('result', {}).get('findings', [])
 print(json.dumps(findings))
 ")
-P_COUNT=$(echo "$P_FINDINGS" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
+P_COUNT=$(echo "$P_FINDINGS" | python3.12 -c "import json,sys; print(len(json.load(sys.stdin)))")
 log "P findings: $P_COUNT 개"
 
 # Read Qwen14B R results for comparison
-R_Q14=$(python3 -c "
+R_Q14=$(python3.12 -c "
 import json
 with open('$R_EXP_Q14') as f:
     data = json.load(f)
@@ -32,7 +32,7 @@ accepts = [v['id'] for v in verdicts if v['verdict']=='accept']
 rejects = [v['id'] for v in verdicts if v['verdict']=='reject']
 print(json.dumps({'accepts': accepts, 'rejects': rejects, 'total': len(verdicts)}))
 ")
-log "Qwen14B R results: $(echo "$R_Q14" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(f"{len(d[\"accepts\"])} accept, {len(d[\"rejects\"])} reject")')"
+log "Qwen14B R results: $(echo "$R_Q14" | python3.12 -c 'import json,sys; d=json.load(sys.stdin); print(f"{len(d[\"accepts\"])} accept, {len(d[\"rejects\"])} reject")')"
 
 # Kill all containers
 log "Podman stop all..."
@@ -69,7 +69,7 @@ for i in $(seq 1 $RETRIES); do
         RESP=$(curl -sf http://127.0.0.1:8080/v1/chat/completions \
               -H "Content-Type: application/json" \
               -d '{"messages":[{"role":"user","content":"Say pong"}],"max_tokens":10,"stream":false}' 2>/dev/null)
-        CONTENT=$(echo "$RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'][:50])" 2>/dev/null)
+        CONTENT=$(echo "$RESP" | python3.12 -c "import json,sys; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'][:50])" 2>/dev/null)
         log "DSV2 Lite ready! (content: $CONTENT)"
         break
     fi
@@ -82,7 +82,7 @@ done
 # Run R role inference using call_llm
 log "Running DSV2 Lite as R..."
 OUTPUT_FILE="$EXPER_DIR/exp_r_dsv2_comparison.json"
-python3 -c "
+python3.12 -c "
 import json, sys
 sys.path.insert(0, '/opt/projects/server/scripts')
 from lib.llm_client import call_llm
@@ -117,7 +117,7 @@ log "DSV2 Lite R 결과 저장: $OUTPUT_FILE"
 # Compare with Qwen14B
 log "
 ===== R 역할 비교 ====="
-python3 -c "
+python3.12 -c "
 import json
 
 with open('$OUTPUT_FILE') as f:

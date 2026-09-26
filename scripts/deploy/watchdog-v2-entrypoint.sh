@@ -6,4 +6,4 @@ export PYTHONPATH=/opt/projects/server/src:/scripts
 if [ -z "${DEVFORGE_DATABASE_URL:-}" ] && [ -n "${DEVFORGE_POSTGRES_PASSWORD:-}" ]; then
   export DEVFORGE_DATABASE_URL="postgresql+asyncpg://postgres:${DEVFORGE_POSTGRES_PASSWORD}@127.0.0.1:5432/devforge_app"
 fi
-exec python3 -m devforge.cli watchdog serve
+exec python3.12 -m devforge.cli watchdog serve

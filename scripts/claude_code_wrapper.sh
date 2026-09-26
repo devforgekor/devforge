@@ -35,7 +35,7 @@ fi
 PROMPT_CONTENT=$(cat "$PROMPT_FILE")
 
 # Build a canonical JSON payload using Python: sorted keys, compact separators, and simple normalization.
-python3 - "$MODEL" "$SYSTEM_PROMPT" "$PROMPT_CONTENT" /tmp/claude_wrapper_payload.json <<'PY'
+python3.12 - "$MODEL" "$SYSTEM_PROMPT" "$PROMPT_CONTENT" /tmp/claude_wrapper_payload.json <<'PY'
 import sys, json, re
 model = sys.argv[1]
 system = sys.argv[2]
