@@ -1,8 +1,28 @@
 last_checkpoint:
-  time: '2026-09-26T15:30:00.213870+09:00'
+  time: '2026-09-26T06:30:00.897463+00:00'
   summary: 25 source, 21 config, 7 docs, 1 generated
   total_files: 61
   recent_files:
+    data: []
+    docs:
+    - server/docs/INDEX.md
+    - server/docs/plans/detection-remediation-implementation-guide.md
+    - server/docs/plans/error-record-analysis-design.md
+    - server/docs/plans/fitness-functions-heartbeat-drift-guide.md
+    - server/docs/plans/python-version-strategy.md
+    - server/docs/plans/watchdog-cutover-execution-20260926.md
+    - server/docs/specs/heartbeat-registry.yaml
+    config:
+    - server/systemd/user/activity-summarizer.service
+    - server/systemd/user/baseline-daily-failed.service
+    - server/systemd/user/baseline-daily.service
+    - server/systemd/user/devforge-backup.service
+    - server/systemd/user/devforge-daily-structure.service
+    - server/systemd/user/devforge-dev-aging.service
+    - server/systemd/user/devforge-dev-poll.service
+    - server/systemd/user/devforge-handover-gen.service
+    - server/systemd/user/devforge-mcp-inventory-failed.service
+    - server/systemd/user/devforge-news-api.service
     source:
     - server/scripts/deploy/heartbeat-ping.sh
     - server/scripts/lib/watchdog/config.py
@@ -24,34 +44,9 @@ last_checkpoint:
     - server/tests/fitness/test_heartbeat_registry.py
     - server/tests/unit/adapters/driven/llm/__init__.py
     - server/tests/unit/adapters/driven/llm/test_reasoning_hypothesis.py
-    config:
-    - server/systemd/user/activity-summarizer.service
-    - server/systemd/user/baseline-daily-failed.service
-    - server/systemd/user/baseline-daily.service
-    - server/systemd/user/devforge-backup.service
-    - server/systemd/user/devforge-daily-structure.service
-    - server/systemd/user/devforge-dev-aging.service
-    - server/systemd/user/devforge-dev-poll.service
-    - server/systemd/user/devforge-handover-gen.service
-    - server/systemd/user/devforge-mcp-inventory-failed.service
-    - server/systemd/user/devforge-news-api.service
-    docs:
-    - server/docs/INDEX.md
-    - server/docs/plans/detection-remediation-implementation-guide.md
-    - server/docs/plans/error-record-analysis-design.md
-    - server/docs/plans/fitness-functions-heartbeat-drift-guide.md
-    - server/docs/plans/python-version-strategy.md
-    - server/docs/plans/watchdog-cutover-execution-20260926.md
-    - server/docs/specs/heartbeat-registry.yaml
-    data: []
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 8 files changed, 79 insertions(+), 26 deletions(-)
-      staged: (none)
-      untracked_files: 6
+  git: {}
   task: null
 decisions:
 - id: nd13-01
@@ -387,6 +382,12 @@ decisions:
     적용·재기동 검증(active, incident 0, drift 0). A/B 서로소. 테스트: controllers 5 + routing/service/config green, lint-imports 4 kept,
     mypy clean.'
   status: applied
+- id: abc-s4-governance-2026-09-26
+  detail: 'A/B/C S4 거버넌스(부분): domain/watchdog/governance.py(escalate_needed), WatchdogConfig.max_attempts(env WATCHDOG_MAX_ATTEMPTS
+    기본5). CatchupController가 fail_count>=max면 escalate(조치 안 함, catchup:escalate 감사기록). watchdog_service._notify_escalate(ESCALATE,
+    dedup) + _fix_canary_applies(A canary HITL). canary 경로에만 적용(비-canary 무변경). v2 재기동 검증(active, incident 0, drift 0). 테스트:
+    governance 3 + controllers 6, mypy/lint-imports/ruff green. 잔여: staleness 명시 skip, impact 승인정책, canary 확대.'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -467,9 +468,6 @@ known_issues:
     대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
   resolved: false
 completed_log:
-- '(2026-09-23, opencode) known_issue 종료: CADDY-HEALTHCHECK-UNHEALTHY — 원인은 컨테이너 내 동적 musl exec 실패 (podman exec + musl RELRO,
-  커널 6.12 UEK). 컨테이너 --health-cmd 제거하고 host-side 검사로 대체: caddy-health-check.{service,timer}(curl http://127.0.0.1:2019/config/,
-  1분 주기, 3연속 실패 시 caddy restart). 검증: admin=200, host:80=308, health=none, failed unit 0. 백업: /etc/systemd/system/caddy.service.bak.20260923.'
 - '(2026-09-23, opencode) known_issue 종료: GRAPHROOT-SHARED — rootless graphroot를 /opt/ai_data/rootless-storage로 분리(부모 공유 제거).
   rootless=/opt/ai_data/rootless-storage, rootful=/opt/ai_data/containers/root-storage. podman 5.6 DBConfig static-dir 마이그레이션
   필요(런북 §4.5 보강). 검증: 컨테이너/파드/이미지 diff 0, ebook-api 200, postgres OK, permission denied 0. 롤백 자산: storage.conf.bak.20260923,
@@ -609,3 +607,5 @@ completed_log:
   v2 재기동 검증(incident 0). S3(B)는 정책 결정 대기.'
 - '2026-09-26: A/B/C S3(B canary) 완료 — CatchupController + systemd catchup 어댑터, WATCHDOG_CATCHUP_ENABLED/CANARY 플래그, canary=timer:devforge-system-sync.timer.
   S1/S2/S3 전 단계 완료(A/B canary 활성, 기본 off·가역).'
+- '2026-09-26: A/B/C S4 거버넌스(부분) — counter→HITL + ESCALATE(canary 경로), record_action 감사. v2 재기동 검증. S1~S4 완료. 잔여: staleness/impact
+  정책, canary 확대.'

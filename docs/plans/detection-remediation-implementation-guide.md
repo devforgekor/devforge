@@ -1,7 +1,7 @@
 # 감시→(수정|미실행 실행) 구현 가이드 (표준 기반)
 
 > Status: active · Date: 2026-09-23 · Owner: devforge
-> **진행(2026-09-26)**: **S1 완료**(`routing.py`+14 tests) · **S2 완료 A canary**(`WATCHDOG_ROUTING_ENABLED`+`_CANARY`, terminal `fix`만 skip; canary `svc:svc-pod-forwarding`) · **S3 완료 B canary**(`ports/catchup.py`+`systemd_catchup.py`+`application/controllers.py::CatchupController`(in-memory run-log dedup 600s), `WATCHDOG_CATCHUP_ENABLED`+`_CANARY`; canary `timer:devforge-system-sync.timer`). v2 유닛에 S2/S3 플래그 적용·재기동 검증(active, incident 0, drift 0, 비-canary 동작 무변경). A/B는 서로소(logic 분기).
+> **진행(2026-09-26, S1~S4)**: **S1** `routing.py`(fix/catchup/alert, terminal). **S2 A canary** terminal `fix` skip(canary `svc:svc-pod-forwarding`). **S3 B canary** `CatchupController`(run-log dedup 600s, canary `timer:devforge-system-sync.timer`). **S4 거버넌스**: `domain/watchdog/governance.py`(counter→HITL, `max_attempts` 기본 5) — 캐나리 경로에서 `fail_count>=max`면 자동조치 중단+ESCALATE 알림, 조치 결과는 `record_action` 감사기록. 플래그 `WATCHDOG_ROUTING_ENABLED`/`_CANARY`, `WATCHDOG_CATCHUP_ENABLED`/`_CANARY`, `WATCHDOG_MAX_ATTEMPTS`(모두 기본 off/5). v2 적용·재기동 검증. **잔여(선택)**: staleness 명시 skip, impact 승인정책 확정, canary 확대.
 > Related: `plans/detection-remediation-architecture.md`(설계·근거), `plans/error-record-analysis-design.md`, `plans/watchdog-standard-compliance.md`, `plans/control-plane-roadmap.md`
 > 목적: 설계(§표준)를 **파일·시그니처·데이터 흐름 수준**으로 구체화. **기존 incident 데이터를 그대로 트리거**로 사용.
 
@@ -176,7 +176,7 @@ class CatchupController:        # B
 | S1 | `routing.py` + 테스트(순수) | ✅ done 2026-09-26 (lint-imports 4 KEPT, 14 tests, 동작 무변경) |
 | S2 | **A** 배선(기존 recovery) — **canary** | ✅ done 2026-09-26 (flag off→on, canary `svc:svc-pod-forwarding`, terminal-skip only) |
 | S3 | **B** `CatchupPort` — **canary** | ✅ done 2026-09-26 (flag off→on, canary `timer:devforge-system-sync.timer`, run-log dedup) |
-| S4 | 거버넌스(staleness/counter/impact/audit) | 감사 커버리지 100% |
+| S4 | 거버넌스(counter→HITL + audit `record_action`) | ✅ done 2026-09-26 (canary 경로; staleness/impact 정책·canary 확대는 잔여) |
 
 > S2/S3는 **`WATCHDOG_DRY_RUN=1`** 유지로 관찰 → enable은 별도 승인.
 
