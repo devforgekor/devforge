@@ -523,3 +523,83 @@ class TestSloReport:
         assert rows[0]["name"] == "a"
         assert rows[0]["breached"] is True
         assert abs(rows[0]["downtime_sec"] - 36000) < 1
+
+
+class _FakeCatchupPort:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def run_oneshot(self, unit: str) -> bool:
+        self.calls.append(("oneshot", unit))
+        return True
+
+    async def kick_timer(self, timer: str) -> bool:
+        self.calls.append(("timer", timer))
+        return True
+
+
+def _build_service(comps: dict, config: WatchdogConfig, catchup: object = None) -> WatchdogService:
+    return WatchdogService(
+        config=config,
+        registry=comps["registry"],
+        check_coordinator=comps["check_coordinator"],
+        recovery_coordinator=comps["recovery_coordinator"],
+        recovery_port=comps["recovery_port"],
+        notification_ports=[comps["notifier"]],
+        incident_repo=comps["incident_repo"],
+        state_storage=comps["state_storage"],
+        dry_run=False,
+        catchup=catchup,
+    )
+
+
+class TestAbcCanary:
+    """A/B/C canary on/off (bidirectional) + terminal-failure regression."""
+
+    @pytest.mark.asyncio
+    async def test_terminal_failure_is_recorded_but_not_recovered_when_canary_on(
+        self, service_components
+    ) -> None:
+        comps = service_components
+        checks = [HealthCheck(component="svc:a", is_healthy=False, detail="Permission denied")]
+        comps["check_coordinator"] = FakeCheckCoordinator(checks, comps["registry"])
+        svc = _build_service(
+            comps, WatchdogConfig(routing_enabled=True, routing_canary=["svc:a"])
+        )
+        for _ in range(3):
+            await svc.run_cycle()
+        # regression: terminal failures are still recorded + alerted (not silent)
+        assert comps["incident_repo"].detect_calls, "terminal failure must be recorded"
+        assert any(a[1] == "DEGRADED" for a in comps["notifier"].alerts)
+        # but never retried
+        assert comps["recovery_port"].actions == []
+
+    @pytest.mark.asyncio
+    async def test_terminal_failure_is_recovered_when_canary_off(
+        self, service_components
+    ) -> None:
+        comps = service_components
+        checks = [HealthCheck(component="svc:a", is_healthy=False, detail="Permission denied")]
+        comps["check_coordinator"] = FakeCheckCoordinator(checks, comps["registry"])
+        svc = _build_service(comps, WatchdogConfig())  # routing off (default)
+        for _ in range(3):
+            await svc.run_cycle()
+        assert comps["recovery_port"].actions, "flag off must preserve existing recovery"
+
+    @pytest.mark.asyncio
+    async def test_catchup_canary_routes_oneshot_to_b(self, service_components) -> None:
+        from devforge.application.controllers import CatchupController
+
+        comps = service_components
+        checks = [HealthCheck(component="oneshot:x.service", is_healthy=False, detail="failed")]
+        comps["check_coordinator"] = FakeCheckCoordinator(checks, comps["registry"])
+        port = _FakeCatchupPort()
+        catchup = CatchupController(port, comps["incident_repo"])
+        svc = _build_service(
+            comps,
+            WatchdogConfig(catchup_enabled=True, catchup_canary=["oneshot:x.service"]),
+            catchup=catchup,
+        )
+        await svc.run_cycle()
+        assert port.calls == [("oneshot", "x.service")]
+        assert comps["recovery_port"].actions == []  # A path not used

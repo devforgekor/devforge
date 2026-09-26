@@ -130,12 +130,6 @@ class WatchdogService:
                 )
                 continue
 
-            # A/B/C canary (S2): terminal fix failures are not retried. Flag off by
-            # default → existing behavior for every component (guide §8).
-            if self._should_skip_terminal(c.component, c.detail):
-                log.info("routing terminal skip (canary): %s (%s)", c.component, c.detail)
-                continue
-
             # Alert-only families (memory/llm/disk/heartbeat) still get recovery
             # and notification, but never an incident row (see policy above).
             inc_id: Optional[int] = None
@@ -158,7 +152,14 @@ class WatchdogService:
             ):
                 await self._notify_escalate(c.component, t)
             else:
-                action = self._recovery.plan(c.component, c.detail)
+                # A canary (S2): terminal fix failures are still recorded + alerted
+                # (record_detect above), but the recovery action is not retried.
+                # Flag off by default → existing behavior for every component.
+                if self._should_skip_terminal(c.component, c.detail):
+                    log.info("routing terminal skip (canary): %s (%s)", c.component, c.detail)
+                    action = None
+                else:
+                    action = self._recovery.plan(c.component, c.detail)
                 if action is not None and t.can_attempt_recovery():
                     # Non-blocking backoff: defer the next attempt instead of
                     # sleeping the whole cycle (legacy sleeps in-line).
