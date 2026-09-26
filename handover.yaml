@@ -1,7 +1,7 @@
 last_checkpoint:
-  time: '2026-09-26T06:00:01.46671+00:00'
-  summary: 19 source, 11 config, 8 docs, 1 generated
-  total_files: 46
+  time: '2026-09-26T06:10:07.014214+00:00'
+  summary: 19 source, 18 config, 8 docs, 1 generated
+  total_files: 53
   recent_files:
     data: []
     docs:
@@ -14,16 +14,16 @@ last_checkpoint:
     - server/docs/refactoring/REFACTORING_STATUS.yaml
     - server/docs/specs/heartbeat-registry.yaml
     config:
+    - server/systemd/user/activity-summarizer.service
+    - server/systemd/user/baseline-daily.service
     - server/systemd/user/devforge-backup.service
     - server/systemd/user/devforge-daily-structure.service
+    - server/systemd/user/devforge-dev-aging.service
     - server/systemd/user/devforge-dev-poll.service
     - server/systemd/user/devforge-handover-gen.service
     - server/systemd/user/devforge-mcp-inventory-failed.service
     - server/systemd/user/devforge-mcp-inventory.service
     - server/systemd/user/devforge-openrouter-free-models.service
-    - server/systemd/user/devforge-system-sync.service
-    - server/systemd/user/devforge-watchdog-failed.service
-    - server/systemd/user/devforge-watchdog-liveness.service
     source:
     - server/scripts/deploy/heartbeat-ping.sh
     - server/scripts/lib/watchdog/config.py
@@ -358,6 +358,11 @@ decisions:
     py_compile(3.12) OK, sync-units no drift. 잔여 상주: turn-watcher(stdlib-only, 재기동 필요), news-api/obsidian-heartbeat(repo 밖)
     — 유지보수 창.'
   status: applied
+- id: py312-batch3-2026-09-26
+  detail: 'PY-3.12 3차(최종): 상주/기타 5종(devforge-turn-watcher, devforge-news-api, devforge-news-digest, baseline-daily-failed,
+    obsidian-heartbeat) 3.12 전환. 상주 3종(turn-watcher/news-api/obsidian-heartbeat) 재기동 → active, 저널 오류 0, v2 incident 0, drift
+    0. 결과: python ExecStart 대상 전량 3.12(의도적 예외: ebooklib venv, kv-fetch-env 래퍼, cashbook ExecStartPre). PY-3.12 이관 종결.'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -438,8 +443,6 @@ known_issues:
     대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
   resolved: false
 completed_log:
-- '(2026-09-23, opencode) known_issue 종료: WEBOBSIDIAN-CGROUP — drop-in 10-slice.conf 제거 + 재부팅 후 정상 기동, container-webobsidian
-  health=healthy.'
 - '(2026-09-23, opencode) known_issue 종료: CORE-DB-UNWIRED — core/database.py 삭제(dead code, commit 84a97b5); 게이트웨이는 adapters/driven/storage/database_gateway.py.'
 - '(2026-09-23, opencode) known_issue 종료: ROOT-BIND-REBOOT — 재부팅 후 rollback-guide §6.1 통과(bind 15, SELinux label OK, netdata/caddy
   active).'
@@ -581,3 +584,4 @@ completed_log:
 - '2026-09-26: error-record §2 LLM 2차 완료 — ReasoningHypothesisClient(OpenRouter chain + 로컬 폴백, 120s 예산) + errors analyze --llm.
   실 스모크 OK(5 가설, decision propose). analysis_models.json 재생성. §2(규칙+LLM) 마무리. 잔여: PY-3.12 잔여(유지보수 창), A/B/C(F4).'
 - '2026-09-26: PY-3.12 2차 — oneshot 8종 3.12 전환(stdlib-only 검증, 재기동 없음, no drift). 잔여는 상주 서비스(유지보수 창).'
+- '2026-09-26: PY-3.12 3차(최종) — 상주 5종 3.12 전환·재기동 검증(active, 오류 0, incident 0). python ExecStart 대상 전량 3.12. 이관 종결.'

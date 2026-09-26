@@ -141,8 +141,10 @@ grep -L "python3.12" ~/.config/systemd/user/*.service
 > `devforge-dev-poll`·`devforge-sp-secret-check`·`golden-image-deploy-check`·`golden-image-yearly-check`·`kv-backup`)을
 > `/usr/bin/python3.12`로 전환(재기동 없음, 다음 타이머 실행부터 적용). import 감사 결과 **전부 stdlib-only**(외부 의존 0),
 > `py_compile`(3.12) OK. `sync-units --check` no drift.
-> **잔여(유지보수 창)**: 상주 서비스 `devforge-turn-watcher`(stdlib-only)·`devforge-news-api`(repo 밖)·`obsidian-heartbeat`(repo 밖)
-> — 재기동 수반이라 서비스별 런타임 스모크 후 유지보수 창에서 이관. `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
+> **3차 이관 완료(2026-09-26)**: 상주/기타 5종(`devforge-turn-watcher`·`devforge-news-api`·`devforge-news-digest`·
+> `baseline-daily-failed`·`obsidian-heartbeat`)을 3.12로 전환, 상주 3종 재기동 검증(active, 저널 오류 0, v2 incident 0).
+> **결과: python ExecStart 대상 전량 3.12.** 잔여는 의도적 예외뿐 — `ebook-watcher`(ebooklib 전용 venv)·`kv-fetch-env.py` 래퍼(외부 stdlib,
+> 대상은 이미 3.12)·`cashbook`(ExecStartPre 셸만). `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
 
 ### 롤백
 - `git checkout` pyproject/Dockerfile/ci + `daemon-reload`. 3.9 환경은 그대로 남아 있음.
