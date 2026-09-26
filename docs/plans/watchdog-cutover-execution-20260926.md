@@ -41,7 +41,7 @@ watchdog v2.1(hexagonal) 24h shadow 관측 창 종료 직후, **legacy 중단(P2
 | C2 | 이중 리더 | legacy가 실복구 중. v2 `dry_run=0`만 켜면 **이중 복구·중복 incident** | P1에서 **legacy stop → v2 restart** 순서 강제 |
 | C3 | 계획 모순 | `#493`(창 종료 직후 해제) vs `plans/execution-plan-2026-09-24.md`(컷오버 최후) | **즉시 컷오버**로 확정(사용자) |
 | C4 | 관측 교란 | ebooklib·통합검색·8080·F2 대상유닛·PY이관이 감시대상 재기동 | 전부 P2/P3 이후(창 밖) |
-| C5 | 실버그 | §16-7 하드닝이 `ReadWritePaths=/opt/ai_data/scripts`만 → v2가 `/var/tmp/watchdog_last_cycle_ts`에 못 씀 → liveness 오경보 | **`/var/tmp` ReadWritePaths 추가 필수** |
+| C5 | 가정오류(정정) | §16-7이 `/var/tmp` ReadWritePaths를 필수라 했으나 **실측 결과 `ProtectSystem=strict`에서 `/var/tmp`·`/run/user`·`/tmp`는 기본 쓰기 가능** | state 경로(`/opt/ai_data/scripts`)만 ReadWritePaths 필요 (§11 실측) |
 | C6 | 알림 무효 | Slack `account_inactive` → OnFailure/F2 경보 미전달 | 배선만 + known_issue 문서화(사용자) |
 | C7 | SSOT stale | known_issue 창=01:05:12Z, `refactoring/REFACTORING_STATUS.yaml` phase 2.5, `execution-plan §3.2` | P2에서 정정 |
 | C8 | 배포 방식 | mcp-inventory는 v2 `oneshot_result_targets` → OnFailure는 daemon-reload만 | 재기동 없이 P2 |
@@ -144,4 +144,7 @@ systemd-run --user --on-calendar="2026-09-26 04:12:00 UTC" \
   무결성 `NRestarts=0`/`ExecMainStart=2026-09-25 04:10:17 GMT`; 패리티 `detection_gaps=0`·`legacy_only=0`(v2_only 3건 전부 alert_only). 로그 `logs/watchdog-shadow-final-parity.log`.
 - **2026-09-26T05:06:31Z — P1 컷오버 실행 완료.**
   `stop devforge-watchdog.service` → v2 `WATCHDOG_DRY_RUN=0` + restart. 검증: `dry_run=False`, `watchdog_state.v2.json` 생성, liveness 갱신, open incident 0, `NRestarts=0`, journal 오류 0. legacy inactive(롤백용 유닛 보존), 유닛 백업 `~/.config/systemd/user/devforge-watchdog-v2.service.bak`.
-- **미실행(대기)**: P2(`#494a`/`#495`/C7/C10), P3(`#494b`/§16-6/error-record §2/F2), P4(A/B/C/F3/PY-3.12).
+- **2026-09-26T05:27:03Z — P3(부분) v2 하드닝 + §16-6(b) 적용.**
+  v2 유닛: `NoNewPrivileges=yes` + `ProtectSystem=strict` + `ReadWritePaths=/opt/ai_data/scripts`, 재기동. 실측: `strict`에서도 `/var/tmp`·`/run/user`·`/tmp`는 쓰기 가능 → **C5의 "/var/tmp ReadWritePaths 필수"는 오가정으로 정정**(state 경로만 필요). 검증: `dry_run=False`, state/liveness/token cache 정상, journal 오류 0, incident 0.
+  §16-6(b): `SWAP_CRIT_MB` 9000(총량 4095 초과=도달 불가)→**3500**, `SWAP_WARN_MB` 6000→**2500** (legacy `lib/watchdog/config.py` + v2 `system_health.py` 동일, parity test green). §16-6(a) disk: v2는 alert-only 90% 유지(legacy DISK_WARN/CRIT 85/92는 미사용) — 의도된 v2 동작으로 문서화.
+- **미실행(대기)**: error-record §2(분석 계층 **미구현** — 설계만, 코드 선행 필요), F2 heartbeat(신규 파일·설계 필요), P4(A/B/C/F3/PY-3.12).
