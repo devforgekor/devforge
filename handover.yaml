@@ -1,17 +1,31 @@
 last_checkpoint:
-  time: '2026-09-26T05:10:01.147472+00:00'
-  summary: 1 config, 1 docs, 1 generated
-  total_files: 5
+  time: '2026-09-26T14:30:00.293084+09:00'
+  summary: 4 source, 4 config, 3 docs, 1 generated
+  total_files: 17
   recent_files:
-    data: []
-    docs:
-    - server/docs/plans/watchdog-cutover-execution-20260926.md
+    source:
+    - server/scripts/lib/watchdog/config.py
+    - server/scripts/lib/watchdog/orchestrator.py
+    - server/src/devforge/adapters/driven/health/system_health.py
+    - server/tests/unit/adapters/driven/health/test_system_health.py
     config:
+    - server/systemd/user/devforge-mcp-inventory-failed.service
+    - server/systemd/user/devforge-mcp-inventory.service
+    - server/systemd/user/devforge-openrouter-free-models.service
     - server/systemd/user/devforge-watchdog-v2.service
-    source: []
+    docs:
+    - server/docs/plans/execution-plan-2026-09-24.md
+    - server/docs/plans/watchdog-cutover-execution-20260926.md
+    - server/docs/refactoring/REFACTORING_STATUS.yaml
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 9 files changed, 63 insertions(+), 37 deletions(-)
+      staged: (none)
+      untracked_files: 4
   task: null
 decisions:
 - id: nd13-01
@@ -279,6 +293,12 @@ decisions:
     + restart(단일 리더 확보). 검증: dry_run=False, watchdog_state.v2.json 생성, liveness 갱신, open incident 0, NRestarts=0, journal
     오류 0. 운영 와치독 = v2 단일(legacy inactive, 롤백용 유닛 보존). 백업: ~/.config/systemd/user/devforge-watchdog-v2.service.bak.'
   status: applied
+- id: wd-hardening-2026-09-26
+  detail: 'P3(부분) v2 하드닝 적용(2026-09-26T05:27:03Z): NoNewPrivileges=yes + ProtectSystem=strict + ReadWritePaths=/opt/ai_data/scripts,
+    재기동. 실측 정정: ProtectSystem=strict에서도 /var/tmp·/run/user·/tmp는 쓰기 가능 → /var/tmp ReadWritePaths는 불필요(state 경로만 필요). 검증: dry_run=False,
+    state/liveness/token cache 정상, 오류 0, incident 0. §16-6(b): SWAP_CRIT_MB 9000→3500, SWAP_WARN_MB 6000→2500(legacy+v2 동일,
+    parity green). §16-6(a) disk는 v2 alert-only 90% 유지.'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -353,8 +373,12 @@ known_issues:
     리부트 시 소실(Linger=yes로 로그아웃은 무관). 미실행 시 수동: python3 scripts/watchdog_parity.py --since 2026-09-25T04:10:17Z --json. 결과 로그
     logs/watchdog-shadow-final-parity.log(P0 GATE PASS/FAIL).'
   resolved: false
+- id: wd-p3-deferred-2026-09-26
+  detail: 'P3 잔여 미착수: (1) error-record §2 분석 계층은 미구현(설계만) → 코드 구현 선행 필요(창 종료 배포 대상 아님). (2) F2 heartbeat(dead-man''s switch
+    for timer units: handover-gen/dev-poll/daily-structure/backup/system-sync)는 신규 파일(heartbeat-ping + specs/heartbeat-registry.yaml)과
+    대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
+  resolved: false
 completed_log:
-- '2026-09-23: ruff/mypy(76)/pytest(전체)/lint-imports(4 kept) 최종 검증 통과'
 - '2026-09-23: WatchdogConfig.oneshot_result_targets parity with legacy (3종 추가); characterization parity 통과'
 - '2026-09-23: _run_timers kick --no-block (oneshot 26s>10s timeout 제거); check_timer에 ExecMainStartTimestamp 포함'
 - '2026-09-23: REFERENCE-MONITOR-POLICY-MISSING resolved=True (gate_result pass/fail 수정 반영)'
@@ -490,3 +514,7 @@ completed_log:
 - '2026-09-26: P2 완료 — #495(a) search MCP enabled(5개 enabled, mcp_inventory OK), (d) drift 0, (c) 8080 리랭커 미기동으로 경합 없음(rerank_models.json
   OpenRouter :free 우선), (b) ebook-watcher 재기동(Cycle 1 정상, v2 incident 0). #494a 전용 OnFailure, C7(REFACTORING_STATUS 2.9/execution-plan),
   C10(drift) 완료. 미결: ebooklib env 토글 의도값(known_issue ebooklib-env-toggles-2026-09-26), P3(v2 하드닝/§16-6/error-record §2/F2).'
+- '2026-09-26: P3(부분) — #494b v2 하드닝(NoNewPrivileges/ProtectSystem=strict/ReadWritePaths=/opt/ai_data/scripts) 적용·재기동 검증(dry_run=False,
+  state/liveness/token cache 정상, 오류 0, incident 0). C5 정정(실측: /var/tmp는 strict에서도 쓰기 가능). §16-6(b) SWAP_CRIT_MB 9000→3500/WARN
+  6000→2500(legacy+v2 parity green), §16-6(a) disk v2 90% alert-only 유지. 미착수: error-record §2(미구현), F2 heartbeat(신규 파일/설계),
+  P4(A/B/C/F3/PY-3.12).'
