@@ -17,6 +17,7 @@ from typing import Any
 
 import typer
 
+from devforge.adapters.driving.cli_cmds import errors as errors_cmds
 from devforge.adapters.driving.cli_cmds import inference as inference_cmds
 from devforge.adapters.driving.cli_cmds import mcp as mcp_cmds
 from devforge.adapters.driving.cli_cmds import watchdog as watchdog_cmds
@@ -43,6 +44,7 @@ app.add_typer(pipeline_app, name="pipeline")
 app.add_typer(inference_cmds.app, name="inference")
 app.add_typer(mcp_cmds.app, name="mcp")
 app.add_typer(watchdog_cmds.app, name="watchdog")
+app.add_typer(errors_cmds.app, name="errors")
 
 
 def _default_pipeline_factory() -> Any:
@@ -87,6 +89,21 @@ async def _watchdog_service_factory() -> Any:
 
 
 watchdog_cmds.init(_watchdog_service_factory)
+
+
+def _error_analysis_factory() -> Any:
+    """Build the production ErrorAnalysisService (composition-root wiring)."""
+    from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
+    from devforge.adapters.driven.storage.error_analysis_pg import (
+        PostgresErrorAnalysisRepository,
+    )
+    from devforge.application.error_analysis import ErrorAnalysisService
+    from devforge.core.config import get_config
+
+    return ErrorAnalysisService(PostgresErrorAnalysisRepository(DatabaseGateway.from_config(get_config())))
+
+
+errors_cmds.init(_error_analysis_factory)
 
 
 @app.command()
