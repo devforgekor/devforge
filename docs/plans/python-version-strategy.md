@@ -134,8 +134,11 @@ grep -L "python3.12" ~/.config/systemd/user/*.service
 3. `daemon-reload` + restart + health 확인. 실패 시 즉시 원복.
 4. 검증 통과분만 배치, 실패분은 3.9 유지.
 
-> **제약**: watchdog v2 shadow-run 창(09-23 13:32 ~ 09-24 13:32 UTC) 동안은 모니터링 대상 서비스 재기동이
-> 비교를 교란하므로 **창 이후** 착수. `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
+> **제약/진행(2026-09-26)**: shadow 창 종료 + 컷오버 완료로 착수 가능. **1차 이관 완료** — watchdog 도메인 oneshot 3종
+> (`devforge-watchdog-liveness`·`devforge-watchdog-failed`·`devforge-mcp-inventory-failed`)을 `/usr/bin/python3.12`로 전환,
+> 유닛 실행 검증 `Result=success`. `watchdog.py`·`cli.py`·후보 스크립트 전량 `py_compile`(3.12) OK.
+> **잔여**: turn-watcher·news-api·activity-summarizer·dev-poll/dev-aging 등 상주/실작업 유닛은 서비스별 런타임 스모크
+> (`--dry-run`) 통과분만 유지보수 창에서 이관. `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
 
 ### 롤백
 - `git checkout` pyproject/Dockerfile/ci + `daemon-reload`. 3.9 환경은 그대로 남아 있음.

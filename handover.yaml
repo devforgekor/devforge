@@ -1,22 +1,35 @@
 last_checkpoint:
-  time: '2026-09-26T05:30:01.259233+00:00'
-  summary: 4 source, 4 config, 3 docs, 1 generated
-  total_files: 17
+  time: '2026-09-26T05:40:01.297647+00:00'
+  summary: 8 source, 11 config, 6 docs, 1 generated
+  total_files: 31
   recent_files:
     data: []
     docs:
+    - server/docs/INDEX.md
     - server/docs/plans/execution-plan-2026-09-24.md
+    - server/docs/plans/fitness-functions-heartbeat-drift-guide.md
     - server/docs/plans/watchdog-cutover-execution-20260926.md
     - server/docs/refactoring/REFACTORING_STATUS.yaml
+    - server/docs/specs/heartbeat-registry.yaml
     config:
+    - server/systemd/user/devforge-backup.service
+    - server/systemd/user/devforge-daily-structure.service
+    - server/systemd/user/devforge-dev-poll.service
+    - server/systemd/user/devforge-handover-gen.service
     - server/systemd/user/devforge-mcp-inventory-failed.service
     - server/systemd/user/devforge-mcp-inventory.service
     - server/systemd/user/devforge-openrouter-free-models.service
-    - server/systemd/user/devforge-watchdog-v2.service
+    - server/systemd/user/devforge-system-sync.service
+    - server/systemd/user/devforge-watchdog-failed.service
+    - server/systemd/user/devforge-watchdog-liveness.service
     source:
+    - server/scripts/deploy/heartbeat-ping.sh
     - server/scripts/lib/watchdog/config.py
     - server/scripts/lib/watchdog/orchestrator.py
     - server/src/devforge/adapters/driven/health/system_health.py
+    - server/src/devforge/core/config.py
+    - server/tests/fitness/test_completion.py
+    - server/tests/fitness/test_contract.py
     - server/tests/unit/adapters/driven/health/test_system_health.py
     generated:
     - server/collect_checkpoint.json
@@ -306,6 +319,12 @@ decisions:
     + tests/fitness/test_contract.py(기록정책 prefix 동결, writes_incident alert-only, recovery 라우팅, context_jsonb SSOT 컬럼/리포지토리).
     8 passed. 미착수: 포트 패리티(test_port_parity), drift(F4).'
   status: applied
+- id: py312-partial-2026-09-26
+  detail: 'PY-3.12 이관 1차 완료: watchdog 도메인 oneshot 3종(devforge-watchdog-liveness/-failed, devforge-mcp-inventory-failed) ExecStart
+    /usr/bin/python3 -> /usr/bin/python3.12, 유닛 실행 Result=success (liveness는 실제 파일 체크 OK). 후보 스크립트 전량 py_compile(3.12) OK,
+    watchdog.py/cli.py 3.12 동작 확인. 잔여: 상주/실작업 유닛(turn-watcher/news-api/activity-summarizer/dev-poll/dev-aging 등)은 서비스별 런타임
+    스모크 후 유지보수 창에서 이관.'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -386,7 +405,6 @@ known_issues:
     대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
   resolved: false
 completed_log:
-- '2026-09-23: REFERENCE-MONITOR-POLICY-MISSING resolved=True (gate_result pass/fail 수정 반영)'
 - '2026-09-23: ruff/mypy/pytest/lint-imports 최종 검증 전부 통과'
 - '(2026-09-23, opencode) a-3 후속 확인: fstab 미러링 미설정 대신 watchdog 보강으로 대체 확인. ONESHOT_RESULT_TARGETS에 root-volume-daily-clean.service·opencode-db-offload.service
   추가, check_oneshot_result가 타이머 LastTrigger 대신 ActiveState/Result로 판정 + system-scope 폴백 (commit 9f9dd33). 라이브 프로브: root-volume-daily-clean=success,
@@ -528,3 +546,5 @@ completed_log:
   error-record §2(미구현).'
 - '2026-09-26: F3(부분) fitness — test_completion.py(alembic 단일 head/부모/migration 컬럼) + test_contract.py(기록정책·라우팅·context_jsonb
   SSOT) 추가, fitness 16 passed, ruff clean. 가이드 구현현황 갱신(F1/F2 done, F3 부분, F4 미착수).'
+- '2026-09-26: PY-3.12 이관 1차 — watchdog 헬퍼 3유닛 python3.12 전환·검증(Result=success), 후보 스크립트 py_compile(3.12) 전량 OK. 잔여 상주 서비스는
+  런타임 스모크 후 이관. python-version-strategy.md 갱신.'
