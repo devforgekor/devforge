@@ -7,7 +7,7 @@ import sys
 import urllib.request
 from typing import Optional, List, Tuple
 
-MCP_URL = "http://127.0.0.1:8000/mcp"
+MCP_URL = "http://127.0.0.1:8002/mcp/"
 
 
 def _post_mcp(method: str, params: Optional[dict] = None,
