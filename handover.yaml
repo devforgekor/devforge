@@ -1,20 +1,19 @@
 last_checkpoint:
-  time: '2026-09-26T10:00:00.276674+09:00'
-  summary: 1 generated
-  total_files: 4
+  time: '2026-09-26T01:20:00.8368+00:00'
+  summary: 1 source, 3 docs, 1 generated
+  total_files: 6
   recent_files:
-    source: []
-    config: []
-    docs: []
     data: []
+    docs:
+    - server/docs/INDEX.md
+    - server/docs/plans/watchdog-cutover-execution-20260926.md
+    - server/docs/reports/watchdog-cutover-handover-20260926.md
+    config: []
+    source:
+    - server/scripts/deploy/watchdog-shadow-final-parity.sh
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 5 files changed, 31 insertions(+), 31 deletions(-)
-      staged: (none)
-      untracked_files: 4
+  git: {}
   task: null
 decisions:
 - id: nd13-01
@@ -271,6 +270,12 @@ decisions:
   detail: 'ebooklib 메타데이터: 제목 검색(네이버→문피아→카카오, 파생작·작가 교차검증 제외) + 완결검수(문피아 우선·네이버 보조, ''완결'' 주장 시 마지막 회차 본문 확인, 카카오 상태 제외).
     이중 캡 400MB/2000화.'
   status: applied
+- id: wd-cutover-2026-09-26
+  detail: 'watchdog v2 24h shadow 창(2026-09-25T04:10:17Z~09-26T04:10:17Z) 종료 후 컷오버 실행 계획 확정. 사용자 결정: 즉시 컷오버(현 산출물 승격), A/B/C는
+    컷오버 후 연기, Slack은 배선만+문서화. P0 게이트 자동화 = transient 타이머 devforge-watchdog-shadow-final-parity.timer(04:12:00Z) → logs/watchdog-shadow-final-parity.log.
+    P1 원자적 컷오버 = legacy stop 먼저 → WATCHDOG_DRY_RUN=0 + v2 restart(순서 엄수, 이중복구 방지). 정본: docs/plans/watchdog-cutover-execution-20260926.md
+    (충돌 C1~C10). 특히 C5 하드닝 /var/tmp ReadWritePaths 필수, C10 sync-units 전체 실행 금지.'
+  status: accepted
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -334,14 +339,26 @@ known_issues:
     후). §9 OTel+GenAI ◐ 부분(core/telemetry.py + opentelemetry-api 기본 + extra [otel]; 로컬 trace/run 상관 + LLM GenAI span; exporter
     백엔드 결정 필요). §5/§6/§7 완료.
   resolved: false
+- id: units-mirror-drift-openrouter-2026-09-26
+  detail: 'sync-units.sh --check drift 1건: devforge-openrouter-free-models.service 의 live(~/.config/systemd/user/)에만 rerank/reasoning
+    ExecStart 2줄(/usr/bin/python3.11 ... --role rerank|reasoning)이 있고 mirror(systemd/user/)엔 없음. sync-units.sh 전체 실행 시 live가
+    롤백되어 free-model refresh 기능 손실 → mirror 선정정 후 개별 배포(계획 P2/C10). 그 전까지 sync-units.sh 전체 실행 금지.'
+  resolved: false
 - id: WATCHDOG-CONTAINER-TOOLS-2026-09-23
   detail: 'watchdog v2 컨테이너에 systemctl/journalctl/pgrep/free 부재 → svc/timer/oneshot/ebook/system 체크 전부 오탐(false-negative).
     근본해결 P2: 호스트 user 유닛 전환. shadow-run 24h 비교가 무의미할 수 있음. 계획 docs/plans/watchdog-standard-compliance.md.'
   resolved: false
+- id: wd-cutover-auto-transient-2026-09-26
+  detail: 'P0 자동 패리티 타이머 devforge-watchdog-shadow-final-parity.timer(2026-09-26 04:12:00Z)는 transient systemd --user 유닛이라
+    리부트 시 소실(Linger=yes로 로그아웃은 무관). 미실행 시 수동: python3 scripts/watchdog_parity.py --since 2026-09-25T04:10:17Z --json. 결과 로그
+    logs/watchdog-shadow-final-parity.log(P0 GATE PASS/FAIL).'
+  resolved: false
+- id: wd-cutover-pending-2026-09-26
+  detail: 'P1 컷오버 대기: G1(NRestarts=0, ExecMainStart=2026-09-25 04:10:17 GMT)·G2(detection_gaps=0·legacy_only=0) 통과 + 사용자 승인
+    필요. 중간 패리티(01:09Z)는 충족, v2_only 3건 전부 alert_only. 다음 세션 첫 행동: logs/watchdog-shadow-final-parity.log 의 P0 GATE 확인 → 승인
+    시 P1 실행. 정본 docs/plans/watchdog-cutover-execution-20260926.md, 스냅샷 docs/reports/watchdog-cutover-handover-20260926.md'
+  resolved: false
 completed_log:
-- '2026-09-23: orchestrator main_loop results 미초기화 UnboundLocalError 수정 (NRestarts 2→0)'
-- '2026-09-23: _run_timers kick --no-block (oneshot 26s>timeout=10 타임아웃 제거); check_timer에 service ActiveEnter/ExecMainStart
-  반영'
 - '2026-09-23: check_oneshot_result system 폴백으로 root-volume-daily-clean/opencode-db-offload/reference-monitor 감지'
 - '2026-09-23: opencode-db-offload 수동 실행 — opencode.db 2.0G 이전+bind, fstab 15행, root 21%'
 - '2026-09-23: REFERENCE-MONITOR-POLICY-MISSING resolved=True (policy gate_result pass/fail 수정)'
@@ -468,3 +485,7 @@ completed_log:
   회귀 테스트(727b536). (4) 사전 점검: 타이머18개·critical/system/alert_only·oneshot·llm·svcpod·heartbeat 대상 전부 legacy 일치, disk 미감시·스왑
   9000MB 도달불가는 legacy 미해결로 계획 §16-6 기록. 새 창 스모크 v2=0 legacy=0 exit 0. 검증 427 passed py3.9+3.12, ruff·format·mypy·lint-imports
   green, CI 6/6 green 2회.'
+- '2026-09-26: watchdog v2 shadow 창(04:10:17Z) 최종 게이트 분석 + 컷오버 재계획. 충돌 9건+mirror drift 1건(C10) 도출. P0 자동 타이머 등록(04:12Z), 스크립트
+  scripts/deploy/watchdog-shadow-final-parity.sh, 계획서 docs/plans/watchdog-cutover-execution-20260926.md(INDEX 등록), 핸드오버 docs/reports/watchdog-cutover-handover-20260926.md.
+  검증: pytest docs_index/doc_links/fitness_wiring 6 passed, ruff clean.'
+- '2026-09-26: 사용자 결정 — 즉시 컷오버(현 산출물), A/B/C 컷오버 후 연기, Slack 배선만+문서화. P1은 legacy stop 먼저(이중복구 C2 방지).'

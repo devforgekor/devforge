@@ -47,6 +47,7 @@
 | 감사 | `reports/watchdog-comprehensive-audit.md` | record |
 | 갭 분석 | `reports/watchdog-port-conflict-gap-analysis.md` | record |
 | svc pod 포트포워딩 복구·재발방지 | `reports/svcpod-portforwarding-recovery-20260912.md` | record |
+| 컷오버 실행 계획(2026-09-26) | `plans/watchdog-cutover-execution-20260926.md` | active |
 
 ### 3) OCI / 백엔드 / 인프라
 | 구분 | 문서 | 상태 |
