@@ -14,11 +14,11 @@ from devforge.ports.types import HealthCheck
 
 # [WHY] legacy lib/watchdog/config.py 상수와 같아야 한다 — 임계치가 다르면 오탐이
 # 난다(2026-09-25 shadow 창에서 swap 1550MB로 74회 오탐, legacy는 all_ok 판정).
-# SWAP_CRIT_MB=9000은 이 서버 스왑 총량(4095MB)보다 커 스왑은 사실상 미감시인데,
-# 이는 legacy의 미해결 설정이므로 창 종료 후 양쪽 함께 재설계 대상이다.
+# SWAP_CRIT_MB는 이 서버 스왑 총량(4095MB) 이하여야 도달 가능하다. 9000(도달 불가)
+# → 3500 재설계(2026-09-26 §16-6b; 초기 휴리스틱 — 실측 후 확정). legacy와 동일값 유지.
 MEM_WARN_PCT = 80
 MEM_CRIT_PCT = 90
-SWAP_CRIT_MB = 9000
+SWAP_CRIT_MB = 3500
 
 
 async def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:

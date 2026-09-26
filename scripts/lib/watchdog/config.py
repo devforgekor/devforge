@@ -153,8 +153,10 @@ CIRCUIT_BREAKER_TIMEOUT = 120  # 2min OPEN → HALF_OPEN
 # ── 리소스 임계값 ───────────────────────────────────────────────────
 DISK_WARN_PCT = 85
 DISK_CRIT_PCT = 92
-SWAP_WARN_MB = 6000
-SWAP_CRIT_MB = 9000
+# [WHY] 스왑 총량 4095MB 이하여야 도달 가능. 6000/9000(도달 불가) → 2500/3500 재설계
+# (2026-09-26 §16-6b). system_health.py와 동일값 유지(parity test).
+SWAP_WARN_MB = 2500
+SWAP_CRIT_MB = 3500
 MEM_WARN_PCT = 80
 MEM_CRIT_PCT = 90
 
