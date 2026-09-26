@@ -132,29 +132,29 @@
 **요약표**
 | ID | 결정 | 선택지 | 권장 | 결정 |
 |---|---|---|---|---|
-| D1 | 추출 아키텍처(ADR-0005) | 승인/수정/보류 | 승인 | |
-| D2 | MCP 전략(ADR-0006) | 승인/조정/보류 | 승인 | |
-| D3 | 웹 수집(chrome-web) | 재가동/은퇴 | 재가동 | |
-| D4 | 첫 적용 착수 | M0 착수/순서변경 | M0 착수 | |
-| D5 | ingest 보안·프라이버시 | 노출/redaction/값 | loopback+bearer·적용·유지 | |
-| D6 | 범위·일정 | worker/인력/컷오버 방식 | 흡수·축소·병렬 | |
-| D7 | **MCP 최적화 옵션** | A/B/C/D/E | A 즉시 + B | |
-| D8 | **훅/로직 전환 범위** | deepdive만/obs포함/최소 | deepdive+obs | |
-| D9 | **Merge 범위** | memory/search/schema/plan 전체/일부 | 전체(4) | |
+| D1 | 추출 아키텍처(ADR-0005) | 승인/수정/보류 | 승인 | **승인 (2026-09-26)** |
+| D2 | MCP 전략(ADR-0006) | 승인/조정/보류 | 승인 | **승인 (Effective at cutover)** |
+| D3 | 웹 수집(chrome-web) | 재가동/은퇴 | 재가동 | **재가동 (운영 중)** |
+| D4 | 첫 적용 착수 | M0 착수/순서변경 | M0 착수 | **M0 승인 (2026-09-26)** |
+| D5 | ingest 보안·프라이버시 | 노출/redaction/값 | loopback+bearer·적용·유지 | **확정 (2026-09-26)** |
+| D6 | 범위·일정 | worker/인력/컷오버 방식 | 흡수·축소·병렬 | **확정 = A** |
+| D7 | **MCP 최적화 옵션** | A/B/C/D/E | A 즉시 + B | **확정 (2026-09-26)** |
+| D8 | **훅/로직 전환 범위** | deepdive만/obs포함/최소 | deepdive+obs | **확정 (2026-09-26)** |
+| D9 | **Merge 범위** | memory/search/schema/plan 전체/일부 | 전체(4) | **확정 (2026-09-26)** |
 
-**현황 (2026-09-23, 근거 있는 것만 기록 — 나머지는 미결)**
+**현황 (2026-09-26, 근거 있는 것만 기록 — 나머지는 미결)**
 
 | ID | 현황 | 근거 |
 |---|---|---|
-| D1 | **미결**(권장 승인) | ADR-0005 `Proposed`(미구현). Phase 3는 ADR-0005를 범위 외로 둠 |
+| D1 | **승인 (2026-09-26)** | ADR-0005 → Accepted 방향 확정. Phase 3 범위 외, Phase C 이후 적용 |
 | D2 | **승인(Effective at cutover)** | ADR-0006 `Accepted`(12툴 계약), `specs/mcp-contract.json` frozen |
 | D3 | **재가동(운영 중)** | `chrome-web-llm` CLI 운영, 단 파이프라인 ingest 배선은 D4/D5 이후 |
-| D4 | **미착수** | M0(allowlist 컷) 미실행 |
-| D5 | **미결**(권장 loopback+bearer) | ingest 미복원 |
+| D4 | **M0 승인 (2026-09-26)** | allowlist 컷 적용·검증 완료(`devforge-mcp_*: false`+계약 12툴만 허용, 서버 25→12, 계약 diff=0). 2주 0회 재측정 시작(재확인 2026-10-10). 부수: 클라이언트 streamable URL `8000/mcp/`→`8002/mcp/` 6곳 수정(2026-07-05~ 연결 실패 56회 복구) |
+| D5 | **확정 (2026-09-26)** | loopback+bearer(둘다) · 시크릿 redaction 적용 · provenance 값(`chrome:*` 등) 유지 — ingest 복원(Phase B) 시 본 정책으로 배선 |
 | D6 | **확정 = A** | `plans/phase3-plan.md`(D6=A: devforge는 embed 소유) |
-| D7 | **미결**(권장 A 즉시+B) | MCP 최적화 미착수 |
-| D8 | **미결**(권장 deepdive+obs) | 훅/로직 전환 미착수 |
-| D9 | **미결**(권장 전체 4) | Merge 파사드 미착수 |
+| D7 | **확정 (2026-09-26)** | A(allowlist)는 완료(D4로 인정) + **B 단계적 진행 승인** — M1 deepdive 훅화 → M2 obs 자동캡처 → merge. C/D는 조건부 유지 |
+| D8 | **확정 (2026-09-26)** | **deepdive + obs** — M1 deepdive lifecycle 훅화(step_enter/exit 훅, heartbeat/status 내부화) + M2 `obs_write` PostToolUse 자동캡처. 롤백 = 훅 off |
+| D9 | **확정 (2026-09-26)** | **전체 4건** — memory·search(devforge 파사드, 계약 merge_target 확정) + schema(opencode-db) + plan(yggdrasil은 외부 패키지 → 래퍼/클라이언트 allowlist로 실현) |
 
 > 표준 정합 후속 항목(공급망·secretless·MCP audit·OTel/SLO 등)은 `plans/2026-standard-gap-remediation.md`로 분리. watchdog Gate4 재설계는 `plans/watchdog-standard-compliance.md`(정본).
 
