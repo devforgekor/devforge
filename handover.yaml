@@ -1,31 +1,21 @@
 last_checkpoint:
-  time: '2026-09-26T19:30:00.634996+09:00'
-  summary: 7 source, 6 docs, 1 generated
-  total_files: 21
+  time: '2026-09-26T20:00:00.499040+09:00'
+  summary: 3 source, 1 generated
+  total_files: 10
   recent_files:
     source:
     - server/scripts/shadow_diff.py
-    - server/src/devforge/adapters/driven/storage/embedding_adapter.py
     - server/src/devforge/adapters/driven/storage/embedding_shadow_adapter.py
-    - server/src/devforge/adapters/driven/text/cleaner_splitter.py
-    - server/src/devforge/application/day_cycle.py
     - server/src/devforge/cli.py
-    - server/tests/unit/test_day_cycle.py
     config: []
-    docs:
-    - server/docs/API_REFERENCE.md
-    - server/docs/LLM_PROVIDER_PLAN.md
-    - server/docs/MIGRATION_GUIDE.md
-    - server/docs/OPERATIONS_GUIDE.md
-    - server/docs/architecture/code-structure.yaml
-    - server/docs/system-architecture.md
+    docs: []
     data: []
     generated:
     - server/collect_checkpoint.json
   git:
     server:
       branch: main
-      unstaged: 9 files changed, 226 insertions(+), 62 deletions(-)
+      unstaged: 10 files changed, 227 insertions(+), 64 deletions(-)
       staged: (none)
       untracked_files: 4
   task: null
