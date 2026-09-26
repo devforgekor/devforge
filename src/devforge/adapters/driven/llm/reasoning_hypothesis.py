@@ -92,7 +92,13 @@ class ReasoningHypothesisClient:
             keys.append(exact)
         for name in sorted(os.environ):
             value = os.environ.get(name, "")
-            if name != "OPENROUTER_API_KEY" and name.startswith("OPENROUTER_") and name.endswith("_API_KEY") and value and value not in keys:
+            if (
+                name != "OPENROUTER_API_KEY"
+                and name.startswith("OPENROUTER_")
+                and name.endswith("_API_KEY")
+                and value
+                and value not in keys
+            ):
                 keys.append(value)
         return keys
 
@@ -124,7 +130,9 @@ class ReasoningHypothesisClient:
         try:
             from devforge.adapters.driven.llm.local_adapter import LocalLLMAdapter
 
-            result = await LocalLLMAdapter().chat(messages, model_key="day-enricher", json_mode=True)
+            result = await LocalLLMAdapter().chat(
+                messages, model_key="day-enricher", json_mode=True
+            )
             return str(result.get("content", ""))
         except Exception as e:  # noqa: BLE001 — no local fallback is not fatal
             _log.warning("error_analysis_local_llm_failed", error=str(e))

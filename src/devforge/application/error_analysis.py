@@ -133,8 +133,7 @@ def build_decision_packet(
         "hypothesis": top_signature,
         "confidence": confidence,
         "alternatives": [
-            {"hypothesis": sig, "confidence": round(confidence * 0.5, 2)}
-            for sig, _ in ranked[1:]
+            {"hypothesis": sig, "confidence": round(confidence * 0.5, 2)} for sig, _ in ranked[1:]
         ],
     }
     packet["fix_proposal"] = _fix_proposal(top_signature)
