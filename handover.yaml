@@ -1,52 +1,49 @@
 last_checkpoint:
-  time: '2026-09-26T06:30:00.897463+00:00'
-  summary: 25 source, 21 config, 7 docs, 1 generated
-  total_files: 61
+  time: '2026-09-26T16:00:00.280594+09:00'
+  summary: 15 source, 14 config, 4 docs, 1 generated
+  total_files: 41
   recent_files:
-    data: []
-    docs:
-    - server/docs/INDEX.md
-    - server/docs/plans/detection-remediation-implementation-guide.md
-    - server/docs/plans/error-record-analysis-design.md
-    - server/docs/plans/fitness-functions-heartbeat-drift-guide.md
-    - server/docs/plans/python-version-strategy.md
-    - server/docs/plans/watchdog-cutover-execution-20260926.md
-    - server/docs/specs/heartbeat-registry.yaml
-    config:
-    - server/systemd/user/activity-summarizer.service
-    - server/systemd/user/baseline-daily-failed.service
-    - server/systemd/user/baseline-daily.service
-    - server/systemd/user/devforge-backup.service
-    - server/systemd/user/devforge-daily-structure.service
-    - server/systemd/user/devforge-dev-aging.service
-    - server/systemd/user/devforge-dev-poll.service
-    - server/systemd/user/devforge-handover-gen.service
-    - server/systemd/user/devforge-mcp-inventory-failed.service
-    - server/systemd/user/devforge-news-api.service
     source:
-    - server/scripts/deploy/heartbeat-ping.sh
-    - server/scripts/lib/watchdog/config.py
+    - server/scripts/proxies/refresh_openrouter_free_models.py
     - server/src/devforge/adapters/driven/llm/reasoning_hypothesis.py
     - server/src/devforge/adapters/driven/recovery/systemd_catchup.py
-    - server/src/devforge/adapters/driven/storage/error_analysis_pg.py
-    - server/src/devforge/adapters/driving/cli_cmds/errors.py
     - server/src/devforge/application/controllers.py
     - server/src/devforge/application/error_analysis.py
     - server/src/devforge/application/watchdog_service.py
-    - server/src/devforge/cli.py
     - server/src/devforge/core/config.py
     - server/src/devforge/domain/watchdog/governance.py
     - server/src/devforge/domain/watchdog/routing.py
     - server/src/devforge/ports/catchup.py
-    - server/src/devforge/ports/error_analysis.py
-    - server/tests/fitness/test_completion.py
-    - server/tests/fitness/test_contract.py
-    - server/tests/fitness/test_heartbeat_registry.py
-    - server/tests/unit/adapters/driven/llm/__init__.py
-    - server/tests/unit/adapters/driven/llm/test_reasoning_hypothesis.py
+    - server/tests/unit/application/test_controllers.py
+    - server/tests/unit/application/test_watchdog_service.py
+    - server/tests/unit/domain/watchdog/test_governance.py
+    - server/tests/unit/domain/watchdog/test_routing.py
+    - server/tests/unit/test_config.py
+    config:
+    - server/systemd/user/activity-summarizer.service
+    - server/systemd/user/baseline-daily-failed.service
+    - server/systemd/user/baseline-daily.service
+    - server/systemd/user/devforge-dev-aging.service
+    - server/systemd/user/devforge-dev-poll.service
+    - server/systemd/user/devforge-news-api.service
+    - server/systemd/user/devforge-news-digest.service
+    - server/systemd/user/devforge-sp-secret-check.service
+    - server/systemd/user/devforge-turn-watcher.service
+    - server/systemd/user/devforge-watchdog-v2.service
+    docs:
+    - server/docs/architecture/code-structure.yaml
+    - server/docs/plans/detection-remediation-implementation-guide.md
+    - server/docs/plans/error-record-analysis-design.md
+    - server/docs/plans/python-version-strategy.md
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 9 files changed, 86 insertions(+), 43 deletions(-)
+      staged: (none)
+      untracked_files: 4
   task: null
 decisions:
 - id: nd13-01
