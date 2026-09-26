@@ -3,4 +3,4 @@ Description=Azure Key Vault GPG Encrypted Backup
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/projects/server/scripts/deploy/kv-backup.py
+ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/deploy/kv-backup.py
