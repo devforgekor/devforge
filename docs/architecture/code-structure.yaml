@@ -1315,6 +1315,18 @@ modules:
     reasoning_hypothesis.py:
       status: experimental
       purpose: "error-record §2 LLM stage — OpenRouter reasoning chain + local fallback."
+    embed_adapter.py:
+      status: experimental
+      purpose: "HttpEmbedClient — OpenAI-compatible /v1/embeddings transport (sync)."
+- path: src/devforge/adapters/driven/text/
+  purpose: Text preprocessing adapters (scripts/lib.text_cleaner boundary)
+  files:
+    __init__.py:
+      status: experimental
+      purpose: __init__.py
+    cleaner_splitter.py:
+      status: experimental
+      purpose: "split_sentences / estimate_tokens backed by scripts.lib.text_cleaner (injected into EmbedStage)."
 - path: src/devforge/adapters/driven/notification/
   purpose: Notification adapters (legacy notifier.py)
   files:
@@ -1396,6 +1408,9 @@ modules:
     extract_adapter.py:
       status: unknown
       purpose: PostgreSQL adapter for extract pipeline ports.
+    embedding_adapter.py:
+      status: experimental
+      purpose: "PostgreSQL adapter for EmbedPort — embed_batch SQL parity (enriched -> embedded)."
     state_json.py:
       status: experimental
       purpose: "JsonStateStorage \u2014 atomic legacy-compatible watchdog state (state.py:290-336)."
@@ -1602,6 +1617,18 @@ modules:
       status: unknown
       purpose: "Extract EDC (Extract, Describe, Classify) \u2014 prompt building and\
         \ response parsing."
+- path: src/devforge/pipeline_stages/embed/
+  purpose: Embed stage (enriched -> embedded) — D6=A owned stage
+  files:
+    __init__.py:
+      status: experimental
+      purpose: __init__.py
+    chunking.py:
+      status: experimental
+      purpose: "Pure chunking/preprocessing — embed_batch parity with injected split/estimate callables."
+    stage.py:
+      status: experimental
+      purpose: "EmbedStage — PipelineStage running cleanup/dead-letter/fetch/chunk/batch/store (skip+count)."
 - path: src/devforge/ports/
   purpose: Hexagonal ports — lowest layer, importable by domain/adapters/application
   files:
@@ -1614,6 +1641,9 @@ modules:
     extract.py:
       status: unknown
       purpose: "Extract pipeline ports \u2014 hexagonal architecture interfaces."
+    embed.py:
+      status: experimental
+      purpose: "Embed ports — EmbedPort, EmbedClient, PendingEmbedTurn, splitter/estimator callables."
     types.py:
       status: experimental
       purpose: "Watchdog value objects \u2014 ComponentState, HealthCheck, RecoveryAction, CircuitState, Incident."
