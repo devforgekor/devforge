@@ -1,0 +1,12 @@
+# /home/opc/.config/systemd/user/devforge-mcp-inventory-failed.service
+# OnFailure handler: MCP inventory 드리프트 검사가 failed 상태가 되면 알림(OWASP MCP09).
+# [WHY] 공유 devforge-watchdog-failed.service는 watchdog 전용 메시지라 재사용하지 않는다.
+[Unit]
+Description=DevForge MCP Inventory failed-state alert (OnFailure)
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/opt/projects/server/scripts
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3 /opt/projects/server/scripts/watchdog.py --notify-failure --unit mcp-inventory --keys SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL
+StandardOutput=journal
+StandardError=journal

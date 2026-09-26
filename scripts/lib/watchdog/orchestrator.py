@@ -1109,12 +1109,17 @@ def main():
     parser.add_argument(
         "--notify-failure", action="store_true", help="Send failure alert (OnFailure unit)",
     )
+    parser.add_argument(
+        "--unit", default="watchdog",
+        help="Unit name that owns the OnFailure handler (default: watchdog)",
+    )
     args = parser.parse_args()
 
     if args.notify_failure:
-        log("watchdog OnFailure: service entered failed state")
+        comp = args.unit
+        log(f"{comp} OnFailure: service entered failed state")
         try:
-            send_alert("watchdog:failed", "DOWN", "watchdog service entered failed state (OnFailure)")
+            send_alert(f"{comp}:failed", "DOWN", f"{comp} service entered failed state (OnFailure)")
         except Exception as e:
             log(f"notify-failure error: {e}")
         return
