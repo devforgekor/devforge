@@ -1,8 +1,29 @@
 last_checkpoint:
-  time: '2026-09-26T15:00:00.593321+09:00'
+  time: '2026-09-26T06:00:01.46671+00:00'
   summary: 19 source, 11 config, 8 docs, 1 generated
   total_files: 46
   recent_files:
+    data: []
+    docs:
+    - server/docs/INDEX.md
+    - server/docs/plans/error-record-analysis-design.md
+    - server/docs/plans/execution-plan-2026-09-24.md
+    - server/docs/plans/fitness-functions-heartbeat-drift-guide.md
+    - server/docs/plans/python-version-strategy.md
+    - server/docs/plans/watchdog-cutover-execution-20260926.md
+    - server/docs/refactoring/REFACTORING_STATUS.yaml
+    - server/docs/specs/heartbeat-registry.yaml
+    config:
+    - server/systemd/user/devforge-backup.service
+    - server/systemd/user/devforge-daily-structure.service
+    - server/systemd/user/devforge-dev-poll.service
+    - server/systemd/user/devforge-handover-gen.service
+    - server/systemd/user/devforge-mcp-inventory-failed.service
+    - server/systemd/user/devforge-mcp-inventory.service
+    - server/systemd/user/devforge-openrouter-free-models.service
+    - server/systemd/user/devforge-system-sync.service
+    - server/systemd/user/devforge-watchdog-failed.service
+    - server/systemd/user/devforge-watchdog-liveness.service
     source:
     - server/scripts/deploy/heartbeat-ping.sh
     - server/scripts/lib/watchdog/config.py
@@ -23,35 +44,9 @@ last_checkpoint:
     - server/tests/unit/adapters/driven/llm/test_reasoning_hypothesis.py
     - server/tests/unit/adapters/driven/storage/test_error_analysis_pg.py
     - server/tests/unit/application/test_error_analysis.py
-    config:
-    - server/systemd/user/devforge-backup.service
-    - server/systemd/user/devforge-daily-structure.service
-    - server/systemd/user/devforge-dev-poll.service
-    - server/systemd/user/devforge-handover-gen.service
-    - server/systemd/user/devforge-mcp-inventory-failed.service
-    - server/systemd/user/devforge-mcp-inventory.service
-    - server/systemd/user/devforge-openrouter-free-models.service
-    - server/systemd/user/devforge-system-sync.service
-    - server/systemd/user/devforge-watchdog-failed.service
-    - server/systemd/user/devforge-watchdog-liveness.service
-    docs:
-    - server/docs/INDEX.md
-    - server/docs/plans/error-record-analysis-design.md
-    - server/docs/plans/execution-plan-2026-09-24.md
-    - server/docs/plans/fitness-functions-heartbeat-drift-guide.md
-    - server/docs/plans/python-version-strategy.md
-    - server/docs/plans/watchdog-cutover-execution-20260926.md
-    - server/docs/refactoring/REFACTORING_STATUS.yaml
-    - server/docs/specs/heartbeat-registry.yaml
-    data: []
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 10 files changed, 170 insertions(+), 33 deletions(-)
-      staged: (none)
-      untracked_files: 7
+  git: {}
   task: null
 decisions:
 - id: nd13-01
@@ -350,6 +345,13 @@ decisions:
     green, 실 DB 스모크(9건 → signature unknown → escalate, 정직한 insufficient). LLM 2차(§4) 미착수 — packet llm_used=false. A/B/C(F4)는
     recovery 변경(v2 재기동)이라 계속 최후.'
   status: applied
+- id: error-record-s2-llm-2026-09-26
+  detail: 'error-record §2 LLM 2차 구현: adapters/driven/llm/reasoning_hypothesis.py(ReasoningHypothesisClient — analysis_models.json
+    reasoning chain(openrouter/ prefix 제거) → 계정별 OPENROUTER_*_API_KEY 순회 → 429/실패 시 다음 모델 → local qwen3-8b(day-enricher) 폴백)
+    + application의 build_hypothesis_prompt/merge_hypotheses(순수) + cli.py errors analyze --llm. LLM 단계 120s 예산(wait_for), 실패
+    시 규칙 결과 유지(llm_used=false). 검증: 단위 13 passed, ruff/lint-imports 4 kept/mypy green, 실 DB+OpenRouter 스모크(llm_model=poolside/laguna-xs-2.1:free,
+    decision propose, 5 가설). E3 해소: analysis_models.json 재생성(primary qwen/qwen3.8-27b:free).'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -430,9 +432,6 @@ known_issues:
     대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
   resolved: false
 completed_log:
-- '(2026-09-23, opencode) a-3 후속 확인: fstab 미러링 미설정 대신 watchdog 보강으로 대체 확인. ONESHOT_RESULT_TARGETS에 root-volume-daily-clean.service·opencode-db-offload.service
-  추가, check_oneshot_result가 타이머 LastTrigger 대신 ActiveState/Result로 판정 + system-scope 폴백 (commit 9f9dd33). 라이브 프로브: root-volume-daily-clean=success,
-  opencode-db-offload=success.'
 - '(2026-09-23, opencode) known_issue 종료: OPENCODE-DB-ON-ROOT — opencode.db가 system-savings로 이전(bind active), root 18%. opencode-db-offload
   Result=success.'
 - '(2026-09-23, opencode) known_issue 종료: WEBOBSIDIAN-CGROUP — drop-in 10-slice.conf 제거 + 재부팅 후 정상 기동, container-webobsidian
@@ -575,3 +574,5 @@ completed_log:
 - '2026-09-26: error-record §2 규칙 단계 완료 — errors analyze CLI(읽기 전용 decision packet). 신규 파일 4 + cli 등록, unit 8 passed, lint-imports
   4 kept, 실 DB 스모크 OK. LLM 2차는 확장 지점(llm_used)만 둠. F2/F3/PY-3.12 1차와 함께 post-cutover 배치 마무리. 잔여: A/B/C(F4, v2 재기동), PY-3.12
   잔여, §2 LLM 2차.'
+- '2026-09-26: error-record §2 LLM 2차 완료 — ReasoningHypothesisClient(OpenRouter chain + 로컬 폴백, 120s 예산) + errors analyze --llm.
+  실 스모크 OK(5 가설, decision propose). analysis_models.json 재생성. §2(규칙+LLM) 마무리. 잔여: PY-3.12 잔여(유지보수 창), A/B/C(F4).'
