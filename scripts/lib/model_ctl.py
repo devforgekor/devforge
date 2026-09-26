@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: sourced by — day_cycle.sh (via model_ctl.sh delegation)
 """CLI for inference container model management.
 
 Usage:
-    python3 -m lib.model_ctl <command> [args]
+    python3.12 -m lib.model_ctl <command> [args]
 
 Commands:
     model-port <model_key>            — resolve port from registry

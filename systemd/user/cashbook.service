@@ -9,7 +9,7 @@ WorkingDirectory=/opt/projects/server/cashbook
 # CASHBOOK_CREDENTIAL_FILE is a path (not secret); the value never enters env.
 Environment=CASHBOOK_CREDENTIAL_FILE=/run/user/1000/cashbook/cashbook_key
 ExecStartPre=/opt/projects/server/scripts/deploy/kv-to-credential.sh CASHBOOK-API-KEY /run/user/1000/cashbook/cashbook_key
-ExecStart=/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8100
+ExecStart=/usr/bin/python3.12 -m uvicorn main:app --host 0.0.0.0 --port 8100
 ExecStopPost=/bin/rm -f /run/user/1000/cashbook/cashbook_key
 Restart=always
 RestartSec=5

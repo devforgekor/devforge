@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — E2E pipeline test with watchdog supervision
 """E2E Pipeline Test — 6-turn full pipeline with timing, metrics, watchdog supervision.
@@ -132,7 +132,7 @@ def main():
     test_heartbeat("phase1_embed")
     log(f"[pipeline_e2e] Phase 1: embed_batch (limit={limit})")
     # embed model is already on :8081 from pre-test load
-    r = _run_phase(["python3", os.path.join(PIPELINES_DIR, "embed_batch.py"), f"--limit", str(limit)], "embed")
+    r = _run_phase(["python3.12", os.path.join(PIPELINES_DIR, "embed_batch.py"), f"--limit", str(limit)], "embed")
     phases_log.append(r)
     log(f"  embed: {'OK' if r['ok'] else 'FAIL'} ({r['elapsed_s']}s)")
     # Check heartbeat was created
@@ -142,7 +142,7 @@ def main():
     # ── Phase 2: Entity Scan ──
     test_heartbeat("phase2_entity_scan")
     log(f"[pipeline_e2e] Phase 2: entity_scan (limit={limit})")
-    r = _run_phase(["python3", os.path.join(PIPELINES_DIR, "entity_scan.py"), f"--limit", str(limit)], "entity_scan")
+    r = _run_phase(["python3.12", os.path.join(PIPELINES_DIR, "entity_scan.py"), f"--limit", str(limit)], "entity_scan")
     phases_log.append(r)
     log(f"  entity_scan: {'OK' if r['ok'] else 'FAIL'} ({r['elapsed_s']}s)")
     heartbeat_status["entity_scan"] = _check_heartbeat("entity_scan")
@@ -161,7 +161,7 @@ def main():
 
     if sw_ok:
         test_heartbeat("phase3_extract")
-        r = _run_phase(["python3", os.path.join(PIPELINES_DIR, "extract.py"), f"--limit", str(limit)], "extract")
+        r = _run_phase(["python3.12", os.path.join(PIPELINES_DIR, "extract.py"), f"--limit", str(limit)], "extract")
         phases_log.append(r)
         log(f"  extract: {'OK' if r['ok'] else 'FAIL'} ({r['elapsed_s']}s)")
         heartbeat_status["day_extract"] = _check_heartbeat("day_extract")
@@ -172,7 +172,7 @@ def main():
     # ── Phase 4: Enrich (same day-extractor model on :8082) ──
     test_heartbeat("phase4_enrich")
     log(f"[pipeline_e2e] Phase 4: enrich (same model)" )
-    r = _run_phase(["python3", os.path.join(PIPELINES_DIR, "enrich.py"), f"--limit", str(limit)], "enrich")
+    r = _run_phase(["python3.12", os.path.join(PIPELINES_DIR, "enrich.py"), f"--limit", str(limit)], "enrich")
     phases_log.append(r)
     log(f"  enrich: {'OK' if r['ok'] else 'FAIL'} ({r['elapsed_s']}s)")
     heartbeat_status["day_enrich"] = _check_heartbeat("day_enrich")
@@ -189,7 +189,7 @@ def main():
 
     if sw_ok:
         test_heartbeat("phase5_verify")
-        r = _run_phase(["python3", os.path.join(PIPELINES_DIR, "day_verify.py"), f"--limit", str(limit)], "verify")
+        r = _run_phase(["python3.12", os.path.join(PIPELINES_DIR, "day_verify.py"), f"--limit", str(limit)], "verify")
         phases_log.append(r)
         log(f"  verify: {'OK' if r['ok'] else 'FAIL'} ({r['elapsed_s']}s)")
         heartbeat_status["day_verify"] = _check_heartbeat("day_verify")

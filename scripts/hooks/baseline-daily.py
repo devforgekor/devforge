@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd:baseline-daily.timer
 """W1 Baseline Daily Runner — D2-D7."""
@@ -57,7 +57,7 @@ def collect():
         out["netdata"] = "unreachable"
 
     # 6. hook overhead
-    r = subprocess.run(["python3", "/opt/projects/server/scripts/hooks/measure-hook-overhead.py"],
+    r = subprocess.run(["python3.12", "/opt/projects/server/scripts/hooks/measure-hook-overhead.py"],
                        capture_output=True, text=True, cwd="/opt/projects/server")
     if r.returncode == 0:
         try:

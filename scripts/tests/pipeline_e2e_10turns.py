@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: none — test script
 """Pipeline E2E test — 10 newest turns, all 5 phases with inference mode switching."""
@@ -21,7 +21,7 @@ overall_start = time.monotonic()
 log(f"\n{'='*60}\nPHASE: embed_batch\n{'='*60}")
 t0 = time.monotonic()
 proc = subprocess.run(
-    ["python3", "pipelines/embed_batch.py", "--limit", "10"],
+    ["python3.12", "pipelines/embed_batch.py", "--limit", "10"],
     capture_output=True, text=True, timeout=7200,
     env={**os.environ, "PYTHONPATH": SCRIPTS_DIR},
 )
@@ -41,7 +41,7 @@ test_heartbeat(f"model switched to day-extractor")
 log(f"\n{'='*60}\nPHASE: entity_scan\n{'='*60}")
 t0 = time.monotonic()
 proc = subprocess.run(
-    ["python3", "pipelines/entity_scan.py", "--limit", "10"],
+    ["python3.12", "pipelines/entity_scan.py", "--limit", "10"],
     capture_output=True, text=True, timeout=600,
     env={**os.environ, "PYTHONPATH": SCRIPTS_DIR},
 )
@@ -54,7 +54,7 @@ test_heartbeat(f"entity_scan done ({elapsed:.0f}s)")
 log(f"\n{'='*60}\nPHASE: extract\n{'='*60}")
 t0 = time.monotonic()
 proc = subprocess.run(
-    ["python3", "pipelines/extract.py", "--limit", "10"],
+    ["python3.12", "pipelines/extract.py", "--limit", "10"],
     capture_output=True, text=True, timeout=7200,
     env={**os.environ, "PYTHONPATH": SCRIPTS_DIR},
 )
@@ -67,7 +67,7 @@ test_heartbeat(f"extract done ({elapsed:.0f}s)")
 log(f"\n{'='*60}\nPHASE: enrich\n{'='*60}")
 t0 = time.monotonic()
 proc = subprocess.run(
-    ["python3", "pipelines/enrich.py", "--limit", "10"],
+    ["python3.12", "pipelines/enrich.py", "--limit", "10"],
     capture_output=True, text=True, timeout=7200,
     env={**os.environ, "PYTHONPATH": SCRIPTS_DIR},
 )
@@ -80,7 +80,7 @@ test_heartbeat(f"enrich done ({elapsed:.0f}s)")
 log(f"\n{'='*60}\nPHASE: day_verify\n{'='*60}")
 t0 = time.monotonic()
 proc = subprocess.run(
-    ["python3", "pipelines/day_verify.py", "--limit", "10"],
+    ["python3.12", "pipelines/day_verify.py", "--limit", "10"],
     capture_output=True, text=True, timeout=7200,
     env={**os.environ, "PYTHONPATH": SCRIPTS_DIR},
 )

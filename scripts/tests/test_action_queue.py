@@ -89,7 +89,7 @@ class TestExecDispatch:
         assert ok
         assert "task updated" in msg
         args = mock_run.call_args[0][0]
-        assert args == ["python3", "/opt/projects/server/scripts/cli.py", "task", "update", "test"]
+        assert args == ["python3.12", "/opt/projects/server/scripts/cli.py", "task", "update", "test"]
 
     @patch("lib.action_queue.subprocess.run")
     def test_cli_timed_out(self, mock_run):

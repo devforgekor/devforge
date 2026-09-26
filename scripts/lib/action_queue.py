@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — mcp_server.py (action_write, action_poll), watchdog/__init__.py (_consume_actions)
 """Action Queue — MCP tool → background daemon bridge.
@@ -237,7 +237,7 @@ def _exec_podman(params: Dict[str, Any]) -> tuple:
 
 
 def _exec_cli(params: Dict[str, Any]) -> tuple:
-    """Execute a safe CLI action (python3 scripts/<script> <args>)."""
+    """Execute a safe CLI action (python3.12 scripts/<script> <args>)."""
     script = params.get("script", "")
     args_list = params.get("args", [])
     if not script:
@@ -245,7 +245,7 @@ def _exec_cli(params: Dict[str, Any]) -> tuple:
     if any(c in script for c in (";", "|", "&", "$", "`")):
         return False, f"Invalid script name: {script}"
 
-    cmd = ["python3", f"/opt/projects/server/scripts/{script}"] + list(args_list)
+    cmd = ["python3.12", f"/opt/projects/server/scripts/{script}"] + list(args_list)
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if r.returncode == 0:
