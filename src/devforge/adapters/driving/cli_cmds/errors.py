@@ -25,11 +25,14 @@ def init(factory: Callable[[], object]) -> None:
 def analyze(
     since: str = typer.Option(None, "--since", help="ISO start (default: --days ago)"),
     days: int = typer.Option(7, "--days", "-d", help="Look back N days when --since omitted"),
+    llm: bool = typer.Option(
+        False, "--llm/--no-llm", help="Add LLM root-cause hypotheses (needs OPENROUTER keys)"
+    ),
 ) -> None:
     """Analyze structured incidents into a decision packet (no execution)."""
     if _factory is None:
         raise RuntimeError("errors.init() not called from composition root")
     since_iso = since or (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     service = _factory()
-    packet = asyncio.run(service.analyze(since_iso))  # type: ignore[attr-defined]
+    packet = asyncio.run(service.analyze(since_iso, use_llm=llm))  # type: ignore[attr-defined]
     typer.echo(json_module.dumps(packet, indent=2, ensure_ascii=False, default=str))

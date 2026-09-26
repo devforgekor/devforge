@@ -93,6 +93,7 @@ watchdog_cmds.init(_watchdog_service_factory)
 
 def _error_analysis_factory() -> Any:
     """Build the production ErrorAnalysisService (composition-root wiring)."""
+    from devforge.adapters.driven.llm.reasoning_hypothesis import ReasoningHypothesisClient
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from devforge.adapters.driven.storage.error_analysis_pg import (
         PostgresErrorAnalysisRepository,
@@ -100,7 +101,10 @@ def _error_analysis_factory() -> Any:
     from devforge.application.error_analysis import ErrorAnalysisService
     from devforge.core.config import get_config
 
-    return ErrorAnalysisService(PostgresErrorAnalysisRepository(DatabaseGateway.from_config(get_config())))
+    return ErrorAnalysisService(
+        PostgresErrorAnalysisRepository(DatabaseGateway.from_config(get_config())),
+        ReasoningHypothesisClient(),
+    )
 
 
 errors_cmds.init(_error_analysis_factory)

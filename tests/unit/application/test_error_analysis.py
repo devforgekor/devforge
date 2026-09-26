@@ -4,8 +4,12 @@
 """Tests for error-record §2 rules (pure, no I/O)."""
 from __future__ import annotations
 
-from devforge.application.error_analysis import build_decision_packet
-from devforge.ports.error_analysis import IncidentEvidence
+from devforge.application.error_analysis import (
+    build_decision_packet,
+    build_hypothesis_prompt,
+    merge_hypotheses,
+)
+from devforge.ports.error_analysis import Hypothesis, IncidentEvidence
 
 
 def _inc(
@@ -74,3 +78,25 @@ def test_should_mark_high_severity_on_reopen() -> None:
         since_iso="s",
     )
     assert packet["severity"] == "high"
+
+
+def test_hypothesis_prompt_includes_grounded_evidence() -> None:
+    packet = build_decision_packet([_inc(1, "svc:a", {"exit_code": 1})], since_iso="s")
+    messages = build_hypothesis_prompt(packet)
+    assert messages[0]["role"] == "system"
+    assert "incidents:1" in messages[1]["content"]
+
+
+def test_merge_hypotheses_overrides_unknown_and_sets_llm() -> None:
+    packet = build_decision_packet([_inc(1, "svc:a", {})], since_iso="s")  # unknown → escalate
+    merged = merge_hypotheses(
+        packet, [Hypothesis("proxy credentials expired", 0.7, "401 in journal")], model="m1"
+    )
+    assert merged["llm_used"] is True and merged["llm_model"] == "m1"
+    assert merged["root_cause"]["hypothesis"] == "proxy credentials expired"
+    assert merged["decision"] == "propose"
+
+
+def test_merge_hypotheses_is_noop_when_empty() -> None:
+    packet = build_decision_packet([_inc(1, "svc:a", {"exit_code": 1})], since_iso="s")
+    assert merge_hypotheses(packet, [], model="m") is packet

@@ -30,3 +30,18 @@ class IncidentEvidence:
 
 class ErrorAnalysisRepository(Protocol):
     async def list_incidents(self, since_iso: str) -> list[IncidentEvidence]: ...
+
+
+@dataclass(frozen=True)
+class Hypothesis:
+    """One LLM-proposed root-cause hypothesis (rules-confirmed downstream)."""
+
+    hypothesis: str
+    confidence: float
+    rationale: str = ""
+
+
+class HypothesisPort(Protocol):
+    """LLM second stage (§2.3 step 3-4); read-only, intent-only."""
+
+    async def hypothesize(self, messages: list[dict[str, str]]) -> list[Hypothesis]: ...

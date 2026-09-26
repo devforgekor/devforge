@@ -14,11 +14,20 @@ adapter is injected by the composition root), keeping the `layering` contract.
 
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Sequence
 
-from devforge.ports.error_analysis import ErrorAnalysisRepository, IncidentEvidence
+from devforge.core.logging import get_logger
+from devforge.ports.error_analysis import (
+    ErrorAnalysisRepository,
+    Hypothesis,
+    HypothesisPort,
+    IncidentEvidence,
+)
+
+_log = get_logger(__name__)
 
 _PROPOSE_MIN_CONFIDENCE = 0.5
 
@@ -136,12 +145,87 @@ def build_decision_packet(
     return packet
 
 
+_LLM_BUDGET_SEC = 120.0  # cap the whole LLM stage so `errors analyze` never hangs
+
+_HYPOTHESIS_SYSTEM = (
+    "You are a read-only SRE analyst. Given structured watchdog incident evidence, "
+    "propose the most likely root causes. Output ONLY a JSON array of objects "
+    '{"hypothesis": str, "confidence": 0..1, "rationale": str}. Cite only the provided '
+    "components; never invent evidence. Maximum 3 items."
+)
+
+
+def build_hypothesis_prompt(packet: dict[str, Any]) -> list[dict[str, str]]:
+    """Pure: render the rules packet into an LLM chat request (design §4)."""
+    evidence = packet.get("evidence", [])
+    lines = [
+        f"- incident {e['incident_id']} component={e['component']} ({e['raw_ref']})"
+        for e in evidence
+    ]
+    user = (
+        f"Window: {packet.get('window')}\n"
+        f"Rule-based cluster: {packet.get('cluster')}\n"
+        f"Rule-based root_cause: {packet.get('root_cause')}\n"
+        f"Evidence ({len(evidence)}):\n" + "\n".join(lines)
+    )
+    return [
+        {"role": "system", "content": _HYPOTHESIS_SYSTEM},
+        {"role": "user", "content": user},
+    ]
+
+
+def merge_hypotheses(
+    packet: dict[str, Any], hypotheses: Sequence[Hypothesis], *, model: str
+) -> dict[str, Any]:
+    """Pure: fold LLM hypotheses into the packet (§2.5 uncertainty + raw_ref)."""
+    if not hypotheses:
+        return packet
+    ranked = sorted(hypotheses, key=lambda h: h.confidence, reverse=True)
+    top = ranked[0]
+    prev = packet.get("root_cause") or {}
+    alternatives: list[dict[str, Any]] = []
+    if prev.get("hypothesis"):
+        alternatives.append(
+            {"hypothesis": prev.get("hypothesis"), "confidence": prev.get("confidence")}
+        )
+    alternatives.extend(
+        {"hypothesis": h.hypothesis, "confidence": round(h.confidence, 2)} for h in ranked[1:]
+    )
+    merged = dict(packet)
+    merged["root_cause"] = {
+        "hypothesis": top.hypothesis,
+        "confidence": round(top.confidence, 2),
+        "rationale": top.rationale,
+        "alternatives": alternatives,
+    }
+    merged["llm_used"] = True
+    merged["llm_model"] = model
+    if top.confidence >= _PROPOSE_MIN_CONFIDENCE:
+        merged["decision"] = "propose"
+    return merged
+
+
 class ErrorAnalysisService:
     """Reads structured incidents and builds a decision packet (no side effects)."""
 
-    def __init__(self, repository: ErrorAnalysisRepository) -> None:
+    def __init__(
+        self, repository: ErrorAnalysisRepository, hypothesis: HypothesisPort | None = None
+    ) -> None:
         self._repository = repository
+        self._hypothesis = hypothesis
 
-    async def analyze(self, since_iso: str) -> dict[str, Any]:
+    async def analyze(self, since_iso: str, *, use_llm: bool = False) -> dict[str, Any]:
         incidents = await self._repository.list_incidents(since_iso)
-        return build_decision_packet(incidents, since_iso=since_iso)
+        packet = build_decision_packet(incidents, since_iso=since_iso)
+        if not use_llm or self._hypothesis is None or not incidents:
+            return packet
+        try:
+            hypotheses = await asyncio.wait_for(
+                self._hypothesis.hypothesize(build_hypothesis_prompt(packet)),
+                timeout=_LLM_BUDGET_SEC,
+            )
+        except Exception as e:  # noqa: BLE001 — LLM stage must never break analysis
+            _log.warning("error_analysis_llm_failed", error=str(e))
+            return packet
+        model = getattr(self._hypothesis, "model_name", "llm")
+        return merge_hypotheses(packet, hypotheses, model=model)
