@@ -23,9 +23,9 @@
 | `Dockerfile` | `python:3.12-slim` (builder/runtime) | ✅ 변경(실행 이미지와 일치) |
 | CI `.github/workflows/ci.yml` | `PYTHON_VERSION: "3.12"` | ✅ 변경 |
 | 실행 컨테이너 (devforge-base/fastapi/mcp/worker) | 3.12.13 | 변경 없음(이미 3.12) |
-| 호스트 기본 `python3` | 3.9.25 | **미변경**(legacy scripts용) |
-| user unit | **8×3.12 (검증 완료) / 나머지 3.9·3.11** | **부분 전환**(2026-09-22) — 아래 §4 참조 |
-| legacy `scripts/` | 3.9 | 당분간 유지 |
+| 호스트 기본 `python3` | 3.9.25 | **미변경**(OL9 시스템 파이썬 — 제거 불가; legacy 실행은 Phase A에서 3.12로 전환) |
+| user unit | **3.12 전량** (2026-09-26, 3배치) | 아래 §4 참조 |
+| legacy `scripts/` | **3.12** (Phase A, 2026-09-26) | host shell wrapper·shebang 전량 전환 — 아래 §4 참조 |
 
 ### 이행 전 (참고)
 호스트 기본 3.9.25 · devforge는 python3.9 editable · Dockerfile 3.11-slim(실행 이미지 3.12와
@@ -146,6 +146,15 @@ grep -L "python3.12" ~/.config/systemd/user/*.service
 > **결과: python ExecStart 대상 전량 3.12.** 잔여는 의도적 예외뿐 — `ebook-watcher`(ebooklib 전용 venv)·`kv-fetch-env.py` 래퍼(외부 stdlib,
 > 대상은 이미 3.12)·`cashbook`(ExecStartPre 셸만). `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
 
+> **Phase A 완료(2026-09-26) — legacy 3.9 사용 0건**: `cashbook`→3.12(3.12 user site에 `jinja2`·`python-multipart` 설치,
+> 부트 스모크 HTTP 응답 확인), kv-fetch-env 외부 래퍼 2종(`openrouter-rr-proxy`·`or-rate-limiter`)→3.12,
+> host shell wrapper **17종**(bare `python3` 57 호출 → `python3.12`, `bash -n` 전량 통과),
+> shebang **361건**(`env python3` → `env python3.12`, `_archive` 제외).
+> 잔여 의도적 예외: container entrypoint 4종(이미지 내 python3=3.12)·`ebook-watcher` venv·`scripts/_archive`(105건)·
+> python3.11 shebang 28건·호스트 기본 `python3`(OL9 시스템 파이썬 — `dnf`가 사용하므로 제거 불가, 목표는 미사용 0건).
+> 검증: cashbook·v2-watchdog·proxy 재기동 정상, heartbeat/model_ctl 스모크 OK, `sync-units --check` no drift,
+> ruff·mypy·lint-imports·pytest 500 passed(3.12+3.9 양방향).
+
 ### 롤백
 - `git checkout` pyproject/Dockerfile/ci + `daemon-reload`. 3.9 환경은 그대로 남아 있음.
 
@@ -162,5 +171,5 @@ grep -L "python3.12" ~/.config/systemd/user/*.service
 ## 6. 결정 (2026-09-22 확정)
 
 1. **devforge 공식 기준 = Python 3.12** ✅ (실행 컨테이너와 일치, 재빌드 불필요).
-2. **legacy scripts = 3.9 유지** (기한 미정), 서비스별 전환.
+2. **legacy scripts = 3.12 전환 완료** (Phase A, 2026-09-26 — §4 참조). 호스트 기본 `python3`(OL9 시스템 파이썬)은 제거 불가하되 잔류해도 미사용.
 3. **호스트 dev/test = 3.12** (`python3.12`); 기본 `python3`(3.9)는 legacy용으로 유지.
