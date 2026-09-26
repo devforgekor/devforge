@@ -137,8 +137,12 @@ grep -L "python3.12" ~/.config/systemd/user/*.service
 > **제약/진행(2026-09-26)**: shadow 창 종료 + 컷오버 완료로 착수 가능. **1차 이관 완료** — watchdog 도메인 oneshot 3종
 > (`devforge-watchdog-liveness`·`devforge-watchdog-failed`·`devforge-mcp-inventory-failed`)을 `/usr/bin/python3.12`로 전환,
 > 유닛 실행 검증 `Result=success`. `watchdog.py`·`cli.py`·후보 스크립트 전량 `py_compile`(3.12) OK.
-> **잔여**: turn-watcher·news-api·activity-summarizer·dev-poll/dev-aging 등 상주/실작업 유닛은 서비스별 런타임 스모크
-> (`--dry-run`) 통과분만 유지보수 창에서 이관. `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
+> **2차 이관 완료(2026-09-26)**: 미러 관리 oneshot 8종(`activity-summarizer`·`baseline-daily`·`devforge-dev-aging`·
+> `devforge-dev-poll`·`devforge-sp-secret-check`·`golden-image-deploy-check`·`golden-image-yearly-check`·`kv-backup`)을
+> `/usr/bin/python3.12`로 전환(재기동 없음, 다음 타이머 실행부터 적용). import 감사 결과 **전부 stdlib-only**(외부 의존 0),
+> `py_compile`(3.12) OK. `sync-units --check` no drift.
+> **잔여(유지보수 창)**: 상주 서비스 `devforge-turn-watcher`(stdlib-only)·`devforge-news-api`(repo 밖)·`obsidian-heartbeat`(repo 밖)
+> — 재기동 수반이라 서비스별 런타임 스모크 후 유지보수 창에서 이관. `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
 
 ### 롤백
 - `git checkout` pyproject/Dockerfile/ci + `daemon-reload`. 3.9 환경은 그대로 남아 있음.

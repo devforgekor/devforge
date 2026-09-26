@@ -352,6 +352,12 @@ decisions:
     시 규칙 결과 유지(llm_used=false). 검증: 단위 13 passed, ruff/lint-imports 4 kept/mypy green, 실 DB+OpenRouter 스모크(llm_model=poolside/laguna-xs-2.1:free,
     decision propose, 5 가설). E3 해소: analysis_models.json 재생성(primary qwen/qwen3.8-27b:free).'
   status: applied
+- id: py312-batch2-2026-09-26
+  detail: 'PY-3.12 2차 이관: 미러 관리 oneshot 8종(activity-summarizer, baseline-daily, devforge-dev-aging, devforge-dev-poll, devforge-sp-secret-check,
+    golden-image-deploy-check, golden-image-yearly-check, kv-backup)을 /usr/bin/python3.12로 전환(재기동 없음). import 감사 전부 stdlib-only,
+    py_compile(3.12) OK, sync-units no drift. 잔여 상주: turn-watcher(stdlib-only, 재기동 필요), news-api/obsidian-heartbeat(repo 밖)
+    — 유지보수 창.'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -432,8 +438,6 @@ known_issues:
     대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
   resolved: false
 completed_log:
-- '(2026-09-23, opencode) known_issue 종료: OPENCODE-DB-ON-ROOT — opencode.db가 system-savings로 이전(bind active), root 18%. opencode-db-offload
-  Result=success.'
 - '(2026-09-23, opencode) known_issue 종료: WEBOBSIDIAN-CGROUP — drop-in 10-slice.conf 제거 + 재부팅 후 정상 기동, container-webobsidian
   health=healthy.'
 - '(2026-09-23, opencode) known_issue 종료: CORE-DB-UNWIRED — core/database.py 삭제(dead code, commit 84a97b5); 게이트웨이는 adapters/driven/storage/database_gateway.py.'
@@ -576,3 +580,4 @@ completed_log:
   잔여, §2 LLM 2차.'
 - '2026-09-26: error-record §2 LLM 2차 완료 — ReasoningHypothesisClient(OpenRouter chain + 로컬 폴백, 120s 예산) + errors analyze --llm.
   실 스모크 OK(5 가설, decision propose). analysis_models.json 재생성. §2(규칙+LLM) 마무리. 잔여: PY-3.12 잔여(유지보수 창), A/B/C(F4).'
+- '2026-09-26: PY-3.12 2차 — oneshot 8종 3.12 전환(stdlib-only 검증, 재기동 없음, no drift). 잔여는 상주 서비스(유지보수 창).'
