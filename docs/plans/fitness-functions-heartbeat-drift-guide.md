@@ -1,6 +1,7 @@
 # Fitness Functions + heartbeat + drift — 구현 가이드 (표준 기반)
 
-> Status: proposed · Date: 2026-09-24 · Owner: devforge
+> Status: active · Date: 2026-09-24 · Owner: devforge
+> **구현 현황(2026-09-26)**: F1 ✅(`tests/fitness/test_wiring.py`) · F2 ✅(heartbeat: `heartbeat-ping.sh` + `docs/specs/heartbeat-registry.yaml` + 5 units + `heartbeat_workers`) · F3 ◐(완결=`test_completion.py`, 계약=`test_contract.py`; 포트 패리티·drift 미구현) · F4 ⬜(A/B/C 별도).
 > Related: `reports/systemic-wiring-gap-analysis-20260924.md`(문제), `plans/detection-remediation-architecture.md`, `plans/watchdog-standard-compliance.md`, `reports/logic-recording-tracking-audit-20260923.md`
 > Deep Dive: `dp-20260924-fitness-heartbeat-drift-guide` (Yggdrasil)
 > **틀**: Fitness Functions(프레임 1개) 안에 **dead-man's switch**·**drift detection**(구체 체크 2개). context7 검증 포함.
@@ -170,10 +171,10 @@ def test_unit_exec_files_exist():
 
 | 단계 | 내용 | 게이트 |
 |---|---|---|
-| **F1** | 배선·문서 fitness(§2.2 1·5) | CI green, silent no-op(handover-gen) 노출 |
-| **F2** | **heartbeat**(§3) — `handover-gen` 신설 + ping + watchdog | grace 내 미수신 alert 확인 |
-| **F3** | 이식·완결·계약 fitness(§2.2 2·3·4) | v2 이식/마이그레이션 진행도 가시화 |
-| **F4** | drift(§4) | OutOfSync 보고 |
+| **F1** | 배선·문서 fitness(§2.2 1·5) | ✅ **done** (`test_wiring.py`) |
+| **F2** | **heartbeat**(§3) — `handover-gen` 신설 + ping + watchdog | ✅ **done** (2026-09-26) |
+| **F3** | 이식·완결·계약 fitness(§2.2 2·3·4) | ◐ **부분** — 완결 `test_completion.py` + 계약 `test_contract.py` done; 포트 패리티 미착수 |
+| **F4** | drift(§4) | ⬜ (A/B/C 별도 배치) |
 
 > shadow-run 창 중 서비스 재기동 금지 → **F1(테스트/CI)은 즉시**, F2(유닛)는 창 이후.
 
