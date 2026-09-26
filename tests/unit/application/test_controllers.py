@@ -75,3 +75,13 @@ async def test_should_skip_non_catchup_components() -> None:
 async def test_should_report_retry_when_port_fails() -> None:
     ctrl = CatchupController(FakePort(ok=False), FakeIncidents())
     assert await ctrl.reconcile("oneshot:devforge-backup.service", "failed") == "retry"
+
+
+@pytest.mark.asyncio
+async def test_should_escalate_and_not_run_at_max_attempts() -> None:
+    port, inc = FakePort(), FakeIncidents()
+    ctrl = CatchupController(port, inc, max_attempts=3)
+    outcome = await ctrl.reconcile("oneshot:x.service", "failed", inc_id=9, fail_count=3)
+    assert outcome == "escalate"
+    assert port.calls == []
+    assert inc.actions == [(9, "catchup:escalate", False)]

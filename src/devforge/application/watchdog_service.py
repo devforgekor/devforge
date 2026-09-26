@@ -15,6 +15,7 @@ from devforge.application.controllers import CatchupController
 from devforge.application.slo import compute_slos
 from devforge.core.config import WatchdogConfig
 from devforge.core.telemetry import new_run_id, set_run_id, span
+from devforge.domain.watchdog.governance import escalate_needed
 from devforge.domain.watchdog.monitoring.tracker import TrackerRegistry
 from devforge.domain.watchdog.orchestration.check_coordinator import CheckCoordinator
 from devforge.domain.watchdog.recovery.graduation import RecoveryCoordinator
@@ -147,9 +148,15 @@ class WatchdogService:
             # default → existing behavior for every component (guide §8).
             if self._catchup is not None and self._catchup_applies(c.component):
                 outcome = await self._catchup.reconcile(
-                    c.component, self._event_type(c.component), inc_id
+                    c.component, self._event_type(c.component), inc_id, t.fail_count
                 )
                 log.info("catchup %s -> %s", c.component, outcome)
+                if outcome == "escalate":
+                    await self._notify_escalate(c.component, t)
+            elif self._fix_canary_applies(c.component) and escalate_needed(
+                t.fail_count, self._config.max_attempts
+            ):
+                await self._notify_escalate(c.component, t)
             else:
                 action = self._recovery.plan(c.component, c.detail)
                 if action is not None and t.can_attempt_recovery():
@@ -210,6 +217,24 @@ class WatchdogService:
         ):
             return False
         return route(component, self._event_type(component), "").logic == "catchup"
+
+    def _fix_canary_applies(self, component: str) -> bool:
+        """Canary-gated: `fix` failures governed by routing (S2/S4)."""
+        if not self._config.routing_enabled or not matches_canary(
+            component, self._config.routing_canary
+        ):
+            return False
+        return route(component, self._event_type(component), "").logic == "fix"
+
+    async def _notify_escalate(self, component: str, tracker: Any) -> None:
+        """HITL: repeated failures stop auto-action; alert once (deduped)."""
+        if tracker.can_alert():
+            detail = (
+                f"fail_count={tracker.fail_count} >= {self._config.max_attempts}; "
+                "auto-action stopped, manual action required"
+            )
+            for n in self._notifiers:
+                await n.send_alert(component, "ESCALATE", detail)
 
     def _persist(self) -> None:
         if self._state is not None:
@@ -314,7 +339,10 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
     from devforge.adapters.driven.recovery.systemd_catchup import SystemdCatchupAdapter
 
     catchup = CatchupController(
-        SystemdCatchupAdapter(), incident_repo, window_sec=config.catchup_window_sec
+        SystemdCatchupAdapter(),
+        incident_repo,
+        window_sec=config.catchup_window_sec,
+        max_attempts=config.max_attempts,
     )
 
     service = WatchdogService(

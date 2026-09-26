@@ -460,6 +460,8 @@ class WatchdogConfig:
     catchup_enabled: bool = False
     catchup_canary: list[str] = field(default_factory=list)
     catchup_window_sec: int = 600
+    # S4 governance: repeated failures stop auto-action and escalate to a human.
+    max_attempts: int = 5
     # DataImpulse path (toki31) liveness — read-only, alert-only (no recovery).
     # Disabled by default until watchdog-standard-compliance P2.6 (single leader);
     # dry-run observation first. Signals are read-only (status.json/log/pgrep).
@@ -503,6 +505,7 @@ class WatchdogConfig:
                 s for s in os.getenv("WATCHDOG_CATCHUP_CANARY", "").split(",") if s
             ],
             catchup_window_sec=int(os.getenv("WATCHDOG_CATCHUP_WINDOW_SEC", "600")),
+            max_attempts=int(os.getenv("WATCHDOG_MAX_ATTEMPTS", "5")),
             dataimpulse_enabled=os.getenv("WATCHDOG_DATAIMPULSE_ENABLED", "0").lower()
             in ("1", "true", "yes", "on"),
             dataimpulse_status_file=os.getenv(
