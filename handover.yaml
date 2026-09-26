@@ -325,6 +325,13 @@ decisions:
     watchdog.py/cli.py 3.12 동작 확인. 잔여: 상주/실작업 유닛(turn-watcher/news-api/activity-summarizer/dev-poll/dev-aging 등)은 서비스별 런타임
     스모크 후 유지보수 창에서 이관.'
   status: applied
+- id: error-record-s2-rules-2026-09-26
+  detail: 'error-record §2 규칙 단계 구현(2026-09-26, 읽기 전용): application/error_analysis.py(build_decision_packet — 군집·근본원인 후보·fix_proposal·decision,
+    순수 규칙) + ports/error_analysis.py(IncidentEvidence/ErrorAnalysisRepository) + adapters/driven/storage/error_analysis_pg.py(L1+L2
+    읽기, asyncpg datetime 정규화) + cli.py errors analyze(--since/--days, JSON). 검증: unit 2파일 8 passed, ruff/lint-imports(4 kept)/mypy
+    green, 실 DB 스모크(9건 → signature unknown → escalate, 정직한 insufficient). LLM 2차(§4) 미착수 — packet llm_used=false. A/B/C(F4)는
+    recovery 변경(v2 재기동)이라 계속 최후.'
+  status: applied
 known_issues:
 - id: agent-docs-session-stale
   detail: 'AGENTS §11 ''Session start/end: agent_docs/session.md'' 포인터 stale(디렉터리 없음). 세션 핸드오버 자동배선 없음(handover.yaml은 자동 로드
@@ -405,7 +412,6 @@ known_issues:
     대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
   resolved: false
 completed_log:
-- '2026-09-23: ruff/mypy/pytest/lint-imports 최종 검증 전부 통과'
 - '(2026-09-23, opencode) a-3 후속 확인: fstab 미러링 미설정 대신 watchdog 보강으로 대체 확인. ONESHOT_RESULT_TARGETS에 root-volume-daily-clean.service·opencode-db-offload.service
   추가, check_oneshot_result가 타이머 LastTrigger 대신 ActiveState/Result로 판정 + system-scope 폴백 (commit 9f9dd33). 라이브 프로브: root-volume-daily-clean=success,
   opencode-db-offload=success.'
@@ -548,3 +554,6 @@ completed_log:
   SSOT) 추가, fitness 16 passed, ruff clean. 가이드 구현현황 갱신(F1/F2 done, F3 부분, F4 미착수).'
 - '2026-09-26: PY-3.12 이관 1차 — watchdog 헬퍼 3유닛 python3.12 전환·검증(Result=success), 후보 스크립트 py_compile(3.12) 전량 OK. 잔여 상주 서비스는
   런타임 스모크 후 이관. python-version-strategy.md 갱신.'
+- '2026-09-26: error-record §2 규칙 단계 완료 — errors analyze CLI(읽기 전용 decision packet). 신규 파일 4 + cli 등록, unit 8 passed, lint-imports
+  4 kept, 실 DB 스모크 OK. LLM 2차는 확장 지점(llm_used)만 둠. F2/F3/PY-3.12 1차와 함께 post-cutover 배치 마무리. 잔여: A/B/C(F4, v2 재기동), PY-3.12
+  잔여, §2 LLM 2차.'

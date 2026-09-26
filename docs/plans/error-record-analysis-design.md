@@ -1,6 +1,7 @@
 # 오류 기록·분석 설계 (Deep Dive)
 
 > Status: §1 implemented + migration applied (2026-09-24) · 2026-09-23 · Deep Dive `dp-20260923-dataimpulse-monitoring-delegation`
+> **§2 규칙 단계 구현(2026-09-26)**: `application/error_analysis.py`(군집·근본원인 후보·decision packet, 순수 규칙) + `ports/error_analysis.py` + `adapters/driven/storage/error_analysis_pg.py` + `cli.py errors analyze`(읽기 전용). **LLM 2차(§4) 미착수** — packet `llm_used=false`, 확장 지점 유지.
 > **구현(§1)**: `alembic/versions/20260923_error_record.py`(additive: `context_jsonb`+`action_error`+GIN, **적용 2026-09-24**), `domain/models.py`, `ports/types.py:Incident`, `ports/incident_repository.py`, `adapters/driven/storage/incident_pg.py`(구조화 캡처·4패턴 마스킹·repeat/reopen 갱신·action_error), `tests/unit/adapters/driven/storage/test_incident_context.py`.
 > **마이그레이션 적용(2026-09-24)**: `20260923_error_record` 적용 완료(컬럼 `context_jsonb`+`action_error`+GIN; 기존 23행 `context_jsonb='{}'`). 캡처(systemctl/journalctl/podman)는 **P2 호스트 유닛**에서 수집 — 2026-09-24 P2 완료로 컨테이너 도구 부재 문제 해소. 구조화 기록은 v2가 **비-dry-run**(cutover) 시 실제 기록.
 > **소비처 연결**: §1 기록(`context_jsonb`)은 `incident → GitHub 이슈 → PR` 루프의 **이슈 본문**에 소비되어야 하나, 현재는 legacy `context`(text)만 사용됨(`scripts/lib/watchdog/incidents.py:177`). 연결 현황·정체는 `reports/incident-issue-pr-loop-audit-20260923.md` §3.1.
