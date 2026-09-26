@@ -660,6 +660,9 @@ modules:
       status: production
       purpose: "Web search core \u2014 Brave \u2192 Tavily \u2192 you.com rotation\
         \ (extracted from proxies/search.py)."
+    rerank.py:
+      status: experimental
+      purpose: "Result reranking — OpenRouter :free \u2192 local 8080 \u2192 original order."
 - path: scripts/lib/rubric/
   purpose: Rubric
   files:
@@ -1008,6 +1011,9 @@ modules:
     refresh_openrouter_free_models.py:
       status: experimental
       purpose: OpenRouter free model auto-refresh for opencode.
+    unified_search.py:
+      status: experimental
+      purpose: "Unified search MCP transport (web/semantic) + rerank + format."
     search.py:
       status: production
       purpose: MCP search proxy (thin wrapper). Core logic lives in lib.research.web.
@@ -1306,6 +1312,9 @@ modules:
     local_adapter.py:
       status: unknown
       purpose: "Local LLM adapter \u2014 Track A (llama.cpp HTTP servers only)."
+    reasoning_hypothesis.py:
+      status: experimental
+      purpose: "error-record §2 LLM stage — OpenRouter reasoning chain + local fallback."
 - path: src/devforge/adapters/driven/notification/
   purpose: Notification adapters (legacy notifier.py)
   files:
@@ -1360,6 +1369,9 @@ modules:
     systemd_recovery.py:
       status: experimental
       purpose: "RecoveryPort implementation — systemctl restart/timer kick + probe."
+    systemd_catchup.py:
+      status: experimental
+      purpose: "CatchupPort (B) — systemctl start oneshot / kick timer service."
 - path: src/devforge/adapters/driven/proxy_utils/
   purpose: src/devforge/adapters/driven/proxy_utils
   files:
@@ -1393,6 +1405,9 @@ modules:
     heartbeat_pg.py:
       status: experimental
       purpose: "PostgresHeartbeatRepository \u2014 watchdog_pulses heartbeat_* rows."
+    error_analysis_pg.py:
+      status: experimental
+      purpose: "error-record §2 reader — watchdog_incidents L1+L2 evidence."
 - path: src/devforge/adapters/driving/
   purpose: src/devforge/adapters/driving
   files:
@@ -1426,6 +1441,9 @@ modules:
     watchdog.py:
       status: experimental
       purpose: "Watchdog CLI (status/check/resolve) \u2014 factory-injected, no application import."
+    errors.py:
+      status: experimental
+      purpose: "error-record §2 CLI — read-only decision packet (errors analyze)."
 - path: src/devforge/adapters/driving/mcp/
   purpose: src/devforge/adapters/driving/mcp
   files:
@@ -1456,6 +1474,12 @@ modules:
     slo.py:
       status: experimental
       purpose: "Pure availability SLI/SLO + error-budget derivation from watchdog incident downtime (2026 standard-gap §10)."
+    controllers.py:
+      status: experimental
+      purpose: "A/B/C remediation controllers \u2014 B CatchupController (run-log dedup)."
+    error_analysis.py:
+      status: experimental
+      purpose: "error-record §2 \u2014 rules decision packet + LLM hypothesis merge."
 - path: src/devforge/core/
   purpose: src/devforge/core
   files:
@@ -1523,6 +1547,12 @@ modules:
     __init__.py:
       status: experimental
       purpose: __init__.py
+    routing.py:
+      status: experimental
+      purpose: "A/B/C routing — fix/catchup/alert + terminal + canary match."
+    governance.py:
+      status: experimental
+      purpose: "S4 governance — counter→HITL escalation (pure)."
 - path: src/devforge/domain/watchdog/monitoring/
   purpose: Component tracking, circuit breaker, trend ETA
   files:
@@ -1605,3 +1635,9 @@ modules:
     heartbeat.py:
       status: experimental
       purpose: "HeartbeatRepository \u2014 list_heartbeats() (dead-man's switch)."
+    catchup.py:
+      status: experimental
+      purpose: "CatchupPort \u2014 run_oneshot/kick_timer (A/B/C B logic)."
+    error_analysis.py:
+      status: experimental
+      purpose: "ErrorAnalysisRepository + HypothesisPort \u2014 error-record §2 evidence."
