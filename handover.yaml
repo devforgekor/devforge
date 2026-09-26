@@ -1,12 +1,12 @@
 last_checkpoint:
-  time: '2026-09-26T20:00:00.499040+09:00'
+  time: '2026-09-26T20:30:00.240856+09:00'
   summary: 3 source, 1 generated
-  total_files: 10
+  total_files: 7
   recent_files:
     source:
-    - server/scripts/shadow_diff.py
-    - server/src/devforge/adapters/driven/storage/embedding_shadow_adapter.py
-    - server/src/devforge/cli.py
+    - server/scripts/day_cycle.sh
+    - server/scripts/pipelines/embed_orchestrate.py
+    - server/src/devforge/adapters/driven/llm/embed_adapter.py
     config: []
     docs: []
     data: []
@@ -15,9 +15,9 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 10 files changed, 227 insertions(+), 64 deletions(-)
+      unstaged: 11 files changed, 225 insertions(+), 59 deletions(-)
       staged: (none)
-      untracked_files: 4
+      untracked_files: 5
   task: null
 decisions:
 - id: nd13-01
