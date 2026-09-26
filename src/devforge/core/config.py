@@ -452,6 +452,10 @@ class WatchdogConfig:
         }
     )
     disks: list[str] = field(default_factory=lambda: ["/", "/opt/ai_data"])
+    # A/B/C routing canary (detection-remediation-implementation-guide §8 S2).
+    # [WHY] default off: enabling changes production recovery; flip per-canary.
+    routing_enabled: bool = False
+    routing_canary: list[str] = field(default_factory=list)
     # DataImpulse path (toki31) liveness — read-only, alert-only (no recovery).
     # Disabled by default until watchdog-standard-compliance P2.6 (single leader);
     # dry-run observation first. Signals are read-only (status.json/log/pgrep).
@@ -484,6 +488,11 @@ class WatchdogConfig:
             check_interval_sec=int(os.getenv("WATCHDOG_CHECK_INTERVAL_SEC", "60")),
             check_timeout_sec=int(os.getenv("WATCHDOG_CHECK_TIMEOUT_SEC", "30")),
             state_file=os.getenv("WATCHDOG_STATE_FILE", "/opt/ai_data/scripts/watchdog_state.json"),
+            routing_enabled=os.getenv("WATCHDOG_ROUTING_ENABLED", "0").lower()
+            in ("1", "true", "yes", "on"),
+            routing_canary=[
+                s for s in os.getenv("WATCHDOG_ROUTING_CANARY", "").split(",") if s
+            ],
             dataimpulse_enabled=os.getenv("WATCHDOG_DATAIMPULSE_ENABLED", "0").lower()
             in ("1", "true", "yes", "on"),
             dataimpulse_status_file=os.getenv(

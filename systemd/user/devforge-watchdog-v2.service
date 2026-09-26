@@ -13,6 +13,8 @@ Environment=PYTHONPATH=/opt/projects/server/src:/opt/projects/server/scripts
 Environment=WATCHDOG_DRY_RUN=0
 Environment=WATCHDOG_STATE_FILE=/opt/ai_data/scripts/watchdog_state.v2.json
 Environment=WATCHDOG_CHECK_INTERVAL_SEC=60
+Environment=WATCHDOG_ROUTING_ENABLED=1
+Environment=WATCHDOG_ROUTING_CANARY=svc:svc-pod-forwarding
 ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.12 -m devforge.cli watchdog serve --keys DEVFORGE-DATABASE-URL,DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL
 WatchdogSec=180
 Restart=on-watchdog

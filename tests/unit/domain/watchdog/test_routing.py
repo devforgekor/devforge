@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from devforge.domain.watchdog.routing import route
+from devforge.domain.watchdog.routing import matches_canary, route
 
 
 @pytest.mark.parametrize(
@@ -62,3 +62,10 @@ def test_should_mark_terminal_on_config_errors() -> None:
     assert route("svc:x", "down", "start request repeated: Permission denied").terminal is True
     assert route("svc:x", "down", "unit not found").terminal is True
     assert route("svc:x", "down", "connection refused").terminal is False
+
+
+def test_matches_canary_exact_and_prefix() -> None:
+    assert matches_canary("svc:svc-pod-forwarding", ["svc:svc-pod-forwarding"]) is True
+    assert matches_canary("svc:container-x", ["svc:container-"]) is True
+    assert matches_canary("llm:day-extract", ["svc:"]) is False
+    assert matches_canary("svc:x", []) is False

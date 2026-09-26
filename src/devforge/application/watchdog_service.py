@@ -17,6 +17,7 @@ from devforge.core.telemetry import new_run_id, set_run_id, span
 from devforge.domain.watchdog.monitoring.tracker import TrackerRegistry
 from devforge.domain.watchdog.orchestration.check_coordinator import CheckCoordinator
 from devforge.domain.watchdog.recovery.graduation import RecoveryCoordinator
+from devforge.domain.watchdog.routing import matches_canary, route
 from devforge.ports.health_check import HealthCheckPort
 from devforge.ports.incident_repository import IncidentRepository
 from devforge.ports.notification import NotificationPort
@@ -125,6 +126,12 @@ class WatchdogService:
                 )
                 continue
 
+            # A/B/C canary (S2): terminal fix failures are not retried. Flag off by
+            # default → existing behavior for every component (guide §8).
+            if self._should_skip_terminal(c.component, c.detail):
+                log.info("routing terminal skip (canary): %s (%s)", c.component, c.detail)
+                continue
+
             # Alert-only families (memory/llm/disk/heartbeat) still get recovery
             # and notification, but never an incident row (see policy above).
             inc_id: Optional[int] = None
@@ -174,6 +181,15 @@ class WatchdogService:
     async def resolve_incident(self, incident_id: int, note: str) -> None:
         """Resolve an incident via the repository port."""
         await self._incidents.record_action(incident_id, f"manual: {note}", True)
+
+    def _should_skip_terminal(self, component: str, detail: str) -> bool:
+        """Canary-gated: skip recovery for terminal `fix` failures (S2)."""
+        if not self._config.routing_enabled or not matches_canary(
+            component, self._config.routing_canary
+        ):
+            return False
+        decision = route(component, self._event_type(component), detail)
+        return decision.logic == "fix" and decision.terminal
 
     def _persist(self) -> None:
         if self._state is not None:

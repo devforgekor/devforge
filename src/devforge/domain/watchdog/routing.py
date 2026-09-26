@@ -14,7 +14,7 @@ recovery-kind SSOT (no live behavior change; S1 — wiring is gated S2/S3).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional, Sequence
 
 from devforge.domain.watchdog.recovery.strategies import classify_recovery_kind
 
@@ -46,3 +46,8 @@ def route(component: str, event_type: str, detail: str = "") -> RouteDecision:
         return RouteDecision("catchup", catchup_kind, "mutating")
     terminal = any(marker in detail.lower() for marker in _TERMINAL_MARKERS)
     return RouteDecision("fix", kind, "mutating", terminal)
+
+
+def matches_canary(component: str, canary: Sequence[str]) -> bool:
+    """True if `component` is in the canary allowlist (exact or prefix match)."""
+    return any(component == entry or component.startswith(entry) for entry in canary)
