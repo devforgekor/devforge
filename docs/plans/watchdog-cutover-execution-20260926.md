@@ -147,4 +147,6 @@ systemd-run --user --on-calendar="2026-09-26 04:12:00 UTC" \
 - **2026-09-26T05:27:03Z — P3(부분) v2 하드닝 + §16-6(b) 적용.**
   v2 유닛: `NoNewPrivileges=yes` + `ProtectSystem=strict` + `ReadWritePaths=/opt/ai_data/scripts`, 재기동. 실측: `strict`에서도 `/var/tmp`·`/run/user`·`/tmp`는 쓰기 가능 → **C5의 "/var/tmp ReadWritePaths 필수"는 오가정으로 정정**(state 경로만 필요). 검증: `dry_run=False`, state/liveness/token cache 정상, journal 오류 0, incident 0.
   §16-6(b): `SWAP_CRIT_MB` 9000(총량 4095 초과=도달 불가)→**3500**, `SWAP_WARN_MB` 6000→**2500** (legacy `lib/watchdog/config.py` + v2 `system_health.py` 동일, parity test green). §16-6(a) disk: v2는 alert-only 90% 유지(legacy DISK_WARN/CRIT 85/92는 미사용) — 의도된 v2 동작으로 문서화.
-- **미실행(대기)**: error-record §2(분석 계층 **미구현** — 설계만, 코드 선행 필요), F2 heartbeat(신규 파일·설계 필요), P4(A/B/C/F3/PY-3.12).
+- **2026-09-26T05:34Z — F2 heartbeat(dead-man's switch) 적용.**
+  `scripts/deploy/heartbeat-ping.sh`(신규) + `docs/specs/heartbeat-registry.yaml`(신규) + 대상 유닛 5개(`handover_gen`·`dev_poll`·`daily_structure`·`backup`·`system_sync`) `ExecStartPost`, v2/legacy `heartbeat_workers` 확장(parity 유지). 검증: 5워커 `healthy=True`, stale 강제 시 `healthy=False 1003s >= 900s`, 재시딩. v2 재기동 후 incident 0.
+- **미실행(대기)**: error-record §2(분석 계층 **미구현** — 설계만, 코드 선행 필요), P4(A/B/C/F3/PY-3.12).
