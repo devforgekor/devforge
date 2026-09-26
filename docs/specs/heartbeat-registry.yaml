@@ -1,0 +1,13 @@
+# heartbeat registry — dead-man's switch (F2, fitness-functions-heartbeat-drift-guide.md §3).
+# [WHY] watchdog v2 HeartbeatHealthChecker reads these workers from watchdog_pulses as
+# heartbeat_<job> and alerts when age >= max_age_sec. Emitters are the ExecStartPost hooks on
+# the listed systemd units (scripts/deploy/heartbeat-ping.sh <job>).
+# Keep in sync with src/devforge/core/config.py heartbeat_workers and
+# scripts/lib/watchdog/config.py HEARTBEAT_WORKERS (parity test test_watchdog_config_parity).
+version: 1
+jobs:
+  handover_gen:    {interval_sec: 600,   grace_sec: 300,  max_age_sec: 900,   unit: devforge-handover-gen.service}
+  dev_poll:        {interval_sec: 600,   grace_sec: 300,  max_age_sec: 900,   unit: devforge-dev-poll.service}
+  daily_structure: {interval_sec: 86400, grace_sec: 3600, max_age_sec: 90000, unit: devforge-daily-structure.service}
+  backup:          {interval_sec: 86400, grace_sec: 7200, max_age_sec: 93600, unit: devforge-backup.service}
+  system_sync:     {interval_sec: 1800,  grace_sec: 600,  max_age_sec: 2400,  unit: devforge-system-sync.service}

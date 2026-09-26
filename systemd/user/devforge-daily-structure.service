@@ -5,5 +5,6 @@ Description=DevForge Daily git autocommit + push (UTC 00:00 = KST 09:00; arch-do
 Type=oneshot
 ExecStart=-/bin/bash -c 'cd /opt/projects/server && git add -A && git reset -q -- src tests scripts pyproject.toml docs "*.md" 2>/dev/null; if ! git diff --cached --quiet; then git commit -m "auto: sync $(date +%%Y-%%m-%%d)"; fi'
 ExecStart=-/bin/bash -c 'cd /opt/projects/server && git push'
+ExecStartPost=-/opt/projects/server/scripts/deploy/heartbeat-ping.sh daily_structure
 StandardOutput=journal
 StandardError=journal

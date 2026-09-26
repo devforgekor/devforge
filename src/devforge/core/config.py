@@ -443,6 +443,12 @@ class WatchdogConfig:
             "day_extract": 1800,
             "day_enrich": 1800,
             "news_collector": 25200,
+            # F2 dead-man's switch for oneshot timer units (docs/specs/heartbeat-registry.yaml).
+            "handover_gen": 900,
+            "dev_poll": 900,
+            "daily_structure": 90000,
+            "backup": 93600,
+            "system_sync": 2400,
         }
     )
     disks: list[str] = field(default_factory=lambda: ["/", "/opt/ai_data"])

@@ -174,6 +174,12 @@ HEARTBEAT_WORKERS: dict[str, int] = {
     "day_extract": 1800,  # extract.py — LLM extraction pipeline
     "day_enrich": 1800,  # enrich.py — LLM enrichment pipeline
     "news_collector": 25200,  # news collector (6h timer) — completion heartbeat only
+    # F2 dead-man's switch for oneshot timer units (docs/specs/heartbeat-registry.yaml).
+    "handover_gen": 900,  # devforge-handover-gen.service (10m timer)
+    "dev_poll": 900,  # devforge-dev-poll.service (10m timer)
+    "daily_structure": 90000,  # devforge-daily-structure.service (24h timer)
+    "backup": 93600,  # devforge-backup.service (daily)
+    "system_sync": 2400,  # devforge-system-sync.service (30m timer)
 }  # worker_name → max_age_seconds. Only register workers that actually call heartbeat().
 
 # Stale completion-heartbeat workers that should be kicked once (with cooldown)

@@ -5,5 +5,6 @@ Description=DevForge Handover Gen — regenerate handover.yaml from session chec
 Type=oneshot
 WorkingDirectory=/opt/projects/server
 ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/update_handover.py
+ExecStartPost=-/opt/projects/server/scripts/deploy/heartbeat-ping.sh handover_gen
 StandardOutput=journal
 StandardError=journal

@@ -54,7 +54,7 @@
 |---|---|---|
 | 스토리지 | `object-storage.md` | active |
 | 아키텍처(수동) | `system-architecture.md` | active |
-| 스키마/레지스트리 | `specs/schema.sql`, `specs/timer-registry.yaml` | active |
+| 스키마/레지스트리 | `specs/schema.sql`, `specs/timer-registry.yaml`, `specs/heartbeat-registry.yaml` | active |
 | Azure Golden Image(런북) | `runbooks/runbook-golden-image.md` | active |
 | Azure Qwen 엔드포인트 | `runbooks/azure-qwen-deepdive-endpoint.md` | active |
 | Azure 재빌드 핸드오버 | `_archive/plans/azure-golden-image-rebuild-handover.md` | archived |
