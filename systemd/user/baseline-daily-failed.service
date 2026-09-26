@@ -3,4 +3,4 @@ Description=Baseline daily failure checkpoint (OnFailure handler)
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 -c "import os,datetime;open(os.path.expanduser('~/.local/state/baseline-daily.failed'),'a').write(datetime.datetime.now(datetime.timezone.utc).isoformat()+' baseline-daily FAILED\n')"
+ExecStart=/usr/bin/python3.12 -c "import os,datetime;open(os.path.expanduser('~/.local/state/baseline-daily.failed'),'a').write(datetime.datetime.now(datetime.timezone.utc).isoformat()+' baseline-daily FAILED\n')"
