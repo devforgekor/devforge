@@ -497,12 +497,12 @@ class WatchdogConfig:
             routing_enabled=os.getenv("WATCHDOG_ROUTING_ENABLED", "0").lower()
             in ("1", "true", "yes", "on"),
             routing_canary=[
-                s for s in os.getenv("WATCHDOG_ROUTING_CANARY", "").split(",") if s
+                s.strip() for s in os.getenv("WATCHDOG_ROUTING_CANARY", "").split(",") if s.strip()
             ],
             catchup_enabled=os.getenv("WATCHDOG_CATCHUP_ENABLED", "0").lower()
             in ("1", "true", "yes", "on"),
             catchup_canary=[
-                s for s in os.getenv("WATCHDOG_CATCHUP_CANARY", "").split(",") if s
+                s.strip() for s in os.getenv("WATCHDOG_CATCHUP_CANARY", "").split(",") if s.strip()
             ],
             catchup_window_sec=int(os.getenv("WATCHDOG_CATCHUP_WINDOW_SEC", "600")),
             max_attempts=int(os.getenv("WATCHDOG_MAX_ATTEMPTS", "5")),

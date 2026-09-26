@@ -86,3 +86,34 @@ class TestDbUrlAsyncProperty:
         # The raw property must NOT normalize, since it is used for display.
         monkeypatch.setenv("DEVFORGE_DATABASE_URL", "postgresql://a/db1")
         assert self._registry().db_url == "postgresql://a/db1"
+
+
+class TestWatchdogCanaryConfig:
+    """A/B/C canary config parsing (S2/S3)."""
+
+    def test_should_parse_and_strip_canary_values(self, monkeypatch) -> None:
+        from devforge.core.config import WatchdogConfig
+
+        monkeypatch.setenv("WATCHDOG_ROUTING_ENABLED", "1")
+        monkeypatch.setenv("WATCHDOG_ROUTING_CANARY", "svc:a, svc:b ,")
+        monkeypatch.setenv("WATCHDOG_CATCHUP_ENABLED", "on")
+        monkeypatch.setenv("WATCHDOG_CATCHUP_CANARY", "timer:x.timer")
+        cfg = WatchdogConfig.from_env()
+        assert cfg.routing_enabled is True
+        assert cfg.routing_canary == ["svc:a", "svc:b"]
+        assert cfg.catchup_enabled is True
+        assert cfg.catchup_canary == ["timer:x.timer"]
+
+    def test_should_default_off(self, monkeypatch) -> None:
+        from devforge.core.config import WatchdogConfig
+
+        for key in (
+            "WATCHDOG_ROUTING_ENABLED",
+            "WATCHDOG_CATCHUP_ENABLED",
+            "WATCHDOG_ROUTING_CANARY",
+            "WATCHDOG_CATCHUP_CANARY",
+        ):
+            monkeypatch.delenv(key, raising=False)
+        cfg = WatchdogConfig.from_env()
+        assert cfg.routing_enabled is False and cfg.routing_canary == []
+        assert cfg.catchup_enabled is False and cfg.catchup_canary == []
