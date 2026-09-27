@@ -1,23 +1,18 @@
 last_checkpoint:
-  time: '2026-09-27T22:30:00.192462+09:00'
+  time: '2026-09-27T14:00:01.418976+00:00'
   summary: 2 source, 1 docs, 1 generated
-  total_files: 8
+  total_files: 10
   recent_files:
+    data: []
+    docs:
+    - server/docs/architecture/code-structure.yaml
+    config: []
     source:
     - server/scripts/backup_ssot_golden.py
     - server/tests/unit/test_backup_ssot_golden.py
-    config: []
-    docs:
-    - server/docs/architecture/code-structure.yaml
-    data: []
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 7 files changed, 258 insertions(+), 60 deletions(-)
-      staged: (none)
-      untracked_files: 7
+  git: {}
   task: null
 decisions:
 - id: nd13-01
