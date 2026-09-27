@@ -90,10 +90,26 @@ def log(msg: str) -> None:
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     log(f"$ {' '.join(cmd)}")
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    except OSError as e:
+        raise BackupError(f"cannot execute {cmd[0]}: {e}") from e
     if r.returncode != 0:
         log(f"FAILED rc={r.returncode}: {(r.stderr or '').strip()[:400]}")
     return r
+
+
+def _relay_stderr(r: subprocess.CompletedProcess[str]) -> None:
+    # [WHY] remote trace is useful on success; on failure run() already logged the
+    # first 400 chars, so a raw relay would duplicate the FAILED line.
+    if r.returncode == 0 and r.stderr:
+        print(r.stderr, file=sys.stderr, end="")
+
+
+def _safe_name(name: str) -> str:
+    if not name or name in {".", ".."} or Path(name).name != name:
+        raise BackupError(f"unsafe file name: {name!r}")
+    return name
 
 
 def _is_glob(pattern: str) -> bool:
@@ -131,9 +147,12 @@ def sha256_file(path: Path) -> str:
 
 
 def git_commit() -> str:
-    r = subprocess.run(
-        ["git", "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True
-    )
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True
+        )
+    except OSError:
+        return "unknown"
     return r.stdout.strip() if r.returncode == 0 else "unknown"
 
 
@@ -154,6 +173,7 @@ def stage(commit: str | None = None) -> tuple[Path, dict]:
     files, unmatched = collect()
     manifest = build_manifest(files, unmatched, commit if commit is not None else git_commit())
     STAGE.mkdir(parents=True, exist_ok=True)
+    STAGE.chmod(0o700)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     tar_path = STAGE / f"ssot-golden-{ts}.tar.gz"
     with tarfile.open(tar_path, "w:gz") as tf:
@@ -164,6 +184,7 @@ def stage(commit: str | None = None) -> tuple[Path, dict]:
         for rel, p in sorted(files.items()):
             tf.add(p, arcname=rel, recursive=False)
     log(f"staged {tar_path.name} ({tar_path.stat().st_size} bytes, {len(files)} files)")
+    tar_path.chmod(0o600)
     return tar_path, manifest
 
 
@@ -210,8 +231,7 @@ def bootstrap(_args: argparse.Namespace) -> int:
     r = run(["ssh", SSH_HOST, _remote_cmd(script.name, "remote-setup")])
     if r.returncode != 0:
         raise BackupError(f"remote-setup failed: {(r.stderr or '').strip()[:300]}")
-    if r.stdout:
-        print(r.stdout, end="")
+    _relay_stderr(r)
     remote = _parse_last_json(r.stdout)
     print(json.dumps({"command": "bootstrap", "status": "ok", "remote": remote}))
     return 0
@@ -243,15 +263,17 @@ def ship(args: argparse.Namespace) -> int:
     )
     if r.returncode != 0:
         raise BackupError(f"remote-receive failed: {(r.stderr or '').strip()[:300]}")
-    if r.stdout:
-        print(r.stdout, end="")
+    _relay_stderr(r)
     remote = _parse_last_json(r.stdout)
     result: dict = {"command": "ship", "status": "ok", "archive": tar_path.name, "remote": remote}
     if args.oci:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import osync_backup  # noqa: PLC0415 — lazy so plain ship never touches the oci CLI
 
-        osync_backup.oci_upload(tar_path, f"backups/ssot-golden/{tar_path.name}")
+        try:
+            osync_backup.oci_upload(tar_path, f"backups/ssot-golden/{tar_path.name}")
+        except RuntimeError as e:
+            raise BackupError(f"oci upload failed: {e}") from e
     pruned = prune_local_stage()
     result["local_pruned"] = pruned
     print(json.dumps(result))
@@ -263,14 +285,13 @@ def verify(args: argparse.Namespace) -> int:
     r = run(["ssh", SSH_HOST, _remote_cmd("backup_ssot_golden.py", "remote-verify", extra)])
     if r.stdout:
         print(r.stdout, end="")
-    if r.stderr:
-        print(r.stderr, file=sys.stderr, end="")
+    _relay_stderr(r)
     # [WHY] ssh uses 255 for transport failures; the contract reserves 0/1/2.
     return 2 if r.returncode == 255 else r.returncode
 
 
 def install_age() -> None:
-    if AGE_BIN.is_file():
+    if AGE_BIN.is_file() and AGE_KEYGEN.is_file():
         r = run([str(AGE_BIN), "--version"])
         if r.returncode == 0:
             return
@@ -282,13 +303,14 @@ def install_age() -> None:
         f"{AGE_VERSION}/age-{AGE_VERSION}-linux-{arch}.tar.gz"
     )
     AGE_BIN.parent.mkdir(parents=True, exist_ok=True)
-    with (
-        urllib.request.urlopen(url, timeout=60) as resp,
-        tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp,
-    ):
-        shutil.copyfileobj(resp, tmp)
-        tmp_path = Path(tmp.name)
+    tmp_path: Path | None = None
     try:
+        with (
+            urllib.request.urlopen(url, timeout=60) as resp,
+            tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp,
+        ):
+            tmp_path = Path(tmp.name)
+            shutil.copyfileobj(resp, tmp)
         with tarfile.open(tmp_path) as tf:
             for name in ("age/age", "age/age-keygen"):
                 src = tf.extractfile(name)
@@ -297,8 +319,13 @@ def install_age() -> None:
                 dest = AGE_BIN.parent / Path(name).name
                 dest.write_bytes(src.read())
                 dest.chmod(0o755)
+    except BackupError:
+        raise
+    except (OSError, tarfile.TarError) as e:
+        raise BackupError(f"age download/install failed: {e}") from e
     finally:
-        tmp_path.unlink(missing_ok=True)
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
     r = run([str(AGE_BIN), "--version"])
     if r.returncode != 0:
         raise BackupError("age install failed --version check")
@@ -357,9 +384,11 @@ def age_recipient() -> str:
 def remote_setup(_args: argparse.Namespace) -> int:
     for d in (INBOX, ARCHIVE, RDIR / "logs", KEYS):
         d.mkdir(parents=True, exist_ok=True)
-    KEYS.chmod(0o700)
+        # [WHY] inbox/logs carry plaintext during receive/verify — owner-only.
+        d.chmod(0o700)
     install_age()
-    if not (GNUPG / "private-keys-v1.d").exists():
+    pk = GNUPG / "private-keys-v1.d"
+    if not pk.is_dir() or not any(pk.iterdir()):
         gen_gpg_key()
     if not AGE_KEY.is_file():
         gen_age_key()
@@ -384,14 +413,16 @@ def prune_archive() -> int:
 
 
 def remote_receive(args: argparse.Namespace) -> int:
-    inbox_file = INBOX / args.file
+    inbox_file = INBOX / _safe_name(args.file)
     if not inbox_file.is_file():
         raise BackupError(f"inbox file missing: {inbox_file}")
     age_out = Path(str(inbox_file) + ".age")
+    age_out.unlink(missing_ok=True)
     r = run([str(AGE_BIN), "-r", age_recipient(), "-o", str(age_out), str(inbox_file)])
     if r.returncode != 0:
         raise BackupError(f"age encrypt failed: {(r.stderr or '').strip()[:300]}")
     gpg_out = Path(str(age_out) + ".gpg")
+    gpg_out.unlink(missing_ok=True)
     r = run(
         [
             "gpg",
@@ -471,17 +502,24 @@ def verify_extracted(extract_dir: Path) -> tuple[dict, int]:
         manifest = json.loads(mf.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         return {"status": "error", "error": f"manifest unreadable: {e}"}, 2
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), list):
+        return {"status": "error", "error": "manifest malformed"}, 2
+    if any(
+        not isinstance(e, dict) or not isinstance(e.get("path"), str) for e in manifest["files"]
+    ):
+        return {"status": "error", "error": "manifest entries malformed"}, 2
     report = compare_manifest(extract_dir, manifest)
     return report, (0 if report["status"] == "pass" else 1)
 
 
 def remote_verify(args: argparse.Namespace) -> int:
-    archive = ARCHIVE / args.file if args.file else newest_archive()
+    archive = ARCHIVE / _safe_name(args.file) if args.file else newest_archive()
     if archive is None or not archive.is_file():
         print(json.dumps({"command": "remote-verify", "status": "error", "error": "no archive"}))
         return 2
-    tmp = RDIR / "logs" / f"verify-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
-    tmp.mkdir(parents=True, exist_ok=True)
+    logs = RDIR / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix="verify-", dir=logs))
     try:
         age_ct = tmp / "artifact.age"
         r = run(
@@ -529,8 +567,21 @@ def remote_verify(args: argparse.Namespace) -> int:
             return 2
         extract_dir = tmp / "x"
         extract_dir.mkdir()
-        with tarfile.open(plain) as tf:
-            tf.extractall(extract_dir, filter="data")
+        try:
+            with tarfile.open(plain) as tf:
+                tf.extractall(extract_dir, filter="data")
+        except (tarfile.TarError, OSError) as e:
+            print(
+                json.dumps(
+                    {
+                        "command": "remote-verify",
+                        "archive": archive.name,
+                        "status": "error",
+                        "error": f"tar extract failed: {e}",
+                    }
+                )
+            )
+            return 2
         report, code = verify_extracted(extract_dir)
         print(json.dumps({"command": "remote-verify", "archive": archive.name, **report}))
         return code
@@ -560,7 +611,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except BackupError as e:
+    except (BackupError, OSError) as e:
         print(json.dumps({"command": args.command, "status": "error", "error": str(e)}))
         return 2
 

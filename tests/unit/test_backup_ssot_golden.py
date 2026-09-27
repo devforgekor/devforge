@@ -17,6 +17,7 @@ import tarfile
 from pathlib import Path
 
 import backup_ssot_golden as bs
+import pytest
 
 
 class FakeRC:
@@ -60,6 +61,32 @@ def _build_artifact(root: Path, *, sha_override: str | None = None) -> Path:
         info.size = len(blob)
         tf.addfile(info, io.BytesIO(blob))
     return tar_path
+
+
+def _prepare_verify(tmp_path: Path, monkeypatch, payload: bytes) -> None:
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    (archive / "a.tar.gz.age.gpg").write_bytes(payload)
+    monkeypatch.setattr(bs, "ARCHIVE", archive)
+    monkeypatch.setattr(bs, "RDIR", tmp_path / "remote")
+    monkeypatch.setattr(bs, "GNUPG", tmp_path / "gnupg")
+    monkeypatch.setattr(bs, "AGE_KEY", tmp_path / "age-key.txt")
+    monkeypatch.setattr(bs, "AGE_BIN", tmp_path / "bin" / "age")
+
+
+def _fake_decrypt_chain(payload: bytes):
+    def fake_run(cmd: list[str]) -> FakeRC:
+        if "--decrypt" in cmd:
+            _out_path(cmd).write_bytes(payload)  # type: ignore[union-attr]
+            return FakeRC()
+        if "-d" in cmd:
+            out = _out_path(cmd)
+            assert out is not None
+            out.write_bytes(Path(cmd[-1]).read_bytes())  # type: ignore[union-attr]
+            return FakeRC()
+        return FakeRC()
+
+    return fake_run
 
 
 def test_should_collect_files_when_patterns_match(tmp_path: Path, monkeypatch) -> None:
@@ -265,3 +292,85 @@ def test_should_fail_with_exit_2_when_gpg_decrypt_fails(
     assert rc == 2
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert out["error"] == "gpg decrypt failed"
+
+
+def test_should_reject_traversal_when_verify_file_arg_unsafe(tmp_path: Path, monkeypatch) -> None:
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    monkeypatch.setattr(bs, "ARCHIVE", archive)
+    monkeypatch.setattr(bs, "RDIR", tmp_path / "remote")
+    with pytest.raises(bs.BackupError, match="unsafe"):
+        bs.remote_verify(argparse.Namespace(file="../evil.tar.gz"))
+    with pytest.raises(bs.BackupError, match="unsafe"):
+        bs.remote_verify(argparse.Namespace(file="sub/evil.tar.gz"))
+
+
+def test_should_accept_basename_only_when_validating_names() -> None:
+    assert bs._safe_name("ssot-golden-x.tar.gz.age.gpg") == "ssot-golden-x.tar.gz.age.gpg"
+    for bad in ("", ".", "..", "../x", "a/b", "/etc/passwd"):
+        with pytest.raises(bs.BackupError):
+            bs._safe_name(bad)
+
+
+def test_should_fail_with_exit_2_when_tar_corrupt_after_decrypt(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    _prepare_verify(tmp_path, monkeypatch, b"cipher")
+    monkeypatch.setattr(bs, "run", _fake_decrypt_chain(b"cipher"))
+    rc = bs.remote_verify(argparse.Namespace(file=None))
+    assert rc == 2
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["error"].startswith("tar extract failed")
+
+
+def test_should_fail_with_exit_2_when_manifest_malformed(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "a.txt").write_text("v1", encoding="utf-8")
+    tar_path = tmp_path / "art.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        tf.add(work / "a.txt", arcname="a.txt")
+        blob = json.dumps({"files": "not-a-list"}).encode("utf-8")
+        info = tarfile.TarInfo("manifest.json")
+        info.size = len(blob)
+        tf.addfile(info, io.BytesIO(blob))
+    _prepare_verify(tmp_path, monkeypatch, tar_path.read_bytes())
+    monkeypatch.setattr(bs, "run", _fake_decrypt_chain(tar_path.read_bytes()))
+    rc = bs.remote_verify(argparse.Namespace(file=None))
+    assert rc == 2
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["error"] == "manifest malformed"
+
+
+def test_should_raise_backuperror_when_binary_missing() -> None:
+    with pytest.raises(bs.BackupError, match="cannot execute"):
+        bs.run(["/nonexistent/devforge-missing-bin-9x", "--version"])
+
+
+def test_should_print_single_json_line_when_ship_succeeds(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    src = _make_src_tree(tmp_path)
+    monkeypatch.setattr(bs, "SSOT_SOURCES", [(src, ["doc.md"])])
+    monkeypatch.setattr(bs, "STAGE", tmp_path / "stage")
+
+    def fake_run(cmd: list[str]) -> FakeRC:
+        if cmd[0] == "ssh":
+            return FakeRC(
+                stdout='{"command":"remote-receive","status":"ok"}\n',
+                stderr="remote trace\n",
+            )
+        return FakeRC()
+
+    monkeypatch.setattr(bs, "run", fake_run)
+    rc = bs.ship(argparse.Namespace(dry_run=False, oci=False))
+    assert rc == 0
+    captured = capsys.readouterr()
+    lines = [ln for ln in captured.out.strip().splitlines() if ln]
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["command"] == "ship"
+    assert payload["remote"]["status"] == "ok"
+    assert "remote trace" in captured.err
