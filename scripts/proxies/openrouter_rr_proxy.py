@@ -4,24 +4,21 @@
 """
 OpenRouter API Key Round-Robin Proxy.
 
-Distributes requests across 3 OpenRouter accounts. Two routing modes:
+Distributes requests across 3 OpenRouter accounts. Every model — whether
+registered in opencode-rr.json (provider.openrouter.models) or unknown —
+rotates over ALL accounts per request (account 1→2→3→1...). A request that
+fails on one account is retried on the next, so a single account's daily
+limit does not kill a model.
 
-1. **Pinned models** — each model configured in opencode-rr.json
-   (provider.openrouter.models, in order) is dedicated to ONE account
-   (model[0]→MESIDS, model[1]→MINIPARK4U, model[2]→HYEONMINPARK4U).
-   Per-minute limits cannot be bypassed anyway (OpenRouter governs RPM
-   globally), so pinning isolates each model's DAILY quota to a single
-   account — the fallback chain (model A→B→C) lands on distinct accounts.
-   A pinned request that fails does NOT fall back to other accounts; the
-   error is returned as-is so opencode's modelFallbackChain advances.
-
-2. **Round-robin** — unpinned/unknown models rotate through all keys
-   per request (original RPM-avoidance behavior kept as fallback).
+Registered models round-robin from their own cursor (each model spreads its
+own traffic); unknown models use the shared global cursor. The per-model
+account list is read from opencode-rr.json, so a model can be scoped to a
+subset of accounts later without code changes.
 
 Endpoints:
   POST /v1/chat/completions  — OpenAI-compatible chat (stream + non-stream)
   GET  /v1/models            — list models from OpenRouter
-  GET  /health               — health check (incl. pinned model→account map)
+  GET  /health               — health check (incl. model→account rotation map)
 """
 
 import json
@@ -109,9 +106,11 @@ current_key_index = 0
 # Account labels aligned with KEYS order.
 ACCOUNT_LABELS = ["MESIDS", "MINIPARK4U", "HYEONMINPARK4U"]
 
-# model_id -> key index, loaded from opencode-rr.json (mtime-cached).
-_pinned_map: dict[str, int] = {}
-_pinned_mtime: float = -1.0
+# model_id -> ordered key indices, loaded from opencode-rr.json (mtime-cached).
+_model_accounts: dict[str, list[int]] = {}
+_model_mtime: float = -1.0
+# model_id -> next position within its account list (per-model round-robin).
+_model_cursor: dict[str, int] = {}
 
 
 @asynccontextmanager
@@ -126,7 +125,7 @@ app = FastAPI(title="OpenRouter RR Proxy", version="1.0.0", lifespan=_lifespan)
 
 
 # ---------------------------------------------------------------------------
-# Round-robin / pinning
+# Round-robin
 # ---------------------------------------------------------------------------
 
 
@@ -143,42 +142,55 @@ def _next_key() -> tuple[int, str]:
     return idx, KEYS[idx]
 
 
-def _load_pinned_map() -> dict[str, int]:
-    """Map opencode-rr.json provider.openrouter.models (in order) to key indices.
+def _load_model_accounts() -> dict[str, list[int]]:
+    """Map each configured model to its account rotation order.
 
-    Each configured model is pinned to ONE account: model[0]→MESIDS,
-    model[1]→MINIPARK4U, model[2]→HYEONMINPARK4U. The daily auto-refresh
-    rewrites opencode-rr.json; mtime check picks the change up without restart.
+    Every model in opencode-rr.json provider.openrouter.models rotates over all
+    accounts (account 1→2→3...). The daily auto-refresh rewrites opencode-rr.json;
+    the mtime check picks the change up without restart.
     """
-    mapping: dict[str, int] = {}
+    mapping: dict[str, list[int]] = {}
     try:
         with open(OPCODE_CONFIG) as f:
             cfg = json.load(f)
         models = cfg.get("provider", {}).get("openrouter", {}).get("models", {})
-        for i, model_id in enumerate(models.keys()):
-            if i < NUM_KEYS:
-                mapping[model_id] = i
+        for model_id in models:
+            mapping[model_id] = list(range(NUM_KEYS))
     except Exception as e:
-        logger.error("Failed to load pinned model map from %s: %s", OPCODE_CONFIG, e)
+        logger.error("Failed to load model→account map from %s: %s", OPCODE_CONFIG, e)
     return mapping
 
 
-def _pinned_key(model: str) -> int | None:
-    """Return the pinned key index for a model, reloading config on change."""
-    global _pinned_map, _pinned_mtime
+def _refresh_model_accounts() -> None:
+    """Reload the model→account map when opencode-rr.json changes (mtime)."""
+    global _model_accounts, _model_mtime
     try:
         mtime = os.path.getmtime(OPCODE_CONFIG)
     except OSError:
         mtime = -1.0
-    if mtime != _pinned_mtime:
-        _pinned_map = _load_pinned_map()
-        _pinned_mtime = mtime
-        if _pinned_map:
+    if mtime != _model_mtime:
+        _model_accounts = _load_model_accounts()
+        _model_mtime = mtime
+        if _model_accounts:
             logger.info(
-                "Pinned model→account: %s",
-                {m: _account_label(i) for m, i in _pinned_map.items()},
+                "Model→accounts: %s",
+                {m: [_account_label(i) for i in idx] for m, idx in _model_accounts.items()},
             )
-    return _pinned_map.get(model)
+
+
+def _model_account_order(model: str) -> list[int] | None:
+    """Return the account order for a registered model, or None if unregistered.
+
+    The starting account advances per model (1→2→3→1...) so consecutive requests
+    for the same model spread across accounts instead of hammering one.
+    """
+    _refresh_model_accounts()
+    accounts = _model_accounts.get(model)
+    if not accounts:
+        return None
+    start = _model_cursor.get(model, 0) % len(accounts)
+    _model_cursor[model] = (start + 1) % len(accounts)
+    return [accounts[(start + o) % len(accounts)] for o in range(len(accounts))]
 
 
 # ---------------------------------------------------------------------------
@@ -280,14 +292,10 @@ async def _forward_key(idx: int, body: dict, is_stream: bool, model: str):
 async def chat_completions(request: Request):
     """OpenAI-compatible chat completions.
 
-    Pinned models (registered in opencode-rr.json, one per account) are sent
-    ONLY to their dedicated account — no cross-account fallback. If the pinned
-    account fails (e.g. daily limit 429), the error is returned as-is so
-    opencode's modelFallbackChain advances to the next model, which is pinned
-    to a different account with a fresh daily quota. Per-minute limits cannot
-    be avoided regardless (OpenRouter governs RPM globally), so this pins each
-    model's daily quota to a single account instead.
-    Unpinned/unknown models keep the original round-robin + 429 retry.
+    Every model round-robins over all accounts. Registered models (present in
+    opencode-rr.json) start from their own per-model cursor; unknown models use
+    the shared global cursor. Requests are retried on the next account when one
+    fails, so an account's daily limit (429) does not take a model down.
     """
     try:
         body = await request.json()
@@ -297,34 +305,21 @@ async def chat_completions(request: Request):
     is_stream = body.get("stream", False)
     model = body.get("model", "unknown")
 
-    pinned_idx = _pinned_key(model)
-    if pinned_idx is not None:
-        # Pinned: single dedicated account, no fallback.
-        try:
-            return await _forward_key(pinned_idx, body, is_stream, model)
-        except HTTPException as e:
-            logger.warning(
-                "✗ pinned account %s failed for %s (status %d): %s",
-                _account_label(pinned_idx),
-                model,
-                e.status_code,
-                e.detail,
-            )
-            raise
+    order = _model_account_order(model)
+    if order is None:
+        # Unknown model: round-robin over all keys (shared global cursor).
+        start_idx, _ = _next_key()
+        order = [(start_idx + offset) % NUM_KEYS for offset in range(NUM_KEYS)]
 
-    # Unpinned: try each key in round-robin order (original behavior).
-    start_idx, _ = _next_key()
     last_error = "All API keys failed."
-
-    for offset in range(NUM_KEYS):
-        idx = (start_idx + offset) % NUM_KEYS
+    for idx in order:
         try:
             return await _forward_key(idx, body, is_stream, model)
         except HTTPException as e:
             last_error = e.detail
             continue
 
-    logger.error("✗ All %d keys failed: %s", NUM_KEYS, last_error)
+    logger.error("✗ All %d keys failed for %s: %s", len(order), model, last_error)
     raise HTTPException(status_code=502, detail=last_error)
 
 
@@ -350,8 +345,9 @@ async def list_models():
 
 @app.get("/health")
 async def health():
-    pinned = {m: _account_label(i) for m, i in _pinned_map.items()}
-    return {"status": "ok", "keys": NUM_KEYS, "pinned": pinned}
+    _refresh_model_accounts()
+    accounts = {m: [_account_label(i) for i in idx] for m, idx in _model_accounts.items()}
+    return {"status": "ok", "keys": NUM_KEYS, "accounts": accounts}
 
 
 # ---------------------------------------------------------------------------
