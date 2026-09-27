@@ -46,11 +46,11 @@ PROVIDERS = {
     },
     "youcom": {
         "prefix": "YOUCOM",
-        "search_url": "https://api.you.com/search",
+        "search_url": "https://ydc-index.io/v1/search",
         "auth_header": "X-API-Key",
         "max_results": 10,
         "method": "GET",
-        "params": lambda q, n: {"q": q, "count": str(n)},
+        "params": lambda q, n: {"query": q, "count": str(n)},
         "tier": 2,
     },
 }
@@ -249,7 +249,13 @@ class SearchProxy:
                     }
                 )
         elif provider == "youcom":
-            for r in data.get("results", []) or data.get("hits", []) or []:
+            # ydc-index.io: {"results": {"web": [{url,title,description,snippets}]}}
+            raw = data.get("results")
+            if isinstance(raw, dict):
+                raw = raw.get("web", []) or raw.get("news", [])
+            elif not isinstance(raw, list):
+                raw = data.get("hits", []) or []
+            for r in raw:
                 formatted.append(
                     {
                         "title": c(r.get("title", "")),
