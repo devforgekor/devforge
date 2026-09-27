@@ -1,16 +1,21 @@
 last_checkpoint:
-  time: '2026-09-27T15:30:01.42174+00:00'
-  summary: 3 source, 1 docs, 1 generated
-  total_files: 8
+  time: '2026-09-27T16:50:02.21266+00:00'
+  summary: 8 source, 1 docs, 1 generated
+  total_files: 15
   recent_files:
     data: []
     docs:
-    - server/docs/reports/opencode-roundrobin-failure-analysis.md
+    - server/docs/architecture/code-structure.yaml
     config: []
     source:
+    - server/scripts/lib/research/__init__.py
+    - server/scripts/lib/research/duckai.py
+    - server/scripts/lib/research/duckduckgo.py
+    - server/scripts/lib/research/proxy.py
     - server/scripts/lib/research/web.py
-    - server/scripts/proxies/openrouter_rr_proxy.py
-    - server/scripts/system_sync.sh
+    - server/tests/test_research_duckai.py
+    - server/tests/test_research_duckduckgo.py
+    - server/tests/test_research_proxy.py
     generated:
     - server/collect_checkpoint.json
   git: {}
