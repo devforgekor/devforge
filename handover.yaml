@@ -1,20 +1,22 @@
 last_checkpoint:
-  time: '2026-09-27T09:00:01.16597+00:00'
-  summary: 4 source, 1 docs, 1 generated
-  total_files: 14
+  time: '2026-09-27T18:30:01.066734+09:00'
+  summary: 2 source, 1 generated
+  total_files: 8
   recent_files:
-    data: []
-    docs:
-    - server/docs/architecture/code-structure.yaml
-    config: []
     source:
-    - server/src/routers/__init__.py
     - server/src/routers/escalation_router.py
-    - server/src/routers/escalation_router_example.py
     - server/tests/test_escalation_router.py
+    config: []
+    docs: []
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 14 files changed, 890 insertions(+), 473 deletions(-)
+      staged: (none)
+      untracked_files: 12
   task: null
 decisions:
 - id: nd13-01
