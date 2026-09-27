@@ -1,0 +1,47 @@
+{
+  "date": "2026-09-25",
+  "mode": "daily",
+  "turns_24h": "112",
+  "turns_total": "8563",
+  "turns_source": {
+    "legacy:pre-2026-09": "7163",
+    "opencode": "1001",
+    "claude": "399"
+  },
+  "turns_age_days": "128.9",
+  "observations_24h": "2",
+  "observations_7d": "1094",
+  "pipeline_state": {
+    "embedded": "3843",
+    "embed_skipped": "81",
+    "enriched": "40",
+    "pending": "3018",
+    "verified": "1581"
+  },
+  "services": {
+    "devforge-turn-watcher.timer": "inactive",
+    "devforge-turn-watcher.service": "active",
+    "devforge-day-cycle.timer": "inactive",
+    "devforge-day-cycle.service": "activating",
+    "devforge-worker.timer": "inactive",
+    "devforge-worker.service": "inactive",
+    "devforge-fastapi.timer": "inactive",
+    "devforge-fastapi.service": "inactive",
+    "devforge-mcp.timer": "inactive",
+    "devforge-mcp.service": "inactive",
+    "devforge-watchdog.timer": "inactive",
+    "devforge-watchdog.service": "active"
+  },
+  "netdata": "active",
+  "hook_overhead": {
+    "iterations": 100,
+    "avg_ms": 247.6352,
+    "p50_ms": 244.2408,
+    "p95_ms": 363.5211,
+    "p99_ms": 422.1642,
+    "min_ms": 163.4969,
+    "max_ms": 422.1642,
+    "mode": "safe(mock)"
+  },
+  "mcp_health": "{\"status\":\"healthy\",\"tools_count\":18}"
+}
