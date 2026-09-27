@@ -16,9 +16,7 @@ import pytest
 
 pytestmark = pytest.mark.characterization
 
-STATE_FLOW = (
-    "pending → batching → cleaned → scanned → extracted+verified → enriched → embedded"
-)
+STATE_FLOW = "pending → batching → cleaned → scanned → extracted+verified → enriched → embedded"
 
 
 def _day_cycle_text(project_root) -> str:
@@ -44,3 +42,13 @@ def test_in_flight_resume_guard(project_root):
     text = _day_cycle_text(project_root)
     # When turns are already in-flight, the cycle resumes instead of reserving.
     assert '"$IN_FLIGHT" -gt 0' in text
+
+
+def test_shadow_reprojection_gated_and_failure_ignored(project_root):
+    """Phase 3 gate: shadow reprojection runs inside the embed phase but can
+    never break the prod cycle (timeout-bounded, failures ignored)."""
+    text = _day_cycle_text(project_root)
+    assert '--shadow-since "$SHADOW_SINCE"' in text
+    assert 'shadow_diff.py" --mode embed' in text
+    assert '|| LOG "  Shadow reprojection failed (ignored)"' in text
+    assert '|| LOG "  Shadow diff failed (ignored)"' in text

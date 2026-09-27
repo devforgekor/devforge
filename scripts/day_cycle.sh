@@ -12,7 +12,8 @@
 #   Day Entity Scan   — entity_scan.py (cleaned → scanned, deterministic, regex+DB, no LLM)
 #   Day Extract       — extract.py (:8082, scanned → extracted+verified, with NLI self-verify)
 #   Day Enrich        — enrich.py (:8082, verified → enriched)
-#   Day Embedding     — embed_batch.py (:8081, enriched → embedded)
+#   Day Embedding     — devforge pipeline orchestrate (enriched → embedded)
+#   Shadow Reproject  — orchestrate --shadow + shadow_diff (Phase 3 gate, failures ignored)
 # Each phase has its own budget check. Mid-cycle timeout carries forward in pipeline_state.
 #
 # Secrets: DUCKDNS_TOKEN_KEY via env (Azure KV → systemd EnvironmentFile)
@@ -26,6 +27,9 @@ fi
 set -o pipefail
 
 MAX_CYCLE_SEC=21600
+# [WHY] Phase 3 parallel-gate parity window: shadow only reprojects prod embeds
+# created at/after this timestamp (override via env to open a new gate window).
+SHADOW_SINCE="${SHADOW_SINCE:-2026-09-20T00:00:00}"
 START_TS=$(date +%s)
 LOG_TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 LOG() { echo "[$(LOG_TS)] $*"; }
@@ -420,11 +424,24 @@ if [ "$NEED_EMBED" -gt 0 ] || [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then
 
     if [ "$NEED_EMBED" -gt 0 ]; then
         LOG "=== Day Embedding (${NEED_EMBED} enriched turns) ==="
-        python3.12 "$PIPELINE_DIR/embed_batch.py" 2>&1
+        python3.12 "$PIPELINE_DIR/embed_orchestrate.py" --limit 50 2>&1
         RC=$?
         ELAPSED=$(( $(date +%s) - START_TS ))
         LOG "  Embed exit=$RC, elapsed=${ELAPSED}s"
         [ $(BUDGET) -le 60 ] && { LOG "Budget exhausted"; exit 0; }
+
+        # [WHY] Phase 3 acceptance gate (≥14 parallel cycles with diff=0):
+        # reproject right after prod embed while the embedder is still loaded.
+        # Timeout-bounded and failures ignored — the verification path must
+        # never break the prod cycle. Evidence: journal (below) + hourly
+        # devforge-shadow-diff.timer JSONL.
+        LOG "=== Shadow reprojection (Phase 3 parallel gate) ==="
+        timeout 1800 python3.12 "$PIPELINE_DIR/embed_orchestrate.py" --shadow \
+            --shadow-since "$SHADOW_SINCE" --limit 50 --budget-sec 1500 \
+            || LOG "  Shadow reprojection failed (ignored)"
+        timeout 120 python3.12 "$SCRIPT_DIR/shadow_diff.py" --mode embed \
+            --since "$SHADOW_SINCE" 2>&1 | tail -n 3 \
+            || LOG "  Shadow diff failed (ignored)"
     fi
 
     if [ "$NEED_FEEDBACK_EMBED" -gt 0 ]; then

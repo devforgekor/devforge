@@ -2,7 +2,7 @@
 # SSOT for "where are we" queries; narrative lives in docs/REFACTORING_PLAN.md.
 # Keep this file in sync with reality at each work session (see option-3 guide).
 version: 1.1
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 canonical_plan: docs/REFACTORING_PLAN.md
 canonical_appendix: docs/REFACTORING_PLAN-appendix.md
 
@@ -10,15 +10,15 @@ canonical_appendix: docs/REFACTORING_PLAN-appendix.md
 #   Phase <N>[.<M>] — N = roadmap stage from REFACTORING_PLAN (0..8);
 #   M = sub-step (0=build, 1-4=verification gates, 5=shadow/parallel run, 9=cutover).
 #   "Gate k" and cutover "Phase A-I" are labels within a phase, not separate phases.
-#   Current: Phase 2.5 = watchdog Gate 4 shadow-run.
+#   Current: Phase 3.5 = embed shadow parallel gate (2주 ≥14 사이클 증거 수집).
 
 current_phase:
-  number: 2.9
-  name: "Watchdog domainization — cutover (v2 production)"
-  week: "Week 5-6"
-  status: complete
-  note: "v2.1 cutover DONE 2026-09-26T05:06Z: legacy devforge-watchdog.service stopped (inactive, rollback unit preserved), v2 devforge-watchdog-v2.service WATCHDOG_DRY_RUN=0 (single leader). P0 parity PASS (detection_gaps=0, legacy_only=0). Residual: IssueCollector, MCP watchdog_* separation. See docs/plans/watchdog-cutover-execution-20260926.md."
-  progress_percent: 95
+  number: 3.5
+  name: "Pipeline embed domainization — shadow parallel gate"
+  week: "Week 7-9"
+  status: in_progress
+  note: "Build complete (orchestrator + embed stage + CLI + day_cycle wrapper). shadow_diff diff=0 achieved 2026-09-27T11:13Z (missing_real=0, vector_mismatch=0, legacy_raw 23 intentional). 2-week parallel gate running: day_cycle.sh embed 직후 shadow 재투영 (failures ignored) + devforge-shadow-diff.timer (hourly JSONL evidence in logs/shadow_diff_YYYYMMDD.jsonl). Rollback rehearsed 2026-09-27: 4s (git checkout -- scripts/day_cycle.sh)."
+  progress_percent: 75
 
 phase_0:
   week_1:
@@ -91,6 +91,37 @@ phase_2:
     lint_imports: "4 kept, 0 broken"
     characterization_parity: "watchdog/recovery/systemd/system/heartbeat/llm parity tests present"
     test_functions: 344
+
+phase_3:
+  status: shadow_parallel_run
+  week: "Week 7-9"
+  guide: docs/plans/phase3-plan.md
+  guide_status: "IN PROGRESS — build complete;2-week parallel gate running (diff=0 since 2026-09-27T11:13Z)"
+  code:
+    - "pipeline_stages/embed/ (chunking + EmbedStage)"
+    - "application/{orchestrator,day_cycle}.py (PipelineOrchestrator + Budget, run_full_cycle)"
+    - "adapters/driven/storage/embedding_shadow_adapter.py (PostgresEmbedShadowAdapter)"
+    - "cli.py pipeline orchestrate|status — ADR-0006 계약 동결로 CLI (MCP pipeline_* 미구현)"
+    - "scripts/pipelines/embed_orchestrate.py (day_cycle wrapper)"
+    - "scripts/{shadow_diff.py embed mode, shadow_diff_logger.py}"
+    - "systemd/user/devforge-shadow-diff.{service,timer} (hourly JSONL evidence)"
+  shadow_run:
+    status: running
+    window_since: "2026-09-20T00:00:00"
+    acceptance: "diff=0 + ≥14 cycles in 2 weeks + rollback ≤5min"
+    evidence: "logs/shadow_diff_YYYYMMDD.jsonl + day_cycle journal (diff tail each cycle)"
+    note: "diff=0 achieved 2026-09-27T11:13Z (missing_real=0, vector_mismatch=0, legacy_raw 23 intentional). day_cycle.sh embed 직후 shadow 재투영 — timeout + failures ignored (prod 영향 없음)."
+  verification:
+    shadow_diff: "diff=0 (2026-09-27T11:13Z): 1258/1281 matched + 23 legacy_raw intentional"
+    rollback_rehearsal: "2026-09-27: 4s via git checkout -- scripts/day_cycle.sh (embed_batch.py --help RC=0)"
+    lint_imports: "4 kept, 0 broken"
+  decisions:
+    - "D6=A: devforge owns embed only (enriched→embedded); pre-embed belongs to 외부 신규 로직"
+    - "shadow fetch = per-chunk completeness (turn 단위 NOT EXISTS 버그 수정, orphan 44 → 0)"
+    - "devforge_shadow 테이블은 컷오버(Phase 3.9) 시점까지 유지"
+  residual:
+    - "feedback embed는 embed_batch.py --feedback 잔류 (Phase 3 범위 밖)"
+    - "shadow_diff_logger write_obs (MCP obs_write) 미연결 — JSONL로 대체 중"
 
 archived_docs:
   - docs/_archive/plans/phases.md

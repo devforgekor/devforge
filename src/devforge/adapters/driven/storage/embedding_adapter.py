@@ -101,7 +101,7 @@ class PostgresEmbedAdapter(EmbedPort):
         vec_str = "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
         stmt = text(
             "INSERT INTO embeddings (source_type, source_id, embed_text, embedding, model_name, chunk_index, metadata)"
-            " VALUES ('turn', :sid, :etext, :vec::vector, :model, :ci, :meta::jsonb)"
+            " VALUES ('turn', :sid, :etext, CAST(:vec AS vector), :model, :ci, CAST(:meta AS jsonb))"
             " ON CONFLICT (source_type, source_id, model_name, chunk_index)"
             " DO UPDATE SET embedding = EXCLUDED.embedding, embed_text = EXCLUDED.embed_text,"
             " metadata = EXCLUDED.metadata, created_at = now()"

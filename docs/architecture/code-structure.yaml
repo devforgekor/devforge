@@ -14,65 +14,67 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 metadata:
-  updated: '2026-09-22'
+
+metadata:
+  updated: '2026-09-27'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
   files:
     activity_summarizer.py:
       status: production
-      purpose: "activity_summarizer.py \u2014 Daily LLM summarization of activity_log\
-        \ events."
+      purpose: activity_summarizer.py — Daily LLM summarization of activity_log events.
     auto_commit_guard.py:
       status: production
-      purpose: "Session guard \u2014 auto-commit unlogged changes so nothing is lost."
+      purpose: Session guard — auto-commit unlogged changes so nothing is lost.
     auto_mode.sh:
       status: unknown
-      purpose: "auto_mode.sh \u2014 DevForge Auto Mode (overnight unattended task\
-        \ execution)"
+      purpose: auto_mode.sh — DevForge Auto Mode (overnight unattended task execution)
     bench_llm.py:
       status: production
-      purpose: "DevForge LLM Benchmark \u2014 decode tps \uCE21\uC815 \uBC0F \uC2E4\
-        \uD5D8 \uB808\uC9C0\uC2A4\uD2B8\uB9AC \uB4F1\uB85D."
+      purpose: DevForge LLM Benchmark — decode tps 측정 및 실험 레지스트리 등록.
     claude_code_runner.sh:
       status: unknown
-      purpose: "Claude Code proxy request runner \u2014 single-mode or A/B multi-variant."
+      purpose: Claude Code proxy request runner — single-mode or A/B multi-variant.
     claude_code_wrapper.sh:
       status: unknown
       purpose: Simple Claude Code wrapper that performs prompt canonicalization and
         sends to the proxy (DeepSeek-compatible).
     cli.py:
       status: production
-      purpose: "DevForge CLI \u2014 AI \uB300\uD654 \uAC80\uC0C9 \uBC0F \uC800\uC7A5\
-        \ \uB3C4\uAD6C."
+      purpose: DevForge CLI — AI 대화 검색 및 저장 도구.
     dev_agent.py:
       status: experimental
-      purpose: "Agent Issue->PR runner \u2014 worktree-isolated, ruff+pytest gated, review-only PR."
+      purpose: Agent Issue->PR runner — worktree-isolated, ruff+pytest gated, review-only
+        PR.
     mcp_inventory_check.py:
       status: production
-      purpose: "MCP server inventory drift check (OWASP MCP09 shadow MCP)."
+      purpose: MCP server inventory drift check (OWASP MCP09 shadow MCP).
     collect_novel.py:
       status: experimental
-      purpose: "bookto31.com \uD558\uB0A8\uC790\uC758 \uD0D1 \uACF5\uB7B5\uBC95 \uC804\
-        \uCCB4 \uD68C\uCC28 \uC218\uC9D1."
+      purpose: bookto31.com 하남자의 탑 공략법 전체 회차 수집.
     context7_mcp.py:
       status: production
       purpose: context7_mcp (thin wrapper). Core logic lives in lib.research.context7.
     day_cycle.sh:
       status: unknown
-      purpose: "day_cycle.sh \u2014 async pipeline (pipeline_state-driven)"
+      purpose: day_cycle.sh — async pipeline (pipeline_state-driven)
     shadow_diff.py:
       status: experimental
-      purpose: "Production vs shadow extract-output diff (cutover gate)."
+      purpose: Production vs shadow extract-output diff (cutover gate).
+    shadow_diff_logger.py:
+      status: experimental
+      purpose: Shadow diff JSONL sampler — Phase 3 gate evidence (--once / loop).
     watchdog_parity.py:
       status: experimental
-      purpose: "Watchdog v2 dry-run (journal) vs legacy incidents (watchdog_incidents) parity harness (Phase 2.5 gate)."
+      purpose: Watchdog v2 dry-run (journal) vs legacy incidents (watchdog_incidents)
+        parity harness (Phase 2.5 gate).
     verify-cutover-ready.py:
       status: experimental
-      purpose: "Phase A pre-cutover verification \u2014 V1-V8 checklist."
+      purpose: Phase A pre-cutover verification — V1-V8 checklist.
     verify-provenance.py:
       status: experimental
-      purpose: "Provenance verification \u2014 turns.source recorded correctly."
+      purpose: Provenance verification — turns.source recorded correctly.
     droplr_upload.py:
       status: production
       purpose: Upload a file to Azure Blob, shorten with Droplr, print d.pr URL.
@@ -87,13 +89,13 @@ modules:
       purpose: github_mcp_wrapper.sh
     mcp_entrypoint.sh:
       status: unknown
-      purpose: "mcp_entrypoint.sh \u2014 Start FastMCP server on inference pod"
+      purpose: mcp_entrypoint.sh — Start FastMCP server on inference pod
     mcp_server.py:
       status: experimental
-      purpose: "DevForge MCP Server \u2014 Streamable HTTP (MCP spec 2025-03-26)."
+      purpose: DevForge MCP Server — Streamable HTTP (MCP spec 2025-03-26).
     mcp_server_sse.py:
       status: experimental
-      purpose: "MCP Server \u2014 SSE-based tool server (protocol 2024-11-05)."
+      purpose: MCP Server — SSE-based tool server (protocol 2024-11-05).
     migrate_decisions_v2.py:
       status: unknown
       purpose: 'One-time migration: parse str(dict) decision_text into structured
@@ -103,51 +105,45 @@ modules:
       purpose: 'One-time migration: parse broken handover.yaml and import to DB.'
     notion_memo.py:
       status: production
-      purpose: "Notion \uBA54\uBAA8 \uC804\uC1A1 CLI \u2014 stdin, \uD30C\uC77C, \uB610\
-        \uB294 \uC778\uC790\uB85C \uBC1B\uC740 \uD14D\uC2A4\uD2B8\uB97C Notion\uC5D0\
-        \ \uAE30\uB85D."
+      purpose: Notion 메모 전송 CLI — stdin, 파일, 또는 인자로 받은 텍스트를 Notion에 기록.
     observer.py:
       status: production
-      purpose: "DevForge Observer Agent \u2014 interactive CLI agent with tool calling."
+      purpose: DevForge Observer Agent — interactive CLI agent with tool calling.
     oci_launch_retry.py:
       status: unknown
-      purpose: "OCI instance launch retry \u2014 exponential backoff, max 5min reset,\
-        \ durable."
+      purpose: OCI instance launch retry — exponential backoff, max 5min reset, durable.
     open-newhand.sh:
       status: unknown
-      purpose: "open-newhand \u2014 NewHand Protocol \uB9C8\uBB34\uB9AC: handover.yaml\
-        \ \u2192 \uCEE4\uBC0B \u2192 \uD478\uC2DC"
+      purpose: 'open-newhand — NewHand Protocol 마무리: handover.yaml → 커밋 → 푸시'
     or_rate_limiter.py:
       status: experimental
       purpose: OpenRouter rate-limiting proxy (15 RPM, multi-key round-robin + auto-retry
         on 429/5xx).
     orchestrator.py:
       status: production
-      purpose: "DevForge Orchestrator \u2014 LLM-based smart router to specialized\
-        \ pipelines."
+      purpose: DevForge Orchestrator — LLM-based smart router to specialized pipelines.
     osync_backup.py:
       status: production
       purpose: DevForge backup -> OCI Object Storage (bucket devforge-standard).
     osync_restore_test.py:
       status: production
-      purpose: "Monthly restore test \u2014 restore latest devforge-standard DB dump\
-        \ into a scratch DB."
+      purpose: Monthly restore test — restore latest devforge-standard DB dump into
+        a scratch DB.
     patch_elf_note.py:
       status: experimental
       purpose: Re-apply NOTE phdr patch to Copilot CLI ELF binary.
     pdf_marker_batch.py:
       status: experimental
-      purpose: "pdf_marker_batch \u2014 Background high-quality PDF conversion using\
-        \ marker-pdf."
+      purpose: pdf_marker_batch — Background high-quality PDF conversion using marker-pdf.
     pdf_reader_mcp.py:
       status: experimental
-      purpose: "pdf_reader_mcp \u2014 PDF extraction MCP server using PyMuPDF."
+      purpose: pdf_reader_mcp — PDF extraction MCP server using PyMuPDF.
     pg_mcp.py:
       status: experimental
-      purpose: "pg_mcp \u2014 PostgreSQL MCP server via podman exec."
+      purpose: pg_mcp — PostgreSQL MCP server via podman exec.
     review_pipeline_3model.py:
       status: production
-      purpose: "3-Model Review Pipeline \u2014 Code Review Pipeline."
+      purpose: 3-Model Review Pipeline — Code Review Pipeline.
     review_sequential.py:
       status: experimental
       purpose: Call review_sequential MCP tool and print structured analysis as JSON
@@ -157,38 +153,37 @@ modules:
       purpose: DevForge Baseline Monitor v1.0
     run_verify_compare.sh:
       status: unknown
-      purpose: "Background verify runner: Qwen Q8 \u2192 NextCoder Q8"
+      purpose: 'Background verify runner: Qwen Q8 → NextCoder Q8'
     slack_notify.py:
       status: production
-      purpose: "slack_notify.py \u2014 Session-end report \u2192 Slack DM."
+      purpose: slack_notify.py — Session-end report → Slack DM.
     sqlite_mcp.py:
       status: experimental
-      purpose: "SQLite MCP \u2014 read-only access to OpenCode session database."
+      purpose: SQLite MCP — read-only access to OpenCode session database.
     system_sync.sh:
       status: unknown
-      purpose: "system_sync.sh \u2014 30min system maintenance (no inference, no pipeline)"
+      purpose: system_sync.sh — 30min system maintenance (no inference, no pipeline)
     telegram_send.py:
       status: experimental
       purpose: telegram_send.py --- Send files or text to your Telegram chat.
     turn_watcher.py:
       status: production
-      purpose: "turn_watcher.py \u2014 real-time session transcript \u2192 PostgreSQL\
-        \ (raw insert)."
+      purpose: turn_watcher.py — real-time session transcript → PostgreSQL (raw insert).
     update_handover.py:
       status: production
-      purpose: "update_handover.py \u2014 Quality-scored session context capture."
+      purpose: update_handover.py — Quality-scored session context capture.
     watchdog.py:
       status: production
-      purpose: "DevForge Watchdog \u2014 entry point."
+      purpose: DevForge Watchdog — entry point.
     web_chat.py:
       status: experimental
-      purpose: "web_chat.py \u2014 DeepSeek web chat CLI via Playwright."
+      purpose: web_chat.py — DeepSeek web chat CLI via Playwright.
     weekly_enrich_rebuild.sh:
       status: unknown
-      purpose: "weekly_enrich_rebuild.sh \u2014 Weekly enrich few-shot diversity rebuild"
+      purpose: weekly_enrich_rebuild.sh — Weekly enrich few-shot diversity rebuild
     worker-entrypoint.sh:
       status: unknown
-      purpose: "worker-entrypoint.sh \u2014 DevForge Worker supervisor runner"
+      purpose: worker-entrypoint.sh — DevForge Worker supervisor runner
     worker_supervisor.py:
       status: experimental
       purpose: Worker container supervisor.
@@ -200,37 +195,35 @@ modules:
       purpose: __init__.py
     action_queue.py:
       status: production
-      purpose: "Action Queue \u2014 MCP tool \u2192 background daemon bridge."
+      purpose: Action Queue — MCP tool → background daemon bridge.
     arbiter.py:
       status: production
       purpose: Pure Python fact consolidation for multi-pass extraction pipeline.
     auto_fix.py:
       status: production
-      purpose: "Safe remediation catalog \u2014 Pattern 2 \"Safe First\" engine."
+      purpose: Safe remediation catalog — Pattern 2 "Safe First" engine.
     blob_uploader.py:
       status: production
-      purpose: "Review-bundle uploader \u2014 OCI Object Storage + optional Droplr\
-        \ short link."
+      purpose: Review-bundle uploader — OCI Object Storage + optional Droplr short
+        link.
     cli_experiment.py:
       status: production
-      purpose: "CLI experiment management \u2014 list, compare, active, adopt commands."
+      purpose: CLI experiment management — list, compare, active, adopt commands.
     cli_fact.py:
       status: production
-      purpose: "CLI fact commands \u2014 user feedback on NEUTRAL review_facts."
+      purpose: CLI fact commands — user feedback on NEUTRAL review_facts.
     cli_helpers.py:
       status: production
-      purpose: "CLI helper functions \u2014 system queries used by cmd_status and\
-        \ others."
+      purpose: CLI helper functions — system queries used by cmd_status and others.
     cli_watch.py:
       status: production
-      purpose: "CLI watch commands \u2014 server status, alerts, pulse queue, event\
-        \ log."
+      purpose: CLI watch commands — server status, alerts, pulse queue, event log.
     cli_worklog.py:
       status: production
-      purpose: "CLI worklog management \u2014 add, recent, search commands."
+      purpose: CLI worklog management — add, recent, search commands.
     common.py:
       status: production
-      purpose: "Shared utilities \u2014 log, timestamp, and other common helpers."
+      purpose: Shared utilities — log, timestamp, and other common helpers.
     db.py:
       status: production
       purpose: Shared PostgreSQL helpers for DevForge scripts.
@@ -239,86 +232,77 @@ modules:
       purpose: GitHub Issue -> PR pipeline (DevForge Devin-like).
     droplr.py:
       status: production
-      purpose: "Droplr link shortener via HTTP API (Basic auth) \u2014 no Node CLI\
-        \ dependency."
+      purpose: Droplr link shortener via HTTP API (Basic auth) — no Node CLI dependency.
     enrich_consumer.py:
       status: production
-      purpose: "enrich_consumer \u2014 read enrichment metadata from review_facts\
-        \ and prepare for MCP tools."
+      purpose: enrich_consumer — read enrichment metadata from review_facts and prepare
+        for MCP tools.
     enrich_feedback.py:
       status: production
-      purpose: "Enrich Feedback \u2014 dynamic few-shot retrieval for enrich pipeline."
+      purpose: Enrich Feedback — dynamic few-shot retrieval for enrich pipeline.
     enrich_few_shot.py:
       status: experimental
-      purpose: "Enrich Few-Shot \u2014 static diversity-first few-shot examples for\
-        \ enrich pipeline."
+      purpose: Enrich Few-Shot — static diversity-first few-shot examples for enrich
+        pipeline.
     experiment_state.py:
       status: production
-      purpose: "Experiment state file \u2014 \uC2E4\uD5D8 \uC911 watchdog\uACFC pipeline\
-        \ \uAC04 \uC0C1\uD0DC \uACF5\uC720."
+      purpose: Experiment state file — 실험 중 watchdog과 pipeline 간 상태 공유.
     file_registry.py:
       status: production
-      purpose: "file_registry.py \u2014 DevForge File Management System."
+      purpose: file_registry.py — DevForge File Management System.
     handover_db.py:
       status: production
-      purpose: "handover_db.py \u2014 DB read/write operations for update_handover.py."
+      purpose: handover_db.py — DB read/write operations for update_handover.py.
     model_ctl.py:
       status: production
       purpose: CLI for inference container model management.
     model_ctl.sh:
       status: unknown
-      purpose: "model_ctl.sh \u2014 DevForge inference container model management\
-        \ shell functions"
+      purpose: model_ctl.sh — DevForge inference container model management shell
+        functions
     model_registry.py:
       status: production
-      purpose: "Model metadata registry \u2014 single source of truth for all model\
-        \ definitions."
+      purpose: Model metadata registry — single source of truth for all model definitions.
     notify.py:
       status: experimental
-      purpose: "Unified notification module \u2014 Apprise (Telegram, Email) + native\
-        \ Slack."
+      purpose: Unified notification module — Apprise (Telegram, Email) + native Slack.
     notion_client.py:
       status: production
-      purpose: "Notion \uBA54\uBAA8 \uD074\uB77C\uC774\uC5B8\uD2B8 \u2014 \uC11C\uBC84\
-        \ \uBB38\uC11C/\uBD84\uC11D \uACB0\uACFC\uB97C Notion \uD398\uC774\uC9C0\uB85C\
-        \ \uACF5\uC720."
+      purpose: Notion 메모 클라이언트 — 서버 문서/분석 결과를 Notion 페이지로 공유.
     observation.py:
       status: production
-      purpose: "Unified observation API \u2014 recording and querying the observations\
-        \ table."
+      purpose: Unified observation API — recording and querying the observations table.
     oci_storage.py:
       status: production
-      purpose: "OCI Object Storage helper \u2014 list / put / delete / PAR for DevForge."
+      purpose: OCI Object Storage helper — list / put / delete / PAR for DevForge.
     protection.py:
       status: production
-      purpose: "Protection context manager \u2014 file-based dead man's switch."
+      purpose: Protection context manager — file-based dead man's switch.
     queue_writer.py:
       status: production
-      purpose: "queue_writer \u2014 enqueue items to activity_log for downstream review\
-        \ pipeline."
+      purpose: queue_writer — enqueue items to activity_log for downstream review
+        pipeline.
     rate_limiter.py:
       status: production
-      purpose: "FlareSolverr \uC694\uCCAD \uC18D\uB3C4 \uC81C\uD55C \uC720\uD2F8\uB9AC\
-        \uD2F0."
+      purpose: FlareSolverr 요청 속도 제한 유틸리티.
     reflex_rules.py:
       status: production
       purpose: Reflex rule CRUD and lifecycle management.
     scoring.py:
       status: production
-      purpose: "Scoring \u2014 shared veto/gap/early-exit logic."
+      purpose: Scoring — shared veto/gap/early-exit logic.
     telegram_notifier.py:
       status: production
       purpose: Telegram notifier for pipeline alerts.
     test_common.py:
       status: production
-      purpose: "Shared test utilities \u2014 setup, heartbeat, cleanup, re-exports."
+      purpose: Shared test utilities — setup, heartbeat, cleanup, re-exports.
     test_runner.py:
       status: experimental
-      purpose: "TestRunner \u2014 Devin-like self-healing test framework for LLM evaluation."
+      purpose: TestRunner — Devin-like self-healing test framework for LLM evaluation.
     test_sandbox.py:
       status: experimental
-      purpose: "Test execution sandbox \u2014 Podman read-only tmpfs for safe code\
-        \ execution."
+      purpose: Test execution sandbox — Podman read-only tmpfs for safe code execution.
     text_cleaner.py:
       status: production
       purpose: Language-aware text cleaner with sentence segmentation and token estimation.
@@ -333,24 +317,22 @@ modules:
       purpose: Shared-queue work distribution across independent model pods.
     worklog.py:
       status: production
-      purpose: "Git commit \u2192 worklog sync."
+      purpose: Git commit → worklog sync.
 - path: scripts/lib/auth/
   purpose: Auth
   files:
     __init__.py:
       status: production
-      purpose: "Authentication \u2014 key rotation, loading, encryption, and quota\
-        \ tracking."
+      purpose: Authentication — key rotation, loading, encryption, and quota tracking.
     api_key_cipher.py:
       status: production
       purpose: AES-256-GCM encryption for API keys and secrets.
     key_loader.py:
       status: production
-      purpose: "Unified API key loader \u2014 loads encrypted or plaintext keys from\
-        \ secrets.env."
+      purpose: Unified API key loader — loads encrypted or plaintext keys from secrets.env.
     key_rotator.py:
       status: production
-      purpose: "Lightweight API Key Rotator \u2014 in-memory, no DB dependency."
+      purpose: Lightweight API Key Rotator — in-memory, no DB dependency.
     quota_tracker.py:
       status: production
       purpose: Daily per-key API quota tracker.
@@ -362,7 +344,7 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Code modification pipeline \u2014 shared utilities."
+      purpose: Code modification pipeline — shared utilities.
     shared.py:
       status: production
       purpose: Shared utilities for code modification pipelines.
@@ -373,25 +355,24 @@ modules:
   files:
     __init__.py:
       status: experimental
-      purpose: "Multi-agent debate package \u2014 LocalDebate + CooperativeDebate."
+      purpose: Multi-agent debate package — LocalDebate + CooperativeDebate.
     cooperative_debate.py:
       status: experimental
-      purpose: "CooperativeDebate \u2014 Proposer/Refuter on Azure spot VMs, Judge/Synthesis\
-        \ local."
+      purpose: CooperativeDebate — Proposer/Refuter on Azure spot VMs, Judge/Synthesis
+        local.
     cooperative_remote.py:
       status: experimental
       purpose: SSH tunnel management and remote model activation for cooperative debate
         mode.
     debate_data.py:
       status: experimental
-      purpose: "Model catalogue, remote hosts, prompt templates \u2014 pure data,\
-        \ no logic."
+      purpose: Model catalogue, remote hosts, prompt templates — pure data, no logic.
     debate_llm.py:
       status: experimental
-      purpose: "LLM calling, JSON parsing, model switching \u2014 shared infrastructure."
+      purpose: LLM calling, JSON parsing, model switching — shared infrastructure.
     local_debate.py:
       status: experimental
-      purpose: "LocalDebate \u2014 multi-agent debate using local inference + inference."
+      purpose: LocalDebate — multi-agent debate using local inference + inference.
 - path: scripts/lib/enrich/
   purpose: Enrich
   files:
@@ -412,7 +393,7 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Extract LLM subpackage \u2014 re-exports from all submodules."
+      purpose: Extract LLM subpackage — re-exports from all submodules.
     _core.py:
       status: production
       purpose: 'Core extraction functions: constants, prompts, 8082 recovery, embed
@@ -432,11 +413,11 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Feedback provider \u2014 extracts recent fix patterns from activity_log\
-        \ and returns"
+      purpose: Feedback provider — extracts recent fix patterns from activity_log
+        and returns
     messages.py:
       status: production
-      purpose: "Pattern \u2192 few-shot message conversion for feedback injection."
+      purpose: Pattern → few-shot message conversion for feedback injection.
     patterns.py:
       status: production
       purpose: Review fetching and pattern extraction for feedback.
@@ -463,18 +444,17 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Infrastructure \u2014 health checks for systemd, podman, filesystem,\
-        \ container discovery."
+      purpose: Infrastructure — health checks for systemd, podman, filesystem, container
+        discovery.
     container_manager.py:
       status: production
-      purpose: "Container lifecycle management \u2014 stop, start, health, memory\
-        \ reclaim."
+      purpose: Container lifecycle management — stop, start, health, memory reclaim.
     containers.py:
       status: production
       purpose: Container and service discovery for state_collector.
     health_checks.py:
       status: production
-      purpose: "System state checks \u2014 systemd, podman, filesystem."
+      purpose: System state checks — systemd, podman, filesystem.
     preflight.py:
       status: production
       purpose: Shared preflight checks for DevForge pipelines.
@@ -483,7 +463,7 @@ modules:
       purpose: Zram cycle tracking.
     subprocess.py:
       status: production
-      purpose: "Subprocess helpers \u2014 run commands and collect output lines."
+      purpose: Subprocess helpers — run commands and collect output lines.
   constraints:
     max_lines_per_file: 100
     no_direct_db: true
@@ -501,11 +481,10 @@ modules:
       purpose: Azure Spot VM configuration (aligned to real Azure infra, 2026-09-11).
     manager.py:
       status: experimental
-      purpose: "Azure Spot VM manager \u2014 create, poll, delete spot VMs."
+      purpose: Azure Spot VM manager — create, poll, delete spot VMs.
     orchestrator.py:
       status: experimental
-      purpose: "Azure Spot VM orchestrator \u2014 coordinates VM lifecycle (endpoint\
-        \ provider)."
+      purpose: Azure Spot VM orchestrator — coordinates VM lifecycle (endpoint provider).
     tunnel.py:
       status: experimental
       purpose: SSH tunnel management for Azure Spot VMs (tracked-pid based, cross-process
@@ -515,16 +494,16 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "LLM integration \u2014 unified client and rate estimators."
+      purpose: LLM integration — unified client and rate estimators.
     endpoint.py:
       status: production
       purpose: Raw HTTP client for any OpenAI-compatible endpoint.
     json_parser.py:
       status: production
-      purpose: "Recovery Ladder: stdlib json.loads \u2192 json_repair for LLM output."
+      purpose: 'Recovery Ladder: stdlib json.loads → json_repair for LLM output.'
     rate_estimator.py:
       status: production
-      purpose: "Rate estimators for LLM inference \u2014 token-count-based and timings-based."
+      purpose: Rate estimators for LLM inference — token-count-based and timings-based.
   constraints:
     max_lines_per_file: 120
 - path: scripts/lib/llm_client/
@@ -532,34 +511,32 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Unified LLM client \u2014 single entry point for all pipeline scripts."
+      purpose: Unified LLM client — single entry point for all pipeline scripts.
     feedback.py:
       status: production
-      purpose: "Feedback injection \u2014 few-shot patterns from activity_log."
+      purpose: Feedback injection — few-shot patterns from activity_log.
     recovery.py:
       status: production
-      purpose: "8082 auto-recovery \u2014 reload model on connection error."
+      purpose: 8082 auto-recovery — reload model on connection error.
 - path: scripts/lib/output/
   purpose: Output
   files:
     __init__.py:
       status: production
-      purpose: "Output \u2014 YAML I/O, CLAUDE.yaml generation, MOTD, validation."
+      purpose: Output — YAML I/O, CLAUDE.yaml generation, MOTD, validation.
     claude_yaml.py:
       status: production
-      purpose: "CLAUDE.yaml auto-update \u2014 sync storage/services/network from\
-        \ live data."
+      purpose: CLAUDE.yaml auto-update — sync storage/services/network from live data.
     memory_line.py:
       status: production
-      purpose: "Memory overview line for CLAUDE.yaml \u2014 generated from live system\
-        \ data."
+      purpose: Memory overview line for CLAUDE.yaml — generated from live system data.
     motd.py:
       status: production
-      purpose: "MOTD generation \u2014 formatted system overview for /etc/motd."
+      purpose: MOTD generation — formatted system overview for /etc/motd.
     validation.py:
       status: production
-      purpose: "Validation \u2014 compare CLAUDE.yaml + blueprint.yaml claims against\
-        \ live data."
+      purpose: Validation — compare CLAUDE.yaml + blueprint.yaml claims against live
+        data.
     yaml_io.py:
       status: production
       purpose: YAML load/save helpers.
@@ -570,17 +547,18 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Log parsers \u2014 Claude, Copilot, OpenCode."
+      purpose: Log parsers — Claude, Copilot, OpenCode.
     claude.py:
       status: production
-      purpose: "parser_claude.py \u2014 extract turns from Claude Code session JSONL."
+      purpose: parser_claude.py — extract turns from Claude Code session JSONL.
     copilot.py:
       status: production
-      purpose: "parser_copilot.py \u2014 extract turns from Copilot events.jsonl (inactive: cost exhausted)."
+      purpose: 'parser_copilot.py — extract turns from Copilot events.jsonl (inactive:
+        cost exhausted).'
     opencode.py:
       status: production
-      purpose: "parser_opencode.py \u2014 extract turns from the OpenCode session\
-        \ sqlite DB."
+      purpose: parser_opencode.py — extract turns from the OpenCode session sqlite
+        DB.
   constraints:
     max_lines_per_file: 140
 - path: scripts/lib/pipeline_common/
@@ -588,8 +566,8 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Shared pipeline utilities \u2014 PipelineState, llm_call, call_one,\
-        \ schema, prompts."
+      purpose: Shared pipeline utilities — PipelineState, llm_call, call_one, schema,
+        prompts.
     helpers.py:
       status: production
       purpose: Helper functions for pipeline_common.
@@ -604,21 +582,19 @@ modules:
       purpose: Pipeline schemas and validation helpers.
     state.py:
       status: production
-      purpose: "PipelineState \u2014 append-only phase results blackboard."
+      purpose: PipelineState — append-only phase results blackboard.
 - path: scripts/lib/pod_manager/
   purpose: Pod Manager
   files:
     __init__.py:
       status: production
-      purpose: "Container management for DevForge \u2014 all models run in inference\
-        \ container."
+      purpose: Container management for DevForge — all models run in inference container.
     container.py:
       status: production
       purpose: Container health checks, model fingerprint, env writing, podman lifecycle.
     models.py:
       status: production
-      purpose: "Model metadata \u2014 re-exported from lib.model_registry for backward\
-        \ compat."
+      purpose: Model metadata — re-exported from lib.model_registry for backward compat.
 - path: scripts/lib/proxy_utils/
   purpose: Proxy Utils
   files:
@@ -642,27 +618,24 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Research facade \u2014 one entry point over web/exa/context7/fetch\
-        \ providers."
+      purpose: Research facade — one entry point over web/exa/context7/fetch providers.
     context7.py:
       status: production
-      purpose: "Context7 docs core \u2014 library resolve + docs query (extracted\
-        \ from context7_mcp.py)."
+      purpose: Context7 docs core — library resolve + docs query (extracted from context7_mcp.py).
     exa.py:
       status: production
-      purpose: "Exa search core \u2014 semantic web search + contents (extracted from\
-        \ exa_mcp.py)."
+      purpose: Exa search core — semantic web search + contents (extracted from exa_mcp.py).
     fetch.py:
       status: production
-      purpose: "URL fetch core \u2014 retrieve page text (extracted capability; replaces\
-        \ fetch MCP)."
+      purpose: URL fetch core — retrieve page text (extracted capability; replaces
+        fetch MCP).
     web.py:
       status: production
-      purpose: "Web search core \u2014 Brave \u2192 Tavily \u2192 you.com rotation\
-        \ (extracted from proxies/search.py)."
+      purpose: Web search core — Brave → Tavily → you.com rotation (extracted from
+        proxies/search.py).
     rerank.py:
       status: experimental
-      purpose: "Result reranking — OpenRouter :free \u2192 local 8080 \u2192 original order."
+      purpose: Result reranking — OpenRouter :free → local 8080 → original order.
 - path: scripts/lib/rubric/
   purpose: Rubric
   files:
@@ -680,14 +653,13 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Search \u2014 web search (Brave) + local FTS5 + hybrid (BM25 + pgvector)."
+      purpose: Search — web search (Brave) + local FTS5 + hybrid (BM25 + pgvector).
     hybrid.py:
       status: experimental
-      purpose: "Hybrid search \u2014 BM25 + Dense RRF fusion, optional cross-encoder\
-        \ reranker."
+      purpose: Hybrid search — BM25 + Dense RRF fusion, optional cross-encoder reranker.
     local_index.py:
       status: experimental
-      purpose: "SQLite FTS5 search index \u2014 Korean-aware BM25 via Kiwi terms."
+      purpose: SQLite FTS5 search index — Korean-aware BM25 via Kiwi terms.
   constraints:
     max_lines_per_file: 280
 - path: scripts/lib/slack_interactive/
@@ -695,34 +667,33 @@ modules:
   files:
     __init__.py:
       status: experimental
-      purpose: "Slack Interactive Handler \u2014 receives Slack block_actions and\
-        \ processes NEUTRAL fact confirm/reject."
+      purpose: Slack Interactive Handler — receives Slack block_actions and processes
+        NEUTRAL fact confirm/reject.
     __main__.py:
       status: unknown
       purpose: Entry point for python3 -m lib.slack_interactive.
     alerts.py:
       status: experimental
-      purpose: "Slack alert senders \u2014 NEUTRAL facts, noise markers, extract fail\
-        \ reports."
+      purpose: Slack alert senders — NEUTRAL facts, noise markers, extract fail reports.
     handler.py:
       status: experimental
-      purpose: "Slack interactive button handler \u2014 receives block_actions and\
-        \ processes fact confirm/reject."
+      purpose: Slack interactive button handler — receives block_actions and processes
+        fact confirm/reject.
 - path: scripts/lib/state/
   purpose: State
   files:
     __init__.py:
       status: production
-      purpose: "State \u2014 changelog management, structural diffing, state I/O."
+      purpose: State — changelog management, structural diffing, state I/O.
     changelog.py:
       status: production
-      purpose: "Changelog management \u2014 load, save, append, archive."
+      purpose: Changelog management — load, save, append, archive.
     diff.py:
       status: production
       purpose: Structural hashing and diff for state change detection.
     state_io.py:
       status: production
-      purpose: "State file I/O \u2014 save and load state.yaml."
+      purpose: State file I/O — save and load state.yaml.
   constraints:
     max_lines_per_file: 100
 - path: scripts/lib/tracking/
@@ -730,13 +701,13 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Tracking \u2014 dependency tracking, agent name normalization."
+      purpose: Tracking — dependency tracking, agent name normalization.
     agent_names.py:
       status: production
       purpose: Single source of truth for agent name normalization.
     dependency_tracker.py:
       status: production
-      purpose: "Reference tracking \u2014 external project watch + internal code observation."
+      purpose: Reference tracking — external project watch + internal code observation.
   constraints:
     max_lines_per_file: 150
 - path: scripts/lib/verify/
@@ -756,49 +727,43 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "DevForge Watchdog \u2014 re-export only."
+      purpose: DevForge Watchdog — re-export only.
     _globals.py:
       status: production
-      purpose: "Watchdog runtime state \u2014 module-level mutable singletons."
+      purpose: Watchdog runtime state — module-level mutable singletons.
     checker.py:
       status: production
-      purpose: "Health check runners \u2014 LLM 3-tier probe, timer, service, resource."
+      purpose: Health check runners — LLM 3-tier probe, timer, service, resource.
     codescanner.py:
       status: experimental
-      purpose: "Code scanner \u2014 DB-backed auto-fix feedback loop for silent exception\
-        \ patterns."
+      purpose: Code scanner — DB-backed auto-fix feedback loop for silent exception
+        patterns.
     config.py:
       status: production
-      purpose: "Watchdog \uC124\uC815 \u2014 \uCCB4\uD06C \uB300\uC0C1, \uAC04\uACA9\
-        , \uC784\uACC4\uAC12."
+      purpose: Watchdog 설정 — 체크 대상, 간격, 임계값.
     fixloop.py:
       status: experimental
-      purpose: "Auto-fix loop \u2014 error \uAC10\uC9C0 \u2192 LLM \uC218\uC815 \uC694\
-        \uCCAD \u2192 \uC784\uC2DC podman \uAC80\uC99D \u2192 \uC801\uC6A9."
+      purpose: Auto-fix loop — error 감지 → LLM 수정 요청 → 임시 podman 검증 → 적용.
     incidents.py:
       status: production
-      purpose: "Incident recorder \u2014 detect \u2192 capture \u2192 remediate \u2192\
-        \ record (audit)."
+      purpose: Incident recorder — detect → capture → remediate → record (audit).
     messenger.py:
       status: production
-      purpose: "Watchdog Messenger \u2014 \uC815\uBCF4 \uC911\uAC1C \uC2DC\uC2A4\uD15C\
-        ."
+      purpose: Watchdog Messenger — 정보 중개 시스템.
     notifier.py:
       status: production
-      purpose: "Slack \uC54C\uB9BC \u2014 30\uBD84 heartbeat (Block Kit in-place)\
-        \ + state change alert (colored)."
+      purpose: Slack 알림 — 30분 heartbeat (Block Kit in-place) + state change alert
+        (colored).
     orchestrator.py:
       status: production
-      purpose: "Watchdog orchestration \u2014 check runners, fix loops, action consumer,\
-        \ code scan."
+      purpose: Watchdog orchestration — check runners, fix loops, action consumer,
+        code scan.
     recovery.py:
       status: production
-      purpose: "Graduated recovery \u2014 CrashLoopBackOff \uD328\uD134, OOM \uC804\
-        \uC6A9 \uBCF5\uAD6C."
+      purpose: Graduated recovery — CrashLoopBackOff 패턴, OOM 전용 복구.
     state.py:
       status: production
-      purpose: "Component state machine \u2014 HEALTHY\u2194DEGRADED\u2194UNHEALTHY\u2194\
-        DOWN."
+      purpose: Component state machine — HEALTHY↔DEGRADED↔UNHEALTHY↔DOWN.
 - path: scripts/lib/worklog/
   purpose: Worklog
   files:
@@ -816,7 +781,7 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "Azure Blob web interface: send + receive \u2014 split from blob_explorer.py."
+      purpose: 'Azure Blob web interface: send + receive — split from blob_explorer.py.'
     __main__.py:
       status: unknown
       purpose: Entry point for python3 -m blob_explorer.
@@ -831,14 +796,14 @@ modules:
   files:
     app.py:
       status: experimental
-      purpose: "DevForge FastAPI \u2014 notification hub (Slack + Telegram + Email)\
-        \ + Blob Explorer."
+      purpose: DevForge FastAPI — notification hub (Slack + Telegram + Email) + Blob
+        Explorer.
     portal.py:
       status: experimental
-      purpose: "Portal read API for the Vercel viewer \u2014 display-only JSON."
+      purpose: Portal read API for the Vercel viewer — display-only JSON.
     review_dashboard.py:
       status: experimental
-      purpose: "HITL Review Dashboard \u2014 web UI for fact CONFIRM/REJECT."
+      purpose: HITL Review Dashboard — web UI for fact CONFIRM/REJECT.
 - path: scripts/golden_image/
   purpose: Golden Image
   files:
@@ -847,70 +812,67 @@ modules:
       purpose: __init__.py
     azure_client.py:
       status: production
-      purpose: "Azure CLI wrapper \u2014 Managed Identity prior, SP fallback, retry."
+      purpose: Azure CLI wrapper — Managed Identity prior, SP fallback, retry.
     models.py:
       status: production
-      purpose: "Golden Image DB wrapper \u2014 lib/db.py psql pattern reuse, no ORM."
+      purpose: Golden Image DB wrapper — lib/db.py psql pattern reuse, no ORM.
     refresh_cycle.py:
       status: production
-      purpose: "15\uBD84 \uC8FC\uAE30 \u2014 \uBC30\uD3EC \uB3D9\uAE30\uD654 + \uD5EC\
-        \uC2A4\uCCB4\uD06C + \uD0C0\uC784\uC544\uC6C3(10\uBD84) + \uC794\uC874 VM\
-        \ \uAC15\uC81C \uC885\uB8CC."
+      purpose: 15분 주기 — 배포 동기화 + 헬스체크 + 타임아웃(10분) + 잔존 VM 강제 종료.
     yearly_check.py:
       status: production
-      purpose: "Yearly upstream change detection \u2014 Qwen/llama.cpp via GitHub\
-        \ API."
+      purpose: Yearly upstream change detection — Qwen/llama.cpp via GitHub API.
     yearly_refresh.sh:
       status: unknown
-      purpose: "yearly_refresh.sh \u2014 Golden Image \uAC31\uC2E0 (\uC218\uB3D9/\uC790\
-        \uB3D9)"
+      purpose: yearly_refresh.sh — Golden Image 갱신 (수동/자동)
 - path: scripts/deploy/
   purpose: Deployment / Key Vault scripts
   files:
     env-file-normalize.py:
       status: production
-      purpose: "EnvironmentFile normalization + quoting-error guard (called by kv-export-env.sh)."
+      purpose: EnvironmentFile normalization + quoting-error guard (called by kv-export-env.sh).
     kv-backup.py:
       status: production
-      purpose: "Key Vault \u2192 GPG-encrypted secrets backup."
+      purpose: Key Vault → GPG-encrypted secrets backup.
     kv-fetch-env.py:
       status: production
-      purpose: "Fetch KV secrets into env vars and exec target (multi-KV merge, --keys filter)."
+      purpose: Fetch KV secrets into env vars and exec target (multi-KV merge, --keys
+        filter).
     kv-safe.py:
       status: production
-      purpose: "Key Vault safe wrapper \u2014 never prints secret values (list/compare/set)."
+      purpose: Key Vault safe wrapper — never prints secret values (list/compare/set).
     kv-sp-secret-check.py:
       status: production
-      purpose: "Azure SP client secret live validity probe + expiry alert (watchdog oneshot)."
+      purpose: Azure SP client secret live validity probe + expiry alert (watchdog
+        oneshot).
 - path: scripts/hooks/
   purpose: Hooks
   files:
     auto_log.py:
       status: experimental
-      purpose: "PostToolUse hook \u2014 auto-log tool calls to DB for session persistence."
+      purpose: PostToolUse hook — auto-log tool calls to DB for session persistence.
     baseline-daily.py:
       status: production
-      purpose: "W1 baseline daily runner (systemd: baseline-daily.timer)."
+      purpose: 'W1 baseline daily runner (systemd: baseline-daily.timer).'
     measure-hook-overhead.py:
       status: production
-      purpose: "Hook overhead measurement \u2014 safe run (no DB writes, mocked observe)."
+      purpose: Hook overhead measurement — safe run (no DB writes, mocked observe).
     pretool_bash_log.py:
       status: experimental
       purpose: 'PreToolUse hook: log ALL Bash tool call attempts as observations.'
     ruff_lint.py:
       status: experimental
-      purpose: "PostToolUse hook \u2014 auto-fix Python files with ruff, surface remaining\
-        \ violations."
+      purpose: PostToolUse hook — auto-fix Python files with ruff, surface remaining
+        violations.
     session_context.py:
       status: production
-      purpose: "SessionStart hook \u2014 inject DevForge work context into Claude."
+      purpose: SessionStart hook — inject DevForge work context into Claude.
 - path: scripts/lint_rules/
   purpose: Lint Rules
   files:
     __init__.py:
       status: production
-      purpose: "DevForge Rule Linter \u2014 coding rules enforced by machine, not\
-        \ documents."
+      purpose: DevForge Rule Linter — coding rules enforced by machine, not documents.
     checks.py:
       status: production
       purpose: Individual lint rule check functions.
@@ -931,7 +893,7 @@ modules:
       purpose: Shared bot message processor for Telegram & Slack.
     lib/text_quality.py:
       status: production
-      purpose: "Phase 2 Tier 1 \u2014 outbound Korean text quality guardrails."
+      purpose: Phase 2 Tier 1 — outbound Korean text quality guardrails.
 - path: scripts/pipelines/
   purpose: Pipelines
   files:
@@ -940,39 +902,41 @@ modules:
       purpose: DevForge pipeline step implementations.
     embed_batch.py:
       status: production
-      purpose: "Embed Batch Pipeline \u2014 text_clean \uAE30\uC900 embedding (unified\
-        \ preprocessing)."
+      purpose: Embed Batch Pipeline — text_clean 기준 embedding (unified preprocessing).
+    embed_orchestrate.py:
+      status: experimental
+      purpose: Wrapper for devforge pipeline orchestrate — replaces embed_batch.py
+        in day_cycle.sh.
     enrich.py:
       status: experimental
-      purpose: "Enrich Pipeline \u2014 post-extract MCP metadata enrichment (tldr,\
-        \ intent, entities, tags)."
+      purpose: Enrich Pipeline — post-extract MCP metadata enrichment (tldr, intent,
+        entities, tags).
     entity_scan.py:
       status: experimental
-      purpose: "Entity Scan \u2014 Phase 0: deterministic entity extraction via regex\
-        \ + DB lookup."
+      purpose: 'Entity Scan — Phase 0: deterministic entity extraction via regex +
+        DB lookup.'
     extract.py:
       status: production
-      purpose: "Extract Pipeline \u2014 state-based fact extraction via NOT EXISTS\
-        \ anti-join."
+      purpose: Extract Pipeline — state-based fact extraction via NOT EXISTS anti-join.
     extract_llm.py:
       status: production
-      purpose: "LLM extraction submodule \u2014 re-exports from lib/extract_llm + 8 prompt constants + chunking/edc re-exports."
+      purpose: LLM extraction submodule — re-exports from lib/extract_llm + 8 prompt
+        constants + chunking/edc re-exports.
     extract_verify.py:
       status: production
       purpose: Verification submodule for the Extract Pipeline.
     fts5_refresh.py:
       status: production
-      purpose: "FTS5 Refresh \u2014 text_clean \uAE30\uC900 FTS5 \uC778\uB371\uC2A4\
-        \ \uB3D9\uAE30\uD654."
+      purpose: FTS5 Refresh — text_clean 기준 FTS5 인덱스 동기화.
     post_extract_supplement.py:
       status: experimental
-      purpose: "Post-extract supplement \u2014 offline LLM call to find missing facts."
+      purpose: Post-extract supplement — offline LLM call to find missing facts.
     raw_consumer.py:
       status: experimental
-      purpose: "Consume raw turns from DB \u2014 apply text_clean, advance to pending."
+      purpose: Consume raw turns from DB — apply text_clean, advance to pending.
     reranker_recover.py:
       status: production
-      purpose: "Reranker Recovery \u2014 quarantine + retry for RERANKER_ERROR facts."
+      purpose: Reranker Recovery — quarantine + retry for RERANKER_ERROR facts.
     review.py:
       status: production
       purpose: Step implementations for the 3-Model Review Pipeline.
@@ -982,11 +946,11 @@ modules:
         supplement).'
     text_clean.py:
       status: production
-      purpose: "Unified Text Preprocessing \u2014 Clean + Polish in one stage."
+      purpose: Unified Text Preprocessing — Clean + Polish in one stage.
     worklog_generator.py:
       status: production
-      purpose: "worklog_generator.py \u2014 3-stage speculative pipeline: draft model\
-        \ \u2192 Python verify \u2192 review model."
+      purpose: 'worklog_generator.py — 3-stage speculative pipeline: draft model →
+        Python verify → review model.'
 - path: scripts/proxies/
   purpose: Proxies
   files:
@@ -1013,7 +977,7 @@ modules:
       purpose: OpenRouter free model auto-refresh for opencode.
     unified_search.py:
       status: experimental
-      purpose: "Unified search MCP transport (web/semantic) + rerank + format."
+      purpose: Unified search MCP transport (web/semantic) + rerank + format.
     search.py:
       status: production
       purpose: MCP search proxy (thin wrapper). Core logic lives in lib.research.web.
@@ -1022,11 +986,11 @@ modules:
   files:
     __init__.py:
       status: production
-      purpose: "state_collector \u2014 server knowledge engine: state gathering and\
-        \ architecture doc generation."
+      purpose: 'state_collector — server knowledge engine: state gathering and architecture
+        doc generation.'
     main.py:
       status: production
-      purpose: "state_collector \u2014 DevForge Server Knowledge Engine v4.4"
+      purpose: state_collector — DevForge Server Knowledge Engine v4.4
 - path: scripts/tests/
   purpose: Test Scripts
   files:
@@ -1062,58 +1026,52 @@ modules:
       purpose: Day cycle pipeline test harness.
     day_cycle_pipeline_full.py:
       status: experimental
-      purpose: "Full Day Cycle Pipeline Test \u2014 day_cycle.sh \uB85C\uC9C1 \uC804\
-        \uCCB4 \uAC80\uC99D."
+      purpose: Full Day Cycle Pipeline Test — day_cycle.sh 로직 전체 검증.
     day_model_test.py:
       status: experimental
-      purpose: "14B Q8_0 \uB2E8\uC77C extract + MiniCheck hallucination \uAC80\uC99D\
-        ."
+      purpose: 14B Q8_0 단일 extract + MiniCheck hallucination 검증.
     day_model_test_direct.py:
       status: experimental
       purpose: day_model_test_direct.py
     day_verify_compare.py:
       status: experimental
-      purpose: "inference(7B reviewer) \uBAA8\uB378 \uBE44\uAD50: 5\uAC1C \uC5ED\uD560\
-        \ \uC804\uCCB4 \uD14C\uC2A4\uD2B8."
+      purpose: 'inference(7B reviewer) 모델 비교: 5개 역할 전체 테스트.'
     day_verify_q8test.py:
       status: experimental
-      purpose: "Day Verify Pipeline \u2014 14B verify + category on inference only."
+      purpose: Day Verify Pipeline — 14B verify + category on inference only.
     day_verify_retry.py:
       status: experimental
-      purpose: "Coder Q8_0\uB9CC classify-P / classify-J / edge cases \uC7AC\uD14C\
-        \uC2A4\uD2B8 (timeout=300s)."
+      purpose: Coder Q8_0만 classify-P / classify-J / edge cases 재테스트 (timeout=300s).
     e2e_20turns_full.sh:
       status: unknown
-      purpose: "E2E Full Pipeline Test \u2014 20 turns, all phases, snapshot per phase\
-        \ + quality eval"
+      purpose: E2E Full Pipeline Test — 20 turns, all phases, snapshot per phase +
+        quality eval
     e2e_extract_section_split.py:
       status: unknown
-      purpose: "E2E Pipeline Test \u2014 section-split extract."
+      purpose: E2E Pipeline Test — section-split extract.
     e2e_extract_section_split.sh:
       status: unknown
-      purpose: "E2E Pipeline Test \u2014 section-split extract"
+      purpose: E2E Pipeline Test — section-split extract
     embed_bench.py:
       status: experimental
-      purpose: "Embedding Model Benchmark \u2014 compare faithfulness accuracy, speed,\
-        \ memory."
+      purpose: Embedding Model Benchmark — compare faithfulness accuracy, speed, memory.
     embed_progress_slack.py:
       status: experimental
-      purpose: "Slack embed progress reporter \u2014 send Qwen 8B embedding status\
-        \ to Slack every 30min."
+      purpose: Slack embed progress reporter — send Qwen 8B embedding status to Slack
+        every 30min.
     embed_runner.py:
       status: experimental
-      purpose: "Full Embed Runner \u2014 continuous embed_batch.py loop with watchdog\
-        \ progress."
+      purpose: Full Embed Runner — continuous embed_batch.py loop with watchdog progress.
     embed_runner.sh:
       status: unknown
-      purpose: "DevForge Embed Runner \u2014 continuous embed_batch.py loop"
+      purpose: DevForge Embed Runner — continuous embed_batch.py loop
     enrich_ab_compare.py:
       status: experimental
-      purpose: "Enrich A/B Quality Comparison \u2014 runs same turns through two models\
-        \ and compares."
+      purpose: Enrich A/B Quality Comparison — runs same turns through two models
+        and compares.
     enrich_verify_quality.py:
       status: experimental
-      purpose: "Enrich Verify \u2014 score enrichment metadata quality manually."
+      purpose: Enrich Verify — score enrichment metadata quality manually.
     eval_comparison.py:
       status: experimental
       purpose: DeepSeek Pro evaluation of 12-run comparison test results.
@@ -1126,8 +1084,7 @@ modules:
         quality.
     extract_compare.py:
       status: experimental
-      purpose: "\uB3D9\uC77C 5\uAC1C turn\uC73C\uB85C \uCD94\uCD9C \uC815\uD655\uB3C4\
-        /\uC18D\uB3C4 \uBE44\uAD50 + MiniCheck NLI \uAC80\uC99D"
+      purpose: 동일 5개 turn으로 추출 정확도/속도 비교 + MiniCheck NLI 검증
     extract_enrich_quality_spotcheck.py:
       status: experimental
       purpose: extract_enrich_quality_spotcheck.py
@@ -1137,70 +1094,61 @@ modules:
         existing phases.
     model_comparison_test.py:
       status: experimental
-      purpose: "14B Q4_K_M 3\uC885 \uBE44\uAD50: \uC2E4\uC81C \uD30C\uC774\uD504\uB77C\
-        \uC778 extract/verify \uD328\uD134\uC73C\uB85C \uD3C9\uAC00."
+      purpose: '14B Q4_K_M 3종 비교: 실제 파이프라인 extract/verify 패턴으로 평가.'
     neutral_improve.py:
       status: experimental
-      purpose: "NEUTRAL NLI Class Improvement \u2014 OLD vs V2 vs V3 (CoT + plausible\
-        \ unstated few-shot)."
+      purpose: NEUTRAL NLI Class Improvement — OLD vs V2 vs V3 (CoT + plausible unstated
+        few-shot).
     nli_compare.py:
       status: experimental
-      purpose: "MiniCheck(flan-t5-large, 770M) vs Qwen2.5-Coder-7B NLI \uBE44\uAD50\
-        ."
+      purpose: MiniCheck(flan-t5-large, 770M) vs Qwen2.5-Coder-7B NLI 비교.
     nli_compare_14b.py:
       status: experimental
-      purpose: "14B NLI Grounding Comparison \u2014 sequential test of both 14B Q8\
-        \ models."
+      purpose: 14B NLI Grounding Comparison — sequential test of both 14B Q8 models.
     pipeline_e2e_10turns.py:
       status: unknown
-      purpose: "Pipeline E2E test \u2014 10 newest turns, all 5 phases with inference\
-        \ mode switching."
+      purpose: Pipeline E2E test — 10 newest turns, all 5 phases with inference mode
+        switching.
     pipeline_e2e_test.py:
       status: experimental
-      purpose: "E2E Pipeline Test \u2014 6-turn full pipeline with timing, metrics,\
-        \ watchdog supervision."
+      purpose: E2E Pipeline Test — 6-turn full pipeline with timing, metrics, watchdog
+        supervision.
     pipeline_preverify_test.py:
       status: experimental
-      purpose: "Integrated Pipeline Test \u2014 \uC804\uCC98\uB9AC\uBD80\uD130 Embed\uAE4C\
-        \uC9C0 \uC804\uCCB4 \uAC80\uC99D."
+      purpose: Integrated Pipeline Test — 전처리부터 Embed까지 전체 검증.
     pipeline_smoke_test.py:
       status: experimental
-      purpose: "Full pipeline smoke test: extract \u2192 enrich \u2192 day_verify\
-        \ with --limit 2 --dry-run."
+      purpose: 'Full pipeline smoke test: extract → enrich → day_verify with --limit
+        2 --dry-run.'
     pipeline_verify_compare.py:
       status: experimental
-      purpose: "Full Pipeline NEUTRAL Test \u2014 10 real samples with 3 verify prompt\
-        \ variants."
+      purpose: Full Pipeline NEUTRAL Test — 10 real samples with 3 verify prompt variants.
     prj_ground_truth_test.py:
       status: experimental
-      purpose: "Ground truth \uAE30\uBC18 P\u2192R\u2192J day \uBD84\uB958 3\uBAA8\
-        \uB378 \uC815\uBC00 \uD3C9\uAC00."
+      purpose: Ground truth 기반 P→R→J day 분류 3모델 정밀 평가.
     prj_model_test.py:
       status: experimental
-      purpose: "P(Proposer)/R(Refuter)/J(Judge) \uC5ED\uD560\uBCC4 \uCD94\uCC9C \uBAA8\
-        \uB378 \uAC80\uC99D."
+      purpose: P(Proposer)/R(Refuter)/J(Judge) 역할별 추천 모델 검증.
     rubric.py:
       status: experimental
-      purpose: "DevForge Rubric Experiment \u2014 Round 1 (no rubric) vs Round 2 (with\
-        \ rubric)."
+      purpose: DevForge Rubric Experiment — Round 1 (no rubric) vs Round 2 (with rubric).
     run_extract_13.py:
       status: unknown
       purpose: Run extract on our 13 test turns.
     test_13t_enrich_prompt.py:
       status: experimental
-      purpose: "13-turn full cycle test: polish \u2192 extract \u2192 enrich \u2192\
-        \ day_verify."
+      purpose: '13-turn full cycle test: polish → extract → enrich → day_verify.'
     test_3t_full_pipeline.py:
       status: unknown
-      purpose: "3-turn full pipeline test: polish \u2192 extract \u2192 enrich \u2192\
-        \ verify (long turns)."
+      purpose: '3-turn full pipeline test: polish → extract → enrich → verify (long
+        turns).'
     test_7b_vs_9b_text_extract.py:
       status: experimental
       purpose: Compare 7B vs 9B extraction from narrative Korean text where 4B returns
         0.
     test_9b_review.py:
       status: experimental
-      purpose: "9B Extraction Review Test: 4B results \u2192 9B finds missed facts."
+      purpose: '9B Extraction Review Test: 4B results → 9B finds missed facts.'
     test_action_queue.py:
       status: unknown
       purpose: 'Test action_queue: write, claim, execute, complete/fail cycle.'
@@ -1213,19 +1161,18 @@ modules:
       purpose: 'Arbiter model comparison: 4B vs 7B/9B on identical V6 extraction pairs.'
     test_chunk_strategies.py:
       status: unknown
-      purpose: "Test chunking strategies \u2014 _split_atomic and its helper functions."
+      purpose: Test chunking strategies — _split_atomic and its helper functions.
     test_chunk_verify.py:
       status: unknown
-      purpose: "Test chunk-aware verification \u2014 creates synthetic long-source\
-        \ turn + predicates, runs day_verify."
+      purpose: Test chunk-aware verification — creates synthetic long-source turn
+        + predicates, runs day_verify.
     test_dual_4b.py:
       status: experimental
       purpose: 'Dual 4B concurrent test: inference core 0 (:8083) B-Xplore, inference
         core 1 (:8082) A-Strict.'
     test_edcr_e2e.py:
       status: experimental
-      purpose: "E2E test for _extract_edcr_freeform: OIE \u2192 Canonicalize \u2192\
-        \ Refinement."
+      purpose: 'E2E test for _extract_edcr_freeform: OIE → Canonicalize → Refinement.'
     test_extract_strategies.py:
       status: experimental
       purpose: Extract strategy comparison for long Korean developer turns on bb9c6363.
@@ -1241,8 +1188,7 @@ modules:
       purpose: Validate no hardcoded 127.0.0.1:808{0-4} ports remain in modified files.
     test_night_prj_eval.py:
       status: experimental
-      purpose: "Ground truth \uAE30\uBC18 night P-R-J \uD3C9\uAC00. P=30B(P), R=14B(R),\
-        \ J=N14B Q6."
+      purpose: Ground truth 기반 night P-R-J 평가. P=30B(P), R=14B(R), J=N14B Q6.
     test_phase1_14b.py:
       status: experimental
       purpose: 'Phase 1: Test Qwen3-14B-Q4_K_M with/without Golden Set on the same
@@ -1255,19 +1201,17 @@ modules:
       purpose: Phase 3 re-run with fixed DB sampling (char_length not est_chars).
     test_pipeline_e2e.py:
       status: deprecated
-      purpose: "Pipeline E2E test harness \u2014 test DB \u2192 extract \u2192 verify\
-        \ \u2192 night_review."
+      purpose: Pipeline E2E test harness — test DB → extract → verify → night_review.
     test_predicate_extract.py:
       status: unknown
-      purpose: "test_predicate_extract.py \u2014 Phase B: free-form predicate + atomic\
-        \ claim extraction test."
+      purpose: 'test_predicate_extract.py — Phase B: free-form predicate + atomic
+        claim extraction test.'
     test_progress_watcher.py:
       status: experimental
       purpose: test_progress_watcher.py
     test_r_role_dsv2.sh:
       status: unknown
-      purpose: "DSV2 Lite R \uC5ED\uD560 \uD14C\uC2A4\uD2B8 (Qwen14B R \uACB0\uACFC\
-        \uC640 \uBE44\uAD50) \u2014 inference container"
+      purpose: DSV2 Lite R 역할 테스트 (Qwen14B R 결과와 비교) — inference container
     test_review_9b.py:
       status: experimental
       purpose: Sequential dual 4B (Strict+Xplore) -> 9B review on real DB turns.
@@ -1280,8 +1224,8 @@ modules:
       purpose: 'V6 Quality Filters: Post-processing improvements for arbiter output.'
     test_verify_methods.py:
       status: experimental
-      purpose: "TLDR Verification Method Comparison \u2014 Reranker vs Embedding (NLI\
-        \ :8085 removed)."
+      purpose: TLDR Verification Method Comparison — Reranker vs Embedding (NLI :8085
+        removed).
 - path: src/devforge/
   purpose: devforge package root (refactored src-layout)
   files:
@@ -1290,7 +1234,7 @@ modules:
       purpose: __init__.py
     cli.py:
       status: unknown
-      purpose: "DevForge CLI \u2014 single entry point for all server operations."
+      purpose: DevForge CLI — single entry point for all server operations.
 - path: src/devforge/adapters/
   purpose: src/devforge/adapters
   files:
@@ -1311,13 +1255,13 @@ modules:
       purpose: __init__.py
     local_adapter.py:
       status: unknown
-      purpose: "Local LLM adapter \u2014 Track A (llama.cpp HTTP servers only)."
+      purpose: Local LLM adapter — Track A (llama.cpp HTTP servers only).
     reasoning_hypothesis.py:
       status: experimental
-      purpose: "error-record §2 LLM stage — OpenRouter reasoning chain + local fallback."
+      purpose: error-record §2 LLM stage — OpenRouter reasoning chain + local fallback.
     embed_adapter.py:
       status: experimental
-      purpose: "HttpEmbedClient — OpenAI-compatible /v1/embeddings transport (sync)."
+      purpose: HttpEmbedClient — OpenAI-compatible /v1/embeddings transport (sync).
 - path: src/devforge/adapters/driven/text/
   purpose: Text preprocessing adapters (scripts/lib.text_cleaner boundary)
   files:
@@ -1326,7 +1270,8 @@ modules:
       purpose: __init__.py
     cleaner_splitter.py:
       status: experimental
-      purpose: "split_sentences / estimate_tokens backed by scripts.lib.text_cleaner (injected into EmbedStage)."
+      purpose: split_sentences / estimate_tokens backed by scripts.lib.text_cleaner
+        (injected into EmbedStage).
 - path: src/devforge/adapters/driven/notification/
   purpose: Notification adapters (legacy notifier.py)
   files:
@@ -1335,16 +1280,16 @@ modules:
       purpose: __init__.py
     slack_notifier.py:
       status: experimental
-      purpose: "Slack Web API notifier (legacy notifier.py:60-81, 345, 362)."
+      purpose: Slack Web API notifier (legacy notifier.py:60-81, 345, 362).
     systemd_notifier.py:
       status: experimental
-      purpose: "sd_notify notifier (legacy notifier.py:26-48)."
+      purpose: sd_notify notifier (legacy notifier.py:26-48).
 - path: src/devforge/adapters/driven/container/
   purpose: Inference container lifecycle adapter (Podman)
   files:
     podman_adapter.py:
       status: experimental
-      purpose: "Podman adapter for inference container lifecycle."
+      purpose: Podman adapter for inference container lifecycle.
 - path: src/devforge/adapters/driven/health/
   purpose: Health check adapters (legacy checker.py) — batch HealthCheckPort
   files:
@@ -1353,25 +1298,25 @@ modules:
       purpose: __init__.py
     systemd_health.py:
       status: experimental
-      purpose: "systemd user service/timer checks (checker.py:150-162, 371-397)."
+      purpose: systemd user service/timer checks (checker.py:150-162, 371-397).
     llm_health.py:
       status: experimental
-      purpose: "LLM inference probes (checker.py:79-127, 493-528)."
+      purpose: LLM inference probes (checker.py:79-127, 493-528).
     system_health.py:
       status: experimental
-      purpose: "Memory/disk checks (checker.py:306-371)."
+      purpose: Memory/disk checks (checker.py:306-371).
     pipeline_health.py:
       status: experimental
-      purpose: "Worker heartbeat checks (checker.py:417-491)."
+      purpose: Worker heartbeat checks (checker.py:417-491).
     svcpod_health.py:
       status: experimental
-      purpose: "svc-pod host port forwarding check (legacy checker.py:679-701)."
+      purpose: svc-pod host port forwarding check (legacy checker.py:679-701).
     ebook_health.py:
       status: experimental
-      purpose: "ebook-watcher pipeline liveness (legacy checker.py:162-235)."
+      purpose: ebook-watcher pipeline liveness (legacy checker.py:162-235).
     dataimpulse_path.py:
       status: experimental
-      purpose: "DataImpulse path (toki31) liveness — read-only, alert-only (fails-open)."
+      purpose: DataImpulse path (toki31) liveness — read-only, alert-only (fails-open).
 - path: src/devforge/adapters/driven/recovery/
   purpose: Recovery adapters (legacy recovery.py recover_* family)
   files:
@@ -1380,10 +1325,10 @@ modules:
       purpose: __init__.py
     systemd_recovery.py:
       status: experimental
-      purpose: "RecoveryPort implementation — systemctl restart/timer kick + probe."
+      purpose: RecoveryPort implementation — systemctl restart/timer kick + probe.
     systemd_catchup.py:
       status: experimental
-      purpose: "CatchupPort (B) — systemctl start oneshot / kick timer service."
+      purpose: CatchupPort (B) — systemctl start oneshot / kick timer service.
 - path: src/devforge/adapters/driven/proxy_utils/
   purpose: src/devforge/adapters/driven/proxy_utils
   files:
@@ -1404,25 +1349,30 @@ modules:
       purpose: __init__.py
     database_gateway.py:
       status: unknown
-      purpose: "Database gateway \u2014 async SQLAlchemy session management."
+      purpose: Database gateway — async SQLAlchemy session management.
     extract_adapter.py:
       status: unknown
       purpose: PostgreSQL adapter for extract pipeline ports.
     embedding_adapter.py:
       status: experimental
-      purpose: "PostgreSQL adapter for EmbedPort — embed_batch SQL parity (enriched -> embedded)."
+      purpose: PostgreSQL adapter for EmbedPort — embed_batch SQL parity (enriched
+        -> embedded).
+    embedding_shadow_adapter.py:
+      status: experimental
+      purpose: PostgresEmbedShadowAdapter — W8 shadow reprojection (prod read, devforge_shadow
+        write only).
     state_json.py:
       status: experimental
-      purpose: "JsonStateStorage \u2014 atomic legacy-compatible watchdog state (state.py:290-336)."
+      purpose: JsonStateStorage — atomic legacy-compatible watchdog state (state.py:290-336).
     incident_pg.py:
       status: experimental
-      purpose: "PostgresIncidentRepository \u2014 legacy incidents.py:112-227 dedup/reopen."
+      purpose: PostgresIncidentRepository — legacy incidents.py:112-227 dedup/reopen.
     heartbeat_pg.py:
       status: experimental
-      purpose: "PostgresHeartbeatRepository \u2014 watchdog_pulses heartbeat_* rows."
+      purpose: PostgresHeartbeatRepository — watchdog_pulses heartbeat_* rows.
     error_analysis_pg.py:
       status: experimental
-      purpose: "error-record §2 reader — watchdog_incidents L1+L2 evidence."
+      purpose: error-record §2 reader — watchdog_incidents L1+L2 evidence.
 - path: src/devforge/adapters/driving/
   purpose: src/devforge/adapters/driving
   files:
@@ -1455,10 +1405,11 @@ modules:
       purpose: CLI subcommands for status inspection.
     watchdog.py:
       status: experimental
-      purpose: "Watchdog CLI (status/check/resolve) \u2014 factory-injected, no application import."
+      purpose: Watchdog CLI (status/check/resolve) — factory-injected, no application
+        import.
     errors.py:
       status: experimental
-      purpose: "error-record §2 CLI — read-only decision packet (errors analyze)."
+      purpose: error-record §2 CLI — read-only decision packet (errors analyze).
 - path: src/devforge/adapters/driving/mcp/
   purpose: src/devforge/adapters/driving/mcp
   files:
@@ -1476,28 +1427,32 @@ modules:
       purpose: __init__.py
     extract_pipeline.py:
       status: unknown
-      purpose: "Extract pipeline service \u2014 orchestrates the extract phase."
+      purpose: Extract pipeline service — orchestrates the extract phase.
     orchestrator.py:
       status: unknown
-      purpose: "Pipeline orchestrator \u2014 budget-managed stage execution."
+      purpose: Pipeline orchestrator — budget-managed stage execution.
     watchdog_service.py:
       status: experimental
-      purpose: "WatchdogService + create_watchdog_service \u2014 legacy orchestrator main loop."
+      purpose: WatchdogService + create_watchdog_service — legacy orchestrator main
+        loop.
     dora.py:
       status: experimental
-      purpose: "Pure DORA metrics derivation (2026 four keys) from deployment/incident events."
+      purpose: Pure DORA metrics derivation (2026 four keys) from deployment/incident
+        events.
     slo.py:
       status: experimental
-      purpose: "Pure availability SLI/SLO + error-budget derivation from watchdog incident downtime (2026 standard-gap §10)."
+      purpose: Pure availability SLI/SLO + error-budget derivation from watchdog incident
+        downtime (2026 standard-gap §10).
     controllers.py:
       status: experimental
-      purpose: "A/B/C remediation controllers \u2014 B CatchupController (run-log dedup)."
+      purpose: A/B/C remediation controllers — B CatchupController (run-log dedup).
     error_analysis.py:
       status: experimental
-      purpose: "error-record §2 \u2014 rules decision packet + LLM hypothesis merge."
+      purpose: error-record §2 — rules decision packet + LLM hypothesis merge.
     day_cycle.py:
       status: experimental
-      purpose: "run_full_cycle — owned-stage day-cycle orchestration (D6=A: FTS5 refresh + embed)."
+      purpose: 'run_full_cycle — owned-stage day-cycle orchestration (D6=A: FTS5 refresh
+        + embed).'
 - path: src/devforge/core/
   purpose: src/devforge/core
   files:
@@ -1506,20 +1461,20 @@ modules:
       purpose: __init__.py
     config.py:
       status: unknown
-      purpose: "Configuration registry \u2014 single entry point for all DevForge\
-        \ settings."
+      purpose: Configuration registry — single entry point for all DevForge settings.
     logging.py:
       status: unknown
-      purpose: "Structured logging via structlog \u2014 centralized configuration."
+      purpose: Structured logging via structlog — centralized configuration.
     paths.py:
       status: unknown
-      purpose: "Centralized path management \u2014 SSOT for filesystem roots."
+      purpose: Centralized path management — SSOT for filesystem roots.
     exceptions.py:
       status: unknown
-      purpose: "Custom exception hierarchy for DevForge."
+      purpose: Custom exception hierarchy for DevForge.
     telemetry.py:
       status: experimental
-      purpose: "OTel API tracing + GenAI semantic conventions; trace_id/run_id correlation (2026 standard-gap §9). No-op without OTEL_EXPORTER_OTLP_ENDPOINT / devforge[otel]."
+      purpose: OTel API tracing + GenAI semantic conventions; trace_id/run_id correlation
+        (2026 standard-gap §9). No-op without OTEL_EXPORTER_OTLP_ENDPOINT / devforge[otel].
 - path: src/devforge/domain/
   purpose: src/devforge/domain
   files:
@@ -1528,7 +1483,7 @@ modules:
       purpose: __init__.py
     models.py:
       status: unknown
-      purpose: "SQLAlchemy models for DevForge \u2014 mirrors docs/specs/schema.sql."
+      purpose: SQLAlchemy models for DevForge — mirrors docs/specs/schema.sql.
 - path: src/devforge/domain/model_management/
   purpose: src/devforge/domain/model_management
   files:
@@ -1537,10 +1492,10 @@ modules:
       purpose: __init__.py
     metadata.py:
       status: experimental
-      purpose: "Pure domain model for inference model metadata."
+      purpose: Pure domain model for inference model metadata.
     registry.py:
       status: experimental
-      purpose: "Inference model registry (pure domain, no I/O)."
+      purpose: Inference model registry (pure domain, no I/O).
 - path: src/devforge/domain/pipeline/
   purpose: src/devforge/domain/pipeline
   files:
@@ -1560,17 +1515,18 @@ modules:
       status: unknown
       purpose: __init__.py
 - path: src/devforge/domain/watchdog/
-  purpose: Watchdog domain (legacy-parity v2.1) — state machine, backoff, recovery, checks
+  purpose: Watchdog domain (legacy-parity v2.1) — state machine, backoff, recovery,
+    checks
   files:
     __init__.py:
       status: experimental
       purpose: __init__.py
     routing.py:
       status: experimental
-      purpose: "A/B/C routing — fix/catchup/alert + terminal + canary match."
+      purpose: A/B/C routing — fix/catchup/alert + terminal + canary match.
     governance.py:
       status: experimental
-      purpose: "S4 governance — counter→HITL escalation (pure)."
+      purpose: S4 governance — counter→HITL escalation (pure).
 - path: src/devforge/domain/watchdog/monitoring/
   purpose: Component tracking, circuit breaker, trend ETA
   files:
@@ -1579,10 +1535,10 @@ modules:
       purpose: __init__.py
     backoff.py:
       status: experimental
-      purpose: "CrashLoopBackOff with jitter — BackoffCalculator (legacy state.py:160)."
+      purpose: CrashLoopBackOff with jitter — BackoffCalculator (legacy state.py:160).
     tracker.py:
       status: experimental
-      purpose: "ComponentTracker + TrackerRegistry + TrendTracker (legacy state.py:28-232)."
+      purpose: ComponentTracker + TrackerRegistry + TrendTracker (legacy state.py:28-232).
 - path: src/devforge/domain/watchdog/recovery/
   purpose: Recovery kind classification and graduated recovery
   files:
@@ -1591,10 +1547,11 @@ modules:
       purpose: __init__.py
     strategies.py:
       status: experimental
-      purpose: "Recovery kind classification — classify_recovery_kind (orchestrator dispatch)."
+      purpose: Recovery kind classification — classify_recovery_kind (orchestrator
+        dispatch).
     graduation.py:
       status: experimental
-      purpose: "RecoveryCoordinator — legacy graduated_recover (recovery.py:270)."
+      purpose: RecoveryCoordinator — legacy graduated_recover (recovery.py:270).
 - path: src/devforge/domain/watchdog/orchestration/
   purpose: Check dispatch
   files:
@@ -1603,7 +1560,7 @@ modules:
       purpose: __init__.py
     check_coordinator.py:
       status: experimental
-      purpose: "CheckCoordinator — batch health-port dispatch into the tracker registry."
+      purpose: CheckCoordinator — batch health-port dispatch into the tracker registry.
 - path: src/devforge/pipeline_stages/
   purpose: src/devforge/pipeline_stages
   files:
@@ -1618,8 +1575,8 @@ modules:
       purpose: __init__.py
     edc.py:
       status: unknown
-      purpose: "Extract EDC (Extract, Describe, Classify) \u2014 prompt building and\
-        \ response parsing."
+      purpose: Extract EDC (Extract, Describe, Classify) — prompt building and response
+        parsing.
 - path: src/devforge/pipeline_stages/embed/
   purpose: Embed stage (enriched -> embedded) — D6=A owned stage
   files:
@@ -1628,10 +1585,12 @@ modules:
       purpose: __init__.py
     chunking.py:
       status: experimental
-      purpose: "Pure chunking/preprocessing — embed_batch parity with injected split/estimate callables."
+      purpose: Pure chunking/preprocessing — embed_batch parity with injected split/estimate
+        callables.
     stage.py:
       status: experimental
-      purpose: "EmbedStage — PipelineStage running cleanup/dead-letter/fetch/chunk/batch/store (skip+count)."
+      purpose: EmbedStage — PipelineStage running cleanup/dead-letter/fetch/chunk/batch/store
+        (skip+count).
 - path: src/devforge/ports/
   purpose: Hexagonal ports — lowest layer, importable by domain/adapters/application
   files:
@@ -1643,34 +1602,111 @@ modules:
       purpose: Inference container manager port.
     extract.py:
       status: unknown
-      purpose: "Extract pipeline ports \u2014 hexagonal architecture interfaces."
+      purpose: Extract pipeline ports — hexagonal architecture interfaces.
     embed.py:
       status: experimental
-      purpose: "Embed ports — EmbedPort, EmbedClient, PendingEmbedTurn, splitter/estimator callables."
+      purpose: Embed ports — EmbedPort, EmbedClient, PendingEmbedTurn, splitter/estimator
+        callables.
     types.py:
       status: experimental
-      purpose: "Watchdog value objects \u2014 ComponentState, HealthCheck, RecoveryAction, CircuitState, Incident."
+      purpose: Watchdog value objects — ComponentState, HealthCheck, RecoveryAction,
+        CircuitState, Incident.
     health_check.py:
       status: experimental
-      purpose: "HealthCheckPort \u2014 batch check_health() -> list[HealthCheck]."
+      purpose: HealthCheckPort — batch check_health() -> list[HealthCheck].
     recovery.py:
       status: experimental
-      purpose: "RecoveryPort \u2014 execute_recovery(action) -> bool."
+      purpose: RecoveryPort — execute_recovery(action) -> bool.
     notification.py:
       status: experimental
-      purpose: "NotificationPort \u2014 send_alert/send_recovery/sd_notify."
+      purpose: NotificationPort — send_alert/send_recovery/sd_notify.
     incident_repository.py:
       status: experimental
-      purpose: "IncidentRepository \u2014 record_detect/record_action/resolve_if_open/find_open/find_since."
+      purpose: IncidentRepository — record_detect/record_action/resolve_if_open/find_open/find_since.
     state_persistence.py:
       status: experimental
-      purpose: "StateStoragePort \u2014 legacy watchdog_state.json save/load."
+      purpose: StateStoragePort — legacy watchdog_state.json save/load.
     heartbeat.py:
       status: experimental
-      purpose: "HeartbeatRepository \u2014 list_heartbeats() (dead-man's switch)."
+      purpose: HeartbeatRepository — list_heartbeats() (dead-man's switch).
     catchup.py:
       status: experimental
-      purpose: "CatchupPort \u2014 run_oneshot/kick_timer (A/B/C B logic)."
+      purpose: CatchupPort — run_oneshot/kick_timer (A/B/C B logic).
     error_analysis.py:
       status: experimental
-      purpose: "ErrorAnalysisRepository + HypothesisPort \u2014 error-record §2 evidence."
+      purpose: ErrorAnalysisRepository + HypothesisPort — error-record §2 evidence.
+- path: tests/unit/
+  purpose: Unit Tests
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    test_code_structure.py:
+      status: production
+      purpose: Verify code-structure.yaml matches actual filesystem.
+    test_config.py:
+      status: production
+      purpose: Configuration loading and validation tests.
+    test_day_cycle.py:
+      status: production
+      purpose: Day cycle orchestration tests.
+    test_dev_agent.py:
+      status: production
+      purpose: Dev agent tests.
+    test_dev_pipeline.py:
+      status: production
+      purpose: Dev pipeline tests.
+    test_doc_links.py:
+      status: production
+      purpose: Documentation link validation.
+    test_docs_index.py:
+      status: production
+      purpose: Documentation index validation.
+    test_embed_stage.py:
+      status: production
+      purpose: EmbedStage unit tests.
+    test_exceptions.py:
+      status: production
+      purpose: Exception hierarchy tests.
+    test_key_loader.py:
+      status: production
+      purpose: Key loader tests.
+    test_kv_safe.py:
+      status: production
+      purpose: Key Vault safe operations tests.
+    test_kv_sp_secret_check.py:
+      status: production
+      purpose: SP secret check tests.
+    test_mcp_audit.py:
+      status: production
+      purpose: MCP audit tests.
+    test_model_registry.py:
+      status: production
+      purpose: Model registry tests.
+    test_model_score.py:
+      status: production
+      purpose: Model scoring tests.
+    test_orchestrator.py:
+      status: production
+      purpose: Orchestrator tests.
+    test_paths.py:
+      status: production
+      purpose: Path abstraction tests.
+    test_podman_adapter.py:
+      status: production
+      purpose: Podman adapter tests.
+    test_rerank_consumer.py:
+      status: production
+      purpose: Rerank consumer tests.
+    test_rerank_selection.py:
+      status: production
+      purpose: Rerank selection tests.
+    test_unified_search_mcp.py:
+      status: production
+      purpose: Unified search MCP tests.
+    test_watchdog_orchestrator_services.py:
+      status: production
+      purpose: Watchdog orchestrator services tests.
+    test_watchdog_parity.py:
+      status: production
+      purpose: Watchdog parity tests.

@@ -18,7 +18,7 @@ class HttpEmbedClient:
     """POST {input, model} to each configured port until one responds."""
 
     def __init__(
-        self, ports: Sequence[int] = (8080, 8081), timeout: int = 600, model: str = "default"
+        self, ports: Sequence[int] = (8081,), timeout: int = 600, model: str = "default"
     ) -> None:
         self._ports = list(ports)
         self._timeout = timeout

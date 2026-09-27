@@ -32,7 +32,7 @@ pending → text_clean → entity_scan            enriched → embed → embedde
 | `src/devforge/application/orchestrator.py` | `PipelineOrchestrator` + `BudgetManager` |
 | `src/devforge/pipeline_stages/embed/` | embed stage 구현(enriched→embedded) |
 | `src/devforge/application/day_cycle.py` | `run_full_cycle()` = 소유 스테이지 오케스트레이션 |
-| `src/devforge/adapters/driving/mcp/tools/pipeline/` | `pipeline_status`, `pipeline_orchestrate` |
+| `src/devforge/cli.py` (`pipeline` app) | `pipeline status`, `pipeline orchestrate` — **ADR-0006 계약 동결로 MCP 툴 대신 CLI** |
 | `scripts/day_cycle.sh` | → `devforge pipeline orchestrate` 래퍼(≤10줄) |
 | 검증 | `scripts/shadow_diff.py`(기존), `docs/ops/baseline/` |
 
@@ -50,6 +50,9 @@ pending → text_clean → entity_scan            enriched → embed → embedde
 
 ## 5. 수락 기준 (Phase C)
 - shadow 대조 **diff=0** + 2주 병렬, 롤백 ≤5분.
+- **현황 (2026-09-27):** diff=0 달성 (11:13Z, missing_real=0 / vector_mismatch=0 / legacy_raw 23 intentional).
+  2주 병렬 게이트 진행 중 — `devforge-shadow-diff.timer`(hourly JSONL) + day_cycle 내 shadow 재투영.
+  롤백 시연 완료: `git checkout -- scripts/day_cycle.sh` **4초** (≤5분 충족).
 
 ## 6. 의존성 / 전제
 - 신규 로직이 `enriched` 생성 + `text_clean*` 컬럼 기록.

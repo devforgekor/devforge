@@ -186,7 +186,7 @@ def pipeline_extract(
     asyncio.run(run())
 
 
-def _build_embed_stage(limit: int) -> Any:
+def _build_embed_stage(limit: int, shadow: bool = False, shadow_since: str | None = None) -> Any:
     """Compose the production EmbedStage (composition-root wiring)."""
     from devforge.adapters.driven.llm.embed_adapter import HttpEmbedClient
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
@@ -194,10 +194,21 @@ def _build_embed_stage(limit: int) -> Any:
     from devforge.adapters.driven.text.cleaner_splitter import estimate_tokens, split_sentences
     from devforge.core.config import get_config
     from devforge.pipeline_stages.embed import EmbedStage
+    from devforge.ports.embed import EmbedPort
 
     config = get_config()
+    gateway = DatabaseGateway.from_config(config)
+    port: EmbedPort
+    if shadow:
+        from devforge.adapters.driven.storage.embedding_shadow_adapter import (
+            PostgresEmbedShadowAdapter,
+        )
+
+        port = PostgresEmbedShadowAdapter(gateway, since=shadow_since)
+    else:
+        port = PostgresEmbedAdapter(gateway)
     return EmbedStage(
-        port=PostgresEmbedAdapter(DatabaseGateway.from_config(config)),
+        port=port,
         client=HttpEmbedClient(),
         split_sentences=split_sentences,
         estimate_tokens=estimate_tokens,
@@ -229,6 +240,14 @@ def pipeline_orchestrate(
     limit: int = typer.Option(50, "--limit", "-n", help="Max turns to embed"),
     budget_sec: int = typer.Option(3600, "--budget-sec", help="Shared stage budget"),
     skip_fts5: bool = typer.Option(False, "--skip-fts5", help="Skip the FTS5 refresh stage"),
+    shadow: bool = typer.Option(
+        False, "--shadow", help="Reproject prod embeds into devforge_shadow (verification only)"
+    ),
+    shadow_since: str = typer.Option(
+        None,
+        "--shadow-since",
+        help="ISO timestamp — only reproject prod embeds created at/after this time (parity window)",
+    ),
 ) -> None:
     """Run owned day-cycle stages (D6=A: FTS5 refresh + embed, enriched -> embedded)."""
     import json as json_module
@@ -238,14 +257,18 @@ def pipeline_orchestrate(
 
     try:
         results = run_full_cycle(
-            embed_stage=_build_embed_stage(limit),
-            fts5_refresh=None if skip_fts5 else _fts5_refresh_callable(),
+            embed_stage=_build_embed_stage(limit, shadow=shadow, shadow_since=shadow_since),
+            # [WHY] FTS5 refresh mutates the prod local index — pointless and
+            # forbidden in shadow verification mode.
+            fts5_refresh=None if (skip_fts5 or shadow) else _fts5_refresh_callable(),
             budget_sec=budget_sec,
         )
     except PipelineBudgetError as exc:
         typer.echo(json_module.dumps({"error": str(exc)}, indent=2))
         raise typer.Exit(code=1) from exc
-    typer.echo(json_module.dumps({"stages": results}, indent=2))
+    typer.echo(
+        json_module.dumps({"mode": "shadow" if shadow else "prod", "stages": results}, indent=2)
+    )
 
 
 @pipeline_app.command("status")

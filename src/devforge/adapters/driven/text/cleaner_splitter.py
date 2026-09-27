@@ -5,7 +5,16 @@
 
 from __future__ import annotations
 
-from lib.text_cleaner import get_cleaner
+import sys
+from pathlib import Path
+
+# [WHY] scripts/ is not an installed package — every entry point (console
+# script, python -m, container PYTHONPATH) must resolve lib.* on sys.path.
+_SCRIPTS_DIR = Path(__file__).resolve().parents[5] / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from lib.text_cleaner import get_cleaner  # noqa: E402
 
 
 def split_sentences(text: str) -> list[str]:
