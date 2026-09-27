@@ -1,18 +1,16 @@
 last_checkpoint:
-  time: '2026-09-27T14:30:01.382182+00:00'
-  summary: 4 source, 1 config, 1 docs, 1 generated
-  total_files: 15
+  time: '2026-09-27T15:00:00.756694+00:00'
+  summary: 3 source, 1 config, 1 generated
+  total_files: 13
   recent_files:
     data: []
-    docs:
-    - server/docs/architecture/code-structure.yaml
+    docs: []
     config:
     - server/systemd/user/devforge-mcp-inventory.service
     source:
-    - server/scripts/backup_ssot_golden.py
+    - server/scripts/lib/research/web.py
     - server/scripts/mcp_inventory_check.py
     - server/tests/fitness/test_mcp_inventory.py
-    - server/tests/unit/test_backup_ssot_golden.py
     generated:
     - server/collect_checkpoint.json
   git: {}
