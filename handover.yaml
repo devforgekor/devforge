@@ -1,14 +1,13 @@
 last_checkpoint:
-  time: '2026-09-27T08:30:00.572722+00:00'
-  summary: 5 source, 1 docs, 1 generated
-  total_files: 15
+  time: '2026-09-27T09:00:01.16597+00:00'
+  summary: 4 source, 1 docs, 1 generated
+  total_files: 14
   recent_files:
     data: []
     docs:
     - server/docs/architecture/code-structure.yaml
     config: []
     source:
-    - server/scripts/web_chat.py
     - server/src/routers/__init__.py
     - server/src/routers/escalation_router.py
     - server/src/routers/escalation_router_example.py
