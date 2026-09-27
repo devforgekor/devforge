@@ -1,10 +1,12 @@
 last_checkpoint:
-  time: '2026-09-27T19:30:00.816863+09:00'
-  summary: 1 source, 1 generated
-  total_files: 4
+  time: '2026-09-27T20:00:00.947436+09:00'
+  summary: 3 source, 1 generated
+  total_files: 11
   recent_files:
     source:
     - server/src/devforge/adapters/driven/storage/embedding_shadow_adapter.py
+    - server/src/routers/escalation_router_example.py
+    - server/tests/unit/adapters/driven/storage/test_embedding_shadow_pg.py
     config: []
     docs: []
     data: []
@@ -13,9 +15,9 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 14 files changed, 891 insertions(+), 477 deletions(-)
+      unstaged: 14 files changed, 896 insertions(+), 480 deletions(-)
       staged: (none)
-      untracked_files: 12
+      untracked_files: 13
   task: null
 decisions:
 - id: nd13-01
