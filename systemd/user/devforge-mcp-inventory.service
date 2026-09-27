@@ -5,6 +5,6 @@ OnFailure=devforge-mcp-inventory-failed.service
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/projects/server
-ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/mcp_inventory_check.py
+ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/mcp_inventory_check.py --m0
 StandardOutput=journal
 StandardError=journal
