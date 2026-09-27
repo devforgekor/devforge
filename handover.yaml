@@ -1,11 +1,10 @@
 last_checkpoint:
-  time: '2026-09-27T18:30:01.066734+09:00'
-  summary: 2 source, 1 generated
-  total_files: 8
+  time: '2026-09-27T19:00:00.795673+09:00'
+  summary: 1 source, 1 generated
+  total_files: 4
   recent_files:
     source:
-    - server/src/routers/escalation_router.py
-    - server/tests/test_escalation_router.py
+    - server/src/devforge/adapters/driven/storage/embedding_shadow_adapter.py
     config: []
     docs: []
     data: []
@@ -14,9 +13,9 @@ last_checkpoint:
   git:
     server:
       branch: main
-      unstaged: 14 files changed, 890 insertions(+), 473 deletions(-)
+      unstaged: 14 files changed, 892 insertions(+), 479 deletions(-)
       staged: (none)
-      untracked_files: 12
+      untracked_files: 13
   task: null
 decisions:
 - id: nd13-01
