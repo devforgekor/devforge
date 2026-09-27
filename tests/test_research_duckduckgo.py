@@ -8,6 +8,7 @@ The live test is opt-in: DEVFORGE_DUCKDUCKGO_LIVE=1 (needs the DataImpulse proxy
 
 from __future__ import annotations
 
+import gzip
 import os
 import sys
 
@@ -114,6 +115,109 @@ def test_should_retry_then_return_empty_when_captcha(monkeypatch):
     # html x3 (1 + 2 retries) then lite x1
     assert len(calls) == 4
     assert calls[-1] == duckduckgo.LITE_ENDPOINT
+
+
+# ── gzip body handling ────────────────────────────────────────────────
+
+
+def test_should_advertise_gzip_when_building_headers():
+    assert duckduckgo._HEADERS["Accept-Encoding"] == "gzip"
+
+
+def test_should_inflate_body_when_content_encoding_gzip():
+    assert duckduckgo._gunzip(gzip.compress(_SERP), "gzip") == _SERP
+
+
+def test_should_return_raw_body_when_encoding_absent():
+    assert duckduckgo._gunzip(_SERP, "") == _SERP
+
+
+def test_should_return_raw_body_when_corrupt_gzip():
+    assert duckduckgo._gunzip(b"\x1f\x8bnot-a-payload", "gzip") == b"\x1f\x8bnot-a-payload"
+
+
+def test_should_parse_rows_when_post_returns_gzip(monkeypatch):
+    payload = gzip.compress(_SERP)
+
+    class _Resp:
+        status = 200
+        headers = {"Content-Encoding": "gzip"}
+
+        def read(self):
+            return payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(
+        duckduckgo.urllib.request,
+        "build_opener",
+        lambda *_a: type("_Opener", (), {"open": lambda self, req, timeout=None: _Resp()})(),
+    )
+    status, body = duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", None)
+    assert status == 200
+    assert body == _SERP
+    assert len(duckduckgo.parse_serp(body)) == 2
+
+
+# ── body read policy (only 200 bodies are ever parsed) ────────────────
+
+
+def test_should_not_read_body_when_status_not_200(monkeypatch):
+    class _Resp:
+        status = 202
+        headers = {"Content-Encoding": "gzip"}
+
+        def read(self, *_a):
+            raise AssertionError("a 202 anomaly body (~14 KB) must not be downloaded")
+
+        def close(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            self.close()
+            return False
+
+    monkeypatch.setattr(
+        duckduckgo.urllib.request,
+        "build_opener",
+        lambda *_a: type("_O", (), {"open": lambda self, req, timeout=None: _Resp()})(),
+    )
+    assert duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", None) == (202, b"")
+
+
+def test_should_not_read_body_when_http_error(monkeypatch):
+    class _Body:
+        def __init__(self):
+            self.read_calls = 0
+            self.closed = False
+
+        def read(self, *_a):
+            self.read_calls += 1
+            return b"404 body"
+
+        def close(self):
+            self.closed = True
+
+    err_body = _Body()
+
+    def _open(self, req, timeout=None):
+        raise duckduckgo.urllib.error.HTTPError("http://x/", 404, "Not Found", None, err_body)
+
+    monkeypatch.setattr(
+        duckduckgo.urllib.request,
+        "build_opener",
+        lambda *_a: type("_O", (), {"open": _open})(),
+    )
+    assert duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", None) == (404, b"")
+    assert err_body.read_calls == 0
+    assert err_body.closed
 
 
 # ── web.py rotation integration ───────────────────────────────────────

@@ -11,6 +11,7 @@ requires a vqd-token handshake, so it is not used.
 
 from __future__ import annotations
 
+import gzip
 import html
 import re
 import sys
@@ -37,8 +38,25 @@ _HEADERS = {
     "User-Agent": _USER_AGENT,
     "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
     "Content-Type": "application/x-www-form-urlencoded",
+    # [WHY] an uncompressed SERP is ~26 KB; gzip brings it down to ~4.4 KB, and the
+    # residential proxy bills by transferred GB.
+    "Accept-Encoding": "gzip",
 }
 _WS_RE = re.compile(r"\s+")
+
+
+def _gunzip(body: bytes, content_encoding: str) -> bytes:
+    """Inflate a gzipped HTTP body, returning raw bytes when it is not gzip.
+
+    A mislabeled or truncated body must never raise: returning it raw lets
+    `parse_serp` yield 0 rows and take the existing retry path instead.
+    """
+    if not body or "gzip" not in (content_encoding or "").lower():
+        return body
+    try:
+        return gzip.decompress(body)
+    except Exception:  # noqa: BLE001 — degrade to "0 rows -> retry", never a traceback
+        return body
 
 
 def _log(msg: str) -> None:
@@ -127,9 +145,16 @@ def _post(endpoint: str, query: str, region: str, proxy_url: Optional[str]) -> t
     )
     try:
         with urllib.request.build_opener(*handlers).open(request, timeout=TIMEOUT) as resp:
-            return resp.status, resp.read()
+            if resp.status != 200:
+                # [WHY] only status 200 is ever parsed, and a 202 anomaly page costs
+                # ~14 KB uncompressed — 3x a good response. Downloading it is pure waste.
+                return resp.status, b""
+            body = _gunzip(resp.read(), resp.headers.get("Content-Encoding", ""))
+            return resp.status, body
     except urllib.error.HTTPError as exc:
-        return exc.code, exc.read()
+        # [WHY] same as above: a non-2xx body is never inspected, so don't fetch it.
+        exc.close()
+        return exc.code, b""
     except Exception as exc:  # noqa: BLE001 — surfaced as an empty result set
         return 0, str(exc).encode()
 
