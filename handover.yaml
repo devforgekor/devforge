@@ -1,14 +1,21 @@
 last_checkpoint:
-  time: '2026-09-27T04:00:00.689605+00:00'
-  summary: no files
-  total_files: 1
+  time: '2026-09-27T13:30:00.276341+09:00'
+  summary: 1 source, 1 generated
+  total_files: 4
   recent_files:
-    data: []
-    docs: []
+    source:
+    - server/scripts/shadow_diff.py
     config: []
-    source: []
-    generated: []
-  git: {}
+    docs: []
+    data: []
+    generated:
+    - server/collect_checkpoint.json
+  git:
+    server:
+      branch: main
+      unstaged: 12 files changed, 225 insertions(+), 51 deletions(-)
+      staged: (none)
+      untracked_files: 8
   task: null
 decisions:
 - id: nd13-01
