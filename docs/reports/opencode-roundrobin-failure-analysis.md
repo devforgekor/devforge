@@ -1,14 +1,18 @@
 # OpenRouter Free Model 시스템 — 운영 문서
 
-> 최종 갱신: 2026-09-14
+> 최종 갱신: 2026-09-27
 > 상태: 운영 중 (E2E 검증 완료)
 
 ## 시스템 개요
 
 3개의 OpenRouter 계정(MESIDS, MINIPARK4U, HYEONMINPARK4U)을 사용한다.
-**선정된 모델 1개는 전용 계정 1개에 고정**(모델별 1:1 매핑)하여 분당 제한 대신
-**일일 쿼터를 계정별로 분산**한다. 매일 자동으로 최신 무료 모델 Top 3를
+**선정된 모델은 각각 3개 계정 전체를 요청마다 라운드로빈**하며, 한 계정이
+실패(429 등)하면 다음 계정으로 자동 재시도한다. 즉 어느 한 계정의 일일 한도가
+소진돼도 모델 전체가 죽지 않는다. 매일 자동으로 최신 무료 모델 Top 3를
 선정(구글 제외 + 최종 더미 검증 통과분)하여 opencode-rr.json을 갱신한다.
+
+> 변경 이력: 2026-09-14에 도입한 "모델 1:1 계정 고정"은 2026-09-27 **모델별 3계정
+> 라운드로빈 + 계정 간 자동 재시도**로 대체됐다.
 
 ```
                     매일 15:30 UTC (00:30 KST)
@@ -24,10 +28,8 @@
                            │ writes
                            ▼
 opencode-rr.json ──> openrouter-rr-proxy.service (127.0.0.1:8451)
-                     ├─ model[0] → key[1] MESIDS (고정)
-                     ├─ model[1] → key[2] MINIPARK4U (고정)
-                     ├─ model[2] → key[3] HYEONMINPARK4U (고정)
-                     └─ 미지정 모델 → 라운드로빈 (fallback)
+                     ├─ 등록 모델 → key[1]→[2]→[3] 라운드로빈 + 계정 간 재시도
+                     └─ 미지정 모델 → 전역 커서 라운드로빈 + 재시도
 
 opencode-rr ──> http://127.0.0.1:8451/v1 (1개 provider, 모드명 ORP)
 ```
@@ -40,7 +42,7 @@ opencode-rr ──> http://127.0.0.1:8451/v1 (1개 provider, 모드명 ORP)
 |------|------|
 | 경로 | `/opt/projects/server/scripts/proxies/openrouter_rr_proxy.py` |
 | 포트 | 8451 (127.0.0.1 전용) |
-| 언어 | Python 3.11, FastAPI + httpx |
+| 언어 | Python 3.12, FastAPI + httpx |
 | 상태 | systemd user service, enabled, active |
 
 **엔드포인트:**
@@ -49,18 +51,19 @@ opencode-rr ──> http://127.0.0.1:8451/v1 (1개 provider, 모드명 ORP)
 |------|--------|------|
 | `/v1/chat/completions` | POST | OpenAI 호환 채팅 (stream + non-stream) |
 | `/v1/models` | GET | OpenRouter 모델 목록 |
-| `/health` | GET | 헬스체크 (pinned 모델→계정 맵 포함) |
+| `/health` | GET | 헬스체크 (model→account 라운드로빈 맵 포함) |
 
 **키 로딩 순서:**
 1. `~/.config/devforge/secrets.env` 파일 직접 파싱
 2. (fallback) 환경변수 `OPENROUTER_MESIDS_API_KEY` 등
 
 **주요 특징:**
-- **모델→계정 고정**: `opencode-rr.json`의 `provider.openrouter.models` **순서**대로
-  계정에 1:1 배정 (`models[0]`→MESIDS, `models[1]`→MINIPARK4U, `models[2]`→HYEONMINPARK4U)
-- 고정 모델은 전용 계정으로만 라우팅 — **계정 간 fallback 없음** (429/실패 시 그대로
-  반환 → opencode의 `modelFallbackChain`이 다음 모델로 진행, 다음 모델은 다른 계정)
-- 미지정/미상 모델은 `_next_key()` 라운드로빈 (기존 동작 유지)
+- **모델별 3계정 라운드로빈**: `opencode-rr.json`의 `provider.openrouter.models`에 등록된
+  모든 모델이 계정 1→2→3(MESIDS→MINIPARK4U→HYEONMINPARK4U)을 요청마다 순환한다.
+  모델별 커서를 두어 각 모델의 트래픽이 계정에 분산된다.
+- **계정 간 자동 재시도**: 한 계정이 429/실패하면 남은 계정을 순서대로 재시도하고,
+  전부 실패하면 502를 반환한다 → 계정 1개 한도 소진이 모델 전체 실패로 이어지지 않음
+- 미등록/미상 모델은 전역 커서 `_next_key()`로 전체 계정 라운드로빈 + 재시도
 - `opencode-rr.json` mtime 체크로 매일 갱신분을 **재시작 없이 자동 재로드**
 - streaming 에러 시 `try/finally`로 연결 누수 방지
 - lifespan 이벤트로 httpx.AsyncClient 생명주기 관리
@@ -105,52 +108,20 @@ opencode-rr ──> http://127.0.0.1:8451/v1 (1개 provider, 모드명 ORP)
 
 ### 3. systemd 유닛
 
-**openrouter-rr-proxy.service:**
+| 유닛 | 역할 |
+|------|------|
+| `openrouter-rr-proxy.service` | RR 프록시. `ExecStart=kv-fetch-env.py … openrouter_rr_proxy.py --keys OPENROUTER-*`, `Restart=on-failure` |
+| `devforge-openrouter-free-models.service` | 갱신 oneshot (`refresh_openrouter_free_models.py`) |
+| `devforge-openrouter-free-models.timer` | `OnCalendar=*-*-* 15:30:00`, `Persistent=true` |
 
-```ini
-[Unit]
-Description=OpenRouter Key Round-Robin Proxy
-After=default.target
-
-[Service]
-Type=simple
-EnvironmentFile=-%h/.config/devforge/secrets.env
-ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/proxies/openrouter_rr_proxy.py
-Restart=on-failure
-RestartSec=5
-```
-
-**devforge-openrouter-free-models.service:**
-
-```ini
-[Unit]
-Description=DevForge OpenRouter Free Model Refresh (매일 00:30 KST = 15:30 UTC)
-
-[Service]
-Type=oneshot
-Environment=PYTHONPATH=/opt/projects/server/scripts
-ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/proxies/refresh_openrouter_free_models.py
-WorkingDirectory=/opt/projects/server/scripts
-Nice=19
-IOSchedulingClass=idle
-```
-
-**devforge-openrouter-free-models.timer:**
-
-```ini
-[Unit]
-Description=DevForge OpenRouter Free Model Refresh Timer (매일 00:30 KST)
-
-[Timer]
-OnCalendar=*-*-* 15:30:00
-Persistent=true
-```
+> 유닛 파일(`~/.config/systemd/user/`)이 SSOT. 런타임 키는 `kv-fetch-env.py`가 Azure KV
+> (`OPENROUTER-*`)에서 주입한다. 모든 유닛은 Python 3.12로 실행된다.
 
 ## 파일 인벤토리
 
 | 파일 | 역할 | 유형 |
 |------|------|------|
-| `scripts/proxies/openrouter_rr_proxy.py` | 3계정 프록시, 모델→계정 고정 (FastAPI, port 8451) | 운영 |
+| `scripts/proxies/openrouter_rr_proxy.py` | 3계정 프록시, 모델별 3계정 라운드로빈 (FastAPI, port 8451) | 운영 |
 | `scripts/proxies/refresh_openrouter_free_models.py` | 매일 free 모델 자동 갱신 (구글 제외 + 최종 검증) | 운영 |
 | `~/.config/systemd/user/openrouter-rr-proxy.service` | RR 프록시 서비스 | 운영 |
 | `~/.config/systemd/user/devforge-openrouter-free-models.service` | 갱신 oneshot 서비스 | 운영 |
@@ -164,39 +135,21 @@ Persistent=true
 
 ```json
 {
-  "model": "openrouter/inclusionai/ling-3.0-flash-vl:free",
-  "experimental": {
-    "modelFallbackChain": {
-      "timeoutMs": 60000,
-      "chains": [
-        [
-          "openrouter/inclusionai/ling-3.0-flash-vl:free",
-          "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
-          "openrouter/cohere/north-mini-code:free"
-        ]
-      ]
-    }
-  },
-  "provider": {
-    "openrouter": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "ORP",
-      "options": {
-        "baseURL": "http://127.0.0.1:8451/v1",
-        "apiKey": "local-rr-proxy"
-      },
-      "models": {
-        "inclusionai/ling-3.0-flash-vl:free": { "name": "ORP-1(free)" },
-        "nvidia/nemotron-3-ultra-550b-a55b:free": { "name": "ORP-2(free)" },
-        "cohere/north-mini-code:free": { "name": "ORP-3(free)" }
-      }
-    }
-  }
+  "model": "openrouter/<top-1 free model>",
+  "experimental": { "modelFallbackChain": { "timeoutMs": 60000,
+    "chains": [["<top-1>", "<top-2>", "<top-3>"]] } },
+  "provider": { "openrouter": {
+    "npm": "@ai-sdk/openai-compatible", "name": "ORP",
+    "options": { "baseURL": "http://127.0.0.1:8451/v1", "apiKey": "local-rr-proxy" },
+    "models": { "<model-1>": { "name": "ORP-1(free)" },
+                "<model-2>": { "name": "ORP-2(free)" },
+                "<model-3>": { "name": "ORP-3(free)" } } } }
 }
 ```
 
-> `provider.openrouter.models`의 **키 순서** = 프록시의 모델→계정 고정 순서.
-> 순서를 바꾸면 프록시가 mtime으로 자동 재로드한다 (재시작 불필요).
+> `model`/`chains[0]`/`models`는 매일 타이머가 실제 모델 ID로 덮어쓴다(아래 §자동 갱신).
+> `provider.openrouter.models`에 **등록된 모델은 모두 3개 계정 전체를 라운드로빈**하며,
+> 모델이 추가/삭제되면 프록시가 mtime으로 자동 재로드한다 (재시작 불필요).
 
 **변경 전후 비교:**
 
@@ -206,7 +159,7 @@ Persistent=true
 | baseURL | https://openrouter.ai/api/v1 | http://127.0.0.1:8451/v1 |
 | apiKey | 3개 개별 키 (하드코딩) | local-rr-proxy (프록시가 교체) |
 | 모델 | 2개 (minimax, laguna) | 매일 자동 갱신 (3개, 서로 다른 업스트림) |
-| 계정 분산 | 요청마다 라운드로빈 (RPM 회피 목적) | **모델별 계정 고정 (일일 쿼터 분산)** |
+| 계정 분산 | 요청마다 라운드로빈 (RPM 회피 목적) | **모델별 3계정 라운드로빈 + 계정 간 재시도** |
 | 선정 규칙 | top-3 org (단순) | top-3 org + **구글 제외** + **최종 더미 검증** |
 | fallback 전략 | 1개 체인, 6개 동일 업스트림 | 1개 체인, 3개 다른 업스트림 |
 
@@ -226,42 +179,34 @@ Persistent=true
 
 opencode-rr 세션 중:
   └─ http://127.0.0.1:8451/v1 (RR 프록시, 모드명 ORP)
-       ├─ 선정 모델 → 전용 계정 1개로 고정 라우팅
-       ├─ 실패(429 등) → 계정 간 fallback 없이 그대로 반환
-       │   └─ opencode modelFallbackChain이 다음 모델(다른 계정)로 진행
-       └─ 미지정 모델 → 라운드로빈 + 429 재시도
+       ├─ 등록 모델 → 계정 1→2→3 라운드로빈
+       ├─ 실패(429 등) → 다음 계정으로 자동 재시도, 전부 실패 시 502
+       └─ 미지정 모델 → 전역 커서 라운드로빈 + 재시도
 ```
 
 ## 검증 결과
 
 ### 단위 검증 (2026-09-08)
 
-| # | 검증 항목 | 결과 |
-|---|----------|------|
-| 1 | Health endpoint | ✅ `{"status":"ok","keys":3}` |
-| 2 | Models list | ✅ HTTP 200, 704KB |
-| 3 | Non-streaming chat | ✅ GPT-4o-mini, cost $4.95e-06 |
-| 4 | Streaming chat | ✅ SSE data: chunks |
-| 5 | Round-robin (6회 병렬) | ✅ key[1]→[2]→[3]→[1]→[2]→[3] |
-| 6 | Invalid model → fallback | ✅ 400 + 다음 키 시도 |
-| 7 | Invalid JSON body | ✅ 400 "Invalid JSON body" |
-| 8 | All keys 429 → 502 | ✅ 3개 키 전부 실패 시 502 |
-| 9 | opencode-rr.json 설정 일치 | ✅ baseURL, model, chain 일치 |
-| 10 | OpenAI 클라이언트 호환 | ✅ Bearer auth + 전체 응답 |
-| 11 | Stress 10 concurrent | ✅ Race condition 없음 |
-| 12 | 메모리 | ✅ RSS 60MB |
-| 13 | 포트 바인딩 | ✅ 127.0.0.1:8451 (외부 차단) |
+| 검증 | 결과 |
+|------|------|
+| Health / Models list | ✅ 200 (`keys:3`, 704KB) |
+| Chat (stream · non-stream) / OpenAI 클라이언트 호환 | ✅ SSE, Bearer auth |
+| Round-robin (6회 병렬) / Stress 10 concurrent | ✅ key[1]→[2]→[3] 순환, race 없음 |
+| Invalid model → 다음 키 / Invalid JSON body | ✅ 400 |
+| All keys 429 → 502 | ✅ |
+| 메모리 / 포트 바인딩 | ✅ RSS 60MB, 127.0.0.1:8451 |
 
-### 핀 고정 검증 (2026-09-14)
+### 라운드로빈 전환 검증 (2026-09-27)
 
 | # | 검증 항목 | 결과 |
 |---|----------|------|
-| 1 | Health pinned 맵 | ✅ `nemotron→MESIDS, gemma→MINIPARK4U, north→HYEONMINPARK4U` |
-| 2 | 모델별 고정 라우팅 | ✅ nemotron→key[1] MESIDS, gemma→key[2] MINIPARK4U, north→key[3] HYEONMINPARK4U |
-| 3 | mtime 자동 재로드 | ✅ 순서 변경 시 재시작 없이 새 매핑 반영 |
-| 4 | 구글 제외 | ✅ 후보에서 google 모델 미포함 |
-| 5 | 최종 더미 검증 | ✅ 선정 후보 dummy 호출 통과분만 기록 |
-| 6 | 핀 고정 모델 실호출 | ✅ 새 primary(ling-3.0-flash-vl) 200 OK |
+| 1 | Health accounts 맵 | ✅ `nemotron→[MESIDS,MINIPARK4U,HYEONMINPARK4U]`, `north→[...]` |
+| 2 | 모델별 라운드로빈 | ✅ 모델 호출 시 `[0,1,2]→[1,2,0]→[2,0,1]` 순환 (모델별 커서) |
+| 3 | 계정 간 재시도 | ✅ 한 계정 실패 시 다음 계정 재시도, 전부 실패 시 502 |
+| 4 | mtime 자동 재로드 | ✅ `opencode-rr.json` 변경 시 재시작 없이 새 맵 반영 |
+| 5 | 구글 제외 | ✅ 후보에서 google 모델 미포함 |
+| 6 | ruff check/format | ✅ 통과 |
 
 ### E2E 검증 (타이머 → 서비스 → 갱신)
 
@@ -278,7 +223,7 @@ opencode-rr 세션 중:
 
 | 구분 | 429 발생 | 계정 분산 |
 |------|---------|---------|
-| 운영 모델 (선정된 Top 3) | **0건** | ✅ 모델별 전용 계정 (1:1) |
+| 운영 모델 (선정된 Top 3) | **0건** | ✅ 모델별 3계정 라운드로빈 + 재시도 |
 | Live-test 모델 (탐색용) | 101건 (업스트림 공유 풀) | — |
 
 ## 참고: OpenRouter Rate Limit 정책 (공식 문서)
@@ -292,46 +237,27 @@ opencode-rr 세션 중:
 > — OpenRouter 공식 문서
 
 **즉, 3개 키로 RPM을 3배 늘리는 건 공식 문서상 효과가 제한적이다.**
-따라서 (2026-09-14부터) 요청마다 라운드로빈하는 대신 **모델별 계정을 고정**하여
-각 모델의 **일일 쿼터**(1,000 req/day)를 계정별로 분산한다. 분당 제한은 어차피
-전역 관리라 회피 불가하므로 포기하고, 대신 fallback 체인이 서로 다른 계정을
-타게 해 일일 한도만 회피한다.
+RPM은 전역 관리라 회피 불가하지만, 계정별 **일일 한도**(1,000 req/day)는 분산
+가능하다. 그래서 (2026-09-27부터) 운영 모델은 **각 모델이 3계정을 라운드로빈**하고
+계정 실패 시 다음 계정으로 **자동 재시도**한다. 한 계정의 일일 한도가 소진돼도
+해당 모델이 즉시 죽지 않고 나머지 계정으로 계속 서비스된다. (2026-09-14~09-26에는
+모델별 1:1 고정이었으나, 그 계정 한도 소진 시 모델 전체가 실패하는 위험이 있어
+되돌렸다.)
 
 ## 부록 A: 실패 분석 이력
 
 ### 원인 1: `modelFallbackChain`은 Round-Robin이 아니다
 
 **`modelFallbackChain`은 요청 간 라운드로빈이 아니라, 단일 요청 내 선형 fallback이다.**
-
-```
-요청 #1 → model 1(Minimax M3) 실패
-         → model 2(Minimax M3, 다른 키) 실패
-         → model 3(Minimax M3, 다른 키) 실패
-         → model 4(Laguna S 2.1) 실패
-         → model 5(Laguna, 다른 키) 실패
-         → model 6(Laguna, 다른 키) 실패
-         → 요청 #1 실패 ❌
-```
+요청 #1에서 model 1~3(Minimax M3) 모두 실패 → model 4~6(Laguna) 실패 → **요청 실패 ❌**.
 
 ### 원인 2: `chains` 배열이 여러 개여도 `chains[0]`만 사용된다
 
-opencode v1.18.29 내장 config schema에서 `experimental` 섹션:
-```json
-"experimental": {
-  "primary_tools": ["edit"],
-  "mcp_timeout": 30000
-}
-```
-→ `modelFallbackChain`은 이 스키마에 존재하지 않는다. 공식 지원 기능이 아니므로
-  동작이 보장되지 않는다.
+opencode v1.18.29 내장 schema의 `experimental`에는 `modelFallbackChain`이 없다
+(`primary_tools`, `mcp_timeout`만 존재) → 공식 지원 기능이 아니라 동작이 보장되지 않는다.
 
-**로그 증거 (2026-09-08 00:09~00:30):**
-```
-00:09:31  model=minimax/minimax-m3:free  → "unavailable for free" ❌
-00:13:32  model=laguna-s-2.1:free        → "Provider returned error" ❌
-00:13:43  model=laguna-s-2.1:free        → 재시도 ❌
-... (25회 이상 Laguna만 재시도, MiniMax로 돌아가지 않음)
-```
+**로그 증거 (2026-09-08 00:09~00:30):** `minimax-m3:free` "unavailable for free" ❌ →
+`laguna-s-2.1:free` "Provider returned error" 25회 이상 재시도(MiniMax로 복귀 안 함) ❌
 
 ### 원인 3: 모든 Free 모델이 종료됨
 
@@ -354,6 +280,7 @@ opencode v1.18.29 내장 config schema에서 `experimental` 섹션:
 | 2026-09-08 | **opencode-ai/opencode 저장소 archived** |
 | 2026-09-08 | **RR 프록시 + 자동 갱신 시스템 구축 완료** |
 | 2026-09-14 | **모드명 ORP 변경 + 모델→계정 고정(일일 쿼터 분산) + 구글 제외 + 최종 더미 검증** |
+| 2026-09-27 | **모델→계정 1:1 고정 → 모델별 3계정 라운드로빈 + 계정 간 자동 재시도** | 한 계정 한도 소진 시 모델 전체 실패 방지 (등록 모델은 3계정 전체 순환) |
 
 ## 와치독 통합 (2026-09-08)
 
@@ -402,7 +329,7 @@ journalctl --user -u devforge-openrouter-free-models.service --since "1 hour ago
 # 와치독 감시 로그
 journalctl --user -u devforge-watchdog.service --since "1 hour ago" | grep -i "free\|rr-proxy"
 
-# 현재 적용된 모델 + 계정 고정 맵 확인
+# 현재 적용된 모델 + 모델별 계정 라운드로빈 맵 확인
 python3 -c "import json; c=json.load(open('/home/opc/.config/opencode/opencode-rr.json')); print('model=', c['model']); print('chain0=', c['experimental']['modelFallbackChain']['chains'][0])"
 curl -s http://127.0.0.1:8451/health
 ```
@@ -415,13 +342,13 @@ curl -s http://127.0.0.1:8451/health
 | 타이머 실행 안 됨 | `systemctl --user list-timers` | `systemctl --user enable --now devforge-openrouter-free-models.timer` |
 | 갱신 후 모델 전부 429 | refresh 스크립트 재실행 | `--force`로 캐시 무시, 수동으로 live-test 재시도 |
 | opencode 설정 안 됨 | opencode 세션 재시작 | `modelFallbackChain`은 세션 시작 시 읽힘 |
-| 계정 고정 맵이 안 맞음 | `curl :8451/health` | opencode-rr.json `models` 순서 변경 → 프록시 mtime 자동 재로드 |
+| 계정 맵이 안 맞음 | `curl :8451/health` | opencode-rr.json `models` 변경 → 프록시 mtime 자동 재로드 |
 
 ### 수동 강제 갱신
 
 ```bash
 cd /opt/projects/server/scripts
-PYTHONPATH=/opt/projects/server/scripts python3.11 -m proxies.refresh_openrouter_free_models --force
+PYTHONPATH=/opt/projects/server/scripts python3.12 -m proxies.refresh_openrouter_free_models --force
 ```
 
 ## 부록 B: 해결책 비교 (프로젝트 선정 사유)

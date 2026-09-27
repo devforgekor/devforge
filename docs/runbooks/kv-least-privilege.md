@@ -32,7 +32,7 @@
   해석 순서: ① `{PREFIX}_API_KEYS`(통합) ② `{PREFIX}_{ACCOUNT}_API_KEY`(계정별 자동수집) ③ `{PREFIX}_API_KEY`(단일).
 - 적용: `lib/research/web.py`(brave/tavily/youcom), `exa.py`, `context7.py`, `proxies/anthropic_openrouter.py`.
 - **제거(dead/legacy)**: `lib/research/_keys.py`(구 `load_encrypted_keys`), `lib/search/manager.py`, `scripts/aider.py`, `scripts/deploy/sync-secrets.py`.
-- **의도적 미통일**: `openrouter_rr_proxy.py`·`or_rate_limiter.py`는 **모델-계정 고정**(RPM 전역 대응)이라 자체 로직 유지.
+- **의도적 미통일**: `openrouter_rr_proxy.py`·`or_rate_limiter.py`는 **모델별 계정 라운드로빈**(RPM 전역 대응)이라 자체 로직 유지.
 - `from __future__ import annotations` 추가(3.9 런타임 호환 — 유닛 3.12 이관 전 안전).
 
 ## 관련 커밋

@@ -13,7 +13,7 @@
 
 - **기본 `opencode`**: `opencode-go` provider(`~/.local/share/opencode/auth.json`,
   type=api)의 **`deepseek-v4-flash` 고정 모델**을 사용하는 안정 경로.
-- **`opencode-rr`**: 로컬 **RR 프록시(:8451, 모델별 계정 고정 + 미지정 모델 라운드로빈)**를
+- **`opencode-rr`**: 로컬 **RR 프록시(:8451, 모델별 3계정 라운드로빈 + 계정 간 재시도)**를
   경유하고, 기본 모델은 매일 자동 갱신되는 **최고 무료 모델**을 사용하는 경로.
 
 ```
@@ -22,7 +22,7 @@ opencode (기본·고정)                opencode-rr (자동·무료)
        ▼                                  ▼
  opencode-go provider                 local RR 프록시
  (auth.json, deepseek-v4-flash)       http://127.0.0.1:8451/v1
-       │                                  │ (모델별 1계정 고정)
+       │                                  │ (모델별 3계정 라운드로빈)
        ▼                                  │ + 매일 free 모델 자동 갱신
    [opencode-go]                          ▼
                                      [OpenRouter]
@@ -93,7 +93,7 @@ exec opencode "$@"
 (쓰기 대상 = `opencode-rr.json`. 전역 설정은 건드리지 않음, §7 참고).
 
 > **참고**: `modelFallbackChain`은 단일 요청 내 선형 fallback이지 요청 간 라운드로빈이
-> 아니다. 모델별 계정 고정/미지정 모델 라운드로빈은 RR 프록시 자체가 담당한다
+> 아니다. 모델별 3계정 라운드로빈/계정 간 재시도는 RR 프록시 자체가 담당한다
 > (`opencode-roundrobin-failure-analysis.md` 참고).
 
 ---
@@ -103,7 +103,7 @@ exec opencode "$@"
 | 파일 | 역할 | 유형 |
 |---|---|---|
 | `~/.config/opencode/opencode.json` | 기본(고정) 모델(`opencode-go/deepseek-v4-flash`) + MCP 15개 | 운영 |
-| `~/.config/opencode/opencode-rr.json` | RR 프록시 provider + 기본 model/fallback + **모델→계정 고정 순서** (타이머 자동 갱신) | 운영 |
+| `~/.config/opencode/opencode-rr.json` | RR 프록시 provider + 기본 model/fallback + **등록 모델 목록(3계정 라운드로빈 대상)** (타이머 자동 갱신) | 운영 |
 | `~/.config/opencode/opencode.jsonc` | global 최소($schema만) | 뼈대 |
 | `~/.config/opencode/opencode.json.bak_*` | 변경 전 백업 (복원용) | 백업 |
 | `~/.config/opencode/opencode-rr.json.bak_*` | 변경 전 백업 (복원용) | 백업 |
@@ -145,11 +145,11 @@ exec opencode "$@"
 ```
 - `model` = `openrouter/inclusionai/ling-3.0-flash-vl:free` (시드, 타이머가 갱신)
 - `experimental.modelFallbackChain.chains[0]` = `[ling-3.0-flash-vl, nemotron-3-ultra, north-mini-code]`
-- **모델→계정 고정**: `provider.openrouter.models`의 **순서**대로 프록시가 계정에 1:1 배정
-  (`models[0]`→MESIDS, `models[1]`→MINIPARK4U, `models[2]`→HYEONMINPARK4U).
-  분당 제한은 OpenRouter가 전역 관리라 회피 불가 → 각 모델의 **일일 쿼터를 한 계정에
-  고정**해 fallback 체인(모델 A→B→C)이 서로 다른 계정의 쿼터를 사용하게 한다.
-  프록시는 mtime으로 이 파일을 재로드하므로 타이머 갱신 시 자동 반영 (재시작 불필요).
+- **모델별 3계정 라운드로빈**: `provider.openrouter.models`에 등록된 모든 모델은 프록시가
+  계정 1→2→3(MESIDS→MINIPARK4U→HYEONMINPARK4U)으로 **요청마다 순환 라우팅**한다
+  (모델별 커서). 한 계정이 실패(429 등)하면 **다음 계정으로 자동 재시도**하고, 전부
+  실패하면 502를 반환한다. 등록 여부는 이 파일의 `models` 목록으로 판단하며, 파일이
+  바뀌면 mtime으로 재로드한다 (재시작 불필요).
 - **자동 갱신**: `provider.openrouter.models`/`model`/`chain`은 매일 00:30 KST
   `devforge-openrouter-free-models` 타이머가 라이브테스트 후 top-3로 덮어쓴다
   (`refresh_openrouter_free_models.py`의 `OPCODE_CONFIG` = `opencode-rr.json`).
@@ -164,7 +164,7 @@ exec opencode "$@"
 - `OPENROUTER_MESIDS_API_KEY` / `_MINIPARK4U_` / `_HYEONMINPARK4U_`
   - 정의: `~/.config/devforge/secrets.env` (3개 OpenRouter 키)
   - RR 프록시(`openrouter-rr-proxy.service`)가 이 파일에서 직접 키를 로드하고,
-    **모델별 전용 계정 고정**(`models[0]`→MESIDS, `models[1]`→MINIPARK4U, `models[2]`→HYEONMINPARK4U).
+    **모델별 3계정 라운드로빈**(등록 모델은 계정 1→2→3 순환 + 계정 간 자동 재시도).
 - 기본(고정) 모드(`opencode-go`)는 자체 키(`auth.json`)를 쓰므로 **OpenRouter env 불필요**.
 - `~/.bashrc.d/claude-env`의 키 export는 RR 프록시/타 클라이언트가 env로 키를 쓸 수 있게
   유지한다(2026-09-09 키 미상속 버그 수정 내역 §9 참고).
@@ -204,7 +204,7 @@ exec opencode "$@"
 
 | 유닛 | 역할 | 상태 |
 |---|---|---|
-| `openrouter-rr-proxy.service` | RR 프록시 (127.0.0.1:8451, 모델별 계정 고정) | enabled/active |
+| `openrouter-rr-proxy.service` | RR 프록시 (127.0.0.1:8451, 모델별 3계정 라운드로빈) | enabled/active |
 | `devforge-openrouter-free-models.{service,timer}` | 매일 00:30 KST free 모델 자동 갱신(구글 제외+최종 검증) → **opencode-rr.json** | enabled |
 | `devforge-watchdog.service` | RR 프록시·타이머 감시 (`SERVICE_TARGETS`/`TIMER_TARGETS`) | 운영 |
 
@@ -254,7 +254,7 @@ PY
 - default: `model=opencode-go/deepseek-v4-flash`, `providers=[]`, `mcp=12`
 - rr: `model=openrouter/<최고 무료 모델>`(타이머 갱신 시 변동),
   `baseURL=http://127.0.0.1:8451/v1`, `apiKey=local-rr-proxy`, `mcp=12`
-- 프록시 계정 고정 맵: `curl -s http://127.0.0.1:8451/health` → `pinned` 필드로 확인
+- 프록시 계정 라운드로빈 맵: `curl -s http://127.0.0.1:8451/health` → `accounts` 필드로 확인
 
 ---
 
@@ -272,6 +272,7 @@ PY
 | 2026-09-09 13:35 | **키 export 버그 수정**: `~/.bashrc.d/claude-env`에 OpenRouter 키 `export` | secrets.env가 export 없이 할당 → opencode(자식)가 상속 못 함(빈 키), 양방향 검증서 발견 |
 | 2026-09-09 13:58 | **기본=`opencode-go/deepseek-v4-flash` 고정, 전역에서 openrouter(Direct) 제거** / `opencode-rr.json`에 RR provider+model/fallback을 완전 포함, 자동 갱신 쓰기 대상도 rr로 전환 | rr 기본이 `(Direct)` deepseek로 뜨던 문제 + 모델 피커/헤더 혼선 제거. rr 기본 = 매일 자동 추천 무료 모델 |
 | 2026-09-14 | **모드명 `OpenRouter (RR Proxy)` → `ORP`** / 프록시 **모델→계정 고정**(일일 쿼터 분산, mtime 자동 재로드) / 선정 시 **구글 제외 + 최종 더미 검증** | 모드명 축약, 분당 제한(전역) 회피 불가 → 일일 한도만 계정별 분산. 구글 free 모델 업스트림 오류 잦음 |
+| 2026-09-27 | **모델→계정 1:1 고정 → 모델별 3계정 라운드로빈 + 계정 간 자동 재시도** (`/health` `pinned`→`accounts`) | 한 계정 일일 한도 소진 시 모델 전체가 실패하던 위험 제거. 등록 모델은 계정 1→2→3 순환 후 실패 시 재시도 |
 
 **버그(2026-09-09) 요약**:
 - 증상: 기본(직접) 모드에서 `{env:OPENROUTER_MESIDS_API_KEY}`가 자식 프로세스에서 빈 값
@@ -291,8 +292,8 @@ PY
 - 프록시 모드가 502면: `systemctl --user status openrouter-rr-proxy.service`,
   `journalctl --user -u openrouter-rr-proxy` 로 키 만료 점검
 - rr 기본 모델이 429/실패면(상위 shared-pool): 즉시 수동 갱신
-  `python3.11 /opt/projects/server/scripts/proxies/refresh_openrouter_free_models.py`
+  `python3.12 /opt/projects/server/scripts/proxies/refresh_openrouter_free_models.py`
   (쓰기 대상 = `opencode-rr.json`, 전역은 불변)
-- 프록시 계정 고정 맵 확인/조정: `curl -s http://127.0.0.1:8451/health` →
-  `pinned`이 `models` 순서와 일치해야 함. 순서 바꾸면 mtime 자동 재로드(재시작 불필요)
+- 프록시 계정 라운드로빈 맵 확인: `curl -s http://127.0.0.1:8451/health` →
+  `accounts`가 등록 모델별 3계정을 표시. `models` 변경 시 mtime 자동 재로드(재시작 불필요)
 - config 수정 후 opencode는 **재시작**해야 반영 (시작 시 1회 로드, 핫리로드 없음)
