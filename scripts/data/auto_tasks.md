@@ -40,3 +40,11 @@ $ systemctl --user show ebook-watcher -p Result,ExecMainStatus,NRestarts Result=
 GitHub Issue #9 — implement the description above.
 Work autonomously. After implementation: git add -A && git commit -m "feat: resolve #9 [watchdog] 반복 실패: svc:ebook-watcher:down" && git push.
 Then run: python3 cli.py dev pr 9
+
+## #10 [test] dev_agent validation — add AGENT_VERSION constant
+Validation task for scripts/dev_agent.py (C1). Add a module-level constant `AGENT_VERSION = "0.1"` to scripts/dev_agent.py and use it in the argparse description. Trivial, test-only.
+
+---
+GitHub Issue #10 — implement the description above.
+Work autonomously. After implementation: git add -A && git commit -m "feat: resolve #10 [test] dev_agent validation — add AGENT_VERSION constant" && git push.
+Then run: python3 cli.py dev pr 10

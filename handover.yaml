@@ -1,26 +1,21 @@
 last_checkpoint:
-  time: '2026-09-27T23:30:00.743044+09:00'
+  time: '2026-09-27T14:30:01.382182+00:00'
   summary: 4 source, 1 config, 1 docs, 1 generated
   total_files: 15
   recent_files:
+    data: []
+    docs:
+    - server/docs/architecture/code-structure.yaml
+    config:
+    - server/systemd/user/devforge-mcp-inventory.service
     source:
     - server/scripts/backup_ssot_golden.py
     - server/scripts/mcp_inventory_check.py
     - server/tests/fitness/test_mcp_inventory.py
     - server/tests/unit/test_backup_ssot_golden.py
-    config:
-    - server/systemd/user/devforge-mcp-inventory.service
-    docs:
-    - server/docs/architecture/code-structure.yaml
-    data: []
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 6 files changed, 257 insertions(+), 54 deletions(-)
-      staged: (none)
-      untracked_files: 5
+  git: {}
   task: null
 decisions:
 - id: nd13-01

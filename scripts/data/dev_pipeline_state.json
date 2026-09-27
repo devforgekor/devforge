@@ -1,17 +1,10 @@
 {
-  "seen_issues": [
-    8,
-    9
-  ],
-  "claimed": {
-    "8": {
-      "title": "[watchdog] \ubc18\ubcf5 \uc2e4\ud328: syssvc:netdata:down",
-      "claimed_at": "2026-09-14T03:20:13.446378Z"
-    },
-    "9": {
-      "title": "[watchdog] \ubc18\ubcf5 \uc2e4\ud328: svc:ebook-watcher:down",
-      "claimed_at": "2026-09-20T11:30:12.198553Z"
+  "seen_issues": [],
+  "claimed": {},
+  "pr_created": {
+    "10": {
+      "url": "https://github.com/devforgekor/devforge/pull/17",
+      "created_at": "2026-09-24T11:56:38.048253Z"
     }
-  },
-  "pr_created": {}
+  }
 }
