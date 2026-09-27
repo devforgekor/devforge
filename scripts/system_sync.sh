@@ -19,30 +19,33 @@ else
     LOG "  duckdns FAILED (non-fatal)" >&2
 fi
 
-# ── git auto-commit (local only, skip if no changes) ──
+# ── git safety-net snapshot (hidden ref, never touches main history) ──
 cd /opt/projects/server 2>/dev/null || exit 1
 
-# Guard: never touch the index while another git operation is mid-flight.
+# Guard: never touch the index while another git operation is mid-flight,
+# and never disturb an author's staged work (index must be clean before add).
 if [ -e .git/index.lock ] || [ -e .git/MERGE_HEAD ] \
-   || [ -e .git/rebase-merge ] || [ -e .git/rebase-apply ]; then
-    LOG "  git commit SKIP (git operation in progress)"
+   || [ -e .git/rebase-merge ] || [ -e .git/rebase-apply ] \
+   || ! git diff --cached --quiet 2>/dev/null; then
+    LOG "  snapshot SKIP (git busy or staged work present)"
 else
-    # Auto-commit is a safety net for generated/runtime state ONLY.
-    # Authored content is excluded on purpose and must be committed deliberately
-    # with a descriptive message:
-    #   - code: src/, tests/, scripts/, pyproject.toml  (bd41445 absorbed staged
-    #     Phase 0 review fixes before they could be committed)
-    #   - docs: docs/, *.md  (0dacca5 absorbed INDEX.md edits + doc moves into a
-    #     generic "auto: sync" commit — same failure mode, docs side)
-    # Scoping the stage set removes the race: authored changes stay in the
-    # working tree for the author to commit.
+    # Crash safety net ONLY: snapshot the whole worktree into a hidden ref.
+    # main history stays intent-only — commits happen at commit-times by the
+    # author (AGENTS.md §9). The hidden ref keeps the "auto: sync" 62% log
+    # pollution out of `git log` while preserving a 30-min restore point.
+    # Restore: git show refs/snapshots/sync -- <path>
+    #          git checkout refs/snapshots/sync -- <path>
     git add -A
-    git reset -q -- src tests scripts pyproject.toml docs '*.md' 2>/dev/null
     if git diff --cached --quiet; then
-        LOG "  git commit SKIP (no non-source changes)"
+        git reset -q
+        LOG "  snapshot SKIP (no changes)"
     else
-        git commit -m "auto: sync $(date +%Y-%m-%d)"
-        LOG "  git commit OK"
+        tree=$(git write-tree)
+        snap=$(git commit-tree "$tree" -p HEAD \
+            -m "auto snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)")
+        git update-ref refs/snapshots/sync "$snap"
+        git reset -q
+        LOG "  snapshot OK ($snap)"
     fi
 fi
 
