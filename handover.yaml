@@ -1,14 +1,20 @@
 last_checkpoint:
-  time: '2026-09-26T23:50:00.717751+00:00'
-  summary: no files
-  total_files: 2
+  time: '2026-09-27T09:00:01.332978+09:00'
+  summary: 1 generated
+  total_files: 3
   recent_files:
-    data: []
-    docs: []
-    config: []
     source: []
-    generated: []
-  git: {}
+    config: []
+    docs: []
+    data: []
+    generated:
+    - server/collect_checkpoint.json
+  git:
+    server:
+      branch: main
+      unstaged: 10 files changed, 216 insertions(+), 45 deletions(-)
+      staged: (none)
+      untracked_files: 6
   task: null
 decisions:
 - id: nd13-01
