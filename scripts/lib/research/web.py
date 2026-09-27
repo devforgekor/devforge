@@ -63,6 +63,17 @@ def _log(msg: str):
     print(f"[research.web] {msg}", file=sys.stderr, flush=True)
 
 
+def _duckduckgo_fallback(query: str, max_results: int) -> list[dict]:
+    """Free, key-less fallback provider (see lib/research/duckduckgo.py)."""
+    from lib.research import duckduckgo
+
+    try:
+        return duckduckgo.duckduckgo_search(query, max_results=max_results)
+    except Exception as exc:  # noqa: BLE001 — never let the fallback break rotation
+        _log(f"duckduckgo fallback failed: {exc}")
+        return []
+
+
 def _load_keys_for(service: str) -> list[tuple[str, str]]:
     """Round-robin-ready keys for a search provider.
 
@@ -176,7 +187,7 @@ class SearchProxy:
         return [f"error: {provider} exhausted"]
 
     def search(self, query: str, max_results: int = 5) -> list[str]:
-        """Text lines. Brave → Tavily → you.com fallback."""
+        """Text lines. Brave → Tavily → you.com → DuckDuckGo (free) fallback."""
         for provider in ("brave", "tavily", "youcom"):
             result = self._search_provider(provider, query, max_results)
             if result and not result[0].startswith("error:"):
@@ -184,6 +195,14 @@ class SearchProxy:
                     _log("you.com fallback activated")
                     result = ["(you.com fallback — budget provider)"] + result
                 return result
+        rows = _duckduckgo_fallback(query, max_results)
+        if rows:
+            _log("duckduckgo fallback activated")
+            lines = [
+                f"{r['title']} | {r['url']} | {(r.get('description') or '-')[: self.DESC_MAX_LEN]}"
+                for r in rows
+            ]
+            return ["(duckduckgo fallback — free provider)"] + lines
         return ["error: All search providers exhausted"]
 
     def search_structured(self, query: str, max_results: int = 5) -> list[dict]:
@@ -214,6 +233,10 @@ class SearchProxy:
                         rotator.rate_limited(idx, 30)
                     rotator._save_state()
                     continue
+        rows = _duckduckgo_fallback(query, max_results)
+        if rows:
+            _log("duckduckgo fallback activated")
+            return rows
         return []
 
     def _clean_text(self, text: str) -> str:
@@ -297,6 +320,16 @@ def web_search(query: str, max_results: int = 5) -> list[str]:
 
 def web_search_structured(query: str, max_results: int = 5) -> list[dict]:
     return get_proxy().search_structured(query, max_results)
+
+
+def duckai_ask(prompt: str, model: str | None = None) -> str:
+    """Ask Duck.ai on a warm browser session (see lib/research/duckai.py).
+
+    Lazy import so Playwright is only required when Duck.ai is actually used.
+    """
+    from lib.research.duckai import duckai_ask as _ask
+
+    return _ask(prompt, model)
 
 
 def search_stats() -> str:

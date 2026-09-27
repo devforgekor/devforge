@@ -9,7 +9,7 @@ be added later without changing callers.
 
 from __future__ import annotations
 
-from lib.research import web, exa, context7, fetch  # noqa: F401  (re-export modules)
+from lib.research import context7, duckai, duckduckgo, exa, fetch, web  # noqa: F401  (re-export)
 
 
 def _norm_web(items: list[dict]) -> list[dict]:
@@ -77,4 +77,5 @@ def fetch_page(url: str, max_chars: int = 50000) -> dict:
     return fetch.fetch_url(url, max_chars=max_chars)
 
 
-__all__ = ["research", "docs", "fetch_page", "web", "exa", "context7", "fetch"]
+__all__ = ["research", "docs", "fetch_page", "web", "exa", "context7", "fetch",
+           "duckai", "duckduckgo"]
