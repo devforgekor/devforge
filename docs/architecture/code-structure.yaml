@@ -625,6 +625,14 @@ modules:
     context7.py:
       status: production
       purpose: Context7 docs core — library resolve + docs query (extracted from context7_mcp.py).
+    duckai.py:
+      status: experimental
+      purpose: Duck.ai warm-session client — headed Chromium (Xvfb) through the
+        DataImpulse proxy; reuses one session to keep per-question traffic low.
+    duckduckgo.py:
+      status: experimental
+      purpose: DuckDuckGo HTML search — key-less free provider parsing the html/lite
+        SERP into JSON via the DataImpulse proxy (datacenter IPs get CAPTCHA).
     exa.py:
       status: production
       purpose: Exa search core — semantic web search + contents (extracted from exa_mcp.py).
@@ -632,6 +640,10 @@ modules:
       status: production
       purpose: URL fetch core — retrieve page text (extracted capability; replaces
         fetch MCP).
+    proxy.py:
+      status: experimental
+      purpose: DataImpulse proxy helpers shared by Duck.ai/DuckDuckGo — env loading,
+        region targeting, urllib proxy URL.
     web.py:
       status: production
       purpose: Web search core — Brave → Tavily → you.com rotation (extracted from
