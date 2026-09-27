@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 import re
-import urllib.request
 import urllib.error
+import urllib.request
 
 _STRIP_SCRIPT_STYLE = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
 _STRIP_TAGS = re.compile(r"<[^>]+>")
