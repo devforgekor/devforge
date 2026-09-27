@@ -1,1 +1,2 @@
 Iter 1: embed: embedded=50 retry=0 empty=0 pending=50 clean_missing=235 dead_letter=0 orphaned=0 chunks=53 batches=16 failed_batches=0
+Iter 2: embed: embedded=50 retry=0 empty=0 pending=50 clean_missing=235 dead_letter=0 orphaned=0 chunks=51 batches=14 failed_batches=0
