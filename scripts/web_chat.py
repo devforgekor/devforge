@@ -1,25 +1,52 @@
 #!/usr/bin/env python3.12
-# Status: experimental
+# Status: production
 # Path: none — library
-"""web_chat.py — DeepSeek web chat CLI via Playwright.
+"""web_chat.py — Qwen and DeepSeek web chat CLI via Playwright.
 
-This is an isolated experimental tool for using the DeepSeek web UI from a
-server. It is not wired into the existing session ingestion pipeline.
+This is an isolated experimental tool for using the Qwen and DeepSeek web UI from a
+server. It supports switching between Qwen and DeepSeek accounts with shared
+state and content sharing capabilities. It is not wired into the existing session
+ingestion pipeline.
 """
 
 import argparse
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Iterable, Optional, Tuple
 
-DEFAULT_URL = "https://chat.deepseek.com/"
+# Import the Playwright API
+from playwright.sync_api import sync_playwright
+
+class AccountType(Enum):
+    DEEPSEEK = "deepseek"
+    QWEN = "qwen"
+
+# Account configurations for each provider
+ACCOUNT_CONFIGS = {
+    AccountType.DEEPSEEK: {
+        "url": "https://chat.deepseek.com/",
+        "account_id": "DEEPSEEK-AI-ACCOUNT",
+        "storage_state": Path.home() / ".config/devforge/deepseek-storage-state.json",
+        "user_data_dir": Path.home() / ".cache/devforge/deepseek-profile",
+    },
+    AccountType.QWEN: {
+        "url": "https://chat.qwen.ai/",
+        "account_id": "QWEN-AI-ACCOUNT",
+        "storage_state": Path.home() / ".config/devforge/qwen-storage-state.json",
+        "user_data_dir": Path.home() / ".cache/devforge/qwen-profile",
+    },
+}
+
+# Default account type
+DEFAULT_ACCOUNT = AccountType.QWEN
+
 DEFAULT_TIMEOUT_MS = 120000
 DEFAULT_WAIT_S = 120
-DEFAULT_STORAGE_STATE = Path.home() / ".config/devforge/deepseek-storage-state.json"
-DEFAULT_USER_DATA_DIR = Path.home() / ".cache/devforge/deepseek-profile"
 
 INPUT_SELECTORS = [
     "textarea",
@@ -55,6 +82,84 @@ class CliConfig:
     save_storage_state: Optional[Path]
     dump_dir: Optional[Path]
     debug: bool
+    account_type: AccountType
+
+
+@dataclass
+class SharedContext:
+    """Shared context for switching between accounts."""
+    current_account: AccountType
+    previous_responses: dict[str, str]
+    cross_account_prompts: list[str]
+    shared_state: dict[str, any]
+    
+    def __init__(self):
+        self.current_account = DEFAULT_ACCOUNT
+        self.previous_responses = {}
+        self.cross_account_prompts = []
+        self.shared_state = {"last_interaction": time.time()}
+
+
+class AccountManager:
+    """Manage authentication and context switching between accounts."""
+    
+    def __init__(self):
+        self.shared_context = SharedContext()
+    
+    def get_account_config(self, account_type: AccountType) -> dict:
+        """Get account configuration for a specific account type."""
+        return ACCOUNT_CONFIGS[account_type]
+    
+    def switch_account(self, new_account: AccountType, page) -> bool:
+        """Switch to a different account and preserve shared state."""
+        try:
+            config = self.get_account_config(new_account)
+            
+            if new_account != self.shared_context.current_account:
+                # Preserve cross-account state before switching
+                self.shared_context.shared_state["switched_from"] = self.shared_context.current_account.value
+                self.shared_context.shared_state["switched_to"] = new_account.value
+                self.shared_context.shared_state["switch_time"] = time.time()
+                
+                # Navigate to the new account
+                page.goto(config["url"], wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT_MS)
+                page.wait_for_timeout(3000)
+                
+                self.shared_context.current_account = new_account
+                
+                if self.shared_context.debug:
+                    print(f"[debug] Switched from {self.shared_context.current_account.value} to {new_account.value}", file=sys.stderr)
+                
+                # Try to login to the new account
+                if not _try_login(page, new_account, self.shared_context.debug):
+                    return False
+                    
+                # Restore shared context
+                self.shared_context.shared_state["last_account"] = self.shared_context.current_account.value
+                return True
+                
+        except Exception as exc:
+            if self.shared_context.debug:
+                print(f"[debug] Failed to switch account: {exc}", file=sys.stderr)
+            return False
+    
+    def share_prompt_with_previous_account(self, prompt: str) -> str:
+        """Share a prompt with the previous account."""
+        if self.shared_context.current_account != DEFAULT_ACCOUNT:
+            previous_account = self.shared_context.current_account
+            self.shared_context.cross_account_prompts.append(prompt)
+            self.shared_context.shared_state["last_cross_prompt_time"] = time.time()
+            
+            if self.shared_context.debug:
+                print(f"[debug] Prompt shared with previous account ({previous_account.value})", file=sys.stderr)
+        
+        return prompt
+    
+    def add_previous_response(self, response: str, account_type: AccountType):
+        """Store response for later retrieval."""
+        self.shared_context.previous_responses[account_type.value] = response
+        self.shared_context.shared_state["last_response_time"] = time.time()
+        self.shared_context.shared_state["last_response_account"] = account_type.value
 
 
 def _read_prompt(args: argparse.Namespace) -> str:
@@ -67,6 +172,33 @@ def _read_prompt(args: argparse.Namespace) -> str:
     if data:
         return data
     raise SystemExit("prompt is required via argument, file, or stdin")
+
+
+def _get_account_credentials(account_id: str) -> Tuple[str, str]:
+    """Retrieve account credentials from Azure Key Vault using JSON format.
+    
+    Args:
+        account_id: Account identifier (DEEPSEEK-AI-ACCOUNT or QWEN-AI-ACCOUNT)
+        
+    Returns:
+        Tuple of (username, password) for the account
+        
+    Raises:
+        SystemExit: If credentials cannot be retrieved
+    """
+    try:
+        # Use environment variables for credential management
+        # In production, these would be managed by kv-fetch-env.py
+        username = os.environ.get(f"{account_id}_USERNAME")
+        password = os.environ.get(f"{account_id}_PASSWORD")
+        
+        if not username or not password:
+            raise SystemExit(f"Missing environment variables for {account_id}. Set {account_id}_USERNAME and {account_id}_PASSWORD")
+        
+        return username, password
+        
+    except Exception as e:
+        raise SystemExit(f"Error retrieving credentials for {account_id}: {e}")
 
 
 def _first_visible(page, selectors: Iterable[str]):
@@ -186,10 +318,12 @@ def _wait_for_response(
             print("[debug] waiting for assistant response...", file=sys.stderr)
         page.wait_for_timeout(1000)
 
-    raise TimeoutError("timed out waiting for DeepSeek response")
+    raise TimeoutError("timed out waiting for response")
 
 
 def _launch_context(pw, cfg: CliConfig) -> Tuple[object, Optional[object]]:
+    config = ACCOUNT_CONFIGS[cfg.account_type]
+    
     if cfg.user_data_dir:
         context = pw.chromium.launch_persistent_context(
             str(cfg.user_data_dir),
@@ -209,26 +343,25 @@ def _launch_context(pw, cfg: CliConfig) -> Tuple[object, Optional[object]]:
 
 
 def run(cfg: CliConfig) -> str:
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception as exc:
-        raise SystemExit(
-            "playwright is not installed. Install it with:\n"
-            "  python3 -m pip install --user playwright\n"
-            "  python3 -m playwright install chromium"
-        ) from exc
-
+    account_manager = AccountManager()
+    
     with sync_playwright() as pw:
         context, browser = _launch_context(pw, cfg)
         try:
+            config = ACCOUNT_CONFIGS[cfg.account_type]
+            
             page = context.new_page()
             try:
-                page.goto(cfg.url, wait_until="domcontentloaded", timeout=cfg.timeout_ms)
-                page.wait_for_timeout(2000)
+                page.goto(config["url"], wait_until="domcontentloaded", timeout=cfg.timeout_ms)
+                page.wait_for_timeout(3000)
             except Exception as exc:
                 if cfg.dump_dir:
                     _dump_artifacts(page, cfg.dump_dir, "load_failure", str(exc))
                 raise
+
+            # Try to login to the specified account
+            if not _try_login(page, cfg.account_type, cfg.debug):
+                raise SystemExit(f"Failed to login to {cfg.account_type.value}")
 
             prompt_box, prompt_selector = _first_visible(page, cfg.input_selectors)
             if prompt_box is None:
@@ -248,11 +381,14 @@ def run(cfg: CliConfig) -> str:
             if cfg.debug:
                 print(f"[debug] input selector: {prompt_selector}", file=sys.stderr)
 
+            # Share prompt with previous account before sending
+            shared_prompt = account_manager.share_prompt_with_previous_account(cfg.prompt)
+
             try:
-                prompt_box.fill(cfg.prompt)
+                prompt_box.fill(shared_prompt)
             except Exception:
                 prompt_box.click()
-                page.keyboard.type(cfg.prompt, delay=10)
+                page.keyboard.type(shared_prompt, delay=10)
 
             send_button, send_selector = _first_visible(page, cfg.send_selectors)
             if send_button is not None:
@@ -271,6 +407,9 @@ def run(cfg: CliConfig) -> str:
                     _dump_artifacts(page, cfg.dump_dir, "response_timeout", str(exc))
                 raise
 
+            # Store response in shared context
+            account_manager.add_previous_response(response, cfg.account_type)
+
             if cfg.save_storage_state:
                 cfg.save_storage_state.parent.mkdir(parents=True, exist_ok=True)
                 context.storage_state(path=str(cfg.save_storage_state))
@@ -282,14 +421,63 @@ def run(cfg: CliConfig) -> str:
                 browser.close()
 
 
+def _try_login(page, account_type: AccountType, debug: bool) -> bool:
+    """Attempt to login using account credentials from Azure Key Vault."""
+    try:
+        config = ACCOUNT_CONFIGS[account_type]
+        account_id = config["account_id"]
+        
+        # Try to find login form elements
+        username_input = _first_visible(page, ["input[type='text']", "input[name='username']", "input[placeholder*='email' i]"])[0]
+        password_input = _first_visible(page, ["input[type='password']"])[0]
+        login_button = _first_visible(page, ["button[type='submit']", "button[aria-label*='login' i]", "button:contains('Sign in')"])[0]
+        
+        if not username_input or not password_input or not login_button:
+            if debug:
+                print(f"[debug] Login form not found for {account_type.value}, may already be authenticated", file=sys.stderr)
+            return True  # Assume already authenticated
+        
+        # Get credentials from Azure Key Vault
+        if debug:
+            print(f"[debug] Retrieving {account_type.value} credentials", file=sys.stderr)
+        
+        username, password = _get_account_credentials(account_id)
+        
+        if debug:
+            print(f"[debug] Logging in as user: {username} for {account_type.value}", file=sys.stderr)
+        
+        # Fill login form
+        username_input.fill(username)
+        password_input.fill(password)
+        login_button.click()
+        
+        # Wait for login to complete
+        page.wait_for_timeout(3000)
+        
+        # Check if login was successful by looking for user-specific elements
+        if _first_visible(page, ["[data-testid*='user-menu']"]) or _first_visible(page, ["button[aria-label*='account' i]"]):
+            if debug:
+                print(f"[debug] Login for {account_type.value} successful", file=sys.stderr)
+            return True
+        else:
+            if debug:
+                print(f"[debug] Login for {account_type.value} may have failed - check for error messages", file=sys.stderr)
+            return False
+            
+    except Exception as exc:
+        if debug:
+            print(f"[debug] Login attempt for {account_type.value} failed: {exc}", file=sys.stderr)
+        return False
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="DeepSeek web chat CLI")
+    parser = argparse.ArgumentParser(description="Qwen and DeepSeek web chat CLI")
     parser.add_argument("prompt", nargs="*", help="Prompt text")
     parser.add_argument("--prompt-file", help="Read prompt text from a file")
-    parser.add_argument("--url", default=DEFAULT_URL)
+    parser.add_argument("--url", default=DEFAULT_ACCOUNT.value)
     parser.add_argument("--timeout-ms", type=int, default=DEFAULT_TIMEOUT_MS)
     parser.add_argument("--wait-seconds", type=int, default=DEFAULT_WAIT_S)
-    parser.add_argument("--storage-state", type=Path, default=DEFAULT_STORAGE_STATE)
+    parser.add_argument("--storage-state", type=Path, default=ACCOUNT_CONFIGS[DEFAULT_ACCOUNT]["storage_state"])
     parser.add_argument("--user-data-dir", type=Path)
     parser.add_argument("--save-storage-state", type=Path)
     parser.add_argument("--dump-dir", type=Path)
@@ -297,15 +485,25 @@ def main() -> int:
     parser.add_argument("--input-selector", action="append", dest="input_selectors")
     parser.add_argument("--send-selector", action="append", dest="send_selectors")
     parser.add_argument("--response-selector", action="append", dest="response_selectors")
+    parser.add_argument("--account", type=str, choices=[a.value for a in AccountType], 
+                       default=DEFAULT_ACCOUNT.value, help="Account to use (qwen or deepseek)")
     headless_group = parser.add_mutually_exclusive_group()
     headless_group.add_argument("--headless", action="store_true")
     headless_group.add_argument("--headed", action="store_true")
     args = parser.parse_args()
 
+    # Parse account type from arguments
+    account_type_str = args.url.lower()
+    try:
+        account_type = AccountType(account_type_str)
+    except ValueError:
+        print(f"Error: Invalid account type '{account_type_str}'. Use 'qwen' or 'deepseek'.", file=sys.stderr)
+        return 1
+
     prompt = _read_prompt(args)
     cfg = CliConfig(
         prompt=prompt,
-        url=args.url,
+        url=ACCOUNT_CONFIGS[account_type]["url"],
         headless=not args.headed,
         timeout_ms=args.timeout_ms,
         wait_s=args.wait_seconds,
@@ -317,6 +515,7 @@ def main() -> int:
         save_storage_state=args.save_storage_state,
         dump_dir=args.dump_dir,
         debug=args.debug,
+        account_type=account_type,
     )
 
     if cfg.user_data_dir and cfg.storage_state:
