@@ -1,23 +1,24 @@
 last_checkpoint:
-  time: '2026-09-27T20:00:00.947436+09:00'
-  summary: 3 source, 1 generated
-  total_files: 11
+  time: '2026-09-27T11:30:01.795554+00:00'
+  summary: 7 source, 2 config, 1 generated
+  total_files: 20
   recent_files:
+    data: []
+    docs: []
+    config:
+    - server/systemd/user/devforge-shadow-diff.service
+    - server/systemd/user/devforge-shadow-diff.timer
     source:
+    - server/scripts/day_cycle.sh
+    - server/scripts/shadow_diff_logger.py
     - server/src/devforge/adapters/driven/storage/embedding_shadow_adapter.py
     - server/src/routers/escalation_router_example.py
+    - server/tests/characterization/test_day_cycle.py
     - server/tests/unit/adapters/driven/storage/test_embedding_shadow_pg.py
-    config: []
-    docs: []
-    data: []
+    - server/tests/unit/test_shadow_diff_logger.py
     generated:
     - server/collect_checkpoint.json
-  git:
-    server:
-      branch: main
-      unstaged: 14 files changed, 896 insertions(+), 480 deletions(-)
-      staged: (none)
-      untracked_files: 13
+  git: {}
   task: null
 decisions:
 - id: nd13-01

@@ -1,0 +1,10 @@
+[Unit]
+Description=DevForge Phase 3 shadow diff sample (JSONL gate evidence)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/shadow_diff_logger.py --once
+WorkingDirectory=/opt/projects/server
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+StandardOutput=journal
+StandardError=journal

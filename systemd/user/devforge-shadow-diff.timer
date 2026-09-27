@@ -1,0 +1,10 @@
+[Unit]
+Description=DevForge Phase 3 shadow diff sampling — hourly gate evidence
+Requires=devforge-shadow-diff.service
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
