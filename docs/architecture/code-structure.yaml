@@ -1635,6 +1635,19 @@ modules:
     error_analysis.py:
       status: experimental
       purpose: ErrorAnalysisRepository + HypothesisPort — error-record §2 evidence.
+- path: src/routers/
+  purpose: Cloud LLM escalation (external routing, not devforge pipeline)
+  files:
+    __init__.py:
+      status: experimental
+      purpose: __init__.py
+    escalation_router.py:
+      status: experimental
+      purpose: '4-tier cloud escalation router: OpenRouter free → GitHub Models →
+        opencode Go premium → DeepSeek fallback.'
+    escalation_router_example.py:
+      status: experimental
+      purpose: Usage example for EscalationRouter.
 - path: tests/unit/
   purpose: Unit Tests
   files:

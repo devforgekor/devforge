@@ -244,3 +244,13 @@ type = "forbidden"
 source_modules = ["devforge.domain"]
 forbidden_modules = ["devforge.adapters"]
 
+
+[[tool.mypy.overrides]]
+module = "src.routers.*"
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = "routers.*"
+ignore_missing_imports = true
+follow_imports = "skip"
