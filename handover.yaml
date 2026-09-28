@@ -1,21 +1,14 @@
 last_checkpoint:
-  time: '2026-09-27T17:30:00.718039+00:00'
-  summary: 8 source, 1 docs, 1 generated
-  total_files: 15
+  time: '2026-09-27T23:50:00.868182+00:00'
+  summary: 2 source, 1 generated
+  total_files: 9
   recent_files:
     data: []
-    docs:
-    - server/docs/architecture/code-structure.yaml
+    docs: []
     config: []
     source:
-    - server/scripts/lib/research/__init__.py
-    - server/scripts/lib/research/duckai.py
     - server/scripts/lib/research/duckduckgo.py
-    - server/scripts/lib/research/proxy.py
-    - server/scripts/lib/research/web.py
-    - server/tests/test_research_duckai.py
     - server/tests/test_research_duckduckgo.py
-    - server/tests/test_research_proxy.py
     generated:
     - server/collect_checkpoint.json
   git: {}
