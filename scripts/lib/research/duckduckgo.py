@@ -4,9 +4,11 @@
 """DuckDuckGo HTML search — key-less provider returning structured JSON results.
 
 [WORKAROUND] DDG serves a CAPTCHA/anomaly page (HTTP 202, ~14 KB body) to datacenter
-IPs, so requests go through the DataImpulse residential proxy and are retried with a
-fresh exit IP on anomaly. The `html` endpoint is scraped; the JSON `d.js` endpoint
-requires a vqd-token handshake, so it is not used.
+IPs, so requests go through the DataImpulse residential proxy. The exit IP is sticky
+for 3h rather than rotating per request, so a retry only clears the CAPTCHA while the
+anomaly is transient — not because the IP changed. Blocked responses are never read,
+so a failed retry costs 0 B (only latency). The `html` endpoint is scraped; the JSON
+`d.js` endpoint requires a vqd-token handshake, so it is not used.
 """
 
 from __future__ import annotations
@@ -169,8 +171,10 @@ def duckduckgo_search(
     if not query or not query.strip():
         return []
     proxy_url = proxy.proxy_url()
-    # [WHY] the proxy rotates the exit IP per request, so a plain retry usually
-    # clears the CAPTCHA/anomaly page; lite is the last resort.
+    # [WHY] the residential exit IP is sticky for 3h (not per-request), so a retry
+    # clears the CAPTCHA only while the anomaly is transient rather than tied to the
+    # IP; lite is the last resort. Non-200 bodies are never read, so a blocked retry
+    # costs 0 B — just the request latency.
     endpoints = [HTML_ENDPOINT] * (retries + 1) + [LITE_ENDPOINT]
     for attempt, endpoint in enumerate(endpoints):
         status, body = _post(endpoint, query, region, proxy_url)
