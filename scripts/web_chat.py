@@ -485,7 +485,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Qwen and DeepSeek web chat CLI")
     parser.add_argument("prompt", nargs="*", help="Prompt text")
     parser.add_argument("--prompt-file", help="Read prompt text from a file")
-    parser.add_argument("--url", default=DEFAULT_ACCOUNT.value)
+    parser.add_argument("--url", default=None, help="deprecated alias for --account")
     parser.add_argument("--timeout-ms", type=int, default=DEFAULT_TIMEOUT_MS)
     parser.add_argument("--wait-seconds", type=int, default=DEFAULT_WAIT_S)
     parser.add_argument("--storage-state", type=Path, default=ACCOUNT_CONFIGS[DEFAULT_ACCOUNT]["storage_state"])
@@ -504,6 +504,8 @@ def main() -> int:
     args = parser.parse_args()
 
     # --account is authoritative; --url is a legacy alias for the account name.
+    if args.url is not None:
+        print("warning: --url is deprecated, use --account", file=sys.stderr)
     account_type_str = (args.account or args.url or DEFAULT_ACCOUNT.value).lower()
     try:
         account_type = AccountType(account_type_str)

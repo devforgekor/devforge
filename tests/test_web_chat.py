@@ -118,6 +118,23 @@ def test_should_reject_unknown_account_when_url_alias_is_bad(monkeypatch, capsys
     assert "Invalid account type" in capsys.readouterr().err
 
 
+def test_should_warn_when_the_url_alias_is_used(monkeypatch, capsys):
+    seen = _spy_account(monkeypatch)
+    _argv(monkeypatch, "--url", "deepseek")
+    with pytest.raises(SystemExit):
+        web_chat.main()
+    assert "deprecated" in capsys.readouterr().err
+    assert seen == [DEEPSEEK]
+
+
+def test_should_not_warn_when_the_url_alias_is_absent(monkeypatch, capsys):
+    _spy_account(monkeypatch)
+    _argv(monkeypatch, "--account", "qwen")
+    with pytest.raises(SystemExit):
+        web_chat.main()
+    assert "deprecated" not in capsys.readouterr().err
+
+
 def test_should_prefer_account_over_the_url_alias(monkeypatch):
     seen = _spy_account(monkeypatch)
     _argv(monkeypatch, "--account", "deepseek", "--url", "qwen")
