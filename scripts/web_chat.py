@@ -162,11 +162,22 @@ class AccountManager:
         self.shared_context.shared_state["last_response_account"] = account_type.value
 
 
-def _read_prompt(args: argparse.Namespace) -> str:
+def _read_prompt(args: argparse.Namespace, account_type: AccountType) -> str:
     if args.prompt:
         return " ".join(args.prompt).strip()
     if args.prompt_file:
         return Path(args.prompt_file).read_text().strip()
+
+    if sys.stdin.isatty():
+        # TTY without a prompt argument: ask instead of blocking until EOF,
+        # otherwise the CLI sits there with no output at all.
+        try:
+            typed = input(f"{account_type.value}> ")
+        except (EOFError, KeyboardInterrupt):
+            raise SystemExit("prompt is required via argument, file, or stdin") from None
+        if typed.strip():
+            return typed.strip()
+        raise SystemExit("prompt is required via argument, file, or stdin")
 
     data = sys.stdin.read().strip()
     if data:
@@ -485,22 +496,22 @@ def main() -> int:
     parser.add_argument("--input-selector", action="append", dest="input_selectors")
     parser.add_argument("--send-selector", action="append", dest="send_selectors")
     parser.add_argument("--response-selector", action="append", dest="response_selectors")
-    parser.add_argument("--account", type=str, choices=[a.value for a in AccountType], 
-                       default=DEFAULT_ACCOUNT.value, help="Account to use (qwen or deepseek)")
+    parser.add_argument("--account", type=str, choices=[a.value for a in AccountType],
+                       default=None, help="Account to use (qwen or deepseek)")
     headless_group = parser.add_mutually_exclusive_group()
     headless_group.add_argument("--headless", action="store_true")
     headless_group.add_argument("--headed", action="store_true")
     args = parser.parse_args()
 
-    # Parse account type from arguments
-    account_type_str = args.url.lower()
+    # --account is authoritative; --url is a legacy alias for the account name.
+    account_type_str = (args.account or args.url or DEFAULT_ACCOUNT.value).lower()
     try:
         account_type = AccountType(account_type_str)
     except ValueError:
         print(f"Error: Invalid account type '{account_type_str}'. Use 'qwen' or 'deepseek'.", file=sys.stderr)
         return 1
 
-    prompt = _read_prompt(args)
+    prompt = _read_prompt(args, account_type)
     cfg = CliConfig(
         prompt=prompt,
         url=ACCOUNT_CONFIGS[account_type]["url"],
