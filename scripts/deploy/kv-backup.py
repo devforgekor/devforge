@@ -1,10 +1,13 @@
 #!/usr/bin/env python3.12
 # Status: production
 # Path: scripts/deploy/kv-backup.py
-# Key Vault → GPG 암호화 백업
-# - Key Vault에서 모든 시크릿 조회 → secrets.env 형식 export → GPG 암호화 → 저장
-# - 공개키: ~/.config/devforge/backup-public-key.asc (서버 보유)
-# - 개인키: 로컬 PC 보관 (복호화는 로컬에서만)
+# Key Vault → age 암호화 백업 (+ onmydoc 단방향 ship)
+# - Key Vault에서 모든 시크릿 조회 → secrets.env 형식 export → age 암호화 → 로컬 저장 → onmydoc push
+# - 공개키(recipient): ~/.config/devforge/backup-age-recipient (서버 보유)
+# - 개인키(identity): 로컬 PC 보관 (텔레그램 세레모니 2026-09-28, 서버에는 없음)
+# - [WHY] ship은 단방향 push(동기화 금지): 백업 서버가 소스를 오염시킬 수 없어야 한다
+#   (backup poisoning 방지). onmydoc은 암호문만 보유하는 untrusted relay로 취급한다.
+import hashlib
 import json
 import os
 import subprocess
@@ -22,8 +25,7 @@ KEYVAULT_URLS = [
     u.strip()
     for u in os.environ.get(
         "AZURE_KEYVAULT_URLS",
-        "https://kv-common-prod-krc.vault.azure.net,"
-        "https://kv-devforge-prod2-krc.vault.azure.net",
+        "https://kv-common-prod-krc.vault.azure.net,https://kv-devforge-prod2-krc.vault.azure.net",
     ).split(",")
     if u.strip()
 ]
@@ -31,10 +33,16 @@ SECRET_FILE = os.environ.get(
     "AZURE_KEYVAULT_CLIENT_SECRET_FILE",
     os.path.join(HOME, ".config/devforge/azure-client-secret"),
 )
-GPG_RECIPIENT = "DevForge Secrets Backup"
 BACKUP_DIR = os.environ.get("KV_BACKUP_DIR", os.path.join(HOME, ".config/devforge/backups"))
 KEEP_DAYS = int(os.environ.get("KV_BACKUP_KEEP_DAYS", "60"))
-PUBLIC_KEY_FILE = os.path.join(HOME, ".config/devforge/backup-public-key.asc")
+AGE_RECIPIENT_FILE = os.environ.get(
+    "AGE_RECIPIENT_FILE", os.path.join(HOME, ".config/devforge/backup-age-recipient")
+)
+AGE_BIN = os.environ.get("AGE_BIN", os.path.join(HOME, ".local/bin/age"))
+# [WHY] 단방향 push 전용(동기화 금지) — 백업 서버가 소스를 오염시키지 못하게 한다.
+# 빈 문자열이면 ship 비활성(KV_BACKUP_SHIP_HOST="").
+SHIP_HOST = os.environ.get("KV_BACKUP_SHIP_HOST", "onmydoc")
+SHIP_DIR = os.environ.get("KV_BACKUP_SHIP_DIR", "kv-backup")
 MAX_RETRIES = 3
 RETRY_BACKOFF = [1, 2, 4]  # exponential backoff (seconds)
 TOKEN_CACHE_FILE = f"/run/user/{os.getuid()}/kv-token-cache.json"
@@ -50,9 +58,7 @@ def is_retryable_error(status_code, curl_exit):
     """일시적 오류 판단 (429, 5xx, 네트워크 오류)"""
     if curl_exit != 0:
         return True
-    if status_code in ("429", "500", "502", "503", "504"):
-        return True
-    return False
+    return status_code in ("429", "500", "502", "503", "504")
 
 
 def load_cached_token():
@@ -255,6 +261,63 @@ def get_secret_value(token, vault_url, name):
         return ""
 
 
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def ship(out_file: str) -> None:
+    """암호문을 SHIP_HOST로 단방향 push하고 원격 무결성 검증/회전. 동기화는 하지 않는다."""
+    if not SHIP_HOST:
+        print("⏭️  ship 비활성 (KV_BACKUP_SHIP_HOST 없음)")
+        return
+
+    basename = os.path.basename(out_file)
+    sidecar = out_file + ".sha256"
+    with open(sidecar, "w") as f:
+        f.write(f"{sha256_file(out_file)}  {basename}\n")
+    os.chmod(sidecar, 0o600)
+
+    r = run(["ssh", "-o", "ConnectTimeout=15", SHIP_HOST, f"mkdir -p ~/{SHIP_DIR}"])
+    if r.returncode != 0:
+        print(f"❌ ship 디렉토리 준비 실패: {r.stderr.strip()[:300]}", file=sys.stderr)
+        sys.exit(1)
+
+    r = run(["scp", out_file, sidecar, f"{SHIP_HOST}:{SHIP_DIR}/"])
+    if r.returncode != 0:
+        print(f"❌ ship 전송 실패: {r.stderr.strip()[:300]}", file=sys.stderr)
+        sys.exit(1)
+
+    r = run(
+        [
+            "ssh",
+            "-o",
+            "ConnectTimeout=15",
+            SHIP_HOST,
+            f"cd ~/{SHIP_DIR} && sha256sum -c {basename}.sha256",
+        ]
+    )
+    if r.returncode != 0:
+        print(f"❌ ship 무결성 검증 실패: {(r.stdout + r.stderr).strip()[:300]}", file=sys.stderr)
+        sys.exit(1)
+
+    r = run(
+        [
+            "ssh",
+            "-o",
+            "ConnectTimeout=15",
+            SHIP_HOST,
+            f"find ~/{SHIP_DIR} -name 'secrets-backup-*' -mtime +{KEEP_DAYS} -delete",
+        ]
+    )
+    if r.returncode != 0:
+        print(f"⚠️  ship 원격 prune 실패(비치명): {r.stderr.strip()[:200]}", file=sys.stderr)
+    print(f"📤 ship 완료: {SHIP_HOST}:~/{SHIP_DIR}/{basename}")
+
+
 def main():
     os.makedirs(BACKUP_DIR, exist_ok=True)
     token = get_token()
@@ -281,45 +344,35 @@ def main():
         f.write("\n".join(env_lines) + "\n")
 
     try:
-        # GPG 암호화
-        if not os.path.exists(PUBLIC_KEY_FILE):
-            print("❌ GPG 공개키 없음:", PUBLIC_KEY_FILE, file=sys.stderr)
+        # age 암호화 — recipient(공개키)만 서버 보유, identity는 로컬 PC
+        if not os.path.exists(AGE_RECIPIENT_FILE):
+            print("❌ age recipient 없음:", AGE_RECIPIENT_FILE, file=sys.stderr)
             sys.exit(1)
-        run(["gpg", "--import", PUBLIC_KEY_FILE])
+        with open(AGE_RECIPIENT_FILE) as f:
+            recipient = f.read().strip()
 
         utc_timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-        out_file = os.path.join(BACKUP_DIR, f"secrets-backup-{utc_timestamp}.gpg")
-        r = run(
-            [
-                "gpg",
-                "--batch",
-                "--yes",
-                "--recipient",
-                GPG_RECIPIENT,
-                "--trust-model",
-                "always",
-                "--encrypt",
-                "--output",
-                out_file,
-                tmp_env,
-            ]
-        )
+        out_file = os.path.join(BACKUP_DIR, f"secrets-backup-{utc_timestamp}.age")
+        r = run([AGE_BIN, "-r", recipient, "-o", out_file, tmp_env])
         if r.returncode != 0 or not os.path.exists(out_file):
-            print("❌ GPG 암호화 실패:", r.stderr, file=sys.stderr)
+            print("❌ age 암호화 실패:", r.stderr, file=sys.stderr)
             sys.exit(1)
 
         os.chmod(out_file, 0o600)
         size = os.path.getsize(out_file)
         print(f"✅ 백업 완료: {out_file} ({size / 1024:.1f} KB)")
+        ship(out_file)
     finally:
         # 임시 파일 안전하게 삭제
         if os.path.exists(tmp_env):
             os.remove(tmp_env)
 
-    # 오래된 백업 정리
+    # 오래된 백업 정리 (.gpg 구세대 포함, 로컬·원격 공통 KEEP_DAYS)
     cutoff = time.time() - KEEP_DAYS * 86400
     for fn in os.listdir(BACKUP_DIR):
-        if not fn.startswith("secrets-backup-") or not fn.endswith(".gpg"):
+        if not fn.startswith("secrets-backup-"):
+            continue
+        if not fn.endswith((".gpg", ".age", ".age.sha256")):
             continue
         fp = os.path.join(BACKUP_DIR, fn)
         if os.path.getmtime(fp) < cutoff:
@@ -328,7 +381,7 @@ def main():
 
     print("📦 백업 파일 목록:")
     for fn in sorted(os.listdir(BACKUP_DIR)):
-        if fn.endswith(".gpg"):
+        if fn.endswith((".gpg", ".age")):
             print(f"  {fn} ({os.path.getsize(os.path.join(BACKUP_DIR, fn)) / 1024:.1f} KB)")
 
 

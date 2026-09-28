@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # Status: production
 # Path: manual — devforge (bootstrap/ship/verify) · onmydoc (remote-setup/remote-receive/remote-verify)
-"""SSOT golden backup: ship a plain tar to onmydoc, encrypt (age->gpg) and verify there.
+"""SSOT golden backup: encrypt locally with age, ship ciphertext to onmydoc, verify integrity.
 
-DevForge never runs gpg/age — encryption, keys, and verification live only on the
-backup server (onmydoc), so plaintext and private keys never share one host.
+Architecture B (2026-09-28, unified with kv-backup.py): devforge encrypts with the
+shared age recipient BEFORE shipping, so onmydoc receives ciphertext only — it is an
+untrusted relay with no keys. [WHY] one-way push (never sync): a compromised backup
+server must not be able to poison the source. identity (private key) lives only on
+the operator's local PC.
 
 Usage:
   backup_ssot_golden.py bootstrap
@@ -15,7 +18,9 @@ Usage:
   backup_ssot_golden.py remote-verify [--file NAME]
 
 Contract: human logs -> stderr, single JSON line -> stdout.
-Exit codes: verify 0=pass, 1=manifest mismatch, 2=error; other commands 0 ok / 2 error.
+Exit codes: verify 0=pass, 1=integrity mismatch, 2=error; other commands 0 ok / 2 error.
+Restore rehearsal runs on the identity-holding PC:
+  age -d -i <identity> <archive>.age > art.tar.gz && tar xz ... && manifest 대조
 """
 
 from __future__ import annotations
@@ -24,15 +29,11 @@ import argparse
 import hashlib
 import io
 import json
-import platform
 import shlex
-import shutil
 import subprocess
 import sys
 import tarfile
-import tempfile
 import time
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,11 +43,7 @@ LOCAL_KEEP_DAYS = 7
 REMOTE_KEEP = 30
 SSH_HOST = "onmydoc"
 REMOTE_DIR = "ssot-golden"
-GPG_ID = "DevForge SSOT Golden <ssot-golden@devforge.invalid>"
 MANIFEST_NAME = "manifest.json"
-# [WHY] age releases publish no sha256 checksums (minisign .proof only), so
-# integrity of the install is established via GitHub HTTPS + `age --version`.
-AGE_VERSION = "v1.3.2"
 
 SSOT_SOURCES: list[tuple[Path, list[str]]] = [
     (
@@ -72,11 +69,10 @@ SSOT_SOURCES: list[tuple[Path, list[str]]] = [
 RDIR = Path.home() / REMOTE_DIR
 INBOX = RDIR / "inbox"
 ARCHIVE = RDIR / "archive"
-KEYS = RDIR / "keys"
-GNUPG = KEYS / "gnupg"
-AGE_KEY = KEYS / "age-key.txt"
+# [WHY] shared with kv-backup.py: one recipient on the server, one identity on the
+# operator's local PC decrypts every backup kind (SSOT golden + secrets).
 AGE_BIN = Path.home() / ".local" / "bin" / "age"
-AGE_KEYGEN = Path.home() / ".local" / "bin" / "age-keygen"
+AGE_RECIPIENT_FILE = Path.home() / ".config" / "devforge" / "backup-age-recipient"
 
 
 class BackupError(Exception):
@@ -237,6 +233,29 @@ def bootstrap(_args: argparse.Namespace) -> int:
     return 0
 
 
+def encrypt_local(tar_path: Path) -> Path:
+    """[WHY] encrypt before shipping: plaintext never leaves this host, and the
+    backup server stays keyless (untrusted relay). Recipient only — identity is
+    on the operator's local PC."""
+    if not AGE_RECIPIENT_FILE.is_file():
+        raise BackupError(f"age recipient missing: {AGE_RECIPIENT_FILE}")
+    recipient = AGE_RECIPIENT_FILE.read_text(encoding="utf-8").strip()
+    age_path = Path(str(tar_path) + ".age")
+    r = run([str(AGE_BIN), "-r", recipient, "-o", str(age_path), str(tar_path)])
+    if r.returncode != 0 or not age_path.is_file():
+        raise BackupError(f"age encrypt failed: {(r.stderr or '').strip()[:300]}")
+    age_path.chmod(0o600)
+    log(f"encrypted {age_path.name} ({age_path.stat().st_size} bytes)")
+    return age_path
+
+
+def write_sidecar(age_path: Path) -> Path:
+    sidecar = Path(str(age_path) + ".sha256")
+    sidecar.write_text(f"{sha256_file(age_path)}  {age_path.name}\n", encoding="utf-8")
+    sidecar.chmod(0o600)
+    return sidecar
+
+
 def ship(args: argparse.Namespace) -> int:
     tar_path, manifest = stage()
     if args.dry_run:
@@ -248,30 +267,36 @@ def ship(args: argparse.Namespace) -> int:
                     "archive": tar_path.name,
                     "files": len(manifest["files"]),
                     "unmatched": manifest["unmatched"],
-                    "next": [f"scp -> {SSH_HOST}:{REMOTE_DIR}/inbox/", "remote-receive"],
+                    "next": [
+                        "age encrypt",
+                        f"scp -> {SSH_HOST}:{REMOTE_DIR}/inbox/",
+                        "remote-receive",
+                    ],
                 }
             )
         )
         return 0
+    age_path = encrypt_local(tar_path)
+    sidecar = write_sidecar(age_path)
     script = Path(__file__).resolve()
     r = run(["scp", str(script), f"{SSH_HOST}:{REMOTE_DIR}/"])
     _scp_check(r, "script deploy (run bootstrap first?)")
-    r = run(["scp", str(tar_path), f"{SSH_HOST}:{REMOTE_DIR}/inbox/"])
-    _scp_check(r, f"archive {tar_path.name}")
+    r = run(["scp", str(age_path), str(sidecar), f"{SSH_HOST}:{REMOTE_DIR}/inbox/"])
+    _scp_check(r, f"archive {age_path.name}")
     r = run(
-        ["ssh", SSH_HOST, _remote_cmd(script.name, "remote-receive", f"--file {tar_path.name}")]
+        ["ssh", SSH_HOST, _remote_cmd(script.name, "remote-receive", f"--file {age_path.name}")]
     )
     if r.returncode != 0:
         raise BackupError(f"remote-receive failed: {(r.stderr or '').strip()[:300]}")
     _relay_stderr(r)
     remote = _parse_last_json(r.stdout)
-    result: dict = {"command": "ship", "status": "ok", "archive": tar_path.name, "remote": remote}
+    result: dict = {"command": "ship", "status": "ok", "archive": age_path.name, "remote": remote}
     if args.oci:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import osync_backup  # noqa: PLC0415 — lazy so plain ship never touches the oci CLI
 
         try:
-            osync_backup.oci_upload(tar_path, f"backups/ssot-golden/{tar_path.name}")
+            osync_backup.oci_upload(age_path, f"backups/ssot-golden/{age_path.name}")
         except RuntimeError as e:
             raise BackupError(f"oci upload failed: {e}") from e
     pruned = prune_local_stage()
@@ -290,124 +315,26 @@ def verify(args: argparse.Namespace) -> int:
     return 2 if r.returncode == 255 else r.returncode
 
 
-def install_age() -> None:
-    if AGE_BIN.is_file() and AGE_KEYGEN.is_file():
-        r = run([str(AGE_BIN), "--version"])
-        if r.returncode == 0:
-            return
-    arch = {"aarch64": "arm64", "x86_64": "amd64"}.get(platform.machine().lower())
-    if arch is None:
-        raise BackupError(f"unsupported arch for age: {platform.machine()}")
-    url = (
-        f"https://github.com/FiloSottile/age/releases/download/"
-        f"{AGE_VERSION}/age-{AGE_VERSION}-linux-{arch}.tar.gz"
-    )
-    AGE_BIN.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path: Path | None = None
-    try:
-        with (
-            urllib.request.urlopen(url, timeout=60) as resp,
-            tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp,
-        ):
-            tmp_path = Path(tmp.name)
-            shutil.copyfileobj(resp, tmp)
-        with tarfile.open(tmp_path) as tf:
-            for name in ("age/age", "age/age-keygen"):
-                src = tf.extractfile(name)
-                if src is None:
-                    raise BackupError(f"age release member missing: {name}")
-                dest = AGE_BIN.parent / Path(name).name
-                dest.write_bytes(src.read())
-                dest.chmod(0o755)
-    except BackupError:
-        raise
-    except (OSError, tarfile.TarError) as e:
-        raise BackupError(f"age download/install failed: {e}") from e
-    finally:
-        if tmp_path is not None:
-            tmp_path.unlink(missing_ok=True)
-    r = run([str(AGE_BIN), "--version"])
-    if r.returncode != 0:
-        raise BackupError("age install failed --version check")
-
-
-def gen_gpg_key() -> None:
-    GNUPG.mkdir(parents=True, exist_ok=True)
-    GNUPG.chmod(0o700)
-    common = [
-        "--batch",
-        "--yes",
-        "--pinentry-mode",
-        "loopback",
-        "--passphrase",
-        "",
-        "--homedir",
-        str(GNUPG),
-    ]
-    r = run(["gpg", *common, "--quick-generate-key", GPG_ID, "ed25519", "cert", "never"])
-    if r.returncode != 0:
-        raise BackupError(f"gpg keygen failed: {(r.stderr or '').strip()[:300]}")
-    fp = gpg_fingerprint()
-    r = run(["gpg", *common, "--quick-add-key", fp, "cv25519", "encr", "never"])
-    if r.returncode != 0:
-        raise BackupError(f"gpg subkey failed: {(r.stderr or '').strip()[:300]}")
-
-
-def gen_age_key() -> None:
-    r = run([str(AGE_KEYGEN), "-o", str(AGE_KEY)])
-    if r.returncode != 0:
-        raise BackupError(f"age-keygen failed: {(r.stderr or '').strip()[:300]}")
-    AGE_KEY.chmod(0o600)
-
-
-def gpg_fingerprint() -> str:
-    r = run(["gpg", "--homedir", str(GNUPG), "--with-colons", "--list-secret-keys"])
-    if r.returncode != 0:
-        raise BackupError("gpg secret key list failed")
-    for line in (r.stdout or "").splitlines():
-        if line.startswith("fpr:"):
-            parts = line.split(":")
-            if len(parts) > 9 and parts[9]:
-                return parts[9]
-    raise BackupError("gpg fingerprint not found")
-
-
-def age_recipient() -> str:
-    if not AGE_KEY.is_file():
-        raise BackupError(f"age key missing: {AGE_KEY}")
-    for line in AGE_KEY.read_text(encoding="utf-8").splitlines():
-        if line.startswith("# public key:"):
-            return line.split(":", 1)[1].strip()
-    raise BackupError("age public key not found in key file")
-
-
 def remote_setup(_args: argparse.Namespace) -> int:
-    for d in (INBOX, ARCHIVE, RDIR / "logs", KEYS):
+    for d in (INBOX, ARCHIVE, RDIR / "logs"):
         d.mkdir(parents=True, exist_ok=True)
-        # [WHY] inbox/logs carry plaintext during receive/verify — owner-only.
+        # [WHY] ciphertext-only relay — inbox/logs are owner-only; no keys ever live here.
         d.chmod(0o700)
-    install_age()
-    pk = GNUPG / "private-keys-v1.d"
-    if not pk.is_dir() or not any(pk.iterdir()):
-        gen_gpg_key()
-    if not AGE_KEY.is_file():
-        gen_age_key()
     result = {
         "command": "remote-setup",
         "status": "ok",
-        "gpg_fingerprint": gpg_fingerprint(),
-        "age_recipient": age_recipient(),
-        "key_backup": f"copy {KEYS} (gnupg/ + age-key.txt) to your local PC now",
+        "mode": "keyless relay (ciphertext receive + sha256 verify)",
     }
     print(json.dumps(result))
     return 0
 
 
 def prune_archive() -> int:
-    archives = sorted(ARCHIVE.glob("*.age.gpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+    archives = sorted(ARCHIVE.glob("*.age"), key=lambda p: p.stat().st_mtime, reverse=True)
     removed = 0
     for stale in archives[REMOTE_KEEP:]:
         stale.unlink()
+        Path(str(stale) + ".sha256").unlink(missing_ok=True)
         removed += 1
     return removed
 
@@ -416,34 +343,17 @@ def remote_receive(args: argparse.Namespace) -> int:
     inbox_file = INBOX / _safe_name(args.file)
     if not inbox_file.is_file():
         raise BackupError(f"inbox file missing: {inbox_file}")
-    age_out = Path(str(inbox_file) + ".age")
-    age_out.unlink(missing_ok=True)
-    r = run([str(AGE_BIN), "-r", age_recipient(), "-o", str(age_out), str(inbox_file)])
-    if r.returncode != 0:
-        raise BackupError(f"age encrypt failed: {(r.stderr or '').strip()[:300]}")
-    gpg_out = Path(str(age_out) + ".gpg")
-    gpg_out.unlink(missing_ok=True)
-    r = run(
-        [
-            "gpg",
-            "--batch",
-            "--yes",
-            "--homedir",
-            str(GNUPG),
-            "-r",
-            gpg_fingerprint(),
-            "--encrypt",
-            "--output",
-            str(gpg_out),
-            str(age_out),
-        ]
-    )
-    if r.returncode != 0:
-        raise BackupError(f"gpg encrypt failed: {(r.stderr or '').strip()[:300]}")
-    dest = ARCHIVE / gpg_out.name
-    gpg_out.replace(dest)
-    inbox_file.unlink()
-    age_out.unlink()
+    sidecar = INBOX / (inbox_file.name + ".sha256")
+    if not sidecar.is_file():
+        raise BackupError(f"sidecar missing: {sidecar}")
+    expected = sidecar.read_text(encoding="utf-8").split()[0]
+    actual = sha256_file(inbox_file)
+    if expected != actual:
+        # [WHY] corrupt ciphertext stays in inbox for diagnosis; next ship overwrites it.
+        raise BackupError(f"ciphertext sha256 mismatch: expected {expected} got {actual}")
+    dest = ARCHIVE / inbox_file.name
+    inbox_file.replace(dest)
+    sidecar.replace(ARCHIVE / sidecar.name)
     removed = prune_archive()
     print(
         json.dumps(
@@ -451,6 +361,7 @@ def remote_receive(args: argparse.Namespace) -> int:
                 "command": "remote-receive",
                 "status": "ok",
                 "archive": dest.name,
+                "sha256": actual,
                 "pruned": removed,
             }
         )
@@ -459,57 +370,8 @@ def remote_receive(args: argparse.Namespace) -> int:
 
 
 def newest_archive() -> Path | None:
-    archives = sorted(ARCHIVE.glob("*.age.gpg"), key=lambda p: p.stat().st_mtime)
+    archives = sorted(ARCHIVE.glob("*.age"), key=lambda p: p.stat().st_mtime)
     return archives[-1] if archives else None
-
-
-def compare_manifest(extract_dir: Path, manifest: dict) -> dict:
-    entries = manifest.get("files", [])
-    listed = {e["path"] for e in entries}
-    missing: list[str] = []
-    changed: list[str] = []
-    ok = 0
-    for entry in entries:
-        p = extract_dir / entry["path"]
-        if not p.is_file():
-            missing.append(entry["path"])
-        elif sha256_file(p) != entry.get("sha256"):
-            changed.append(entry["path"])
-        else:
-            ok += 1
-    actual = {
-        str(p.relative_to(extract_dir))
-        for p in extract_dir.rglob("*")
-        if p.is_file() and p.name != MANIFEST_NAME
-    }
-    extra = sorted(actual - listed)
-    status = "pass" if not (missing or changed or extra) else "fail"
-    return {
-        "status": status,
-        "checked": len(entries),
-        "ok": ok,
-        "missing": missing,
-        "changed": changed,
-        "extra": extra,
-    }
-
-
-def verify_extracted(extract_dir: Path) -> tuple[dict, int]:
-    mf = extract_dir / MANIFEST_NAME
-    if not mf.is_file():
-        return {"status": "error", "error": "manifest.json missing"}, 2
-    try:
-        manifest = json.loads(mf.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        return {"status": "error", "error": f"manifest unreadable: {e}"}, 2
-    if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), list):
-        return {"status": "error", "error": "manifest malformed"}, 2
-    if any(
-        not isinstance(e, dict) or not isinstance(e.get("path"), str) for e in manifest["files"]
-    ):
-        return {"status": "error", "error": "manifest entries malformed"}, 2
-    report = compare_manifest(extract_dir, manifest)
-    return report, (0 if report["status"] == "pass" else 1)
 
 
 def remote_verify(args: argparse.Namespace) -> int:
@@ -517,77 +379,74 @@ def remote_verify(args: argparse.Namespace) -> int:
     if archive is None or not archive.is_file():
         print(json.dumps({"command": "remote-verify", "status": "error", "error": "no archive"}))
         return 2
-    logs = RDIR / "logs"
-    logs.mkdir(parents=True, exist_ok=True)
-    tmp = Path(tempfile.mkdtemp(prefix="verify-", dir=logs))
-    try:
-        age_ct = tmp / "artifact.age"
-        r = run(
-            [
-                "gpg",
-                "--batch",
-                "--yes",
-                "--pinentry-mode",
-                "loopback",
-                "--passphrase",
-                "",
-                "--homedir",
-                str(GNUPG),
-                "--decrypt",
-                "--output",
-                str(age_ct),
-                str(archive),
-            ]
+    sidecar = Path(str(archive) + ".sha256")
+    if not sidecar.exists():
+        print(
+            json.dumps(
+                {
+                    "command": "remote-verify",
+                    "archive": archive.name,
+                    "status": "error",
+                    "error": "sidecar missing",
+                }
+            )
         )
-        if r.returncode != 0:
+        return 2
+    try:
+        expected = sidecar.read_text(encoding="utf-8").split()[0]
+    except OSError as e:
+        print(
+            json.dumps(
+                {
+                    "command": "remote-verify",
+                    "archive": archive.name,
+                    "status": "error",
+                    "error": f"sidecar unreadable: {e}",
+                }
+            )
+        )
+        return 2
+    # [WHY] the relay holds no identity, so it can only prove ciphertext integrity;
+    # content/manifest verification is a restore rehearsal on the identity-holding PC.
+    with open(archive, "rb") as f:
+        if f.read(21) != b"age-encryption.org/v1":
             print(
                 json.dumps(
                     {
                         "command": "remote-verify",
                         "archive": archive.name,
                         "status": "error",
-                        "error": "gpg decrypt failed",
+                        "error": "not an age ciphertext file",
                     }
                 )
             )
             return 2
-        plain = tmp / "artifact.tar.gz"
-        r = run([str(AGE_BIN), "-d", "-i", str(AGE_KEY), "-o", str(plain), str(age_ct)])
-        if r.returncode != 0:
-            print(
-                json.dumps(
-                    {
-                        "command": "remote-verify",
-                        "archive": archive.name,
-                        "status": "error",
-                        "error": "age decrypt failed",
-                    }
-                )
+    actual = sha256_file(archive)
+    if expected != actual:
+        print(
+            json.dumps(
+                {
+                    "command": "remote-verify",
+                    "archive": archive.name,
+                    "status": "fail",
+                    "expected": expected,
+                    "actual": actual,
+                }
             )
-            return 2
-        extract_dir = tmp / "x"
-        extract_dir.mkdir()
-        try:
-            with tarfile.open(plain) as tf:
-                tf.extractall(extract_dir, filter="data")
-        except (tarfile.TarError, OSError) as e:
-            print(
-                json.dumps(
-                    {
-                        "command": "remote-verify",
-                        "archive": archive.name,
-                        "status": "error",
-                        "error": f"tar extract failed: {e}",
-                    }
-                )
-            )
-            return 2
-        report, code = verify_extracted(extract_dir)
-        print(json.dumps({"command": "remote-verify", "archive": archive.name, **report}))
-        return code
-    finally:
-        # [WHY] decrypted plaintext must never persist on the backup server.
-        shutil.rmtree(tmp, ignore_errors=True)
+        )
+        return 1
+    print(
+        json.dumps(
+            {
+                "command": "remote-verify",
+                "archive": archive.name,
+                "status": "pass",
+                "sha256": actual,
+                "note": "ciphertext integrity only; restore rehearsal on identity PC",
+            }
+        )
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

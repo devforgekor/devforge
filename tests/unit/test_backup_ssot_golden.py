@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # Status: experimental
 # Path: tests/unit/
-"""Unit tests for backup_ssot_golden — manifest integrity and remote command flow.
+"""Unit tests for backup_ssot_golden — ciphertext ship/receive flow and integrity.
 
-All crypto/ssh calls are mocked: devforge must never run gpg/age (architecture A —
-encryption and verification live only on the onmydoc backup server).
+Crypto is mocked: devforge encrypts locally with the shared age recipient
+(architecture B, unified with kv-backup.py); the onmydoc relay stores ciphertext
+only and verifies sha256 sidecars. Restore rehearsal runs on the identity PC.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import tarfile
 from pathlib import Path
@@ -27,13 +27,6 @@ class FakeRC:
         self.stderr = stderr
 
 
-def _out_path(cmd: list[str]) -> Path | None:
-    for flag in ("-o", "--output"):
-        if flag in cmd:
-            return Path(cmd[cmd.index(flag) + 1])
-    return None
-
-
 def _make_src_tree(root: Path) -> Path:
     src = root / "src"
     src.mkdir()
@@ -43,50 +36,14 @@ def _make_src_tree(root: Path) -> Path:
     return src
 
 
-def _build_artifact(root: Path, *, sha_override: str | None = None) -> Path:
-    work = root / "work"
-    work.mkdir()
-    (work / "a.txt").write_text("v1", encoding="utf-8")
-    sha = sha_override or hashlib.sha256(b"v1").hexdigest()
-    manifest = {
-        "schema": 1,
-        "git_commit": "test",
-        "files": [{"path": "a.txt", "sha256": sha, "size": 2}],
-    }
-    tar_path = root / "art.tar.gz"
-    with tarfile.open(tar_path, "w:gz") as tf:
-        tf.add(work / "a.txt", arcname="a.txt")
-        blob = json.dumps(manifest).encode("utf-8")
-        info = tarfile.TarInfo("manifest.json")
-        info.size = len(blob)
-        tf.addfile(info, io.BytesIO(blob))
-    return tar_path
-
-
-def _prepare_verify(tmp_path: Path, monkeypatch, payload: bytes) -> None:
-    archive = tmp_path / "archive"
-    archive.mkdir()
-    (archive / "a.tar.gz.age.gpg").write_bytes(payload)
-    monkeypatch.setattr(bs, "ARCHIVE", archive)
-    monkeypatch.setattr(bs, "RDIR", tmp_path / "remote")
-    monkeypatch.setattr(bs, "GNUPG", tmp_path / "gnupg")
-    monkeypatch.setattr(bs, "AGE_KEY", tmp_path / "age-key.txt")
-    monkeypatch.setattr(bs, "AGE_BIN", tmp_path / "bin" / "age")
-
-
-def _fake_decrypt_chain(payload: bytes):
-    def fake_run(cmd: list[str]) -> FakeRC:
-        if "--decrypt" in cmd:
-            _out_path(cmd).write_bytes(payload)  # type: ignore[union-attr]
-            return FakeRC()
-        if "-d" in cmd:
-            out = _out_path(cmd)
-            assert out is not None
-            out.write_bytes(Path(cmd[-1]).read_bytes())  # type: ignore[union-attr]
-            return FakeRC()
-        return FakeRC()
-
-    return fake_run
+def _write_cipher_archive(archive: Path, payload: bytes) -> str:
+    """ciphertext + sidecar를 archive에 배치하고 파일명을 반환."""
+    name = "a.tar.gz.age"
+    (archive / name).write_bytes(payload)
+    (archive / f"{name}.sha256").write_text(
+        f"{hashlib.sha256(payload).hexdigest()}  {name}\n", encoding="utf-8"
+    )
+    return name
 
 
 def test_should_collect_files_when_patterns_match(tmp_path: Path, monkeypatch) -> None:
@@ -163,135 +120,91 @@ def test_should_skip_ssh_and_scp_when_ship_dry_run(tmp_path: Path, monkeypatch, 
     assert list((tmp_path / "stage").glob("*.tar.gz"))
 
 
-def test_should_encrypt_with_age_then_gpg_when_receive(tmp_path: Path, monkeypatch) -> None:
+def test_should_verify_sidecar_and_move_when_receive(tmp_path: Path, monkeypatch) -> None:
     inbox = tmp_path / "inbox"
     archive = tmp_path / "archive"
     inbox.mkdir()
     archive.mkdir()
-    (inbox / "ssot-golden-x.tar.gz").write_bytes(b"plain-tar")
-    age_key = tmp_path / "age-key.txt"
-    age_key.write_text("# public key: age1test\nAGESECRET\n", encoding="utf-8")
+    payload = b"ciphertext-bytes"
+    name = "ssot-golden-x.tar.gz.age"
+    (inbox / name).write_bytes(payload)
+    (inbox / f"{name}.sha256").write_text(
+        f"{hashlib.sha256(payload).hexdigest()}  {name}\n", encoding="utf-8"
+    )
     monkeypatch.setattr(bs, "INBOX", inbox)
     monkeypatch.setattr(bs, "ARCHIVE", archive)
-    monkeypatch.setattr(bs, "AGE_KEY", age_key)
-    monkeypatch.setattr(bs, "GNUPG", tmp_path / "gnupg")
-    monkeypatch.setattr(bs, "AGE_BIN", tmp_path / "bin" / "age")
-    calls: list[list[str]] = []
-
-    def fake_run(cmd: list[str]) -> FakeRC:
-        calls.append(list(cmd))
-        if "--list-secret-keys" in cmd:
-            return FakeRC(stdout="sec:-:255:1::\nfpr:::::::::FPR123:\n")
-        out = _out_path(cmd)
-        if out is not None:
-            out.write_bytes(b"cipher")
-        return FakeRC()
-
-    monkeypatch.setattr(bs, "run", fake_run)
-    rc = bs.remote_receive(argparse.Namespace(file="ssot-golden-x.tar.gz"))
+    rc = bs.remote_receive(argparse.Namespace(file=name))
     assert rc == 0
-    age_idx = next(i for i, c in enumerate(calls) if str(c[0]).endswith("/age"))
-    gpg_idx = next(i for i, c in enumerate(calls) if c[0] == "gpg" and "--encrypt" in c)
-    assert age_idx < gpg_idx
-    assert list(archive.glob("*.age.gpg"))
+    assert (archive / name).is_file()
+    assert (archive / f"{name}.sha256").is_file()
     assert not list(inbox.iterdir())
 
 
-def test_should_report_missing_changed_extra_when_manifest_compared(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "good.txt").write_text("ok", encoding="utf-8")
-    (tmp_path / "bad.txt").write_text("new", encoding="utf-8")
-    (tmp_path / "rogue.txt").write_text("x", encoding="utf-8")
-    manifest = {
-        "files": [
-            {"path": "good.txt", "sha256": hashlib.sha256(b"ok").hexdigest()},
-            {"path": "bad.txt", "sha256": hashlib.sha256(b"old").hexdigest()},
-            {"path": "gone.txt", "sha256": hashlib.sha256(b"gone").hexdigest()},
-        ]
-    }
-    report = bs.compare_manifest(tmp_path, manifest)
-    assert report["status"] == "fail"
-    assert report["missing"] == ["gone.txt"]
-    assert report["changed"] == ["bad.txt"]
-    assert report["extra"] == ["rogue.txt"]
+def test_should_raise_when_sidecar_missing_on_receive(tmp_path: Path, monkeypatch) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "x.tar.gz.age").write_bytes(b"cipher")
+    monkeypatch.setattr(bs, "INBOX", inbox)
+    monkeypatch.setattr(bs, "ARCHIVE", tmp_path / "archive")
+    with pytest.raises(bs.BackupError, match="sidecar"):
+        bs.remote_receive(argparse.Namespace(file="x.tar.gz.age"))
+
+
+def test_should_raise_when_sidecar_sha_mismatch_on_receive(tmp_path: Path, monkeypatch) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "x.tar.gz.age").write_bytes(b"cipher")
+    (inbox / "x.tar.gz.age.sha256").write_text(f"{'0' * 64}  x.tar.gz.age\n", encoding="utf-8")
+    monkeypatch.setattr(bs, "INBOX", inbox)
+    monkeypatch.setattr(bs, "ARCHIVE", tmp_path / "archive")
+    with pytest.raises(bs.BackupError, match="sha256 mismatch"):
+        bs.remote_receive(argparse.Namespace(file="x.tar.gz.age"))
+
+
+def test_should_fail_with_exit_2_when_not_age_file(tmp_path: Path, monkeypatch, capsys) -> None:
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    name = _write_cipher_archive(archive, b"broken")
+    monkeypatch.setattr(bs, "ARCHIVE", archive)
+    monkeypatch.setattr(bs, "RDIR", tmp_path / "remote")
+    rc = bs.remote_verify(argparse.Namespace(file=None))
+    assert rc == 2
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["error"] == "not an age ciphertext file"
+    assert out["archive"] == name
 
 
 def test_should_pass_when_archive_intact(tmp_path: Path, monkeypatch) -> None:
-    tar_path = _build_artifact(tmp_path)
     archive = tmp_path / "archive"
     archive.mkdir()
-    (archive / "a.tar.gz.age.gpg").write_bytes(tar_path.read_bytes())
+    _write_cipher_archive(archive, b"age-encryption.org/v1\n-> stanza")
     monkeypatch.setattr(bs, "ARCHIVE", archive)
     monkeypatch.setattr(bs, "RDIR", tmp_path / "remote")
-    monkeypatch.setattr(bs, "GNUPG", tmp_path / "gnupg")
-    monkeypatch.setattr(bs, "AGE_KEY", tmp_path / "age-key.txt")
-    monkeypatch.setattr(bs, "AGE_BIN", tmp_path / "bin" / "age")
-
-    def fake_run(cmd: list[str]) -> FakeRC:
-        if "--decrypt" in cmd:
-            _out_path(cmd).write_bytes(tar_path.read_bytes())  # type: ignore[union-attr]
-            return FakeRC()
-        if "-d" in cmd:
-            out = _out_path(cmd)
-            assert out is not None
-            out.write_bytes(Path(cmd[-1]).read_bytes())  # type: ignore[union-attr]
-            return FakeRC()
-        return FakeRC()
-
-    monkeypatch.setattr(bs, "run", fake_run)
     rc = bs.remote_verify(argparse.Namespace(file=None))
     assert rc == 0
 
 
-def test_should_fail_when_manifest_sha_mismatch(tmp_path: Path, monkeypatch) -> None:
-    tar_path = _build_artifact(tmp_path, sha_override="0" * 64)
+def test_should_fail_when_sidecar_sha_mismatch(tmp_path: Path, monkeypatch) -> None:
     archive = tmp_path / "archive"
     archive.mkdir()
-    (archive / "a.tar.gz.age.gpg").write_bytes(tar_path.read_bytes())
+    name = _write_cipher_archive(archive, b"age-encryption.org/v1\n-> stanza")
+    (archive / f"{name}.sha256").write_text(f"{'0' * 64}  {name}\n", encoding="utf-8")
     monkeypatch.setattr(bs, "ARCHIVE", archive)
     monkeypatch.setattr(bs, "RDIR", tmp_path / "remote")
-    monkeypatch.setattr(bs, "GNUPG", tmp_path / "gnupg")
-    monkeypatch.setattr(bs, "AGE_KEY", tmp_path / "age-key.txt")
-    monkeypatch.setattr(bs, "AGE_BIN", tmp_path / "bin" / "age")
-
-    def fake_run(cmd: list[str]) -> FakeRC:
-        if "--decrypt" in cmd:
-            _out_path(cmd).write_bytes(tar_path.read_bytes())  # type: ignore[union-attr]
-            return FakeRC()
-        if "-d" in cmd:
-            out = _out_path(cmd)
-            assert out is not None
-            out.write_bytes(Path(cmd[-1]).read_bytes())  # type: ignore[union-attr]
-            return FakeRC()
-        return FakeRC()
-
-    monkeypatch.setattr(bs, "run", fake_run)
     rc = bs.remote_verify(argparse.Namespace(file=None))
     assert rc == 1
 
 
-def test_should_fail_with_exit_2_when_gpg_decrypt_fails(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_should_fail_with_exit_2_when_sidecar_missing(tmp_path: Path, monkeypatch, capsys) -> None:
     archive = tmp_path / "archive"
     archive.mkdir()
-    (archive / "a.tar.gz.age.gpg").write_bytes(b"broken")
+    (archive / "a.tar.gz.age").write_bytes(b"age-encryption.org/v1\n-> x")
     monkeypatch.setattr(bs, "ARCHIVE", archive)
     monkeypatch.setattr(bs, "RDIR", tmp_path / "remote")
-    monkeypatch.setattr(bs, "GNUPG", tmp_path / "gnupg")
-    monkeypatch.setattr(bs, "AGE_KEY", tmp_path / "age-key.txt")
-
-    def fake_run(cmd: list[str]) -> FakeRC:
-        if "--decrypt" in cmd:
-            return FakeRC(returncode=2, stderr="gpg: decryption failed")
-        return FakeRC()
-
-    monkeypatch.setattr(bs, "run", fake_run)
     rc = bs.remote_verify(argparse.Namespace(file=None))
     assert rc == 2
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert out["error"] == "gpg decrypt failed"
+    assert out["error"] == "sidecar missing"
 
 
 def test_should_reject_traversal_when_verify_file_arg_unsafe(tmp_path: Path, monkeypatch) -> None:
@@ -312,36 +225,21 @@ def test_should_accept_basename_only_when_validating_names() -> None:
             bs._safe_name(bad)
 
 
-def test_should_fail_with_exit_2_when_tar_corrupt_after_decrypt(
+def test_should_fail_with_exit_2_when_sidecar_unreadable(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    _prepare_verify(tmp_path, monkeypatch, b"cipher")
-    monkeypatch.setattr(bs, "run", _fake_decrypt_chain(b"cipher"))
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    _write_cipher_archive(archive, b"age-encryption.org/v1\n-> x")
+    sidecar = Path(str(archive / "a.tar.gz.age") + ".sha256")
+    sidecar.unlink()
+    sidecar.mkdir()  # 디렉토리로 만들어 read_text 실패 유도
+    monkeypatch.setattr(bs, "ARCHIVE", archive)
+    monkeypatch.setattr(bs, "RDIR", tmp_path / "remote")
     rc = bs.remote_verify(argparse.Namespace(file=None))
     assert rc == 2
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert out["error"].startswith("tar extract failed")
-
-
-def test_should_fail_with_exit_2_when_manifest_malformed(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
-    work = tmp_path / "work"
-    work.mkdir()
-    (work / "a.txt").write_text("v1", encoding="utf-8")
-    tar_path = tmp_path / "art.tar.gz"
-    with tarfile.open(tar_path, "w:gz") as tf:
-        tf.add(work / "a.txt", arcname="a.txt")
-        blob = json.dumps({"files": "not-a-list"}).encode("utf-8")
-        info = tarfile.TarInfo("manifest.json")
-        info.size = len(blob)
-        tf.addfile(info, io.BytesIO(blob))
-    _prepare_verify(tmp_path, monkeypatch, tar_path.read_bytes())
-    monkeypatch.setattr(bs, "run", _fake_decrypt_chain(tar_path.read_bytes()))
-    rc = bs.remote_verify(argparse.Namespace(file=None))
-    assert rc == 2
-    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert out["error"] == "manifest malformed"
+    assert out["error"].startswith("sidecar unreadable")
 
 
 def test_should_raise_backuperror_when_binary_missing() -> None:
@@ -353,10 +251,16 @@ def test_should_print_single_json_line_when_ship_succeeds(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     src = _make_src_tree(tmp_path)
+    recipient = tmp_path / "recipient"
+    recipient.write_text("age1test\n", encoding="utf-8")
     monkeypatch.setattr(bs, "SSOT_SOURCES", [(src, ["doc.md"])])
     monkeypatch.setattr(bs, "STAGE", tmp_path / "stage")
+    monkeypatch.setattr(bs, "AGE_RECIPIENT_FILE", recipient)
 
     def fake_run(cmd: list[str]) -> FakeRC:
+        if str(cmd[0]).endswith("age") and "-o" in cmd:
+            Path(cmd[cmd.index("-o") + 1]).write_bytes(b"age-ciphertext")
+            return FakeRC()
         if cmd[0] == "ssh":
             return FakeRC(
                 stdout='{"command":"remote-receive","status":"ok"}\n',
@@ -372,5 +276,6 @@ def test_should_print_single_json_line_when_ship_succeeds(
     assert len(lines) == 1
     payload = json.loads(lines[0])
     assert payload["command"] == "ship"
+    assert payload["archive"].endswith(".tar.gz.age")
     assert payload["remote"]["status"] == "ok"
     assert "remote trace" in captured.err
