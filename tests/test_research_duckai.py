@@ -125,6 +125,21 @@ def test_should_treat_gpt_prefix_as_same_when_normalizing_model():
     assert duckai._normalize_model("GPT-5.6 Luna") != duckai._normalize_model("Mistral Small 4")
 
 
+# ── MODELS single source of truth ─────────────────────────────────────
+
+
+def test_should_match_every_model_when_building_pattern():
+    for model_id, token in duckai.MODELS:
+        assert duckai._MODEL_PATTERN.search(token), model_id
+    # the collapsed picker renders a shortened label (measured live)
+    assert duckai._MODEL_PATTERN.search("5.6 Luna")
+    assert duckai._MODEL_PATTERN.search("GPT-5.6 Luna")
+
+
+def test_should_default_to_first_model_when_using_default():
+    assert duckai.MODELS[0][0] == duckai.DEFAULT_MODEL
+
+
 # ── _decode_body ──────────────────────────────────────────────────────
 
 

@@ -45,15 +45,22 @@ _LOG_PREFIX = "[research.duckai]"
 
 DEFAULT_URL = "https://duck.ai/"
 
-DEFAULT_MODEL = "GPT-5.6 Luna"
-MODELS = (
-    "GPT-5.6 Luna",
-    "GPT-5.4 mini",
-    "Claude Haiku 4.5",
-    "Mistral Small 4",
-    "gpt-oss 120B",
-    "Gemma 4 31B",
+# (model id accepted by ask(), distinctive substring of the collapsed picker button).
+# [WHY] the picker shows a shortened label — "GPT-5.6 Luna" renders as "5.6 Luna"
+# (measured) — so the button cannot be matched on the id alone, while the open menu
+# matches on the full id. Keeping both halves in one row makes this the single
+# source of truth: adding a model is one line and the button pattern can no longer
+# drift away from the id list.
+MODELS: tuple[tuple[str, str], ...] = (
+    ("GPT-5.6 Luna", "Luna"),
+    ("GPT-5.4 mini", "mini"),
+    ("Claude Haiku 4.5", "Haiku"),
+    ("Mistral Small 4", "Mistral"),
+    ("gpt-oss 120B", "gpt-oss"),
+    ("Gemma 4 31B", "Gemma"),
 )
+DEFAULT_MODEL = MODELS[0][0]
+_MODEL_PATTERN = re.compile("|".join(re.escape(token) for _, token in MODELS))
 
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -439,11 +446,7 @@ class DuckAIClient:
     def _select_model(self, model: str) -> None:
         page = self._page
         assert page is not None
-        selector = (
-            page.locator("button")
-            .filter(has_text=re.compile(r"Luna|mini|Haiku|Mistral|gpt-oss|Gemma"))
-            .first
-        )
+        selector = page.locator("button").filter(has_text=_MODEL_PATTERN).first
         if _normalize_model(model) == _normalize_model(selector.inner_text()):
             return
         selector.click()
