@@ -1,6 +1,8 @@
 # Web Chat CLI - Qwen and DeepSeek Integration
 
-This script provides a unified interface for interacting with both Qwen and DeepSeek web chat interfaces.
+This document covers **two separate tools** that talk to the Qwen and DeepSeek
+web UIs: the `webq`/`webd` shell functions (chrome-web-llm stack — the supported
+entry point) and `web_chat.py` (a standalone Playwright driver).
 
 ## Features
 
@@ -9,31 +11,58 @@ This script provides a unified interface for interacting with both Qwen and Deep
 - **DeepSeek**: Access DeepSeek's web chat interface
 
 ### 2. Account Management
-- Separate authentication for each platform
-- Azure Key Vault integration for secure credential storage
-- Automatic login handling for both accounts
+- Separate browser storage per platform (`--storage-state` / `--user-data-dir`)
+- Login form auto-fill driven by `<ACCOUNT>_USERNAME/PASSWORD` **environment
+  variables** — there is no Key Vault wiring in this script
+- Because nothing injects those variables here, the script runs logged-out
+  (see the caveat under *Azure Key Vault Configuration*)
 
 ### 3. Shared State and Content Sharing
 - **Cross-platform content sharing**: Prompts and responses can be shared between accounts
 - **Session management**: Track interactions across different accounts
 - **State persistence**: Maintain shared context between account switches
 
-### 4. Convenience Aliases
-- `webq` or `webqwen`: Access Qwen interface
-- `webd` or `webdeepseek`: Access DeepSeek interface
+### 4. Entry points
+
+Two independent ways to drive Qwen/DeepSeek. `webq`/`webd` do **not** use this
+script.
+
+| Command | Implementation | Requirement |
+|---------|----------------|-------------|
+| `webq` / `webd` | shell functions in `~/.bashrc` → `web-llm.sh` (chrome-web-llm stack) | `stack-start.sh` running |
+| `webqwen` / `webdeepseek` | removed (they were aliases to this script and shadowed the functions) | — |
+| `python3.12 web_chat.py` | this script (Playwright) | `playwright install chromium` |
+
+`webq` defaults to Qwen + web search; `webd` defaults to DeepSeek + web search
++ DeepThink. See `docs/runbooks/web-llm.md`.
 
 ## Installation and Setup
 
 ### Prerequisites
+
+`webq`/`webd` (shell functions) — one-time per boot:
 ```bash
-python3 -m pip install playwright
-python3 -m playwright install chromium
+~/.local/share/chrome-web-llm/scripts/stack-start.sh   # relay :9876 + Chromium + extension
 ```
+
+`web_chat.py` (this script):
+```bash
+python3.12 -m pip install playwright
+python3.12 -m playwright install chromium
+```
+> Use `python3.12`, not `python3`. On this host `python3` is 3.9 with a
+> different Playwright build, so its browser revision does not match the
+> installed Chromium.
 
 ### Azure Key Vault Configuration
 Set up Azure Key Vault secrets for both accounts:
 - `DEEPSEEK-AI-ACCOUNT` (JSON format: {"username": "value", "password": "value"})
 - `QWEN-AI-ACCOUNT` (JSON format: {"username": "value", "password": "value"})
+
+> **Not provisioned in this environment.** `web_chat.py` only looks for these
+> `<ACCOUNT>_*USERNAME/PASSWORD` environment variables, and no wrapper injects
+> them — so it always runs a **logged-out** browser context. The `webq`/`webd`
+> shell functions instead reuse the logged-in `chrome-web-llm-profile`.
 
 ### Environment Variables
 Set the following environment variables for authentication:
@@ -46,32 +75,35 @@ export QWEN-AI-ACCOUNT_PASSWORD="your_password"
 
 ## Usage
 
-### Basic Usage
+### Basic Usage — shell functions (`webq` / `webd`)
+
 ```bash
-# Access Qwen interface
-webq "Hello, Qwen!"
-
-# Access DeepSeek interface
-webd "Hello, DeepSeek!"
-
-# Or using full names
-webqwen "Hello, Qwen!"
-webdeepseek "Hello, DeepSeek!"
+~/.local/share/chrome-web-llm/scripts/stack-start.sh   # one-time per boot (relay + Chromium)
+webq "Hello, Qwen!"                             # Qwen + web search
+webd "Hello, DeepSeek!"                         # DeepSeek + search + DeepThink
+webq                                             # no args → "qwen[chat]> " prompt
+WL_SESSION=proj webq "Hello, Qwen!"              # session proj
+echo "Hello" | webq                              # read the question from stdin
 ```
 
-### Advanced Options
+### Basic Usage — this script (direct invocation)
+
 ```bash
-# Switch account and share context
-webq --account deepseek "Switch to DeepSeek and share this prompt"
+python3.12 /opt/projects/server/scripts/web_chat.py --account qwen "Hello, Qwen!"
+python3.12 /opt/projects/server/scripts/web_chat.py --account deepseek "Hello, DeepSeek!"
+```
 
-# Use custom URL
-webq --url "https://custom.qwen.domain" "Use custom Qwen instance"
+### Advanced Options (web_chat.py only)
 
+```bash
 # Save login state
-webq --save-storage-state "~/deepseek_state.json" "Save login state for future sessions"
+web_chat.py --account deepseek --save-storage-state ~/deepseek_state.json "Save login state"
 
 # Debug mode
-webq --debug "Enable debug output"
+web_chat.py --account qwen --debug "Enable debug output"
+
+# Interactive prompt (no argument, TTY)
+web_chat.py --account qwen
 ```
 
 ### Content Sharing Features
@@ -90,7 +122,10 @@ The following state is shared between accounts:
 
 ### Storage
 - User data directories: `~/.cache/devforge/qwen-profile` and `~/.cache/devforge/deepseek-profile`
+  — created only when you pass `--user-data-dir`; by default `web_chat.py`
+  launches an **ephemeral** context
 - Storage states: `~/.config/devforge/qwen-storage-state.json` and `~/.config/devforge/deepseek-storage-state.json`
+  — read on start, written only with `--save-storage-state` (neither exists yet)
 
 ## Examples
 
@@ -115,36 +150,62 @@ webq "Explain quantum computing to me in simple terms."
 webd "Can you elaborate on that quantum computing explanation?"
 ```
 
-### Session Management
+### Session Management (shell functions)
+
+`--shared` reads **and** writes the session file, so Qwen and DeepSeek hand the
+conversation to each other automatically:
+
 ```bash
-# Save and restore sessions
-webq --save-storage-state "~/qwen_state.json" "my prompt"
+webq "Explain quantum computing simply."     # saved to conversations/chat.jsonl
+webd "Can you elaborate on that?"            # reads chat.jsonl, writes it back
+WL_SESSION=proj webq "Start a new topic."    # separate session
+```
+
+Session files: `~/.local/share/chrome-web-llm/conversations/<name>.jsonl`.
+
+### Session Management (web_chat.py — browser storage state)
+
+```bash
+web_chat.py --account qwen --save-storage-state ~/qwen_state.json "my prompt"
 # Later...
-webq --storage-state "~/qwen_state.json" "Continue from saved session"
+web_chat.py --account qwen --storage-state ~/qwen_state.json "Continue from saved session"
 ```
 
 ## Troubleshooting
 
 ### Common Issues
-1. **Login failures**: Check Azure Key Vault credentials and ensure environment variables are set correctly
-2. **Browser not opening**: Ensure playwright chromium is installed
-3. **Authentication errors**: Verify account credentials are correct in Azure Key Vault
+1. **`webq`/`webd` do nothing or fail to reach the relay**: start the stack first —
+   `~/.local/share/chrome-web-llm/scripts/stack-start.sh` (relay `127.0.0.1:9876` + Chromium)
+2. **Silent exit from `web-llm.sh`**: run it directly to see the Azure Key Vault error —
+   deleted KV keys in `KEYS` make `kv-fetch-env.py` exit non-zero under `set -e`
+3. **web_chat.py: browser executable missing**: `python3.12 -m playwright install chromium`
+   (must match the interpreter — `python3` is 3.9 and has a different browser revision)
+4. **web_chat.py: no answer / wrong text**: the script runs a fresh, logged-out
+   browser context; prefer the `webq`/`webd` shell functions, which use the
+   logged-in `chrome-web-llm-profile`
 
 ### Debug Mode
-Enable debug mode for detailed output:
 ```bash
-webq --debug "my prompt"
+web_chat.py --account qwen --debug "my prompt"     # this script
+DEBUG=1 ~/.local/share/chrome-web-llm/scripts/web-llm-cli.sh "my prompt"   # shell path
 ```
 
 ## File Structure
 
 ```
 /opt/projects/server/scripts/
-├── web_chat.py                    # Main script
-├── .config/devforge/qwen-profile/  # Qwen user data
-├── .config/devforge/deepseek-profile/ # DeepSeek user data
-├── .config/devforge/qwen-storage-state.json  # Qwen storage state
-├── .config/devforge/deepseek-storage-state.json # DeepSeek storage state
+└── web_chat.py                          # this script (direct Playwright driver)
+
+# Chrome state lives under $HOME, not next to the script:
+~/.cache/devforge/qwen-profile/          # Playwright persistent profile (--user-data-dir)
+~/.cache/devforge/deepseek-profile/
+~/.config/devforge/qwen-storage-state.json      # --storage-state / --save-storage-state
+~/.config/devforge/deepseek-storage-state.json
+
+# webq/webd stack (shell functions):
+~/.local/share/chrome-web-llm/           # relay + extension + web-llm.sh
+~/.cache/devforge/chrome-web-llm-profile/  # logged-in profile (415MB)
+~/.local/share/chrome-web-llm/conversations/<session>.jsonl
 ```
 
 ## Future Enhancements
