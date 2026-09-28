@@ -101,6 +101,24 @@ def test_should_fallback_when_env_float_is_invalid(monkeypatch):
     assert duckai._env_float("DEVFORGE_DUCKAI_TEST_FLOAT", 7.5) == 3.0
 
 
+# ── _user_data_dir ────────────────────────────────────────────────────
+
+
+def test_should_use_cache_env_when_set(monkeypatch, tmp_path):
+    target = tmp_path / "profile"
+    monkeypatch.setenv("DEVFORGE_DUCKAI_CACHE_DIR", str(target))
+    assert duckai._user_data_dir() == str(target)
+    assert target.is_dir()
+
+
+def test_should_default_to_home_cache_when_env_absent(monkeypatch, tmp_path):
+    monkeypatch.delenv("DEVFORGE_DUCKAI_CACHE_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    path = duckai._user_data_dir()
+    assert path == str(tmp_path / ".cache" / "devforge" / "duckai")
+    assert os.path.isdir(path)
+
+
 def test_should_treat_gpt_prefix_as_same_when_normalizing_model():
     assert duckai._normalize_model("GPT-5.6 Luna") == duckai._normalize_model("5.6 Luna")
     assert duckai._normalize_model("GPT-5.4 mini") == duckai._normalize_model("5.4 mini")

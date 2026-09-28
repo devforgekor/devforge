@@ -6,8 +6,10 @@
 [WHY] Duck.ai rejects datacenter IPs (Cloudflare challenge / ERR_CHALLENGE) and
 detects headless Chromium (ERR_BN_LIMIT / code 84f2). We therefore run a *headed*
 Chromium under Xvfb through the DataImpulse residential proxy, and keep one warm
-browser session alive so the per-question proxy traffic is a few KB (the chat SSE)
-instead of a ~1.8 MB cold page load.
+browser session alive so a question costs ~35 KB over the proxy. The first cold
+load costs ~1.3 MB; every one after that costs ~82 KB, because the persistent
+profile reuses the disk cache for the scripts duck.ai serves with
+`max-age=31536000` (see _user_data_dir).
 """
 
 from __future__ import annotations
@@ -30,7 +32,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from playwright.sync_api import (
-        Browser,
         BrowserContext,
         CDPSession,
         Page,
@@ -43,6 +44,7 @@ from lib.research import proxy
 _LOG_PREFIX = "[research.duckai]"
 
 DEFAULT_URL = "https://duck.ai/"
+
 DEFAULT_MODEL = "GPT-5.6 Luna"
 MODELS = (
     "GPT-5.6 Luna",
@@ -58,19 +60,30 @@ _USER_AGENT = (
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
-# [WHY] telemetry/analytics beacons are pure waste over a metered proxy.
+# [WHY] every byte over the metered residential proxy is billed: analytics beacons
+# and visual-only webfonts are pure waste. Blocking the fonts alone cut the cold
+# load by 592 KB and 6.3 s with no functional loss (A/B verified: same answer, the
+# textarea/submit/model picker all still work).
 # Blocked via CDP Network.setBlockedURLs, NOT context.route(): enabling Playwright
 # interception makes response.body() fail with "No data found for resource".
 _BLOCK_URLS = (
     "https://improving.duckduckgo.com/*",
     "https://*.googletagmanager.com/*",
     "https://*.google-analytics.com/*",
+    "https://fonts.googleapis.com/*",
+    "https://fonts.gstatic.com/*",
+    "*woff2*",
+    "*woff*",
+    "*ttf*",
+    "*otf*",
+    "*.eot*",
 )
 
 _CHAT_URL = "/duckchat/v1/chat"
 _IDLE_ENV = "DEVFORGE_DUCKAI_IDLE_SEC"
 _TIMEOUT_ENV = "DEVFORGE_DUCKAI_TIMEOUT_SEC"
 _XVFB_ENV = "DEVFORGE_DUCKAI_XVFB_DISPLAY"
+_CACHE_ENV = "DEVFORGE_DUCKAI_CACHE_DIR"
 
 _DEFAULT_IDLE_SEC = 600.0
 _DEFAULT_TIMEOUT_SEC = 120.0
@@ -269,6 +282,21 @@ def _ensure_display() -> None:
         _log(f"Xvfb started on {display}")
 
 
+def _user_data_dir() -> str:
+    """Persistent Chromium profile — the disk HTTP cache lives here.
+
+    [WHY] duck.ai serves every script/stylesheet with `max-age=31536000` + ETag
+    (1.18 MB total), but a throwaway context re-downloads all of it on every cold
+    load. Reusing one profile measured 1,296,343 B -> 60,877 B (-95%). The directory
+    must survive reboots, so it defaults to ~/.cache rather than /tmp.
+    """
+    path = os.environ.get(_CACHE_ENV) or os.path.join(
+        os.path.expanduser("~"), ".cache", "devforge", "duckai"
+    )
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 # ── warm-session client (browser owned by a dedicated worker thread) ───
 
 
@@ -287,7 +315,6 @@ class DuckAIClient:
 
         # Playwright sync objects live only on the worker thread.
         self._pw: Optional[Playwright] = None
-        self._browser: Optional[Browser] = None
         self._ctx: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
         self._cdp: Optional[CDPSession] = None
@@ -359,17 +386,18 @@ class DuckAIClient:
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
             ],
+            "user_agent": _USER_AGENT,
+            "viewport": {"width": 1920, "height": 1080},
+            "locale": "ko-KR",
+            "timezone_id": "Asia/Seoul",
         }
         proxy = _build_proxy_config()
         if proxy:
             launch["proxy"] = proxy
-        self._browser = self._pw.chromium.launch(**launch)
-        self._ctx = self._browser.new_context(
-            user_agent=_USER_AGENT,
-            viewport={"width": 1920, "height": 1080},
-            locale="ko-KR",
-            timezone_id="Asia/Seoul",
-        )
+        # [WHY] launch_persistent_context hands back the BrowserContext directly (no
+        # separate Browser) and keeps the disk HTTP cache across sessions, which is
+        # where the -95% cold-load saving comes from — see _user_data_dir.
+        self._ctx = self._pw.chromium.launch_persistent_context(_user_data_dir(), **launch)
         self._ctx.add_init_script(
             "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
         )
@@ -395,7 +423,7 @@ class DuckAIClient:
 
     def _teardown(self) -> None:
         for obj, meth in (
-            (self._browser, "close"),
+            (self._ctx, "close"),
             (self._pw, "stop"),
         ):
             if obj is not None:
@@ -405,7 +433,6 @@ class DuckAIClient:
                     pass
         self._page = None
         self._ctx = None
-        self._browser = None
         self._pw = None
         self._cdp = None
 
