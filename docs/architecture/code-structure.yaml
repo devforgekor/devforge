@@ -32,7 +32,8 @@ modules:
       purpose: auto_mode.sh — DevForge Auto Mode (overnight unattended task execution)
     backup_ssot_golden.py:
       status: production
-      purpose: SSOT golden 백업 — 평문 tar를 onmydoc으로 ship, age→gpg 암호화·검증은 원격.
+      purpose: SSOT golden 백업 — 로컬 age 선암호화 후 암호문을 onmydoc으로 단방향
+        ship, 원격은 sha256 무결성만 검증 (keyless relay).
     bench_llm.py:
       status: production
       purpose: DevForge LLM Benchmark — decode tps 측정 및 실험 레지스트리 등록.
@@ -848,7 +849,8 @@ modules:
       purpose: EnvironmentFile normalization + quoting-error guard (called by kv-export-env.sh).
     kv-backup.py:
       status: production
-      purpose: Key Vault → GPG-encrypted secrets backup.
+      purpose: Key Vault → age-encrypted secrets backup + one-way ship to onmydoc
+        (single recipient, identity on operator PC).
     kv-fetch-env.py:
       status: production
       purpose: Fetch KV secrets into env vars and exec target (multi-KV merge, --keys
@@ -860,6 +862,10 @@ modules:
       status: production
       purpose: Azure SP client secret live validity probe + expiry alert (watchdog
         oneshot).
+    openclaw-kv-resolver.py:
+      status: production
+      purpose: OpenClaw exec SecretRef resolver — reads Azure KV per request, values
+        stay in process memory (no plaintext at rest).
 - path: scripts/hooks/
   purpose: Hooks
   files:
