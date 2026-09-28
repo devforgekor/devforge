@@ -53,9 +53,11 @@ DATAIMPULSE_API_KEY, DATAIMPULSE_LOGIN, DATAIMPULSE_USER, DATAIMPULSE_PASS  (개
 
 ### 시크릿 등록 (쓰기 SP 사용, 값 미출력)
 ```bash
-# 쓰기 SP로 로그인 (값은 KV에서 읽어 사용, 화면 출력 금지)
-CID=$(az keyvault secret show --vault-name kv-common-prod-krc --name AZ-20137133-SP-AIAGENT-CLIENT-ID --query value -o tsv)
-CSEC=$(az keyvault secret show --vault-name kv-common-prod-krc --name AZ-20137133-SP-AIAGENT-CLIENT-SECRET --query value -o tsv)
+# 쓰기 SP로 로그인 — 정본 JSON에서 추출 (2026-09-28: 개별 시크릿
+# AZ-20137133-SP-AIAGENT-CLIENT-ID/SECRET는 JSON 통합으로 폐기)
+CFG=$(az keyvault secret show --vault-name kv-common-prod-krc --name AZURE-SP-ENV-CONFIG-20137133 --query value -o tsv)
+CID=$(echo "$CFG" | jq -r '.sp.appId')
+CSEC=$(echo "$CFG" | jq -r '.sp.clientSecret')
 az login --service-principal -u "$CID" -p "$CSEC" --tenant 9ec65251-a106-4dc3-9878-4278caa80b1b --allow-no-subscriptions -o none
 
 # 시크릿 등록 (kv-safe.py 권장: 값 미출력)

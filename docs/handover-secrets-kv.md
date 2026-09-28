@@ -27,8 +27,9 @@
    ├─ kv-devforge-prod2-krc : devforge 전용 (DEVFORGE-*, OCI-DEVFORGE-*)
    └─ kv-onmydoc-prod-krc   : onmydoc 전용 (OCI-ONMYDOC-*)
    │
-   ├─ 주 1회 자동 (일 03:00) → GPG 암호화 백업 → ~/.config/devforge/backups/
-   │     (공개키: 서버 / 개인키: 로컬 PC — 서버는 복호화 불가)
+   ├─ 주 1회 자동 (일 03:00) → age 암호화 백업 → ~/.config/devforge/backups/
+   │     + 단방향 ship → onmydoc:~/kv-backup/ (암호문만, sha256 검증·60일 회전)
+   │     (recipient: 서버 / identity: 로컬 PC — 서버·백업 서버 모두 복호화 불가)
    │
    └─ 서버 서비스 시작 시 → Key Vault API 조회(다중 KV 병합) → 환경변수 주입
          kv-fetch-env.py 래퍼 경유 (AZURE_KEYVAULT_URLS 순서대로, 뒤 KV가 우선)
@@ -120,7 +121,8 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | 파일 | 역할 | 최근 개선 |
 |------|------|----------------------|
 | `scripts/deploy/kv-fetch-env.py` | Key Vault → 환경변수 주입 → 명령 실행 래퍼 | P0+P1: 에러 처리 강화, retry 로직 (최대 3회, exponential backoff) |
-| `scripts/deploy/kv-backup.py` | Key Vault → GPG 암호화 백업 | P0+P1: 에러 처리 강화, retry 로직, 임시 파일 보안 강화 (tempfile 사용) |
+| `scripts/deploy/kv-backup.py` | Key Vault → age 암호화 백업 + onmydoc 단방향 ship | **2026-09-28: GPG → age 전환** (recipient 통일, ship/sha256/원격 회전 추가) |
+| `scripts/deploy/openclaw-kv-resolver.py` | OpenClaw `exec` SecretRef → Azure KV 직접 조회 (평문 저장 없음) | 2026-09-28 신규 — gateway token/opencode-go 키 SecretRef화 |
 | `scripts/deploy/kv-export-env.sh` | 지정 키만 KV 조회 → 임시 EnvironmentFile 생성(서비스별 최소 주입) | quoting artifact 자동 정규화 (2026-09-19) |
 | `scripts/deploy/kv-safe.py` | 시크릿 **값 미출력** 래퍼 (`list`/`compare`/`set-from-env`/`set-from-file`) | 2026-09-23 신규 — DSN 등록·검증용. `compare`는 **공백 무시**(KV 개행→공백 치환 대응) |
 | `.github/_deprecated/sync-kv.yml.deprecated` | GitHub → Key Vault 이전 워크플로우 (폐기, 서버 직접 등록 권장) | 2026-09-20 비활성 |
@@ -169,23 +171,40 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 
 **전환 보류: 없음** (fastapi는 2026-09-20 평문 DB URL 제거로 완료)
 
-### 4.3 GPG 백업
+### 4.3 age 백업 (2026-09-28: GPG → age 전환 — SSOT golden 포함 통일)
 
 | 항목 | 값 |
 |------|-----|
-| 공개키 (서버 보유) | `~/.config/devforge/backup-public-key.asc` |
-| 개인키 (로컬 PC) | `backup-private-key.asc` (텔레그램으로 전송됨) |
-| GPG 수신자 | `DevForge Secrets Backup` |
-| 백업 디렉토리 | `~/.config/devforge/backups/` |
-| 백업 주기 | 매주 일요일 03:00 (systemd 타이머 `kv-backup.timer`) |
-| 보관 기간 | 60일 |
-| 파일 형식 | `secrets-backup-YYYYMMDDTHHMMSS.gpg` |
+| recipient (서버 보유) | `~/.config/devforge/backup-age-recipient` |
+| identity (로컬 PC) | 텔레그램 세레모니 2026-09-28 발송 — 서버·onmydoc 모두 없음 |
+| 암호화 도구 | age v1.3.2 (`~/.local/bin/age`) · SOPS 3.13.3 설치(현재 미사용, 리포 시크릿 파일 생길 때 age 백엔드로 사용) |
+| 로컬 백업 | `~/.config/devforge/backups/secrets-backup-YYYYMMDDTHHMMSS.age` (+ `.sha256`) |
+| 원격 ship | `onmydoc:~/kv-backup/` — **단방향 push**(동기화 금지) + 원격 sha256 검증 + 60일 원격 회전 |
+| 백업 주기 | 매주 일요일 03:00 (systemd 타이머 `kv-backup.timer`) · 보관 60일 (로컬·원격 동일) |
+
+**SSOT golden (`backup_ssot_golden.py`)도 동일 recipient 통일 (architecture B, 2026-09-28):**
+- 로컬 age 선암호화 → 암호문만 `onmydoc:~/ssot-golden/archive/` (keyless relay, sha256 sidecar 검증)
+- 복구 리허설은 identity 보유 PC에서: `age -d -i <identity> <file>` → tar → manifest 대조
+- 2026-09-28: onmydoc 구세대 개인키(`keys/`)와 `.age.gpg` 2개 **폐기** (완전 전환)
 
 **⚠️ 중요:**
-- 개인키는 서버에서 **삭제 완료** (gpg 키링에서 제거됨)
-- 서버에서 복호화 시도 → "No secret key" (정상, 확인됨)
-- 개인키는 **로컬 PC에만** 보관 — 분실 시 백업 복구 불가
-- 로컬에서 복호화: `gpg --import backup-private-key.asc` 후 `gpg --decrypt <file>.gpg`
+- identity는 **로컬 PC에만** 보관 — 분실 시 백업 복구 불가
+- **2차 사본: 별도 Azure 테넌트(`b08cd1bf`)의 `kv-shared-devforge-krc`** (2026-09-28 완료):
+  - `DEVFORGE-SSOT-GOLDEN-AGE-KEY-PUB` (recipient, age16zanwfxx...) · `DEVFORGE-AGE-SECRET-KEY` (identity)
+  - **키쌍 완전 일치 검증 완료** (identity → public key 유추 대조 2026-09-28)
+  - 검증용 SP·구독·vault 정보 JSON: 현 테넌트 KV `AZURE-SP-ENV-CONFIG-MESIDS`
+    (SP appId `301a2c13...`, 구독 `89c6a8ee...` / Azure for Students)
+  - 서버 SP는 현 테넌트 SP로 mesids vault를 읽을 수 있으나, identity **영구 보유는
+    하지 않음** (검증 시 tmpfs 임시 사용 즉시 삭제 — 디스크 미기록)
+- 현 테넌트 KV·GitHub Secrets는 break-glass 독립성/정책 SSOT 위반으로 사용 안 함
+- **계정 구분 원칙: JSON/문서는 displayName이 아니라 Subscription GUID로 구분**
+  (둘 다 `Azure for Students` 이름이라 혼동 방지):
+  - mesids(`b08cd1bf`): sub `89c6a8ee...` → `AZURE-SP-ENV-CONFIG-MESIDS` (vault `kv-shared-devforge-krc`)
+  - 현 테넌트(`9ec65251`): sub `a942e898...` → `AZURE-SP-ENV-CONFIG-20137133` (vault `kv-common-prod-krc`)
+  - 두 JSON 모두 SP 인증 → 구독 → vault 자동 발견 검증 체인 통과 (2026-09-28)
+- 로컬 복호화: `age -d -i age-identity.txt <file>.age`
+- 단방향 push 원칙: onmydoc은 신뢰하지 않는 중계자(untrusted relay) — 동기화/역방향 쓰기 금지
+- 구 GPG 백업(`*.gpg`, 로컬 4개)은 보관기간 내 남아 있고 기존 GPG 개인키로 복구 가능
 
 ---
 
@@ -296,7 +315,7 @@ KV에 신규 자격증명이 **이미 결합형 키(`*_PROXY_KEY`)로 존재**�
 > KV 쓰기는 여전히 불가(SP get/list 전용)하나, 이 케이스는 **등록 불필요**. (A-2는 코드 매핑으로 종결)
 
 **등록 불필요 (0 사용 / 기본값 / 다른 키로 매핑):**
-`SMTP_HOST/PORT/USER`(kuhwa가 `GMAIL_SMTP_*_MINIPARK4U`에서 매핑), `DUCKDNS_ACCOUNT/DOMAIN/*_IP`, `OCI_HOME_REGION`, `OCI_IDCS_URL`, `DEVFORGE_SERVER_HOST/_USER/_SSH_KEY`, `NEWS_WEB_URL`, `NEON_DATABASE_URL`, `VERCEL_REVALIDATE_SECRET`, `MASKPROXY_API_KEY`(코드 미사용), `OCI_REGION`(기본 ap-chuncheon-1), `EBOOK_DAILY_TRAFFIC_LIMIT_MB`(기본 200).
+`SMTP_HOST/PORT/USER`(kuhwa가 `GMAIL-ENV-CONFIG-MINIPARK4U` JSON에서 매핑 — 비밀만 passwordRef `GMAIL-SMTP-PASSWORD-MINIPARK4U` 분리, 2026-09-28 5→2 통합), `DUCKDNS_ACCOUNT/DOMAIN/*_IP`, `OCI_HOME_REGION`, `OCI_IDCS_URL`, `DEVFORGE_SERVER_HOST/_USER/_SSH_KEY`, `NEWS_WEB_URL`, `NEON_DATABASE_URL`, `VERCEL_REVALIDATE_SECRET`, `MASKPROXY_API_KEY`(코드 미사용), `OCI_REGION`(기본 ap-chuncheon-1), `EBOOK_DAILY_TRAFFIC_LIMIT_MB`(기본 200).
 
 
 ### 우선순위 1: 나머지 systemd 서비스 전환
@@ -329,31 +348,35 @@ KV에 신규 자격증명이 **이미 결합형 키(`*_PROXY_KEY`)로 존재**�
 ## 10. 복원 절차 (DR)
 
 ### Key Vault 분실/삭제 시
-1. 로컬 PC에서 GPG 백업 복호화
+1. 로컬 PC에서 age 백업 복호화 (identity 보유)
    ```bash
-   gpg --import backup-private-key.asc
-   gpg --decrypt ~/.config/devforge/backups/secrets-backup-*.gpg
+   age -d -i age-identity.txt ~/.config/devforge/backups/secrets-backup-<ts>.age
+   # 구세대(.gpg)는 기존 GPG 개인키로: gpg --decrypt <file>.gpg
+   # onmydoc 사본: scp onmydoc:~/kv-backup/secrets-backup-<ts>.age . 후 동일 복호화
    ```
 2. 새 Key Vault 생성
 3. `kv-backup.py` 로직 반대로: env 파일 → Key Vault REST API PUT (이름 변환: `_` → `-`)
 4. 서비스 재시작
 
 ### 서버 재구축 시
-1. `kv-fetch-env.py` + `kv-backup.py` 배포
+1. `kv-fetch-env.py` + `kv-backup.py` + `openclaw-kv-resolver.py` 배포
 2. `azure-client-secret` 파일 배치 (chmod 600)
-3. `backup-public-key.asc` 배치
+3. `backup-age-recipient` 파일 배치 (recipient 공개키 — 재생성 불필요)
 4. systemd 서비스 유닛 적용 + 재시작
 
 ---
 
 ## 11. 보안 노트
 
-- 개인키는 **로컬 PC에서만** 보관 (서버/이메일/클라우드 저장 금지)
+- 시크릿 백업: age recipient만 서버에 보관, identity는 **로컬 PC에서만** (서버/onmydoc/이메일/클라우드 저장 금지)
+- age identity 2차 사본: **별도 테넌트(`b08cd1bf`) `kv-shared-devforge-krc`** — `DEVFORGE-SSOT-GOLDEN-AGE-KEY-PUB`/`DEVFORGE-AGE-SECRET-KEY` (키쌍 일치 검증 완료 2026-09-28). 현 테넌트 KV/GitHub Secrets는 독립성·정책 위반으로 배제. 검증 정보 JSON: 현 KV `AZURE-SP-ENV-CONFIG-MESIDS`
+- 백업 ship은 **단방향 push만** — 백업 서버가 소스를 오염시키지 못하도록 동기화 금지 (2026-09-28)
+- Azure KV purge protection: **OFF 유지** (2026-09-28 결정 — 영구·취소 불가 설정의 제약보다 soft-delete 90일 채택)
 - `azure-client-secret`은 서버에서만, chmod 600
 - `secrets.env` 평문은 삭제 완료(2026-09-18). 단 감사(2026-09-20) 결과 `secrets.env.backup.20260918` 백업은 디스크에 없음.
 - **`~/.claude/secrets.env` (NOTION_TOKEN 평문)**: 감사(2026-09-20)에서 발견. 당시 mode 644 → 600 조치 후 **삭제 완료**. KV(`NOTION-TOKEN-KEY`)와 중복이었고 `~/.claude/mcp.json`에 notion 서버 설정도 없어(비활성) 안전하게 제거.
 - GitHub org 시크릿에 시크릿 값이 아직 존재 — 안정 확인 후 삭제
-- 백업 .gpg 파일은 서버 디스크에 있지만 복호화 불가 (개인키 없음) — 추가 오프사이트 복사 권장
+- 시크릿 백업 오프사이트 복사: **onmydoc 단방향 ship 완료** (2026-09-28, 암호문만) — 로컬·원격 이중 사본
 - 프로세스 env 덤프 시 KV 값이 노출될 수 있음 — `tr`/`xargs`로 `/proc/<pid>/environ` 전체 출력 금지, 필요한 키만 grep
 
 ---
@@ -373,7 +396,7 @@ Azure 계정을 신규 계정(20137133, tenant `9ec65251`)으로 통일. 시크�
 | Service Principal | `sp-aiagent-rbac-prod-krc` (앱 ID `fcf857e3-686e-49a8-b58c-f49a33e7b840`, 2026-09-24 통일) |
 | devforge KV | `kv-common-prod-krc` + `kv-devforge-prod2-krc` (다중 병합, 93개) |
 | onmydoc KV | `kv-common-prod-krc` + `kv-onmydoc-prod-krc` (다중 병합, 88개) |
-| Document Intelligence | `di-common-prod-krc` (F0, rg-server-common-prod-krc) |
+| Document Intelligence | `di-common-prod-krc` (F0, rg-server-common-prod-krc) — **RBAC 전용** (2026-09-28: `disableLocalAuth=true`로 API 키 폐기, SP fcf857e3에 Cognitive Services Users 부여 · 실측 200 확인 · JSON `planned.azureAi[0]`에 인벤토리 등록) |
 | KV 접근 방식 | **Access Policy 모드** (`enableRbacAuthorization=false` — RBAC 역할 무효). 단일 SP `sp-aiagent-rbac-prod-krc`(fcf857e3, get/list/**set**, 2026-09-24 읽기+쓰기 통일). 이전 읽기 SP `DevForge-llm-Qwen`(abc5aab0)는 미사용 |
 
 ### 스크립트 변경
@@ -480,3 +503,28 @@ toki31에서 MaskProxy 폴백을 제거(407로 통과 불가)하고, 시크릿�
 - **주입**: `ebook-api.service` `--keys`에 `EBOOK-*` 추가.
 - 로컬 개발: `load_dotenv`는 유지(파일 없으면 무해). `.env.local`은 템플릿.
 - 등록은 쓰기 SP `sp-aiagent-rbac-prod-krc`로 수행.
+
+## 16. Azure 계정 매핑표 (2026-09-28)
+
+> **판별 규칙 (혼동 방지 필수)**: Azure 계정/리소스를 언급할 때는 **Subscription GUID 또는
+> 전용 JSON 시크릿 이름으로만 특정**한다. displayName으로 구분하지 않는다 —
+> 여러 계정이 모두 `Azure for Students` 이름이라서 반드시 혼동된다.
+> 에이전트(대화 컨텍스트)도 아래 표로만 계정을 판별한다.
+
+| # | 계정/별칭 | Tenant GUID | Subscription GUID | 구독 번호 | SP appId | SP objectId | 리소스 naming 패턴 | 전용 JSON 시크릿 | 전용 KV·리소스 |
+|---|-----------|-------------|-------------------|-----------|----------|-------------|--------------------|-----------------|----------------|
+| 1 | 현 DevForge | `9ec65251-a106-4dc3-9878-4278caa80b1b` | `a942e898-e1ee-47f4-b9b3-d9475672ff4e` | `20137133` | `fcf857e3-686e-49a8-b58c-f49a33e7b840` | `2b34f8ee-f785-4b6a-a3c6-339ba4cba9f5` | `*-common-prod-krc` | `AZURE-SP-ENV-CONFIG-20137133` | kv-common-prod-krc · kv-devforge-prod2-krc · kv-onmydoc-prod-krc (Access Policy) · di/lang/cv-common · stcommonprodkrc |
+| 2 | mesids | `b08cd1bf-7952-489c-8fbb-aa907bb74709` | `89c6a8ee-eb11-4ec2-b077-7f524f752815` | (미확인) | `301a2c13-4a45-4a5a-ae48-69787959826a` | `b700ff7c-c951-477c-95b9-09072560dbf6` | `*-shared-devforge-krc` | `AZURE-SP-ENV-CONFIG-MESIDS` | kv-shared-devforge-krc (RBAC) · di/lang/cv-shared · stshareddevforgeprodkrc |
+| 3 | KUHWADOCS | `b08cd1bf-7952-489c-8fbb-aa907bb74709` | `d0a7db48-d9a5-4e71-8425-90e90f541520` | (미확인) | `051a49ee-6eff-4678-a3ea-d54ec86b1bb3` | `980ad91e-fb66-4b02-aa35-22fd1ed7522e` | `*-kuhwadocs-prod-krc` | `AZURE-SP-ENV-CONFIG-KUHWADOCS` | kv-kuhwadocs-prod-krc · di/lang/cv-kuhwadocs-prod-krc · stkuhwadocsprodkrc |
+| 4 | MINIPARK4U | `b08cd1bf-7952-489c-8fbb-aa907bb74709` | `e71711e2-5df5-4259-bd0d-4bd58fd1ca67` | (미확인) | `5b0d635f-8b25-4d38-90cc-aefbb49688a8` | `6595401a-edb0-4858-a2f2-ea3644a4902d` | `*-minipark4u-prod-jpw` | `AZURE-SP-ENV-CONFIG-MINIPARK4U` | kv-minipark4u-prod-jpw · di/lang/cv-minipark4u-prod-jpw · stminipark4uprodjpw |
+
+**판별 실전 절차**:
+1. 어떤 JSON(`AZURE-SP-ENV-CONFIG-*`)에 속하는 얘기인지 확인 → 그 JSON의 `subscription.id`/`tenantId`가 곧 계정
+2. 리소스가 어느 계정 것인지는 **naming 패턴**으로 교차 검증 (`common-prod-krc` = 현 계정, `shared-devforge-krc` = mesids)
+3. `Azure for Students` 같은 displayName은 구분 기준으로 쓰지 않는다
+
+**서버 az CLI 세션 범위**: 서버의 `az`는 **1번 계정 SP(`fcf857e3`) / tenant `9ec65251`** 로 로그인된 상태 — `az` 기반 작업(kv-safe list/set 등)은 1번 계정 범위. 2번(mesids)은 JSON의 SP 자격증명으로 REST 직접 호출로 접근한다.
+
+**정본 통합 완료 (2026-09-28)**: 계정 3·4의 개별 SP 3벌 시크릿(`AZURE-SP-KUHWADOCS-*`,
+`AZURE-SP-MINIPARK4U-*` — 코드/문서 참조 0건)은 정본 JSON으로 통합 완료 → **삭제 후보**.
+참고: 2·3·4번 계정은 전부 **동일 테넌트 `b08cd1bf`**이며 구독만 다르다 (구독 3종이 한 테넌트).
