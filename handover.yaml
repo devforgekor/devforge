@@ -1,18 +1,13 @@
 last_checkpoint:
-  time: '2026-09-28T02:20:01.022861+00:00'
-  summary: 6 source, 1 generated
-  total_files: 15
+  time: '2026-09-28T16:50:01.200855+00:00'
+  summary: 1 docs, 1 generated
+  total_files: 4
   recent_files:
     data: []
-    docs: []
+    docs:
+    - server/docs/handover-secrets-kv.md
     config: []
-    source:
-    - server/scripts/cli.py
-    - server/scripts/lib/research/duckai.py
-    - server/scripts/lib/research/web.py
-    - server/scripts/web_chat.py
-    - server/tests/test_research_duckai.py
-    - server/tests/test_web_chat.py
+    source: []
     generated:
     - server/collect_checkpoint.json
   git: {}
