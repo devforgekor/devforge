@@ -3,6 +3,11 @@
 # Path: imported by — lib/research/web.py (free fallback), lib/research/__init__.py
 """DuckDuckGo HTML search — key-less provider returning structured JSON results.
 
+One keep-alive connection per endpoint is reused across queries: a fresh
+CONNECT+TLS handshake costs 5,311 B against a ~4,900 B gzipped SERP, so reusing
+it halves the bytes the proxy bills for (measured). DDG answers `max-age=1` with
+no ETag, so nothing can be cached at the HTTP layer.
+
 [WORKAROUND] DDG serves a CAPTCHA/anomaly page (HTTP 202, ~14 KB body) to datacenter
 IPs, so requests go through the DataImpulse residential proxy. The exit IP is sticky
 for 3h rather than rotating per request, so a retry only clears the CAPTCHA while the
@@ -13,14 +18,15 @@ so a failed retry costs 0 B (only latency). The `html` endpoint is scraped; the 
 
 from __future__ import annotations
 
+import base64
 import gzip
 import html
+import http.client
 import re
 import sys
+import threading
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from html.parser import HTMLParser
 from typing import Optional
 
@@ -139,26 +145,106 @@ def parse_serp(raw: bytes) -> list[dict[str, str]]:
     return [r for r in parser.results if r["url"] and r["title"]]
 
 
+_CONN_LOCK = threading.Lock()
+_CONN: dict[str, "http.client.HTTPSConnection"] = {}
+_CONN_PROXY: dict[str, Optional[str]] = {}
+_REUSE_ATTEMPTS = 2
+
+
+def _basic_auth(proxy_url: str) -> str:
+    parts = urllib.parse.urlsplit(proxy_url)
+    user = urllib.parse.unquote(parts.username or "")
+    password = urllib.parse.unquote(parts.password or "")
+    token = base64.b64encode(f"{user}:{password}".encode()).decode()
+    return f"Basic {token}"
+
+
+def _open_connection(
+    endpoint: str, proxy_url: Optional[str]
+) -> Optional["http.client.HTTPSConnection"]:
+    """Open a keep-alive tunnel to `endpoint`. Caller must hold `_CONN_LOCK`.
+
+    [WHY] a fresh CONNECT+TLS handshake costs 5,311 B (measured: CONNECT 203 B +
+    TLS 1.3 5,108 B) while a gzipped SERP is ~4,900 B, so reusing one tunnel
+    across queries halves the bytes the residential proxy bills for — the same
+    warm-session principle as the Duck.ai client.
+    """
+    target = urllib.parse.urlsplit(endpoint)
+    host, port = target.hostname, target.port or 443
+    if not host:
+        return None
+    try:
+        if proxy_url:
+            hop = urllib.parse.urlsplit(proxy_url)
+            proxy_host = hop.hostname
+            if not proxy_host:
+                return None
+            conn = http.client.HTTPSConnection(proxy_host, hop.port or 443, timeout=TIMEOUT)
+            conn.set_tunnel(host, port, headers={"Proxy-Authorization": _basic_auth(proxy_url)})
+        else:
+            conn = http.client.HTTPSConnection(host, port, timeout=TIMEOUT)
+    except Exception:  # noqa: BLE001 — surfaced as status 0 to the caller
+        return None
+    _CONN[endpoint] = conn
+    _CONN_PROXY[endpoint] = proxy_url
+    return conn
+
+
+def _close_connection(endpoint: str) -> None:
+    conn = _CONN.pop(endpoint, None)
+    _CONN_PROXY.pop(endpoint, None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001 — best-effort teardown
+            pass
+
+
+def _connection(endpoint: str, proxy_url: Optional[str]) -> Optional["http.client.HTTPSConnection"]:
+    """Reuse the live tunnel for `endpoint`, reopening it when the proxy changed."""
+    conn = _CONN.get(endpoint)
+    if conn is None:
+        return _open_connection(endpoint, proxy_url)
+    if _CONN_PROXY.get(endpoint) != proxy_url:
+        # [WHY] the exit country lives in the proxy credentials (`user__cr.kr`), so a
+        # country change must not keep tunnelling through the previous exit.
+        _close_connection(endpoint)
+        return _open_connection(endpoint, proxy_url)
+    return conn
+
+
 def _post(endpoint: str, query: str, region: str, proxy_url: Optional[str]) -> tuple[int, bytes]:
     data = urllib.parse.urlencode({"q": query, "kl": region}).encode()
-    request = urllib.request.Request(endpoint, data=data, headers=_HEADERS)
-    handlers = (
-        [urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})] if proxy_url else []
-    )
-    try:
-        with urllib.request.build_opener(*handlers).open(request, timeout=TIMEOUT) as resp:
+    path = urllib.parse.urlsplit(endpoint).path or "/"
+    # [WHY] one HTTP/1.1 connection cannot serve concurrent requests, so the whole
+    # exchange is serialised. DDG rate-limits rapid requests anyway (measured: 4/4
+    # at a 10 s spacing vs 2/4 when flooded), so serialising costs nothing.
+    with _CONN_LOCK:
+        last_error = b""
+        for _ in range(_REUSE_ATTEMPTS):
+            conn = _connection(endpoint, proxy_url)
+            if conn is None:
+                return 0, last_error or b"connection failed"
+            try:
+                conn.request("POST", path, body=data, headers=_HEADERS)
+                resp = conn.getresponse()
+            except (http.client.HTTPException, OSError) as exc:
+                # [WHY] an idle tunnel can be dropped server-side; one fresh
+                # handshake (5.3 KB) is far cheaper than failing the search.
+                _close_connection(endpoint)
+                last_error = str(exc).encode()
+                continue
             if resp.status != 200:
                 # [WHY] only status 200 is ever parsed, and a 202 anomaly page costs
-                # ~14 KB uncompressed — 3x a good response. Downloading it is pure waste.
+                # ~14 KB uncompressed — 3x a good response. Draining it to preserve
+                # the tunnel would spend 14 KB to save a 5.3 KB handshake, so the
+                # connection is dropped instead.
+                resp.close()
+                _close_connection(endpoint)
                 return resp.status, b""
-            body = _gunzip(resp.read(), resp.headers.get("Content-Encoding", ""))
+            body = _gunzip(resp.read(), resp.getheader("Content-Encoding") or "")
             return resp.status, body
-    except urllib.error.HTTPError as exc:
-        # [WHY] same as above: a non-2xx body is never inspected, so don't fetch it.
-        exc.close()
-        return exc.code, b""
-    except Exception as exc:  # noqa: BLE001 — surfaced as an empty result set
-        return 0, str(exc).encode()
+        return 0, last_error
 
 
 def duckduckgo_search(

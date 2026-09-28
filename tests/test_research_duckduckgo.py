@@ -46,6 +46,83 @@ _LITE_SERP = b"""
 """
 
 
+# ── keep-alive connection fakes ───────────────────────────────────────
+
+
+class _FakeResponse:
+    def __init__(self, status: int = 200, body: bytes = b"", encoding: str = ""):
+        self.status = status
+        self._body = body
+        self._encoding = encoding
+        self.closed = False
+
+    def getheader(self, name, default=None):
+        if name == "Content-Encoding":
+            return self._encoding or default
+        return default
+
+    def read(self, *_a):
+        if self.status != 200:
+            raise AssertionError(f"a {self.status} body must not be downloaded")
+        return self._body
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeConn:
+    def __init__(self, factory, host=None, port=None, timeout=None, error=None):
+        self._factory = factory
+        self._error = error
+        self.host, self.port, self.timeout = host, port, timeout
+        self.tunnel = None
+        self.requests = []
+        self.closed = False
+
+    def set_tunnel(self, host, port=None, headers=None):
+        self.tunnel = (host, port, headers)
+
+    def request(self, method, path, body=None, headers=None):
+        if self._error is not None:
+            raise self._error
+        self.requests.append((method, path, body, headers))
+
+    def getresponse(self):
+        return self._factory()
+
+    def close(self):
+        self.closed = True
+
+
+def _patch_https(monkeypatch, specs):
+    """Replace http.client.HTTPSConnection with fakes built from `specs`.
+
+    Each spec is {"response": _FakeResponse} or {"error": Exception}; the last
+    entry repeats once the created connections run out.
+    """
+    created = []
+
+    class _Conn(_FakeConn):
+        def __init__(self, host=None, port=None, timeout=None):
+            spec = specs[len(created)] if len(created) < len(specs) else specs[-1]
+            super().__init__(
+                lambda: spec.get("response"), host, port, timeout, error=spec.get("error")
+            )
+            created.append(self)
+
+    monkeypatch.setattr(duckduckgo.http.client, "HTTPSConnection", _Conn)
+    return created
+
+
+@pytest.fixture(autouse=True)
+def _clear_conns():
+    duckduckgo._CONN.clear()
+    duckduckgo._CONN_PROXY.clear()
+    yield
+    duckduckgo._CONN.clear()
+    duckduckgo._CONN_PROXY.clear()
+
+
 # ── _unwrap_url ───────────────────────────────────────────────────────
 
 
@@ -137,87 +214,95 @@ def test_should_return_raw_body_when_corrupt_gzip():
 
 
 def test_should_parse_rows_when_post_returns_gzip(monkeypatch):
-    payload = gzip.compress(_SERP)
-
-    class _Resp:
-        status = 200
-        headers = {"Content-Encoding": "gzip"}
-
-        def read(self):
-            return payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            return False
-
-    monkeypatch.setattr(
-        duckduckgo.urllib.request,
-        "build_opener",
-        lambda *_a: type("_Opener", (), {"open": lambda self, req, timeout=None: _Resp()})(),
+    conns = _patch_https(
+        monkeypatch, [{"response": _FakeResponse(200, gzip.compress(_SERP), encoding="gzip")}]
     )
+
     status, body = duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", None)
+
     assert status == 200
     assert body == _SERP
     assert len(duckduckgo.parse_serp(body)) == 2
+    method, path, req_body, headers = conns[0].requests[0]
+    assert (method, path) == ("POST", "/html/")
+    assert req_body == b"q=q&kl=wt-wt"
+    assert headers["Accept-Encoding"] == "gzip"
 
 
 # ── body read policy (only 200 bodies are ever parsed) ────────────────
 
 
 def test_should_not_read_body_when_status_not_200(monkeypatch):
-    class _Resp:
-        status = 202
-        headers = {"Content-Encoding": "gzip"}
+    conns = _patch_https(monkeypatch, [{"response": _FakeResponse(202)}])
 
-        def read(self, *_a):
-            raise AssertionError("a 202 anomaly body (~14 KB) must not be downloaded")
-
-        def close(self):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            self.close()
-            return False
-
-    monkeypatch.setattr(
-        duckduckgo.urllib.request,
-        "build_opener",
-        lambda *_a: type("_O", (), {"open": lambda self, req, timeout=None: _Resp()})(),
-    )
     assert duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", None) == (202, b"")
+    # an unread body poisons the tunnel, so it must be dropped, not reused
+    assert conns[0].closed
+    assert duckduckgo._CONN == {}
 
 
-def test_should_not_read_body_when_http_error(monkeypatch):
-    class _Body:
-        def __init__(self):
-            self.read_calls = 0
-            self.closed = False
+def test_should_not_read_body_when_status_is_error(monkeypatch):
+    conns = _patch_https(monkeypatch, [{"response": _FakeResponse(404)}])
 
-        def read(self, *_a):
-            self.read_calls += 1
-            return b"404 body"
-
-        def close(self):
-            self.closed = True
-
-    err_body = _Body()
-
-    def _open(self, req, timeout=None):
-        raise duckduckgo.urllib.error.HTTPError("http://x/", 404, "Not Found", None, err_body)
-
-    monkeypatch.setattr(
-        duckduckgo.urllib.request,
-        "build_opener",
-        lambda *_a: type("_O", (), {"open": _open})(),
-    )
     assert duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", None) == (404, b"")
-    assert err_body.read_calls == 0
-    assert err_body.closed
+    assert conns[0].closed
+
+
+# ── keep-alive connection reuse ───────────────────────────────────────
+
+
+def test_should_reuse_connection_when_called_twice(monkeypatch):
+    conns = _patch_https(
+        monkeypatch, [{"response": _FakeResponse(200, gzip.compress(_SERP), encoding="gzip")}]
+    )
+
+    assert duckduckgo._post(duckduckgo.HTML_ENDPOINT, "a", "wt-wt", None)[0] == 200
+    assert duckduckgo._post(duckduckgo.HTML_ENDPOINT, "b", "wt-wt", None)[0] == 200
+
+    assert len(conns) == 1
+    assert len(conns[0].requests) == 2
+    assert not conns[0].closed
+
+
+def test_should_tunnel_through_proxy_when_proxy_given(monkeypatch):
+    conns = _patch_https(monkeypatch, [{"response": _FakeResponse(200, _SERP)}])
+
+    duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", "http://user__cr.kr:pw@host:823")
+
+    host, port, headers = conns[0].tunnel
+    assert (host, port) == ("html.duckduckgo.com", 443)
+    assert headers["Proxy-Authorization"].startswith("Basic ")
+
+
+def test_should_reopen_connection_when_proxy_changes(monkeypatch):
+    conns = _patch_https(
+        monkeypatch,
+        [{"response": _FakeResponse(200, _SERP)}, {"response": _FakeResponse(200, _SERP)}],
+    )
+
+    duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", "http://a:1@host:823")
+    first = conns[0]
+    duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", "http://b:2@host:823")
+
+    assert len(conns) == 2
+    assert first.closed
+
+
+def test_should_reconnect_once_when_tunnel_is_stale(monkeypatch):
+    conns = _patch_https(
+        monkeypatch,
+        [
+            {"error": duckduckgo.http.client.RemoteDisconnected("stale")},
+            {"response": _FakeResponse(200, _SERP)},
+        ],
+    )
+
+    status, body = duckduckgo._post(duckduckgo.HTML_ENDPOINT, "q", "wt-wt", None)
+
+    assert status == 200
+    assert body == _SERP
+    assert len(conns) == 2
+    assert conns[0].closed
 
 
 # ── web.py rotation integration ───────────────────────────────────────
