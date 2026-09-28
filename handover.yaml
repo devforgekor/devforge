@@ -1,13 +1,15 @@
 last_checkpoint:
-  time: '2026-09-27T23:50:00.868182+00:00'
-  summary: 2 source, 1 generated
-  total_files: 9
+  time: '2026-09-28T00:30:01.384903+00:00'
+  summary: 4 source, 1 generated
+  total_files: 14
   recent_files:
     data: []
     docs: []
     config: []
     source:
+    - server/scripts/lib/research/duckai.py
     - server/scripts/lib/research/duckduckgo.py
+    - server/tests/test_research_duckai.py
     - server/tests/test_research_duckduckgo.py
     generated:
     - server/collect_checkpoint.json
