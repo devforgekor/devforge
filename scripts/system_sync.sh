@@ -11,12 +11,14 @@ LOG "system_sync start"
 
 # ── duckdns ──
 DUCKDNS_TOKEN_KEY="${DUCKDNS_TOKEN_KEY:-}"
-if curl -s -o /dev/null -w "%{http_code}" \
-    "https://www.duckdns.org/update?domains=devforgekor&token=${DUCKDNS_TOKEN_KEY:-MISSING}&ip=&verbose=true" \
-    2>/dev/null | grep -q 200; then
+# [WARNING] DuckDNS returns HTTP 200 with body "KO" on an invalid token — check the body, not the status code.
+duckdns_resp=$(curl -s --max-time 20 \
+    "https://www.duckdns.org/update?domains=devforgekor,myclerk&token=${DUCKDNS_TOKEN_KEY:-MISSING}&ip=" \
+    2>/dev/null)
+if [ "$duckdns_resp" = "OK" ]; then
     LOG "  duckdns OK"
 else
-    LOG "  duckdns FAILED (non-fatal)" >&2
+    LOG "  duckdns FAILED (non-fatal, resp=${duckdns_resp:-empty})" >&2
 fi
 
 # ── git safety-net snapshot (hidden ref, never touches main history) ──

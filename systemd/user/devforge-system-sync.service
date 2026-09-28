@@ -3,7 +3,7 @@ Description=DevForge 30min system sync — gen_architecture + duckdns
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash /opt/projects/server/scripts/system_sync.sh
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /bin/bash /opt/projects/server/scripts/system_sync.sh --keys DUCKDNS-TOKEN-KEY
 ExecStartPost=-/opt/projects/server/scripts/deploy/heartbeat-ping.sh system_sync
 StandardOutput=journal
 StandardError=journal
