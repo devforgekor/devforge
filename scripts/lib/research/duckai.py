@@ -446,6 +446,14 @@ class DuckAIClient:
     def _select_model(self, model: str) -> None:
         page = self._page
         assert page is not None
+        if not page.locator("button").filter(has_text=_MODEL_PATTERN).count():
+            # [WHY] sending a message unmounts the picker button — the model name
+            # survives only as a read-only <strong> label (measured), so no button
+            # matches the pattern and the lookup below would time out. A reload
+            # brings the button back; the persistent profile keeps that cheap.
+            _log("model picker gone after chat — reloading to restore it")
+            page.reload(wait_until="domcontentloaded", timeout=60_000)
+            page.wait_for_selector("textarea", timeout=30_000)
         selector = page.locator("button").filter(has_text=_MODEL_PATTERN).first
         if _normalize_model(model) == _normalize_model(selector.inner_text()):
             return

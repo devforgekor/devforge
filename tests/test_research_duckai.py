@@ -140,6 +140,57 @@ def test_should_default_to_first_model_when_using_default():
     assert duckai.MODELS[0][0] == duckai.DEFAULT_MODEL
 
 
+# ── _select_model picker restoration ──────────────────────────────────
+
+
+def test_should_reload_then_select_when_model_picker_missing():
+    # Sending a message unmounts the picker button (measured live); only a
+    # read-only <strong> label keeps the model name, so no button matches.
+    state = {"picker": False, "reloads": 0, "clicks": []}
+
+    class _Loc:
+        def __init__(self, kind: str):
+            self._kind = kind
+
+        def filter(self, **_kw):
+            return self
+
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            return 1 if state["picker"] else 0
+
+        def inner_text(self, *_a, **_k):
+            return "5.6 Luna"
+
+        def click(self, *_a, **_k):
+            state["clicks"].append(self._kind)
+
+    class _Page:
+        def locator(self, sel: str):
+            return _Loc("trigger" if sel == "button" else "menuitem")
+
+        def reload(self, **_kw):
+            state["reloads"] += 1
+            state["picker"] = True
+
+        def wait_for_selector(self, *_a, **_k):
+            return None
+
+        def wait_for_timeout(self, _ms):
+            return None
+
+    client = duckai.DuckAIClient.__new__(duckai.DuckAIClient)
+    client._page = _Page()
+
+    client._select_model("GPT-5.4 mini")
+
+    assert state["reloads"] == 1
+    assert state["clicks"] == ["trigger", "menuitem"]
+
+
 # ── _decode_body ──────────────────────────────────────────────────────
 
 
