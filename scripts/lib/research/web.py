@@ -322,14 +322,15 @@ def web_search_structured(query: str, max_results: int = 5) -> list[dict]:
     return get_proxy().search_structured(query, max_results)
 
 
-def duckai_ask(prompt: str, model: str | None = None) -> str:
+def duckai_ask(prompt: str, model: str | None = None, fresh: bool = False) -> str:
     """Ask Duck.ai on a warm browser session (see lib/research/duckai.py).
 
     Lazy import so Playwright is only required when Duck.ai is actually used.
+    `fresh=True` starts a new chat so earlier questions do not leak into the answer.
     """
     from lib.research.duckai import duckai_ask as _ask
 
-    return _ask(prompt, model)
+    return _ask(prompt, model, fresh)
 
 
 def search_stats() -> str:

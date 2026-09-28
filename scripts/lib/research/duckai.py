@@ -87,6 +87,7 @@ _BLOCK_URLS = (
 )
 
 _CHAT_URL = "/duckchat/v1/chat"
+_NEW_CHAT_LABEL = "새로운 채팅"
 _IDLE_ENV = "DEVFORGE_DUCKAI_IDLE_SEC"
 _TIMEOUT_ENV = "DEVFORGE_DUCKAI_TIMEOUT_SEC"
 _XVFB_ENV = "DEVFORGE_DUCKAI_XVFB_DISPLAY"
@@ -315,7 +316,7 @@ class DuckAIClient:
         self._timeout = _env_float(_TIMEOUT_ENV, _DEFAULT_TIMEOUT_SEC)
         self._idle = _env_float(_IDLE_ENV, _DEFAULT_IDLE_SEC)
         self._queue: queue.Queue[
-            Optional[tuple[str, Optional[str], concurrent.futures.Future[str]]]
+            Optional[tuple[str, Optional[str], bool, concurrent.futures.Future[str]]]
         ] = queue.Queue()
         self._closing = False
         self._last_used = time.monotonic()
@@ -332,13 +333,13 @@ class DuckAIClient:
 
     # -- public API --
 
-    def ask(self, prompt: str, model: Optional[str] = None) -> str:
+    def ask(self, prompt: str, model: Optional[str] = None, fresh: bool = False) -> str:
         if not prompt or not prompt.strip():
             raise DuckAIError("empty prompt")
         if self._closing:
             raise DuckAIError("client is closed")
         fut: concurrent.futures.Future[str] = concurrent.futures.Future()
-        self._queue.put((prompt, model, fut))
+        self._queue.put((prompt, model, fresh, fut))
         try:
             return fut.result(timeout=self._timeout + 30)
         except concurrent.futures.TimeoutError as exc:
@@ -366,11 +367,11 @@ class DuckAIClient:
                 continue
             if item is None:
                 break
-            prompt, model, fut = item
+            prompt, model, fresh, fut = item
             try:
                 if self._page is not None and time.monotonic() - self._last_used > self._idle:
                     self._teardown()
-                fut.set_result(self._ask(prompt, model))
+                fut.set_result(self._ask(prompt, model, fresh))
                 self._last_used = time.monotonic()
             except Exception as exc:  # noqa: BLE001 — surfaced to caller via future
                 fut.set_exception(exc)
@@ -443,6 +444,26 @@ class DuckAIClient:
         self._pw = None
         self._cdp = None
 
+    def _start_new_chat(self, page: Page) -> None:
+        """Click duck.ai's new-chat button so the question starts isolated.
+
+        [WHY] a warm session otherwise carries every earlier question, which is
+        wrong for unrelated prompts. The label is matched as a substring, so the
+        shortcut hint ("새로운 채팅⏎CTRL + ⇧ + O") still matches while the
+        sibling "새로운 음성 채팅" does not.
+        """
+        button = page.locator("button").filter(has_text=_NEW_CHAT_LABEL).first
+        try:
+            button.click(timeout=5000)
+        except Exception:  # noqa: BLE001 — label drift; the fallback also isolates
+            # [WHY] a reload drops the in-memory conversation too and the
+            # persistent profile keeps it cheap, so isolation is never silently lost.
+            _log("new-chat button unavailable — reloading to isolate the question")
+            page.reload(wait_until="domcontentloaded", timeout=60_000)
+            page.wait_for_selector("textarea", timeout=30_000)
+        else:
+            page.wait_for_timeout(400)
+
     def _select_model(self, model: str) -> None:
         page = self._page
         assert page is not None
@@ -464,10 +485,12 @@ class DuckAIClient:
         ).first.click()
         page.wait_for_timeout(500)
 
-    def _ask(self, prompt: str, model: Optional[str]) -> str:
+    def _ask(self, prompt: str, model: Optional[str], fresh: bool = False) -> str:
         self._ensure_started()
         page = self._page
         assert page is not None
+        if fresh:
+            self._start_new_chat(page)
         if model and model != self._model:
             self._select_model(model)
             self._model = model
@@ -591,6 +614,9 @@ def get_duckai_client() -> DuckAIClient:
     return _client
 
 
-def duckai_ask(prompt: str, model: Optional[str] = None) -> str:
-    """Ask Duck.ai a question on a warm session. Raises DuckAIError on failure."""
-    return get_duckai_client().ask(prompt, model)
+def duckai_ask(prompt: str, model: Optional[str] = None, fresh: bool = False) -> str:
+    """Ask Duck.ai a question on a warm session. Raises DuckAIError on failure.
+
+    Set `fresh=True` to start a brand-new chat (no context from earlier questions).
+    """
+    return get_duckai_client().ask(prompt, model, fresh)

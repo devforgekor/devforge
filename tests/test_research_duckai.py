@@ -191,6 +191,67 @@ def test_should_reload_then_select_when_model_picker_missing():
     assert state["clicks"] == ["trigger", "menuitem"]
 
 
+# ── _start_new_chat ───────────────────────────────────────────────────
+
+
+def test_should_click_new_chat_when_isolation_requested():
+    events = []
+
+    class _Loc:
+        def filter(self, **_kw):
+            return self
+
+        @property
+        def first(self):
+            return self
+
+        def click(self, timeout=None):
+            events.append("click")
+
+    class _Page:
+        def locator(self, _sel):
+            return _Loc()
+
+        def wait_for_timeout(self, _ms):
+            events.append("wait")
+
+    client = duckai.DuckAIClient.__new__(duckai.DuckAIClient)
+    client._start_new_chat(_Page())
+
+    assert events == ["click", "wait"]
+
+
+def test_should_reload_when_new_chat_button_unavailable():
+    # Isolation must never be silently lost — a reload also drops the conversation.
+    events = []
+
+    class _Loc:
+        def filter(self, **_kw):
+            return self
+
+        @property
+        def first(self):
+            return self
+
+        def click(self, timeout=None):
+            raise TimeoutError("button not found")
+
+    class _Page:
+        def locator(self, _sel):
+            return _Loc()
+
+        def reload(self, **_kw):
+            events.append("reload")
+
+        def wait_for_selector(self, *_a, **_k):
+            events.append("wait_selector")
+
+    client = duckai.DuckAIClient.__new__(duckai.DuckAIClient)
+    client._start_new_chat(_Page())
+
+    assert events == ["reload", "wait_selector"]
+
+
 # ── _decode_body ──────────────────────────────────────────────────────
 
 

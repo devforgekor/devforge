@@ -568,6 +568,26 @@ def cmd_research_fetch(args):
     print(r.get("text", ""))
 
 
+def cmd_research_ask(args):
+    from lib.research.web import duckai_ask
+
+    try:
+        text = duckai_ask(args.prompt, model=args.model, fresh=args.fresh)
+    except Exception as e:
+        print(f"ask error: {e}", file=sys.stderr)
+        return
+    if args.json:
+        print(
+            json.dumps(
+                {"answer": text, "model": args.model, "fresh": args.fresh},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    print(text)
+
+
 MODE_FILE_INFERENCE = "/opt/ai_data/scripts/current-mode-inference.env"
 SYSTEM_MODE_FILE = "/opt/ai_data/scripts/current-system-mode.env"
 
@@ -1615,6 +1635,17 @@ async def main():
     r_fetch.add_argument("--max-chars", type=int, default=50000)
     r_fetch.add_argument("--json", action="store_true")
 
+    r_ask = res_sub.add_parser("ask", help="Duck.ai 웜 세션에 질문 (브라우저 실행)")
+    r_ask.add_argument("prompt")
+    r_ask.add_argument("--model", "-m", help="모델 id (예: GPT-5.4 mini)")
+    r_ask.add_argument(
+        "--fresh",
+        "-f",
+        action="store_true",
+        help="새로운 채팅부터 시작 — 이전 질문의 컨텍스트를 섞지 않음",
+    )
+    r_ask.add_argument("--json", action="store_true")
+
     p_status = sub.add_parser(
         "status", help="Live system status — containers, models, timers, tasks, resources"
     )
@@ -1819,6 +1850,8 @@ async def main():
             cmd_research_docs(args)
         elif args.research_command == "fetch":
             cmd_research_fetch(args)
+        elif args.research_command == "ask":
+            cmd_research_ask(args)
         else:
             p_research.print_help()
     elif args.command == "mem-search":
