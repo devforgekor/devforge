@@ -1,16 +1,17 @@
 last_checkpoint:
-  time: '2026-09-29T11:30:01.30828+00:00'
-  summary: 3 source, 1 docs, 1 generated
-  total_files: 10
+  time: '2026-09-29T12:20:01.015331+00:00'
+  summary: 2 source, 3 docs, 1 generated
+  total_files: 13
   recent_files:
     data: []
     docs:
+    - server/docs/LLM_PROVIDER_PLAN.md
+    - server/docs/adr/0005-extraction-routing.md
     - server/docs/architecture/code-structure.yaml
     config: []
     source:
-    - server/scripts/day_cycle.sh
-    - server/scripts/lib/model_registry.py
-    - server/scripts/pipelines/extract.py
+    - server/scripts/chrome_ingest.py
+    - server/tests/unit/test_chrome_ingest.py
     generated:
     - server/collect_checkpoint.json
   git: {}
@@ -424,9 +425,7 @@ known_issues:
     RSS 9,397MB(파일4,461M) · extract 추정6.5GB(ctx8192+cache_ram1024) · reranker 추정2.9GB · 비LLM 기본부하 3,100MB. 시나리오: embed 단독
     12.5GB OK / day(extract+reranker) 12.5GB OK / embed+day 동시 21.9GB → 잔여1GB 로 부적합. 동시가 필요해지면 embed만 소형 임베딩모델(Qwen3-Embedding-4B-Q4≈2.5GB
     또는 bge-m3≈1.2GB)로 교체가 정답(RSS 9.4→3GB, 합계 ~14GB). embed 상주는 OpenClaw memory search(8081) 연결로 불가. entrypoint 재검토 지점: inference-entrypoint.sh
-    mode dispatch + scripts/lib/model_registry.py(MODEL_METADATA). 임베딩·리랭커는 OpenCode 계열 API 부재(GO 30종/ZEN 44종 전부 chat, /embeddings·/rerank
-    404)로 로컬 고정 확정. daycycle API 전환 근거는 docs/adr/0005-extraction-routing.md, 공급자 구현 계획은 docs/LLM_PROVIDER_PLAN.md §7 에 2026-09-29
-    실측 반영.'
+    mode dispatch + scripts/lib/model_registry.py(MODEL_METADATA).'
   resolved: false
 - text: 'REFACTOR CUTOVER PENDING: live systemd units + Quadlet ExecStart still run scripts/*; src/devforge is installed and
     functional but not wired into services. See system-architecture.md §3.5 and REFACTORING_PLAN.md.'
