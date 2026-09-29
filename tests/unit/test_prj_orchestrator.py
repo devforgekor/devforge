@@ -9,6 +9,8 @@ from lib.prj.orchestrator import (
     Phase,
     PRJOrchestrator,
     Round,
+    _clip,
+    _rebuttal_prompt,
     _split_verdict,
     detect_answer_exchange,
     detect_consensus,
@@ -252,3 +254,35 @@ class TestShouldSplitVerdictWhenPromptRequestsIt:
         orch.run("t11", "질문")
         assert len(p.calls) == 2
         assert len(r.calls) == 2
+
+
+class TestShouldClipContextWhenAboveBrowserLimit:
+    """실측(2026-09-29): 브라우저 타이핑은 55.8k자 통과 / 58.5k자 실패(입력 잘림).
+
+    재논쟁 라운드는 P+R 답변을 함께 싣기 때문에 원 질문보다 크게 커진다.
+    """
+
+    def test_should_not_clip_when_below_limit(self):
+        text = "짧은 주장 " * 100
+        assert _clip(text) == text
+
+    def test_should_clip_when_above_limit(self):
+        big = "가" * 80_000
+        out = _clip(big)
+        assert len(out) < len(big)
+        assert "중간" in out and "생략" in out
+
+    def test_should_preserve_head_and_tail(self):
+        big = "HEAD" + ("x" * 80_000) + "TAIL"
+        out = _clip(big)
+        assert out.startswith("HEAD")
+        assert out.endswith("TAIL")
+
+    def test_should_keep_rebuttal_prompt_under_limit(self):
+        prev = Round(
+            index=1,
+            p_answer="P" * 40_000,
+            r_answer="R" * 40_000,
+        )
+        prompt = _rebuttal_prompt("질문 " * 10_000, prev, role="P")
+        assert len(prompt) < 60_000

@@ -308,6 +308,29 @@ class PRJOrchestrator:
         )
 
 
+# 실측 브라우저 타이핑 경계(2026-09-29): 55.8k자 통과 / 58.5k자 실패. 여유를 둔다.
+MAX_ANSWER_CHARS = 50_000
+# [BUGFIX] 조각별 상한만 두면 3조각이 합쳐 3배로 넘어간다(단위 테스트가 실측: 98,229자).
+# 총량 상한으로 배분해야 한다.
+MAX_PROMPT_CHARS = 46_000
+_MAX_QUESTION = 8_000
+_MAX_SIDE = (MAX_PROMPT_CHARS - _MAX_QUESTION) // 2
+
+
+def _clip(text: str, limit: int = MAX_ANSWER_CHARS) -> str:
+    """왕복 문맥이 상한을 넘으면 잘라낸다.
+
+    [WHY] 재논쟁 라운드는 P+R 답변을 싣기 때문에 원 질문보다 2.4배로 커진다
+    (2026-09-29 실측: 2,040 → 4,940 bytes). 브라우저 타이핑 경계(58.5k자)를 넘으면
+    입력이 조용히 잘려 5회 재시도 후 실패한다. 명시적으로 잘라내는 편이 낫다.
+    """
+    if len(text) <= limit:
+        return text
+    head = text[: int(limit * 0.7)]
+    tail = text[-int(limit * 0.2) :]
+    return f"{head}\n\n…[중간 {len(text) - limit}자 생략]…\n\n{tail}"
+
+
 def _rebuttal_prompt(question: str, prev: Round, role: str) -> str:
     # [WHY] 상대 주장을 구조화해 전달하되 전체 대화는 재주입하지 않는다. 전문 재주입은
     # industry 표준이 anti-pattern으로 규명됐다(§11.1) — 라운드가 늘면 컨텍스트가 선형 증가한다.
@@ -315,13 +338,13 @@ def _rebuttal_prompt(question: str, prev: Round, role: str) -> str:
     # 실측 6분→약 3분. 2026-09-29 E2E).
     mine, theirs = (prev.p_answer, prev.r_answer) if role == "P" else (prev.r_answer, prev.p_answer)
     other = "R (Qwen)" if role == "P" else "P (DeepSeek)"
-    return f"""질문: {question}
+    return f"""질문: {_clip(question, _MAX_QUESTION)}
 
 [내 이전 주장]
-{mine}
+{_clip(mine, _MAX_SIDE)}
 
 [상대({other})의 주장 — 반박하거나 방어할 것]
-{theirs}
+{_clip(theirs, _MAX_SIDE)}
 
 먼저 답변을 쓰고, 마지막 줄에 아래 형식으로 판정을 남겨라.
 VERDICT 뒤에 다른 텍스트를 쓰지 마라.
