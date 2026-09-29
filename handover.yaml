@@ -1,5 +1,5 @@
 last_checkpoint:
-  time: '2026-09-29T14:20:01.172172+00:00'
+  time: '2026-09-29T14:50:00.812866+00:00'
   summary: 10 source, 1 docs, 1 generated
   total_files: 21
   recent_files:
@@ -9,12 +9,12 @@ last_checkpoint:
     config: []
     source:
     - server/scripts/lib/prj/__init__.py
+    - server/scripts/lib/prj/cli.py
     - server/scripts/lib/prj/orchestrator.py
     - server/scripts/lib/prj/serialize.py
     - server/scripts/lib/prj/verify.py
     - server/scripts/turn_watcher.py
     - server/src/devforge/domain/turn_collection/collection.py
-    - server/tests/unit/domain/turn_collection/__init__.py
     - server/tests/unit/domain/turn_collection/test_collection.py
     - server/tests/unit/test_prj_orchestrator.py
     - server/tests/unit/test_prj_verify.py
