@@ -1,18 +1,25 @@
 last_checkpoint:
-  time: '2026-09-29T09:50:00.875382+00:00'
-  summary: 7 source, 1 generated
-  total_files: 16
+  time: '2026-09-29T10:40:00.948427+00:00'
+  summary: 13 source, 1 config, 1 generated
+  total_files: 23
   recent_files:
     data: []
     docs: []
-    config: []
+    config:
+    - server/systemd/user/devforge-watchdog-v2.service
     source:
-    - server/scripts/devforge_fastapi/app.py
+    - server/scripts/day_cycle.sh
+    - server/scripts/lib/model_registry.py
     - server/scripts/lib/notify.py
+    - server/scripts/pipelines/embed_batch.py
+    - server/scripts/pipelines/extract.py
+    - server/src/devforge/adapters/driven/notification/telegram_notifier.py
     - server/src/devforge/application/watchdog_service.py
     - server/src/devforge/domain/watchdog/monitoring/tracker.py
+    - server/tests/unit/adapters/driven/notification/test_telegram_notifier.py
     - server/tests/unit/application/test_watchdog_service.py
     - server/tests/unit/domain/watchdog/monitoring/test_tracker.py
+    - server/tests/unit/test_heartbeat_pulses.py
     - server/tests/unit/test_notify.py
     generated:
     - server/collect_checkpoint.json
