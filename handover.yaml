@@ -1,7 +1,7 @@
 last_checkpoint:
-  time: '2026-09-29T16:10:01.097787+00:00'
-  summary: 79 source, 1 docs, 1 generated
-  total_files: 88
+  time: '2026-09-29T16:20:01.325968+00:00'
+  summary: 2 source, 1 docs, 1 generated
+  total_files: 11
   recent_files:
     data: []
     docs:
@@ -9,25 +9,7 @@ last_checkpoint:
     config: []
     source:
     - server/scripts/lib/prj/cli.py
-    - server/tests/characterization/test_call_llm.py
-    - server/tests/characterization/test_check_all_llm.py
-    - server/tests/characterization/test_handover_db.py
-    - server/tests/characterization/test_heartbeat_parity.py
-    - server/tests/characterization/test_llm_parity.py
-    - server/tests/characterization/test_recovery_parity.py
-    - server/tests/characterization/test_system_parity.py
-    - server/tests/characterization/test_systemd_parity.py
-    - server/tests/characterization/test_watchdog_config_parity.py
-    - server/tests/characterization/test_watchdog_state_parity.py
-    - server/tests/conftest.py
-    - server/tests/fitness/test_completion.py
-    - server/tests/fitness/test_contract.py
-    - server/tests/fitness/test_heartbeat_registry.py
-    - server/tests/fitness/test_mcp_contract.py
-    - server/tests/fitness/test_wiring.py
-    - server/tests/fixtures/replay_harness.py
-    - server/tests/test_all.py
-    - server/tests/test_characterization.py
+    - server/tests/unit/test_prj_cli.py
     generated:
     - server/collect_checkpoint.json
   git: {}
