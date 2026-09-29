@@ -16,7 +16,7 @@
 metadata:
 
 metadata:
-  updated: '2026-09-27'
+  updated: '2026-09-29'
 modules:
 - path: scripts/
   purpose: Executable entry points, pipelines, services, and tests
@@ -37,6 +37,10 @@ modules:
     bench_llm.py:
       status: production
       purpose: DevForge LLM Benchmark — decode tps 측정 및 실험 레지스트리 등록.
+    chrome_ingest.py:
+      status: experimental
+      purpose: chrome-web-llm 캡처 → POST /api/v1/ingest 푸시 브리지 — 안정적
+        conversation_id/source_message_id로 멱등 재전송, provenance source=chrome[:model].
     claude_code_runner.sh:
       status: unknown
       purpose: Claude Code proxy request runner — single-mode or A/B multi-variant.
