@@ -1,11 +1,13 @@
 last_checkpoint:
-  time: '2026-09-29T16:20:01.325968+00:00'
-  summary: 2 source, 1 docs, 1 generated
-  total_files: 11
+  time: '2026-09-29T16:30:00.696081+00:00'
+  summary: 2 source, 3 docs, 1 generated
+  total_files: 15
   recent_files:
     data: []
     docs:
+    - server/docs/INDEX.md
     - server/docs/architecture/code-structure.yaml
+    - server/docs/architecture/prj.md
     config: []
     source:
     - server/scripts/lib/prj/cli.py
