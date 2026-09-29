@@ -131,6 +131,14 @@ def chunk_text(text: str, overlap: int = 64) -> list[tuple[str, int]]:
 # ── Background liveness heartbeat ────────────────────────────────────
 
 
+def _cleanup_pulses():
+    """[WHY] liveness 스레드는 프로세스 종료와 함께 죽어 pulse 가 IN_PROGRESS 로
+    남는다. 그러면 watchdog 이 300초마다 죽었다고 알린다(2026-09-29 재현 확인:
+    heartbeat_liveness_embed_batch 2695회 연속 실패). 두 pulse 를 함께 정리한다."""
+    resolve_pulse("heartbeat_liveness_embed_batch")
+    resolve_pulse("heartbeat_embed_batch")
+
+
 def _liveness_heartbeat():
     """Daemon thread: fires liveness heartbeat every 60s.
     Watchdog checks this to distinguish "still alive but slow" from "dead".
@@ -329,7 +337,7 @@ def main():
 
     # Register heartbeat pulse + SIGTERM cleanup
     heartbeat("embed_batch", detail="embedding batch")
-    _cleanup_embed = lambda: resolve_pulse("heartbeat_embed_batch")
+    _cleanup_embed = _cleanup_pulses  # liveness pulse 포함 함께 정리
     signal.signal(signal.SIGTERM, lambda s, f: (_cleanup_embed(), os._exit(1)))
     atexit.register(_cleanup_embed)
 
