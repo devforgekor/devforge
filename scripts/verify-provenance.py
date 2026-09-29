@@ -82,6 +82,25 @@ def main():
         else:
             print(f"{filepath}: ❌ 파일 없음")
 
+    # 7. provenance 3요소 (source/confidence/updated_at) — industry-standard §3.4
+    print(f"\n--- 7. provenance 3요소 정합 ---")
+    bad_range = pg_query("SELECT count(*) FROM turns WHERE confidence IS NULL OR confidence < 0 OR confidence > 1;")
+    bad_legacy = pg_query("SELECT count(*) FROM turns WHERE source='legacy:pre-2026-09' AND confidence <> 0.5;")
+    bad_time = pg_query("SELECT count(*) FROM turns WHERE updated_at IS NULL OR updated_at < created_at;")
+    trigger = pg_query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal AND tgrelid='turns'::regclass;")
+    fired = pg_query("SELECT count(*) FROM turns WHERE updated_at > created_at;")
+    checks = [
+        ("confidence NULL/범위 위반 (0)", bad_range),
+        ("legacy confidence <> 0.5 (0)", bad_legacy),
+        ("updated_at NULL/created_at 이전 (0)", bad_time),
+        ("trigger trg_turns_updated_at (있음)", trigger),
+    ]
+    for label, value in checks:
+        ok = value == "0" if label.endswith("(0)") else bool(value)
+        print(f"{label}: {value} {'✅ PASS' if ok else '⚠️  WARN'}")
+    print(f"updated_at > created_at (트리거 발화 증거): {fired or 0}행")
+    print("(0행이면 이후 UPDATE된 행이 없다는 뜻 — 트리거는 발화 경로 확인 필요)")
+
     print(f"\n=== Verification Complete ===")
 
 

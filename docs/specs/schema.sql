@@ -2,7 +2,7 @@
 -- DevForge DB Schema — application-owned tables
 -- 적용 대상: devforge_app (PostgreSQL 16)
 -- 정본: src/devforge/domain/models.py (SQLAlchemy) 와 일치 (라이브 DB와 `alembic check` clean)
--- 갱신: 2026-09-14
+-- 갱신: 2026-09-29
 -- 참고: 라이브 DB에는 다른 서브시스템(news/ebook/calendar 등) 소유 테이블이
 --       추가로 존재한다. 이 파일은 devforge 앱 소유 16개 테이블만 문서화한다.
 -- ============================================================
@@ -213,6 +213,8 @@ CREATE TABLE turns (
 	source_message_id TEXT, 
 	pipeline_state TEXT DEFAULT 'scanned', 
 	source TEXT DEFAULT 'unknown' NOT NULL, 
+	confidence REAL DEFAULT 1.0 NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
 	created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(conversation_id) REFERENCES conversations (id)

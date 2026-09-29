@@ -101,6 +101,21 @@ class Turn(Base):
     source_message_id = Column(Text)
     pipeline_state = Column(Text, nullable=True, server_default=sql_text("'scanned'"))
     source = Column(Text, nullable=False, server_default=sql_text("'unknown'"))
+    # [WHY] provenance 표준(source/confidence/updated_at): confidence는 수집 경로
+    # 신뢰도(백필 legacy는 낮게), updated_at은 트리거가 UPDATE마다 갱신한다.
+    confidence = Column(
+        REAL,
+        nullable=False,
+        server_default=sql_text("1.0"),
+        comment="Provenance trust 0..1 for the capture path. "
+        "1.0 = verified collector, 0.5 = legacy backfill (source era marker only).",
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="Last row mutation. Maintained by trigger trg_turns_updated_at.",
+    )
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
@@ -499,7 +514,13 @@ class WatchdogIncident(Base):
     status = Column(Text, nullable=False, server_default=sql_text("'open'"))
     symptom = Column(Text)
     context = Column(Text)  # deprecated (error-record-design §3): kept until no reader
-    context_jsonb = Column(JSONB, nullable=False, server_default=sql_text("'{}'::jsonb"))
+    context_jsonb = Column(
+        JSONB,
+        nullable=False,
+        server_default=sql_text("'{}'::jsonb"),
+        comment="Structured diagnostics (schema_version, systemd, container, "
+        "journal_tail, exception, hint). AI-readable.",
+    )
     action_error = Column(JSONB)
     detected_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     last_seen_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
