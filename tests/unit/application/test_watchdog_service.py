@@ -29,6 +29,7 @@ class FakeTracker:
     fail_count: int = 0
     circuit_open_until: float = 0.0
     last_alert_ts: float = 0.0
+    last_latency_alert_ts: float = 0.0
     next_attempt_at: float = 0.0
 
     def is_healthy(self) -> bool:
@@ -39,6 +40,14 @@ class FakeTracker:
 
     def can_alert(self, dedup_sec: int = 300) -> bool:
         return (time.monotonic() - self.last_alert_ts) >= dedup_sec
+
+    def can_alert_latency(self, dedup_sec: int = 300) -> bool:
+        """LATENCY 전용 dedup — 실구현과 동일하게 시각을 갱신한다."""
+        now = time.monotonic()
+        if now - self.last_latency_alert_ts >= dedup_sec:
+            self.last_latency_alert_ts = now
+            return True
+        return False
 
     def can_attempt_recovery(self) -> bool:
         return time.monotonic() >= self.next_attempt_at
@@ -76,6 +85,7 @@ class FakeTracker:
             "fail_count": self.fail_count,
             "circuit_open_until": self.circuit_open_until,
             "last_alert_ts": self.last_alert_ts,
+            "last_latency_alert_ts": self.last_latency_alert_ts,
             "next_attempt_at": self.next_attempt_at,
         }
 
@@ -603,3 +613,51 @@ class TestAbcCanary:
         await svc.run_cycle()
         assert port.calls == [("oneshot", "x.service")]
         assert comps["recovery_port"].actions == []  # A path not used
+
+
+class TestLatencyAlertDedup:
+    """LATENCY(healthy 이면서 임계 초과) 알림 dedup + 상태 알림 예산 분리."""
+
+    @staticmethod
+    def _latency_checks() -> list[HealthCheck]:
+        return [
+            HealthCheck(
+                component="svc:a",
+                is_healthy=True,
+                detail="slow",
+                metric_value=150.0,
+                threshold=100.0,
+            )
+        ]
+
+    @pytest.mark.asyncio
+    async def test_latency_alert_is_sent_once_within_window(self, service_components) -> None:
+        comps = service_components
+        comps["check_coordinator"] = FakeCheckCoordinator(self._latency_checks(), comps["registry"])
+        svc = _build_service(comps, WatchdogConfig(check_interval_sec=60))
+
+        await svc.run_cycle()
+        await svc.run_cycle()
+
+        latency = [a for a in comps["notifier"].alerts if a[1] == "LATENCY"]
+        assert len(latency) == 1
+
+    @pytest.mark.asyncio
+    async def test_latency_alert_does_not_consume_state_alert_budget(
+        self, service_components
+    ) -> None:
+        comps = service_components
+        coordinator = FakeCheckCoordinator(self._latency_checks(), comps["registry"])
+        comps["check_coordinator"] = coordinator
+        svc = _build_service(comps, WatchdogConfig(check_interval_sec=60))
+        await svc.run_cycle()
+
+        # 서비스는 빌드 시점에 coordinator 를 잡으므로 그대로 두고 결과만 바꾼다
+        coordinator._checks = [HealthCheck(component="svc:a", is_healthy=False, detail="down")]
+        await svc.run_cycle()
+
+        assert [a[1] for a in comps["notifier"].alerts] == [
+            "LATENCY",
+            ComponentState.DEGRADED.value,
+        ]
+        assert comps["notifier"].recoveries == []

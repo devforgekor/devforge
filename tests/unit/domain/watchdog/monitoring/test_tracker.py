@@ -133,3 +133,26 @@ def test_next_attempt_at_persisted() -> None:
     t.schedule_next_attempt(42)
     r = ComponentTracker.from_dict(t.to_dict())
     assert r.next_attempt_at == t.next_attempt_at
+
+
+def test_latency_alert_dedup_is_independent_of_state_alert() -> None:
+    t = ComponentTracker("svc:x")
+    # LATENCY 게이트는 자기 예산만 쓴다
+    assert t.can_alert_latency(dedup_sec=10) is True
+    assert t.can_alert_latency(dedup_sec=10) is False
+    # 그리고 상태 변화 알림 예산도 그대로 남아있다
+    assert t.can_alert(dedup_sec=10) is True
+    assert t.can_alert(dedup_sec=10) is False
+    # 상태 알림이 LATENCY 예산도 쓰지 않는다
+    t.last_latency_alert_ts = time.monotonic() - 11
+    assert t.can_alert_latency(dedup_sec=10) is True
+
+
+def test_latency_alert_ts_serialization_roundtrip() -> None:
+    t = ComponentTracker("svc:x")
+    t.can_alert_latency()
+    r = ComponentTracker.from_dict(t.to_dict())
+    assert r.last_latency_alert_ts > 0
+    # 이전 버전 상태 파일(해당 키 없음)은 기본값 0.0 으로 복원된다
+    legacy = ComponentTracker.from_dict({"name": "svc:y", "state": "HEALTHY"})
+    assert legacy.last_latency_alert_ts == 0.0

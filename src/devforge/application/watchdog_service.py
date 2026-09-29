@@ -105,8 +105,13 @@ class WatchdogService:
                 and c.threshold is not None
                 and c.metric_value > c.threshold
             ) and not self._dry_run:
-                for n in self._notifiers:
-                    await n.send_alert(c.component, "LATENCY", c.detail)
+                # [WHY] 상태 변화(DEGRADED/DOWN) 알림과 같은 dedup 예산을 쓰지
+                # 않는다. 한 빅킷이면 LATENCY 알림이 곧 이어질 장애 알림을
+                # 삼키고, 매 사이클 중복 발송도 그대로다.
+                latency_tracker = self._registry.get(c.component)
+                if latency_tracker.can_alert_latency():
+                    for n in self._notifiers:
+                        await n.send_alert(c.component, "LATENCY", c.detail)
 
         # 2. failed → incident → recovery → alert (orchestrator.py:128-143)
         #

@@ -30,6 +30,7 @@ class ComponentTracker:
         self.consecutive_fail = 0
         self.last_state_change = 0.0
         self.last_alert_ts = 0.0
+        self.last_latency_alert_ts = 0.0
         self.last_success_ts = time.monotonic()
         self.last_fail_ts = 0.0
         self.circuit_open_until = 0.0
@@ -92,6 +93,18 @@ class ComponentTracker:
             return True
         return False
 
+    def can_alert_latency(self, dedup_sec: int = DEFAULT_ALERT_DEDUP_SEC) -> bool:
+        """LATENCY(healthy 이면서 임계 초과) 알림 전용 dedup 게이트.
+
+        [WHY] 상태 변화(DEGRADED/DOWN) 알림 예산과 분리한다. 한 빅킷이면
+        느린 응답 알림이 곧바로 오는 장애 알림을 dedup_sec 동안 삼켜버린다.
+        """
+        now = time.monotonic()
+        if now - self.last_latency_alert_ts >= dedup_sec:
+            self.last_latency_alert_ts = now
+            return True
+        return False
+
     def is_degraded(self) -> bool:
         return self.state in (
             ComponentState.DEGRADED,
@@ -137,6 +150,7 @@ class ComponentTracker:
             "consecutive_fail": self.consecutive_fail,
             "last_state_change": self.last_state_change,
             "last_alert_ts": self.last_alert_ts,
+            "last_latency_alert_ts": self.last_latency_alert_ts,
             "last_success_ts": self.last_success_ts,
             "last_fail_ts": self.last_fail_ts,
             "circuit_open_until": self.circuit_open_until,
@@ -154,6 +168,7 @@ class ComponentTracker:
         t.consecutive_fail = int(data.get("consecutive_fail", 0))  # type: ignore[call-overload]
         t.last_state_change = float(data.get("last_state_change", 0.0))  # type: ignore[arg-type]
         t.last_alert_ts = float(data.get("last_alert_ts", 0.0))  # type: ignore[arg-type]
+        t.last_latency_alert_ts = float(data.get("last_latency_alert_ts", 0.0))  # type: ignore[arg-type]
         t.last_success_ts = float(data.get("last_success_ts", time.monotonic()))  # type: ignore[arg-type]
         t.last_fail_ts = float(data.get("last_fail_ts", 0.0))  # type: ignore[arg-type]
         t.circuit_open_until = float(data.get("circuit_open_until", 0.0))  # type: ignore[arg-type]
