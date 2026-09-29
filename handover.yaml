@@ -1,17 +1,15 @@
 last_checkpoint:
-  time: '2026-09-29T12:20:01.015331+00:00'
-  summary: 2 source, 3 docs, 1 generated
-  total_files: 13
+  time: '2026-09-29T13:20:00.655528+00:00'
+  summary: 3 source, 1 generated
+  total_files: 11
   recent_files:
     data: []
-    docs:
-    - server/docs/LLM_PROVIDER_PLAN.md
-    - server/docs/adr/0005-extraction-routing.md
-    - server/docs/architecture/code-structure.yaml
+    docs: []
     config: []
     source:
-    - server/scripts/chrome_ingest.py
-    - server/tests/unit/test_chrome_ingest.py
+    - server/alembic/versions/20260929_turn_provenance.py
+    - server/scripts/verify-provenance.py
+    - server/src/devforge/domain/models.py
     generated:
     - server/collect_checkpoint.json
   git: {}
