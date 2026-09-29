@@ -381,6 +381,24 @@ modules:
     local_debate.py:
       status: experimental
       purpose: LocalDebate — multi-agent debate using local inference + inference.
+- path: scripts/lib/prj/
+  purpose: PRJ
+  files:
+    __init__.py:
+      status: experimental
+      purpose: P-R-J package — web LLM(DeepSeek/Qwen/Duck.ai) 검색·교차검증 오케스트레이션.
+    cli.py:
+      status: experimental
+      purpose: prj 명령 — run/status/brief/decide. WebLLM/DuckAI 엔진 어댑터, handoff 동기화.
+    orchestrator.py:
+      status: experimental
+      purpose: HCP-MAD 3단계(HCV/HPAD/ECT) P-R-J 오케스트레이션, 조기 종료 판정.
+    serialize.py:
+      status: experimental
+      purpose: PRJResult 직렬화 — brief/JSON. 미확정 상태를 항상 명시.
+    verify.py:
+      status: experimental
+      purpose: 결정론적 주장 검증 — 출처 URL 추출, 인용 조각/출처 부재 차단.
 - path: scripts/lib/enrich/
   purpose: Enrich
   files:
