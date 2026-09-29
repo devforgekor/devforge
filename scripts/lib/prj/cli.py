@@ -205,30 +205,59 @@ def _push_handoff(result: PRJResult) -> None:
             print(f"[warn] handoff review 실패: {(rev.stderr or '').strip()}", file=sys.stderr)
 
 
+def _resolve_source(raw: str | None) -> tuple[str | None, int, str]:
+    """입력 경로와 크기를 정한다. --chunk 는 자동 판정된다.
+
+    [WHY] 사람이 `--chunk`를 기억해야 하면 안 된다. 2026-09-29 실측 경계
+    (55.8k자 통과 / 58.5k자 실패)를 기준으로 크기만 보고 스스로 판단한다.
+    플래그가 없는 파일은 50,000자 초과 시 자동으로 map-reduce로 전환된다.
+
+    반환: (경로, 글자수, 모드). 모드는 "argv" | "file" | "chunk".
+    """
+    if not raw:
+        return None, 0, "argv"
+    path = os.path.expanduser(raw)
+    if os.path.isdir(path):
+        # 디렉터리는 Obsidian 볼트 한 개로 간주한다 (PARA 구조).
+        md = sorted(os.path.join(path, f) for f in os.listdir(path) if f.endswith(".md"))
+        if not md:
+            raise EngineError(f"no .md files in: {path}")
+        path = md[0]
+    if not os.path.isfile(path):
+        raise EngineError(f"file not found: {path}")
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        nchars = len(fh.read())
+    mode = "chunk" if nchars > MAX_CONTEXT_CHARS else "file"
+    return path, nchars, mode
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     task_id = args.task or f"prj-{uuid.uuid4().hex[:8]}"
-    src = args.file
+    try:
+        src, nchars, mode = _resolve_source(args.file)
+    except EngineError as exc:
+        print(f"[prj] {exc}", file=sys.stderr)
+        return 1
+
+    # [WHY] --no-chunk 는 사용자가 map-reduce를 명시적으로 끄는 경우에만 쓴다.
+    chunk = mode == "chunk" and not args.no_chunk
+    if mode == "chunk" and args.no_chunk:
+        print(
+            f"[prj] 문서가 {nchars:,}자로 상한({MAX_CONTEXT_CHARS:,})을 넘는데 "
+            f"--no-chunk 로 강제했습니다. 브라우저 타이핑 한계(58.5k자)에서 실패할 수 있습니다.",
+            file=sys.stderr,
+        )
     if src:
-        # [WHY] 장문 입력은 질문과 별개로 파일로 전달한다. argv는 252KB에서 ARG_MAX로
-        # 죽고, 58k자를 넘으면 브라우저 타이핑이 잘린다(2026-09-29 실측).
-        if not os.path.isfile(src):
-            print(f"[prj] file not found: {src}", file=sys.stderr)
-            return 1
-        nchars = len(open(src, encoding="utf-8", errors="replace").read())
-        if nchars > MAX_CONTEXT_CHARS and not args.chunk:
-            print(
-                f"[prj] 문서가 {nchars:,}자로 상한({MAX_CONTEXT_CHARS:,})을 넘습니다. "
-                f"--chunk 를 붙이거나 문서를 나눠 주세요.",
-                file=sys.stderr,
-            )
-            return 1
-        eta = f"장문 {nchars:,}자 — 수 분 소요" if args.chunk else "2~5분 소요"
+        if chunk:
+            eta = f"장문 {nchars:,}자 — 자동 map-reduce, 수 분 소요"
+        else:
+            eta = f"파일 {nchars:,}자 — 2~5분 소요"
     else:
         eta = "2~5분 소요"
 
     orch = PRJOrchestrator(
-        proposer=WebLLMEngine("deepseek", think=True, file=src, chunk=args.chunk),
-        reviewer=WebLLMEngine("qwen", think=False, file=src, chunk=args.chunk),
+        proposer=WebLLMEngine("deepseek", think=True, file=src, chunk=chunk),
+        reviewer=WebLLMEngine("qwen", think=False, file=src, chunk=chunk),
         adjudicator=DuckAIEngine() if not args.no_judge else None,
         max_rounds=args.max_rounds,
         on_log=lambda m: print(f"[prj] {m}", file=sys.stderr),
@@ -343,8 +372,12 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("run", help="P-R 실행 → 합의 시 즉시 종료")
     r.add_argument("query")
     r.add_argument("--task", default=None, help="task_id 지정 (기본: 자동 생성)")
-    r.add_argument("--file", default=None, help="장문 파일 경로 (argv ARG_MAX 회피)")
-    r.add_argument("--chunk", action="store_true", help="상한 초과 문서를 map-reduce로 처리")
+    r.add_argument("--file", default=None, help="문서 경로 또는 Obsidian 디렉터리 (선택)")
+    r.add_argument(
+        "--no-chunk",
+        action="store_true",
+        help="자동 map-reduce를 끈다 (대용량에서 실패할 수 있다)",
+    )
     r.add_argument("--max-rounds", type=int, default=3)
     r.add_argument("--no-judge", action="store_true", help="ECT(판정) 단계를 건너뛴다")
     r.add_argument("--json", action="store_true")
