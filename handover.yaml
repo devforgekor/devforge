@@ -1,20 +1,20 @@
 last_checkpoint:
-  time: '2026-09-29T16:30:00.696081+00:00'
-  summary: 2 source, 3 docs, 1 generated
-  total_files: 15
+  time: '2026-09-30T07:30:00.704435+09:00'
+  summary: 1 generated
+  total_files: 4
   recent_files:
-    data: []
-    docs:
-    - server/docs/INDEX.md
-    - server/docs/architecture/code-structure.yaml
-    - server/docs/architecture/prj.md
+    source: []
     config: []
-    source:
-    - server/scripts/lib/prj/cli.py
-    - server/tests/unit/test_prj_cli.py
+    docs: []
+    data: []
     generated:
     - server/collect_checkpoint.json
-  git: {}
+  git:
+    server:
+      branch: main
+      unstaged: 3 files changed, 28 insertions(+), 14 deletions(-)
+      staged: (none)
+      untracked_files: 0
   task: null
 decisions:
 - id: nd13-01
@@ -410,6 +410,15 @@ known_issues:
     플러그인 명령도 타이핑하면 동작(docs 동일). 업스트림: 세밀 스위치 부재 이슈 #85199 만 존재(/dashboard 충돌 이슈 없음), npm latest = 현재 2026.9.6 이라 업그레이드 불가.
     로그 77건은 getUpdates 충돌 재시작 폭주(약 41초 주기 메뉴 재빌드)가 원인이고 @mesids_test_bot 분리 후 2026-09-28 22:58 1건 이후 0건. 상세: obs_search("openclaw")
     · OpenClaw 워크스페이스 MEMORY.md.'
+  resolved: false
+- id: opencode-db-part-index-corrupt-2026-09-29
+  detail: '[부분해소 2026-09-29] opencode.db(2.04GB)의 part_session_idx B-tree 손상 → turn_watcher가 ses_f33d13eb(OS root 볼륨)·ses_f340158(miniebook
+    트래픽 가드) 2세션에서 "database disk image is malformed" 무한 재시도(2,192건/시간, journal 190MB). 영향 범위는 169세션 중 2개뿐이며 나머지 167개는 정상.
+    [WHY] turn_watcher.py:296이 예외를 로그만 남기고 체크포인트를 갱신하지 않아 should_skip_parse가 계속 False → 자가 회복 불가. 완화: collect_checkpoint.json의
+    2개 mtime을 live session.time_updated로 동기화(2026-09-29T22:18Z) → 에러 0건, 메모리 44M→15.6M. 근본 미해결이며 opencode.db는 여전히 손상 상태. ⚠
+    opencode.db.recovered(2.97GB, quick_check ok)는 이 2세션의 유일한 정상 사본이므로 삭제 금지(2단계 삭제 계획 보류). 손실 확정 1건: ses_f340 1턴(PG 29 vs
+    정상 30). f33d 잔여 7턴(원본 17턴 중 기준선 불명)은 이전 손상분으로 이번 범위 외. 재발 조건: turn-watcher 재시작 또는 체크포인트 유실 시 mtime 재동기화 필요. 근본 해결은 opencode
+    종료 후 .recovered로 swap이며 활성 세션 f10c5c11 소실 위험이 있어 사용자 지시로 완화(B)만 적용, swap(A)은 보류.'
   resolved: false
 - text: 'Phase 0 진행 중(2026-09-14): specs/mcp-contract.json 초안 작성 완료(draft), ADR-0006 Accepted(12툴 열거 완료), W1 baseline 1주 측정
     진행 중(docs/ops/baseline/W1-baseline-spec.md). Gate 1 통과 확인 필요(allowlist diff=0 검증). rf-triage-07 완료.'
