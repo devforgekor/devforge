@@ -63,7 +63,11 @@ app.mount("/mcp", mcp_app)
 _SECRETS: dict[str, str] = {k: os.environ.get(k, "") for k in (
     "SLACK_SIGNING_SECRET_KEY",
     "SLACK_BOT_TOKEN_KEY",
-    "TELEGRAM_TOKEN_KEY",
+    # [WHY] 알림 봇 전용 키. 대화용 봇(TELEGRAM_TOKEN_KEY)은 폐기됐고 알림은
+    # @Devforge_ping_bot 으로만 보낸다. 인바운드 폴링은 아래 _TG_TOKEN 이
+    # TELEGRAM_TOKEN_KEY 를 읽는데 그 키가 이 목록에 없으므로 TG_BASE="" 로
+    # 영구 꺼진다(알림만 남김).
+    "TELEGRAM_ALERT_TOKEN_KEY",
     "TELEGRAM_CHAT_ID",
     "SMTP_HOST",
     "SMTP_PORT",
