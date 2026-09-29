@@ -1,15 +1,19 @@
 last_checkpoint:
-  time: '2026-09-29T06:50:00.980867+00:00'
-  summary: 3 source, 1 generated
-  total_files: 8
+  time: '2026-09-29T09:50:00.875382+00:00'
+  summary: 7 source, 1 generated
+  total_files: 16
   recent_files:
     data: []
     docs: []
     config: []
     source:
-    - server/scripts/lib/research/rerank.py
-    - server/tests/test_research_proxy.py
-    - server/tests/unit/test_rerank_consumer.py
+    - server/scripts/devforge_fastapi/app.py
+    - server/scripts/lib/notify.py
+    - server/src/devforge/application/watchdog_service.py
+    - server/src/devforge/domain/watchdog/monitoring/tracker.py
+    - server/tests/unit/application/test_watchdog_service.py
+    - server/tests/unit/domain/watchdog/monitoring/test_tracker.py
+    - server/tests/unit/test_notify.py
     generated:
     - server/collect_checkpoint.json
   git: {}
