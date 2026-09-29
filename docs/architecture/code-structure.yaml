@@ -1542,6 +1542,9 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
+    collection.py:
+      status: experimental
+      purpose: "Turn collection rules: checkpoint merge, session increment plan, turn dedup."
 - path: src/devforge/domain/watchdog/
   purpose: Watchdog domain (legacy-parity v2.1) — state machine, backoff, recovery,
     checks
