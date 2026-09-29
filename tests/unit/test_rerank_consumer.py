@@ -39,12 +39,12 @@ def test_rerank_indices_should_skip_single_doc(monkeypatch):
     assert called["n"] == 0
 
 
-def test_rerank_should_prefer_openrouter_then_local(monkeypatch):
-    monkeypatch.setattr(rerank, "_rerank_openrouter", lambda q, d, c: [1, 0])
-    monkeypatch.setattr(rerank, "_rerank_local", lambda q, d: [0, 1])
+def test_rerank_should_prefer_local_then_openrouter(monkeypatch):
+    monkeypatch.setattr(rerank, "_rerank_local", lambda q, d: [1, 0])
+    monkeypatch.setattr(rerank, "_rerank_openrouter", lambda q, d, c: [0, 1])
     assert rerank.rerank_indices("q", ["a", "b"]) == [1, 0]
 
-    monkeypatch.setattr(rerank, "_rerank_openrouter", lambda q, d, c: None)
+    monkeypatch.setattr(rerank, "_rerank_local", lambda q, d: None)
     assert rerank.rerank_indices("q", ["a", "b"]) == [0, 1]
 
 

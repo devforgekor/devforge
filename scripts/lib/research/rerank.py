@@ -5,9 +5,12 @@
 
 [WHY] 검색 결과 순서는 제공자마다 다르고 항상 최적이 아니다. 표준(TREC/RAG)은
 후보를 reranker로 재정렬해 상위 품질을 올린다. 우선순위:
-  1) OpenRouter 무료 리랭커(`~/.config/devforge/rerank_models.json`, :free만)
-  2) 로컬 리랭커(127.0.0.1:8080 /v1/rerank)
+  1) 로컬 리랭커(127.0.0.1:8080 /v1/rerank)
+  2) OpenRouter 무료 리랭커(`~/.config/devforge/rerank_models.json`, :free만)
   3) 원본 순서(폴백)
+[WHY] 로컬이 1순위: 서버에 reranker 모델(Qwen3-Reranker-4B)이 스테이징돼 있고
+인퍼런스 포트가 열려 있으면 무상·비공개로 끝난다. 미기동(`MODE=embed`)이어도
+연결 거부는 즉시 실패하므로 OpenRouter로 넘기는 비용은 사실상 없다.
 크레딧 소진 정책: 유료 모델은 후보 파일에 기록되지 않으므로 여기서도 사용하지 않는다.
 """
 
@@ -109,10 +112,10 @@ def rerank_indices(query: str, docs: list[str]) -> Optional[list[int]]:
     if len(docs) < 2:
         return None
     docs = [d[:_MAX_DOC_CHARS] for d in docs]
-    idx = _rerank_openrouter(query, docs, _load_config())
+    idx = _rerank_local(query, docs)
     if idx:
         return idx
-    return _rerank_local(query, docs)
+    return _rerank_openrouter(query, docs, _load_config())
 
 
 def rerank_records(query: str, records: list[dict], text_key: str = "description") -> list[dict]:
