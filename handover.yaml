@@ -1,26 +1,22 @@
 last_checkpoint:
-  time: '2026-09-29T10:40:00.948427+00:00'
-  summary: 13 source, 1 config, 1 generated
-  total_files: 23
+  time: '2026-09-29T10:50:00.723792+00:00'
+  summary: 8 source, 1 config, 1 docs, 1 generated
+  total_files: 20
   recent_files:
     data: []
-    docs: []
+    docs:
+    - server/docs/architecture/code-structure.yaml
     config:
     - server/systemd/user/devforge-watchdog-v2.service
     source:
     - server/scripts/day_cycle.sh
     - server/scripts/lib/model_registry.py
-    - server/scripts/lib/notify.py
     - server/scripts/pipelines/embed_batch.py
     - server/scripts/pipelines/extract.py
     - server/src/devforge/adapters/driven/notification/telegram_notifier.py
     - server/src/devforge/application/watchdog_service.py
-    - server/src/devforge/domain/watchdog/monitoring/tracker.py
     - server/tests/unit/adapters/driven/notification/test_telegram_notifier.py
-    - server/tests/unit/application/test_watchdog_service.py
-    - server/tests/unit/domain/watchdog/monitoring/test_tracker.py
     - server/tests/unit/test_heartbeat_pulses.py
-    - server/tests/unit/test_notify.py
     generated:
     - server/collect_checkpoint.json
   git: {}
@@ -460,6 +456,14 @@ known_issues:
   detail: 'P3 잔여 미착수: (1) error-record §2 분석 계층은 미구현(설계만) → 코드 구현 선행 필요(창 종료 배포 대상 아님). (2) F2 heartbeat(dead-man''s switch
     for timer units: handover-gen/dev-poll/daily-structure/backup/system-sync)는 신규 파일(heartbeat-ping + specs/heartbeat-registry.yaml)과
     대상 유닛 ExecStartPost/OnSuccess 수정 필요 → 별도 배치.'
+  resolved: false
+- id: q4-concurrency-recheck-2026-10-13
+  detail: 'Q4 전환 후 동시 기동 재검토 예정(2026-10-13, 시스템 변경 후). 현행은 mode-exclusive 유지(embed/day/dual 중 하나만) — 동시 기동 모드 없음. 2026-09-29
+    기준선: RAM 22,945MB · available 10,448MB · swap 4,095MB(1,060 사용) · CPU 4코어(Neoverse-N1) · 컨테이너 CPU/메모리 제한 없음. Q4 실측: embed
+    RSS 9,397MB(파일4,461M) · extract 추정6.5GB(ctx8192+cache_ram1024) · reranker 추정2.9GB · 비LLM 기본부하 3,100MB. 시나리오: embed 단독
+    12.5GB OK / day(extract+reranker) 12.5GB OK / embed+day 동시 21.9GB → 잔여1GB 로 부적합. 동시가 필요해지면 embed만 소형 임베딩모델(Qwen3-Embedding-4B-Q4≈2.5GB
+    또는 bge-m3≈1.2GB)로 교체가 정답(RSS 9.4→3GB, 합계 ~14GB). embed 상주는 OpenClaw memory search(8081) 연결로 불가. entrypoint 재검토 지점: inference-entrypoint.sh
+    mode dispatch + scripts/lib/model_registry.py(MODEL_METADATA).'
   resolved: false
 completed_log:
 - '(2026-09-23, opencode) known_issue 종료: DATAIMPULSE-CHECK-BROKEN — 깨진 import는 재현되지 않음(활성 경로는 _refresh_dataimpulse_periodic
