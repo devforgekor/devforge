@@ -39,6 +39,7 @@
 | 규칙 | `/home/opc/llm-agent-rule.md` → `AGENTS.md`(자동) | active |
 | EXA 직접 사용 (MCP 비활성) | `specs/exa-direct-usage.yaml`, `runbooks/exa-direct-usage.md` | active |
 | **PRJ 웹 LLM 교차검증** | **`architecture/prj.md`** · `scripts/lib/prj/` | **active** |
+| PRJ 세션 핸드오버 | `reports/prj-handover-20260929.md` | record |
 
 ### 2) 컨트롤 플레인 / watchdog
 | 구분 | 문서 | 상태 |
