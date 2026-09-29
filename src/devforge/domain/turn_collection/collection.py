@@ -112,13 +112,22 @@ class SessionPlan:
     new_turns: List[Any]
 
 
+def should_skip_parse(prev: CheckpointEntry, current_mtime: float) -> bool:
+    """True when the source is untouched since the last ingest.
+
+    [WHY] most poll cycles see no change — the parse itself is the expensive
+    part, so the check runs before any file/sqlite read.
+    """
+    return current_mtime == prev.mtime and prev.count > 0
+
+
 def plan_session(
     prev: CheckpointEntry,
     current_mtime: float,
     parsed: Optional[Sequence[Any]],
 ) -> SessionPlan:
     """Decide whether a session needs parsing, and which turns are new."""
-    if current_mtime == prev.mtime and prev.count > 0:
+    if should_skip_parse(prev, current_mtime):
         return SessionPlan(SessionAction.UNCHANGED, None, [])
 
     if not parsed or len(parsed) <= prev.count:

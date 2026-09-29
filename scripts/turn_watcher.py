@@ -30,6 +30,16 @@ from lib.parsers.claude import parse as parse_claude
 from lib.parsers.copilot import parse as parse_copilot
 from lib.tracking.agent_names import normalize as normalize_agent
 
+from devforge.domain.turn_collection.collection import (
+    SessionAction,
+    filter_unseen,
+    get_entry,
+    merge_checkpoint,
+    plan_session,
+    should_skip_parse,
+    truncate_turn,
+)
+
 POLL_INTERVAL = 3  # seconds between full scans
 CHECKPOINT_FILE = Path("/opt/projects/server/collect_checkpoint.json")
 
@@ -65,37 +75,17 @@ def load_checkpoint() -> Dict:
 
 
 def save_checkpoint(cp: Dict):
-    """Merge-write: reload file first to preserve metadata keys (e.g. last_ingested_at)
-    written by collect_turns.py, then overlay our session counts with max() to prevent
-    count regression from race conditions."""
+    """Merge-write: reload file first so metadata keys (e.g. last_ingested_at)
+    written by collect_turns.py survive, and counts never regress under race."""
     existing = {}
     if CHECKPOINT_FILE.exists():
         try:
             existing = json.loads(CHECKPOINT_FILE.read_text())
         except json.JSONDecodeError:
             pass
-    for source, sessions in cp.items():
-        base = existing.setdefault(source, {})
-        for sid, entry in sessions.items():
-            # Skip metadata keys (last_ingested_at, etc.) — preserve from existing
-            if isinstance(entry, str) or sid in ("last_ingested_at",):
-                continue
-            if isinstance(entry, dict):
-                prev = base.get(sid, {})
-                if isinstance(prev, dict):
-                    base[sid] = {
-                        "count": max(prev.get("count", 0), entry["count"]),
-                        "mtime": max(prev.get("mtime", 0), entry["mtime"]),
-                    }
-                else:
-                    base[sid] = {
-                        "count": max(prev if isinstance(prev, int) else 0, entry["count"]),
-                        "mtime": entry["mtime"],
-                    }
-            else:
-                # integer count (backward compat)
-                base[sid] = max(base.get(sid, 0) if isinstance(base.get(sid, 0), int) else 0, entry)
-    CHECKPOINT_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=False))
+    CHECKPOINT_FILE.write_text(
+        json.dumps(merge_checkpoint(existing, cp), indent=2, ensure_ascii=False)
+    )
 
 
 def _list_session_files(source: str, config: Dict) -> List[tuple]:
@@ -121,14 +111,6 @@ def _list_session_files(source: str, config: Dict) -> List[tuple]:
     return []
 
 
-def _cp_get(checkpoint: Dict, source: str, session_id: str) -> dict:
-    """Get {count, mtime} for a session from checkpoint. Handles old int-only format."""
-    entry = checkpoint.get(source, {}).get(session_id, {})
-    if isinstance(entry, int):
-        return {"count": entry, "mtime": 0}
-    return {"count": entry.get("count", 0), "mtime": entry.get("mtime", 0)}
-
-
 def ensure_conversation(session_id: str, source: str, model: str = "", title: str = "") -> bool:
     """Upsert conversation row."""
     sid = esc_sql(session_id)
@@ -147,9 +129,15 @@ _INSERT_BYTES = 60000  # max SQL bytes per chunk (ARG_MAX / MAX_ARG_STRLEN safet
 
 
 def insert_turns(
-    conversation_id: str, source: str, model: str, new_turns: List[Dict], start_seq: int
+    conversation_id: str,
+    source: str,
+    model: str,
+    new_turns: List[Dict],
+    start_seq: int,
+    dry_run: bool = False,
 ) -> int:
-    """Batch INSERT new turns. Returns count inserted."""
+    """Batch INSERT new turns. Returns rows inserted (rows that would be
+    attempted when dry_run is set — no INSERT is issued)."""
     src = normalize_agent(source)
 
     # Pre-filter: skip turns whose source_message_id already exists in DB
@@ -166,24 +154,16 @@ def insert_turns(
 
     # Filter and build VALUES rows (index i preserved for seq)
     rows_values = []
-    filtered_turns = []
-    seen_smid = set(existing_ids)
-    for i, turn in enumerate(new_turns):
-        smid = turn.get("source_message_id", "")
-        if smid and smid in seen_smid:
-            continue
-        if smid:
-            seen_smid.add(smid)
-        filtered_turns.append((i, turn))
-
+    filtered_turns = filter_unseen(new_turns, existing_ids)
     if not filtered_turns:
         return 0
 
     for i, turn in filtered_turns:
         seq = start_seq + i
-        user_turn = esc_sql(turn.get("user_turn", "")[:8000])
-        thinking = esc_sql((turn.get("thinking") or "")[:4000])
-        text = esc_sql((turn.get("text") or "")[:8000])
+        fields = truncate_turn(turn)
+        user_turn = esc_sql(fields["user_turn"])
+        thinking = esc_sql(fields["thinking"])
+        text = esc_sql(fields["text"])
         smid = turn.get("source_message_id", "")
         msg_id = esc_sql(smid) if smid else ""
         created_at = turn.get("created_at") or datetime.now(timezone.utc).isoformat()
@@ -202,21 +182,24 @@ def insert_turns(
     if not rows_values:
         return 0
 
-    # Chunked INSERT — cap rows AND total bytes to stay under ARG_MAX
-    inserted = 0
+    # Chunk the VALUES rows — cap rows AND total bytes to stay under ARG_MAX
+    chunks: List[List[str]] = []
     buf: List[str] = []
     buf_bytes = 0
     for rv in rows_values:
         buf.append(rv)
         buf_bytes += len(rv)
         if len(buf) >= _INSERT_CHUNK or buf_bytes >= _INSERT_BYTES:
-            inserted += _insert_chunk(buf)
+            chunks.append(buf)
             buf = []
             buf_bytes = 0
     if buf:
-        inserted += _insert_chunk(buf)
+        chunks.append(buf)
 
-    return inserted
+    if dry_run:
+        return sum(len(chunk) for chunk in chunks)
+
+    return sum(_insert_chunk(chunk) for chunk in chunks)
 
 
 def _insert_chunk(rows_values: List[str]) -> int:
@@ -232,7 +215,13 @@ def _insert_chunk(rows_values: List[str]) -> int:
 
 
 def process_session(
-    source: str, session_id: str, path: Path, parser_fn, checkpoint: Dict, config: Dict = None
+    source: str,
+    session_id: str,
+    path: Path,
+    parser_fn,
+    checkpoint: Dict,
+    config: Dict = None,
+    dry_run: bool = False,
 ) -> int:
     """Parse session, insert new turns. Returns count of newly inserted turns."""
     config = config or {}
@@ -243,57 +232,52 @@ def process_session(
     conv_id = sid_fn(session_id)
     title_fn = config.get("title_fn")
 
-    cp_entry = _cp_get(checkpoint, source, conv_id)
-    prev_count = cp_entry["count"]
-    prev_mtime = cp_entry["mtime"]
-
+    prev = get_entry(checkpoint, source, conv_id)
     # mtime-based skip: if file hasn't changed since last ingest, skip parsing entirely
     current_mtime = mtime_fn(path, session_id)
-    if current_mtime == prev_mtime and prev_count > 0:
+    if should_skip_parse(prev, current_mtime):
         return 0
 
     parsed, model, is_active = parser_fn(path, session_id=session_id)
+    plan = plan_session(prev, current_mtime, parsed)
 
-    # Record empty sessions so we don't re-parse them every cycle
-    if parsed is None or len(parsed) == 0:
-        checkpoint.setdefault(source, {})[conv_id] = {
-            "count": prev_count,
-            "mtime": current_mtime,
-        }
-        return 0
-
-    if len(parsed) <= prev_count:
-        # mtime changed but no new turns (e.g., file touched). Update mtime only.
-        checkpoint.setdefault(source, {})[conv_id] = {
-            "count": prev_count,
-            "mtime": current_mtime,
-        }
-        return 0
-
-    new_turns = parsed[prev_count:]
-    if not new_turns:
+    if plan.action is not SessionAction.INGEST:
+        # Empty / unchanged session: refresh mtime so it isn't re-parsed every
+        # cycle. A dry run must not touch the file the live watcher is writing.
+        if not dry_run and plan.record is not None:
+            checkpoint.setdefault(source, {})[conv_id] = {
+                "count": plan.record.count,
+                "mtime": plan.record.mtime,
+            }
         return 0
 
     title = title_fn(path, session_id) if title_fn else ""
-    ensure_conversation(conv_id, source, model or "", title or "")
-    inserted = insert_turns(conv_id, source, model or "", new_turns, prev_count)
+    if not dry_run:
+        ensure_conversation(conv_id, source, model or "", title or "")
+    inserted = insert_turns(
+        conv_id, source, model or "", plan.new_turns, prev.count, dry_run=dry_run
+    )
 
-    checkpoint.setdefault(source, {})[conv_id] = {
-        "count": prev_count + inserted,
-        "mtime": current_mtime,
-    }
+    if not dry_run:
+        checkpoint.setdefault(source, {})[conv_id] = {
+            "count": prev.count + inserted,
+            "mtime": current_mtime,
+        }
 
     if inserted > 0:
-        tag = " [active]" if is_active else ""
-        print(
-            f"  {source}/{session_id[:8]}: +{inserted} turns "
-            f"({prev_count}→{prev_count + inserted}){tag}"
-        )
+        if dry_run:
+            print(f"  DRY-RUN {source}/{session_id[:8]}: would attempt {inserted} turns")
+        else:
+            tag = " [active]" if is_active else ""
+            print(
+                f"  {source}/{session_id[:8]}: +{inserted} turns "
+                f"({prev.count}→{prev.count + inserted}){tag}"
+            )
 
     return inserted
 
 
-def run_once() -> int:
+def run_once(dry_run: bool = False) -> int:
     """One full scan across all sources. Returns total turns inserted."""
     checkpoint = load_checkpoint()
     total = 0
@@ -305,12 +289,14 @@ def run_once() -> int:
 
         for session_id, path in sessions:
             try:
-                n = process_session(source, session_id, path, config["parser"], checkpoint, config)
+                n = process_session(
+                    source, session_id, path, config["parser"], checkpoint, config, dry_run=dry_run
+                )
                 total += n
             except Exception as e:
                 print(f"  ERROR {source}/{session_id[:8]}: {e}")
 
-    if total > 0:
+    if total > 0 and not dry_run:
         save_checkpoint(checkpoint)
 
     return total
@@ -329,22 +315,28 @@ def main():
         default=POLL_INTERVAL,
         help=f"Poll interval in seconds (default: {POLL_INTERVAL})",
     )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Compute and report rows without writing to DB or checkpoint",
+    )
     args = ap.parse_args()
 
     print(
         f"[{datetime.now(timezone.utc).isoformat()}] turn_watcher starting "
-        f"(interval={args.interval}s)"
+        f"(interval={args.interval}s, dry_run={args.dry_run})"
     )
 
     if args.once:
-        n = run_once()
-        print(f"  done: {n} new turns")
+        n = run_once(dry_run=args.dry_run)
+        label = "would attempt" if args.dry_run else "new"
+        print(f"  done: {n} {label} turns")
         return 0
 
     # Persistent loop
     while True:
         try:
-            n = run_once()
+            n = run_once(dry_run=args.dry_run)
             if n > 0:
                 print(f"[{datetime.now(timezone.utc).isoformat()}] scan complete: {n} new turns")
         except Exception as e:

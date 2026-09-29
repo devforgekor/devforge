@@ -15,6 +15,7 @@ from devforge.domain.turn_collection.collection import (
     get_entry,
     merge_checkpoint,
     plan_session,
+    should_skip_parse,
     truncate_turn,
 )
 
@@ -79,6 +80,18 @@ def test_should_keep_int_entry_when_incoming_is_int() -> None:
 def test_should_add_session_when_missing_from_existing() -> None:
     merged = merge_checkpoint({}, {"claude": {"abc": {"count": 2, "mtime": 5.0}}})
     assert merged["claude"]["abc"] == {"count": 2, "mtime": 5.0}
+
+
+def test_should_skip_parse_when_source_is_untouched() -> None:
+    assert should_skip_parse(CheckpointEntry(4, 100.0), current_mtime=100.0) is True
+
+
+def test_should_not_skip_parse_when_nothing_was_ingested_yet() -> None:
+    assert should_skip_parse(CheckpointEntry(0, 100.0), current_mtime=100.0) is False
+
+
+def test_should_not_skip_parse_when_source_changed() -> None:
+    assert should_skip_parse(CheckpointEntry(4, 100.0), current_mtime=101.0) is False
 
 
 def test_should_skip_parsing_when_mtime_unchanged_and_count_positive() -> None:
