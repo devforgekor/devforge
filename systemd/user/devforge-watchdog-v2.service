@@ -17,7 +17,7 @@ Environment=WATCHDOG_ROUTING_ENABLED=1
 Environment=WATCHDOG_ROUTING_CANARY=svc:svc-pod-forwarding
 Environment=WATCHDOG_CATCHUP_ENABLED=1
 Environment=WATCHDOG_CATCHUP_CANARY=timer:devforge-system-sync.timer
-ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.12 -m devforge.cli watchdog serve --keys DEVFORGE-DATABASE-URL,DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /usr/bin/python3.12 -m devforge.cli watchdog serve --keys DEVFORGE-DATABASE-URL,DEVFORGE-POSTGRES-PASSWORD,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL,TELEGRAM-ALERT-TOKEN-KEY,TELEGRAM-CHAT-ID
 WatchdogSec=180
 Restart=on-watchdog
 RestartSec=30

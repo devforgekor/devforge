@@ -1305,6 +1305,9 @@ modules:
     systemd_notifier.py:
       status: experimental
       purpose: sd_notify notifier (legacy notifier.py:26-48).
+    telegram_notifier.py:
+      status: experimental
+      purpose: Telegram bot notifier (알림 전용 봇 @Devforge_ping_bot) — Slack 대체.
 - path: src/devforge/adapters/driven/container/
   purpose: Inference container lifecycle adapter (Podman)
   files:

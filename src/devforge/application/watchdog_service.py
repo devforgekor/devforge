@@ -283,6 +283,7 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
     )
     from devforge.adapters.driven.notification.slack_notifier import SlackNotifier
     from devforge.adapters.driven.notification.systemd_notifier import SystemdNotifier
+    from devforge.adapters.driven.notification.telegram_notifier import TelegramNotifier
     from devforge.adapters.driven.recovery.systemd_recovery import SystemdRecoveryAdapter
     from devforge.adapters.driven.storage.database_gateway import DatabaseGateway
     from devforge.adapters.driven.storage.heartbeat_pg import PostgresHeartbeatRepository
@@ -336,8 +337,15 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
     notifiers: list[NotificationPort] = [SystemdNotifier()]
     import os
 
+    # [WHY] 알림 채널은 Telegram 하나로 통일한다. Slack 봇 토큰이
+    # account_inactive 로 죽어 알림이 전량 소실된 적이 있어 연결을 해제한다.
+    # 코드는 남겨두고 WATCHDOG_SLACK_ENABLED=1 일 때만 재연결한다.
+    telegram_notifier = TelegramNotifier.from_env()
+    if telegram_notifier is not None:
+        notifiers.append(telegram_notifier)
+
     slack_token = os.environ.get("SLACK_BOT_TOKEN_KEY", "")
-    if slack_token:
+    if slack_token and os.environ.get("WATCHDOG_SLACK_ENABLED", "") == "1":
         notifiers.append(SlackNotifier(slack_token, os.environ.get("SLACK_CHANNEL", "")))
 
     incident_repo = PostgresIncidentRepository(gateway)
