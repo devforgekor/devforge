@@ -1,6 +1,6 @@
 # Track B — LLM Provider Abstraction Plan
 
-> Status: proposed · Date: 2026-09-14 · Owner: devforge · Related: `docs/REFACTORING_PLAN.md`, `docs/adr/0002-llm-provider-flag.md`
+> Status: proposed · Date: 2026-09-14 · Updated: 2026-09-29 (opencode-go 실측 반영) · Owner: devforge · Related: `docs/REFACTORING_PLAN.md`, `docs/adr/0002-llm-provider-flag.md`, `docs/adr/0005-extraction-routing.md`
 > Track B(클라우드 LLM 공급자) 설계·전환 계획. Track A(로컬 llama.cpp)는 이미 포트까지 구현됨.
 
 ---
@@ -37,6 +37,16 @@ ConfigRegistry.llm_provider = DEVFORGE_LLM_PROVIDER (local|openai|anthropic)
   ```yaml
   default_provider: local
   providers:
+    opencode-go:                        # 2026-09-29 실측 통과 — Track B 1순위 후보
+      type: openai                      # OpenAI-compatible /chat/completions
+      api_key: ${OPENCODE_GO_API_KEY}   # KV OPENCODE-GO-API-KEY (기존 키 재사용)
+      base_url: https://opencode.ai/zen/go/v1
+      headers:                          # [WHY] 이 두 개 없으면 요청이 통과하지 않는다
+        User-Agent: <브라우저형>          #   없으면 Cloudflare 403 (error 1010)
+        x-opencode-session: <run-id>     #   없으면 400 MissingSessionID
+      default_models:
+        day_extract: mimo-v2.6-flash
+        day_verify: deepseek-v4-flash
     openai:
       type: openai
       api_key: ${OPENAI_API_KEY}     # secrets.env
@@ -75,3 +85,33 @@ ConfigRegistry.llm_provider = DEVFORGE_LLM_PROVIDER (local|openai|anthropic)
 - `DEVFORGE_LLM_PROVIDER` 값만 바꿔 동일 파이프라인이 다른 공급자로 동작한다.
 - Track A(`local`) 회귀 0 (특성화 테스트 5종 + replay 통과).
 - `lint-imports`, `mypy --strict`, `ruff` CI green 유지.
+
+## 7. 실측 검증 (2026-09-29 · opencode-go)
+
+Track B 1순위 후보를 실제 키로 검증한 결과. 하드웨어/동시성 근거는 `docs/adr/0005-extraction-routing.md`.
+
+### 통과
+- `POST https://opencode.ai/zen/go/v1/chat/completions` — `mimo-v2.6-flash` **5.1s** · `deepseek-v4-flash` **1.1s** · `deepseek-flash` 3.1s
+- `response_format: {"type":"json_object"}` 지원 확인
+- 키는 기존 KV `OPENCODE-GO-API-KEY` 재사용 → 신규 시크릿 0
+- 물량: `review_facts` 769건/7일(≈110/day) → 월 ~10k 호출 · Go 한도 150,400req/월·$60/월 · **추정 ~$2/월**
+
+### 실패·차단 (이유 포함)
+| 시도 | 결과 |
+|---|---|
+| Zen 무료 모델 (`mimo-v2.6-flash-free` 등) | `403 FreeTierError: only from within OpenCode` — 파이프라인 직접 HTTP 불가 |
+| `deepseek-v4-flash-free` | `400 Model is unavailable` (회전형) |
+| **임베딩/리랭커 API** | **OpenCode 계열에 없음** — GO 30종·ZEN 44종 전부 chat, `/embeddings`·`/rerank`·`/v1/*` 전부 **404** → **로컬 고정 확정** |
+| 브라우저형 `User-Agent` 없이 호출 | Cloudflare `403 error 1010` |
+| `x-opencode-session` 없이 호출 | `400 MissingSessionID` |
+
+### 설계 확정 사항
+1. **3단 폴백**: `mimo-v2.6-flash` → `deepseek-v4-flash` → **로컬 Q4** (embed 8081 · reranker 8080은 체인 밖)
+2. **스키마 강제 필수** — `json_object`는 JSON만 보장: 동일 프롬프트에 mimo는 객체 스키마 준수, deepseek는 `{"facts":[문자열]}`로 이탈 → 응답 검증 + 1회 재시도(ADR-0005 Decision 3·4)
+3. llama.cpp 전용 인자 제거: `top_k` · `repeat_penalty` · `cache_prompt` · `chat_template_kwargs`
+4. `timeout` 300~7200s → **120s** 하향
+5. 한도: 5시간 **$12** / 주 $30 / 월 $60 — 월 물량은 15배 여유, **배치 몰아치면 5시간 한도가 병목**
+
+### 미해결 (전환 단계 1~3 미착수)
+- `config/providers.yaml` 미생성 · `ModelProvidersConfig.resolve_provider_name()` 미구현 · `create_llm_provider()` 팩토리 없음
+- 수락 기준(`DEVFORGE_LLM_PROVIDER` 스위치만으로 전환) **미달**
