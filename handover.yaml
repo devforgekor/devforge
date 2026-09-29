@@ -1,19 +1,23 @@
 last_checkpoint:
-  time: '2026-09-29T13:40:00.888886+00:00'
-  summary: 6 source, 1 docs, 1 generated
-  total_files: 15
+  time: '2026-09-29T14:20:01.172172+00:00'
+  summary: 10 source, 1 docs, 1 generated
+  total_files: 21
   recent_files:
     data: []
     docs:
     - server/docs/architecture/code-structure.yaml
     config: []
     source:
-    - server/alembic/versions/20260929_turn_provenance.py
-    - server/scripts/verify-provenance.py
-    - server/src/devforge/domain/models.py
+    - server/scripts/lib/prj/__init__.py
+    - server/scripts/lib/prj/orchestrator.py
+    - server/scripts/lib/prj/serialize.py
+    - server/scripts/lib/prj/verify.py
+    - server/scripts/turn_watcher.py
     - server/src/devforge/domain/turn_collection/collection.py
     - server/tests/unit/domain/turn_collection/__init__.py
     - server/tests/unit/domain/turn_collection/test_collection.py
+    - server/tests/unit/test_prj_orchestrator.py
+    - server/tests/unit/test_prj_verify.py
     generated:
     - server/collect_checkpoint.json
   git: {}
