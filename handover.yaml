@@ -1,18 +1,15 @@
 last_checkpoint:
-  time: '2026-09-29T15:10:01.522057+00:00'
-  summary: 84 source, 1 docs, 1 generated
-  total_files: 96
+  time: '2026-09-29T15:40:01.111435+00:00'
+  summary: 80 source, 1 docs, 1 generated
+  total_files: 91
   recent_files:
     data: []
     docs:
     - server/docs/architecture/code-structure.yaml
     config: []
     source:
-    - server/scripts/lib/prj/__init__.py
     - server/scripts/lib/prj/cli.py
     - server/scripts/lib/prj/orchestrator.py
-    - server/scripts/lib/prj/serialize.py
-    - server/scripts/lib/prj/verify.py
     - server/tests/characterization/test_call_llm.py
     - server/tests/characterization/test_check_all_llm.py
     - server/tests/characterization/test_handover_db.py
@@ -28,6 +25,9 @@ last_checkpoint:
     - server/tests/fitness/test_contract.py
     - server/tests/fitness/test_heartbeat_registry.py
     - server/tests/fitness/test_mcp_contract.py
+    - server/tests/fitness/test_wiring.py
+    - server/tests/fixtures/replay_harness.py
+    - server/tests/test_all.py
     generated:
     - server/collect_checkpoint.json
   git: {}
