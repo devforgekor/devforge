@@ -144,7 +144,7 @@ _launch_reranker() {
     podman exec -d devforge-inference \
         taskset -c 0-3 \
         /app/llama-server \
-        -m /models/Qwen3-Reranker-4B-Q8_0.gguf \
+        -m /models/Qwen3-Reranker-4B.i1-Q4_K_M.gguf \
         --host 0.0.0.0 --port 8080 \
         --ctx-size 4096 --batch-size 1024 --ubatch-size 1024 \
         --threads 4 --threads-batch 4 --no-mmap -lv 6 \

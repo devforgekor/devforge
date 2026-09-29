@@ -1066,7 +1066,7 @@ def _preflight_gate() -> None:
 
 
 def _launch_reranker() -> bool:
-    """Launch reranker (Qwen3-Reranker-4B-Q8_0.gguf) on :8080 via podman exec."""
+    """Launch reranker (Qwen3-Reranker-4B.i1-Q4_K_M.gguf) on :8080 via podman exec."""
     import subprocess
 
     from lib.model_registry import MODEL_METADATA

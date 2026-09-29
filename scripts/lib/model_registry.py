@@ -6,10 +6,14 @@
 Import by name: MODEL_METADATA, DAY_PHASE_MODELS, NIGHT_MODELS.
 """
 
+# [WHY] 전량 Q4_K_M: 이 시스템(CPU 추론)에서 Q8_0 대비 추론이 느렸고,
+# 임베딩·리랭커·추출기 모두 같은 병목을 공유한다. Q4_K_M 은 대역폭 절반 수준이라
+# 체감 속도가 크게 올라간다. Q8_0 파일은 /opt/ai_data/models/gguf 에 그대로 남아
+# 롤백 가능하다.
 MODEL_METADATA = {
     "embeder": {
-        "file": "Qwen3-Embedding-8B-Q8_0.gguf",
-        "size": "7.5GB",
+        "file": "Qwen3-Embedding-8B-Q4_K_M.gguf",
+        "size": "4.4GB",
         "port": 8081,
         "mode": "embed",
         "model_name": "embeder",
@@ -20,8 +24,8 @@ MODEL_METADATA = {
         "cpus": "2-3",
     },
     "reranker": {
-        "file": "Qwen3-Reranker-4B-Q8_0.gguf",
-        "size": "4.0GB",
+        "file": "Qwen3-Reranker-4B.i1-Q4_K_M.gguf",
+        "size": "2.4GB",
         "port": 8080,
         "mode": "rerank",
         "model_name": "reranker",
@@ -32,8 +36,8 @@ MODEL_METADATA = {
         "ubatch_size": 2048,
     },
     "day-extractor": {
-        "file": "Qwen3-8B-Q8_0.gguf",
-        "size": "8.2GB",
+        "file": "Qwen3-8B-Q4_K_M.gguf",
+        "size": "4.7GB",
         "port": 8082,
         "mode": "day",
         "model_name": "day-extractor",
@@ -51,8 +55,8 @@ MODEL_METADATA = {
         "flash_attn": "1",
     },
     "day-verifier": {
-        "file": "veritas-8B-fact-checker-non-thinking-1.0.Q8_0.gguf",
-        "size": "8.2GB",
+        "file": "veritas-8B-fact-checker-non-thinking-1.0.Q4_K_M.gguf",
+        "size": "4.7GB",
         "port": 8082,
         "mode": "day",
         "model_name": "day-verifier",
