@@ -28,6 +28,11 @@ HANDOFF = os.path.join(WEBLLM_SCRIPTS, "handoff.sh")
 STATE_DIR = os.environ.get("PRJ_STATE_DIR", os.path.expanduser("~/.local/share/chrome-web-llm/prj"))
 
 TIMEOUT_WARN = 300
+# [WHY] 장문 map-reduce는 청크마다 웹 호출을 반복한다. 162,066자 20청크 실측 4분.
+# 질문 1회(300초)로는 부족하므로 파일 경로에는 더 긴 상한을 둔다.
+CHUNK_TIMEOUT_WARN = 1800
+# 브라우저 타이핑 실측 경계(2026-09-29): 55.8k자 통과 / 58.5k자 실패. 상한은 여유를 둔다.
+MAX_CONTEXT_CHARS = 50_000
 
 
 class EngineError(RuntimeError):
@@ -47,18 +52,40 @@ class WebLLMEngine:
     직렬로만 호출할 것(§7.6).
     """
 
-    def __init__(self, model: str, *, think: bool = True, timeout: int = TIMEOUT_WARN) -> None:
+    def __init__(
+        self,
+        model: str,
+        *,
+        think: bool = True,
+        timeout: int = TIMEOUT_WARN,
+        file: str | None = None,
+        chunk: bool = False,
+    ) -> None:
         self.name = model
         self.model = model
         self.think = think
         self.timeout = timeout
+        # [WHY] 장문은 argv로 넘기지 않는다. 252KB는 ARG_MAX로 즉시 죽고, 58k자를 넘으면
+        # 브라우저 타이핑이 잘려 5회 재시도 후 실패한다(2026-09-29 실측).
+        self.file = file
+        self.chunk = chunk
 
     def ask(self, prompt: str) -> str:
         _require(WEBLLM_CLI, "web-llm.sh — ~/.local/share/chrome-web-llm/scripts")
         cmd = [WEBLLM_CLI, "-m", self.model, "--search", "--no-capture"]
         if self.think:
             cmd.append("--think")
+        if self.file:
+            cmd += ["-f", self.file]
+            if self.chunk:
+                cmd.append("--chunk")
+        else:
+            cmd += ["-c", prompt]
         cmd += ["--", prompt]
+        # [WHY] 장문 map-reduce는 청크마다 웹 호출을 반복한다. 파일 하나가 수 분 걸리므로
+        # 여유를 둔다(argv 질문 경로는 300초면 충분하다).
+        if self.file:
+            self.timeout = max(self.timeout, CHUNK_TIMEOUT_WARN)
         try:
             proc = subprocess.run(  # noqa: S603
                 cmd, capture_output=True, text=True, timeout=self.timeout, check=False
@@ -180,14 +207,33 @@ def _push_handoff(result: PRJResult) -> None:
 
 def cmd_run(args: argparse.Namespace) -> int:
     task_id = args.task or f"prj-{uuid.uuid4().hex[:8]}"
+    src = args.file
+    if src:
+        # [WHY] 장문 입력은 질문과 별개로 파일로 전달한다. argv는 252KB에서 ARG_MAX로
+        # 죽고, 58k자를 넘으면 브라우저 타이핑이 잘린다(2026-09-29 실측).
+        if not os.path.isfile(src):
+            print(f"[prj] file not found: {src}", file=sys.stderr)
+            return 1
+        nchars = len(open(src, encoding="utf-8", errors="replace").read())
+        if nchars > MAX_CONTEXT_CHARS and not args.chunk:
+            print(
+                f"[prj] 문서가 {nchars:,}자로 상한({MAX_CONTEXT_CHARS:,})을 넘습니다. "
+                f"--chunk 를 붙이거나 문서를 나눠 주세요.",
+                file=sys.stderr,
+            )
+            return 1
+        eta = f"장문 {nchars:,}자 — 수 분 소요" if args.chunk else "2~5분 소요"
+    else:
+        eta = "2~5분 소요"
+
     orch = PRJOrchestrator(
-        proposer=WebLLMEngine("deepseek", think=True),
-        reviewer=WebLLMEngine("qwen", think=False),
+        proposer=WebLLMEngine("deepseek", think=True, file=src, chunk=args.chunk),
+        reviewer=WebLLMEngine("qwen", think=False, file=src, chunk=args.chunk),
         adjudicator=DuckAIEngine() if not args.no_judge else None,
         max_rounds=args.max_rounds,
         on_log=lambda m: print(f"[prj] {m}", file=sys.stderr),
     )
-    print(f"[prj] {task_id} 시작 — 2~5분 소요", file=sys.stderr)
+    print(f"[prj] {task_id} 시작 — {eta}", file=sys.stderr)
     try:
         result = orch.run(task_id, args.query)
     except EngineError as exc:
@@ -297,6 +343,8 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("run", help="P-R 실행 → 합의 시 즉시 종료")
     r.add_argument("query")
     r.add_argument("--task", default=None, help="task_id 지정 (기본: 자동 생성)")
+    r.add_argument("--file", default=None, help="장문 파일 경로 (argv ARG_MAX 회피)")
+    r.add_argument("--chunk", action="store_true", help="상한 초과 문서를 map-reduce로 처리")
     r.add_argument("--max-rounds", type=int, default=3)
     r.add_argument("--no-judge", action="store_true", help="ECT(판정) 단계를 건너뛴다")
     r.add_argument("--json", action="store_true")
