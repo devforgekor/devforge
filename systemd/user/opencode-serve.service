@@ -1,0 +1,14 @@
+[Unit]
+Description=Opencode Headless Server (loopback attach target for openclaw exec)
+
+[Service]
+Type=simple
+# [WHY] loopback 전용 + 패스워드 생략: 단일 사용자(opc) 머신이라 로컬 프로세스는
+#      이미 opc 권한을 가짐. 적합한 KV 키(OPENCODE_SERVER_PASSWORD)가 없어
+#      새 시크릿 생성 대신 --hostname 127.0.0.1 로 바인딩 제한.
+ExecStart=/home/opc/.local/bin/opencode serve --port 4097 --hostname 127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
