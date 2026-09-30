@@ -27,6 +27,24 @@ _TERMINAL_MARKERS = ("permission denied", "not found", "no such file")
 
 _CATCHUP_PREFIXES = ("oneshot:", "timer:")
 
+# [WHY] Canary stages follow Google SRE: start small, expand gradually, one at a time.
+# Stage 0 = canary paths only; Stage 1 = canary + one real service; Stage 2 = all.
+# Promotion requires evidence (no incidents for a period) — not time-based alone.
+CANARY_STAGES: dict[int, dict[str, Sequence[str]]] = {
+    0: {
+        "fix": ("svc:svc-pod-forwarding",),
+        "catchup": ("timer:devforge-system-sync.timer",),
+    },
+    1: {
+        "fix": ("svc:svc-pod-forwarding", "svc:ebook-watcher"),
+        "catchup": ("timer:devforge-system-sync.timer", "oneshot:devforge-backup.service"),
+    },
+    2: {
+        "fix": ("svc:",),
+        "catchup": ("oneshot:", "timer:"),
+    },
+}
+
 
 @dataclass(frozen=True)
 class RouteDecision:
@@ -51,3 +69,10 @@ def route(component: str, event_type: str, detail: str = "") -> RouteDecision:
 def matches_canary(component: str, canary: Sequence[str]) -> bool:
     """True if `component` is in the canary allowlist (exact or prefix match)."""
     return any(component == entry or component.startswith(entry) for entry in canary)
+
+
+def canary_allowed(component: str, logic: str, stage: int) -> bool:
+    """True if `component` is allowed at the given canary stage (Google SRE pattern)."""
+    stage_map = CANARY_STAGES.get(stage, CANARY_STAGES[0])
+    allowed = stage_map.get(logic, ())
+    return any(component == entry or component.startswith(entry) for entry in allowed)

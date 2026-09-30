@@ -16,7 +16,8 @@ from typing import Optional
 
 from devforge.core.logging import get_logger
 from devforge.domain.watchdog.governance import MAX_ATTEMPTS_DEFAULT, escalate_needed
-from devforge.domain.watchdog.routing import route
+from devforge.domain.watchdog.routing import canary_allowed, route
+from devforge.ports.approval import ApprovalPort, ApprovalRequest
 from devforge.ports.catchup import CatchupPort
 from devforge.ports.incident_repository import IncidentRepository
 
@@ -30,11 +31,17 @@ class CatchupController:
         incidents: IncidentRepository,
         window_sec: int = 600,
         max_attempts: int = MAX_ATTEMPTS_DEFAULT,
+        staleness_sec: int = 3600,
+        approval_port: Optional[ApprovalPort] = None,
+        canary_stage: int = 0,
     ) -> None:
         self._port = catchup_port
         self._incidents = incidents
         self._window_sec = window_sec
         self._max_attempts = max_attempts
+        self._staleness_sec = staleness_sec
+        self._approval = approval_port
+        self._canary_stage = canary_stage
         self._last_run: dict[str, float] = {}
 
     def ran_recently(self, unit: str) -> bool:
@@ -47,11 +54,27 @@ class CatchupController:
         event_type: str,
         inc_id: Optional[int] = None,
         fail_count: int = 0,
+        last_seen_at: Optional[str] = None,
+        status: str = "open",
     ) -> str:
         """Returns: skip | already-ran | ran | retry | escalate."""
         decision = route(component, event_type, "")
         if decision.logic != "catchup":
             return "skip"
+        if status == "resolved":
+            return "skip"
+        if last_seen_at:
+            try:
+                from datetime import datetime, timezone
+
+                ts = datetime.fromisoformat(last_seen_at.replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                age = (datetime.now(timezone.utc) - ts).total_seconds()
+                if age > self._staleness_sec:
+                    return "skip"
+            except (ValueError, TypeError):
+                pass
         if escalate_needed(fail_count, self._max_attempts):
             if inc_id is not None:
                 await self._incidents.record_action(inc_id, "catchup:escalate", False)
@@ -59,6 +82,28 @@ class CatchupController:
         unit = component.split(":", 1)[1] if ":" in component else component
         if self.ran_recently(unit):
             return "already-ran"
+        if not canary_allowed(component, "catchup", self._canary_stage):
+            if inc_id is not None:
+                await self._incidents.record_action(inc_id, "catchup:canary-blocked", False)
+            return "canary-blocked"
+        if self._approval is not None and decision.impact in ("mutating", "undetermined"):
+            action_id = f"catchup:{unit}:{int(time.monotonic())}"
+            req = ApprovalRequest(
+                action_id=action_id,
+                component=component,
+                action=f"catchup:{decision.kind}",
+                evidence={
+                    "unit": unit,
+                    "event_type": event_type,
+                    "fail_count": fail_count,
+                    "impact": decision.impact,
+                },
+            )
+            approval = await self._approval.request(req)
+            if not approval.approved:
+                if inc_id is not None:
+                    await self._incidents.record_action(inc_id, "catchup:denied", False)
+                return "denied"
         try:
             if decision.kind == "oneshot_run":
                 ok = await self._port.run_oneshot(unit)

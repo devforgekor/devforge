@@ -604,7 +604,7 @@ class TestAbcCanary:
         checks = [HealthCheck(component="oneshot:x.service", is_healthy=False, detail="failed")]
         comps["check_coordinator"] = FakeCheckCoordinator(checks, comps["registry"])
         port = _FakeCatchupPort()
-        catchup = CatchupController(port, comps["incident_repo"])
+        catchup = CatchupController(port, comps["incident_repo"], canary_stage=2)
         svc = _build_service(
             comps,
             WatchdogConfig(catchup_enabled=True, catchup_canary=["oneshot:x.service"]),
