@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: MCP client (opencode.json)
 """SQLite MCP — read-only access to OpenCode session database.
@@ -10,7 +10,7 @@ Security:
 Register in opencode.json:
   "mcpServers": {
     "opencode-db": {
-      "command": "python3.11",
+      "command": "python3.12",
       "args": ["/opt/projects/server/scripts/sqlite_mcp.py"]
     }
   }

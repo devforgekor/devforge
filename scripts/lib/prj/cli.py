@@ -113,7 +113,7 @@ class DuckAIEngine:
         _require(script, "cli.py — /opt/projects/server/scripts")
         try:
             proc = subprocess.run(  # noqa: S603
-                ["python3.11", script, "research", "ask", prompt, "--fresh"],
+                ["python3.12", script, "research", "ask", prompt, "--fresh"],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,

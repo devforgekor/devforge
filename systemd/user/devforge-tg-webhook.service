@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3.11 /opt/projects/server/scripts/lib/tg_webhook.py --port 8001 --host 127.0.0.1
+ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/lib/tg_webhook.py --port 8001 --host 127.0.0.1
 Restart=always
 RestartSec=5
 StandardOutput=journal

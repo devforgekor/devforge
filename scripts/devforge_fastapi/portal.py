@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: devforge_fastapi/app.py (mounted) — Vercel viewer read API
 """Portal read API for the Vercel viewer — display-only JSON.

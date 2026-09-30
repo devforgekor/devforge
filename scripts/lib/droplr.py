@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — blob_explorer/blob.py, lib
 """Droplr link shortener via HTTP API — no Node CLI dependency.

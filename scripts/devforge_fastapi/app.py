@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: systemd:devforge-fastapi.service
 """DevForge FastAPI — notification hub (Slack + Telegram + Email) + Blob Explorer.

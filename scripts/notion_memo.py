@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: bash alias: notion-memo, nnmm
 """Notion 메모 전송 CLI — stdin, 파일, 또는 인자로 받은 텍스트를 Notion에 기록.

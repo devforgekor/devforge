@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — cli.py, lib/debate/local_debate.py, droplr_upload.py
 """Review-bundle uploader — OCI Object Storage + optional Droplr short link.

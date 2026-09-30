@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd --user: devforge-restore-test.service -> osync_restore_test.py (monthly)
 """Monthly restore test — restore latest devforge-standard DB dump into a scratch DB.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: MCP client (mcp.json)
 """pg_mcp — PostgreSQL MCP server via podman exec.
@@ -14,7 +14,7 @@ Security:
 Register in mcp.json:
   "postgres": {
     "type": "stdio",
-    "command": "python3.11",
+    "command": "python3.12",
     "args": ["/opt/projects/server/scripts/pg_mcp.py"]
   }
 """

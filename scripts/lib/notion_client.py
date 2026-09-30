@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — droplr_upload.py, blob_uploader.py, cli.py
 """Notion 메모 클라이언트 — 서버 문서/분석 결과를 Notion 페이지로 공유.

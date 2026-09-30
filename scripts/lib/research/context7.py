@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — context7_mcp.py, lib/research/__init__.py, cli.py
 """Context7 docs core — library resolve + docs query (extracted from context7_mcp.py).

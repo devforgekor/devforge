@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: systemd:devforge-openrouter-free-models.timer
 """

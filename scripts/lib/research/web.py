@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — proxies/search.py, lib/research/__init__.py, cli.py
 """Web search core — Brave → Tavily → you.com rotation (extracted from proxies/search.py).

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: MCP stdio (mcp.json: exa-search) — thin wrapper over lib/research/exa.py
 """exa_mcp (thin wrapper). Core logic lives in lib.research.exa."""

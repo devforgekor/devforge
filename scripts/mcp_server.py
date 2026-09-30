@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: systemd:devforge-mcp.service
 """DevForge MCP Server — Streamable HTTP (MCP spec 2025-03-26).
@@ -16,8 +16,8 @@ Tools:
   - review_sequential: Sequential code review for Aider task prep
 
 Usage:
-  python3.11 mcp_server.py                    # default :8000
-  python3.11 mcp_server.py --port 8001        # custom port
+  python3.12 mcp_server.py                    # default :8000
+  python3.12 mcp_server.py --port 8001        # custom port
 """
 
 import asyncio

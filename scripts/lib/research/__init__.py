@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — cli.py, (future) lib consumers
 """Research facade — one entry point over web/exa/context7/fetch providers.

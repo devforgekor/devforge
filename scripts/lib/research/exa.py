@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: imported by — exa_mcp.py, lib/research/__init__.py, cli.py
 """Exa search core — semantic web search + contents (extracted from exa_mcp.py).

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: systemd --user: devforge-backup.service -> osync_backup.py (daily)
 """DevForge backup -> OCI Object Storage (bucket devforge-standard).

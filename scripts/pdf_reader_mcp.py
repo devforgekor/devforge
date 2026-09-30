@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: MCP client (mcp.json — ~/.claude/mcp.json)
 """pdf_reader_mcp — PDF extraction MCP server using PyMuPDF.
@@ -9,7 +9,7 @@ Designed for both quick reading and structured JSON export for embedding.
 Register in mcp.json:
   "pdf-reader": {
     "type": "stdio",
-    "command": "python3.11",
+    "command": "python3.12",
     "args": ["/opt/projects/server/scripts/pdf_reader_mcp.py"]
   }
 """

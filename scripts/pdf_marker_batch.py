@@ -1,6 +1,6 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
-# Path: cli — python3.11 scripts/pdf_marker_batch.py {convert, batch, scan} [args]
+# Path: cli — python3.12 scripts/pdf_marker_batch.py {convert, batch, scan} [args]
 """pdf_marker_batch — Background high-quality PDF conversion using marker-pdf.
 
 Uses marker-pdf (Surya layout model) for superior structure extraction.
@@ -8,10 +8,10 @@ NOT for realtime use — model load is heavy, conversion is slow on CPU.
 Designed for background/batch processing (tmux, systemd, cron).
 
 Usage:
-  python3.11 pdf_marker_batch.py convert <pdf_path> [output_dir]
-  python3.11 pdf_marker_batch.py batch <pdf_dir> [output_dir]
-  python3.11 pdf_marker_batch.py scan <pdf_dir>           # list PDFs with type detection
-  python3.11 pdf_marker_batch.py info <pdf_path>          # show PDF metadata only (no marker)
+  python3.12 pdf_marker_batch.py convert <pdf_path> [output_dir]
+  python3.12 pdf_marker_batch.py batch <pdf_dir> [output_dir]
+  python3.12 pdf_marker_batch.py scan <pdf_dir>           # list PDFs with type detection
+  python3.12 pdf_marker_batch.py info <pdf_path>          # show PDF metadata only (no marker)
 """
 
 import argparse

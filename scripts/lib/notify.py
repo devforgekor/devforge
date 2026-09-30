@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: experimental
 # Path: lib/notify.py — imported by app.py, telegram_send.py, mcp_server.py
 """Unified notification module — Apprise (Telegram, Email) + native Slack.

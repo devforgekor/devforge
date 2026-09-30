@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: MCP stdio (mcp.json: context7) — thin wrapper over lib/research/context7.py
 """context7_mcp (thin wrapper). Core logic lives in lib.research.context7."""

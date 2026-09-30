@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3.12
 # Status: production
 # Path: bash alias: droplr, dplr
 """Upload a file to Azure Blob, shorten with Droplr, print d.pr URL.
