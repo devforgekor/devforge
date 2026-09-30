@@ -19,6 +19,7 @@ Claude 수집 정책 (단일 경로):
 import json
 import sys
 import time
+import traceback
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,10 +32,13 @@ from lib.parsers.copilot import parse as parse_copilot
 from lib.tracking.agent_names import normalize as normalize_agent
 
 from devforge.domain.turn_collection.collection import (
+    FailureKind,
     SessionAction,
     filter_unseen,
     get_entry,
+    is_quarantined,
     merge_checkpoint,
+    plan_failure,
     plan_session,
     should_skip_parse,
     truncate_turn,
@@ -214,6 +218,72 @@ def _insert_chunk(rows_values: List[str]) -> int:
     return len(rows_values) if ok else 0
 
 
+def _record(checkpoint: Dict, source: str, conv_id: str, count: int, mtime: float, prev) -> None:
+    """Write a session's position, un-parking it if it had been parked.
+
+    The recovery is stated explicitly rather than omitted: a writer that leaves
+    the quarantine fields out lets the merge preserve them, which would strand
+    a repaired session forever.
+    """
+    entry = {"count": count, "mtime": mtime}
+    if is_quarantined(prev):
+        entry.update({"failures": 0, "fail_kind": "", "quarantined_at": 0.0})
+        print(f"  RESUMED {source}/{conv_id[:8]}: parse recovered")
+    checkpoint.setdefault(source, {})[conv_id] = entry
+
+
+def _handle_failure(
+    source: str,
+    session_id: str,
+    path: Path,
+    exc: Exception,
+    checkpoint: Dict,
+    config: Dict,
+    dry_run: bool,
+) -> bool:
+    """Park a session whose parse failed. Returns True when the checkpoint changed.
+
+    [WHY] logging every failure would repeat it once per poll interval forever,
+    because a parked session is skipped without clearing the position that
+    caused the retry. The transition — parked or recovered — is the only part
+    worth a line.
+    """
+    sid_fn = config.get("sid_fn", lambda s: s)
+    mtime_fn = config.get("mtime_fn", lambda p, s: p.stat().st_mtime)
+    conv_id = sid_fn(session_id)
+    try:
+        current_mtime = mtime_fn(path, session_id)
+    except Exception:
+        current_mtime = 0.0
+
+    prev = get_entry(checkpoint, source, conv_id)
+    plan = plan_failure(prev, current_mtime, exc, now=time.time())
+    record = plan.record
+    if record is None:
+        return False
+    if not dry_run:
+        checkpoint.setdefault(source, {})[conv_id] = {
+            "count": record.count,
+            "mtime": record.mtime,
+            "failures": record.failures,
+            "fail_kind": record.fail_kind,
+            "quarantined_at": record.quarantined_at,
+        }
+
+    if is_quarantined(prev) != is_quarantined(record):
+        if is_quarantined(record):
+            print(
+                f"  QUARANTINE {source}/{session_id[:8]}: {record.fail_kind} "
+                f"after {record.failures} failure(s) — {exc}. "
+                f"Retries resume only if the source changes."
+            )
+    elif record.fail_kind == FailureKind.UNKNOWN.value and record.failures == 1:
+        # [WARNING] an unrecognized failure is not silently retried — surface the
+        # traceback once so a regression is attributable.
+        traceback.print_exc()
+    return True
+
+
 def process_session(
     source: str,
     session_id: str,
@@ -245,10 +315,7 @@ def process_session(
         # Empty / unchanged session: refresh mtime so it isn't re-parsed every
         # cycle. A dry run must not touch the file the live watcher is writing.
         if not dry_run and plan.record is not None:
-            checkpoint.setdefault(source, {})[conv_id] = {
-                "count": plan.record.count,
-                "mtime": plan.record.mtime,
-            }
+            _record(checkpoint, source, conv_id, plan.record.count, plan.record.mtime, prev)
         return 0
 
     title = title_fn(path, session_id) if title_fn else ""
@@ -259,10 +326,7 @@ def process_session(
     )
 
     if not dry_run:
-        checkpoint.setdefault(source, {})[conv_id] = {
-            "count": prev.count + inserted,
-            "mtime": current_mtime,
-        }
+        _record(checkpoint, source, conv_id, prev.count + inserted, current_mtime, prev)
 
     if inserted > 0:
         if dry_run:
@@ -281,6 +345,7 @@ def run_once(dry_run: bool = False) -> int:
     """One full scan across all sources. Returns total turns inserted."""
     checkpoint = load_checkpoint()
     total = 0
+    failed = False
 
     for source, config in SOURCES.items():
         sessions = _list_session_files(source, config)
@@ -294,9 +359,9 @@ def run_once(dry_run: bool = False) -> int:
                 )
                 total += n
             except Exception as e:
-                print(f"  ERROR {source}/{session_id[:8]}: {e}")
+                failed |= _handle_failure(source, session_id, path, e, checkpoint, config, dry_run)
 
-    if total > 0 and not dry_run:
+    if (total > 0 or failed) and not dry_run:
         save_checkpoint(checkpoint)
 
     return total
