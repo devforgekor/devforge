@@ -1,21 +1,20 @@
 last_checkpoint:
-  time: '2026-09-30T00:57:26.215949+00:00'
-  summary: 8 source, 1 docs, 1 generated
-  total_files: 22
+  time: '2026-09-30T08:20:00.781865+00:00'
+  summary: 7 source, 1 docs, 1 generated
+  total_files: 15
   recent_files:
     data: []
     docs:
     - server/docs/architecture/code-structure.yaml
     config: []
     source:
-    - server/scripts/proxies/gemini_rr_proxy.py
-    - server/scripts/turn_watcher.py
-    - server/src/devforge/adapters/driven/health/turn_collection_health.py
-    - server/src/devforge/application/watchdog_service.py
-    - server/src/devforge/core/config.py
-    - server/src/devforge/domain/turn_collection/collection.py
-    - server/tests/unit/adapters/driven/health/test_turn_collection_health.py
-    - server/tests/unit/domain/turn_collection/test_collection.py
+    - server/src/devforge/adapters/driven/approval/__init__.py
+    - server/src/devforge/adapters/driven/approval/memory_approval.py
+    - server/src/devforge/application/controllers.py
+    - server/src/devforge/domain/watchdog/routing.py
+    - server/src/devforge/ports/approval.py
+    - server/tests/unit/application/test_controllers.py
+    - server/tests/unit/application/test_watchdog_service.py
     generated:
     - server/collect_checkpoint.json
   git: {}

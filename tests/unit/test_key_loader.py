@@ -17,6 +17,15 @@ def test_per_account_keys_auto_collected(monkeypatch) -> None:  # type: ignore[n
     assert ("minipark4u", "AIza-2") in keys
 
 
+def test_consolidated_json_format(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.delenv("GEMINI_MESIDS_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_MINIPARK4U_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEYS", '[{"account":"mesids","api_key":"AIza-1"},{"account":"minipark4u","api_key":"AIza-2"}]')
+    keys = load_api_keys("GEMINI")
+    assert ("mesids", "AIza-1") in keys
+    assert ("minipark4u", "AIza-2") in keys
+
+
 def test_service_prefix_for_rotator(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv("BRAVE_API_KEYS", raising=False)
     monkeypatch.setenv("BRAVE_MESIDS_API_KEY", "b1")

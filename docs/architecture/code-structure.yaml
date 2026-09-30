@@ -1021,6 +1021,9 @@ modules:
     unified_search.py:
       status: experimental
       purpose: Unified search MCP transport (web/semantic) + rerank + format.
+    gemini_rr_proxy.py:
+      status: experimental
+      purpose: Gemini OpenAI-compatible key round-robin proxy (:4431).
     search.py:
       status: production
       purpose: MCP search proxy (thin wrapper). Core logic lives in lib.research.web.
@@ -1290,6 +1293,15 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
+- path: src/devforge/adapters/driven/approval/
+  purpose: HITL approval adapters
+  files:
+    __init__.py:
+      status: unknown
+      purpose: __init__.py
+    memory_approval.py:
+      status: experimental
+      purpose: In-memory approval adapter — fail closed when no approver registered.
 - path: src/devforge/adapters/driven/llm/
   purpose: src/devforge/adapters/driven/llm
   files:
@@ -1672,6 +1684,9 @@ modules:
     notification.py:
       status: experimental
       purpose: NotificationPort — send_alert/send_recovery/sd_notify.
+    approval.py:
+      status: experimental
+      purpose: HITL approval port — ApprovalRequest/Decision, mutating gate.
     incident_repository.py:
       status: experimental
       purpose: IncidentRepository — record_detect/record_action/resolve_if_open/find_open/find_since.

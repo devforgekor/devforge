@@ -43,6 +43,16 @@ def load_api_keys(provider_prefix: str = "GEMINI", service: str | None = None) -
     if keys_str:
         from lib.auth.api_key_cipher import decrypt_data
 
+        # JSON array format: [{"account": "...", "api_key": "..."}, ...]
+        stripped = keys_str.strip()
+        if stripped.startswith("["):
+            import json as _json
+            try:
+                entries = _json.loads(stripped)
+                return [(_name(e["account"]), e["api_key"]) for e in entries]
+            except (ValueError, KeyError, TypeError):
+                pass
+
         keys = []
         for item in keys_str.split(","):
             item = item.strip()
