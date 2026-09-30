@@ -12,7 +12,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from devforge.application.closed_loop_verifier import ClosedLoopVerifier
 from devforge.application.controllers import CatchupController
+from devforge.application.remediation_runner import RemediationRunner
+from devforge.application.self_heal_matcher import SelfHealMatcher
 from devforge.application.slo import compute_slos
 from devforge.core.config import WatchdogConfig
 from devforge.core.telemetry import new_run_id, set_run_id, span
@@ -68,6 +71,9 @@ class WatchdogService:
         state_storage: Optional[StateStoragePort] = None,
         dry_run: bool = False,
         catchup: Optional["CatchupController"] = None,
+        remediation_runner: Optional["RemediationRunner"] = None,
+        closed_loop_verifier: Optional["ClosedLoopVerifier"] = None,
+        self_heal_matcher: Optional["SelfHealMatcher"] = None,
     ) -> None:
         self._config = config
         self._catchup = catchup
@@ -81,6 +87,9 @@ class WatchdogService:
         self._mode = "day"
         self._last_heartbeat_ts = 0.0
         self._dry_run = dry_run
+        self._runner = remediation_runner
+        self._verifier = closed_loop_verifier
+        self._self_heal = self_heal_matcher
 
     def _event_type(self, component: str) -> str:
         return _EVENT_TYPE.get(component.split(":", 1)[0], "down")
@@ -167,6 +176,20 @@ class WatchdogService:
                 else:
                     action = self._recovery.plan(c.component, c.detail)
                 if action is not None and t.can_attempt_recovery():
+                    # Self-heal: check for pre-approved pattern first
+                    if self._self_heal is not None and self._runner is not None and self._verifier is not None:
+                        plan = self._self_heal.match(c.component, self._event_type(c.component))
+                        if plan is not None:
+                            result = await self._runner.execute(plan, inc_id)
+                            verified = await self._verifier.verify(c.component, result, inc_id)
+                            if verified.success:
+                                self._recovery.record_result(c.component, True)
+                                for n in self._notifiers:
+                                    await n.send_recovery(c.component, "self-heal ok")
+                            else:
+                                for n in self._notifiers:
+                                    await n.send_alert(c.component, "SELF_HEAL_FAILED", verified.error or "unknown")
+                            continue
                     # Non-blocking backoff: defer the next attempt instead of
                     # sleeping the whole cycle (legacy sleeps in-line).
                     t.schedule_next_attempt(action.backoff_sec)
@@ -368,6 +391,13 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
         max_attempts=config.max_attempts,
     )
 
+    from devforge.adapters.driven.health.systemd_health import SystemdServiceHealthChecker
+
+    health_port = SystemdServiceHealthChecker([s for s in config.critical_services if s != "ebook-watcher"])
+    runner = RemediationRunner(recovery_port, health_port, incident_repo)
+    verifier = ClosedLoopVerifier(health_port)
+    self_heal = SelfHealMatcher()
+
     service = WatchdogService(
         config,
         registry,
@@ -379,6 +409,9 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
         state_storage,
         dry_run=dry_run,
         catchup=catchup,
+        remediation_runner=runner,
+        closed_loop_verifier=verifier,
+        self_heal_matcher=self_heal,
     )
     service.load_state()
     return service
