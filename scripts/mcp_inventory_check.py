@@ -109,7 +109,7 @@ def scan_m0_log(log_path: Path, since: str, contract: List[str]) -> Dict[str, ob
                 continue
             ts_s = m.group(1)
             try:
-                ts = datetime.fromisoformat(ts_s)
+                ts = datetime.fromisoformat(ts_s.replace("Z", "+00:00"))
             except ValueError:
                 continue
             if ts < since_dt:
