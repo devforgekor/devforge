@@ -1324,11 +1324,17 @@
     },
     "7fd14d9e-491e-578f-a114-8bce06bd2f8c": {
       "count": 29,
-      "mtime": 1790142059.363
+      "mtime": 1790142059.363,
+      "failures": 1,
+      "fail_kind": "permanent",
+      "quarantined_at": 1790728308.131518
     },
     "f8ed7d8e-5c20-59f5-ae63-1d5be25f8773": {
       "count": 17,
-      "mtime": 1790142002.474
+      "mtime": 1790142002.474,
+      "failures": 1,
+      "fail_kind": "permanent",
+      "quarantined_at": 1790728308.131518
     },
     "cfc31d74-3cc4-5e99-9479-2e046b66414b": {
       "count": 160,
@@ -1443,8 +1449,16 @@
       "mtime": 1790686520.83
     },
     "9a05da7b-a672-52e9-b661-2860c4c9e248": {
-      "count": 9,
-      "mtime": 1790724809.893
+      "count": 14,
+      "mtime": 1790729761.058
+    },
+    "7c7106b1-231e-5d63-8303-c368b800eabc": {
+      "count": 6,
+      "mtime": 1790729754.398
+    },
+    "9faaac91-40bb-5915-9d9f-afad0ac22f08": {
+      "count": 4,
+      "mtime": 1790729238.463
     }
   },
   "copilot": {
