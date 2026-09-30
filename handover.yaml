@@ -1,21 +1,13 @@
 last_checkpoint:
-  time: '2026-09-30T09:40:00.572464+00:00'
-  summary: 8 source, 1 docs, 1 generated
-  total_files: 15
+  time: '2026-09-30T22:30:01.370793+00:00'
+  summary: 1 config, 1 generated
+  total_files: 4
   recent_files:
     data: []
-    docs:
-    - server/docs/architecture/code-structure.yaml
-    config: []
-    source:
-    - server/src/devforge/application/closed_loop_verifier.py
-    - server/src/devforge/application/remediation_runner.py
-    - server/src/devforge/application/self_heal_matcher.py
-    - server/src/devforge/application/watchdog_service.py
-    - server/src/devforge/ports/types.py
-    - server/tests/unit/application/test_closed_loop_verifier.py
-    - server/tests/unit/application/test_remediation_runner.py
-    - server/tests/unit/application/test_self_heal_matcher.py
+    docs: []
+    config:
+    - server/systemd/user/opencode-serve.service
+    source: []
     generated:
     - server/collect_checkpoint.json
   git: {}
