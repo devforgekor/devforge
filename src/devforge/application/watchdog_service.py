@@ -9,6 +9,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from devforge.application.controllers import CatchupController
@@ -319,6 +320,14 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
         "disk": DiskHealthChecker(config.disks),
         "heartbeat": HeartbeatHealthChecker(heartbeat_repo, config.heartbeat_workers),
     }
+    if config.turn_collection_enabled:
+        from devforge.adapters.driven.health.turn_collection_health import (
+            TurnCollectionHealthChecker,
+        )
+
+        health_ports["turn_collection"] = TurnCollectionHealthChecker(
+            Path(config.turn_collection_checkpoint)
+        )
     if config.dataimpulse_enabled:
         from devforge.adapters.driven.health.dataimpulse_path import DataImpulsePathHealthChecker
 

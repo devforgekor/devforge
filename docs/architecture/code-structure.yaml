@@ -1348,6 +1348,9 @@ modules:
     llm_health.py:
       status: experimental
       purpose: LLM inference probes (checker.py:79-127, 493-528).
+    turn_collection_health.py:
+      status: experimental
+      purpose: Turn collection completeness — sessions the collector parked, read from collect_checkpoint.json.
     system_health.py:
       status: experimental
       purpose: Memory/disk checks (checker.py:306-371).

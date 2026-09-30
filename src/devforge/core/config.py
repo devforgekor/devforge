@@ -472,6 +472,11 @@ class WatchdogConfig:
     dataimpulse_deep_stale_sec: int = 300
     dataimpulse_deep_consecutive: int = 3
     dataimpulse_reconcile_gap_pct: float = 20.0
+    # Turn collection completeness — sessions the collector parked. Read-only,
+    # alert-only (no recovery: a parked session needs its source repaired, not
+    # a restart). Off by default; enable once the checkpoint path is settled.
+    turn_collection_enabled: bool = False
+    turn_collection_checkpoint: str = "/opt/projects/server/collect_checkpoint.json"
     # Availability SLOs (2026 standard-gap §10). Component keys match the
     # watchdog tracker keys produced by the health checkers (svc: prefix).
     slo_targets: list[SloTarget] = field(
@@ -506,6 +511,11 @@ class WatchdogConfig:
             ],
             catchup_window_sec=int(os.getenv("WATCHDOG_CATCHUP_WINDOW_SEC", "600")),
             max_attempts=int(os.getenv("WATCHDOG_MAX_ATTEMPTS", "5")),
+            turn_collection_enabled=os.getenv("WATCHDOG_TURN_COLLECTION_ENABLED", "0").lower()
+            in ("1", "true", "yes", "on"),
+            turn_collection_checkpoint=os.getenv(
+                "WATCHDOG_TURN_COLLECTION_CHECKPOINT", cls.turn_collection_checkpoint
+            ),
             dataimpulse_enabled=os.getenv("WATCHDOG_DATAIMPULSE_ENABLED", "0").lower()
             in ("1", "true", "yes", "on"),
             dataimpulse_status_file=os.getenv(
