@@ -17,7 +17,7 @@ current_phase:
   name: "Pipeline embed domainization — shadow parallel gate"
   week: "Week 7-9"
   status: in_progress
-  note: "Build complete (orchestrator + embed stage + CLI + day_cycle wrapper). shadow_diff diff=0 achieved 2026-09-27T11:13Z (missing_real=0, vector_mismatch=0, legacy_raw 23 intentional). 2-week parallel gate running: day_cycle.sh embed 직후 shadow 재투영 (failures ignored) + devforge-shadow-diff.timer (hourly JSONL evidence in logs/shadow_diff_YYYYMMDD.jsonl). Rollback rehearsed 2026-09-27: 4s (git checkout -- scripts/day_cycle.sh)."
+  note: "Build complete (orchestrator + embed stage + CLI + day_cycle wrapper). shadow_diff diff=0 achieved 2026-09-27T11:13Z (missing_real=0, vector_mismatch=0, legacy_raw 23 intentional). 2-week parallel gate running: day_cycle.sh embed 직후 shadow 재투영 (failures ignored) + devforge-shadow-diff.timer (hourly JSONL evidence in logs/shadow_diff_YYYYMMDD.jsonl). Rollback rehearsed 2026-09-27: 4s (git checkout -- scripts/day_cycle.sh). AutoRemediation complete 2026-09-30: RemediationRunner + ClosedLoopVerifier + SelfHealMatcher integrated into WatchdogService A path."
   progress_percent: 75
 
 phase_0:
