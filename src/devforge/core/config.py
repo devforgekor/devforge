@@ -449,6 +449,9 @@ class WatchdogConfig:
             "daily_structure": 90000,
             "backup": 93600,
             "system_sync": 2400,
+            # openclaw cron git-commit-sweep — agent job, 6h schedule + generous
+            # grace because `low` effort was observed hanging >250s.
+            "git_commit_sweep": 25200,
         }
     )
     disks: list[str] = field(default_factory=lambda: ["/", "/opt/ai_data"])

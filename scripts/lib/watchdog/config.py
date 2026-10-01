@@ -180,6 +180,10 @@ HEARTBEAT_WORKERS: dict[str, int] = {
     "daily_structure": 90000,  # devforge-daily-structure.service (24h timer)
     "backup": 93600,  # devforge-backup.service (daily)
     "system_sync": 2400,  # devforge-system-sync.service (30m timer)
+    # openclaw cron git-commit-sweep. max_age is 6h schedule + grace: the job is
+    # an agent turn (space-bunny-free @ high), and `low` was observed hanging
+    # >250s, so the budget is generous rather than tight.
+    "git_commit_sweep": 25200,  # openclaw cron git:commit-sweep (6h, pinged from job message)
 }  # worker_name → max_age_seconds. Only register workers that actually call heartbeat().
 
 # Stale completion-heartbeat workers that should be kicked once (with cooldown)
