@@ -11,6 +11,8 @@ jobs:
   daily_structure: {interval_sec: 86400, grace_sec: 3600, max_age_sec: 90000, unit: devforge-daily-structure.service}
   backup:          {interval_sec: 86400, grace_sec: 7200, max_age_sec: 93600, unit: devforge-backup.service}
   system_sync:     {interval_sec: 1800,  grace_sec: 600,  max_age_sec: 2400,  unit: devforge-system-sync.service}
-  # [WHY] openclaw cron (not a systemd unit) — emitter is the job's own bash step,
-  # not an ExecStartPost hook. unit is advisory here.
-  git_commit_sweep: {interval_sec: 21600, grace_sec: 3600, max_age_sec: 25200, unit: openclaw-cron:git:commit-sweep}
+  # [WHY] openclaw cron (not a systemd unit) — emitter is a separate command
+  # payload job (git:diff-heartbeat), not an ExecStartPost hook. An agent turn
+  # cannot obtain exec approval headlessly and silently voids the pulse while
+  # still reporting lastRunStatus ok. unit is advisory here.
+  git_diff_report: {interval_sec: 21600, grace_sec: 3600, max_age_sec: 25200, unit: openclaw-cron:git:diff-report}
