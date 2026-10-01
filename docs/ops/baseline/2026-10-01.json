@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-01",
+  "mode": "daily",
+  "turns_24h": "167",
+  "turns_total": "9333",
+  "turns_source": {
+    "chrome": "14",
+    "opencode": "1750",
+    "copilot": "1",
+    "chrome:qwen": "4",
+    "claude": "399",
+    "legacy:pre-2026-09": "7163",
+    "chrome:deepseek": "2"
+  },
+  "turns_age_days": "134.9",
+  "observations_24h": "12",
+  "observations_7d": "30",
+  "pipeline_state": {
+    "embedded": "4156",
+    "embed_skipped": "81",
+    "enriching": "50",
+    "pending": "3788",
+    "verified": "1258"
+  },
+  "services": {
+    "devforge-turn-watcher.timer": "inactive",
+    "devforge-turn-watcher.service": "active",
+    "devforge-day-cycle.timer": "inactive",
+    "devforge-day-cycle.service": "inactive",
+    "devforge-worker.timer": "inactive",
+    "devforge-worker.service": "inactive",
+    "devforge-fastapi.timer": "inactive",
+    "devforge-fastapi.service": "inactive",
+    "devforge-mcp.timer": "inactive",
+    "devforge-mcp.service": "inactive",
+    "devforge-watchdog.timer": "inactive",
+    "devforge-watchdog.service": "inactive"
+  },
+  "netdata": "active",
+  "hook_overhead": {
+    "iterations": 100,
+    "avg_ms": 171.3281,
+    "p50_ms": 163.7544,
+    "p95_ms": 240.0174,
+    "p99_ms": 261.3478,
+    "min_ms": 115.4994,
+    "max_ms": 261.3478,
+    "mode": "safe(mock)"
+  },
+  "mcp_health": "{\"status\":\"healthy\",\"tools_count\":18}"
+}
