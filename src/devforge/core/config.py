@@ -449,9 +449,12 @@ class WatchdogConfig:
             "daily_structure": 90000,
             "backup": 93600,
             "system_sync": 2400,
-            # openclaw cron git-commit-sweep — agent job, 6h schedule + generous
-            # grace because `low` effort was observed hanging >250s.
-            "git_commit_sweep": 25200,
+            # openclaw cron git diff report lane. The heartbeat runs as a separate
+            # command payload job (`git:diff-heartbeat` -> heartbeat-ping.sh), not
+            # from the agent turn: an agent turn cannot obtain exec approval
+            # headlessly and silently voids the pulse while still reporting
+            # lastRunStatus ok. Keep in sync with scripts/lib/watchdog/config.py.
+            "git_diff_report": 25200,  # openclaw cron git:diff-report (6h, pinged by git:diff-heartbeat)
         }
     )
     disks: list[str] = field(default_factory=lambda: ["/", "/opt/ai_data"])
