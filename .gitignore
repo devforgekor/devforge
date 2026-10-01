@@ -46,10 +46,18 @@ _archive/seedling/
 # Azure Key Vault via exec SecretRefs (see scripts/deploy/openclaw-kv-resolver.py).
 .env
 .env.*
+# Re-admit example files. The negation must be a glob, not a literal name:
+# `.env.example` alone left sibling names like `.env.escalation.example`
+# matched by `.env.*` (they only survived because they were already tracked).
 !.env.example
+!.env.*.example
 *.pem
 *.key
 !*.pub
 credentials.json
 service-account*.json
 gha-creds-*.json
+
+# Local token-savior cache — 11MB build artifact, stale since 2026-07-03.
+# Untracked 2026-10-01; see MEMORY / handover for rationale.
+.token-savior-cache.json
