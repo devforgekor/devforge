@@ -38,7 +38,7 @@ dependencies = [
     "alembic>=1.13,<2.0",
     # Cloud
     "oci>=2.140,<3.0",
-    "apprise>=1.0,<2.0",
+    "apprise>=2.0.0,<3.0",
     # CLI
     "typer>=0.9,<1.0",
     # Settings
