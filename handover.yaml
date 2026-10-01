@@ -1,13 +1,15 @@
 last_checkpoint:
-  time: '2026-09-30T22:30:01.370793+00:00'
-  summary: 1 config, 1 generated
-  total_files: 4
+  time: '2026-09-30T23:50:01.379933+00:00'
+  summary: 2 source, 1 docs, 1 generated
+  total_files: 9
   recent_files:
     data: []
-    docs: []
-    config:
-    - server/systemd/user/opencode-serve.service
-    source: []
+    docs:
+    - server/docs/specs/heartbeat-registry.yaml
+    config: []
+    source:
+    - server/scripts/lib/watchdog/config.py
+    - server/src/devforge/core/config.py
     generated:
     - server/collect_checkpoint.json
   git: {}
