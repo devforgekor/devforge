@@ -2,6 +2,11 @@
 CLAUDE.yaml
 state.yaml
 
+# Agent tool local settings — MCP config carries live API tokens (e.g. NOTION_TOKEN).
+# Values belong in Azure Key Vault; never commit them.
+.gemini/
+.claude/settings.local.json
+
 # Auto mode artifacts
 data/auto_logs/
 data/auto_tasks_*.md

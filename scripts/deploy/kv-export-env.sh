@@ -9,6 +9,11 @@
 # 아래 normalize 단계가 quoting artifact 를 자동 감지·수정하고 형식을 검증한다.
 set -euo pipefail
 
+# [WHY] env 파일은 생성되는 순간부터 시크릿 전체를 담는다. 뒤의 chmod 600 까지 umask 가
+#       022 면 그 사이에 world-readable 상태로 존재하고, set -e 로 중간 실패하면 그 상태로
+#       남는다. 파일 생성 전에 umask 를 조여서 창 자체를 없앤다.
+umask 077
+
 SCRIPT_DIR="$(dirname "$0")"
 OUTPUT=${1:?output path required (usage: kv-export-env.sh <output_path> [KEY1,KEY2,...])}
 KEYS=${2:-}
@@ -19,11 +24,11 @@ else
     echo "⚠️  키 미지정: 전체 KV 시크릿을 export 합니다(레거시). 최소 주입을 권장합니다." >&2
     python3.12 "$SCRIPT_DIR/kv-fetch-env.py" env > "$OUTPUT"
 fi
+chmod 600 "$OUTPUT"
 
 # EnvironmentFile quoting 자동수정 + KEY=VALUE 형식 검증 (실패 시 잘못된 env 차단)
 python3.12 "$SCRIPT_DIR/env-file-normalize.py" "$OUTPUT"
 
-# 권한 설정
 chmod 600 "$OUTPUT"
 
 echo "✅ Key Vault 시크릿을 $OUTPUT 에 저장" >&2

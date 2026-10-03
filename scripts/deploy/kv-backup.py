@@ -54,6 +54,14 @@ def run(cmd, **kw):
     return r
 
 
+def curl_bearer_config(token):
+    """curl 설정 문자열 — bearer 토큰을 argv 대신 stdin 으로 넘긴다.
+
+    [WHY] 토큰이 argv 에 있으면 /proc/<pid>/cmdline 으로 로컬 사용자가 읽을 수 있다.
+    """
+    return f'header = "Authorization: Bearer {token}"\n'
+
+
 def is_retryable_error(status_code, curl_exit):
     """일시적 오류 판단 (429, 5xx, 네트워크 오류)"""
     if curl_exit != 0:
@@ -121,15 +129,17 @@ def get_token():
                 "-X",
                 "POST",
                 f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token",
-                "-d",
-                "grant_type=client_credentials",
-                "-d",
-                f"client_id={CLIENT_ID}",
-                "-d",
-                f"client_secret={client_secret}",
-                "-d",
-                "scope=https://vault.azure.net/.default",
-            ]
+                "-H",
+                "Content-Type: application/x-www-form-urlencoded",
+                "--data-binary",
+                "@-",
+            ],
+            # [WHY] client_secret 을 argv 에 두면 /proc/<pid>/cmdline 으로 노출된다.
+            input=(
+                "grant_type=client_credentials"
+                f"&client_id={CLIENT_ID}&client_secret={client_secret}"
+                "&scope=https://vault.azure.net/.default"
+            ),
         )
 
         lines = r.stdout.strip().split("\n") if r.returncode == 0 else []
@@ -179,7 +189,8 @@ def list_secrets(token, vault_url):
         success = False
         for attempt in range(MAX_RETRIES):
             r = run(
-                ["curl", "-s", "-w", "\n%{http_code}", url, "-H", f"Authorization: Bearer {token}"]
+                ["curl", "-s", "-w", "\n%{http_code}", url, "--config", "-"],
+                input=curl_bearer_config(token),
             )
 
             lines = r.stdout.strip().split("\n") if r.returncode == 0 else []
@@ -235,9 +246,10 @@ def get_secret_value(token, vault_url, name):
             "-w",
             "\n%{http_code}",
             f"{vault_url}/secrets/{name}?api-version=7.4",
-            "-H",
-            f"Authorization: Bearer {token}",
-        ]
+            "--config",
+            "-",
+        ],
+        input=curl_bearer_config(token),
     )
     if r.returncode != 0:
         print(

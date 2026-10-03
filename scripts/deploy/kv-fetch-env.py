@@ -33,6 +33,14 @@ TOKEN_CACHE_FILE = f"/run/user/{os.getuid()}/kv-token-cache.json"
 TOKEN_CACHE_MARGIN = 300  # 5분 여유 (3600s 토큰이면 55분까지 사용)
 
 
+def _curl_bearer_config(token):
+    """curl 설정 문자열 — bearer 토큰을 argv 대신 stdin 으로 넘긴다.
+
+    [WHY] bearer 토큰이 argv 에 있으면 /proc/<pid>/cmdline 으로 로컬 사용자가 읽을 수 있다.
+    """
+    return f'header = "Authorization: Bearer {token}"\n'
+
+
 def is_retryable_error(status_code, curl_exit):
     """일시적 오류 판단 (429, 5xx, 네트워크 오류)"""
     if curl_exit != 0:
@@ -93,6 +101,13 @@ def get_token():
     client_secret = open(SECRET_FILE).read().strip()
 
     for attempt in range(MAX_RETRIES):
+        # [WHY] client_secret 을 argv 에 넣으면 /proc/<pid>/cmdline 으로 로컬 사용자에게
+        #      노출된다. kv-sp-secret-check.py 와 같은 방식으로 stdin(body) 로 보낸다.
+        body = (
+            "grant_type=client_credentials"
+            f"&client_id={CLIENT_ID}&client_secret={client_secret}"
+            "&scope=https://vault.azure.net/.default"
+        )
         r = subprocess.run(
             [
                 "curl",
@@ -102,15 +117,12 @@ def get_token():
                 "-X",
                 "POST",
                 f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token",
-                "-d",
-                "grant_type=client_credentials",
-                "-d",
-                f"client_id={CLIENT_ID}",
-                "-d",
-                f"client_secret={client_secret}",
-                "-d",
-                "scope=https://vault.azure.net/.default",
+                "-H",
+                "Content-Type: application/x-www-form-urlencoded",
+                "--data-binary",
+                "@-",
             ],
+            input=body,
             capture_output=True,
             text=True,
         )
@@ -167,7 +179,8 @@ def list_secrets(token, vault_url):
         success = False
         for attempt in range(MAX_RETRIES):
             r = subprocess.run(
-                ["curl", "-s", "-w", "\n%{http_code}", url, "-H", f"Authorization: Bearer {token}"],
+                ["curl", "-s", "-w", "\n%{http_code}", url, "--config", "-"],
+                input=_curl_bearer_config(token),
                 capture_output=True,
                 text=True,
             )
@@ -225,9 +238,10 @@ def get_secret_value(token, vault_url, name):
             "-w",
             "\n%{http_code}",
             f"{vault_url}/secrets/{name}?api-version=7.4",
-            "-H",
-            f"Authorization: Bearer {token}",
+            "--config",
+            "-",
         ],
+        input=_curl_bearer_config(token),
         capture_output=True,
         text=True,
     )
