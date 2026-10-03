@@ -1,14 +1,18 @@
 last_checkpoint:
-  time: '2026-10-03T04:20:01.848469+00:00'
-  summary: 1 source, 1 config, 1 generated
-  total_files: 5
+  time: '2026-10-03T05:30:01.567721+00:00'
+  summary: 3 source, 3 config, 1 generated
+  total_files: 14
   recent_files:
     data: []
     docs: []
     config:
-    - server/systemd/user/kuhwa-schedule.service
+    - server/systemd/user/miniebook-web.service
+    - server/systemd/user/minihome-web.service
+    - server/systemd/user/news-web.service
     source:
-    - server/scripts/kuhwa_schedule_entry.sh
+    - server/scripts/day_cycle.sh
+    - server/scripts/deploy/minihome-apps.sh
+    - server/scripts/system_sync.sh
     generated:
     - server/collect_checkpoint.json
   git: {}
