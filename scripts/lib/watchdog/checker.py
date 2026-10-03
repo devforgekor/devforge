@@ -153,21 +153,21 @@ def check_service(name: str) -> tuple[bool, str]:
 
 
 # ── Ebook Pipeline 전용 체크 ────────────────────────────────────────
-# ebook-watcher.service는 상시 loop (5분 간격). 프로세스 존재뿐 아니라
+# ebooklib-pipeline.service는 상시 loop (5분 간격). 프로세스 존재뿐 아니라
 # 마지막 로그 활동(cycle/collect) 시간으로 hang을 감지한다.
-EBOOK_WATCHER_SVC = "ebook-watcher"
+EBOOKLIB_PIPELINE_SVC = "ebooklib-pipeline"
 EBOOK_HANG_STALE_SEC = 1200  # 20분 이상 활동 없으면 hang 판정
 
 
 def check_ebook_pipeline() -> tuple[bool, str]:
-    """ebook-watcher 파이프라인 liveness 체크.
+    """ebooklib-pipeline 파이프라인 liveness 체크.
 
     Returns:
         (ok, detail) — ok=False면 hang 또는 프로세스 죽음.
     """
     # 1) systemd 서비스 active 여부
-    if not svc_active(EBOOK_WATCHER_SVC):
-        return False, f"{EBOOK_WATCHER_SVC} inactive"
+    if not svc_active(EBOOKLIB_PIPELINE_SVC):
+        return False, f"{EBOOKLIB_PIPELINE_SVC} inactive"
 
     # 2) loop 프로세스 존재
     try:
@@ -183,7 +183,7 @@ def check_ebook_pipeline() -> tuple[bool, str]:
     # 3) 마지막 로그 활동 (journal) — hang 감지
     try:
         r = subprocess.run(
-            ["journalctl", "--user", "-u", EBOOK_WATCHER_SVC, "--no-pager", "-n", "200"],
+            ["journalctl", "--user", "-u", EBOOKLIB_PIPELINE_SVC, "--no-pager", "-n", "200"],
             capture_output=True, text=True, timeout=8,
         )
         # 로그에서 최근 활동 시각 추출 (Cycle 또는 collect/저장 로그)
@@ -549,8 +549,8 @@ def check_all_llm() -> list[dict]:
 def check_all_services() -> list[dict]:
     results = []
     for name in SERVICE_TARGETS:
-        if name == EBOOK_WATCHER_SVC:
-            # ebook-watcher는 프로세스 존재 + 로그 활동(hang)까지 확인
+        if name == EBOOKLIB_PIPELINE_SVC:
+            # ebooklib-pipeline는 프로세스 존재 + 로그 활동(hang)까지 확인
             ok, detail = check_ebook_pipeline()
         else:
             ok, detail = check_service(name)

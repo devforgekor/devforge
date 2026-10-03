@@ -36,7 +36,7 @@ CANARY_STAGES: dict[int, dict[str, Sequence[str]]] = {
         "catchup": ("timer:devforge-system-sync.timer",),
     },
     1: {
-        "fix": ("svc:svc-pod-forwarding", "svc:ebook-watcher"),
+        "fix": ("svc:svc-pod-forwarding", "svc:ebooklib-pipeline"),
         "catchup": ("timer:devforge-system-sync.timer", "oneshot:devforge-backup.service"),
     },
     2: {

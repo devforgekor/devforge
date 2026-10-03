@@ -51,10 +51,10 @@ SERVICE_TARGETS = [
     "devforge-turn-watcher",
     "openrouter-rr-proxy",
     "devforge-day-cycle",  # day 파이프라인 (async)
-    "ebook-watcher",  # ebook 워처 (타이머와 쌍)
+    "ebooklib-pipeline",  # ebook 워처 (타이머와 쌍)
     "container-devforge-fastapi",  # 알림 허브 + Blob Explorer → 다운 시 자동 재시작
     "container-devforge-worker",  # raw_consumer → 다운 시 자동 재시작
-    "ebook-api",  # ebook 백엔드 (:8089, Caddy /api)
+    "ebooklib-api",  # ebook 백엔드 (:8089, Caddy /api)
     "devforge-news-api",  # news API (:8091, Caddy /news)
     "cashbook",  # 가계부 (:8100, Caddy /cashbook)
 ]

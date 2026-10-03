@@ -354,10 +354,10 @@ class WatchdogConfig:
             "devforge-turn-watcher",
             "openrouter-rr-proxy",
             "devforge-day-cycle",
-            "ebook-watcher",
+            "ebooklib-pipeline",
             "container-devforge-fastapi",
             "container-devforge-worker",
-            "ebook-api",
+            "ebooklib-api",
             "devforge-news-api",
             "cashbook",
         ]

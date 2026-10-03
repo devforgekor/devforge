@@ -34,9 +34,9 @@ async def test_capture_structured(monkeypatch: pytest.MonkeyPatch) -> None:
         return None
 
     monkeypatch.setattr(incident_pg, "_run_capture", _fake_run)
-    ctx = await incident_pg._capture_context_jsonb("svc:ebook-watcher", None)
+    ctx = await incident_pg._capture_context_jsonb("svc:ebooklib-pipeline", None)
     assert ctx["schema_version"] == 1
-    assert ctx["unit"] == "ebook-watcher"
+    assert ctx["unit"] == "ebooklib-pipeline"
     assert ctx["systemd"]["ActiveState"] == "failed"
     assert ctx["systemd"]["ExecMainStatus"] == "15"
     assert ctx["journal_tail"] == ["line one", "line two token=***"]
@@ -65,7 +65,7 @@ async def test_capture_best_effort_no_tools(monkeypatch: pytest.MonkeyPatch) -> 
         return None
 
     monkeypatch.setattr(incident_pg, "_run_capture", _no_tools)
-    ctx = await incident_pg._capture_context_jsonb("svc:ebook-watcher", None)
+    ctx = await incident_pg._capture_context_jsonb("svc:ebooklib-pipeline", None)
     # missing tools (e.g. inside the v2 container) -> absent sections, not error
     assert "systemd" not in ctx
     assert "journal_tail" not in ctx

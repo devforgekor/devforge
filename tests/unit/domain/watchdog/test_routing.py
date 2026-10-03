@@ -14,7 +14,7 @@ from devforge.domain.watchdog.routing import matches_canary, route
     [
         ("svc:devforge-day-cycle", "service"),
         ("svc:container-devforge-worker", "container"),
-        ("svc:ebook-watcher", "service"),
+        ("svc:ebooklib-pipeline", "service"),
         ("llm:day-extract", "cascade"),
         ("infra:inference", "cascade"),
         ("pipeline:embed", "pipeline"),

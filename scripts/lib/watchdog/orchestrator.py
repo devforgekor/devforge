@@ -67,7 +67,7 @@ from lib.watchdog.notifier import heartbeat, sd_notify, send_alert, send_recover
 from lib.watchdog.recovery import (
     graduated_recover,
     kill_stale_process,
-    recover_ebook_watcher,
+    recover_ebook_pipeline,
     recover_inference_cascade,  # noqa: F401 — used in day_fix_loop
     recover_oneshot,
     recover_oom,
@@ -141,9 +141,9 @@ def _run_services(results: dict, dry_run: bool):
             incidents.resolve_if_open(f"svc:{name}")
         elif not dry_run and not is_experiment_active():
             inc_id = incidents.record_detect(f"svc:{name}", "down", svc["detail"], unit=name)
-            if name == "ebook-watcher":
-                # ebook-watcher: restart 후 readiness(프로세스+로그활동)까지 확인
-                ok = graduated_recover(name, tracker, recover_ebook_watcher)
+            if name == "ebooklib-pipeline":
+                # ebooklib-pipeline: restart 후 readiness(프로세스+로그활동)까지 확인
+                ok = graduated_recover(name, tracker, recover_ebook_pipeline)
             else:
                 ok = graduated_recover(name, tracker, lambda n=name: recover_service(n))
             incidents.record_action(inc_id, "restart", bool(ok))
