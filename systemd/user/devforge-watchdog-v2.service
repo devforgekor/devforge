@@ -2,6 +2,7 @@
 Description=DevForge Watchdog v2.1 (hexagonal)
 After=container-postgres.service
 Wants=container-postgres.service
+OnFailure=devforge-watchdog-v2-failed.service
 
 [Service]
 Type=notify

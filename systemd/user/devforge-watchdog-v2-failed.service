@@ -1,0 +1,14 @@
+# /opt/projects/server/systemd/user/devforge-watchdog-v2-failed.service
+# OnFailure handler: watchdog-v2가 재시작 한계를 넘겨 failed 상태가 되면 알림.
+# [WHY] devforge-watchdog-failed.service와 공유 불가 — --unit이 단일 인자라
+#       v1(v1 롤백용 보존)과 v2가 각기 다른 알림 주체명을 못 내는 데다,
+#       v1 롤백 시 알림이 devforge-watchdog-v2로 잘못 표기된다.
+[Unit]
+Description=DevForge Watchdog v2 failed-state alert (OnFailure)
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/opt/projects/server/scripts
+ExecStart=/usr/bin/python3.12 /opt/projects/server/scripts/watchdog.py --notify-failure --unit devforge-watchdog-v2
+StandardOutput=journal
+StandardError=journal
