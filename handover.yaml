@@ -1,12 +1,14 @@
 last_checkpoint:
-  time: '2026-10-02T23:50:00.976557+00:00'
-  summary: 1 generated
-  total_files: 3
+  time: '2026-10-03T04:20:01.848469+00:00'
+  summary: 1 source, 1 config, 1 generated
+  total_files: 5
   recent_files:
     data: []
     docs: []
-    config: []
-    source: []
+    config:
+    - server/systemd/user/kuhwa-schedule.service
+    source:
+    - server/scripts/kuhwa_schedule_entry.sh
     generated:
     - server/collect_checkpoint.json
   git: {}
