@@ -7,24 +7,34 @@ import json, os, subprocess, datetime
 OUTDIR = "/opt/projects/server/docs/ops/baseline"
 DB = 'podman exec -i postgres psql -U postgres -d devforge_app -t -A'
 
-def run(sql):
+class BaselineQueryError(RuntimeError):
+    """psql 호출이 실패했을 때 — baseline 덮어쓰기를 막기 위해 수집을 중단한다."""
+
+def _psql(sql: str) -> str:
+    # [WHY] DB가 잠시 내려가 있어도(재시작 직후 등) 이전 baseline이 빈 값으로 덮어써져
+    #       측정 이력이 사라졌다. 실패를 조용히 넘기지 않고 OnFailure로 알린다.
     r = subprocess.run(f'{DB} -c "{sql}"', shell=True, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise BaselineQueryError(f"psql failed (rc={r.returncode}): {r.stderr.strip()[:200]}")
     return r.stdout.strip()
 
-def run_rows(sql):
-    r = subprocess.run(f'{DB} -t -A -c "{sql}"', shell=True, capture_output=True, text=True)
-    if not r.stdout.strip():
+def run(sql: str) -> str:
+    return _psql(sql)
+
+def run_rows(sql: str) -> dict[str, str]:
+    out = _psql(sql)
+    if not out:
         return {}
     result = {}
-    for line in r.stdout.strip().splitlines():
+    for line in out.splitlines():
         parts = line.split("|")
         if len(parts) == 2:
             result[parts[0]] = parts[1]
     return result
 
-def collect():
+def collect() -> dict[str, object]:
     today = datetime.date.today().isoformat()
-    out = {"date": today, "mode": "daily"}
+    out: dict[str, object] = {"date": today, "mode": "daily"}
 
     # 1. turns rate
     out["turns_24h"] = run("SELECT count(*) FROM turns WHERE created_at >= NOW() - INTERVAL '24 hours'")

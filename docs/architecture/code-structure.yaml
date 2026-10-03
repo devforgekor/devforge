@@ -1718,6 +1718,10 @@ modules:
     __init__.py:
       status: unknown
       purpose: __init__.py
+    test_baseline_daily.py:
+      status: production
+      purpose: Baseline daily psql failure handling — a failed query must abort the
+        run instead of overwriting the baseline with empty values.
     test_code_structure.py:
       status: production
       purpose: Verify code-structure.yaml matches actual filesystem.
