@@ -1,0 +1,16 @@
+[Unit]
+Description=minihome Web (Next.js, minihome4u.duckdns.org/) :8200
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/workspace/minihome/apps/minihome
+ExecStart=/opt/workspace/minihome/apps/minihome/node_modules/.bin/next start -p 8200
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

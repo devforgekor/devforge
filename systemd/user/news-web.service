@@ -1,0 +1,19 @@
+[Unit]
+Description=news Web (Next.js, minihome4u.duckdns.org/news/) :8202
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/workspace/minihome/apps/news/web
+# [WHY] next start가 런타임에도 next.config.ts를 재평가하므로 빌드 때와
+#       같은 basePath를 주지 않으면 프리픽스 없이 루트로 서빙된다.
+Environment=NEXT_PUBLIC_BASE_PATH=/news
+ExecStart=/opt/workspace/minihome/apps/news/web/node_modules/.bin/next start -p 8202
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
