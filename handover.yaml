@@ -1,24 +1,12 @@
 last_checkpoint:
-  time: '2026-10-03T06:20:01.426267+00:00'
-  summary: 10 source, 2 config, 1 generated
-  total_files: 20
+  time: '2026-10-03T10:00:00.831058+00:00'
+  summary: 1 generated
+  total_files: 3
   recent_files:
     data: []
     docs: []
-    config:
-    - server/systemd/user/ebooklib-pipeline.service
-    - server/systemd/user/miniebook-web.service
-    source:
-    - server/scripts/_archive/day_extract.sh
-    - server/scripts/_archive/day_verify.sh
-    - server/scripts/_archive/phase0/15m_cycle.sh
-    - server/scripts/_archive/phase1/15m_cycle.sh
-    - server/scripts/_archive/phase2/15m_cycle.sh
-    - server/scripts/_archive/phase3/15m_cycle.sh
-    - server/scripts/_archive/phase4/15m_cycle.sh
-    - server/scripts/_archive/phase_original/15m_cycle.sh
-    - server/scripts/deploy/minihome-apps.sh
-    - server/src/devforge/adapters/driven/approval/memory_approval.py
+    config: []
+    source: []
     generated:
     - server/collect_checkpoint.json
   git: {}
