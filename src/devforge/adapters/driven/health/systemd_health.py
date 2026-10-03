@@ -39,6 +39,8 @@ class SystemdServiceHealthChecker(HealthCheckPort):
                     "--property=LoadState",
                     "--property=Type",
                     "--property=ActiveState",
+                    "--property=SubState",
+                    "--property=Result",
                 ]
             )
             props: dict[str, str] = {}
@@ -49,8 +51,20 @@ class SystemdServiceHealthChecker(HealthCheckPort):
             load = props.get("LoadState", "")
             unit_type = props.get("Type", "")
             state = props.get("ActiveState", "")
+            sub_state = props.get("SubState", "")
+            result = props.get("Result", "")
             if load and load != "loaded":
                 ok, detail = False, f"load={load} state={state or 'unknown'}"
+            elif state == "activating" and sub_state == "auto-restart":
+                # [WHY] crash loop. ActivState=activating 은 정상 기동 중에도 나타나므로
+                #      healthy 로 보지만, SubState=auto-restart 는 systemd 가 이전 기동을
+                #      실패해 재시도 대기 중이라는 뜻이다. RestartSec >= start limit
+                #      interval 인 단위는 failed 로 전이되지 않고 이 상태로 무한 루프하며
+                #      (2026-10-03 devforge-mcp 4시간 무감지), 조용히 죽는다.
+                ok = False
+                detail = f"{state}/{sub_state} result={result or '?'} crash-loop"
+            elif result == "start-limit-hit":
+                ok, detail = False, f"{state}/{sub_state} result=start-limit-hit"
             else:
                 # [WHY] systemd: oneshot은 ExecStart가 끝나면 즉시 inactive가 정상
                 #      상태다(systemd#18949). Prometheus 표준 규칙·monitord도

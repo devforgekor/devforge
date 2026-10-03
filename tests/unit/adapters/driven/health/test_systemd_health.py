@@ -21,6 +21,19 @@ def _svc_props(active: str, unit_type: str = "simple", load: str = "loaded") -> 
     return f"LoadState={load}\nType={unit_type}\nActiveState={active}\n"
 
 
+def _svc_props_full(
+    active: str,
+    sub: str = "running",
+    result: str = "success",
+    unit_type: str = "simple",
+    load: str = "loaded",
+) -> str:
+    return (
+        f"LoadState={load}\nType={unit_type}\nActiveState={active}\n"
+        f"SubState={sub}\nResult={result}\n"
+    )
+
+
 @pytest.mark.asyncio
 async def test_all_services_active() -> None:
     with patch(
@@ -72,6 +85,59 @@ async def test_failed_service_is_unhealthy() -> None:
         checks = await SystemdServiceHealthChecker(["a"]).check_health()
     assert checks[0].is_healthy is False
     assert "failed" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_activating_with_auto_restart_substate_is_unhealthy() -> None:
+    # [WHY] crash loop: 2026-10-03 devforge-mcp 가 4시간 1141회 재시도하며
+    #      activating/auto-restart 에 머물렀고 watchdog 이 무감지했다.
+    with patch(
+        "asyncio.to_thread",
+        new=AsyncMock(
+            return_value=MagicMock(
+                stdout=_svc_props_full("activating", sub="auto-restart", result="exit-code")
+            )
+        ),
+    ):
+        checks = await SystemdServiceHealthChecker(["container-devforge-mcp"]).check_health()
+    assert checks[0].is_healthy is False
+    assert "crash-loop" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_activating_with_start_substate_is_healthy() -> None:
+    # 정상 기동 중(SubState=start)에는 crash-loop 판정을 걸면 안 된다.
+    with patch(
+        "asyncio.to_thread",
+        new=AsyncMock(return_value=MagicMock(stdout=_svc_props_full("activating", sub="start"))),
+    ):
+        checks = await SystemdServiceHealthChecker(["a"]).check_health()
+    assert checks[0].is_healthy is True
+
+
+@pytest.mark.asyncio
+async def test_start_limit_hit_result_is_unhealthy() -> None:
+    with patch(
+        "asyncio.to_thread",
+        new=AsyncMock(
+            return_value=MagicMock(
+                stdout=_svc_props_full("failed", sub="auto-restart", result="start-limit-hit")
+            )
+        ),
+    ):
+        checks = await SystemdServiceHealthChecker(["a"]).check_health()
+    assert checks[0].is_healthy is False
+    assert "start-limit-hit" in checks[0].detail
+
+
+@pytest.mark.asyncio
+async def test_reloading_service_stays_healthy() -> None:
+    with patch(
+        "asyncio.to_thread",
+        new=AsyncMock(return_value=MagicMock(stdout=_svc_props_full("reloading", sub="reloading"))),
+    ):
+        checks = await SystemdServiceHealthChecker(["a"]).check_health()
+    assert checks[0].is_healthy is True
 
 
 @pytest.mark.asyncio
