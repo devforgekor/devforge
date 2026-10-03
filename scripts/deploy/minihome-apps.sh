@@ -66,6 +66,14 @@ if [ "$MODE" = "status" ]; then
 fi
 
 FAILED=0
+
+# [WHY] 단위 파일을 직접 고친 뒤 restart하면 systemd가 구 정의로 기동한다.
+#       (2026-10-03 kv-fetch-env 주입이 새어나가 503으로 표류한 사례)
+if ! systemctl --user daemon-reload; then
+  LOG "FAIL: daemon-reload" >&2
+  exit 1
+fi
+
 for e in "${APPS[@]}"; do
   IFS='|' read -r name dir base_path unit port <<<"$e"
   want "$name" || continue
