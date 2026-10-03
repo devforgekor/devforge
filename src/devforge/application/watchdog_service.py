@@ -337,7 +337,23 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
         )
     check_coordinator = CheckCoordinator(registry, health_ports)
     recovery_coordinator = RecoveryCoordinator(registry)
-    recovery_port = SystemdRecoveryAdapter()
+
+    async def _recovery_probe(component: str) -> bool:
+        """복구 직후 그 유닛의 실제 헬스를 다시 조회한다.
+
+        [WHY] systemd 는 "systemctl start ... will report success even if the
+        service's binary cannot be invoked successfully" 라고 명시한다. 복구 명령의
+        exit code 만으로 incident 를 resolved 처리하면 (2026-10-03 worker 212ms 오해결)
+        복구 실패가 조용히 사라진다. 대상 유닛 하나만 재조회해 무관한 서비스와 결속시키지 않는다.
+        """
+        prefix, _, unit = component.partition(":")
+        if not unit or prefix not in ("svc", "alert"):
+            return False
+        checker = SystemdServiceHealthChecker([unit], prefix=prefix)
+        checks = await checker.check_health()
+        return bool(checks) and all(c.is_healthy for c in checks)
+
+    recovery_port = SystemdRecoveryAdapter(probe=_recovery_probe)
 
     notifiers: list[NotificationPort] = [SystemdNotifier()]
     import os
