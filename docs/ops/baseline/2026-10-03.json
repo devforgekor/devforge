@@ -1,25 +1,26 @@
 {
   "date": "2026-10-03",
   "mode": "daily",
-  "turns_24h": "26",
-  "turns_total": "9371",
+  "turns_24h": "75",
+  "turns_total": "9426",
   "turns_source": {
     "chrome": "14",
-    "opencode": "1788",
+    "opencode": "1842",
     "copilot": "1",
     "chrome:qwen": "4",
     "claude": "399",
+    "selfhost": "1",
     "legacy:pre-2026-09": "7163",
     "chrome:deepseek": "2"
   },
-  "turns_age_days": "136.9",
+  "turns_age_days": "137.3",
   "observations_24h": "1",
-  "observations_7d": "29",
+  "observations_7d": "26",
   "pipeline_state": {
     "embedded": "4156",
     "embed_skipped": "81",
     "enriching": "50",
-    "pending": "3826",
+    "pending": "3881",
     "verified": "1258"
   },
   "services": {
@@ -39,13 +40,13 @@
   "netdata": "active",
   "hook_overhead": {
     "iterations": 100,
-    "avg_ms": 305.0963,
-    "p50_ms": 306.2477,
-    "p95_ms": 433.1339,
-    "p99_ms": 491.2224,
-    "min_ms": 167.5429,
-    "max_ms": 491.2224,
+    "avg_ms": 147.0667,
+    "p50_ms": 143.0036,
+    "p95_ms": 193.6912,
+    "p99_ms": 221.1429,
+    "min_ms": 114.4213,
+    "max_ms": 221.1429,
     "mode": "safe(mock)"
   },
-  "mcp_health": "{\"status\":\"healthy\",\"tools_count\":18}"
+  "mcp_health": "unreachable"
 }
