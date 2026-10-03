@@ -1,17 +1,18 @@
 last_checkpoint:
-  time: '2026-10-03T13:50:00.727514+00:00'
-  summary: 5 source, 1 generated
-  total_files: 15
+  time: '2026-10-03T14:40:01.475489+00:00'
+  summary: 5 source, 1 config, 1 generated
+  total_files: 17
   recent_files:
     data: []
     docs: []
-    config: []
+    config:
+    - server/systemd/user/devforge-watchdog-v2.service
     source:
-    - server/scripts/deploy/kv-backup.py
-    - server/scripts/deploy/kv-export-env.sh
-    - server/scripts/deploy/kv-fetch-env.py
     - server/scripts/fastapi-entrypoint.sh
     - server/scripts/worker-entrypoint.sh
+    - server/src/devforge/adapters/driven/recovery/systemd_recovery.py
+    - server/src/devforge/application/watchdog_service.py
+    - server/tests/unit/adapters/driven/recovery/test_systemd_recovery.py
     generated:
     - server/collect_checkpoint.json
   git: {}
