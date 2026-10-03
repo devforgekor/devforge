@@ -12,7 +12,6 @@ from devforge.ports.types import RecoveryAction
 # Exact-match overrides take precedence over prefix rules.
 _EXACT: dict[str, str] = {
     "svc:svc-pod-forwarding": "svcpod",  # recover_svcpod_forwarding
-    "svc:ebook-watcher": "ebook",  # recover_ebook_watcher
     "system:memory": "oom",  # recover_oom
     # Alert-only (legacy ALERT_ONLY_TARGETS) — monitor only, never restart.
     "svc:container-postgres": "",

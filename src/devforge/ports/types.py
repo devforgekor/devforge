@@ -9,7 +9,7 @@ import it without layer inversion (import-linter: ports is the lowest layer).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
@@ -88,48 +88,6 @@ class CircuitState:
     failure_count: int
     opens_at: Optional[float] = None  # monotonic timestamp
     can_retry: bool = True
-
-
-@dataclass(frozen=True)
-class RemediationStep:
-    """One step in a remediation plan (runbook pattern)."""
-
-    name: str
-    action: str
-    params: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class RemediationPlan:
-    """A multi-step remediation plan (runbook pattern).
-
-    Steps execute in order: pre-check → execute → verify → record.
-    """
-
-    component: str
-    steps: list[RemediationStep]
-    impact: str = "mutating"
-    approved: bool = False
-
-
-@dataclass(frozen=True)
-class StepResult:
-    """Result of one remediation step."""
-
-    name: str
-    success: bool
-    detail: str = ""
-    duration_ms: float = 0.0
-
-
-@dataclass(frozen=True)
-class RemediationResult:
-    """Result of executing a remediation plan (closed-loop)."""
-
-    success: bool
-    steps: list[StepResult]
-    error: Optional[str] = None
-    rolled_back: bool = False
 
 
 @dataclass(frozen=True)

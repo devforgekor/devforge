@@ -1500,15 +1500,6 @@ modules:
       status: experimental
       purpose: Pure DORA metrics derivation (2026 four keys) from deployment/incident
         events.
-    remediation_runner.py:
-      status: experimental
-      purpose: RemediationRunner — step-by-step plan execution with closed-loop verify.
-    closed_loop_verifier.py:
-      status: experimental
-      purpose: ClosedLoopVerifier — post-execution verification with rollback.
-    self_heal_matcher.py:
-      status: experimental
-      purpose: SelfHealMatcher — auto-execute pre-approved low-risk patterns.
     slo.py:
       status: experimental
       purpose: Pure availability SLI/SLO + error-budget derivation from watchdog incident

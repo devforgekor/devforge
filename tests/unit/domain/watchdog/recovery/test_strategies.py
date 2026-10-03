@@ -20,8 +20,11 @@ def test_container_kind() -> None:
 
 def test_exact_overrides() -> None:
     assert classify_recovery_kind("svc:svc-pod-forwarding") == "svcpod"
-    assert classify_recovery_kind("svc:ebook-watcher") == "ebook"
     assert classify_recovery_kind("system:memory") == "oom"
+
+
+def test_should_use_service_kind_when_component_has_no_exact_override() -> None:
+    assert classify_recovery_kind("svc:ebooklib-pipeline") == "service"
 
 
 def test_prefix_kinds() -> None:
