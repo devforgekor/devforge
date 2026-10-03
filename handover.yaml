@@ -1,12 +1,15 @@
 last_checkpoint:
-  time: '2026-10-03T10:00:00.831058+00:00'
-  summary: 1 generated
-  total_files: 3
+  time: '2026-10-03T10:20:00.559477+00:00'
+  summary: 2 source, 1 docs, 1 generated
+  total_files: 15
   recent_files:
     data: []
-    docs: []
+    docs:
+    - server/docs/architecture/code-structure.yaml
     config: []
-    source: []
+    source:
+    - server/scripts/hooks/baseline-daily.py
+    - server/tests/unit/test_baseline_daily.py
     generated:
     - server/collect_checkpoint.json
   git: {}
