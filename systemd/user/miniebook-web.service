@@ -8,7 +8,9 @@ WorkingDirectory=/opt/workspace/minihome/apps/ebooklib/apps/frontend
 # [WHY] next start가 런타임에도 next.config.ts를 재평가하므로 빌드 때와
 #       같은 basePath를 주지 않으면 프리픽스 없이 루트로 서빙된다.
 Environment=NEXT_PUBLIC_BASE_PATH=/miniebook
-ExecStart=/opt/workspace/minihome/apps/ebooklib/apps/frontend/node_modules/.bin/next start -p 8201
+# [WHY] route.ts의 인증 토큰과 프록시용 API URL을 KV에서 받는다.
+#       하드코딩 폴백을 제거했으므로(kv-fetch-env 미주입 시 503) 주입은 필수다.
+ExecStart=/opt/projects/server/scripts/deploy/kv-fetch-env.py /opt/workspace/minihome/apps/ebooklib/apps/frontend/node_modules/.bin/next start -p 8201 --keys NEXT-PUBLIC-API-*,VERCEL-REVALIDATE-TOKEN-KEY
 Restart=on-failure
 RestartSec=5
 StartLimitBurst=3
