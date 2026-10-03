@@ -1,4 +1,4 @@
-# /home/opc/.config/systemd/user/ebook-watcher.service
+# /home/opc/.config/systemd/user/ebooklib-pipeline.service
 [Unit]
 Description=Ebook Pipeline — 파이프라인 루프 (devforge-watchdog 감시)
 After=network-online.target svc-pod.service container-flaresolverr.service
