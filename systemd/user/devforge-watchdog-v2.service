@@ -1,4 +1,9 @@
 [Unit]
+# [WHY] RestartSec>=10 이면 기본 StartLimitIntervalSec(10s) 윈도우가 채워지지 않아
+#       start limit이 영영 trip되지 않고 auto-restart 루프가 무한 지속된다
+#       (2026-10-03 devforge-mcp 4시간 1141회 재시도, watchdog 무감지).
+#       systemd.unit(5) 참조.
+StartLimitIntervalSec=60
 Description=DevForge Watchdog v2.1 (hexagonal)
 After=container-postgres.service
 Wants=container-postgres.service
