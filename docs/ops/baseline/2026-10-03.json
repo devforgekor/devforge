@@ -1,11 +1,11 @@
 {
   "date": "2026-10-03",
   "mode": "daily",
-  "turns_24h": "75",
-  "turns_total": "9426",
+  "turns_24h": "76",
+  "turns_total": "9427",
   "turns_source": {
     "chrome": "14",
-    "opencode": "1842",
+    "opencode": "1843",
     "copilot": "1",
     "chrome:qwen": "4",
     "claude": "399",
@@ -20,7 +20,7 @@
     "embedded": "4156",
     "embed_skipped": "81",
     "enriching": "50",
-    "pending": "3881",
+    "pending": "3882",
     "verified": "1258"
   },
   "services": {
@@ -40,12 +40,12 @@
   "netdata": "active",
   "hook_overhead": {
     "iterations": 100,
-    "avg_ms": 147.0667,
-    "p50_ms": 143.0036,
-    "p95_ms": 193.6912,
-    "p99_ms": 221.1429,
-    "min_ms": 114.4213,
-    "max_ms": 221.1429,
+    "avg_ms": 143.6865,
+    "p50_ms": 137.5435,
+    "p95_ms": 196.9372,
+    "p99_ms": 234.6981,
+    "min_ms": 109.4837,
+    "max_ms": 234.6981,
     "mode": "safe(mock)"
   },
   "mcp_health": "unreachable"
