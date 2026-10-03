@@ -1,6 +1,6 @@
 #!/bin/bash
 # minihome-apps.sh — 자체 호스팅 3개 Next.js 앱 (minihome4u.duckdns.org) 배포
-# Called by: 수동 (agent_docs/DEPLOYMENT.md 게이트4)
+# Called by: 수동 (docs/DEPLOYMENT.md)
 # Tasks: npm install → next build → systemd 재시작 → 상태 출력
 #
 # [WHY] Vercel Hobby가 조직 소유 PRIVATE 저장소(devforgekor/minihome) 연결을
@@ -21,11 +21,11 @@ LOG() { echo "[$(LOG_TS)] $*"; }
 
 ROOT="/opt/workspace/minihome"
 
-# 앱 | 소스 상대경로 | 빌드 시 basePath | systemd 단위 | 포트
+# 앱 | 소스 상대경로 | 빌드 시 basePath | systemd 단위 | 포트 | 빌드 시 KV env 주입
 APPS=(
-  "minihome|apps/minihome||minihome-web|8200"
-  "miniebook|apps/ebooklib/apps/frontend|/miniebook|miniebook-web|8201"
-  "news|apps/news/web|/news|news-web|8202"
+  "minihome|apps/minihome||minihome-web|8200|"
+  "miniebook|apps/ebooklib/apps/frontend|/miniebook|miniebook-web|8201|NEXT-PUBLIC-API-*,VERCEL-REVALIDATE-TOKEN-KEY"
+  "news|apps/news/web|/news|news-web|8202|"
 )
 
 SELECTED=()
@@ -53,7 +53,7 @@ status_all() {
   printf "%-12s %-10s %-6s %s\n" "APP" "STATE" "PORT" "UNIT"
   local e name _dir _bp unit port
   for e in "${APPS[@]}"; do
-    IFS='|' read -r name _dir _bp unit port <<<"$e"
+    IFS='|' read -r name _dir _bp unit port _kv <<<"$e"
     printf "%-12s %-10s %-6s %s\n" \
       "$name" "$(systemctl --user is-active "$unit" 2>/dev/null || echo unknown)" \
       "$port" "$unit"
@@ -75,7 +75,7 @@ if ! systemctl --user daemon-reload; then
 fi
 
 for e in "${APPS[@]}"; do
-  IFS='|' read -r name dir base_path unit port <<<"$e"
+  IFS='|' read -r name dir base_path unit port kv_keys <<<"$e"
   want "$name" || continue
 
   src="$ROOT/$dir"
@@ -97,14 +97,20 @@ for e in "${APPS[@]}"; do
   fi
 
   LOG "  next build (basePath=${base_path:-루트})"
+  # [WHY] NEXT_PUBLIC_*는 빌드 타임에 인라인되므로 런타임 주입으로는 부족하다.
+  #       KV 값이 코드 기본값과 달라지면 반드시 여기서 재주입해야 한다.
+  build_cmd=(npm run build)
+  if [ -n "$kv_keys" ]; then
+    build_cmd=(/opt/projects/server/scripts/deploy/kv-fetch-env.py npm run build "--keys" "$kv_keys")
+  fi
   if [ -n "$base_path" ]; then
-    if ! NEXT_PUBLIC_BASE_PATH="$base_path" npm run build >/dev/null; then
+    if ! NEXT_PUBLIC_BASE_PATH="$base_path" "${build_cmd[@]}" >/dev/null; then
       LOG "  FAIL $name: build" >&2
       FAILED=1
       continue
     fi
   else
-    if ! npm run build >/dev/null; then
+    if ! "${build_cmd[@]}" >/dev/null; then
       LOG "  FAIL $name: build" >&2
       FAILED=1
       continue
