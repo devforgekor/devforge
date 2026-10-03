@@ -1,15 +1,20 @@
 last_checkpoint:
-  time: '2026-10-03T12:00:01.622637+00:00'
-  summary: 2 source, 1 config, 1 generated
-  total_files: 14
+  time: '2026-10-03T13:00:00.667158+00:00'
+  summary: 2 source, 5 config, 1 docs, 1 generated
+  total_files: 16
   recent_files:
     data: []
-    docs: []
+    docs:
+    - server/docs/specs/heartbeat-registry.yaml
     config:
-    - server/systemd/user/container-flaresolverr.service
+    - server/systemd/user/devforge-turn-watcher.service
+    - server/systemd/user/devforge-watchdog-v2.service
+    - server/systemd/user/ebooklib-api.service
+    - server/systemd/user/ebooklib-pipeline.service
+    - server/systemd/user/obsidian-heartbeat.service
     source:
-    - server/src/devforge/adapters/driven/health/systemd_health.py
-    - server/tests/unit/adapters/driven/health/test_systemd_health.py
+    - server/scripts/deploy/kv-fetch-env.py
+    - server/tests/fitness/test_heartbeat_registry.py
     generated:
     - server/collect_checkpoint.json
   git: {}
