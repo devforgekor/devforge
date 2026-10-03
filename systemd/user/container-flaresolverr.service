@@ -1,4 +1,9 @@
 [Unit]
+# [WHY] RestartSec>=10 이면 기본 StartLimitIntervalSec(10s) 윈도우가 채워지지 않아
+#       start limit이 영영 trip되지 않고 auto-restart 루프가 무한 지속된다
+#       (2026-10-03 devforge-mcp 4시간 1141회 재시도, watchdog 무감지).
+#       systemd.unit(5) 참조. [Unit] 섹션이어야 systemd가 인식한다.
+StartLimitIntervalSec=60
 Description=FlareSolverr — Cloudflare bypass proxy (svc pod)
 After=svc-pod.service
 Requires=svc-pod.service
@@ -16,6 +21,7 @@ ExecStart=/usr/bin/podman run --name flaresolverr --rm --pod=svc \
 ExecStop=/usr/bin/podman stop flaresolverr
 Restart=always
 RestartSec=15
+#       interval을 RestartSec보다 크게 두면 루프가 failed로 전이되어 감지된다.
 TimeoutStartSec=120
 TimeoutStopSec=30
 

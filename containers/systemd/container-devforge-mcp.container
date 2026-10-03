@@ -1,4 +1,9 @@
 [Unit]
+# [WHY] RestartSec>=10 이면 기본 StartLimitIntervalSec(10s) 윈도우가 채워지지 않아
+#       start limit이 영영 trip되지 않고 auto-restart 루프가 무한 지속된다
+#       (2026-10-03 devforge-mcp 4시간 1141회 재시도, watchdog 무감지).
+#       systemd.unit(5) 참조. [Unit] 섹션이어야 systemd가 인식한다.
+StartLimitIntervalSec=60
 Description=DevForge MCP server — FastMCP refactored (:8000)
 Documentation=https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http
 
@@ -25,10 +30,11 @@ HealthStartPeriod=20s
 HealthOnFailure=restart
 
 [Service]
-ExecStartPre=/opt/projects/server/scripts/deploy/kv-export-env.sh /run/user/1000/kv-devforge-mcp.env DEVFORGE-POSTGRES-PASSWORD,GUDOKPIN-API-KEY,DEEPSEEK-API-KEY,MY-GITHUB-TOKEN-KEY,NOTION-TOKEN-KEY,OPENROUTER-API-KEYS,SLACK-BOT-TOKEN-KEY,SLACK-CHANNEL,SLACK-SIGNING-SECRET-KEY,TELEGRAM-CHAT-ID,TELEGRAM-ALERT-TOKEN-KEY,DEVFORGE-WATCHDOG-PING-SSH,DEVFORGE-ENCRYPTION-PASSPHRASE,BRAVE-API-KEYS,TAVILY-API-KEYS,EXA-API-KEYS,CONTEXT7-API-KEYS,GEMINI-API-KEYS,YOUCOM-API-KEYS
+ExecStartPre=/opt/projects/server/scripts/deploy/kv-export-env.sh /run/user/1000/kv-devforge-mcp.env DEVFORGE-POSTGRES-PASSWORD,GUDOKPIN-API-KEY,DEEPSEEK-API-KEY,MY-GITHUB-TOKEN-KEY,NOTION-TOKEN-KEY,OPENROUTER-API-KEYS,SLACK-ENV-CONFIG,TELEGRAM-CHAT-ID,TELEGRAM-ALERT-TOKEN-KEY,DEVFORGE-WATCHDOG-PING-SSH,DEVFORGE-ENCRYPTION-PASSPHRASE,BRAVE-API-KEYS,TAVILY-API-KEYS,EXA-API-KEYS,CONTEXT7-API-KEYS,GEMINI-API-KEYS,YOUCOM-API-KEYS
 ExecStopPost=/bin/rm -f /run/user/1000/kv-devforge-mcp.env
 Restart=always
 RestartSec=10
+#       interval을 RestartSec보다 크게 두면 루프가 failed로 전이되어 감지된다.
 TimeoutStopSec=30
 
 [Install]
