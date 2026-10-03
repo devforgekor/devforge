@@ -26,7 +26,7 @@ fi
 
 echo "[$(LOG_TS)] === 2/3: duckdns ==="
 if curl -s -o /dev/null -w "%{http_code}" \
-    "https://www.duckdns.org/update?domains=devforgekor&token=776d9654-5af7-4814-8a8d-8f6183e5e2f7&ip=&verbose=true" \
+    "https://www.duckdns.org/update?domains=devforgekor&token=${DUCKDNS_TOKEN_KEY}&ip=&verbose=true" \
     2>/dev/null | grep -q 200; then
     echo "[$(LOG_TS)] duckdns OK"
 else
