@@ -40,7 +40,9 @@ class MemoryApprovalAdapter:
         return ApprovalDecision(req.action_id, True, self._approver, "auto-approved")
 
     def approve(self, action_id: str, approver: str = "") -> None:
-        self._decisions[action_id] = ApprovalDecision(action_id, True, approver or self._approver, "")
+        self._decisions[action_id] = ApprovalDecision(
+            action_id, True, approver or self._approver, ""
+        )
 
     def deny(self, action_id: str, reason: str = "") -> None:
         self._decisions[action_id] = ApprovalDecision(action_id, False, "", reason)
