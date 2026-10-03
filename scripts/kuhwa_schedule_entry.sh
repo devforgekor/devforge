@@ -8,7 +8,7 @@ set -euo pipefail
 
 VAULT_KV="/opt/projects/server/scripts/deploy/kv-export-env.sh"
 ENV_FILE="/run/user/$(id -u)/kv-kuhwa.env"
-KUWHA_DIR="/opt/workspace/minihome/apps/kuhwa"
+KUWHA_DIR="/opt/workspace/kuhwa"
 NODE_BIN="/home/opc/.local/bin/node"
 
 KEYS="NEIS-API-KEY,GMAIL-ENV-CONFIG-MINIPARK4U,GMAIL-SMTP-PASSWORD-MINIPARK4U"
