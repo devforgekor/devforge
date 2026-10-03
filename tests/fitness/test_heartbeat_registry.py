@@ -35,6 +35,14 @@ def test_registry_max_age_matches_v2_config() -> None:
 
 def test_registry_units_wire_the_ping() -> None:
     for job, spec in _jobs().items():
+        kind = spec.get("kind")
+        assert kind in ("systemd", "payload"), f"{job}: kind must be systemd|payload, got {kind!r}"
+        if kind == "payload":
+            # [WHY] command payload job 은 systemd unit 이 없다. unit 을 made up 하면
+            #      존재하지 않는 파일을 SSOT 로 굳히는 것이므로 emitter 선언만 검증한다.
+            assert spec.get("unit") is None, f"{job}: payload job must not carry a unit"
+            assert spec.get("emitter"), f"{job}: payload job must declare an emitter"
+            continue
         unit = UNITS / Path(spec["unit"]).name
         assert unit.exists(), f"{job}: unit {spec['unit']} missing"
         text = unit.read_text(encoding="utf-8")
