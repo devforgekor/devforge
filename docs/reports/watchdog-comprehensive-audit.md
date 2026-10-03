@@ -26,10 +26,10 @@
 
 | 대상 | 감시 | 복구 |
 |------|------|------|
-| `ebook-watcher.service` | ✅ `check_ebook_pipeline()` 전용 체크 (프로세스+로그 활동) | ✅ 재시작 |
+| `ebooklib-pipeline.service` | ✅ `check_ebook_pipeline()` 전용 체크 (프로세스+로그 활동) | ✅ 재시작 |
 | `devforge-openrouter-free-models.timer` | ✅ idle 체크 | ✅ kick |
 
-> **ebook-watcher 개선 (2026-09-09)**: 기존 15분 `ebook-watcher.timer`는 제거.
+> **ebooklib-pipeline 개선 (2026-09-09)**: 기존 15분 `ebooklib-pipeline.timer`는 제거.
 > watchdog이 60초마다 `check_ebook_pipeline()`으로 프로세스 존재 + 마지막 로그 활동(20분)을
 > 확인해 hang/죽음을 감지하고 재시작한다. (systemd WatchdogSec과 이중 감시)
 | 그 외 **11개 타이머** | ❌ | ❌ |
@@ -65,7 +65,7 @@
 | 1 | `devforge-inference` | **컨테이너** | 모든 LLM 작업의 중심. 죽으면 enrich/extract/embed 전부 중단 | ✅ check_inference_container() (구현 완료) |
 | 2 | `container-postgres` | **컨테이너** | ALERT_ONLY → 자동 복구로 격상. DB 다운 시 모든 파이프라인 중단 | SERVICE_TARGETS로 이동 |
 | 3 | `devforge-day-cycle.service` | **서비스** | 현재 파이프라인 프로세스만 감시, 서비스 자체는 미감시 | SERVICE_TARGETS에 추가 |
-| 4 | `ebook-watcher.service` | **서비스** | 타이머는 감시하지만 서비스는 미감시. 타이머가 죽었을 때 서비스도 확인 필요 | SERVICE_TARGETS에 추가 |
+| 4 | `ebooklib-pipeline.service` | **서비스** | 타이머는 감시하지만 서비스는 미감시. 타이머가 죽었을 때 서비스도 확인 필요 | SERVICE_TARGETS에 추가 |
 
 ### P1 — 중요 (간접적 영향)
 
@@ -151,7 +151,7 @@ SERVICE_TARGETS = [
     "devforge-turn-watcher",
     "openrouter-rr-proxy",
     "devforge-day-cycle",       # ← 추가
-    "ebook-watcher",            # ← 전용 체크(check_ebook_pipeline) 사용
+    "ebooklib-pipeline",            # ← 전용 체크(check_ebook_pipeline) 사용
 ]
 
 ALERT_ONLY_TARGETS = [
@@ -163,7 +163,7 @@ ALERT_ONLY_TARGETS = [
 ]
 
 TIMER_TARGETS = {
-    # ebook-watcher.timer 제거됨 (2026-09-09) — watchdog이 check_ebook_pipeline으로 직접 감시
+    # ebooklib-pipeline.timer 제거됨 (2026-09-09) — watchdog이 check_ebook_pipeline으로 직접 감시
     "devforge-openrouter-free-models.timer": {"max_idle": 93600},
     "devforge-system-sync.timer": {"max_idle": 1800},      # ← 추가 (15분)
     "devforge-news.timer": {"max_idle": 25200},              # ← 추가 (6시간)
@@ -220,7 +220,7 @@ def _check_token_stagnation(results, dry_run=False):
 
 | 순위 | 변경 | 파일 | 예상 시간 |
 |------|------|------|----------|
-| 🥇 | SERVICE_TARGETS에 day-cycle, ebook-watcher 추가 | config.py | 1분 |
+| 🥇 | SERVICE_TARGETS에 day-cycle, ebooklib-pipeline 추가 | config.py | 1분 |
 | 🥇 | ALERT_ONLY_TARGETS에 mcp, flaresolverr, proxies 추가 | config.py | 1분 |
 | 🥇 | TIMER_TARGETS에 주요 타이머 6개 추가 | config.py | 2분 |
 | 🥈 | `recover_service()`에 health check 추가 | recovery.py | 5분 |
@@ -232,15 +232,15 @@ def _check_token_stagnation(results, dry_run=False):
 
 ## 6. 2026-09-09 패치 기록 (완료)
 
-### 6.0 ebook-watcher 전용 감시 도입 (이전 패치)
+### 6.0 ebooklib-pipeline 전용 감시 도입 (이전 패치)
 - **문제**: `check_service(name)` = `svc_active`(systemd active)만 확인 → loop이
-  멈춰도(hang) 감지 못함. 15분 `ebook-watcher.timer`가 유일한 health check였음
+  멈춰도(hang) 감지 못함. 15분 `ebooklib-pipeline.timer`가 유일한 health check였음
 - **수정**: `check_ebook_pipeline()` 추가 (`checker.py`)
   - ① systemd 서비스 active 여부
   - ② `pipeline.py loop` 프로세스 존재 (pgrep)
   - ③ journal 마지막 Cycle/collect 로그 시간 → 20분 초과 시 hang 판정
-  - `check_all_services()`에서 ebook-watcher만 이 전용 체크 사용
-- **`ebook-watcher.timer` 제거**: config.py TIMER_TARGETS에서 삭제 + systemd timer 비활성화
+  - `check_all_services()`에서 ebooklib-pipeline만 이 전용 체크 사용
+- **`ebooklib-pipeline.timer` 제거**: config.py TIMER_TARGETS에서 삭제 + systemd timer 비활성화
   → watchdog이 메인으로 ebook 파이프라인을 감시/관리
 - **커밋**: `39913d2`
 
@@ -252,12 +252,12 @@ def _check_token_stagnation(results, dry_run=False):
   - watchdog 시작 시 `load_state()`로 복원
 - **검증**: 실패 상태(UNHEALTHY, consec=4, circuit_open) 저장 → 복원 후 동일 유지
 
-### 6.2 ebook-watcher 복구 후 readiness 확인
+### 6.2 ebooklib-pipeline 복구 후 readiness 확인
 - **문제**: `recover_service`가 `svc_active`(systemd active)만 확인 → `Type=notify`+`WatchdogSec`
   서비스는 `READY=1` 수신 전 `activating` 상태라 healthy로 오판 가능
 - **수정**: `recover_ebook_watcher()` 추가 — restart 후 `check_ebook_pipeline()`
   (프로세스 존재 + 로그 활동 20분)으로 **진짜 준비** 확인 (최대 6회×5초 대기)
-- `_run_services`에서 ebook-watcher만 이 전용 복구 사용
+- `_run_services`에서 ebooklib-pipeline만 이 전용 복구 사용
 
 ### 6.3 백오프 jitter
 - **문제**: `BACKOFF_SCHEDULE` 고정값 → 여러 컴포넌트 동시 실패 시 동시 재시작 (retry storm)
@@ -268,7 +268,7 @@ def _check_token_stagnation(results, dry_run=False):
 
 | 커밋 | 내용 | 파일 |
 |------|------|------|
-| `39913d2` | ebook-watcher 전용 체크(`check_ebook_pipeline`) + 15분 timer 제거 | checker.py, config.py |
+| `39913d2` | ebooklib-pipeline 전용 체크(`check_ebook_pipeline`) + 15분 timer 제거 | checker.py, config.py |
 | `f875134` | 상태 영속화 + ebook readiness 복구 + backoff jitter | state.py, recovery.py, orchestrator.py, config.py |
 | `23fe63f` | 문서 기록 (watchdog audit) | watchdog-comprehensive-audit.md |
 | `044974b` | 문서 기록 (timer 제거 반영) | watchdog-comprehensive-audit.md |
@@ -283,5 +283,5 @@ ebook 파이프라인 쪽도 함께 hardening 되었다 (`/opt/workspace/minihom
 | `5cdd0c4` | collect 락 / queue 락 분리 (flock 무력화 버그 수정) |
 | `d44a7e6` | 문서 업데이트 |
 
-> ebook-watcher.service: `Type=notify`, `WatchdogSec=600`, `Restart=on-watchdog`
+> ebooklib-pipeline.service: `Type=notify`, `WatchdogSec=600`, `Restart=on-watchdog`
 > → watchdog의 `check_ebook_pipeline`(로그 기반)과 **이중 감시** 구조

@@ -19,7 +19,7 @@
 
 | incident(dedup_key) | prefix | event | logic | kind | impact |
 |---|---|---|---|---|---|
-| `svc:ebook-watcher:down` | svc | down | **A(fix)** | service | mutating |
+| `svc:ebooklib-pipeline:down` | svc | down | **A(fix)** | service | mutating |
 | `svc:container-devforge-mcp:down` | svc | down | A | container | mutating |
 | `syssvc:caddy:down` | syssvc | down | **alert** | — | non-mutating |
 | `llm:day-extract:down` | llm | down | A | cascade | mutating |

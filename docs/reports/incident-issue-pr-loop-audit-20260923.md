@@ -33,10 +33,10 @@
 
 | 항목 | 값 |
 |---|---|
-| `svc:ebook-watcher:down` | **fail_count 443 / reopen_count 441**(재시작 폭주) + 후속 13/1, 32/0 등 |
+| `svc:ebooklib-pipeline:down` | **fail_count 443 / reopen_count 441**(재시작 폭주) + 후속 13/1, 32/0 등 |
 | `syssvc:netdata:down` | 반복(이슈 #8 원인) |
 | GitHub 이슈 **#8** | `[watchdog] 반복 실패: syssvc:netdata:down` — OPEN, `watchdog,auto-safe`, 생성 **2026-09-14** |
-| GitHub 이슈 **#9** | `[watchdog] 반복 실패: svc:ebook-watcher:down` — OPEN, `watchdog,auto-safe`, 생성 **2026-09-20** |
+| GitHub 이슈 **#9** | `[watchdog] 반복 실패: svc:ebooklib-pipeline:down` — OPEN, `watchdog,auto-safe`, 생성 **2026-09-20** |
 | dev_pipeline state | `seen:[8,9]`, `claimed:{8,9}`(assignee 1, `claimed_at`), **`pr_created:{}`** |
 
 → 즉 **"이전 문제 상황"이 곧 이 이슈들의 원인**이다(연결 확인).

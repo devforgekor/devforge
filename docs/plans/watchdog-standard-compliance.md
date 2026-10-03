@@ -244,7 +244,7 @@ systemctl --user is-active devforge-watchdog-liveness.timer          # active (�
 
 - `svc.pod` publish를 pod 수준 vs 컨테이너 수준 중 어느 것으로 할지 (기존 8000/8002/8085 방식과 통일).
 - 호스트 유닛의 legacy 동시 실행 시 중복 복구 방지: shadow는 `WATCHDOG_DRY_RUN=1` 유지, 24h 비교 후 P2.6(복구 ON).
-- `ebook-watcher` 등 사용자 유닛 3.12 이관(별건, `python-version-strategy.md`).
+- `ebooklib-pipeline` 등 사용자 유닛 3.12 이관(별건, `python-version-strategy.md`).
 
 ### 9.1 P2.3 후보 — DataImpulse 사용량 주기 검증 (검증 필요, 미채택)
 

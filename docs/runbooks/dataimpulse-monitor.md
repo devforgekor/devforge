@@ -67,9 +67,9 @@ DATAIMPULSE_API_KEY='...' /opt/projects/server/scripts/deploy/kv-safe.py set-fro
 ```
 
 ### 서비스 주입 (이미 구성됨)
-`~/.config/systemd/user/ebook-watcher.service`는
+`~/.config/systemd/user/ebooklib-pipeline.service`는
 `kv-fetch-env.py ... --keys DATAIMPULSE-*,VERCEL-*,BRAVE-*` 로 실행된다.
-`ebook-api.service`는 `--keys DATAIMPULSE-*,VERCEL-*,BRAVE-*,EBOOK-*`.
+`ebooklib-api.service`는 `--keys DATAIMPULSE-*,VERCEL-*,BRAVE-*,EBOOK-*`.
 새 `DATAIMPULSE-*` 등록 시 `--keys DATAIMPULSE-*` 에 자동 포함된다.
 
 ---
@@ -102,7 +102,7 @@ http -a "$DP_USER:$DP_PASS" --verify=no --timeout=10 GET https://gw.dataimpulse.
 
 ### 4-1. 로그
 ```bash
-journalctl --user -u ebook-watcher.service -n 200 | grep -E "DataImpulse|SPC|보정계수"
+journalctl --user -u ebooklib-pipeline.service -n 200 | grep -E "DataImpulse|SPC|보정계수"
 ```
 - 기대: `📊 DataImpulse API 비교: API=.. TG=.. 차이=..%` + `SPC 갱신: ...`
 - 일일 보정: `보정계수 갱신(수집일 YYYY-MM-DD): API=.. / TG=.. = ..`

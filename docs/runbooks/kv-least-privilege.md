@@ -23,7 +23,7 @@
 | anthropic-gudokpin-proxy | `GUDOKPIN-*,DEEPSEEK-*` |
 | devforge-watchdog | `SLACK-*,DEVFORGE-*,MY-GITHUB-TOKEN-KEY,TELEGRAM-*` |
 | devforge-news, devforge-summary-retry | `OPENROUTER-*,GEMINI-*,BRAVE-*,EXA-*,TAVILY-*,YOUCOM-*,CONTEXT7-*,TELEGRAM-*,GMAIL-*` |
-| ebook-api, ebook-watcher | `DATAIMPULSE-*,VERCEL-*,BRAVE-*` |
+| ebooklib-api, ebooklib-pipeline | `DATAIMPULSE-*,VERCEL-*,BRAVE-*` |
 
 검증(재시작 후 로드 시크릿 수): 109 → 3~12개 (프록시 3~6, watchdog 11, ebook 12).
 

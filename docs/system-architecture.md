@@ -38,7 +38,7 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 │  FastAPI hub :8002  (Slack/Telegram/email + MCP mount)         │
 │    └─ Blob Explorer :8085 (OCI 백엔드 + Droplr, /send·/receive)    │
 │  MCP server  :8000  (리팩터드 SSE — devforge.adapters.driving.mcp.server) │
-│  ebook-api   :8089  · cashbook :8100 · news :8091              │
+│  ebooklib-api   :8089  · cashbook :8100 · news :8091              │
 │  tg_webhook  :8001  · review_dashboard :9002                   │
 │  proxies: anthropic :44777 · anthropic_openrouter :44778        │
 │           gemini_openai :4431 · openrouter_rr :8451            │
@@ -109,7 +109,7 @@ LLM 추론 + 파이프라인 + 웹앱 + 파일 교환 통합 시스템이다.
 | `devforge-system-sync` | `scripts/system_sync.sh` | DuckDNS + autocommit (문서생성 은퇴 2026-09-14) |
 | `devforge-backup` | `scripts/osync_backup.py all` | OCI 백업(DB+앱) |
 | `devforge-restore-test` | `scripts/osync_restore_test.py` | 월간 복원 검증 |
-| `ebook-watcher` / `ebook-api` | ebooklib | ebook 수집/서빙 |
+| `ebooklib-pipeline` / `ebooklib-api` | ebooklib | ebook 수집/서빙 |
 | `devforge-news*` | `/opt/workspace/news/*` | 뉴스 수집/digest/API |
 | `cashbook` | uvicorn:8100 | 가계부 웹앱 |
 | `anthropic-proxy` 등 | `scripts/proxies/*` | LLM API 호환 프록시 |
@@ -190,15 +190,15 @@ MCP(`fact_*`, `obs_*`, `search_*`, `mem_*`)로 노출된다.
 - gemini/aider: 2026-09-19 폐기 (파서 삭제)
 
 ### 4.3 ebook 파이프라인
-`ebook-watcher`(5분 loop): discover → collect(FlareSolverr/Playwright) → enrich → index → revalidate.
-`ebook-api`(:8089)가 서빙, Caddy `/api/*` 경유.
+`ebooklib-pipeline`(5분 loop): discover → collect(FlareSolverr/Playwright) → enrich → index → revalidate.
+`ebooklib-api`(:8089)가 서빙, Caddy `/api/*` 경유.
 
 ### 4.4 watchdog
 `devforge-watchdog`(60초) → 서비스/타이머/컨테이너/디스크/heartbeat 감시 →
 `graduated_recover`(backoff + circuit breaker) + Slack/Opsgenie 알림.
 - 추가 감시(2026-09-11): 컨테이너 `devforge-fastapi`/`devforge-worker`(**자동 재시작**), 타이머 `devforge-backup-safety`(kick), **one-shot 결과**(`ActiveState/Result`: daily-structure·backup·restore-test·system-sync, 실패 시 **자동 재실행** + backoff/circuit, 반복 실패 시에만 알림).
 - **incident 기록(2026-09-11)**: 감지 시 **재시작 전** 로그/상태 캡처(시크릿 마스킹·8KB) → 조치 → `watchdog_incidents` 테이블에 감사 기록(open/resolved, dedup_key, fail/reopen 카운트). 7일 내 3회+ 반복 → DB `tasks`에 수정 티켓 자동 생성. 조회 `cli.py watch incidents [--open]·watch incident <id>`. 보존: events 90일 / incidents 180일.
-- 감시 확장(2026-09-11 후속): 웹앱 `ebook-api`/`devforge-news-api`/`cashbook`(**자동 재시작**), **system 스코프** `caddy`/`netdata`(alert-only, rootful), 타이머 `dev-poll`/`news-digest`/`kuhwa-schedule`/`workspace-autopush` 추가. `ebook-watcher` `enable`(재부팅 생존). `system-sync` max_idle 1800→2700(30분 주기 경계 오탐 보정).
+- 감시 확장(2026-09-11 후속): 웹앱 `ebooklib-api`/`devforge-news-api`/`cashbook`(**자동 재시작**), **system 스코프** `caddy`/`netdata`(alert-only, rootful), 타이머 `dev-poll`/`news-digest`/`kuhwa-schedule`/`workspace-autopush` 추가. `ebooklib-pipeline` `enable`(재부팅 생존). `system-sync` max_idle 1800→2700(30분 주기 경계 오탐 보정).
 - **watchdog 자기 복구(2026-09-11)**: 유닛 `Type=notify` + `WatchdogSec=900` — 매 사이클 `sd_notify(WATCHDOG=1)`, **hang 시 systemd가 kill+restart**. `OnFailure=devforge-watchdog-failed.service` — 크래시루프(60s 내 5회) 시 **Slack 알림**. **dead-man's switch**: 매 사이클 `/var/tmp/watchdog_last_cycle_ts` 기록 + `devforge-watchdog-liveness.timer`(5분마다)가 stale(>900s) 시 알림. **외부 감시**: `WATCHDOG_PING_SSH=onmydoc`(secrets.env) → 5분마다 onmydoc(161.33.199.207)으로 SSH push(`~/wd_monitor/wdpulse.py record`). onmydoc의 `wd-check.timer`(5분)가 30분+ stale이면 **minipark4u@gmail.com 메일**(6h cooldown, 평소 무음). HTTP 방식 `WATCHDOG_PING_URL`도 지원.
 - **incident → 자동 수정 루프(2026-09-11)**: 반복 incident(3회+/7일) → DB `tasks` + **GitHub Issue 자동 생성**(라벨 `watchdog,auto-safe`, 멱등) → `cli.py dev poll --auto-safe --claim`(dev-poll 타이머)이 claim → `lib/dev_pipeline`이 PR. (부수 수정: `poll_issues`가 gh의 `state="OPEN"`(대문자)을 소문자 비교로 모두 걸러내던 버그 → case-insensitive로 수정)
 - **svc pod 포트포워딩 감시(2026-09-12)**: 컨테이너는 healthy여도 `rootlessport`(userspace proxy)가 죽으면 호스트 `127.0.0.1:8000/8002/8085/8191` 도달 불가 → devforge-mcp/FlareSolverr 불통. `check_svcpod_ports`(TCP connect)로 감지 후 `recover_svcpod_forwarding`(`svc-pod.service` 재기동, postgres 볼륨 유지)으로 자동 복구(60s 주기, backoff/circuit). task#32 · [`reports/svcpod-portforwarding-recovery-20260912.md`](./reports/svcpod-portforwarding-recovery-20260912.md).

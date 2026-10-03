@@ -145,9 +145,9 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
 | `gemini-openai-proxy.service` | Phase 1 | 2026-09-18 | - |
 | `anthropic-proxy.service` | Phase 2 | 2026-09-18 | **메인 프록시** |
 | `devforge-watchdog.service` | Phase 2 | 2026-09-18 | Slack 알림 |
-| `ebook-api.service` | Phase 4 | 2026-09-18 | ebooklib 프록시 인증 |
+| `ebooklib-api.service` | Phase 4 | 2026-09-18 | ebooklib 프록시 인증 |
 | `devforge-summary-retry.service` | 후속 | 2026-09-18 | news 요약 재시도 |
-| `ebook-watcher.service` | 후속 | 2026-09-18 | ebook 파이프라인 loop |
+| `ebooklib-pipeline.service` | 후속 | 2026-09-18 | ebook 파이프라인 loop |
 | `devforge-news.service` | 후속 | 2026-09-18 | news collector |
 | `container-devforge-mcp.container` | Phase 3 | 2026-09-18 | ExecStartPre + kv-export-env.sh (+`DEVFORGE-POSTGRES-PASSWORD` 2026-09-20, **`DEVFORGE-DATABASE-URL` 2026-09-23**) |
 | `devforge-watchdog-v2.container` | Phase 3 | 2026-09-23 | ExecStartPre + kv-export-env.sh (**`DEVFORGE-DATABASE-URL`**+PASSWORD+SLACK) — 재시작 시 DSN KV 주입 |
@@ -282,7 +282,7 @@ Key Vault 시크릿 값은 저장/조회 시 **개행이 공백으로 치환**�
    - `.github/workflows/update-schedule.yml` (문서 초판 오기: `kuhwa.yaml`): `secrets.env` 참조 없음
    - 환경변수 직접 주입 방식으로 변경
    
-4. **ebook-api.service 전환**
+4. **ebooklib-api.service 전환**
    - Key Vault 통합 (kv-fetch-env.py 래퍼)
    - WorkingDirectory 경로 문제 수정 중
 
@@ -472,7 +472,7 @@ DataImpulse Gateway API(`https://gw.dataimpulse.com:777`) 사용량 모니터 �
 
 - 코드 매핑: `DATAIMPULSE-API-KEY` → env `DATAIMPULSE_API_KEY` → `lib/dataimpulse_monitor._load_proxy_credentials`
 - 프록시 로더(`toki31_playwright._load_proxy_env`)도 `DATAIMPULSE_API_KEY`/`DATAIMPULSE_LOGIN`을 USER로 매핑
-- 서비스 주입: `ebook-watcher.service`/`ebook-api.service`의 `--keys DATAIMPULSE-*`에 자동 포함
+- 서비스 주입: `ebooklib-pipeline.service`/`ebooklib-api.service`의 `--keys DATAIMPULSE-*`에 자동 포함
 - 상세 런북: `docs/runbooks/dataimpulse-monitor.md`
 - 서버 하드코딩 금지: `.env.local`은 템플릿(값 없음), 실제 값은 KV만
 
@@ -500,7 +500,7 @@ toki31에서 MaskProxy 폴백을 제거(407로 통과 불가)하고, 시크릿�
 | `ENV`, `DEBUG` | — | (미사용) | 폐기 |
 
 - **하드코딩 제거**: `routers/pipeline.py`의 기본값 `ADMIN_PASSWORD="01074604416"` 삭제 → 미설정 시 빈 문자열(인증 전면 거부).
-- **주입**: `ebook-api.service` `--keys`에 `EBOOK-*` 추가.
+- **주입**: `ebooklib-api.service` `--keys`에 `EBOOK-*` 추가.
 - 로컬 개발: `load_dotenv`는 유지(파일 없으면 무해). `.env.local`은 템플릿.
 - 등록은 쓰기 SP `sp-aiagent-rbac-prod-krc`로 수행.
 

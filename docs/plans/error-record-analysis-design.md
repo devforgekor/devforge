@@ -43,7 +43,7 @@
 {
   "schema_version": 1,
   "captured_at": "2026-09-23T01:00:00Z",
-  "component": "svc:ebook-watcher", "event_type": "down", "severity": "ERROR",
+  "component": "svc:ebooklib-pipeline", "event_type": "down", "severity": "ERROR",
   "exit_code": 15,
   "systemd":   {"ActiveState":"failed","SubState":"failed","Result":"exit-code","ExecMainStatus":"15","NRestarts":0},
   "container": {"logs_tail":"...","exit_code":137},
@@ -124,7 +124,7 @@ COMMENT ON COLUMN watchdog_incidents.context_jsonb
   "schema_version": 1,
   "problem_id": "...", "severity": "high",
   "evidence": [{"incident_id": 23, "raw_ref": "observations:<uuid>"}],
-  "cluster": {"components": ["svc:ebook-watcher","svc:day-cycle"], "shared_cause_confidence": 0.8},
+  "cluster": {"components": ["svc:ebooklib-pipeline","svc:day-cycle"], "shared_cause_confidence": 0.8},
   "root_cause": {"hypothesis": "프록시 자격증명 만료", "confidence": 0.7, "alternatives": [{"h":"네트워크","confidence":0.2}]},
   "fix_proposal": {"actions": ["KV 시크릿 갱신"], "verify": ["재시도 후 health OK"], "stop_conditions": ["2회 실패 시 중단"], "risk": "low"},
   "decision": "propose|escalate|insufficient_evidence"

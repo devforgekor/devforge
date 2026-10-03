@@ -969,7 +969,7 @@ from devforge.ports.types import RecoveryAction
 # Exact-match overrides take precedence over prefix rules.
 _EXACT: dict[str, str] = {
     "svc:svc-pod-forwarding": "svcpod",   # recover_svcpod_forwarding
-    "svc:ebook-watcher": "ebook",         # recover_ebook_watcher
+    "svc:ebooklib-pipeline": "ebook",         # recover_ebook_watcher
     "system:memory": "oom",               # recover_oom
 }
 # Prefix → kind. "" prefix means "no recovery (alert-only)".
@@ -1033,7 +1033,7 @@ def test_container_kind():
 
 def test_exact_overrides():
     assert classify_recovery_kind("svc:svc-pod-forwarding") == "svcpod"
-    assert classify_recovery_kind("svc:ebook-watcher") == "ebook"
+    assert classify_recovery_kind("svc:ebooklib-pipeline") == "ebook"
     assert classify_recovery_kind("system:memory") == "oom"
 
 
@@ -2219,8 +2219,8 @@ class WatchdogConfig:
 
     critical_services: list[str] = field(default_factory=lambda: [
         "devforge-turn-watcher", "openrouter-rr-proxy", "devforge-day-cycle",
-        "ebook-watcher", "container-devforge-fastapi", "container-devforge-worker",
-        "ebook-api", "devforge-news-api", "cashbook",
+        "ebooklib-pipeline", "container-devforge-fastapi", "container-devforge-worker",
+        "ebooklib-api", "devforge-news-api", "cashbook",
     ])
     timers: dict[str, int] = field(default_factory=lambda: {
         "devforge-day-cycle.timer": 2100, "devforge-night-cycle.timer": 2100,

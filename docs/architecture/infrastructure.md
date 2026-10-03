@@ -49,7 +49,7 @@ Caddy (host network)
 | flaresolverr | systemd user | active |
 | devforge-turn-watcher | systemd user | active |
 | devforge-watchdog | systemd user | active |
-| ebook-api | systemd user | active |
+| ebooklib-api | systemd user | active |
 | devforge-news-api | systemd user | active |
 | cashbook | systemd user | active |
 | daily structure | systemd user (timer/oneshot) | activating |

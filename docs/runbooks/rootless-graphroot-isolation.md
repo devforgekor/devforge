@@ -173,7 +173,7 @@ diff /tmp/pre_images.txt /tmp/post_images.txt
 # (c) 서비스 상태 + 헬스
 systemctl --user is-active container-postgres.service container-devforge-fastapi.service \
   svc-pod.service data-pod.service devforge-watchdog-v2.service
-curl -s -m 5 http://127.0.0.1:8089/health        # ebook-api (경로 문제와 별개, 정상 확인)
+curl -s -m 5 http://127.0.0.1:8089/health        # ebooklib-api (경로 문제와 별개, 정상 확인)
 podman exec postgres psql -U devforge -d devforge_app -c 'select 1'
 
 # (d) 재발 감시 — v2 로그에 permission denied 없어야 함

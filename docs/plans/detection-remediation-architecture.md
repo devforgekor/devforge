@@ -123,7 +123,7 @@
 
 ### 5.1 prefix 라우팅 = **subject 계층 패턴** (NATS)
 
-incident의 `dedup_key`(`component:event_type`)를 **계층 subject**로 취급한다: `svc.ebook-watcher.down`, `oneshot.backup.failed`, `timer.sync.delay`.
+incident의 `dedup_key`(`component:event_type`)를 **계층 subject**로 취급한다: `svc.ebooklib-pipeline.down`, `oneshot.backup.failed`, `timer.sync.delay`.
 - **NATS 표준**: `.` 토큰 계층 + 와일드카드(`*`=1토큰, `>`=하위 전체). "고유 subject가 많아지면 **와일드카드+계층 네이밍**"이 정답. **publisher는 목적지를 지정하지 않고**, subscriber가 패턴으로 구독.
 - **적용**: A 컨트롤러는 `svc.>`, `llm.>`, `pipeline.>`, `infra.>` 구독. B 컨트롤러는 `oneshot.>`, `timer.>` 구독. **서로소 구독 → A/B 중복 처리 0.**
 - **C(escalate)는 두 번째 축**: 종류(prefix)가 아니라 **빈도**(동일 `dedup_key` N회/기간)로 발화. 기존 `TASK_THRESHOLD=3`/7일(legacy)과 정합. 즉 **라우팅 = `prefix → {A|B|alert}` + `repeat_count → C`**(한 표에 두 축).
@@ -176,7 +176,7 @@ incident의 `dedup_key`(`component:event_type`)를 **계층 subject**로 취급�
 | 대상 | **실패한 것** 복구(서비스 down, crash) | **안 돈 것** 실행(스케줄 미발화, 조건 실패로 skip) |
 | 판정 방식 | **level-based**(조치 전 현재 상태 재확인) | level-based + **실행 이력 확인**(중복 방지) |
 | 판정 근거 | incident(down/failed) | **desired-state 대비 미실행**(never-triggered/delay/skip) |
-| 예 | `svc.ebook-watcher.down` → restart | `oneshot.backup.failed` → 재실행, `timer.sync.delay` → kick |
+| 예 | `svc.ebooklib-pipeline.down` → restart | `oneshot.backup.failed` → 재실행, `timer.sync.delay` → kick |
 | 재시도 | requeue(지수 backoff), **terminal=중단** | 동일 + **counter 임계 시 에스컬레이션** |
 | 위험 | 재시작 폭주(backoff/circuit) | **중복 실행**(이미 돈 걸 또 실행) |
 | 선행 | incident 기록 | **desired-state registry**(roadmap Stage1) |

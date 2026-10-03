@@ -38,7 +38,7 @@
 | `pipeline.py collect --source bookto31` | 2552549 | (자체 로그) | 분리 실행 |
 | `pipeline.py loop` (서비스) | 2639404 | **journal** | toki31 락 선점으로 `처리: 0` |
 
-**핵심 함정**: toki31 작업은 **detached 프로세스**라 `ebook-watcher` journal에 **toki31/DataImpulse 로그가 0건**. 기존 `check_ebook_pipeline`(journal 기반)으로는 **감지 불가**.
+**핵심 함정**: toki31 작업은 **detached 프로세스**라 `ebooklib-pipeline` journal에 **toki31/DataImpulse 로그가 0건**. 기존 `check_ebook_pipeline`(journal 기반)으로는 **감지 불가**.
 
 ### 1.3 관찰 가능한 권위 신호 (import 없이)
 | 순위 | 신호 | 경로/명령 | 판정 |
@@ -47,7 +47,7 @@
 | 2 | 상태 파일 구조화 신호 | `status.json` → `sources.toki31.phase=="collect"` + `updated_at` | **"지금 작동"(구조화)** |
 | 3 | 프로세스 존재 | `pgrep -f "pipeline.py collect --source toki31"` | **"시작됨"** |
 | 4 | 트래픽 누적 | `traffic_state.json` bytes/chapters delta | "트래픽 발생" (프록시 구분 불가) |
-| — | journal `ebook-watcher` | toki31 마커 **0건** | ❌ 부적합 |
+| — | journal `ebooklib-pipeline` | toki31 마커 **0건** | ❌ 부적합 |
 | — | DB | toki31 전용 테이블 없음 | ❌ 부적합 |
 
 실측값(01:00:38): `status.json.sources.toki31.phase="collect"`, `updated_at=01:00:38`, `processed=127`, `remaining=98`; `traffic_state.json` bytes=25,184,546 / chapters=128.

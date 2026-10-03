@@ -143,14 +143,14 @@ grep -L "python3.12" ~/.config/systemd/user/*.service
 > `py_compile`(3.12) OK. `sync-units --check` no drift.
 > **3차 이관 완료(2026-09-26)**: 상주/기타 5종(`devforge-turn-watcher`·`devforge-news-api`·`devforge-news-digest`·
 > `baseline-daily-failed`·`obsidian-heartbeat`)을 3.12로 전환, 상주 3종 재기동 검증(active, 저널 오류 0, v2 incident 0).
-> **결과: python ExecStart 대상 전량 3.12.** 잔여는 의도적 예외뿐 — `ebook-watcher`(ebooklib 전용 venv)·`kv-fetch-env.py` 래퍼(외부 stdlib,
+> **결과: python ExecStart 대상 전량 3.12.** 잔여는 의도적 예외뿐 — `ebooklib-pipeline`(ebooklib 전용 venv)·`kv-fetch-env.py` 래퍼(외부 stdlib,
 > 대상은 이미 3.12)·`cashbook`(ExecStartPre 셸만). `devforge` 패키지 실행 유닛은 0개이므로 Step 4는 컷오버에서 처리.
 
 > **Phase A 완료(2026-09-26) — legacy 3.9 사용 0건**: `cashbook`→3.12(3.12 user site에 `jinja2`·`python-multipart` 설치,
 > 부트 스모크 HTTP 응답 확인), kv-fetch-env 외부 래퍼 2종(`openrouter-rr-proxy`·`or-rate-limiter`)→3.12,
 > host shell wrapper **17종**(bare `python3` 57 호출 → `python3.12`, `bash -n` 전량 통과),
 > shebang **361건**(`env python3` → `env python3.12`, `_archive` 제외).
-> 잔여 의도적 예외: container entrypoint 4종(이미지 내 python3=3.12)·`ebook-watcher` venv·`scripts/_archive`(105건)·
+> 잔여 의도적 예외: container entrypoint 4종(이미지 내 python3=3.12)·`ebooklib-pipeline` venv·`scripts/_archive`(105건)·
 > python3.11 shebang 28건·호스트 기본 `python3`(OL9 시스템 파이썬 — `dnf`가 사용하므로 제거 불가, 목표는 미사용 0건).
 > 검증: cashbook·v2-watchdog·proxy 재기동 정상, heartbeat/model_ctl 스모크 OK, `sync-units --check` no drift,
 > ruff·mypy·lint-imports·pytest 500 passed(3.12+3.9 양방향).
