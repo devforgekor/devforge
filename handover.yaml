@@ -1,20 +1,17 @@
 last_checkpoint:
-  time: '2026-10-03T13:00:00.667158+00:00'
-  summary: 2 source, 5 config, 1 docs, 1 generated
-  total_files: 16
+  time: '2026-10-03T13:50:00.727514+00:00'
+  summary: 5 source, 1 generated
+  total_files: 15
   recent_files:
     data: []
-    docs:
-    - server/docs/specs/heartbeat-registry.yaml
-    config:
-    - server/systemd/user/devforge-turn-watcher.service
-    - server/systemd/user/devforge-watchdog-v2.service
-    - server/systemd/user/ebooklib-api.service
-    - server/systemd/user/ebooklib-pipeline.service
-    - server/systemd/user/obsidian-heartbeat.service
+    docs: []
+    config: []
     source:
+    - server/scripts/deploy/kv-backup.py
+    - server/scripts/deploy/kv-export-env.sh
     - server/scripts/deploy/kv-fetch-env.py
-    - server/tests/fitness/test_heartbeat_registry.py
+    - server/scripts/fastapi-entrypoint.sh
+    - server/scripts/worker-entrypoint.sh
     generated:
     - server/collect_checkpoint.json
   git: {}
