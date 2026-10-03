@@ -1,7 +1,7 @@
 last_checkpoint:
-  time: '2026-10-03T05:50:00.789545+00:00'
-  summary: 4 source, 3 config, 1 generated
-  total_files: 15
+  time: '2026-10-03T06:00:01.403035+00:00'
+  summary: 12 source, 3 config, 1 generated
+  total_files: 22
   recent_files:
     data: []
     docs: []
@@ -10,6 +10,14 @@ last_checkpoint:
     - server/systemd/user/minihome-web.service
     - server/systemd/user/news-web.service
     source:
+    - server/scripts/_archive/day_extract.sh
+    - server/scripts/_archive/day_verify.sh
+    - server/scripts/_archive/phase0/15m_cycle.sh
+    - server/scripts/_archive/phase1/15m_cycle.sh
+    - server/scripts/_archive/phase2/15m_cycle.sh
+    - server/scripts/_archive/phase3/15m_cycle.sh
+    - server/scripts/_archive/phase4/15m_cycle.sh
+    - server/scripts/_archive/phase_original/15m_cycle.sh
     - server/scripts/day_cycle.sh
     - server/scripts/deploy/minihome-apps.sh
     - server/scripts/system_sync.sh
