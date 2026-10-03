@@ -168,7 +168,7 @@ _launch_reranker() {
 # ── System Sync ────────────────────────────────────
 LOG "=== System: duckdns ==="
 if curl -s -o /dev/null -w "%{http_code}" \
-    "https://www.duckdns.org/update?domains=devforgekor&token=${DUCKDNS_TOKEN_KEY:-MISSING}&ip=&verbose=true" \
+    "https://www.duckdns.org/update?domains=devforgekor,myclerk,minihome4u&token=${DUCKDNS_TOKEN_KEY:-MISSING}&ip=&verbose=true" \
     2>/dev/null | grep -q 200; then
     LOG "  duckdns OK"
 else

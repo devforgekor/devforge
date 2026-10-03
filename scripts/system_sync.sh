@@ -13,7 +13,7 @@ LOG "system_sync start"
 DUCKDNS_TOKEN_KEY="${DUCKDNS_TOKEN_KEY:-}"
 # [WARNING] DuckDNS returns HTTP 200 with body "KO" on an invalid token — check the body, not the status code.
 duckdns_resp=$(curl -s --max-time 20 \
-    "https://www.duckdns.org/update?domains=devforgekor,myclerk&token=${DUCKDNS_TOKEN_KEY:-MISSING}&ip=" \
+    "https://www.duckdns.org/update?domains=devforgekor,myclerk,minihome4u&token=${DUCKDNS_TOKEN_KEY:-MISSING}&ip=" \
     2>/dev/null)
 if [ "$duckdns_resp" = "OK" ]; then
     LOG "  duckdns OK"
