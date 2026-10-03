@@ -1,15 +1,15 @@
 last_checkpoint:
-  time: '2026-10-03T10:20:00.559477+00:00'
-  summary: 2 source, 1 docs, 1 generated
-  total_files: 15
+  time: '2026-10-03T11:10:00.769481+00:00'
+  summary: 2 source, 1 config, 1 generated
+  total_files: 10
   recent_files:
     data: []
-    docs:
-    - server/docs/architecture/code-structure.yaml
-    config: []
+    docs: []
+    config:
+    - server/systemd/user/container-flaresolverr.service
     source:
-    - server/scripts/hooks/baseline-daily.py
-    - server/tests/unit/test_baseline_daily.py
+    - server/src/devforge/adapters/driven/health/systemd_health.py
+    - server/tests/unit/adapters/driven/health/test_systemd_health.py
     generated:
     - server/collect_checkpoint.json
   git: {}
