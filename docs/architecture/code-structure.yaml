@@ -1372,9 +1372,6 @@ modules:
     svcpod_health.py:
       status: experimental
       purpose: svc-pod host port forwarding check (legacy checker.py:679-701).
-    ebook_health.py:
-      status: experimental
-      purpose: ebook-watcher pipeline liveness (legacy checker.py:162-235).
     dataimpulse_path.py:
       status: experimental
       purpose: DataImpulse path (toki31) liveness — read-only, alert-only (fails-open).

@@ -267,7 +267,6 @@ class WatchdogService:
 
 def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> WatchdogService:
     """Composition factory — wires ports/adapters for the CLI (E3)."""
-    from devforge.adapters.driven.health.ebook_health import EbookPipelineHealthChecker
     from devforge.adapters.driven.health.llm_health import (
         LLMHealthChecker,
         read_runtime_mode,
@@ -299,11 +298,8 @@ def create_watchdog_service(config: WatchdogConfig, dry_run: bool = False) -> Wa
         raise ConfigurationError("DEVFORGE_DATABASE_URL is not set (run inside devforge-net)")
     gateway = DatabaseGateway.from_config(cfg)
     heartbeat_repo = PostgresHeartbeatRepository(gateway)
-    ebook_svc = "ebook-watcher"
-    svc_targets = [s for s in config.critical_services if s != ebook_svc]
     health_ports: dict[str, HealthCheckPort] = {
-        "svc": SystemdServiceHealthChecker(svc_targets),
-        "ebook": EbookPipelineHealthChecker(ebook_svc),  # hang-aware (legacy check_ebook_pipeline)
+        "svc": SystemdServiceHealthChecker(config.critical_services),
         "alert": SystemdServiceHealthChecker(config.alert_only_targets),  # svc: prefix, alert-only
         "syssvc": SystemdSystemServiceHealthChecker(config.system_service_targets),
         "svcpod": SvcpodForwardingHealthChecker(config.svcpod_published_ports),
