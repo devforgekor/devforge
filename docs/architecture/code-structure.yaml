@@ -51,10 +51,6 @@ modules:
     cli.py:
       status: production
       purpose: DevForge CLI — AI 대화 검색 및 저장 도구.
-    dev_agent.py:
-      status: experimental
-      purpose: Agent Issue->PR runner — worktree-isolated, ruff+pytest gated, review-only
-        PR.
     mcp_inventory_check.py:
       status: production
       purpose: MCP server inventory drift check (OWASP MCP09 shadow MCP).
@@ -92,9 +88,6 @@ modules:
     fastapi-entrypoint.sh:
       status: unknown
       purpose: fastapi-entrypoint.sh
-    github_mcp_wrapper.sh:
-      status: unknown
-      purpose: github_mcp_wrapper.sh
     mcp_entrypoint.sh:
       status: unknown
       purpose: mcp_entrypoint.sh — Start FastMCP server on inference pod
@@ -235,9 +228,6 @@ modules:
     db.py:
       status: production
       purpose: Shared PostgreSQL helpers for DevForge scripts.
-    dev_pipeline.py:
-      status: production
-      purpose: GitHub Issue -> PR pipeline (DevForge Devin-like).
     droplr.py:
       status: production
       purpose: Droplr link shortener via HTTP API (Basic auth) — no Node CLI dependency.
@@ -1731,12 +1721,6 @@ modules:
     test_day_cycle.py:
       status: production
       purpose: Day cycle orchestration tests.
-    test_dev_agent.py:
-      status: production
-      purpose: Dev agent tests.
-    test_dev_pipeline.py:
-      status: production
-      purpose: Dev pipeline tests.
     test_doc_links.py:
       status: production
       purpose: Documentation link validation.

@@ -106,8 +106,6 @@ class SecretsConfig(BaseSettings):
     OCI_API_KEY_FINGERPRINT: str = ""
 
     # GitHub
-    MY_GITHUB_TOKEN_KEY: str = ""
-    MY_COPILOT_GITHUB_TOKEN_KEY: str = ""
 
 
 class ProviderConfig(BaseModel):
@@ -371,7 +369,6 @@ class WatchdogConfig:
             "devforge-weekly-enrich-rebuild.timer": 604800,
             "devforge-restore-test.timer": 2592000,
             "devforge-backup-safety.timer": 97200,
-            "devforge-dev-poll.timer": 1800,
             "devforge-news-digest.timer": 90000,
             "kuhwa-schedule.timer": 90000,
             "workspace-autopush.timer": 90000,
@@ -445,7 +442,6 @@ class WatchdogConfig:
             "news_collector": 25200,
             # F2 dead-man's switch for oneshot timer units (docs/specs/heartbeat-registry.yaml).
             "handover_gen": 900,
-            "dev_poll": 900,
             "daily_structure": 90000,
             "backup": 93600,
             "system_sync": 2400,

@@ -101,7 +101,6 @@ TIMER_TARGETS = {
     },  # 7일
     "devforge-restore-test.timer": {"expected": "restore_test", "max_idle": 2592000},  # 30일
     "devforge-backup-safety.timer": {"expected": "backup", "max_idle": 97200},  # 27h (OCI 백업)
-    "devforge-dev-poll.timer": {"expected": "dev_poll", "max_idle": 1800},  # 10분
     "devforge-news-digest.timer": {"expected": "news_digest", "max_idle": 90000},  # 25h
     "kuhwa-schedule.timer": {"expected": "kuhwa", "max_idle": 90000},  # 25h
     "workspace-autopush.timer": {"expected": "workspace_autopush", "max_idle": 90000},  # 25h
@@ -176,7 +175,6 @@ HEARTBEAT_WORKERS: dict[str, int] = {
     "news_collector": 25200,  # news collector (6h timer) — completion heartbeat only
     # F2 dead-man's switch for oneshot timer units (docs/specs/heartbeat-registry.yaml).
     "handover_gen": 900,  # devforge-handover-gen.service (10m timer)
-    "dev_poll": 900,  # devforge-dev-poll.service (10m timer)
     "daily_structure": 90000,  # devforge-daily-structure.service (24h timer)
     "backup": 93600,  # devforge-backup.service (daily)
     "system_sync": 2400,  # devforge-system-sync.service (30m timer)
