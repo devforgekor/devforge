@@ -1,18 +1,12 @@
 last_checkpoint:
-  time: '2026-10-03T14:40:01.475489+00:00'
-  summary: 5 source, 1 config, 1 generated
-  total_files: 17
+  time: '2026-10-03T23:50:01.297202+00:00'
+  summary: 1 generated
+  total_files: 3
   recent_files:
     data: []
     docs: []
-    config:
-    - server/systemd/user/devforge-watchdog-v2.service
-    source:
-    - server/scripts/fastapi-entrypoint.sh
-    - server/scripts/worker-entrypoint.sh
-    - server/src/devforge/adapters/driven/recovery/systemd_recovery.py
-    - server/src/devforge/application/watchdog_service.py
-    - server/tests/unit/adapters/driven/recovery/test_systemd_recovery.py
+    config: []
+    source: []
     generated:
     - server/collect_checkpoint.json
   git: {}
